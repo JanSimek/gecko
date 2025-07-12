@@ -15,6 +15,15 @@ add_executable (${PROJECT_NAME}
     util/ProHelper.h
     util/ProHelper.cpp
 
+    util/QtDialogs.h
+    util/QtDialogs.cpp
+
+    # Qt6 UI
+    ui/MainWindow.h
+    ui/MainWindow.cpp
+    ui/SFMLWidget.h
+    ui/SFMLWidget.cpp
+
     # States
     state/StateMachine.h
     state/StateMachine.cpp
@@ -33,21 +42,21 @@ add_executable (${PROJECT_NAME}
     state/loader/MapLoader.cpp
     state/loader/MapLoader.h
 
-    # UI
-    ui/util.h
-    ui/IconsFontAwesome6.h
+    # UI - COMMENTED OUT: Migrating to Qt6
+    # ui/util.h
+    # ui/IconsFontAwesome6.h
 
-    ui/panel/Panel.h
-    ui/panel/MainMenuPanel.h
-    ui/panel/MainMenuPanel.cpp
-    ui/panel/MapInfoPanel.h
-    ui/panel/MapInfoPanel.cpp
-    ui/panel/SelectedObjectPanel.h
-    ui/panel/SelectedObjectPanel.cpp    
-    ui/panel/TileSelectionPanel.h
-    ui/panel/TileSelectionPanel.cpp
-    ui/panel/Toolbar.h
-    ui/panel/Toolbar.cpp
+    # ui/panel/Panel.h
+    # ui/panel/MainMenuPanel.h
+    # ui/panel/MainMenuPanel.cpp
+    # ui/panel/MapInfoPanel.h
+    # ui/panel/MapInfoPanel.cpp
+    # ui/panel/SelectedObjectPanel.h
+    # ui/panel/SelectedObjectPanel.cpp    
+    # ui/panel/TileSelectionPanel.h
+    # ui/panel/TileSelectionPanel.cpp
+    # ui/panel/Toolbar.h
+    # ui/panel/Toolbar.cpp
 
     editor/Object.h
     editor/Object.cpp
@@ -178,8 +187,8 @@ target_link_libraries(vault PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
     sfml-system sfml-graphics sfml-window
     imgui::imgui
-    ImGui-SFML::ImGui-SFML
-    portable_file_dialogs
+    # ImGui-SFML::ImGui-SFML  # REMOVED - migrating to Qt6
+    Qt6::Core Qt6::Widgets
     cxxopts
     spdlog::spdlog_header_only
     vfspp

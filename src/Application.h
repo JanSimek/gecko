@@ -6,12 +6,14 @@
 #include <atomic>
 #include <shared_mutex>
 
+#include <QApplication>
 #include <SFML/Graphics/RenderWindow.hpp>
 #include "ui/IconsFontAwesome6.h"
 
 namespace geck {
 
 class StateMachine;
+class MainWindow;
 
 struct AppData {
     std::shared_ptr<sf::RenderWindow> window;
@@ -25,26 +27,20 @@ public:
     inline static const std::filesystem::path FONT_MAIN = FONT_DIR / + "SourceSansPro-SemiBold.ttf";
     inline static const std::filesystem::path FONT_ICON = FONT_DIR / + FONT_ICON_FILE_NAME_FAS;
 
-    Application(const std::filesystem::path& resourcePath, const std::filesystem::path& mapPath);
+    Application(int argc, char** argv, const std::filesystem::path& resourcePath, const std::filesystem::path& mapPath);
     ~Application();
 
     bool isRunning() const;
 
     void run();
-    void update(float dt);
-    void render(float dt);
 
 private:
     void initUI();
 
-    bool _running;
-    sf::Clock _deltaClock;
-
-    std::shared_ptr<sf::RenderWindow> _window;
+    std::unique_ptr<QApplication> _qtApp;
+    std::unique_ptr<MainWindow> _mainWindow;
     std::shared_ptr<StateMachine> _stateMachine;
     std::shared_ptr<AppData> _appData;
-
-    void renderDockingUI();
 
     void loadMap(const std::filesystem::path& mapPath);
 };

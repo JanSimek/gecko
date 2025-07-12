@@ -1,5 +1,7 @@
 #pragma once
 
+// TODO: Migrate to Qt6 - ImGui utilities removed temporarily
+/*
 #include <imgui.h>
 #include "IconsFontAwesome6.h" // from https://github.com/juliettef/IconFontCppHeaders
 
@@ -93,3 +95,4 @@ inline void Tooltip(const char* tooltip) {
     }
 }
 }; // namespace ImGui
+*/

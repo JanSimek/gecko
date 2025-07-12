@@ -1,87 +1,193 @@
-﻿cmake_minimum_required (VERSION 3.22)
+﻿cmake_minimum_required(VERSION 3.24)
 
-project (
-    geck-mapper # this will be the ${PROJECT_NAME}
-    VERSION 0.1 # this will provide ${PROJECT_VERSION}
+# Set minimum policy version for legacy dependencies
+cmake_policy(VERSION 3.24)
+
+project(
+    geck-mapper
+    VERSION 0.1
     DESCRIPTION "Map editor for Fallout 2"
     LANGUAGES CXX
 )
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(NOT CMAKE_BUILD_TYPE)
-  message(STATUS "Setting build type to Release as none was specified.")
-  set(CMAKE_BUILD_TYPE "Release" CACHE
-      STRING "Choose the type of build." FORCE)
-  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
-    "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+    message(STATUS "Setting build type to Release as none was specified.")
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
+
+include(FetchContent)
+include(GNUInstallDirs)
+
+##################################################
+# Options
+##################################################
+option(GECK_USE_SYSTEM_LIBS "Use system libraries when available" OFF)
+option(GECK_BUILD_TESTS "Build tests" ON)
+
+##################################################
+# Dependencies
+##################################################
+
+# System dependencies first
+find_package(PkgConfig QUIET)
+
+# Qt6 for dialogs and future UI migration
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
+# SFML - prefer system package
+if(GECK_USE_SYSTEM_LIBS)
+    find_package(SFML 2.5 COMPONENTS system window graphics)
+endif()
+
+if(NOT SFML_FOUND)
+    message(STATUS "Using FetchContent for SFML")
+    FetchContent_Declare(
+            SFML
+            GIT_REPOSITORY https://github.com/SFML/SFML.git
+            GIT_TAG 2.6.1
+            GIT_SHALLOW TRUE
+    )
+    set(SFML_BUILD_AUDIO FALSE CACHE BOOL "Build audio module")
+    set(SFML_BUILD_NETWORK FALSE CACHE BOOL "Build network module")
+    FetchContent_MakeAvailable(SFML)
+endif()
+
+# ZLIB
+find_package(ZLIB REQUIRED)
+
+# spdlog - prefer system package
+if(GECK_USE_SYSTEM_LIBS)
+    find_package(spdlog)
+endif()
+
+if(NOT spdlog_FOUND)
+    message(STATUS "Using FetchContent for spdlog")
+    FetchContent_Declare(
+            spdlog
+            GIT_REPOSITORY https://github.com/gabime/spdlog.git
+            GIT_TAG v1.12.0
+            GIT_SHALLOW TRUE
+    )
+    set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "Build examples")
+    set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "Build tests")
+    FetchContent_MakeAvailable(spdlog)
+endif()
+
+# cxxopts
+FetchContent_Declare(
+        cxxopts
+        GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
+        GIT_TAG v3.1.1
+        GIT_SHALLOW TRUE
+)
+set(CXXOPTS_BUILD_EXAMPLES OFF CACHE BOOL "Build examples")
+set(CXXOPTS_BUILD_TESTS OFF CACHE BOOL "Build tests")
+FetchContent_MakeAvailable(cxxopts)
+
+
+# vfspp - using existing external directory temporarily
+add_subdirectory("external/vfspp" EXCLUDE_FROM_ALL)
+
+# ImGui
+FetchContent_Declare(
+        imgui
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG v1.90.1
+        GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(imgui)
+
+# Create ImGui target manually
+add_library(imgui_lib STATIC
+        ${imgui_SOURCE_DIR}/imgui.cpp
+        ${imgui_SOURCE_DIR}/imgui_demo.cpp
+        ${imgui_SOURCE_DIR}/imgui_draw.cpp
+        ${imgui_SOURCE_DIR}/imgui_tables.cpp
+        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+        ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
+)
+
+target_include_directories(imgui_lib PUBLIC
+        ${imgui_SOURCE_DIR}
+        ${imgui_SOURCE_DIR}/misc/cpp
+)
+
+add_library(imgui::imgui ALIAS imgui_lib)
+
+# Make SFML available
+if(NOT SFML_FOUND)
+    FetchContent_MakeAvailable(SFML)
+endif()
+
+# ImGui-SFML REMOVED - migrating to Qt6
+
+# Catch2 for testing
+if(GECK_BUILD_TESTS)
+    FetchContent_Declare(
+            Catch2
+            GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+            GIT_TAG v3.4.0
+            GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(Catch2)
 endif()
 
 ##################################################
-# dependencies
+# Compiler settings
+##################################################
 
-find_package(SFML 2.5 COMPONENTS system window graphics REQUIRED)
-find_package(ZLIB)
+# Enable verbose compiler warnings
+if(MSVC)
+    add_compile_options(/W4 /WX)
+else()
+    add_compile_options(-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic)
+endif()
 
-add_subdirectory("external/portable-file-dialogs")
-add_subdirectory("external/spdlog")
-add_subdirectory("external/cxxopts")
-add_subdirectory("external/vfspp" EXCLUDE_FROM_ALL)
+if(MSVC)
+    add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
+endif()
 
-add_library(imgui INTERFACE)
-add_library(imgui::imgui ALIAS imgui)
-target_sources(imgui INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/misc/cpp/imgui_stdlib.cpp")
-target_include_directories(imgui INTERFACE
-        "${CMAKE_SOURCE_DIR}/external/imgui"
-        "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/misc/cpp")
-
-set(BUILD_SHARED_LIBS TRUE CACHE BOOL "build shared SFLM-Imgui (static build requires static SFML libraries)" FORCE)
-set(IMGUI_DIR "${CMAKE_SOURCE_DIR}/external/imgui" CACHE STRING "path to the imgui library sources" FORCE)
-add_subdirectory("external/imgui-sfml")
-
-# TODO: option to use system libraries instead
-
-#find_package(imgui REQUIRED)
-#find_package(ImGui-SFML REQUIRED)
-
+# Targets
 add_subdirectory(src)
 
-find_package(Catch2 3 QUIET)
-
-if (Catch2_FOUND)
+if(GECK_BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
     add_subdirectory(tests)
     enable_testing()
 endif()
 
-# Enable verbose compiler warnings
-add_compile_options(
-  $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
-  $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic>
-)
-
-if (MSVC)
-    add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
-endif() # MSVC
-
 ##################################################
-# show build configuration overview
-
+# Configuration summary
+##################################################
 message("")
-
 message("${PROJECT_NAME} ${PROJECT_VERSION}
          compiler | ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}
         generator | ${CMAKE_GENERATOR}
        build type | ${CMAKE_BUILD_TYPE}
-         cxxflags | ${CMAKE_CXX_FLAGS} ${EXTRA_FLAGS}
+         cxxflags | ${CMAKE_CXX_FLAGS}
         build dir | ${CMAKE_BINARY_DIR}
    install prefix | ${CMAKE_INSTALL_PREFIX}
+   system libs    | ${GECK_USE_SYSTEM_LIBS}
+   build tests    | ${GECK_BUILD_TESTS}
+   Qt6 version    | ${Qt6_VERSION}
 ")
 
 ##################################################
-# install dependencies
-
-# import for things like MS Visual Studio redistribution
+# Installation
+##################################################
 include(InstallRequiredSystemLibraries)
 
-#install(FILES ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS} DESTINATION ${CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION})
+install(TARGETS ${PROJECT_NAME}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+install(DIRECTORY resources/
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/resources
+)

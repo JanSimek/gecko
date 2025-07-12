@@ -16,7 +16,6 @@
 
 #include "../../util/ProHelper.h"
 #include "../../util/ResourceManager.h"
-#include "portable-file-dialogs.h"
 
 namespace geck {
 
@@ -29,17 +28,8 @@ MapLoader::MapLoader(const std::filesystem::path& mapFile, int elevation, std::f
 void MapLoader::load() {
 
     if (_mapPath.empty()) {
-        _mapPath = pfd::open_file("Choose Fallout 2 map to load", "",
-            { "Fallout 2 map (.map)", "*.map" },
-            pfd::opt::none)
-                       .result()
-                       .front();
-
-        if (_mapPath.empty()) {
-            // TODO: go back to the initial screen
-            spdlog::error("You must choose a Fallout 2 map file to load");
-            return;
-        }
+        spdlog::error("MapLoader: No map path provided");
+        return;
     }
 
     spdlog::stopwatch stopwatch_chunk;

@@ -3,8 +3,7 @@
 
 #include "Application.h"
 #include "util/ResourceManager.h"
-
-#include <portable-file-dialogs.h>
+#include "util/QtDialogs.h"
 
 int main(int argc, char** argv) {
     cxxopts::Options options{ "GECK::Mapper", "Fallout 2 map editor" };
@@ -41,7 +40,7 @@ int main(int argc, char** argv) {
             geck::ResourceManager::getInstance().addDataPath(data);
         }
     } else {
-        auto dir = pfd::select_folder("Select Fallout 2 \"data\" directory which contains maps", resources_path.string()).result();
+        auto dir = geck::QtDialogs::selectFolder("Select Fallout 2 \"data\" directory which contains maps", resources_path.string());
         if (!dir.empty()) {
             spdlog::info("User selected data directory: {}", dir);
             geck::ResourceManager::getInstance().addDataPath(dir);
@@ -50,7 +49,7 @@ int main(int argc, char** argv) {
 
     std::string map = !result.count("map") ? std::string() : result["map"].as<std::string>();
 
-    geck::Application app{ resources_path, map };
+    geck::Application app{ argc, argv, resources_path, map };
 
     app.run();
 

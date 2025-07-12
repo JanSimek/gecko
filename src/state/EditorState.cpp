@@ -1,20 +1,23 @@
-﻿#include "EditorState.h"
+﻿#define QT_NO_EMIT
+#include "EditorState.h"
 
-#include <imgui.h>
-#include <imgui_stdlib.h>
-#include <imgui-SFML.h>
+// TODO: Migrate to Qt6 - ImGui includes removed temporarily
+// #include <imgui.h>
+// #include <imgui_stdlib.h>
+// #include <imgui-SFML.h>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
 #include <cmath> // ceil
-#include <portable-file-dialogs.h>
+#include "../util/QtDialogs.h"
 
-#include "../ui/util.h"
-#include "../ui/panel/MainMenuPanel.h"
-#include "../ui/panel/TileSelectionPanel.h"
-#include "../ui/panel/MapInfoPanel.h"
-#include "../ui/panel/SelectedObjectPanel.h"
-#include "../ui/panel/Toolbar.h"
+// TODO: Migrate to Qt6 - UI panels removed temporarily
+// #include "../ui/util.h"
+// #include "../ui/panel/MainMenuPanel.h"
+// #include "../ui/panel/TileSelectionPanel.h"
+// #include "../ui/panel/MapInfoPanel.h"
+// #include "../ui/panel/SelectedObjectPanel.h"
+// #include "../ui/panel/Toolbar.h"
 
 #include "../editor/Object.h"
 
@@ -61,6 +64,8 @@ void EditorState::setUpSignals() {
 }
 
 void EditorState::setUpPanels() {
+    // TODO: Migrate to Qt6 - TileSelectionPanel temporarily disabled
+    /*
     auto tile_selection_panel = std::make_shared<TileSelectionPanel>();
 
     tile_selection_panel->tileClicked.connect([this](int newTileId) {
@@ -92,7 +97,10 @@ void EditorState::setUpPanels() {
         }
         unselectTiles();
     });
+    */
 
+    // TODO: Migrate to Qt6 - UI panels temporarily disabled
+    /*
     auto toolbar = std::make_shared<Toolbar>("Toolbar");
 
     Signal<> selectionMode;
@@ -130,9 +138,12 @@ void EditorState::setUpPanels() {
     auto selected_object_panel = std::make_shared<SelectedObjectPanel>();
     objectSelected.connect_member(selected_object_panel.get(), &SelectedObjectPanel::selectObject);
     _panels.push_back(std::move(selected_object_panel));
+    */
 }
 
 void EditorState::setUpMainMenu() {
+    // TODO: Migrate to Qt6 - Main menu temporarily disabled
+    /*
     auto main_menu = std::make_shared<MainMenuPanel>(_map.get(), _currentElevation);
     main_menu->menuNewMapClicked.connect_member(this, &EditorState::createNewMap);
     main_menu->menuSaveMapClicked.connect_member(this, &EditorState::saveMap);
@@ -170,6 +181,7 @@ void EditorState::setUpMainMenu() {
     });
 
     _panels.emplace_back(std::move(main_menu));
+    */
 }
 
 void EditorState::init() {
@@ -179,9 +191,9 @@ void EditorState::init() {
 
 void EditorState::saveMap() {
 
-    auto destination = pfd::save_file("Select a file", ".",
-        { "Map Files", "*.map" },
-        pfd::opt::force_overwrite).result();
+    auto destination = geck::QtDialogs::saveFile("Select a file", ".",
+        { {"Map Files", "*.map"} },
+        true);
 
     MapWriter map_writer{ [](int32_t PID) {
                              ProReader pro_reader{};
@@ -197,8 +209,17 @@ void EditorState::saveMap() {
 }
 
 void EditorState::openMap() {
+    // Show file dialog on main thread BEFORE creating the background loader
+    auto mapPath = geck::QtDialogs::openFile("Choose Fallout 2 map to load", "",
+        { {"Fallout 2 map (.map)", "*.map"} });
+
+    if (mapPath.empty()) {
+        spdlog::info("No map file selected");
+        return;
+    }
+
     auto loading_state = std::make_unique<LoadingState>(_appData);
-    loading_state->addLoader(std::make_unique<MapLoader>("", -1, [&](auto map) {
+    loading_state->addLoader(std::make_unique<MapLoader>(mapPath, -1, [&](auto map) {
         _appData->stateMachine->push(std::make_unique<EditorState>(_appData, std::move(map)), true);
     }));
 
@@ -592,9 +613,12 @@ void EditorState::render(const float dt) {
 
     _appData->window->setView(_view);
 
+    // TODO: Migrate to Qt6 - UI panels temporarily disabled
+    /*
     for (auto& panel : _panels) {
         panel->render(dt);
     }
+    */
 
     for (const auto& floor : _floorSprites) {
         _appData->window->draw(floor);
