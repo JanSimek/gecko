@@ -14,7 +14,6 @@
 #include "../util/ResourceManager.h"
 #include "../format/map/Map.h"
 
-#include "ui/panel/Panel.h"
 
 namespace geck {
 
@@ -90,9 +89,6 @@ private:
 
     sf::Sprite _fakeTileSprite; // used for checking tile selection
 
-    std::vector<std::shared_ptr<Panel>> _panels;
-    void setUpMainMenu();
-    void setUpPanels();
 
 public:
 

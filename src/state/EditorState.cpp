@@ -1,10 +1,6 @@
 ﻿#define QT_NO_EMIT
 #include "EditorState.h"
 
-// TODO: Migrate to Qt6 - ImGui includes removed temporarily
-// #include <imgui.h>
-// #include <imgui_stdlib.h>
-// #include <imgui-SFML.h>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
@@ -12,13 +8,6 @@
 #include "../util/QtDialogs.h"
 #include "../ui/MainWindow.h"
 
-// TODO: Migrate to Qt6 - UI panels removed temporarily
-// #include "../ui/util.h"
-// #include "../ui/panel/MainMenuPanel.h"
-// #include "../ui/panel/TileSelectionPanel.h"
-// #include "../ui/panel/MapInfoPanel.h"
-// #include "../ui/panel/SelectedObjectPanel.h"
-// #include "../ui/panel/Toolbar.h"
 
 #include "../editor/Object.h"
 
@@ -59,130 +48,10 @@ EditorState::EditorState(const std::shared_ptr<AppData>& appData, std::unique_pt
 }
 
 
-void EditorState::setUpPanels() {
-    // TODO: Migrate to Qt6 - TileSelectionPanel temporarily disabled
-    /*
-    auto tile_selection_panel = std::make_shared<TileSelectionPanel>();
 
-    tile_selection_panel->tileClicked.connect([this](int newTileId) {
-        const auto& lst = ResourceManager::getInstance().getResource<Lst, std::string>("art/tiles/tiles.lst");
-
-        for (auto selectedTileId : _selectedFloorTileIndexes) {
-
-            _map->getMapFile().tiles.at(_currentElevation).at(selectedTileId).setFloor(newTileId);
-
-            sf::Sprite tile_sprite;
-            std::string texture_path = "art/tiles/" + lst->at(newTileId);
-
-            auto selectedTile = _floorSprites.at(selectedTileId);
-            tile_sprite.setTexture(ResourceManager::getInstance().texture(texture_path));
-            tile_sprite.setPosition(selectedTile.getPosition().x, selectedTile.getPosition().y);
-            _floorSprites.at(selectedTileId) = tile_sprite;
-        }
-        for (auto selectedTileId : _selectedRoofTileIndexes) {
-
-            _map->getMapFile().tiles.at(_currentElevation).at(selectedTileId).setRoof(newTileId);
-
-            sf::Sprite tile_sprite;
-            std::string texture_path = "art/tiles/" + lst->at(newTileId);
-
-            auto selectedTile = _roofSprites.at(selectedTileId);
-            tile_sprite.setTexture(ResourceManager::getInstance().texture(texture_path));
-            tile_sprite.setPosition(selectedTile.getPosition().x, selectedTile.getPosition().y);
-            _roofSprites.at(selectedTileId) = tile_sprite;
-        }
-        unselectTiles();
-    });
-    */
-
-    // TODO: Migrate to Qt6 - UI panels temporarily disabled
-    /*
-    auto toolbar = std::make_shared<Toolbar>("Toolbar");
-
-    Signal<> selectionMode;
-    selectionMode.connect([this]() {
-        _currentSelectionMode = static_cast<SelectionMode>((static_cast<int>(_currentSelectionMode) + 1) % static_cast<int>(SelectionMode::NUM_SELECTION_TYPES));
-    });
-    toolbar->addButton([this]() {
-        switch(_currentSelectionMode) {
-        case SelectionMode::OBJECTS:
-            return ICON_FA_OBJECT_GROUP " Objects";
-        case SelectionMode::FLOOR_TILES:
-            return ICON_FA_OBJECT_GROUP " Floor";
-        case SelectionMode::ROOF_TILES:
-            return ICON_FA_OBJECT_GROUP " Roof";
-        case SelectionMode::ALL:
-        default:
-            return ICON_FA_OBJECT_GROUP " All";
-        }
-    }, std::move(selectionMode), "Selection mode\t(toggle: m)");
-
-    Signal<> rotate;
-    rotate.connect([this]() {
-        if (_selectedObject) {
-            _selectedObject->get()->rotate();
-        }
-    });
-    toolbar->addButton([]() { return ICON_FA_ROTATE; }, std::move(rotate), "Rotate selected object\t(Ctrl+R)");
-
-    _panels.emplace_back(std::move(toolbar));
-
-    _panels.emplace_back(std::move(tile_selection_panel));
-
-    _panels.emplace_back(std::make_unique<MapInfoPanel>(_map.get()));
-
-    auto selected_object_panel = std::make_shared<SelectedObjectPanel>();
-    objectSelected.connect_member(selected_object_panel.get(), &SelectedObjectPanel::selectObject);
-    _panels.push_back(std::move(selected_object_panel));
-    */
-}
-
-void EditorState::setUpMainMenu() {
-    // TODO: Migrate to Qt6 - Main menu temporarily disabled
-    /*
-    auto main_menu = std::make_shared<MainMenuPanel>(_map.get(), _currentElevation);
-    main_menu->menuNewMapClicked.connect_member(this, &EditorState::createNewMap);
-    main_menu->menuSaveMapClicked.connect_member(this, &EditorState::saveMap);
-    main_menu->menuLoadMapClicked.connect_member(this, &EditorState::openMap);
-    main_menu->menuQuitMapClicked.connect_member(this, &EditorState::quit);
-
-    main_menu->menuShowObjectsClicked.connect([this](const bool selected) {
-        _showObjects = selected;
-    });
-    main_menu->menuShowCrittersClicked.connect([this](const bool selected) {
-        _showCritters = selected;
-    });
-    main_menu->menuShowWallsClicked.connect([this](const bool selected) {
-        _showWalls = selected;
-    });
-    main_menu->menuShowRoofsClicked.connect([this](const bool selected) {
-        _showRoof = selected;
-    });
-    main_menu->menuShowScrollBlkClicked.connect([this](const bool selected) {
-        _showScrollBlk = selected;
-    });
-
-    main_menu->menuElevationClicked.connect([this](int elevation) {
-        _currentElevation = elevation;
-        spdlog::info("Loading elevation " + std::to_string(_currentElevation));
-
-        auto loading_state = std::make_unique<LoadingState>(_appData);
-        loading_state->addLoader(std::make_unique<MapLoader>(_map->path(), _currentElevation, [&](std::unique_ptr<Map> map) {
-            _map = std::move(map);
-            init();
-            _appData->stateMachine->pop();
-        }));
-
-        _appData->stateMachine->push(std::move(loading_state));
-    });
-
-    _panels.emplace_back(std::move(main_menu));
-    */
-}
 
 void EditorState::init() {
     loadSprites();
-    setUpPanels();
     
     // Connect Qt6 menus to EditorState functionality
     if (_appData->mainWindow) {
@@ -626,12 +495,6 @@ void EditorState::render(const float dt) {
 
     _appData->window->setView(_view);
 
-    // TODO: Migrate to Qt6 - UI panels temporarily disabled
-    /*
-    for (auto& panel : _panels) {
-        panel->render(dt);
-    }
-    */
 
     for (const auto& floor : _floorSprites) {
         _appData->window->draw(floor);

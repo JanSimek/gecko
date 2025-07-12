@@ -126,6 +126,20 @@ void MainWindow::setupMenuBar() {
     
     _viewMenu->addSeparator();
     
+    // Dock widgets submenu
+    QAction* showTileSelectionAction = _viewMenu->addAction("Show &Tile Selection");
+    showTileSelectionAction->setCheckable(true);
+    showTileSelectionAction->setChecked(false);
+    connect(showTileSelectionAction, &QAction::toggled, [this](bool visible) {
+        if (visible) {
+            _tileSelectionDock->show();
+        } else {
+            _tileSelectionDock->hide();
+        }
+    });
+    
+    _viewMenu->addSeparator();
+    
     // Elevation submenu
     _elevationMenu = _viewMenu->addMenu("&Elevation");
     
@@ -203,7 +217,7 @@ void MainWindow::setupDockWidgets() {
     
     addDockWidget(Qt::RightDockWidgetArea, _selectedObjectDock);
     
-    // Tile Selection dock
+    // Tile Selection dock - hidden by default until implemented
     _tileSelectionDock = new QDockWidget("Tile Selection", this);
     _tileSelectionDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     
@@ -213,6 +227,9 @@ void MainWindow::setupDockWidgets() {
     _tileSelectionDock->setWidget(tileSelectionWidget);
     
     addDockWidget(Qt::LeftDockWidgetArea, _tileSelectionDock);
+    
+    // Hide by default since it's not implemented yet
+    _tileSelectionDock->hide();
 }
 
 void MainWindow::startGameLoop() {
