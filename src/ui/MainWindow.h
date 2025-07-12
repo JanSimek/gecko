@@ -35,6 +35,21 @@ public:
 
     void startGameLoop();
     void stopGameLoop();
+    
+    void connectToEditorState();
+
+signals:
+    void newMapRequested();
+    void openMapRequested();
+    void saveMapRequested();
+    void showObjectsToggled(bool enabled);
+    void showCrittersToggled(bool enabled);
+    void showWallsToggled(bool enabled);
+    void showRoofsToggled(bool enabled);
+    void showScrollBlockersToggled(bool enabled);
+    void elevationChanged(int elevation);
+    void selectionModeRequested();
+    void rotateObjectRequested();
 
 protected:
     void closeEvent(QCloseEvent* event) override;

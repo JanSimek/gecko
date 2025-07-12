@@ -18,6 +18,7 @@ class MainWindow;
 struct AppData {
     std::shared_ptr<sf::RenderWindow> window;
     std::shared_ptr<StateMachine> stateMachine;
+    MainWindow* mainWindow;
 };
 
 class Application {

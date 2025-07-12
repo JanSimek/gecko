@@ -67,6 +67,15 @@ void SFMLWidget::paintEvent(QPaintEvent* event) {
 
 void SFMLWidget::resizeEvent(QResizeEvent* event) {
     if (_renderWindow) {
+        // Update SFML render window size to match the widget
+        sf::Vector2u newSize(event->size().width(), event->size().height());
+        _renderWindow->setSize(newSize);
+        
+        // Update SFML viewport to match new size
+        sf::View view = _renderWindow->getView();
+        view.setSize(static_cast<float>(newSize.x), static_cast<float>(newSize.y));
+        _renderWindow->setView(view);
+        
         // Convert resize event to SFML event and forward to state machine
         sf::Event sfmlEvent;
         sfmlEvent.type = sf::Event::Resized;

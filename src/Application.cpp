@@ -28,7 +28,8 @@ Application::Application(int argc, char** argv, const std::filesystem::path& res
     // Create AppData with SFML window from the Qt widget
     _appData = std::make_shared<AppData>(AppData{ 
         std::shared_ptr<sf::RenderWindow>(_mainWindow->getSFMLWidget()->getRenderWindow(), [](sf::RenderWindow*) {}), 
-        _stateMachine 
+        _stateMachine,
+        _mainWindow.get()
     });
 
     // TODO: show configuration window if no map is selected

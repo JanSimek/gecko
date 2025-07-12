@@ -2,6 +2,7 @@
 #include "MainWindow.h"
 #include "SFMLWidget.h"
 #include "../state/StateMachine.h"
+#include "../state/EditorState.h"
 
 #include <QApplication>
 #include <QVBoxLayout>
@@ -13,6 +14,7 @@
 #include <QCloseEvent>
 #include <QKeyEvent>
 #include <QAction>
+#include <QActionGroup>
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 
@@ -71,17 +73,17 @@ void MainWindow::setupMenuBar() {
     QAction* newAction = _fileMenu->addAction("&New Map");
     newAction->setShortcut(QKeySequence::New);
     newAction->setStatusTip("Create a new map");
-    // TODO: Connect to new map signal
+    connect(newAction, &QAction::triggered, this, &MainWindow::newMapRequested);
     
     QAction* openAction = _fileMenu->addAction("&Open Map");
     openAction->setShortcut(QKeySequence::Open);
     openAction->setStatusTip("Open an existing map");
-    // TODO: Connect to open map signal
+    connect(openAction, &QAction::triggered, this, &MainWindow::openMapRequested);
     
     QAction* saveAction = _fileMenu->addAction("&Save Map");
     saveAction->setShortcut(QKeySequence::Save);
     saveAction->setStatusTip("Save current map");
-    // TODO: Connect to save map signal
+    connect(saveAction, &QAction::triggered, this, &MainWindow::saveMapRequested);
     
     _fileMenu->addSeparator();
     
@@ -96,45 +98,54 @@ void MainWindow::setupMenuBar() {
     QAction* showObjectsAction = _viewMenu->addAction("Show &Objects");
     showObjectsAction->setCheckable(true);
     showObjectsAction->setChecked(true);
-    // TODO: Connect to show objects signal
+    connect(showObjectsAction, &QAction::toggled, this, &MainWindow::showObjectsToggled);
     
     QAction* showCrittersAction = _viewMenu->addAction("Show &Critters");
     showCrittersAction->setCheckable(true);
     showCrittersAction->setChecked(true);
-    // TODO: Connect to show critters signal
+    connect(showCrittersAction, &QAction::toggled, this, &MainWindow::showCrittersToggled);
     
     QAction* showWallsAction = _viewMenu->addAction("Show &Walls");
     showWallsAction->setCheckable(true);
     showWallsAction->setChecked(true);
-    // TODO: Connect to show walls signal
+    connect(showWallsAction, &QAction::toggled, this, &MainWindow::showWallsToggled);
     
     QAction* showRoofsAction = _viewMenu->addAction("Show &Roofs");
     showRoofsAction->setCheckable(true);
     showRoofsAction->setChecked(true);
-    // TODO: Connect to show roofs signal
+    connect(showRoofsAction, &QAction::toggled, this, &MainWindow::showRoofsToggled);
     
     QAction* showScrollBlkAction = _viewMenu->addAction("Show Scroll &Blockers");
     showScrollBlkAction->setCheckable(true);
     showScrollBlkAction->setChecked(false);
-    // TODO: Connect to show scroll blockers signal
+    connect(showScrollBlkAction, &QAction::toggled, this, &MainWindow::showScrollBlockersToggled);
     
     _viewMenu->addSeparator();
     
     // Elevation submenu
     _elevationMenu = _viewMenu->addMenu("&Elevation");
     
+    // Create action group for mutually exclusive elevation selection
+    QActionGroup* elevationGroup = new QActionGroup(this);
+    
     QAction* elevation0Action = _elevationMenu->addAction("Elevation &0");
     elevation0Action->setCheckable(true);
     elevation0Action->setChecked(true);
-    // TODO: Connect to elevation change signal
+    elevation0Action->setData(0);
+    elevationGroup->addAction(elevation0Action);
+    connect(elevation0Action, &QAction::triggered, [this]() { elevationChanged(0); });
     
     QAction* elevation1Action = _elevationMenu->addAction("Elevation &1");
     elevation1Action->setCheckable(true);
-    // TODO: Connect to elevation change signal
+    elevation1Action->setData(1);
+    elevationGroup->addAction(elevation1Action);
+    connect(elevation1Action, &QAction::triggered, [this]() { elevationChanged(1); });
     
     QAction* elevation2Action = _elevationMenu->addAction("Elevation &2");
     elevation2Action->setCheckable(true);
-    // TODO: Connect to elevation change signal
+    elevation2Action->setData(2);
+    elevationGroup->addAction(elevation2Action);
+    connect(elevation2Action, &QAction::triggered, [this]() { elevationChanged(2); });
 }
 
 void MainWindow::setupToolBar() {
@@ -143,7 +154,7 @@ void MainWindow::setupToolBar() {
     // Selection mode action
     QAction* selectionModeAction = _mainToolBar->addAction("Selection Mode");
     selectionModeAction->setStatusTip("Toggle selection mode (Objects/Floor/Roof/All)");
-    // TODO: Connect to selection mode signal
+    connect(selectionModeAction, &QAction::triggered, this, &MainWindow::selectionModeRequested);
     
     _mainToolBar->addSeparator();
     
@@ -151,7 +162,7 @@ void MainWindow::setupToolBar() {
     QAction* rotateAction = _mainToolBar->addAction("Rotate");
     rotateAction->setShortcut(QKeySequence("R"));
     rotateAction->setStatusTip("Rotate selected object");
-    // TODO: Connect to rotate signal
+    connect(rotateAction, &QAction::triggered, this, &MainWindow::rotateObjectRequested);
 }
 
 void MainWindow::setupDockWidgets() {
@@ -258,6 +269,64 @@ void MainWindow::convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, 
     sfmlEvent.key.shift = qtEvent->modifiers() & Qt::ShiftModifier;
     sfmlEvent.key.alt = qtEvent->modifiers() & Qt::AltModifier;
     sfmlEvent.key.system = qtEvent->modifiers() & Qt::MetaModifier;
+}
+
+void MainWindow::connectToEditorState() {
+    if (!_stateMachine || _stateMachine->empty()) {
+        return;
+    }
+    
+    // Try to cast current state to EditorState
+    EditorState* editorState = dynamic_cast<EditorState*>(&_stateMachine->top());
+    if (!editorState) {
+        return; // Current state is not an EditorState
+    }
+    
+    // Connect MainWindow signals to EditorState methods via lambdas
+    connect(this, &MainWindow::newMapRequested, [editorState]() {
+        editorState->createNewMap();
+    });
+    connect(this, &MainWindow::openMapRequested, [editorState]() {
+        editorState->openMap();
+    });
+    connect(this, &MainWindow::saveMapRequested, [editorState]() {
+        editorState->saveMap();
+    });
+    
+    // Connect view toggles to EditorState visibility flags
+    connect(this, &MainWindow::showObjectsToggled, [editorState](bool enabled) {
+        editorState->setShowObjects(enabled);
+    });
+    connect(this, &MainWindow::showCrittersToggled, [editorState](bool enabled) {
+        editorState->setShowCritters(enabled);
+    });
+    connect(this, &MainWindow::showWallsToggled, [editorState](bool enabled) {
+        editorState->setShowWalls(enabled);
+    });
+    connect(this, &MainWindow::showRoofsToggled, [editorState](bool enabled) {
+        editorState->setShowRoof(enabled);
+    });
+    connect(this, &MainWindow::showScrollBlockersToggled, [editorState](bool enabled) {
+        editorState->setShowScrollBlk(enabled);
+    });
+    
+    // Connect elevation changes
+    connect(this, &MainWindow::elevationChanged, [editorState](int elevation) {
+        // TODO: Implement elevation change in EditorState
+        spdlog::info("Elevation change requested: {}", elevation);
+    });
+    
+    // Connect toolbar actions  
+    connect(this, &MainWindow::selectionModeRequested, [editorState]() {
+        // TODO: Implement selection mode toggle in EditorState
+        spdlog::info("Selection mode toggle requested");
+    });
+    connect(this, &MainWindow::rotateObjectRequested, [editorState]() {
+        // TODO: Implement object rotation in EditorState
+        spdlog::info("Object rotation requested");
+    });
+    
+    spdlog::info("Qt6 menu connected to EditorState");
 }
 
 } // namespace geck

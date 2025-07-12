@@ -10,6 +10,7 @@
 #include <spdlog/stopwatch.h>
 #include <cmath> // ceil
 #include "../util/QtDialogs.h"
+#include "../ui/MainWindow.h"
 
 // TODO: Migrate to Qt6 - UI panels removed temporarily
 // #include "../ui/util.h"
@@ -187,6 +188,11 @@ void EditorState::setUpMainMenu() {
 void EditorState::init() {
     loadSprites();
     setUpSignals();
+    
+    // Connect Qt6 menus to EditorState functionality
+    if (_appData->mainWindow) {
+        _appData->mainWindow->connectToEditorState();
+    }
 }
 
 void EditorState::saveMap() {

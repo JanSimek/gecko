@@ -104,6 +104,13 @@ public:
     void saveMap();
     void quit() override;
 
+    // Qt6 menu integration - visibility controls
+    void setShowObjects(bool show) { _showObjects = show; }
+    void setShowCritters(bool show) { _showCritters = show; }
+    void setShowWalls(bool show) { _showWalls = show; }
+    void setShowRoof(bool show) { _showRoof = show; }
+    void setShowScrollBlk(bool show) { _showScrollBlk = show; }
+
     void init() override;
     void handleEvent(const sf::Event& event) override;
     void update(const float dt) override;
