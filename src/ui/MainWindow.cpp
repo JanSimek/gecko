@@ -1,6 +1,8 @@
 #define QT_NO_EMIT
 #include "MainWindow.h"
 #include "SFMLWidget.h"
+#include "Qt6SelectedObjectPanel.h"
+#include "Qt6MapInfoPanel.h"
 #include "../state/StateMachine.h"
 #include "../state/EditorState.h"
 
@@ -32,6 +34,8 @@ MainWindow::MainWindow(QWidget* parent)
     , _mapInfoDock(nullptr)
     , _selectedObjectDock(nullptr)
     , _tileSelectionDock(nullptr)
+    , _selectedObjectPanel(nullptr)
+    , _mapInfoPanel(nullptr)
     , _isRunning(false) {
     
     setWindowTitle("GECK::Mapper - Fallout 2 Map Editor");
@@ -151,10 +155,23 @@ void MainWindow::setupMenuBar() {
 void MainWindow::setupToolBar() {
     _mainToolBar = addToolBar("Main");
     
-    // Selection mode action
-    QAction* selectionModeAction = _mainToolBar->addAction("Selection Mode");
+    // Selection mode action - start with "All" mode
+    QAction* selectionModeAction = _mainToolBar->addAction("Mode: All");
     selectionModeAction->setStatusTip("Toggle selection mode (Objects/Floor/Roof/All)");
     connect(selectionModeAction, &QAction::triggered, this, &MainWindow::selectionModeRequested);
+    
+    // Update selection mode button text when mode changes
+    connect(this, &MainWindow::selectionModeRequested, [selectionModeAction]() {
+        static int currentMode = 0; // 0=All, 1=Objects, 2=Floor, 3=Roof
+        currentMode = (currentMode + 1) % 4;
+        
+        switch(currentMode) {
+            case 0: selectionModeAction->setText("Mode: All"); break;
+            case 1: selectionModeAction->setText("Mode: Objects"); break;
+            case 2: selectionModeAction->setText("Mode: Floor"); break;
+            case 3: selectionModeAction->setText("Mode: Roof"); break;
+        }
+    });
     
     _mainToolBar->addSeparator();
     
@@ -170,10 +187,9 @@ void MainWindow::setupDockWidgets() {
     _mapInfoDock = new QDockWidget("Map Information", this);
     _mapInfoDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     
-    QWidget* mapInfoWidget = new QWidget();
-    QVBoxLayout* mapInfoLayout = new QVBoxLayout(mapInfoWidget);
-    mapInfoLayout->addWidget(new QLabel("Map info will be displayed here"));
-    _mapInfoDock->setWidget(mapInfoWidget);
+    // Create and set the Qt6 MapInfoPanel
+    _mapInfoPanel = new Qt6MapInfoPanel();
+    _mapInfoDock->setWidget(_mapInfoPanel);
     
     addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
     
@@ -181,10 +197,9 @@ void MainWindow::setupDockWidgets() {
     _selectedObjectDock = new QDockWidget("Selected Object", this);
     _selectedObjectDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     
-    QWidget* selectedObjectWidget = new QWidget();
-    QVBoxLayout* selectedObjectLayout = new QVBoxLayout(selectedObjectWidget);
-    selectedObjectLayout->addWidget(new QLabel("Selected object properties will be displayed here"));
-    _selectedObjectDock->setWidget(selectedObjectWidget);
+    // Create and set the Qt6 SelectedObjectPanel
+    _selectedObjectPanel = new Qt6SelectedObjectPanel();
+    _selectedObjectDock->setWidget(_selectedObjectPanel);
     
     addDockWidget(Qt::RightDockWidgetArea, _selectedObjectDock);
     
@@ -312,21 +327,37 @@ void MainWindow::connectToEditorState() {
     
     // Connect elevation changes
     connect(this, &MainWindow::elevationChanged, [editorState](int elevation) {
-        // TODO: Implement elevation change in EditorState
-        spdlog::info("Elevation change requested: {}", elevation);
+        editorState->changeElevation(elevation);
     });
     
     // Connect toolbar actions  
     connect(this, &MainWindow::selectionModeRequested, [editorState]() {
-        // TODO: Implement selection mode toggle in EditorState
-        spdlog::info("Selection mode toggle requested");
+        editorState->cycleSelectionMode();
     });
     connect(this, &MainWindow::rotateObjectRequested, [editorState]() {
-        // TODO: Implement object rotation in EditorState
-        spdlog::info("Object rotation requested");
+        editorState->rotateSelectedObject();
     });
     
+    // Connect EditorState's objectSelected signal to the Qt6SelectedObjectPanel
+    if (_selectedObjectPanel) {
+        connect(editorState, &EditorState::objectSelected, _selectedObjectPanel, &Qt6SelectedObjectPanel::selectObject);
+        spdlog::info("Connected EditorState objectSelected signal to Qt6SelectedObjectPanel");
+    }
+    
+    // Update map info panel with current map
+    if (_mapInfoPanel) {
+        // For now, we need to access the EditorState's map directly
+        // TODO: Add a signal for map changes in EditorState
+        updateMapInfo(editorState->getMap());
+    }
+    
     spdlog::info("Qt6 menu connected to EditorState");
+}
+
+void MainWindow::updateMapInfo(Map* map) {
+    if (_mapInfoPanel) {
+        _mapInfoPanel->setMap(map);
+    }
 }
 
 } // namespace geck

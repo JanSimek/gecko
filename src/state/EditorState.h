@@ -7,12 +7,12 @@
 #include <optional>
 #include <array>
 
+#include <QObject>
 #include "State.h"
 #include "../editor/Object.h"
 #include "../editor/HexagonGrid.h"
 #include "../util/ResourceManager.h"
 #include "../format/map/Map.h"
-#include "util/Signal.h"
 
 #include "ui/panel/Panel.h"
 
@@ -20,7 +20,8 @@ namespace geck {
 
 struct AppData;
 
-class EditorState : public State {
+class EditorState : public QObject, public State {
+    Q_OBJECT
 
 private:
     EditorState(const std::shared_ptr<AppData>& appData);
@@ -82,7 +83,6 @@ private:
     sf::Cursor _cursor;
 
     std::optional<std::shared_ptr<Object>> _selectedObject;
-    Signal<std::shared_ptr<Object>> objectSelected;
 
     // TODO: merge 2*Map::TILES_PER_ELEVATION
     std::vector<int> _selectedRoofTileIndexes;
@@ -91,7 +91,6 @@ private:
     sf::Sprite _fakeTileSprite; // used for checking tile selection
 
     std::vector<std::shared_ptr<Panel>> _panels;
-    void setUpSignals();
     void setUpMainMenu();
     void setUpPanels();
 
@@ -110,7 +109,18 @@ public:
     void setShowWalls(bool show) { _showWalls = show; }
     void setShowRoof(bool show) { _showRoof = show; }
     void setShowScrollBlk(bool show) { _showScrollBlk = show; }
+    
+    Map* getMap() const { return _map.get(); }
+    
+    // Qt6 toolbar actions
+    void cycleSelectionMode();
+    void rotateSelectedObject();
+    void changeElevation(int elevation);
 
+signals:
+    void objectSelected(std::shared_ptr<Object> object);
+
+public:
     void init() override;
     void handleEvent(const sf::Event& event) override;
     void update(const float dt) override;

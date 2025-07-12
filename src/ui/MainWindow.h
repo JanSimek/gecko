@@ -22,6 +22,9 @@ namespace geck {
 
 class SFMLWidget;
 class StateMachine;
+class Qt6SelectedObjectPanel;
+class Qt6MapInfoPanel;
+class Map;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -32,6 +35,8 @@ public:
 
     void setStateMachine(std::shared_ptr<StateMachine> stateMachine);
     SFMLWidget* getSFMLWidget() const { return _sfmlWidget; }
+    
+    void updateMapInfo(Map* map);
 
     void startGameLoop();
     void stopGameLoop();
@@ -84,6 +89,10 @@ private:
     QDockWidget* _mapInfoDock;
     QDockWidget* _selectedObjectDock;
     QDockWidget* _tileSelectionDock;
+    
+    // Qt6 Panel widgets
+    Qt6SelectedObjectPanel* _selectedObjectPanel;
+    Qt6MapInfoPanel* _mapInfoPanel;
     
     bool _isRunning;
 };

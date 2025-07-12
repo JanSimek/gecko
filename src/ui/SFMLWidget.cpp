@@ -69,12 +69,13 @@ void SFMLWidget::resizeEvent(QResizeEvent* event) {
     if (_renderWindow) {
         // Update SFML render window size to match the widget
         sf::Vector2u newSize(event->size().width(), event->size().height());
+        
+        spdlog::debug("SFMLWidget resize: {}x{}", newSize.x, newSize.y);
+        
         _renderWindow->setSize(newSize);
         
-        // Update SFML viewport to match new size
-        sf::View view = _renderWindow->getView();
-        view.setSize(static_cast<float>(newSize.x), static_cast<float>(newSize.y));
-        _renderWindow->setView(view);
+        // Don't set view size here - let EditorState handle view management
+        // This prevents conflicting view configurations
         
         // Convert resize event to SFML event and forward to state machine
         sf::Event sfmlEvent;

@@ -52,17 +52,12 @@ namespace geck {
 
 EditorState::EditorState(const std::shared_ptr<AppData>& appData, std::unique_ptr<Map> map)
     : _appData(appData)
-    , _view({ 0.f, 0.f }, sf::Vector2f(appData->window->getSize()))
+    , _view({ 0.f, 0.f }, sf::Vector2f(800.f, 600.f)) // Default size, will be updated on first resize
     , _map(std::move(map))
     , _fakeTileSprite(ResourceManager::getInstance().texture("art/tiles/blank.frm")) {
     centerViewOnMap();
 }
 
-void EditorState::setUpSignals() {
-    _panels.clear();
-    setUpMainMenu();
-    setUpPanels();
-}
 
 void EditorState::setUpPanels() {
     // TODO: Migrate to Qt6 - TileSelectionPanel temporarily disabled
@@ -187,7 +182,7 @@ void EditorState::setUpMainMenu() {
 
 void EditorState::init() {
     loadSprites();
-    setUpSignals();
+    setUpPanels();
     
     // Connect Qt6 menus to EditorState functionality
     if (_appData->mainWindow) {
@@ -375,7 +370,7 @@ bool EditorState::selectObject(sf::Vector2f worldPos) {
 
         _selectedObject = newly_selected_object;
         _selectedObject->get()->select();
-        objectSelected.emit(_selectedObject.value());
+        objectSelected(_selectedObject.value());
 
         // TODO: show in the panel
 
@@ -581,10 +576,22 @@ void EditorState::handleEvent(const sf::Event& event) {
 
     // Window resizing
     if (event.type == sf::Event::Resized) {
-        // update the view to the new size of the window
-        sf::FloatRect visibleArea(0.f, 0.f, event.size.width, event.size.height);
-        _view.reset(visibleArea);
-        centerViewOnMap();
+        // Update the view size while preserving center and zoom
+        sf::Vector2f currentCenter = _view.getCenter();
+        sf::Vector2f currentSize = _view.getSize();
+        
+        // Calculate the aspect ratio change to maintain proper scaling
+        float newWidth = static_cast<float>(event.size.width);
+        float newHeight = static_cast<float>(event.size.height);
+        
+        spdlog::debug("EditorState resize: {}x{} -> {}x{}", 
+                      currentSize.x, currentSize.y, newWidth, newHeight);
+        
+        // Update view size to match new window dimensions
+        _view.setSize(newWidth, newHeight);
+        
+        // Keep the same center point
+        _view.setCenter(currentCenter);
     }
 }
 
@@ -611,7 +618,7 @@ void EditorState::unselectObject() {
     if (_selectedObject) {
         _selectedObject->get()->unselect();
         _selectedObject = {};
-        objectSelected.emit(nullptr);
+        objectSelected(nullptr);
     }
 }
 
@@ -686,6 +693,48 @@ void EditorState::createNewMap() {
 
 void EditorState::quit() {
     State::quit();
+}
+
+void EditorState::cycleSelectionMode() {
+    _currentSelectionMode = static_cast<SelectionMode>((static_cast<int>(_currentSelectionMode) + 1) % static_cast<int>(SelectionMode::NUM_SELECTION_TYPES));
+    
+    // Log the new selection mode for debugging
+    std::string modeStr;
+    switch(_currentSelectionMode) {
+        case SelectionMode::OBJECTS: modeStr = "Objects"; break;
+        case SelectionMode::FLOOR_TILES: modeStr = "Floor Tiles"; break;
+        case SelectionMode::ROOF_TILES: modeStr = "Roof Tiles"; break;
+        case SelectionMode::ALL: 
+        default: modeStr = "All"; break;
+    }
+    spdlog::info("Selection mode changed to: {}", modeStr);
+}
+
+void EditorState::rotateSelectedObject() {
+    if (_selectedObject) {
+        _selectedObject->get()->rotate();
+        spdlog::info("Rotated selected object");
+    } else {
+        spdlog::info("No object selected to rotate");
+    }
+}
+
+void EditorState::changeElevation(int elevation) {
+    if (elevation == _currentElevation) {
+        return; // Already on this elevation
+    }
+    
+    spdlog::info("Changing elevation from {} to {}", _currentElevation, elevation);
+    
+    auto loading_state = std::make_unique<LoadingState>(_appData);
+    loading_state->addLoader(std::make_unique<MapLoader>(_map->path(), elevation, [&](std::unique_ptr<Map> map) {
+        _map = std::move(map);
+        _currentElevation = elevation;
+        init();
+        _appData->stateMachine->pop();
+    }));
+    
+    _appData->stateMachine->push(std::move(loading_state));
 }
 
 } // namespace geck

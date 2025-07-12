@@ -23,6 +23,10 @@ add_executable (${PROJECT_NAME}
     ui/MainWindow.cpp
     ui/SFMLWidget.h
     ui/SFMLWidget.cpp
+    ui/Qt6SelectedObjectPanel.h
+    ui/Qt6SelectedObjectPanel.cpp
+    ui/Qt6MapInfoPanel.h
+    ui/Qt6MapInfoPanel.cpp
 
     # States
     state/StateMachine.h
@@ -186,17 +190,14 @@ target_link_libraries(vault PRIVATE
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     sfml-system sfml-graphics sfml-window
-    imgui::imgui
-    # ImGui-SFML::ImGui-SFML  # REMOVED - migrating to Qt6
-    Qt6::Core Qt6::Widgets
-    cxxopts
+    Qt6::Core
+    Qt6::Widgets
     spdlog::spdlog_header_only
     vfspp
     vault
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-        ${imgui_SOURCE_DIR}
         "${CMAKE_SOURCE_DIR}/external/vfspp/include")
 
 # copy shared external libraries to the build directory for Windows builds

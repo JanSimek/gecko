@@ -3,6 +3,8 @@
 
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
+#include <QCommandLineParser>
+#include <QCommandLineOption>
 
 #include "state/EditorState.h"
 #include "state/LoadingState.h"
@@ -21,19 +23,25 @@ Application::Application(int argc, char** argv, const std::filesystem::path& res
     , _mainWindow(nullptr)
     , _stateMachine(std::make_shared<StateMachine>()) {
 
-    ResourceManager::getInstance().addDataPath(resourcePath);
+    // Set application metadata
+    _qtApp->setApplicationName("GECK::Mapper");
+    _qtApp->setApplicationDisplayName("Fallout 2 Map Editor");
+    _qtApp->setApplicationVersion("0.1");
+    
+    // Process command line arguments
+    std::string finalMapPath = processCommandLineArgs(argc, argv, resourcePath, mapPath);
 
     initUI();
 
     // Create AppData with SFML window from the Qt widget
     _appData = std::make_shared<AppData>(AppData{ 
-        std::shared_ptr<sf::RenderWindow>(_mainWindow->getSFMLWidget()->getRenderWindow(), [](sf::RenderWindow*) {}), 
+        _mainWindow->getSFMLWidget()->getRenderWindow(),
         _stateMachine,
         _mainWindow.get()
     });
 
-    // TODO: show configuration window if no map is selected
-    loadMap(mapPath);
+    // Load the map (either from command line or show dialog)
+    loadMap(finalMapPath);
     
     // Set the state machine in the main window after loading initial state
     _mainWindow->setStateMachine(_stateMachine);
@@ -64,9 +72,68 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
     _stateMachine->push(std::move(loading_state));
 }
 
+std::string Application::processCommandLineArgs(int /*argc*/, char** /*argv*/, const std::filesystem::path& resourcePath, const std::filesystem::path& mapPath) {
+    // Set up Qt6 command line parser
+    QCommandLineParser parser;
+    parser.setApplicationDescription("Fallout 2 map editor");
+    parser.addHelpOption();
+    parser.addVersionOption();
+    
+    // Define command line options
+    QCommandLineOption dataOption(QStringList() << "d" << "data",
+        "Path to the Fallout 2 directory or individual data files, e.g. master.dat and critter.dat",
+        "path", QString::fromStdString(resourcePath.string()));
+    parser.addOption(dataOption);
+    
+    QCommandLineOption mapOption(QStringList() << "m" << "map",
+        "Path to the map file to load",
+        "mapfile");
+    parser.addOption(mapOption);
+    
+    QCommandLineOption debugOption("debug", "Show debug messages");
+    parser.addOption(debugOption);
+
+    // Process command line arguments
+    parser.process(*_qtApp);
+    
+    // Handle options
+    if (parser.isSet(debugOption)) {
+        spdlog::set_pattern("[%^%l%$] [thread %t] %v");
+        spdlog::set_level(spdlog::level::debug);
+    }
+    
+    if (parser.isSet(dataOption)) {
+        QString dataPath = parser.value(dataOption);
+        ResourceManager::getInstance().addDataPath(dataPath.toStdString());
+    } else {
+        auto dir = QtDialogs::selectFolder("Select Fallout 2 \"data\" directory which contains maps", resourcePath.string());
+        if (!dir.empty()) {
+            spdlog::info("User selected data directory: {}", dir);
+            ResourceManager::getInstance().addDataPath(dir);
+        }
+    }
+
+    // Return the map path from command line or the passed mapPath
+    return parser.isSet(mapOption) ? parser.value(mapOption).toStdString() : mapPath.string();
+}
+
 Application::~Application() {
+    // Clean up in proper order, but let Qt handle the final cleanup
     if (_mainWindow) {
         _mainWindow->stopGameLoop();
+    }
+    
+    // Clear the state machine before Qt widget destruction
+    if (_stateMachine) {
+        while (!_stateMachine->empty()) {
+            _stateMachine->pop();
+        }
+        _stateMachine.reset();
+    }
+    
+    // Clear app data reference
+    if (_appData) {
+        _appData.reset();
     }
 }
 

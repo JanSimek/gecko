@@ -81,53 +81,13 @@ if(NOT spdlog_FOUND)
     FetchContent_MakeAvailable(spdlog)
 endif()
 
-# cxxopts
-FetchContent_Declare(
-        cxxopts
-        GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
-        GIT_TAG v3.1.1
-        GIT_SHALLOW TRUE
-)
-set(CXXOPTS_BUILD_EXAMPLES OFF CACHE BOOL "Build examples")
-set(CXXOPTS_BUILD_TESTS OFF CACHE BOOL "Build tests")
-FetchContent_MakeAvailable(cxxopts)
-
-
 # vfspp - using existing external directory temporarily
 add_subdirectory("external/vfspp" EXCLUDE_FROM_ALL)
-
-# ImGui
-FetchContent_Declare(
-        imgui
-        GIT_REPOSITORY https://github.com/ocornut/imgui.git
-        GIT_TAG v1.90.1
-        GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(imgui)
-
-# Create ImGui target manually
-add_library(imgui_lib STATIC
-        ${imgui_SOURCE_DIR}/imgui.cpp
-        ${imgui_SOURCE_DIR}/imgui_demo.cpp
-        ${imgui_SOURCE_DIR}/imgui_draw.cpp
-        ${imgui_SOURCE_DIR}/imgui_tables.cpp
-        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-        ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
-)
-
-target_include_directories(imgui_lib PUBLIC
-        ${imgui_SOURCE_DIR}
-        ${imgui_SOURCE_DIR}/misc/cpp
-)
-
-add_library(imgui::imgui ALIAS imgui_lib)
 
 # Make SFML available
 if(NOT SFML_FOUND)
     FetchContent_MakeAvailable(SFML)
 endif()
-
-# ImGui-SFML REMOVED - migrating to Qt6
 
 # Catch2 for testing
 if(GECK_BUILD_TESTS)

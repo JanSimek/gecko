@@ -16,7 +16,7 @@ class StateMachine;
 class MainWindow;
 
 struct AppData {
-    std::shared_ptr<sf::RenderWindow> window;
+    sf::RenderWindow* window;
     std::shared_ptr<StateMachine> stateMachine;
     MainWindow* mainWindow;
 };
@@ -37,6 +37,7 @@ public:
 
 private:
     void initUI();
+    std::string processCommandLineArgs(int argc, char** argv, const std::filesystem::path& resourcePath, const std::filesystem::path& mapPath);
 
     std::unique_ptr<QApplication> _qtApp;
     std::unique_ptr<MainWindow> _mainWindow;
