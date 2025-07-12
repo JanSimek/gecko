@@ -28,6 +28,8 @@ include(GNUInstallDirs)
 ##################################################
 option(GECK_USE_SYSTEM_LIBS "Use system libraries when available" OFF)
 option(GECK_BUILD_TESTS "Build tests" ON)
+option(GECK_ENABLE_SANITIZERS "Enable sanitizer builds for debugging" OFF)
+option(GECK_AUTO_TEST "Automatically run tests after build" ON)
 
 ##################################################
 # Dependencies
@@ -111,6 +113,13 @@ else()
     add_compile_options(-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic)
 endif()
 
+# Sanitizer options
+if(GECK_ENABLE_SANITIZERS AND NOT MSVC)
+    message(STATUS "Enabling sanitizers for debugging")
+    add_compile_options(-fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address -fsanitize=undefined)
+endif()
+
 if(MSVC)
     add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
 endif()
@@ -151,3 +160,54 @@ install(TARGETS ${PROJECT_NAME}
 install(DIRECTORY resources/
         DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/resources
 )
+
+##################################################
+# Post-Build Testing Framework
+##################################################
+
+# Add custom target for post-build testing
+add_custom_target(post-build-test
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/post-build-test.sh
+    DEPENDS ${PROJECT_NAME}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Running post-build stability tests..."
+    VERBATIM
+)
+
+# Add crash detection utilities
+add_custom_target(crash-check
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/crash-detector.sh find 1
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Checking for recent crashes..."
+    VERBATIM
+)
+
+# Add sanitizer build target
+if(NOT MSVC)
+    add_custom_target(build-with-sanitizers
+        COMMAND ${CMAKE_COMMAND} -DGECK_ENABLE_SANITIZERS=ON -B ${CMAKE_BINARY_DIR}/sanitizer-build -S ${CMAKE_SOURCE_DIR}
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}/sanitizer-build
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Building with sanitizers enabled..."
+        VERBATIM
+    )
+endif()
+
+# Auto-test will be configured in src/CMakeLists.txt where the target is defined
+
+# Add convenience targets
+add_custom_target(test-all
+    DEPENDS post-build-test crash-check
+    COMMENT "Running all stability tests..."
+)
+
+message(STATUS "")
+message(STATUS "Testing Targets Available:")
+message(STATUS "  post-build-test     | Run comprehensive stability tests")
+message(STATUS "  crash-check        | Check for recent crashes")
+message(STATUS "  test-all           | Run all tests")
+if(NOT MSVC)
+    message(STATUS "  build-with-sanitizers | Build with AddressSanitizer/UBSan")
+endif()
+message(STATUS "  auto-test enabled  | ${GECK_AUTO_TEST}")
+message(STATUS "")
