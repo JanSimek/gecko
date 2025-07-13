@@ -415,26 +415,36 @@ void EditorWidget::unselectObject() {
 }
 
 void EditorWidget::zoomView(float direction) {
-    // Calculate new zoom level with smaller steps for smoother trackpad experience
-    float zoomChange = direction > 0 ? -ZOOM_STEP : ZOOM_STEP;  // Negative for zoom in, positive for zoom out
-    float newZoomLevel = _zoomLevel + zoomChange;
+    // Ignore zero direction to prevent oscillation
+    if (std::abs(direction) < 0.001f) {
+        return;
+    }
+    
+    // Calculate zoom factor directly for SFML
+    // Positive direction = zoom in (smaller zoom factor)
+    // Negative direction = zoom out (larger zoom factor)
+    float zoomFactor;
+    if (direction > 0) {
+        zoomFactor = 1.0f - ZOOM_STEP;  // Zoom in
+    } else {
+        zoomFactor = 1.0f + ZOOM_STEP;  // Zoom out
+    }
+    
+    // Calculate what the new zoom level would be
+    float newZoomLevel = _zoomLevel * zoomFactor;
     
     // Clamp to min/max zoom levels
-    newZoomLevel = std::max(MIN_ZOOM, std::min(MAX_ZOOM, newZoomLevel));
-    
-    // Only apply zoom if it would actually change the level
-    if (std::abs(newZoomLevel - _zoomLevel) > 0.001f) {
-        // Calculate the zoom factor to apply
-        float zoomFactor = newZoomLevel / _zoomLevel;
-        
-        // Apply the zoom
-        _view.zoom(zoomFactor);
-        
-        // Update our zoom level tracking
-        _zoomLevel = newZoomLevel;
-        
-        spdlog::debug("Zoom level: {:.2f} (direction: {:.1f})", _zoomLevel, direction);
+    if (newZoomLevel < MIN_ZOOM || newZoomLevel > MAX_ZOOM) {
+        return; // Don't zoom beyond limits
     }
+    
+    // Apply the zoom
+    _view.zoom(zoomFactor);
+    
+    // Update our zoom level tracking
+    _zoomLevel = newZoomLevel;
+    
+    spdlog::debug("Zoom level: {:.2f} (direction: {:.1f}, factor: {:.3f})", _zoomLevel, direction, zoomFactor);
 }
 
 // SFML Event handling interface (called by SFMLWidget)
@@ -534,7 +544,8 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 
                 // Reapply the current zoom level by zooming from 1.0 to current level
                 if (_zoomLevel != 1.0f) {
-                    _view.zoom(_zoomLevel);
+                    float zoomFactor = 1.0f / _zoomLevel;  // Factor to get to current zoom from 1.0
+                    _view.zoom(zoomFactor);
                 }
                 
                 spdlog::debug("EditorWidget: Window resized to {}x{}, zoom level: {:.2f}", 
