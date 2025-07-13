@@ -443,10 +443,16 @@ bool EditorState::selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::
                 }
                 selectedIndexes.clear();
                 
+                // Clear any existing object selection (mutual exclusion)
+                unselectObject();
+                
                 // Select the new tile
                 tile.setColor(sf::Color::Red);
                 selectedIndexes.push_back(i);
                 spdlog::debug("selectTile: Selected tile {}", i);
+                
+                // Emit signal for tile selection
+                tileSelected(i, _currentElevation, selectingRoof);
                 return true;
             }
         }
@@ -733,6 +739,9 @@ void EditorState::unselectTiles() {
     }
     _selectedFloorTileIndexes.clear();
     _selectedRoofTileIndexes.clear();
+    
+    // Emit signal for tile deselection
+    tileSelectionCleared();
 }
 
 void EditorState::unselectObject() {

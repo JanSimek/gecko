@@ -2,6 +2,7 @@
 #include "MainWindow.h"
 #include "SFMLWidget.h"
 #include "SelectedObjectPanel.h"
+#include "SelectedTilePanel.h"
 #include "MapInfoPanel.h"
 #include "../state/StateMachine.h"
 #include "../state/EditorState.h"
@@ -36,6 +37,7 @@ MainWindow::MainWindow(QWidget* parent)
     , _selectedObjectDock(nullptr)
     , _tileSelectionDock(nullptr)
     , _selectedObjectPanel(nullptr)
+    , _selectedTilePanel(nullptr)
     , _mapInfoPanel(nullptr)
     , _isRunning(false) {
     
@@ -214,19 +216,15 @@ void MainWindow::setupDockWidgets() {
     
     addDockWidget(Qt::RightDockWidgetArea, _selectedObjectDock);
     
-    // Tile Selection dock - hidden by default until implemented
-    _tileSelectionDock = new QDockWidget("Tile Selection", this);
+    // Tile Selection dock
+    _tileSelectionDock = new QDockWidget("Selected Tile", this);
     _tileSelectionDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     
-    QWidget* tileSelectionWidget = new QWidget();
-    QVBoxLayout* tileSelectionLayout = new QVBoxLayout(tileSelectionWidget);
-    tileSelectionLayout->addWidget(new QLabel("Tile selection grid will be displayed here"));
-    _tileSelectionDock->setWidget(tileSelectionWidget);
+    // Create and set the SelectedTilePanel
+    _selectedTilePanel = new SelectedTilePanel();
+    _tileSelectionDock->setWidget(_selectedTilePanel);
     
     addDockWidget(Qt::LeftDockWidgetArea, _tileSelectionDock);
-    
-    // Hide by default since it's not implemented yet
-    _tileSelectionDock->hide();
 }
 
 void MainWindow::startGameLoop() {
@@ -356,6 +354,16 @@ void MainWindow::connectToEditorState() {
     if (_selectedObjectPanel) {
         connect(editorState, &EditorState::objectSelected, _selectedObjectPanel, &SelectedObjectPanel::selectObject);
         spdlog::info("Connected EditorState objectSelected signal to SelectedObjectPanel");
+    }
+    
+    // Connect EditorState's tile selection signals to the SelectedTilePanel
+    if (_selectedTilePanel) {
+        // Set the map reference for the tile panel
+        _selectedTilePanel->setMap(editorState->getMap());
+        
+        connect(editorState, &EditorState::tileSelected, _selectedTilePanel, &SelectedTilePanel::selectTile);
+        connect(editorState, &EditorState::tileSelectionCleared, _selectedTilePanel, &SelectedTilePanel::clearSelection);
+        spdlog::info("Connected EditorState tile selection signals to SelectedTilePanel");
     }
     
     // Update map info panel with current map

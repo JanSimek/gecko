@@ -17,6 +17,7 @@ add_executable (${PROJECT_NAME}
 
     util/QtDialogs.h
     util/QtDialogs.cpp
+    util/Types.h
 
     # Qt6 UI
     ui/MainWindow.h
@@ -25,6 +26,8 @@ add_executable (${PROJECT_NAME}
     ui/SFMLWidget.cpp
     ui/SelectedObjectPanel.h
     ui/SelectedObjectPanel.cpp
+    ui/SelectedTilePanel.h
+    ui/SelectedTilePanel.cpp
     ui/MapInfoPanel.h
     ui/MapInfoPanel.cpp
 

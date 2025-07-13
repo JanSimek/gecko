@@ -23,6 +23,7 @@ namespace geck {
 class SFMLWidget;
 class StateMachine;
 class SelectedObjectPanel;
+class SelectedTilePanel;
 class MapInfoPanel;
 class Map;
 
@@ -92,6 +93,7 @@ private:
     
     // Panel widgets
     SelectedObjectPanel* _selectedObjectPanel;
+    SelectedTilePanel* _selectedTilePanel;
     MapInfoPanel* _mapInfoPanel;
     
     bool _isRunning;

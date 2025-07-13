@@ -126,6 +126,8 @@ public:
 
 signals:
     void objectSelected(std::shared_ptr<Object> object);
+    void tileSelected(int tileIndex, int elevation, bool isRoof);
+    void tileSelectionCleared();
 
 public:
     void init() override;
