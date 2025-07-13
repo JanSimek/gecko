@@ -65,6 +65,9 @@ void EditorWidget::setupUI() {
 void EditorWidget::init() {
     loadSprites();
     
+    // Initialize fake tile sprite for hit detection
+    _fakeTileSprite.setTexture(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
+    
     // Ensure view is properly sized to match current window
     if (_sfmlWidget && _sfmlWidget->getRenderWindow()) {
         sf::Vector2u windowSize = _sfmlWidget->getRenderWindow()->getSize();
@@ -581,7 +584,6 @@ void EditorWidget::render(const float dt) {
 }
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
-    // Respect current selection mode
     switch (_currentSelectionMode) {
         case SelectionMode::OBJECTS:
             return selectObject(worldPos);
@@ -607,20 +609,30 @@ bool EditorWidget::selectAllAtPosition(sf::Vector2f worldPos) {
     bool hasFloorTile = false;
     bool hasRoofTile = false;
     
-    // Check if there are tiles at this position
-    for (size_t i = 0; i < _floorSprites.size(); ++i) {
-        if (_floorSprites[i].getGlobalBounds().contains(worldPos)) {
-            hasFloorTile = true;
+    // Check if there are visible tiles at this position
+    bool floorTileAtPos = false;
+    bool roofTileAtPos = false;
+    
+    // Use the same logic as selectTile to detect if tiles are clickable
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+        _fakeTileSprite.setPosition(_floorSprites.at(i).getPosition());
+        if (isSpriteClicked(worldPos, _fakeTileSprite)) {
+            floorTileAtPos = true;
             break;
         }
     }
     
-    for (size_t i = 0; i < _roofSprites.size(); ++i) {
-        if (_roofSprites[i].getGlobalBounds().contains(worldPos)) {
-            hasRoofTile = true;
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+        _fakeTileSprite.setPosition(_roofSprites.at(i).getPosition());
+        if (isSpriteClicked(worldPos, _fakeTileSprite) && 
+            _map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() != Map::EMPTY_TILE) {
+            roofTileAtPos = true;
             break;
         }
     }
+    
+    hasFloorTile = floorTileAtPos;
+    hasRoofTile = roofTileAtPos;
     
     // Build list of available element types in priority order: roof → objects → floor
     std::vector<SelectionType> availableTypes;
@@ -629,11 +641,14 @@ bool EditorWidget::selectAllAtPosition(sf::Vector2f worldPos) {
     if (hasFloorTile) availableTypes.push_back(SelectionType::FLOOR_TILE);
     
     if (availableTypes.empty()) {
+        // No selectable elements at this position
+        unselectAll();
         return false;
     }
     
     // Check for double-click to cycle through element types
-    if (isDoubleClick(worldPos) && availableTypes.size() > 1) {
+    //if (isDoubleClick(worldPos) && availableTypes.size() > 1) {
+    if ( availableTypes.size() > 1) {
         // Find current selection type and move to next
         auto currentIt = std::find(availableTypes.begin(), availableTypes.end(), _lastSelectionType);
         if (currentIt != availableTypes.end()) {
@@ -647,7 +662,7 @@ bool EditorWidget::selectAllAtPosition(sf::Vector2f worldPos) {
             _lastSelectionType = availableTypes[0];
         }
     } else {
-        // First click - prioritize objects, then floor tiles, then roof tiles
+        // First click - prioritize objects, then roof tiles, then floor tiles
         _lastSelectionType = availableTypes[0];
     }
     
@@ -672,7 +687,8 @@ bool EditorWidget::selectObject(sf::Vector2f worldPos) {
     }
     
     // Check for double-click to cycle through objects
-    if (isDoubleClick(worldPos) && objectsAtPos.size() > 1) {
+    //if (isDoubleClick(worldPos) && objectsAtPos.size() > 1) {
+    if (objectsAtPos.size() > 1) {
         cycleObjectsAtPosition(worldPos);
         return true;
     }
@@ -695,24 +711,34 @@ bool EditorWidget::selectRoofTile(sf::Vector2f worldPos) {
     return selectTile(worldPos, _roofSprites, _selectedRoofTileIndexes, true);
 }
 
-bool EditorWidget::selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& sprites, std::vector<int>& selectedIndexes, bool roof) {
-    for (size_t i = 0; i < sprites.size(); ++i) {
-        if (sprites[i].getGlobalBounds().contains(worldPos)) {
-            // Check if this tile is actually visible (not empty/blank)
-            if (!isTileVisible(static_cast<int>(i), roof)) {
-                continue; // Skip invisible/empty tiles
+bool EditorWidget::selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& sprites, std::vector<int>& selectedIndexes, bool selectingRoof) {
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+        auto& tile = sprites.at(i);
+        
+        _fakeTileSprite.setPosition(tile.getPosition());
+        
+        if (isSpriteClicked(worldPos, _fakeTileSprite)) {
+            if (selectingRoof && _map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() == Map::EMPTY_TILE) {
+                return false;
             }
             
-            unselectAll();
-            
-            // Select this tile
-            selectedIndexes.push_back(static_cast<int>(i));
-            sprites[i].setColor(sf::Color::Magenta); // Match object selection color
-            
-            emit tileSelected(static_cast<int>(i), _currentElevation, roof);
-            return true;
+            if (std::count(selectedIndexes.begin(), selectedIndexes.end(), i)) {
+                // Tile is already selected - deselect it
+                tile.setColor(sf::Color::White);
+                selectedIndexes.erase(std::remove(selectedIndexes.begin(), selectedIndexes.end(), i));
+                return false;
+            } else {
+                // Select the tile
+                tile.setColor(sf::Color::Red);
+                selectedIndexes.push_back(i);
+                
+                unselectObject();
+                emit tileSelected(i, _currentElevation, selectingRoof);
+                return true;
+            }
         }
     }
+    
     return false;
 }
 
@@ -744,17 +770,25 @@ void EditorWidget::changeElevation(int elevation) {
 
 bool EditorWidget::isTileVisible(int tileIndex, bool roof) {
     auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
-    
+
     if (roof) {
         uint16_t roofId = tile.getRoof();
         // Check if roof tile is empty/invisible
-        // Common invisible roof tiles: grid000.frm, transparent tiles, etc.
-        return roofId != Map::EMPTY_TILE && roofId != 0;
+        // Allow selection of roof tiles that exist but may be transparent
+        return roofId != Map::EMPTY_TILE;
     } else {
-        uint16_t floorId = tile.getFloor();
-        // Floor tiles with ID 1 (EMPTY_TILE) are handled as blank.frm
-        return floorId != Map::EMPTY_TILE;
+        // Floor tiles should always be selectable, even blank.frm tiles
+        // The EMPTY_TILE case is handled by loading blank.frm
+        return true;
     }
 }
+
+// Tile selection helper implementation
+
+bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) {
+    // Simple bounding box collision check - same as original EditorState
+    return sprite.getGlobalBounds().contains(worldPos);
+}
+
 
 } // namespace geck

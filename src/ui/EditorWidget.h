@@ -18,6 +18,10 @@
 
 namespace geck {
 
+// Tile geometry constants for isometric tiles
+constexpr int TILE_WIDTH = 80;
+constexpr int TILE_HEIGHT = 36;
+
 class SFMLWidget;
 
 class EditorWidget : public QWidget {
@@ -74,6 +78,9 @@ private:
     bool selectAllAtPosition(sf::Vector2f worldPos);
     bool selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& sprites, std::vector<int>& selectedIndexes, bool roof);
     bool isTileVisible(int tileIndex, bool roof);
+    
+    // Tile selection helper
+    bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
     
     // New improved object selection methods
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
@@ -138,6 +145,9 @@ private:
     sf::Vector2f _lastClickPosition;
     static constexpr float DOUBLE_CLICK_TIME = 0.5f; // 500ms
     static constexpr float DOUBLE_CLICK_DISTANCE = 10.0f; // pixels
+    
+    // Fake sprite for tile hit detection
+    sf::Sprite _fakeTileSprite;
     
     // Selection type cycling for overlapping elements
     SelectionType _lastSelectionType = SelectionType::OBJECT;
