@@ -204,18 +204,50 @@ std::vector<std::shared_ptr<Object>> EditorState::getObjectsAtPosition(sf::Vecto
     }
     
     // Sort by map position (z-order) - higher positions are "in front"
+    // For objects with same position, prioritize by object type (scenery > wall > others)
     std::sort(objectsAtPos.begin(), objectsAtPos.end(), 
         [](const std::shared_ptr<Object>& a, const std::shared_ptr<Object>& b) {
-            return a->getMapObject().position > b->getMapObject().position;
+            auto posA = a->getMapObject().position;
+            auto posB = b->getMapObject().position;
+            
+            if (posA != posB) {
+                return posA > posB;  // Higher position = front
+            }
+            
+            // Same position - use object type priority
+            auto getTypePriority = [](uint32_t pid) -> int {
+                unsigned int typeId = pid >> 24;
+                switch (static_cast<Pro::OBJECT_TYPE>(typeId)) {
+                    case Pro::OBJECT_TYPE::SCENERY: return 3;  // Highest priority
+                    case Pro::OBJECT_TYPE::WALL:    return 2;
+                    case Pro::OBJECT_TYPE::ITEM:    return 1;
+                    case Pro::OBJECT_TYPE::CRITTER: return 1;
+                    case Pro::OBJECT_TYPE::TILE:    return 1;
+                    case Pro::OBJECT_TYPE::MISC:    return 1;
+                    default: return 0;
+                }
+            };
+            
+            return getTypePriority(a->getMapObject().pro_pid) > getTypePriority(b->getMapObject().pro_pid);
         });
     
     // Debug: Log object positions and PIDs for debugging
     if (objectsAtPos.size() > 1) {
         spdlog::debug("getObjectsAtPosition: Found {} overlapping objects:", objectsAtPos.size());
         for (size_t i = 0; i < objectsAtPos.size(); i++) {
-            spdlog::debug("  [{}] PID: {}, Position: {}", i, 
-                         objectsAtPos[i]->getMapObject().pro_pid, 
-                         objectsAtPos[i]->getMapObject().position);
+            uint32_t pid = objectsAtPos[i]->getMapObject().pro_pid;
+            unsigned int typeId = pid >> 24;
+            const char* typeName = "UNKNOWN";
+            switch (static_cast<Pro::OBJECT_TYPE>(typeId)) {
+                case Pro::OBJECT_TYPE::ITEM:    typeName = "ITEM"; break;
+                case Pro::OBJECT_TYPE::CRITTER: typeName = "CRITTER"; break;
+                case Pro::OBJECT_TYPE::SCENERY: typeName = "SCENERY"; break;
+                case Pro::OBJECT_TYPE::WALL:    typeName = "WALL"; break;
+                case Pro::OBJECT_TYPE::TILE:    typeName = "TILE"; break;
+                case Pro::OBJECT_TYPE::MISC:    typeName = "MISC"; break;
+            }
+            spdlog::debug("  [{}] PID: {}, Position: {}, Type: {}", i, 
+                         pid, objectsAtPos[i]->getMapObject().position, typeName);
         }
     }
     

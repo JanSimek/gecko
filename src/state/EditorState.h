@@ -13,6 +13,7 @@
 #include "../editor/HexagonGrid.h"
 #include "../util/ResourceManager.h"
 #include "../format/map/Map.h"
+#include "../format/pro/Pro.h"
 
 
 namespace geck {
