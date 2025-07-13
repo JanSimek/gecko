@@ -24,10 +24,8 @@ add_executable (${PROJECT_NAME}
     ui/MainWindow.cpp
     ui/SFMLWidget.h
     ui/SFMLWidget.cpp
-    ui/SelectedObjectPanel.h
-    ui/SelectedObjectPanel.cpp
-    ui/SelectedTilePanel.h
-    ui/SelectedTilePanel.cpp
+    ui/SelectionPanel.h
+    ui/SelectionPanel.cpp
     ui/MapInfoPanel.h
     ui/MapInfoPanel.cpp
 

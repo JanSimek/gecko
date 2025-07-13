@@ -8,38 +8,59 @@
 #include <QSpinBox>
 #include <QGroupBox>
 #include <QScrollArea>
+#include <QStackedWidget>
 #include <memory>
 
+#include "../editor/Object.h"
 #include "../format/map/Tile.h"
 
 namespace geck {
 
 class Map;
 
-class SelectedTilePanel : public QWidget {
+class SelectionPanel : public QWidget {
     Q_OBJECT
 
 public:
-    explicit SelectedTilePanel(QWidget* parent = nullptr);
+    explicit SelectionPanel(QWidget* parent = nullptr);
 
     void setMap(Map* map);
 
 public slots:
+    void selectObject(std::shared_ptr<Object> selectedObject);
     void selectTile(int tileIndex, int elevation, bool isRoof);
     void clearSelection();
 
 private:
     void setupUI();
+    void updateObjectInfo();
     void updateTileInfo();
+    void clearObjectInfo();
     void clearTileInfo();
     void loadTilePreview(class Lst* tilesList, uint16_t tileId);
+    void showObjectPanel();
+    void showTilePanel();
 
     QVBoxLayout* _mainLayout;
     QScrollArea* _scrollArea;
     QWidget* _contentWidget;
     QVBoxLayout* _contentLayout;
     
-    // Tile info widgets
+    // Stacked widget to switch between object and tile panels
+    QStackedWidget* _stackedWidget;
+    
+    // Object panel widgets
+    QWidget* _objectPanelWidget;
+    QGroupBox* _objectInfoGroup;
+    QLabel* _objectSpriteLabel;
+    QLineEdit* _objectNameEdit;
+    QLineEdit* _objectTypeEdit;
+    QSpinBox* _objectMessageIdSpin;
+    QSpinBox* _objectPositionSpin;
+    QSpinBox* _objectProtoPidSpin;
+    
+    // Tile panel widgets
+    QWidget* _tilePanelWidget;
     QGroupBox* _tileInfoGroup;
     QLabel* _tilePreviewLabel;
     QSpinBox* _tileIndexSpin;
@@ -53,10 +74,11 @@ private:
     QLineEdit* _tileNameEdit;
     
     // Current selection state
+    std::optional<std::shared_ptr<Object>> _selectedObject;
     int _selectedTileIndex;
     int _selectedElevation;
     bool _isRoofSelected;
-    bool _hasSelection;
+    bool _hasTileSelection;
     Map* _map;
 };
 

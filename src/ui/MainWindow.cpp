@@ -1,8 +1,7 @@
 #define QT_NO_EMIT
 #include "MainWindow.h"
 #include "SFMLWidget.h"
-#include "SelectedObjectPanel.h"
-#include "SelectedTilePanel.h"
+#include "SelectionPanel.h"
 #include "MapInfoPanel.h"
 #include "../state/StateMachine.h"
 #include "../state/EditorState.h"
@@ -34,10 +33,8 @@ MainWindow::MainWindow(QWidget* parent)
     , _elevationMenu(nullptr)
     , _mainToolBar(nullptr)
     , _mapInfoDock(nullptr)
-    , _selectedObjectDock(nullptr)
-    , _tileSelectionDock(nullptr)
-    , _selectedObjectPanel(nullptr)
-    , _selectedTilePanel(nullptr)
+    , _selectionDock(nullptr)
+    , _selectionPanel(nullptr)
     , _mapInfoPanel(nullptr)
     , _isRunning(false) {
     
@@ -130,14 +127,14 @@ void MainWindow::setupMenuBar() {
     _viewMenu->addSeparator();
     
     // Dock widgets submenu
-    QAction* showTileSelectionAction = _viewMenu->addAction("Show &Tile Selection");
-    showTileSelectionAction->setCheckable(true);
-    showTileSelectionAction->setChecked(false);
-    connect(showTileSelectionAction, &QAction::toggled, [this](bool visible) {
+    QAction* showSelectionAction = _viewMenu->addAction("Show &Selection Panel");
+    showSelectionAction->setCheckable(true);
+    showSelectionAction->setChecked(true);
+    connect(showSelectionAction, &QAction::toggled, [this](bool visible) {
         if (visible) {
-            _tileSelectionDock->show();
+            _selectionDock->show();
         } else {
-            _tileSelectionDock->hide();
+            _selectionDock->hide();
         }
     });
     
@@ -206,25 +203,15 @@ void MainWindow::setupDockWidgets() {
     
     addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
     
-    // Selected Object dock
-    _selectedObjectDock = new QDockWidget("Selected Object", this);
-    _selectedObjectDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    // Selection dock (unified object and tile selection)
+    _selectionDock = new QDockWidget("Selection", this);
+    _selectionDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     
-    // Create and set the SelectedObjectPanel
-    _selectedObjectPanel = new SelectedObjectPanel();
-    _selectedObjectDock->setWidget(_selectedObjectPanel);
+    // Create and set the unified SelectionPanel
+    _selectionPanel = new SelectionPanel();
+    _selectionDock->setWidget(_selectionPanel);
     
-    addDockWidget(Qt::RightDockWidgetArea, _selectedObjectDock);
-    
-    // Tile Selection dock
-    _tileSelectionDock = new QDockWidget("Selected Tile", this);
-    _tileSelectionDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-    
-    // Create and set the SelectedTilePanel
-    _selectedTilePanel = new SelectedTilePanel();
-    _tileSelectionDock->setWidget(_selectedTilePanel);
-    
-    addDockWidget(Qt::LeftDockWidgetArea, _tileSelectionDock);
+    addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
 }
 
 void MainWindow::startGameLoop() {
@@ -350,20 +337,19 @@ void MainWindow::connectToEditorState() {
         editorState->rotateSelectedObject();
     });
     
-    // Connect EditorState's objectSelected signal to the SelectedObjectPanel
-    if (_selectedObjectPanel) {
-        connect(editorState, &EditorState::objectSelected, _selectedObjectPanel, &SelectedObjectPanel::selectObject);
-        spdlog::info("Connected EditorState objectSelected signal to SelectedObjectPanel");
-    }
-    
-    // Connect EditorState's tile selection signals to the SelectedTilePanel
-    if (_selectedTilePanel) {
-        // Set the map reference for the tile panel
-        _selectedTilePanel->setMap(editorState->getMap());
+    // Connect EditorState's selection signals to the unified SelectionPanel
+    if (_selectionPanel) {
+        // Set the map reference for the selection panel
+        _selectionPanel->setMap(editorState->getMap());
         
-        connect(editorState, &EditorState::tileSelected, _selectedTilePanel, &SelectedTilePanel::selectTile);
-        connect(editorState, &EditorState::tileSelectionCleared, _selectedTilePanel, &SelectedTilePanel::clearSelection);
-        spdlog::info("Connected EditorState tile selection signals to SelectedTilePanel");
+        // Connect object selection signals
+        connect(editorState, &EditorState::objectSelected, _selectionPanel, &SelectionPanel::selectObject);
+        
+        // Connect tile selection signals
+        connect(editorState, &EditorState::tileSelected, _selectionPanel, &SelectionPanel::selectTile);
+        connect(editorState, &EditorState::tileSelectionCleared, _selectionPanel, &SelectionPanel::clearSelection);
+        
+        spdlog::info("Connected EditorState selection signals to unified SelectionPanel");
     }
     
     // Update map info panel with current map
