@@ -4,7 +4,8 @@
 
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
-#include <cmath> // ceil
+#include <cmath> // ceil, sqrt, pow
+#include <algorithm> // std::sort, std::find
 #include "../util/QtDialogs.h"
 #include "../ui/MainWindow.h"
 
@@ -42,8 +43,7 @@ namespace geck {
 EditorState::EditorState(const std::shared_ptr<AppData>& appData, std::unique_ptr<Map> map)
     : _appData(appData)
     , _view({ 0.f, 0.f }, sf::Vector2f(800.f, 600.f)) // Default size, will be updated on first resize
-    , _map(std::move(map))
-    , _fakeTileSprite(ResourceManager::getInstance().texture("art/tiles/blank.frm")) {
+    , _map(std::move(map)) {
     centerViewOnMap();
 }
 
@@ -56,6 +56,15 @@ void EditorState::init() {
     // Connect Qt6 menus to EditorState functionality
     if (_appData->mainWindow) {
         _appData->mainWindow->connectToEditorState();
+    }
+    
+    // Ensure view is properly sized to match current window
+    if (_appData->window) {
+        sf::Vector2u windowSize = _appData->window->getSize();
+        if (windowSize.x > 0 && windowSize.y > 0) {
+            _view.setSize(static_cast<float>(windowSize.x), static_cast<float>(windowSize.y));
+            spdlog::debug("EditorState::init() - Set initial view size to {}x{}", windowSize.x, windowSize.y);
+        }
     }
 }
 
@@ -183,70 +192,173 @@ void EditorState::loadSprites() {
     spdlog::info("Map sprites loaded in {:.3} seconds", sw);
 }
 
-std::vector<bool> EditorState::calculateBitset(const sf::Image& img) {
-    sf::Vector2u imgSize = img.getSize();
-
-    std::vector<bool> retVal(imgSize.x * imgSize.y); // allocate directly
-
-    for (unsigned int x = 0; x < imgSize.x; ++x)     // unsigned,  pre-increment (not crucial
-        for (unsigned int y = 0; y < imgSize.y; ++y) // here, but generally good practice)
-        {
-            const auto& pixel = img.getPixel(x, y);
-            retVal[imgSize.x * y + x] = (pixel.r == 0 && pixel.g == 0 && pixel.b == 0 && pixel.a == 0);
+// New improved object selection methods
+std::vector<std::shared_ptr<Object>> EditorState::getObjectsAtPosition(sf::Vector2f worldPos) {
+    std::vector<std::shared_ptr<Object>> objectsAtPos;
+    
+    // Check all objects for collision at the world position
+    for (auto& object : _objects) {
+        if (isPointInSpritePixel(worldPos, object->getSprite())) {
+            objectsAtPos.push_back(object);
         }
+    }
+    
+    // Sort by map position (z-order) - higher positions are "in front"
+    std::sort(objectsAtPos.begin(), objectsAtPos.end(), 
+        [](const std::shared_ptr<Object>& a, const std::shared_ptr<Object>& b) {
+            return a->getMapObject().position > b->getMapObject().position;
+        });
+    
+    // Debug: Log object positions and PIDs for debugging
+    if (objectsAtPos.size() > 1) {
+        spdlog::debug("getObjectsAtPosition: Found {} overlapping objects:", objectsAtPos.size());
+        for (size_t i = 0; i < objectsAtPos.size(); i++) {
+            spdlog::debug("  [{}] PID: {}, Position: {}", i, 
+                         objectsAtPos[i]->getMapObject().pro_pid, 
+                         objectsAtPos[i]->getMapObject().position);
+        }
+    }
+    
+    return objectsAtPos;
+}
 
-    return retVal;
+bool EditorState::isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite& sprite) {
+    return sprite.getGlobalBounds().contains(worldPos);
+}
+
+bool EditorState::isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite) {
+    // First check if point is within sprite bounds
+    if (!isPointInSpriteBounds(worldPos, sprite)) {
+        return false;
+    }
+    
+    // Get sprite bounds and texture
+    const auto bounds = sprite.getGlobalBounds();
+    const auto* texture = sprite.getTexture();
+    if (!texture) {
+        return false;
+    }
+    
+    // Convert world position to sprite-local coordinates
+    sf::Vector2f localPos = worldPos - sf::Vector2f(bounds.left, bounds.top);
+    
+    // Apply sprite's texture rectangle and scale
+    const auto textureRect = sprite.getTextureRect();
+    const auto scale = sprite.getScale();
+    
+    // Convert to texture coordinates
+    int texX = static_cast<int>((localPos.x / scale.x) + textureRect.left);
+    int texY = static_cast<int>((localPos.y / scale.y) + textureRect.top);
+    
+    // Get texture size
+    const auto texSize = texture->getSize();
+    
+    // Bounds check
+    if (texX < 0 || texY < 0 || texX >= static_cast<int>(texSize.x) || texY >= static_cast<int>(texSize.y)) {
+        return false;
+    }
+    
+    // Get the image and check pixel transparency
+    const auto image = texture->copyToImage();
+    const auto pixel = image.getPixel(texX, texY);
+    
+    bool isHit = pixel.a > 0;
+    if (isHit) {
+        spdlog::debug("Hit detected: world({:.2f},{:.2f}) -> local({:.2f},{:.2f}) -> tex({},{}) alpha={}", 
+                     worldPos.x, worldPos.y, localPos.x, localPos.y, texX, texY, pixel.a);
+    }
+    
+    // Return true if pixel is not fully transparent
+    return isHit;
+}
+
+bool EditorState::isDoubleClick(sf::Vector2f worldPos) {
+    float timeSinceLastClick = _lastClickTime.getElapsedTime().asSeconds();
+    float distance = std::sqrt(std::pow(worldPos.x - _lastClickPosition.x, 2) + 
+                              std::pow(worldPos.y - _lastClickPosition.y, 2));
+    
+    bool isDouble = (timeSinceLastClick < DOUBLE_CLICK_TIME) && (distance < DOUBLE_CLICK_DISTANCE);
+    
+    // Update last click info
+    _lastClickTime.restart();
+    _lastClickPosition = worldPos;
+    
+    return isDouble;
+}
+
+void EditorState::cycleObjectsAtPosition(sf::Vector2f worldPos) {
+    auto objectsAtPos = getObjectsAtPosition(worldPos);
+    
+    if (objectsAtPos.size() <= 1) {
+        return; // Nothing to cycle
+    }
+    
+    if (!_selectedObject) {
+        return; // No current selection to cycle from
+    }
+    
+    // Find current object in the list
+    auto currentIt = std::find(objectsAtPos.begin(), objectsAtPos.end(), _selectedObject.value());
+    if (currentIt != objectsAtPos.end()) {
+        // Move to next object in the list
+        auto nextIt = std::next(currentIt);
+        if (nextIt != objectsAtPos.end()) {
+            spdlog::debug("cycleObjectsAtPosition: Cycling to next object");
+            unselectObject();
+            (*nextIt)->select();
+            _selectedObject = *nextIt;
+            objectSelected(_selectedObject.value());
+        } else {
+            // Wrap around to the first object
+            spdlog::debug("cycleObjectsAtPosition: Wrapping to first object");
+            unselectObject();
+            objectsAtPos[0]->select();
+            _selectedObject = objectsAtPos[0];
+            objectSelected(_selectedObject.value());
+        }
+    }
 }
 
 bool EditorState::selectObject(sf::Vector2f worldPos) {
-
-    // TODO: use ranges ?
-    // filter and then max_element using the position property
-    std::optional<std::shared_ptr<Object>> newly_selected_object;
-
-    // we are moving selected object to a different location
-    if (_selectedObject && !isSpriteClicked(worldPos, _selectedObject->get()->getSprite())) {
+    // Get all objects at the clicked position, sorted by z-order (front to back)
+    auto objectsAtPos = getObjectsAtPosition(worldPos);
+    
+    spdlog::debug("selectObject: Found {} objects at position ({:.2f}, {:.2f})", 
+                 objectsAtPos.size(), worldPos.x, worldPos.y);
+    
+    if (objectsAtPos.empty()) {
+        // No objects at this position, clear selection
+        if (_selectedObject) {
+            spdlog::debug("selectObject: No objects found, clearing selection");
+            unselectObject();
+        }
         return false;
     }
-
-    // we are clicking on the same area where the selected object is located, so select the one behind or unselect it
-    for (int i = 0; i < _objects.size(); i++) {
-        auto& iterated_object = _objects.at(i);
-
-        if (isSpriteClicked(worldPos, iterated_object->getSprite())) {
-
-            if (iterated_object->isSelected()) {
-                unselectObject();
-                break;
-            }
-
-            if (newly_selected_object) {
-
-                const int position1 = newly_selected_object->get()->getMapObject().position;
-                const int position2 = iterated_object->getMapObject().position;
-
-                // select the foremost object
-                if (position1 < position2) {
-                    newly_selected_object = iterated_object;
-                }
-            } else {
-                newly_selected_object = iterated_object;
-            }
+    
+    // If we have multiple objects and currently have a selected object at this position, cycle to next
+    if (objectsAtPos.size() > 1 && _selectedObject) {
+        auto currentIt = std::find(objectsAtPos.begin(), objectsAtPos.end(), _selectedObject.value());
+        if (currentIt != objectsAtPos.end()) {
+            // The currently selected object is at this position, so cycle to the next one
+            spdlog::debug("selectObject: Clicking on position with currently selected object, cycling to next object");
+            cycleObjectsAtPosition(worldPos);
+            _lastClickPosition = worldPos;
+            _lastClickTime.restart();
+            return true;
         }
     }
-    if (newly_selected_object) {
-        unselectAll();
-
-        _selectedObject = newly_selected_object;
-        _selectedObject->get()->select();
-        objectSelected(_selectedObject.value());
-
-        // TODO: show in the panel
-
-        return true;
-    }
-
-    return false;
+    
+    // Select the frontmost object at this position
+    spdlog::debug("selectObject: Selecting frontmost object");
+    unselectAll();
+    objectsAtPos[0]->select();
+    _selectedObject = objectsAtPos[0];
+    objectSelected(_selectedObject.value());
+    
+    // Update click tracking for cycling
+    _lastClickPosition = worldPos;
+    _lastClickTime.restart();
+    return true;
 }
 
 bool EditorState::selectFloorTile(sf::Vector2f worldPos) {
@@ -259,28 +371,46 @@ bool EditorState::selectRoofTile(sf::Vector2f worldPos) {
 }
 
 bool EditorState::selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& sprites, std::vector<int>& selectedIndexes, bool selectingRoof) {
-
+    // First, check all tiles to find the one(s) that contain the click point
+    std::vector<int> candidateTiles;
+    
     for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
-
         auto& tile = sprites.at(i);
-
-        _fakeTileSprite.setPosition(tile.getPosition());
-
-        if (isSpriteClicked(worldPos, _fakeTileSprite)) {
+        
+        // Use bounds check first for efficiency
+        if (isPointInSpriteBounds(worldPos, tile)) {
+            candidateTiles.push_back(i);
+        }
+    }
+    
+    // Now check pixel-perfect collision only on candidate tiles
+    for (int i : candidateTiles) {
+        auto& tile = sprites.at(i);
+        
+        if (isPointInSpritePixel(worldPos, tile)) {
             if (selectingRoof && _map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() == Map::EMPTY_TILE) {
-                return false;
+                continue; // Skip empty roof tiles, try next candidate
             }
+            
+            // Check if this tile is already selected
             if (std::count(selectedIndexes.begin(), selectedIndexes.end(), i)) {
-
+                // Deselect this tile
                 tile.setColor(sf::Color::White);
                 selectedIndexes.erase(std::remove(selectedIndexes.begin(), selectedIndexes.end(), i));
+                spdlog::debug("selectTile: Deselected tile {}", i);
                 return false;
-
             } else {
+                // Clear all previously selected tiles before selecting the new one
+                for (int prevIndex : selectedIndexes) {
+                    sprites.at(prevIndex).setColor(sf::Color::White);
+                }
+                selectedIndexes.clear();
+                
+                // Select the new tile
                 tile.setColor(sf::Color::Red);
                 selectedIndexes.push_back(i);
-
                 unselectObject();
+                spdlog::debug("selectTile: Selected tile {}", i);
                 return true;
             }
         }
@@ -289,22 +419,93 @@ bool EditorState::selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::
     return false;
 }
 
-bool EditorState::isSpriteClicked(const sf::Vector2f& worldPos, const sf::Sprite& sprite) {
-    if (sprite.getGlobalBounds().contains(worldPos)) {
-
-        const auto& image = sprite.getTexture()->copyToImage();
-        const auto& bitsets = calculateBitset(image);
-
-        const auto& x = worldPos.x - sprite.getGlobalBounds().left;
-        const auto& y = worldPos.y - sprite.getGlobalBounds().top;
-
-        int w = image.getSize().x;
-        if (!bitsets[w * y + x]) {
-            return true;
+bool EditorState::selectAtPosition(sf::Vector2f worldPos) {
+    // Check what types of selectable items are available at this position
+    auto objectsAtPos = getObjectsAtPosition(worldPos);
+    bool hasObjects = !objectsAtPos.empty();
+    
+    // Check if there are tiles at this position
+    bool hasRoofTile = false;
+    bool hasFloorTile = false;
+    
+    // Quick check for tiles by looking at bounds
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+        if (isPointInSpriteBounds(worldPos, _roofSprites.at(i))) {
+            if (_map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() != Map::EMPTY_TILE) {
+                hasRoofTile = true;
+            }
+        }
+        if (isPointInSpriteBounds(worldPos, _floorSprites.at(i))) {
+            hasFloorTile = true;
         }
     }
-    return false;
+    
+    // Determine if this is a new position or a cycling click
+    float distance = std::sqrt(std::pow(worldPos.x - _lastSelectionPosition.x, 2) + 
+                              std::pow(worldPos.y - _lastSelectionPosition.y, 2));
+    bool isSamePosition = distance < DOUBLE_CLICK_DISTANCE;
+    
+    if (!isSamePosition) {
+        // New position - start with the highest priority item (objects first)
+        _lastSelectionPosition = worldPos;
+        
+        if (hasObjects) {
+            _lastSelectionType = SelectionType::OBJECT;
+            return selectObject(worldPos);
+        } else if (hasRoofTile) {
+            _lastSelectionType = SelectionType::ROOF_TILE;
+            return selectRoofTile(worldPos);
+        } else if (hasFloorTile) {
+            _lastSelectionType = SelectionType::FLOOR_TILE;
+            return selectFloorTile(worldPos);
+        }
+        return false;
+    } else {
+        // Same position - cycle to next available type
+        switch (_lastSelectionType) {
+            case SelectionType::OBJECT:
+                if (hasRoofTile) {
+                    _lastSelectionType = SelectionType::ROOF_TILE;
+                    return selectRoofTile(worldPos);
+                } else if (hasFloorTile) {
+                    _lastSelectionType = SelectionType::FLOOR_TILE;
+                    return selectFloorTile(worldPos);
+                } else if (hasObjects) {
+                    // Cycle back to objects
+                    return selectObject(worldPos);
+                }
+                break;
+                
+            case SelectionType::ROOF_TILE:
+                if (hasFloorTile) {
+                    _lastSelectionType = SelectionType::FLOOR_TILE;
+                    return selectFloorTile(worldPos);
+                } else if (hasObjects) {
+                    _lastSelectionType = SelectionType::OBJECT;
+                    return selectObject(worldPos);
+                } else if (hasRoofTile) {
+                    // Stay on roof tile
+                    return selectRoofTile(worldPos);
+                }
+                break;
+                
+            case SelectionType::FLOOR_TILE:
+                if (hasObjects) {
+                    _lastSelectionType = SelectionType::OBJECT;
+                    return selectObject(worldPos);
+                } else if (hasRoofTile) {
+                    _lastSelectionType = SelectionType::ROOF_TILE;
+                    return selectRoofTile(worldPos);
+                } else if (hasFloorTile) {
+                    // Stay on floor tile
+                    return selectFloorTile(worldPos);
+                }
+                break;
+        }
+        return false;
+    }
 }
+
 
 void EditorState::handleEvent(const sf::Event& event) {
     if (event.type == sf::Event::KeyPressed) {
@@ -359,44 +560,40 @@ void EditorState::handleEvent(const sf::Event& event) {
     // Left mouse click
     if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Button::Left) {
 
-        sf::Vector2i mouse_pos = sf::Mouse::getPosition(*_appData->window);
+        // Use the mouse coordinates from the event directly (already in widget coordinates)
+        sf::Vector2i mouse_pos(event.mouseButton.x, event.mouseButton.y);
 
-        // convert it to world coordinates
-        sf::Vector2f world_pos = _appData->window->mapPixelToCoords(mouse_pos);
+        // convert it to world coordinates using the current view
+        sf::Vector2f world_pos = _appData->window->mapPixelToCoords(mouse_pos, _view);
 
-        bool object_already_selected = _selectedObject.has_value(); // some object was already selected
-
-        // FIXME: disable selecting objects through roof
-        bool roof_selected = false;
-        if (!object_already_selected && _showRoof && (_currentSelectionMode == SelectionMode::ALL || _currentSelectionMode == SelectionMode::ROOF_TILES)) {
-            roof_selected = selectRoofTile(world_pos);
-        }
-
-        if (!roof_selected && _currentSelectionMode != SelectionMode::ROOF_TILES) {
-            bool moving_object = false;
-            if (_currentSelectionMode != SelectionMode::ALL && _currentSelectionMode != SelectionMode::OBJECTS) {
-                unselectObject();
-            } else {
-                bool selected_different_object = selectObject(world_pos); // another object was selected instead
-
-                // still have the original selected and clicked on an empty space
-                moving_object = object_already_selected && !selected_different_object && _selectedObject.has_value();
-
-                auto position_clicked = _hexgrid.positionAt(world_pos.x, world_pos.y);
-                if (moving_object && position_clicked != Hex::HEX_OUT_OF_MAP) {
-                    _selectedObject->get()->setHexPosition(_hexgrid.grid().at(position_clicked));
-
-                    std::stable_sort(_objects.begin(), _objects.end(), [](const auto obj1, const auto obj2) {
-                        return obj1->getMapObject().position < obj2->getMapObject().position;
-                    });
+        spdlog::debug("Mouse click at widget coords: ({}, {}), world coords: ({:.2f}, {:.2f})", 
+                     mouse_pos.x, mouse_pos.y, world_pos.x, world_pos.y);
+        
+        // Simplified selection logic
+        switch (_currentSelectionMode) {
+            case SelectionMode::ALL:
+                // Try objects first, then tiles
+                if (!selectObject(world_pos)) {
+                    if (!selectRoofTile(world_pos)) {
+                        selectFloorTile(world_pos);
+                    }
                 }
-            }
-
-            if (!_selectedObject && !moving_object && !object_already_selected) {
-                if (_currentSelectionMode == SelectionMode::ALL || _currentSelectionMode == SelectionMode::FLOOR_TILES) {
-                    selectFloorTile(world_pos);
-                }
-            }
+                break;
+                
+            case SelectionMode::OBJECTS:
+                selectObject(world_pos);
+                break;
+                
+            case SelectionMode::ROOF_TILES:
+                selectRoofTile(world_pos);
+                break;
+                
+            case SelectionMode::FLOOR_TILES:
+                selectFloorTile(world_pos);
+                break;
+                
+            default:
+                break;
         }
     }
 

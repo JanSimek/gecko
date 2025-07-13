@@ -1,4 +1,4 @@
-#include "Qt6MapInfoPanel.h"
+#include "MapInfoPanel.h"
 
 #include <QHeaderView>
 #include <QApplication>
@@ -14,7 +14,7 @@
 
 namespace geck {
 
-Qt6MapInfoPanel::Qt6MapInfoPanel(QWidget* parent)
+MapInfoPanel::MapInfoPanel(QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
     , _scrollArea(nullptr)
@@ -44,7 +44,7 @@ Qt6MapInfoPanel::Qt6MapInfoPanel(QWidget* parent)
     setupUI();
 }
 
-void Qt6MapInfoPanel::setupUI() {
+void MapInfoPanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
     _mainLayout->setContentsMargins(5, 5, 5, 5);
     
@@ -168,18 +168,18 @@ void Qt6MapInfoPanel::setupUI() {
     clearMapInfo();
 }
 
-void Qt6MapInfoPanel::setMap(Map* map) {
+void MapInfoPanel::setMap(Map* map) {
     _map = map;
     if (_map) {
         updateMapInfo();
-        spdlog::debug("Qt6MapInfoPanel: Map set and info updated");
+        spdlog::debug("MapInfoPanel: Map set and info updated");
     } else {
         clearMapInfo();
-        spdlog::debug("Qt6MapInfoPanel: Map cleared");
+        spdlog::debug("MapInfoPanel: Map cleared");
     }
 }
 
-void Qt6MapInfoPanel::updateMapInfo() {
+void MapInfoPanel::updateMapInfo() {
     if (!_map) {
         clearMapInfo();
         return;
@@ -227,7 +227,7 @@ void Qt6MapInfoPanel::updateMapInfo() {
     }
 }
 
-void Qt6MapInfoPanel::loadScriptVars() {
+void MapInfoPanel::loadScriptVars() {
     _mvars.clear();
     _mapScriptName = "no script";
     
@@ -272,7 +272,7 @@ void Qt6MapInfoPanel::loadScriptVars() {
     }
 }
 
-void Qt6MapInfoPanel::clearMapInfo() {
+void MapInfoPanel::clearMapInfo() {
     _filenameEdit->clear();
     _filenameEdit->setPlaceholderText("No map loaded");
     

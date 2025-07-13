@@ -22,8 +22,8 @@ namespace geck {
 
 class SFMLWidget;
 class StateMachine;
-class Qt6SelectedObjectPanel;
-class Qt6MapInfoPanel;
+class SelectedObjectPanel;
+class MapInfoPanel;
 class Map;
 
 class MainWindow : public QMainWindow {
@@ -90,9 +90,9 @@ private:
     QDockWidget* _selectedObjectDock;
     QDockWidget* _tileSelectionDock;
     
-    // Qt6 Panel widgets
-    Qt6SelectedObjectPanel* _selectedObjectPanel;
-    Qt6MapInfoPanel* _mapInfoPanel;
+    // Panel widgets
+    SelectedObjectPanel* _selectedObjectPanel;
+    MapInfoPanel* _mapInfoPanel;
     
     bool _isRunning;
 };

@@ -14,11 +14,11 @@
 
 namespace geck {
 
-class Qt6SelectedObjectPanel : public QWidget {
+class SelectedObjectPanel : public QWidget {
     Q_OBJECT
 
 public:
-    explicit Qt6SelectedObjectPanel(QWidget* parent = nullptr);
+    explicit SelectedObjectPanel(QWidget* parent = nullptr);
 
 public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);

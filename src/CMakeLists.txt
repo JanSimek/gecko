@@ -23,10 +23,10 @@ add_executable (${PROJECT_NAME}
     ui/MainWindow.cpp
     ui/SFMLWidget.h
     ui/SFMLWidget.cpp
-    ui/Qt6SelectedObjectPanel.h
-    ui/Qt6SelectedObjectPanel.cpp
-    ui/Qt6MapInfoPanel.h
-    ui/Qt6MapInfoPanel.cpp
+    ui/SelectedObjectPanel.h
+    ui/SelectedObjectPanel.cpp
+    ui/MapInfoPanel.h
+    ui/MapInfoPanel.cpp
 
     # States
     state/StateMachine.h

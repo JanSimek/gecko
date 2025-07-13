@@ -1,8 +1,8 @@
 #define QT_NO_EMIT
 #include "MainWindow.h"
 #include "SFMLWidget.h"
-#include "Qt6SelectedObjectPanel.h"
-#include "Qt6MapInfoPanel.h"
+#include "SelectedObjectPanel.h"
+#include "MapInfoPanel.h"
 #include "../state/StateMachine.h"
 #include "../state/EditorState.h"
 
@@ -201,8 +201,8 @@ void MainWindow::setupDockWidgets() {
     _mapInfoDock = new QDockWidget("Map Information", this);
     _mapInfoDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     
-    // Create and set the Qt6 MapInfoPanel
-    _mapInfoPanel = new Qt6MapInfoPanel();
+    // Create and set the MapInfoPanel
+    _mapInfoPanel = new MapInfoPanel();
     _mapInfoDock->setWidget(_mapInfoPanel);
     
     addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
@@ -211,8 +211,8 @@ void MainWindow::setupDockWidgets() {
     _selectedObjectDock = new QDockWidget("Selected Object", this);
     _selectedObjectDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     
-    // Create and set the Qt6 SelectedObjectPanel
-    _selectedObjectPanel = new Qt6SelectedObjectPanel();
+    // Create and set the SelectedObjectPanel
+    _selectedObjectPanel = new SelectedObjectPanel();
     _selectedObjectDock->setWidget(_selectedObjectPanel);
     
     addDockWidget(Qt::RightDockWidgetArea, _selectedObjectDock);
@@ -355,10 +355,10 @@ void MainWindow::connectToEditorState() {
         editorState->rotateSelectedObject();
     });
     
-    // Connect EditorState's objectSelected signal to the Qt6SelectedObjectPanel
+    // Connect EditorState's objectSelected signal to the SelectedObjectPanel
     if (_selectedObjectPanel) {
-        connect(editorState, &EditorState::objectSelected, _selectedObjectPanel, &Qt6SelectedObjectPanel::selectObject);
-        spdlog::info("Connected EditorState objectSelected signal to Qt6SelectedObjectPanel");
+        connect(editorState, &EditorState::objectSelected, _selectedObjectPanel, &SelectedObjectPanel::selectObject);
+        spdlog::info("Connected EditorState objectSelected signal to SelectedObjectPanel");
     }
     
     // Update map info panel with current map

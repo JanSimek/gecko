@@ -1,4 +1,4 @@
-#include "Qt6SelectedObjectPanel.h"
+#include "SelectedObjectPanel.h"
 
 #include <QFormLayout>
 #include <QPixmap>
@@ -12,7 +12,7 @@
 
 namespace geck {
 
-Qt6SelectedObjectPanel::Qt6SelectedObjectPanel(QWidget* parent)
+SelectedObjectPanel::SelectedObjectPanel(QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
     , _scrollArea(nullptr)
@@ -29,7 +29,7 @@ Qt6SelectedObjectPanel::Qt6SelectedObjectPanel(QWidget* parent)
     setupUI();
 }
 
-void Qt6SelectedObjectPanel::setupUI() {
+void SelectedObjectPanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
     _mainLayout->setContentsMargins(5, 5, 5, 5);
     
@@ -50,7 +50,12 @@ void Qt6SelectedObjectPanel::setupUI() {
     // Sprite display (placeholder for now)
     _spriteLabel = new QLabel("No object selected");
     _spriteLabel->setAlignment(Qt::AlignCenter);
-    _spriteLabel->setMinimumHeight(64);
+    _spriteLabel->setMinimumHeight(128);
+    _spriteLabel->setMinimumWidth(128);
+    _spriteLabel->setMaximumHeight(128);
+    _spriteLabel->setMaximumWidth(128);
+    _spriteLabel->setScaledContents(false);  // Don't stretch - we'll handle scaling manually
+    _spriteLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     _spriteLabel->setStyleSheet("border: 1px solid gray; background-color: #f0f0f0;");
     formLayout->addRow("Sprite:", _spriteLabel);
     
@@ -93,19 +98,20 @@ void Qt6SelectedObjectPanel::setupUI() {
     clearObjectInfo();
 }
 
-void Qt6SelectedObjectPanel::selectObject(std::shared_ptr<Object> selectedObject) {
+void SelectedObjectPanel::selectObject(std::shared_ptr<Object> selectedObject) {
     if (selectedObject == nullptr) {
         _selectedObject.reset();
         clearObjectInfo();
-        spdlog::debug("Qt6SelectedObjectPanel: Object deselected");
+        spdlog::debug("SelectedObjectPanel: Object deselected");
     } else {
         _selectedObject = selectedObject;
         updateObjectInfo();
-        spdlog::debug("Qt6SelectedObjectPanel: Object selected");
+        spdlog::debug("SelectedObjectPanel: Object selected with PID {}", 
+                     selectedObject->getMapObject().pro_pid);
     }
 }
 
-void Qt6SelectedObjectPanel::updateObjectInfo() {
+void SelectedObjectPanel::updateObjectInfo() {
     if (!_selectedObject || !_selectedObject.value()) {
         clearObjectInfo();
         return;
@@ -138,8 +144,43 @@ void Qt6SelectedObjectPanel::updateObjectInfo() {
             _positionSpin->setValue(selectedMapObject.position);
             _protoPidSpin->setValue(static_cast<int>(selectedMapObject.pro_pid));
             
-            // TODO: Display sprite image - requires converting SFML sprite to QPixmap
-            _spriteLabel->setText("Sprite\n(TODO: Image display)");
+            // Convert SFML sprite to QPixmap for display
+            const auto& sprite = _selectedObject.value()->getSprite();
+            const auto* texture = sprite.getTexture();
+            if (texture) {
+                // Get the image from SFML texture
+                auto image = texture->copyToImage();
+                auto textureRect = sprite.getTextureRect();
+                
+                // Create QImage from SFML image data
+                const sf::Uint8* pixels = image.getPixelsPtr();
+                QImage qImage(pixels, image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
+                
+                // Extract the sprite's texture rectangle if needed
+                if (textureRect.width > 0 && textureRect.height > 0) {
+                    qImage = qImage.copy(textureRect.left, textureRect.top, textureRect.width, textureRect.height);
+                }
+                
+                // Create pixmap and scale to fit label while maintaining aspect ratio
+                QPixmap pixmap = QPixmap::fromImage(qImage);
+                if (!pixmap.isNull()) {
+                    // Scale the pixmap to fit within 128x128 while keeping aspect ratio
+                    QSize maxSize(128, 128);
+                    
+                    if (pixmap.width() > maxSize.width() || pixmap.height() > maxSize.height()) {
+                        pixmap = pixmap.scaled(maxSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                    }
+                    
+                    _spriteLabel->setPixmap(pixmap);
+                    
+                    // Clear the text when we have a pixmap
+                    _spriteLabel->setText("");
+                } else {
+                    _spriteLabel->setText("Failed to convert sprite");
+                }
+            } else {
+                _spriteLabel->setText("No texture available");
+            }
             
             _objectInfoGroup->setTitle("Object Information");
         } else {
@@ -152,7 +193,7 @@ void Qt6SelectedObjectPanel::updateObjectInfo() {
     }
 }
 
-void Qt6SelectedObjectPanel::clearObjectInfo() {
+void SelectedObjectPanel::clearObjectInfo() {
     _nameEdit->clear();
     _nameEdit->setPlaceholderText("No object selected");
     
@@ -163,6 +204,7 @@ void Qt6SelectedObjectPanel::clearObjectInfo() {
     _positionSpin->setValue(0);
     _protoPidSpin->setValue(0);
     
+    _spriteLabel->clear();
     _spriteLabel->setText("No object selected");
     _objectInfoGroup->setTitle("Object Information");
 }

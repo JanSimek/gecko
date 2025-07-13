@@ -92,28 +92,20 @@ void SFMLWidget::resizeEvent(QResizeEvent* event) {
 }
 
 void SFMLWidget::mousePressEvent(QMouseEvent* event) {
-    sf::Event sfmlEvent;
-    convertQtMouseEventToSFML(event, sfmlEvent, sf::Event::MouseButtonPressed);
-    handleSFMLEvent(sfmlEvent);
-    
+    // Don't forward Qt mouse events to SFML - SFML handles them natively
+    // This prevents duplicate event processing
     QWidget::mousePressEvent(event);
 }
 
 void SFMLWidget::mouseReleaseEvent(QMouseEvent* event) {
-    sf::Event sfmlEvent;
-    convertQtMouseEventToSFML(event, sfmlEvent, sf::Event::MouseButtonReleased);
-    handleSFMLEvent(sfmlEvent);
-    
+    // Don't forward Qt mouse events to SFML - SFML handles them natively
+    // This prevents duplicate event processing
     QWidget::mouseReleaseEvent(event);
 }
 
 void SFMLWidget::mouseMoveEvent(QMouseEvent* event) {
-    sf::Event sfmlEvent;
-    sfmlEvent.type = sf::Event::MouseMoved;
-    sfmlEvent.mouseMove.x = event->position().x();
-    sfmlEvent.mouseMove.y = event->position().y();
-    handleSFMLEvent(sfmlEvent);
-    
+    // Don't forward Qt mouse events to SFML - SFML handles them natively
+    // This prevents duplicate event processing
     QWidget::mouseMoveEvent(event);
 }
 

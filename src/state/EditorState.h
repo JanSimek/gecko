@@ -35,8 +35,17 @@ private:
     bool selectFloorTile(sf::Vector2f worldPos);
     bool selectRoofTile(sf::Vector2f worldPos);
     bool selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& sprites, std::vector<int>& selectedIndexes, bool roof);
-    bool isSpriteClicked(const sf::Vector2f& worldPos, const sf::Sprite& sprite);
-    std::vector<bool> calculateBitset(const sf::Image& img);
+    
+    // New improved object selection methods
+    std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
+    bool isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite);
+    bool isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite& sprite);
+    bool isDoubleClick(sf::Vector2f worldPos);
+    void cycleObjectsAtPosition(sf::Vector2f worldPos);
+    
+    // Selection type cycling for overlapping elements
+    enum class SelectionType { OBJECT, ROOF_TILE, FLOOR_TILE };
+    bool selectAtPosition(sf::Vector2f worldPos);
 
     void unselectAll();
     void unselectTiles();
@@ -80,6 +89,16 @@ private:
     sf::Vector2i _mouseLastPosition{ 0, 0 };     // current panning position
     EditorAction _currentAction = EditorAction::NONE;
     sf::Cursor _cursor;
+    
+    // Double-click detection for object cycling
+    sf::Clock _lastClickTime;
+    sf::Vector2f _lastClickPosition;
+    static constexpr float DOUBLE_CLICK_TIME = 0.5f; // 500ms
+    static constexpr float DOUBLE_CLICK_DISTANCE = 10.0f; // pixels
+    
+    // Selection type cycling for overlapping elements
+    SelectionType _lastSelectionType = SelectionType::OBJECT;
+    sf::Vector2f _lastSelectionPosition;
 
     std::optional<std::shared_ptr<Object>> _selectedObject;
 
@@ -87,7 +106,6 @@ private:
     std::vector<int> _selectedRoofTileIndexes;
     std::vector<int> _selectedFloorTileIndexes;
 
-    sf::Sprite _fakeTileSprite; // used for checking tile selection
 
 
 public:

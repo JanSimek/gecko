@@ -20,11 +20,11 @@ class Map;
 /**
  * Qt6 widget for displaying properties from the current MAP file
  */
-class Qt6MapInfoPanel : public QWidget {
+class MapInfoPanel : public QWidget {
     Q_OBJECT
 
 public:
-    explicit Qt6MapInfoPanel(QWidget* parent = nullptr);
+    explicit MapInfoPanel(QWidget* parent = nullptr);
     
     void setMap(Map* map);
 
