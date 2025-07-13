@@ -7,7 +7,7 @@
 
 namespace geck {
 
-class StateMachine;
+class EditorWidget;
 
 class SFMLWidget : public QWidget {
     Q_OBJECT
@@ -16,7 +16,7 @@ public:
     explicit SFMLWidget(QWidget* parent = nullptr);
     ~SFMLWidget();
 
-    void setStateMachine(std::shared_ptr<StateMachine> stateMachine);
+    void setEditorWidget(EditorWidget* editorWidget);
     sf::RenderWindow* getRenderWindow() const { return _renderWindow.get(); }
 
     void handleSFMLEvent(const sf::Event& event);
@@ -40,7 +40,7 @@ private:
     void convertQtWheelEventToSFML(QWheelEvent* qtEvent, sf::Event& sfmlEvent);
 
     std::unique_ptr<sf::RenderWindow> _renderWindow;
-    std::shared_ptr<StateMachine> _stateMachine;
+    EditorWidget* _editorWidget;
     sf::Clock _deltaClock;
     bool _initialized;
 };

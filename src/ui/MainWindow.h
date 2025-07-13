@@ -6,6 +6,7 @@
 #include <QDockWidget>
 #include <QTimer>
 #include <QKeyEvent>
+#include <QStackedWidget>
 #include <memory>
 
 QT_BEGIN_NAMESPACE
@@ -21,7 +22,8 @@ namespace sf {
 namespace geck {
 
 class SFMLWidget;
-class StateMachine;
+class EditorWidget;
+class LoadingWidget;
 class SelectionPanel;
 class MapInfoPanel;
 class Map;
@@ -33,15 +35,15 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow();
 
-    void setStateMachine(std::shared_ptr<StateMachine> stateMachine);
-    SFMLWidget* getSFMLWidget() const { return _sfmlWidget; }
+    void setEditorWidget(std::unique_ptr<EditorWidget> editorWidget);
+    void setLoadingWidget(std::unique_ptr<LoadingWidget> loadingWidget);
     
     void updateMapInfo(Map* map);
 
     void startGameLoop();
     void stopGameLoop();
     
-    void connectToEditorState();
+    void connectToEditorWidget();
 
 signals:
     void newMapRequested();
@@ -63,6 +65,7 @@ protected:
 
 private slots:
     void updateAndRender();
+    void handleMapLoadRequest(const std::string& mapPath);
 
 private:
     void setupUI();
@@ -72,9 +75,12 @@ private:
     
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
 
-    SFMLWidget* _sfmlWidget;
+    QStackedWidget* _centralStack;
     QTimer* _gameLoopTimer;
-    std::shared_ptr<StateMachine> _stateMachine;
+    
+    // Current widgets
+    EditorWidget* _currentEditorWidget;
+    LoadingWidget* _currentLoadingWidget;
     
     // Menu items
     QMenuBar* _menuBar;

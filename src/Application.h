@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <stack>
 #include <filesystem>
 #include <atomic>
 #include <shared_mutex>
@@ -12,14 +11,7 @@
 
 namespace geck {
 
-class StateMachine;
 class MainWindow;
-
-struct AppData {
-    sf::RenderWindow* window;
-    std::shared_ptr<StateMachine> stateMachine;
-    MainWindow* mainWindow;
-};
 
 class Application {
 public:
@@ -41,8 +33,6 @@ private:
 
     std::unique_ptr<QApplication> _qtApp;
     std::unique_ptr<MainWindow> _mainWindow;
-    std::shared_ptr<StateMachine> _stateMachine;
-    std::shared_ptr<AppData> _appData;
 
     void loadMap(const std::filesystem::path& mapPath);
 };

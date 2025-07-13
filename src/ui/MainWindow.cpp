@@ -1,10 +1,11 @@
 #define QT_NO_EMIT
 #include "MainWindow.h"
+#include "EditorWidget.h"
+#include "LoadingWidget.h"
 #include "SFMLWidget.h"
 #include "SelectionPanel.h"
 #include "MapInfoPanel.h"
-#include "../state/StateMachine.h"
-#include "../state/EditorState.h"
+#include "../state/loader/MapLoader.h"
 #include "../util/Types.h"
 
 #include <QApplication>
@@ -25,8 +26,10 @@ namespace geck {
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
-    , _sfmlWidget(nullptr)
+    , _centralStack(nullptr)
     , _gameLoopTimer(new QTimer(this))
+    , _currentEditorWidget(nullptr)
+    , _currentLoadingWidget(nullptr)
     , _menuBar(nullptr)
     , _fileMenu(nullptr)
     , _viewMenu(nullptr)
@@ -51,17 +54,36 @@ MainWindow::~MainWindow() {
     stopGameLoop();
 }
 
-void MainWindow::setStateMachine(std::shared_ptr<StateMachine> stateMachine) {
-    _stateMachine = stateMachine;
-    if (_sfmlWidget) {
-        _sfmlWidget->setStateMachine(stateMachine);
+void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
+    _currentEditorWidget = editorWidget.release();
+    _centralStack->addWidget(_currentEditorWidget);
+    _centralStack->setCurrentWidget(_currentEditorWidget);
+    
+    // Initialize the editor widget
+    _currentEditorWidget->init();
+    
+    // Connect signals
+    connectToEditorWidget();
+    
+    // Update map info panel
+    if (_currentEditorWidget->getMap()) {
+        updateMapInfo(_currentEditorWidget->getMap());
     }
 }
 
+void MainWindow::setLoadingWidget(std::unique_ptr<LoadingWidget> loadingWidget) {
+    _currentLoadingWidget = loadingWidget.release();
+    _centralStack->addWidget(_currentLoadingWidget);
+    _centralStack->setCurrentWidget(_currentLoadingWidget);
+    
+    // Start the loading process
+    _currentLoadingWidget->start();
+}
+
 void MainWindow::setupUI() {
-    // Create central SFML widget
-    _sfmlWidget = new SFMLWidget(this);
-    setCentralWidget(_sfmlWidget);
+    // Create central stacked widget to hold loading and editor widgets
+    _centralStack = new QStackedWidget(this);
+    setCentralWidget(_centralStack);
     
     setupMenuBar();
     setupToolBar();
@@ -231,8 +253,12 @@ void MainWindow::stopGameLoop() {
 }
 
 void MainWindow::updateAndRender() {
-    if (_sfmlWidget && _isRunning) {
-        _sfmlWidget->updateAndRender();
+    if (_currentEditorWidget && _isRunning) {
+        // Update and render current editor widget
+        SFMLWidget* sfmlWidget = _currentEditorWidget->getSFMLWidget();
+        if (sfmlWidget) {
+            sfmlWidget->updateAndRender();
+        }
     }
 }
 
@@ -242,19 +268,25 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent* event) {
-    if (_sfmlWidget) {
-        sf::Event sfmlEvent;
-        convertQtEventToSFML(event, sfmlEvent, true);
-        _sfmlWidget->handleSFMLEvent(sfmlEvent);
+    if (_currentEditorWidget) {
+        SFMLWidget* sfmlWidget = _currentEditorWidget->getSFMLWidget();
+        if (sfmlWidget) {
+            sf::Event sfmlEvent;
+            convertQtEventToSFML(event, sfmlEvent, true);
+            sfmlWidget->handleSFMLEvent(sfmlEvent);
+        }
     }
     QMainWindow::keyPressEvent(event);
 }
 
 void MainWindow::keyReleaseEvent(QKeyEvent* event) {
-    if (_sfmlWidget) {
-        sf::Event sfmlEvent;
-        convertQtEventToSFML(event, sfmlEvent, false);
-        _sfmlWidget->handleSFMLEvent(sfmlEvent);
+    if (_currentEditorWidget) {
+        SFMLWidget* sfmlWidget = _currentEditorWidget->getSFMLWidget();
+        if (sfmlWidget) {
+            sf::Event sfmlEvent;
+            convertQtEventToSFML(event, sfmlEvent, false);
+            sfmlWidget->handleSFMLEvent(sfmlEvent);
+        }
     }
     QMainWindow::keyReleaseEvent(event);
 }
@@ -285,87 +317,99 @@ void MainWindow::convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, 
     sfmlEvent.key.system = qtEvent->modifiers() & Qt::MetaModifier;
 }
 
-void MainWindow::connectToEditorState() {
-    if (!_stateMachine || _stateMachine->empty()) {
+void MainWindow::connectToEditorWidget() {
+    if (!_currentEditorWidget) {
         return;
     }
     
-    // Try to cast current state to EditorState
-    EditorState* editorState = dynamic_cast<EditorState*>(&_stateMachine->top());
-    if (!editorState) {
-        return; // Current state is not an EditorState
-    }
-    
-    // Connect MainWindow signals to EditorState methods via lambdas
-    connect(this, &MainWindow::newMapRequested, [editorState]() {
-        editorState->createNewMap();
+    // Connect MainWindow signals to EditorWidget methods via lambdas
+    connect(this, &MainWindow::newMapRequested, [this]() {
+        _currentEditorWidget->createNewMap();
     });
-    connect(this, &MainWindow::openMapRequested, [editorState]() {
-        editorState->openMap();
+    connect(this, &MainWindow::openMapRequested, [this]() {
+        _currentEditorWidget->openMap();
     });
-    connect(this, &MainWindow::saveMapRequested, [editorState]() {
-        editorState->saveMap();
+    connect(this, &MainWindow::saveMapRequested, [this]() {
+        _currentEditorWidget->saveMap();
     });
     
-    // Connect view toggles to EditorState visibility flags
-    connect(this, &MainWindow::showObjectsToggled, [editorState](bool enabled) {
-        editorState->setShowObjects(enabled);
+    // Connect view toggles to EditorWidget visibility flags
+    connect(this, &MainWindow::showObjectsToggled, [this](bool enabled) {
+        _currentEditorWidget->setShowObjects(enabled);
     });
-    connect(this, &MainWindow::showCrittersToggled, [editorState](bool enabled) {
-        editorState->setShowCritters(enabled);
+    connect(this, &MainWindow::showCrittersToggled, [this](bool enabled) {
+        _currentEditorWidget->setShowCritters(enabled);
     });
-    connect(this, &MainWindow::showWallsToggled, [editorState](bool enabled) {
-        editorState->setShowWalls(enabled);
+    connect(this, &MainWindow::showWallsToggled, [this](bool enabled) {
+        _currentEditorWidget->setShowWalls(enabled);
     });
-    connect(this, &MainWindow::showRoofsToggled, [editorState](bool enabled) {
-        editorState->setShowRoof(enabled);
+    connect(this, &MainWindow::showRoofsToggled, [this](bool enabled) {
+        _currentEditorWidget->setShowRoof(enabled);
     });
-    connect(this, &MainWindow::showScrollBlockersToggled, [editorState](bool enabled) {
-        editorState->setShowScrollBlk(enabled);
+    connect(this, &MainWindow::showScrollBlockersToggled, [this](bool enabled) {
+        _currentEditorWidget->setShowScrollBlk(enabled);
     });
     
     // Connect elevation changes
-    connect(this, &MainWindow::elevationChanged, [editorState](int elevation) {
-        editorState->changeElevation(elevation);
+    connect(this, &MainWindow::elevationChanged, [this](int elevation) {
+        _currentEditorWidget->changeElevation(elevation);
     });
     
     // Connect toolbar actions  
-    connect(this, &MainWindow::selectionModeRequested, [editorState]() {
-        editorState->cycleSelectionMode();
+    connect(this, &MainWindow::selectionModeRequested, [this]() {
+        _currentEditorWidget->cycleSelectionMode();
     });
-    connect(this, &MainWindow::rotateObjectRequested, [editorState]() {
-        editorState->rotateSelectedObject();
+    connect(this, &MainWindow::rotateObjectRequested, [this]() {
+        _currentEditorWidget->rotateSelectedObject();
     });
     
-    // Connect EditorState's selection signals to the unified SelectionPanel
+    // Connect EditorWidget's selection signals to the unified SelectionPanel
     if (_selectionPanel) {
         // Set the map reference for the selection panel
-        _selectionPanel->setMap(editorState->getMap());
+        _selectionPanel->setMap(_currentEditorWidget->getMap());
         
         // Connect object selection signals
-        connect(editorState, &EditorState::objectSelected, _selectionPanel, &SelectionPanel::selectObject);
+        connect(_currentEditorWidget, &EditorWidget::objectSelected, _selectionPanel, &SelectionPanel::selectObject);
         
         // Connect tile selection signals
-        connect(editorState, &EditorState::tileSelected, _selectionPanel, &SelectionPanel::selectTile);
-        connect(editorState, &EditorState::tileSelectionCleared, _selectionPanel, &SelectionPanel::clearSelection);
+        connect(_currentEditorWidget, &EditorWidget::tileSelected, _selectionPanel, &SelectionPanel::selectTile);
+        connect(_currentEditorWidget, &EditorWidget::tileSelectionCleared, _selectionPanel, &SelectionPanel::clearSelection);
         
-        spdlog::info("Connected EditorState selection signals to unified SelectionPanel");
+        spdlog::info("Connected EditorWidget selection signals to unified SelectionPanel");
     }
     
-    // Update map info panel with current map
-    if (_mapInfoPanel) {
-        // For now, we need to access the EditorState's map directly
-        // TODO: Add a signal for map changes in EditorState
-        updateMapInfo(editorState->getMap());
-    }
+    // Connect map loading signal
+    connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, &MainWindow::handleMapLoadRequest);
     
-    spdlog::info("Qt6 menu connected to EditorState");
+    spdlog::info("Qt6 menu connected to EditorWidget");
 }
 
 void MainWindow::updateMapInfo(Map* map) {
     if (_mapInfoPanel) {
         _mapInfoPanel->setMap(map);
     }
+}
+
+void MainWindow::handleMapLoadRequest(const std::string& mapPath) {
+    spdlog::info("MainWindow: Handling request to load map: {}", mapPath);
+    
+    // Create loading widget and show it
+    auto loadingWidget = std::make_unique<LoadingWidget>();
+    
+    // Add map loader with callback to create new editor widget
+    loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, [this](auto map) {
+        // When loading is complete, create new editor widget and switch to it
+        auto editorWidget = std::make_unique<EditorWidget>(std::move(map));
+        setEditorWidget(std::move(editorWidget));
+    }));
+    
+    // Connect loading complete signal
+    QObject::connect(loadingWidget.get(), &LoadingWidget::loadingComplete, loadingWidget.get(), []() {
+        spdlog::info("Map loading completed from MainWindow");
+    });
+    
+    // Show loading widget
+    setLoadingWidget(std::move(loadingWidget));
 }
 
 } // namespace geck

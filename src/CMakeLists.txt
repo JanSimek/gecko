@@ -24,25 +24,16 @@ add_executable (${PROJECT_NAME}
     ui/MainWindow.cpp
     ui/SFMLWidget.h
     ui/SFMLWidget.cpp
+    ui/EditorWidget.h
+    ui/EditorWidget.cpp
+    ui/LoadingWidget.h
+    ui/LoadingWidget.cpp
     ui/SelectionPanel.h
     ui/SelectionPanel.cpp
     ui/MapInfoPanel.h
     ui/MapInfoPanel.cpp
 
-    # States
-    state/StateMachine.h
-    state/StateMachine.cpp
-
-    state/State.h
-
-    state/ConfigurationState.h
-    state/ConfigurationState.cpp
-
-    state/EditorState.h
-    state/EditorState.cpp
-
-    state/LoadingState.h
-    state/LoadingState.cpp
+    # Loaders (kept from state system)
     state/loader/Loader.h
     state/loader/MapLoader.cpp
     state/loader/MapLoader.h

@@ -1,6 +1,5 @@
 #include "SFMLWidget.h"
-#include "../state/StateMachine.h"
-#include "../state/State.h"
+#include "EditorWidget.h"
 
 #include <QShowEvent>
 #include <QPaintEvent>
@@ -19,7 +18,7 @@ namespace geck {
 SFMLWidget::SFMLWidget(QWidget* parent)
     : QWidget(parent)
     , _renderWindow(nullptr)
-    , _stateMachine(nullptr)
+    , _editorWidget(nullptr)
     , _initialized(false) {
     
     // Set widget attributes for SFML rendering
@@ -38,8 +37,8 @@ SFMLWidget::~SFMLWidget() {
     }
 }
 
-void SFMLWidget::setStateMachine(std::shared_ptr<StateMachine> stateMachine) {
-    _stateMachine = stateMachine;
+void SFMLWidget::setEditorWidget(EditorWidget* editorWidget) {
+    _editorWidget = editorWidget;
 }
 
 void SFMLWidget::showEvent(QShowEvent* event) {
@@ -83,8 +82,8 @@ void SFMLWidget::resizeEvent(QResizeEvent* event) {
         sfmlEvent.size.width = event->size().width();
         sfmlEvent.size.height = event->size().height();
         
-        if (_stateMachine && !_stateMachine->empty()) {
-            _stateMachine->top().handleEvent(sfmlEvent);
+        if (_editorWidget) {
+            _editorWidget->handleEvent(sfmlEvent);
         }
     }
     
@@ -137,18 +136,18 @@ void SFMLWidget::updateAndRender() {
     }
     
     // Update and render current state
-    if (_stateMachine && !_stateMachine->empty()) {
-        _stateMachine->top().update(deltaTime);
+    if (_editorWidget) {
+        _editorWidget->update(deltaTime);
         
         _renderWindow->clear(sf::Color::Black);
-        _stateMachine->top().render(deltaTime);
+        _editorWidget->render(deltaTime);
         _renderWindow->display();
     }
 }
 
 void SFMLWidget::handleSFMLEvent(const sf::Event& event) {
-    if (_stateMachine && !_stateMachine->empty()) {
-        _stateMachine->top().handleEvent(event);
+    if (_editorWidget) {
+        _editorWidget->handleEvent(event);
     }
 }
 

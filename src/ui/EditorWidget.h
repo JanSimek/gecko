@@ -7,8 +7,8 @@
 #include <optional>
 #include <array>
 
-#include <QObject>
-#include "State.h"
+#include <QWidget>
+#include <QVBoxLayout>
 #include "../editor/Object.h"
 #include "../editor/HexagonGrid.h"
 #include "../util/ResourceManager.h"
@@ -16,17 +16,52 @@
 #include "../format/map/Map.h"
 #include "../format/pro/Pro.h"
 
-
 namespace geck {
 
-struct AppData;
+class SFMLWidget;
 
-class EditorState : public QObject, public State {
+class EditorWidget : public QWidget {
     Q_OBJECT
 
-private:
-    EditorState(const std::shared_ptr<AppData>& appData);
+public:
+    EditorWidget(std::unique_ptr<Map> map, QWidget* parent = nullptr);
+    ~EditorWidget();
 
+    void createNewMap();
+    void openMap();
+    void saveMap();
+
+    // Qt6 menu integration - visibility controls
+    void setShowObjects(bool show) { _showObjects = show; }
+    void setShowCritters(bool show) { _showCritters = show; }
+    void setShowWalls(bool show) { _showWalls = show; }
+    void setShowRoof(bool show) { _showRoof = show; }
+    void setShowScrollBlk(bool show) { _showScrollBlk = show; }
+    
+    Map* getMap() const { return _map.get(); }
+    
+    // Qt6 toolbar actions
+    void cycleSelectionMode();
+    void rotateSelectedObject();
+    void changeElevation(int elevation);
+
+    // SFML rendering interface (called by SFMLWidget)
+    void handleEvent(const sf::Event& event);
+    void update(const float dt);
+    void render(const float dt);
+    void init();
+
+    // Access to SFML widget for main window
+    SFMLWidget* getSFMLWidget() const { return _sfmlWidget; }
+
+signals:
+    void objectSelected(std::shared_ptr<Object> object);
+    void tileSelected(int tileIndex, int elevation, bool isRoof);
+    void tileSelectionCleared();
+    void mapLoadRequested(const std::string& mapPath);
+
+private:
+    void setupUI();
     void centerViewOnMap();
 
     void loadSprites();
@@ -36,7 +71,9 @@ private:
     bool selectObject(sf::Vector2f worldPos);
     bool selectFloorTile(sf::Vector2f worldPos);
     bool selectRoofTile(sf::Vector2f worldPos);
+    bool selectAllAtPosition(sf::Vector2f worldPos);
     bool selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& sprites, std::vector<int>& selectedIndexes, bool roof);
+    bool isTileVisible(int tileIndex, bool roof);
     
     // New improved object selection methods
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
@@ -52,12 +89,20 @@ private:
     void unselectAll();
     void unselectTiles();
     void unselectObject();
+    
+    // Zoom management
+    void zoomView(float direction);
 
     enum class EditorAction {
         NONE,
         PANNING
     };
 
+    // UI Components
+    QVBoxLayout* _layout;
+    SFMLWidget* _sfmlWidget;
+
+    // Game/Editor State
     SelectionMode _currentSelectionMode = SelectionMode::ALL;
 
     HexagonGrid _hexgrid;
@@ -66,7 +111,6 @@ private:
 
     std::vector<std::shared_ptr<Object>> _objects;
 
-    std::shared_ptr<AppData> _appData;
     sf::View _view;
 
     int _currentElevation = 0;
@@ -83,6 +127,12 @@ private:
     EditorAction _currentAction = EditorAction::NONE;
     sf::Cursor _cursor;
     
+    // Zoom level tracking and limits
+    float _zoomLevel = 1.0f;
+    static constexpr float MIN_ZOOM = 0.1f;   // Can zoom out to 10% of original size
+    static constexpr float MAX_ZOOM = 5.0f;   // Can zoom in to 500% of original size
+    static constexpr float ZOOM_STEP = 0.05f; // 5% zoom steps for smooth zooming
+    
     // Double-click detection for object cycling
     sf::Clock _lastClickTime;
     sf::Vector2f _lastClickPosition;
@@ -98,42 +148,6 @@ private:
     // TODO: merge 2*Map::TILES_PER_ELEVATION
     std::vector<int> _selectedRoofTileIndexes;
     std::vector<int> _selectedFloorTileIndexes;
-
-
-
-public:
-
-    EditorState(const std::shared_ptr<AppData>& appData, std::unique_ptr<Map> map);
-
-    void createNewMap();
-    void openMap();
-    void saveMap();
-    void quit() override;
-
-    // Qt6 menu integration - visibility controls
-    void setShowObjects(bool show) { _showObjects = show; }
-    void setShowCritters(bool show) { _showCritters = show; }
-    void setShowWalls(bool show) { _showWalls = show; }
-    void setShowRoof(bool show) { _showRoof = show; }
-    void setShowScrollBlk(bool show) { _showScrollBlk = show; }
-    
-    Map* getMap() const { return _map.get(); }
-    
-    // Qt6 toolbar actions
-    void cycleSelectionMode();
-    void rotateSelectedObject();
-    void changeElevation(int elevation);
-
-signals:
-    void objectSelected(std::shared_ptr<Object> object);
-    void tileSelected(int tileIndex, int elevation, bool isRoof);
-    void tileSelectionCleared();
-
-public:
-    void init() override;
-    void handleEvent(const sf::Event& event) override;
-    void update(const float dt) override;
-    void render(const float dt) override;
 };
 
 } // namespace geck

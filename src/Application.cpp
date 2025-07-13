@@ -5,23 +5,20 @@
 #include <spdlog/spdlog.h>
 #include <QCommandLineParser>
 #include <QCommandLineOption>
+#include <QObject>
 
-#include "state/EditorState.h"
-#include "state/LoadingState.h"
-#include "state/ConfigurationState.h"
-#include "state/StateMachine.h"
 #include "state/loader/MapLoader.h"
 #include "util/ResourceManager.h"
 #include "util/QtDialogs.h"
 #include "ui/MainWindow.h"
-#include "ui/SFMLWidget.h"
+#include "ui/EditorWidget.h"
+#include "ui/LoadingWidget.h"
 
 namespace geck {
 
 Application::Application(int argc, char** argv, const std::filesystem::path& resourcePath, const std::filesystem::path& mapPath)
     : _qtApp(std::make_unique<QApplication>(argc, argv))
-    , _mainWindow(nullptr)
-    , _stateMachine(std::make_shared<StateMachine>()) {
+    , _mainWindow(nullptr) {
 
     // Set application metadata
     _qtApp->setApplicationName("GECK::Mapper");
@@ -33,18 +30,8 @@ Application::Application(int argc, char** argv, const std::filesystem::path& res
 
     initUI();
 
-    // Create AppData with SFML window from the Qt widget
-    _appData = std::make_shared<AppData>(AppData{ 
-        _mainWindow->getSFMLWidget()->getRenderWindow(),
-        _stateMachine,
-        _mainWindow.get()
-    });
-
     // Load the map (either from command line or show dialog)
     loadMap(finalMapPath);
-    
-    // Set the state machine in the main window after loading initial state
-    _mainWindow->setStateMachine(_stateMachine);
 }
 
 void Application::loadMap(const std::filesystem::path& mapPath) {
@@ -54,8 +41,9 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
             { {"Fallout 2 map (.map)", "*.map"} });
         
         if (selectedMapPath.empty()) {
-            spdlog::info("No map file selected, starting with configuration screen");
-            _stateMachine->push(std::make_unique<ConfigurationState>());
+            spdlog::info("No map file selected, starting empty editor");
+            // For now, just show empty main window
+            // TODO: Could show a "New Map" wizard or welcome screen
             return;
         }
         
@@ -64,12 +52,25 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
         return;
     }
 
-    auto loading_state = std::make_unique<LoadingState>(_appData);
-    loading_state->addLoader(std::make_unique<MapLoader>(mapPath, -1, [this](auto map) {
-        _appData->stateMachine->push(std::make_unique<EditorState>(_appData, std::move(map)), true);
+    // Create loading widget and show it in main window
+    auto loadingWidget = std::make_unique<LoadingWidget>();
+    
+    // Add map loader
+    loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, [this](auto map) {
+        // When loading is complete, create editor widget and switch to it
+        auto editorWidget = std::make_unique<EditorWidget>(std::move(map));
+        _mainWindow->setEditorWidget(std::move(editorWidget));
     }));
-
-    _stateMachine->push(std::move(loading_state));
+    
+    // Connect loading complete signal
+    QObject::connect(loadingWidget.get(), &LoadingWidget::loadingComplete, loadingWidget.get(), []() {
+        // Loading widget will automatically be replaced by editor widget
+        // when the map loader completes
+        spdlog::info("Map loading completed");
+    });
+    
+    // Show loading widget in main window
+    _mainWindow->setLoadingWidget(std::move(loadingWidget));
 }
 
 std::string Application::processCommandLineArgs(int /*argc*/, char** /*argv*/, const std::filesystem::path& resourcePath, const std::filesystem::path& mapPath) {
@@ -121,19 +122,6 @@ Application::~Application() {
     // Clean up in proper order, but let Qt handle the final cleanup
     if (_mainWindow) {
         _mainWindow->stopGameLoop();
-    }
-    
-    // Clear the state machine before Qt widget destruction
-    if (_stateMachine) {
-        while (!_stateMachine->empty()) {
-            _stateMachine->pop();
-        }
-        _stateMachine.reset();
-    }
-    
-    // Clear app data reference
-    if (_appData) {
-        _appData.reset();
     }
 }
 
