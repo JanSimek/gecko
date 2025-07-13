@@ -249,7 +249,7 @@ void MapInfoPanel::loadScriptVars() {
         
         if (gam_file) {
             // Load global variables
-            for (int index = 0; index < _map->getMapFile().header.num_global_vars; index++) {
+            for (uint32_t index = 0; index < _map->getMapFile().header.num_global_vars; index++) {
                 _mvars.emplace(gam_file->mvarKey(index), gam_file->mvarValue(index));
             }
             

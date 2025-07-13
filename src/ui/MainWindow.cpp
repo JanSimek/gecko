@@ -5,6 +5,7 @@
 #include "MapInfoPanel.h"
 #include "../state/StateMachine.h"
 #include "../state/EditorState.h"
+#include "../util/Types.h"
 
 #include <QApplication>
 #include <QVBoxLayout>
@@ -176,15 +177,11 @@ void MainWindow::setupToolBar() {
     
     // Update selection mode button text when mode changes
     connect(this, &MainWindow::selectionModeRequested, [selectionModeAction]() {
-        static int currentMode = 0; // 0=All, 1=Objects, 2=Floor, 3=Roof
-        currentMode = (currentMode + 1) % 4;
+        static SelectionMode currentMode = SelectionMode::ALL;
+        currentMode = static_cast<SelectionMode>((static_cast<int>(currentMode) + 1) % static_cast<int>(SelectionMode::NUM_SELECTION_TYPES));
         
-        switch(currentMode) {
-            case 0: selectionModeAction->setText("Mode: All"); break;
-            case 1: selectionModeAction->setText("Mode: Objects"); break;
-            case 2: selectionModeAction->setText("Mode: Floor"); break;
-            case 3: selectionModeAction->setText("Mode: Roof"); break;
-        }
+        QString modeText = QString("Mode: %1").arg(selectionModeToString(currentMode));
+        selectionModeAction->setText(modeText);
     });
     
     _mainToolBar->addSeparator();

@@ -55,7 +55,7 @@ public:
     unsigned int objectSubtypeId();
     void setObjectSubtypeId(unsigned int objectSubtypeId);
 
-    const OBJECT_TYPE type() const;
+    OBJECT_TYPE type() const;
 
     const std::string typeToString() const;
 };

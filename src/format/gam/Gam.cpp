@@ -14,9 +14,12 @@ const std::string& Gam::gvarKey(size_t index) const {
 }
 
 int Gam::gvarValue(const std::string& key) {
-    std::find_if(_gvars.begin(), _gvars.end(), [&key](std::pair<std::string, int> const& elem) {
+    auto it = std::find_if(_gvars.begin(), _gvars.end(), [&key](std::pair<std::string, int> const& elem) {
         return elem.first == key;
     });
+    if (it != _gvars.end()) {
+        return it->second;
+    }
     throw std::runtime_error{ "GVAR '" + key + "' not found" };
 }
 
@@ -32,9 +35,12 @@ const std::string& Gam::mvarKey(size_t index) const {
 }
 
 int Gam::mvarValue(const std::string& key) {
-    std::find_if(_mvars.begin(), _mvars.end(), [&key](std::pair<std::string, int> const& elem) {
+    auto it = std::find_if(_mvars.begin(), _mvars.end(), [&key](std::pair<std::string, int> const& elem) {
         return elem.first == key;
     });
+    if (it != _mvars.end()) {
+        return it->second;
+    }
     throw std::runtime_error{ "MVAR '" + key + "' not found" };
 }
 

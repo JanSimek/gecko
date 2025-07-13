@@ -69,7 +69,7 @@ void Object::setDirection(int direction) {
     // Point point = hexToScreen(x, y);
 
     // FIXME: ??? one scrblk on arcaves.map
-    if (_frm->directions().size() <= _direction || _direction < 0) {
+    if (_frm->directions().size() <= static_cast<size_t>(_direction) || _direction < 0) {
         spdlog::error("Object has orientation index {} but the FRM has only [{}] orientations", _direction, _frm->directions().size());
         _direction = 0;
     }
@@ -88,7 +88,7 @@ void Object::setDirection(int direction) {
 }
 
 void Object::rotate() {
-    if (_direction + 1 >= _frm->directions().size()) {
+    if (static_cast<size_t>(_direction + 1) >= _frm->directions().size()) {
         _direction = 0;
     } else {
         _direction++;

@@ -19,10 +19,10 @@ protected:
     std::filesystem::path path;
 
 public:
-    void openFile(const std::filesystem::path& path) {
+    void openFile(const std::filesystem::path& filePath) {
 
-        stream = std::ofstream{ path.string(), std::ofstream::out | std::ofstream::binary };
-        this->path = path;
+        stream = std::ofstream{ filePath.string(), std::ofstream::out | std::ofstream::binary };
+        this->path = filePath;
 
         if (!stream.is_open()) {
             throw std::runtime_error{ "Could not open file for writing " + path.string() };

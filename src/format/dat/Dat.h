@@ -26,7 +26,7 @@ public:
 
     // NOTE: MSVC does not support std::filesystem::path as a key in std::unordered_map
     [[nodiscard]] const std::unordered_map<std::string, std::shared_ptr<DatEntry>>& getEntries() const;
-    void addEntry(std::filesystem::path filename, std::shared_ptr<DatEntry> entry);
+    void addEntry(std::filesystem::path entryPath, std::shared_ptr<DatEntry> entry);
 };
 
 } // namespace geck

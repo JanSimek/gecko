@@ -359,11 +359,8 @@ bool EditorState::selectObject(sf::Vector2f worldPos) {
                  objectsAtPos.size(), worldPos.x, worldPos.y);
     
     if (objectsAtPos.empty()) {
-        // No objects at this position, clear selection
-        if (_selectedObject) {
-            spdlog::debug("selectObject: No objects found, clearing selection");
-            unselectObject();
-        }
+        // No objects at this position
+        spdlog::debug("selectObject: No objects found at position");
         return false;
     }
     
@@ -382,7 +379,15 @@ bool EditorState::selectObject(sf::Vector2f worldPos) {
     
     // Select the frontmost object at this position
     spdlog::debug("selectObject: Selecting frontmost object");
-    unselectAll();
+    
+    // Clear any existing object selection
+    unselectObject();
+    
+    // Only clear tiles if not in ALL mode (to allow mixed selection)
+    //if (_currentSelectionMode != SelectionMode::ALL) {
+        unselectTiles();
+    //}
+    
     objectsAtPos[0]->select();
     _selectedObject = objectsAtPos[0];
     objectSelected(_selectedObject.value());
@@ -406,7 +411,7 @@ bool EditorState::selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::
     // First, check all tiles to find the one(s) that contain the click point
     std::vector<int> candidateTiles;
     
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+    for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); i++) {
         auto& tile = sprites.at(i);
         
         // Use bounds check first for efficiency
@@ -441,7 +446,6 @@ bool EditorState::selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::
                 // Select the new tile
                 tile.setColor(sf::Color::Red);
                 selectedIndexes.push_back(i);
-                unselectObject();
                 spdlog::debug("selectTile: Selected tile {}", i);
                 return true;
             }
@@ -461,7 +465,7 @@ bool EditorState::selectAtPosition(sf::Vector2f worldPos) {
     bool hasFloorTile = false;
     
     // Quick check for tiles by looking at bounds
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+    for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); i++) {
         if (isPointInSpriteBounds(worldPos, _roofSprites.at(i))) {
             if (_map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() != Map::EMPTY_TILE) {
                 hasRoofTile = true;
@@ -478,57 +482,66 @@ bool EditorState::selectAtPosition(sf::Vector2f worldPos) {
     bool isSamePosition = distance < DOUBLE_CLICK_DISTANCE;
     
     if (!isSamePosition) {
-        // New position - start with the highest priority item (objects first)
+        // New position - start with the highest priority item (roof tiles first)
         _lastSelectionPosition = worldPos;
         
-        if (hasObjects) {
-            _lastSelectionType = SelectionType::OBJECT;
-            return selectObject(worldPos);
-        } else if (hasRoofTile) {
+        if (hasRoofTile) {
+            unselectAll();
             _lastSelectionType = SelectionType::ROOF_TILE;
             return selectRoofTile(worldPos);
+        } else if (hasObjects) {
+            unselectTiles();
+            _lastSelectionType = SelectionType::OBJECT;
+            return selectObject(worldPos);
         } else if (hasFloorTile) {
+            unselectAll();
             _lastSelectionType = SelectionType::FLOOR_TILE;
             return selectFloorTile(worldPos);
         }
         return false;
     } else {
-        // Same position - cycle to next available type
+        // Same position - cycle to next available type (Roof -> Objects -> Floor -> Roof)
         switch (_lastSelectionType) {
-            case SelectionType::OBJECT:
-                if (hasRoofTile) {
-                    _lastSelectionType = SelectionType::ROOF_TILE;
-                    return selectRoofTile(worldPos);
-                } else if (hasFloorTile) {
-                    _lastSelectionType = SelectionType::FLOOR_TILE;
-                    return selectFloorTile(worldPos);
-                } else if (hasObjects) {
-                    // Cycle back to objects
-                    return selectObject(worldPos);
-                }
-                break;
-                
             case SelectionType::ROOF_TILE:
-                if (hasFloorTile) {
-                    _lastSelectionType = SelectionType::FLOOR_TILE;
-                    return selectFloorTile(worldPos);
-                } else if (hasObjects) {
+                if (hasObjects) {
                     _lastSelectionType = SelectionType::OBJECT;
                     return selectObject(worldPos);
+                } else if (hasFloorTile) {
+                    unselectAll();
+                    _lastSelectionType = SelectionType::FLOOR_TILE;
+                    return selectFloorTile(worldPos);
                 } else if (hasRoofTile) {
+                    unselectAll();
                     // Stay on roof tile
                     return selectRoofTile(worldPos);
                 }
                 break;
                 
-            case SelectionType::FLOOR_TILE:
-                if (hasObjects) {
-                    _lastSelectionType = SelectionType::OBJECT;
-                    return selectObject(worldPos);
+            case SelectionType::OBJECT:
+                if (hasFloorTile) {
+                    unselectAll();
+                    _lastSelectionType = SelectionType::FLOOR_TILE;
+                    return selectFloorTile(worldPos);
                 } else if (hasRoofTile) {
+                    unselectAll();
                     _lastSelectionType = SelectionType::ROOF_TILE;
                     return selectRoofTile(worldPos);
+                } else if (hasObjects) {
+                    // Stay on objects
+                    return selectObject(worldPos);
+                }
+                break;
+                
+            case SelectionType::FLOOR_TILE:
+                if (hasRoofTile) {
+                    unselectAll();
+                    _lastSelectionType = SelectionType::ROOF_TILE;
+                    return selectRoofTile(worldPos);
+                } else if (hasObjects) {
+                    _lastSelectionType = SelectionType::OBJECT;
+                    return selectObject(worldPos);
                 } else if (hasFloorTile) {
+                    unselectAll();
                     // Stay on floor tile
                     return selectFloorTile(worldPos);
                 }
@@ -601,26 +614,36 @@ void EditorState::handleEvent(const sf::Event& event) {
         spdlog::debug("Mouse click at widget coords: ({}, {}), world coords: ({:.2f}, {:.2f})", 
                      mouse_pos.x, mouse_pos.y, world_pos.x, world_pos.y);
         
-        // Simplified selection logic
+        // Selection logic based on mode
         switch (_currentSelectionMode) {
-            case SelectionMode::ALL:
-                // Try objects first, then tiles
-                if (!selectObject(world_pos)) {
-                    if (!selectRoofTile(world_pos)) {
-                        selectFloorTile(world_pos);
-                    }
-                }
+            case SelectionMode::ALL: {
+                spdlog::info("SelectionMode::ALL");
+                // In ALL mode, allow cycling between objects, roof tiles, and floor tiles at the same position
+                selectAtPosition(world_pos);
                 break;
+            }
                 
             case SelectionMode::OBJECTS:
+                spdlog::info("SelectionMode::OBJECTS");
+                // Only select objects - clear everything else first
+                unselectTiles();
+                unselectObject();
                 selectObject(world_pos);
                 break;
                 
             case SelectionMode::ROOF_TILES:
+                spdlog::info("SelectionMode::ROOF_TILES");
+                // Only select roof tiles - clear everything else first
+                unselectObject();
+                unselectTiles();
                 selectRoofTile(world_pos);
                 break;
                 
             case SelectionMode::FLOOR_TILES:
+                spdlog::info("SelectionMode::FLOOR_TILES");
+                // Only select floor tiles - clear everything else first
+                unselectObject();
+                unselectTiles();
                 selectFloorTile(world_pos);
                 break;
                 
@@ -789,17 +812,11 @@ void EditorState::quit() {
 
 void EditorState::cycleSelectionMode() {
     _currentSelectionMode = static_cast<SelectionMode>((static_cast<int>(_currentSelectionMode) + 1) % static_cast<int>(SelectionMode::NUM_SELECTION_TYPES));
-    
+
     // Log the new selection mode for debugging
-    std::string modeStr;
-    switch(_currentSelectionMode) {
-        case SelectionMode::OBJECTS: modeStr = "Objects"; break;
-        case SelectionMode::FLOOR_TILES: modeStr = "Floor Tiles"; break;
-        case SelectionMode::ROOF_TILES: modeStr = "Roof Tiles"; break;
-        case SelectionMode::ALL: 
-        default: modeStr = "All"; break;
-    }
-    spdlog::info("Selection mode changed to: {}", modeStr);
+    spdlog::info("Selection mode changed to: {} (mode = {})", 
+                 selectionModeToString(_currentSelectionMode), 
+                 static_cast<int>(_currentSelectionMode));
 }
 
 void EditorState::rotateSelectedObject() {

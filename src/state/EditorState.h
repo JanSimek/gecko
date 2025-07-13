@@ -12,6 +12,7 @@
 #include "../editor/Object.h"
 #include "../editor/HexagonGrid.h"
 #include "../util/ResourceManager.h"
+#include "../util/Types.h"
 #include "../format/map/Map.h"
 #include "../format/pro/Pro.h"
 
@@ -51,15 +52,6 @@ private:
     void unselectAll();
     void unselectTiles();
     void unselectObject();
-
-    enum class SelectionMode : int {
-        ALL,
-        FLOOR_TILES,
-        ROOF_TILES,
-        OBJECTS,
-
-        NUM_SELECTION_TYPES
-    };
 
     enum class EditorAction {
         NONE,
