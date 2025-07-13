@@ -73,6 +73,7 @@ private:
     void loadObjectSprites();
 
     bool selectObject(sf::Vector2f worldPos);
+    bool selectObjectAtIndex(const std::vector<std::shared_ptr<Object>>& objects, int index);
     bool selectFloorTile(sf::Vector2f worldPos);
     bool selectRoofTile(sf::Vector2f worldPos);
     bool selectAllAtPosition(sf::Vector2f worldPos);

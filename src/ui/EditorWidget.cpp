@@ -614,99 +614,94 @@ bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
 }
 
 bool EditorWidget::selectAllAtPosition(sf::Vector2f worldPos) {
-    // For ALL mode, we need to cycle between all selectable elements at this position
-    // Check what's available at this position
+    // Get all available items at this position
     auto objectsAtPos = getObjectsAtPosition(worldPos);
-    bool hasFloorTile = false;
-    bool hasRoofTile = false;
     
-    // Check if there are visible tiles at this position
-    bool floorTileAtPos = false;
-    bool roofTileAtPos = false;
-    
-    // Use the same logic as selectTile to detect if tiles are clickable
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
-        _fakeTileSprite.setPosition(_floorSprites.at(i).getPosition());
-        if (isSpriteClicked(worldPos, _fakeTileSprite)) {
-            floorTileAtPos = true;
-            break;
-        }
-    }
-    
+    // Check for roof tile at position
+    int roofTileIndex = -1;
     for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
         _fakeTileSprite.setPosition(_roofSprites.at(i).getPosition());
         if (isSpriteClicked(worldPos, _fakeTileSprite) && 
             _map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() != Map::EMPTY_TILE) {
-            roofTileAtPos = true;
+            roofTileIndex = i;
             break;
         }
     }
     
-    hasFloorTile = floorTileAtPos;
-    hasRoofTile = roofTileAtPos;
+    // Check for floor tile at position
+    int floorTileIndex = -1;
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+        _fakeTileSprite.setPosition(_floorSprites.at(i).getPosition());
+        if (isSpriteClicked(worldPos, _fakeTileSprite)) {
+            floorTileIndex = i;
+            break;
+        }
+    }
     
-    // Build list of available element types in priority order: roof → objects → floor
-    std::vector<SelectionType> availableTypes;
-    if (hasRoofTile) availableTypes.push_back(SelectionType::ROOF_TILE);
-    if (!objectsAtPos.empty()) availableTypes.push_back(SelectionType::OBJECT);
-    if (hasFloorTile) availableTypes.push_back(SelectionType::FLOOR_TILE);
+    // Check what's currently selected at this position
+    bool roofSelected = (roofTileIndex >= 0) && 
+                       (std::find(_selectedRoofTileIndexes.begin(), _selectedRoofTileIndexes.end(), roofTileIndex) != _selectedRoofTileIndexes.end());
+    bool floorSelected = (floorTileIndex >= 0) && 
+                        (std::find(_selectedFloorTileIndexes.begin(), _selectedFloorTileIndexes.end(), floorTileIndex) != _selectedFloorTileIndexes.end());
     
-    if (availableTypes.empty()) {
-        // No selectable elements at this position
+    // Check if an object at this position is selected and find its index
+    int selectedObjectIndex = -1;
+    if (_selectedObject.has_value()) {
+        auto it = std::find(objectsAtPos.begin(), objectsAtPos.end(), _selectedObject.value());
+        if (it != objectsAtPos.end()) {
+            selectedObjectIndex = static_cast<int>(std::distance(objectsAtPos.begin(), it));
+        }
+    }
+    
+    // Selection logic: roof → objects (cycle through all) → floor → deselect
+    if (roofSelected) {
+        // Roof is selected, move to first object or floor if no objects
+        unselectAll();
+        if (!objectsAtPos.empty()) {
+            return selectObjectAtIndex(objectsAtPos, 0);
+        } else if (floorTileIndex >= 0) {
+            return selectFloorTile(worldPos);
+        }
+    } else if (selectedObjectIndex >= 0) {
+        // An object is selected, cycle to next object or move to floor
+        unselectAll();
+        if (selectedObjectIndex < static_cast<int>(objectsAtPos.size()) - 1) {
+            // Select next object
+            return selectObjectAtIndex(objectsAtPos, selectedObjectIndex + 1);
+        } else if (floorTileIndex >= 0) {
+            // No more objects, select floor
+            return selectFloorTile(worldPos);
+        }
+    } else if (floorSelected) {
+        // Floor is selected, deselect everything
         unselectAll();
         return false;
-    }
-    
-    // Check for double-click to cycle through element types
-    //if (isDoubleClick(worldPos) && availableTypes.size() > 1) {
-    if ( availableTypes.size() > 1) {
-        // Find current selection type and move to next
-        auto currentIt = std::find(availableTypes.begin(), availableTypes.end(), _lastSelectionType);
-        if (currentIt != availableTypes.end()) {
-            auto nextIt = std::next(currentIt);
-            if (nextIt != availableTypes.end()) {
-                _lastSelectionType = *nextIt;
-            } else {
-                _lastSelectionType = availableTypes[0]; // Wrap around
-            }
-        } else {
-            _lastSelectionType = availableTypes[0];
-        }
     } else {
-        // First click - prioritize objects, then roof tiles, then floor tiles
-        _lastSelectionType = availableTypes[0];
+        // Nothing selected, start with roof or first available
+        unselectAll();
+        if (roofTileIndex >= 0) {
+            return selectRoofTile(worldPos);
+        } else if (!objectsAtPos.empty()) {
+            return selectObjectAtIndex(objectsAtPos, 0);
+        } else if (floorTileIndex >= 0) {
+            return selectFloorTile(worldPos);
+        }
     }
     
-    // Select based on the determined type
-    switch (_lastSelectionType) {
-        case SelectionType::OBJECT:
-            return selectObject(worldPos);
-        case SelectionType::FLOOR_TILE:
-            return selectFloorTile(worldPos);
-        case SelectionType::ROOF_TILE:
-            return selectRoofTile(worldPos);
-        default:
-            return false;
-    }
+    return false;
 }
 
 bool EditorWidget::selectObject(sf::Vector2f worldPos) {
     auto objectsAtPos = getObjectsAtPosition(worldPos);
-    
-    if (objectsAtPos.empty()) {
+    return selectObjectAtIndex(objectsAtPos, 0);
+}
+
+bool EditorWidget::selectObjectAtIndex(const std::vector<std::shared_ptr<Object>>& objects, int index) {
+    if (objects.empty() || index < 0 || index >= static_cast<int>(objects.size())) {
         return false;
     }
     
-    // Check for double-click to cycle through objects
-    //if (isDoubleClick(worldPos) && objectsAtPos.size() > 1) {
-    if (objectsAtPos.size() > 1) {
-        cycleObjectsAtPosition(worldPos);
-        return true;
-    }
-    
-    // Select the first (topmost) object
-    unselectAll();
-    auto selectedObj = objectsAtPos[0];
+    auto selectedObj = objects[index];
     selectedObj->select();
     _selectedObject = selectedObj;
     emit objectSelected(_selectedObject.value());
@@ -733,20 +728,14 @@ bool EditorWidget::selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map:
                 return false;
             }
             
-            if (std::count(selectedIndexes.begin(), selectedIndexes.end(), i)) {
-                // Tile is already selected - deselect it
-                tile.setColor(sf::Color::White);
-                selectedIndexes.erase(std::remove(selectedIndexes.begin(), selectedIndexes.end(), i));
-                return false;
-            } else {
-                // Select the tile
-                tile.setColor(sf::Color::Red);
-                selectedIndexes.push_back(i);
-                
-                unselectObject();
-                emit tileSelected(i, _currentElevation, selectingRoof);
-                return true;
-            }
+            // Select this tile (clear any existing selections first)
+            selectedIndexes.clear();
+            tile.setColor(sf::Color::Red);
+            selectedIndexes.push_back(i);
+            
+            unselectObject();
+            emit tileSelected(i, _currentElevation, selectingRoof);
+            return true;
         }
     }
     
