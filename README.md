@@ -108,7 +108,7 @@ The editor supports multiple selection modes accessible via the toolbar:
 - **Ctrl+D**: Deselect all items
 
 #### Object Manipulation
-- **R key**: Rotate selected object
+- **R key**: Rotate selected object(s) - works with single or multiple selected objects
 - **Ctrl+R**: Alternative rotation shortcut
 
 #### File Operations

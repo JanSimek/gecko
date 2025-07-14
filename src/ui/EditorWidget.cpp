@@ -835,8 +835,13 @@ void EditorWidget::rotateSelectedObject() {
     auto objects = selection.getObjects();
     
     if (!objects.empty()) {
-        // TODO: Implement object rotation for selected objects
-        spdlog::info("Rotate selected objects not yet implemented ({} objects)", objects.size());
+        for (auto& object : objects) {
+            object->rotate();
+            spdlog::debug("Rotated object to direction {}", object->getMapObject().direction);
+        }
+        spdlog::info("Rotated {} selected object(s)", objects.size());
+    } else {
+        spdlog::debug("No objects selected for rotation");
     }
 }
 
