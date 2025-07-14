@@ -151,7 +151,7 @@ SelectionResult SelectionBridge::cycleThroughItemsAtPosition(sf::Vector2f worldP
         } else {
             // No objects or floor tiles available, clear selection
             _selectionManager.clearSelection();
-            return SelectionResult::createSuccess();
+            return SelectionResult::createSuccess("No objects or floor tiles available, clear selection");
         }
     } else if (selectedObjectIndex >= 0) {
         // An object is selected, cycle to next object or move to floor
@@ -164,12 +164,12 @@ SelectionResult SelectionBridge::cycleThroughItemsAtPosition(sf::Vector2f worldP
         } else {
             // No floor tile available, clear selection
             _selectionManager.clearSelection();
-            return SelectionResult::createSuccess();
+            return SelectionResult::createSuccess("No floor tile available, clear selection");
         }
     } else if (floorSelected) {
         // Floor is selected, deselect everything
         _selectionManager.clearSelection();
-        return SelectionResult::createSuccess();
+        return SelectionResult::createSuccess("Floor is selected, deselect everything");
     } else {
         // Nothing selected, start with roof or first available
         if (roofTileIndex) {
@@ -183,7 +183,7 @@ SelectionResult SelectionBridge::cycleThroughItemsAtPosition(sf::Vector2f worldP
     
     // If we get here, there's nothing to select - clear selection
     _selectionManager.clearSelection();
-    return SelectionResult::createSuccess();
+    return SelectionResult::createSuccess("there's nothing to select - clear selection");
 }
 
 bool SelectionBridge::isPositionInTileSprite(sf::Vector2f worldPos, int tileIndex, bool roof) {
@@ -228,7 +228,7 @@ SelectionResult SelectionBridge::selectItem(SelectionType type, const std::varia
     // Trigger observer notifications using the now-public method
     _selectionManager.notifyObservers();
     
-    return SelectionResult::createSuccess();
+    return SelectionResult::createSuccess("");
 }
 
 // QtSelectionObserver implementation

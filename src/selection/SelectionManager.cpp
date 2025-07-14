@@ -100,7 +100,7 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
     
     _currentSelection.mode = mode;
     notifyObservers();
-    return SelectionResult::createSuccess();
+    return SelectionResult::createSuccess("");
 }
 
 SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
@@ -113,7 +113,7 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                 addItemToSelection(item);
                 _currentSelection.mode = mode;
                 notifyObservers();
-                return SelectionResult::createSuccess();
+                return SelectionResult::createSuccess("");
             }
             break;
         }
@@ -125,7 +125,7 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                 addItemToSelection(item);
                 _currentSelection.mode = mode;
                 notifyObservers();
-                return SelectionResult::createSuccess();
+                return SelectionResult::createSuccess("");
             }
             break;
         }
@@ -153,7 +153,7 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                     addItemToSelection(item);
                     _currentSelection.mode = mode;
                     notifyObservers();
-                    return SelectionResult::createSuccess();
+                    return SelectionResult::createSuccess("");
                 }
             }
             // Then try objects
@@ -164,7 +164,7 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                     addItemToSelection(item);
                     _currentSelection.mode = mode;
                     notifyObservers();
-                    return SelectionResult::createSuccess();
+                    return SelectionResult::createSuccess("");
                 }
             }
             // Finally try floor tile
@@ -188,35 +188,74 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
 }
 
 SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
-    // Find what would be selected at this position
-    auto tempSelection = _currentSelection;
-    clearSelection();
+    // Find what item is at this position without clearing current selection
+    std::optional<SelectedItem> itemAtPosition;
     
-    auto result = selectSingleAtPosition(worldPos, mode, currentElevation);
-    if (result.success && !_currentSelection.isEmpty()) {
-        // Item was found - check if it was already selected
-        const auto& newItem = _currentSelection.items[0];
-        
-        // Restore original selection
-        _currentSelection = tempSelection;
-        
-        if (isItemSelected(newItem)) {
-            // Item was selected - remove it
-            removeItemFromSelection(newItem);
-            result.message = "Item removed from selection";
-        } else {
-            // Item was not selected - add it
-            addItemToSelection(newItem);
-            result.message = "Item added to selection";
+    switch (mode) {
+        case SelectionMode::FLOOR_TILES: {
+            auto tileIndex = getFloorTileAtPosition(worldPos, currentElevation);
+            if (tileIndex) {
+                itemAtPosition = SelectedItem{SelectionType::FLOOR_TILE, tileIndex.value()};
+            }
+            break;
         }
         
-        notifyObservers();
-        return result;
-    } else {
-        // Nothing found - restore original selection
-        _currentSelection = tempSelection;
-        return SelectionResult::createNoChange();
+        case SelectionMode::ROOF_TILES: {
+            auto tileIndex = getRoofTileAtPosition(worldPos, currentElevation);
+            if (tileIndex) {
+                itemAtPosition = SelectedItem{SelectionType::ROOF_TILE, tileIndex.value()};
+            }
+            break;
+        }
+        
+        case SelectionMode::OBJECTS: {
+            auto objects = getObjectsAtPosition(worldPos, currentElevation);
+            if (!objects.empty()) {
+                itemAtPosition = SelectedItem{SelectionType::OBJECT, objects[0]};
+            }
+            break;
+        }
+        
+        case SelectionMode::ALL: {
+            // For ALL mode, check in priority order: roof -> objects -> floor
+            auto roofTileIndex = getRoofTileAtPosition(worldPos, currentElevation);
+            if (roofTileIndex) {
+                itemAtPosition = SelectedItem{SelectionType::ROOF_TILE, roofTileIndex.value()};
+            } else {
+                auto objects = getObjectsAtPosition(worldPos, currentElevation);
+                if (!objects.empty()) {
+                    itemAtPosition = SelectedItem{SelectionType::OBJECT, objects[0]};
+                } else {
+                    auto floorTileIndex = getFloorTileAtPosition(worldPos, currentElevation);
+                    if (floorTileIndex) {
+                        itemAtPosition = SelectedItem{SelectionType::FLOOR_TILE, floorTileIndex.value()};
+                    }
+                }
+            }
+            break;
+        }
+        
+        default:
+            return SelectionResult::createError("Invalid selection mode");
     }
+    
+    if (itemAtPosition) {
+        if (isItemSelected(itemAtPosition.value())) {
+            // Item is selected - remove it
+            removeItemFromSelection(itemAtPosition.value());
+            _currentSelection.mode = mode;
+            notifyObservers();
+            return SelectionResult::createSuccess("Item removed from selection");
+        } else {
+            // Item is not selected - add it
+            addItemToSelection(itemAtPosition.value());
+            _currentSelection.mode = mode;
+            notifyObservers();
+            return SelectionResult::createSuccess("Item added to selection");
+        }
+    }
+    
+    return SelectionResult::createNoChange();
 }
 
 bool SelectionManager::startDrag(sf::Vector2f worldPos) {

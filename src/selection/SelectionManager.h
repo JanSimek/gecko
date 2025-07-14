@@ -75,7 +75,7 @@ struct SelectionResult {
     bool selectionChanged = false;
     std::string message; // For error messages or status info
     
-    static SelectionResult createSuccess() { return {true, true, ""}; }
+    static SelectionResult createSuccess(const std::string& msg = "") { return {true, true, msg}; }
     static SelectionResult createNoChange() { return {true, false, ""}; }
     static SelectionResult createError(const std::string& msg) { return {false, false, msg}; }
 };
@@ -106,7 +106,7 @@ public:
     explicit SelectionManager(Map* map);
     ~SelectionManager() = default;
     
-    // Set the bridge for connecting to UI layer
+    // Set the bridge for connecting to the UI layer
     void setBridge(SelectionBridge* bridge) { _bridge = bridge; }
     
     // Selection operations
