@@ -9,26 +9,18 @@
 
 #include "../editor/Object.h"
 
-#include "../reader/dat/DatReader.h"
 #include "../reader/frm/FrmReader.h"
-#include "../reader/lst/LstReader.h"
-#include "../reader/gam/GamReader.h"
 #include "../reader/pro/ProReader.h"
 
 #include "../writer/map/MapWriter.h"
 
-#include "../format/frm/Direction.h"
-#include "../format/frm/Frame.h"
 #include "../format/frm/Frm.h"
 #include "../format/lst/Lst.h"
-#include "../format/gam/Gam.h"
 #include "../format/map/Tile.h"
-#include "../format/msg/Msg.h"
 #include "../format/pro/Pro.h"
 #include "../format/map/MapObject.h"
 
 #include "../util/ProHelper.h"
-#include "../reader/msg/MsgReader.h"
 
 namespace geck {
 
@@ -39,6 +31,9 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
     , _view({ 0.f, 0.f }, sf::Vector2f(800.f, 600.f)) // Default size, will be updated on first resize
     , _map(std::move(map)) {
     
+    // Initialize selection management
+    initializeSelectionSystem();
+    
     setupUI();
     centerViewOnMap();
 }
@@ -46,6 +41,118 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
 EditorWidget::~EditorWidget() {
     // Qt will handle cleanup of child widgets automatically
 }
+
+void EditorWidget::initializeSelectionSystem() {
+    // Initialize the selection manager
+    _selectionManager = std::make_unique<selection::SelectionManager>(_map.get());
+    
+    // Initialize the bridge
+    _selectionBridge = std::make_unique<selection::SelectionBridge>(*_selectionManager);
+    
+    // Setup callbacks from bridge to EditorWidget methods
+    _selectionBridge->setObjectHitTest([this](sf::Vector2f worldPos) {
+        return this->getObjectsAtPosition(worldPos);
+    });
+    
+    _selectionBridge->setTileHitTest([this](sf::Vector2f worldPos, bool isRoof) -> std::optional<int> {
+        for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+            auto& sprites = isRoof ? _roofSprites : _floorSprites;
+            _fakeTileSprite.setPosition(sprites.at(i).getPosition());
+            
+            if (isSpriteClicked(worldPos, _fakeTileSprite)) {
+                if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() == Map::EMPTY_TILE) {
+                    return std::nullopt;
+                }
+                return i;
+            }
+        }
+        return std::nullopt;
+    });
+    
+    _selectionBridge->setSpriteClickTest([this](sf::Vector2f worldPos, const sf::Sprite& sprite) {
+        return this->isSpriteClicked(worldPos, sprite);
+    });
+    
+    _selectionBridge->setTilePositionFunc([this](int tileIndex) -> sf::Vector2f {
+        // Calculate tile position using the same logic as loadTileSprites
+        unsigned int tileX = tileIndex / 100;
+        unsigned int tileY = tileIndex % 100;
+        unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
+        unsigned int y = tileX * 24 + tileY * 12;
+        return sf::Vector2f(static_cast<float>(x), static_cast<float>(y));
+    });
+    
+    _selectionBridge->setFloorSpritesFunc([this]() -> std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& {
+        return _floorSprites;
+    });
+    
+    _selectionBridge->setRoofSpritesFunc([this]() -> std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& {
+        return _roofSprites;
+    });
+    
+    _selectionBridge->setGetAllObjectsFunc([this]() -> std::vector<std::shared_ptr<Object>> {
+        return _objects;
+    });
+    
+    // Initialize the Qt observer for signal emission
+    _selectionObserver = std::make_shared<selection::QtSelectionObserver>();
+    
+    // Setup Qt signal callbacks
+    _selectionObserver->setObjectSelectedCallback([this](std::shared_ptr<Object> object) {
+        emit objectSelected(object);
+    });
+    
+    _selectionObserver->setTileSelectedCallback([this](int index, int elevation, bool isRoof) {
+        emit tileSelected(index, elevation, isRoof);
+    });
+    
+    _selectionObserver->setSelectionClearedCallback([this]() {
+        this->clearAllVisualSelections();
+        emit tileSelectionCleared();
+    });
+    
+    // Setup visual update callback to update sprite colors and object selection states
+    _selectionObserver->setUpdateVisualsCallback([this](const selection::Selection& selection) {
+        // First, clear all existing visual selections
+        this->clearAllVisualSelections();
+        
+        // Then apply new visual selections
+        for (const auto& item : selection.items) {
+            switch (item.type) {
+                case selection::SelectionType::OBJECT: {
+                    auto object = item.getObject();
+                    if (object) {
+                        object->select();
+                    }
+                    break;
+                }
+                
+                case selection::SelectionType::ROOF_TILE: {
+                    int tileIndex = item.getTileIndex();
+                    if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                        this->_roofSprites.at(tileIndex).setColor(sf::Color::Red);
+                    }
+                    break;
+                }
+                
+                case selection::SelectionType::FLOOR_TILE: {
+                    int tileIndex = item.getTileIndex();
+                    if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                        this->_floorSprites.at(tileIndex).setColor(sf::Color::Red);
+                    }
+                    break;
+                }
+            }
+        }
+    });
+    
+    // Connect the bridge to the selection manager
+    _selectionManager->setBridge(_selectionBridge.get());
+    
+    // Register the observer with the selection manager
+    _selectionManager->addObserver(_selectionObserver);
+}
+
 
 void EditorWidget::setupUI() {
     _layout = new QVBoxLayout(this);
@@ -67,6 +174,11 @@ void EditorWidget::init() {
     
     // Initialize fake tile sprite for hit detection
     _fakeTileSprite.setTexture(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
+    
+    // Initialize selection rectangle for drag selection
+    _selectionRectangle.setFillColor(sf::Color(100, 150, 255, 50)); // Semi-transparent blue
+    _selectionRectangle.setOutlineColor(sf::Color(100, 150, 255, 200)); // Blue border
+    _selectionRectangle.setOutlineThickness(2.0f);
     
     // Ensure view is properly sized to match current window
     if (_sfmlWidget && _sfmlWidget->getRenderWindow()) {
@@ -351,66 +463,22 @@ bool EditorWidget::isDoubleClick(sf::Vector2f worldPos) {
     return isDouble;
 }
 
-void EditorWidget::cycleObjectsAtPosition(sf::Vector2f worldPos) {
-    auto objectsAtPos = getObjectsAtPosition(worldPos);
-    
-    if (objectsAtPos.size() <= 1) {
-        return; // Nothing to cycle
-    }
-    
-    if (!_selectedObject) {
-        return; // No current selection to cycle from
-    }
-    
-    // Find current object in the list
-    auto currentIt = std::find(objectsAtPos.begin(), objectsAtPos.end(), _selectedObject.value());
-    if (currentIt != objectsAtPos.end()) {
-        // Move to next object in the list
-        auto nextIt = std::next(currentIt);
-        if (nextIt != objectsAtPos.end()) {
-            spdlog::debug("cycleObjectsAtPosition: Cycling to next object");
-            unselectObject();
-            (*nextIt)->select();
-            _selectedObject = *nextIt;
-            emit objectSelected(_selectedObject.value());
-        } else {
-            // Wrap around to the first object
-            spdlog::debug("cycleObjectsAtPosition: Wrapping to first object");
-            unselectObject();
-            objectsAtPos[0]->select();
-            _selectedObject = objectsAtPos[0];
-            emit objectSelected(_selectedObject.value());
+
+void EditorWidget::clearAllVisualSelections() {
+    // Clear all object selections
+    for (auto& object : _objects) {
+        if (object) {
+            object->unselect();
         }
     }
-}
-
-void EditorWidget::unselectAll() {
-    unselectObject();
-    unselectTiles();
-}
-
-void EditorWidget::unselectTiles() {
-    // Unselect floor tiles
-    for (int index : _selectedFloorTileIndexes) {
-        // Reset color to white (no tint)
-        _floorSprites.at(index).setColor(sf::Color::White);
-    }
-    _selectedFloorTileIndexes.clear();
-
-    // Unselect roof tiles  
-    for (int index : _selectedRoofTileIndexes) {
-        // Reset color to white (no tint)
-        _roofSprites.at(index).setColor(sf::Color::White);
-    }
-    _selectedRoofTileIndexes.clear();
     
-    emit tileSelectionCleared();
-}
-
-void EditorWidget::unselectObject() {
-    if (_selectedObject) {
-        _selectedObject.value()->unselect();
-        _selectedObject.reset();
+    // Clear all tile colors
+    for (auto& floorSprite : _floorSprites) {
+        floorSprite.setColor(sf::Color::White);
+    }
+    
+    for (auto& roofSprite : _roofSprites) {
+        roofSprite.setColor(sf::Color::White);
     }
 }
 
@@ -457,7 +525,39 @@ void EditorWidget::handleEvent(const sf::Event& event) {
             if (event.mouseButton.button == sf::Mouse::Left) {
                 sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
                     sf::Vector2i(event.mouseButton.x, event.mouseButton.y), _view);
-                selectAtPosition(worldPos);
+                
+                // Detect modifier keys for multi-selection
+                SelectionModifier modifier = SelectionModifier::NONE;
+                bool hasModifiers = false;
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) || 
+                    sf::Keyboard::isKeyPressed(sf::Keyboard::RControl)) {
+                    modifier = SelectionModifier::ADD;
+                    hasModifiers = true;
+                } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::LAlt) || 
+                          sf::Keyboard::isKeyPressed(sf::Keyboard::RAlt)) {
+                    modifier = SelectionModifier::TOGGLE;
+                    hasModifiers = true;
+                } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::LShift) || 
+                          sf::Keyboard::isKeyPressed(sf::Keyboard::RShift)) {
+                    modifier = SelectionModifier::RANGE;
+                    hasModifiers = true;
+                }
+                
+                // Determine if we should start drag selection or do immediate selection
+                bool canDragSelect = !hasModifiers && 
+                                   (_currentSelectionMode == SelectionMode::FLOOR_TILES || 
+                                    _currentSelectionMode == SelectionMode::ROOF_TILES ||
+                                    _currentSelectionMode == SelectionMode::OBJECTS);
+                
+                if (canDragSelect) {
+                    // Start drag selection
+                    _currentAction = EditorAction::DRAG_SELECTING;
+                    _dragStartWorldPos = worldPos;
+                    _isDragSelecting = false; // Will become true on first mouse move
+                } else {
+                    // Immediate selection
+                    selectAtPosition(worldPos, modifier);
+                }
             } else if (event.mouseButton.button == sf::Mouse::Right) {
                 // Start panning
                 _currentAction = EditorAction::PANNING;
@@ -467,7 +567,38 @@ void EditorWidget::handleEvent(const sf::Event& event) {
             break;
             
         case sf::Event::MouseButtonReleased:
-            if (event.mouseButton.button == sf::Mouse::Right) {
+            if (event.mouseButton.button == sf::Mouse::Left) {
+                if (_currentAction == EditorAction::DRAG_SELECTING) {
+                    // Clear preview visuals first
+                    clearDragPreview();
+                    
+                    if (_isDragSelecting) {
+                        // Complete drag selection
+                        sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
+                            sf::Vector2i(event.mouseButton.x, event.mouseButton.y), _view);
+                        
+                        // Create selection area
+                        float left = std::min(_dragStartWorldPos.x, worldPos.x);
+                        float top = std::min(_dragStartWorldPos.y, worldPos.y);
+                        float width = std::abs(worldPos.x - _dragStartWorldPos.x);
+                        float height = std::abs(worldPos.y - _dragStartWorldPos.y);
+                        sf::FloatRect selectionArea(left, top, width, height);
+                        
+                        // Perform area selection - this will trigger observer notification and apply final colors
+                        auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
+                        if (result.success) {
+                            spdlog::info("Drag selection: {} items selected", _selectionManager->getCurrentSelection().count());
+                        }
+                        
+                        _isDragSelecting = false;
+                    } else {
+                        // Was a click, not a drag - do normal selection
+                        selectAtPosition(_dragStartWorldPos, SelectionModifier::NONE);
+                    }
+                    
+                    _currentAction = EditorAction::NONE;
+                }
+            } else if (event.mouseButton.button == sf::Mouse::Right) {
                 // Stop panning
                 _currentAction = EditorAction::NONE;
             }
@@ -483,6 +614,31 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 _view.move(static_cast<float>(delta.x), static_cast<float>(delta.y));
                 
                 _mouseLastPosition = currentPos;
+            } else if (_currentAction == EditorAction::DRAG_SELECTING) {
+                // Update drag selection rectangle
+                sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
+                    sf::Vector2i(event.mouseMove.x, event.mouseMove.y), _view);
+                
+                // Mark as actively dragging if we've moved enough
+                float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + 
+                                         std::pow(currentWorldPos.y - _dragStartWorldPos.y, 2));
+                if (distance > 5.0f) { // Minimum drag distance
+                    _isDragSelecting = true;
+                }
+                
+                if (_isDragSelecting) {
+                    // Update selection rectangle
+                    float left = std::min(_dragStartWorldPos.x, currentWorldPos.x);
+                    float top = std::min(_dragStartWorldPos.y, currentWorldPos.y);
+                    float width = std::abs(currentWorldPos.x - _dragStartWorldPos.x);
+                    float height = std::abs(currentWorldPos.y - _dragStartWorldPos.y);
+                    
+                    _selectionRectangle.setPosition(left, top);
+                    _selectionRectangle.setSize(sf::Vector2f(width, height));
+                    
+                    // Update preview of items that would be selected
+                    updateDragPreview(currentWorldPos);
+                }
             }
             break;
             
@@ -499,11 +655,25 @@ void EditorWidget::handleEvent(const sf::Event& event) {
             switch (event.key.code) {
                 case sf::Keyboard::Left:
                 case sf::Keyboard::A:
-                    _view.move(-50.0f, 0.0f);
+                    // Ctrl+A: Select all items of current type
+                    if (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) || 
+                        sf::Keyboard::isKeyPressed(sf::Keyboard::RControl)) {
+                        _selectionManager->selectAll(_currentSelectionMode, _currentElevation);
+                        spdlog::info("Select all: {} items", _selectionManager->getCurrentSelection().count());
+                    } else {
+                        _view.move(-50.0f, 0.0f);
+                    }
                     break;
                 case sf::Keyboard::Right:
                 case sf::Keyboard::D:
-                    _view.move(50.0f, 0.0f);
+                    // Ctrl+D: Deselect all
+                    if (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) || 
+                        sf::Keyboard::isKeyPressed(sf::Keyboard::RControl)) {
+                        _selectionManager->clearSelection();
+                        spdlog::info("Deselected all items");
+                    } else {
+                        _view.move(50.0f, 0.0f);
+                    }
                     break;
                 case sf::Keyboard::Up:
                 case sf::Keyboard::W:
@@ -592,155 +762,61 @@ void EditorWidget::render(const float dt) {
             window->draw(roof);
         }
     }
+    
+    // Render drag selection rectangle
+    if (_isDragSelecting && _currentAction == EditorAction::DRAG_SELECTING) {
+        window->draw(_selectionRectangle);
+    }
 }
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
-    switch (_currentSelectionMode) {
-        case SelectionMode::OBJECTS:
-            return selectObject(worldPos);
-            
-        case SelectionMode::FLOOR_TILES:
-            return selectFloorTile(worldPos);
-            
-        case SelectionMode::ROOF_TILES:
-            return selectRoofTile(worldPos);
-            
-        case SelectionMode::ALL:
-            return selectAllAtPosition(worldPos);
-            
-        default:
-            return false;
-    }
+    // Default to normal selection (no modifier)
+    return selectAtPosition(worldPos, SelectionModifier::NONE);
 }
 
-bool EditorWidget::selectAllAtPosition(sf::Vector2f worldPos) {
-    // Get all available items at this position
-    auto objectsAtPos = getObjectsAtPosition(worldPos);
+bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier modifier) {
+    // Update the observer with current elevation
+    _selectionObserver->setCurrentElevation(_currentElevation);
     
-    // Check for roof tile at position
-    int roofTileIndex = -1;
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
-        _fakeTileSprite.setPosition(_roofSprites.at(i).getPosition());
-        if (isSpriteClicked(worldPos, _fakeTileSprite) && 
-            _map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() != Map::EMPTY_TILE) {
-            roofTileIndex = i;
+    selection::SelectionResult result;
+    
+    switch (modifier) {
+        case SelectionModifier::NONE:
+            // Normal single selection (clear and select one)
+            result = _selectionManager->selectAtPosition(worldPos, _currentSelectionMode, _currentElevation);
             break;
-        }
-    }
-    
-    // Check for floor tile at position
-    int floorTileIndex = -1;
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
-        _fakeTileSprite.setPosition(_floorSprites.at(i).getPosition());
-        if (isSpriteClicked(worldPos, _fakeTileSprite)) {
-            floorTileIndex = i;
+            
+        case SelectionModifier::ADD:
+            // Ctrl+Click - add to existing selection
+            result = _selectionManager->addToSelection(worldPos, _currentSelectionMode, _currentElevation);
+            spdlog::debug("Add to selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
-        }
-    }
-    
-    // Check what's currently selected at this position
-    bool roofSelected = (roofTileIndex >= 0) && 
-                       (std::find(_selectedRoofTileIndexes.begin(), _selectedRoofTileIndexes.end(), roofTileIndex) != _selectedRoofTileIndexes.end());
-    bool floorSelected = (floorTileIndex >= 0) && 
-                        (std::find(_selectedFloorTileIndexes.begin(), _selectedFloorTileIndexes.end(), floorTileIndex) != _selectedFloorTileIndexes.end());
-    
-    // Check if an object at this position is selected and find its index
-    int selectedObjectIndex = -1;
-    if (_selectedObject.has_value()) {
-        auto it = std::find(objectsAtPos.begin(), objectsAtPos.end(), _selectedObject.value());
-        if (it != objectsAtPos.end()) {
-            selectedObjectIndex = static_cast<int>(std::distance(objectsAtPos.begin(), it));
-        }
-    }
-    
-    // Selection logic: roof → objects (cycle through all) → floor → deselect
-    if (roofSelected) {
-        // Roof is selected, move to first object or floor if no objects
-        unselectAll();
-        if (!objectsAtPos.empty()) {
-            return selectObjectAtIndex(objectsAtPos, 0);
-        } else if (floorTileIndex >= 0) {
-            return selectFloorTile(worldPos);
-        }
-    } else if (selectedObjectIndex >= 0) {
-        // An object is selected, cycle to next object or move to floor
-        unselectAll();
-        if (selectedObjectIndex < static_cast<int>(objectsAtPos.size()) - 1) {
-            // Select next object
-            return selectObjectAtIndex(objectsAtPos, selectedObjectIndex + 1);
-        } else if (floorTileIndex >= 0) {
-            // No more objects, select floor
-            return selectFloorTile(worldPos);
-        }
-    } else if (floorSelected) {
-        // Floor is selected, deselect everything
-        unselectAll();
-        return false;
-    } else {
-        // Nothing selected, start with roof or first available
-        unselectAll();
-        if (roofTileIndex >= 0) {
-            return selectRoofTile(worldPos);
-        } else if (!objectsAtPos.empty()) {
-            return selectObjectAtIndex(objectsAtPos, 0);
-        } else if (floorTileIndex >= 0) {
-            return selectFloorTile(worldPos);
-        }
-    }
-    
-    return false;
-}
-
-bool EditorWidget::selectObject(sf::Vector2f worldPos) {
-    auto objectsAtPos = getObjectsAtPosition(worldPos);
-    return selectObjectAtIndex(objectsAtPos, 0);
-}
-
-bool EditorWidget::selectObjectAtIndex(const std::vector<std::shared_ptr<Object>>& objects, int index) {
-    if (objects.empty() || index < 0 || index >= static_cast<int>(objects.size())) {
-        return false;
-    }
-    
-    auto selectedObj = objects[index];
-    selectedObj->select();
-    _selectedObject = selectedObj;
-    emit objectSelected(_selectedObject.value());
-    
-    return true;
-}
-
-bool EditorWidget::selectFloorTile(sf::Vector2f worldPos) {
-    return selectTile(worldPos, _floorSprites, _selectedFloorTileIndexes, false);
-}
-
-bool EditorWidget::selectRoofTile(sf::Vector2f worldPos) {
-    return selectTile(worldPos, _roofSprites, _selectedRoofTileIndexes, true);
-}
-
-bool EditorWidget::selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& sprites, std::vector<int>& selectedIndexes, bool selectingRoof) {
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
-        auto& tile = sprites.at(i);
-        
-        _fakeTileSprite.setPosition(tile.getPosition());
-        
-        if (isSpriteClicked(worldPos, _fakeTileSprite)) {
-            if (selectingRoof && _map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() == Map::EMPTY_TILE) {
-                return false;
-            }
             
-            // Select this tile (clear any existing selections first)
-            selectedIndexes.clear();
-            tile.setColor(sf::Color::Red);
-            selectedIndexes.push_back(i);
+        case SelectionModifier::TOGGLE:
+            // Alt+Click - toggle selection (add if not selected, remove if selected)
+            result = _selectionManager->toggleSelection(worldPos, _currentSelectionMode, _currentElevation);
+            spdlog::debug("Toggle selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
+            break;
             
-            unselectObject();
-            emit tileSelected(i, _currentElevation, selectingRoof);
-            return true;
+        case SelectionModifier::RANGE:
+            // Shift+Click - range selection for tiles
+            result = handleRangeSelection(worldPos);
+            spdlog::debug("Range selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
+            break;
+    }
+    
+    // Log selection count for multi-selection feedback
+    if (result.success && result.selectionChanged) {
+        const auto& selection = _selectionManager->getCurrentSelection();
+        if (selection.count() > 1) {
+            spdlog::info("Multi-selection: {} items selected", selection.count());
         }
     }
     
-    return false;
+    return result.success && result.selectionChanged;
 }
+
+
 
 void EditorWidget::cycleSelectionMode() {
     // Cycle through selection modes
@@ -749,15 +825,18 @@ void EditorWidget::cycleSelectionMode() {
     _currentSelectionMode = static_cast<SelectionMode>(currentMode);
     
     // Clear current selection when mode changes
-    unselectAll();
+    _selectionManager->clearSelection();
     
     spdlog::info("Selection mode changed to: {}", selectionModeToString(_currentSelectionMode));
 }
 
 void EditorWidget::rotateSelectedObject() {
-    if (_selectedObject) {
-        // TODO: Implement object rotation
-        spdlog::info("Rotate selected object not yet implemented");
+    const auto& selection = _selectionManager->getCurrentSelection();
+    auto objects = selection.getObjects();
+    
+    if (!objects.empty()) {
+        // TODO: Implement object rotation for selected objects
+        spdlog::info("Rotate selected objects not yet implemented ({} objects)", objects.size());
     }
 }
 
@@ -768,20 +847,6 @@ void EditorWidget::changeElevation(int elevation) {
     }
 }
 
-bool EditorWidget::isTileVisible(int tileIndex, bool roof) {
-    auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
-
-    if (roof) {
-        uint16_t roofId = tile.getRoof();
-        // Check if roof tile is empty/invisible
-        // Allow selection of roof tiles that exist but may be transparent
-        return roofId != Map::EMPTY_TILE;
-    } else {
-        // Floor tiles should always be selectable, even blank.frm tiles
-        // The EMPTY_TILE case is handled by loading blank.frm
-        return true;
-    }
-}
 
 // Tile selection helper implementation
 
@@ -790,5 +855,139 @@ bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& spri
     return sprite.getGlobalBounds().contains(worldPos);
 }
 
+selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f worldPos) {
+    // Range selection is primarily for tiles - select a rectangular area of tiles
+    const auto& currentSelection = _selectionManager->getCurrentSelection();
+    
+    // For range selection to work, we need a starting point
+    // If nothing is selected, just do a normal selection
+    if (currentSelection.isEmpty()) {
+        return _selectionManager->selectAtPosition(worldPos, _currentSelectionMode, _currentElevation);
+    }
+    
+    // Get the first selected tile as the starting point for range selection
+    sf::Vector2f startPos;
+    bool hasStartTile = false;
+    
+    for (const auto& item : currentSelection.items) {
+        if (item.type == selection::SelectionType::FLOOR_TILE || 
+            item.type == selection::SelectionType::ROOF_TILE) {
+            // Convert tile index to world position
+            int tileIndex = item.getTileIndex();
+            unsigned int tileX = tileIndex / 100;
+            unsigned int tileY = tileIndex % 100;
+            unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
+            unsigned int y = tileX * 24 + tileY * 12;
+            startPos = sf::Vector2f(static_cast<float>(x), static_cast<float>(y));
+            hasStartTile = true;
+            break;
+        }
+    }
+    
+    // If no tile in current selection, fallback to normal selection
+    if (!hasStartTile) {
+        return _selectionManager->selectAtPosition(worldPos, _currentSelectionMode, _currentElevation);
+    }
+    
+    // Calculate rectangular area between start and current position
+    float left = std::min(startPos.x, worldPos.x);
+    float top = std::min(startPos.y, worldPos.y);
+    float right = std::max(startPos.x, worldPos.x);
+    float bottom = std::max(startPos.y, worldPos.y);
+    
+    // Add some padding to ensure we catch tiles at the edges
+    sf::FloatRect selectionArea(left - 40, top - 18, (right - left) + 80, (bottom - top) + 36);
+    
+    // Determine selection mode based on current mode
+    SelectionMode areaMode = _currentSelectionMode;
+    if (_currentSelectionMode == SelectionMode::ALL) {
+        // For ALL mode, default to floor tiles for range selection
+        areaMode = SelectionMode::FLOOR_TILES;
+    }
+    
+    // Use the SelectionManager's area selection functionality
+    auto result = _selectionManager->selectArea(selectionArea, areaMode, _currentElevation);
+    
+    spdlog::info("Range selection: area ({:.1f}, {:.1f}, {:.1f}, {:.1f})", 
+                 selectionArea.left, selectionArea.top, selectionArea.width, selectionArea.height);
+    
+    return result;
+}
+
+void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
+    // Clear previous preview
+    clearDragPreview();
+    
+    // Create selection area
+    float left = std::min(_dragStartWorldPos.x, currentWorldPos.x);
+    float top = std::min(_dragStartWorldPos.y, currentWorldPos.y);
+    float width = std::abs(currentWorldPos.x - _dragStartWorldPos.x);
+    float height = std::abs(currentWorldPos.y - _dragStartWorldPos.y);
+    sf::FloatRect selectionArea(left, top, width, height);
+    
+    // Get items that would be selected
+    switch (_currentSelectionMode) {
+        case SelectionMode::FLOOR_TILES: {
+            _previewTiles = _selectionBridge->getTilesInArea(selectionArea, false, _currentElevation);
+            // Apply preview coloring to floor tiles
+            for (int tileIndex : _previewTiles) {
+                if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                    _floorSprites.at(tileIndex).setColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
+                }
+            }
+            break;
+        }
+        
+        case SelectionMode::ROOF_TILES: {
+            _previewTiles = _selectionBridge->getTilesInArea(selectionArea, true, _currentElevation);
+            // Apply preview coloring to roof tiles
+            for (int tileIndex : _previewTiles) {
+                if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                    _roofSprites.at(tileIndex).setColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
+                }
+            }
+            break;
+        }
+        
+        case SelectionMode::OBJECTS: {
+            _previewObjects = _selectionBridge->getObjectsInArea(selectionArea, _currentElevation);
+            // Apply preview coloring to objects
+            for (auto& object : _previewObjects) {
+                if (object) {
+                    object->getSprite().setColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
+                }
+            }
+            break;
+        }
+        
+        case SelectionMode::ALL:
+            // No preview for ALL mode
+            break;
+            
+        default:
+            break;
+    }
+}
+
+void EditorWidget::clearDragPreview() {
+    // Clear tile preview coloring
+    for (int tileIndex : _previewTiles) {
+        if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+            _floorSprites.at(tileIndex).setColor(sf::Color::White);
+            _roofSprites.at(tileIndex).setColor(sf::Color::White);
+        }
+    }
+    
+    // Clear object preview coloring
+    for (auto& object : _previewObjects) {
+        if (object) {
+            object->getSprite().setColor(sf::Color::White);
+        }
+    }
+    
+    // Clear the preview arrays
+    _previewTiles.clear();
+    _previewObjects.clear();
+}
 
 } // namespace geck

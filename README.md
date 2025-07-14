@@ -10,7 +10,7 @@ GECK::Mapper is a modern Fallout 2 map editor written in C++20 using Qt6 Framewo
 
 - **Modern Qt6 Interface**: Native platform integration with menus, toolbars, and dockable panels
 - **SFML Graphics Engine**: High-performance 2D rendering for game graphics
-- **Advanced Selection System**: Multiple selection modes with intelligent cycling between overlapping elements
+- **Advanced Selection System**: Multiple selection modes with multi-selection support and intelligent cycling
 - **Map Format Support**: Full compatibility with Fallout 2 MAP files and DAT archives
 - **Object Management**: View, select, and manipulate map objects with proper z-ordering
 - **Tile Editing**: Support for both floor and roof tiles with visual highlighting
@@ -98,6 +98,14 @@ The editor supports multiple selection modes accessible via the toolbar:
 - **Left mouse click**: Select element at cursor position
 - **Multiple clicks on same position**: Cycle through overlapping elements (in ALL mode)
 - **Right mouse click**: Clear all selections
+
+#### Multi-Selection
+- **Click and Drag**: Area selection (FLOOR_TILES, ROOF_TILES, or OBJECTS modes only)
+- **Ctrl+Click**: Add item to existing selection
+- **Alt+Click**: Toggle item selection (add if not selected, remove if selected)
+- **Shift+Click**: Range selection for tiles (select area between first selected tile and clicked position)
+- **Ctrl+A**: Select all items of current selection mode type
+- **Ctrl+D**: Deselect all items
 
 #### Object Manipulation
 - **R key**: Rotate selected object

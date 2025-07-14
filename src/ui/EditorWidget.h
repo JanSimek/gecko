@@ -15,6 +15,8 @@
 #include "../util/Types.h"
 #include "../format/map/Map.h"
 #include "../format/pro/Pro.h"
+#include "../selection/SelectionManager.h"
+#include "../selection/SelectionBridge.h"
 
 namespace geck {
 
@@ -67,43 +69,45 @@ signals:
 private:
     void setupUI();
     void centerViewOnMap();
+    void initializeSelectionSystem();
 
     void loadSprites();
     void loadTileSprites();
     void loadObjectSprites();
 
-    bool selectObject(sf::Vector2f worldPos);
-    bool selectObjectAtIndex(const std::vector<std::shared_ptr<Object>>& objects, int index);
-    bool selectFloorTile(sf::Vector2f worldPos);
-    bool selectRoofTile(sf::Vector2f worldPos);
-    bool selectAllAtPosition(sf::Vector2f worldPos);
-    bool selectTile(sf::Vector2f worldPos, std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& sprites, std::vector<int>& selectedIndexes, bool roof);
-    bool isTileVisible(int tileIndex, bool roof);
-    
-    // Tile selection helper
-    bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
-    
-    // New improved object selection methods
+    // Object selection methods
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
     bool isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite);
     bool isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite& sprite);
     bool isDoubleClick(sf::Vector2f worldPos);
-    void cycleObjectsAtPosition(sf::Vector2f worldPos);
     
-    // Selection type cycling for overlapping elements
-    enum class SelectionType { OBJECT, ROOF_TILE, FLOOR_TILE };
+    // Tile selection helper
+    bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
+    
+    
+    // Selection modifiers for multi-selection
+    enum class SelectionModifier {
+        NONE,        // Normal single selection (clear and select)
+        ADD,         // Ctrl+Click - add to selection
+        TOGGLE,      // Alt+Click - toggle selection
+        RANGE        // Shift+Click - range selection for tiles
+    };
+    
     bool selectAtPosition(sf::Vector2f worldPos);
+    bool selectAtPosition(sf::Vector2f worldPos, SelectionModifier modifier);
+    selection::SelectionResult handleRangeSelection(sf::Vector2f worldPos);
 
-    void unselectAll();
-    void unselectTiles();
-    void unselectObject();
+    void clearAllVisualSelections();
+    void updateDragPreview(sf::Vector2f currentWorldPos);
+    void clearDragPreview();
     
     // Zoom management
     void zoomView(float direction);
 
     enum class EditorAction {
         NONE,
-        PANNING
+        PANNING,
+        DRAG_SELECTING
     };
 
     // UI Components
@@ -150,15 +154,17 @@ private:
     // Fake sprite for tile hit detection
     sf::Sprite _fakeTileSprite;
     
-    // Selection type cycling for overlapping elements
-    SelectionType _lastSelectionType = SelectionType::OBJECT;
-    sf::Vector2f _lastSelectionPosition;
-
-    std::optional<std::shared_ptr<Object>> _selectedObject;
-
-    // TODO: merge 2*Map::TILES_PER_ELEVATION
-    std::vector<int> _selectedRoofTileIndexes;
-    std::vector<int> _selectedFloorTileIndexes;
+    // Drag selection state
+    sf::Vector2f _dragStartWorldPos;
+    sf::RectangleShape _selectionRectangle;
+    bool _isDragSelecting = false;
+    std::vector<int> _previewTiles; // Tiles being previewed during drag
+    std::vector<std::shared_ptr<Object>> _previewObjects; // Objects being previewed during drag
+    
+    // Selection management
+    std::unique_ptr<selection::SelectionManager> _selectionManager;
+    std::unique_ptr<selection::SelectionBridge> _selectionBridge;
+    std::shared_ptr<selection::QtSelectionObserver> _selectionObserver;
 };
 
 } // namespace geck

@@ -33,6 +33,12 @@ add_executable (${PROJECT_NAME}
     ui/MapInfoPanel.h
     ui/MapInfoPanel.cpp
 
+    # Selection management
+    selection/SelectionManager.h
+    selection/SelectionManager.cpp
+    selection/SelectionBridge.h
+    selection/SelectionBridge.cpp
+
     # Loaders (kept from state system)
     state/loader/Loader.h
     state/loader/MapLoader.cpp

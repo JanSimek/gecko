@@ -32,6 +32,10 @@ const sf::Sprite& Object::getSprite() const {
     return _sprite;
 }
 
+sf::Sprite& Object::getSprite() {
+    return _sprite;
+}
+
 void Object::setHexPosition(const Hex& hex) {
 
     // center on the hex

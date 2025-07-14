@@ -32,6 +32,7 @@ public:
 
     void setSprite(sf::Sprite sprite);
     const sf::Sprite& getSprite() const;
+    sf::Sprite& getSprite();
 
     void setHexPosition(const Hex& hex);
     void setDirection(int direction); // TODO: enum
