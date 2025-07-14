@@ -101,8 +101,8 @@ The editor supports multiple selection modes accessible via the toolbar:
 
 #### Multi-Selection
 - **Click and Drag**: Area selection (FLOOR_TILES, ROOF_TILES, or OBJECTS modes only)
-- **Ctrl+Click**: Add item to existing selection
-- **Alt+Click**: Toggle item selection (add if not selected, remove if selected)
+- **Ctrl+Click**: Toggle item selection (add if not selected, remove if selected)
+- **Alt+Click** (Option+Click on macOS): Add item to existing selection
 - **Shift+Click**: Range selection for tiles (select area between first selected tile and clicked position)
 - **Ctrl+A**: Select all items of current selection mode type
 - **Ctrl+D**: Deselect all items

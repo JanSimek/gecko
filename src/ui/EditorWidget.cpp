@@ -531,15 +531,15 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 bool hasModifiers = false;
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) || 
                     sf::Keyboard::isKeyPressed(sf::Keyboard::RControl)) {
-                    modifier = SelectionModifier::ADD;
+                    modifier = SelectionModifier::TOGGLE;  // Ctrl+Click toggles items
                     hasModifiers = true;
                 } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::LAlt) || 
                           sf::Keyboard::isKeyPressed(sf::Keyboard::RAlt)) {
-                    modifier = SelectionModifier::TOGGLE;
+                    modifier = SelectionModifier::ADD;     // Alt+Click (Option on macOS) adds items
                     hasModifiers = true;
                 } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::LShift) || 
                           sf::Keyboard::isKeyPressed(sf::Keyboard::RShift)) {
-                    modifier = SelectionModifier::RANGE;
+                    modifier = SelectionModifier::RANGE;   // Shift+Click range selection
                     hasModifiers = true;
                 }
                 
@@ -787,13 +787,13 @@ bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier mod
             break;
             
         case SelectionModifier::ADD:
-            // Ctrl+Click - add to existing selection
+            // Alt+Click - add to existing selection
             result = _selectionManager->addToSelection(worldPos, _currentSelectionMode, _currentElevation);
             spdlog::debug("Add to selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
             
         case SelectionModifier::TOGGLE:
-            // Alt+Click - toggle selection (add if not selected, remove if selected)
+            // Ctrl+Click - toggle selection (add if not selected, remove if selected)
             result = _selectionManager->toggleSelection(worldPos, _currentSelectionMode, _currentElevation);
             spdlog::debug("Toggle selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
