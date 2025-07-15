@@ -11,6 +11,10 @@
 #include "../format/map/Map.h"
 #include "../editor/Object.h"
 
+namespace geck {
+    class EditorWidget; // Forward declaration
+}
+
 namespace geck::selection {
 
 // Forward declarations
@@ -98,16 +102,10 @@ public:
  * - Area selection for tiles
  * - Multiple object selection
  */
-// Forward declaration
-class SelectionBridge;
-
 class SelectionManager {
 public:
-    explicit SelectionManager(Map* map);
+    explicit SelectionManager(Map* map, geck::EditorWidget* editorWidget);
     ~SelectionManager() = default;
-    
-    // Set the bridge for connecting to the UI layer
-    void setBridge(SelectionBridge* bridge) { _bridge = bridge; }
     
     // Selection operations
     SelectionResult selectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
@@ -148,9 +146,14 @@ public:
     // Public access to notification (needed by SelectionBridge)
     void notifyObservers();
     
+    // Area selection helpers (public for EditorWidget usage)
+    std::vector<int> getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) const;
+    std::vector<int> getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const;
+    std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area, int elevation) const;
+    
 private:
     Map* _map;
-    SelectionBridge* _bridge = nullptr;
+    geck::EditorWidget* _editorWidget = nullptr;
     Selection _currentSelection;
     std::vector<std::weak_ptr<SelectionObserver>> _observers;
     
@@ -160,10 +163,6 @@ private:
     std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos, int elevation) const;
     std::optional<int> getFloorTileAtPosition(sf::Vector2f worldPos, int elevation) const;
     
-    // Area selection helpers
-    std::vector<int> getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) const;
-    std::vector<int> getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const;
-    std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area, int elevation) const;
     
     // Single item selection logic (current behavior)
     SelectionResult selectSingleAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation);

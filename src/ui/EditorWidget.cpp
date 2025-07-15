@@ -44,64 +44,8 @@ EditorWidget::~EditorWidget() {
 }
 
 void EditorWidget::initializeSelectionSystem() {
-    // Initialize the selection manager
-    _selectionManager = std::make_unique<selection::SelectionManager>(_map.get());
-    
-    // Initialize the bridge
-    _selectionBridge = std::make_unique<selection::SelectionBridge>(*_selectionManager);
-    
-    // Setup callbacks from bridge to EditorWidget methods
-    _selectionBridge->setObjectHitTest([this](sf::Vector2f worldPos) {
-        return this->getObjectsAtPosition(worldPos);
-    });
-    
-    _selectionBridge->setTileHitTest([this](sf::Vector2f worldPos, bool isRoof) -> std::optional<int> {
-        for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
-            auto& sprites = isRoof ? _roofSprites : _floorSprites;
-            _fakeTileSprite.setPosition(sprites.at(i).getPosition());
-            
-            if (isSpriteClicked(worldPos, _fakeTileSprite)) {
-                if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() == Map::EMPTY_TILE) {
-                    return std::nullopt;
-                }
-                return i;
-            }
-        }
-        return std::nullopt;
-    });
-    
-    _selectionBridge->setSpriteClickTest([this](sf::Vector2f worldPos, const sf::Sprite& sprite) {
-        return this->isSpriteClicked(worldPos, sprite);
-    });
-    
-    _selectionBridge->setTilePositionFunc([this](int tileIndex) -> sf::Vector2f {
-        // Calculate tile position using the same logic as loadTileSprites
-        unsigned int tileX = tileIndex / 100;
-        unsigned int tileY = tileIndex % 100;
-        unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
-        unsigned int y = tileX * 24 + tileY * 12;
-        return sf::Vector2f(static_cast<float>(x), static_cast<float>(y));
-    });
-    
-    _selectionBridge->setFloorSpritesFunc([this]() -> std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& {
-        return _floorSprites;
-    });
-    
-    _selectionBridge->setRoofSpritesFunc([this]() -> std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& {
-        return _roofSprites;
-    });
-    
-    _selectionBridge->setGetAllObjectsFunc([this]() -> std::vector<std::shared_ptr<Object>> {
-        return _objects;
-    });
-    
-    _selectionBridge->setGetCurrentElevationFunc([this]() -> int {
-        return _currentElevation;
-    });
-    
-    _selectionBridge->setGetMapFileFunc([this]() -> Map::MapFile& {
-        return _map->getMapFile();
-    });
+    // Initialize the selection manager with direct EditorWidget integration
+    _selectionManager = std::make_unique<selection::SelectionManager>(_map.get(), this);
     
     // Initialize the Qt observer for signal emission
     _selectionObserver = std::make_shared<selection::QtSelectionObserver>();
@@ -176,9 +120,6 @@ void EditorWidget::initializeSelectionSystem() {
             }
         }
     });
-    
-    // Connect the bridge to the selection manager
-    _selectionManager->setBridge(_selectionBridge.get());
     
     // Register the observer with the selection manager
     _selectionManager->addObserver(_selectionObserver);
@@ -1016,7 +957,7 @@ void EditorWidget::fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bo
     }
     
     // Use the same logic as selection system to get tiles in area
-    std::vector<int> tilesToFill = _selectionBridge->getTilesInArea(area, isRoof, _currentElevation);
+    std::vector<int> tilesToFill = _selectionManager->getTilesInArea(area, isRoof, _currentElevation);
     
     if (tilesToFill.empty()) {
         spdlog::debug("EditorWidget::fillAreaWithTile: No tiles found in area");
@@ -1213,6 +1154,38 @@ bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& spri
     return sprite.getGlobalBounds().contains(worldPos);
 }
 
+// Methods for SelectionManager to access tile and object data
+
+std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool isRoof) {
+    auto& sprites = isRoof ? _roofSprites : _floorSprites;
+    
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+        _fakeTileSprite.setPosition(sprites.at(i).getPosition());
+        
+        if (isSpriteClicked(worldPos, _fakeTileSprite)) {
+            if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() == Map::EMPTY_TILE) {
+                return std::nullopt;
+            }
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
+    // This version includes empty roof tiles in the selection
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+        sf::FloatRect tileBounds = _roofSprites.at(i).getGlobalBounds();
+        
+        // Check if world position is within tile bounds
+        if (tileBounds.contains(worldPos)) {
+            return i;
+        }
+    }
+    
+    return std::nullopt;
+}
+
 selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f worldPos) {
     // Range selection is primarily for tiles - select a rectangular area of tiles
     const auto& currentSelection = _selectionManager->getCurrentSelection();
@@ -1286,7 +1259,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
     // Get items that would be selected
     switch (_currentSelectionMode) {
         case SelectionMode::FLOOR_TILES: {
-            _previewTiles = _selectionBridge->getTilesInArea(selectionArea, false, _currentElevation);
+            _previewTiles = _selectionManager->getTilesInArea(selectionArea, false, _currentElevation);
             // Apply preview coloring to floor tiles
             for (int tileIndex : _previewTiles) {
                 if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
@@ -1297,7 +1270,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
         }
         
         case SelectionMode::ROOF_TILES: {
-            _previewTiles = _selectionBridge->getTilesInArea(selectionArea, true, _currentElevation);
+            _previewTiles = _selectionManager->getTilesInArea(selectionArea, true, _currentElevation);
             // Apply preview coloring to roof tiles
             for (int tileIndex : _previewTiles) {
                 if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
@@ -1308,7 +1281,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
         }
         
         case SelectionMode::ROOF_TILES_ALL: {
-            _previewTiles = _selectionBridge->getTilesInAreaIncludingEmpty(selectionArea, true, _currentElevation);
+            _previewTiles = _selectionManager->getTilesInAreaIncludingEmpty(selectionArea, true, _currentElevation);
             // Apply preview coloring to roof tiles including empty ones
             for (int tileIndex : _previewTiles) {
                 if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
@@ -1341,7 +1314,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
         }
         
         case SelectionMode::OBJECTS: {
-            _previewObjects = _selectionBridge->getObjectsInArea(selectionArea, _currentElevation);
+            _previewObjects = _selectionManager->getObjectsInArea(selectionArea, _currentElevation);
             // Apply preview coloring to objects
             for (auto& object : _previewObjects) {
                 if (object) {
@@ -1373,7 +1346,7 @@ void EditorWidget::updateTileAreaFillPreview(sf::Vector2f currentWorldPos) {
     
     // Get tiles that would be affected by the area fill (default to floor tiles)
     bool isRoof = _tilePlacementIsRoof;
-    _previewTiles = _selectionBridge->getTilesInArea(selectionArea, isRoof, _currentElevation);
+    _previewTiles = _selectionManager->getTilesInArea(selectionArea, isRoof, _currentElevation);
     
     // Apply preview coloring to tiles (same as selection mode)
     auto& sprites = isRoof ? _roofSprites : _floorSprites;

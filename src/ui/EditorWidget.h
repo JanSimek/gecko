@@ -73,6 +73,26 @@ public:
 
     // Access to SFML widget for main window
     SFMLWidget* getSFMLWidget() const { return _sfmlWidget; }
+    
+    // Methods for SelectionManager (moved from private)
+    std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
+    bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
+    
+    // Tile hit testing methods
+    std::optional<int> getTileAtPosition(sf::Vector2f worldPos, bool isRoof);
+    std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos);
+    
+    // Access to sprite arrays for SelectionManager
+    const std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& getFloorSprites() const { return _floorSprites; }
+    const std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& getRoofSprites() const { return _roofSprites; }
+    
+    // Access to current elevation and map data
+    int getCurrentElevation() const { return _currentElevation; }
+    Map::MapFile& getMapFile() { return _map->getMapFile(); }
+    const Map::MapFile& getMapFile() const { return _map->getMapFile(); }
+    
+    // Access to objects for SelectionManager
+    const std::vector<std::shared_ptr<Object>>& getObjects() const { return _objects; }
 
 signals:
     void objectSelected(std::shared_ptr<Object> object);
@@ -89,14 +109,10 @@ private:
     void loadTileSprites();
     void loadObjectSprites();
 
-    // Object selection methods
-    std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
+    // Object selection methods (moved to public)
     bool isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite);
     bool isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite& sprite);
     bool isDoubleClick(sf::Vector2f worldPos);
-    
-    // Tile selection helper
-    bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
     
     
     // Selection modifiers for multi-selection
@@ -192,7 +208,6 @@ private:
     bool _tilePlacementReplaceMode = false;
     int _tilePlacementIndex = -1;
     bool _tilePlacementIsRoof = false;
-    std::unique_ptr<selection::SelectionBridge> _selectionBridge;
     std::shared_ptr<selection::QtSelectionObserver> _selectionObserver;
 };
 
