@@ -32,6 +32,8 @@ add_executable (${PROJECT_NAME}
     ui/SelectionPanel.cpp
     ui/MapInfoPanel.h
     ui/MapInfoPanel.cpp
+    ui/TilePalettePanel.h
+    ui/TilePalettePanel.cpp
 
     # Selection management
     selection/SelectionManager.h

@@ -53,6 +53,7 @@ SelectionResult SelectionManager::selectAtPosition(sf::Vector2f worldPos, Select
         case SelectionMode::OBJECTS:
         case SelectionMode::FLOOR_TILES:
         case SelectionMode::ROOF_TILES:
+        case SelectionMode::ROOF_TILES_ALL:
             return selectSingleAtPosition(worldPos, mode, currentElevation);
             
         default:
@@ -75,6 +76,15 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
         
         case SelectionMode::ROOF_TILES: {
             auto tiles = getTilesInArea(area, true, currentElevation);
+            for (int tileIndex : tiles) {
+                SelectedItem item{SelectionType::ROOF_TILE, tileIndex};
+                addItemToSelection(item);
+            }
+            break;
+        }
+        
+        case SelectionMode::ROOF_TILES_ALL: {
+            auto tiles = getTilesInAreaIncludingEmpty(area, true, currentElevation);
             for (int tileIndex : tiles) {
                 SelectedItem item{SelectionType::ROOF_TILE, tileIndex};
                 addItemToSelection(item);
@@ -120,6 +130,18 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
         
         case SelectionMode::ROOF_TILES: {
             auto tileIndex = getRoofTileAtPosition(worldPos, currentElevation);
+            if (tileIndex) {
+                SelectedItem item{SelectionType::ROOF_TILE, tileIndex.value()};
+                addItemToSelection(item);
+                _currentSelection.mode = mode;
+                notifyObservers();
+                return SelectionResult::createSuccess("");
+            }
+            break;
+        }
+        
+        case SelectionMode::ROOF_TILES_ALL: {
+            auto tileIndex = getRoofTileAtPositionIncludingEmpty(worldPos, currentElevation);
             if (tileIndex) {
                 SelectedItem item{SelectionType::ROOF_TILE, tileIndex.value()};
                 addItemToSelection(item);
@@ -202,6 +224,14 @@ SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, Selecti
         
         case SelectionMode::ROOF_TILES: {
             auto tileIndex = getRoofTileAtPosition(worldPos, currentElevation);
+            if (tileIndex) {
+                itemAtPosition = SelectedItem{SelectionType::ROOF_TILE, tileIndex.value()};
+            }
+            break;
+        }
+        
+        case SelectionMode::ROOF_TILES_ALL: {
+            auto tileIndex = getRoofTileAtPositionIncludingEmpty(worldPos, currentElevation);
             if (tileIndex) {
                 itemAtPosition = SelectedItem{SelectionType::ROOF_TILE, tileIndex.value()};
             }
@@ -389,6 +419,14 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
             }
             break;
             
+        case SelectionMode::ROOF_TILES_ALL:
+            for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+                // Include all roof tile positions, regardless of whether they have textures
+                SelectedItem item{SelectionType::ROOF_TILE, i};
+                addItemToSelection(item);
+            }
+            break;
+            
         case SelectionMode::OBJECTS:
             if (_bridge) {
                 auto allObjects = _bridge->getAllObjects();
@@ -448,6 +486,13 @@ std::optional<int> SelectionManager::getRoofTileAtPosition(sf::Vector2f worldPos
     return std::nullopt;
 }
 
+std::optional<int> SelectionManager::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos, int elevation) const {
+    if (_bridge) {
+        return _bridge->getRoofTileAtPositionIncludingEmpty(worldPos, elevation);
+    }
+    return std::nullopt;
+}
+
 std::optional<int> SelectionManager::getFloorTileAtPosition(sf::Vector2f worldPos, int elevation) const {
     if (_bridge) {
         return _bridge->getFloorTileAtPosition(worldPos, elevation);
@@ -458,6 +503,13 @@ std::optional<int> SelectionManager::getFloorTileAtPosition(sf::Vector2f worldPo
 std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) const {
     if (_bridge) {
         return _bridge->getTilesInArea(area, roof, elevation);
+    }
+    return {};
+}
+
+std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const {
+    if (_bridge) {
+        return _bridge->getTilesInAreaIncludingEmpty(area, roof, elevation);
     }
     return {};
 }
@@ -487,6 +539,18 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
         
         case SelectionMode::ROOF_TILES: {
             auto tileIndex = getRoofTileAtPosition(worldPos, elevation);
+            if (tileIndex) {
+                SelectedItem item{SelectionType::ROOF_TILE, tileIndex.value()};
+                addItemToSelection(item);
+                _currentSelection.mode = mode;
+                notifyObservers();
+                return SelectionResult::createSuccess();
+            }
+            break;
+        }
+        
+        case SelectionMode::ROOF_TILES_ALL: {
+            auto tileIndex = getRoofTileAtPositionIncludingEmpty(worldPos, elevation);
             if (tileIndex) {
                 SelectedItem item{SelectionType::ROOF_TILE, tileIndex.value()};
                 addItemToSelection(item);

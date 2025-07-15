@@ -22,6 +22,32 @@ std::optional<int> SelectionBridge::getRoofTileAtPosition(sf::Vector2f worldPos,
     return std::nullopt;
 }
 
+std::optional<int> SelectionBridge::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos, int elevation) {
+    // This version includes empty roof tiles in the selection
+    if (!_tilePosition) {
+        return std::nullopt;
+    }
+    
+    // Get access to sprite arrays to check actual tile bounds
+    auto* roofSprites = _roofSprites ? &_roofSprites() : nullptr;
+    
+    if (!roofSprites) {
+        return std::nullopt;
+    }
+    
+    // Check each tile to see if the world position is within its sprite bounds
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+        sf::FloatRect tileBounds = roofSprites->at(i).getGlobalBounds();
+        
+        // Check if world position is within tile bounds
+        if (tileBounds.contains(worldPos)) {
+            return i;
+        }
+    }
+    
+    return std::nullopt;
+}
+
 std::optional<int> SelectionBridge::getFloorTileAtPosition(sf::Vector2f worldPos, int elevation) {
     if (_tileHitTest) {
         return _tileHitTest(worldPos, false); // false for floor
@@ -30,6 +56,52 @@ std::optional<int> SelectionBridge::getFloorTileAtPosition(sf::Vector2f worldPos
 }
 
 std::vector<int> SelectionBridge::getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) {
+    std::vector<int> result;
+    
+    if (!_tilePosition || !_getCurrentElevation || !_getMapFile) {
+        return result;
+    }
+    
+    // Get access to sprite arrays to check actual tile bounds
+    auto* floorSprites = _floorSprites ? &_floorSprites() : nullptr;
+    auto* roofSprites = _roofSprites ? &_roofSprites() : nullptr;
+    
+    if (!floorSprites || !roofSprites) {
+        return result;
+    }
+    
+    // Get current map data for checking tile content
+    auto& mapFile = _getMapFile();
+    int currentElevation = _getCurrentElevation();
+    
+    // Check each tile to see if its sprite bounds intersect with the area
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+        sf::FloatRect tileBounds;
+        
+        if (roof) {
+            tileBounds = roofSprites->at(i).getGlobalBounds();
+        } else {
+            tileBounds = floorSprites->at(i).getGlobalBounds();
+        }
+        
+        // Check if tile bounds intersect with selection area
+        if (area.intersects(tileBounds)) {
+            // For roof tiles, only include tiles that have actual content (not empty)
+            if (roof) {
+                if (mapFile.tiles.at(currentElevation).at(i).getRoof() != Map::EMPTY_TILE) {
+                    result.push_back(i);
+                }
+            } else {
+                // For floor tiles, include all tiles (floor tiles are always considered to have content)
+                result.push_back(i);
+            }
+        }
+    }
+    
+    return result;
+}
+
+std::vector<int> SelectionBridge::getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) {
     std::vector<int> result;
     
     if (!_tilePosition) {
@@ -45,6 +117,7 @@ std::vector<int> SelectionBridge::getTilesInArea(const sf::FloatRect& area, bool
     }
     
     // Check each tile to see if its sprite bounds intersect with the area
+    // This version includes empty tiles by not checking tile content
     for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
         sf::FloatRect tileBounds;
         

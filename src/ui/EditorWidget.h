@@ -50,6 +50,20 @@ public:
     void cycleSelectionMode();
     void rotateSelectedObject();
     void changeElevation(int elevation);
+    
+    // Tile placement functionality
+    void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);
+    void fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof);
+    void replaceSelectedTiles(int newTileIndex);
+    
+    // Efficient tile update
+    void updateTileSprite(int hexIndex, bool isRoof);
+    
+    // Tile placement mode control
+    void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
+    void setTilePlacementAreaFill(bool enabled);
+    void setTilePlacementReplaceMode(bool enabled);
+    bool isTilePlacementMode() const { return _tilePlacementMode; }
 
     // SFML rendering interface (called by SFMLWidget)
     void handleEvent(const sf::Event& event);
@@ -100,14 +114,19 @@ private:
     void clearAllVisualSelections();
     void updateDragPreview(sf::Vector2f currentWorldPos);
     void clearDragPreview();
+    void updateTileAreaFillPreview(sf::Vector2f currentWorldPos);
     
     // Zoom management
     void zoomView(float direction);
+    
+    // Helper methods
+    int worldPosToHexIndex(sf::Vector2f worldPos) const;
 
     enum class EditorAction {
         NONE,
         PANNING,
-        DRAG_SELECTING
+        DRAG_SELECTING,
+        TILE_PLACING
     };
 
     // UI Components
@@ -161,8 +180,18 @@ private:
     std::vector<int> _previewTiles; // Tiles being previewed during drag
     std::vector<std::shared_ptr<Object>> _previewObjects; // Objects being previewed during drag
     
+    // Empty roof tile highlighting
+    std::vector<sf::RectangleShape> _emptyRoofTileIndicators; // Visual indicators for empty roof tiles
+    
     // Selection management
     std::unique_ptr<selection::SelectionManager> _selectionManager;
+    
+    // Tile placement state
+    bool _tilePlacementMode = false;
+    bool _tilePlacementAreaFill = false;
+    bool _tilePlacementReplaceMode = false;
+    int _tilePlacementIndex = -1;
+    bool _tilePlacementIsRoof = false;
     std::unique_ptr<selection::SelectionBridge> _selectionBridge;
     std::shared_ptr<selection::QtSelectionObserver> _selectionObserver;
 };

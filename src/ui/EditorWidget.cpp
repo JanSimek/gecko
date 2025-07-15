@@ -5,6 +5,7 @@
 #include <spdlog/stopwatch.h>
 #include <cmath> // ceil, sqrt, pow
 #include <algorithm> // std::sort, std::find, std::max, std::min
+#include <limits> // std::numeric_limits
 #include "../util/QtDialogs.h"
 
 #include "../editor/Object.h"
@@ -94,6 +95,14 @@ void EditorWidget::initializeSelectionSystem() {
         return _objects;
     });
     
+    _selectionBridge->setGetCurrentElevationFunc([this]() -> int {
+        return _currentElevation;
+    });
+    
+    _selectionBridge->setGetMapFileFunc([this]() -> Map::MapFile& {
+        return _map->getMapFile();
+    });
+    
     // Initialize the Qt observer for signal emission
     _selectionObserver = std::make_shared<selection::QtSelectionObserver>();
     
@@ -130,7 +139,29 @@ void EditorWidget::initializeSelectionSystem() {
                 case selection::SelectionType::ROOF_TILE: {
                     int tileIndex = item.getTileIndex();
                     if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
-                        this->_roofSprites.at(tileIndex).setColor(sf::Color::Red);
+                        // Check if this is an empty roof tile and we're in ROOF_TILES_ALL mode
+                        auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
+                        if (tile.getRoof() == Map::EMPTY_TILE && selection.mode == SelectionMode::ROOF_TILES_ALL) {
+                            // Create a visual indicator for empty roof tile
+                            sf::RectangleShape indicator;
+                            indicator.setSize(sf::Vector2f(20, 20)); // Small rectangle
+                            indicator.setFillColor(sf::Color(255, 0, 0, 150)); // Semi-transparent red
+                            indicator.setOutlineColor(sf::Color(255, 0, 0, 255)); // Solid red outline
+                            indicator.setOutlineThickness(1);
+                            
+                            // Calculate tile position (same as in loadTileSprites)
+                            unsigned int tileX = tileIndex / 100;
+                            unsigned int tileY = tileIndex % 100;
+                            unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
+                            unsigned int y = tileX * 24 + tileY * 12;
+                            
+                            // Position indicator at roof offset
+                            indicator.setPosition(static_cast<float>(x) - 10, static_cast<float>(y) - Tile::ROOF_OFFSET - 10);
+                            _emptyRoofTileIndicators.push_back(indicator);
+                        } else {
+                            // Apply normal highlighting to existing roof sprite
+                            this->_roofSprites.at(tileIndex).setColor(sf::Color::Red);
+                        }
                     }
                     break;
                 }
@@ -480,6 +511,9 @@ void EditorWidget::clearAllVisualSelections() {
     for (auto& roofSprite : _roofSprites) {
         roofSprite.setColor(sf::Color::White);
     }
+    
+    // Clear empty roof tile indicators
+    _emptyRoofTileIndicators.clear();
 }
 
 void EditorWidget::zoomView(float direction) {
@@ -526,6 +560,26 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
                     sf::Vector2i(event.mouseButton.x, event.mouseButton.y), _view);
                 
+                // Check if we're in tile placement mode
+                if (_tilePlacementMode && _tilePlacementIndex >= 0 && !_tilePlacementReplaceMode) {
+                    // Check if Shift is held to place roof tiles instead of floor tiles
+                    bool placeOnRoof = sf::Keyboard::isKeyPressed(sf::Keyboard::LShift) || 
+                                      sf::Keyboard::isKeyPressed(sf::Keyboard::RShift);
+                    
+                    if (_tilePlacementAreaFill) {
+                        // Start area selection for tile filling
+                        _currentAction = EditorAction::TILE_PLACING;
+                        _dragStartWorldPos = worldPos;
+                        _isDragSelecting = false; // Will become true on first mouse move
+                        // Update the roof setting for area fill preview
+                        _tilePlacementIsRoof = placeOnRoof;
+                    } else {
+                        // Single tile placement
+                        placeTileAtPosition(_tilePlacementIndex, worldPos, placeOnRoof);
+                    }
+                    return; // Don't process as selection
+                }
+                
                 // Detect modifier keys for multi-selection
                 SelectionModifier modifier = SelectionModifier::NONE;
                 bool hasModifiers = false;
@@ -547,6 +601,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 bool canDragSelect = !hasModifiers && 
                                    (_currentSelectionMode == SelectionMode::FLOOR_TILES || 
                                     _currentSelectionMode == SelectionMode::ROOF_TILES ||
+                                    _currentSelectionMode == SelectionMode::ROOF_TILES_ALL ||
                                     _currentSelectionMode == SelectionMode::OBJECTS);
                 
                 if (canDragSelect) {
@@ -568,7 +623,30 @@ void EditorWidget::handleEvent(const sf::Event& event) {
             
         case sf::Event::MouseButtonReleased:
             if (event.mouseButton.button == sf::Mouse::Left) {
-                if (_currentAction == EditorAction::DRAG_SELECTING) {
+                if (_currentAction == EditorAction::TILE_PLACING) {
+                    // Clear preview visuals first
+                    clearDragPreview();
+                    
+                    if (_isDragSelecting && _tilePlacementMode && _tilePlacementAreaFill) {
+                        // Complete tile area fill
+                        sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
+                            sf::Vector2i(event.mouseButton.x, event.mouseButton.y), _view);
+                        
+                        // Create fill area
+                        float left = std::min(_dragStartWorldPos.x, worldPos.x);
+                        float top = std::min(_dragStartWorldPos.y, worldPos.y);
+                        float width = std::abs(worldPos.x - _dragStartWorldPos.x);
+                        float height = std::abs(worldPos.y - _dragStartWorldPos.y);
+                        sf::FloatRect fillArea(left, top, width, height);
+                        
+                        // Fill area with selected tile
+                        fillAreaWithTile(_tilePlacementIndex, fillArea, _tilePlacementIsRoof);
+                        
+                        _isDragSelecting = false;
+                    }
+                    
+                    _currentAction = EditorAction::NONE;
+                } else if (_currentAction == EditorAction::DRAG_SELECTING) {
                     // Clear preview visuals first
                     clearDragPreview();
                     
@@ -638,6 +716,33 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     
                     // Update preview of items that would be selected
                     updateDragPreview(currentWorldPos);
+                }
+            } else if (_currentAction == EditorAction::TILE_PLACING) {
+                // Handle tile area fill drag
+                if (_tilePlacementMode && _tilePlacementAreaFill) {
+                    sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
+                        sf::Vector2i(event.mouseMove.x, event.mouseMove.y), _view);
+                    
+                    // Mark as actively dragging if we've moved enough
+                    float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + 
+                                             std::pow(currentWorldPos.y - _dragStartWorldPos.y, 2));
+                    if (distance > 5.0f) { // Minimum drag distance
+                        _isDragSelecting = true;
+                    }
+                    
+                    if (_isDragSelecting) {
+                        // Update selection rectangle for tile area fill (same as selection mode)
+                        float left = std::min(_dragStartWorldPos.x, currentWorldPos.x);
+                        float top = std::min(_dragStartWorldPos.y, currentWorldPos.y);
+                        float width = std::abs(currentWorldPos.x - _dragStartWorldPos.x);
+                        float height = std::abs(currentWorldPos.y - _dragStartWorldPos.y);
+                        
+                        _selectionRectangle.setPosition(left, top);
+                        _selectionRectangle.setSize(sf::Vector2f(width, height));
+                        
+                        // Update tile area fill preview
+                        updateTileAreaFillPreview(currentWorldPos);
+                    }
                 }
             }
             break;
@@ -764,8 +869,13 @@ void EditorWidget::render(const float dt) {
     }
     
     // Render drag selection rectangle
-    if (_isDragSelecting && _currentAction == EditorAction::DRAG_SELECTING) {
+    if (_isDragSelecting && (_currentAction == EditorAction::DRAG_SELECTING || _currentAction == EditorAction::TILE_PLACING)) {
         window->draw(_selectionRectangle);
+    }
+    
+    // Render empty roof tile indicators
+    for (const auto& indicator : _emptyRoofTileIndicators) {
+        window->draw(indicator);
     }
 }
 
@@ -852,6 +962,249 @@ void EditorWidget::changeElevation(int elevation) {
     }
 }
 
+void EditorWidget::placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof) {
+    if (!_map) {
+        spdlog::warn("EditorWidget::placeTileAtPosition: No map loaded");
+        return;
+    }
+    
+    // Use the same tile hit detection logic as the selection system
+    int hexIndex = -1;
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+        auto& sprites = isRoof ? _roofSprites : _floorSprites;
+        _fakeTileSprite.setPosition(sprites.at(i).getPosition());
+        
+        if (isSpriteClicked(worldPos, _fakeTileSprite)) {
+            hexIndex = i;
+            break;
+        }
+    }
+    
+    if (hexIndex < 0) {
+        spdlog::debug("EditorWidget::placeTileAtPosition: No tile found at worldPos ({:.1f}, {:.1f})", 
+                     worldPos.x, worldPos.y);
+        return;
+    }
+    
+    // Get tiles for current elevation
+    auto& mapFile = _map->getMapFile();
+    auto& elevationTiles = mapFile.tiles[_currentElevation];
+    
+    if (hexIndex >= static_cast<int>(elevationTiles.size())) {
+        spdlog::warn("EditorWidget::placeTileAtPosition: Hex index {} out of bounds", hexIndex);
+        return;
+    }
+    
+    // Update tile
+    if (isRoof) {
+        elevationTiles[hexIndex].setRoof(tileIndex);
+    } else {
+        elevationTiles[hexIndex].setFloor(tileIndex);
+    }
+    
+    // Efficiently update just this tile's sprite
+    updateTileSprite(hexIndex, isRoof);
+    
+    spdlog::debug("EditorWidget::placeTileAtPosition: Placed tile {} at hex {} (roof: {})", 
+                  tileIndex, hexIndex, isRoof);
+}
+
+void EditorWidget::fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof) {
+    if (!_map) {
+        spdlog::warn("EditorWidget::fillAreaWithTile: No map loaded");
+        return;
+    }
+    
+    // Use the same logic as selection system to get tiles in area
+    std::vector<int> tilesToFill = _selectionBridge->getTilesInArea(area, isRoof, _currentElevation);
+    
+    if (tilesToFill.empty()) {
+        spdlog::debug("EditorWidget::fillAreaWithTile: No tiles found in area");
+        return;
+    }
+    
+    auto& mapFile = _map->getMapFile();
+    auto& elevationTiles = mapFile.tiles[_currentElevation];
+    
+    int tilesPlaced = 0;
+    for (int hexIndex : tilesToFill) {
+        if (hexIndex >= 0 && hexIndex < static_cast<int>(elevationTiles.size())) {
+            if (isRoof) {
+                elevationTiles[hexIndex].setRoof(tileIndex);
+            } else {
+                elevationTiles[hexIndex].setFloor(tileIndex);
+            }
+            
+            // Efficiently update this tile's sprite
+            updateTileSprite(hexIndex, isRoof);
+            tilesPlaced++;
+        }
+    }
+    
+    spdlog::info("EditorWidget::fillAreaWithTile: Filled {} tiles with tile {} (roof: {})", 
+                 tilesPlaced, tileIndex, isRoof);
+}
+
+void EditorWidget::replaceSelectedTiles(int newTileIndex) {
+    if (!_map) {
+        spdlog::warn("EditorWidget::replaceSelectedTiles: No map loaded");
+        return;
+    }
+    
+    const auto& selection = _selectionManager->getCurrentSelection();
+    
+    // Replace both floor and roof tiles based on what's actually selected
+    std::vector<int> floorTileIndices = selection.getFloorTileIndices();
+    std::vector<int> roofTileIndices = selection.getRoofTileIndices();
+    
+    if (floorTileIndices.empty() && roofTileIndices.empty()) {
+        spdlog::debug("EditorWidget::replaceSelectedTiles: No tiles selected for replacement");
+        return;
+    }
+    
+    auto& mapFile = _map->getMapFile();
+    auto& elevationTiles = mapFile.tiles[_currentElevation];
+    
+    int tilesReplaced = 0;
+    
+    // Replace floor tiles
+    for (int hexIndex : floorTileIndices) {
+        if (hexIndex >= 0 && hexIndex < static_cast<int>(elevationTiles.size())) {
+            elevationTiles[hexIndex].setFloor(newTileIndex);
+            updateTileSprite(hexIndex, false); // false = floor tile
+            tilesReplaced++;
+        }
+    }
+    
+    // Replace roof tiles
+    for (int hexIndex : roofTileIndices) {
+        if (hexIndex >= 0 && hexIndex < static_cast<int>(elevationTiles.size())) {
+            elevationTiles[hexIndex].setRoof(newTileIndex);
+            updateTileSprite(hexIndex, true); // true = roof tile
+            tilesReplaced++;
+        }
+    }
+    
+    spdlog::info("EditorWidget::replaceSelectedTiles: Replaced {} tiles with tile {} ({} floor, {} roof)", 
+                 tilesReplaced, newTileIndex, floorTileIndices.size(), roofTileIndices.size());
+}
+
+void EditorWidget::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof) {
+    _tilePlacementMode = enabled;
+    _tilePlacementIndex = tileIndex;
+    _tilePlacementIsRoof = isRoof;
+    
+    if (enabled) {
+        spdlog::debug("EditorWidget: Enabled tile placement mode - tile {}, roof: {}", tileIndex, isRoof);
+    } else {
+        spdlog::debug("EditorWidget: Disabled tile placement mode");
+    }
+}
+
+void EditorWidget::setTilePlacementAreaFill(bool enabled) {
+    _tilePlacementAreaFill = enabled;
+    spdlog::debug("EditorWidget: Set tile placement area fill mode: {}", enabled);
+}
+
+void EditorWidget::setTilePlacementReplaceMode(bool enabled) {
+    _tilePlacementReplaceMode = enabled;
+    spdlog::debug("EditorWidget: Set tile placement replace mode: {}", enabled);
+}
+
+void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
+    if (!_map || hexIndex < 0 || hexIndex >= static_cast<int>(Map::TILES_PER_ELEVATION)) {
+        return;
+    }
+    
+    // Get tiles for current elevation
+    const auto& elevationTiles = _map->getMapFile().tiles[_currentElevation];
+    if (hexIndex >= static_cast<int>(elevationTiles.size())) {
+        return;
+    }
+    
+    // Get the tile data
+    const auto& tile = elevationTiles[hexIndex];
+    int tileIndex = isRoof ? tile.getRoof() : tile.getFloor();
+    
+    // Skip if tile is empty
+    if (tileIndex == Map::EMPTY_TILE) {
+        return;
+    }
+    
+    // Get the sprite array to update
+    auto& sprites = isRoof ? _roofSprites : _floorSprites;
+    
+    // Load the texture for this tile
+    try {
+        auto& resourceManager = ResourceManager::getInstance();
+        const auto* tileList = resourceManager.getResource<Lst, std::string>("art/tiles/tiles.lst");
+        if (!tileList || tileIndex >= static_cast<int>(tileList->list().size())) {
+            return;
+        }
+        
+        const std::string& tileName = tileList->list()[tileIndex];
+        std::string tilePath = "art/tiles/" + tileName;
+        const auto& texture = resourceManager.texture(tilePath);
+        
+        // Update the sprite
+        sprites[hexIndex].setTexture(texture);
+
+        // FIXME: duplicate code from loadTileSprites
+        // Calculate position (same as in loadTileSprites)
+        unsigned int tileX = hexIndex / 100;
+        unsigned int tileY = hexIndex % 100;
+        unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
+        unsigned int y = tileX * 24 + tileY * 12 - (isRoof ? Tile::ROOF_OFFSET : 0);
+
+        sprites[hexIndex].setPosition(static_cast<float>(x), static_cast<float>(y));
+        
+        spdlog::debug("EditorWidget::updateTileSprite: Updated sprite for hex {} ({})", hexIndex, tileName);
+    } catch (const std::exception& e) {
+        spdlog::warn("EditorWidget::updateTileSprite: Failed to update tile sprite: {}", e.what());
+    }
+}
+
+
+// Helper methods implementation
+
+int EditorWidget::worldPosToHexIndex(sf::Vector2f worldPos) const {
+    // Convert world position to hexagonal grid coordinates
+    // Use the same coordinate system as used in tile loading:
+    // x = (100 - tileY - 1) * 48 + 32 * tileX
+    // y = tileX * 24 + tileY * 12
+    
+    // Find the closest tile by iterating through all possible positions
+    // This is not the most efficient but ensures correctness
+    float minDistance = std::numeric_limits<float>::max();
+    int closestIndex = -1;
+    
+    for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
+        // Calculate tileX and tileY from linear index
+        unsigned int tileX = i / 100;
+        unsigned int tileY = i % 100;
+        
+        // Calculate world position for this tile (same as in loadTileSprites)
+        unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
+        unsigned int y = tileX * 24 + tileY * 12;
+        
+        // Calculate distance from click position
+        float dx = worldPos.x - static_cast<float>(x);
+        float dy = worldPos.y - static_cast<float>(y);
+        float distance = dx * dx + dy * dy;
+        
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestIndex = i;
+        }
+    }
+    
+    // Only return the index if it's reasonably close (within tile bounds)
+    if (minDistance < 40.0f * 40.0f) { // Within 40 pixels
+        return closestIndex;
+    }
+    
+    return -1;
+}
 
 // Tile selection helper implementation
 
@@ -954,6 +1307,39 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
             break;
         }
         
+        case SelectionMode::ROOF_TILES_ALL: {
+            _previewTiles = _selectionBridge->getTilesInAreaIncludingEmpty(selectionArea, true, _currentElevation);
+            // Apply preview coloring to roof tiles including empty ones
+            for (int tileIndex : _previewTiles) {
+                if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                    // Check if this roof tile is empty
+                    auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
+                    if (tile.getRoof() == Map::EMPTY_TILE) {
+                        // Create a visual indicator for empty roof tile
+                        sf::RectangleShape indicator;
+                        indicator.setSize(sf::Vector2f(20, 20)); // Small rectangle
+                        indicator.setFillColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
+                        indicator.setOutlineColor(sf::Color(255, 255, 0, 255)); // Solid yellow outline
+                        indicator.setOutlineThickness(1);
+                        
+                        // Calculate tile position (same as in loadTileSprites)
+                        unsigned int tileX = tileIndex / 100;
+                        unsigned int tileY = tileIndex % 100;
+                        unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
+                        unsigned int y = tileX * 24 + tileY * 12;
+                        
+                        // Position indicator at roof offset
+                        indicator.setPosition(static_cast<float>(x) - 10, static_cast<float>(y) - Tile::ROOF_OFFSET - 10);
+                        _emptyRoofTileIndicators.push_back(indicator);
+                    } else {
+                        // Apply preview coloring to existing roof sprite
+                        _roofSprites.at(tileIndex).setColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
+                    }
+                }
+            }
+            break;
+        }
+        
         case SelectionMode::OBJECTS: {
             _previewObjects = _selectionBridge->getObjectsInArea(selectionArea, _currentElevation);
             // Apply preview coloring to objects
@@ -974,6 +1360,30 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
     }
 }
 
+void EditorWidget::updateTileAreaFillPreview(sf::Vector2f currentWorldPos) {
+    // Clear previous preview
+    clearDragPreview();
+    
+    // Create selection area
+    float left = std::min(_dragStartWorldPos.x, currentWorldPos.x);
+    float top = std::min(_dragStartWorldPos.y, currentWorldPos.y);
+    float width = std::abs(currentWorldPos.x - _dragStartWorldPos.x);
+    float height = std::abs(currentWorldPos.y - _dragStartWorldPos.y);
+    sf::FloatRect selectionArea(left, top, width, height);
+    
+    // Get tiles that would be affected by the area fill (default to floor tiles)
+    bool isRoof = _tilePlacementIsRoof;
+    _previewTiles = _selectionBridge->getTilesInArea(selectionArea, isRoof, _currentElevation);
+    
+    // Apply preview coloring to tiles (same as selection mode)
+    auto& sprites = isRoof ? _roofSprites : _floorSprites;
+    for (int tileIndex : _previewTiles) {
+        if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+            sprites.at(tileIndex).setColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
+        }
+    }
+}
+
 void EditorWidget::clearDragPreview() {
     // Clear tile preview coloring
     for (int tileIndex : _previewTiles) {
@@ -989,6 +1399,9 @@ void EditorWidget::clearDragPreview() {
             object->getSprite().setColor(sf::Color::White);
         }
     }
+    
+    // Clear empty roof tile indicators
+    _emptyRoofTileIndicators.clear();
     
     // Clear the preview arrays
     _previewTiles.clear();

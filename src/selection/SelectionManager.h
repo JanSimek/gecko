@@ -157,10 +157,12 @@ private:
     // Tile selection helpers
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos, int elevation) const;
     std::optional<int> getRoofTileAtPosition(sf::Vector2f worldPos, int elevation) const;
+    std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos, int elevation) const;
     std::optional<int> getFloorTileAtPosition(sf::Vector2f worldPos, int elevation) const;
     
     // Area selection helpers
     std::vector<int> getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) const;
+    std::vector<int> getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const;
     std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area, int elevation) const;
     
     // Single item selection logic (current behavior)

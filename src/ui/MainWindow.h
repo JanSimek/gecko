@@ -26,6 +26,7 @@ class EditorWidget;
 class LoadingWidget;
 class SelectionPanel;
 class MapInfoPanel;
+class TilePalettePanel;
 class Map;
 
 class MainWindow : public QMainWindow {
@@ -94,10 +95,12 @@ private:
     // Dock widgets for panels
     QDockWidget* _mapInfoDock;
     QDockWidget* _selectionDock;
+    QDockWidget* _tilePaletteDock;
     
     // Panel widgets
     SelectionPanel* _selectionPanel;
     MapInfoPanel* _mapInfoPanel;
+    TilePalettePanel* _tilePalettePanel;
     
     bool _isRunning;
 };

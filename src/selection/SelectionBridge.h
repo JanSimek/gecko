@@ -28,6 +28,10 @@ public:
     using FloorSpritesFunc = std::function<std::array<sf::Sprite, Map::TILES_PER_ELEVATION>&()>;
     using RoofSpritesFunc = std::function<std::array<sf::Sprite, Map::TILES_PER_ELEVATION>&()>;
     
+    // Map data access functions
+    using GetCurrentElevationFunc = std::function<int()>;
+    using GetMapFileFunc = std::function<Map::MapFile&()>;
+    
     explicit SelectionBridge(SelectionManager& selectionManager);
     
     // Setup callbacks to EditorWidget methods
@@ -38,12 +42,16 @@ public:
     void setFloorSpritesFunc(FloorSpritesFunc func) { _floorSprites = std::move(func); }
     void setRoofSpritesFunc(RoofSpritesFunc func) { _roofSprites = std::move(func); }
     void setGetAllObjectsFunc(GetAllObjectsFunc func) { _getAllObjects = std::move(func); }
+    void setGetCurrentElevationFunc(GetCurrentElevationFunc func) { _getCurrentElevation = std::move(func); }
+    void setGetMapFileFunc(GetMapFileFunc func) { _getMapFile = std::move(func); }
     
     // Bridge methods that implement the actual hit detection logic
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos, int elevation);
     std::optional<int> getRoofTileAtPosition(sf::Vector2f worldPos, int elevation);
+    std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos, int elevation);
     std::optional<int> getFloorTileAtPosition(sf::Vector2f worldPos, int elevation);
     std::vector<int> getTilesInArea(const sf::FloatRect& area, bool roof, int elevation);
+    std::vector<int> getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation);
     std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area, int elevation);
     std::vector<std::shared_ptr<Object>> getAllObjects();
     
@@ -64,6 +72,8 @@ private:
     FloorSpritesFunc _floorSprites;
     RoofSpritesFunc _roofSprites;
     GetAllObjectsFunc _getAllObjects;
+    GetCurrentElevationFunc _getCurrentElevation;
+    GetMapFileFunc _getMapFile;
     
     // Internal helpers
     bool isPositionInTileSprite(sf::Vector2f worldPos, int tileIndex, bool roof);

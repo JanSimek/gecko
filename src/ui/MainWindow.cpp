@@ -5,8 +5,12 @@
 #include "SFMLWidget.h"
 #include "SelectionPanel.h"
 #include "MapInfoPanel.h"
+#include "TilePalettePanel.h"
 #include "../state/loader/MapLoader.h"
 #include "../util/Types.h"
+#include "../util/ResourceManager.h"
+#include "../reader/lst/LstReader.h"
+#include "../format/lst/Lst.h"
 
 #include <QApplication>
 #include <QVBoxLayout>
@@ -234,6 +238,19 @@ void MainWindow::setupDockWidgets() {
     _selectionDock->setWidget(_selectionPanel);
     
     addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
+    
+    // Tile Palette dock
+    _tilePaletteDock = new QDockWidget("Tile Palette", this);
+    _tilePaletteDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    
+    // Create and set the TilePalettePanel
+    _tilePalettePanel = new TilePalettePanel();
+    _tilePaletteDock->setWidget(_tilePalettePanel);
+    
+    addDockWidget(Qt::LeftDockWidgetArea, _tilePaletteDock);
+    
+    // Stack docks in the right area for better layout
+    tabifyDockWidget(_mapInfoDock, _selectionDock);
 }
 
 void MainWindow::startGameLoop() {
@@ -378,6 +395,45 @@ void MainWindow::connectToEditorWidget() {
         spdlog::info("Connected EditorWidget selection signals to unified SelectionPanel");
     }
     
+    // Connect TilePalettePanel to EditorWidget
+    if (_tilePalettePanel) {
+        // Set the map reference for the tile palette panel
+        _tilePalettePanel->setMap(_currentEditorWidget->getMap());
+        
+        // Connect tile selection to enable tile placement mode
+        connect(_tilePalettePanel, &TilePalettePanel::tileSelected, 
+                [this](int tileIndex) {
+            if (tileIndex >= 0) {
+                // Default to floor for single placement and area fill (roof/floor detection is automatic for replace mode)
+                _currentEditorWidget->setTilePlacementMode(true, tileIndex, false);
+                spdlog::debug("Enabled tile placement mode with tile {}", tileIndex);
+            } else {
+                // Disable tile placement mode
+                _currentEditorWidget->setTilePlacementMode(false);
+                spdlog::debug("Disabled tile placement mode");
+            }
+        });
+        
+        // Connect placement mode changes to update area fill setting
+        connect(_tilePalettePanel, &TilePalettePanel::placementModeChanged,
+                [this](TilePalettePanel::PlacementMode mode) {
+            bool areaFillMode = (mode == TilePalettePanel::PlacementMode::AREA_FILL);
+            bool replaceMode = (mode == TilePalettePanel::PlacementMode::REPLACE_SELECTED);
+            _currentEditorWidget->setTilePlacementAreaFill(areaFillMode);
+            _currentEditorWidget->setTilePlacementReplaceMode(replaceMode);
+            spdlog::debug("Set tile placement area fill mode: {}, replace mode: {}", areaFillMode, replaceMode);
+        });
+        
+        // Connect replace selected tiles signal for direct tile replacement
+        connect(_tilePalettePanel, &TilePalettePanel::replaceSelectedTiles,
+                [this](int newTileIndex) {
+            // Tiles are replaced based on what's actually selected (floor/roof auto-detected)
+            _currentEditorWidget->replaceSelectedTiles(newTileIndex);
+        });
+        
+        spdlog::info("Connected TilePalettePanel to EditorWidget");
+    }
+    
     // Connect map loading signal
     connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, &MainWindow::handleMapLoadRequest);
     
@@ -387,6 +443,26 @@ void MainWindow::connectToEditorWidget() {
 void MainWindow::updateMapInfo(Map* map) {
     if (_mapInfoPanel) {
         _mapInfoPanel->setMap(map);
+    }
+    
+    // Load tiles into palette when map is loaded
+    if (_tilePalettePanel && map) {
+        // Load tile list from ResourceManager using the same method as original implementation
+        try {
+            auto& resourceManager = ResourceManager::getInstance();
+            
+            // Get the tiles.lst resource (it should already be loaded by MapLoader)
+            const auto* tileList = resourceManager.getResource<Lst, std::string>("art/tiles/tiles.lst");
+            
+            if (tileList) {
+                _tilePalettePanel->loadTiles(tileList);
+                spdlog::info("Loaded tiles.lst into palette: {} tiles", tileList->list().size());
+            } else {
+                spdlog::error("Failed to get tiles.lst from ResourceManager");
+            }
+        } catch (const std::exception& e) {
+            spdlog::error("Failed to load tile list for palette: {}", e.what());
+        }
     }
 }
 
