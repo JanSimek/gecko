@@ -166,6 +166,49 @@ void MainWindow::setupMenuBar() {
     
     _viewMenu->addSeparator();
     
+    // Dock Layout submenu
+    QMenu* dockLayoutMenu = _viewMenu->addMenu("&Dock Layout");
+    
+    // Create action group for mutually exclusive dock layout selection
+    QActionGroup* layoutGroup = new QActionGroup(this);
+    
+    QAction* verticalStackAction = dockLayoutMenu->addAction("&Vertical Stack");
+    verticalStackAction->setCheckable(true);
+    verticalStackAction->setChecked(true);
+    layoutGroup->addAction(verticalStackAction);
+    connect(verticalStackAction, &QAction::triggered, [this]() {
+        // Reconfigure to vertical stacking
+        splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
+    });
+    
+    QAction* horizontalStackAction = dockLayoutMenu->addAction("&Horizontal Stack");
+    horizontalStackAction->setCheckable(true);
+    layoutGroup->addAction(horizontalStackAction);
+    connect(horizontalStackAction, &QAction::triggered, [this]() {
+        // Reconfigure to horizontal stacking
+        splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
+    });
+    
+    QAction* tabbedLayoutAction = dockLayoutMenu->addAction("&Tabbed Layout");
+    tabbedLayoutAction->setCheckable(true);
+    layoutGroup->addAction(tabbedLayoutAction);
+    connect(tabbedLayoutAction, &QAction::triggered, [this]() {
+        // Reconfigure to tabbed layout
+        tabifyDockWidget(_mapInfoDock, _selectionDock);
+    });
+    
+    QAction* bottomDockAction = dockLayoutMenu->addAction("&Bottom Dock");
+    bottomDockAction->setCheckable(true);
+    layoutGroup->addAction(bottomDockAction);
+    connect(bottomDockAction, &QAction::triggered, [this]() {
+        // Move both docks to bottom area
+        addDockWidget(Qt::BottomDockWidgetArea, _mapInfoDock);
+        addDockWidget(Qt::BottomDockWidgetArea, _selectionDock);
+        splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
+    });
+    
+    _viewMenu->addSeparator();
+    
     // Elevation submenu
     _elevationMenu = _viewMenu->addMenu("&Elevation");
     
@@ -221,7 +264,7 @@ void MainWindow::setupToolBar() {
 void MainWindow::setupDockWidgets() {
     // Map Info dock
     _mapInfoDock = new QDockWidget("Map Information", this);
-    _mapInfoDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    _mapInfoDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
     
     // Create and set the MapInfoPanel
     _mapInfoPanel = new MapInfoPanel();
@@ -231,7 +274,7 @@ void MainWindow::setupDockWidgets() {
     
     // Selection dock (unified object and tile selection)
     _selectionDock = new QDockWidget("Selection", this);
-    _selectionDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    _selectionDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
     
     // Create and set the unified SelectionPanel
     _selectionPanel = new SelectionPanel();
@@ -241,7 +284,7 @@ void MainWindow::setupDockWidgets() {
     
     // Tile Palette dock
     _tilePaletteDock = new QDockWidget("Tile Palette", this);
-    _tilePaletteDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    _tilePaletteDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
     
     // Create and set the TilePalettePanel
     _tilePalettePanel = new TilePalettePanel();
@@ -249,8 +292,8 @@ void MainWindow::setupDockWidgets() {
     
     addDockWidget(Qt::LeftDockWidgetArea, _tilePaletteDock);
     
-    // Stack docks in the right area for better layout
-    tabifyDockWidget(_mapInfoDock, _selectionDock);
+    // Configure initial dock layout - vertical stacking instead of tabs
+    splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
 }
 
 void MainWindow::startGameLoop() {
