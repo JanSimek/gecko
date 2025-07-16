@@ -8,6 +8,7 @@
 #include <limits> // std::numeric_limits
 #include "../util/QtDialogs.h"
 #include "../util/Constants.h"
+#include "../util/ColorUtils.h"
 #include "../util/TileUtils.h"
 
 #include "../editor/Object.h"
@@ -103,7 +104,7 @@ void EditorWidget::initializeSelectionSystem() {
                             _emptyRoofTileIndicators.push_back(indicator);
                         } else {
                             // Apply normal highlighting to existing roof sprite
-                            this->_roofSprites.at(tileIndex).setColor(sf::Color::Red);
+                            this->_roofSprites.at(tileIndex).setColor(geck::ColorUtils::createErrorIndicatorColor());
                         }
                     }
                     break;
@@ -112,7 +113,7 @@ void EditorWidget::initializeSelectionSystem() {
                 case selection::SelectionType::FLOOR_TILE: {
                     int tileIndex = item.getTileIndex();
                     if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
-                        this->_floorSprites.at(tileIndex).setColor(sf::Color::Red);
+                        this->_floorSprites.at(tileIndex).setColor(geck::ColorUtils::createErrorIndicatorColor());
                     }
                     break;
                 }

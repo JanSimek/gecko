@@ -3,11 +3,14 @@ add_executable(tests
     test_reading_gam.cpp
     test_reading_msg.cpp
     test_selection_system.cpp
+    test_tile_utils.cpp
 )
 target_link_libraries(tests PRIVATE
     Catch2::Catch2WithMain
     spdlog::spdlog_header_only
     vault
+    sfml-graphics
+    sfml-system
 )
 
 include(CTest)

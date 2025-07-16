@@ -12,6 +12,7 @@ namespace geck::selection {
 // Selection helper methods
 std::vector<int> Selection::getRoofTileIndices() const {
     std::vector<int> indices;
+    indices.reserve(items.size()); // Reserve space for worst-case scenario
     for (const auto& item : items) {
         if (item.type == SelectionType::ROOF_TILE) {
             indices.push_back(item.getTileIndex());
@@ -22,6 +23,7 @@ std::vector<int> Selection::getRoofTileIndices() const {
 
 std::vector<int> Selection::getFloorTileIndices() const {
     std::vector<int> indices;
+    indices.reserve(items.size()); // Reserve space for worst-case scenario
     for (const auto& item : items) {
         if (item.type == SelectionType::FLOOR_TILE) {
             indices.push_back(item.getTileIndex());
@@ -32,6 +34,7 @@ std::vector<int> Selection::getFloorTileIndices() const {
 
 std::vector<std::shared_ptr<Object>> Selection::getObjects() const {
     std::vector<std::shared_ptr<Object>> objects;
+    objects.reserve(items.size()); // Reserve space for worst-case scenario
     for (const auto& item : items) {
         if (item.type == SelectionType::OBJECT) {
             objects.push_back(item.getObject());

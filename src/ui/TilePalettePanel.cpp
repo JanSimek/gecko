@@ -2,6 +2,8 @@
 #include "../format/map/Map.h"
 #include "../format/lst/Lst.h"
 #include "../util/ResourceManager.h"
+#include "../util/Constants.h"
+#include "../util/ColorUtils.h"
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -45,7 +47,7 @@ void TileWidget::paintEvent(QPaintEvent* event) {
     
     if (_selected) {
         QPainter painter(this);
-        painter.setPen(QPen(QColor(255, 0, 0), 3)); // Red selection border
+        painter.setPen(QPen(geck::ColorUtils::createSelectionBorderColor(), 3));
         painter.drawRect(rect().adjusted(1, 1, -1, -1));
     }
 }
@@ -235,7 +237,7 @@ void TilePalettePanel::updateTileGrid() {
                 spdlog::debug("TilePalettePanel: Using placeholder for tile {}: {}", i, e.what());
                 
                 tilePixmap = QPixmap(TileWidget::TILE_SIZE, TileWidget::TILE_SIZE);
-                tilePixmap.fill(QColor(100 + (i % 156), 100 + ((i * 7) % 156), 100 + ((i * 13) % 156)));
+                tilePixmap.fill(geck::ColorUtils::createTilePlaceholderColor(i));
                 
                 // Draw tile index and filename
                 QPainter painter(&tilePixmap);

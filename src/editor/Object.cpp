@@ -5,6 +5,8 @@
 #include "format/frm/Frame.h"
 #include "format/frm/Frm.h"
 #include "../util/ResourceManager.h"
+#include "../util/Constants.h"
+#include "../util/ColorUtils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -101,7 +103,7 @@ void Object::rotate() {
 }
 
 void Object::select() {
-    _sprite.setColor(sf::Color::Magenta);
+    _sprite.setColor(geck::ColorUtils::createObjectSelectionColor());
     _selected = true;
 }
 
