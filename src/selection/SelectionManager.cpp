@@ -563,24 +563,19 @@ std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf
     std::vector<std::shared_ptr<Object>> result;
     result.reserve(100); // Reserve space for typical object selection
     
-    // Use unordered_set for efficient duplicate detection
-    std::unordered_set<std::shared_ptr<Object>> uniqueObjects;
+    // Get all objects from EditorWidget and check bounds intersection
+    const auto& allObjects = _editorWidget->getObjects();
     
-    // Get all objects from EditorWidget and check which ones are in the area
-    std::vector<sf::Vector2f> positions;
-    for (int i = 0; i < static_cast<int>(area.width); i += 10) {
-        for (int j = 0; j < static_cast<int>(area.height); j += 10) {
-            sf::Vector2f testPos(area.left + i, area.top + j);
-            auto objects = _editorWidget->getObjectsAtPosition(testPos);
-            for (auto& obj : objects) {
-                // Use set for O(1) duplicate detection instead of O(n) linear search
-                uniqueObjects.insert(obj);
-            }
+    for (const auto& object : allObjects) {
+        // Check if object sprite bounds intersect with selection area
+        const auto& sprite = object->getSprite();
+        sf::FloatRect objectBounds = sprite.getGlobalBounds();
+        
+        // Use simple bounds intersection test (much faster than hit detection)
+        if (area.intersects(objectBounds)) {
+            result.push_back(object);
         }
     }
-    
-    // Convert set to vector
-    result.assign(uniqueObjects.begin(), uniqueObjects.end());
     
     return result;
 }
