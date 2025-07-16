@@ -1,5 +1,6 @@
 #include "LoadingWidget.h"
 #include "../state/loader/Loader.h"
+#include "../util/Constants.h"
 
 #include <QVBoxLayout>
 #include <QLabel>
@@ -38,7 +39,7 @@ void LoadingWidget::setupUI() {
     // Title label
     _titleLabel = new QLabel("Loading", this);
     QFont titleFont = _titleLabel->font();
-    titleFont.setPointSize(24);
+    titleFont.setPointSize(UI::TITLE_FONT_SIZE);
     titleFont.setBold(true);
     _titleLabel->setFont(titleFont);
     _titleLabel->setAlignment(Qt::AlignCenter);
@@ -47,23 +48,23 @@ void LoadingWidget::setupUI() {
     // Status label
     _statusLabel = new QLabel("Initializing...", this);
     QFont statusFont = _statusLabel->font();
-    statusFont.setPointSize(14);
+    statusFont.setPointSize(UI::STATUS_FONT_SIZE);
     _statusLabel->setFont(statusFont);
     _statusLabel->setAlignment(Qt::AlignCenter);
     _statusLabel->setStyleSheet("color: white;");
     
     // Progress bar
     _progressBar = new QProgressBar(this);
-    _progressBar->setMinimum(0);
-    _progressBar->setMaximum(100);
-    _progressBar->setValue(0);
+    _progressBar->setMinimum(UI::PROGRESS_BAR_MIN);
+    _progressBar->setMaximum(UI::PROGRESS_BAR_MAX);
+    _progressBar->setValue(UI::PROGRESS_BAR_MIN);
     
     // Add widgets to layout
     _layout->addStretch();
     _layout->addWidget(_titleLabel);
-    _layout->addSpacing(20);
+    _layout->addSpacing(UI::SPACING_LARGE);
     _layout->addWidget(_statusLabel);
-    _layout->addSpacing(10);
+    _layout->addSpacing(UI::SPACING_SMALL);
     _layout->addWidget(_progressBar);
     _layout->addStretch();
     
@@ -92,7 +93,7 @@ void LoadingWidget::start() {
     }
     
     // Start update timer (30 FPS for smooth progress updates)
-    _updateTimer->start(33);
+    _updateTimer->start(UI::TIMER_INTERVAL_MS);
     
     spdlog::info("LoadingWidget started with {} loaders", _loaders.size());
 }

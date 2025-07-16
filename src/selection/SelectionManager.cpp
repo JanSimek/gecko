@@ -1,7 +1,10 @@
 #include "SelectionManager.h"
 #include "../ui/EditorWidget.h"
 #include "../format/map/MapObject.h"
+#include "../util/Constants.h"
+#include "../util/TileUtils.h"
 #include <algorithm>
+#include <unordered_set>
 #include <spdlog/spdlog.h>
 
 namespace geck::selection {
@@ -491,6 +494,7 @@ std::optional<int> SelectionManager::getFloorTileAtPosition(sf::Vector2f worldPo
 
 std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) const {
     std::vector<int> result;
+    result.reserve(1000); // Reserve space for typical area selection
     
     // Get access to sprite arrays to check actual tile bounds
     const auto& floorSprites = _editorWidget->getFloorSprites();
@@ -529,6 +533,7 @@ std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, boo
 
 std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const {
     std::vector<int> result;
+    result.reserve(1000); // Reserve space for typical area selection
     
     // Get access to sprite arrays to check actual tile bounds
     const auto& floorSprites = _editorWidget->getFloorSprites();
@@ -556,6 +561,10 @@ std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatR
 
 std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf::FloatRect& area, int elevation) const {
     std::vector<std::shared_ptr<Object>> result;
+    result.reserve(100); // Reserve space for typical object selection
+    
+    // Use unordered_set for efficient duplicate detection
+    std::unordered_set<std::shared_ptr<Object>> uniqueObjects;
     
     // Get all objects from EditorWidget and check which ones are in the area
     std::vector<sf::Vector2f> positions;
@@ -564,13 +573,14 @@ std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf
             sf::Vector2f testPos(area.left + i, area.top + j);
             auto objects = _editorWidget->getObjectsAtPosition(testPos);
             for (auto& obj : objects) {
-                // Avoid duplicates
-                if (std::find(result.begin(), result.end(), obj) == result.end()) {
-                    result.push_back(obj);
-                }
+                // Use set for O(1) duplicate detection instead of O(n) linear search
+                uniqueObjects.insert(obj);
             }
         }
     }
+    
+    // Convert set to vector
+    result.assign(uniqueObjects.begin(), uniqueObjects.end());
     
     return result;
 }

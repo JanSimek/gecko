@@ -1,4 +1,5 @@
 #include "SelectionBridge.h"
+#include "../util/Constants.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 
@@ -268,12 +269,10 @@ bool SelectionBridge::isPositionInTileSprite(sf::Vector2f worldPos, int tileInde
     
     sf::Vector2f tilePos = _tilePosition(tileIndex);
     if (roof) {
-        tilePos.y -= 96; // Tile::ROOF_OFFSET
+        tilePos.y -= ROOF_OFFSET;
     }
     
-    // Basic rectangular bounds check (80x36 tile size)
-    const float TILE_WIDTH = 80.0f;
-    const float TILE_HEIGHT = 36.0f;
+    // Basic rectangular bounds check using tile constants
     
     return worldPos.x >= tilePos.x - TILE_WIDTH/2 &&
            worldPos.x <= tilePos.x + TILE_WIDTH/2 &&

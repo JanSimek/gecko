@@ -17,12 +17,9 @@
 #include "../format/pro/Pro.h"
 #include "../selection/SelectionManager.h"
 #include "../selection/SelectionBridge.h"
+#include "../util/Constants.h"
 
 namespace geck {
-
-// Tile geometry constants for isometric tiles
-constexpr int TILE_WIDTH = 80;
-constexpr int TILE_HEIGHT = 36;
 
 class SFMLWidget;
 

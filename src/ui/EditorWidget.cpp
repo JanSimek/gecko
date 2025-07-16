@@ -7,6 +7,8 @@
 #include <algorithm> // std::sort, std::find, std::max, std::min
 #include <limits> // std::numeric_limits
 #include "../util/QtDialogs.h"
+#include "../util/Constants.h"
+#include "../util/TileUtils.h"
 
 #include "../editor/Object.h"
 
@@ -89,18 +91,15 @@ void EditorWidget::initializeSelectionSystem() {
                             // Create a visual indicator for empty roof tile
                             sf::RectangleShape indicator;
                             indicator.setSize(sf::Vector2f(20, 20)); // Small rectangle
-                            indicator.setFillColor(sf::Color(255, 0, 0, 150)); // Semi-transparent red
-                            indicator.setOutlineColor(sf::Color(255, 0, 0, 255)); // Solid red outline
+                            indicator.setFillColor(TileColors::errorFill());
+                            indicator.setOutlineColor(TileColors::errorOutline());
                             indicator.setOutlineThickness(1);
                             
-                            // Calculate tile position (same as in loadTileSprites)
-                            unsigned int tileX = tileIndex / 100;
-                            unsigned int tileY = tileIndex % 100;
-                            unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
-                            unsigned int y = tileX * 24 + tileY * 12;
+                            // Calculate tile position using utility function
+                            auto screenPos = indexToScreenPosition(tileIndex, true);
                             
-                            // Position indicator at roof offset
-                            indicator.setPosition(static_cast<float>(x) - 10, static_cast<float>(y) - Tile::ROOF_OFFSET - 10);
+                            // Position indicator at calculated screen position
+                            indicator.setPosition(static_cast<float>(screenPos.x) - 10, static_cast<float>(screenPos.y) - 10);
                             _emptyRoofTileIndicators.push_back(indicator);
                         } else {
                             // Apply normal highlighting to existing roof sprite
@@ -148,8 +147,8 @@ void EditorWidget::init() {
     _fakeTileSprite.setTexture(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
     
     // Initialize selection rectangle for drag selection
-    _selectionRectangle.setFillColor(sf::Color(100, 150, 255, 50)); // Semi-transparent blue
-    _selectionRectangle.setOutlineColor(sf::Color(100, 150, 255, 200)); // Blue border
+    _selectionRectangle.setFillColor(TileColors::selectionFill());
+    _selectionRectangle.setOutlineColor(TileColors::selectionOutline());
     _selectionRectangle.setOutlineThickness(2.0f);
     
     // Ensure view is properly sized to match current window
@@ -246,18 +245,15 @@ void EditorWidget::loadTileSprites() {
         // const TILE_HEIGHT = 36
         // const HEX_GRID_SIZE = 200 // hex grid is 200x200 (roof+floor)
 
-        // Convert tile number to hex grid coordinates (matching Fallout 2 CE logic)
-        unsigned int tileX = tileNumber / 100;  // Row in the grid
-        unsigned int tileY = tileNumber % 100;  // Column in the grid
+        // Convert tile number to hex grid coordinates using utility function
+        auto coords = indexToCoordinates(static_cast<int>(tileNumber));
         
-        // Convert to screen coordinates using isometric projection
-        // This matches the positioning used in the original engine
-        unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
-        unsigned int y = tileX * 24 + tileY * 12;
+        // Convert to screen coordinates using utility function
+        auto screenPos = coordinatesToScreenPosition(coords);
 
         const auto& createTileSprite = [&](const uint16_t tile_id, int offset = 0) {
             sf::Sprite tile_sprite(ResourceManager::getInstance().texture("art/tiles/" + lst->at(tile_id)));
-            tile_sprite.setPosition(x, y - offset);
+            tile_sprite.setPosition(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) - offset);
             return tile_sprite;
         };
 
@@ -265,14 +261,14 @@ void EditorWidget::loadTileSprites() {
         uint16_t floorId = tile.getFloor();
         if (floorId == Map::EMPTY_TILE) {
             sf::Sprite tile_sprite(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
-            tile_sprite.setPosition(x, y);
+            tile_sprite.setPosition(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y));
             _floorSprites[tileNumber] = tile_sprite;
         } else {
             _floorSprites[tileNumber] = createTileSprite(floorId);
         }
 
         // roof
-        _roofSprites[tileNumber] = createTileSprite(tile.getRoof(), Tile::ROOF_OFFSET);
+        _roofSprites[tileNumber] = createTileSprite(tile.getRoof(), ROOF_OFFSET);
     }
 }
 
@@ -1090,14 +1086,9 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
         // Update the sprite
         sprites[hexIndex].setTexture(texture);
 
-        // FIXME: duplicate code from loadTileSprites
-        // Calculate position (same as in loadTileSprites)
-        unsigned int tileX = hexIndex / 100;
-        unsigned int tileY = hexIndex % 100;
-        unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
-        unsigned int y = tileX * 24 + tileY * 12 - (isRoof ? Tile::ROOF_OFFSET : 0);
-
-        sprites[hexIndex].setPosition(static_cast<float>(x), static_cast<float>(y));
+        // Calculate position using utility function (eliminates duplicate code)
+        auto screenPos = indexToScreenPosition(hexIndex, isRoof);
+        sprites[hexIndex].setPosition(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y));
         
         spdlog::debug("EditorWidget::updateTileSprite: Updated sprite for hex {} ({})", hexIndex, tileName);
     } catch (const std::exception& e) {
@@ -1120,17 +1111,12 @@ int EditorWidget::worldPosToHexIndex(sf::Vector2f worldPos) const {
     int closestIndex = -1;
     
     for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
-        // Calculate tileX and tileY from linear index
-        unsigned int tileX = i / 100;
-        unsigned int tileY = i % 100;
-        
-        // Calculate world position for this tile (same as in loadTileSprites)
-        unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
-        unsigned int y = tileX * 24 + tileY * 12;
+        // Calculate world position for this tile using utility function
+        auto screenPos = indexToScreenPosition(i);
         
         // Calculate distance from click position
-        float dx = worldPos.x - static_cast<float>(x);
-        float dy = worldPos.y - static_cast<float>(y);
+        float dx = worldPos.x - static_cast<float>(screenPos.x);
+        float dy = worldPos.y - static_cast<float>(screenPos.y);
         float distance = dx * dx + dy * dy;
         
         if (distance < minDistance) {
@@ -1205,11 +1191,8 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
             item.type == selection::SelectionType::ROOF_TILE) {
             // Convert tile index to world position
             int tileIndex = item.getTileIndex();
-            unsigned int tileX = tileIndex / 100;
-            unsigned int tileY = tileIndex % 100;
-            unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
-            unsigned int y = tileX * 24 + tileY * 12;
-            startPos = sf::Vector2f(static_cast<float>(x), static_cast<float>(y));
+            auto screenPos = indexToScreenPosition(tileIndex);
+            startPos = sf::Vector2f(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y));
             hasStartTile = true;
             break;
         }
@@ -1227,7 +1210,12 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     float bottom = std::max(startPos.y, worldPos.y);
     
     // Add some padding to ensure we catch tiles at the edges
-    sf::FloatRect selectionArea(left - 40, top - 18, (right - left) + 80, (bottom - top) + 36);
+    sf::FloatRect selectionArea(
+        left - AREA_SELECTION_X_PADDING, 
+        top - AREA_SELECTION_Y_PADDING, 
+        (right - left) + AREA_SELECTION_X_TOTAL_PADDING, 
+        (bottom - top) + AREA_SELECTION_Y_TOTAL_PADDING
+    );
     
     // Determine selection mode based on current mode
     SelectionMode areaMode = _currentSelectionMode;
@@ -1263,7 +1251,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
             // Apply preview coloring to floor tiles
             for (int tileIndex : _previewTiles) {
                 if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
-                    _floorSprites.at(tileIndex).setColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
+                    applyPreviewHighlight(_floorSprites.at(tileIndex));
                 }
             }
             break;
@@ -1274,7 +1262,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
             // Apply preview coloring to roof tiles
             for (int tileIndex : _previewTiles) {
                 if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
-                    _roofSprites.at(tileIndex).setColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
+                    applyPreviewHighlight(_roofSprites.at(tileIndex));
                 }
             }
             break;
@@ -1291,22 +1279,19 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
                         // Create a visual indicator for empty roof tile
                         sf::RectangleShape indicator;
                         indicator.setSize(sf::Vector2f(20, 20)); // Small rectangle
-                        indicator.setFillColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
-                        indicator.setOutlineColor(sf::Color(255, 255, 0, 255)); // Solid yellow outline
+                        indicator.setFillColor(TileColors::previewFill());
+                        indicator.setOutlineColor(TileColors::previewOutline());
                         indicator.setOutlineThickness(1);
                         
-                        // Calculate tile position (same as in loadTileSprites)
-                        unsigned int tileX = tileIndex / 100;
-                        unsigned int tileY = tileIndex % 100;
-                        unsigned int x = (100 - tileY - 1) * 48 + 32 * tileX;
-                        unsigned int y = tileX * 24 + tileY * 12;
+                        // Calculate tile position using utility function
+                        auto screenPos = indexToScreenPosition(tileIndex);
                         
-                        // Position indicator at roof offset
-                        indicator.setPosition(static_cast<float>(x) - 10, static_cast<float>(y) - Tile::ROOF_OFFSET - 10);
+                        // Position indicator at calculated screen position
+                        indicator.setPosition(static_cast<float>(screenPos.x) - 10, static_cast<float>(screenPos.y) - 10);
                         _emptyRoofTileIndicators.push_back(indicator);
                     } else {
                         // Apply preview coloring to existing roof sprite
-                        _roofSprites.at(tileIndex).setColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
+                        applyPreviewHighlight(_roofSprites.at(tileIndex));
                     }
                 }
             }
@@ -1318,7 +1303,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
             // Apply preview coloring to objects
             for (auto& object : _previewObjects) {
                 if (object) {
-                    object->getSprite().setColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
+                    applyPreviewHighlight(object->getSprite());
                 }
             }
             break;
@@ -1352,7 +1337,7 @@ void EditorWidget::updateTileAreaFillPreview(sf::Vector2f currentWorldPos) {
     auto& sprites = isRoof ? _roofSprites : _floorSprites;
     for (int tileIndex : _previewTiles) {
         if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
-            sprites.at(tileIndex).setColor(sf::Color(255, 255, 0, 150)); // Semi-transparent yellow
+            applyPreviewHighlight(sprites.at(tileIndex));
         }
     }
 }
@@ -1361,15 +1346,15 @@ void EditorWidget::clearDragPreview() {
     // Clear tile preview coloring
     for (int tileIndex : _previewTiles) {
         if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
-            _floorSprites.at(tileIndex).setColor(sf::Color::White);
-            _roofSprites.at(tileIndex).setColor(sf::Color::White);
+            removePreviewHighlight(_floorSprites.at(tileIndex));
+            removePreviewHighlight(_roofSprites.at(tileIndex));
         }
     }
     
     // Clear object preview coloring
     for (auto& object : _previewObjects) {
         if (object) {
-            object->getSprite().setColor(sf::Color::White);
+            removePreviewHighlight(object->getSprite());
         }
     }
     
