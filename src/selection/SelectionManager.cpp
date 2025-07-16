@@ -107,8 +107,27 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
             break;
         }
         
-        case SelectionMode::ALL:
-            return SelectionResult::createError("Area selection not supported in ALL mode");
+        case SelectionMode::ALL: {
+            // Select all items in the area: objects, floor tiles, and roof tiles
+            auto objects = getObjectsInArea(area, currentElevation);
+            for (auto& object : objects) {
+                SelectedItem item{SelectionType::OBJECT, object};
+                addItemToSelection(item);
+            }
+            
+            auto floorTiles = getTilesInArea(area, false, currentElevation);
+            for (int tileIndex : floorTiles) {
+                SelectedItem item{SelectionType::FLOOR_TILE, tileIndex};
+                addItemToSelection(item);
+            }
+            
+            auto roofTiles = getTilesInArea(area, true, currentElevation);
+            for (int tileIndex : roofTiles) {
+                SelectedItem item{SelectionType::ROOF_TILE, tileIndex};
+                addItemToSelection(item);
+            }
+            break;
+        }
             
         default:
             return SelectionResult::createError("Invalid selection mode");
@@ -342,14 +361,11 @@ void SelectionManager::cancelDrag() {
 }
 
 bool SelectionManager::startAreaSelection(sf::Vector2f startPos, SelectionMode mode) {
-    if (mode == SelectionMode::ALL) {
-        return false; // Area selection not supported in ALL mode
-    }
-    
     _currentSelection.selectionArea = sf::FloatRect(startPos.x, startPos.y, 0, 0);
     _currentSelection.mode = mode;
     
-    spdlog::debug("Started area selection at ({:.2f}, {:.2f})", startPos.x, startPos.y);
+    spdlog::debug("Started area selection at ({:.2f}, {:.2f}) for mode: {}", 
+                 startPos.x, startPos.y, static_cast<int>(mode));
     return true;
 }
 

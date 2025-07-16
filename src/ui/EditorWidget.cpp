@@ -536,7 +536,8 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 
                 // Determine if we should start drag selection or do immediate selection
                 bool canDragSelect = !hasModifiers && 
-                                   (_currentSelectionMode == SelectionMode::FLOOR_TILES || 
+                                   (_currentSelectionMode == SelectionMode::ALL ||
+                                    _currentSelectionMode == SelectionMode::FLOOR_TILES || 
                                     _currentSelectionMode == SelectionMode::ROOF_TILES ||
                                     _currentSelectionMode == SelectionMode::ROOF_TILES_ALL ||
                                     _currentSelectionMode == SelectionMode::OBJECTS);
@@ -1309,9 +1310,35 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
             break;
         }
         
-        case SelectionMode::ALL:
-            // No preview for ALL mode
+        case SelectionMode::ALL: {
+            // Preview all types of items in ALL mode
+            
+            // Preview floor tiles
+            _previewTiles = _selectionManager->getTilesInArea(selectionArea, false, _currentElevation);
+            for (int tileIndex : _previewTiles) {
+                if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                    applyPreviewHighlight(_floorSprites.at(tileIndex));
+                }
+            }
+            
+            // Preview roof tiles
+            auto roofTiles = _selectionManager->getTilesInArea(selectionArea, true, _currentElevation);
+            for (int tileIndex : roofTiles) {
+                if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                    applyPreviewHighlight(_roofSprites.at(tileIndex));
+                }
+            }
+            _previewTiles.insert(_previewTiles.end(), roofTiles.begin(), roofTiles.end());
+            
+            // Preview objects
+            _previewObjects = _selectionManager->getObjectsInArea(selectionArea, _currentElevation);
+            for (auto& object : _previewObjects) {
+                if (object) {
+                    applyPreviewHighlight(object->getSprite());
+                }
+            }
             break;
+        }
             
         default:
             break;
