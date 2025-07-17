@@ -1579,8 +1579,15 @@ void EditorWidget::updateObjectDrag(sf::Vector2f currentWorldPos) {
     // Apply visual offset to dragged objects (preview)
     for (size_t i = 0; i < _draggedObjects.size(); ++i) {
         if (_draggedObjects[i] && i < _objectDragStartPositions.size()) {
-            sf::Vector2f newPos = _objectDragStartPositions[i] + _objectDragOffset;
-            _draggedObjects[i]->getSprite().setPosition(newPos);
+            // Calculate new hex center position
+            sf::Vector2f newHexCenter = _objectDragStartPositions[i] + _objectDragOffset;
+            
+            // Apply FRM offsets to position sprite correctly relative to hex center
+            auto& object = _draggedObjects[i];
+            float spriteX = newHexCenter.x - (object->width() / 2) + object->shiftX();
+            float spriteY = newHexCenter.y - object->height() + object->shiftY();
+            
+            object->getSprite().setPosition(spriteX, spriteY);
         }
     }
 }
