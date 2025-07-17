@@ -16,7 +16,6 @@
 #include "../format/map/Map.h"
 #include "../format/pro/Pro.h"
 #include "../selection/SelectionManager.h"
-#include "../selection/SelectionBridge.h"
 #include "../util/Constants.h"
 
 namespace geck {
@@ -95,6 +94,7 @@ signals:
     void objectSelected(std::shared_ptr<Object> object);
     void tileSelected(int tileIndex, int elevation, bool isRoof);
     void tileSelectionCleared();
+    void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
 
 private:

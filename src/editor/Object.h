@@ -11,6 +11,18 @@
 
 namespace geck {
 
+/**
+ * @brief Object facing directions in the Fallout 2 hex grid system
+ */
+enum class ObjectDirection : int {
+    NORTH_EAST = 0,   ///< Facing North-East (default)
+    EAST = 1,         ///< Facing East
+    SOUTH_EAST = 2,   ///< Facing South-East
+    SOUTH_WEST = 3,   ///< Facing South-West  
+    WEST = 4,         ///< Facing West
+    NORTH_WEST = 5    ///< Facing North-West
+};
+
 struct MapObject;
 class Frm;
 
@@ -35,7 +47,7 @@ public:
     sf::Sprite& getSprite();
 
     void setHexPosition(const Hex& hex);
-    void setDirection(int direction); // TODO: enum
+    void setDirection(ObjectDirection direction);
     void rotate();
 
     void select();

@@ -13,6 +13,7 @@ namespace geck {
 constexpr int MAP_WIDTH = 100;                    ///< Number of tiles per row in a map
 constexpr int MAP_HEIGHT = 100;                   ///< Number of tiles per column in a map
 constexpr int TILES_PER_ELEVATION = 10000;        ///< Total tiles per elevation (100x100)
+constexpr int INVALID_ELEVATION = -1;             ///< Invalid or unset elevation value
 
 // Tile positioning constants
 constexpr int TILE_WIDTH = 80;                    ///< Width of a tile in pixels

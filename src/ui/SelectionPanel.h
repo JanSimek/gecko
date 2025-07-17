@@ -13,6 +13,7 @@
 
 #include "../editor/Object.h"
 #include "../format/map/Tile.h"
+#include "../selection/SelectionState.h"
 
 namespace geck {
 
@@ -30,6 +31,7 @@ public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);
     void selectTile(int tileIndex, int elevation, bool isRoof);
     void clearSelection();
+    void handleSelectionChanged(const selection::SelectionState& selection, int elevation);
 
 private:
     void setupUI();

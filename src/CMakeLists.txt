@@ -18,6 +18,8 @@ add_executable (${PROJECT_NAME}
     util/QtDialogs.h
     util/QtDialogs.cpp
     util/Types.h
+    util/SpatialIndex.h
+    util/SpatialIndex.cpp
 
     # Qt6 UI
     ui/MainWindow.h
@@ -40,8 +42,6 @@ add_executable (${PROJECT_NAME}
     selection/SelectionState.cpp
     selection/SelectionManager.h
     selection/SelectionManager.cpp
-    selection/SelectionBridge.h
-    selection/SelectionBridge.cpp
 
     # Loaders (kept from state system)
     state/loader/Loader.h

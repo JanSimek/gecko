@@ -103,13 +103,16 @@ void EditorWidget::initializeSelectionSystem() {
             }
         }
         
-        // Emit Qt signals for UI updates
+        // Emit efficient batched selection update instead of individual signals
+        emit selectionChanged(selection, _currentElevation);
+        
+        // Keep legacy signals for backward compatibility if needed
         if (selection.isEmpty()) {
-            this->clearAllVisualSelections();
             emit tileSelectionCleared();
         } else {
-            // Emit signals for selected items
-            for (const auto& item : selection.items) {
+            // For single-item selections, emit legacy signals for compatibility
+            if (selection.items.size() == 1) {
+                const auto& item = selection.items[0];
                 switch (item.type) {
                     case selection::SelectionType::OBJECT: {
                         auto object = item.getObject();
@@ -151,6 +154,9 @@ void EditorWidget::setupUI() {
 
 void EditorWidget::init() {
     loadSprites();
+    
+    // Initialize spatial index for O(1) area selection performance
+    _selectionManager->initializeSpatialIndex();
     
     // Initialize fake tile sprite for hit detection
     _fakeTileSprite.setTexture(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
@@ -235,7 +241,7 @@ void EditorWidget::loadObjectSprites() {
         _objects.back()->setSprite(std::move(object_sprite));
         _objects.back()->setHexPosition(_hexgrid.grid().at(object->position));
         _objects.back()->setMapObject(object);
-        _objects.back()->setDirection(object->direction);
+        _objects.back()->setDirection(static_cast<ObjectDirection>(object->direction));
     }
 }
 
@@ -297,6 +303,9 @@ void EditorWidget::loadSprites() {
     // Data
     loadTileSprites();
     loadObjectSprites();
+
+    // Rebuild spatial index after sprites are loaded
+    _selectionManager->initializeSpatialIndex();
 
     spdlog::info("Map sprites loaded in {:.3} seconds", sw);
 }

@@ -496,4 +496,58 @@ void SelectionPanel::loadTilePreview(Lst* tilesList, uint16_t tileId) {
     }
 }
 
+void SelectionPanel::handleSelectionChanged(const selection::SelectionState& selection, int elevation) {
+    // Handle selection changes efficiently for large selections
+    if (selection.isEmpty()) {
+        clearSelection();
+        return;
+    }
+    
+    // For multi-selection, show summary info instead of individual tile details
+    if (selection.items.size() > 1) {
+        showTilePanel();
+        
+        // Update tile info group title to show selection count
+        _tileInfoGroup->setTitle(QString("Tile Selection (%1 tiles)").arg(selection.items.size()));
+        
+        // Clear individual tile details for multi-selection
+        _tileIndexSpin->setValue(0);
+        _elevationSpin->setValue(elevation);
+        _hexXSpin->setValue(0);
+        _hexYSpin->setValue(0);
+        _tileTypeEdit->clear();
+        _tileIdSpin->setValue(0);
+        _tileNameEdit->clear();
+        _tilePreviewLabel->setText(QString("Multiple tiles selected (%1)").arg(selection.items.size()));
+        
+        // Enable relevant controls
+        _elevationSpin->setEnabled(true);
+        _tileTypeEdit->setEnabled(false);
+        _tileIdSpin->setEnabled(false);
+        _tileNameEdit->setEnabled(false);
+        
+        spdlog::debug("SelectionPanel: Multiple selection - {} tiles", selection.items.size());
+        return;
+    }
+    
+    // Single selection - use existing logic
+    const auto& item = selection.items[0];
+    switch (item.type) {
+        case selection::SelectionType::OBJECT: {
+            auto object = item.getObject();
+            if (object) {
+                selectObject(object);
+            }
+            break;
+        }
+        case selection::SelectionType::ROOF_TILE:
+        case selection::SelectionType::FLOOR_TILE: {
+            int tileIndex = item.getTileIndex();
+            bool isRoof = (item.type == selection::SelectionType::ROOF_TILE);
+            selectTile(tileIndex, elevation, isRoof);
+            break;
+        }
+    }
+}
+
 } // namespace geck

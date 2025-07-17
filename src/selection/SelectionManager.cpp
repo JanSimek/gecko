@@ -18,6 +18,9 @@ SelectionManager::SelectionManager(Map* map, geck::EditorWidget* editorWidget)
     if (!_editorWidget) {
         throw std::invalid_argument("EditorWidget cannot be null");
     }
+    
+    // Initialize spatial index for performance
+    _spatialIndex = std::make_unique<TileSpatialIndex>();
 }
 
 SelectionResult SelectionManager::selectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
@@ -318,10 +321,43 @@ SelectionResult SelectionManager::finishDrag(sf::Vector2f endPos) {
     
     spdlog::info("Drag completed: offset ({:.2f}, {:.2f})", offset.x, offset.y);
     
-    // TODO: Implement actual item moving logic here
-    // For now, just report success
-    notifySelectionChanged();
-    return SelectionResult::createSuccess();
+    // Implement drag & drop logic
+    bool hasMovements = false;
+    
+    for (const auto& item : _state.items) {
+        switch (item.type) {
+            case SelectionType::OBJECT: {
+                auto object = item.getObject();
+                if (object && moveObject(object, offset)) {
+                    hasMovements = true;
+                }
+                break;
+            }
+            
+            case SelectionType::FLOOR_TILE: {
+                int tileIndex = item.getTileIndex();
+                if (moveTile(tileIndex, offset, false)) {
+                    hasMovements = true;
+                }
+                break;
+            }
+            
+            case SelectionType::ROOF_TILE: {
+                int tileIndex = item.getTileIndex();
+                if (moveTile(tileIndex, offset, true)) {
+                    hasMovements = true;
+                }
+                break;
+            }
+        }
+    }
+    
+    if (hasMovements) {
+        notifySelectionChanged();
+        return SelectionResult::createSuccess("Items moved successfully");
+    } else {
+        return SelectionResult::createNoChange();
+    }
 }
 
 void SelectionManager::cancelDrag() {
@@ -465,36 +501,49 @@ std::optional<int> SelectionManager::getFloorTileAtPosition(sf::Vector2f worldPo
 }
 
 std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) const {
-    std::vector<int> result;
-    result.reserve(1000); // Reserve space for typical area selection
+    // Use spatial index for O(1) performance if available
+    if (_spatialIndex) {
+        auto spatialResult = _spatialIndex->getTilesInArea(area, roof);
+        
+        // Filter by tile content for roof tiles (spatial index doesn't know about empty tiles)
+        if (roof) {
+            std::vector<int> result;
+            result.reserve(spatialResult.size());
+            
+            const auto& mapFile = _editorWidget->getMapFile();
+            int currentElevation = _editorWidget->getCurrentElevation();
+            
+            for (int tileIndex : spatialResult) {
+                if (mapFile.tiles.at(currentElevation).at(tileIndex).getRoof() != Map::EMPTY_TILE) {
+                    result.push_back(tileIndex);
+                }
+            }
+            
+            return result;
+        } else {
+            // For floor tiles, return all results (floor tiles always have content)
+            return spatialResult;
+        }
+    }
     
-    // Get access to sprite arrays to check actual tile bounds
+    // Fallback to linear search if spatial index not available
+    std::vector<int> result;
+    result.reserve(1000);
+    
     const auto& floorSprites = _editorWidget->getFloorSprites();
     const auto& roofSprites = _editorWidget->getRoofSprites();
-    
-    // Get current map data for checking tile content
     const auto& mapFile = _editorWidget->getMapFile();
     int currentElevation = _editorWidget->getCurrentElevation();
     
-    // Check each tile to see if its sprite bounds intersect with the area
     for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
-        sf::FloatRect tileBounds;
+        sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
         
-        if (roof) {
-            tileBounds = roofSprites.at(i).getGlobalBounds();
-        } else {
-            tileBounds = floorSprites.at(i).getGlobalBounds();
-        }
-        
-        // Check if tile bounds intersect with selection area
         if (area.intersects(tileBounds)) {
-            // For roof tiles, only include tiles that have actual content (not empty)
             if (roof) {
                 if (mapFile.tiles.at(currentElevation).at(i).getRoof() != Map::EMPTY_TILE) {
                     result.push_back(i);
                 }
             } else {
-                // For floor tiles, include all tiles (floor tiles are always considered to have content)
                 result.push_back(i);
             }
         }
@@ -504,25 +553,22 @@ std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, boo
 }
 
 std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const {
-    std::vector<int> result;
-    result.reserve(1000); // Reserve space for typical area selection
+    // Use spatial index for O(1) performance if available
+    if (_spatialIndex) {
+        // This method includes empty tiles, so we return all spatial results without filtering
+        return _spatialIndex->getTilesInArea(area, roof);
+    }
     
-    // Get access to sprite arrays to check actual tile bounds
+    // Fallback to linear search if spatial index not available
+    std::vector<int> result;
+    result.reserve(1000);
+    
     const auto& floorSprites = _editorWidget->getFloorSprites();
     const auto& roofSprites = _editorWidget->getRoofSprites();
     
-    // Check each tile to see if its sprite bounds intersect with the area
-    // This version includes empty tiles by not checking tile content
     for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
-        sf::FloatRect tileBounds;
+        sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
         
-        if (roof) {
-            tileBounds = roofSprites.at(i).getGlobalBounds();
-        } else {
-            tileBounds = floorSprites.at(i).getGlobalBounds();
-        }
-        
-        // Check if tile bounds intersect with selection area
         if (area.intersects(tileBounds)) {
             result.push_back(i);
         }
@@ -754,6 +800,137 @@ bool SelectionManager::isPositionInTile(sf::Vector2f worldPos, int tileIndex, bo
     // This will need to implement the tile hit detection logic from EditorWidget
     // For now, return false
     return false;
+}
+
+bool SelectionManager::moveObject(std::shared_ptr<Object> object, sf::Vector2f offset) {
+    if (!object) {
+        return false;
+    }
+    
+    // Get current object position 
+    auto& mapObject = object->getMapObject();
+    int32_t currentPosition = mapObject.position;
+    
+    // Convert current position to coordinates
+    auto currentCoords = indexToCoordinates(currentPosition);
+    
+    // Calculate new position using screen offset -> hex offset conversion
+    // For simplicity, convert screen offset to approximate hex offset
+    // This is a simplified conversion - in a full implementation you'd use proper isometric projection
+    int deltaX = static_cast<int>(offset.x / TILE_WIDTH);
+    int deltaY = static_cast<int>(offset.y / TILE_HEIGHT);
+    
+    // Calculate new coordinates (with bounds checking)
+    int newX = static_cast<int>(currentCoords.x) + deltaY; // Screen Y maps to hex X
+    int newY = static_cast<int>(currentCoords.y) + deltaX; // Screen X maps to hex Y
+    
+    // Validate bounds
+    if (newX < 0 || newX >= MAP_HEIGHT || newY < 0 || newY >= MAP_WIDTH) {
+        spdlog::debug("Object move out of bounds: ({}, {}) -> ({}, {})", 
+                     currentCoords.x, currentCoords.y, newX, newY);
+        return false;
+    }
+    
+    // Calculate new tile index
+    int newPosition = coordinatesToIndex(TileCoordinates(newX, newY));
+    
+    // Update object position
+    mapObject.position = newPosition;
+    
+    // Note: Object sprite position will be updated on next render cycle
+    
+    spdlog::info("Moved object from tile {} to tile {}", currentPosition, newPosition);
+    return true;
+}
+
+bool SelectionManager::moveTile(int sourceTileIndex, sf::Vector2f offset, bool isRoof) {
+    // Validate source tile index
+    if (sourceTileIndex < 0 || sourceTileIndex >= Map::TILES_PER_ELEVATION) {
+        return false;
+    }
+    
+    // Convert source position to coordinates
+    auto sourceCoords = indexToCoordinates(sourceTileIndex);
+    
+    // Calculate new position using screen offset -> hex offset conversion
+    int deltaX = static_cast<int>(offset.x / TILE_WIDTH);
+    int deltaY = static_cast<int>(offset.y / TILE_HEIGHT);
+    
+    // Calculate new coordinates
+    int newX = static_cast<int>(sourceCoords.x) + deltaY;
+    int newY = static_cast<int>(sourceCoords.y) + deltaX;
+    
+    // Validate bounds
+    if (newX < 0 || newX >= MAP_HEIGHT || newY < 0 || newY >= MAP_WIDTH) {
+        spdlog::debug("Tile move out of bounds: ({}, {}) -> ({}, {})", 
+                     sourceCoords.x, sourceCoords.y, newX, newY);
+        return false;
+    }
+    
+    // Calculate target tile index
+    int targetTileIndex = coordinatesToIndex(TileCoordinates(newX, newY));
+    
+    // Don't move to same position
+    if (targetTileIndex == sourceTileIndex) {
+        return false;
+    }
+    
+    // Get current elevation from EditorWidget
+    int currentElevation = _editorWidget->getCurrentElevation();
+    
+    // Access map tiles
+    auto& mapFile = _editorWidget->getMapFile();
+    auto& tiles = mapFile.tiles.at(currentElevation);
+    
+    // Get source and target tiles
+    auto& sourceTile = tiles.at(sourceTileIndex);
+    auto& targetTile = tiles.at(targetTileIndex);
+    
+    if (isRoof) {
+        // Move roof tile content
+        uint16_t sourceRoof = sourceTile.getRoof();
+        if (sourceRoof == Map::EMPTY_TILE) {
+            return false; // Nothing to move
+        }
+        
+        // Note: For future enhancement, could implement tile swapping instead of moving
+        
+        // Move roof content
+        targetTile.setRoof(sourceRoof);
+        sourceTile.setRoof(Map::EMPTY_TILE);
+        
+        spdlog::info("Moved roof tile from {} to {}", sourceTileIndex, targetTileIndex);
+    } else {
+        // Move floor tile content
+        uint16_t sourceFloor = sourceTile.getFloor();
+        uint16_t targetFloor = targetTile.getFloor();
+        
+        // Swap floor tiles (floor tiles are always present)
+        targetTile.setFloor(sourceFloor);
+        sourceTile.setFloor(targetFloor);
+        
+        spdlog::info("Swapped floor tiles {} and {}", sourceTileIndex, targetTileIndex);
+    }
+    
+    // Note: Tile sprites will be updated on next render cycle
+    
+    return true;
+}
+
+void SelectionManager::initializeSpatialIndex() {
+    if (!_spatialIndex) {
+        spdlog::error("Spatial index not initialized");
+        return;
+    }
+    
+    // Build the spatial index from current sprite data
+    const auto& floorSprites = _editorWidget->getFloorSprites();
+    const auto& roofSprites = _editorWidget->getRoofSprites();
+    
+    _spatialIndex->buildIndex(floorSprites, roofSprites);
+    
+    spdlog::info("Spatial index initialized with {} indexed tiles", 
+                _spatialIndex->getIndexedTileCount());
 }
 
 } // namespace geck::selection

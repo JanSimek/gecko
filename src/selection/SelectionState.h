@@ -123,7 +123,7 @@ public:
         dragStartPosition = startPos;
     }
     
-    void updateDrag(sf::Vector2f currentPos) {
+    void updateDrag(sf::Vector2f /*currentPos*/) {
         // Drag position tracking could be added here if needed
     }
     

@@ -2,6 +2,7 @@
 #include <thread>
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
+#include "../../util/Constants.h"
 
 #include "../../reader/pro/ProReader.h"
 #include "../../reader/map/MapReader.h"
@@ -52,7 +53,7 @@ void MapLoader::load() {
     } };
     _map = map_reader.openFile(_mapPath);
 
-    if (_elevation == -1) { // TODO: no magic numbers
+    if (_elevation == INVALID_ELEVATION) {
         uint32_t default_elevation = _map->getMapFile().header.player_default_elevation;
         spdlog::info("Using default map elevation {}", default_elevation);
         _elevation = default_elevation;

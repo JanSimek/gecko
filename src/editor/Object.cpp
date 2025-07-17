@@ -66,8 +66,8 @@ int Object::height() const {
     return _frm->directions().at(_direction).frames().at(0).height();
 }
 
-void Object::setDirection(int direction) {
-    _direction = direction;
+void Object::setDirection(ObjectDirection direction) {
+    _direction = static_cast<int>(direction);
 
     // int hexPos = object->hexPosition();
     // float x = hexPos % 200;
@@ -99,7 +99,7 @@ void Object::rotate() {
     } else {
         _direction++;
     }
-    setDirection(_direction);
+    setDirection(static_cast<ObjectDirection>(_direction));
 }
 
 void Object::select() {

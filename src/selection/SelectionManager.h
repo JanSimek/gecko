@@ -8,6 +8,7 @@
 #include <functional>
 
 #include "../util/Types.h"
+#include "../util/SpatialIndex.h"
 #include "../format/map/Map.h"
 #include "../editor/Object.h"
 #include "SelectionState.h"
@@ -81,6 +82,9 @@ public:
     // Callback mechanism for UI updates
     void setSelectionCallback(SelectionCallback callback) { _selectionCallback = callback; }
     
+    // Spatial index management
+    void initializeSpatialIndex();
+    
     // Helper for external classes (like EditorWidget) to check collision
     bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
     
@@ -94,6 +98,9 @@ private:
     geck::EditorWidget* _editorWidget = nullptr;
     SelectionState _state;
     SelectionCallback _selectionCallback;
+    
+    // Spatial indexing for O(1) area queries
+    std::unique_ptr<TileSpatialIndex> _spatialIndex;
     
     // Tile selection helpers
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos, int elevation) const;
@@ -119,6 +126,10 @@ private:
     // Position calculations (will need access to sprite positioning logic)
     sf::Vector2f getTileWorldPosition(int tileIndex) const;
     bool isPositionInTile(sf::Vector2f worldPos, int tileIndex, bool roof) const;
+    
+    // Drag & drop implementation helpers
+    bool moveObject(std::shared_ptr<Object> object, sf::Vector2f offset);
+    bool moveTile(int sourceTileIndex, sf::Vector2f offset, bool isRoof);
 };
 
 } // namespace geck::selection
