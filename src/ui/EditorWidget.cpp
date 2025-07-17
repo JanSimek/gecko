@@ -47,28 +47,11 @@ EditorWidget::~EditorWidget() {
 }
 
 void EditorWidget::initializeSelectionSystem() {
-    // Initialize the selection manager with direct EditorWidget integration
+    // Initialize the selection manager
     _selectionManager = std::make_unique<selection::SelectionManager>(_map.get(), this);
     
-    // Initialize the Qt observer for signal emission
-    _selectionObserver = std::make_shared<selection::QtSelectionObserver>();
-    
-    // Setup Qt signal callbacks
-    _selectionObserver->setObjectSelectedCallback([this](std::shared_ptr<Object> object) {
-        emit objectSelected(object);
-    });
-    
-    _selectionObserver->setTileSelectedCallback([this](int index, int elevation, bool isRoof) {
-        emit tileSelected(index, elevation, isRoof);
-    });
-    
-    _selectionObserver->setSelectionClearedCallback([this]() {
-        this->clearAllVisualSelections();
-        emit tileSelectionCleared();
-    });
-    
-    // Setup visual update callback to update sprite colors and object selection states
-    _selectionObserver->setUpdateVisualsCallback([this](const selection::Selection& selection) {
+    // Setup direct callback for selection changes
+    _selectionManager->setSelectionCallback([this](const selection::SelectionState& selection) {
         // First, clear all existing visual selections
         this->clearAllVisualSelections();
         
@@ -119,10 +102,35 @@ void EditorWidget::initializeSelectionSystem() {
                 }
             }
         }
+        
+        // Emit Qt signals for UI updates
+        if (selection.isEmpty()) {
+            this->clearAllVisualSelections();
+            emit tileSelectionCleared();
+        } else {
+            // Emit signals for selected items
+            for (const auto& item : selection.items) {
+                switch (item.type) {
+                    case selection::SelectionType::OBJECT: {
+                        auto object = item.getObject();
+                        if (object) {
+                            emit objectSelected(object);
+                        }
+                        break;
+                    }
+                    case selection::SelectionType::ROOF_TILE:
+                    case selection::SelectionType::FLOOR_TILE: {
+                        int tileIndex = item.getTileIndex();
+                        bool isRoof = (item.type == selection::SelectionType::ROOF_TILE);
+                        emit tileSelected(tileIndex, _currentElevation, isRoof);
+                        break;
+                    }
+                }
+            }
+        }
     });
     
     // Register the observer with the selection manager
-    _selectionManager->addObserver(_selectionObserver);
 }
 
 
@@ -825,7 +833,6 @@ bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier modifier) {
     // Update the observer with current elevation
-    _selectionObserver->setCurrentElevation(_currentElevation);
     
     selection::SelectionResult result;
     

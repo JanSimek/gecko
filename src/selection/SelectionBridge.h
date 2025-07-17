@@ -12,8 +12,8 @@ namespace geck::selection {
 /**
  * @brief Bridge class that connects SelectionManager with existing EditorWidget functionality
  * 
- * This class acts as an adapter between the new SelectionManager and the existing
- * EditorWidget code, allowing for gradual migration while maintaining compatibility.
+ * This class acts as an adapter between SelectionManager and EditorWidget,
+ * providing Qt signal integration for the selection system.
  */
 class SelectionBridge {
 public:
@@ -55,10 +55,10 @@ public:
     std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area, int elevation);
     std::vector<std::shared_ptr<Object>> getAllObjects();
     
-    // Helper for existing compatibility
+    // Sprite collision detection helper
     bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
     
-    // Cycling logic implementation (maintains existing behavior)
+    // Cycling logic implementation
     SelectionResult cycleThroughItemsAtPosition(sf::Vector2f worldPos, int elevation);
     
 private:
@@ -80,43 +80,5 @@ private:
     SelectionResult selectItem(SelectionType type, const std::variant<int, std::shared_ptr<Object>>& item);
 };
 
-/**
- * @brief Observer implementation that bridges selection changes to Qt signals
- * 
- * This class converts SelectionManager observer notifications into Qt signals
- * that the existing UI can connect to.
- */
-class QtSelectionObserver : public SelectionObserver {
-public:
-    // Function types for Qt signal emissions
-    using ObjectSelectedFunc = std::function<void(std::shared_ptr<Object>)>;
-    using TileSelectedFunc = std::function<void(int, int, bool)>; // index, elevation, isRoof
-    using SelectionClearedFunc = std::function<void()>;
-    
-    // Function types for visual updates
-    using UpdateVisualsFunc = std::function<void(const Selection&)>;
-    
-    void setObjectSelectedCallback(ObjectSelectedFunc func) { _objectSelected = std::move(func); }
-    void setTileSelectedCallback(TileSelectedFunc func) { _tileSelected = std::move(func); }
-    void setSelectionClearedCallback(SelectionClearedFunc func) { _selectionCleared = std::move(func); }
-    void setUpdateVisualsCallback(UpdateVisualsFunc func) { _updateVisuals = std::move(func); }
-    
-    // SelectionObserver interface
-    void onSelectionChanged(const Selection& selection) override;
-    void onSelectionCleared() override;
-    
-private:
-    ObjectSelectedFunc _objectSelected;
-    TileSelectedFunc _tileSelected;
-    SelectionClearedFunc _selectionCleared;
-    UpdateVisualsFunc _updateVisuals;
-    
-    int _currentElevation = 0; // This will need to be updated from EditorWidget
-    
-    void updateSelectionVisuals(const Selection& selection);
-    
-public:
-    void setCurrentElevation(int elevation) { _currentElevation = elevation; }
-};
 
 } // namespace geck::selection

@@ -79,8 +79,7 @@ std::string Application::processCommandLineArgs(int /*argc*/, char** /*argv*/, c
     parser.setApplicationDescription("Fallout 2 map editor");
     parser.addHelpOption();
     parser.addVersionOption();
-    
-    // Define command line options
+
     QCommandLineOption dataOption(QStringList() << "d" << "data",
         "Path to the Fallout 2 directory or individual data files, e.g. master.dat and critter.dat",
         "path", QString::fromStdString(resourcePath.string()));
@@ -94,10 +93,8 @@ std::string Application::processCommandLineArgs(int /*argc*/, char** /*argv*/, c
     QCommandLineOption debugOption("debug", "Show debug messages");
     parser.addOption(debugOption);
 
-    // Process command line arguments
     parser.process(*_qtApp);
-    
-    // Handle options
+
     if (parser.isSet(debugOption)) {
         spdlog::set_pattern("[%^%l%$] [thread %t] %v");
         spdlog::set_level(spdlog::level::debug);
@@ -114,31 +111,25 @@ std::string Application::processCommandLineArgs(int /*argc*/, char** /*argv*/, c
         }
     }
 
-    // Return the map path from command line or the passed mapPath
     return parser.isSet(mapOption) ? parser.value(mapOption).toStdString() : mapPath.string();
 }
 
 Application::~Application() {
-    // Clean up in proper order, but let Qt handle the final cleanup
     if (_mainWindow) {
         _mainWindow->stopGameLoop();
     }
 }
 
 void Application::initUI() {
-    // Create Qt6 main window
     _mainWindow = std::make_unique<MainWindow>();
     _mainWindow->show();
-    spdlog::info("Qt6 main window created and shown");
 }
 
 void Application::run() {
-    // Start the Qt6 game loop in the main window
     _mainWindow->startGameLoop();
-    
-    // Execute Qt application event loop
+
     int result = _qtApp->exec();
-    spdlog::info("Qt application exited with code: {}", result);
+    spdlog::debug("Application exited with code: {}", result);
 }
 
 bool Application::isRunning() const {

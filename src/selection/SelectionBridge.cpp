@@ -293,67 +293,11 @@ SelectionResult SelectionBridge::selectItem(SelectionType type, const std::varia
     }
     
     // Manually add to selection and set mode
-    auto& selection = const_cast<Selection&>(_selectionManager.getCurrentSelection());
+    auto& selection = const_cast<SelectionState&>(_selectionManager.getCurrentSelection());
     selection.items.push_back(selectedItem);
     selection.mode = SelectionMode::ALL;
     
-    // Trigger observer notifications using the now-public method
-    _selectionManager.notifyObservers();
-    
     return SelectionResult::createSuccess("");
-}
-
-// QtSelectionObserver implementation
-void QtSelectionObserver::onSelectionChanged(const Selection& selection) {
-    // Always update visual appearance (this handles both selection and deselection)
-    updateSelectionVisuals(selection);
-    
-    if (selection.isEmpty()) {
-        onSelectionCleared();
-        return;
-    }
-    
-    // For now, emit signals for the first selected item to maintain compatibility
-    // In the future, this could be enhanced to handle multiple selections
-    const auto& firstItem = selection.items[0];
-    
-    switch (firstItem.type) {
-        case SelectionType::OBJECT:
-            if (_objectSelected) {
-                _objectSelected(firstItem.getObject());
-            }
-            break;
-            
-        case SelectionType::ROOF_TILE:
-            if (_tileSelected) {
-                _tileSelected(firstItem.getTileIndex(), _currentElevation, true);
-            }
-            break;
-            
-        case SelectionType::FLOOR_TILE:
-            if (_tileSelected) {
-                _tileSelected(firstItem.getTileIndex(), _currentElevation, false);
-            }
-            break;
-    }
-    
-    // Log multiple selection info
-    if (selection.items.size() > 1) {
-        spdlog::info("Multiple items selected: {} total", selection.items.size());
-    }
-}
-
-void QtSelectionObserver::updateSelectionVisuals(const Selection& selection) {
-    // Use the visual update callback to update sprite colors and object selection states
-    if (_updateVisuals) {
-        _updateVisuals(selection);
-    }
-}
-
-void QtSelectionObserver::onSelectionCleared() {
-    if (_selectionCleared) {
-        _selectionCleared();
-    }
 }
 
 } // namespace geck::selection

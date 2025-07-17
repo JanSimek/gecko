@@ -9,40 +9,6 @@
 
 namespace geck::selection {
 
-// Selection helper methods
-std::vector<int> Selection::getRoofTileIndices() const {
-    std::vector<int> indices;
-    indices.reserve(items.size()); // Reserve space for worst-case scenario
-    for (const auto& item : items) {
-        if (item.type == SelectionType::ROOF_TILE) {
-            indices.push_back(item.getTileIndex());
-        }
-    }
-    return indices;
-}
-
-std::vector<int> Selection::getFloorTileIndices() const {
-    std::vector<int> indices;
-    indices.reserve(items.size()); // Reserve space for worst-case scenario
-    for (const auto& item : items) {
-        if (item.type == SelectionType::FLOOR_TILE) {
-            indices.push_back(item.getTileIndex());
-        }
-    }
-    return indices;
-}
-
-std::vector<std::shared_ptr<Object>> Selection::getObjects() const {
-    std::vector<std::shared_ptr<Object>> objects;
-    objects.reserve(items.size()); // Reserve space for worst-case scenario
-    for (const auto& item : items) {
-        if (item.type == SelectionType::OBJECT) {
-            objects.push_back(item.getObject());
-        }
-    }
-    return objects;
-}
-
 // SelectionManager implementation
 SelectionManager::SelectionManager(Map* map, geck::EditorWidget* editorWidget) 
     : _map(map), _editorWidget(editorWidget) {
@@ -136,8 +102,8 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
             return SelectionResult::createError("Invalid selection mode");
     }
     
-    _currentSelection.mode = mode;
-    notifyObservers();
+    _state.mode = mode;
+    notifySelectionChanged();
     return SelectionResult::createSuccess("");
 }
 
@@ -149,8 +115,8 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
             if (tileIndex) {
                 SelectedItem item{SelectionType::FLOOR_TILE, tileIndex.value()};
                 addItemToSelection(item);
-                _currentSelection.mode = mode;
-                notifyObservers();
+                _state.mode = mode;
+                notifySelectionChanged();
                 return SelectionResult::createSuccess("");
             }
             break;
@@ -161,8 +127,8 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
             if (tileIndex) {
                 SelectedItem item{SelectionType::ROOF_TILE, tileIndex.value()};
                 addItemToSelection(item);
-                _currentSelection.mode = mode;
-                notifyObservers();
+                _state.mode = mode;
+                notifySelectionChanged();
                 return SelectionResult::createSuccess("");
             }
             break;
@@ -173,8 +139,8 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
             if (tileIndex) {
                 SelectedItem item{SelectionType::ROOF_TILE, tileIndex.value()};
                 addItemToSelection(item);
-                _currentSelection.mode = mode;
-                notifyObservers();
+                _state.mode = mode;
+                notifySelectionChanged();
                 return SelectionResult::createSuccess("");
             }
             break;
@@ -186,8 +152,8 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                 // Add the first object found
                 SelectedItem item{SelectionType::OBJECT, objects[0]};
                 addItemToSelection(item);
-                _currentSelection.mode = mode;
-                notifyObservers();
+                _state.mode = mode;
+                notifySelectionChanged();
                 return SelectionResult::createSuccess();
             }
             break;
@@ -201,8 +167,8 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                 if (tileIndex) {
                     SelectedItem item{SelectionType::ROOF_TILE, tileIndex.value()};
                     addItemToSelection(item);
-                    _currentSelection.mode = mode;
-                    notifyObservers();
+                    _state.mode = mode;
+                    notifySelectionChanged();
                     return SelectionResult::createSuccess("");
                 }
             }
@@ -212,8 +178,8 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                 if (!objects.empty()) {
                     SelectedItem item{SelectionType::OBJECT, objects[0]};
                     addItemToSelection(item);
-                    _currentSelection.mode = mode;
-                    notifyObservers();
+                    _state.mode = mode;
+                    notifySelectionChanged();
                     return SelectionResult::createSuccess("");
                 }
             }
@@ -223,8 +189,8 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                 if (tileIndex) {
                     SelectedItem item{SelectionType::FLOOR_TILE, tileIndex.value()};
                     addItemToSelection(item);
-                    _currentSelection.mode = mode;
-                    notifyObservers();
+                    _state.mode = mode;
+                    notifySelectionChanged();
                     return SelectionResult::createSuccess();
                 }
             }
@@ -301,14 +267,14 @@ SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, Selecti
         if (isItemSelected(itemAtPosition.value())) {
             // Item is selected - remove it
             removeItemFromSelection(itemAtPosition.value());
-            _currentSelection.mode = mode;
-            notifyObservers();
+            _state.mode = mode;
+            notifySelectionChanged();
             return SelectionResult::createSuccess("Item removed from selection");
         } else {
             // Item is not selected - add it
             addItemToSelection(itemAtPosition.value());
-            _currentSelection.mode = mode;
-            notifyObservers();
+            _state.mode = mode;
+            notifySelectionChanged();
             return SelectionResult::createSuccess("Item added to selection");
         }
     }
@@ -317,21 +283,21 @@ SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, Selecti
 }
 
 bool SelectionManager::startDrag(sf::Vector2f worldPos) {
-    if (_currentSelection.isEmpty()) {
+    if (_state.isEmpty()) {
         return false;
     }
     
     // Check if any selected item is at this position
     // For now, we'll implement basic drag start logic
-    _currentSelection.isDragging = true;
-    _currentSelection.dragStartPosition = worldPos;
+    _state.isDragging = true;
+    _state.dragStartPosition = worldPos;
     
     spdlog::debug("Started drag operation at ({:.2f}, {:.2f})", worldPos.x, worldPos.y);
     return true;
 }
 
 void SelectionManager::updateDrag(sf::Vector2f currentPos) {
-    if (!_currentSelection.isDragging) {
+    if (!_state.isDragging) {
         return;
     }
     
@@ -341,31 +307,31 @@ void SelectionManager::updateDrag(sf::Vector2f currentPos) {
 }
 
 SelectionResult SelectionManager::finishDrag(sf::Vector2f endPos) {
-    if (!_currentSelection.isDragging) {
+    if (!_state.isDragging) {
         return SelectionResult::createError("No drag operation in progress");
     }
     
-    _currentSelection.isDragging = false;
+    _state.isDragging = false;
     
     // Calculate the offset
-    sf::Vector2f offset = endPos - _currentSelection.dragStartPosition;
+    sf::Vector2f offset = endPos - _state.dragStartPosition;
     
     spdlog::info("Drag completed: offset ({:.2f}, {:.2f})", offset.x, offset.y);
     
     // TODO: Implement actual item moving logic here
     // For now, just report success
-    notifyObservers();
+    notifySelectionChanged();
     return SelectionResult::createSuccess();
 }
 
 void SelectionManager::cancelDrag() {
-    _currentSelection.isDragging = false;
+    _state.isDragging = false;
     spdlog::debug("Drag operation cancelled");
 }
 
 bool SelectionManager::startAreaSelection(sf::Vector2f startPos, SelectionMode mode) {
-    _currentSelection.selectionArea = sf::FloatRect(startPos.x, startPos.y, 0, 0);
-    _currentSelection.mode = mode;
+    _state.selectionArea = sf::FloatRect(startPos.x, startPos.y, 0, 0);
+    _state.mode = mode;
     
     spdlog::debug("Started area selection at ({:.2f}, {:.2f}) for mode: {}", 
                  startPos.x, startPos.y, static_cast<int>(mode));
@@ -373,11 +339,11 @@ bool SelectionManager::startAreaSelection(sf::Vector2f startPos, SelectionMode m
 }
 
 void SelectionManager::updateAreaSelection(sf::Vector2f currentPos) {
-    if (!_currentSelection.selectionArea) {
+    if (!_state.selectionArea) {
         return;
     }
     
-    auto& rect = _currentSelection.selectionArea.value();
+    auto& rect = _state.selectionArea.value();
     sf::Vector2f startPos(rect.left, rect.top);
     
     // Update rectangle to encompass start and current position
@@ -393,15 +359,15 @@ void SelectionManager::updateAreaSelection(sf::Vector2f currentPos) {
 }
 
 SelectionResult SelectionManager::finishAreaSelection() {
-    if (!_currentSelection.selectionArea) {
+    if (!_state.selectionArea) {
         return SelectionResult::createError("No area selection in progress");
     }
     
-    auto area = _currentSelection.selectionArea.value();
-    auto mode = _currentSelection.mode;
+    auto area = _state.selectionArea.value();
+    auto mode = _state.mode;
     
     // Clear the area selection state but keep the mode
-    _currentSelection.selectionArea.reset();
+    _state.selectionArea.reset();
     
     // Perform the actual area selection
     // Note: We need to get current elevation from somewhere - this will need to be passed in
@@ -410,16 +376,16 @@ SelectionResult SelectionManager::finishAreaSelection() {
 }
 
 void SelectionManager::cancelAreaSelection() {
-    _currentSelection.selectionArea.reset();
+    _state.selectionArea.reset();
     spdlog::debug("Area selection cancelled");
 }
 
 void SelectionManager::clearSelection() {
-    bool hadSelection = !_currentSelection.isEmpty();
-    _currentSelection.clear();
+    bool hadSelection = !_state.isEmpty();
+    _state.clear();
     
     if (hadSelection) {
-        notifyObservers();
+        notifySelectionChanged();
     }
 }
 
@@ -472,23 +438,10 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
             break;
     }
     
-    _currentSelection.mode = mode;
-    notifyObservers();
+    _state.mode = mode;
+    notifySelectionChanged();
 }
 
-void SelectionManager::addObserver(std::weak_ptr<SelectionObserver> observer) {
-    _observers.push_back(observer);
-}
-
-void SelectionManager::removeObserver(std::weak_ptr<SelectionObserver> observer) {
-    _observers.erase(
-        std::remove_if(_observers.begin(), _observers.end(),
-            [&observer](const std::weak_ptr<SelectionObserver>& weak) {
-                return weak.expired() || weak.lock() == observer.lock();
-            }),
-        _observers.end()
-    );
-}
 
 bool SelectionManager::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) const {
     return sprite.getGlobalBounds().contains(worldPos);
@@ -608,8 +561,8 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
             if (tileIndex) {
                 SelectedItem item{SelectionType::FLOOR_TILE, tileIndex.value()};
                 addItemToSelection(item);
-                _currentSelection.mode = mode;
-                notifyObservers();
+                _state.mode = mode;
+                notifySelectionChanged();
                 return SelectionResult::createSuccess();
             }
             break;
@@ -620,8 +573,8 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
             if (tileIndex) {
                 SelectedItem item{SelectionType::ROOF_TILE, tileIndex.value()};
                 addItemToSelection(item);
-                _currentSelection.mode = mode;
-                notifyObservers();
+                _state.mode = mode;
+                notifySelectionChanged();
                 return SelectionResult::createSuccess();
             }
             break;
@@ -632,8 +585,8 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
             if (tileIndex) {
                 SelectedItem item{SelectionType::ROOF_TILE, tileIndex.value()};
                 addItemToSelection(item);
-                _currentSelection.mode = mode;
-                notifyObservers();
+                _state.mode = mode;
+                notifySelectionChanged();
                 return SelectionResult::createSuccess();
             }
             break;
@@ -644,8 +597,8 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
             if (!objects.empty()) {
                 SelectedItem item{SelectionType::OBJECT, objects[0]}; // Select first (topmost)
                 addItemToSelection(item);
-                _currentSelection.mode = mode;
-                notifyObservers();
+                _state.mode = mode;
+                notifySelectionChanged();
                 return SelectionResult::createSuccess();
             }
             break;
@@ -672,7 +625,7 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
     int selectedObjectIndex = -1;
     
     // Check if there's an item at this position that's currently selected
-    for (const auto& item : _currentSelection.items) {
+    for (const auto& item : _state.items) {
         switch (item.type) {
             case SelectionType::ROOF_TILE:
                 if (roofTileIndex && item.getTileIndex() == roofTileIndex.value()) {
@@ -703,15 +656,15 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
             clearSelection();
             SelectedItem item{SelectionType::OBJECT, objectsAtPos[0]};
             addItemToSelection(item);
-            _currentSelection.mode = SelectionMode::ALL;
-            notifyObservers();
+            _state.mode = SelectionMode::ALL;
+            notifySelectionChanged();
             return SelectionResult::createSuccess();
         } else if (floorTileIndex) {
             clearSelection();
             SelectedItem item{SelectionType::FLOOR_TILE, floorTileIndex.value()};
             addItemToSelection(item);
-            _currentSelection.mode = SelectionMode::ALL;
-            notifyObservers();
+            _state.mode = SelectionMode::ALL;
+            notifySelectionChanged();
             return SelectionResult::createSuccess();
         } else {
             clearSelection();
@@ -724,16 +677,16 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
             clearSelection();
             SelectedItem item{SelectionType::OBJECT, objectsAtPos[selectedObjectIndex + 1]};
             addItemToSelection(item);
-            _currentSelection.mode = SelectionMode::ALL;
-            notifyObservers();
+            _state.mode = SelectionMode::ALL;
+            notifySelectionChanged();
             return SelectionResult::createSuccess();
         } else if (floorTileIndex) {
             // No more objects, select floor
             clearSelection();
             SelectedItem item{SelectionType::FLOOR_TILE, floorTileIndex.value()};
             addItemToSelection(item);
-            _currentSelection.mode = SelectionMode::ALL;
-            notifyObservers();
+            _state.mode = SelectionMode::ALL;
+            notifySelectionChanged();
             return SelectionResult::createSuccess();
         } else {
             clearSelection();
@@ -749,22 +702,22 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
             clearSelection();
             SelectedItem item{SelectionType::ROOF_TILE, roofTileIndex.value()};
             addItemToSelection(item);
-            _currentSelection.mode = SelectionMode::ALL;
-            notifyObservers();
+            _state.mode = SelectionMode::ALL;
+            notifySelectionChanged();
             return SelectionResult::createSuccess();
         } else if (!objectsAtPos.empty()) {
             clearSelection();
             SelectedItem item{SelectionType::OBJECT, objectsAtPos[0]};
             addItemToSelection(item);
-            _currentSelection.mode = SelectionMode::ALL;
-            notifyObservers();
+            _state.mode = SelectionMode::ALL;
+            notifySelectionChanged();
             return SelectionResult::createSuccess();
         } else if (floorTileIndex) {
             clearSelection();
             SelectedItem item{SelectionType::FLOOR_TILE, floorTileIndex.value()};
             addItemToSelection(item);
-            _currentSelection.mode = SelectionMode::ALL;
-            notifyObservers();
+            _state.mode = SelectionMode::ALL;
+            notifySelectionChanged();
             return SelectionResult::createSuccess();
         }
     }
@@ -773,65 +726,22 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
     return SelectionResult::createSuccess();
 }
 
-void SelectionManager::notifyObservers() {
-    // Clean up expired observers
-    _observers.erase(
-        std::remove_if(_observers.begin(), _observers.end(),
-            [](const std::weak_ptr<SelectionObserver>& weak) {
-                return weak.expired();
-            }),
-        _observers.end()
-    );
-    
-    // Notify remaining observers
-    for (auto& weakObserver : _observers) {
-        if (auto observer = weakObserver.lock()) {
-            if (_currentSelection.isEmpty()) {
-                observer->onSelectionCleared();
-            } else {
-                observer->onSelectionChanged(_currentSelection);
-            }
-        }
+void SelectionManager::notifySelectionChanged() {
+    if (_selectionCallback) {
+        _selectionCallback(_state);
     }
 }
 
 void SelectionManager::addItemToSelection(const SelectedItem& item) {
-    if (!isItemSelected(item)) {
-        _currentSelection.items.push_back(item);
-    }
+    _state.addItem(item);
 }
 
 void SelectionManager::removeItemFromSelection(const SelectedItem& item) {
-    _currentSelection.items.erase(
-        std::remove_if(_currentSelection.items.begin(), _currentSelection.items.end(),
-            [&item](const SelectedItem& selected) {
-                if (selected.type != item.type) {
-                    return false;
-                }
-                
-                if (item.isTile()) {
-                    return selected.getTileIndex() == item.getTileIndex();
-                } else {
-                    return selected.getObject() == item.getObject();
-                }
-            }),
-        _currentSelection.items.end()
-    );
+    _state.removeItem(item);
 }
 
 bool SelectionManager::isItemSelected(const SelectedItem& item) const {
-    return std::any_of(_currentSelection.items.begin(), _currentSelection.items.end(),
-        [&item](const SelectedItem& selected) {
-            if (selected.type != item.type) {
-                return false;
-            }
-            
-            if (item.isTile()) {
-                return selected.getTileIndex() == item.getTileIndex();
-            } else {
-                return selected.getObject() == item.getObject();
-            }
-        });
+    return _state.hasItem(item);
 }
 
 sf::Vector2f SelectionManager::getTileWorldPosition(int tileIndex) const {

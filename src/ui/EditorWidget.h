@@ -205,7 +205,6 @@ private:
     bool _tilePlacementReplaceMode = false;
     int _tilePlacementIndex = -1;
     bool _tilePlacementIsRoof = false;
-    std::shared_ptr<selection::QtSelectionObserver> _selectionObserver;
 };
 
 } // namespace geck

@@ -10,66 +10,14 @@
 #include "../util/Types.h"
 #include "../format/map/Map.h"
 #include "../editor/Object.h"
+#include "SelectionState.h"
+#include <functional>
 
 namespace geck {
     class EditorWidget; // Forward declaration
 }
 
 namespace geck::selection {
-
-// Forward declarations
-class SelectionObserver;
-
-/**
- * @brief Represents different types of selections
- */
-enum class SelectionType {
-    ROOF_TILE,
-    FLOOR_TILE,
-    OBJECT
-};
-
-/**
- * @brief Represents a single selected item
- */
-struct SelectedItem {
-    SelectionType type;
-    std::variant<int, std::shared_ptr<Object>> data; // tile index or object
-    
-    // Helper methods
-    bool isTile() const { return type == SelectionType::ROOF_TILE || type == SelectionType::FLOOR_TILE; }
-    bool isObject() const { return type == SelectionType::OBJECT; }
-    
-    int getTileIndex() const { return std::get<int>(data); }
-    std::shared_ptr<Object> getObject() const { return std::get<std::shared_ptr<Object>>(data); }
-};
-
-/**
- * @brief Represents the current selection state
- */
-struct Selection {
-    std::vector<SelectedItem> items;
-    SelectionMode mode;
-    
-    // Area selection support (for future drag operations)
-    std::optional<sf::FloatRect> selectionArea;
-    bool isDragging = false;
-    sf::Vector2f dragStartPosition;
-    
-    void clear() {
-        items.clear();
-        selectionArea.reset();
-        isDragging = false;
-    }
-    
-    bool isEmpty() const { return items.empty(); }
-    size_t count() const { return items.size(); }
-    
-    // Helper methods for different selection types
-    std::vector<int> getRoofTileIndices() const;
-    std::vector<int> getFloorTileIndices() const;
-    std::vector<std::shared_ptr<Object>> getObjects() const;
-};
 
 /**
  * @brief Result of a selection operation
@@ -85,25 +33,18 @@ struct SelectionResult {
 };
 
 /**
- * @brief Interface for classes that want to observe selection changes
- */
-class SelectionObserver {
-public:
-    virtual ~SelectionObserver() = default;
-    virtual void onSelectionChanged(const Selection& selection) = 0;
-    virtual void onSelectionCleared() = 0;
-};
-
-/**
- * @brief Manages all selection operations for tiles and objects
+ * @brief Manages core selection operations for tiles and objects
  * 
- * This class encapsulates all selection logic and prepares for future features:
- * - Drag and drop functionality
- * - Area selection for tiles
- * - Multiple object selection
+ * This class encapsulates core selection algorithms:
+ * - Position-based selection logic
+ * - Area selection calculations  
+ * - Coordinate conversions
+ * - Direct callback notification for UI updates
  */
 class SelectionManager {
 public:
+    using SelectionCallback = std::function<void(const SelectionState&)>;
+    
     explicit SelectionManager(Map* map, geck::EditorWidget* editorWidget);
     ~SelectionManager() = default;
     
@@ -130,21 +71,18 @@ public:
     void selectAll(SelectionMode mode, int currentElevation);
     void invertSelection(SelectionMode mode, int currentElevation);
     
-    // Getters
-    const Selection& getCurrentSelection() const { return _currentSelection; }
-    bool hasSelection() const { return !_currentSelection.isEmpty(); }
-    bool isDragging() const { return _currentSelection.isDragging; }
-    bool isAreaSelecting() const { return _currentSelection.selectionArea.has_value(); }
+    // State access
+    const SelectionState& getCurrentSelection() const { return _state; }
+    SelectionState& getMutableSelection() { return _state; }
+    bool hasSelection() const { return !_state.isEmpty(); }
+    bool isDragging() const { return _state.isDragging; }
+    bool isAreaSelecting() const { return _state.isAreaSelecting(); }
     
-    // Observer pattern for UI updates
-    void addObserver(std::weak_ptr<SelectionObserver> observer);
-    void removeObserver(std::weak_ptr<SelectionObserver> observer);
+    // Callback mechanism for UI updates
+    void setSelectionCallback(SelectionCallback callback) { _selectionCallback = callback; }
     
     // Helper for external classes (like EditorWidget) to check collision
     bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
-    
-    // Public access to notification (needed by SelectionBridge)
-    void notifyObservers();
     
     // Area selection helpers (public for EditorWidget usage)
     std::vector<int> getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) const;
@@ -154,8 +92,8 @@ public:
 private:
     Map* _map;
     geck::EditorWidget* _editorWidget = nullptr;
-    Selection _currentSelection;
-    std::vector<std::weak_ptr<SelectionObserver>> _observers;
+    SelectionState _state;
+    SelectionCallback _selectionCallback;
     
     // Tile selection helpers
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos, int elevation) const;
@@ -170,10 +108,13 @@ private:
     // Cycling logic for ALL mode (current behavior)
     SelectionResult cycleThroughItemsAtPosition(sf::Vector2f worldPos, int elevation);
     
-    // Internal helpers
+    // Internal helpers (now work with state and notify via renderer)
     void addItemToSelection(const SelectedItem& item);
     void removeItemFromSelection(const SelectedItem& item);
     bool isItemSelected(const SelectedItem& item) const;
+    
+    // Notification helper
+    void notifySelectionChanged();
     
     // Position calculations (will need access to sprite positioning logic)
     sf::Vector2f getTileWorldPosition(int tileIndex) const;

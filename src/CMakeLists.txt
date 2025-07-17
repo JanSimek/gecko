@@ -36,6 +36,8 @@ add_executable (${PROJECT_NAME}
     ui/TilePalettePanel.cpp
 
     # Selection management
+    selection/SelectionState.h
+    selection/SelectionState.cpp
     selection/SelectionManager.h
     selection/SelectionManager.cpp
     selection/SelectionBridge.h
