@@ -150,6 +150,11 @@ void MainWindow::setupMenuBar() {
     showScrollBlkAction->setChecked(false);
     connect(showScrollBlkAction, &QAction::toggled, this, &MainWindow::showScrollBlockersToggled);
     
+    QAction* showHexGridAction = _viewMenu->addAction("Show &Hex Grid");
+    showHexGridAction->setCheckable(true);
+    showHexGridAction->setChecked(false);
+    connect(showHexGridAction, &QAction::toggled, this, &MainWindow::showHexGridToggled);
+    
     _viewMenu->addSeparator();
     
     // Dock widgets submenu
@@ -408,6 +413,10 @@ void MainWindow::connectToEditorWidget() {
     });
     connect(this, &MainWindow::showScrollBlockersToggled, [this](bool enabled) {
         _currentEditorWidget->setShowScrollBlk(enabled);
+    });
+    
+    connect(this, &MainWindow::showHexGridToggled, [this](bool enabled) {
+        _currentEditorWidget->setShowHexGrid(enabled);
     });
     
     // Connect elevation changes

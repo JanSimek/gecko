@@ -20,7 +20,7 @@ public:
     inline static const std::filesystem::path FONT_MAIN = FONT_DIR / + "SourceSansPro-SemiBold.ttf";
     inline static const std::filesystem::path FONT_ICON = FONT_DIR / + FONT_ICON_FILE_NAME_FAS;
 
-    Application(int argc, char** argv, const std::filesystem::path& resourcePath, const std::filesystem::path& mapPath);
+    Application(int argc, char** argv);
     ~Application();
 
     bool isRunning() const;
@@ -29,7 +29,7 @@ public:
 
 private:
     void initUI();
-    std::string processCommandLineArgs(int argc, char** argv, const std::filesystem::path& resourcePath, const std::filesystem::path& mapPath);
+    std::string processCommandLineArgs();
 
     std::unique_ptr<QApplication> _qtApp;
     std::unique_ptr<MainWindow> _mainWindow;

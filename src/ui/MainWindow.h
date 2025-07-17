@@ -55,6 +55,7 @@ signals:
     void showWallsToggled(bool enabled);
     void showRoofsToggled(bool enabled);
     void showScrollBlockersToggled(bool enabled);
+    void showHexGridToggled(bool enabled);
     void elevationChanged(int elevation);
     void selectionModeRequested();
     void rotateObjectRequested();

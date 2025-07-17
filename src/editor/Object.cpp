@@ -7,7 +7,6 @@
 #include "../util/ResourceManager.h"
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
-
 #include <spdlog/spdlog.h>
 
 namespace geck {

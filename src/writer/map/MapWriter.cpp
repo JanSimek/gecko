@@ -35,7 +35,8 @@ bool MapWriter::write(const Map::MapFile& map) {
     write_be_32(map.header.map_id);
     write_be_32(map.header.timestamp);
 
-    for (int i = 0; i < 44; i++) {
+    constexpr int MAP_HEADER_UNUSED_BYTES = 44;
+    for (int i = 0; i < MAP_HEADER_UNUSED_BYTES; i++) {
         write_be_32(0); // unused bytes
     }
 
@@ -119,8 +120,8 @@ bool MapWriter::write(const Map::MapFile& map) {
 
     // FIXME: some maps (artemple.map, kladwtwn.map, all?) contain 2x extra 0x000000 at the end of the file
     // without them kladwtnwn.map crashes Fallout 2; however F2_Dims_Mapper doesn't seem to add them (?)
-    write_be_32(0);
-    write_be_32(0);
+    //write_be_32(0);
+    //write_be_32(0);
 
     return true;
 }

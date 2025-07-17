@@ -306,6 +306,16 @@ void EditorWidget::loadSprites() {
 
     // Rebuild spatial index after sprites are loaded
     _selectionManager->initializeSpatialIndex();
+    
+    // Load hex grid sprite
+    try {
+        FrmReader frm_reader{};
+        ResourceManager::getInstance().loadResource("art/HEX.frm", frm_reader);
+
+        _hexSprite.setTexture(ResourceManager::getInstance().texture("art/HEX.frm"));
+    } catch (const std::exception& e) {
+        spdlog::warn("Failed to load HEX.frm: {}", e.what());
+    }
 
     spdlog::info("Map sprites loaded in {:.3} seconds", sw);
 }
@@ -500,6 +510,7 @@ void EditorWidget::zoomView(float direction) {
     
     // Update our zoom level tracking
     _zoomLevel = newZoomLevel;
+    
     
     spdlog::debug("Zoom level: {:.2f} (direction: {:.1f}, factor: {:.3f})", _zoomLevel, direction, zoomFactor);
 }
@@ -879,6 +890,9 @@ void EditorWidget::render(const float dt) {
     for (const auto& indicator : _emptyRoofTileIndicators) {
         window->draw(indicator);
     }
+    
+    // Render hex grid overlay
+    renderHexGrid();
 }
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
@@ -1534,11 +1548,50 @@ void EditorWidget::finishObjectDrag(sf::Vector2f finalWorldPos) {
     // Calculate final drag offset
     sf::Vector2f finalOffset = finalWorldPos - _dragStartWorldPos;
     
-    // Apply the drag offset to each object using SelectionManager
+    // Snap each object to the nearest hex grid position
     int movedCount = 0;
-    for (const auto& object : _draggedObjects) {
-        if (object && _selectionManager->moveObject(object, finalOffset)) {
+    for (size_t i = 0; i < _draggedObjects.size(); ++i) {
+        auto& object = _draggedObjects[i];
+        if (!object || i >= _objectDragStartPositions.size()) {
+            continue;
+        }
+        
+        // Calculate final world position for this object
+        sf::Vector2f finalObjectPos = _objectDragStartPositions[i] + finalOffset;
+        
+        // Snap to nearest hex grid position
+        sf::Vector2f snappedPos = snapToHexGrid(finalObjectPos);
+        spdlog::debug("Snapping object from ({:.1f}, {:.1f}) to ({:.1f}, {:.1f})", 
+                     finalObjectPos.x, finalObjectPos.y, snappedPos.x, snappedPos.y);
+        
+        // Get the hex position index
+        int newHexPosition = worldPosToHexPosition(snappedPos);
+        spdlog::debug("World position ({:.1f}, {:.1f}) maps to hex position {}", 
+                     snappedPos.x, snappedPos.y, newHexPosition);
+        
+        if (newHexPosition >= 0) {
+            // Update the map object's position index for saving
+            int oldHexPosition = object->getMapObject().position;
+            object->getMapObject().position = newHexPosition;
+            
+            spdlog::info("Hex coordinate update: old position {} -> new position {}", oldHexPosition, newHexPosition);
+            
+            // Keep the object at its current drag position (it's already positioned correctly)
+            // The sprite position was set during updateObjectDrag() and should remain there
+            // No need to change the sprite position - it's already where it should be
+            
+            // Debug: Check the current sprite position
+            sf::Vector2f spritePos = object->getSprite().getPosition();
+            spdlog::debug("Object remains at current position: ({:.1f}, {:.1f})", 
+                         spritePos.x, spritePos.y);
+            
             movedCount++;
+            spdlog::debug("Snapped object to hex position {} at world pos ({:.1f}, {:.1f})", 
+                         newHexPosition, snappedPos.x, snappedPos.y);
+        } else {
+            // Invalid position - restore original position
+            object->getSprite().setPosition(_objectDragStartPositions[i]);
+            spdlog::debug("Invalid drop position - restored object to original position");
         }
     }
     
@@ -1548,7 +1601,20 @@ void EditorWidget::finishObjectDrag(sf::Vector2f finalWorldPos) {
     _objectDragStartPositions.clear();
     _objectDragOffset = sf::Vector2f(0, 0);
     
-    spdlog::info("Finished dragging: {} objects moved successfully", movedCount);
+    // Debug: Check if objects are still in the render list
+    spdlog::debug("Total objects in render list: {}", _objects.size());
+    
+    // Update selection panel to reflect new object positions
+    if (movedCount > 0) {
+        // Trigger selection update to refresh the UI panels
+        const auto& selection = _selectionManager->getCurrentSelection();
+        if (!selection.isEmpty()) {
+            // Emit selection change to update panels
+            emit selectionChanged(selection, _currentElevation);
+        }
+    }
+    
+    spdlog::info("Finished dragging: {} objects moved and snapped to hex grid", movedCount);
 }
 
 void EditorWidget::cancelObjectDrag() {
@@ -1570,6 +1636,107 @@ void EditorWidget::cancelObjectDrag() {
     _objectDragOffset = sf::Vector2f(0, 0);
     
     spdlog::info("Cancelled object drag operation");
+}
+
+// Hex grid snapping helper methods
+
+sf::Vector2f EditorWidget::snapToHexGrid(sf::Vector2f worldPos) const {
+    // Find the closest hex grid position using the hex grid system
+    // This uses the actual hex grid coordinates, not tile coordinates
+    float minDistance = std::numeric_limits<float>::max();
+    sf::Vector2f closestHexPos = worldPos;
+    
+    // Use the hex grid system (200x200) to find the closest hex position
+    const auto& hexGrid = _hexgrid.grid();
+    for (size_t i = 0; i < hexGrid.size(); ++i) {
+        const auto& hex = hexGrid[i];
+        sf::Vector2f hexWorldPos(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
+        
+        // Calculate distance from current world position
+        float dx = worldPos.x - hexWorldPos.x;
+        float dy = worldPos.y - hexWorldPos.y;
+        float distance = dx * dx + dy * dy;
+        
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestHexPos = hexWorldPos;
+        }
+    }
+    
+    return closestHexPos;
+}
+
+int EditorWidget::worldPosToHexPosition(sf::Vector2f worldPos) const {
+    // Find the hex position index that corresponds to this world position
+    const float POSITION_TOLERANCE = 50.0f; // Allow reasonable tolerance for hex grid snapping
+    
+    // Use the hex grid system (200x200) to find the matching hex position
+    const auto& hexGrid = _hexgrid.grid();
+    for (size_t i = 0; i < hexGrid.size(); ++i) {
+        const auto& hex = hexGrid[i];
+        sf::Vector2f hexWorldPos(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
+        
+        // Calculate distance from world position
+        float dx = worldPos.x - hexWorldPos.x;
+        float dy = worldPos.y - hexWorldPos.y;
+        float distance = std::sqrt(dx * dx + dy * dy);
+        
+        if (distance <= POSITION_TOLERANCE) {
+            return static_cast<int>(i);
+        }
+    }
+    
+    // No matching hex position found
+    return -1;
+}
+
+void EditorWidget::renderHexGrid() {
+    if (!_showHexGrid) {
+        return;
+    }
+    
+    auto* window = _sfmlWidget->getRenderWindow();
+    if (!window) {
+        return;
+    }
+    
+    // Get viewport bounds for culling (similar to legacy implementation)
+    sf::Vector2f viewCenter = _view.getCenter();
+    sf::Vector2f viewSize = _view.getSize();
+    
+    // Calculate visible area bounds
+    int worldX = static_cast<int>(viewCenter.x - viewSize.x / 2);
+    int worldY = static_cast<int>(viewCenter.y - viewSize.y / 2);
+    int viewWidth = static_cast<int>(viewSize.x);
+    int viewHeight = static_cast<int>(viewSize.y);
+    
+    // Iterate through 200x200 hex grid (based on legacy implementation)
+    for (int y = 0; y < 200; y++) {
+        for (int x = 0; x < 200; x++) {
+            // Convert hex coordinates to world coordinates using existing HexagonGrid
+            int hexIndex = y * 200 + x;
+            if (hexIndex >= static_cast<int>(_hexgrid.grid().size())) {
+                continue;
+            }
+            
+            Hex hexPos = _hexgrid.grid().at(hexIndex);
+            int hexWorldX = hexPos.x();
+            int hexWorldY = hexPos.y();
+            
+            // Viewport culling - only render visible hex sprites
+            // Based on legacy: (nMapX + 32 > WorldX && nMapX < WorldX + w1) && (nMapY + 16 > WorldY && nMapY < WorldY + h1)
+            if ((hexWorldX + 32 > worldX && hexWorldX < worldX + viewWidth) &&
+                (hexWorldY + 16 > worldY && hexWorldY < worldY + viewHeight)) {
+                
+                // Position hex sprite - based on legacy: nMapX - WorldX - 16, nMapY - WorldY - 8
+                float spriteX = static_cast<float>(hexWorldX - 16);
+                float spriteY = static_cast<float>(hexWorldY - 8);
+                
+                _hexSprite.setPosition(spriteX, spriteY);
+                window->draw(_hexSprite);
+            }
+        }
+    }
 }
 
 } // namespace geck

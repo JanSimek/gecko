@@ -16,21 +16,18 @@
 
 namespace geck {
 
-Application::Application(int argc, char** argv, const std::filesystem::path& resourcePath, const std::filesystem::path& mapPath)
+Application::Application(int argc, char** argv)
     : _qtApp(std::make_unique<QApplication>(argc, argv))
     , _mainWindow(nullptr) {
 
-    // Set application metadata
     _qtApp->setApplicationName("GECK::Mapper");
     _qtApp->setApplicationDisplayName("Fallout 2 Map Editor");
     _qtApp->setApplicationVersion("0.1");
     
-    // Process command line arguments
-    std::string finalMapPath = processCommandLineArgs(argc, argv, resourcePath, mapPath);
+    const std::string finalMapPath = processCommandLineArgs();
 
     initUI();
 
-    // Load the map (either from command line or show dialog)
     loadMap(finalMapPath);
 }
 
@@ -73,16 +70,18 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
     _mainWindow->setLoadingWidget(std::move(loadingWidget));
 }
 
-std::string Application::processCommandLineArgs(int /*argc*/, char** /*argv*/, const std::filesystem::path& resourcePath, const std::filesystem::path& mapPath) {
-    // Set up Qt6 command line parser
+std::string Application::processCommandLineArgs() {
     QCommandLineParser parser;
+    parser.addHelpOption();
+    parser.addVersionOption();
     parser.setApplicationDescription("Fallout 2 map editor");
     parser.addHelpOption();
     parser.addVersionOption();
 
+    const std::filesystem::path resources_path = std::filesystem::current_path() / geck::Application::RESOURCES_DIR;
     QCommandLineOption dataOption(QStringList() << "d" << "data",
         "Path to the Fallout 2 directory or individual data files, e.g. master.dat and critter.dat",
-        "path", QString::fromStdString(resourcePath.string()));
+        "path", QString::fromStdString(resources_path.string()));
     parser.addOption(dataOption);
     
     QCommandLineOption mapOption(QStringList() << "m" << "map",
@@ -99,19 +98,22 @@ std::string Application::processCommandLineArgs(int /*argc*/, char** /*argv*/, c
         spdlog::set_pattern("[%^%l%$] [thread %t] %v");
         spdlog::set_level(spdlog::level::debug);
     }
-    
-    if (parser.isSet(dataOption)) {
-        QString dataPath = parser.value(dataOption);
-        ResourceManager::getInstance().addDataPath(dataPath.toStdString());
-    } else {
-        auto dir = QtDialogs::selectFolder("Select Fallout 2 \"data\" directory which contains maps", resourcePath.string());
-        if (!dir.empty()) {
-            spdlog::info("User selected data directory: {}", dir);
-            ResourceManager::getInstance().addDataPath(dir);
-        }
-    }
 
-    return parser.isSet(mapOption) ? parser.value(mapOption).toStdString() : mapPath.string();
+
+    QString dataPath = parser.value(dataOption);
+    spdlog::info("Added {} as the default path for loading game files");
+    ResourceManager::getInstance().addDataPath(dataPath.toStdString());
+
+    // TODO: this dialog will be available in the configuration screen to append path to data paths
+    /*
+    auto dir = QtDialogs::selectFolder("Select Fallout 2 \"data\" directory which contains maps", resources_path.string());
+    if (!dir.empty()) {
+        spdlog::info("User selected data directory: {}", dir);
+        ResourceManager::getInstance().addDataPath(dir);
+    }
+    */
+
+    return parser.isSet(mapOption) ? parser.value(mapOption).toStdString() : "";
 }
 
 Application::~Application() {

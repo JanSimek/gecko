@@ -39,6 +39,7 @@ public:
     void setShowWalls(bool show) { _showWalls = show; }
     void setShowRoof(bool show) { _showRoof = show; }
     void setShowScrollBlk(bool show) { _showScrollBlk = show; }
+    void setShowHexGrid(bool show) { _showHexGrid = show; }
     
     Map* getMap() const { return _map.get(); }
     
@@ -136,6 +137,13 @@ private:
     void cancelObjectDrag();
     bool canStartObjectDrag(sf::Vector2f worldPos) const;
     
+    // Hex grid snapping helpers
+    sf::Vector2f snapToHexGrid(sf::Vector2f worldPos) const;
+    int worldPosToHexPosition(sf::Vector2f worldPos) const;
+    
+    // Hex grid visualization
+    void renderHexGrid();
+    
     // Zoom management
     void zoomView(float direction);
     
@@ -173,6 +181,7 @@ private:
     bool _showRoof = true;
     bool _showWalls = true;
     bool _showScrollBlk = true;
+    bool _showHexGrid = false;
 
     sf::Vector2i _mouseStartingPosition{ 0, 0 }; // panning started
     sf::Vector2i _mouseLastPosition{ 0, 0 };     // current panning position
@@ -209,6 +218,9 @@ private:
     
     // Empty roof tile highlighting
     std::vector<sf::RectangleShape> _emptyRoofTileIndicators; // Visual indicators for empty roof tiles
+    
+    // Hex grid visualization
+    sf::Sprite _hexSprite; // Hex grid sprite from HEX.frm
     
     // Selection management
     std::unique_ptr<selection::SelectionManager> _selectionManager;
