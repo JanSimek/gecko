@@ -97,6 +97,7 @@ signals:
     void tileSelectionCleared();
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
+    void hexHoverChanged(int hexIndex);
 
 private:
     void setupUI();
@@ -143,6 +144,7 @@ private:
     
     // Hex grid visualization
     void renderHexGrid();
+    void updateHoverHex(sf::Vector2f worldPos);
     
     // Zoom management
     void zoomView(float direction);
@@ -207,6 +209,7 @@ private:
     sf::Vector2f _dragStartWorldPos;
     sf::RectangleShape _selectionRectangle;
     bool _isDragSelecting = false;
+    bool _immediateSelectionPerformed = false; // Track if immediate selection was performed on mouse press
     std::vector<int> _previewTiles; // Tiles being previewed during drag
     std::vector<std::shared_ptr<Object>> _previewObjects; // Objects being previewed during drag
     
@@ -221,6 +224,8 @@ private:
     
     // Hex grid visualization
     sf::Sprite _hexSprite; // Hex grid sprite from HEX.frm
+    sf::Sprite _hexHighlightSprite; // Red highlight sprite for mouse hover
+    int _currentHoverHex = -1; // Current hex index under mouse cursor
     
     // Selection management
     std::unique_ptr<selection::SelectionManager> _selectionManager;

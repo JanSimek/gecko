@@ -29,14 +29,24 @@ const std::vector<Hex>& HexagonGrid::grid() const {
     return _grid;
 }
 
-uint32_t HexagonGrid::positionAt(uint32_t x, uint32_t y) {
+uint32_t HexagonGrid::positionAt(uint32_t x, uint32_t y) const {
     for (size_t i = 0; i < _grid.size(); i++) {
         const auto& hex = _grid.at(i);
         if (x >= hex.x() - Hex::HEX_WIDTH && x < hex.x() + Hex::HEX_WIDTH && y >= hex.y() - 8 && y < hex.y() + 4) {
-            return i;
+            return hex.position(); // Return the hex's actual position, not the array index
         }
     }
     return Hex::HEX_OUT_OF_MAP;
+}
+
+const Hex* HexagonGrid::getHexByPosition(uint32_t position) const {
+    // Find the hex with the matching position value
+    for (const auto& hex : _grid) {
+        if (hex.position() == position) {
+            return &hex;
+        }
+    }
+    return nullptr;
 }
 
 } // namespace geck

@@ -7,6 +7,8 @@
 #include <QTimer>
 #include <QKeyEvent>
 #include <QStackedWidget>
+#include <QStatusBar>
+#include <QLabel>
 #include <memory>
 
 QT_BEGIN_NAMESPACE
@@ -68,12 +70,14 @@ protected:
 private slots:
     void updateAndRender();
     void handleMapLoadRequest(const std::string& mapPath);
+    void updateHexIndexDisplay(int hexIndex);
 
 private:
     void setupUI();
     void setupMenuBar();
     void setupToolBar();
     void setupDockWidgets();
+    void setupStatusBar();
     
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
 
@@ -92,6 +96,10 @@ private:
     
     // Toolbar
     QToolBar* _mainToolBar;
+    
+    // Status bar
+    QStatusBar* _statusBar;
+    QLabel* _hexIndexLabel;
     
     // Dock widgets for panels
     QDockWidget* _mapInfoDock;

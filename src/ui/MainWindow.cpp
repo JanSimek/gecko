@@ -92,6 +92,7 @@ void MainWindow::setupUI() {
     setupMenuBar();
     setupToolBar();
     setupDockWidgets();
+    setupStatusBar();
 }
 
 void MainWindow::setupMenuBar() {
@@ -301,6 +302,26 @@ void MainWindow::setupDockWidgets() {
     splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
 }
 
+void MainWindow::setupStatusBar() {
+    _statusBar = statusBar();
+    
+    // Create hex index label
+    _hexIndexLabel = new QLabel("Hex: N/A");
+    _hexIndexLabel->setMinimumWidth(80);
+    _statusBar->addWidget(_hexIndexLabel);
+    
+    // Add a spacer to push hex info to the left
+    _statusBar->addPermanentWidget(new QLabel(" "), 1);
+}
+
+void MainWindow::updateHexIndexDisplay(int hexIndex) {
+    if (hexIndex >= 0) {
+        _hexIndexLabel->setText(QString("Hex: %1").arg(hexIndex));
+    } else {
+        _hexIndexLabel->setText("Hex: N/A");
+    }
+}
+
 void MainWindow::startGameLoop() {
     if (!_isRunning) {
         _isRunning = true;
@@ -488,6 +509,9 @@ void MainWindow::connectToEditorWidget() {
         
         spdlog::info("Connected TilePalettePanel to EditorWidget");
     }
+    
+    // Connect hex hover signal to status bar
+    connect(_currentEditorWidget, &EditorWidget::hexHoverChanged, this, &MainWindow::updateHexIndexDisplay);
     
     // Connect map loading signal
     connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, &MainWindow::handleMapLoadRequest);

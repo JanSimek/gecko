@@ -313,6 +313,11 @@ void EditorWidget::loadSprites() {
         ResourceManager::getInstance().loadResource("art/HEX.frm", frm_reader);
 
         _hexSprite.setTexture(ResourceManager::getInstance().texture("art/HEX.frm"));
+        _hexSprite.setColor(sf::Color(255, 255, 255, 50)); // Very transparent white for grid
+        
+        // Initialize hex highlight sprite with red color
+        _hexHighlightSprite.setTexture(ResourceManager::getInstance().texture("art/HEX.frm"));
+        _hexHighlightSprite.setColor(sf::Color(255, 0, 0, 200)); // Bright red for highlighting
     } catch (const std::exception& e) {
         spdlog::warn("Failed to load HEX.frm: {}", e.what());
     }
@@ -586,9 +591,11 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         _currentAction = EditorAction::DRAG_SELECTING;
                         _dragStartWorldPos = worldPos;
                         _isDragSelecting = false; // Will become true on first mouse move
+                        _immediateSelectionPerformed = false; // Reset flag
                     } else {
                         // Immediate selection
                         selectAtPosition(worldPos, modifier);
+                        _immediateSelectionPerformed = true; // Mark that immediate selection was performed
                     }
                 }
             } else if (event.mouseButton.button == sf::Mouse::Right) {
@@ -647,12 +654,13 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         }
                         
                         _isDragSelecting = false;
-                    } else {
-                        // Was a click, not a drag - do normal selection
+                    } else if (!_immediateSelectionPerformed) {
+                        // Was a click, not a drag - do normal selection (only if immediate selection wasn't already performed)
                         selectAtPosition(_dragStartWorldPos, SelectionModifier::NONE);
                     }
                     
                     _currentAction = EditorAction::NONE;
+                    _immediateSelectionPerformed = false; // Reset flag when action completes
                 } else if (_currentAction == EditorAction::OBJECT_MOVING) {
                     // Complete object drag operation
                     sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
@@ -749,6 +757,13 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     // Update object positions for visual feedback
                     updateObjectDrag(currentWorldPos);
                 }
+            }
+            
+            // Always update hex hover for any mouse movement
+            {
+                sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
+                    sf::Vector2i(event.mouseMove.x, event.mouseMove.y), _view);
+                updateHoverHex(currentWorldPos);
             }
             break;
             
@@ -893,6 +908,21 @@ void EditorWidget::render(const float dt) {
     
     // Render hex grid overlay
     renderHexGrid();
+    
+    // Render hex highlight if there's a valid hover hex
+    if (_currentHoverHex >= 0) {
+        // Find the hex with the matching position
+        for (const auto& hex : _hexgrid.grid()) {
+            if (hex.position() == _currentHoverHex) {
+                float spriteX = static_cast<float>(hex.x() - 16);
+                float spriteY = static_cast<float>(hex.y() - 8);
+                
+                _hexHighlightSprite.setPosition(spriteX, spriteY);
+                window->draw(_hexHighlightSprite);
+                break;
+            }
+        }
+    }
 }
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
@@ -1504,13 +1534,28 @@ bool EditorWidget::startObjectDrag(sf::Vector2f worldPos) {
         return false;
     }
     
-    // Store original positions for potential cancel/revert
+    // Store original hex center positions for drag calculations (not sprite positions)
     _objectDragStartPositions.clear();
     _objectDragStartPositions.reserve(_draggedObjects.size());
     
     for (const auto& object : _draggedObjects) {
         if (object) {
-            _objectDragStartPositions.push_back(object->getSprite().getPosition());
+            // Get the object's current hex position and convert to hex center coordinates
+            int currentHexPosition = object->getMapObject().position;
+            const Hex* currentHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(currentHexPosition));
+            if (currentHex) {
+                // Store hex center position, not sprite position
+                _objectDragStartPositions.push_back(sf::Vector2f(
+                    static_cast<float>(currentHex->x()), 
+                    static_cast<float>(currentHex->y())
+                ));
+                spdlog::debug("Object at hex {} starts drag from hex center ({}, {})", 
+                             currentHexPosition, currentHex->x(), currentHex->y());
+            } else {
+                // Fallback: use sprite position
+                _objectDragStartPositions.push_back(object->getSprite().getPosition());
+                spdlog::warn("Could not find hex for position {}, using sprite position", currentHexPosition);
+            }
         }
     }
     
@@ -1570,28 +1615,48 @@ void EditorWidget::finishObjectDrag(sf::Vector2f finalWorldPos) {
                      snappedPos.x, snappedPos.y, newHexPosition);
         
         if (newHexPosition >= 0) {
-            // Update the map object's position index for saving
-            int oldHexPosition = object->getMapObject().position;
-            object->getMapObject().position = newHexPosition;
-            
-            spdlog::info("Hex coordinate update: old position {} -> new position {}", oldHexPosition, newHexPosition);
-            
-            // Keep the object at its current drag position (it's already positioned correctly)
-            // The sprite position was set during updateObjectDrag() and should remain there
-            // No need to change the sprite position - it's already where it should be
-            
-            // Debug: Check the current sprite position
-            sf::Vector2f spritePos = object->getSprite().getPosition();
-            spdlog::debug("Object remains at current position: ({:.1f}, {:.1f})", 
-                         spritePos.x, spritePos.y);
-            
-            movedCount++;
-            spdlog::debug("Snapped object to hex position {} at world pos ({:.1f}, {:.1f})", 
-                         newHexPosition, snappedPos.x, snappedPos.y);
+            // Get the proper hex object for this position
+            const Hex* targetHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(newHexPosition));
+            if (targetHex) {
+                // Update the map object's position index for saving
+                int oldHexPosition = object->getMapObject().position;
+                
+                // Use setHexPosition to properly position the object with FRM offsets
+                object->setHexPosition(*targetHex);
+                
+                spdlog::info("Hex coordinate update: old position {} -> new position {}", oldHexPosition, newHexPosition);
+                
+                // Debug: Check the final sprite position after applying FRM offsets
+                sf::Vector2f spritePos = object->getSprite().getPosition();
+                spdlog::debug("Object positioned at ({:.1f}, {:.1f}) with FRM offsets applied", 
+                             spritePos.x, spritePos.y);
+                
+                movedCount++;
+                spdlog::debug("Snapped object to hex position {} with proper FRM offsets", newHexPosition);
+            } else {
+                spdlog::error("Failed to get hex object for position {}", newHexPosition);
+                // Invalid position - restore to original hex position
+                int originalHexPosition = object->getMapObject().position;
+                const Hex* originalHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(originalHexPosition));
+                if (originalHex) {
+                    object->setHexPosition(*originalHex);
+                } else {
+                    // Last resort: use sprite positioning
+                    object->getSprite().setPosition(_objectDragStartPositions[i]);
+                }
+            }
         } else {
-            // Invalid position - restore original position
-            object->getSprite().setPosition(_objectDragStartPositions[i]);
-            spdlog::debug("Invalid drop position - restored object to original position");
+            // Invalid position - restore to original hex position
+            int originalHexPosition = object->getMapObject().position;
+            const Hex* originalHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(originalHexPosition));
+            if (originalHex) {
+                object->setHexPosition(*originalHex);
+                spdlog::debug("Invalid drop position - restored object to original hex {}", originalHexPosition);
+            } else {
+                // Last resort: use sprite positioning
+                object->getSprite().setPosition(_objectDragStartPositions[i]);
+                spdlog::debug("Invalid drop position - restored object to original sprite position");
+            }
         }
     }
     
@@ -1622,10 +1687,18 @@ void EditorWidget::cancelObjectDrag() {
         return;
     }
     
-    // Restore original positions
+    // Restore original hex positions
     for (size_t i = 0; i < _draggedObjects.size(); ++i) {
         if (_draggedObjects[i] && i < _objectDragStartPositions.size()) {
-            _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);
+            // Restore to original hex position
+            int originalHexPosition = _draggedObjects[i]->getMapObject().position;
+            const Hex* originalHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(originalHexPosition));
+            if (originalHex) {
+                _draggedObjects[i]->setHexPosition(*originalHex);
+            } else {
+                // Fallback: use stored position
+                _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);
+            }
         }
     }
     
@@ -1641,12 +1714,11 @@ void EditorWidget::cancelObjectDrag() {
 // Hex grid snapping helper methods
 
 sf::Vector2f EditorWidget::snapToHexGrid(sf::Vector2f worldPos) const {
-    // Find the closest hex grid position using the hex grid system
-    // This uses the actual hex grid coordinates, not tile coordinates
+    // Find the closest hex grid position by iterating through actual hex positions
     float minDistance = std::numeric_limits<float>::max();
     sf::Vector2f closestHexPos = worldPos;
     
-    // Use the hex grid system (200x200) to find the closest hex position
+    // Iterate through the actual hex grid using proper position indices
     const auto& hexGrid = _hexgrid.grid();
     for (size_t i = 0; i < hexGrid.size(); ++i) {
         const auto& hex = hexGrid[i];
@@ -1667,27 +1739,15 @@ sf::Vector2f EditorWidget::snapToHexGrid(sf::Vector2f worldPos) const {
 }
 
 int EditorWidget::worldPosToHexPosition(sf::Vector2f worldPos) const {
-    // Find the hex position index that corresponds to this world position
-    const float POSITION_TOLERANCE = 50.0f; // Allow reasonable tolerance for hex grid snapping
+    // Use the hex grid's built-in positionAt method for accurate position lookup
+    uint32_t hexPosition = _hexgrid.positionAt(static_cast<uint32_t>(worldPos.x), 
+                                               static_cast<uint32_t>(worldPos.y));
     
-    // Use the hex grid system (200x200) to find the matching hex position
-    const auto& hexGrid = _hexgrid.grid();
-    for (size_t i = 0; i < hexGrid.size(); ++i) {
-        const auto& hex = hexGrid[i];
-        sf::Vector2f hexWorldPos(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
-        
-        // Calculate distance from world position
-        float dx = worldPos.x - hexWorldPos.x;
-        float dy = worldPos.y - hexWorldPos.y;
-        float distance = std::sqrt(dx * dx + dy * dy);
-        
-        if (distance <= POSITION_TOLERANCE) {
-            return static_cast<int>(i);
-        }
+    if (hexPosition == static_cast<uint32_t>(-1)) {
+        return -1;
     }
     
-    // No matching hex position found
-    return -1;
+    return static_cast<int>(hexPosition);
 }
 
 void EditorWidget::renderHexGrid() {
@@ -1719,9 +1779,17 @@ void EditorWidget::renderHexGrid() {
                 continue;
             }
             
-            Hex hexPos = _hexgrid.grid().at(hexIndex);
-            int hexWorldX = hexPos.x();
-            int hexWorldY = hexPos.y();
+            // Get the hex data for this grid index
+            const auto& hex = _hexgrid.grid().at(hexIndex);
+            int actualHexPosition = hex.position();
+            
+            // Skip rendering the hex that's currently being highlighted
+            if (actualHexPosition == _currentHoverHex) {
+                continue;
+            }
+            
+            int hexWorldX = hex.x();
+            int hexWorldY = hex.y();
             
             // Viewport culling - only render visible hex sprites
             // Based on legacy: (nMapX + 32 > WorldX && nMapX < WorldX + w1) && (nMapY + 16 > WorldY && nMapY < WorldY + h1)
@@ -1736,6 +1804,15 @@ void EditorWidget::renderHexGrid() {
                 window->draw(_hexSprite);
             }
         }
+    }
+}
+
+void EditorWidget::updateHoverHex(sf::Vector2f worldPos) {
+    int newHoverHex = worldPosToHexPosition(worldPos);
+    
+    if (newHoverHex != _currentHoverHex) {
+        _currentHoverHex = newHoverHex;
+        Q_EMIT hexHoverChanged(_currentHoverHex);
     }
 }
 
