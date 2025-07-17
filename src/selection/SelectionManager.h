@@ -93,6 +93,10 @@ public:
     std::vector<int> getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const;
     std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area, int elevation) const;
     
+    // Drag & drop implementation helpers (public for EditorWidget usage)
+    bool moveObject(std::shared_ptr<Object> object, sf::Vector2f offset);
+    bool moveTile(int sourceTileIndex, sf::Vector2f offset, bool isRoof);
+    
 private:
     Map* _map;
     geck::EditorWidget* _editorWidget = nullptr;
@@ -126,10 +130,6 @@ private:
     // Position calculations (will need access to sprite positioning logic)
     sf::Vector2f getTileWorldPosition(int tileIndex) const;
     bool isPositionInTile(sf::Vector2f worldPos, int tileIndex, bool roof) const;
-    
-    // Drag & drop implementation helpers
-    bool moveObject(std::shared_ptr<Object> object, sf::Vector2f offset);
-    bool moveTile(int sourceTileIndex, sf::Vector2f offset, bool isRoof);
 };
 
 } // namespace geck::selection

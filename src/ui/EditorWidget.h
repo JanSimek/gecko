@@ -107,8 +107,8 @@ private:
     void loadObjectSprites();
 
     // Object selection methods (moved to public)
-    bool isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite);
-    bool isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite& sprite);
+    bool isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
+    bool isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
     bool isDoubleClick(sf::Vector2f worldPos);
     
     
@@ -129,6 +129,13 @@ private:
     void clearDragPreview();
     void updateTileAreaFillPreview(sf::Vector2f currentWorldPos);
     
+    // Object drag management
+    bool startObjectDrag(sf::Vector2f worldPos);
+    void updateObjectDrag(sf::Vector2f currentWorldPos);
+    void finishObjectDrag(sf::Vector2f finalWorldPos);
+    void cancelObjectDrag();
+    bool canStartObjectDrag(sf::Vector2f worldPos) const;
+    
     // Zoom management
     void zoomView(float direction);
     
@@ -139,7 +146,8 @@ private:
         NONE,
         PANNING,
         DRAG_SELECTING,
-        TILE_PLACING
+        TILE_PLACING,
+        OBJECT_MOVING
     };
 
     // UI Components
@@ -192,6 +200,12 @@ private:
     bool _isDragSelecting = false;
     std::vector<int> _previewTiles; // Tiles being previewed during drag
     std::vector<std::shared_ptr<Object>> _previewObjects; // Objects being previewed during drag
+    
+    // Object drag state
+    bool _isDraggingObjects = false;
+    std::vector<std::shared_ptr<Object>> _draggedObjects; // Objects being dragged
+    std::vector<sf::Vector2f> _objectDragStartPositions; // Original positions for cancel/revert
+    sf::Vector2f _objectDragOffset; // Current drag offset from start position
     
     // Empty roof tile highlighting
     std::vector<sf::RectangleShape> _emptyRoofTileIndicators; // Visual indicators for empty roof tiles

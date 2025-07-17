@@ -385,11 +385,11 @@ std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vect
     return objectsAtPos;
 }
 
-bool EditorWidget::isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite& sprite) {
+bool EditorWidget::isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite& sprite) const {
     return sprite.getGlobalBounds().contains(worldPos);
 }
 
-bool EditorWidget::isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite) {
+bool EditorWidget::isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite) const {
     // First check if point is within sprite bounds
     if (!isPointInSpriteBounds(worldPos, sprite)) {
         return false;
@@ -552,22 +552,33 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     hasModifiers = true;
                 }
                 
-                // Determine if we should start drag selection or do immediate selection
-                bool canDragSelect = !hasModifiers && 
-                                   (_currentSelectionMode == SelectionMode::ALL ||
-                                    _currentSelectionMode == SelectionMode::FLOOR_TILES || 
-                                    _currentSelectionMode == SelectionMode::ROOF_TILES ||
-                                    _currentSelectionMode == SelectionMode::ROOF_TILES_ALL ||
-                                    _currentSelectionMode == SelectionMode::OBJECTS);
+                // Check if we can start object dragging (no modifiers and clicking on selected object)
+                bool canObjectDrag = !hasModifiers && canStartObjectDrag(worldPos);
                 
-                if (canDragSelect) {
-                    // Start drag selection
-                    _currentAction = EditorAction::DRAG_SELECTING;
-                    _dragStartWorldPos = worldPos;
-                    _isDragSelecting = false; // Will become true on first mouse move
+                if (canObjectDrag) {
+                    // Start object drag operation
+                    if (startObjectDrag(worldPos)) {
+                        _currentAction = EditorAction::OBJECT_MOVING;
+                        _isDragSelecting = false; // Will become true on first mouse move
+                    }
                 } else {
-                    // Immediate selection
-                    selectAtPosition(worldPos, modifier);
+                    // Determine if we should start drag selection or do immediate selection
+                    bool canDragSelect = !hasModifiers && 
+                                       (_currentSelectionMode == SelectionMode::ALL ||
+                                        _currentSelectionMode == SelectionMode::FLOOR_TILES || 
+                                        _currentSelectionMode == SelectionMode::ROOF_TILES ||
+                                        _currentSelectionMode == SelectionMode::ROOF_TILES_ALL ||
+                                        _currentSelectionMode == SelectionMode::OBJECTS);
+                    
+                    if (canDragSelect) {
+                        // Start drag selection
+                        _currentAction = EditorAction::DRAG_SELECTING;
+                        _dragStartWorldPos = worldPos;
+                        _isDragSelecting = false; // Will become true on first mouse move
+                    } else {
+                        // Immediate selection
+                        selectAtPosition(worldPos, modifier);
+                    }
                 }
             } else if (event.mouseButton.button == sf::Mouse::Right) {
                 // Start panning
@@ -628,6 +639,17 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     } else {
                         // Was a click, not a drag - do normal selection
                         selectAtPosition(_dragStartWorldPos, SelectionModifier::NONE);
+                    }
+                    
+                    _currentAction = EditorAction::NONE;
+                } else if (_currentAction == EditorAction::OBJECT_MOVING) {
+                    // Complete object drag operation
+                    sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
+                        sf::Vector2i(event.mouseButton.x, event.mouseButton.y), _view);
+                    
+                    if (_isDraggingObjects) {
+                        // Complete the drag operation
+                        finishObjectDrag(worldPos);
                     }
                     
                     _currentAction = EditorAction::NONE;
@@ -700,6 +722,22 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         updateTileAreaFillPreview(currentWorldPos);
                     }
                 }
+            } else if (_currentAction == EditorAction::OBJECT_MOVING) {
+                // Handle object drag movement
+                sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
+                    sf::Vector2i(event.mouseMove.x, event.mouseMove.y), _view);
+                
+                // Mark as actively dragging if we've moved enough
+                float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + 
+                                         std::pow(currentWorldPos.y - _dragStartWorldPos.y, 2));
+                if (distance > 5.0f) { // Minimum drag distance
+                    _isDraggingObjects = true;
+                }
+                
+                if (_isDraggingObjects) {
+                    // Update object positions for visual feedback
+                    updateObjectDrag(currentWorldPos);
+                }
             }
             break;
             
@@ -753,6 +791,14 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         _view.zoom(resetFactor);
                         _zoomLevel = 1.0f;
                         spdlog::debug("Reset zoom to 1.0");
+                    }
+                    break;
+                case sf::Keyboard::Escape:
+                    // Cancel any active operation
+                    if (_currentAction == EditorAction::OBJECT_MOVING && _isDraggingObjects) {
+                        cancelObjectDrag();
+                        _currentAction = EditorAction::NONE;
+                        spdlog::info("Object drag cancelled with ESC key");
                     }
                     break;
                 default:
@@ -1408,6 +1454,122 @@ void EditorWidget::clearDragPreview() {
     // Clear the preview arrays
     _previewTiles.clear();
     _previewObjects.clear();
+}
+
+// Object drag management methods
+
+bool EditorWidget::canStartObjectDrag(sf::Vector2f worldPos) const {
+    // Check if we have selected objects and if the click position is on a selected object
+    const auto& selection = _selectionManager->getCurrentSelection();
+    auto selectedObjects = selection.getObjects();
+    
+    if (selectedObjects.empty()) {
+        return false;
+    }
+    
+    // Check if the click position is on any selected object
+    for (const auto& object : selectedObjects) {
+        if (object && isPointInSpritePixel(worldPos, object->getSprite())) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+bool EditorWidget::startObjectDrag(sf::Vector2f worldPos) {
+    if (!canStartObjectDrag(worldPos)) {
+        return false;
+    }
+    
+    // Get selected objects to drag
+    const auto& selection = _selectionManager->getCurrentSelection();
+    _draggedObjects = selection.getObjects();
+    
+    if (_draggedObjects.empty()) {
+        return false;
+    }
+    
+    // Store original positions for potential cancel/revert
+    _objectDragStartPositions.clear();
+    _objectDragStartPositions.reserve(_draggedObjects.size());
+    
+    for (const auto& object : _draggedObjects) {
+        if (object) {
+            _objectDragStartPositions.push_back(object->getSprite().getPosition());
+        }
+    }
+    
+    // Initialize drag state
+    _isDraggingObjects = true;
+    _dragStartWorldPos = worldPos;
+    _objectDragOffset = sf::Vector2f(0, 0);
+    
+    spdlog::info("Started dragging {} objects", _draggedObjects.size());
+    return true;
+}
+
+void EditorWidget::updateObjectDrag(sf::Vector2f currentWorldPos) {
+    if (!_isDraggingObjects || _draggedObjects.empty()) {
+        return;
+    }
+    
+    // Calculate drag offset
+    _objectDragOffset = currentWorldPos - _dragStartWorldPos;
+    
+    // Apply visual offset to dragged objects (preview)
+    for (size_t i = 0; i < _draggedObjects.size(); ++i) {
+        if (_draggedObjects[i] && i < _objectDragStartPositions.size()) {
+            sf::Vector2f newPos = _objectDragStartPositions[i] + _objectDragOffset;
+            _draggedObjects[i]->getSprite().setPosition(newPos);
+        }
+    }
+}
+
+void EditorWidget::finishObjectDrag(sf::Vector2f finalWorldPos) {
+    if (!_isDraggingObjects || _draggedObjects.empty()) {
+        return;
+    }
+    
+    // Calculate final drag offset
+    sf::Vector2f finalOffset = finalWorldPos - _dragStartWorldPos;
+    
+    // Apply the drag offset to each object using SelectionManager
+    int movedCount = 0;
+    for (const auto& object : _draggedObjects) {
+        if (object && _selectionManager->moveObject(object, finalOffset)) {
+            movedCount++;
+        }
+    }
+    
+    // Clean up drag state
+    _isDraggingObjects = false;
+    _draggedObjects.clear();
+    _objectDragStartPositions.clear();
+    _objectDragOffset = sf::Vector2f(0, 0);
+    
+    spdlog::info("Finished dragging: {} objects moved successfully", movedCount);
+}
+
+void EditorWidget::cancelObjectDrag() {
+    if (!_isDraggingObjects || _draggedObjects.empty()) {
+        return;
+    }
+    
+    // Restore original positions
+    for (size_t i = 0; i < _draggedObjects.size(); ++i) {
+        if (_draggedObjects[i] && i < _objectDragStartPositions.size()) {
+            _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);
+        }
+    }
+    
+    // Clean up drag state
+    _isDraggingObjects = false;
+    _draggedObjects.clear();
+    _objectDragStartPositions.clear();
+    _objectDragOffset = sf::Vector2f(0, 0);
+    
+    spdlog::info("Cancelled object drag operation");
 }
 
 } // namespace geck
