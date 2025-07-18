@@ -179,7 +179,14 @@ TEST_CASE("Color utilities", "[tile_utils]") {
 
 TEST_CASE("Sprite highlight functions", "[tile_utils]") {
     SECTION("Apply and remove preview highlight") {
-        sf::Sprite sprite;
+        // Create a minimal 1x1 texture for testing
+        sf::Texture texture;
+        sf::Image image{sf::Vector2u{1, 1}, sf::Color::White};
+        if (!texture.loadFromImage(image)) {
+            FAIL("Failed to create test texture");
+        }
+        
+        sf::Sprite sprite(texture);
         
         // Initially white
         sprite.setColor(sf::Color::White);

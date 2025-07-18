@@ -19,21 +19,19 @@ void TileSpatialIndex::buildIndex(const std::array<sf::Sprite, TILES_PER_ELEVATI
     // Build floor tile index
     for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
         const auto& floorSprite = floorSprites[i];
-        if (floorSprite.getTexture()) {
-            sf::FloatRect bounds = floorSprite.getGlobalBounds();
-            _floorIndex.addItem(i, bounds);
-            _indexedTiles++;
-        }
+        // All sprites now have textures (either real texture or blank texture for SFML 3 compatibility)
+        sf::FloatRect bounds = floorSprite.getGlobalBounds();
+        _floorIndex.addItem(i, bounds);
+        _indexedTiles++;
     }
     
     // Build roof tile index  
     for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
         const auto& roofSprite = roofSprites[i];
-        if (roofSprite.getTexture()) {
-            sf::FloatRect bounds = roofSprite.getGlobalBounds();
-            _roofIndex.addItem(i, bounds);
-            _indexedTiles++;
-        }
+        // All sprites now have textures (either real texture or blank texture for SFML 3 compatibility)  
+        sf::FloatRect bounds = roofSprite.getGlobalBounds();
+        _roofIndex.addItem(i, bounds);
+        _indexedTiles++;
     }
 }
 
@@ -44,8 +42,8 @@ std::vector<int> TileSpatialIndex::getTilesInArea(sf::FloatRect area, bool roof)
 
 std::vector<int> TileSpatialIndex::getTilesInRadius(sf::Vector2f center, float radius, bool roof) const {
     // Convert radius to bounding box for initial query
-    sf::FloatRect area(center.x - radius, center.y - radius, radius * 2, radius * 2);
-    
+    sf::FloatRect area({center.x - radius, center.y - radius}, { radius * 2, radius * 2 });
+
     std::vector<int> candidates = getTilesInArea(area, roof);
     std::vector<int> results;
     results.reserve(candidates.size());
@@ -121,8 +119,8 @@ sf::FloatRect TileSpatialIndex::getTileBounds(int tileIndex, bool roof) const {
     sf::Vector2f position(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y));
     
     // Create bounds based on tile size
-    return sf::FloatRect(position.x - TILE_WIDTH / 2, position.y - TILE_HEIGHT / 2, 
-                        TILE_WIDTH, TILE_HEIGHT);
+    return sf::FloatRect({ position.x - TILE_WIDTH / 2, position.y - TILE_HEIGHT / 2 },
+        {TILE_WIDTH, TILE_HEIGHT});
 }
 
 bool TileSpatialIndex::isValidTileIndex(int index) const {

@@ -366,7 +366,7 @@ void SelectionManager::cancelDrag() {
 }
 
 bool SelectionManager::startAreaSelection(sf::Vector2f startPos, SelectionMode mode) {
-    _state.selectionArea = sf::FloatRect(startPos.x, startPos.y, 0, 0);
+    _state.selectionArea = sf::FloatRect({startPos.x, startPos.y}, {0, 0});
     _state.mode = mode;
     
     spdlog::debug("Started area selection at ({:.2f}, {:.2f}) for mode: {}", 
@@ -380,7 +380,7 @@ void SelectionManager::updateAreaSelection(sf::Vector2f currentPos) {
     }
     
     auto& rect = _state.selectionArea.value();
-    sf::Vector2f startPos(rect.left, rect.top);
+    sf::Vector2f startPos(rect.position.x, rect.position.y);
     
     // Update rectangle to encompass start and current position
     float left = std::min(startPos.x, currentPos.x);
@@ -388,10 +388,10 @@ void SelectionManager::updateAreaSelection(sf::Vector2f currentPos) {
     float right = std::max(startPos.x, currentPos.x);
     float bottom = std::max(startPos.y, currentPos.y);
     
-    rect = sf::FloatRect(left, top, right - left, bottom - top);
-    
+    rect = sf::FloatRect({left, top}, { right - left, bottom - top });
+
     spdlog::debug("Updated area selection: ({:.2f}, {:.2f}, {:.2f}, {:.2f})", 
-                 rect.left, rect.top, rect.width, rect.height);
+                 rect.position.x, rect.position.y, rect.size.x, rect.size.y);
 }
 
 SelectionResult SelectionManager::finishAreaSelection() {
@@ -538,7 +538,7 @@ std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, boo
     for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
         sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
         
-        if (area.intersects(tileBounds)) {
+        if (area.findIntersection(tileBounds)) {
             if (roof) {
                 if (mapFile.tiles.at(currentElevation).at(i).getRoof() != Map::EMPTY_TILE) {
                     result.push_back(i);
@@ -569,7 +569,7 @@ std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatR
     for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
         sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
         
-        if (area.intersects(tileBounds)) {
+        if (area.findIntersection(tileBounds)) {
             result.push_back(i);
         }
     }
@@ -590,7 +590,7 @@ std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf
         sf::FloatRect objectBounds = sprite.getGlobalBounds();
         
         // Use simple bounds intersection test (much faster than hit detection)
-        if (area.intersects(objectBounds)) {
+        if (area.findIntersection(objectBounds)) {
             result.push_back(object);
         }
     }

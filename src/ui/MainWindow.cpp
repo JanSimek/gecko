@@ -357,7 +357,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
     if (_currentEditorWidget) {
         SFMLWidget* sfmlWidget = _currentEditorWidget->getSFMLWidget();
         if (sfmlWidget) {
-            sf::Event sfmlEvent;
+            sf::Event sfmlEvent{sf::Event::KeyPressed{sf::Keyboard::Key::Unknown}};
             convertQtEventToSFML(event, sfmlEvent, true);
             sfmlWidget->handleSFMLEvent(sfmlEvent);
         }
@@ -369,7 +369,7 @@ void MainWindow::keyReleaseEvent(QKeyEvent* event) {
     if (_currentEditorWidget) {
         SFMLWidget* sfmlWidget = _currentEditorWidget->getSFMLWidget();
         if (sfmlWidget) {
-            sf::Event sfmlEvent;
+            sf::Event sfmlEvent{sf::Event::KeyReleased{sf::Keyboard::Key::Unknown}};
             convertQtEventToSFML(event, sfmlEvent, false);
             sfmlWidget->handleSFMLEvent(sfmlEvent);
         }
@@ -378,29 +378,32 @@ void MainWindow::keyReleaseEvent(QKeyEvent* event) {
 }
 
 void MainWindow::convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed) {
-    sfmlEvent.type = pressed ? sf::Event::KeyPressed : sf::Event::KeyReleased;
-    
     // Convert Qt key to SFML key
+    sf::Keyboard::Key key = sf::Keyboard::Key::Unknown;
     switch (qtEvent->key()) {
-        case Qt::Key_Escape: sfmlEvent.key.code = sf::Keyboard::Escape; break;
-        case Qt::Key_Left: sfmlEvent.key.code = sf::Keyboard::Left; break;
-        case Qt::Key_Right: sfmlEvent.key.code = sf::Keyboard::Right; break;
-        case Qt::Key_Up: sfmlEvent.key.code = sf::Keyboard::Up; break;
-        case Qt::Key_Down: sfmlEvent.key.code = sf::Keyboard::Down; break;
-        case Qt::Key_N: sfmlEvent.key.code = sf::Keyboard::N; break;
-        case Qt::Key_O: sfmlEvent.key.code = sf::Keyboard::O; break;
-        case Qt::Key_S: sfmlEvent.key.code = sf::Keyboard::S; break;
-        case Qt::Key_Q: sfmlEvent.key.code = sf::Keyboard::Q; break;
-        case Qt::Key_R: sfmlEvent.key.code = sf::Keyboard::R; break;
-        case Qt::Key_M: sfmlEvent.key.code = sf::Keyboard::M; break;
-        default: sfmlEvent.key.code = sf::Keyboard::Unknown; break;
+        case Qt::Key_Escape: key = sf::Keyboard::Key::Escape; break;
+        case Qt::Key_Left: key = sf::Keyboard::Key::Left; break;
+        case Qt::Key_Right: key = sf::Keyboard::Key::Right; break;
+        case Qt::Key_Up: key = sf::Keyboard::Key::Up; break;
+        case Qt::Key_Down: key = sf::Keyboard::Key::Down; break;
+        case Qt::Key_N: key = sf::Keyboard::Key::N; break;
+        case Qt::Key_O: key = sf::Keyboard::Key::O; break;
+        case Qt::Key_S: key = sf::Keyboard::Key::S; break;
+        case Qt::Key_Q: key = sf::Keyboard::Key::Q; break;
+        case Qt::Key_R: key = sf::Keyboard::Key::R; break;
+        case Qt::Key_M: key = sf::Keyboard::Key::M; break;
+        default: key = sf::Keyboard::Key::Unknown; break;
     }
     
-    // Convert modifiers
-    sfmlEvent.key.control = qtEvent->modifiers() & Qt::ControlModifier;
-    sfmlEvent.key.shift = qtEvent->modifiers() & Qt::ShiftModifier;
-    sfmlEvent.key.alt = qtEvent->modifiers() & Qt::AltModifier;
-    sfmlEvent.key.system = qtEvent->modifiers() & Qt::MetaModifier;
+    // Create the proper SFML 3 event
+    if (pressed) {
+        sfmlEvent = sf::Event::KeyPressed{key};
+    } else {
+        sfmlEvent = sf::Event::KeyReleased{key};
+    }
+    
+    // Note: SFML 3 events don't store modifier states directly
+    // Modifiers should be checked using sf::Keyboard::isKeyPressed() when needed
 }
 
 void MainWindow::connectToEditorWidget() {

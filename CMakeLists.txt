@@ -46,7 +46,7 @@ set(CMAKE_AUTOUIC ON)
 
 # SFML - prefer system package
 if(GECK_USE_SYSTEM_LIBS)
-    find_package(SFML 2.5 COMPONENTS system window graphics)
+    find_package(SFML 3 COMPONENTS System Window Graphics)
 endif()
 
 if(NOT SFML_FOUND)
@@ -54,7 +54,7 @@ if(NOT SFML_FOUND)
     FetchContent_Declare(
             SFML
             GIT_REPOSITORY https://github.com/SFML/SFML.git
-            GIT_TAG 2.6.1
+            GIT_TAG 3.0.1
             GIT_SHALLOW TRUE
     )
     set(SFML_BUILD_AUDIO FALSE CACHE BOOL "Build audio module")

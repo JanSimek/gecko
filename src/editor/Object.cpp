@@ -89,7 +89,7 @@ void Object::setDirection(ObjectDirection direction) {
     uint16_t width = first_frame.width();
     uint16_t height = first_frame.height();
 
-    _sprite.setTextureRect({ left, top, width, height });
+    _sprite.setTextureRect({ {left, top}, {width, height} });
 }
 
 void Object::rotate() {

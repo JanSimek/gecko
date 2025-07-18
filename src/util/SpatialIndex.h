@@ -222,7 +222,7 @@ void SpatialIndex<T>::queryArea(sf::FloatRect area, QueryCallback callback) cons
             
             const auto& item = itemIt->second;
             // Check if item bounds actually intersect with query area
-            if (item->bounds.intersects(area)) {
+            if (item->bounds.findIntersection(area)) {
                 if (!callback(item->data)) {
                     return; // Callback requested to stop
                 }
@@ -242,8 +242,8 @@ template<typename T>
 std::vector<typename SpatialIndex<T>::CellKey> SpatialIndex<T>::boundsToKeys(sf::FloatRect bounds) const {
     std::vector<CellKey> keys;
     
-    CellKey minKey = worldToCell({bounds.left, bounds.top});
-    CellKey maxKey = worldToCell({bounds.left + bounds.width, bounds.top + bounds.height});
+    CellKey minKey = worldToCell({bounds.position.x, bounds.position.y});
+    CellKey maxKey = worldToCell({bounds.position.x + bounds.size.x, bounds.position.y + bounds.size.y});
     
     for (int x = minKey.first; x <= maxKey.first; ++x) {
         for (int y = minKey.second; y <= maxKey.second; ++y) {

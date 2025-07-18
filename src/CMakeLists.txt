@@ -191,7 +191,7 @@ target_link_libraries(vault PRIVATE
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    sfml-system sfml-graphics sfml-window
+    SFML::System SFML::Graphics SFML::Window
     Qt6::Core
     Qt6::Widgets
     spdlog::spdlog_header_only

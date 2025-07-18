@@ -171,10 +171,10 @@ inline sf::RectangleShape createTileIndicator(
     indicator.setFillColor(fillColor);
     indicator.setOutlineColor(outlineColor);
     indicator.setOutlineThickness(1.0f);
-    indicator.setPosition(
+    indicator.setPosition({
         static_cast<float>(position.x) - size/2,
         static_cast<float>(position.y) - size/2
-    );
+    });
     return indicator;
 }
 

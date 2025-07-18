@@ -306,12 +306,12 @@ void SelectionPanel::updateObjectInfo() {
                 auto textureRect = sprite.getTextureRect();
                 
                 // Create QImage from SFML image data
-                const sf::Uint8* pixels = image.getPixelsPtr();
+                const std::uint8_t* pixels = image.getPixelsPtr();
                 QImage qImage(pixels, image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
                 
                 // Extract the sprite's texture rectangle if needed
-                if (textureRect.width > 0 && textureRect.height > 0) {
-                    qImage = qImage.copy(textureRect.left, textureRect.top, textureRect.width, textureRect.height);
+                if (textureRect.size.x > 0 && textureRect.size.y > 0) {
+                    qImage = qImage.copy(textureRect.position.x, textureRect.position.y, textureRect.size.x, textureRect.size.y);
                 }
                 
                 // Create pixmap and scale to fit label while maintaining aspect ratio
@@ -471,7 +471,7 @@ void SelectionPanel::loadTilePreview(Lst* tilesList, uint16_t tileId) {
         
         // Convert SFML texture to QPixmap for display
         auto image = texture.copyToImage();
-        const sf::Uint8* pixels = image.getPixelsPtr();
+        const std::uint8_t* pixels = image.getPixelsPtr();
         QImage qImage(pixels, image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
         
         // Create pixmap and scale to fit label while maintaining aspect ratio

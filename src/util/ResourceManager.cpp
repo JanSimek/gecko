@@ -144,7 +144,7 @@ const sf::Image ResourceManager::imageFromFrm(Frm* frm, Pal* pal) {
     unsigned maxHeight = frm->maxFrameHeight();
 
     sf::Image image{};
-    image.create(frm->width(), frm->height(), { 0, 0, 0, 0 });
+    image.resize({frm->width(), frm->height()}, { 0, 0, 0, 0 });
 
     int yOffset = 0;
     for (const auto& direction : frm->directions()) {
@@ -177,8 +177,7 @@ const sf::Image ResourceManager::imageFromFrm(Frm* frm, Pal* pal) {
                     }
 
                     image.setPixel(
-                        maxWidth * xOffset + x,
-                        maxHeight * yOffset + y,
+                        {maxWidth * xOffset + x, maxHeight * yOffset + y},
                         { r, g, b, a });
                 }
             }

@@ -83,7 +83,7 @@ void EditorWidget::initializeSelectionSystem() {
                             auto screenPos = indexToScreenPosition(tileIndex, true);
                             
                             // Position indicator at calculated screen position
-                            indicator.setPosition(static_cast<float>(screenPos.x) - 10, static_cast<float>(screenPos.y) - 10);
+                            indicator.setPosition({static_cast<float>(screenPos.x) - 10, static_cast<float>(screenPos.y) - 10});
                             _emptyRoofTileIndicators.push_back(indicator);
                         } else {
                             // Apply normal highlighting to existing roof sprite
@@ -170,7 +170,7 @@ void EditorWidget::init() {
     if (_sfmlWidget && _sfmlWidget->getRenderWindow()) {
         sf::Vector2u windowSize = _sfmlWidget->getRenderWindow()->getSize();
         if (windowSize.x > 0 && windowSize.y > 0) {
-            _view.setSize(static_cast<float>(windowSize.x), static_cast<float>(windowSize.y));
+            _view.setSize({static_cast<float>(windowSize.x), static_cast<float>(windowSize.y)});
             spdlog::debug("EditorWidget::init() - Set initial view size to {}x{}", windowSize.x, windowSize.y);
         }
     }
@@ -268,7 +268,7 @@ void EditorWidget::loadTileSprites() {
 
         const auto& createTileSprite = [&](const uint16_t tile_id, int offset = 0) {
             sf::Sprite tile_sprite(ResourceManager::getInstance().texture("art/tiles/" + lst->at(tile_id)));
-            tile_sprite.setPosition(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) - offset);
+            tile_sprite.setPosition({static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) - offset});
             return tile_sprite;
         };
 
@@ -276,7 +276,7 @@ void EditorWidget::loadTileSprites() {
         uint16_t floorId = tile.getFloor();
         if (floorId == Map::EMPTY_TILE) {
             sf::Sprite tile_sprite(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
-            tile_sprite.setPosition(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y));
+            tile_sprite.setPosition({static_cast<float>(screenPos.x), static_cast<float>(screenPos.y)});
             _floorSprites[tileNumber] = tile_sprite;
         } else {
             _floorSprites[tileNumber] = createTileSprite(floorId);
@@ -334,7 +334,7 @@ void EditorWidget::centerViewOnMap() {
     float centerX = (100 - 50 - 1) * 48 + 32 * (50 - 1);  // ≈ 3920
     float centerY = 50 * 24 + (50 - 1) * 12 + 1;          // ≈ 1789
     
-    _view.setCenter(centerX, centerY);
+    _view.setCenter({centerX, centerY});
     spdlog::debug("EditorWidget::centerViewOnMap() - Set view center to ({:.1f}, {:.1f})", centerX, centerY);
 }
 
@@ -418,15 +418,15 @@ bool EditorWidget::isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite&
     }
     
     // Convert world position to sprite-local coordinates
-    sf::Vector2f localPos = worldPos - sf::Vector2f(bounds.left, bounds.top);
+    sf::Vector2f localPos = worldPos - sf::Vector2f(bounds.position.x, bounds.position.y);
     
     // Apply sprite's texture rectangle and scale
     const auto textureRect = sprite.getTextureRect();
     const auto scale = sprite.getScale();
     
     // Convert to texture coordinates
-    int texX = static_cast<int>((localPos.x / scale.x) + textureRect.left);
-    int texY = static_cast<int>((localPos.y / scale.y) + textureRect.top);
+    int texX = static_cast<int>((localPos.x / scale.x) + textureRect.position.x);
+    int texY = static_cast<int>((localPos.y / scale.y) + textureRect.position.y);
     
     // Get texture size
     const auto texSize = texture->getSize();
@@ -527,15 +527,15 @@ void EditorWidget::handleEvent(const sf::Event& event) {
     
     switch (event.type) {
         case sf::Event::MouseButtonPressed:
-            if (event.mouseButton.button == sf::Mouse::Left) {
+            if (event.mouseButton.button == sf::Mouse::Button::Left) {
                 sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
                     sf::Vector2i(event.mouseButton.x, event.mouseButton.y), _view);
                 
                 // Check if we're in tile placement mode
                 if (_tilePlacementMode && _tilePlacementIndex >= 0 && !_tilePlacementReplaceMode) {
                     // Check if Shift is held to place roof tiles instead of floor tiles
-                    bool placeOnRoof = sf::Keyboard::isKeyPressed(sf::Keyboard::LShift) || 
-                                      sf::Keyboard::isKeyPressed(sf::Keyboard::RShift);
+                    bool placeOnRoof = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || 
+                                      sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
                     
                     if (_tilePlacementAreaFill) {
                         // Start area selection for tile filling
@@ -554,16 +554,16 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 // Detect modifier keys for multi-selection
                 SelectionModifier modifier = SelectionModifier::NONE;
                 bool hasModifiers = false;
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) || 
-                    sf::Keyboard::isKeyPressed(sf::Keyboard::RControl)) {
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || 
+                    sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl)) {
                     modifier = SelectionModifier::TOGGLE;  // Ctrl+Click toggles items
                     hasModifiers = true;
-                } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::LAlt) || 
-                          sf::Keyboard::isKeyPressed(sf::Keyboard::RAlt)) {
+                } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LAlt) || 
+                          sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RAlt)) {
                     modifier = SelectionModifier::ADD;     // Alt+Click (Option on macOS) adds items
                     hasModifiers = true;
-                } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::LShift) || 
-                          sf::Keyboard::isKeyPressed(sf::Keyboard::RShift)) {
+                } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || 
+                          sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift)) {
                     modifier = SelectionModifier::RANGE;   // Shift+Click range selection
                     hasModifiers = true;
                 }
@@ -598,7 +598,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         _immediateSelectionPerformed = true; // Mark that immediate selection was performed
                     }
                 }
-            } else if (event.mouseButton.button == sf::Mouse::Right) {
+            } else if (event.mouseButton.button == sf::Mouse::Button::Right) {
                 // Start panning
                 _currentAction = EditorAction::PANNING;
                 _mouseStartingPosition = sf::Vector2i(event.mouseButton.x, event.mouseButton.y);
@@ -607,7 +607,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
             break;
             
         case sf::Event::MouseButtonReleased:
-            if (event.mouseButton.button == sf::Mouse::Left) {
+            if (event.mouseButton.button == sf::Mouse::Button::Left) {
                 if (_currentAction == EditorAction::TILE_PLACING) {
                     // Clear preview visuals first
                     clearDragPreview();
@@ -777,58 +777,60 @@ void EditorWidget::handleEvent(const sf::Event& event) {
             
         case sf::Event::KeyPressed:
             // Arrow key movement
-            switch (event.key.code) {
-                case sf::Keyboard::Left:
-                case sf::Keyboard::A:
-                    // Ctrl+A: Select all items of current type
-                    if (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) || 
-                        sf::Keyboard::isKeyPressed(sf::Keyboard::RControl)) {
+            if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>()) {
+                switch (keyPressed->scancode) {
+                    case sf::Keyboard::Scancode::Left:
+                    case sf::Keyboard::Scancode::A:
+                        // Ctrl+A: Select all items of current type
+                        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || 
+                            sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl)) {
                         _selectionManager->selectAll(_currentSelectionMode, _currentElevation);
                         spdlog::info("Select all: {} items", _selectionManager->getCurrentSelection().count());
                     } else {
                         _view.move(-50.0f, 0.0f);
                     }
                     break;
-                case sf::Keyboard::Right:
-                case sf::Keyboard::D:
-                    // Ctrl+D: Deselect all
-                    if (sf::Keyboard::isKeyPressed(sf::Keyboard::LControl) || 
-                        sf::Keyboard::isKeyPressed(sf::Keyboard::RControl)) {
-                        _selectionManager->clearSelection();
-                        spdlog::info("Deselected all items");
-                    } else {
-                        _view.move(50.0f, 0.0f);
-                    }
-                    break;
-                case sf::Keyboard::Up:
-                case sf::Keyboard::W:
-                    _view.move(0.0f, -50.0f);
-                    break;
-                case sf::Keyboard::Down:
-                case sf::Keyboard::S:
-                    _view.move(0.0f, 50.0f);
-                    break;
-                case sf::Keyboard::Home:
-                    // Reset to center and normal zoom
-                    centerViewOnMap();
-                    // Reset zoom to 1.0
-                    if (_zoomLevel != 1.0f) {
-                        float resetFactor = 1.0f / _zoomLevel;
-                        _view.zoom(resetFactor);
-                        _zoomLevel = 1.0f;
-                        spdlog::debug("Reset zoom to 1.0");
-                    }
-                    break;
-                case sf::Keyboard::Escape:
-                    // Cancel any active operation
-                    if (_currentAction == EditorAction::OBJECT_MOVING && _isDraggingObjects) {
-                        cancelObjectDrag();
-                        _currentAction = EditorAction::NONE;
-                        spdlog::info("Object drag cancelled with ESC key");
-                    }
-                    break;
-                default:
-                    break;
+                    case sf::Keyboard::Scancode::Right:
+                    case sf::Keyboard::Scancode::D:
+                        // Ctrl+D: Deselect all
+                            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || 
+                                sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl)) {
+                            _selectionManager->clearSelection();
+                            spdlog::info("Deselected all items");
+                        } else {
+                            _view.move(50.0f, 0.0f);
+                        }
+                        break;
+                    case sf::Keyboard::Scancode::Up:
+                    case sf::Keyboard::Scancode::W:
+                        _view.move(0.0f, -50.0f);
+                        break;
+                    case sf::Keyboard::Scancode::Down:
+                    case sf::Keyboard::Scancode::S:
+                        _view.move(0.0f, 50.0f);
+                        break;
+                    case sf::Keyboard::Scancode::Home:
+                        // Reset to center and normal zoom
+                        centerViewOnMap();
+                        // Reset zoom to 1.0
+                        if (_zoomLevel != 1.0f) {
+                            float resetFactor = 1.0f / _zoomLevel;
+                            _view.zoom(resetFactor);
+                            _zoomLevel = 1.0f;
+                            spdlog::debug("Reset zoom to 1.0");
+                        }
+                        break;
+                    case sf::Keyboard::Scancode::Escape:
+                        // Cancel any active operation
+                        if (_currentAction == EditorAction::OBJECT_MOVING && _isDraggingObjects) {
+                            cancelObjectDrag();
+                            _currentAction = EditorAction::NONE;
+                            spdlog::info("Object drag cancelled with ESC key");
+                        }
+                        break;
+                    default:
+                        break;
+                }
             }
             break;
             
@@ -1336,7 +1338,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     auto result = _selectionManager->selectArea(selectionArea, areaMode, _currentElevation);
     
     spdlog::info("Range selection: area ({:.1f}, {:.1f}, {:.1f}, {:.1f})", 
-                 selectionArea.left, selectionArea.top, selectionArea.width, selectionArea.height);
+                 selectionArea.position.x, selectionArea.position.y, selectionArea.width, selectionArea.height);
     
     return result;
 }

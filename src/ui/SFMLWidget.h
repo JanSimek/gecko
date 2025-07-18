@@ -36,7 +36,7 @@ public slots:
     void updateAndRender();
 
 private:
-    void convertQtMouseEventToSFML(QMouseEvent* qtEvent, sf::Event& sfmlEvent, sf::Event::EventType type);
+    void convertQtMouseEventToSFML(QMouseEvent* qtEvent, sf::Event& sfmlEvent, bool isPressed);
     void convertQtWheelEventToSFML(QWheelEvent* qtEvent, sf::Event& sfmlEvent);
 
     std::unique_ptr<sf::RenderWindow> _renderWindow;

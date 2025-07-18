@@ -102,14 +102,14 @@ public:
     void startAreaSelection(sf::Vector2f startPos, SelectionMode selectionMode) {
         dragStartPosition = startPos;
         mode = selectionMode;
-        selectionArea = sf::FloatRect(startPos.x, startPos.y, 0.0f, 0.0f);
+        selectionArea = sf::FloatRect({startPos.x, startPos.y}, {0.0f, 0.0f});
     }
     
     void updateAreaSelection(sf::Vector2f currentPos) {
         if (selectionArea.has_value()) {
             auto& area = selectionArea.value();
-            area.width = currentPos.x - dragStartPosition.x;
-            area.height = currentPos.y - dragStartPosition.y;
+            area.size.x = currentPos.x - dragStartPosition.x;
+            area.size.y = currentPos.y - dragStartPosition.y;
         }
     }
     

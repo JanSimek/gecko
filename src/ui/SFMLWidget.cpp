@@ -77,10 +77,12 @@ void SFMLWidget::resizeEvent(QResizeEvent* event) {
         // This prevents conflicting view configurations
         
         // Convert resize event to SFML event and forward to state machine
-        sf::Event sfmlEvent;
-        sfmlEvent.type = sf::Event::Resized;
-        sfmlEvent.size.width = event->size().width();
-        sfmlEvent.size.height = event->size().height();
+        sf::Event sfmlEvent = sf::Event::Resized{
+                {
+                    static_cast<unsigned int>(event->size().width()),
+                   static_cast<unsigned int>(event->size().height())
+                }
+        };
         
         if (_editorWidget) {
             _editorWidget->handleEvent(sfmlEvent);
@@ -109,7 +111,7 @@ void SFMLWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void SFMLWidget::wheelEvent(QWheelEvent* event) {
-    sf::Event sfmlEvent;
+    sf::Event sfmlEvent{sf::Event::MouseWheelScrolled{sf::Mouse::Wheel::Vertical, 0.0f, sf::Vector2i{0, 0}}};
     convertQtWheelEventToSFML(event, sfmlEvent);
     handleSFMLEvent(sfmlEvent);
     
@@ -129,10 +131,9 @@ void SFMLWidget::updateAndRender() {
     // Calculate delta time
     float deltaTime = _deltaClock.restart().asSeconds();
     
-    // Process SFML events
-    sf::Event event;
-    while (_renderWindow->pollEvent(event)) {
-        handleSFMLEvent(event);
+    // Process SFML events (SFML 3 style)
+    while (const std::optional event = _renderWindow->pollEvent()) {
+        handleSFMLEvent(*event);
     }
     
     // Update and render current state
@@ -151,35 +152,39 @@ void SFMLWidget::handleSFMLEvent(const sf::Event& event) {
     }
 }
 
-void SFMLWidget::convertQtMouseEventToSFML(QMouseEvent* qtEvent, sf::Event& sfmlEvent, sf::Event::EventType type) {
-    sfmlEvent.type = type;
-    
+void SFMLWidget::convertQtMouseEventToSFML(QMouseEvent* qtEvent, sf::Event& sfmlEvent, bool isPressed) {
     // Convert mouse button
+    sf::Mouse::Button button = sf::Mouse::Button::Left;
     switch (qtEvent->button()) {
         case Qt::LeftButton:
-            sfmlEvent.mouseButton.button = sf::Mouse::Left;
+            button = sf::Mouse::Button::Left;
             break;
         case Qt::RightButton:
-            sfmlEvent.mouseButton.button = sf::Mouse::Right;
+            button = sf::Mouse::Button::Right;
             break;
         case Qt::MiddleButton:
-            sfmlEvent.mouseButton.button = sf::Mouse::Middle;
+            button = sf::Mouse::Button::Middle;
             break;
         default:
-            sfmlEvent.mouseButton.button = sf::Mouse::Left;
+            button = sf::Mouse::Button::Left;
             break;
     }
     
-    sfmlEvent.mouseButton.x = qtEvent->position().x();
-    sfmlEvent.mouseButton.y = qtEvent->position().y();
+    // Create the appropriate SFML 3 event
+    sf::Vector2i position{static_cast<int>(qtEvent->position().x()), static_cast<int>(qtEvent->position().y())};
+    if (isPressed) {
+        sfmlEvent = sf::Event::MouseButtonPressed{button, position};
+    } else {
+        sfmlEvent = sf::Event::MouseButtonReleased{button, position};
+    }
 }
 
 void SFMLWidget::convertQtWheelEventToSFML(QWheelEvent* qtEvent, sf::Event& sfmlEvent) {
-    sfmlEvent.type = sf::Event::MouseWheelScrolled;
-    sfmlEvent.mouseWheelScroll.wheel = sf::Mouse::VerticalWheel;
-    sfmlEvent.mouseWheelScroll.delta = qtEvent->angleDelta().y() / 120.0f; // Convert to wheel steps
-    sfmlEvent.mouseWheelScroll.x = qtEvent->position().x();
-    sfmlEvent.mouseWheelScroll.y = qtEvent->position().y();
+    sfmlEvent = sf::Event::MouseWheelScrolled{
+        sf::Mouse::Wheel::Vertical,
+        qtEvent->angleDelta().y() / 120.0f, // Convert to wheel steps
+        sf::Vector2i{static_cast<int>(qtEvent->position().x()), static_cast<int>(qtEvent->position().y())}
+    };
 }
 
 } // namespace geck
