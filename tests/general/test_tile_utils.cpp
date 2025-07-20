@@ -175,6 +175,14 @@ TEST_CASE("Color utilities", "[tile_utils]") {
         auto white = TileColors::white();
         REQUIRE(white == sf::Color::White);
     }
+    
+    SECTION("Transparent color") {
+        auto transparent = TileColors::transparent();
+        REQUIRE(transparent.r == 255);
+        REQUIRE(transparent.g == 255);
+        REQUIRE(transparent.b == 255);
+        REQUIRE(transparent.a == 0);
+    }
 }
 
 TEST_CASE("Sprite highlight functions", "[tile_utils]") {

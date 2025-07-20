@@ -291,7 +291,7 @@ void EditorWidget::loadTileSprites() {
             sf::Sprite tile_sprite(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
             tile_sprite.setPosition({static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) - ROOF_OFFSET});
             // Make empty roof tiles fully transparent by default
-            tile_sprite.setColor(sf::Color(255, 255, 255, 0));
+            tile_sprite.setColor(geck::TileColors::transparent());
             _roofSprites[tileNumber] = tile_sprite;
         } else {
             _roofSprites[tileNumber] = createTileSprite(roofId, ROOF_OFFSET);
@@ -469,7 +469,7 @@ void EditorWidget::clearAllVisualSelections() {
     for (int i = 0; i < static_cast<int>(_roofSprites.size()); ++i) {
         auto tile = _map->getMapFile().tiles.at(_currentElevation).at(i);
         if (tile.getRoof() == Map::EMPTY_TILE) {
-            _roofSprites[i].setColor(sf::Color(255, 255, 255, 0)); // Transparent
+            _roofSprites[i].setColor(geck::TileColors::transparent()); // Transparent
         } else {
             _roofSprites[i].setColor(sf::Color::White); // Opaque white
         }
@@ -1458,7 +1458,7 @@ void EditorWidget::clearDragPreview() {
             // For roof sprites, check if it's empty and set back to transparent
             auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
             if (tile.getRoof() == Map::EMPTY_TILE) {
-                _roofSprites.at(tileIndex).setColor(sf::Color(255, 255, 255, 0)); // Transparent
+                _roofSprites.at(tileIndex).setColor(geck::TileColors::transparent()); // Transparent
             } else {
                 removePreviewHighlight(_roofSprites.at(tileIndex));
             }

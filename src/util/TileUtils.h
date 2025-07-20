@@ -128,6 +128,11 @@ namespace TileColors {
     inline sf::Color white() {
         return sf::Color::White;
     }
+    
+    // Transparent colors for empty tiles
+    inline sf::Color transparent() {
+        return sf::Color(255, 255, 255, 0);
+    }
 }
 
 /**
