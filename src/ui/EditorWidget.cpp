@@ -665,8 +665,20 @@ void EditorWidget::handleEvent(const sf::Event& event) {
             sf::Vector2i currentPos = mouseMoved->position;
             sf::Vector2i delta = _mouseLastPosition - currentPos;
             
-            // Pan the view
-            _view.move({static_cast<float>(delta.x), static_cast<float>(delta.y)});
+            // Scale panning delta by zoom level for consistent visual speed
+            // When zoomed out (_zoomLevel > 1.0), we need to move more in world coordinates
+            // When zoomed in (_zoomLevel < 1.0), we need to move less for precision
+            float panScale = _zoomLevel;
+            sf::Vector2f scaledDelta = {
+                static_cast<float>(delta.x) * panScale,
+                static_cast<float>(delta.y) * panScale
+            };
+            
+            spdlog::debug("Pan: zoom={:.2f}, scale={:.2f}, raw_delta=({},{}), scaled_delta=({:.1f},{:.1f})", 
+                         _zoomLevel, panScale, delta.x, delta.y, scaledDelta.x, scaledDelta.y);
+            
+            // Pan the view with zoom-scaled movement
+            _view.move(scaledDelta);
 
             _mouseLastPosition = currentPos;
         } else if (_currentAction == EditorAction::DRAG_SELECTING) {
@@ -763,7 +775,8 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         _selectionManager->selectAll(_currentSelectionMode, _currentElevation);
                         spdlog::info("Select all: {} items", _selectionManager->getCurrentSelection().count());
                     } else {
-                        _view.move({-VIEW_MOVE_STEP, 0.0f});
+                        float panScale = _zoomLevel;
+                        _view.move({-VIEW_MOVE_STEP * panScale, 0.0f});
                     }
                     break;
                     case sf::Keyboard::Scancode::Right:
@@ -774,16 +787,23 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                             _selectionManager->clearSelection();
                             spdlog::info("Deselected all items");
                         } else {
-                            _view.move({VIEW_MOVE_STEP, 0.0f});
+                            float panScale = _zoomLevel;
+                            _view.move({VIEW_MOVE_STEP * panScale, 0.0f});
                         }
                         break;
                     case sf::Keyboard::Scancode::Up:
                     case sf::Keyboard::Scancode::W:
-                        _view.move({0.0f, -VIEW_MOVE_STEP});
+                        {
+                            float panScale = _zoomLevel;
+                            _view.move({0.0f, -VIEW_MOVE_STEP * panScale});
+                        }
                         break;
                     case sf::Keyboard::Scancode::Down:
                     case sf::Keyboard::Scancode::S:
-                        _view.move({0.0f, VIEW_MOVE_STEP});
+                        {
+                            float panScale = _zoomLevel;
+                            _view.move({0.0f, VIEW_MOVE_STEP * panScale});
+                        }
                         break;
                     case sf::Keyboard::Scancode::Home:
                         // Reset to center and normal zoom
