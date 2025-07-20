@@ -164,7 +164,7 @@ void EditorWidget::setupUI() {
     // Set this EditorWidget as the delegate for SFML event handling
     _sfmlWidget->setEditorWidget(this);
     
-    _layout->addWidget(_sfmlWidget);
+    _layout->addWidget(_sfmlWidget, 1);  // Stretch factor 1 - take all available space
     
     setLayout(_layout);
 }
@@ -754,6 +754,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
         {
             sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
                 mouseMoved->position, _view);
+
             updateHoverHex(currentWorldPos);
         }
     } else if (const auto* wheelScrolled = event.getIf<sf::Event::MouseWheelScrolled>()) {
@@ -829,14 +830,10 @@ void EditorWidget::handleEvent(const sf::Event& event) {
         _view.setSize({newWidth, newHeight});
         _view.setCenter(currentCenter);
         
-        // Reapply the current zoom level by zooming from 1.0 to current level
+        // Reapply the current zoom level by scaling the view size directly
         if (_zoomLevel != 1.0f) {
-            float zoomFactor = 1.0f / _zoomLevel;  // Factor to get to current zoom from 1.0
-            _view.zoom(zoomFactor);
+            _view.zoom(_zoomLevel);
         }
-        
-        spdlog::debug("EditorWidget: Window resized to {}x{}, zoom level: {:.2f}", 
-                     newWidth, newHeight, _zoomLevel);
     }
 }
 
@@ -1724,10 +1721,15 @@ sf::Vector2f EditorWidget::snapToHexGrid(sf::Vector2f worldPos) const {
 }
 
 int EditorWidget::worldPosToHexPosition(sf::Vector2f worldPos) const {
+    // Check for negative coordinates that would wrap when cast to uint32_t
+    if (worldPos.x < 0 || worldPos.y < 0) {
+            return -1;
+    }
+    
     // Use the hex grid's built-in positionAt method for accurate position lookup
     uint32_t hexPosition = _hexgrid.positionAt(static_cast<uint32_t>(worldPos.x), 
                                                static_cast<uint32_t>(worldPos.y));
-    
+
     if (hexPosition == static_cast<uint32_t>(-1)) {
         return -1;
     }

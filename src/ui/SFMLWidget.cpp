@@ -29,6 +29,9 @@ SFMLWidget::SFMLWidget(QWidget* parent)
     // Enable mouse tracking
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
+    
+    // Set size policy to expand and fill available space
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }
 
 SFMLWidget::~SFMLWidget() {
@@ -66,14 +69,17 @@ void SFMLWidget::paintEvent(QPaintEvent* event) {
 
 void SFMLWidget::resizeEvent(QResizeEvent* event) {
     if (_renderWindow) {
-        // Update SFML render window size to match the widget
+        // For embedded SFML windows, we MUST explicitly resize the render window
+        // SFML only handles automatic resizing for standalone windows
         sf::Vector2u newSize(event->size().width(), event->size().height());
-        
-        spdlog::debug("SFMLWidget resize: {}x{}", newSize.x, newSize.y);
-        
         _renderWindow->setSize(newSize);
         
-        // Don't set view size here - let EditorState handle view management
+        spdlog::debug("SFMLWidget resize: {}x{}, widget geometry: ({}, {}, {}x{})", 
+                     newSize.x, newSize.y,
+                     geometry().x(), geometry().y(), 
+                     geometry().width(), geometry().height());
+        
+        // Don't set view size here - let EditorWidget handle view management
         // This prevents conflicting view configurations
         
         // Convert resize event to SFML event and forward to state machine
@@ -105,8 +111,14 @@ void SFMLWidget::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void SFMLWidget::mouseMoveEvent(QMouseEvent* event) {
-    // Don't forward Qt mouse events to SFML - SFML handles them natively
-    // This prevents duplicate event processing
+    // Forward Qt mouse events to SFML since Qt correctly handles the full widget area
+    // SFML's native mouse handling has coordinate system issues after resize
+    if (_renderWindow && _editorWidget) {
+        sf::Event sfmlEvent = sf::Event::MouseMoved{
+            {event->pos().x(), event->pos().y()}
+        };
+        _editorWidget->handleEvent(sfmlEvent);
+    }
     QWidget::mouseMoveEvent(event);
 }
 
@@ -148,6 +160,10 @@ void SFMLWidget::updateAndRender() {
 
 void SFMLWidget::handleSFMLEvent(const sf::Event& event) {
     if (_editorWidget) {
+        // Skip mouse movement events - we handle those through Qt for proper coordinate handling
+        if (event.is<sf::Event::MouseMoved>()) {
+            return;
+        }
         _editorWidget->handleEvent(event);
     }
 }
