@@ -193,6 +193,7 @@ private:
     // sf::Cursor _cursor; // TODO: Fix cursor initialization for SFML 3
     const sf::Texture& createBlankTexture();
     const sf::Texture& createHexTexture();
+    const sf::Texture& createCursorHexTexture();
     
     // Zoom level tracking and limits
     float _zoomLevel = 1.0f;

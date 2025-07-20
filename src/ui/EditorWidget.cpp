@@ -36,9 +36,17 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
     , _view({ 0.f, 0.f }, sf::Vector2f(800.f, 600.f)) // Default size, will be updated on first resize
     , _map(std::move(map))
     , _hexSprite(createHexTexture())
-    , _hexHighlightSprite(createHexTexture()) {
+    , _hexHighlightSprite(createCursorHexTexture()) {
 
-    _hexHighlightSprite.setColor(sf::Color(255, 0, 0, HEX_HIGHLIGHT_ALPHA));
+    // Set texture rectangle to show only half of HEX.frm (right half for highlighting)
+    sf::Vector2u textureSize = _hexHighlightSprite.getTexture().getSize();
+    _hexHighlightSprite.setTextureRect(
+        sf::IntRect(
+            sf::Vector2i(static_cast<int>(textureSize.x / 2), 0),
+            sf::Vector2i(static_cast<int>(textureSize.x / 2), static_cast<int>(textureSize.y))
+        )
+    );
+    _hexHighlightSprite.setColor(sf::Color(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B, 255));
 
     // Initialize sprite vectors with blank texture
     const sf::Texture& blankTexture = createBlankTexture();
@@ -673,9 +681,6 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 static_cast<float>(delta.x) * panScale,
                 static_cast<float>(delta.y) * panScale
             };
-            
-            spdlog::debug("Pan: zoom={:.2f}, scale={:.2f}, raw_delta=({},{}), scaled_delta=({:.1f},{:.1f})", 
-                         _zoomLevel, panScale, delta.x, delta.y, scaledDelta.x, scaledDelta.y);
             
             // Pan the view with zoom-scaled movement
             _view.move(scaledDelta);
@@ -1806,6 +1811,11 @@ const sf::Texture& EditorWidget::createHexTexture() {
     ResourceManager::getInstance().loadResource("art/HEX.frm", frm_reader);
 
     return ResourceManager::getInstance().texture("art/HEX.frm");
+}
+
+const sf::Texture& EditorWidget::createCursorHexTexture() {
+    // Use the same HEX.frm texture as the normal hex sprite
+    return createHexTexture();
 }
 
 const sf::Texture& EditorWidget::createBlankTexture() {
