@@ -9,28 +9,28 @@ TileSpatialIndex::TileSpatialIndex() : _floorIndex(TILE_WIDTH), _roofIndex(TILE_
     // Initialize with tile-optimized cell size
 }
 
-void TileSpatialIndex::buildIndex(const std::array<sf::Sprite, TILES_PER_ELEVATION>& floorSprites,
-                                 const std::array<sf::Sprite, TILES_PER_ELEVATION>& roofSprites) {
+void TileSpatialIndex::buildIndex(const std::vector<sf::Sprite>& floorSprites,
+                                 const std::vector<sf::Sprite>& roofSprites) {
     // Clear existing indices
     _floorIndex.clear();
     _roofIndex.clear();
     _indexedTiles = 0;
     
     // Build floor tile index
-    for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
+    for (size_t i = 0; i < TILES_PER_ELEVATION; ++i) {
         const auto& floorSprite = floorSprites[i];
         // All sprites now have textures (either real texture or blank texture for SFML 3 compatibility)
         sf::FloatRect bounds = floorSprite.getGlobalBounds();
-        _floorIndex.addItem(i, bounds);
+        _floorIndex.addItem(static_cast<int>(i), bounds);
         _indexedTiles++;
     }
     
     // Build roof tile index  
-    for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
+    for (size_t i = 0; i < TILES_PER_ELEVATION; ++i) {
         const auto& roofSprite = roofSprites[i];
         // All sprites now have textures (either real texture or blank texture for SFML 3 compatibility)  
         sf::FloatRect bounds = roofSprite.getGlobalBounds();
-        _roofIndex.addItem(i, bounds);
+        _roofIndex.addItem(static_cast<int>(i), bounds);
         _indexedTiles++;
     }
 }

@@ -299,38 +299,35 @@ void SelectionPanel::updateObjectInfo() {
             
             // Convert SFML sprite to QPixmap for display
             const auto& sprite = _selectedObject.value()->getSprite();
-            const auto* texture = sprite.getTexture();
-            if (texture) {
-                // Get the image from SFML texture
-                auto image = texture->copyToImage();
-                auto textureRect = sprite.getTextureRect();
+            const auto& texture = sprite.getTexture();
+            
+            // Get the image from SFML texture (texture is always valid in SFML 3)
+            auto image = texture.copyToImage();
+            auto textureRect = sprite.getTextureRect();
+            
+            // Create QImage from SFML image data
+            const std::uint8_t* pixels = image.getPixelsPtr();
+            QImage qImage(pixels, image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
+            
+            // Extract the sprite's texture rectangle if needed
+            if (textureRect.size.x > 0 && textureRect.size.y > 0) {
+                qImage = qImage.copy(textureRect.position.x, textureRect.position.y, textureRect.size.x, textureRect.size.y);
+            }
+            
+            // Create pixmap and scale to fit label while maintaining aspect ratio
+            QPixmap pixmap = QPixmap::fromImage(qImage);
+            if (!pixmap.isNull()) {
+                // Scale the pixmap to fit within 128x128 while keeping aspect ratio
+                QSize maxSize(128, 128);
                 
-                // Create QImage from SFML image data
-                const std::uint8_t* pixels = image.getPixelsPtr();
-                QImage qImage(pixels, image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
-                
-                // Extract the sprite's texture rectangle if needed
-                if (textureRect.size.x > 0 && textureRect.size.y > 0) {
-                    qImage = qImage.copy(textureRect.position.x, textureRect.position.y, textureRect.size.x, textureRect.size.y);
+                if (pixmap.width() > maxSize.width() || pixmap.height() > maxSize.height()) {
+                    pixmap = pixmap.scaled(maxSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
                 }
                 
-                // Create pixmap and scale to fit label while maintaining aspect ratio
-                QPixmap pixmap = QPixmap::fromImage(qImage);
-                if (!pixmap.isNull()) {
-                    // Scale the pixmap to fit within 128x128 while keeping aspect ratio
-                    QSize maxSize(128, 128);
-                    
-                    if (pixmap.width() > maxSize.width() || pixmap.height() > maxSize.height()) {
-                        pixmap = pixmap.scaled(maxSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                    }
-                    
-                    _objectSpriteLabel->setPixmap(pixmap);
-                    _objectSpriteLabel->setText("");
-                } else {
-                    _objectSpriteLabel->setText("Failed to convert sprite");
-                }
+                _objectSpriteLabel->setPixmap(pixmap);
+                _objectSpriteLabel->setText("");
             } else {
-                _objectSpriteLabel->setText("No texture available");
+                _objectSpriteLabel->setText("Failed to convert sprite");
             }
             
             _objectInfoGroup->setTitle("Object Information");
@@ -344,7 +341,7 @@ void SelectionPanel::updateObjectInfo() {
     }
 }
 
-void SelectionPanel::updateTileInfo() {
+void geck::SelectionPanel::updateTileInfo() {
     if (!_hasTileSelection || !_map) {
         clearTileInfo();
         return;
@@ -417,7 +414,7 @@ void SelectionPanel::updateTileInfo() {
     }
 }
 
-void SelectionPanel::clearObjectInfo() {
+void geck::SelectionPanel::clearObjectInfo() {
     _objectNameEdit->clear();
     _objectNameEdit->setPlaceholderText("No object selected");
     
@@ -433,7 +430,7 @@ void SelectionPanel::clearObjectInfo() {
     _objectInfoGroup->setTitle("Object Information");
 }
 
-void SelectionPanel::clearTileInfo() {
+void geck::SelectionPanel::clearTileInfo() {
     _tileTypeEdit->clear();
     _tileTypeEdit->setPlaceholderText("No tile selected");
     
@@ -454,7 +451,7 @@ void SelectionPanel::clearTileInfo() {
     _tileInfoGroup->setTitle("Tile Information");
 }
 
-void SelectionPanel::loadTilePreview(Lst* tilesList, uint16_t tileId) {
+void geck::SelectionPanel::loadTilePreview(Lst* tilesList, uint16_t tileId) {
     try {
         auto tileNames = tilesList->list();
         if (tileId >= tileNames.size()) {
@@ -496,7 +493,7 @@ void SelectionPanel::loadTilePreview(Lst* tilesList, uint16_t tileId) {
     }
 }
 
-void SelectionPanel::handleSelectionChanged(const selection::SelectionState& selection, int elevation) {
+void geck::SelectionPanel::handleSelectionChanged(const selection::SelectionState& selection, int elevation) {
     // Handle selection changes efficiently for large selections
     if (selection.isEmpty()) {
         clearSelection();

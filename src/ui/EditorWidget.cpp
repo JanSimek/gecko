@@ -6,6 +6,7 @@
 #include <cmath> // ceil, sqrt, pow
 #include <algorithm> // std::sort, std::find, std::max, std::min
 #include <limits> // std::numeric_limits
+#include <cstdlib> // std::abs
 #include "../util/QtDialogs.h"
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
@@ -33,7 +34,23 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
     , _layout(nullptr)
     , _sfmlWidget(nullptr)
     , _view({ 0.f, 0.f }, sf::Vector2f(800.f, 600.f)) // Default size, will be updated on first resize
-    , _map(std::move(map)) {
+    , _map(std::move(map))
+    , _hexSprite(createHexTexture())
+    , _hexHighlightSprite(createHexTexture()) {
+
+    _hexHighlightSprite.setColor(sf::Color(255, 0, 0, 200)); // Bright red for highlighting
+
+    // Initialize sprite vectors with blank texture
+    const sf::Texture& blankTexture = createBlankTexture();
+    _floorSprites.reserve(Map::TILES_PER_ELEVATION);
+    _roofSprites.reserve(Map::TILES_PER_ELEVATION);
+    
+    for (size_t i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+        _floorSprites.emplace_back(blankTexture);
+        _roofSprites.emplace_back(blankTexture);
+    }
+    
+    // TODO: Initialize cursor for SFML 3 (cursor removed temporarily)
     
     // Initialize selection management
     initializeSelectionSystem();
@@ -157,9 +174,6 @@ void EditorWidget::init() {
     
     // Initialize spatial index for O(1) area selection performance
     _selectionManager->initializeSpatialIndex();
-    
-    // Initialize fake tile sprite for hit detection
-    _fakeTileSprite.setTexture(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
     
     // Initialize selection rectangle for drag selection
     _selectionRectangle.setFillColor(TileColors::selectionFill());
@@ -306,21 +320,6 @@ void EditorWidget::loadSprites() {
 
     // Rebuild spatial index after sprites are loaded
     _selectionManager->initializeSpatialIndex();
-    
-    // Load hex grid sprite
-    try {
-        FrmReader frm_reader{};
-        ResourceManager::getInstance().loadResource("art/HEX.frm", frm_reader);
-
-        _hexSprite.setTexture(ResourceManager::getInstance().texture("art/HEX.frm"));
-        _hexSprite.setColor(sf::Color(255, 255, 255, 50)); // Very transparent white for grid
-        
-        // Initialize hex highlight sprite with red color
-        _hexHighlightSprite.setTexture(ResourceManager::getInstance().texture("art/HEX.frm"));
-        _hexHighlightSprite.setColor(sf::Color(255, 0, 0, 200)); // Bright red for highlighting
-    } catch (const std::exception& e) {
-        spdlog::warn("Failed to load HEX.frm: {}", e.what());
-    }
 
     spdlog::info("Map sprites loaded in {:.3} seconds", sw);
 }
@@ -412,11 +411,8 @@ bool EditorWidget::isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite&
     
     // Get sprite bounds and texture
     const auto bounds = sprite.getGlobalBounds();
-    const auto* texture = sprite.getTexture();
-    if (!texture) {
-        return false;
-    }
-    
+    const auto& texture = sprite.getTexture();
+
     // Convert world position to sprite-local coordinates
     sf::Vector2f localPos = worldPos - sf::Vector2f(bounds.position.x, bounds.position.y);
     
@@ -425,11 +421,11 @@ bool EditorWidget::isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite&
     const auto scale = sprite.getScale();
     
     // Convert to texture coordinates
-    int texX = static_cast<int>((localPos.x / scale.x) + textureRect.position.x);
-    int texY = static_cast<int>((localPos.y / scale.y) + textureRect.position.y);
+    unsigned int texX = static_cast<unsigned int>((localPos.x / scale.x) + textureRect.position.x);
+    unsigned int texY = static_cast<unsigned int>((localPos.y / scale.y) + textureRect.position.y);
     
     // Get texture size
-    const auto texSize = texture->getSize();
+    const auto texSize = texture.getSize();
     
     // Bounds check
     if (texX < 0 || texY < 0 || texX >= static_cast<int>(texSize.x) || texY >= static_cast<int>(texSize.y)) {
@@ -437,9 +433,9 @@ bool EditorWidget::isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite&
     }
     
     // Get the image and check pixel transparency
-    const auto image = texture->copyToImage();
-    const auto pixel = image.getPixel(texX, texY);
-    
+    const auto image = texture.copyToImage();
+    const auto pixel = image.getPixel({texX, texY});
+
     bool isHit = pixel.a > 0;
     if (isHit) {
         spdlog::debug("Hit detected: world({:.2f},{:.2f}) -> local({:.2f},{:.2f}) -> tex({},{}) alpha={}", 
@@ -525,11 +521,10 @@ void EditorWidget::handleEvent(const sf::Event& event) {
     // Handle SFML events here
     // This is called by the SFMLWidget when it receives events
     
-    switch (event.type) {
-        case sf::Event::MouseButtonPressed:
-            if (event.mouseButton.button == sf::Mouse::Button::Left) {
-                sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                    sf::Vector2i(event.mouseButton.x, event.mouseButton.y), _view);
+    if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>()) {
+        if (mousePressed->button == sf::Mouse::Button::Left) {
+            sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
+                mousePressed->position, _view);
                 
                 // Check if we're in tile placement mode
                 if (_tilePlacementMode && _tilePlacementIndex >= 0 && !_tilePlacementReplaceMode) {
@@ -598,16 +593,14 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         _immediateSelectionPerformed = true; // Mark that immediate selection was performed
                     }
                 }
-            } else if (event.mouseButton.button == sf::Mouse::Button::Right) {
-                // Start panning
-                _currentAction = EditorAction::PANNING;
-                _mouseStartingPosition = sf::Vector2i(event.mouseButton.x, event.mouseButton.y);
-                _mouseLastPosition = _mouseStartingPosition;
-            }
-            break;
-            
-        case sf::Event::MouseButtonReleased:
-            if (event.mouseButton.button == sf::Mouse::Button::Left) {
+        } else if (mousePressed->button == sf::Mouse::Button::Right) {
+            // Start panning
+            _currentAction = EditorAction::PANNING;
+            _mouseStartingPosition = mousePressed->position;
+            _mouseLastPosition = _mouseStartingPosition;
+        }
+    } else if (const auto* mouseReleased = event.getIf<sf::Event::MouseButtonReleased>()) {
+        if (mouseReleased->button == sf::Mouse::Button::Left) {
                 if (_currentAction == EditorAction::TILE_PLACING) {
                     // Clear preview visuals first
                     clearDragPreview();
@@ -615,14 +608,14 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     if (_isDragSelecting && _tilePlacementMode && _tilePlacementAreaFill) {
                         // Complete tile area fill
                         sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                            sf::Vector2i(event.mouseButton.x, event.mouseButton.y), _view);
+                            mouseReleased->position, _view);
                         
                         // Create fill area
                         float left = std::min(_dragStartWorldPos.x, worldPos.x);
                         float top = std::min(_dragStartWorldPos.y, worldPos.y);
                         float width = std::abs(worldPos.x - _dragStartWorldPos.x);
                         float height = std::abs(worldPos.y - _dragStartWorldPos.y);
-                        sf::FloatRect fillArea(left, top, width, height);
+                        sf::FloatRect fillArea({left, top}, {width, height});
                         
                         // Fill area with selected tile
                         fillAreaWithTile(_tilePlacementIndex, fillArea, _tilePlacementIsRoof);
@@ -638,14 +631,14 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     if (_isDragSelecting) {
                         // Complete drag selection
                         sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                            sf::Vector2i(event.mouseButton.x, event.mouseButton.y), _view);
+                            mouseReleased->position, _view);
                         
                         // Create selection area
                         float left = std::min(_dragStartWorldPos.x, worldPos.x);
                         float top = std::min(_dragStartWorldPos.y, worldPos.y);
                         float width = std::abs(worldPos.x - _dragStartWorldPos.x);
                         float height = std::abs(worldPos.y - _dragStartWorldPos.y);
-                        sf::FloatRect selectionArea(left, top, width, height);
+                        sf::FloatRect selectionArea({left, top}, {width, height});
                         
                         // Perform area selection - this will trigger observer notification and apply final colors
                         auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
@@ -664,7 +657,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 } else if (_currentAction == EditorAction::OBJECT_MOVING) {
                     // Complete object drag operation
                     sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                        sf::Vector2i(event.mouseButton.x, event.mouseButton.y), _view);
+                        mouseReleased->position, _view);
                     
                     if (_isDraggingObjects) {
                         // Complete the drag operation
@@ -673,26 +666,24 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     
                     _currentAction = EditorAction::NONE;
                 }
-            } else if (event.mouseButton.button == sf::Mouse::Right) {
-                // Stop panning
+        } else if (mouseReleased->button == sf::Mouse::Button::Right) {
+            // Stop panning
                 _currentAction = EditorAction::NONE;
             }
-            break;
+    } else if (const auto* mouseMoved = event.getIf<sf::Event::MouseMoved>()) {
+        if (_currentAction == EditorAction::PANNING) {
+            // Calculate pan delta
+            sf::Vector2i currentPos = mouseMoved->position;
+            sf::Vector2i delta = _mouseLastPosition - currentPos;
             
-        case sf::Event::MouseMoved:
-            if (_currentAction == EditorAction::PANNING) {
-                // Calculate pan delta
-                sf::Vector2i currentPos(event.mouseMove.x, event.mouseMove.y);
-                sf::Vector2i delta = _mouseLastPosition - currentPos;
-                
-                // Pan the view
-                _view.move(static_cast<float>(delta.x), static_cast<float>(delta.y));
-                
-                _mouseLastPosition = currentPos;
-            } else if (_currentAction == EditorAction::DRAG_SELECTING) {
-                // Update drag selection rectangle
-                sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                    sf::Vector2i(event.mouseMove.x, event.mouseMove.y), _view);
+            // Pan the view
+            _view.move({static_cast<float>(delta.x), static_cast<float>(delta.y)});
+
+            _mouseLastPosition = currentPos;
+        } else if (_currentAction == EditorAction::DRAG_SELECTING) {
+            // Update drag selection rectangle
+            sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
+                mouseMoved->position, _view);
                 
                 // Mark as actively dragging if we've moved enough
                 float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + 
@@ -708,7 +699,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     float width = std::abs(currentWorldPos.x - _dragStartWorldPos.x);
                     float height = std::abs(currentWorldPos.y - _dragStartWorldPos.y);
                     
-                    _selectionRectangle.setPosition(left, top);
+                    _selectionRectangle.setPosition({left, top});
                     _selectionRectangle.setSize(sf::Vector2f(width, height));
                     
                     // Update preview of items that would be selected
@@ -718,7 +709,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 // Handle tile area fill drag
                 if (_tilePlacementMode && _tilePlacementAreaFill) {
                     sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                        sf::Vector2i(event.mouseMove.x, event.mouseMove.y), _view);
+                        mouseMoved->position, _view);
                     
                     // Mark as actively dragging if we've moved enough
                     float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + 
@@ -734,7 +725,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         float width = std::abs(currentWorldPos.x - _dragStartWorldPos.x);
                         float height = std::abs(currentWorldPos.y - _dragStartWorldPos.y);
                         
-                        _selectionRectangle.setPosition(left, top);
+                        _selectionRectangle.setPosition({left, top});
                         _selectionRectangle.setSize(sf::Vector2f(width, height));
                         
                         // Update tile area fill preview
@@ -744,7 +735,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
             } else if (_currentAction == EditorAction::OBJECT_MOVING) {
                 // Handle object drag movement
                 sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                    sf::Vector2i(event.mouseMove.x, event.mouseMove.y), _view);
+                    mouseMoved->position, _view);
                 
                 // Mark as actively dragging if we've moved enough
                 float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + 
@@ -759,25 +750,20 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 }
             }
             
-            // Always update hex hover for any mouse movement
-            {
-                sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                    sf::Vector2i(event.mouseMove.x, event.mouseMove.y), _view);
-                updateHoverHex(currentWorldPos);
-            }
-            break;
-            
-        case sf::Event::MouseWheelScrolled:
-            // Zoom in/out with limits and sensitivity control
-            if (event.mouseWheelScroll.wheel == sf::Mouse::VerticalWheel) {
-                // Use smaller steps for smoother trackpad experience
-                zoomView(event.mouseWheelScroll.delta);
-            }
-            break;
-            
-        case sf::Event::KeyPressed:
-            // Arrow key movement
-            if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>()) {
+        // Always update hex hover for any mouse movement
+        {
+            sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
+                mouseMoved->position, _view);
+            updateHoverHex(currentWorldPos);
+        }
+    } else if (const auto* wheelScrolled = event.getIf<sf::Event::MouseWheelScrolled>()) {
+        // Zoom in/out with limits and sensitivity control
+        if (wheelScrolled->wheel == sf::Mouse::Wheel::Vertical) {
+            // Use smaller steps for smoother trackpad experience
+            zoomView(wheelScrolled->delta);
+        }
+    } else if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>()) {
+        // Arrow key movement
                 switch (keyPressed->scancode) {
                     case sf::Keyboard::Scancode::Left:
                     case sf::Keyboard::Scancode::A:
@@ -787,7 +773,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         _selectionManager->selectAll(_currentSelectionMode, _currentElevation);
                         spdlog::info("Select all: {} items", _selectionManager->getCurrentSelection().count());
                     } else {
-                        _view.move(-50.0f, 0.0f);
+                        _view.move({-50.0f, 0.0f});
                     }
                     break;
                     case sf::Keyboard::Scancode::Right:
@@ -798,16 +784,16 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                             _selectionManager->clearSelection();
                             spdlog::info("Deselected all items");
                         } else {
-                            _view.move(50.0f, 0.0f);
+                            _view.move({50.0f, 0.0f});
                         }
                         break;
                     case sf::Keyboard::Scancode::Up:
                     case sf::Keyboard::Scancode::W:
-                        _view.move(0.0f, -50.0f);
+                        _view.move({0.0f, -50.0f});
                         break;
                     case sf::Keyboard::Scancode::Down:
                     case sf::Keyboard::Scancode::S:
-                        _view.move(0.0f, 50.0f);
+                        _view.move({0.0f, 50.0f});
                         break;
                     case sf::Keyboard::Scancode::Home:
                         // Reset to center and normal zoom
@@ -831,35 +817,26 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     default:
                         break;
                 }
-            }
-            break;
-            
-        case sf::Event::Resized:
-            // Update view size when window is resized
-            {
-                float newWidth = static_cast<float>(event.size.width);
-                float newHeight = static_cast<float>(event.size.height);
+    } else if (const auto* resized = event.getIf<sf::Event::Resized>()) {
+        // Update view size when window is resized
+        float newWidth = static_cast<float>(resized->size.x);
+        float newHeight = static_cast<float>(resized->size.y);
                 
-                // Preserve the current view center
-                sf::Vector2f currentCenter = _view.getCenter();
-                
-                // Set the view to the new size at 1:1 scale
-                _view.setSize(newWidth, newHeight);
-                _view.setCenter(currentCenter);
-                
-                // Reapply the current zoom level by zooming from 1.0 to current level
-                if (_zoomLevel != 1.0f) {
-                    float zoomFactor = 1.0f / _zoomLevel;  // Factor to get to current zoom from 1.0
-                    _view.zoom(zoomFactor);
-                }
-                
-                spdlog::debug("EditorWidget: Window resized to {}x{}, zoom level: {:.2f}", 
-                             newWidth, newHeight, _zoomLevel);
-            }
-            break;
-            
-        default:
-            break;
+        // Preserve the current view center
+        sf::Vector2f currentCenter = _view.getCenter();
+        
+        // Set the view to the new size at 1:1 scale
+        _view.setSize({newWidth, newHeight});
+        _view.setCenter(currentCenter);
+        
+        // Reapply the current zoom level by zooming from 1.0 to current level
+        if (_zoomLevel != 1.0f) {
+            float zoomFactor = 1.0f / _zoomLevel;  // Factor to get to current zoom from 1.0
+            _view.zoom(zoomFactor);
+        }
+        
+        spdlog::debug("EditorWidget: Window resized to {}x{}, zoom level: {:.2f}", 
+                     newWidth, newHeight, _zoomLevel);
     }
 }
 
@@ -883,7 +860,10 @@ void EditorWidget::render(const float dt) {
     for (const auto& floor : _floorSprites) {
         window->draw(floor);
     }
-    
+
+    // Render hex grid overlay
+    renderHexGrid();
+
     // Render objects with visibility filtering
     if (_showObjects) {
         for (const auto& object : _objects) {
@@ -907,10 +887,7 @@ void EditorWidget::render(const float dt) {
     for (const auto& indicator : _emptyRoofTileIndicators) {
         window->draw(indicator);
     }
-    
-    // Render hex grid overlay
-    renderHexGrid();
-    
+
     // Render hex highlight if there's a valid hover hex
     if (_currentHoverHex >= 0) {
         // Find the hex with the matching position
@@ -919,7 +896,7 @@ void EditorWidget::render(const float dt) {
                 float spriteX = static_cast<float>(hex.x() - 16);
                 float spriteY = static_cast<float>(hex.y() - 8);
                 
-                _hexHighlightSprite.setPosition(spriteX, spriteY);
+                _hexHighlightSprite.setPosition({spriteX, spriteY});
                 window->draw(_hexHighlightSprite);
                 break;
             }
@@ -1019,9 +996,9 @@ void EditorWidget::placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, boo
     int hexIndex = -1;
     for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
         auto& sprites = isRoof ? _roofSprites : _floorSprites;
-        _fakeTileSprite.setPosition(sprites.at(i).getPosition());
+        const sf::Sprite& tileSprite = sprites.at(i);
         
-        if (isSpriteClicked(worldPos, _fakeTileSprite)) {
+        if (isSpriteClicked(worldPos, tileSprite)) {
             hexIndex = i;
             break;
         }
@@ -1198,7 +1175,7 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
 
         // Calculate position using utility function (eliminates duplicate code)
         auto screenPos = indexToScreenPosition(hexIndex, isRoof);
-        sprites[hexIndex].setPosition(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y));
+        sprites[hexIndex].setPosition({static_cast<float>(screenPos.x), static_cast<float>(screenPos.y)});
         
         spdlog::debug("EditorWidget::updateTileSprite: Updated sprite for hex {} ({})", hexIndex, tileName);
     } catch (const std::exception& e) {
@@ -1256,9 +1233,10 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
     auto& sprites = isRoof ? _roofSprites : _floorSprites;
     
     for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
-        _fakeTileSprite.setPosition(sprites.at(i).getPosition());
+        // Use the actual sprite's bounds instead of a fake sprite
+        const sf::Sprite& tileSprite = sprites.at(i);
         
-        if (isSpriteClicked(worldPos, _fakeTileSprite)) {
+        if (isSpriteClicked(worldPos, tileSprite)) {
             if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() == Map::EMPTY_TILE) {
                 return std::nullopt;
             }
@@ -1321,10 +1299,8 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     
     // Add some padding to ensure we catch tiles at the edges
     sf::FloatRect selectionArea(
-        left - AREA_SELECTION_X_PADDING, 
-        top - AREA_SELECTION_Y_PADDING, 
-        (right - left) + AREA_SELECTION_X_TOTAL_PADDING, 
-        (bottom - top) + AREA_SELECTION_Y_TOTAL_PADDING
+        {left - AREA_SELECTION_X_PADDING, top - AREA_SELECTION_Y_PADDING}, 
+        {(right - left) + AREA_SELECTION_X_TOTAL_PADDING, (bottom - top) + AREA_SELECTION_Y_TOTAL_PADDING}
     );
     
     // Determine selection mode based on current mode
@@ -1338,7 +1314,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     auto result = _selectionManager->selectArea(selectionArea, areaMode, _currentElevation);
     
     spdlog::info("Range selection: area ({:.1f}, {:.1f}, {:.1f}, {:.1f})", 
-                 selectionArea.position.x, selectionArea.position.y, selectionArea.width, selectionArea.height);
+                 selectionArea.position.x, selectionArea.position.y, selectionArea.size.x, selectionArea.size.y);
     
     return result;
 }
@@ -1352,7 +1328,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
     float top = std::min(_dragStartWorldPos.y, currentWorldPos.y);
     float width = std::abs(currentWorldPos.x - _dragStartWorldPos.x);
     float height = std::abs(currentWorldPos.y - _dragStartWorldPos.y);
-    sf::FloatRect selectionArea(left, top, width, height);
+    sf::FloatRect selectionArea({left, top}, {width, height});
     
     // Get items that would be selected
     switch (_currentSelectionMode) {
@@ -1397,7 +1373,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
                         auto screenPos = indexToScreenPosition(tileIndex);
                         
                         // Position indicator at calculated screen position
-                        indicator.setPosition(static_cast<float>(screenPos.x) - 10, static_cast<float>(screenPos.y) - 10);
+                        indicator.setPosition({static_cast<float>(screenPos.x) - 10, static_cast<float>(screenPos.y) - 10});
                         _emptyRoofTileIndicators.push_back(indicator);
                     } else {
                         // Apply preview coloring to existing roof sprite
@@ -1463,7 +1439,7 @@ void EditorWidget::updateTileAreaFillPreview(sf::Vector2f currentWorldPos) {
     float top = std::min(_dragStartWorldPos.y, currentWorldPos.y);
     float width = std::abs(currentWorldPos.x - _dragStartWorldPos.x);
     float height = std::abs(currentWorldPos.y - _dragStartWorldPos.y);
-    sf::FloatRect selectionArea(left, top, width, height);
+    sf::FloatRect selectionArea({left, top}, {width, height});
     
     // Get tiles that would be affected by the area fill (default to floor tiles)
     bool isRoof = _tilePlacementIsRoof;
@@ -1589,7 +1565,7 @@ void EditorWidget::updateObjectDrag(sf::Vector2f currentWorldPos) {
             float spriteX = newHexCenter.x - (object->width() / 2) + object->shiftX();
             float spriteY = newHexCenter.y - object->height() + object->shiftY();
             
-            object->getSprite().setPosition(spriteX, spriteY);
+            object->getSprite().setPosition({spriteX, spriteY});
         }
     }
 }
@@ -1766,20 +1742,22 @@ void EditorWidget::renderHexGrid() {
     
     auto* window = _sfmlWidget->getRenderWindow();
     if (!window) {
+        spdlog::debug("renderHexGrid: No render window available");
         return;
     }
-    
+
     // Get viewport bounds for culling (similar to legacy implementation)
     sf::Vector2f viewCenter = _view.getCenter();
     sf::Vector2f viewSize = _view.getSize();
-    
+
     // Calculate visible area bounds
     int worldX = static_cast<int>(viewCenter.x - viewSize.x / 2);
     int worldY = static_cast<int>(viewCenter.y - viewSize.y / 2);
     int viewWidth = static_cast<int>(viewSize.x);
     int viewHeight = static_cast<int>(viewSize.y);
-    
+
     // Iterate through 200x200 hex grid (based on legacy implementation)
+    // TODO: replace magic numbers with HexGrid constants
     for (int y = 0; y < 200; y++) {
         for (int x = 0; x < 200; x++) {
             // Convert hex coordinates to world coordinates using existing HexagonGrid
@@ -1787,29 +1765,29 @@ void EditorWidget::renderHexGrid() {
             if (hexIndex >= static_cast<int>(_hexgrid.grid().size())) {
                 continue;
             }
-            
+
             // Get the hex data for this grid index
             const auto& hex = _hexgrid.grid().at(hexIndex);
             int actualHexPosition = hex.position();
-            
+
             // Skip rendering the hex that's currently being highlighted
             if (actualHexPosition == _currentHoverHex) {
                 continue;
             }
-            
+
             int hexWorldX = hex.x();
             int hexWorldY = hex.y();
-            
+
             // Viewport culling - only render visible hex sprites
             // Based on legacy: (nMapX + 32 > WorldX && nMapX < WorldX + w1) && (nMapY + 16 > WorldY && nMapY < WorldY + h1)
             if ((hexWorldX + 32 > worldX && hexWorldX < worldX + viewWidth) &&
                 (hexWorldY + 16 > worldY && hexWorldY < worldY + viewHeight)) {
-                
+
                 // Position hex sprite - based on legacy: nMapX - WorldX - 16, nMapY - WorldY - 8
                 float spriteX = static_cast<float>(hexWorldX - 16);
                 float spriteY = static_cast<float>(hexWorldY - 8);
-                
-                _hexSprite.setPosition(spriteX, spriteY);
+
+                _hexSprite.setPosition({spriteX, spriteY});
                 window->draw(_hexSprite);
             }
         }
@@ -1822,6 +1800,36 @@ void EditorWidget::updateHoverHex(sf::Vector2f worldPos) {
     if (newHoverHex != _currentHoverHex) {
         _currentHoverHex = newHoverHex;
         Q_EMIT hexHoverChanged(_currentHoverHex);
+    }
+}
+
+
+const sf::Texture& EditorWidget::createHexTexture() {
+    FrmReader frm_reader{};
+    ResourceManager::getInstance().loadResource("art/HEX.frm", frm_reader);
+
+    return ResourceManager::getInstance().texture("art/HEX.frm");
+}
+
+// TODO: better mechanism for registering a custom texture
+const sf::Texture& EditorWidget::createBlankTexture() {
+    // Use ResourceManager to handle the blank texture to avoid static OpenGL resources
+    static std::string blankTextureName = "__blank_texture__";
+    
+    try {
+        return ResourceManager::getInstance().texture(blankTextureName);
+    } catch (const std::exception&) {
+        // Create blank texture and store it in ResourceManager
+        auto& resourceManager = ResourceManager::getInstance();
+        sf::Image blankImage{sf::Vector2u{1, 1}, sf::Color::Transparent};
+        
+        auto texture = std::make_unique<sf::Texture>();
+        texture->loadFromImage(blankImage);
+        
+        // Store in ResourceManager's texture cache using the new method
+        resourceManager.storeTexture(blankTextureName, std::move(texture));
+        
+        return resourceManager.texture(blankTextureName);
     }
 }
 

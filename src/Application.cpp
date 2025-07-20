@@ -75,8 +75,6 @@ std::string Application::processCommandLineArgs() {
     parser.addHelpOption();
     parser.addVersionOption();
     parser.setApplicationDescription("Fallout 2 map editor");
-    parser.addHelpOption();
-    parser.addVersionOption();
 
     const std::filesystem::path resources_path = std::filesystem::current_path() / geck::Application::RESOURCES_DIR;
     QCommandLineOption dataOption(QStringList() << "d" << "data",
@@ -120,6 +118,9 @@ Application::~Application() {
     if (_mainWindow) {
         _mainWindow->stopGameLoop();
     }
+    // OpenGL textures must be destroyed while the OpenGL context is still valid;
+    // without this we get mutex/context crash during static destruction
+    ResourceManager::getInstance().cleanup();
 }
 
 void Application::initUI() {

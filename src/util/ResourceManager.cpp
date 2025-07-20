@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
+#include <spdlog/spdlog.h>
 
 #include <vfspp/NativeFileSystem.hpp>
 #include "vfs/Dat2FileSystem.hpp"
@@ -20,6 +21,22 @@ namespace geck {
 ResourceManager::ResourceManager()
     : _vfs(new vfspp::VirtualFileSystem())
 {
+}
+
+void ResourceManager::cleanup() {
+    spdlog::info("Cleaning up ResourceManager resources...");
+
+    // Clear textures first (they are OpenGL resources)
+    _textures.clear();
+
+    // Clear other resources
+    _resources.clear();
+
+    spdlog::info("ResourceManager cleanup completed");
+}
+
+void ResourceManager::storeTexture(const std::string& name, std::unique_ptr<sf::Texture> texture) {
+    _textures[name] = std::move(texture);
 }
 
 bool ResourceManager::exists(const std::string& filename) {

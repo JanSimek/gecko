@@ -91,8 +91,8 @@ public:
     ~TileSpatialIndex() = default;
     
     // Initialize with map data
-    void buildIndex(const std::array<sf::Sprite, TILES_PER_ELEVATION>& floorSprites,
-                   const std::array<sf::Sprite, TILES_PER_ELEVATION>& roofSprites);
+    void buildIndex(const std::vector<sf::Sprite>& floorSprites,
+                   const std::vector<sf::Sprite>& roofSprites);
     
     // Fast tile queries
     std::vector<int> getTilesInArea(sf::FloatRect area, bool roof = false) const;

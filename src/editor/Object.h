@@ -61,6 +61,9 @@ public:
 
     int width() const;
     int height() const;
+
+private:
+    static sf::Texture& createBlankTexture();
 };
 
 } // namespace geck

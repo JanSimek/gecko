@@ -70,7 +70,7 @@ public:
 
     // Access to SFML widget for main window
     SFMLWidget* getSFMLWidget() const { return _sfmlWidget; }
-    
+
     // Methods for SelectionManager (moved from private)
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
     bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
@@ -79,9 +79,9 @@ public:
     std::optional<int> getTileAtPosition(sf::Vector2f worldPos, bool isRoof);
     std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos);
     
-    // Access to sprite arrays for SelectionManager
-    const std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& getFloorSprites() const { return _floorSprites; }
-    const std::array<sf::Sprite, Map::TILES_PER_ELEVATION>& getRoofSprites() const { return _roofSprites; }
+    // Access to sprite vectors for SelectionManager
+    const std::vector<sf::Sprite>& getFloorSprites() const { return _floorSprites; }
+    const std::vector<sf::Sprite>& getRoofSprites() const { return _roofSprites; }
     
     // Access to current elevation and map data
     int getCurrentElevation() const { return _currentElevation; }
@@ -168,8 +168,10 @@ private:
     SelectionMode _currentSelectionMode = SelectionMode::ALL;
 
     HexagonGrid _hexgrid;
-    std::array<sf::Sprite, Map::TILES_PER_ELEVATION> _floorSprites;
-    std::array<sf::Sprite, Map::TILES_PER_ELEVATION> _roofSprites;
+    // Note: Using std::vector instead of std::array because SFML 3 sf::Sprite
+    // requires a texture in constructor and is not default-constructible
+    std::vector<sf::Sprite> _floorSprites;
+    std::vector<sf::Sprite> _roofSprites;
 
     std::vector<std::shared_ptr<Object>> _objects;
 
@@ -188,7 +190,9 @@ private:
     sf::Vector2i _mouseStartingPosition{ 0, 0 }; // panning started
     sf::Vector2i _mouseLastPosition{ 0, 0 };     // current panning position
     EditorAction _currentAction = EditorAction::NONE;
-    sf::Cursor _cursor;
+    // sf::Cursor _cursor; // TODO: Fix cursor initialization for SFML 3
+    const sf::Texture& createBlankTexture();
+    const sf::Texture& createHexTexture();
     
     // Zoom level tracking and limits
     float _zoomLevel = 1.0f;
@@ -202,8 +206,6 @@ private:
     static constexpr float DOUBLE_CLICK_TIME = 0.5f; // 500ms
     static constexpr float DOUBLE_CLICK_DISTANCE = 10.0f; // pixels
     
-    // Fake sprite for tile hit detection
-    sf::Sprite _fakeTileSprite;
     
     // Drag selection state
     sf::Vector2f _dragStartWorldPos;

@@ -12,9 +12,28 @@
 namespace geck {
 
 Object::Object(const Frm* frm)
-    : _frm(frm)
+    : _sprite(createBlankTexture())
+    , _frm(frm)
     , _direction(0)
     , _selected(false) {
+}
+
+sf::Texture& Object::createBlankTexture() {
+    static const std::string BLANK_TEXTURE_KEY = "__object_blank_texture__";
+    
+    auto& resourceManager = ResourceManager::getInstance();
+    
+    // Check if texture already exists in ResourceManager
+    try {
+        return const_cast<sf::Texture&>(resourceManager.texture(BLANK_TEXTURE_KEY));
+    } catch (const std::exception&) {
+        // Texture doesn't exist, create it
+        sf::Image blankImage{sf::Vector2u{1, 1}, sf::Color::Transparent};
+        auto texture = std::make_unique<sf::Texture>();
+        texture->loadFromImage(blankImage);
+        resourceManager.storeTexture(BLANK_TEXTURE_KEY, std::move(texture));
+        return const_cast<sf::Texture&>(resourceManager.texture(BLANK_TEXTURE_KEY));
+    }
 }
 
 MapObject& Object::getMapObject() {
@@ -43,7 +62,7 @@ void Object::setHexPosition(const Hex& hex) {
     float x = static_cast<float>(hex.x() - (width() / 2) + shiftX());
     float y = static_cast<float>(hex.y() - height() + shiftY());
 
-    _sprite.setPosition(x, y);
+    _sprite.setPosition({x, y});
     if (_mapObject != nullptr) {
         _mapObject->position = hex.position();
     }

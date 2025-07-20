@@ -44,6 +44,11 @@ public:
     template <class T, typename Key>
     T* getResource(const Key& filepath);
 
+    void cleanup();
+
+    // Store a custom texture in the resource manager
+    void storeTexture(const std::string& name, std::unique_ptr<sf::Texture> texture);
+    
     template <class Resource>
     Resource* loadResource(const std::filesystem::path& path, FileParser<Resource>& reader) {
 

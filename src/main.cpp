@@ -9,9 +9,21 @@
 #include "util/QtDialogs.h"
 
 int main(int argc, char** argv) {
-    spdlog::set_pattern("[%^%l%$] %v");
-    geck::Application app{ argc, argv };
-    app.run();
-
-    return 0;
+    try {
+        spdlog::set_pattern("[%^%l%$] %v");
+        
+        geck::Application app{ argc, argv };
+        app.run();
+        return 0;
+        
+    } catch (const std::system_error& e) {
+        spdlog::error("System error in main: {} (code: {})", e.what(), e.code().value());
+        return -1;
+    } catch (const std::exception& e) {
+        spdlog::error("Exception in main: {}", e.what());
+        return -1;
+    } catch (...) {
+        spdlog::error("Unknown exception in main");
+        return -1;
+    }
 }
