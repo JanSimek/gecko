@@ -1519,15 +1519,15 @@ bool EditorWidget::startObjectDrag(sf::Vector2f worldPos) {
         if (object) {
             // Get the object's current hex position and convert to hex center coordinates
             int currentHexPosition = object->getMapObject().position;
-            const Hex* currentHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(currentHexPosition));
+            auto currentHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(currentHexPosition));
             if (currentHex) {
                 // Store hex center position, not sprite position
                 _objectDragStartPositions.push_back(sf::Vector2f(
-                    static_cast<float>(currentHex->x()), 
-                    static_cast<float>(currentHex->y())
+                    static_cast<float>(currentHex->get().x()), 
+                    static_cast<float>(currentHex->get().y())
                 ));
                 spdlog::debug("Object at hex {} starts drag from hex center ({}, {})", 
-                             currentHexPosition, currentHex->x(), currentHex->y());
+                             currentHexPosition, currentHex->get().x(), currentHex->get().y());
             } else {
                 // Fallback: use sprite position
                 _objectDragStartPositions.push_back(object->getSprite().getPosition());
@@ -1600,13 +1600,13 @@ void EditorWidget::finishObjectDrag(sf::Vector2f finalWorldPos) {
         
         if (newHexPosition >= 0) {
             // Get the proper hex object for this position
-            const Hex* targetHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(newHexPosition));
+            auto targetHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(newHexPosition));
             if (targetHex) {
                 // Update the map object's position index for saving
                 int oldHexPosition = object->getMapObject().position;
                 
                 // Use setHexPosition to properly position the object with FRM offsets
-                object->setHexPosition(*targetHex);
+                object->setHexPosition(targetHex->get());
                 
                 spdlog::info("Hex coordinate update: old position {} -> new position {}", oldHexPosition, newHexPosition);
                 
@@ -1621,9 +1621,9 @@ void EditorWidget::finishObjectDrag(sf::Vector2f finalWorldPos) {
                 spdlog::error("Failed to get hex object for position {}", newHexPosition);
                 // Invalid position - restore to original hex position
                 int originalHexPosition = object->getMapObject().position;
-                const Hex* originalHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(originalHexPosition));
+                auto originalHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(originalHexPosition));
                 if (originalHex) {
-                    object->setHexPosition(*originalHex);
+                    object->setHexPosition(originalHex->get());
                 } else {
                     // Last resort: use sprite positioning
                     object->getSprite().setPosition(_objectDragStartPositions[i]);
@@ -1632,9 +1632,9 @@ void EditorWidget::finishObjectDrag(sf::Vector2f finalWorldPos) {
         } else {
             // Invalid position - restore to original hex position
             int originalHexPosition = object->getMapObject().position;
-            const Hex* originalHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(originalHexPosition));
+            auto originalHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(originalHexPosition));
             if (originalHex) {
-                object->setHexPosition(*originalHex);
+                object->setHexPosition(originalHex->get());
                 spdlog::debug("Invalid drop position - restored object to original hex {}", originalHexPosition);
             } else {
                 // Last resort: use sprite positioning
@@ -1676,9 +1676,9 @@ void EditorWidget::cancelObjectDrag() {
         if (_draggedObjects[i] && i < _objectDragStartPositions.size()) {
             // Restore to original hex position
             int originalHexPosition = _draggedObjects[i]->getMapObject().position;
-            const Hex* originalHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(originalHexPosition));
+            auto originalHex = _hexgrid.getHexByPosition(static_cast<uint32_t>(originalHexPosition));
             if (originalHex) {
-                _draggedObjects[i]->setHexPosition(*originalHex);
+                _draggedObjects[i]->setHexPosition(originalHex->get());
             } else {
                 // Fallback: use stored position
                 _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);

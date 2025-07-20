@@ -1,5 +1,6 @@
 #include "HexagonGrid.h"
 #include "Hex.h"
+#include <functional>
 
 namespace geck {
 
@@ -39,14 +40,14 @@ uint32_t HexagonGrid::positionAt(uint32_t x, uint32_t y) const {
     return Hex::HEX_OUT_OF_MAP;
 }
 
-const Hex* HexagonGrid::getHexByPosition(uint32_t position) const {
+std::optional<std::reference_wrapper<const Hex>> HexagonGrid::getHexByPosition(uint32_t position) const {
     // Find the hex with the matching position value
     for (const auto& hex : _grid) {
         if (hex.position() == position) {
-            return &hex;
+            return std::cref(hex);
         }
     }
-    return nullptr;
+    return std::nullopt;
 }
 
 } // namespace geck

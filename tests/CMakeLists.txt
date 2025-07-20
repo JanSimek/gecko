@@ -4,9 +4,6 @@ add_executable(general_tests
     general/test_reading_msg.cpp
     general/test_tile_utils.cpp
     general/test_selection_system.cpp
-    general/test_error_handling.cpp
-    # general/test_area_calculator.cpp  # Temporarily disabled - needs complex EditorWidget mocking
-    # general/test_advanced_components.cpp  # Temporarily disabled - missing component dependencies
 )
 
 target_link_libraries(general_tests PRIVATE

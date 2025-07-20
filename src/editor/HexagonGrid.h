@@ -2,6 +2,8 @@
 
 #include <memory>
 #include <vector>
+#include <optional>
+#include <functional>
 
 namespace geck {
 
@@ -21,7 +23,7 @@ public:
 
     uint32_t positionAt(uint32_t x, uint32_t y) const;
     
-    const Hex* getHexByPosition(uint32_t position) const;
+    std::optional<std::reference_wrapper<const Hex>> getHexByPosition(uint32_t position) const;
 };
 
 } // namespace geck

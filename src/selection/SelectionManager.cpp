@@ -291,7 +291,6 @@ bool SelectionManager::startDrag(sf::Vector2f worldPos) {
     }
     
     // Check if any selected item is at this position
-    // For now, we'll implement basic drag start logic
     _state.isDragging = true;
     _state.dragStartPosition = worldPos;
     
