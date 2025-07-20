@@ -26,7 +26,7 @@ include(GNUInstallDirs)
 ##################################################
 # Options
 ##################################################
-option(GECK_USE_SYSTEM_LIBS "Use system libraries when available" OFF)
+option(GECK_USE_SYSTEM_LIBS "Use system libraries when available" ON)
 option(GECK_BUILD_TESTS "Build tests" ON)
 option(GECK_ENABLE_SANITIZERS "Enable sanitizer builds for debugging" OFF)
 option(GECK_AUTO_TEST "Automatically run tests after build" ON)

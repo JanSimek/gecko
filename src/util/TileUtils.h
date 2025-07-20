@@ -148,34 +148,5 @@ inline void removePreviewHighlight(sf::Sprite& sprite) {
     sprite.setColor(TileColors::white());
 }
 
-/**
- * @brief Create a tile position indicator rectangle
- * 
- * Creates a small rectangle used to indicate tile positions,
- * commonly used for empty roof tiles.
- * 
- * @param position Screen position for the indicator
- * @param fillColor Fill color for the indicator
- * @param outlineColor Outline color for the indicator  
- * @param size Size of the indicator rectangle
- * @return Configured rectangle shape
- */
-inline sf::RectangleShape createTileIndicator(
-    const ScreenPosition& position,
-    const sf::Color& fillColor,
-    const sf::Color& outlineColor,
-    float size = 20.0f
-) {
-    sf::RectangleShape indicator;
-    indicator.setSize(sf::Vector2f(size, size));
-    indicator.setFillColor(fillColor);
-    indicator.setOutlineColor(outlineColor);
-    indicator.setOutlineThickness(1.0f);
-    indicator.setPosition({
-        static_cast<float>(position.x) - size/2,
-        static_cast<float>(position.y) - size/2
-    });
-    return indicator;
-}
 
 } // namespace geck

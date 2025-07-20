@@ -203,50 +203,6 @@ TEST_CASE("Sprite highlight functions", "[tile_utils]") {
     }
 }
 
-TEST_CASE("Tile indicator creation", "[tile_utils]") {
-    SECTION("Default indicator creation") {
-        ScreenPosition pos(100, 200);
-        sf::Color fill = sf::Color::Red;
-        sf::Color outline = sf::Color::Blue;
-        
-        auto indicator = createTileIndicator(pos, fill, outline);
-        
-        // Check size (default 20.0f)
-        auto size = indicator.getSize();
-        REQUIRE(size.x == 20.0f);
-        REQUIRE(size.y == 20.0f);
-        
-        // Check colors
-        REQUIRE(indicator.getFillColor() == fill);
-        REQUIRE(indicator.getOutlineColor() == outline);
-        REQUIRE(indicator.getOutlineThickness() == 1.0f);
-        
-        // Check position (should be centered on the given position)
-        auto position = indicator.getPosition();
-        REQUIRE(position.x == static_cast<float>(pos.x) - 10.0f); // 20.0f / 2
-        REQUIRE(position.y == static_cast<float>(pos.y) - 10.0f); // 20.0f / 2
-    }
-    
-    SECTION("Custom size indicator creation") {
-        ScreenPosition pos(50, 75);
-        sf::Color fill = sf::Color::Green;
-        sf::Color outline = sf::Color::Yellow;
-        float custom_size = 30.0f;
-        
-        auto indicator = createTileIndicator(pos, fill, outline, custom_size);
-        
-        // Check custom size
-        auto size = indicator.getSize();
-        REQUIRE(size.x == custom_size);
-        REQUIRE(size.y == custom_size);
-        
-        // Check position is centered correctly with custom size
-        auto position = indicator.getPosition();
-        REQUIRE(position.x == static_cast<float>(pos.x) - custom_size/2);
-        REQUIRE(position.y == static_cast<float>(pos.y) - custom_size/2);
-    }
-}
-
 TEST_CASE("Mathematical property validation", "[tile_utils]") {
     SECTION("Ensure coordinates stay within bounds") {
         // Test that all valid tile indices produce valid coordinates

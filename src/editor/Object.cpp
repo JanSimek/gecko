@@ -87,10 +87,6 @@ int Object::height() const {
 void Object::setDirection(ObjectDirection direction) {
     _direction = static_cast<int>(direction);
 
-    // int hexPos = object->hexPosition();
-    // float x = hexPos % 200;
-    // float y = hexPos / 200;
-    // Point point = hexToScreen(x, y);
 
     // FIXME: ??? one scrblk on arcaves.map
     if (_frm->directions().size() <= static_cast<size_t>(_direction) || _direction < 0) {

@@ -38,7 +38,7 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
     , _hexSprite(createHexTexture())
     , _hexHighlightSprite(createHexTexture()) {
 
-    _hexHighlightSprite.setColor(sf::Color(255, 0, 0, 200)); // Bright red for highlighting
+    _hexHighlightSprite.setColor(sf::Color(255, 0, 0, HEX_HIGHLIGHT_ALPHA));
 
     // Initialize sprite vectors with blank texture
     const sf::Texture& blankTexture = createBlankTexture();
@@ -50,7 +50,6 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
         _roofSprites.emplace_back(blankTexture);
     }
     
-    // TODO: Initialize cursor for SFML 3 (cursor removed temporarily)
     
     // Initialize selection management
     initializeSelectionSystem();
@@ -88,24 +87,16 @@ void EditorWidget::initializeSelectionSystem() {
                     if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
                         // Check if this is an empty roof tile and we're in ROOF_TILES_ALL mode
                         auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
-                        if (tile.getRoof() == Map::EMPTY_TILE && selection.mode == SelectionMode::ROOF_TILES_ALL) {
-                            // Create a visual indicator for empty roof tile
-                            sf::RectangleShape indicator;
-                            indicator.setSize(sf::Vector2f(20, 20)); // Small rectangle
-                            indicator.setFillColor(TileColors::errorFill());
-                            indicator.setOutlineColor(TileColors::errorOutline());
-                            indicator.setOutlineThickness(1);
-                            
-                            // Calculate tile position using utility function
-                            auto screenPos = indexToScreenPosition(tileIndex, true);
-                            
-                            // Position indicator at calculated screen position
-                            indicator.setPosition({static_cast<float>(screenPos.x) - 10, static_cast<float>(screenPos.y) - 10});
-                            _emptyRoofTileIndicators.push_back(indicator);
-                        } else {
-                            // Apply normal highlighting to existing roof sprite
-                            this->_roofSprites.at(tileIndex).setColor(geck::ColorUtils::createErrorIndicatorColor());
-                        }
+                        // Apply highlighting to roof sprite with higher visibility for better contrast
+                        this->_roofSprites.at(tileIndex).setColor(geck::ColorUtils::createRoofTileSelectionColor());
+                        
+                        // Create a blank.frm background sprite for better visibility of tiles with transparent pixels
+                        auto screenPos = geck::indexToScreenPosition(tileIndex, true); // true for roof offset
+                        sf::Sprite backgroundSprite(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
+                        backgroundSprite.setPosition({static_cast<float>(screenPos.x), static_cast<float>(screenPos.y)});
+                        // Set semi-transparent red color to show through transparent areas of the roof tile
+                        backgroundSprite.setColor(sf::Color(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B, 128)); // 50% transparency
+                        this->_selectedRoofTileBackgroundSprites.push_back(backgroundSprite);
                     }
                     break;
                 }
@@ -229,7 +220,6 @@ void EditorWidget::openMap() {
 
 void EditorWidget::createNewMap() {
     spdlog::info("Create new map functionality not yet implemented");
-    // TODO: Implement new map creation
 }
 
 void EditorWidget::loadObjectSprites() {
@@ -247,8 +237,6 @@ void EditorWidget::loadObjectSprites() {
 
         const auto& frm = ResourceManager::getInstance().getResource<Frm>(frm_name);
 
-        // TODO: use _objects.insert(v.begin(), Object{ frm }); for flat objects
-        //       which should be rendered first
 
         _objects.emplace_back(std::make_shared<Object>(frm));
         sf::Sprite object_sprite{ ResourceManager::getInstance().texture(frm_name) };
@@ -260,19 +248,12 @@ void EditorWidget::loadObjectSprites() {
 }
 
 // Tiles
-// TODO: create tile atlas like in Falltergeist Tilemap.cpp
 void EditorWidget::loadTileSprites() {
     const auto& lst = ResourceManager::getInstance().getResource<Lst, std::string>("art/tiles/tiles.lst");
 
     for (auto tileNumber = 0U; tileNumber < Map::TILES_PER_ELEVATION; ++tileNumber) {
         auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileNumber);
 
-        // Positioning
-
-        // geometry constants
-        // const TILE_WIDTH = 80
-        // const TILE_HEIGHT = 36
-        // const HEX_GRID_SIZE = 200 // hex grid is 200x200 (roof+floor)
 
         // Convert tile number to hex grid coordinates using utility function
         auto coords = indexToCoordinates(static_cast<int>(tileNumber));
@@ -297,7 +278,16 @@ void EditorWidget::loadTileSprites() {
         }
 
         // roof
-        _roofSprites[tileNumber] = createTileSprite(tile.getRoof(), ROOF_OFFSET);
+        uint16_t roofId = tile.getRoof();
+        if (roofId == Map::EMPTY_TILE) {
+            sf::Sprite tile_sprite(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
+            tile_sprite.setPosition({static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) - ROOF_OFFSET});
+            // Make empty roof tiles fully transparent by default
+            tile_sprite.setColor(sf::Color(255, 255, 255, 0));
+            _roofSprites[tileNumber] = tile_sprite;
+        } else {
+            _roofSprites[tileNumber] = createTileSprite(roofId, ROOF_OFFSET);
+        }
     }
 }
 
@@ -310,9 +300,6 @@ void EditorWidget::loadSprites() {
 
     _objects.clear();
 
-    // FIXME: causes stack overflow on Windows ?! It is probably not needed anyway because all elements get overwritten on map-reload
-    //_floorSprites = {};
-    //_roofSprites = {};
 
     // Data
     loadTileSprites();
@@ -326,12 +313,11 @@ void EditorWidget::loadSprites() {
 
 void EditorWidget::centerViewOnMap() {
     // Calculate map center based on how tiles are positioned in loadTileSprites()
-    // The map is 100x100 tiles per elevation, positioned with this formula:
-    // x = (100 - tileY - 1) * 48 + 32 * (tileX - 1)
-    // y = tileX * 24 + (tileY - 1) * 12 + 1
-    // Center should be around tile 50,50
-    float centerX = (100 - 50 - 1) * 48 + 32 * (50 - 1);  // ≈ 3920
-    float centerY = 50 * 24 + (50 - 1) * 12 + 1;          // ≈ 1789
+    constexpr int centerTileX = MAP_WIDTH / 2;
+    constexpr int centerTileY = MAP_HEIGHT / 2;
+    
+    float centerX = (MAP_WIDTH - centerTileY - 1) * TILE_X_OFFSET + TILE_Y_OFFSET_LARGE * (centerTileX - 1);
+    float centerY = centerTileX * TILE_Y_OFFSET_SMALL + (centerTileY - 1) * TILE_Y_OFFSET_TINY + 1;
     
     _view.setCenter({centerX, centerY});
     spdlog::debug("EditorWidget::centerViewOnMap() - Set view center to ({:.1f}, {:.1f})", centerX, centerY);
@@ -341,7 +327,6 @@ void EditorWidget::centerViewOnMap() {
 std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vector2f worldPos) {
     std::vector<std::shared_ptr<Object>> objectsAtPos;
     
-    // Check all objects for collision at the world position
     for (auto& object : _objects) {
         if (isPointInSpritePixel(worldPos, object->getSprite())) {
             objectsAtPos.push_back(object);
@@ -361,7 +346,7 @@ std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vect
             
             // Same position - use object type priority
             auto getTypePriority = [](uint32_t pid) -> int {
-                unsigned int typeId = pid >> 24;
+                unsigned int typeId = pid >> FileFormat::TYPE_MASK_SHIFT;
                 switch (static_cast<Pro::OBJECT_TYPE>(typeId)) {
                     case Pro::OBJECT_TYPE::SCENERY: return 3;  // Highest priority
                     case Pro::OBJECT_TYPE::WALL:    return 2;
@@ -404,7 +389,6 @@ bool EditorWidget::isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite
 }
 
 bool EditorWidget::isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite) const {
-    // First check if point is within sprite bounds
     if (!isPointInSpriteBounds(worldPos, sprite)) {
         return false;
     }
@@ -453,7 +437,6 @@ bool EditorWidget::isDoubleClick(sf::Vector2f worldPos) {
     
     bool isDouble = (timeSinceLastClick < DOUBLE_CLICK_TIME) && (distance < DOUBLE_CLICK_DISTANCE);
     
-    // Update last click info
     _lastClickTime.restart();
     _lastClickPosition = worldPos;
     
@@ -474,12 +457,18 @@ void EditorWidget::clearAllVisualSelections() {
         floorSprite.setColor(sf::Color::White);
     }
     
-    for (auto& roofSprite : _roofSprites) {
-        roofSprite.setColor(sf::Color::White);
+    // Reset roof sprites - empty tiles back to transparent, others to white
+    for (int i = 0; i < static_cast<int>(_roofSprites.size()); ++i) {
+        auto tile = _map->getMapFile().tiles.at(_currentElevation).at(i);
+        if (tile.getRoof() == Map::EMPTY_TILE) {
+            _roofSprites[i].setColor(sf::Color(255, 255, 255, 0)); // Transparent
+        } else {
+            _roofSprites[i].setColor(sf::Color::White); // Opaque white
+        }
     }
     
-    // Clear empty roof tile indicators
-    _emptyRoofTileIndicators.clear();
+    // Clear roof tile selection background sprites
+    _selectedRoofTileBackgroundSprites.clear();
 }
 
 void EditorWidget::zoomView(float direction) {
@@ -688,7 +677,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 // Mark as actively dragging if we've moved enough
                 float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + 
                                          std::pow(currentWorldPos.y - _dragStartWorldPos.y, 2));
-                if (distance > 5.0f) { // Minimum drag distance
+                if (distance > DRAG_START_THRESHOLD) {
                     _isDragSelecting = true;
                 }
                 
@@ -714,7 +703,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     // Mark as actively dragging if we've moved enough
                     float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + 
                                              std::pow(currentWorldPos.y - _dragStartWorldPos.y, 2));
-                    if (distance > 5.0f) { // Minimum drag distance
+                    if (distance > DRAG_START_THRESHOLD) {
                         _isDragSelecting = true;
                     }
                     
@@ -740,7 +729,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 // Mark as actively dragging if we've moved enough
                 float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + 
                                          std::pow(currentWorldPos.y - _dragStartWorldPos.y, 2));
-                if (distance > 5.0f) { // Minimum drag distance
+                if (distance > DRAG_START_THRESHOLD) {
                     _isDraggingObjects = true;
                 }
                 
@@ -774,7 +763,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         _selectionManager->selectAll(_currentSelectionMode, _currentElevation);
                         spdlog::info("Select all: {} items", _selectionManager->getCurrentSelection().count());
                     } else {
-                        _view.move({-50.0f, 0.0f});
+                        _view.move({-VIEW_MOVE_STEP, 0.0f});
                     }
                     break;
                     case sf::Keyboard::Scancode::Right:
@@ -785,16 +774,16 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                             _selectionManager->clearSelection();
                             spdlog::info("Deselected all items");
                         } else {
-                            _view.move({50.0f, 0.0f});
+                            _view.move({VIEW_MOVE_STEP, 0.0f});
                         }
                         break;
                     case sf::Keyboard::Scancode::Up:
                     case sf::Keyboard::Scancode::W:
-                        _view.move({0.0f, -50.0f});
+                        _view.move({0.0f, -VIEW_MOVE_STEP});
                         break;
                     case sf::Keyboard::Scancode::Down:
                     case sf::Keyboard::Scancode::S:
-                        _view.move({0.0f, 50.0f});
+                        _view.move({0.0f, VIEW_MOVE_STEP});
                         break;
                     case sf::Keyboard::Scancode::Home:
                         // Reset to center and normal zoom
@@ -870,6 +859,12 @@ void EditorWidget::render(const float dt) {
     
     // Render roof tiles
     if (_showRoof) {
+        // First draw background sprites for selected roof tiles (blank.frm tiles)
+        for (const auto& backgroundSprite : _selectedRoofTileBackgroundSprites) {
+            window->draw(backgroundSprite);
+        }
+        
+        // Then draw the roof sprites on top
         for (const auto& roof : _roofSprites) {
             window->draw(roof);
         }
@@ -880,10 +875,6 @@ void EditorWidget::render(const float dt) {
         window->draw(_selectionRectangle);
     }
     
-    // Render empty roof tile indicators
-    for (const auto& indicator : _emptyRoofTileIndicators) {
-        window->draw(indicator);
-    }
 
     // Render hex highlight if there's a valid hover hex
     if (_currentHoverHex >= 0) {
@@ -1210,7 +1201,7 @@ int EditorWidget::worldPosToHexIndex(sf::Vector2f worldPos) const {
     }
     
     // Only return the index if it's reasonably close (within tile bounds)
-    if (minDistance < 40.0f * 40.0f) { // Within 40 pixels
+    if (minDistance < TILE_CLICK_DISTANCE_THRESHOLD * TILE_CLICK_DISTANCE_THRESHOLD) {
         return closestIndex;
     }
     
@@ -1356,26 +1347,8 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
             // Apply preview coloring to roof tiles including empty ones
             for (int tileIndex : _previewTiles) {
                 if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
-                    // Check if this roof tile is empty
-                    auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
-                    if (tile.getRoof() == Map::EMPTY_TILE) {
-                        // Create a visual indicator for empty roof tile
-                        sf::RectangleShape indicator;
-                        indicator.setSize(sf::Vector2f(20, 20)); // Small rectangle
-                        indicator.setFillColor(TileColors::previewFill());
-                        indicator.setOutlineColor(TileColors::previewOutline());
-                        indicator.setOutlineThickness(1);
-                        
-                        // Calculate tile position using utility function
-                        auto screenPos = indexToScreenPosition(tileIndex);
-                        
-                        // Position indicator at calculated screen position
-                        indicator.setPosition({static_cast<float>(screenPos.x) - 10, static_cast<float>(screenPos.y) - 10});
-                        _emptyRoofTileIndicators.push_back(indicator);
-                    } else {
-                        // Apply preview coloring to existing roof sprite
-                        applyPreviewHighlight(_roofSprites.at(tileIndex));
-                    }
+                    // Apply preview coloring to roof sprite (makes empty tiles visible if they were transparent)
+                    applyPreviewHighlight(_roofSprites.at(tileIndex));
                 }
             }
             break;
@@ -1456,7 +1429,14 @@ void EditorWidget::clearDragPreview() {
     for (int tileIndex : _previewTiles) {
         if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
             removePreviewHighlight(_floorSprites.at(tileIndex));
-            removePreviewHighlight(_roofSprites.at(tileIndex));
+            
+            // For roof sprites, check if it's empty and set back to transparent
+            auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
+            if (tile.getRoof() == Map::EMPTY_TILE) {
+                _roofSprites.at(tileIndex).setColor(sf::Color(255, 255, 255, 0)); // Transparent
+            } else {
+                removePreviewHighlight(_roofSprites.at(tileIndex));
+            }
         }
     }
     
@@ -1466,9 +1446,6 @@ void EditorWidget::clearDragPreview() {
             removePreviewHighlight(object->getSprite());
         }
     }
-    
-    // Clear empty roof tile indicators
-    _emptyRoofTileIndicators.clear();
     
     // Clear the preview arrays
     _previewTiles.clear();
@@ -1758,12 +1735,11 @@ void EditorWidget::renderHexGrid() {
     int viewWidth = static_cast<int>(viewSize.x);
     int viewHeight = static_cast<int>(viewSize.y);
 
-    // Iterate through 200x200 hex grid (based on legacy implementation)
-    // TODO: replace magic numbers with HexGrid constants
-    for (int y = 0; y < 200; y++) {
-        for (int x = 0; x < 200; x++) {
+    // Iterate through hex grid
+    for (int y = 0; y < HexagonGrid::GRID_HEIGHT; y++) {
+        for (int x = 0; x < HexagonGrid::GRID_WIDTH; x++) {
             // Convert hex coordinates to world coordinates using existing HexagonGrid
-            int hexIndex = y * 200 + x;
+            int hexIndex = y * HexagonGrid::GRID_WIDTH + x;
             if (hexIndex >= static_cast<int>(_hexgrid.grid().size())) {
                 continue;
             }
@@ -1781,13 +1757,12 @@ void EditorWidget::renderHexGrid() {
             int hexWorldY = hex.y();
 
             // Viewport culling - only render visible hex sprites
-            // Based on legacy: (nMapX + 32 > WorldX && nMapX < WorldX + w1) && (nMapY + 16 > WorldY && nMapY < WorldY + h1)
-            if ((hexWorldX + 32 > worldX && hexWorldX < worldX + viewWidth) &&
-                (hexWorldY + 16 > worldY && hexWorldY < worldY + viewHeight)) {
+            if ((hexWorldX + Hex::HEX_WIDTH * 2 > worldX && hexWorldX < worldX + viewWidth) &&
+                (hexWorldY + Hex::HEX_HEIGHT + 4 > worldY && hexWorldY < worldY + viewHeight)) {
 
-                // Position hex sprite - based on legacy: nMapX - WorldX - 16, nMapY - WorldY - 8
-                float spriteX = static_cast<float>(hexWorldX - 16);
-                float spriteY = static_cast<float>(hexWorldY - 8);
+                // Position hex sprite
+                float spriteX = static_cast<float>(hexWorldX - Hex::HEX_WIDTH);
+                float spriteY = static_cast<float>(hexWorldY - Hex::HEX_HEIGHT + 4);
 
                 _hexSprite.setPosition({spriteX, spriteY});
                 window->draw(_hexSprite);
@@ -1813,7 +1788,6 @@ const sf::Texture& EditorWidget::createHexTexture() {
     return ResourceManager::getInstance().texture("art/HEX.frm");
 }
 
-// TODO: better mechanism for registering a custom texture
 const sf::Texture& EditorWidget::createBlankTexture() {
     // Use ResourceManager to handle the blank texture to avoid static OpenGL resources
     static std::string blankTextureName = "__blank_texture__";

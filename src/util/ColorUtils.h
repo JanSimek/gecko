@@ -31,6 +31,10 @@ inline sf::Color createErrorOutlineColor() {
     return sf::Color(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B, Colors::ERROR_OUTLINE_ALPHA);
 }
 
+inline sf::Color createRoofTileSelectionColor() {
+    return sf::Color(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B, Colors::ROOF_SELECTION_ALPHA);
+}
+
 inline sf::Color createObjectSelectionColor() {
     return sf::Color::Magenta; // Standard SFML magenta for object selection
 }

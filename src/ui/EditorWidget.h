@@ -221,8 +221,6 @@ private:
     std::vector<sf::Vector2f> _objectDragStartPositions; // Original positions for cancel/revert
     sf::Vector2f _objectDragOffset; // Current drag offset from start position
     
-    // Empty roof tile highlighting
-    std::vector<sf::RectangleShape> _emptyRoofTileIndicators; // Visual indicators for empty roof tiles
     
     // Hex grid visualization
     sf::Sprite _hexSprite; // Hex grid sprite from HEX.frm
@@ -231,6 +229,9 @@ private:
     
     // Selection management
     std::unique_ptr<selection::SelectionManager> _selectionManager;
+    
+    // Selected roof tile background sprites (blank.frm tiles for transparent pixel visibility)
+    std::vector<sf::Sprite> _selectedRoofTileBackgroundSprites;
     
     // Tile placement state
     bool _tilePlacementMode = false;

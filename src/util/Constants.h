@@ -24,6 +24,17 @@ constexpr int TILE_Y_OFFSET_SMALL = 24;           ///< Small Y offset for tile p
 constexpr int TILE_Y_OFFSET_TINY = 12;            ///< Tiny Y offset for tile positioning
 constexpr int ROOF_OFFSET = 96;                   ///< Roof height offset
 
+// View movement constants
+constexpr float VIEW_MOVE_STEP = 50.0f;            ///< Distance to move view with arrow keys
+
+// Mouse and interaction constants
+constexpr float TILE_CLICK_DISTANCE_THRESHOLD = 40.0f; ///< Maximum distance for tile click detection
+constexpr float DRAG_START_THRESHOLD = 5.0f;      ///< Minimum drag distance to start drag operation
+
+// Color constants
+constexpr int HEX_HIGHLIGHT_ALPHA = 200;          ///< Alpha value for hex highlighting
+
+
 // Area selection padding constants
 constexpr float AREA_SELECTION_X_PADDING = 40.0f; ///< X padding for area selection bounds
 constexpr float AREA_SELECTION_Y_PADDING = 18.0f; ///< Y padding for area selection bounds
@@ -52,6 +63,9 @@ namespace Colors {
     constexpr int ERROR_B = 0;
     constexpr int ERROR_ALPHA = 150;
     constexpr int ERROR_OUTLINE_ALPHA = 255;
+    
+    // Roof tile selection colors (higher visibility)
+    constexpr int ROOF_SELECTION_ALPHA = 220;
     
     // Standard alpha values
     constexpr int FULLY_OPAQUE = 255;
