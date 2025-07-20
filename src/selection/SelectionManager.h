@@ -12,7 +12,6 @@
 #include "../format/map/Map.h"
 #include "../editor/Object.h"
 #include "SelectionState.h"
-#include <functional>
 
 namespace geck {
     class EditorWidget; // Forward declaration
@@ -103,7 +102,7 @@ private:
     SelectionState _state;
     SelectionCallback _selectionCallback;
     
-    // Spatial indexing for O(1) area queries
+    // Spatial index for efficient area queries
     std::unique_ptr<TileSpatialIndex> _spatialIndex;
     
     // Tile selection helpers

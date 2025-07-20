@@ -553,24 +553,25 @@ std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, boo
 }
 
 std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const {
+    // TODO: check if this works at all
     // Use spatial index for O(1) performance if available
     if (_spatialIndex) {
         // This method includes empty tiles, so we return all spatial results without filtering
         return _spatialIndex->getTilesInArea(area, roof);
     }
-    
-    // Fallback to linear search if spatial index not available
+
+    // Fallback to linear search
     std::vector<int> result;
-    result.reserve(1000);
+    result.reserve(1000); // Reserve space for typical selection
     
     const auto& floorSprites = _editorWidget->getFloorSprites();
     const auto& roofSprites = _editorWidget->getRoofSprites();
     
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+    for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
         sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
         
         if (area.findIntersection(tileBounds)) {
-            result.push_back(i);
+            result.push_back(i); // Include all tiles, regardless of content
         }
     }
     
@@ -578,6 +579,8 @@ std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatR
 }
 
 std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf::FloatRect& area, int elevation) const {
+    // Note: TileSpatialIndex only handles tiles, not objects
+    // For now, always use linear search for objects
     std::vector<std::shared_ptr<Object>> result;
     result.reserve(100); // Reserve space for typical object selection
     
