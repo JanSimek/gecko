@@ -24,16 +24,20 @@ jobs:
           - os: ubuntu-latest
             install_deps: |
               sudo apt-get update
+              # Install Qt6 packages (correct names for Ubuntu)
               sudo apt-get install -y \
-                qtbase6-dev qtbase6-dev-tools qt6-base-dev \
+                qt6-base-dev qt6-base-dev-tools \
                 libgl1-mesa-dev \
                 libxrandr-dev \
                 libxcursor-dev \
+                libxi-dev \
+                libxinerama-dev \
+                libx11-dev \
+                libxext-dev \
                 libudev-dev \
                 libopenal-dev \
                 libflac-dev \
                 libvorbis-dev \
-                libgl1-mesa-dev \
                 libegl1-mesa-dev \
                 libdrm-dev \
                 libgbm-dev \
@@ -57,7 +61,7 @@ jobs:
           - os: windows-latest
             install_deps: |
               # Use vcpkg for dependencies
-              vcpkg install qt6:x64-windows sfml:x64-windows spdlog:x64-windows zlib:x64-windows
+              vcpkg install qtbase:x64-windows qttools:x64-windows sfml:x64-windows spdlog:x64-windows zlib:x64-windows
             cmake_extra_args: -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
             
           - os: macos-latest
@@ -76,6 +80,16 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
+
+    - name: Fix vfspp CMake version requirement
+      shell: bash
+      run: |
+        # Patch vfspp CMakeLists.txt to use compatible CMake version
+        if [ "${{ matrix.os }}" == "macos-latest" ]; then
+          sed -i '.bak' 's/cmake_minimum_required(VERSION 3.50)/cmake_minimum_required(VERSION 3.20)/' vendor/vfspp/CMakeLists.txt
+        else
+          sed -i 's/cmake_minimum_required(VERSION 3.50)/cmake_minimum_required(VERSION 3.20)/' vendor/vfspp/CMakeLists.txt
+        fi
 
     - name: Set up CMake
       uses: lukka/get-cmake@latest
