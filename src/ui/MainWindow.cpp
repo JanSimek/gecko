@@ -676,7 +676,7 @@ void MainWindow::setupPanelsMenu() {
         spdlog::debug("Tile Palette Panel action toggled: {}", visible);
         if (visible) {
             _tilePaletteDock->show();
-            _tilePaletteDock->raise();
+            _tilePaletteDock->raise(); // Important: brings the tab to the front when tabified
         } else {
             _tilePaletteDock->hide();
         }
@@ -713,15 +713,19 @@ void MainWindow::setupPanelsMenu() {
     
     connect(_tilePaletteDock, &QDockWidget::visibilityChanged, [this](bool visible) {
         spdlog::debug("Tile Palette Dock visibility changed: {}", visible);
-        if (_tilePalettePanelAction && _tilePalettePanelAction->isChecked() != visible) {
-            _tilePalettePanelAction->setChecked(visible);
+        // For tabified dock widgets, we need to check if this dock is actually the current tab
+        // Don't auto-uncheck the action when the dock becomes non-visible due to tab switching
+        if (visible && _tilePalettePanelAction && !_tilePalettePanelAction->isChecked()) {
+            _tilePalettePanelAction->setChecked(true);
         }
     });
 
     connect(_objectPaletteDock, &QDockWidget::visibilityChanged, [this](bool visible) {
         spdlog::debug("Object Palette Dock visibility changed: {}", visible);
-        if (_objectPalettePanelAction && _objectPalettePanelAction->isChecked() != visible) {
-            _objectPalettePanelAction->setChecked(visible);
+        // For tabified dock widgets, we need to check if this dock is actually the current tab
+        // Don't auto-uncheck the action when the dock becomes non-visible due to tab switching
+        if (visible && _objectPalettePanelAction && !_objectPalettePanelAction->isChecked()) {
+            _objectPalettePanelAction->setChecked(true);
         }
     });
 
@@ -735,11 +739,13 @@ void MainWindow::updatePanelMenuActions() {
     if (_selectionPanelAction) {
         _selectionPanelAction->setChecked(_selectionDock->isVisible());
     }
+    // For tabified dock widgets, check if they are not hidden (rather than just visible)
+    // This prevents the action from being unchecked when the tab is not active
     if (_tilePalettePanelAction) {
-        _tilePalettePanelAction->setChecked(_tilePaletteDock->isVisible());
+        _tilePalettePanelAction->setChecked(!_tilePaletteDock->isHidden());
     }
     if (_objectPalettePanelAction) {
-        _objectPalettePanelAction->setChecked(_objectPaletteDock->isVisible());
+        _objectPalettePanelAction->setChecked(!_objectPaletteDock->isHidden());
     }
 }
 

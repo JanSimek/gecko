@@ -1,7 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.24)
-
-# Set minimum policy version for legacy dependencies
-cmake_policy(VERSION 3.24)
+﻿cmake_minimum_required(VERSION 3.31)
 
 project(
     geck-mapper
@@ -83,8 +80,8 @@ if(NOT spdlog_FOUND)
     FetchContent_MakeAvailable(spdlog)
 endif()
 
-# vfspp - using existing external directory temporarily
-add_subdirectory("external/vfspp" EXCLUDE_FROM_ALL)
+# VFSPP - Virtual File System library (local submodule)
+add_subdirectory("vendor/vfspp" EXCLUDE_FROM_ALL)
 
 # Make SFML available
 if(NOT SFML_FOUND)

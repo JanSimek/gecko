@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
+#include <regex>
 #include <spdlog/spdlog.h>
 
 #include <vfspp/NativeFileSystem.hpp>
@@ -19,7 +20,7 @@
 namespace geck {
 
 ResourceManager::ResourceManager()
-    : _vfs(new vfspp::VirtualFileSystem())
+    : _vfs(std::make_shared<vfspp::VirtualFileSystem>())
 {
 }
 
@@ -114,7 +115,7 @@ void ResourceManager::addDataPath(const std::filesystem::path& path) {
                 addDataPath(critterDat);
             }
         } else if (path.extension() == ".dat") {
-            vfsPtr = std::make_shared<vfspp::Dat2FileSystem>(path.string());
+            vfsPtr = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem(path.string()));
         } else {
             spdlog::error("Unsupported data location: {}", path.string());
             return;
@@ -122,7 +123,7 @@ void ResourceManager::addDataPath(const std::filesystem::path& path) {
 
         vfsPtr->Initialize();
         if (!vfsPtr->IsInitialized()) {
-            spdlog::error("Failed to initialize Dat2FileSystem: {}", path.string());
+            spdlog::error("Failed to initialize GeckDat2FileSystem: {}", path.string());
             return;
         }
 
@@ -255,6 +256,45 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
         return typeArtDescription.prefixPath + frm_name.substr(0, 6) + Frm::STANDING_ANIMATION_SUFFIX;
     }
     return typeArtDescription.prefixPath + frm_name;
+}
+
+// ========================================
+// Extended VFS Methods (File Listing)
+// ========================================
+
+std::vector<std::string> ResourceManager::listAllFiles() const {
+    return _vfs->ListAllFiles();
+}
+
+std::vector<std::string> ResourceManager::listFilesByPattern(const std::string& pattern) const {
+    // For now, we'll implement pattern matching on top of ListAllFiles
+    // This could be optimized later by adding pattern support to VFSPP
+    auto allFiles = _vfs->ListAllFiles();
+    std::vector<std::string> matchingFiles;
+    
+    // Simple wildcard pattern matching
+    std::string regex_pattern = pattern;
+    // Replace * with .*
+    size_t pos = 0;
+    while ((pos = regex_pattern.find('*', pos)) != std::string::npos) {
+        regex_pattern.replace(pos, 1, ".*");
+        pos += 2;
+    }
+    // Replace ? with .
+    pos = 0;
+    while ((pos = regex_pattern.find('?', pos)) != std::string::npos) {
+        regex_pattern.replace(pos, 1, ".");
+        pos += 1;
+    }
+    
+    std::regex regex(regex_pattern);
+    for (const auto& file : allFiles) {
+        if (std::regex_match(file, regex)) {
+            matchingFiles.push_back(file);
+        }
+    }
+    
+    return matchingFiles;
 }
 
 } // namespace geck

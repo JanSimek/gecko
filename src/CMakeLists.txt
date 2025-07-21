@@ -50,22 +50,6 @@ add_executable (${PROJECT_NAME}
     state/loader/MapLoader.cpp
     state/loader/MapLoader.h
 
-    # UI - COMMENTED OUT: Migrating to Qt6
-    # ui/util.h
-    # ui/IconsFontAwesome6.h
-
-    # ui/panel/Panel.h
-    # ui/panel/MainMenuPanel.h
-    # ui/panel/MainMenuPanel.cpp
-    # ui/panel/MapInfoPanel.h
-    # ui/panel/MapInfoPanel.cpp
-    # ui/panel/SelectedObjectPanel.h
-    # ui/panel/SelectedObjectPanel.cpp    
-    # ui/panel/TileSelectionPanel.h
-    # ui/panel/TileSelectionPanel.cpp
-    # ui/panel/Toolbar.h
-    # ui/panel/Toolbar.cpp
-
     editor/Object.h
     editor/Object.cpp
 
@@ -80,6 +64,9 @@ add_executable (${PROJECT_NAME}
     # vfspp plugin
     vfs/Dat2File.hpp
     vfs/Dat2FileSystem.hpp
+    
+    # Path utilities
+    util/PathUtils.h
 )
 
 ###################################
@@ -202,7 +189,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-        "${CMAKE_SOURCE_DIR}/external/vfspp/include")
+        "${CMAKE_SOURCE_DIR}/vendor/vfspp/include")
 
 # copy shared external libraries to the build directory for Windows builds
 if(WIN32)

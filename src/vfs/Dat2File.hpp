@@ -9,11 +9,11 @@
 #include "format/dat/Dat.h"
 #include "reader/dat/DatReader.h"
 
-namespace vfspp {
-class Dat2File final : public IFile {
+namespace geck {
+class Dat2File final : public vfspp::IFile {
 
 public:
-    Dat2File(const FileInfo& fileInfo,
+    Dat2File(const vfspp::FileInfo& fileInfo,
         const std::shared_ptr<geck::DatEntry>& datEntry,
         const std::shared_ptr<geck::DatReader>& datReader)
         : m_FileInfo(fileInfo)
@@ -32,7 +32,7 @@ public:
     /*
      * Get file information
      */
-    virtual const FileInfo& GetFileInfo() const override
+    virtual const vfspp::FileInfo& GetFileInfo() const override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
             std::lock_guard<std::mutex> lock(m_Mutex);
@@ -210,7 +210,7 @@ public:
     }
 
 private:
-    inline const FileInfo& GetFileInfoST() const
+    inline const vfspp::FileInfo& GetFileInfoST() const
     {
         return m_FileInfo;
     }
@@ -394,7 +394,7 @@ private:
     }
 
 private:
-    FileInfo m_FileInfo;
+    vfspp::FileInfo m_FileInfo;
     std::vector<uint8_t> m_Data;
     std::shared_ptr<geck::DatEntry> m_datEntry;
     std::shared_ptr<geck::DatReader> m_datReader;
@@ -402,5 +402,5 @@ private:
     uint64_t m_SeekPos;
     mutable std::mutex m_Mutex;
 };
-} // vfspp
+} // geck
 #endif // GECK_MAPPER_DAT2FILE_HPP

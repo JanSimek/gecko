@@ -10,8 +10,7 @@ target_link_libraries(general_tests PRIVATE
     Catch2::Catch2WithMain
     spdlog::spdlog_header_only
     vault
-    sfml-graphics
-    sfml-system
+    SFML::System SFML::Graphics
 )
 
 # Qt tests - UI component and integration tests
@@ -27,8 +26,7 @@ target_link_libraries(qt_tests PRIVATE
     Qt6::Widgets
     spdlog::spdlog_header_only
     vault
-    sfml-graphics
-    sfml-system
+    SFML::System SFML::Graphics
 )
 
 # Enable testing
