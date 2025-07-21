@@ -6,6 +6,7 @@
 #include "SelectionPanel.h"
 #include "MapInfoPanel.h"
 #include "TilePalettePanel.h"
+#include "ObjectPalettePanel.h"
 #include "../state/loader/MapLoader.h"
 #include "../util/Types.h"
 #include "../util/ResourceManager.h"
@@ -43,17 +44,21 @@ MainWindow::MainWindow(QWidget* parent)
     , _mainToolBar(nullptr)
     , _mapInfoDock(nullptr)
     , _selectionDock(nullptr)
+    , _tilePaletteDock(nullptr)
+    , _objectPaletteDock(nullptr)
     , _selectionPanel(nullptr)
     , _mapInfoPanel(nullptr)
     , _tilePalettePanel(nullptr)
+    , _objectPalettePanel(nullptr)
     , _mapInfoPanelAction(nullptr)
     , _selectionPanelAction(nullptr)
     , _tilePalettePanelAction(nullptr)
+    , _objectPalettePanelAction(nullptr)
     , _isRunning(false) {
     
     setWindowTitle("GECK::Mapper - Fallout 2 Map Editor");
     setMinimumSize(1024, 768);
-    
+
     setupUI();
     
     // Connect timer to update loop
@@ -309,11 +314,23 @@ void MainWindow::setupDockWidgets() {
     // Create and set the TilePalettePanel
     _tilePalettePanel = new TilePalettePanel();
     _tilePaletteDock->setWidget(_tilePalettePanel);
-    
+
     addDockWidget(Qt::LeftDockWidgetArea, _tilePaletteDock);
+
+    // Object Palette dock
+    _objectPaletteDock = new QDockWidget("Object Palette", this);
+    _objectPaletteDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+    _objectPaletteDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
     
+    // Create and set the ObjectPalettePanel
+    _objectPalettePanel = new ObjectPalettePanel();
+    _objectPaletteDock->setWidget(_objectPalettePanel);
+    
+    addDockWidget(Qt::LeftDockWidgetArea, _objectPaletteDock);
+
     // Configure initial dock layout - vertical stacking instead of tabs
     splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
+    tabifyDockWidget(_tilePaletteDock, _objectPaletteDock);
     
     // Set panels above the SFML widget to prevent redrawing issues
     // This is achieved by using QDockWidget's floating and layering features
@@ -587,6 +604,17 @@ void MainWindow::updateMapInfo(Map* map) {
             spdlog::error("Failed to load tile list for palette: {}", e.what());
         }
     }
+    
+    // Load objects into object palette panel
+    if (_objectPalettePanel) {
+        try {
+            _objectPalettePanel->setMap(map);
+            _objectPalettePanel->loadObjects();
+            spdlog::info("Loaded objects into ObjectPalettePanel");
+        } catch (const std::exception& e) {
+            spdlog::error("Failed to load objects for palette: {}", e.what());
+        }
+    }
 }
 
 void MainWindow::handleMapLoadRequest(const std::string& mapPath) {
@@ -654,6 +682,20 @@ void MainWindow::setupPanelsMenu() {
         }
     });
     
+    // Object Palette Panel
+    _objectPalettePanelAction = _panelsMenu->addAction("&Object Palette");
+    _objectPalettePanelAction->setCheckable(true);
+    _objectPalettePanelAction->setChecked(true);
+    connect(_objectPalettePanelAction, &QAction::toggled, [this](bool visible) {
+        spdlog::debug("Object Palette Panel action toggled: {}", visible);
+        if (visible) {
+            _objectPaletteDock->show();
+            _objectPaletteDock->raise();
+        } else {
+            _objectPaletteDock->hide();
+        }
+    });
+
     // Connect dock widget visibility changes back to menu actions
     connect(_mapInfoDock, &QDockWidget::visibilityChanged, [this](bool visible) {
         spdlog::debug("Map Info Dock visibility changed: {}", visible);
@@ -675,7 +717,14 @@ void MainWindow::setupPanelsMenu() {
             _tilePalettePanelAction->setChecked(visible);
         }
     });
-    
+
+    connect(_objectPaletteDock, &QDockWidget::visibilityChanged, [this](bool visible) {
+        spdlog::debug("Object Palette Dock visibility changed: {}", visible);
+        if (_objectPalettePanelAction && _objectPalettePanelAction->isChecked() != visible) {
+            _objectPalettePanelAction->setChecked(visible);
+        }
+    });
+
     spdlog::info("Panel management menu configured with bidirectional synchronization");
 }
 
@@ -688,6 +737,9 @@ void MainWindow::updatePanelMenuActions() {
     }
     if (_tilePalettePanelAction) {
         _tilePalettePanelAction->setChecked(_tilePaletteDock->isVisible());
+    }
+    if (_objectPalettePanelAction) {
+        _objectPalettePanelAction->setChecked(_objectPaletteDock->isVisible());
     }
 }
 

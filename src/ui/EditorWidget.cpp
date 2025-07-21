@@ -1824,9 +1824,9 @@ void EditorWidget::updateHoverHex(sf::Vector2f worldPos) {
 
 const sf::Texture& EditorWidget::createHexTexture() {
     FrmReader frm_reader{};
-    ResourceManager::getInstance().loadResource("art/HEX.frm", frm_reader);
+    ResourceManager::getInstance().loadResource("art/tiles/HEX.frm", frm_reader);
 
-    return ResourceManager::getInstance().texture("art/HEX.frm");
+    return ResourceManager::getInstance().texture("art/tiles/HEX.frm");
 }
 
 const sf::Texture& EditorWidget::createCursorHexTexture() {

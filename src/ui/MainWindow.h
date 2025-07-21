@@ -29,6 +29,7 @@ class LoadingWidget;
 class SelectionPanel;
 class MapInfoPanel;
 class TilePalettePanel;
+class ObjectPalettePanel;
 class Map;
 
 class MainWindow : public QMainWindow {
@@ -111,16 +112,19 @@ private:
     QDockWidget* _mapInfoDock;
     QDockWidget* _selectionDock;
     QDockWidget* _tilePaletteDock;
+    QDockWidget* _objectPaletteDock;
     
     // Panel widgets
     SelectionPanel* _selectionPanel;
     MapInfoPanel* _mapInfoPanel;
     TilePalettePanel* _tilePalettePanel;
+    ObjectPalettePanel* _objectPalettePanel;
     
     // Panel menu actions
     QAction* _mapInfoPanelAction;
     QAction* _selectionPanelAction;
     QAction* _tilePalettePanelAction;
+    QAction* _objectPalettePanelAction;
     
     bool _isRunning;
 };

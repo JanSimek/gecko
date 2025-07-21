@@ -1,7 +1,6 @@
 #define QT_NO_EMIT
 #include "Application.h"
 
-#include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 #include <QCommandLineParser>
 #include <QCommandLineOption>
@@ -99,7 +98,7 @@ std::string Application::processCommandLineArgs() {
 
 
     QString dataPath = parser.value(dataOption);
-    spdlog::info("Added {} as the default path for loading game files");
+    spdlog::info("Added {} as the default path for loading game files", dataPath.toStdString());
     ResourceManager::getInstance().addDataPath(dataPath.toStdString());
 
     // TODO: this dialog will be available in the configuration screen to append path to data paths
