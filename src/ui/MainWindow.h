@@ -52,6 +52,8 @@ signals:
     void newMapRequested();
     void openMapRequested();
     void saveMapRequested();
+    void selectAllRequested();
+void deselectAllRequested();
     void showObjectsToggled(bool enabled);
     void showCrittersToggled(bool enabled);
     void showWallsToggled(bool enabled);
@@ -78,6 +80,8 @@ private:
     void setupToolBar();
     void setupDockWidgets();
     void setupStatusBar();
+    void setupPanelsMenu();
+    void updatePanelMenuActions();
     
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
 
@@ -91,7 +95,9 @@ private:
     // Menu items
     QMenuBar* _menuBar;
     QMenu* _fileMenu;
+    QMenu* _editMenu;
     QMenu* _viewMenu;
+    QMenu* _panelsMenu;
     QMenu* _elevationMenu;
     
     // Toolbar
@@ -110,6 +116,11 @@ private:
     SelectionPanel* _selectionPanel;
     MapInfoPanel* _mapInfoPanel;
     TilePalettePanel* _tilePalettePanel;
+    
+    // Panel menu actions
+    QAction* _mapInfoPanelAction;
+    QAction* _selectionPanelAction;
+    QAction* _tilePalettePanelAction;
     
     bool _isRunning;
 };

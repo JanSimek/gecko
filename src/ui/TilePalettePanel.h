@@ -62,9 +62,14 @@ class TilePalettePanel : public QWidget {
 
 public:
     enum class PlacementMode {
-        SINGLE_PLACEMENT,  // Click to place one tile
-        AREA_FILL,         // Draw selection box to fill area
-        REPLACE_SELECTED   // Replace currently selected tiles
+        UNIFIED_PLACEMENT  // Single click = single tile, drag = area fill (like selection mode)
+        // Note: SINGLE_PLACEMENT and AREA_FILL merged into unified system
+        // Note: REPLACE_SELECTED removed - automatic replacement when tiles are selected
+    };
+    
+    enum class InteractionMode {
+        SELECTION,         // Normal selection mode (default editor behavior)
+        TILE_PAINTING      // Tile painting mode (place tiles from palette)
     };
 
     explicit TilePalettePanel(QWidget* parent = nullptr);
@@ -78,7 +83,11 @@ public:
     int getSelectedTileIndex() const { return _selectedTileIndex; }
     bool hasSelectedTile() const { return _selectedTileIndex >= 0; }
     
-    // Placement modes
+    // Interaction modes
+    InteractionMode getInteractionMode() const { return _interactionMode; }
+    void setInteractionMode(InteractionMode mode);
+    
+    // Placement modes (only relevant in TILE_PAINTING interaction mode)
     PlacementMode getPlacementMode() const { return _placementMode; }
     void setPlacementMode(PlacementMode mode);
     
@@ -86,6 +95,7 @@ public:
 
 signals:
     void tileSelected(int tileIndex);
+    void interactionModeChanged(InteractionMode mode);
     void placementModeChanged(PlacementMode mode);
     void placeTileAtPosition(int tileIndex, int position, bool isRoof);
     void fillAreaWithTile(int tileIndex, const QRect& area, bool isRoof);
@@ -93,6 +103,7 @@ signals:
 
 public slots:
     void onTileClicked(int tileIndex);
+    void onInteractionModeChanged();
     void onPlacementModeChanged();
 
 private slots:
@@ -101,6 +112,7 @@ private slots:
 
 private:
     void setupUI();
+    void setupInteractionModeControls();
     void setupModeControls();
     void setupTileGrid();
     void setupFilterControls();
@@ -110,11 +122,16 @@ private:
     
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
+    
+    // Interaction mode controls
+    QGroupBox* _interactionGroup = nullptr;
+    QButtonGroup* _interactionButtonGroup = nullptr;
+    QPushButton* _selectionModeButton = nullptr;
+    QPushButton* _tilePaintingModeButton = nullptr;
+    
+    // Placement mode info (shown only in tile painting mode)
     QGroupBox* _modeGroup = nullptr;
-    QButtonGroup* _modeButtonGroup = nullptr;
-    QPushButton* _singlePlacementButton = nullptr;
-    QPushButton* _areaFillButton = nullptr;
-    QPushButton* _replaceSelectedButton = nullptr;
+    QLabel* _placementModeLabel = nullptr;
     
     QGroupBox* _filterGroup = nullptr;
     QSpinBox* _startTileSpinBox = nullptr;
@@ -136,7 +153,8 @@ private:
     
     // State
     int _selectedTileIndex = -1;
-    PlacementMode _placementMode = PlacementMode::SINGLE_PLACEMENT;
+    InteractionMode _interactionMode = InteractionMode::SELECTION;
+    PlacementMode _placementMode = PlacementMode::UNIFIED_PLACEMENT;
     int _tilesPerRow = 8;
     int _filterStart = 0;
     int _filterEnd = -1; // -1 means show all

@@ -529,17 +529,14 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     bool placeOnRoof = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || 
                                       sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
                     
-                    if (_tilePlacementAreaFill) {
-                        // Start area selection for tile filling
-                        _currentAction = EditorAction::TILE_PLACING;
-                        _dragStartWorldPos = worldPos;
-                        _isDragSelecting = false; // Will become true on first mouse move
-                        // Update the roof setting for area fill preview
-                        _tilePlacementIsRoof = placeOnRoof;
-                    } else {
-                        // Single tile placement
-                        placeTileAtPosition(_tilePlacementIndex, worldPos, placeOnRoof);
-                    }
+                    // Unified placement mode: prepare for either single or area placement
+                    _currentAction = EditorAction::TILE_PLACING;
+                    _dragStartWorldPos = worldPos;
+                    _isDragSelecting = false; // Will become true on first mouse move if dragging
+                    _tilePlacementIsRoof = placeOnRoof;
+                    
+                    // Don't place immediately - let mouse release handle single placement
+                    // and mouse move handle area drag detection
                     return; // Don't process as selection
                 }
                 
@@ -602,7 +599,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     // Clear preview visuals first
                     clearDragPreview();
                     
-                    if (_isDragSelecting && _tilePlacementMode && _tilePlacementAreaFill) {
+                    if (_isDragSelecting && _tilePlacementMode) {
                         // Complete tile area fill
                         sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
                             mouseReleased->position, _view);
@@ -618,6 +615,10 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         fillAreaWithTile(_tilePlacementIndex, fillArea, _tilePlacementIsRoof);
                         
                         _isDragSelecting = false;
+                    } else if (_tilePlacementMode && _tilePlacementIndex >= 0) {
+                        // Single tile placement - no dragging occurred
+                        placeTileAtPosition(_tilePlacementIndex, _dragStartWorldPos, _tilePlacementIsRoof);
+                        spdlog::debug("Placed single tile at mouse release");
                     }
                     
                     _currentAction = EditorAction::NONE;
@@ -713,7 +714,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 }
             } else if (_currentAction == EditorAction::TILE_PLACING) {
                 // Handle tile area fill drag
-                if (_tilePlacementMode && _tilePlacementAreaFill) {
+                if (_tilePlacementMode) {
                     sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
                         mouseMoved->position, _view);
                     
@@ -773,28 +774,31 @@ void EditorWidget::handleEvent(const sf::Event& event) {
         // Arrow key movement
                 switch (keyPressed->scancode) {
                     case sf::Keyboard::Scancode::Left:
+                        // Left arrow key - move view left
+                        if (!(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || 
+                              sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl))) {
+                            float panScale = _zoomLevel;
+                            _view.move({-VIEW_MOVE_STEP * panScale, 0.0f});
+                        }
+                        break;
+                        
                     case sf::Keyboard::Scancode::A:
-                        // Ctrl+A: Select all items of current type
-                        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || 
-                            sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl)) {
-                        _selectionManager->selectAll(_currentSelectionMode, _currentElevation);
-                        spdlog::info("Select all: {} items", _selectionManager->getCurrentSelection().count());
-                    } else {
-                        float panScale = _zoomLevel;
-                        _view.move({-VIEW_MOVE_STEP * panScale, 0.0f});
-                    }
-                    break;
+                        // Note: Ctrl+A should be handled by Qt menu shortcuts, not SFML
+                        // SFML only handles 'A' for movement (if not using WASD)
+                        // Removed Ctrl+A logic to prevent conflicts with Qt shortcuts
+                        break;
                     case sf::Keyboard::Scancode::Right:
-                    case sf::Keyboard::Scancode::D:
-                        // Ctrl+D: Deselect all
-                            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || 
-                                sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl)) {
-                            _selectionManager->clearSelection();
-                            spdlog::info("Deselected all items");
-                        } else {
+                        // Right arrow key - move view right
+                        if (!(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || 
+                              sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl))) {
                             float panScale = _zoomLevel;
                             _view.move({VIEW_MOVE_STEP * panScale, 0.0f});
                         }
+                        break;
+                        
+                    case sf::Keyboard::Scancode::D:
+                        // Note: Ctrl+D deselection is handled by Qt menu shortcut, not SFML
+                        // Do nothing here to avoid conflicts with Qt shortcut handling
                         break;
                     case sf::Keyboard::Scancode::Up:
                     case sf::Keyboard::Scancode::W:
@@ -1124,6 +1128,18 @@ void EditorWidget::replaceSelectedTiles(int newTileIndex) {
     
     spdlog::info("EditorWidget::replaceSelectedTiles: Replaced {} tiles with tile {} ({} floor, {} roof)", 
                  tilesReplaced, newTileIndex, floorTileIndices.size(), roofTileIndices.size());
+}
+
+void EditorWidget::selectAll() {
+    if (_selectionManager) {
+        _selectionManager->selectAll(_currentSelectionMode, _currentElevation);
+    }
+}
+
+void EditorWidget::clearSelection() {
+    if (_selectionManager) {
+        _selectionManager->clearSelection();
+    }
 }
 
 void EditorWidget::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof) {

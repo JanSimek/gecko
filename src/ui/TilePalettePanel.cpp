@@ -64,6 +64,7 @@ void TilePalettePanel::setupUI() {
     _mainLayout->setSpacing(8);
     _mainLayout->setContentsMargins(8, 8, 8, 8);
     
+    setupInteractionModeControls();
     setupModeControls();
     setupFilterControls();
     setupTileGrid();
@@ -76,35 +77,46 @@ void TilePalettePanel::setupUI() {
     _mainLayout->addStretch(); // Push everything to top
 }
 
+void TilePalettePanel::setupInteractionModeControls() {
+    _interactionGroup = new QGroupBox("Interaction Mode", this);
+    auto* interactionLayout = new QVBoxLayout(_interactionGroup);
+    
+    _interactionButtonGroup = new QButtonGroup(this);
+    
+    _selectionModeButton = new QPushButton("Selection Mode", this);
+    _selectionModeButton->setCheckable(true);
+    _selectionModeButton->setChecked(true);
+    _selectionModeButton->setToolTip("Normal selection and editing mode (default)");
+    
+    _tilePaintingModeButton = new QPushButton("Tile Painting Mode", this);
+    _tilePaintingModeButton->setCheckable(true);
+    _tilePaintingModeButton->setToolTip("Paint tiles from palette onto the map");
+    
+    _interactionButtonGroup->addButton(_selectionModeButton, static_cast<int>(InteractionMode::SELECTION));
+    _interactionButtonGroup->addButton(_tilePaintingModeButton, static_cast<int>(InteractionMode::TILE_PAINTING));
+    
+    interactionLayout->addWidget(_selectionModeButton);
+    interactionLayout->addWidget(_tilePaintingModeButton);
+    
+    connect(_interactionButtonGroup, &QButtonGroup::idClicked,
+            this, &TilePalettePanel::onInteractionModeChanged);
+    
+    _mainLayout->addWidget(_interactionGroup);
+}
+
 void TilePalettePanel::setupModeControls() {
     _modeGroup = new QGroupBox("Placement Mode", this);
     auto* modeLayout = new QVBoxLayout(_modeGroup);
     
-    _modeButtonGroup = new QButtonGroup(this);
+    _placementModeLabel = new QLabel(this);
+    _placementModeLabel->setText("• Single click: Place one tile\n• Click and drag: Fill area with tiles\n• Auto-replace selected tiles");
+    _placementModeLabel->setStyleSheet("color: #666; font-size: 11px;");
+    _placementModeLabel->setWordWrap(true);
     
-    _singlePlacementButton = new QPushButton("Single Placement", this);
-    _singlePlacementButton->setCheckable(true);
-    _singlePlacementButton->setChecked(true);
-    _singlePlacementButton->setToolTip("Click to place one tile at a time");
+    modeLayout->addWidget(_placementModeLabel);
     
-    _areaFillButton = new QPushButton("Area Fill", this);
-    _areaFillButton->setCheckable(true);
-    _areaFillButton->setToolTip("Draw selection box to fill area with tile");
-    
-    _replaceSelectedButton = new QPushButton("Replace Selected", this);
-    _replaceSelectedButton->setCheckable(true);
-    _replaceSelectedButton->setToolTip("Replace currently selected tiles with chosen tile");
-    
-    _modeButtonGroup->addButton(_singlePlacementButton, static_cast<int>(PlacementMode::SINGLE_PLACEMENT));
-    _modeButtonGroup->addButton(_areaFillButton, static_cast<int>(PlacementMode::AREA_FILL));
-    _modeButtonGroup->addButton(_replaceSelectedButton, static_cast<int>(PlacementMode::REPLACE_SELECTED));
-    
-    modeLayout->addWidget(_singlePlacementButton);
-    modeLayout->addWidget(_areaFillButton);
-    modeLayout->addWidget(_replaceSelectedButton);
-    
-    connect(_modeButtonGroup, &QButtonGroup::idClicked,
-            this, &TilePalettePanel::onPlacementModeChanged);
+    // Initially hide placement mode controls since we start in SELECTION mode
+    _modeGroup->hide();
     
     _mainLayout->addWidget(_modeGroup);
 }
@@ -317,19 +329,14 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
         }
     }
     
-    // Handle different placement modes
-    switch (_placementMode) {
-        case PlacementMode::SINGLE_PLACEMENT:
-        case PlacementMode::AREA_FILL:
-            // For single placement and area fill, just emit tileSelected to enable placement mode
-            emit tileSelected(tileIndex);
-            break;
-            
-        case PlacementMode::REPLACE_SELECTED:
-            // For replace mode, directly replace selected tiles
-            // Note: The EditorWidget will handle checking if tiles are actually selected
-            emit replaceSelectedTiles(tileIndex);
-            break;
+    // Only emit signals for tile operations when in TILE_PAINTING mode
+    if (_interactionMode == InteractionMode::TILE_PAINTING) {
+        // First check if there are selected tiles - if so, replace them automatically
+        // This signal will always be emitted to let EditorWidget decide whether to replace or enable placement
+        emit tileSelected(tileIndex);
+        
+        // Also emit the replacement signal - EditorWidget will handle whether tiles are actually selected
+        emit replaceSelectedTiles(tileIndex);
     }
     
     spdlog::debug("TilePalettePanel: Selected tile {} in mode {}", tileIndex, static_cast<int>(_placementMode));
@@ -342,40 +349,59 @@ void TilePalettePanel::clearTileSelection() {
 }
 
 void TilePalettePanel::onPlacementModeChanged() {
-    int modeId = _modeButtonGroup->checkedId();
-    if (modeId >= 0) {
-        _placementMode = static_cast<PlacementMode>(modeId);
-        emit placementModeChanged(_placementMode);
-        
-        QString modeText;
-        switch (_placementMode) {
-            case PlacementMode::SINGLE_PLACEMENT:
-                modeText = "Single tile placement mode";
-                break;
-            case PlacementMode::AREA_FILL:
-                modeText = "Area fill mode - draw selection box";
-                break;
-            case PlacementMode::REPLACE_SELECTED:
-                modeText = "Replace selected tiles mode";
-                break;
-        }
-        
-        _statusLabel->setText(modeText);
-        spdlog::debug("TilePalettePanel: Changed to placement mode {}", static_cast<int>(_placementMode));
-    }
+    // With unified placement mode, this function is simplified
+    emit placementModeChanged(_placementMode);
+    
+    QString modeText = "Unified placement mode - click or drag to place tiles (auto-replace if tiles selected)";
+    _statusLabel->setText(modeText);
+    spdlog::debug("TilePalettePanel: Using unified placement mode");
 }
 
 void TilePalettePanel::setPlacementMode(PlacementMode mode) {
     if (_placementMode != mode) {
         _placementMode = mode;
         
+        // With unified placement mode, no button state to update
+        emit placementModeChanged(_placementMode);
+    }
+}
+
+void TilePalettePanel::onInteractionModeChanged() {
+    int modeId = _interactionButtonGroup->checkedId();
+    if (modeId >= 0) {
+        _interactionMode = static_cast<InteractionMode>(modeId);
+        emit interactionModeChanged(_interactionMode);
+        
+        // Show/hide placement mode controls based on interaction mode
+        if (_interactionMode == InteractionMode::TILE_PAINTING) {
+            _modeGroup->show();
+            _statusLabel->setText("Tile painting mode - select a tile and click/drag to paint");
+        } else {
+            _modeGroup->hide();
+            _statusLabel->setText("Selection mode - normal editing behavior");
+            
+            // When switching to selection mode, disable tile placement if active
+            emit tileSelected(-1); // -1 signals disable tile placement mode
+        }
+        
+        spdlog::debug("TilePalettePanel: Changed to interaction mode {}", static_cast<int>(_interactionMode));
+    }
+}
+
+void TilePalettePanel::setInteractionMode(InteractionMode mode) {
+    if (_interactionMode != mode) {
+        _interactionMode = mode;
+        
         // Update button selection
-        auto* button = qobject_cast<QPushButton*>(_modeButtonGroup->button(static_cast<int>(mode)));
+        auto* button = qobject_cast<QPushButton*>(_interactionButtonGroup->button(static_cast<int>(mode)));
         if (button) {
             button->setChecked(true);
         }
         
-        emit placementModeChanged(_placementMode);
+        // Trigger the UI update
+        onInteractionModeChanged();
+        
+        emit interactionModeChanged(_interactionMode);
     }
 }
 

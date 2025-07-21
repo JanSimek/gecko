@@ -462,10 +462,27 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
             break;
             
         case SelectionMode::ALL:
-            // Select all tiles and objects
-            selectAll(SelectionMode::FLOOR_TILES, currentElevation);
-            selectAll(SelectionMode::ROOF_TILES, currentElevation);
-            selectAll(SelectionMode::OBJECTS, currentElevation);
+            // Select all tiles and objects directly (without recursive calls to avoid clearSelection conflicts)
+            // Add all floor tiles
+            for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+                SelectedItem item{SelectionType::FLOOR_TILE, i};
+                addItemToSelection(item);
+            }
+            
+            // Add all roof tiles (only those with textures)
+            for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+                auto tile = _map->getMapFile().tiles.at(currentElevation).at(i);
+                if (tile.getRoof() != Map::EMPTY_TILE) {
+                    SelectedItem item{SelectionType::ROOF_TILE, i};
+                    addItemToSelection(item);
+                }
+            }
+            
+            // Add all objects
+            for (auto& object : _editorWidget->getObjects()) {
+                SelectedItem item{SelectionType::OBJECT, object};
+                addItemToSelection(item);
+            }
             break;
             
         case SelectionMode::NUM_SELECTION_TYPES:

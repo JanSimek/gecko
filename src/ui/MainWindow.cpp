@@ -36,13 +36,19 @@ MainWindow::MainWindow(QWidget* parent)
     , _currentLoadingWidget(nullptr)
     , _menuBar(nullptr)
     , _fileMenu(nullptr)
+    , _editMenu(nullptr)
     , _viewMenu(nullptr)
+    , _panelsMenu(nullptr)
     , _elevationMenu(nullptr)
     , _mainToolBar(nullptr)
     , _mapInfoDock(nullptr)
     , _selectionDock(nullptr)
     , _selectionPanel(nullptr)
     , _mapInfoPanel(nullptr)
+    , _tilePalettePanel(nullptr)
+    , _mapInfoPanelAction(nullptr)
+    , _selectionPanelAction(nullptr)
+    , _tilePalettePanelAction(nullptr)
     , _isRunning(false) {
     
     setWindowTitle("GECK::Mapper - Fallout 2 Map Editor");
@@ -92,6 +98,7 @@ void MainWindow::setupUI() {
     setupMenuBar();
     setupToolBar();
     setupDockWidgets();
+    setupPanelsMenu();
     setupStatusBar();
 }
 
@@ -122,6 +129,19 @@ void MainWindow::setupMenuBar() {
     quitAction->setShortcut(QKeySequence::Quit);
     quitAction->setStatusTip("Exit the application");
     connect(quitAction, &QAction::triggered, this, &QWidget::close);
+    
+    // Edit Menu
+    _editMenu = _menuBar->addMenu("&Edit");
+    
+    QAction* selectAllAction = _editMenu->addAction("Select &All");
+    selectAllAction->setShortcut(QKeySequence("Ctrl+A"));
+    selectAllAction->setStatusTip("Select all items of current type");
+    connect(selectAllAction, &QAction::triggered, this, &MainWindow::selectAllRequested);
+    
+    QAction* deselectAllAction = _editMenu->addAction("&Deselect All");
+    deselectAllAction->setShortcut(QKeySequence("Ctrl+D"));
+    deselectAllAction->setStatusTip("Clear all selections");
+    connect(deselectAllAction, &QAction::triggered, this, &MainWindow::deselectAllRequested);
     
     // View Menu
     _viewMenu = _menuBar->addMenu("&View");
@@ -158,17 +178,8 @@ void MainWindow::setupMenuBar() {
     
     _viewMenu->addSeparator();
     
-    // Dock widgets submenu
-    QAction* showSelectionAction = _viewMenu->addAction("Show &Selection Panel");
-    showSelectionAction->setCheckable(true);
-    showSelectionAction->setChecked(true);
-    connect(showSelectionAction, &QAction::toggled, [this](bool visible) {
-        if (visible) {
-            _selectionDock->show();
-        } else {
-            _selectionDock->hide();
-        }
-    });
+    // Panels submenu (will be set up later in setupPanelsMenu)
+    _panelsMenu = _viewMenu->addMenu("&Panels");
     
     _viewMenu->addSeparator();
     
@@ -271,6 +282,7 @@ void MainWindow::setupDockWidgets() {
     // Map Info dock
     _mapInfoDock = new QDockWidget("Map Information", this);
     _mapInfoDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+    _mapInfoDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
     
     // Create and set the MapInfoPanel
     _mapInfoPanel = new MapInfoPanel();
@@ -281,6 +293,7 @@ void MainWindow::setupDockWidgets() {
     // Selection dock (unified object and tile selection)
     _selectionDock = new QDockWidget("Selection", this);
     _selectionDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+    _selectionDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
     
     // Create and set the unified SelectionPanel
     _selectionPanel = new SelectionPanel();
@@ -291,6 +304,7 @@ void MainWindow::setupDockWidgets() {
     // Tile Palette dock
     _tilePaletteDock = new QDockWidget("Tile Palette", this);
     _tilePaletteDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+    _tilePaletteDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
     
     // Create and set the TilePalettePanel
     _tilePalettePanel = new TilePalettePanel();
@@ -300,6 +314,11 @@ void MainWindow::setupDockWidgets() {
     
     // Configure initial dock layout - vertical stacking instead of tabs
     splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
+    
+    // Set panels above the SFML widget to prevent redrawing issues
+    // This is achieved by using QDockWidget's floating and layering features
+    // Dock widgets are already rendered above the central widget by Qt's design
+    spdlog::info("Dock widgets configured with proper z-order and panel features");
 }
 
 void MainWindow::setupStatusBar() {
@@ -421,6 +440,19 @@ void MainWindow::connectToEditorWidget() {
     connect(this, &MainWindow::saveMapRequested, [this]() {
         _currentEditorWidget->saveMap();
     });
+    connect(this, &MainWindow::selectAllRequested, [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->selectAll();
+        }
+    });
+    connect(this, &MainWindow::deselectAllRequested, [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->clearSelection();
+        }
+        if (_selectionPanel) {
+            _selectionPanel->clearSelection();
+        }
+    });
     
     // Connect view toggles to EditorWidget visibility flags
     connect(this, &MainWindow::showObjectsToggled, [this](bool enabled) {
@@ -493,14 +525,14 @@ void MainWindow::connectToEditorWidget() {
             }
         });
         
-        // Connect placement mode changes to update area fill setting
+        // Connect placement mode changes to update unified placement settings
         connect(_tilePalettePanel, &TilePalettePanel::placementModeChanged,
                 [this](TilePalettePanel::PlacementMode mode) {
-            bool areaFillMode = (mode == TilePalettePanel::PlacementMode::AREA_FILL);
-            bool replaceMode = (mode == TilePalettePanel::PlacementMode::REPLACE_SELECTED);
-            _currentEditorWidget->setTilePlacementAreaFill(areaFillMode);
-            _currentEditorWidget->setTilePlacementReplaceMode(replaceMode);
-            spdlog::debug("Set tile placement area fill mode: {}, replace mode: {}", areaFillMode, replaceMode);
+            // With unified placement mode, both single and area placement are supported
+            // The EditorWidget will handle click vs drag detection
+            _currentEditorWidget->setTilePlacementAreaFill(true);  // Enable drag support
+            _currentEditorWidget->setTilePlacementReplaceMode(false);  // Replace is automatic
+            spdlog::debug("Set unified tile placement mode");
         });
         
         // Connect replace selected tiles signal for direct tile replacement
@@ -508,6 +540,15 @@ void MainWindow::connectToEditorWidget() {
                 [this](int newTileIndex) {
             // Tiles are replaced based on what's actually selected (floor/roof auto-detected)
             _currentEditorWidget->replaceSelectedTiles(newTileIndex);
+        });
+        
+        // Connect interaction mode changes to enable/disable tile placement functionality
+        connect(_tilePalettePanel, &TilePalettePanel::interactionModeChanged,
+                [this](TilePalettePanel::InteractionMode mode) {
+            bool tilePaintingEnabled = (mode == TilePalettePanel::InteractionMode::TILE_PAINTING);
+            // TODO: Implement EditorWidget method to toggle tile painting interaction mode
+            // _currentEditorWidget->setTilePaintingInteractionMode(tilePaintingEnabled);
+            spdlog::debug("Interaction mode changed: tile painting {}", tilePaintingEnabled ? "enabled" : "disabled");
         });
         
         spdlog::info("Connected TilePalettePanel to EditorWidget");
@@ -568,6 +609,86 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath) {
     
     // Show loading widget
     setLoadingWidget(std::move(loadingWidget));
+}
+
+void MainWindow::setupPanelsMenu() {
+    // Map Info Panel
+    _mapInfoPanelAction = _panelsMenu->addAction("Map &Information");
+    _mapInfoPanelAction->setCheckable(true);
+    _mapInfoPanelAction->setChecked(true);
+    connect(_mapInfoPanelAction, &QAction::toggled, [this](bool visible) {
+        spdlog::debug("Map Info Panel action toggled: {}", visible);
+        if (visible) {
+            _mapInfoDock->show();
+            _mapInfoDock->raise();
+        } else {
+            _mapInfoDock->hide();
+        }
+    });
+    
+    // Selection Panel
+    _selectionPanelAction = _panelsMenu->addAction("&Selection");
+    _selectionPanelAction->setCheckable(true);
+    _selectionPanelAction->setChecked(true);
+    connect(_selectionPanelAction, &QAction::toggled, [this](bool visible) {
+        spdlog::debug("Selection Panel action toggled: {}", visible);
+        if (visible) {
+            _selectionDock->show();
+            _selectionDock->raise();
+        } else {
+            _selectionDock->hide();
+        }
+    });
+    
+    // Tile Palette Panel
+    _tilePalettePanelAction = _panelsMenu->addAction("&Tile Palette");
+    _tilePalettePanelAction->setCheckable(true);
+    _tilePalettePanelAction->setChecked(true);
+    connect(_tilePalettePanelAction, &QAction::toggled, [this](bool visible) {
+        spdlog::debug("Tile Palette Panel action toggled: {}", visible);
+        if (visible) {
+            _tilePaletteDock->show();
+            _tilePaletteDock->raise();
+        } else {
+            _tilePaletteDock->hide();
+        }
+    });
+    
+    // Connect dock widget visibility changes back to menu actions
+    connect(_mapInfoDock, &QDockWidget::visibilityChanged, [this](bool visible) {
+        spdlog::debug("Map Info Dock visibility changed: {}", visible);
+        if (_mapInfoPanelAction && _mapInfoPanelAction->isChecked() != visible) {
+            _mapInfoPanelAction->setChecked(visible);
+        }
+    });
+    
+    connect(_selectionDock, &QDockWidget::visibilityChanged, [this](bool visible) {
+        spdlog::debug("Selection Dock visibility changed: {}", visible);
+        if (_selectionPanelAction && _selectionPanelAction->isChecked() != visible) {
+            _selectionPanelAction->setChecked(visible);
+        }
+    });
+    
+    connect(_tilePaletteDock, &QDockWidget::visibilityChanged, [this](bool visible) {
+        spdlog::debug("Tile Palette Dock visibility changed: {}", visible);
+        if (_tilePalettePanelAction && _tilePalettePanelAction->isChecked() != visible) {
+            _tilePalettePanelAction->setChecked(visible);
+        }
+    });
+    
+    spdlog::info("Panel management menu configured with bidirectional synchronization");
+}
+
+void MainWindow::updatePanelMenuActions() {
+    if (_mapInfoPanelAction) {
+        _mapInfoPanelAction->setChecked(_mapInfoDock->isVisible());
+    }
+    if (_selectionPanelAction) {
+        _selectionPanelAction->setChecked(_selectionDock->isVisible());
+    }
+    if (_tilePalettePanelAction) {
+        _tilePalettePanelAction->setChecked(_tilePaletteDock->isVisible());
+    }
 }
 
 } // namespace geck

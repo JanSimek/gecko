@@ -70,6 +70,8 @@ public:
         items.clear();
         selectionArea.reset();
         isDragging = false;
+        // Note: Preserve the current selection mode when clearing
+        // This prevents unexpected behavior when using Ctrl+D
     }
     
     bool isEmpty() const { return items.empty(); }

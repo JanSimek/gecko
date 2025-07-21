@@ -60,6 +60,8 @@ public:
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
     void setTilePlacementAreaFill(bool enabled);
     void setTilePlacementReplaceMode(bool enabled);
+    void selectAll();
+    void clearSelection();
     bool isTilePlacementMode() const { return _tilePlacementMode; }
 
     // SFML rendering interface (called by SFMLWidget)
