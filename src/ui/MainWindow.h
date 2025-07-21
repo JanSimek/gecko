@@ -30,6 +30,7 @@ class SelectionPanel;
 class MapInfoPanel;
 class TilePalettePanel;
 class ObjectPalettePanel;
+class FileBrowserPanel;
 class Map;
 
 class MainWindow : public QMainWindow {
@@ -113,18 +114,21 @@ private:
     QDockWidget* _selectionDock;
     QDockWidget* _tilePaletteDock;
     QDockWidget* _objectPaletteDock;
+    QDockWidget* _fileBrowserDock;
     
     // Panel widgets
     SelectionPanel* _selectionPanel;
     MapInfoPanel* _mapInfoPanel;
     TilePalettePanel* _tilePalettePanel;
     ObjectPalettePanel* _objectPalettePanel;
+    FileBrowserPanel* _fileBrowserPanel;
     
     // Panel menu actions
     QAction* _mapInfoPanelAction;
     QAction* _selectionPanelAction;
     QAction* _tilePalettePanelAction;
     QAction* _objectPalettePanelAction;
+    QAction* _fileBrowserPanelAction;
     
     bool _isRunning;
 };

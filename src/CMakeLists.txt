@@ -38,6 +38,8 @@ add_executable (${PROJECT_NAME}
     ui/TilePalettePanel.cpp
     ui/ObjectPalettePanel.h
     ui/ObjectPalettePanel.cpp
+    ui/FileBrowserPanel.h
+    ui/FileBrowserPanel.cpp
 
     # Selection management
     selection/SelectionState.h

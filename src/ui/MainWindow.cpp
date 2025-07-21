@@ -7,6 +7,7 @@
 #include "MapInfoPanel.h"
 #include "TilePalettePanel.h"
 #include "ObjectPalettePanel.h"
+#include "FileBrowserPanel.h"
 #include "../state/loader/MapLoader.h"
 #include "../util/Types.h"
 #include "../util/ResourceManager.h"
@@ -46,14 +47,17 @@ MainWindow::MainWindow(QWidget* parent)
     , _selectionDock(nullptr)
     , _tilePaletteDock(nullptr)
     , _objectPaletteDock(nullptr)
+    , _fileBrowserDock(nullptr)
     , _selectionPanel(nullptr)
     , _mapInfoPanel(nullptr)
     , _tilePalettePanel(nullptr)
     , _objectPalettePanel(nullptr)
+    , _fileBrowserPanel(nullptr)
     , _mapInfoPanelAction(nullptr)
     , _selectionPanelAction(nullptr)
     , _tilePalettePanelAction(nullptr)
     , _objectPalettePanelAction(nullptr)
+    , _fileBrowserPanelAction(nullptr)
     , _isRunning(false) {
     
     setWindowTitle("GECK::Mapper - Fallout 2 Map Editor");
@@ -328,9 +332,21 @@ void MainWindow::setupDockWidgets() {
     
     addDockWidget(Qt::LeftDockWidgetArea, _objectPaletteDock);
 
+    // File Browser dock
+    _fileBrowserDock = new QDockWidget("File Browser", this);
+    _fileBrowserDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+    _fileBrowserDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
+    
+    // Create and set the FileBrowserPanel
+    _fileBrowserPanel = new FileBrowserPanel();
+    _fileBrowserDock->setWidget(_fileBrowserPanel);
+    
+    addDockWidget(Qt::LeftDockWidgetArea, _fileBrowserDock);
+
     // Configure initial dock layout - vertical stacking instead of tabs
     splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
     tabifyDockWidget(_tilePaletteDock, _objectPaletteDock);
+    tabifyDockWidget(_objectPaletteDock, _fileBrowserDock);
     
     // Set panels above the SFML widget to prevent redrawing issues
     // This is achieved by using QDockWidget's floating and layering features
@@ -695,6 +711,20 @@ void MainWindow::setupPanelsMenu() {
             _objectPaletteDock->hide();
         }
     });
+    
+    // File Browser Panel
+    _fileBrowserPanelAction = _panelsMenu->addAction("&File Browser");
+    _fileBrowserPanelAction->setCheckable(true);
+    _fileBrowserPanelAction->setChecked(true);
+    connect(_fileBrowserPanelAction, &QAction::toggled, [this](bool visible) {
+        spdlog::debug("File Browser Panel action toggled: {}", visible);
+        if (visible) {
+            _fileBrowserDock->show();
+            _fileBrowserDock->raise();
+        } else {
+            _fileBrowserDock->hide();
+        }
+    });
 
     // Connect dock widget visibility changes back to menu actions
     connect(_mapInfoDock, &QDockWidget::visibilityChanged, [this](bool visible) {
@@ -729,6 +759,15 @@ void MainWindow::setupPanelsMenu() {
         }
     });
 
+    connect(_fileBrowserDock, &QDockWidget::visibilityChanged, [this](bool visible) {
+        spdlog::debug("File Browser Dock visibility changed: {}", visible);
+        // For tabified dock widgets, we need to check if this dock is actually the current tab
+        // Don't auto-uncheck the action when the dock becomes non-visible due to tab switching
+        if (visible && _fileBrowserPanelAction && !_fileBrowserPanelAction->isChecked()) {
+            _fileBrowserPanelAction->setChecked(true);
+        }
+    });
+
     spdlog::info("Panel management menu configured with bidirectional synchronization");
 }
 
@@ -746,6 +785,9 @@ void MainWindow::updatePanelMenuActions() {
     }
     if (_objectPalettePanelAction) {
         _objectPalettePanelAction->setChecked(!_objectPaletteDock->isHidden());
+    }
+    if (_fileBrowserPanelAction) {
+        _fileBrowserPanelAction->setChecked(!_fileBrowserDock->isHidden());
     }
 }
 
