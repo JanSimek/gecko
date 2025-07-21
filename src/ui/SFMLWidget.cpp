@@ -99,26 +99,52 @@ void SFMLWidget::resizeEvent(QResizeEvent* event) {
 }
 
 void SFMLWidget::mousePressEvent(QMouseEvent* event) {
-    // Don't forward Qt mouse events to SFML - SFML handles them natively
-    // This prevents duplicate event processing
+    // Forward Qt mouse events to SFML
+    if (_renderWindow && _editorWidget) {
+        // Create SFML mouse button pressed event
+        sf::Mouse::Button button = sf::Mouse::Button::Left;
+        switch (event->button()) {
+            case Qt::LeftButton: button = sf::Mouse::Button::Left; break;
+            case Qt::RightButton: button = sf::Mouse::Button::Right; break;
+            case Qt::MiddleButton: button = sf::Mouse::Button::Middle; break;
+            default: button = sf::Mouse::Button::Left; break;
+        }
+        sf::Vector2i position{static_cast<int>(event->position().x()), static_cast<int>(event->position().y())};
+        sf::Event sfmlEvent = sf::Event::MouseButtonPressed{button, position};
+        _editorWidget->handleEvent(sfmlEvent);
+    }
+    
     QWidget::mousePressEvent(event);
 }
 
 void SFMLWidget::mouseReleaseEvent(QMouseEvent* event) {
-    // Don't forward Qt mouse events to SFML - SFML handles them natively
-    // This prevents duplicate event processing
+    // Forward Qt mouse events to SFML
+    if (_renderWindow && _editorWidget) {
+        // Create SFML mouse button released event
+        sf::Mouse::Button button = sf::Mouse::Button::Left;
+        switch (event->button()) {
+            case Qt::LeftButton: button = sf::Mouse::Button::Left; break;
+            case Qt::RightButton: button = sf::Mouse::Button::Right; break;
+            case Qt::MiddleButton: button = sf::Mouse::Button::Middle; break;
+            default: button = sf::Mouse::Button::Left; break;
+        }
+        sf::Vector2i position{static_cast<int>(event->position().x()), static_cast<int>(event->position().y())};
+        sf::Event sfmlEvent = sf::Event::MouseButtonReleased{button, position};
+        _editorWidget->handleEvent(sfmlEvent);
+    }
+    
     QWidget::mouseReleaseEvent(event);
 }
 
 void SFMLWidget::mouseMoveEvent(QMouseEvent* event) {
     // Forward Qt mouse events to SFML since Qt correctly handles the full widget area
-    // SFML's native mouse handling has coordinate system issues after resize
     if (_renderWindow && _editorWidget) {
         sf::Event sfmlEvent = sf::Event::MouseMoved{
             {event->pos().x(), event->pos().y()}
         };
         _editorWidget->handleEvent(sfmlEvent);
     }
+    
     QWidget::mouseMoveEvent(event);
 }
 
@@ -202,5 +228,6 @@ void SFMLWidget::convertQtWheelEventToSFML(QWheelEvent* qtEvent, sf::Event& sfml
         sf::Vector2i{static_cast<int>(qtEvent->position().x()), static_cast<int>(qtEvent->position().y())}
     };
 }
+
 
 } // namespace geck

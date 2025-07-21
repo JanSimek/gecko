@@ -9,6 +9,7 @@
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QLabel>
+#include <QSettings>
 #include <memory>
 
 QT_BEGIN_NAMESPACE
@@ -84,6 +85,12 @@ private:
     void setupStatusBar();
     void setupPanelsMenu();
     void updatePanelMenuActions();
+    
+    // Dock widget state management
+    void saveDockWidgetState();
+    void restoreDockWidgetState();
+    void resetDockWidgetLayout();
+    void restoreDefaultLayout();
     
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
 
