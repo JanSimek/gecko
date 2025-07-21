@@ -123,32 +123,50 @@ void TilePalettePanel::setupModeControls() {
 
 
 void TilePalettePanel::setupFilterControls() {
-    _filterGroup = new QGroupBox("Tile Range", this);
-    auto* filterLayout = new QHBoxLayout(_filterGroup);
+    _filterGroup = new QGroupBox("Filter", this);
+    auto* filterGroupLayout = new QVBoxLayout(_filterGroup);
     
-    filterLayout->addWidget(new QLabel("Start:", this));
+    // Search field
+    auto* searchLayout = new QHBoxLayout();
+    searchLayout->addWidget(new QLabel("Search:", this));
+    _searchLineEdit = new QLineEdit(this);
+    _searchLineEdit->setPlaceholderText("Enter tile filename...");
+    _searchLineEdit->setClearButtonEnabled(true);
+    searchLayout->addWidget(_searchLineEdit, 1);
+    filterGroupLayout->addLayout(searchLayout);
+    
+    // Range filter
+    auto* rangeLayout = new QHBoxLayout();
+    rangeLayout->addWidget(new QLabel("Range:", this));
+    rangeLayout->addWidget(new QLabel("Start:", this));
     _startTileSpinBox = new QSpinBox(this);
     _startTileSpinBox->setMinimum(0);
     _startTileSpinBox->setMaximum(9999);
     _startTileSpinBox->setValue(0);
-    filterLayout->addWidget(_startTileSpinBox);
+    rangeLayout->addWidget(_startTileSpinBox);
     
-    filterLayout->addWidget(new QLabel("End:", this));
+    rangeLayout->addWidget(new QLabel("End:", this));
     _endTileSpinBox = new QSpinBox(this);
     _endTileSpinBox->setMinimum(-1); // -1 means show all
     _endTileSpinBox->setMaximum(9999);
     _endTileSpinBox->setValue(-1);
     _endTileSpinBox->setSpecialValueText("All");
-    filterLayout->addWidget(_endTileSpinBox);
+    rangeLayout->addWidget(_endTileSpinBox);
     
     _showAllButton = new QPushButton("Show All", this);
-    filterLayout->addWidget(_showAllButton);
+    rangeLayout->addWidget(_showAllButton);
     
+    filterGroupLayout->addLayout(rangeLayout);
+    
+    // Connect signals
+    connect(_searchLineEdit, &QLineEdit::textChanged,
+            this, &TilePalettePanel::onSearchTextChanged);
     connect(_startTileSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &TilePalettePanel::filterTiles);
     connect(_endTileSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &TilePalettePanel::filterTiles);
     connect(_showAllButton, &QPushButton::clicked, [this]() {
+        _searchLineEdit->clear();
         _startTileSpinBox->setValue(0);
         _endTileSpinBox->setValue(-1);
     });
@@ -223,6 +241,14 @@ void TilePalettePanel::updateTileGrid() {
             continue;
         }
         
+        // Apply search filter if set
+        if (!_searchText.isEmpty()) {
+            QString tileNameQ = QString::fromStdString(tileName);
+            if (!tileNameQ.contains(_searchText, Qt::CaseInsensitive)) {
+                continue; // Skip tiles that don't match search
+            }
+        }
+        
         try {
             // Load tile texture through ResourceManager
             std::string tilePath = "art/tiles/" + tileName;
@@ -286,10 +312,20 @@ void TilePalettePanel::updateTileGrid() {
     }
     
     // Update status
-    _statusLabel->setText(QString("Loaded %1 tiles (showing %2-%3)")
-                         .arg(tilesLoaded)
-                         .arg(startIndex)
-                         .arg(endIndex));
+    QString statusText;
+    if (!_searchText.isEmpty()) {
+        statusText = QString("Found %1 tiles matching '%2' (range %3-%4)")
+                    .arg(tilesLoaded)
+                    .arg(_searchText)
+                    .arg(startIndex)
+                    .arg(endIndex >= 0 ? QString::number(endIndex) : "All");
+    } else {
+        statusText = QString("Loaded %1 tiles (showing %2-%3)")
+                    .arg(tilesLoaded)
+                    .arg(startIndex)
+                    .arg(endIndex >= 0 ? QString::number(endIndex) : "All");
+    }
+    _statusLabel->setText(statusText);
     
     spdlog::info("TilePalettePanel: Loaded {} tile widgets", tilesLoaded);
 }
@@ -298,6 +334,11 @@ void TilePalettePanel::filterTiles() {
     _filterStart = _startTileSpinBox->value();
     _filterEnd = _endTileSpinBox->value();
     
+    updateTileGrid();
+}
+
+void TilePalettePanel::onSearchTextChanged(const QString& text) {
+    _searchText = text.trimmed();
     updateTileGrid();
 }
 
@@ -376,6 +417,12 @@ void TilePalettePanel::onInteractionModeChanged() {
         if (_interactionMode == InteractionMode::TILE_PAINTING) {
             _modeGroup->show();
             _statusLabel->setText("Tile painting mode - select a tile and click/drag to paint");
+            
+            // If we already have a tile selected, re-emit the signal to enable tile placement
+            if (_selectedTileIndex >= 0) {
+                emit tileSelected(_selectedTileIndex);
+                spdlog::debug("TilePalettePanel: Re-emitting selected tile {} for painting mode", _selectedTileIndex);
+            }
         } else {
             _modeGroup->hide();
             _statusLabel->setText("Selection mode - normal editing behavior");

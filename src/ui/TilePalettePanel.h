@@ -11,6 +11,7 @@
 #include <QSpinBox>
 #include <QGroupBox>
 #include <QButtonGroup>
+#include <QLineEdit>
 #include <vector>
 #include <memory>
 
@@ -109,6 +110,7 @@ public slots:
 private slots:
     void updateTileGrid();
     void filterTiles();
+    void onSearchTextChanged(const QString& text);
 
 private:
     void setupUI();
@@ -134,6 +136,7 @@ private:
     QLabel* _placementModeLabel = nullptr;
     
     QGroupBox* _filterGroup = nullptr;
+    QLineEdit* _searchLineEdit = nullptr;
     QSpinBox* _startTileSpinBox = nullptr;
     QSpinBox* _endTileSpinBox = nullptr;
     QPushButton* _showAllButton = nullptr;
@@ -158,6 +161,7 @@ private:
     int _tilesPerRow = 8;
     int _filterStart = 0;
     int _filterEnd = -1; // -1 means show all
+    QString _searchText = ""; // Current search filter text
     
     // Constants
     static constexpr int MAX_TILES_TO_LOAD = 1000; // Prevent UI slowdown
