@@ -7,8 +7,7 @@
 
 namespace geck {
 
-std::string parseLine(std::string line)
-{
+std::string parseLine(std::string line) {
     // strip comments
     if (auto pos = line.find(';')) {
         line = line.substr(0, pos);
@@ -17,13 +16,14 @@ std::string parseLine(std::string line)
     // rtrim
     line.erase(std::find_if(line.rbegin(), line.rend(), [](unsigned char c) {
         return !std::isspace(c);
-    }).base(), line.end());
+    }).base(),
+        line.end());
 
     // replace slashes
-    std::replace(line.begin(),line.end(),'\\','/');
+    std::replace(line.begin(), line.end(), '\\', '/');
 
     // to lower
-    std::transform(line.begin(),line.end(),line.begin(), ::tolower);
+    std::transform(line.begin(), line.end(), line.begin(), ::tolower);
 
     return line;
 }
@@ -34,25 +34,20 @@ std::unique_ptr<Lst> LstReader::read() {
     std::vector<std::string> list;
     std::string line;
     unsigned char ch = 0;
-    for (unsigned int i = 0; i != _stream.size(); ++i)
-    {
+    for (unsigned int i = 0; i != _stream.size(); ++i) {
         _stream >> ch;
         if (ch == 0x0D) // \r
         {
             // do nothing
-        }
-        else if (ch == 0x0A) // \n
+        } else if (ch == 0x0A) // \n
         {
             list.push_back(parseLine(line));
             line.clear();
-        }
-        else
-        {
+        } else {
             line += ch;
         }
     }
-    if (line.size() != 0)
-    {
+    if (line.size() != 0) {
         list.push_back(parseLine(line));
     }
 

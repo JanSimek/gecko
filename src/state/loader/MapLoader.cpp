@@ -63,7 +63,7 @@ void MapLoader::load() {
     stopwatch_chunk.reset();
 
     // Tiles
-    auto lst= ResourceManager::getInstance().loadResource("art/tiles/tiles.lst", lst_reader);
+    auto lst = ResourceManager::getInstance().loadResource("art/tiles/tiles.lst", lst_reader);
 
     //    auto tiles = _map->tiles().at(_elevation);
     //    for (auto tileNumber = 0U; tileNumber < geck::Map::TILES_PER_ELEVATION; tileNumber++) {

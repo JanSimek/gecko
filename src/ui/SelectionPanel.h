@@ -47,10 +47,10 @@ private:
     QScrollArea* _scrollArea;
     QWidget* _contentWidget;
     QVBoxLayout* _contentLayout;
-    
+
     // Stacked widget to switch between object and tile panels
     QStackedWidget* _stackedWidget;
-    
+
     // Object panel widgets
     QWidget* _objectPanelWidget;
     QGroupBox* _objectInfoGroup;
@@ -60,7 +60,7 @@ private:
     QSpinBox* _objectMessageIdSpin;
     QSpinBox* _objectPositionSpin;
     QSpinBox* _objectProtoPidSpin;
-    
+
     // Tile panel widgets
     QWidget* _tilePanelWidget;
     QGroupBox* _tileInfoGroup;
@@ -74,7 +74,7 @@ private:
     QLineEdit* _tileTypeEdit;
     QSpinBox* _tileIdSpin;
     QLineEdit* _tileNameEdit;
-    
+
     // Current selection state
     std::optional<std::shared_ptr<Object>> _selectedObject;
     int _selectedTileIndex;

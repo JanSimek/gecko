@@ -13,62 +13,68 @@ PerformanceMonitor& PerformanceMonitor::getInstance() {
 }
 
 void PerformanceMonitor::startTimer(const std::string& name) {
-    if (!_enabled) return;
-    
+    if (!_enabled)
+        return;
+
     std::lock_guard<std::mutex> lock(_mutex);
     _activeTimers[name] = std::chrono::high_resolution_clock::now();
 }
 
 void PerformanceMonitor::endTimer(const std::string& name) {
-    if (!_enabled) return;
-    
+    if (!_enabled)
+        return;
+
     auto endTime = std::chrono::high_resolution_clock::now();
-    
+
     std::lock_guard<std::mutex> lock(_mutex);
     auto it = _activeTimers.find(name);
     if (it == _activeTimers.end()) {
         spdlog::warn("PerformanceMonitor: Timer '{}' was not started", name);
         return;
     }
-    
+
     auto duration = std::chrono::duration_cast<Duration>(endTime - it->second);
     _activeTimers.erase(it);
-    
+
     auto& metric = _metrics[name];
     metric.name = name;
     metric.addSample(duration.count());
-    
+
     checkPerformanceRegression(name, metric);
 }
 
 void PerformanceMonitor::recordMetric(const std::string& name, double value) {
-    if (!_enabled) return;
-    
+    if (!_enabled)
+        return;
+
     std::lock_guard<std::mutex> lock(_mutex);
     auto& metric = _metrics[name];
     metric.name = name;
     metric.addSample(value);
-    
+
     checkPerformanceRegression(name, metric);
 }
 
 void PerformanceMonitor::recordMemoryUsage(const std::string& name, size_t bytes) {
-    if (!_enabled) return;
-    
+    if (!_enabled)
+        return;
+
     std::lock_guard<std::mutex> lock(_mutex);
     _memoryUsage[name] = bytes;
 }
 
 void PerformanceMonitor::recordMemoryAllocation(const std::string& name, size_t bytes) {
-    if (!_enabled) return;
-    
+    if (!_enabled)
+        return;
+
     std::lock_guard<std::mutex> lock(_mutex);
     _memoryUsage[name] += bytes;
 }
 
 void PerformanceMonitor::recordMemoryDeallocation(const std::string& name, size_t bytes) {
-    if (!_enabled) return;
-    
+    if (!_enabled)
+        return;
+
     std::lock_guard<std::mutex> lock(_mutex);
     auto it = _memoryUsage.find(name);
     if (it != _memoryUsage.end()) {
@@ -77,8 +83,9 @@ void PerformanceMonitor::recordMemoryDeallocation(const std::string& name, size_
 }
 
 void PerformanceMonitor::recordFrameTime(double frameTime) {
-    if (!_enabled) return;
-    
+    if (!_enabled)
+        return;
+
     std::lock_guard<std::mutex> lock(_mutex);
     if (_frameTimeSamples.size() < FRAME_SAMPLE_COUNT) {
         _frameTimeSamples.push_back(frameTime);
@@ -90,21 +97,23 @@ void PerformanceMonitor::recordFrameTime(double frameTime) {
 
 double PerformanceMonitor::getAverageFrameRate() const {
     std::lock_guard<std::mutex> lock(_mutex);
-    if (_frameTimeSamples.empty()) return 0.0;
-    
+    if (_frameTimeSamples.empty())
+        return 0.0;
+
     double totalTime = 0.0;
     for (double frameTime : _frameTimeSamples) {
         totalTime += frameTime;
     }
-    
+
     double averageFrameTime = totalTime / _frameTimeSamples.size();
     return (averageFrameTime > 0.0) ? (1000.0 / averageFrameTime) : 0.0; // Convert ms to FPS
 }
 
 double PerformanceMonitor::getCurrentFrameRate() const {
     std::lock_guard<std::mutex> lock(_mutex);
-    if (_frameTimeSamples.empty()) return 0.0;
-    
+    if (_frameTimeSamples.empty())
+        return 0.0;
+
     size_t lastIndex = _frameTimeSampleIndex > 0 ? _frameTimeSampleIndex - 1 : _frameTimeSamples.size() - 1;
     double lastFrameTime = _frameTimeSamples[lastIndex];
     return (lastFrameTime > 0.0) ? (1000.0 / lastFrameTime) : 0.0;
@@ -120,11 +129,11 @@ std::vector<std::string> PerformanceMonitor::getMetricNames() const {
     std::lock_guard<std::mutex> lock(_mutex);
     std::vector<std::string> names;
     names.reserve(_metrics.size());
-    
+
     for (const auto& pair : _metrics) {
         names.push_back(pair.first);
     }
-    
+
     return names;
 }
 
@@ -157,14 +166,14 @@ void PerformanceMonitor::setRegressionCallback(PerformanceCallback callback) {
 std::string PerformanceMonitor::generateReport() const {
     std::lock_guard<std::mutex> lock(_mutex);
     std::ostringstream report;
-    
+
     report << "=== Performance Monitor Report ===\n\n";
-    
+
     // Frame rate info
     report << "Frame Rate:\n";
     report << "  Current: " << std::fixed << std::setprecision(2) << getCurrentFrameRate() << " FPS\n";
     report << "  Average: " << std::fixed << std::setprecision(2) << getAverageFrameRate() << " FPS\n\n";
-    
+
     // Performance metrics
     report << "Performance Metrics:\n";
     for (const auto& pair : _metrics) {
@@ -176,7 +185,7 @@ std::string PerformanceMonitor::generateReport() const {
         report << "    Samples: " << metric.sampleCount << "\n";
         report << "    Total: " << formatTime(metric.totalTime) << "\n\n";
     }
-    
+
     // Memory usage
     if (!_memoryUsage.empty()) {
         report << "Memory Usage:\n";
@@ -185,7 +194,7 @@ std::string PerformanceMonitor::generateReport() const {
         }
         report << "\n";
     }
-    
+
     return report.str();
 }
 
@@ -195,10 +204,10 @@ void PerformanceMonitor::exportToFile(const std::string& filename) const {
         spdlog::error("PerformanceMonitor: Failed to open file '{}' for export", filename);
         return;
     }
-    
+
     file << generateReport();
     file.close();
-    
+
     spdlog::info("PerformanceMonitor: Exported performance report to '{}'", filename);
 }
 
@@ -206,9 +215,9 @@ void PerformanceMonitor::checkPerformanceRegression(const std::string& name, con
     auto thresholdIt = _performanceThresholds.find(name);
     if (thresholdIt != _performanceThresholds.end()) {
         if (metric.averageTime > thresholdIt->second) {
-            spdlog::warn("Performance regression detected for '{}': {:.2f}ms > {:.2f}ms threshold", 
-                        name, metric.averageTime, thresholdIt->second);
-            
+            spdlog::warn("Performance regression detected for '{}': {:.2f}ms > {:.2f}ms threshold",
+                name, metric.averageTime, thresholdIt->second);
+
             if (_regressionCallback) {
                 _regressionCallback(name, metric);
             }
@@ -229,22 +238,23 @@ std::string PerformanceMonitor::formatTime(double timeMs) const {
 }
 
 std::string PerformanceMonitor::formatMemory(size_t bytes) const {
-    const char* units[] = {"B", "KB", "MB", "GB", "TB"};
+    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
     double size = static_cast<double>(bytes);
     size_t unitIndex = 0;
-    
+
     while (size >= 1024.0 && unitIndex < 4) {
         size /= 1024.0;
         unitIndex++;
     }
-    
+
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(2) << size << " " << units[unitIndex];
     return oss.str();
 }
 
 // PerformanceTimer implementation
-PerformanceTimer::PerformanceTimer(const std::string& name) : _name(name) {
+PerformanceTimer::PerformanceTimer(const std::string& name)
+    : _name(name) {
     restart();
 }
 
@@ -255,8 +265,9 @@ PerformanceTimer::~PerformanceTimer() {
 }
 
 void PerformanceTimer::stop() {
-    if (_stopped) return;
-    
+    if (_stopped)
+        return;
+
     auto& monitor = PerformanceMonitor::getInstance();
     monitor.endTimer(_name);
     _stopped = true;
@@ -276,7 +287,8 @@ double PerformanceTimer::getElapsedTime() const {
 }
 
 // MemoryTracker implementation
-MemoryTracker::MemoryTracker(const std::string& name) : _name(name) {
+MemoryTracker::MemoryTracker(const std::string& name)
+    : _name(name) {
     auto& monitor = PerformanceMonitor::getInstance();
     monitor.recordMemoryUsage(_name, 0);
 }
@@ -289,14 +301,14 @@ MemoryTracker::~MemoryTracker() {
 void MemoryTracker::recordAllocation(size_t bytes) {
     _currentUsage += bytes;
     _peakUsage = std::max(_peakUsage, _currentUsage);
-    
+
     auto& monitor = PerformanceMonitor::getInstance();
     monitor.recordMemoryUsage(_name, _currentUsage);
 }
 
 void MemoryTracker::recordDeallocation(size_t bytes) {
     _currentUsage = (_currentUsage > bytes) ? (_currentUsage - bytes) : 0;
-    
+
     auto& monitor = PerformanceMonitor::getInstance();
     monitor.recordMemoryUsage(_name, _currentUsage);
 }

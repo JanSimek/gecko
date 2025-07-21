@@ -11,7 +11,6 @@ private:
     uint16_t _roof;
 
 public:
-
     Tile(uint16_t floor, uint16_t roof);
 
     uint16_t getFloor() const;

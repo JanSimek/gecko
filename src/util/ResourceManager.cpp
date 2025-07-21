@@ -20,8 +20,7 @@
 namespace geck {
 
 ResourceManager::ResourceManager()
-    : _vfs(std::make_shared<vfspp::VirtualFileSystem>())
-{
+    : _vfs(std::make_shared<vfspp::VirtualFileSystem>()) {
 }
 
 void ResourceManager::cleanup() {
@@ -100,35 +99,35 @@ const sf::Texture& ResourceManager::texture(const std::string& filename) {
 }
 
 void ResourceManager::addDataPath(const std::filesystem::path& path) {
-        vfspp::IFileSystemPtr vfsPtr;
+    vfspp::IFileSystemPtr vfsPtr;
 
-        if (std::filesystem::is_directory(path)) {
-            vfsPtr = std::make_shared<vfspp::NativeFileSystem>(path.string());
+    if (std::filesystem::is_directory(path)) {
+        vfsPtr = std::make_shared<vfspp::NativeFileSystem>(path.string());
 
-            std::filesystem::path masterDat = path / "master.dat";
-            if (std::filesystem::exists(masterDat) && std::filesystem::is_regular_file(masterDat)) {
-                addDataPath(masterDat);
-            }
-
-            std::filesystem::path critterDat = path / "critter.dat";
-            if (std::filesystem::exists(critterDat) && std::filesystem::is_regular_file(critterDat)) {
-                addDataPath(critterDat);
-            }
-        } else if (path.extension() == ".dat") {
-            vfsPtr = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem(path.string()));
-        } else {
-            spdlog::error("Unsupported data location: {}", path.string());
-            return;
+        std::filesystem::path masterDat = path / "master.dat";
+        if (std::filesystem::exists(masterDat) && std::filesystem::is_regular_file(masterDat)) {
+            addDataPath(masterDat);
         }
 
-        vfsPtr->Initialize();
-        if (!vfsPtr->IsInitialized()) {
-            spdlog::error("Failed to initialize GeckDat2FileSystem: {}", path.string());
-            return;
+        std::filesystem::path critterDat = path / "critter.dat";
+        if (std::filesystem::exists(critterDat) && std::filesystem::is_regular_file(critterDat)) {
+            addDataPath(critterDat);
         }
+    } else if (path.extension() == ".dat") {
+        vfsPtr = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem(path.string()));
+    } else {
+        spdlog::error("Unsupported data location: {}", path.string());
+        return;
+    }
 
-        _vfs->AddFileSystem("/", vfsPtr);
-        spdlog::info("Location '{}' was added to the data path", path.string());
+    vfsPtr->Initialize();
+    if (!vfsPtr->IsInitialized()) {
+        spdlog::error("Failed to initialize GeckDat2FileSystem: {}", path.string());
+        return;
+    }
+
+    _vfs->AddFileSystem("/", vfsPtr);
+    spdlog::info("Location '{}' was added to the data path", path.string());
 }
 
 template <class T, typename Key>
@@ -162,7 +161,7 @@ const sf::Image ResourceManager::imageFromFrm(Frm* frm, Pal* pal) {
     unsigned maxHeight = frm->maxFrameHeight();
 
     sf::Image image{};
-    image.resize({frm->width(), frm->height()}, { 0, 0, 0, 0 });
+    image.resize({ frm->width(), frm->height() }, { 0, 0, 0, 0 });
 
     int yOffset = 0;
     for (const auto& direction : frm->directions()) {
@@ -195,7 +194,7 @@ const sf::Image ResourceManager::imageFromFrm(Frm* frm, Pal* pal) {
                     }
 
                     image.setPixel(
-                        {maxWidth * xOffset + x, maxHeight * yOffset + y},
+                        { maxWidth * xOffset + x, maxHeight * yOffset + y },
                         { r, g, b, a });
                 }
             }
@@ -271,7 +270,7 @@ std::vector<std::string> ResourceManager::listFilesByPattern(const std::string& 
     // This could be optimized later by adding pattern support to VFSPP
     auto allFiles = _vfs->ListAllFiles();
     std::vector<std::string> matchingFiles;
-    
+
     // Simple wildcard pattern matching
     std::string regex_pattern = pattern;
     // Replace * with .*
@@ -286,14 +285,14 @@ std::vector<std::string> ResourceManager::listFilesByPattern(const std::string& 
         regex_pattern.replace(pos, 1, ".");
         pos += 1;
     }
-    
+
     std::regex regex(regex_pattern);
     for (const auto& file : allFiles) {
         if (std::regex_match(file, regex)) {
             matchingFiles.push_back(file);
         }
     }
-    
+
     return matchingFiles;
 }
 

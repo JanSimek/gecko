@@ -10,11 +10,11 @@ class TestUIComponents : public QObject {
     Q_OBJECT
 
 private slots:
-    void initTestCase(); // Called before all tests
+    void initTestCase();    // Called before all tests
     void cleanupTestCase(); // Called after all tests
-    void init(); // Called before each test
-    void cleanup(); // Called after each test
-    
+    void init();            // Called before each test
+    void cleanup();         // Called after each test
+
     // Example test cases for UI components
     void testWidgetCreation();
     void testBasicFunctionality();

@@ -20,15 +20,15 @@ Object::Object(const Frm* frm)
 
 sf::Texture& Object::createBlankTexture() {
     static const std::string BLANK_TEXTURE_KEY = "__object_blank_texture__";
-    
+
     auto& resourceManager = ResourceManager::getInstance();
-    
+
     // Check if texture already exists in ResourceManager
     try {
         return const_cast<sf::Texture&>(resourceManager.texture(BLANK_TEXTURE_KEY));
     } catch (const std::exception&) {
         // Texture doesn't exist, create it
-        sf::Image blankImage{sf::Vector2u{1, 1}, sf::Color::Transparent};
+        sf::Image blankImage{ sf::Vector2u{ 1, 1 }, sf::Color::Transparent };
         auto texture = std::make_unique<sf::Texture>();
         texture->loadFromImage(blankImage);
         resourceManager.storeTexture(BLANK_TEXTURE_KEY, std::move(texture));
@@ -62,7 +62,7 @@ void Object::setHexPosition(const Hex& hex) {
     float x = static_cast<float>(hex.x() - (width() / 2) + shiftX());
     float y = static_cast<float>(hex.y() - height() + shiftY());
 
-    _sprite.setPosition({x, y});
+    _sprite.setPosition({ x, y });
     if (_mapObject != nullptr) {
         _mapObject->position = hex.position();
     }
@@ -87,7 +87,6 @@ int Object::height() const {
 void Object::setDirection(ObjectDirection direction) {
     _direction = static_cast<int>(direction);
 
-
     // FIXME: ??? one scrblk on arcaves.map
     if (_frm->directions().size() <= static_cast<size_t>(_direction) || _direction < 0) {
         spdlog::error("Object has orientation index {} but the FRM has only [{}] orientations", _direction, _frm->directions().size());
@@ -104,7 +103,7 @@ void Object::setDirection(ObjectDirection direction) {
     uint16_t width = first_frame.width();
     uint16_t height = first_frame.height();
 
-    _sprite.setTextureRect({ {left, top}, {width, height} });
+    _sprite.setTextureRect({ { left, top }, { width, height } });
 }
 
 void Object::rotate() {

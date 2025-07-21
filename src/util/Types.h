@@ -4,7 +4,7 @@ namespace geck {
 
 /**
  * @brief Selection mode for the map editor
- * 
+ *
  * Defines what types of elements can be selected in the editor:
  * - ALL: Allow selection of any element type (objects, floor tiles, roof tiles)
  * - FLOOR_TILES: Only allow selection of floor tiles
@@ -19,7 +19,7 @@ enum class SelectionMode : int {
     ROOF_TILES_ALL, ///< Select all roof tiles including empty ones
     OBJECTS,        ///< Select only objects
 
-    NUM_SELECTION_TYPES  ///< Total number of selection modes (for cycling)
+    NUM_SELECTION_TYPES ///< Total number of selection modes (for cycling)
 };
 
 /**
@@ -29,12 +29,18 @@ enum class SelectionMode : int {
  */
 inline const char* selectionModeToString(SelectionMode mode) {
     switch (mode) {
-        case SelectionMode::ALL:           return "All";
-        case SelectionMode::FLOOR_TILES:   return "Floor Tiles";
-        case SelectionMode::ROOF_TILES:    return "Roof Tiles";
-        case SelectionMode::ROOF_TILES_ALL: return "Roof Tiles + Empty";
-        case SelectionMode::OBJECTS:       return "Objects";
-        default:                           return "Unknown";
+        case SelectionMode::ALL:
+            return "All";
+        case SelectionMode::FLOOR_TILES:
+            return "Floor Tiles";
+        case SelectionMode::ROOF_TILES:
+            return "Roof Tiles";
+        case SelectionMode::ROOF_TILES_ALL:
+            return "Roof Tiles + Empty";
+        case SelectionMode::OBJECTS:
+            return "Objects";
+        default:
+            return "Unknown";
     }
 }
 

@@ -18,8 +18,8 @@ class QHBoxLayout;
 QT_END_NAMESPACE
 
 namespace sf {
-    class RenderWindow;
-    class Event;
+class RenderWindow;
+class Event;
 }
 
 namespace geck {
@@ -43,12 +43,12 @@ public:
 
     void setEditorWidget(std::unique_ptr<EditorWidget> editorWidget);
     void setLoadingWidget(std::unique_ptr<LoadingWidget> loadingWidget);
-    
+
     void updateMapInfo(Map* map);
 
     void startGameLoop();
     void stopGameLoop();
-    
+
     void connectToEditorWidget();
 
 signals:
@@ -56,7 +56,7 @@ signals:
     void openMapRequested();
     void saveMapRequested();
     void selectAllRequested();
-void deselectAllRequested();
+    void deselectAllRequested();
     void showObjectsToggled(bool enabled);
     void showCrittersToggled(bool enabled);
     void showWallsToggled(bool enabled);
@@ -85,22 +85,22 @@ private:
     void setupStatusBar();
     void setupPanelsMenu();
     void updatePanelMenuActions();
-    
+
     // Dock widget state management
     void saveDockWidgetState();
     void restoreDockWidgetState();
     void resetDockWidgetLayout();
     void restoreDefaultLayout();
-    
+
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
 
     QStackedWidget* _centralStack;
     QTimer* _gameLoopTimer;
-    
+
     // Current widgets
     EditorWidget* _currentEditorWidget;
     LoadingWidget* _currentLoadingWidget;
-    
+
     // Menu items
     QMenuBar* _menuBar;
     QMenu* _fileMenu;
@@ -108,35 +108,35 @@ private:
     QMenu* _viewMenu;
     QMenu* _panelsMenu;
     QMenu* _elevationMenu;
-    
+
     // Toolbar
     QToolBar* _mainToolBar;
-    
+
     // Status bar
     QStatusBar* _statusBar;
     QLabel* _hexIndexLabel;
-    
+
     // Dock widgets for panels
     QDockWidget* _mapInfoDock;
     QDockWidget* _selectionDock;
     QDockWidget* _tilePaletteDock;
     QDockWidget* _objectPaletteDock;
     QDockWidget* _fileBrowserDock;
-    
+
     // Panel widgets
     SelectionPanel* _selectionPanel;
     MapInfoPanel* _mapInfoPanel;
     TilePalettePanel* _tilePalettePanel;
     ObjectPalettePanel* _objectPalettePanel;
     FileBrowserPanel* _fileBrowserPanel;
-    
+
     // Panel menu actions
     QAction* _mapInfoPanelAction;
     QAction* _selectionPanelAction;
     QAction* _tilePalettePanelAction;
     QAction* _objectPalettePanelAction;
     QAction* _fileBrowserPanelAction;
-    
+
     bool _isRunning;
 };
 

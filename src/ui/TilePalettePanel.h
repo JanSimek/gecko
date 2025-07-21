@@ -28,7 +28,7 @@ class TileWidget : public QLabel {
 
 public:
     explicit TileWidget(int tileIndex, const QPixmap& pixmap, QWidget* parent = nullptr);
-    
+
     int getTileIndex() const { return _tileIndex; }
     bool isSelected() const { return _selected; }
     void setSelected(bool selected);
@@ -50,7 +50,7 @@ private:
 
 /**
  * @brief Panel showing all available tiles in a grid layout
- * 
+ *
  * Features:
  * - Grid display of all tiles with Qt pixmaps
  * - Tile selection for placement/replacement
@@ -63,14 +63,14 @@ class TilePalettePanel : public QWidget {
 
 public:
     enum class PlacementMode {
-        UNIFIED_PLACEMENT  // Single click = single tile, drag = area fill (like selection mode)
+        UNIFIED_PLACEMENT // Single click = single tile, drag = area fill (like selection mode)
         // Note: SINGLE_PLACEMENT and AREA_FILL merged into unified system
         // Note: REPLACE_SELECTED removed - automatic replacement when tiles are selected
     };
-    
+
     enum class InteractionMode {
-        SELECTION,         // Normal selection mode (default editor behavior)
-        TILE_PAINTING      // Tile painting mode (place tiles from palette)
+        SELECTION,    // Normal selection mode (default editor behavior)
+        TILE_PAINTING // Tile painting mode (place tiles from palette)
     };
 
     explicit TilePalettePanel(QWidget* parent = nullptr);
@@ -83,15 +83,15 @@ public:
     // Tile selection
     int getSelectedTileIndex() const { return _selectedTileIndex; }
     bool hasSelectedTile() const { return _selectedTileIndex >= 0; }
-    
+
     // Interaction modes
     InteractionMode getInteractionMode() const { return _interactionMode; }
     void setInteractionMode(InteractionMode mode);
-    
+
     // Placement modes (only relevant in TILE_PAINTING interaction mode)
     PlacementMode getPlacementMode() const { return _placementMode; }
     void setPlacementMode(PlacementMode mode);
-    
+
     // Note: Target selection removed - tiles are replaced based on what's actually selected
 
 signals:
@@ -118,51 +118,51 @@ private:
     void setupModeControls();
     void setupTileGrid();
     void setupFilterControls();
-    
+
     void clearTileSelection();
     void updateTileDisplay();
-    
+
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
-    
+
     // Interaction mode controls
     QGroupBox* _interactionGroup = nullptr;
     QButtonGroup* _interactionButtonGroup = nullptr;
     QPushButton* _selectionModeButton = nullptr;
     QPushButton* _tilePaintingModeButton = nullptr;
-    
+
     // Placement mode info (shown only in tile painting mode)
     QGroupBox* _modeGroup = nullptr;
     QLabel* _placementModeLabel = nullptr;
-    
+
     QGroupBox* _filterGroup = nullptr;
     QLineEdit* _searchLineEdit = nullptr;
     QSpinBox* _startTileSpinBox = nullptr;
     QSpinBox* _endTileSpinBox = nullptr;
     QPushButton* _showAllButton = nullptr;
-    
+
     // Target controls removed - tiles are replaced based on what's actually selected
-    
+
     QScrollArea* _scrollArea = nullptr;
     QWidget* _tileGridWidget = nullptr;
     QGridLayout* _tileGridLayout = nullptr;
-    
+
     QLabel* _statusLabel = nullptr;
-    
+
     // Data
     Map* _map = nullptr;
     const Lst* _tileList = nullptr;
     std::vector<std::unique_ptr<TileWidget>> _tileWidgets;
-    
+
     // State
     int _selectedTileIndex = -1;
     InteractionMode _interactionMode = InteractionMode::SELECTION;
     PlacementMode _placementMode = PlacementMode::UNIFIED_PLACEMENT;
     int _tilesPerRow = 8;
     int _filterStart = 0;
-    int _filterEnd = -1; // -1 means show all
+    int _filterEnd = -1;      // -1 means show all
     QString _searchText = ""; // Current search filter text
-    
+
     // Constants
     static constexpr int MAX_TILES_TO_LOAD = 1000; // Prevent UI slowdown
     static constexpr int DEFAULT_TILES_PER_ROW = 8;

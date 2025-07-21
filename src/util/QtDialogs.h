@@ -21,9 +21,9 @@ public:
      * @param filters File type filters (e.g., {"Fallout Maps", "*.map"})
      * @return Selected file path or empty string if cancelled
      */
-    static std::string openFile(const std::string& title, 
-                               const std::string& default_path = "",
-                               const std::vector<std::pair<std::string, std::string>>& filters = {});
+    static std::string openFile(const std::string& title,
+        const std::string& default_path = "",
+        const std::vector<std::pair<std::string, std::string>>& filters = {});
 
     /**
      * Save file dialog
@@ -34,9 +34,9 @@ public:
      * @return Selected file path or empty string if cancelled
      */
     static std::string saveFile(const std::string& title,
-                               const std::string& default_path = "",
-                               const std::vector<std::pair<std::string, std::string>>& filters = {},
-                               bool force_overwrite = false);
+        const std::string& default_path = "",
+        const std::vector<std::pair<std::string, std::string>>& filters = {},
+        bool force_overwrite = false);
 
     /**
      * Select folder dialog
@@ -45,12 +45,12 @@ public:
      * @return Selected folder path or empty string if cancelled
      */
     static std::string selectFolder(const std::string& title,
-                                   const std::string& default_path = "");
+        const std::string& default_path = "");
 
 private:
     // Initialize Qt application if needed
     static void ensureQtApplication();
-    
+
     // Convert filters to Qt format
     static QString formatFilters(const std::vector<std::pair<std::string, std::string>>& filters);
 };

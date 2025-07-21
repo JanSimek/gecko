@@ -2,85 +2,168 @@ name: Build
 
 on:
   push:
-    paths:
-      - "CMakeLists.txt"
-      - "src/**"
-      - ".github/**"
+    branches: [ master, main, develop, "feature/*" ]
   pull_request:
-    paths:
-      - "CMakeLists.txt"
-      - "src/**"
-      - ".github/**"
+    branches: [ master, main, develop ]
+
+env:
+  CMAKE_VERSION: 3.31.4
+  BUILD_TYPE: Release
+  BUILD_DIR: ${{ github.workspace }}/build
 
 jobs:
   build:
-    name: ${{ matrix.config.name }}
-    runs-on: ${{ matrix.config.os }}
-
+    name: ${{ matrix.os }} - ${{ matrix.build_type }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        config:
-          - {
-              os: windows-latest,
-              name: "Windows MSVC",
-              cc: cl,
-              cxx: cl,
-              cflags: "",
-            }
-          - {
-              os: windows-latest,
-              name: "Windows Clang",
-              cc: clang-cl,
-              cxx: clang-cl,
-            }
-          - { os: ubuntu-latest, name: "Linux Clang", cc: clang, cxx: clang++ }
-          - { os: ubuntu-latest, name: "Linux GCC", cc: gcc-10, cxx: g++-10 }
-          - { os: macos-latest, name: "OS X Clang", cc: clang, cxx: clang++ }
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        build_type: [Debug, Release]
+        include:
+          - os: ubuntu-latest
+            install_deps: |
+              sudo apt-get update
+              sudo apt-get install -y \
+                qtbase6-dev qtbase6-dev-tools qt6-base-dev \
+                libgl1-mesa-dev \
+                libxrandr-dev \
+                libxcursor-dev \
+                libudev-dev \
+                libopenal-dev \
+                libflac-dev \
+                libvorbis-dev \
+                libgl1-mesa-dev \
+                libegl1-mesa-dev \
+                libdrm-dev \
+                libgbm-dev \
+                libfreetype6-dev \
+                zlib1g-dev
+              # Build SFML 3 from source as it's not in Ubuntu repos yet
+              git clone --depth 1 --branch 3.0.0 https://github.com/SFML/SFML.git
+              cd SFML
+              cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+              cmake --build build --config Release
+              sudo cmake --install build
+              cd ..
+              # Install spdlog
+              git clone --depth 1 --branch v1.x https://github.com/gabime/spdlog.git
+              cd spdlog
+              cmake -B build -DCMAKE_BUILD_TYPE=Release
+              cmake --build build --config Release
+              sudo cmake --install build
+              cd ..
+            
+          - os: windows-latest
+            install_deps: |
+              # Use vcpkg for dependencies
+              vcpkg install qt6:x64-windows sfml:x64-windows spdlog:x64-windows zlib:x64-windows
+            cmake_extra_args: -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+            
+          - os: macos-latest
+            install_deps: |
+              brew install qt@6 spdlog zlib
+              # Build SFML 3 from source
+              git clone --depth 1 --branch 3.0.0 https://github.com/SFML/SFML.git
+              cd SFML
+              cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+              cmake --build build --config Release
+              sudo cmake --install build
+              cd ..
+            cmake_prefix_path: /opt/homebrew/opt/qt@6:/usr/local/opt/qt@6
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-      - name: Install dependencies
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            vcpkg install --triplet x64-windows sfml zlib
-          elif [ "$RUNNER_OS" == "macOS" ]; then
-            brew install sfml zlib
-          else
-            set -e
-            sudo apt-get update
-            sudo apt-get install libsfml-dev
-          fi
+    - name: Set up CMake
+      uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: ${{ env.CMAKE_VERSION }}
 
-      - name: Configure CMake
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            cmake \
-              -B ./build \
-              -DCMAKE_C_COMPILER=${{matrix.config.cc}} \
-              -DCMAKE_CXX_COMPILER=${{matrix.config.cxx}} \
-              -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake \
-              .
-          else
-            cmake \
-              -B ./build \
-              -DCMAKE_C_COMPILER=${{matrix.config.cc}} \
-              -DCMAKE_CXX_COMPILER=${{matrix.config.cxx}} \
-              .
-          fi
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/vcpkg
+          ~/.cache/vcpkg
+          ~/Library/Caches/Homebrew
+          /usr/local/Cellar
+          /opt/homebrew/Cellar
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/CMakeLists.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
 
-      - name: Build
-        shell: bash
-        # Execute the build.  You can specify a specific target with "--target <NAME>"
-        run: cmake --build build -j 3
+    - name: Install dependencies
+      shell: bash
+      run: ${{ matrix.install_deps }}
 
-      - name: Run tests
-        shell: bash
-        run: cd build && ctest --output-on-failure
-# TODO: release and publish artifacts: https://github.com/cristianadam/HelloWorld/blob/master/.github/workflows/build_cmake.yml
+    - name: Configure CMake
+      shell: bash
+      run: |
+        if [ "${{ matrix.os }}" == "macos-latest" ]; then
+          export CMAKE_PREFIX_PATH="${{ matrix.cmake_prefix_path }}:$CMAKE_PREFIX_PATH"
+        fi
+        cmake -B ${{ env.BUILD_DIR }} \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -DGECK_BUILD_TESTS=ON \
+          -DGECK_AUTO_TEST=OFF \
+          ${{ matrix.cmake_extra_args }} \
+          -S ${{ github.workspace }}
+
+    - name: Build
+      run: cmake --build ${{ env.BUILD_DIR }} --config ${{ matrix.build_type }} --parallel
+
+    - name: Run Unit Tests
+      shell: bash
+      working-directory: ${{ env.BUILD_DIR }}
+      run: |
+        if [ "${{ matrix.os }}" == "windows-latest" ]; then
+          # Run tests with proper configuration
+          ctest -C ${{ matrix.build_type }} --output-on-failure --verbose
+        else
+          ctest --output-on-failure --verbose
+        fi
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: geck-mapper-${{ matrix.os }}-${{ matrix.build_type }}
+        path: |
+          ${{ env.BUILD_DIR }}/src/geck-mapper*
+          ${{ env.BUILD_DIR }}/tests/*_tests*
+        retention-days: 7
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.os }}-${{ matrix.build_type }}
+        path: |
+          test-results/
+          ${{ env.BUILD_DIR }}/Testing/
+        retention-days: 7
+
+  format-check:
+    name: Code Format Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install clang-format
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-format
+
+    - name: Check code formatting
+      run: |
+        # Run format script and check if any files were modified
+        chmod +x format.sh
+        ./format.sh
+        if ! git diff --quiet; then
+          echo "::error::Code formatting issues found. Please run ./format.sh"
+          git diff --name-only
+          exit 1
+        fi

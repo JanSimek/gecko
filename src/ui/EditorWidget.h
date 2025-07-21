@@ -40,22 +40,22 @@ public:
     void setShowRoof(bool show) { _showRoof = show; }
     void setShowScrollBlk(bool show) { _showScrollBlk = show; }
     void setShowHexGrid(bool show) { _showHexGrid = show; }
-    
+
     Map* getMap() const { return _map.get(); }
-    
+
     // Qt6 toolbar actions
     void cycleSelectionMode();
     void rotateSelectedObject();
     void changeElevation(int elevation);
-    
+
     // Tile placement functionality
     void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);
     void fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof);
     void replaceSelectedTiles(int newTileIndex);
-    
+
     // Efficient tile update
     void updateTileSprite(int hexIndex, bool isRoof);
-    
+
     // Tile placement mode control
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
     void setTilePlacementAreaFill(bool enabled);
@@ -76,20 +76,20 @@ public:
     // Methods for SelectionManager (moved from private)
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
     bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
-    
+
     // Tile hit testing methods
     std::optional<int> getTileAtPosition(sf::Vector2f worldPos, bool isRoof);
     std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos);
-    
+
     // Access to sprite vectors for SelectionManager
     const std::vector<sf::Sprite>& getFloorSprites() const { return _floorSprites; }
     const std::vector<sf::Sprite>& getRoofSprites() const { return _roofSprites; }
-    
+
     // Access to current elevation and map data
     int getCurrentElevation() const { return _currentElevation; }
     Map::MapFile& getMapFile() { return _map->getMapFile(); }
     const Map::MapFile& getMapFile() const { return _map->getMapFile(); }
-    
+
     // Access to objects for SelectionManager
     const std::vector<std::shared_ptr<Object>>& getObjects() const { return _objects; }
 
@@ -114,16 +114,15 @@ private:
     bool isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
     bool isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
     bool isDoubleClick(sf::Vector2f worldPos);
-    
-    
+
     // Selection modifiers for multi-selection
     enum class SelectionModifier {
-        NONE,        // Normal single selection (clear and select)
-        ADD,         // Ctrl+Click - add to selection
-        TOGGLE,      // Alt+Click - toggle selection
-        RANGE        // Shift+Click - range selection for tiles
+        NONE,   // Normal single selection (clear and select)
+        ADD,    // Ctrl+Click - add to selection
+        TOGGLE, // Alt+Click - toggle selection
+        RANGE   // Shift+Click - range selection for tiles
     };
-    
+
     bool selectAtPosition(sf::Vector2f worldPos);
     bool selectAtPosition(sf::Vector2f worldPos, SelectionModifier modifier);
     selection::SelectionResult handleRangeSelection(sf::Vector2f worldPos);
@@ -132,25 +131,25 @@ private:
     void updateDragPreview(sf::Vector2f currentWorldPos);
     void clearDragPreview();
     void updateTileAreaFillPreview(sf::Vector2f currentWorldPos);
-    
+
     // Object drag management
     bool startObjectDrag(sf::Vector2f worldPos);
     void updateObjectDrag(sf::Vector2f currentWorldPos);
     void finishObjectDrag(sf::Vector2f finalWorldPos);
     void cancelObjectDrag();
     bool canStartObjectDrag(sf::Vector2f worldPos) const;
-    
+
     // Hex grid snapping helpers
     sf::Vector2f snapToHexGrid(sf::Vector2f worldPos) const;
     int worldPosToHexPosition(sf::Vector2f worldPos) const;
-    
+
     // Hex grid visualization
     void renderHexGrid();
     void updateHoverHex(sf::Vector2f worldPos);
-    
+
     // Zoom management
     void zoomView(float direction);
-    
+
     // Helper methods
     int worldPosToHexIndex(sf::Vector2f worldPos) const;
 
@@ -196,46 +195,44 @@ private:
     const sf::Texture& createBlankTexture();
     const sf::Texture& createHexTexture();
     const sf::Texture& createCursorHexTexture();
-    
+
     // Zoom level tracking and limits
     float _zoomLevel = 1.0f;
     static constexpr float MIN_ZOOM = 0.1f;   // Can zoom out to 10% of original size
     static constexpr float MAX_ZOOM = 5.0f;   // Can zoom in to 500% of original size
     static constexpr float ZOOM_STEP = 0.05f; // 5% zoom steps for smooth zooming
-    
+
     // Double-click detection for object cycling
     sf::Clock _lastClickTime;
     sf::Vector2f _lastClickPosition;
-    static constexpr float DOUBLE_CLICK_TIME = 0.5f; // 500ms
+    static constexpr float DOUBLE_CLICK_TIME = 0.5f;      // 500ms
     static constexpr float DOUBLE_CLICK_DISTANCE = 10.0f; // pixels
-    
-    
+
     // Drag selection state
     sf::Vector2f _dragStartWorldPos;
     sf::RectangleShape _selectionRectangle;
     bool _isDragSelecting = false;
-    bool _immediateSelectionPerformed = false; // Track if immediate selection was performed on mouse press
-    std::vector<int> _previewTiles; // Tiles being previewed during drag
+    bool _immediateSelectionPerformed = false;            // Track if immediate selection was performed on mouse press
+    std::vector<int> _previewTiles;                       // Tiles being previewed during drag
     std::vector<std::shared_ptr<Object>> _previewObjects; // Objects being previewed during drag
-    
+
     // Object drag state
     bool _isDraggingObjects = false;
     std::vector<std::shared_ptr<Object>> _draggedObjects; // Objects being dragged
-    std::vector<sf::Vector2f> _objectDragStartPositions; // Original positions for cancel/revert
-    sf::Vector2f _objectDragOffset; // Current drag offset from start position
-    
-    
+    std::vector<sf::Vector2f> _objectDragStartPositions;  // Original positions for cancel/revert
+    sf::Vector2f _objectDragOffset;                       // Current drag offset from start position
+
     // Hex grid visualization
-    sf::Sprite _hexSprite; // Hex grid sprite from HEX.frm
+    sf::Sprite _hexSprite;          // Hex grid sprite from HEX.frm
     sf::Sprite _hexHighlightSprite; // Red highlight sprite for mouse hover
-    int _currentHoverHex = -1; // Current hex index under mouse cursor
-    
+    int _currentHoverHex = -1;      // Current hex index under mouse cursor
+
     // Selection management
     std::unique_ptr<selection::SelectionManager> _selectionManager;
-    
+
     // Selected roof tile background sprites (blank.frm tiles for transparent pixel visibility)
     std::vector<sf::Sprite> _selectedRoofTileBackgroundSprites;
-    
+
     // Tile placement state
     bool _tilePlacementMode = false;
     bool _tilePlacementAreaFill = false;

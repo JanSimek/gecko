@@ -17,7 +17,7 @@ class LoadingWidget : public QWidget {
 public:
     explicit LoadingWidget(QWidget* parent = nullptr);
     ~LoadingWidget();
-    
+
     void addLoader(std::unique_ptr<Loader> loader);
     void start();
 
@@ -29,13 +29,13 @@ private slots:
 
 private:
     void setupUI();
-    
+
     QVBoxLayout* _layout;
     QLabel* _titleLabel;
     QLabel* _statusLabel;
     QProgressBar* _progressBar;
     QTimer* _updateTimer;
-    
+
     std::vector<std::unique_ptr<Loader>> _loaders;
     bool _isLoading;
 };

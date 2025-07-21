@@ -19,7 +19,8 @@ private:
     static constexpr int FOOTER_SIZE = TREE_SIZE_FIELD + DATA_SIZE_FIELD;
 
 public:
-    DatReader() : FileParser(StreamBuffer::ENDIANNESS::LITTLE) {}
+    DatReader()
+        : FileParser(StreamBuffer::ENDIANNESS::LITTLE) { }
     std::unique_ptr<Dat> read() override;
 };
 

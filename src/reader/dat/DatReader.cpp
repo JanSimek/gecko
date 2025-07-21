@@ -36,7 +36,7 @@ std::unique_ptr<Dat> DatReader::read() {
         // normalize file path
         std::replace(filename.begin(), filename.end(), '\\', '/');
         std::transform(filename.begin(), filename.end(), filename.begin(),
-            [](unsigned char c){ return std::tolower(c); });
+            [](unsigned char c) { return std::tolower(c); });
         entry->setFilename(filename);
 
         bool compressed = static_cast<uint8_t>(read_u8());

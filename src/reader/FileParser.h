@@ -8,7 +8,7 @@
 
 namespace geck {
 
-template<typename T>
+template <typename T>
 class FileParser {
 protected:
     StreamBuffer _stream;

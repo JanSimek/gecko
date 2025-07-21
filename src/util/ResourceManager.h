@@ -49,7 +49,7 @@ public:
 
     // Store a custom texture in the resource manager
     void storeTexture(const std::string& name, std::unique_ptr<sf::Texture> texture);
-    
+
     template <class Resource>
     Resource* loadResource(const std::filesystem::path& path, FileParser<Resource>& reader) {
 
@@ -79,17 +79,17 @@ public:
     std::string FIDtoFrmName(unsigned int FID);
 
     void addDataPath(const std::filesystem::path& path);
-    
+
     // ========================================
     // Extended VFS Methods (File Listing)
     // ========================================
-    
+
     /**
      * @brief List all files from all mounted filesystems
      * @return Vector of all file paths (absolute paths with aliases)
      */
     std::vector<std::string> listAllFiles() const;
-    
+
     /**
      * @brief List files matching a glob pattern
      * @param pattern Glob pattern (e.g., "*.lst", "art/items/")

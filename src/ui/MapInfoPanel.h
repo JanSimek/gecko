@@ -25,7 +25,7 @@ class MapInfoPanel : public QWidget {
 
 public:
     explicit MapInfoPanel(QWidget* parent = nullptr);
-    
+
     void setMap(Map* map);
 
 private:
@@ -38,7 +38,7 @@ private:
     QScrollArea* _scrollArea;
     QWidget* _contentWidget;
     QVBoxLayout* _contentLayout;
-    
+
     // Map header group
     QGroupBox* _mapHeaderGroup;
     QLineEdit* _filenameEdit;
@@ -54,15 +54,15 @@ private:
     QSpinBox* _mapIdSpin;
     QSpinBox* _timestampSpin;
     QCheckBox* _savegameCheck;
-    
+
     // Global variables group
     QGroupBox* _globalVarsGroup;
     QTreeWidget* _globalVarsTree;
-    
+
     // Map scripts group (placeholder)
     QGroupBox* _mapScriptsGroup;
     QLabel* _mapScriptsLabel;
-    
+
     Map* _map;
     std::string _mapScriptName;
     std::unordered_map<std::string, uint32_t> _mvars;
