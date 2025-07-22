@@ -53,7 +53,6 @@ void TileWidget::paintEvent(QPaintEvent* event) {
     }
 }
 
-// TilePalettePanel implementation
 TilePalettePanel::TilePalettePanel(QWidget* parent)
     : QWidget(parent) {
     setupUI();
@@ -68,6 +67,7 @@ void TilePalettePanel::setupUI() {
     setupInteractionModeControls();
     setupModeControls();
     setupFilterControls();
+    setupPaginationControls();
     setupTileGrid();
 
     // Status label
@@ -169,6 +169,7 @@ void TilePalettePanel::setupFilterControls() {
         _searchLineEdit->clear();
         _startTileSpinBox->setValue(0);
         _endTileSpinBox->setValue(-1);
+        _currentPage = 0; // Reset to first page
     });
 
     _mainLayout->addWidget(_filterGroup);
@@ -187,6 +188,60 @@ void TilePalettePanel::setupTileGrid() {
 
     _scrollArea->setWidget(_tileGridWidget);
     _mainLayout->addWidget(_scrollArea, 1); // Take remaining space
+}
+
+void TilePalettePanel::setupPaginationControls() {
+    _paginationGroup = new QGroupBox("Pages", this);
+    auto* paginationLayout = new QVBoxLayout(_paginationGroup);
+
+    // Navigation buttons row
+    auto* navLayout = new QHBoxLayout();
+    
+    _firstPageButton = new QPushButton("First", this);
+    _firstPageButton->setEnabled(false);
+    _prevPageButton = new QPushButton("Previous", this);
+    _prevPageButton->setEnabled(false);
+    
+    _nextPageButton = new QPushButton("Next", this);
+    _nextPageButton->setEnabled(false);
+    _lastPageButton = new QPushButton("Last", this);
+    _lastPageButton->setEnabled(false);
+    
+    navLayout->addWidget(_firstPageButton);
+    navLayout->addWidget(_prevPageButton);
+    navLayout->addStretch();
+    navLayout->addWidget(_nextPageButton);
+    navLayout->addWidget(_lastPageButton);
+    
+    paginationLayout->addLayout(navLayout);
+    
+    // Page selection row
+    auto* pageLayout = new QHBoxLayout();
+    pageLayout->addWidget(new QLabel("Page:", this));
+    
+    _pageSpinBox = new QSpinBox(this);
+    _pageSpinBox->setMinimum(1);
+    _pageSpinBox->setMaximum(1);
+    _pageSpinBox->setValue(1);
+    _pageSpinBox->setEnabled(false);
+    pageLayout->addWidget(_pageSpinBox);
+    
+    _pageInfoLabel = new QLabel("of 0", this);
+    _pageInfoLabel->setStyleSheet("color: gray; font-style: italic;");
+    pageLayout->addWidget(_pageInfoLabel);
+    pageLayout->addStretch();
+    
+    paginationLayout->addLayout(pageLayout);
+    
+    // Connect pagination signals
+    connect(_firstPageButton, &QPushButton::clicked, this, &TilePalettePanel::goToFirstPage);
+    connect(_prevPageButton, &QPushButton::clicked, this, &TilePalettePanel::goToPrevPage);
+    connect(_nextPageButton, &QPushButton::clicked, this, &TilePalettePanel::goToNextPage);
+    connect(_lastPageButton, &QPushButton::clicked, this, &TilePalettePanel::goToLastPage);
+    connect(_pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+        this, &TilePalettePanel::onPageSpinBoxChanged);
+
+    _mainLayout->addWidget(_paginationGroup);
 }
 
 void TilePalettePanel::loadTiles(const Lst* tileList) {
@@ -225,9 +280,13 @@ void TilePalettePanel::updateTileGrid() {
     int endIndex = (_filterEnd >= 0) ? std::min(_filterEnd, static_cast<int>(tiles.size()) - 1)
                                      : static_cast<int>(tiles.size()) - 1;
 
-    // Limit tiles to prevent UI slowdown
-    int tilesToLoad = std::min(endIndex - startIndex + 1, MAX_TILES_TO_LOAD);
-    endIndex = startIndex + tilesToLoad - 1;
+    // Calculate pagination for filtered tiles
+    calculatePagination();
+    
+    // Skip to the current page within filtered results
+    int filteredIndex = 0;
+    int targetStartIndex = _currentPage * TILES_PER_PAGE;
+    int targetEndIndex = targetStartIndex + TILES_PER_PAGE - 1;
 
     int row = 0;
     int col = 0;
@@ -247,6 +306,15 @@ void TilePalettePanel::updateTileGrid() {
             if (!tileNameQ.contains(_searchText, Qt::CaseInsensitive)) {
                 continue; // Skip tiles that don't match search
             }
+        }
+        
+        // Check if this filtered tile is in the current page range
+        if (filteredIndex < targetStartIndex) {
+            filteredIndex++;
+            continue; // Skip tiles before current page
+        }
+        if (filteredIndex > targetEndIndex) {
+            break; // Stop loading tiles beyond current page
         }
 
         try {
@@ -309,23 +377,36 @@ void TilePalettePanel::updateTileGrid() {
         } catch (const std::exception& e) {
             spdlog::warn("TilePalettePanel: Failed to load tile {}: {}", tileName, e.what());
         }
+        
+        filteredIndex++; // Move to next filtered tile
     }
 
-    // Update status
+    // Update status with pagination info
     QString statusText;
-    if (!_searchText.isEmpty()) {
-        statusText = QString("Found %1 tiles matching '%2' (range %3-%4)")
-                         .arg(tilesLoaded)
-                         .arg(_searchText)
-                         .arg(startIndex)
-                         .arg(endIndex >= 0 ? QString::number(endIndex) : "All");
+    if (_totalPages > 0) {
+        if (!_searchText.isEmpty()) {
+            statusText = QString("Page %1 of %2 - Found %3 tiles matching '%4' (showing %5 tiles)")
+                             .arg(_currentPage + 1)
+                             .arg(_totalPages)
+                             .arg(_totalFilteredTiles)
+                             .arg(_searchText)
+                             .arg(tilesLoaded);
+        } else {
+            int rangeStart = targetStartIndex + 1; // Convert to 1-based
+            int rangeEnd = std::min(targetStartIndex + tilesLoaded, _totalFilteredTiles);
+            statusText = QString("Page %1 of %2 - Showing %3 tiles (tiles %4-%5)")
+                             .arg(_currentPage + 1)
+                             .arg(_totalPages)
+                             .arg(tilesLoaded)
+                             .arg(rangeStart)
+                             .arg(rangeEnd);
+        }
     } else {
-        statusText = QString("Loaded %1 tiles (showing %2-%3)")
-                         .arg(tilesLoaded)
-                         .arg(startIndex)
-                         .arg(endIndex >= 0 ? QString::number(endIndex) : "All");
+        statusText = "No tiles to display";
     }
     _statusLabel->setText(statusText);
+    
+    updatePaginationControls();
 
     spdlog::info("TilePalettePanel: Loaded {} tile widgets", tilesLoaded);
 }
@@ -333,12 +414,19 @@ void TilePalettePanel::updateTileGrid() {
 void TilePalettePanel::filterTiles() {
     _filterStart = _startTileSpinBox->value();
     _filterEnd = _endTileSpinBox->value();
-
+    
+    // Reset to first page when filter changes
+    _currentPage = 0;
+    calculatePagination();
     updateTileGrid();
 }
 
 void TilePalettePanel::onSearchTextChanged(const QString& text) {
     _searchText = text.trimmed();
+    
+    // Reset to first page when search changes
+    _currentPage = 0;
+    calculatePagination();
     updateTileGrid();
 }
 
@@ -450,6 +538,110 @@ void TilePalettePanel::setInteractionMode(InteractionMode mode) {
 
         emit interactionModeChanged(_interactionMode);
     }
+}
+
+void TilePalettePanel::calculatePagination() {
+    if (!_tileList) {
+        _totalPages = 0;
+        _totalFilteredTiles = 0;
+        return;
+    }
+    
+    const auto& tiles = _tileList->list();
+    int startIndex = _filterStart;
+    int endIndex = (_filterEnd >= 0) ? std::min(_filterEnd, static_cast<int>(tiles.size()) - 1)
+                                     : static_cast<int>(tiles.size()) - 1;
+    
+    // Count tiles that match current filters
+    int filteredCount = 0;
+    for (int i = startIndex; i <= endIndex && i < static_cast<int>(tiles.size()); ++i) {
+        // Skip reserved tiles
+        if (i < 2) continue;
+        
+        // Apply search filter if set
+        if (!_searchText.isEmpty()) {
+            const std::string& tileName = tiles[i];
+            QString tileNameQ = QString::fromStdString(tileName);
+            if (!tileNameQ.contains(_searchText, Qt::CaseInsensitive)) {
+                continue;
+            }
+        }
+        filteredCount++;
+    }
+    
+    _totalFilteredTiles = filteredCount;
+    _totalPages = (filteredCount + TILES_PER_PAGE - 1) / TILES_PER_PAGE; // Ceiling division
+    
+    // Ensure current page is valid
+    if (_currentPage >= _totalPages) {
+        _currentPage = std::max(0, _totalPages - 1);
+    }
+    
+    spdlog::debug("Pagination calculated: {} filtered tiles, {} pages, current page {}", 
+                  _totalFilteredTiles, _totalPages, _currentPage + 1);
+}
+
+void TilePalettePanel::updatePaginationControls() {
+    if (_totalPages <= 1) {
+        _paginationGroup->hide();
+        return;
+    }
+    
+    _paginationGroup->show();
+    
+    // Update button states
+    _firstPageButton->setEnabled(_currentPage > 0);
+    _prevPageButton->setEnabled(_currentPage > 0);
+    _nextPageButton->setEnabled(_currentPage < _totalPages - 1);
+    _lastPageButton->setEnabled(_currentPage < _totalPages - 1);
+    
+    // Update page spinbox
+    _pageSpinBox->setEnabled(_totalPages > 1);
+    _pageSpinBox->setMaximum(_totalPages);
+    _pageSpinBox->setValue(_currentPage + 1);
+    
+    // Update page info label
+    _pageInfoLabel->setText(QString("of %1").arg(_totalPages));
+}
+
+void TilePalettePanel::goToFirstPage() {
+    if (_currentPage != 0) {
+        _currentPage = 0;
+        updateTileGrid();
+    }
+}
+
+void TilePalettePanel::goToLastPage() {
+    if (_currentPage != _totalPages - 1) {
+        _currentPage = std::max(0, _totalPages - 1);
+        updateTileGrid();
+    }
+}
+
+void TilePalettePanel::goToPrevPage() {
+    if (_currentPage > 0) {
+        _currentPage--;
+        updateTileGrid();
+    }
+}
+
+void TilePalettePanel::goToNextPage() {
+    if (_currentPage < _totalPages - 1) {
+        _currentPage++;
+        updateTileGrid();
+    }
+}
+
+void TilePalettePanel::onPageSpinBoxChanged(int page) {
+    int newPage = page - 1; // Convert from 1-based to 0-based
+    if (newPage != _currentPage && newPage >= 0 && newPage < _totalPages) {
+        _currentPage = newPage;
+        updateTileGrid();
+    }
+}
+
+void TilePalettePanel::onPageChanged() {
+    updateTileGrid();
 }
 
 } // namespace geck

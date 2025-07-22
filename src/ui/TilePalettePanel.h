@@ -111,6 +111,12 @@ private slots:
     void updateTileGrid();
     void filterTiles();
     void onSearchTextChanged(const QString& text);
+    void onPageChanged();
+    void goToFirstPage();
+    void goToLastPage();
+    void goToPrevPage();
+    void goToNextPage();
+    void onPageSpinBoxChanged(int page);
 
 private:
     void setupUI();
@@ -118,6 +124,9 @@ private:
     void setupModeControls();
     void setupTileGrid();
     void setupFilterControls();
+    void setupPaginationControls();
+    void updatePaginationControls();
+    void calculatePagination();
 
     void clearTileSelection();
     void updateTileDisplay();
@@ -163,8 +172,22 @@ private:
     int _filterEnd = -1;      // -1 means show all
     QString _searchText = ""; // Current search filter text
 
+    // Pagination controls
+    QGroupBox* _paginationGroup = nullptr;
+    QPushButton* _prevPageButton = nullptr;
+    QPushButton* _nextPageButton = nullptr;
+    QPushButton* _firstPageButton = nullptr;
+    QPushButton* _lastPageButton = nullptr;
+    QSpinBox* _pageSpinBox = nullptr;
+    QLabel* _pageInfoLabel = nullptr;
+
+    // Pagination state
+    int _currentPage = 0;
+    int _totalPages = 0;
+    int _totalFilteredTiles = 0;
+
     // Constants
-    static constexpr int MAX_TILES_TO_LOAD = 1000; // Prevent UI slowdown
+    static constexpr int TILES_PER_PAGE = 200; // Tiles to load per page
     static constexpr int DEFAULT_TILES_PER_ROW = 8;
 };
 
