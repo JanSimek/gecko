@@ -142,19 +142,8 @@ jobs:
         echo "Qt6 installed at: $QT6_PATH"
         
         # Set environment variables for subsequent steps
-        echo "CMAKE_PREFIX_PATH=$QT6_PATH:$CMAKE_PREFIX_PATH" >> $GITHUB_ENV
-        echo "QT_DIR=$QT6_PATH" >> $GITHUB_ENV
+        echo "CMAKE_PREFIX_PATH=$QT6_PATH/lib/cmake" >> $GITHUB_ENV
         echo "Qt6_DIR=$QT6_PATH/lib/cmake/Qt6" >> $GITHUB_ENV
-        
-        # Verify installation
-        if [[ -f "$QT6_PATH/lib/cmake/Qt6/Qt6Config.cmake" ]]; then
-          echo "✅ Qt6Config.cmake found"
-          QT6_VERSION=$(grep -o 'set(PACKAGE_VERSION "[^"]*"' "$QT6_PATH/lib/cmake/Qt6/Qt6ConfigVersion.cmake" | cut -d'"' -f2 || echo "unknown")
-          echo "Qt6 version: $QT6_VERSION"
-        else
-          echo "❌ Qt6Config.cmake not found at expected location"
-          exit 1
-        fi
 
     - name: Configure CMake
       shell: bash
@@ -164,6 +153,7 @@ jobs:
           cmake -B "${{ env.BUILD_DIR }}" \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DGECK_BUILD_TESTS=ON \
+            -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" \
             -DGECK_AUTO_TEST=OFF \
             ${{ matrix.cmake_extra_args }} \
             -S "${{ github.workspace }}"

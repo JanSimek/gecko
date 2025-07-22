@@ -10,7 +10,9 @@
 
 // Network byte order functions
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX  // sfml conflict
+#endif
 #pragma comment(lib, "ws2_32.lib") // Winsock
 #include <winsock.h>
 #else

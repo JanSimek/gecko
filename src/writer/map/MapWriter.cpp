@@ -62,7 +62,7 @@ bool MapWriter::write(const Map::MapFile& map) {
 
         // Write scripts
         for (const auto& script_section : map.map_scripts) {
-            uint32_t number_of_scripts = script_section.size();
+            uint32_t number_of_scripts = static_cast<uint32_t>(script_section.size());
             utils.writeWithLog(number_of_scripts, "number of scripts in section");
 
             if (number_of_scripts == 0) {
@@ -111,7 +111,7 @@ bool MapWriter::write(const Map::MapFile& map) {
 
         for (size_t elev = 0; elev < map.map_objects.size(); elev++) {
             auto objectsOnElevation = map.map_objects.at(elev).size();
-            utils.writeWithLog(static_cast<uint32_t>(objectsOnElevation), "objects on elevation " + std::to_string(elev));
+            utils.writeWithLog(static_cast<uint32_t>(objectsOnElevation), "objects on elevation " + std::to_string(static_cast<int>(elev)));
 
             // TODO: sort objects by their position for better loading performance
             for (size_t i = 0; i < objectsOnElevation; i++) {
