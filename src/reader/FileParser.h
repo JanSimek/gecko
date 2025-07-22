@@ -5,6 +5,7 @@
 #include <spdlog/spdlog.h>
 
 #include "StreamBuffer.h"
+#include "ReaderExceptions.h"
 
 namespace geck {
 
@@ -22,44 +23,62 @@ public:
     virtual ~FileParser() = default;
 
     std::unique_ptr<T> openFile(const std::filesystem::path& filename, const std::vector<uint8_t>& data) {
-        _stream = StreamBuffer(data);
-        this->_path = filename.string();
-
-        return read();
+        try {
+            _stream = StreamBuffer(data);
+            this->_path = filename;
+            
+            spdlog::debug("Opening file from data: {}", filename.string());
+            return read();
+        } catch (const std::exception& e) {
+            throw IOException("Failed to open file from data: " + std::string(e.what()), filename);
+        }
     }
 
     std::unique_ptr<T> openFile(const std::filesystem::path& path,
         std::ios_base::openmode mode = std::ifstream::in | std::ifstream::binary) {
-        std::ifstream stream{ path.string(), mode };
+        try {
+            std::ifstream stream{ path.string(), mode };
 
-        if (!stream.is_open()) {
-            throw std::runtime_error{ "Could not read file " + path.string() };
+            if (!stream.is_open()) {
+                throw IOException("Could not open file", path);
+            }
+
+            _stream = StreamBuffer(stream, _endianness);
+            this->_path = path;
+            
+            spdlog::debug("Opening file: {}", path.string());
+            return read();
+        } catch (const FileReaderException&) {
+            throw;
+        } catch (const std::exception& e) {
+            throw IOException("Failed to open file: " + std::string(e.what()), path);
         }
-
-        _stream = StreamBuffer(stream, _endianness);
-        this->_path = path;
-        return read();
     }
 
     virtual std::unique_ptr<T> read() = 0;
 
     inline uint32_t read_u8() {
+        validateStreamPosition(1);
         return _stream.uint8();
     }
 
     inline uint32_t read_le_u32() {
+        validateStreamPosition(4);
         return _stream.uint32();
     }
 
     inline uint8_t read_be_u8() {
+        validateStreamPosition(1);
         return _stream.uint8();
     }
 
     inline uint16_t read_be_u16() {
+        validateStreamPosition(2);
         return _stream.uint16();
     }
 
     inline uint32_t read_be_u32() {
+        validateStreamPosition(4);
         return _stream.uint32();
     }
 
@@ -68,10 +87,12 @@ public:
     }
 
     inline std::string read_str(size_t len) {
+        validateStreamPosition(len);
         return _stream.readString(len);
     }
 
     inline void read_bytes(uint8_t* buf, size_t n) {
+        validateStreamPosition(n);
         _stream.read(buf, n);
     }
 
@@ -84,6 +105,14 @@ public:
         std::array<uint8_t, N> buf;
         read_bytes(buf.data(), buf.size());
     }
+
+protected:
+    inline void validateStreamPosition(size_t requiredBytes) const {
+        if (_stream.position() + requiredBytes > _stream.size()) {
+            throw ParseException("Attempt to read beyond end of file", _path, _stream.position());
+        }
+    }
+
 };
 
 } // namespace geck

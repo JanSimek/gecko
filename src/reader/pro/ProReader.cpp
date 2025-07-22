@@ -1,19 +1,23 @@
 #include "ProReader.h"
 
+#include <spdlog/spdlog.h>
+
 #include "../../format/pro/Pro.h"
 
 namespace geck {
 
 std::unique_ptr<Pro> ProReader::read() {
+    try {
+        spdlog::debug("Reading PRO file: {}", _path.string());
 
-    auto pro = std::make_unique<Pro>(_path);
+        auto pro = std::make_unique<Pro>(_path);
 
-    pro->header.PID = read_be_i32();
-    pro->header.message_id = read_be_u32();
-    pro->header.FID = read_be_i32();
-    pro->header.light_distance = read_be_u32();
-    pro->header.light_intensity = read_be_u32();
-    pro->header.flags = read_be_u32();
+        pro->header.PID = read_be_i32();
+        pro->header.message_id = read_be_u32();
+        pro->header.FID = read_be_i32();
+        pro->header.light_distance = read_be_u32();
+        pro->header.light_intensity = read_be_u32();
+        pro->header.flags = read_be_u32();
 
     switch (pro->type()) {
         case Pro::OBJECT_TYPE::TILE:
@@ -252,7 +256,15 @@ std::unique_ptr<Pro> ProReader::read() {
             break;
         }
     }
+    
+    spdlog::debug("Successfully read PRO file: {} (type: {})", _path.string(), pro->typeToString());
     return pro;
+
+    } catch (const FileReaderException&) {
+        throw;
+    } catch (const std::exception& e) {
+        throw ParseException("Failed to parse PRO file: " + std::string(e.what()), _path);
+    }
 }
 
 } // namespace geck
