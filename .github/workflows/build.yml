@@ -129,21 +129,28 @@ jobs:
       run: |
         echo "=== Setting up Qt6 on macOS ==="
         
-        # Install Qt6 via Homebrew if not present
-        if ! brew list qt@6 >/dev/null 2>&1; then
-          echo "Installing Qt6 via Homebrew..."
-          brew install qt@6
-        else
-          echo "Qt6 already installed via Homebrew"
-        fi
-        
-        # Get Qt6 path from Homebrew
+        brew install qt@6
+    
+        # Link Qt6 (since it's keg-only and not linked by default)
+        brew link qt@6 --force --overwrite
+    
+        # Get Homebrew prefix
         QT6_PATH=$(brew --prefix qt@6)
         echo "Qt6 installed at: $QT6_PATH"
-        
-        # Set environment variables for subsequent steps
+    
+        # Export CMake path hints
         echo "CMAKE_PREFIX_PATH=$QT6_PATH/lib/cmake" >> $GITHUB_ENV
         echo "Qt6_DIR=$QT6_PATH/lib/cmake/Qt6" >> $GITHUB_ENV
+    
+        # Confirm existence
+        echo "Looking for Qt6Config.cmake in $QT6_PATH/lib/cmake/Qt6"
+        if [[ -f "$QT6_PATH/lib/cmake/Qt6/Qt6Config.cmake" ]]; then
+          echo "✅ Qt6Config.cmake found"
+        else
+          echo "❌ Qt6Config.cmake not found"
+          find "$QT6_PATH" -name Qt6Config.cmake
+          exit 1
+        fi
 
     - name: Configure CMake
       shell: bash

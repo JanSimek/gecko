@@ -39,7 +39,7 @@ std::unique_ptr<Msg> MsgReader::read() {
         // NOTE: Known issues to handle:
         // 1. Multiline strings (not yet implemented)
         // 2. Missing '}' in some files (e.g., CMBATAI2.MSG messages #1382, #32020)
-        std::regex re{ R"(\{(\d+)\}\{(.*)\?\}\{(.*)\?\})" };
+        std::regex re{ R"(\{(\d+)\}\{(.*)?\}\{(.*)?\})" };
 
         std::smatch matches;
         
