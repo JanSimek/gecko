@@ -2,6 +2,8 @@
 #include "../format/map/Map.h"
 #include "../format/lst/Lst.h"
 #include "../format/pro/Pro.h"
+#include "../format/frm/Frm.h"
+#include "../format/pal/Pal.h"
 #include "../util/ResourceManager.h"
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
@@ -462,21 +464,50 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
         try {
             auto& resourceManager = ResourceManager::getInstance();
 
-            resourceManager.loadResource<Frm>(objectInfo->frmPath.toStdString());
-            const auto& texture = resourceManager.texture(objectInfo->frmPath.toStdString());
+            // Load the FRM object directly (not the texture)
+            const auto* frm = resourceManager.loadResource<Frm>(objectInfo->frmPath.toStdString());
+            if (!frm) {
+                spdlog::debug("ObjectPalettePanel: Failed to load FRM object for {}", objectInfo->frmPath.toStdString());
+                // Fall through to placeholder generation
+            } else {
+                // Extract first frame of first direction (like F2 Dims)
+                const auto& directions = frm->directions();
+                if (!directions.empty()) {
+                    const auto& firstDirection = directions[0];
+                    const auto& frames = firstDirection.frames();
+                    if (!frames.empty()) {
+                        const auto& firstFrame = frames[0];
+                        
+                        // Load palette for color conversion (required)
+                        const Pal* palette = nullptr;
+                        try {
+                            palette = resourceManager.loadResource<Pal>("color.pal");
+                        } catch (...) {
+                            // Palette loading failed - this is required for proper color display
+                            spdlog::warn("ObjectPalettePanel: Could not load color.pal for {}, falling back to placeholder", objectInfo->frmPath.toStdString());
+                            // Fall through to placeholder generation since we need the palette
+                        }
+                        
+                        if (!palette) {
+                            // Without palette, we cannot generate proper colors, use placeholder
+                            spdlog::debug("ObjectPalettePanel: No palette available for {}", objectInfo->frmPath.toStdString());
+                            // Fall through to placeholder generation
+                        } else {
+                            // Convert single frame to thumbnail
+                            thumbnail = createFrameThumbnail(firstFrame, palette);
+                            
+                            spdlog::debug("ObjectPalettePanel: Created single-frame thumbnail for {} ({}x{})",
+                                objectInfo->frmPath.toStdString(), firstFrame.width(), firstFrame.height());
 
-            // Convert SFML texture to QPixmap
-            sf::Vector2u textureSize = texture.getSize();
-            sf::Image image = texture.copyToImage();
-
-            // Create QImage from SFML image data
-            QImage qImage(image.getPixelsPtr(), textureSize.x, textureSize.y, QImage::Format_RGBA8888);
-            thumbnail = QPixmap::fromImage(qImage);
-
-            spdlog::debug("ObjectPalettePanel: Loaded FRM thumbnail for {} ({}x{})",
-                objectInfo->frmPath.toStdString(), textureSize.x, textureSize.y);
-
-            return thumbnail;
+                            return thumbnail;
+                        }
+                    } else {
+                        spdlog::debug("ObjectPalettePanel: No frames found in FRM {}", objectInfo->frmPath.toStdString());
+                    }
+                } else {
+                    spdlog::debug("ObjectPalettePanel: No directions found in FRM {}", objectInfo->frmPath.toStdString());
+                }
+            }
 
         } catch (const std::exception& e) {
             spdlog::debug("ObjectPalettePanel: Failed to load FRM for {}: {}",
@@ -727,6 +758,66 @@ void ObjectPalettePanel::onPageSpinBoxChanged(int page) {
         _currentPage = newPage;
         updateObjectGrid();
     }
+}
+
+QPixmap ObjectPalettePanel::createFrameThumbnail(const Frame& frame, const Pal* palette) {
+    QPixmap thumbnail(ObjectWidget::OBJECT_SIZE, ObjectWidget::OBJECT_SIZE);
+    thumbnail.fill(Qt::transparent);
+
+    // Get frame dimensions
+    uint16_t frameWidth = frame.width();
+    uint16_t frameHeight = frame.height();
+    
+    if (frameWidth == 0 || frameHeight == 0) {
+        spdlog::debug("ObjectPalettePanel: Frame has zero dimensions");
+        return thumbnail;
+    }
+
+    // Always use RGBA data with palette - no fallback to grayscale
+    uint8_t* rgbaData = const_cast<Frame&>(frame).rgba(const_cast<Pal*>(palette));
+    if (!rgbaData) {
+        spdlog::debug("ObjectPalettePanel: Failed to get RGBA data from frame");
+        return thumbnail;
+    }
+    
+    QImage frameImage(rgbaData, frameWidth, frameHeight, QImage::Format_RGBA8888);
+    frameImage = frameImage.copy(); // Make a copy since rgbaData might be temporary
+
+    // Scale frame to fit thumbnail size while preserving aspect ratio (like F2 Dims)
+    QPixmap framePixmap = QPixmap::fromImage(frameImage);
+    
+    // Calculate scaling like F2 Dims does
+    int newWidth = frameWidth;
+    int newHeight = frameHeight;
+    
+    // Constrain to thumbnail size
+    if (newWidth > ObjectWidget::OBJECT_SIZE) {
+        newWidth = ObjectWidget::OBJECT_SIZE;
+    }
+    if (newHeight > ObjectWidget::OBJECT_SIZE) {
+        newHeight = ObjectWidget::OBJECT_SIZE;
+    }
+    
+    // Preserve aspect ratio
+    double aspectRatioX = static_cast<double>(frameWidth) / newWidth;
+    double aspectRatioY = static_cast<double>(frameHeight) / newHeight;
+    double aspectRatio = qMax(aspectRatioX, aspectRatioY);
+    
+    if (aspectRatio > 1.001) { // Avoid division by very small numbers
+        newWidth = static_cast<int>(frameWidth / aspectRatio);
+        newHeight = static_cast<int>(frameHeight / aspectRatio);
+    }
+    
+    // Scale the frame
+    QPixmap scaledFrame = framePixmap.scaled(newWidth, newHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    
+    // Center the scaled frame in the thumbnail
+    QPainter painter(&thumbnail);
+    int x = (ObjectWidget::OBJECT_SIZE - scaledFrame.width()) / 2;
+    int y = (ObjectWidget::OBJECT_SIZE - scaledFrame.height()) / 2;
+    painter.drawPixmap(x, y, scaledFrame);
+    
+    return thumbnail;
 }
 
 } // namespace geck
