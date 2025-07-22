@@ -6,6 +6,8 @@
 
 #include "StreamBuffer.h"
 #include "ReaderExceptions.h"
+#include "BinaryUtils.h"
+#include "FormatValidator.h"
 
 namespace geck {
 
@@ -15,6 +17,8 @@ protected:
     StreamBuffer _stream;
     std::filesystem::path _path;
     StreamBuffer::ENDIANNESS _endianness = StreamBuffer::ENDIANNESS::BIG;
+    bool _preserveAllData = false;
+    std::unique_ptr<BinaryUtils> _binaryUtils;
 
 public:
     FileParser() = default;
@@ -26,6 +30,7 @@ public:
         try {
             _stream = StreamBuffer(data);
             this->_path = filename;
+            _binaryUtils = std::make_unique<BinaryUtils>(_stream, _path);
             
             spdlog::debug("Opening file from data: {}", filename.string());
             return read();
@@ -45,6 +50,7 @@ public:
 
             _stream = StreamBuffer(stream, _endianness);
             this->_path = path;
+            _binaryUtils = std::make_unique<BinaryUtils>(_stream, _path);
             
             spdlog::debug("Opening file: {}", path.string());
             return read();
@@ -56,6 +62,16 @@ public:
     }
 
     virtual std::unique_ptr<T> read() = 0;
+
+    void setPreserveAllData(bool preserve) { _preserveAllData = preserve; }
+    bool getPreserveAllData() const { return _preserveAllData; }
+
+    BinaryUtils& getBinaryUtils() { 
+        if (!_binaryUtils) {
+            throw std::runtime_error("BinaryUtils not initialized - call openFile first");
+        }
+        return *_binaryUtils; 
+    }
 
     inline uint32_t read_u8() {
         validateStreamPosition(1);

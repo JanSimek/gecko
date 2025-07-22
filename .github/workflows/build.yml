@@ -85,7 +85,6 @@ jobs:
               cmake --build build --config Release
               sudo cmake --install build
               cd ..
-            cmake_prefix_path: /opt/homebrew/opt/qt@6:/usr/local/opt/qt@6
 
     steps:
     - uses: actions/checkout@v4
@@ -124,12 +123,42 @@ jobs:
       shell: bash
       run: ${{ matrix.install_deps }}
 
+    - name: Setup Qt6 on macOS
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        echo "=== Setting up Qt6 on macOS ==="
+        
+        # Install Qt6 via Homebrew if not present
+        if ! brew list qt@6 >/dev/null 2>&1; then
+          echo "Installing Qt6 via Homebrew..."
+          brew install qt@6
+        else
+          echo "Qt6 already installed via Homebrew"
+        fi
+        
+        # Get Qt6 path from Homebrew
+        QT6_PATH=$(brew --prefix qt@6)
+        echo "Qt6 installed at: $QT6_PATH"
+        
+        # Set environment variables for subsequent steps
+        echo "CMAKE_PREFIX_PATH=$QT6_PATH:$CMAKE_PREFIX_PATH" >> $GITHUB_ENV
+        echo "QT_DIR=$QT6_PATH" >> $GITHUB_ENV
+        echo "Qt6_DIR=$QT6_PATH/lib/cmake/Qt6" >> $GITHUB_ENV
+        
+        # Verify installation
+        if [[ -f "$QT6_PATH/lib/cmake/Qt6/Qt6Config.cmake" ]]; then
+          echo "✅ Qt6Config.cmake found"
+          QT6_VERSION=$(grep -o 'set(PACKAGE_VERSION "[^"]*"' "$QT6_PATH/lib/cmake/Qt6/Qt6ConfigVersion.cmake" | cut -d'"' -f2 || echo "unknown")
+          echo "Qt6 version: $QT6_VERSION"
+        else
+          echo "❌ Qt6Config.cmake not found at expected location"
+          exit 1
+        fi
+
     - name: Configure CMake
       shell: bash
       run: |
-        if [[ "${{ runner.os }}" == "macOS" ]]; then
-          export CMAKE_PREFIX_PATH="${{ matrix.cmake_prefix_path }}:$CMAKE_PREFIX_PATH"
-        fi
         if [[ "${{ runner.os }}" == "Windows" ]]; then
           # Use Windows paths with proper escaping
           cmake -B "${{ env.BUILD_DIR }}" \

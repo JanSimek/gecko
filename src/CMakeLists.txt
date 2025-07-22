@@ -15,6 +15,9 @@ add_executable (${PROJECT_NAME}
     util/ProHelper.h
     util/ProHelper.cpp
 
+    util/QtDialogs.h
+    util/QtDialogs.cpp
+
     util/Types.h
     util/SpatialIndex.h
     util/SpatialIndex.cpp

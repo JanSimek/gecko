@@ -7,10 +7,10 @@
 #include <algorithm> // std::sort, std::find, std::max, std::min
 #include <limits>    // std::numeric_limits
 #include <cstdlib>   // std::abs
-#include "../util/QtDialogs.h"
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
 #include "../util/TileUtils.h"
+#include "../util/QtDialogs.h"
 
 #include "../editor/Object.h"
 
@@ -189,9 +189,13 @@ void EditorWidget::init() {
 }
 
 void EditorWidget::saveMap() {
-    auto destination = geck::QtDialogs::saveFile("Select a file", ".",
-        { { "Map Files", "*.map" } },
-        true);
+    QString destinationQString = QtDialogs::saveFile(this, "Select a file", "Map Files (*.map);;All Files (*.*)");
+    
+    if (destinationQString.isEmpty()) {
+        return; // User cancelled
+    }
+    
+    std::string destination = destinationQString.toStdString();
 
     MapWriter map_writer{ [](int32_t PID) {
         ProReader pro_reader{};
@@ -208,14 +212,14 @@ void EditorWidget::saveMap() {
 
 void EditorWidget::openMap() {
     // Show file dialog to select a new map
-    auto mapPath = geck::QtDialogs::openFile("Choose Fallout 2 map to load", "",
-        { { "Fallout 2 map (.map)", "*.map" } });
+    QString mapPathQString = QtDialogs::openMapFile(this, "Choose Fallout 2 map to load");
 
-    if (mapPath.empty()) {
+    if (mapPathQString.isEmpty()) {
         spdlog::info("No map file selected");
         return;
     }
 
+    std::string mapPath = mapPathQString.toStdString();
     spdlog::info("User requested to open new map: {}", mapPath);
 
     // Emit signal to request map loading - MainWindow will handle the actual loading

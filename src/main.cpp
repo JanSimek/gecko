@@ -6,7 +6,6 @@
 
 #include "Application.h"
 #include "util/ResourceManager.h"
-#include "util/QtDialogs.h"
 
 int main(int argc, char** argv) {
     try {

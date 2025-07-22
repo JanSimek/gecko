@@ -3,28 +3,33 @@
 #include <spdlog/spdlog.h>
 
 #include "../../format/pro/Pro.h"
+#include "../ErrorMessages.h"
 
 namespace geck {
 
 std::unique_ptr<Pro> ProReader::read() {
     try {
+        // Use format validation
+        FormatValidator::validateProFile(getBinaryUtils(), _path);
+        
+        auto& utils = getBinaryUtils();
         spdlog::debug("Reading PRO file: {}", _path.string());
 
         auto pro = std::make_unique<Pro>(_path);
 
-        pro->header.PID = read_be_i32();
-        pro->header.message_id = read_be_u32();
-        pro->header.FID = read_be_i32();
-        pro->header.light_distance = read_be_u32();
-        pro->header.light_intensity = read_be_u32();
-        pro->header.flags = read_be_u32();
+        pro->header.PID = utils.readBE32Signed();
+        pro->header.message_id = utils.readBE32();
+        pro->header.FID = utils.readBE32Signed();
+        pro->header.light_distance = utils.readBE32();
+        pro->header.light_intensity = utils.readBE32();
+        pro->header.flags = utils.readBE32();
 
     switch (pro->type()) {
         case Pro::OBJECT_TYPE::TILE:
         case Pro::OBJECT_TYPE::MISC:
             break;
         default:
-            read_be_u32(); //_flagsExt = stream.uint32();
+            utils.skipWithLog(4, "_flagsExt field");
             break;
     }
 
@@ -33,7 +38,7 @@ std::unique_ptr<Pro> ProReader::read() {
         case Pro::OBJECT_TYPE::CRITTER:
         case Pro::OBJECT_TYPE::SCENERY:
         case Pro::OBJECT_TYPE::WALL:
-            read_be_u32(); //_SID = stream.int32();
+            utils.skipWithLog(4, "_SID field");
             break;
         case Pro::OBJECT_TYPE::TILE:
         case Pro::OBJECT_TYPE::MISC:
@@ -42,32 +47,24 @@ std::unique_ptr<Pro> ProReader::read() {
 
     switch (pro->type()) {
         case Pro::OBJECT_TYPE::ITEM: {
-            uint32_t subtypeId = read_be_u32();
+            uint32_t subtypeId = utils.readBE32();
             pro->setObjectSubtypeId(subtypeId);
 
-            read_be_u32(); //            _materialId    = stream.uint32();
-            read_be_u32(); //            _containerSize = stream.uint32();
-            read_be_u32(); //            _weight        = stream.uint32();
-            read_be_u32(); //            _basePrice     = stream.uint32();
-            read_be_u32(); //            _inventoryFID  = stream.int32();
-            read_be_u8();  //            _soundId       = stream.uint8();
+            utils.skipWithLog(4, "_materialId");
+            utils.skipWithLog(4, "_containerSize");
+            utils.skipWithLog(4, "_weight");
+            utils.skipWithLog(4, "_basePrice");
+            utils.skipWithLog(4, "_inventoryFID");
+            utils.skipWithLog(1, "_soundId");
 
             switch ((Pro::ITEM_TYPE)subtypeId) {
                 case Pro::ITEM_TYPE::ARMOR: {
-                    read_be_u32(); // _armorClass = stream.uint32();
-                    // Damage resist
-                    for (unsigned int i = 0; i != 7; ++i) {
-                        read_be_u32();
-                        //                        _damageResist.at(i) = stream.uint32();
-                    }
-                    // Damage threshold
-                    for (unsigned int i = 0; i != 7; ++i) {
-                        read_be_u32();
-                        //                        _damageThreshold.at(i) = stream.uint32();
-                    }
-                    read_be_u32(); //_perk           = stream.int32();
-                    read_be_u32(); //_armorMaleFID   = stream.int32();
-                    read_be_u32(); //_armorFemaleFID = stream.int32();
+                    utils.skipWithLog(4, "_armorClass");
+                    utils.skipWithLog(7 * 4, "damage resist array (7 elements)");
+                    utils.skipWithLog(7 * 4, "damage threshold array (7 elements)");
+                    utils.skipWithLog(4, "_perk");
+                    utils.skipWithLog(4, "_armorMaleFID");
+                    utils.skipWithLog(4, "_armorFemaleFID");
                     break;
                 }
                 case Pro::ITEM_TYPE::CONTAINER: {

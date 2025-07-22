@@ -33,8 +33,8 @@ Application::Application(int argc, char** argv)
 void Application::loadMap(const std::filesystem::path& mapPath) {
     if (mapPath.empty()) {
         // No map specified, show file dialog to select one
-        auto selectedMapPath = geck::QtDialogs::openFile("Choose Fallout 2 map to load", "",
-            { { "Fallout 2 map (.map)", "*.map" } });
+        QString selectedMapQString = QtDialogs::openMapFile(nullptr, "Choose Fallout 2 map to load");
+        std::filesystem::path selectedMapPath = selectedMapQString.toStdString();
 
         if (selectedMapPath.empty()) {
             spdlog::info("No map file selected, starting empty editor");
@@ -136,5 +136,6 @@ void Application::run() {
 bool Application::isRunning() const {
     return _mainWindow && _mainWindow->isVisible();
 }
+
 
 } // namespace geck
