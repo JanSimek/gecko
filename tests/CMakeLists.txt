@@ -4,9 +4,22 @@ add_executable(general_tests
     general/test_reading_msg.cpp
     general/test_tile_utils.cpp
     general/test_selection_system.cpp
+    general/test_reader_factory.cpp
+)
+
+# Performance tests (Catch2 with benchmarking) - Reader performance tests
+add_executable(performance_tests
+    performance/test_reader_performance.cpp
 )
 
 target_link_libraries(general_tests PRIVATE
+    Catch2::Catch2WithMain
+    spdlog::spdlog_header_only
+    vault
+    SFML::System SFML::Graphics
+)
+
+target_link_libraries(performance_tests PRIVATE
     Catch2::Catch2WithMain
     spdlog::spdlog_header_only
     vault
@@ -39,9 +52,11 @@ include(Catch)
 if(DEFINED ENV{CI} OR DEFINED ENV{GITHUB_ACTIONS})
     # Register tests without discovery - this avoids running the executable during configure
     add_test(NAME general_tests COMMAND general_tests)
+    add_test(NAME performance_tests COMMAND performance_tests)
 else()
     # Use automatic test discovery for local development
     catch_discover_tests(general_tests)
+    catch_discover_tests(performance_tests)
 endif()
 
 # Qt test discovery for Qt tests
@@ -55,6 +70,11 @@ if(WIN32)
         COMMAND_EXPAND_LISTS
     )
     add_custom_command(
+        TARGET performance_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:performance_tests> $<TARGET_FILE_DIR:performance_tests>
+        COMMAND_EXPAND_LISTS
+    )
+    add_custom_command(
         TARGET qt_tests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:qt_tests> $<TARGET_FILE_DIR:qt_tests>
         COMMAND_EXPAND_LISTS
@@ -65,6 +85,11 @@ endif()
 add_custom_command(
     TARGET general_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:general_tests>/data
+)
+
+add_custom_command(
+    TARGET performance_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:performance_tests>/data
 )
 
 add_custom_command(

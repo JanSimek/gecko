@@ -103,17 +103,10 @@ public:
             throw UnsupportedFormatException(
                 "Unsupported FRM version: " + std::to_string(version), filePath);
         }
-        
-        // Read and validate FPS
-        uint16_t fps = utils.readBE16();
-        if (fps == 0 || fps > 100) {
-            throw UnsupportedFormatException(
-                "Invalid FRM FPS: " + std::to_string(fps), filePath);
-        }
-        
+
         // Reset to start
         utils.setPosition(0);
-        spdlog::debug("FRM format validation passed: version={}, fps={}", version, fps);
+        spdlog::debug("FRM format validation passed: version={}", version);
     }
     
     static void validateMsgFile(BinaryUtils& utils, const std::filesystem::path& filePath) {

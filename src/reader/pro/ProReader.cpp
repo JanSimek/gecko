@@ -68,50 +68,50 @@ std::unique_ptr<Pro> ProReader::read() {
                     break;
                 }
                 case Pro::ITEM_TYPE::CONTAINER: {
-                    read_be_u32(); // stream.uint32(); // max size
-                    read_be_u32(); // stream.uint32(); // containter flags
+                    utils.skipWithLog(4, "container max size");
+                    utils.skipWithLog(4, "container flags");
                     break;
                 }
                 case Pro::ITEM_TYPE::DRUG: {
-                    read_be_u32(); // stream.uint32(); // Stat0
-                    read_be_u32(); // stream.uint32(); // Stat1
-                    read_be_u32(); // stream.uint32(); // Stat2
-                    read_be_u32(); // stream.uint32(); // Stat0 ammount
-                    read_be_u32(); // stream.uint32(); // Stat1 ammount
-                    read_be_u32(); // stream.uint32(); // Stat2 ammount
+                    utils.skipWithLog(4, "drug stat0 base");
+                    utils.skipWithLog(4, "drug stat1 base");
+                    utils.skipWithLog(4, "drug stat2 base");
+                    utils.skipWithLog(4, "drug stat0 amount");
+                    utils.skipWithLog(4, "drug stat1 amount");
+                    utils.skipWithLog(4, "drug stat2 amount");
                     // first delayed effect
-                    read_be_u32(); // stream.uint32(); // delay in game minutes
-                    read_be_u32(); // stream.uint32(); // Stat0 ammount
-                    read_be_u32(); // stream.uint32(); // Stat1 ammount
-                    read_be_u32(); // stream.uint32(); // Stat2 ammount
+                    utils.skipWithLog(4, "drug first delay minutes");
+                    utils.skipWithLog(4, "drug first stat0 amount");
+                    utils.skipWithLog(4, "drug first stat1 amount");
+                    utils.skipWithLog(4, "drug first stat2 amount");
                     // second delayed effect
-                    read_be_u32(); // stream.uint32(); // delay in game minutes
-                    read_be_u32(); // stream.uint32(); // Stat0 ammount
-                    read_be_u32(); // stream.uint32(); // Stat1 ammount
-                    read_be_u32(); // stream.uint32(); // Stat2 ammount
-                    read_be_u32(); // stream.uint32(); // addiction chance
-                    read_be_u32(); // stream.uint32(); // addiction perk
-                    read_be_u32(); // stream.uint32(); // addiction delay
+                    utils.skipWithLog(4, "drug second delay minutes");
+                    utils.skipWithLog(4, "drug second stat0 amount");
+                    utils.skipWithLog(4, "drug second stat1 amount");
+                    utils.skipWithLog(4, "drug second stat2 amount");
+                    utils.skipWithLog(4, "drug addiction chance");
+                    utils.skipWithLog(4, "drug addiction perk");
+                    utils.skipWithLog(4, "drug addiction delay");
                     break;
                 }
                 case Pro::ITEM_TYPE::WEAPON:
-                    read_be_u32(); //_weaponAnimationCode  = stream.uint32();
-                    read_be_u32(); //_weaponDamageMin      = stream.uint32();
-                    read_be_u32(); //_weaponDamageMax      = stream.uint32();
-                    read_be_u32(); //_weaponDamageType     = stream.uint32();
-                    read_be_u32(); //_weaponRangePrimary   = stream.uint32();
-                    read_be_u32(); //_weaponRangeSecondary = stream.uint32();
-                    read_be_u32(); // stream.uint32(); // Proj PID
-                    read_be_u32(); //_weaponMinimumStrenght     = stream.uint32();
-                    read_be_u32(); //_weaponActionCostPrimary   = stream.uint32();
-                    read_be_u32(); //_weaponActionCostSecondary = stream.uint32();
-                    read_be_u32(); // stream.uint32(); // Crit Fail
-                    read_be_u32(); //_perk = stream.int32();
-                    read_be_u32(); //_weaponBurstRounds  = stream.uint32();
-                    read_be_u32(); //_weaponAmmoType     = stream.uint32();
-                    read_be_u32(); //_weaponAmmoPID      = stream.uint32();
-                    read_be_u32(); //_weaponAmmoCapacity = stream.uint32();
-                    read_be_u8();  //_soundId = stream.uint8();
+                    utils.skipWithLog(4, "weapon animation code");
+                    utils.skipWithLog(4, "weapon damage min");
+                    utils.skipWithLog(4, "weapon damage max");
+                    utils.skipWithLog(4, "weapon damage type");
+                    utils.skipWithLog(4, "weapon range primary");
+                    utils.skipWithLog(4, "weapon range secondary");
+                    utils.skipWithLog(4, "weapon projectile PID");
+                    utils.skipWithLog(4, "weapon minimum strength");
+                    utils.skipWithLog(4, "weapon action cost primary");
+                    utils.skipWithLog(4, "weapon action cost secondary");
+                    utils.skipWithLog(4, "weapon critical fail");
+                    utils.skipWithLog(4, "weapon perk");
+                    utils.skipWithLog(4, "weapon burst rounds");
+                    utils.skipWithLog(4, "weapon ammo type");
+                    utils.skipWithLog(4, "weapon ammo PID");
+                    utils.skipWithLog(4, "weapon ammo capacity");
+                    utils.skipWithLog(1, "weapon sound ID");
                     break;
                 case Pro::ITEM_TYPE::AMMO:
                     break;
@@ -123,117 +123,97 @@ std::unique_ptr<Pro> ProReader::read() {
             break;
         }
         case Pro::OBJECT_TYPE::CRITTER: {
-            read_be_i32(); //_critterHeadFID = stream.int32();
+            utils.skipWithLog(4, "critter head FID");
 
-            read_be_u32(); // stream.uint32(); // ai packet number
-            read_be_u32(); // stream.uint32(); // team number
-            read_be_u32(); //_critterFlags = stream.uint32();
+            utils.skipWithLog(4, "critter AI packet number");
+            utils.skipWithLog(4, "critter team number");
+            utils.skipWithLog(4, "critter flags");
 
-            // S P E C I A L
-            for (unsigned int i = 0; i != 7; ++i) {
-                read_be_u32(); //_critterStats.at(i) = stream.uint32();
-            }
-            read_be_u32(); //_critterHitPointsMax = stream.uint32();
-            read_be_u32(); //_critterActionPoints = stream.uint32();
-            read_be_u32(); //_critterArmorClass   = stream.uint32();
-            read_be_u32(); // stream.uint32(); // Unused
-            read_be_u32(); //_critterMeleeDamage    = stream.uint32();
-            read_be_u32(); // _critterCarryWeightMax = stream.uint32();
-            read_be_u32(); //_critterSequence       = stream.uint32();
-            read_be_u32(); //_critterHealingRate    = stream.uint32();
-            read_be_u32(); //_critterCriticalChance = stream.uint32();
-            read_be_u32(); // stream.uint32(); // Better criticals
+            // S P E C I A L stats (7 base stats)
+            utils.skipArray<uint32_t>(7, "critter SPECIAL stats (STR,PER,END,CHR,INT,AGL,LCK)");
+            
+            utils.skipWithLog(4, "critter max hit points");
+            utils.skipWithLog(4, "critter action points");
+            utils.skipWithLog(4, "critter armor class");
+            utils.skipWithLog(4, "critter unused field");
+            utils.skipWithLog(4, "critter melee damage");
+            utils.skipWithLog(4, "critter carry weight max");
+            utils.skipWithLog(4, "critter sequence");
+            utils.skipWithLog(4, "critter healing rate");
+            utils.skipWithLog(4, "critter critical chance");
+            utils.skipWithLog(4, "critter better criticals");
 
-            // Damage threshold
-            for (unsigned int i = 0; i != 7; ++i) {
-                read_be_u32(); //_damageThreshold.at(i) = stream.uint32();
-            }
-            // Damage resist
-            for (unsigned int i = 0; i != 9; ++i) {
-                read_be_u32(); //_damageResist.at(i) = stream.uint32();
-            }
+            // Damage threshold (7 damage types)
+            utils.skipArray<uint32_t>(7, "critter damage threshold array");
+            
+            // Damage resist (9 damage types)
+            utils.skipArray<uint32_t>(9, "critter damage resist array");
 
-            read_be_u32(); //_critterAge = stream.uint32(); // age
-            read_be_u32(); //_critterGender = stream.uint32(); // sex
+            utils.skipWithLog(4, "critter age");
+            utils.skipWithLog(4, "critter gender");
 
-            for (unsigned int i = 0; i != 7; ++i) {
-                read_be_u32(); //_critterStatsBonus.at(i) = stream.uint32();
-            }
+            // Bonus SPECIAL stats (7 stats)
+            utils.skipArray<uint32_t>(7, "critter SPECIAL bonus stats");
 
-            read_be_u32(); // stream.uint32(); // Bonus Health points
-            read_be_u32(); // stream.uint32(); // Bonus Action points
-            read_be_u32(); // stream.uint32(); // Bonus Armor class
-            read_be_u32(); // stream.uint32(); // Bonus Unused
-            read_be_u32(); // stream.uint32(); // Bonus Melee damage
-            read_be_u32(); // stream.uint32(); // Bonus Carry weight
-            read_be_u32(); // stream.uint32(); // Bonus Sequence
-            read_be_u32(); // stream.uint32(); // Bonus Healing rate
-            read_be_u32(); // stream.uint32(); // Bonus Critical chance
-            read_be_u32(); // stream.uint32(); // Bonus Better criticals
+            utils.skipWithLog(4, "critter bonus health points");
+            utils.skipWithLog(4, "critter bonus action points");
+            utils.skipWithLog(4, "critter bonus armor class");
+            utils.skipWithLog(4, "critter bonus unused field");
+            utils.skipWithLog(4, "critter bonus melee damage");
+            utils.skipWithLog(4, "critter bonus carry weight");
+            utils.skipWithLog(4, "critter bonus sequence");
+            utils.skipWithLog(4, "critter bonus healing rate");
+            utils.skipWithLog(4, "critter bonus critical chance");
+            utils.skipWithLog(4, "critter bonus better criticals");
 
-            // Bonus Damage threshold
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
+            // Bonus Damage threshold (8 values)
+            utils.skipArray<uint32_t>(8, "critter bonus damage threshold array");
 
-            // Bonus Damage resistance
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
-            read_be_u32();
+            // Bonus Damage resistance (8 values)
+            utils.skipArray<uint32_t>(8, "critter bonus damage resistance array");
 
-            read_be_u32(); // Bonus age
-            read_be_u32(); // Bonus sex
+            utils.skipWithLog(4, "critter bonus age");
+            utils.skipWithLog(4, "critter bonus gender");
 
-            for (unsigned int i = 0; i != 18; ++i) {
-                read_be_u32(); //_critterSkills.at(i) = stream.uint32();
-            }
+            // Skills (18 different skills)
+            utils.skipArray<uint32_t>(18, "critter skills array (18 skills)");
 
-            read_be_u32(); // body type
-            read_be_u32(); // experience for kill
-            read_be_u32(); // kill type
-            read_be_u32(); // damage type
+            utils.skipWithLog(4, "critter body type");
+            utils.skipWithLog(4, "critter experience for kill");
+            utils.skipWithLog(4, "critter kill type");
+            utils.skipWithLog(4, "critter damage type");
             break;
         }
         case Pro::OBJECT_TYPE::SCENERY: {
-            uint32_t subtypeId = read_be_u32(); // _subtypeId  = stream.uint32();
+            uint32_t subtypeId = utils.readBE32();
             pro->setObjectSubtypeId(subtypeId);
 
-            read_be_u32(); //_materialId = stream.uint32();
-            read_be_u8();  // _soundId    = stream.uint8();
+            utils.skipWithLog(4, "scenery material ID");
+            utils.skipWithLog(1, "scenery sound ID");
 
             switch ((Pro::SCENERY_TYPE)subtypeId) {
                 case Pro::SCENERY_TYPE::DOOR: {
-                    read_be_u32(); // stream.uint32(); // walk thru flag
-                    read_be_u32(); // stream.uint32(); // unknown
+                    utils.skipWithLog(4, "door walk through flag");
+                    utils.skipWithLog(4, "door unknown field");
                     break;
                 }
                 case Pro::SCENERY_TYPE::STAIRS: {
-                    read_be_u32(); // stream.uint32(); // DestTile && DestElevation
-                    read_be_u32(); // stream.uint32(); // DestElevation
+                    utils.skipWithLog(4, "stairs dest tile");
+                    utils.skipWithLog(4, "stairs dest elevation");
                     break;
                 }
                 case Pro::SCENERY_TYPE::ELEVATOR: {
-                    read_be_u32(); // stream.uint32(); // Elevator type
-                    read_be_u32(); // stream.uint32(); // Elevator level
+                    utils.skipWithLog(4, "elevator type");
+                    utils.skipWithLog(4, "elevator level");
                     break;
                 }
                 case Pro::SCENERY_TYPE::LADDER_BOTTOM:
                 case Pro::SCENERY_TYPE::LADDER_TOP: {
-                    read_be_u32(); // stream.uint32(); // DestTile && DestElevation
+                    utils.skipWithLog(4, "ladder dest tile and elevation");
                     break;
                 }
                 case Pro::SCENERY_TYPE::GENERIC: {
-                    read_be_u32(); // stream.uint32(); // unknown
+                    utils.skipWithLog(4, "generic scenery unknown field");
                     break;
                 }
             }
@@ -241,15 +221,15 @@ std::unique_ptr<Pro> ProReader::read() {
             break;
         }
         case Pro::OBJECT_TYPE::WALL: {
-            read_be_u32(); //_materialId = stream.uint32();
+            utils.skipWithLog(4, "wall material ID");
             break;
         }
         case Pro::OBJECT_TYPE::TILE: {
-            read_be_u32(); //_materialId = stream.uint32();
+            utils.skipWithLog(4, "tile material ID");
             break;
         }
         case Pro::OBJECT_TYPE::MISC: {
-            read_be_u32(); // stream.uint32(); // unknown
+            utils.skipWithLog(4, "misc unknown field");
             break;
         }
     }

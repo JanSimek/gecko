@@ -141,6 +141,8 @@ add_library(vault STATIC
 
     # Parser superclass
     reader/FileParser.h
+    reader/ReaderFactory.h
+    reader/ReaderFactory.cpp
 
     reader/dat/DatReader.h
     reader/dat/DatReader.cpp

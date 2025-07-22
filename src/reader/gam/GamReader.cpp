@@ -5,57 +5,108 @@
 #include <spdlog/spdlog.h>
 
 #include "../../format/gam/Gam.h"
+#include "../ErrorMessages.h"
 
 namespace geck {
 
 std::unique_ptr<Gam> GamReader::read() {
-    auto gam = std::make_unique<Gam>(_path);
-
-    const std::regex regex_key_value(R"~(^\s*(\w+)\s*:=(\d+)\s*;)~");
-    const std::regex regex_gvars_start(R"~(^\s*GAME_GLOBAL_VARS:)~"); // GVARS
-    const std::regex regex_mvars_start(R"~(^\s*MAP_GLOBAL_VARS:)~");  // MVARS
-
-    std::smatch regex_match;
-
-    bool parsingMvars = false;
-    bool parsingGvars = false;
-
-    std::string contents = _stream.readString(_stream.size());
-    std::stringstream stream(contents);
-    for (std::string line; std::getline(stream, line);) {
-
-        // GAME_GLOBAL_VARS section start
-        if (std::regex_search(line, regex_gvars_start)) {
-            parsingGvars = true;
-            parsingMvars = false;
-            continue;
+    try {
+        auto& utils = getBinaryUtils();
+        spdlog::debug("Reading GAM file: {}", _path.string());
+        
+        // Validate file size
+        auto pos = utils.getPosition();
+        if (pos.total == 0) {
+            throw UnsupportedFormatException("Empty GAM file", _path);
         }
+        
+        spdlog::trace("GAM file size: {} bytes", pos.total);
+        
+        auto gam = std::make_unique<Gam>(_path);
 
-        // MAP_GLOBAL_VARS section start
-        if (std::regex_search(line, regex_mvars_start)) {
-            parsingGvars = false;
-            parsingMvars = true;
-            continue;
+        // Define regex patterns for GAM file parsing
+        const std::regex regex_key_value(R"~(^\s*(\w+)\s*:=(\d+)\s*;)~");
+        const std::regex regex_gvars_start(R"~(^\s*GAME_GLOBAL_VARS:)~"); // GVARS
+        const std::regex regex_mvars_start(R"~(^\s*MAP_GLOBAL_VARS:)~");  // MVARS
+
+        std::smatch regex_match;
+
+        bool parsingMvars = false;
+        bool parsingGvars = false;
+        int lines_processed = 0;
+        int variables_found = 0;
+
+        // Read entire file content as string using BinaryUtils
+        std::string contents = utils.readFixedString(pos.total);
+        
+        // Validate that the content contains expected sections
+        if (contents.find("GAME_GLOBAL_VARS:") == std::string::npos &&
+            contents.find("MAP_GLOBAL_VARS:") == std::string::npos) {
+            throw UnsupportedFormatException(
+                ErrorMessages::corruptedData(_path, "Missing required GAM sections"), _path);
         }
+        // Parse the content line by line
+        std::stringstream stream(contents);
+        for (std::string line; std::getline(stream, line);) {
+            lines_processed++;
+            
+            // GAME_GLOBAL_VARS section start
+            if (std::regex_search(line, regex_gvars_start)) {
+                parsingGvars = true;
+                parsingMvars = false;
+                spdlog::trace("Found GAME_GLOBAL_VARS section at line {}", lines_processed);
+                continue;
+            }
 
-        if (std::regex_search(line, regex_match, regex_key_value)) {
-            // The first match is the whole string
-            if (regex_match.size() == 3) {
-                auto key = regex_match[1].str();
-                auto value = regex_match[2].str();
+            // MAP_GLOBAL_VARS section start
+            if (std::regex_search(line, regex_mvars_start)) {
+                parsingGvars = false;
+                parsingMvars = true;
+                spdlog::trace("Found MAP_GLOBAL_VARS section at line {}", lines_processed);
+                continue;
+            }
 
-                if (parsingGvars) {
-                    gam->addGvar(key, std::stoi(value));
-                } else if (parsingMvars) {
-                    gam->addMvar(key, std::stoi(value));
-                } else {
-                    throw std::runtime_error{ "Variable " + key + " does not belong to either MVARS nor GVARS section" };
+            // Parse variable assignment
+            if (std::regex_search(line, regex_match, regex_key_value)) {
+                if (regex_match.size() == 3) {
+                    auto key = regex_match[1].str();
+                    auto value_str = regex_match[2].str();
+                    
+                    try {
+                        int value = std::stoi(value_str);
+                        variables_found++;
+                        
+                        if (parsingGvars) {
+                            gam->addGvar(key, value);
+                            spdlog::trace("Added GVAR: {} = {}", key, value);
+                        } else if (parsingMvars) {
+                            gam->addMvar(key, value);
+                            spdlog::trace("Added MVAR: {} = {}", key, value);
+                        } else {
+                            throw ParseException(
+                                ErrorMessages::corruptedData(_path, 
+                                    "Variable " + key + " outside of GVARS/MVARS section at line " + std::to_string(lines_processed)), _path);
+                        }
+                    } catch (const std::invalid_argument& e) {
+                        throw ParseException(
+                            ErrorMessages::corruptedData(_path,
+                                "Invalid variable value '" + value_str + "' for " + key + " at line " + std::to_string(lines_processed)), _path);
+                    }
                 }
             }
         }
-    }
+        
+        spdlog::debug("Successfully read GAM file: {} lines processed, {} variables found", 
+                     lines_processed, variables_found);
 
-    return gam;
+        return gam;
+        
+    } catch (const FileReaderException&) {
+        throw;
+    } catch (const std::exception& e) {
+        throw ParseException(
+            "Failed to parse GAM file: " + std::string(e.what()), _path);
+    }
 }
 
 } // namespace geck
