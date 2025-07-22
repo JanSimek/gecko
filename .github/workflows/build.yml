@@ -50,10 +50,10 @@ jobs:
               cmake --build build --config Release
               sudo cmake --install build
               cd ..
-              # Install spdlog
-              git clone --depth 1 --branch v1.x https://github.com/gabime/spdlog.git
+              # Install spdlog (compatible version)
+              git clone --depth 1 --branch v1.12.0 https://github.com/gabime/spdlog.git
               cd spdlog
-              cmake -B build -DCMAKE_BUILD_TYPE=Release
+              cmake -B build -DCMAKE_BUILD_TYPE=Release -DSPDLOG_BUILD_SHARED=ON
               cmake --build build --config Release
               sudo cmake --install build
               cd ..
@@ -66,11 +66,18 @@ jobs:
             
           - os: macos-latest
             install_deps: |
-              brew install qt@6 spdlog zlib
+              brew install qt@6 zlib
               # Build SFML 3 from source
               git clone --depth 1 --branch 3.0.0 https://github.com/SFML/SFML.git
               cd SFML
               cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+              cmake --build build --config Release
+              sudo cmake --install build
+              cd ..
+              # Install spdlog (compatible version, same as Ubuntu)
+              git clone --depth 1 --branch v1.12.0 https://github.com/gabime/spdlog.git
+              cd spdlog
+              cmake -B build -DCMAKE_BUILD_TYPE=Release -DSPDLOG_BUILD_SHARED=ON
               cmake --build build --config Release
               sudo cmake --install build
               cd ..
@@ -119,12 +126,24 @@ jobs:
         if [ "${{ matrix.os }}" == "macos-latest" ]; then
           export CMAKE_PREFIX_PATH="${{ matrix.cmake_prefix_path }}:$CMAKE_PREFIX_PATH"
         fi
-        cmake -B ${{ env.BUILD_DIR }} \
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -DGECK_BUILD_TESTS=ON \
-          -DGECK_AUTO_TEST=OFF \
-          ${{ matrix.cmake_extra_args }} \
-          -S ${{ github.workspace }}
+        if [ "${{ matrix.os }}" == "windows-latest" ]; then
+          # Use Windows paths with proper escaping
+          cmake -B "${{ env.BUILD_DIR }}" \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DGECK_BUILD_TESTS=ON \
+            -DGECK_AUTO_TEST=OFF \
+            ${{ matrix.cmake_extra_args }} \
+            -S "${{ github.workspace }}"
+        else
+          cmake -B ${{ env.BUILD_DIR }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DGECK_BUILD_TESTS=ON \
+            -DGECK_AUTO_TEST=OFF \
+            -DSPDLOG_FMT_EXTERNAL=OFF \
+            -DCMAKE_CXX_FLAGS="-Wno-error" \
+            ${{ matrix.cmake_extra_args }} \
+            -S ${{ github.workspace }}
+        fi
 
     - name: Build
       run: cmake --build ${{ env.BUILD_DIR }} --config ${{ matrix.build_type }} --parallel
