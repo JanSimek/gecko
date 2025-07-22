@@ -1,7 +1,6 @@
 #include "MapReader.h"
 
 #include <spdlog/spdlog.h>
-#include <spdlog/fmt/bundled/color.h>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -184,7 +183,7 @@ std::unique_ptr<Map> MapReader::read() {
     std::string filename = read_str(16);
     map_file->header.filename = filename;
 
-    spdlog::info("Loading map {} from {}", fmt::format(fmt::fg(fmt::color::green) | fmt::emphasis::bold, filename), _path.string());
+    spdlog::info("Loading map {} from {}", filename, _path.string());
 
     map_file->header.player_default_position = read_be_u32();
     map_file->header.player_default_elevation = read_be_u32();

@@ -66,19 +66,14 @@ public:
         auto masterPath = getMasterDat();
 
         // Check if we have full test assets (real Fallout 2 data)
+        // This requires both the master.dat and the specific map files
         if (std::filesystem::exists(testPath) && std::filesystem::exists(masterPath)) {
-            return true;
-        }
-
-        // Check if we have minimal test data in tests/data directory
-        auto testDataPath = std::filesystem::current_path() / "tests" / "data";
-        auto altTestDataPath = std::filesystem::current_path().parent_path() / "tests" / "data";
-
-        if (std::filesystem::exists(testDataPath) && std::filesystem::exists(testDataPath / "test.gam")) {
-            return true;
-        }
-        if (std::filesystem::exists(altTestDataPath) && std::filesystem::exists(altTestDataPath / "test.gam")) {
-            return true;
+            // Also check if the specific map files exist
+            if (std::filesystem::exists(getSimpleTestMap()) && 
+                std::filesystem::exists(getComplexTestMap()) &&
+                std::filesystem::exists(getMediumTestMap())) {
+                return true;
+            }
         }
 
         return false;

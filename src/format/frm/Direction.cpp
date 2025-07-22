@@ -47,7 +47,7 @@ uint16_t Direction::width() const {
         return a.width() < b.width();
     });
 
-    return widest->width() * _frames.size();
+    return widest->width() * static_cast<uint16_t>(_frames.size());
 }
 
 /**

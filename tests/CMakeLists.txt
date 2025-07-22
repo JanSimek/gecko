@@ -34,7 +34,15 @@ include(CTest)
 
 # Catch2 test discovery for general tests
 include(Catch)
-catch_discover_tests(general_tests)
+
+# In CI environments, use simpler test registration to avoid library loading issues
+if(DEFINED ENV{CI} OR DEFINED ENV{GITHUB_ACTIONS})
+    # Register tests without discovery - this avoids running the executable during configure
+    add_test(NAME general_tests COMMAND general_tests)
+else()
+    # Use automatic test discovery for local development
+    catch_discover_tests(general_tests)
+endif()
 
 # Qt test discovery for Qt tests
 add_test(NAME qt_tests COMMAND qt_tests)

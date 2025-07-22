@@ -58,7 +58,7 @@ uint16_t Frm::width() const {
         return a.width() < b.width();
     });
 
-    return widest->width() * _directions.size();
+    return widest->width() * static_cast<uint16_t>(_directions.size());
 }
 
 /**
@@ -70,7 +70,7 @@ uint16_t Frm::height() const {
         return a.height() < b.height();
     });
 
-    return tallest->height() * _directions.size();
+    return tallest->height() * static_cast<uint16_t>(_directions.size());
 }
 
 void Frm::updateFrameDimensions() {

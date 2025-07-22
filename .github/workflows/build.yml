@@ -50,6 +50,8 @@ jobs:
               cmake --build build --config Release
               sudo cmake --install build
               cd ..
+              # Update library cache for SFML
+              sudo ldconfig
               # Install spdlog (compatible version)
               git clone --depth 1 --branch v1.12.0 https://github.com/gabime/spdlog.git
               cd spdlog
@@ -57,6 +59,8 @@ jobs:
               cmake --build build --config Release
               sudo cmake --install build
               cd ..
+              # Update library cache for spdlog
+              sudo ldconfig
             
           - os: windows-latest
             install_deps: |
@@ -123,10 +127,10 @@ jobs:
     - name: Configure CMake
       shell: bash
       run: |
-        if [ "${{ matrix.os }}" == "macos-latest" ]; then
+        if [[ "${{ runner.os }}" == "macOS" ]]; then
           export CMAKE_PREFIX_PATH="${{ matrix.cmake_prefix_path }}:$CMAKE_PREFIX_PATH"
         fi
-        if [ "${{ matrix.os }}" == "windows-latest" ]; then
+        if [[ "${{ runner.os }}" == "Windows" ]]; then
           # Use Windows paths with proper escaping
           cmake -B "${{ env.BUILD_DIR }}" \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
@@ -135,27 +139,46 @@ jobs:
             ${{ matrix.cmake_extra_args }} \
             -S "${{ github.workspace }}"
         else
-          cmake -B ${{ env.BUILD_DIR }} \
+          # Set library path for CMake test discovery on Linux/macOS
+          export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+          export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
+          cmake -B "${{ env.BUILD_DIR }}" \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DGECK_BUILD_TESTS=ON \
             -DGECK_AUTO_TEST=OFF \
             -DSPDLOG_FMT_EXTERNAL=OFF \
             -DCMAKE_CXX_FLAGS="-Wno-error" \
             ${{ matrix.cmake_extra_args }} \
-            -S ${{ github.workspace }}
+            -S "${{ github.workspace }}"
         fi
 
     - name: Build
-      run: cmake --build ${{ env.BUILD_DIR }} --config ${{ matrix.build_type }} --parallel
+      shell: bash
+      run: |
+        if [[ "${{ runner.os }}" != "Windows" ]]; then
+          # Set library path for Linux/macOS
+          export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+          export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
+        fi
+        cmake --build "${{ env.BUILD_DIR }}" --config ${{ matrix.build_type }} --parallel
 
     - name: Run Unit Tests
       shell: bash
       working-directory: ${{ env.BUILD_DIR }}
       run: |
-        if [ "${{ matrix.os }}" == "windows-latest" ]; then
+        if [[ "${{ runner.os }}" == "Windows" ]]; then
           # Run tests with proper configuration
           ctest -C ${{ matrix.build_type }} --output-on-failure --verbose
         else
+          # Set library path for Linux and macOS
+          export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+          export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
+          
+          # Set Qt platform to offscreen for headless testing on Linux
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            export QT_QPA_PLATFORM=offscreen
+          fi
+          
           ctest --output-on-failure --verbose
         fi
 
