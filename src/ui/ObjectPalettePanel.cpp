@@ -104,6 +104,7 @@ void ObjectPalettePanel::setupUI() {
     setupCategoryTabs();
     setupSearchControls();
     setupObjectGrid();
+    setupPaginationControls();
 
     // Status label
     _statusLabel = new QLabel("No objects loaded", this);
@@ -158,6 +159,55 @@ void ObjectPalettePanel::setupObjectGrid() {
 
     _scrollArea->setWidget(_objectGridWidget);
     _mainLayout->addWidget(_scrollArea, 1); // Take remaining space
+}
+
+void ObjectPalettePanel::setupPaginationControls() {
+    _paginationGroup = new QGroupBox("Page Navigation", this);
+    auto* paginationLayout = new QHBoxLayout(_paginationGroup);
+
+    // First page button
+    _firstPageButton = new QPushButton("|<", this);
+    _firstPageButton->setToolTip("Go to first page");
+    _firstPageButton->setMaximumWidth(40);
+    connect(_firstPageButton, &QPushButton::clicked, this, &ObjectPalettePanel::goToFirstPage);
+    paginationLayout->addWidget(_firstPageButton);
+
+    // Previous page button
+    _prevPageButton = new QPushButton("<", this);
+    _prevPageButton->setToolTip("Go to previous page");
+    _prevPageButton->setMaximumWidth(30);
+    connect(_prevPageButton, &QPushButton::clicked, this, &ObjectPalettePanel::goToPrevPage);
+    paginationLayout->addWidget(_prevPageButton);
+
+    // Page selector
+    paginationLayout->addWidget(new QLabel("Page:", this));
+    _pageSpinBox = new QSpinBox(this);
+    _pageSpinBox->setMinimum(1);
+    _pageSpinBox->setMaximumWidth(60);
+    connect(_pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &ObjectPalettePanel::onPageSpinBoxChanged);
+    paginationLayout->addWidget(_pageSpinBox);
+
+    _pageInfoLabel = new QLabel("of 1", this);
+    paginationLayout->addWidget(_pageInfoLabel);
+
+    // Next page button
+    _nextPageButton = new QPushButton(">", this);
+    _nextPageButton->setToolTip("Go to next page");
+    _nextPageButton->setMaximumWidth(30);
+    connect(_nextPageButton, &QPushButton::clicked, this, &ObjectPalettePanel::goToNextPage);
+    paginationLayout->addWidget(_nextPageButton);
+
+    // Last page button
+    _lastPageButton = new QPushButton(">|", this);
+    _lastPageButton->setToolTip("Go to last page");
+    _lastPageButton->setMaximumWidth(40);
+    connect(_lastPageButton, &QPushButton::clicked, this, &ObjectPalettePanel::goToLastPage);
+    paginationLayout->addWidget(_lastPageButton);
+
+    paginationLayout->addStretch(); // Push buttons to left
+
+    _mainLayout->addWidget(_paginationGroup);
+    _paginationGroup->hide(); // Initially hidden
 }
 
 void ObjectPalettePanel::loadObjects() {
@@ -221,9 +271,10 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
 
         const auto& proFiles = lst->list();
         int loadedCount = 0;
-        int maxToLoad = std::min(static_cast<int>(proFiles.size()), MAX_OBJECTS_TO_LOAD);
+        // Load ALL objects - no artificial limit
+        int totalObjects = static_cast<int>(proFiles.size());
 
-        for (int i = 0; i < maxToLoad; ++i) {
+        for (int i = 0; i < totalObjects; ++i) {
             try {
                 const std::string& proFileName = proFiles[i];
                 QString qProFileName = QString::fromStdString(proFileName);
@@ -324,12 +375,17 @@ void ObjectPalettePanel::updateObjectGrid() {
         return;
     }
 
+    // Calculate pagination for filtered objects
+    calculatePagination();
+
     int row = 0;
     int col = 0;
     int objectsLoaded = 0;
-    int maxObjects = std::min(static_cast<int>(objectList->size()), MAX_OBJECTS_TO_LOAD);
+    int filteredIndex = 0;
+    int targetStartIndex = _currentPage * OBJECTS_PER_PAGE;
+    int targetEndIndex = targetStartIndex + OBJECTS_PER_PAGE - 1;
 
-    for (int i = 0; i < maxObjects; ++i) {
+    for (int i = 0; i < static_cast<int>(objectList->size()); ++i) {
         const auto& objectInfo = (*objectList)[i];
 
         // Apply search filter if set
@@ -337,6 +393,15 @@ void ObjectPalettePanel::updateObjectGrid() {
             if (!objectInfo->displayName.contains(_searchText, Qt::CaseInsensitive) && !objectInfo->proFileName.contains(_searchText, Qt::CaseInsensitive)) {
                 continue; // Skip objects that don't match search
             }
+        }
+
+        // Check if this filtered object is in the current page range
+        if (filteredIndex < targetStartIndex) {
+            filteredIndex++;
+            continue; // Skip objects before current page
+        }
+        if (filteredIndex > targetEndIndex) {
+            break; // Stop loading objects beyond current page
         }
 
         try {
@@ -358,23 +423,30 @@ void ObjectPalettePanel::updateObjectGrid() {
             }
 
             objectsLoaded++;
+            filteredIndex++;
         } catch (const std::exception& e) {
             spdlog::warn("ObjectPalettePanel: Failed to load object {}: {}",
                 objectInfo->proFileName.toStdString(), e.what());
         }
     }
 
-    // Update status
+    // Update status with pagination info
     QString statusText;
     if (!_searchText.isEmpty()) {
-        statusText = QString("Found %1 objects matching '%2' in %3")
-                         .arg(objectsLoaded)
+        statusText = QString("Page %1/%2: Found %3 objects matching '%4' in %5 (showing %6)")
+                         .arg(_currentPage + 1)
+                         .arg(_totalPages)
+                         .arg(_totalFilteredObjects)
                          .arg(_searchText)
-                         .arg(getCategoryDisplayName(_currentCategory));
+                         .arg(getCategoryDisplayName(_currentCategory))
+                         .arg(objectsLoaded);
     } else {
-        statusText = QString("Loaded %1 %2 objects")
-                         .arg(objectsLoaded)
-                         .arg(getCategoryDisplayName(_currentCategory));
+        statusText = QString("Page %1/%2: %3 total %4 objects (showing %5)")
+                         .arg(_currentPage + 1)
+                         .arg(_totalPages)
+                         .arg(_totalFilteredObjects)
+                         .arg(getCategoryDisplayName(_currentCategory))
+                         .arg(objectsLoaded);
     }
     _statusLabel->setText(statusText);
 
@@ -522,6 +594,9 @@ void ObjectPalettePanel::onCategoryChanged(int tabIndex) {
 
     spdlog::debug("ObjectPalettePanel: Changed to category {}", static_cast<int>(_currentCategory));
 
+    // Reset pagination when changing categories
+    _currentPage = 0;
+
     // Load objects for new category and update grid
     loadCategoryObjects(_currentCategory);
     updateObjectGrid();
@@ -529,6 +604,7 @@ void ObjectPalettePanel::onCategoryChanged(int tabIndex) {
 
 void ObjectPalettePanel::onSearchTextChanged(const QString& text) {
     _searchText = text.trimmed();
+    _currentPage = 0; // Reset to first page when search changes
     updateObjectGrid();
 }
 
@@ -537,6 +613,120 @@ void ObjectPalettePanel::clearObjectSelection() {
         objectWidget->setSelected(false);
     }
     _selectedObjectIndex = -1;
+}
+
+void ObjectPalettePanel::calculatePagination() {
+    // Get objects for current category
+    const std::vector<std::unique_ptr<ObjectInfo>>* objectList = nullptr;
+
+    switch (_currentCategory) {
+        case ObjectCategory::ITEMS:
+            objectList = &_itemsList;
+            break;
+        case ObjectCategory::SCENERY:
+            objectList = &_sceneryList;
+            break;
+        case ObjectCategory::CRITTERS:
+            objectList = &_crittersList;
+            break;
+        case ObjectCategory::WALLS:
+            objectList = &_wallsList;
+            break;
+        case ObjectCategory::MISC:
+            objectList = &_miscList;
+            break;
+    }
+
+    if (!objectList || objectList->empty()) {
+        _totalFilteredObjects = 0;
+        _totalPages = 0;
+        _currentPage = 0;
+        updatePaginationControls();
+        return;
+    }
+
+    // Count objects that match current filters
+    int filteredCount = 0;
+    for (const auto& objectInfo : *objectList) {
+        // Apply search filter if set
+        if (!_searchText.isEmpty()) {
+            if (!objectInfo->displayName.contains(_searchText, Qt::CaseInsensitive) && 
+                !objectInfo->proFileName.contains(_searchText, Qt::CaseInsensitive)) {
+                continue; // Skip objects that don't match search
+            }
+        }
+        filteredCount++;
+    }
+
+    _totalFilteredObjects = filteredCount;
+    _totalPages = (filteredCount + OBJECTS_PER_PAGE - 1) / OBJECTS_PER_PAGE; // Ceiling division
+
+    // Ensure current page is valid
+    if (_currentPage >= _totalPages) {
+        _currentPage = std::max(0, _totalPages - 1);
+    }
+
+    updatePaginationControls();
+}
+
+void ObjectPalettePanel::updatePaginationControls() {
+    if (_totalPages <= 1) {
+        _paginationGroup->hide(); // Hide pagination if not needed
+        return;
+    }
+
+    _paginationGroup->show();
+
+    // Update button states
+    _firstPageButton->setEnabled(_currentPage > 0);
+    _prevPageButton->setEnabled(_currentPage > 0);
+    _nextPageButton->setEnabled(_currentPage < _totalPages - 1);
+    _lastPageButton->setEnabled(_currentPage < _totalPages - 1);
+
+    // Update page spinbox
+    _pageSpinBox->setEnabled(_totalPages > 1);
+    _pageSpinBox->setMaximum(_totalPages);
+    _pageSpinBox->setValue(_currentPage + 1); // Convert to 1-based
+
+    // Update page info label
+    _pageInfoLabel->setText(QString("of %1").arg(_totalPages));
+}
+
+void ObjectPalettePanel::goToFirstPage() {
+    if (_currentPage != 0) {
+        _currentPage = 0;
+        updateObjectGrid();
+    }
+}
+
+void ObjectPalettePanel::goToLastPage() {
+    int lastPage = std::max(0, _totalPages - 1);
+    if (_currentPage != lastPage) {
+        _currentPage = lastPage;
+        updateObjectGrid();
+    }
+}
+
+void ObjectPalettePanel::goToPrevPage() {
+    if (_currentPage > 0) {
+        _currentPage--;
+        updateObjectGrid();
+    }
+}
+
+void ObjectPalettePanel::goToNextPage() {
+    if (_currentPage < _totalPages - 1) {
+        _currentPage++;
+        updateObjectGrid();
+    }
+}
+
+void ObjectPalettePanel::onPageSpinBoxChanged(int page) {
+    int newPage = page - 1; // Convert from 1-based to 0-based
+    if (newPage != _currentPage && newPage >= 0 && newPage < _totalPages) {
+        _currentPage = newPage;
+        updateObjectGrid();
+    }
 }
 
 } // namespace geck

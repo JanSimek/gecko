@@ -12,6 +12,7 @@
 #include <QButtonGroup>
 #include <QLineEdit>
 #include <QTabWidget>
+#include <QSpinBox>
 #include <vector>
 #include <memory>
 
@@ -110,14 +111,24 @@ public slots:
     void onCategoryChanged(int tabIndex);
     void onSearchTextChanged(const QString& text);
 
+    // Pagination navigation
+    void goToFirstPage();
+    void goToLastPage();
+    void goToPrevPage();
+    void goToNextPage();
+    void onPageSpinBoxChanged(int page);
+
 private slots:
     void updateObjectGrid();
+    void calculatePagination();
+    void updatePaginationControls();
 
 private:
     void setupUI();
     void setupCategoryTabs();
     void setupSearchControls();
     void setupObjectGrid();
+    void setupPaginationControls();
 
     void loadCategoryObjects(ObjectCategory category);
     QPixmap createObjectThumbnail(const ObjectInfo* objectInfo, ObjectCategory category);
@@ -136,6 +147,15 @@ private:
     QGroupBox* _searchGroup = nullptr;
     QLineEdit* _searchLineEdit = nullptr;
 
+    // Pagination controls
+    QGroupBox* _paginationGroup = nullptr;
+    QPushButton* _prevPageButton = nullptr;
+    QPushButton* _nextPageButton = nullptr;
+    QPushButton* _firstPageButton = nullptr;
+    QPushButton* _lastPageButton = nullptr;
+    QSpinBox* _pageSpinBox = nullptr;
+    QLabel* _pageInfoLabel = nullptr;
+
     // Object grid for current category
     QScrollArea* _scrollArea = nullptr;
     QWidget* _objectGridWidget = nullptr;
@@ -153,6 +173,11 @@ private:
     QString _searchText = ""; // Current search filter text
     int _objectsPerRow = 6;
 
+    // Pagination state
+    int _currentPage = 0;
+    int _totalPages = 0;
+    int _totalFilteredObjects = 0;
+
     // Object lists for each category
     std::vector<std::unique_ptr<ObjectInfo>> _itemsList;
     std::vector<std::unique_ptr<ObjectInfo>> _sceneryList;
@@ -161,7 +186,7 @@ private:
     std::vector<std::unique_ptr<ObjectInfo>> _miscList;
 
     // Constants
-    static constexpr int MAX_OBJECTS_TO_LOAD = 500; // Prevent UI slowdown
+    static constexpr int OBJECTS_PER_PAGE = 200; // Objects to load per page
     static constexpr int DEFAULT_OBJECTS_PER_ROW = 6;
 };
 

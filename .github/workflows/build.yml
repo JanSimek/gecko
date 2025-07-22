@@ -129,10 +129,11 @@ jobs:
       run: |
         echo "=== Setting up Qt6 on macOS ==="
         
-        brew install qt@6
+        brew install qt@6 double-conversion
     
         # Link Qt6 (since it's keg-only and not linked by default)
         brew link qt@6 --force --overwrite
+        brew link double-conversion --force
     
         # Get Homebrew prefix
         QT6_PATH=$(brew --prefix qt@6)
