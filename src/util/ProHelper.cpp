@@ -2,14 +2,12 @@
 
 #include "format/lst/Lst.h"
 #include "format/msg/Msg.h"
-#include "reader/lst/LstReader.h"
-#include "reader/msg/MsgReader.h"
+#include "reader/ReaderFactory.h"
 #include "util/ResourceManager.h"
 
 namespace geck {
 
 Msg* geck::ProHelper::msgFile(Pro::OBJECT_TYPE type) {
-    MsgReader msg_reader{};
 
     std::string filename;
 
@@ -36,7 +34,7 @@ Msg* geck::ProHelper::msgFile(Pro::OBJECT_TYPE type) {
             throw std::runtime_error{ "Invalid PRO type" };
     }
 
-    return ResourceManager::getInstance().loadResource(filename, msg_reader);
+    return ResourceManager::getInstance().loadResource<Msg>(filename);
 }
 
 Lst* ProHelper::lstFile(uint32_t PID) {
@@ -66,8 +64,7 @@ Lst* ProHelper::lstFile(uint32_t PID) {
             throw std::runtime_error{ "Wrong PID: " + std::to_string(PID) };
     }
 
-    LstReader lst_reader{};
-    return ResourceManager::getInstance().loadResource(filename, lst_reader);
+    return ResourceManager::getInstance().loadResource<Lst>(filename);
 }
 
 const std::string ProHelper::basePath(uint32_t PID) {

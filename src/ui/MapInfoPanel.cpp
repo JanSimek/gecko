@@ -8,8 +8,7 @@
 #include "../format/map/Map.h"
 #include "../format/gam/Gam.h"
 #include "../format/lst/Lst.h"
-#include "../reader/gam/GamReader.h"
-#include "../reader/lst/LstReader.h"
+#include "../reader/ReaderFactory.h"
 #include "../util/ResourceManager.h"
 
 namespace geck {
@@ -244,8 +243,7 @@ void MapInfoPanel::loadScriptVars() {
             return;
         }
 
-        GamReader gam_reader{};
-        auto gam_file = ResourceManager::getInstance().loadResource(gam_filepath, gam_reader);
+        auto gam_file = ResourceManager::getInstance().loadResource<Gam>(gam_filepath);
 
         if (gam_file) {
             // Load global variables
@@ -256,8 +254,7 @@ void MapInfoPanel::loadScriptVars() {
             // Load map script name
             int map_script_id = _map->getMapFile().header.script_id;
             if (map_script_id > 0) {
-                LstReader lst_reader{};
-                auto scripts = ResourceManager::getInstance().loadResource("scripts/scripts.lst", lst_reader);
+                auto scripts = ResourceManager::getInstance().loadResource<Lst>("scripts/scripts.lst");
                 if (scripts) {
                     try {
                         _mapScriptName = scripts->at(map_script_id - 1); // script id starts at 1

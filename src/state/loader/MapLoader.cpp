@@ -4,12 +4,12 @@
 #include <spdlog/stopwatch.h>
 #include "../../util/Constants.h"
 
-#include "../../reader/pro/ProReader.h"
+#include "../../reader/ReaderFactory.h"
 #include "../../reader/map/MapReader.h"
-#include "../../reader/lst/LstReader.h"
 
 #include "../../format/pro/Pro.h"
 #include "../../format/map/Map.h"
+#include "../../format/map/MapObject.h"
 #include "../../format/map/Tile.h"
 #include "../../format/lst/Lst.h"
 #include "../../format/frm/Direction.h"
@@ -38,19 +38,18 @@ void MapLoader::load() {
 
     setStatus("Loading map " + _mapPath.filename().string());
 
-    LstReader lst_reader{};
-
     // TODO: move to a new loader that is called only once per application start
     for (const auto& lst_path : { "art/items/items.lst", "art/critters/critters.lst", "art/scenery/scenery.lst", "art/walls/walls.lst", "art/tiles/tiles.lst", "art/misc/misc.lst", "art/intrface/intrface.lst", "art/inven/inven.lst" }) {
-        ResourceManager::getInstance().loadResource(lst_path, lst_reader);
+        ResourceManager::getInstance().loadResource<Lst>(lst_path);
     }
 
     setProgress("Parsing map file");
 
-    MapReader map_reader{ [&](uint32_t PID) {
-        ProReader pro_reader;
-        return ResourceManager::getInstance().loadResource(ProHelper::basePath(PID), pro_reader);
-    } };
+    // MapReader requires callback in constructor, so we need to create it directly
+    auto proLoadCallback = [&](uint32_t PID) {
+        return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(PID));
+    };
+    MapReader map_reader{ proLoadCallback };
     _map = map_reader.openFile(_mapPath);
 
     if (_elevation == INVALID_ELEVATION) {
@@ -63,7 +62,7 @@ void MapLoader::load() {
     stopwatch_chunk.reset();
 
     // Tiles
-    auto lst = ResourceManager::getInstance().loadResource("art/tiles/tiles.lst", lst_reader);
+    auto lst = ResourceManager::getInstance().loadResource<Lst>("art/tiles/tiles.lst");
 
     //    auto tiles = _map->tiles().at(_elevation);
     //    for (auto tileNumber = 0U; tileNumber < geck::Map::TILES_PER_ELEVATION; tileNumber++) {

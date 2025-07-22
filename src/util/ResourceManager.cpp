@@ -9,8 +9,7 @@
 #include <vfspp/NativeFileSystem.hpp>
 #include "vfs/Dat2FileSystem.hpp"
 
-#include "reader/frm/FrmReader.h"
-#include "reader/pal/PalReader.h"
+#include "reader/ReaderFactory.h"
 
 #include "format/frm/Direction.h"
 #include "format/frm/Frame.h"
@@ -57,8 +56,7 @@ void ResourceManager::insertTexture(const std::string& filename) {
     }();
 
     if (extension.rfind(".frm", 0) == 0) { // frm, frm0, frmX..
-        FrmReader frm_reader;
-        loadResource(filename, frm_reader);
+        loadResource<Frm>(filename);
     } else {
         auto texture = std::make_unique<sf::Texture>();
         if (!texture->loadFromFile(filename)) { // default to SFML's implementation
@@ -82,8 +80,7 @@ const sf::Texture& ResourceManager::texture(const std::string& filename) {
         //        texture->create(frame.width(), frame.height());
         //        texture->update(&frame.rgba[
 
-        PalReader pal_reader;
-        auto pal = loadResource("color.pal", pal_reader); // TODO: custom pal0]);
+        auto pal = loadResource<Pal>("color.pal"); // TODO: custom pal0]);
 
         [[maybe_unused]] bool loadSuccess = texture->loadFromImage(imageFromFrm(frm, pal));
 
