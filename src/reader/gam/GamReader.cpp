@@ -55,7 +55,7 @@ std::unique_ptr<Gam> GamReader::read() {
         }
     }
 
-    return std::move(gam);
+    return gam;
 }
 
 } // namespace geck

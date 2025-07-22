@@ -21,6 +21,7 @@ private:
 public:
     DatReader()
         : FileParser(StreamBuffer::ENDIANNESS::LITTLE) { }
+    virtual ~DatReader() = default;
     std::unique_ptr<Dat> read() override;
 };
 

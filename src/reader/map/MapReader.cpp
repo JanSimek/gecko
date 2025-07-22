@@ -159,7 +159,7 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
             break;
     }
 
-    return std::move(object);
+    return object;
 }
 
 // TODO: split

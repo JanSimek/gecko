@@ -330,7 +330,7 @@ private:
         return 0;
     }
 
-    inline uint64_t WriteST(const uint8_t* buffer, uint64_t size)
+    inline uint64_t WriteST([[maybe_unused]] const uint8_t* buffer, [[maybe_unused]] uint64_t size)
     {
         return 0;
     }

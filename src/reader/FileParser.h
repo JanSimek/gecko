@@ -19,6 +19,7 @@ public:
     FileParser() = default;
     explicit FileParser(StreamBuffer::ENDIANNESS endianness)
         : _endianness(endianness) { }
+    virtual ~FileParser() = default;
 
     std::unique_ptr<T> openFile(const std::filesystem::path& filename, const std::vector<uint8_t>& data) {
         _stream = StreamBuffer(data);

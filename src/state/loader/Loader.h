@@ -43,7 +43,7 @@ public:
         this->_progress = progress;
     }
 
-    const int percentDone() const {
+    int percentDone() const {
         return this->_percentDone;
     }
 };

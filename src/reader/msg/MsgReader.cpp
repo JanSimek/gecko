@@ -36,7 +36,7 @@ std::unique_ptr<Msg> MsgReader::read() {
         s = matches.suffix(); // next
     }
 
-    return std::move(std::make_unique<Msg>(_path, std::move(_messages)));
+    return std::make_unique<Msg>(_path, std::move(_messages));
 }
 
 } // namespace geck

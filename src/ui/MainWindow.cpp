@@ -658,7 +658,7 @@ void MainWindow::connectToEditorWidget() {
 
         // Connect placement mode changes to update unified placement settings
         connect(_tilePalettePanel, &TilePalettePanel::placementModeChanged,
-            [this](TilePalettePanel::PlacementMode mode) {
+            [this]([[maybe_unused]] TilePalettePanel::PlacementMode mode) {
                 // With unified placement mode, both single and area placement are supported
                 // The EditorWidget will handle click vs drag detection
                 _currentEditorWidget->setTilePlacementAreaFill(true);     // Enable drag support
@@ -675,7 +675,7 @@ void MainWindow::connectToEditorWidget() {
 
         // Connect interaction mode changes to enable/disable tile placement functionality
         connect(_tilePalettePanel, &TilePalettePanel::interactionModeChanged,
-            [this](TilePalettePanel::InteractionMode mode) {
+            [](TilePalettePanel::InteractionMode mode) {
                 bool tilePaintingEnabled = (mode == TilePalettePanel::InteractionMode::TILE_PAINTING);
                 // TODO: Implement EditorWidget method to toggle tile painting interaction mode
                 // _currentEditorWidget->setTilePaintingInteractionMode(tilePaintingEnabled);

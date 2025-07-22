@@ -80,8 +80,10 @@ if(NOT spdlog_FOUND)
     FetchContent_MakeAvailable(spdlog)
 endif()
 
-# VFSPP - Virtual File System library (local submodule)
+# VFSPP - Virtual File System library (local submodule) 
+# Suppress warnings from vendor libraries by treating them as system includes
 add_subdirectory("vendor/vfspp" EXCLUDE_FROM_ALL)
+target_include_directories(vfspp SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/vfspp/include)
 
 # Make SFML available
 if(NOT SFML_FOUND)

@@ -430,14 +430,14 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
 
     switch (mode) {
         case SelectionMode::FLOOR_TILES:
-            for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+            for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
                 SelectedItem item{ SelectionType::FLOOR_TILE, i };
                 addItemToSelection(item);
             }
             break;
 
         case SelectionMode::ROOF_TILES:
-            for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+            for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
                 auto tile = _map->getMapFile().tiles.at(currentElevation).at(i);
                 if (tile.getRoof() != Map::EMPTY_TILE) {
                     SelectedItem item{ SelectionType::ROOF_TILE, i };
@@ -447,7 +447,7 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
             break;
 
         case SelectionMode::ROOF_TILES_ALL:
-            for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+            for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
                 // Include all roof tile positions, regardless of whether they have textures
                 SelectedItem item{ SelectionType::ROOF_TILE, i };
                 addItemToSelection(item);
@@ -465,13 +465,13 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
         case SelectionMode::ALL:
             // Select all tiles and objects directly (without recursive calls to avoid clearSelection conflicts)
             // Add all floor tiles
-            for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+            for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
                 SelectedItem item{ SelectionType::FLOOR_TILE, i };
                 addItemToSelection(item);
             }
 
             // Add all roof tiles (only those with textures)
-            for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+            for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
                 auto tile = _map->getMapFile().tiles.at(currentElevation).at(i);
                 if (tile.getRoof() != Map::EMPTY_TILE) {
                     SelectedItem item{ SelectionType::ROOF_TILE, i };
@@ -500,23 +500,23 @@ bool SelectionManager::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& 
 }
 
 // Private helper methods
-std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsAtPosition(sf::Vector2f worldPos, int elevation) const {
+std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsAtPosition(sf::Vector2f worldPos, [[maybe_unused]] int elevation) const {
     return _editorWidget->getObjectsAtPosition(worldPos);
 }
 
-std::optional<int> SelectionManager::getRoofTileAtPosition(sf::Vector2f worldPos, int elevation) const {
+std::optional<int> SelectionManager::getRoofTileAtPosition(sf::Vector2f worldPos, [[maybe_unused]] int elevation) const {
     return _editorWidget->getTileAtPosition(worldPos, true); // true for roof
 }
 
-std::optional<int> SelectionManager::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos, int elevation) const {
+std::optional<int> SelectionManager::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos, [[maybe_unused]] int elevation) const {
     return _editorWidget->getRoofTileAtPositionIncludingEmpty(worldPos);
 }
 
-std::optional<int> SelectionManager::getFloorTileAtPosition(sf::Vector2f worldPos, int elevation) const {
+std::optional<int> SelectionManager::getFloorTileAtPosition(sf::Vector2f worldPos, [[maybe_unused]] int elevation) const {
     return _editorWidget->getTileAtPosition(worldPos, false); // false for floor
 }
 
-std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) const {
+std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, bool roof, [[maybe_unused]] int elevation) const {
     // Use spatial index for O(1) performance if available
     if (_spatialIndex) {
         auto spatialResult = _spatialIndex->getTilesInArea(area, roof);
@@ -551,7 +551,7 @@ std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, boo
     const auto& mapFile = _editorWidget->getMapFile();
     int currentElevation = _editorWidget->getCurrentElevation();
 
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+    for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
         sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
 
         if (area.findIntersection(tileBounds)) {
@@ -568,7 +568,7 @@ std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, boo
     return result;
 }
 
-std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const {
+std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, [[maybe_unused]] int elevation) const {
     // TODO: check if this works at all
     // Use spatial index for O(1) performance if available
     if (_spatialIndex) {
@@ -594,7 +594,7 @@ std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatR
     return result;
 }
 
-std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf::FloatRect& area, int elevation) const {
+std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf::FloatRect& area, [[maybe_unused]] int elevation) const {
     // Note: TileSpatialIndex only handles tiles, not objects
     // For now, always use linear search for objects
     std::vector<std::shared_ptr<Object>> result;
@@ -809,13 +809,13 @@ bool SelectionManager::isItemSelected(const SelectedItem& item) const {
     return _state.hasItem(item);
 }
 
-sf::Vector2f SelectionManager::getTileWorldPosition(int tileIndex) const {
+sf::Vector2f SelectionManager::getTileWorldPosition([[maybe_unused]] int tileIndex) const {
     // This will need to implement the tile positioning logic from EditorWidget
     // For now, return a placeholder
     return sf::Vector2f(0, 0);
 }
 
-bool SelectionManager::isPositionInTile(sf::Vector2f worldPos, int tileIndex, bool roof) const {
+bool SelectionManager::isPositionInTile([[maybe_unused]] sf::Vector2f worldPos, [[maybe_unused]] int tileIndex, [[maybe_unused]] bool roof) const {
     // This will need to implement the tile hit detection logic from EditorWidget
     // For now, return false
     return false;
@@ -864,7 +864,7 @@ bool SelectionManager::moveObject(std::shared_ptr<Object> object, sf::Vector2f o
 
 bool SelectionManager::moveTile(int sourceTileIndex, sf::Vector2f offset, bool isRoof) {
     // Validate source tile index
-    if (sourceTileIndex < 0 || sourceTileIndex >= Map::TILES_PER_ELEVATION) {
+    if (sourceTileIndex < 0 || sourceTileIndex >= static_cast<int>(Map::TILES_PER_ELEVATION)) {
         return false;
     }
 

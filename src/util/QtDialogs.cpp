@@ -12,7 +12,8 @@ void QtDialogs::ensureQtApplication() {
     // Check if QApplication exists, create a minimal one if not
     if (!QApplication::instance()) {
         static int argc = 1;
-        static char* argv[] = { "geck-mapper", nullptr };
+        static char appName[] = "geck-mapper";
+        static char* argv[] = { appName, nullptr };
         static QApplication app(argc, argv);
         spdlog::debug("Created minimal QApplication for dialogs");
     }

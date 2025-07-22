@@ -85,7 +85,7 @@ const sf::Texture& ResourceManager::texture(const std::string& filename) {
         PalReader pal_reader;
         auto pal = loadResource("color.pal", pal_reader); // TODO: custom pal0]);
 
-        texture->loadFromImage(imageFromFrm(frm, pal));
+        [[maybe_unused]] bool loadSuccess = texture->loadFromImage(imageFromFrm(frm, pal));
 
         auto loaded = _textures.emplace(filename, std::move(texture));
 

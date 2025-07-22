@@ -30,7 +30,7 @@ sf::Texture& Object::createBlankTexture() {
         // Texture doesn't exist, create it
         sf::Image blankImage{ sf::Vector2u{ 1, 1 }, sf::Color::Transparent };
         auto texture = std::make_unique<sf::Texture>();
-        texture->loadFromImage(blankImage);
+        [[maybe_unused]] bool loadSuccess = texture->loadFromImage(blankImage);
         resourceManager.storeTexture(BLANK_TEXTURE_KEY, std::move(texture));
         return const_cast<sf::Texture&>(resourceManager.texture(BLANK_TEXTURE_KEY));
     }

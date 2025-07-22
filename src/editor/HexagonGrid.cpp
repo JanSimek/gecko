@@ -33,7 +33,7 @@ const std::vector<Hex>& HexagonGrid::grid() const {
 uint32_t HexagonGrid::positionAt(uint32_t x, uint32_t y) const {
     for (size_t i = 0; i < _grid.size(); i++) {
         const auto& hex = _grid.at(i);
-        if (x >= hex.x() - Hex::HEX_WIDTH && x < hex.x() + Hex::HEX_WIDTH && y >= hex.y() - 8 && y < hex.y() + 4) {
+        if (x >= static_cast<uint32_t>(hex.x() - Hex::HEX_WIDTH) && x < static_cast<uint32_t>(hex.x() + Hex::HEX_WIDTH) && y >= static_cast<uint32_t>(hex.y() - 8) && y < static_cast<uint32_t>(hex.y() + 4)) {
             return hex.position(); // Return the hex's actual position, not the array index
         }
     }

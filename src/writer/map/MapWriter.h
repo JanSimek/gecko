@@ -14,6 +14,7 @@ class MapWriter : public FileWriter<Map::MapFile> {
 public:
     MapWriter(std::function<Pro*(int32_t PID)> loadProCallback)
         : _loadProCallback(loadProCallback) { }
+    virtual ~MapWriter() = default;
 
     [[nodiscard]] bool write(const Map::MapFile& map);
 

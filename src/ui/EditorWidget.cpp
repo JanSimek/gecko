@@ -89,9 +89,9 @@ void EditorWidget::initializeSelectionSystem() {
 
                 case selection::SelectionType::ROOF_TILE: {
                     int tileIndex = item.getTileIndex();
-                    if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                    if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
                         // Check if this is an empty roof tile and we're in ROOF_TILES_ALL mode
-                        auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
+                        [[maybe_unused]] auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
                         // Apply highlighting to roof sprite with higher visibility for better contrast
                         this->_roofSprites.at(tileIndex).setColor(geck::ColorUtils::createRoofTileSelectionColor());
 
@@ -108,7 +108,7 @@ void EditorWidget::initializeSelectionSystem() {
 
                 case selection::SelectionType::FLOOR_TILE: {
                     int tileIndex = item.getTileIndex();
-                    if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                    if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
                         this->_floorSprites.at(tileIndex).setColor(geck::ColorUtils::createErrorIndicatorColor());
                     }
                     break;
@@ -432,7 +432,7 @@ bool EditorWidget::isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite&
     const auto texSize = texture.getSize();
 
     // Bounds check
-    if (texX < 0 || texY < 0 || texX >= static_cast<int>(texSize.x) || texY >= static_cast<int>(texSize.y)) {
+    if (texX >= texSize.x || texY >= texSize.y) {
         return false;
     }
 
@@ -846,12 +846,12 @@ void EditorWidget::handleEvent(const sf::Event& event) {
     }
 }
 
-void EditorWidget::update(const float dt) {
+void EditorWidget::update([[maybe_unused]] const float dt) {
     // Update game logic here
     // This is called by the SFMLWidget's update loop
 }
 
-void EditorWidget::render(const float dt) {
+void EditorWidget::render([[maybe_unused]] const float dt) {
     // Render the game here
     // This is called by the SFMLWidget's render loop
 
@@ -899,7 +899,7 @@ void EditorWidget::render(const float dt) {
     if (_currentHoverHex >= 0) {
         // Find the hex with the matching position
         for (const auto& hex : _hexgrid.grid()) {
-            if (hex.position() == _currentHoverHex) {
+            if (hex.position() == static_cast<uint32_t>(_currentHoverHex)) {
                 float spriteX = static_cast<float>(hex.x() - 16);
                 float spriteY = static_cast<float>(hex.y() - 8);
 
@@ -999,7 +999,7 @@ void EditorWidget::placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, boo
 
     // Use the same tile hit detection logic as the selection system
     int hexIndex = -1;
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+    for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); i++) {
         auto& sprites = isRoof ? _roofSprites : _floorSprites;
         const sf::Sprite& tileSprite = sprites.at(i);
 
@@ -1183,7 +1183,7 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
             return;
         }
 
-        const std::string& tileName = tileList->list()[tileIndex];
+        const std::string tileName = tileList->list()[tileIndex];
         std::string tilePath = "art/tiles/" + tileName;
         const auto& texture = resourceManager.texture(tilePath);
 
@@ -1248,7 +1248,7 @@ bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& spri
 std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool isRoof) {
     auto& sprites = isRoof ? _roofSprites : _floorSprites;
 
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+    for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); i++) {
         // Use the actual sprite's bounds instead of a fake sprite
         const sf::Sprite& tileSprite = sprites.at(i);
 
@@ -1264,7 +1264,7 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
 
 std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
     // This version includes empty roof tiles in the selection
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+    for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
         sf::FloatRect tileBounds = _roofSprites.at(i).getGlobalBounds();
 
         // Check if world position is within tile bounds
@@ -1350,7 +1350,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
             _previewTiles = _selectionManager->getTilesInArea(selectionArea, false, _currentElevation);
             // Apply preview coloring to floor tiles
             for (int tileIndex : _previewTiles) {
-                if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
                     applyPreviewHighlight(_floorSprites.at(tileIndex));
                 }
             }
@@ -1361,7 +1361,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
             _previewTiles = _selectionManager->getTilesInArea(selectionArea, true, _currentElevation);
             // Apply preview coloring to roof tiles
             for (int tileIndex : _previewTiles) {
-                if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
                     applyPreviewHighlight(_roofSprites.at(tileIndex));
                 }
             }
@@ -1372,7 +1372,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
             _previewTiles = _selectionManager->getTilesInAreaIncludingEmpty(selectionArea, true, _currentElevation);
             // Apply preview coloring to roof tiles including empty ones
             for (int tileIndex : _previewTiles) {
-                if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
                     // Apply preview coloring to roof sprite (makes empty tiles visible if they were transparent)
                     applyPreviewHighlight(_roofSprites.at(tileIndex));
                 }
@@ -1397,7 +1397,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
             // Preview floor tiles
             _previewTiles = _selectionManager->getTilesInArea(selectionArea, false, _currentElevation);
             for (int tileIndex : _previewTiles) {
-                if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
                     applyPreviewHighlight(_floorSprites.at(tileIndex));
                 }
             }
@@ -1405,7 +1405,7 @@ void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
             // Preview roof tiles
             auto roofTiles = _selectionManager->getTilesInArea(selectionArea, true, _currentElevation);
             for (int tileIndex : roofTiles) {
-                if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+                if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
                     applyPreviewHighlight(_roofSprites.at(tileIndex));
                 }
             }
@@ -1444,7 +1444,7 @@ void EditorWidget::updateTileAreaFillPreview(sf::Vector2f currentWorldPos) {
     // Apply preview coloring to tiles (same as selection mode)
     auto& sprites = isRoof ? _roofSprites : _floorSprites;
     for (int tileIndex : _previewTiles) {
-        if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+        if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
             applyPreviewHighlight(sprites.at(tileIndex));
         }
     }
@@ -1453,7 +1453,7 @@ void EditorWidget::updateTileAreaFillPreview(sf::Vector2f currentWorldPos) {
 void EditorWidget::clearDragPreview() {
     // Clear tile preview coloring
     for (int tileIndex : _previewTiles) {
-        if (tileIndex >= 0 && tileIndex < Map::TILES_PER_ELEVATION) {
+        if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
             removePreviewHighlight(_floorSprites.at(tileIndex));
 
             // For roof sprites, check if it's empty and set back to transparent
@@ -1828,7 +1828,7 @@ const sf::Texture& EditorWidget::createBlankTexture() {
         sf::Image blankImage{ sf::Vector2u{ 1, 1 }, sf::Color::Transparent };
 
         auto texture = std::make_unique<sf::Texture>();
-        texture->loadFromImage(blankImage);
+        [[maybe_unused]] bool loadSuccess = texture->loadFromImage(blankImage);
 
         // Store in ResourceManager's texture cache using the new method
         resourceManager.storeTexture(blankTextureName, std::move(texture));

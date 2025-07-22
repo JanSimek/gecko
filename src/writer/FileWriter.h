@@ -19,6 +19,7 @@ protected:
     std::filesystem::path path;
 
 public:
+    virtual ~FileWriter() = default;
     void openFile(const std::filesystem::path& filePath) {
 
         stream = std::ofstream{ filePath.string(), std::ofstream::out | std::ofstream::binary };

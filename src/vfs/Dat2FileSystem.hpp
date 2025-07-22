@@ -23,8 +23,8 @@ class GeckDat2FileSystem final : public vfspp::IFileSystem {
 public:
     GeckDat2FileSystem(const std::string& datPath)
         : m_DatPath(datPath)
-        , m_IsInitialized(false)
         , m_datReader(std::make_shared<geck::DatReader>())
+        , m_IsInitialized(false)
     {
     }
     
@@ -118,7 +118,7 @@ public:
     /*
      * Create file on writeable filesystem. Returns true if file created successfully
      */
-    virtual bool CreateFile(const vfspp::FileInfo& filePath) override
+    virtual bool CreateFile([[maybe_unused]] const vfspp::FileInfo& filePath) override
     {
         return false;
     }
@@ -126,7 +126,7 @@ public:
     /*
      * Remove existing file on writable filesystem
      */
-    virtual bool RemoveFile(const vfspp::FileInfo& filePath) override
+    virtual bool RemoveFile([[maybe_unused]] const vfspp::FileInfo& filePath) override
     {
         return false;
     }
@@ -134,7 +134,7 @@ public:
     /*
      * Copy existing file on writable filesystem
      */
-    virtual bool CopyFile(const vfspp::FileInfo& src, const vfspp::FileInfo& dest) override
+    virtual bool CopyFile([[maybe_unused]] const vfspp::FileInfo& src, [[maybe_unused]] const vfspp::FileInfo& dest) override
     {
         return false;
     }
@@ -142,7 +142,7 @@ public:
     /*
      * Rename existing file on writable filesystem
      */
-    virtual bool RenameFile(const vfspp::FileInfo& srcPath, const vfspp::FileInfo& dstPath) override
+    virtual bool RenameFile([[maybe_unused]] const vfspp::FileInfo& srcPath, [[maybe_unused]] const vfspp::FileInfo& dstPath) override
     {
         return false;
     }
@@ -207,7 +207,7 @@ private:
             return;
         }
 
-        m_DatArchive = std::move(m_datReader->openFile(m_DatPath));
+        m_DatArchive = m_datReader->openFile(m_DatPath);
 
         BuildFilelist(m_DatArchive, m_FileList);
         m_IsInitialized = true;
