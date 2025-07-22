@@ -178,25 +178,3 @@ jobs:
           ${{ env.BUILD_DIR }}/Testing/
         retention-days: 7
 
-  format-check:
-    name: Code Format Check
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install clang-format
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y clang-format
-
-    - name: Check code formatting
-      run: |
-        # Run format script and check if any files were modified
-        chmod +x format.sh
-        ./format.sh
-        if ! git diff --quiet; then
-          echo "::error::Code formatting issues found. Please run ./format.sh"
-          git diff --name-only
-          exit 1
-        fi

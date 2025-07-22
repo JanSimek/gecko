@@ -7,6 +7,7 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <spdlog/spdlog.h>
+#include <cstdint>
 
 #ifdef Q_WS_X11
 #include <Qt/qx11info_x11.h>
@@ -47,7 +48,7 @@ void SFMLWidget::setEditorWidget(EditorWidget* editorWidget) {
 void SFMLWidget::showEvent(QShowEvent* event) {
     if (!_initialized) {
         // Create SFML render window using the widget's window handle
-        sf::WindowHandle handle = reinterpret_cast<sf::WindowHandle>(winId());
+        sf::WindowHandle handle = reinterpret_cast<sf::WindowHandle>(static_cast<uintptr_t>(winId()));
         _renderWindow = std::make_unique<sf::RenderWindow>(handle);
 
         if (_renderWindow) {

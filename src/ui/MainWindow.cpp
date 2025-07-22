@@ -915,35 +915,35 @@ void MainWindow::restoreDockWidgetState() {
         // Restore individual floating dock widget geometries after a short delay
         // This ensures the dock widgets are fully initialized first
         QTimer::singleShot(100, this, [this]() {
-            QSettings settings("geck", "mapper"); // Create new settings instance in timer callback
-            settings.beginGroup("FloatingDockGeometries");
+            QSettings timerSettings("geck", "mapper"); // Create new settings instance in timer callback
+            timerSettings.beginGroup("FloatingDockGeometries");
 
-            QByteArray mapInfoGeometry = settings.value("MapInfoDock").toByteArray();
+            QByteArray mapInfoGeometry = timerSettings.value("MapInfoDock").toByteArray();
             if (!mapInfoGeometry.isEmpty() && _mapInfoDock->isFloating()) {
                 _mapInfoDock->restoreGeometry(mapInfoGeometry);
             }
 
-            QByteArray selectionGeometry = settings.value("SelectionDock").toByteArray();
+            QByteArray selectionGeometry = timerSettings.value("SelectionDock").toByteArray();
             if (!selectionGeometry.isEmpty() && _selectionDock->isFloating()) {
                 _selectionDock->restoreGeometry(selectionGeometry);
             }
 
-            QByteArray tilePaletteGeometry = settings.value("TilePaletteDock").toByteArray();
+            QByteArray tilePaletteGeometry = timerSettings.value("TilePaletteDock").toByteArray();
             if (!tilePaletteGeometry.isEmpty() && _tilePaletteDock->isFloating()) {
                 _tilePaletteDock->restoreGeometry(tilePaletteGeometry);
             }
 
-            QByteArray objectPaletteGeometry = settings.value("ObjectPaletteDock").toByteArray();
+            QByteArray objectPaletteGeometry = timerSettings.value("ObjectPaletteDock").toByteArray();
             if (!objectPaletteGeometry.isEmpty() && _objectPaletteDock->isFloating()) {
                 _objectPaletteDock->restoreGeometry(objectPaletteGeometry);
             }
 
-            QByteArray fileBrowserGeometry = settings.value("FileBrowserDock").toByteArray();
+            QByteArray fileBrowserGeometry = timerSettings.value("FileBrowserDock").toByteArray();
             if (!fileBrowserGeometry.isEmpty() && _fileBrowserDock->isFloating()) {
                 _fileBrowserDock->restoreGeometry(fileBrowserGeometry);
             }
 
-            settings.endGroup();
+            timerSettings.endGroup();
             spdlog::debug("Restored floating dock widget geometries");
         });
 

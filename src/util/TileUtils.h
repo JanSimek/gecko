@@ -31,9 +31,9 @@ struct ScreenPosition {
     unsigned int x; ///< X position in pixels
     unsigned int y; ///< Y position in pixels
 
-    ScreenPosition(unsigned int x = 0, unsigned int y = 0)
-        : x(x)
-        , y(y) { }
+    ScreenPosition(unsigned int posX = 0, unsigned int posY = 0)
+        : x(posX)
+        , y(posY) { }
 };
 
 /**

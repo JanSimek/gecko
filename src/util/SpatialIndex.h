@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <functional>
+#include <cmath>
 
 #include "Constants.h"
 
