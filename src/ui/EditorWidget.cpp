@@ -14,8 +14,6 @@
 
 #include "../editor/Object.h"
 
-#include "../reader/frm/FrmReader.h"
-#include "../reader/pro/ProReader.h"
 
 #include "../writer/map/MapWriter.h"
 
@@ -1815,8 +1813,7 @@ void EditorWidget::updateHoverHex(sf::Vector2f worldPos) {
 }
 
 const sf::Texture& EditorWidget::createHexTexture() {
-    FrmReader frm_reader{};
-    ResourceManager::getInstance().loadResource("art/tiles/HEX.frm", frm_reader);
+    ResourceManager::getInstance().loadResource<Frm>("art/tiles/HEX.frm");
 
     return ResourceManager::getInstance().texture("art/tiles/HEX.frm");
 }

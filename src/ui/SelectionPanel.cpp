@@ -8,8 +8,6 @@
 
 #include "../format/map/Map.h"
 #include "../format/lst/Lst.h"
-#include "../reader/lst/LstReader.h"
-#include "../reader/pro/ProReader.h"
 #include "../util/ResourceManager.h"
 #include "../util/ProHelper.h"
 #include "../format/map/MapObject.h"
@@ -275,8 +273,7 @@ void SelectionPanel::updateObjectInfo() {
         int32_t PID = selectedMapObject.pro_pid;
 
         // Load Proto file to get object information
-        ProReader proReader{};
-        auto pro = ResourceManager::getInstance().loadResource(ProHelper::basePath(PID), proReader);
+        auto pro = ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(PID));
 
         if (pro) {
             // Get object name from message file
@@ -376,7 +373,6 @@ void geck::SelectionPanel::updateTileInfo() {
         // Load tiles.lst to get tile names
         try {
             auto& resourceManager = ResourceManager::getInstance();
-            LstReader lstReader;
             auto tilesList = resourceManager.getResource<Lst, std::string>("art/tiles/tiles.lst");
 
             if (tilesList) {

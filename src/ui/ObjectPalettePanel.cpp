@@ -2,8 +2,6 @@
 #include "../format/map/Map.h"
 #include "../format/lst/Lst.h"
 #include "../format/pro/Pro.h"
-#include "../reader/pro/ProReader.h"
-#include "../reader/lst/LstReader.h"
 #include "../util/ResourceManager.h"
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
@@ -213,8 +211,7 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
 
         // If not found, try to load it manually
         if (!lst) {
-            LstReader lstReader;
-            lst = resourceManager.loadResource(lstPath.toStdString(), lstReader);
+            lst = resourceManager.loadResource<Lst>(lstPath.toStdString());
         }
 
         if (!lst || lst->list().empty()) {
@@ -237,8 +234,7 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
                 // Try to load the PRO file
                 std::string proFilePath = categoryPath.toStdString() + "/" + proFileName;
 
-                ProReader proReader;
-                objectInfo->pro = resourceManager.loadResource(proFilePath, proReader);
+                objectInfo->pro = resourceManager.loadResource<Pro>(proFilePath);
 
                 if (objectInfo->pro) {
                     // Generate display name from PRO file information
@@ -393,6 +389,8 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
     if (objectInfo && !objectInfo->frmPath.isEmpty()) {
         try {
             auto& resourceManager = ResourceManager::getInstance();
+
+            resourceManager.loadResource<Frm>(objectInfo->frmPath.toStdString());
             const auto& texture = resourceManager.texture(objectInfo->frmPath.toStdString());
 
             // Convert SFML texture to QPixmap

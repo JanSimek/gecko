@@ -52,28 +52,6 @@ public:
     void storeTexture(const std::string& name, std::unique_ptr<sf::Texture> texture);
 
     template <class Resource>
-    Resource* loadResource(const std::filesystem::path& path, FileParser<Resource>& reader) {
-
-        static_assert(std::is_base_of<IFile, Resource>::value, "Resource must derive from IFile");
-
-        if (!exists(path.string())) {
-            // vfspp adds / to the root by default
-            std::filesystem::path vfsPath = "/" / path;
-            vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::createNormalizedFileInfo(vfsPath), vfspp::IFile::FileMode::Read);
-
-            if (!file || !file->IsOpened()) {
-                throw std::runtime_error{ "Failed to open file from VFS: " + vfsPath.string() };
-            }
-            std::vector<uint8_t> data(file->Size());
-            file->Read(data, file->Size());
-            _resources.emplace(path.string(), std::move(reader.openFile(path.string(), data)));
-        }
-
-        return dynamic_cast<Resource*>(_resources.at(path.string()).get());
-    }
-    
-    // New method using ReaderFactory
-    template <class Resource>
     Resource* loadResource(const std::filesystem::path& path) {
         static_assert(std::is_base_of<IFile, Resource>::value, "Resource must derive from IFile");
 
