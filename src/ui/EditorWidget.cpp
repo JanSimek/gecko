@@ -197,16 +197,22 @@ void EditorWidget::saveMap() {
     
     std::string destination = destinationQString.toStdString();
 
-    MapWriter map_writer{ [](int32_t PID) {
-        ProReader pro_reader{};
-        return ResourceManager::getInstance().loadResource(ProHelper::basePath(PID), pro_reader);
-    } };
+    try {
+        MapWriter map_writer{ [](int32_t PID) {
+            return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(PID));
+        } };
 
-    map_writer.openFile(destination);
-    if (map_writer.write(_map->getMapFile())) {
-        spdlog::info("Saved map {}", destination);
-    } else {
-        spdlog::error("Failed to save map {}", destination);
+        map_writer.openFile(destination);
+        if (map_writer.write(_map->getMapFile())) {
+            spdlog::info("Saved map {} ({} bytes)", destination, map_writer.getBytesWritten());
+        } else {
+            spdlog::error("Failed to save map {}", destination);
+        }
+    } catch (const geck::FileWriterException& e) {
+        spdlog::error("Failed to save map {}: {}", destination, e.what());
+        // Could show error dialog to user here
+    } catch (const std::exception& e) {
+        spdlog::error("Unexpected error saving map {}: {}", destination, e.what());
     }
 }
 
