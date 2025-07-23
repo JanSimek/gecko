@@ -76,6 +76,7 @@ public:
     }
 
     bool exists(const std::string& filename);
+    bool fileExistsInVFS(const std::filesystem::path& filepath) const;
     void insertTexture(const std::string& filename);
 
     const sf::Texture& texture(const std::string& filename);

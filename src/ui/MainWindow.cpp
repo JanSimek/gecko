@@ -11,6 +11,7 @@
 #include "../state/loader/MapLoader.h"
 #include "../util/Types.h"
 #include "../util/ResourceManager.h"
+#include "../util/QtDialogs.h"
 #include "../reader/lst/LstReader.h"
 #include "../format/lst/Lst.h"
 
@@ -110,6 +111,14 @@ void MainWindow::setLoadingWidget(std::unique_ptr<LoadingWidget> loadingWidget) 
     _currentLoadingWidget->start();
 }
 
+void MainWindow::clearLoadingWidget() {
+    if (_currentLoadingWidget) {
+        _centralStack->removeWidget(_currentLoadingWidget);
+        _currentLoadingWidget->deleteLater();
+        _currentLoadingWidget = nullptr;
+    }
+}
+
 void MainWindow::setupUI() {
     // Create central stacked widget to hold loading and editor widgets
     _centralStack = new QStackedWidget(this);
@@ -120,6 +129,48 @@ void MainWindow::setupUI() {
     setupDockWidgets();
     setupPanelsMenu();
     setupStatusBar();
+    connectMenuSignals();
+}
+
+void MainWindow::connectMenuSignals() {
+    // Connect MainWindow menu signals - these work regardless of EditorWidget state
+    connect(this, &MainWindow::newMapRequested, [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->createNewMap();
+        }
+        // TODO: Handle new map creation when no EditorWidget exists
+    });
+    connect(this, &MainWindow::openMapRequested, [this]() {
+        if (_currentEditorWidget) {
+            // Normal case: delegate to EditorWidget
+            _currentEditorWidget->openMap();
+        } else {
+            // Fallback case: handle directly in MainWindow
+            QString mapPath = QtDialogs::openMapFile(this, "Choose Fallout 2 map to load");
+            if (!mapPath.isEmpty()) {
+                handleMapLoadRequest(mapPath.toStdString());
+            }
+        }
+    });
+    connect(this, &MainWindow::saveMapRequested, [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->saveMap();
+        }
+        // Note: Save Map should be disabled when no map is loaded
+    });
+    connect(this, &MainWindow::selectAllRequested, [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->selectAll();
+        }
+    });
+    connect(this, &MainWindow::deselectAllRequested, [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->clearSelection();
+        }
+        if (_selectionPanel) {
+            _selectionPanel->clearSelection();
+        }
+    });
 }
 
 void MainWindow::setupMenuBar() {
@@ -564,30 +615,6 @@ void MainWindow::connectToEditorWidget() {
         return;
     }
 
-    // Connect MainWindow signals to EditorWidget methods via lambdas
-    connect(this, &MainWindow::newMapRequested, [this]() {
-        _currentEditorWidget->createNewMap();
-    });
-    connect(this, &MainWindow::openMapRequested, [this]() {
-        _currentEditorWidget->openMap();
-    });
-    connect(this, &MainWindow::saveMapRequested, [this]() {
-        _currentEditorWidget->saveMap();
-    });
-    connect(this, &MainWindow::selectAllRequested, [this]() {
-        if (_currentEditorWidget) {
-            _currentEditorWidget->selectAll();
-        }
-    });
-    connect(this, &MainWindow::deselectAllRequested, [this]() {
-        if (_currentEditorWidget) {
-            _currentEditorWidget->clearSelection();
-        }
-        if (_selectionPanel) {
-            _selectionPanel->clearSelection();
-        }
-    });
-
     // Connect view toggles to EditorWidget visibility flags
     connect(this, &MainWindow::showObjectsToggled, [this](bool enabled) {
         _currentEditorWidget->setShowObjects(enabled);
@@ -742,14 +769,20 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath) {
 
     // Add map loader with callback to create new editor widget
     loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, [this](auto map) {
-        // When loading is complete, create new editor widget and switch to it
-        auto editorWidget = std::make_unique<EditorWidget>(std::move(map));
-        setEditorWidget(std::move(editorWidget));
+        // Check if loading was successful
+        if (map) {
+            // When loading is complete, create new editor widget and switch to it
+            auto editorWidget = std::make_unique<EditorWidget>(std::move(map));
+            setEditorWidget(std::move(editorWidget));
+        }
+        // If map is null, error was already shown by MapLoader::onDone()
     }));
 
     // Connect loading complete signal
-    QObject::connect(loadingWidget.get(), &LoadingWidget::loadingComplete, loadingWidget.get(), []() {
+    QObject::connect(loadingWidget.get(), &LoadingWidget::loadingComplete, this, [this]() {
         spdlog::info("Map loading completed from MainWindow");
+        // Remove loading widget when loading completes (success or failure)
+        clearLoadingWidget();
     });
 
     // Show loading widget

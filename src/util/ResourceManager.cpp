@@ -43,6 +43,20 @@ bool ResourceManager::exists(const std::string& filename) {
         || _resources.find(filename) != _resources.end();
 }
 
+bool ResourceManager::fileExistsInVFS(const std::filesystem::path& filepath) const {
+    if (!_vfs) {
+        return false;
+    }
+    
+    // vfspp needs leading slash for root-relative paths
+    std::filesystem::path vfsPath = "/" / filepath;
+    vfspp::FileInfo fileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
+    
+    // Try to open file in read mode to check if it exists
+    vfspp::IFilePtr file = _vfs->OpenFile(fileInfo, vfspp::IFile::FileMode::Read);
+    return file != nullptr;
+}
+
 void ResourceManager::insertTexture(const std::string& filename) {
     if (exists(filename)) {
         return;

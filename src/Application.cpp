@@ -77,16 +77,22 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
 
     // Add map loader
     loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, [this](auto map) {
-        // When loading is complete, create editor widget and switch to it
-        auto editorWidget = std::make_unique<EditorWidget>(std::move(map));
-        _mainWindow->setEditorWidget(std::move(editorWidget));
+        // Check if loading was successful
+        if (map) {
+            // When loading is complete, create editor widget and switch to it
+            auto editorWidget = std::make_unique<EditorWidget>(std::move(map));
+            _mainWindow->setEditorWidget(std::move(editorWidget));
+        }
+        // If map is null, error was already shown by MapLoader::onDone()
     }));
 
     // Connect loading complete signal
-    QObject::connect(loadingWidget.get(), &LoadingWidget::loadingComplete, loadingWidget.get(), []() {
+    QObject::connect(loadingWidget.get(), &LoadingWidget::loadingComplete, _mainWindow.get(), [this]() {
         // Loading widget will automatically be replaced by editor widget
         // when the map loader completes
         spdlog::info("Map loading completed");
+        // Remove loading widget when loading completes (success or failure)
+        _mainWindow->clearLoadingWidget();
     });
 
     // Show loading widget in main window

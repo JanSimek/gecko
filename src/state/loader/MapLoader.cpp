@@ -1,5 +1,6 @@
 #include "MapLoader.h"
 #include <thread>
+#include <QString>
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
 #include "../../util/Constants.h"
@@ -17,6 +18,7 @@
 
 #include "../../util/ProHelper.h"
 #include "../../util/ResourceManager.h"
+#include "../../util/QtDialogs.h"
 
 namespace geck {
 
@@ -38,8 +40,43 @@ void MapLoader::load() {
 
     setStatus("Loading map " + _mapPath.filename().string());
 
+    // Validate required LST files exist before loading
+    const std::vector<std::string> requiredLstFiles = {
+        "art/items/items.lst", 
+        "art/critters/critters.lst", 
+        "art/scenery/scenery.lst", 
+        "art/walls/walls.lst", 
+        "art/tiles/tiles.lst", 
+        "art/misc/misc.lst", 
+        "art/intrface/intrface.lst", 
+        "art/inven/inven.lst"
+    };
+    
+    std::vector<std::string> missingFiles;
+    auto& resourceManager = ResourceManager::getInstance();
+    
+    for (const auto& lstPath : requiredLstFiles) {
+        if (!resourceManager.fileExistsInVFS(lstPath)) {
+            missingFiles.push_back(lstPath);
+        }
+    }
+    
+    if (!missingFiles.empty()) {
+        std::string errorMessage = "Cannot load map: Missing required LST files:\n\n";
+        for (const auto& missingFile : missingFiles) {
+            errorMessage += "• " + missingFile + "\n";
+        }
+        errorMessage += "\nPlease ensure all Fallout 2 game files are properly installed and DAT archives are loaded.";
+        
+        _errorMessage = errorMessage;
+        _hasError = true;
+        done = true;  // Mark as done so LoadingWidget will call onDone()
+        spdlog::error("Map loading failed: {} LST files missing", missingFiles.size());
+        return;
+    }
+
     // TODO: move to a new loader that is called only once per application start
-    for (const auto& lst_path : { "art/items/items.lst", "art/critters/critters.lst", "art/scenery/scenery.lst", "art/walls/walls.lst", "art/tiles/tiles.lst", "art/misc/misc.lst", "art/intrface/intrface.lst", "art/inven/inven.lst" }) {
+    for (const auto& lst_path : requiredLstFiles) {
         ResourceManager::getInstance().loadResource<Lst>(lst_path);
     }
 
@@ -129,7 +166,14 @@ bool MapLoader::isDone() {
 }
 
 void MapLoader::onDone() {
-    _onLoadCallback(std::move(_map));
+    if (_hasError) {
+        // Show error dialog on main thread
+        QtDialogs::showError(nullptr, "Missing Game Files", QString::fromStdString(_errorMessage));
+        // Call callback with null map to indicate failure
+        _onLoadCallback(nullptr);
+    } else {
+        _onLoadCallback(std::move(_map));
+    }
 }
 
 } // namespace geck

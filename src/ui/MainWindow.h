@@ -43,6 +43,7 @@ public:
 
     void setEditorWidget(std::unique_ptr<EditorWidget> editorWidget);
     void setLoadingWidget(std::unique_ptr<LoadingWidget> loadingWidget);
+    void clearLoadingWidget();
 
     void updateMapInfo(Map* map);
 
@@ -87,6 +88,7 @@ private:
     void setupDockWidgets();
     void setupStatusBar();
     void setupPanelsMenu();
+    void connectMenuSignals();
     void updatePanelMenuActions();
 
     // Dock widget state management

@@ -18,6 +18,9 @@ public:
     void init() override;
     bool isDone() override;
     void onDone() override;
+    
+    bool hasError() const { return _hasError; }
+    const std::string& errorMessage() const { return _errorMessage; }
 
 private:
     void load() override;
@@ -28,6 +31,10 @@ private:
     std::unique_ptr<Map> _map;
     int _elevation;
     std::function<void(std::unique_ptr<Map>)> _onLoadCallback;
+    
+    // Error handling
+    std::string _errorMessage;
+    bool _hasError = false;
 };
 
 } // namespace geck
