@@ -87,7 +87,7 @@ std::unique_ptr<Gam> GamReader::read() {
                                 ErrorMessages::corruptedData(_path, 
                                     "Variable " + key + " outside of GVARS/MVARS section at line " + std::to_string(lines_processed)), _path);
                         }
-                    } catch (const std::invalid_argument& e) {
+                    } catch (const std::invalid_argument&) {
                         throw ParseException(
                             ErrorMessages::corruptedData(_path,
                                 "Invalid variable value '" + value_str + "' for " + key + " at line " + std::to_string(lines_processed)), _path);

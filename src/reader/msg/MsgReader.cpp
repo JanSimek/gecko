@@ -77,7 +77,7 @@ std::unique_ptr<Msg> MsgReader::read() {
                 _messages[id] = { id, audio, message };
                 messages_found++;
                 
-            } catch (const std::invalid_argument& e) {
+            } catch (const std::invalid_argument&) {
                 spdlog::error("Invalid message ID in MSG file: {}", matches[1].str());
             }
             

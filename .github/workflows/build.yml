@@ -70,7 +70,7 @@ jobs:
             
           - os: macos-latest
             install_deps: |
-              brew install qt@6 zlib
+              brew install qt@6 zlib libb2
               # Build SFML 3 from source
               git clone --depth 1 --branch 3.0.0 https://github.com/SFML/SFML.git
               cd SFML
