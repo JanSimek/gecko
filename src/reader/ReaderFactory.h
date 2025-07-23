@@ -90,6 +90,26 @@ private:
     static const std::map<std::string, Format> extension_format_map;
 };
 
+// Forward declarations for supported types
+class Dat;
+class Pro;
+class Frm;
+class Pal;
+class Gam;
+class Msg;
+class Lst;
+class Map;
+
+// Template specialization declarations
+template<> std::unique_ptr<FileParser<Dat>> ReaderFactory::createReader<Dat>(Format format);
+template<> std::unique_ptr<FileParser<Pro>> ReaderFactory::createReader<Pro>(Format format);
+template<> std::unique_ptr<FileParser<Frm>> ReaderFactory::createReader<Frm>(Format format);
+template<> std::unique_ptr<FileParser<Pal>> ReaderFactory::createReader<Pal>(Format format);
+template<> std::unique_ptr<FileParser<Gam>> ReaderFactory::createReader<Gam>(Format format);
+template<> std::unique_ptr<FileParser<Msg>> ReaderFactory::createReader<Msg>(Format format);
+template<> std::unique_ptr<FileParser<Lst>> ReaderFactory::createReader<Lst>(Format format);
+template<> std::unique_ptr<FileParser<Map>> ReaderFactory::createReader<Map>(Format format);
+
 // Template implementations
 
 template<typename T>

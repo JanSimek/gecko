@@ -104,18 +104,18 @@ bool MapWriter::write(const Map::MapFile& map) {
         // Write objects
         size_t total_objects = 0;
         for (size_t elev = 0; elev < map.map_objects.size(); elev++) {
-            total_objects += map.map_objects.at(elev).size();
+            total_objects += map.map_objects.at(static_cast<int>(elev)).size();
         }
 
         utils.writeWithLog(static_cast<uint32_t>(total_objects), "total objects on map");
 
         for (size_t elev = 0; elev < map.map_objects.size(); elev++) {
-            auto objectsOnElevation = map.map_objects.at(elev).size();
+            auto objectsOnElevation = map.map_objects.at(static_cast<int>(elev)).size();
             utils.writeWithLog(static_cast<uint32_t>(objectsOnElevation), "objects on elevation " + std::to_string(static_cast<int>(elev)));
 
             // TODO: sort objects by their position for better loading performance
             for (size_t i = 0; i < objectsOnElevation; i++) {
-                const auto& object = map.map_objects.at(elev)[i];
+                const auto& object = map.map_objects.at(static_cast<int>(elev))[i];
                 writeObject(*object);
             }
         }

@@ -93,7 +93,7 @@ std::unique_ptr<geck::Frm> geck::FrmReader::read() {
 
                 // Number of pixels for this frame (should equal width * height)
                 uint32_t pixel_count = utils.readBE32();
-                if (pixel_count != width * height) {
+                if (pixel_count != static_cast<uint32_t>(width) * static_cast<uint32_t>(height)) {
                     spdlog::warn("FRM frame {}: pixel count mismatch - header says {}, expected {}",
                                i, pixel_count, width * height);
                 }
