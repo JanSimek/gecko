@@ -70,7 +70,7 @@ jobs:
             
           - os: macos-latest
             install_deps: |
-              brew install qt@6 zlib libb2
+              brew install zlib
               # Build SFML 3 from source
               git clone --depth 1 --branch 3.0.0 https://github.com/SFML/SFML.git
               cd SFML
@@ -129,16 +129,27 @@ jobs:
       run: |
         echo "=== Setting up Qt6 on macOS ==="
         
-        brew install qt@6 double-conversion
+        # Install Qt6 and required dependencies
+        brew install qt@6 double-conversion libb2
     
         # Link Qt6 (since it's keg-only and not linked by default)
         brew link qt@6 --force --overwrite
         brew link double-conversion --force
+        brew link libb2 --force
     
-        # Get Homebrew prefix
+        # Get Homebrew prefix and paths
+        HOMEBREW_PREFIX=$(brew --prefix)
         QT6_PATH=$(brew --prefix qt@6)
+        LIBB2_PATH=$(brew --prefix libb2)
+        
+        echo "Homebrew prefix: $HOMEBREW_PREFIX"
         echo "Qt6 installed at: $QT6_PATH"
+        echo "libb2 installed at: $LIBB2_PATH"
     
+        # Set up library paths for Qt tools to find libb2
+        echo "DYLD_LIBRARY_PATH=$HOMEBREW_PREFIX/lib:$LIBB2_PATH/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "LD_LIBRARY_PATH=$HOMEBREW_PREFIX/lib:$LIBB2_PATH/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        
         # Export CMake path hints
         echo "CMAKE_PREFIX_PATH=$QT6_PATH/lib/cmake" >> $GITHUB_ENV
         echo "Qt6_DIR=$QT6_PATH/lib/cmake/Qt6" >> $GITHUB_ENV
@@ -150,6 +161,27 @@ jobs:
         else
           echo "❌ Qt6Config.cmake not found"
           find "$QT6_PATH" -name Qt6Config.cmake
+          exit 1
+        fi
+        
+        # Verify libb2 is available
+        echo "Checking for libb2 library..."
+        # Look for libb2 libraries (versioned or unversioned)
+        LIBB2_FOUND=false
+        for lib in "$LIBB2_PATH/lib/libb2.dylib" "$LIBB2_PATH/lib/libb2.1.dylib" "$LIBB2_PATH/lib/libb2.*.dylib"; do
+          if [[ -f "$lib" ]]; then
+            echo "✅ libb2 library found: $lib"
+            LIBB2_FOUND=true
+            break
+          fi
+        done
+        
+        if [[ "$LIBB2_FOUND" == "false" ]]; then
+          echo "❌ libb2 library not found in expected locations"
+          echo "Contents of $LIBB2_PATH/lib/:"
+          ls -la "$LIBB2_PATH/lib/" | grep -i libb2 || echo "No libb2 files found"
+          echo "Searching for libb2 libraries system-wide..."
+          find "$HOMEBREW_PREFIX" -name "*libb2*" 2>/dev/null || echo "No libb2 libraries found"
           exit 1
         fi
 
@@ -166,9 +198,16 @@ jobs:
             ${{ matrix.cmake_extra_args }} \
             -S "${{ github.workspace }}"
         else
-          # Set library path for CMake test discovery on Linux/macOS
-          export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
-          export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
+          # Set library paths for CMake test discovery on Linux/macOS
+          # On macOS, use the environment variables set by the Qt setup step
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            echo "Using DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
+            echo "Using LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+          else
+            export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+            export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
+          fi
+          
           cmake -B "${{ env.BUILD_DIR }}" \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DGECK_BUILD_TESTS=ON \
@@ -183,9 +222,14 @@ jobs:
       shell: bash
       run: |
         if [[ "${{ runner.os }}" != "Windows" ]]; then
-          # Set library path for Linux/macOS
-          export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
-          export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
+          # Set library paths for Linux/macOS
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            echo "Using DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
+            echo "Using LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+          else
+            export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+            export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
+          fi
         fi
         cmake --build "${{ env.BUILD_DIR }}" --config ${{ matrix.build_type }} --parallel
 
@@ -197,9 +241,14 @@ jobs:
           # Run tests with proper configuration
           ctest -C ${{ matrix.build_type }} --output-on-failure --verbose
         else
-          # Set library path for Linux and macOS
-          export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
-          export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
+          # Set library paths for Linux and macOS
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            echo "Using DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
+            echo "Using LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+          else
+            export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+            export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
+          fi
           
           # Set Qt platform to offscreen for headless testing on Linux
           if [[ "${{ runner.os }}" == "Linux" ]]; then
