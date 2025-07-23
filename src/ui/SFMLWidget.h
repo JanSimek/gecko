@@ -2,6 +2,10 @@
 
 #include <QWidget>
 #include <QTimer>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include <SFML/Graphics.hpp>
 #include <memory>
 
@@ -29,6 +33,11 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+
+    // Drag and drop support
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
     QPaintEngine* paintEngine() const override;
 

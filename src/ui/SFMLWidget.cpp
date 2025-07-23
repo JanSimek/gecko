@@ -31,6 +31,9 @@ SFMLWidget::SFMLWidget(QWidget* parent)
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
 
+    // Enable drag and drop
+    setAcceptDrops(true);
+
     // Set size policy to expand and fill available space
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }
@@ -242,6 +245,63 @@ void SFMLWidget::convertQtWheelEventToSFML(QWheelEvent* qtEvent, sf::Event& sfml
         qtEvent->angleDelta().y() / 120.0f, // Convert to wheel steps
         sf::Vector2i{ static_cast<int>(qtEvent->position().x()), static_cast<int>(qtEvent->position().y()) }
     };
+}
+
+void SFMLWidget::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasFormat("application/x-geck-object")) {
+        // Extract object data and start drag preview
+        QByteArray objectData = event->mimeData()->data("application/x-geck-object");
+        QStringList parts = QString::fromUtf8(objectData).split(',');
+        
+        if (parts.size() == 2 && _editorWidget) {
+            int objectIndex = parts[0].toInt();
+            int categoryInt = parts[1].toInt();
+            
+            // Convert Qt coordinates to SFML world coordinates
+            sf::Vector2f worldPos;
+            if (_renderWindow) {
+                sf::Vector2i windowPos(event->position().x(), event->position().y());
+                worldPos = _renderWindow->mapPixelToCoords(windowPos);
+            }
+            
+            // Start drag preview in editor
+            _editorWidget->startDragPreview(objectIndex, categoryInt, worldPos);
+        }
+        
+        event->acceptProposedAction();
+    } else {
+        event->ignore();
+    }
+}
+
+void SFMLWidget::dragMoveEvent(QDragMoveEvent* event) {
+    if (event->mimeData()->hasFormat("application/x-geck-object")) {
+        // Update drag preview position
+        if (_editorWidget && _renderWindow) {
+            sf::Vector2i windowPos(event->position().x(), event->position().y());
+            sf::Vector2f worldPos = _renderWindow->mapPixelToCoords(windowPos);
+            _editorWidget->updateDragPreview(worldPos);
+        }
+        
+        event->acceptProposedAction();
+    } else {
+        event->ignore();
+    }
+}
+
+void SFMLWidget::dropEvent(QDropEvent* event) {
+    if (event->mimeData()->hasFormat("application/x-geck-object")) {
+        // Finish the drag preview and place the object
+        if (_editorWidget && _renderWindow) {
+            sf::Vector2i windowPos(event->position().x(), event->position().y());
+            sf::Vector2f worldPos = _renderWindow->mapPixelToCoords(windowPos);
+            _editorWidget->finishDragPreview(worldPos);
+        }
+        
+        event->acceptProposedAction();
+    } else {
+        event->ignore();
+    }
 }
 
 } // namespace geck

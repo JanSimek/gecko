@@ -19,10 +19,11 @@
 
 namespace geck {
 
-ObjectWidget::ObjectWidget(int objectIndex, const ObjectInfo* objectInfo, const QPixmap& pixmap, QWidget* parent)
+ObjectWidget::ObjectWidget(int objectIndex, const ObjectInfo* objectInfo, const QPixmap& pixmap, ObjectCategory category, QWidget* parent)
     : QLabel(parent)
     , _objectIndex(objectIndex)
-    , _objectInfo(objectInfo) {
+    , _objectInfo(objectInfo)
+    , _category(category) {
 
     QPixmap scaledPixmap = pixmap.scaled(OBJECT_SIZE, OBJECT_SIZE, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
@@ -61,8 +62,36 @@ void ObjectWidget::setSelected(bool selected) {
 void ObjectWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         emit objectClicked(_objectIndex);
+        _dragStartPosition = event->pos();
     }
     QLabel::mousePressEvent(event);
+}
+
+void ObjectWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (!(event->buttons() & Qt::LeftButton)) {
+        return;
+    }
+
+    if ((event->pos() - _dragStartPosition).manhattanLength() < QApplication::startDragDistance()) {
+        return;
+    }
+
+    // Start drag operation
+    QDrag* drag = new QDrag(this);
+    QMimeData* mimeData = new QMimeData;
+
+    // Set MIME data with object information
+    mimeData->setText(QString("geck/object"));
+    mimeData->setData("application/x-geck-object", 
+        QByteArray::number(_objectIndex) + "," + QByteArray::number(static_cast<int>(_category)));
+
+    // Use the object's pixmap as drag pixmap
+    drag->setPixmap(pixmap().scaled(32, 32, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    drag->setMimeData(mimeData);
+
+    // Execute the drag
+    Qt::DropAction dropAction = drag->exec(Qt::CopyAction);
+    Q_UNUSED(dropAction);
 }
 
 void ObjectWidget::paintEvent(QPaintEvent* event) {
@@ -411,7 +440,7 @@ void ObjectPalettePanel::updateObjectGrid() {
             QPixmap objectThumbnail = createObjectThumbnail(objectInfo.get(), _currentCategory);
 
             // Create object widget
-            auto objectWidget = std::make_unique<ObjectWidget>(i, objectInfo.get(), objectThumbnail, this);
+            auto objectWidget = std::make_unique<ObjectWidget>(i, objectInfo.get(), objectThumbnail, _currentCategory, this);
             connect(objectWidget.get(), &ObjectWidget::objectClicked, this, &ObjectPalettePanel::onObjectClicked);
 
             // Add to grid
@@ -818,6 +847,34 @@ QPixmap ObjectPalettePanel::createFrameThumbnail(const Frame& frame, const Pal* 
     painter.drawPixmap(x, y, scaledFrame);
     
     return thumbnail;
+}
+
+const ObjectInfo* ObjectPalettePanel::getObjectInfo(int objectIndex, ObjectCategory category) const {
+    const std::vector<std::unique_ptr<ObjectInfo>>* categoryList = nullptr;
+    
+    switch (category) {
+        case ObjectCategory::ITEMS:
+            categoryList = &_itemsList;
+            break;
+        case ObjectCategory::SCENERY:
+            categoryList = &_sceneryList;
+            break;
+        case ObjectCategory::CRITTERS:
+            categoryList = &_crittersList;
+            break;
+        case ObjectCategory::WALLS:
+            categoryList = &_wallsList;
+            break;
+        case ObjectCategory::MISC:
+            categoryList = &_miscList;
+            break;
+    }
+    
+    if (!categoryList || objectIndex < 0 || objectIndex >= static_cast<int>(categoryList->size())) {
+        return nullptr;
+    }
+    
+    return (*categoryList)[objectIndex].get();
 }
 
 } // namespace geck

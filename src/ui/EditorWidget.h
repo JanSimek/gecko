@@ -21,6 +21,7 @@
 namespace geck {
 
 class SFMLWidget;
+struct ObjectInfo;
 
 class EditorWidget : public QWidget {
     Q_OBJECT
@@ -53,6 +54,15 @@ public:
     void fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof);
     void replaceSelectedTiles(int newTileIndex);
 
+    // Object placement functionality
+    void placeObjectAtPosition(int objectIndex, int categoryInt, sf::Vector2f worldPos);
+    
+    // Drag preview functionality (for palette drag and drop)
+    void startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos);
+    void updateDragPreview(sf::Vector2f worldPos);
+    void finishDragPreview(sf::Vector2f worldPos);
+    void cancelDragPreview();
+
     // Efficient tile update
     void updateTileSprite(int hexIndex, bool isRoof);
 
@@ -72,6 +82,9 @@ public:
 
     // Access to SFML widget for main window
     SFMLWidget* getSFMLWidget() const { return _sfmlWidget; }
+    
+    // Set main window reference for accessing palette panels
+    void setMainWindow(class MainWindow* mainWindow) { _mainWindow = mainWindow; }
 
     // Methods for SelectionManager (moved from private)
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
@@ -128,8 +141,8 @@ private:
     selection::SelectionResult handleRangeSelection(sf::Vector2f worldPos);
 
     void clearAllVisualSelections();
-    void updateDragPreview(sf::Vector2f currentWorldPos);
     void clearDragPreview();
+    void updateDragSelectionPreview(sf::Vector2f currentWorldPos);
     void updateTileAreaFillPreview(sf::Vector2f currentWorldPos);
 
     // Object drag management
@@ -164,6 +177,7 @@ private:
     // UI Components
     QVBoxLayout* _layout;
     SFMLWidget* _sfmlWidget;
+    class MainWindow* _mainWindow;
 
     // Game/Editor State
     SelectionMode _currentSelectionMode = SelectionMode::ALL;
@@ -221,6 +235,13 @@ private:
     std::vector<std::shared_ptr<Object>> _draggedObjects; // Objects being dragged
     std::vector<sf::Vector2f> _objectDragStartPositions;  // Original positions for cancel/revert
     sf::Vector2f _objectDragOffset;                       // Current drag offset from start position
+    
+    // Drag preview state (for palette drag and drop)
+    bool _isDraggingFromPalette = false;
+    std::shared_ptr<Object> _dragPreviewObject;           // Preview object being dragged from palette
+    int _previewObjectIndex = -1;                         // Index of object in palette
+    int _previewObjectCategory = 0;                       // Category of preview object (as int)
+    const ObjectInfo* _previewObjectInfo = nullptr;      // Object info from palette
 
     // Hex grid visualization
     sf::Sprite _hexSprite;          // Hex grid sprite from HEX.frm

@@ -93,7 +93,9 @@ void Object::setDirection(ObjectDirection direction) {
         _direction = 0;
     }
 
-    _mapObject->direction = _direction;
+    if (_mapObject != nullptr) {
+        _mapObject->direction = _direction;
+    }
 
     // Take the first frame of the direction
     auto first_frame = _frm->directions().at(_direction).frames().at(0);

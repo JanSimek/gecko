@@ -86,6 +86,9 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     _centralStack->addWidget(_currentEditorWidget);
     _centralStack->setCurrentWidget(_currentEditorWidget);
 
+    // Set main window reference for palette access
+    _currentEditorWidget->setMainWindow(this);
+
     // Initialize the editor widget
     _currentEditorWidget->init();
 

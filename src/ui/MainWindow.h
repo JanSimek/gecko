@@ -50,6 +50,9 @@ public:
     void stopGameLoop();
 
     void connectToEditorWidget();
+    
+    // Access to palette panel for drag and drop
+    ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
 
 signals:
     void newMapRequested();

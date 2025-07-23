@@ -13,6 +13,8 @@
 #include <QLineEdit>
 #include <QTabWidget>
 #include <QSpinBox>
+#include <QDrag>
+#include <QMimeData>
 #include <vector>
 #include <memory>
 
@@ -21,6 +23,18 @@ namespace geck {
 class Map;
 class Lst;
 class Pro;
+
+// Forward declaration
+class ObjectPalettePanel;
+
+// Object category enum - moved outside class for easier access
+enum class ObjectCategory {
+    ITEMS,    // Weapons, armor, consumables, etc.
+    SCENERY,  // Furniture, decorations, interactive objects
+    CRITTERS, // NPCs, monsters, characters
+    WALLS,    // Wall segments and structural elements
+    MISC      // Miscellaneous objects
+};
 
 /**
  * @brief Information about a loaded object for the palette
@@ -45,10 +59,11 @@ class ObjectWidget : public QLabel {
     Q_OBJECT
 
 public:
-    explicit ObjectWidget(int objectIndex, const ObjectInfo* objectInfo, const QPixmap& pixmap, QWidget* parent = nullptr);
+    explicit ObjectWidget(int objectIndex, const ObjectInfo* objectInfo, const QPixmap& pixmap, ObjectCategory category, QWidget* parent = nullptr);
 
     int getObjectIndex() const { return _objectIndex; }
     const ObjectInfo* getObjectInfo() const { return _objectInfo; }
+    ObjectCategory getCategory() const { return _category; }
     bool isSelected() const { return _selected; }
     void setSelected(bool selected);
 
@@ -57,6 +72,7 @@ signals:
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
 
 public:
@@ -65,7 +81,9 @@ public:
 private:
     int _objectIndex;
     const ObjectInfo* _objectInfo;
+    ObjectCategory _category;
     bool _selected = false;
+    QPoint _dragStartPosition;
 };
 
 /**
@@ -82,14 +100,6 @@ class ObjectPalettePanel : public QWidget {
     Q_OBJECT
 
 public:
-    enum class ObjectCategory {
-        ITEMS,    // Weapons, armor, consumables, etc.
-        SCENERY,  // Furniture, decorations, interactive objects
-        CRITTERS, // NPCs, monsters, characters
-        WALLS,    // Wall segments and structural elements
-        MISC      // Miscellaneous objects
-    };
-
     explicit ObjectPalettePanel(QWidget* parent = nullptr);
     ~ObjectPalettePanel();
 
@@ -101,6 +111,9 @@ public:
     int getSelectedObjectIndex() const { return _selectedObjectIndex; }
     ObjectCategory getCurrentCategory() const { return _currentCategory; }
     bool hasSelectedObject() const { return _selectedObjectIndex >= 0; }
+    
+    // Access to object info for drag and drop
+    const ObjectInfo* getObjectInfo(int objectIndex, ObjectCategory category) const;
 
 signals:
     void objectSelected(int objectIndex, ObjectCategory category);

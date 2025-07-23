@@ -9,6 +9,7 @@
 #include <cstdlib>   // std::abs
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
+#include "../editor/HexagonGrid.h"
 #include "../util/TileUtils.h"
 #include "../util/QtDialogs.h"
 
@@ -22,6 +23,8 @@
 #include "../format/map/Tile.h"
 #include "../format/pro/Pro.h"
 #include "../format/map/MapObject.h"
+#include "ObjectPalettePanel.h"
+#include "MainWindow.h"
 
 #include "../util/ProHelper.h"
 
@@ -31,6 +34,7 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
     : QWidget(parent)
     , _layout(nullptr)
     , _sfmlWidget(nullptr)
+    , _mainWindow(nullptr)
     , _view({ 0.f, 0.f }, sf::Vector2f(800.f, 600.f)) // Default size, will be updated on first resize
     , _map(std::move(map))
     , _hexSprite(createHexTexture())
@@ -717,7 +721,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 _selectionRectangle.setSize(sf::Vector2f(width, height));
 
                 // Update preview of items that would be selected
-                updateDragPreview(currentWorldPos);
+                updateDragSelectionPreview(currentWorldPos);
             }
         } else if (_currentAction == EditorAction::TILE_PLACING) {
             // Handle tile area fill drag
@@ -883,6 +887,11 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
         for (const auto& object : _objects) {
             window->draw(object->getSprite());
         }
+    }
+    
+    // Render drag preview object if active
+    if (_isDraggingFromPalette && _dragPreviewObject) {
+        window->draw(_dragPreviewObject->getSprite());
     }
 
     // Render roof tiles
@@ -1341,7 +1350,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     return result;
 }
 
-void EditorWidget::updateDragPreview(sf::Vector2f currentWorldPos) {
+void EditorWidget::updateDragSelectionPreview(sf::Vector2f currentWorldPos) {
     // Clear previous preview
     clearDragPreview();
 
@@ -1842,6 +1851,236 @@ const sf::Texture& EditorWidget::createBlankTexture() {
 
         return resourceManager.texture(blankTextureName);
     }
+}
+
+void EditorWidget::placeObjectAtPosition(int objectIndex, int categoryInt, sf::Vector2f worldPos) {
+    if (!_map) {
+        spdlog::warn("EditorWidget: Cannot place object - no map loaded");
+        return;
+    }
+
+    // Convert world position to hex position
+    int hexPosition = worldPosToHexPosition(worldPos);
+    if (hexPosition < 0 || hexPosition >= (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT)) {
+        spdlog::warn("EditorWidget: Invalid hex position {} for object placement", hexPosition);
+        return;
+    }
+
+    // Create a MapObject for the placed object using shared_ptr (same as existing objects)
+    auto mapObject = std::make_shared<MapObject>();
+    
+    // Set basic properties
+    mapObject->position = hexPosition;
+    mapObject->elevation = _currentElevation;
+    mapObject->direction = 0;
+    mapObject->frame_number = 0;
+    
+    // Set world coordinates
+    auto hexCoords = _hexgrid.getHexByPosition(static_cast<uint32_t>(hexPosition));
+    if (hexCoords) {
+        mapObject->x = static_cast<uint32_t>(hexCoords->get().x());
+        mapObject->y = static_cast<uint32_t>(hexCoords->get().y());
+    }
+    
+    // Only use actual PIDs from ObjectInfo - fail if not available
+    if (!_previewObjectInfo || !_previewObjectInfo->pro) {
+        spdlog::error("EditorWidget: Cannot place object - no ObjectInfo or PRO data available");
+        return;
+    }
+    
+    mapObject->pro_pid = _previewObjectInfo->pro->header.PID;
+    mapObject->frm_pid = _previewObjectInfo->pro->header.FID;
+
+    // Initialize remaining fields
+    mapObject->sx = 0;
+    mapObject->sy = 0;
+    mapObject->flags = 0;
+    mapObject->critter_index = -1;
+    mapObject->light_radius = 0;
+    mapObject->light_intensity = 0;
+    mapObject->outline_color = 0;
+    mapObject->map_scripts_pid = -1;
+    mapObject->script_id = -1;
+    mapObject->objects_in_inventory = 0;
+    mapObject->max_inventory_size = 0;
+    mapObject->amount = 1;
+    mapObject->unknown10 = 0;
+    mapObject->unknown11 = 0;
+
+    // Add to map for saving (both MapFile and Map's objects collection)
+    auto& mapFile = _map->getMapFile();
+    mapFile.map_objects[_currentElevation].push_back(mapObject);
+    
+    // Create visual Object for immediate display
+    try {
+        // Try to load FRM for the object if we have ObjectInfo
+        const Frm* frm = nullptr;
+        auto& resourceManager = ResourceManager::getInstance();
+        if (_previewObjectInfo && !_previewObjectInfo->frmPath.isEmpty()) {
+            frm = resourceManager.loadResource<Frm>(_previewObjectInfo->frmPath.toStdString());
+        }
+        
+        // Create Object instance same way as existing objects
+        auto object = std::make_shared<Object>(frm);
+        
+        // Set the MapObject association (same as existing objects)
+        object->setMapObject(mapObject);
+        
+        // Set sprite texture if FRM was loaded successfully
+        if (frm && _previewObjectInfo && !_previewObjectInfo->frmPath.isEmpty()) {
+            sf::Sprite objectSprite{ resourceManager.texture(_previewObjectInfo->frmPath.toStdString()) };
+            object->setSprite(std::move(objectSprite));
+            
+            // Set direction to show correct frame (first frame of first direction)
+            if (frm) {
+                object->setDirection(static_cast<ObjectDirection>(0));
+            }
+        }
+        
+        // Set proper position using hex positioning
+        // Use the hex grid system like existing objects
+        if (hexPosition < static_cast<int>(_hexgrid.grid().size())) {
+            const auto& hex = _hexgrid.grid()[hexPosition];
+            object->setHexPosition(hex);
+        }
+        
+        // Add to objects list for immediate display
+        _objects.push_back(object);
+        
+            
+    } catch (const std::exception& e) {
+        spdlog::warn("EditorWidget: Failed to create visual object for placed item: {}", e.what());
+        // The MapObject is still saved, just won't be visible until reload
+    }
+    
+}
+
+void EditorWidget::startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos) {
+    // Cancel any existing drag preview
+    cancelDragPreview();
+    
+    // Set drag preview state
+    _isDraggingFromPalette = true;
+    _previewObjectIndex = objectIndex;
+    _previewObjectCategory = categoryInt;
+    
+    try {
+        // Get ObjectInfo from ObjectPalettePanel
+        const ObjectInfo* objectInfo = nullptr;
+        if (_mainWindow) {
+            ObjectPalettePanel* palettePanel = _mainWindow->getObjectPalettePanel();
+            if (palettePanel) {
+                objectInfo = palettePanel->getObjectInfo(objectIndex, static_cast<ObjectCategory>(categoryInt));
+                _previewObjectInfo = objectInfo;
+                
+                if (!objectInfo) {
+                    spdlog::warn("EditorWidget: No ObjectInfo found for index {} in category {}", objectIndex, categoryInt);
+                }
+            }
+        }
+        
+        // Try to load actual FRM data
+        sf::Sprite previewSprite(createBlankTexture());
+        
+        // Load actual FRM if ObjectInfo is available
+        if (objectInfo && !objectInfo->frmPath.isEmpty()) {
+            try {
+                auto& resourceManager = ResourceManager::getInstance();
+                const auto* frm = resourceManager.loadResource<Frm>(objectInfo->frmPath.toStdString());
+                
+                if (frm) {
+                    // Create Object with actual FRM
+                    _dragPreviewObject = std::make_shared<Object>(frm);
+                    
+                    // Load sprite texture same way as existing objects
+                    sf::Sprite objectSprite{ resourceManager.texture(objectInfo->frmPath.toStdString()) };
+                    objectSprite.setColor(sf::Color(255, 255, 255, 180)); // Semi-transparent for preview
+                    _dragPreviewObject->setSprite(std::move(objectSprite));
+                    
+                    // Set direction to show correct frame (first frame of first direction)
+                    if (frm) {
+                        _dragPreviewObject->setDirection(static_cast<ObjectDirection>(0));
+                        
+                    }
+                    
+                } else {
+                    spdlog::warn("EditorWidget: Failed to load FRM for drag preview");
+                    cancelDragPreview();
+                    return;
+                }
+            } catch (const std::exception& e) {
+                spdlog::warn("EditorWidget: Failed to load FRM {}: {}", objectInfo->frmPath.toStdString(), e.what());
+                cancelDragPreview();
+                return;
+            }
+        } else {
+            spdlog::warn("EditorWidget: No ObjectInfo available for drag preview");
+            cancelDragPreview();
+            return;
+        }
+        
+        // Position the preview object initially
+        updateDragPreview(worldPos);
+        
+            
+    } catch (const std::exception& e) {
+        spdlog::warn("EditorWidget: Failed to create drag preview: {}", e.what());
+        cancelDragPreview();
+    }
+}
+
+void EditorWidget::updateDragPreview(sf::Vector2f worldPos) {
+    if (!_isDraggingFromPalette || !_dragPreviewObject) {
+        return;
+    }
+    
+    // Find the closest hex position directly
+    int hexPosition = worldPosToHexPosition(worldPos);
+    
+    if (hexPosition >= 0 && hexPosition < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT)) {
+        // Update hover hex for visual feedback
+        _currentHoverHex = hexPosition;
+        
+        // Position the preview object at the hex center with proper FRM offsets
+        auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(hexPosition));
+        if (hex) {
+            _dragPreviewObject->setHexPosition(hex->get());
+        }
+        
+        spdlog::debug("EditorWidget: Drag preview at hex position {}", hexPosition);
+    } else {
+        _currentHoverHex = -1;
+        spdlog::debug("EditorWidget: Drag preview at invalid position ({})", hexPosition);
+    }
+}
+
+void EditorWidget::finishDragPreview(sf::Vector2f worldPos) {
+    if (!_isDraggingFromPalette) {
+        return;
+    }
+    
+    // Convert to hex position
+    int hexPosition = worldPosToHexPosition(worldPos);
+    if (hexPosition >= 0 && hexPosition < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT)) {
+        // Place the actual object
+        placeObjectAtPosition(_previewObjectIndex, _previewObjectCategory, worldPos);
+        
+        spdlog::info("EditorWidget: Finished drag preview - placed object at hex {}", hexPosition);
+    } else {
+        spdlog::warn("EditorWidget: Invalid drop position for drag preview (hex position: {})", hexPosition);
+    }
+    
+    // Clean up preview
+    cancelDragPreview();
+}
+
+void EditorWidget::cancelDragPreview() {
+    _isDraggingFromPalette = false;
+    _dragPreviewObject.reset();
+    _previewObjectIndex = -1;
+    _previewObjectCategory = 0;
+    _previewObjectInfo = nullptr;
+    _currentHoverHex = -1;
 }
 
 } // namespace geck
