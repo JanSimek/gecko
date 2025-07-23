@@ -7,13 +7,13 @@
     <key>CFBundleExecutable</key>
     <string>${EXECUTABLE_NAME}</string>
     <key>CFBundleIconFile</key>
-    <string>geck-mapper</string>
+    <string>gecko</string>
     <key>CFBundleIdentifier</key>
-    <string>com.geck.mapper</string>
+    <string>com.gecko.editor</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>GECK Mapper</string>
+    <string>Gecko</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

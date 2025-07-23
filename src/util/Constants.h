@@ -3,7 +3,7 @@
 namespace geck {
 
 /**
- * @brief Common constants used throughout the GECK Mapper application
+ * @brief Common constants used throughout the Gecko application
  *
  * This file contains magic numbers that have been extracted into named constants
  * to improve code readability and maintainability.

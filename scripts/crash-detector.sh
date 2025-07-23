@@ -49,9 +49,9 @@ analyze_crash_report() {
         fi
         
         # Extract binary information
-        if grep -q "\"name\":\"geck-mapper\"" "$crash_file"; then
+        if grep -q "\"name\":\"gecko\"" "$crash_file"; then
             echo "Application Binary Info:"
-            grep -A 5 "\"name\":\"geck-mapper\"" "$crash_file" | sed 's/^/  /'
+            grep -A 5 "\"name\":\"gecko\"" "$crash_file" | sed 's/^/  /'
             echo ""
         fi
         
@@ -82,7 +82,7 @@ find_recent_crashes() {
     local current_time=$(date +%s)
     local cutoff_time=$((current_time - hours_ago * 3600))
     
-    log_info "Searching for geck-mapper crashes in the last $hours_ago hours..."
+    log_info "Searching for gecko crashes in the last $hours_ago hours..."
     
     if [[ ! -d "$CRASH_REPORTS_DIR" ]]; then
         log_warning "Crash reports directory not found: $CRASH_REPORTS_DIR"
@@ -106,7 +106,7 @@ find_recent_crashes() {
             log_info "Analysis saved to: $analysis_file"
             ((crash_count++))
         fi
-    done < <(find "$CRASH_REPORTS_DIR" -name "geck-mapper-*.ips" -print0 2>/dev/null || true)
+    done < <(find "$CRASH_REPORTS_DIR" -name "gecko-*.ips" -print0 2>/dev/null || true)
     
     if [[ $crash_count -eq 0 ]]; then
         log_success "No recent crashes found"
@@ -119,7 +119,7 @@ find_recent_crashes() {
 
 # Monitor for new crashes in real-time
 monitor_crashes() {
-    log_info "Monitoring for new geck-mapper crashes... (Press Ctrl+C to stop)"
+    log_info "Monitoring for new gecko crashes... (Press Ctrl+C to stop)"
     
     local last_check=$(date +%s)
     
@@ -147,7 +147,7 @@ monitor_crashes() {
                 head -30 "$analysis_file"
                 echo ""
             fi
-        done < <(find "$CRASH_REPORTS_DIR" -name "geck-mapper-*.ips" -print0 2>/dev/null || true)
+        done < <(find "$CRASH_REPORTS_DIR" -name "gecko-*.ips" -print0 2>/dev/null || true)
         
         last_check=$current_time
     done
@@ -170,7 +170,7 @@ cleanup_crashes() {
             rm "$crash_file"
             ((cleaned_count++))
         fi
-    done < <(find "$CRASH_REPORTS_DIR" -name "geck-mapper-*.ips" -print0 2>/dev/null || true)
+    done < <(find "$CRASH_REPORTS_DIR" -name "gecko-*.ips" -print0 2>/dev/null || true)
     
     log_success "Cleaned up $cleaned_count old crash reports"
 }

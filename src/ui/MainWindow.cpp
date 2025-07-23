@@ -874,7 +874,7 @@ void MainWindow::setupPanelsMenu() {
 
 // Dock widget state management methods
 void MainWindow::saveDockWidgetState() {
-    QSettings settings("geck", "mapper");
+    QSettings settings("gecko", "editor");
     settings.setValue("dockWidgetState", saveState());
     settings.setValue("windowGeometry", saveGeometry());
 
@@ -902,7 +902,7 @@ void MainWindow::saveDockWidgetState() {
 }
 
 void MainWindow::restoreDockWidgetState() {
-    QSettings settings("geck", "mapper");
+    QSettings settings("gecko", "editor");
 
     // Restore window geometry first
     QByteArray geometry = settings.value("windowGeometry").toByteArray();

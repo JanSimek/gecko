@@ -1,6 +1,6 @@
 
 ###################################
-# GECK Mapper executable
+# Gecko executable
 ###################################
 
 # Define source files
@@ -77,19 +77,19 @@ set(GECK_SOURCES
 if(WIN32)
     add_executable(${PROJECT_NAME} WIN32 ${GECK_SOURCES})
     # Add Windows resource file for icon
-    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/resources/geck-mapper.rc)
+    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/resources/gecko.rc)
 elseif(APPLE)
     # Add icon to bundle
-    set(MACOSX_BUNDLE_ICON_FILE geck-mapper.icns)
-    set(APP_ICON_MACOSX ${CMAKE_SOURCE_DIR}/resources/geck-mapper.icns)
+    set(MACOSX_BUNDLE_ICON_FILE gecko.icns)
+    set(APP_ICON_MACOSX ${CMAKE_SOURCE_DIR}/resources/gecko.icns)
     set_source_files_properties(${APP_ICON_MACOSX} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
     add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${GECK_SOURCES} ${APP_ICON_MACOSX})
     
     # Set bundle properties
     set_target_properties(${PROJECT_NAME} PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/Info.plist
-        MACOSX_BUNDLE_BUNDLE_NAME "GECK Mapper"
-        MACOSX_BUNDLE_GUI_IDENTIFIER "com.geck.mapper"
+        MACOSX_BUNDLE_BUNDLE_NAME "Gecko"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.gecko.editor"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
         MACOSX_BUNDLE_BUNDLE_VERSION "1"
     )

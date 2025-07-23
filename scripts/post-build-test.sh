@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_ROOT/build"
-EXECUTABLE="$BUILD_DIR/src/geck-mapper"
+EXECUTABLE="$BUILD_DIR/src/gecko"
 TEST_RESULTS_DIR="$PROJECT_ROOT/test-results"
 CRASH_REPORTS_DIR="$HOME/Library/Logs/DiagnosticReports"
 
@@ -87,7 +87,7 @@ check_crash_reports() {
                 cp "$crash_file" "$TEST_RESULTS_DIR/"
                 crash_found=true
             fi
-        done < <(find "$CRASH_REPORTS_DIR" -name "geck-mapper-*.ips" -print0 2>/dev/null || true)
+        done < <(find "$CRASH_REPORTS_DIR" -name "gecko-*.ips" -print0 2>/dev/null || true)
     fi
     
     if [[ "$crash_found" == "false" ]]; then

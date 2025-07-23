@@ -22,7 +22,7 @@ Application::Application(int argc, char** argv)
     , _mainWindow(nullptr) {
 
     _qtApp->setApplicationName("Gecko");
-    _qtApp->setApplicationDisplayName("Fallout 2 Map Editor");
+    _qtApp->setApplicationDisplayName("Gecko");
     _qtApp->setApplicationVersion("0.1");
     
     // Set application icon with platform-aware path
@@ -97,7 +97,7 @@ std::string Application::processCommandLineArgs() {
     QCommandLineParser parser;
     parser.addHelpOption();
     parser.addVersionOption();
-    parser.setApplicationDescription("Fallout 2 map editor");
+    parser.setApplicationDescription("Gecko - Fallout 2 map editor");
 
     // Determine the default resources path based on platform
     std::filesystem::path default_resources_path;
