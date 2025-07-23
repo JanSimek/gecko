@@ -212,9 +212,9 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: geck-mapper-${{ matrix.os }}-${{ matrix.build_type }}
+        name: gecko-${{ matrix.os }}-${{ matrix.build_type }}
         path: |
-          ${{ env.BUILD_DIR }}/src/geck-mapper*
+          ${{ env.BUILD_DIR }}/src/gecko*
           ${{ env.BUILD_DIR }}/tests/*_tests*
         retention-days: 7
 
