@@ -11,6 +11,8 @@
 #include <QLabel>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+#include <QComboBox>
+#include <QPushButton>
 #include <unordered_map>
 
 namespace geck {
@@ -27,12 +29,28 @@ public:
     explicit MapInfoPanel(QWidget* parent = nullptr);
 
     void setMap(Map* map);
+    void setPlayerPosition(int hexPosition);
+
+signals:
+    void playerPositionChanged(int position);
+    void playerElevationChanged(int elevation);
+    void playerOrientationChanged(int orientation);
+    void selectPlayerPositionRequested();
+    void mapScriptIdChanged(int scriptId);
+    void darknessChanged(int darkness);
+    void timestampChanged(int timestamp);
+
+private slots:
+    void onFieldChanged();
+    void onOrientationChanged(int index);
+    void onSelectPositionClicked();
 
 private:
     void setupUI();
     void updateMapInfo();
     void loadScriptVars();
     void clearMapInfo();
+    void updateMapScriptsDisplay();
 
     QVBoxLayout* _mainLayout;
     QScrollArea* _scrollArea;
@@ -44,8 +62,9 @@ private:
     QLineEdit* _filenameEdit;
     QSpinBox* _elevationsSpin;
     QSpinBox* _playerPositionSpin;
+    QPushButton* _setPositionButton;
     QSpinBox* _playerElevationSpin;
-    QSpinBox* _playerOrientationSpin;
+    QComboBox* _playerOrientationCombo;
     QSpinBox* _globalVarsSpin;
     QSpinBox* _localVarsSpin;
     QLineEdit* _mapScriptEdit;

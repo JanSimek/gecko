@@ -38,7 +38,8 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
     , _view({ 0.f, 0.f }, sf::Vector2f(800.f, 600.f)) // Default size, will be updated on first resize
     , _map(std::move(map))
     , _hexSprite(createHexTexture())
-    , _hexHighlightSprite(createCursorHexTexture()) {
+    , _hexHighlightSprite(createCursorHexTexture())
+    , _playerPositionSprite(createCursorHexTexture()) {
 
     // Set texture rectangle to show only half of HEX.frm (right half for highlighting)
     sf::Vector2u textureSize = _hexHighlightSprite.getTexture().getSize();
@@ -47,6 +48,13 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
             sf::Vector2i(static_cast<int>(textureSize.x / 2), 0),
             sf::Vector2i(static_cast<int>(textureSize.x / 2), static_cast<int>(textureSize.y))));
     _hexHighlightSprite.setColor(sf::Color(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B, 255));
+    
+    // Set up player position marker (blue color for visibility)
+    _playerPositionSprite.setTextureRect(
+        sf::IntRect(
+            sf::Vector2i(static_cast<int>(textureSize.x / 2), 0),
+            sf::Vector2i(static_cast<int>(textureSize.x / 2), static_cast<int>(textureSize.y))));
+    _playerPositionSprite.setColor(sf::Color(50, 150, 255, 200)); // Semi-transparent blue
 
     // Initialize sprite vectors with blank texture
     const sf::Texture& blankTexture = createBlankTexture();
@@ -559,6 +567,19 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 // and mouse move handle area drag detection
                 return; // Don't process as selection
             }
+            
+            // Check if we're in player position selection mode
+            if (_playerPositionSelectionMode) {
+                int hexPosition = worldPosToHexPosition(worldPos);
+                if (hexPosition >= 0) {
+                    emit playerPositionSelected(hexPosition);
+                    spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
+                }
+                
+                // Exit selection mode after selection
+                _playerPositionSelectionMode = false;
+                return; // Don't process as normal selection
+            }
 
             // Detect modifier keys for multi-selection
             SelectionModifier modifier = SelectionModifier::NONE;
@@ -923,6 +944,24 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
                 _hexHighlightSprite.setPosition({ spriteX, spriteY });
                 window->draw(_hexHighlightSprite);
                 break;
+            }
+        }
+    }
+    
+    // Render player default position marker
+    if (_map) {
+        uint32_t playerPosition = _map->getMapFile().header.player_default_position;
+        if (playerPosition < HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT) {
+            // Find the hex with the matching position
+            for (const auto& hex : _hexgrid.grid()) {
+                if (hex.position() == playerPosition) {
+                    float spriteX = static_cast<float>(hex.x() - 16);
+                    float spriteY = static_cast<float>(hex.y() - 8);
+
+                    _playerPositionSprite.setPosition({ spriteX, spriteY });
+                    window->draw(_playerPositionSprite);
+                    break;
+                }
             }
         }
     }
@@ -2081,6 +2120,17 @@ void EditorWidget::cancelDragPreview() {
     _previewObjectCategory = 0;
     _previewObjectInfo = nullptr;
     _currentHoverHex = -1;
+}
+
+void EditorWidget::enterPlayerPositionSelectionMode() {
+    // Exit any current modes
+    _tilePlacementMode = false;
+    _tilePlacementReplaceMode = false;
+    
+    // Enter player position selection mode
+    _playerPositionSelectionMode = true;
+    
+    spdlog::debug("EditorWidget: Entered player position selection mode");
 }
 
 } // namespace geck

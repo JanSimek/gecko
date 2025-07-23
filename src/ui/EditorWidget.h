@@ -48,6 +48,9 @@ public:
     void cycleSelectionMode();
     void rotateSelectedObject();
     void changeElevation(int elevation);
+    
+    // Player position selection
+    void enterPlayerPositionSelectionMode();
 
     // Tile placement functionality
     void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);
@@ -113,6 +116,7 @@ signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
     void hexHoverChanged(int hexIndex);
+    void playerPositionSelected(int hexPosition);
 
 private:
     void setupUI();
@@ -246,6 +250,7 @@ private:
     // Hex grid visualization
     sf::Sprite _hexSprite;          // Hex grid sprite from HEX.frm
     sf::Sprite _hexHighlightSprite; // Red highlight sprite for mouse hover
+    sf::Sprite _playerPositionSprite; // Blue marker sprite for player default position
     int _currentHoverHex = -1;      // Current hex index under mouse cursor
 
     // Selection management
@@ -260,6 +265,9 @@ private:
     bool _tilePlacementReplaceMode = false;
     int _tilePlacementIndex = -1;
     bool _tilePlacementIsRoof = false;
+    
+    // Player position selection state
+    bool _playerPositionSelectionMode = false;
 };
 
 } // namespace geck

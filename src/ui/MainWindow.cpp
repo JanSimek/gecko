@@ -720,6 +720,20 @@ void MainWindow::connectToEditorWidget() {
 
     // Connect map loading signal
     connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, &MainWindow::handleMapLoadRequest);
+    
+    // Connect player position selection
+    if (_mapInfoPanel) {
+        connect(_mapInfoPanel, &MapInfoPanel::selectPlayerPositionRequested, 
+                _currentEditorWidget, &EditorWidget::enterPlayerPositionSelectionMode);
+        connect(_currentEditorWidget, &EditorWidget::playerPositionSelected, 
+                this, [this](int hexPosition) {
+                    if (_mapInfoPanel) {
+                        // Update the MapInfo panel with the selected position
+                        // The panel will update the underlying map data
+                        _mapInfoPanel->setPlayerPosition(hexPosition);
+                    }
+                });
+    }
 
     spdlog::info("Qt6 menu connected to EditorWidget");
 }
