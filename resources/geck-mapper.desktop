@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=GECK Mapper
+Comment=Map editor for Fallout 2
+Exec=geck-mapper
+Icon=geck-mapper
+Terminal=false
+Type=Application
+Categories=Development;Game;
