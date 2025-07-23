@@ -154,11 +154,25 @@ include(InstallRequiredSystemLibraries)
 
 install(TARGETS ${PROJECT_NAME}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        BUNDLE DESTINATION .
 )
 
 install(DIRECTORY resources/
         DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/resources
 )
+
+# Platform-specific icon installation
+if(UNIX AND NOT APPLE)
+    # Install desktop file
+    install(FILES resources/geck-mapper.desktop
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    
+    # Install icons
+    foreach(size 16 24 32 48 64 128 256 512)
+        install(FILES resources/icons/hicolor/${size}x${size}/apps/geck-mapper.png
+                DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps)
+    endforeach()
+endif()
 
 ##################################################
 # Post-Build Testing Framework

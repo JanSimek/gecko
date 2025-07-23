@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Crash Detection Utility for GECK::Mapper
+# Crash Detection Utility for Gecko
 # Monitors and analyzes application crashes
 
 set -euo pipefail
@@ -177,7 +177,7 @@ cleanup_crashes() {
 
 # Show usage
 show_usage() {
-    echo "Crash Detection Utility for GECK::Mapper"
+    echo "Crash Detection Utility for Gecko"
     echo ""
     echo "Usage: $0 [command] [options]"
     echo ""

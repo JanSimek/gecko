@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Post-Build Testing Framework for GECK::Mapper
+# Post-Build Testing Framework for Gecko
 # Automatically tests application stability after compilation
 
 set -euo pipefail
@@ -267,7 +267,7 @@ generate_report() {
     local report_file="$TEST_RESULTS_DIR/test_report.txt"
     
     {
-        echo "GECK::Mapper Post-Build Test Report"
+        echo "Gecko Post-Build Test Report"
         echo "===================================="
         echo "Date: $(date)"
         echo "Build Directory: $BUILD_DIR"
@@ -309,7 +309,7 @@ generate_report() {
 # Main test execution
 main() {
     echo "=========================================="
-    echo "GECK::Mapper Post-Build Testing Framework"
+    echo "Gecko Post-Build Testing Framework"
     echo "=========================================="
     echo ""
     

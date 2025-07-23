@@ -60,7 +60,7 @@ MainWindow::MainWindow(QWidget* parent)
     , _fileBrowserPanelAction(nullptr)
     , _isRunning(false) {
 
-    setWindowTitle("GECK::Mapper - Fallout 2 Map Editor");
+    setWindowTitle("Gecko - Fallout 2 Map Editor");
     setMinimumSize(1024, 768);
 
     setupUI();

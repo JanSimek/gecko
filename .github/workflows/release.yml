@@ -73,7 +73,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.get_version.outputs.version }}
-        release_name: GECK::Mapper ${{ steps.get_version.outputs.version }}
+        release_name: Gecko ${{ steps.get_version.outputs.version }}
         body_path: release_notes.md
         draft: false
         prerelease: ${{ contains(steps.get_version.outputs.version, 'alpha') || contains(steps.get_version.outputs.version, 'beta') || contains(steps.get_version.outputs.version, 'rc') }}

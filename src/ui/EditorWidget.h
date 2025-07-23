@@ -55,7 +55,7 @@ public:
     void replaceSelectedTiles(int newTileIndex);
 
     // Object placement functionality
-    void placeObjectAtPosition(int objectIndex, int categoryInt, sf::Vector2f worldPos);
+    void placeObjectAtPosition(sf::Vector2f worldPos);
     
     // Drag preview functionality (for palette drag and drop)
     void startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos);

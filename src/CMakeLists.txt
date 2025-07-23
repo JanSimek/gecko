@@ -2,8 +2,9 @@
 ###################################
 # GECK Mapper executable
 ###################################
-add_executable (${PROJECT_NAME}
 
+# Define source files
+set(GECK_SOURCES
     main.cpp
 
     Application.h
@@ -71,6 +72,30 @@ add_executable (${PROJECT_NAME}
     # Path utilities
     util/PathUtils.h
 )
+
+# Platform-specific executable settings
+if(WIN32)
+    add_executable(${PROJECT_NAME} WIN32 ${GECK_SOURCES})
+    # Add Windows resource file for icon
+    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/resources/geck-mapper.rc)
+elseif(APPLE)
+    # Add icon to bundle
+    set(MACOSX_BUNDLE_ICON_FILE geck-mapper.icns)
+    set(APP_ICON_MACOSX ${CMAKE_SOURCE_DIR}/resources/geck-mapper.icns)
+    set_source_files_properties(${APP_ICON_MACOSX} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${GECK_SOURCES} ${APP_ICON_MACOSX})
+    
+    # Set bundle properties
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/Info.plist
+        MACOSX_BUNDLE_BUNDLE_NAME "GECK Mapper"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.geck.mapper"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1"
+    )
+else()
+    add_executable(${PROJECT_NAME} ${GECK_SOURCES})
+endif()
 
 ###################################
 # GECK Library "Vault"
@@ -205,10 +230,25 @@ if(WIN32)
     )
 endif()
 
-add_custom_command(
-    TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-)
+# Copy resources to appropriate location based on platform
+if(APPLE)
+    # For macOS bundles, copy to Resources directory
+    add_custom_command(
+        TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/resources
+    )
+    # Also copy the main icon.png to Resources root for easy access
+    add_custom_command(
+        TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/resources/icon.png $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/icon.png
+    )
+else()
+    # For other platforms, copy to executable directory
+    add_custom_command(
+        TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+    )
+endif()
 
 # Optionally run tests automatically after build
 if(GECK_AUTO_TEST)

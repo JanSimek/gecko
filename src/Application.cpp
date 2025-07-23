@@ -5,6 +5,8 @@
 #include <QCommandLineParser>
 #include <QCommandLineOption>
 #include <QObject>
+#include <QIcon>
+#include <QCoreApplication>
 
 #include "state/loader/MapLoader.h"
 #include "util/ResourceManager.h"
@@ -19,9 +21,31 @@ Application::Application(int argc, char** argv)
     : _qtApp(std::make_unique<QApplication>(argc, argv))
     , _mainWindow(nullptr) {
 
-    _qtApp->setApplicationName("GECK::Mapper");
+    _qtApp->setApplicationName("Gecko");
     _qtApp->setApplicationDisplayName("Fallout 2 Map Editor");
     _qtApp->setApplicationVersion("0.1");
+    
+    // Set application icon with platform-aware path
+    std::filesystem::path iconPath;
+    
+#ifdef __APPLE__
+    // Check if we're running from a macOS app bundle
+    QString appPath = QCoreApplication::applicationDirPath();
+    if (appPath.contains(".app/Contents/MacOS")) {
+        // We're in a bundle, icon is in ../Resources
+        iconPath = appPath.toStdString();
+        iconPath = iconPath.parent_path() / "Resources" / "icon.png";
+    } else {
+        // Not in a bundle, use relative path
+        iconPath = "resources/icon.png";
+    }
+#else
+    // For Windows and Linux, use relative path
+    iconPath = "resources/icon.png";
+#endif
+    
+    QIcon appIcon(QString::fromStdString(iconPath.string()));
+    _qtApp->setWindowIcon(appIcon);
 
     const std::string finalMapPath = processCommandLineArgs();
 
@@ -75,10 +99,28 @@ std::string Application::processCommandLineArgs() {
     parser.addVersionOption();
     parser.setApplicationDescription("Fallout 2 map editor");
 
-    const std::filesystem::path resources_path = std::filesystem::current_path() / geck::Application::RESOURCES_DIR;
+    // Determine the default resources path based on platform
+    std::filesystem::path default_resources_path;
+    
+#ifdef __APPLE__
+    // Check if we're running from a macOS app bundle
+    QString appPath = QCoreApplication::applicationDirPath();
+    if (appPath.contains(".app/Contents/MacOS")) {
+        // We're in a bundle, resources are in ../Resources
+        default_resources_path = appPath.toStdString();
+        default_resources_path = default_resources_path.parent_path() / "Resources" / geck::Application::RESOURCES_DIR;
+    } else {
+        // Not in a bundle, use current directory
+        default_resources_path = std::filesystem::current_path() / geck::Application::RESOURCES_DIR;
+    }
+#else
+    // For Windows and Linux, use current directory
+    default_resources_path = std::filesystem::current_path() / geck::Application::RESOURCES_DIR;
+#endif
+
     QCommandLineOption dataOption(QStringList() << "d" << "data",
         "Path to the Fallout 2 directory or individual data files, e.g. master.dat and critter.dat",
-        "path", QString::fromStdString(resources_path.string()));
+        "path", QString::fromStdString(default_resources_path.string()));
     parser.addOption(dataOption);
 
     QCommandLineOption mapOption(QStringList() << "m" << "map",

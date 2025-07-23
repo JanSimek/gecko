@@ -1853,7 +1853,7 @@ const sf::Texture& EditorWidget::createBlankTexture() {
     }
 }
 
-void EditorWidget::placeObjectAtPosition(int objectIndex, int categoryInt, sf::Vector2f worldPos) {
+void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     if (!_map) {
         spdlog::warn("EditorWidget: Cannot place object - no map loaded");
         return;
@@ -2063,7 +2063,7 @@ void EditorWidget::finishDragPreview(sf::Vector2f worldPos) {
     int hexPosition = worldPosToHexPosition(worldPos);
     if (hexPosition >= 0 && hexPosition < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT)) {
         // Place the actual object
-        placeObjectAtPosition(_previewObjectIndex, _previewObjectCategory, worldPos);
+        placeObjectAtPosition(worldPos);
         
         spdlog::info("EditorWidget: Finished drag preview - placed object at hex {}", hexPosition);
     } else {

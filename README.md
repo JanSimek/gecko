@@ -1,20 +1,10 @@
-# GECK::Mapper - Fallout 2 map editor
+# Gecko - Fallout 2 map editor
 
 [![Build](https://github.com/JanSimek/geck-map-editor/workflows/Build/badge.svg)](https://github.com/JanSimek/geck-map-editor/actions) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/50b6611a3e2246c6b07282f87aa5940a)](https://www.codacy.com/gh/JanSimek/geck-map-editor/dashboard?utm_source=github.com&utm_medium=referral&utm_content=JanSimek/geck-map-editor&utm_campaign=Badge_Grade)
 
-GECK::Mapper is a modern Fallout 2 map editor written in C++20 using Qt6 Framework for the user interface and SFML for 2D graphics rendering. The application functions as both a map viewer and editor with ongoing development toward full-featured map editing capabilities.
+*Gecko* is a modern cross-platform Fallout 2 map editor.
 
 ![Screenshot](https://github.com/JanSimek/geck-map-editor/blob/master/screenshot.jpg "Screenshot")
-
-## Features
-
-- **Modern Qt6 Interface**: Native platform integration with menus, toolbars, and dockable panels
-- **SFML Graphics Engine**: High-performance 2D rendering for game graphics
-- **Advanced Selection System**: Multiple selection modes with multi-selection support and intelligent cycling
-- **Map Format Support**: Full compatibility with Fallout 2 MAP files and DAT archives
-- **Object Management**: View, select, and manipulate map objects with proper z-ordering
-- **Tile Editing**: Support for both floor and roof tiles with visual highlighting
-- **Cross-Platform**: Runs on Linux, Windows, and macOS
 
 ## Building from source
 
@@ -25,9 +15,8 @@ This repository contains dependencies as git submodules. When you clone the repo
 ### Dependencies
 
 - **Qt6** (Core, Widgets) - Primary UI framework
-- **SFML 2.5+** - 2D graphics rendering
+- **SFML 3+** - 2D graphics rendering
 - **spdlog** - Logging framework
-- **Catch2** - Testing framework (optional)
 - **vfspp** - Virtual file system for game archives
 - **ZLIB** - Compression support
 
@@ -74,7 +63,7 @@ make
 
 ### Setup
 
-1. Copy `master.dat` and `critter.dat` from your Fallout 2 installation to the `resources` subdirectory
+1. Copy `master.dat` and `critter.dat` from your Fallout 2 installation to the `resources` subdirectory (`gecko.app/Contents/Resources` on Mac)
 2. (Optional) Extract data files using [dat-unpacker](https://github.com/falltergeist/dat-unpacker) with the `--transform` option to convert filenames to lowercase
 
 ### Controls
@@ -108,41 +97,13 @@ The editor supports multiple selection modes accessible via the toolbar:
 - **Ctrl+D**: Deselect all items
 
 #### Object Manipulation
-- **R key**: Rotate selected object(s) - works with single or multiple selected objects
-- **Ctrl+R**: Alternative rotation shortcut
+- **R key** or **Ctrl+R**: Rotate selected object(s) - works with single or multiple selected objects
 
 #### File Operations
 - **Ctrl+N**: Create new map
 - **Ctrl+O**: Open existing map
 - **Ctrl+S**: Save current map
 - **Ctrl+Q**: Quit application
-
-### Interface Elements
-
-- **Map Info Panel**: Displays information about the currently loaded map
-- **Selected Object Panel**: Shows details of the currently selected object
-- **Main Toolbar**: Quick access to selection modes and common actions
-- **Menu Bar**: Full access to all application features
-
-## Architecture
-
-The application follows a state machine pattern with clear separation of concerns:
-
-### Core Components
-- **Application**: Main application class managing Qt6 lifecycle and state machine
-- **MainWindow**: Qt6 main window with menus, toolbars, and dock widgets
-- **SFMLWidget**: Qt6 widget embedding SFML rendering for game graphics
-- **StateMachine**: Manages application states using a stack-based approach
-- **EditorState**: Main editing interface with Qt6 signal integration
-- **ResourceManager**: Singleton managing game assets and VFS integration
-
-### File Format Support
-- **DAT**: Archive files containing game data
-- **MAP**: Map files with tiles, objects, and scripts
-- **FRM**: Sprite/animation files
-- **PAL**: Color palette files
-- **PRO**: Object prototype definitions
-- **MSG**: Text/dialogue files
 
 ## Development
 
@@ -186,3 +147,4 @@ This project wouldn't be possible without the excellent work from:
 
 - [Complete Fallout 1 & 2 Artwork Collection](https://www.nma-fallout.com/threads/the-complete-fallout-1-2-artwork.191548/)
 - [Fallout File Format Documentation](https://falloutmods.fandom.com/wiki/Fallout_file_formats)
+- [Modding guide by Femic et al.](https://f3mic.github.io/)
