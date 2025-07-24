@@ -76,18 +76,36 @@ void MapLoader::load() {
     }
 
     // TODO: move to a new loader that is called only once per application start
-    for (const auto& lst_path : requiredLstFiles) {
-        ResourceManager::getInstance().loadResource<Lst>(lst_path);
+    try {
+        for (const auto& lst_path : requiredLstFiles) {
+            ResourceManager::getInstance().loadResource<Lst>(lst_path);
+        }
+    } catch (const std::exception& e) {
+        _errorMessage = QString("Failed to load required resource files:\n%1\n\nPlease ensure all game data files are properly configured.")
+            .arg(e.what()).toStdString();
+        _hasError = true;
+        done = true;
+        spdlog::error("Failed to load LST files: {}", e.what());
+        return;
     }
 
     setProgress("Parsing map file");
 
     // MapReader requires callback in constructor, so we need to create it directly
-    auto proLoadCallback = [&](uint32_t PID) {
-        return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(PID));
-    };
-    MapReader map_reader{ proLoadCallback };
-    _map = map_reader.openFile(_mapPath);
+    try {
+        auto proLoadCallback = [&](uint32_t PID) {
+            return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(PID));
+        };
+        MapReader map_reader{ proLoadCallback };
+        _map = map_reader.openFile(_mapPath);
+    } catch (const std::exception& e) {
+        _errorMessage = QString("Failed to parse map file:\n%1\n\nPlease ensure all game data files are properly configured.")
+            .arg(e.what()).toStdString();
+        _hasError = true;
+        done = true;
+        spdlog::error("Failed to parse map: {}", e.what());
+        return;
+    }
 
     if (_elevation == INVALID_ELEVATION) {
         uint32_t default_elevation = _map->getMapFile().header.player_default_elevation;
@@ -99,7 +117,17 @@ void MapLoader::load() {
     stopwatch_chunk.reset();
 
     // Tiles
-    auto lst = ResourceManager::getInstance().loadResource<Lst>("art/tiles/tiles.lst");
+    Lst* lst = nullptr;
+    try {
+        lst = ResourceManager::getInstance().loadResource<Lst>("art/tiles/tiles.lst");
+    } catch (const std::exception& e) {
+        _errorMessage = QString("Failed to load tiles list file:\n%1\n\nPlease ensure all game data files are properly configured.")
+            .arg(e.what()).toStdString();
+        _hasError = true;
+        done = true;
+        spdlog::error("Failed to load tiles.lst: {}", e.what());
+        return;
+    }
 
     //    auto tiles = _map->tiles().at(_elevation);
     //    for (auto tileNumber = 0U; tileNumber < geck::Map::TILES_PER_ELEVATION; tileNumber++) {
