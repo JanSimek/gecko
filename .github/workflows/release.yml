@@ -58,9 +58,9 @@ jobs:
         echo "## Installation" >> release_notes.md
         echo "" >> release_notes.md
         echo "Download the appropriate package for your platform:" >> release_notes.md
-        echo "- **Windows**: \`geck-mapper-windows-installer.exe\`" >> release_notes.md
-        echo "- **macOS**: \`geck-mapper-macos.dmg\`" >> release_notes.md
-        echo "- **Linux**: \`geck-mapper-linux.AppImage\`" >> release_notes.md
+        echo "- **Windows**: \`gecko-windows-installer.exe\`" >> release_notes.md
+        echo "- **macOS**: \`gecko-macos.dmg\`" >> release_notes.md
+        echo "- **Linux**: \`gecko-linux.AppImage\`" >> release_notes.md
         echo "" >> release_notes.md
         echo "## Requirements" >> release_notes.md
         echo "- Copy \`master.dat\` and \`critter.dat\` from your Fallout 2 installation" >> release_notes.md
@@ -90,19 +90,19 @@ jobs:
           - {
               name: "Windows",
               os: windows-latest,
-              artifact: "geck-mapper-windows",
+              artifact: "gecko-windows",
               package_cmd: "scripts/package-windows.ps1"
             }
           - {
               name: "macOS",
               os: macos-latest,
-              artifact: "geck-mapper-macos",
+              artifact: "gecko-macos",
               package_cmd: "scripts/package-macos.sh"
             }
           - {
               name: "Linux",
               os: ubuntu-latest,
-              artifact: "geck-mapper-linux",
+              artifact: "gecko-linux",
               package_cmd: "scripts/package-linux.sh"
             }
 
@@ -212,10 +212,10 @@ jobs:
         New-Item -ItemType Directory -Force -Path "dist"
         
         # Copy main executable
-        Copy-Item "build/src/Release/geck-mapper.exe" "dist/"
+        Copy-Item "build/src/Release/gecko.exe" "dist/"
         
         # Use windeployqt to gather Qt dependencies
-        & "C:/vcpkg/installed/x64-windows/tools/Qt6/bin/windeployqt.exe" "dist/geck-mapper.exe"
+        & "C:/vcpkg/installed/x64-windows/tools/Qt6/bin/windeployqt.exe" "dist/gecko.exe"
         
         # Copy SFML and other DLLs from vcpkg
         $vcpkgBin = "C:/vcpkg/installed/x64-windows/bin"
@@ -238,7 +238,7 @@ jobs:
         InstallDir `$PROGRAMFILES64\GECKMapper
         
         Name "`${APPNAME}"
-        OutFile "geck-mapper-windows-installer.exe"
+        OutFile "gecko-windows-installer.exe"
         
         Section "Install"
             SetOutPath `$INSTDIR
@@ -250,7 +250,7 @@ jobs:
             makensis installer.nsi
         } else {
             # Fallback to zip
-            Compress-Archive -Path "dist/*" -DestinationPath "geck-mapper-windows.zip"
+            Compress-Archive -Path "dist/*" -DestinationPath "gecko-windows.zip"
         }
         EOF
         fi
@@ -269,7 +269,7 @@ jobs:
         mkdir -p "$DIST_DIR/$APP_DIR/Contents/"{MacOS,Resources,Frameworks}
         
         # Copy executable
-        cp "build/src/geck-mapper" "$DIST_DIR/$APP_DIR/Contents/MacOS/"
+        cp "build/src/gecko" "$DIST_DIR/$APP_DIR/Contents/MacOS/"
         
         # Create Info.plist
         cat > "$DIST_DIR/$APP_DIR/Contents/Info.plist" << PLIST
@@ -278,7 +278,7 @@ jobs:
         <plist version="1.0">
         <dict>
             <key>CFBundleExecutable</key>
-            <string>geck-mapper</string>
+            <string>gecko</string>
             <key>CFBundleIdentifier</key>
             <string>com.jansimek.geckmapper</string>
             <key>CFBundleName</key>
@@ -312,12 +312,12 @@ jobs:
                 --icon "$APP_NAME.app" 175 120 \
                 --hide-extension "$APP_NAME.app" \
                 --app-drop-link 425 120 \
-                "geck-mapper-macos.dmg" \
+                "gecko-macos.dmg" \
                 "$DIST_DIR/"
         else
             # Fallback: create zip
             cd "$DIST_DIR"
-            zip -r "../geck-mapper-macos.zip" "$APP_DIR"
+            zip -r "../gecko-macos.zip" "$APP_DIR"
             cd ..
         fi
         EOF
@@ -336,23 +336,23 @@ jobs:
         mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
         
         # Copy executable
-        cp build/src/geck-mapper AppDir/usr/bin/
+        cp build/src/gecko AppDir/usr/bin/
         
         # Create desktop file
-        cat > AppDir/usr/share/applications/geck-mapper.desktop << EOF2
+        cat > AppDir/usr/share/applications/gecko.desktop << EOF2
         [Desktop Entry]
         Type=Application
         Name=GECK Mapper
         Comment=Fallout 2 Map Editor
-        Exec=geck-mapper
-        Icon=geck-mapper
+        Exec=gecko
+        Icon=gecko
         Categories=Graphics;Development;
         EOF2
         
         # Copy icon if available
         if [ -f "resources/gecko-icon.png" ]; then
-            cp resources/gecko-icon.png AppDir/usr/share/icons/hicolor/256x256/apps/geck-mapper.png
-            cp resources/gecko-icon.png AppDir/geck-mapper.png
+            cp resources/gecko-icon.png AppDir/usr/share/icons/hicolor/256x256/apps/gecko.png
+            cp resources/gecko-icon.png AppDir/gecko.png
         fi
         
         # Create AppRun
@@ -361,7 +361,7 @@ jobs:
         HERE="$(dirname "$(readlink -f "${0}")")"
         export PATH="${HERE}/usr/bin:${PATH}"
         export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
-        exec "${HERE}/usr/bin/geck-mapper" "$@"
+        exec "${HERE}/usr/bin/gecko" "$@"
         EOF3
         chmod +x AppDir/AppRun
         
@@ -369,7 +369,7 @@ jobs:
         linuxdeploy --appdir AppDir --plugin qt --output appimage
         
         # Rename the generated AppImage
-        mv GECK*.AppImage geck-mapper-linux.AppImage 2>/dev/null || true
+        mv GECK*.AppImage gecko-linux.AppImage 2>/dev/null || true
         EOF
           chmod +x scripts/package-linux.sh
         fi
@@ -390,11 +390,11 @@ jobs:
       with:
         upload_url: ${{ needs.create-release.outputs.upload_url }}
         asset_path: |
-          geck-mapper-windows-installer.exe
-          geck-mapper-windows.zip
-          geck-mapper-macos.dmg
-          geck-mapper-macos.zip
-          geck-mapper-linux.AppImage
+          gecko-windows-installer.exe
+          gecko-windows.zip
+          gecko-macos.dmg
+          gecko-macos.zip
+          gecko-linux.AppImage
         asset_name: ${{ matrix.config.artifact }}
         asset_content_type: application/octet-stream
 
@@ -403,9 +403,9 @@ jobs:
       with:
         name: ${{ matrix.config.artifact }}-${{ needs.create-release.outputs.version }}
         path: |
-          geck-mapper-windows-installer.exe
-          geck-mapper-windows.zip
-          geck-mapper-macos.dmg
-          geck-mapper-macos.zip
-          geck-mapper-linux.AppImage
+          gecko-windows-installer.exe
+          gecko-windows.zip
+          gecko-macos.dmg
+          gecko-macos.zip
+          gecko-linux.AppImage
         retention-days: 90

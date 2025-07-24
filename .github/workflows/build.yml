@@ -130,25 +130,28 @@ jobs:
         echo "=== Setting up Qt6 on macOS ==="
         
         # Install Qt6 and required dependencies
-        brew install qt@6 double-conversion libb2
+        brew install qt@6 double-conversion libb2 md4c
     
         # Link Qt6 (since it's keg-only and not linked by default)
         brew link qt@6 --force --overwrite
         brew link double-conversion --force
         brew link libb2 --force
+        brew link md4c --force
     
         # Get Homebrew prefix and paths
         HOMEBREW_PREFIX=$(brew --prefix)
         QT6_PATH=$(brew --prefix qt@6)
         LIBB2_PATH=$(brew --prefix libb2)
+        MD4C_PATH=$(brew --prefix md4c)
         
         echo "Homebrew prefix: $HOMEBREW_PREFIX"
         echo "Qt6 installed at: $QT6_PATH"
         echo "libb2 installed at: $LIBB2_PATH"
+        echo "md4c installed at: $MD4C_PATH"
     
-        # Set up library paths for Qt tools to find libb2
-        export DYLD_LIBRARY_PATH="$LIBB2_PATH/lib:$HOMEBREW_PREFIX/lib:$DYLD_LIBRARY_PATH"
-        export LD_LIBRARY_PATH="$LIBB2_PATH/lib:$HOMEBREW_PREFIX/lib:$LD_LIBRARY_PATH"
+        # Set up library paths for Qt tools to find libb2 and md4c
+        export DYLD_LIBRARY_PATH="$LIBB2_PATH/lib:$MD4C_PATH/lib:$HOMEBREW_PREFIX/lib:$DYLD_LIBRARY_PATH"
+        export LD_LIBRARY_PATH="$LIBB2_PATH/lib:$MD4C_PATH/lib:$HOMEBREW_PREFIX/lib:$LD_LIBRARY_PATH"
         echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
         echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> $GITHUB_ENV
         
@@ -189,15 +192,36 @@ jobs:
           exit 1
         fi
         
-        # Test that Qt tools can find libb2 with the exported paths
+        # Verify md4c is available
+        echo "Checking for md4c library..."
+        # Look for md4c libraries (versioned or unversioned)
+        MD4C_FOUND=false
+        for lib in "$MD4C_PATH/lib/libmd4c.dylib" "$MD4C_PATH/lib/libmd4c.0.dylib" "$MD4C_PATH/lib/libmd4c.*.dylib"; do
+          if [[ -f "$lib" ]]; then
+            echo "✅ md4c library found: $lib"
+            MD4C_FOUND=true
+            break
+          fi
+        done
+        
+        if [[ "$MD4C_FOUND" == "false" ]]; then
+          echo "❌ md4c library not found in expected locations"
+          echo "Contents of $MD4C_PATH/lib/:"
+          ls -la "$MD4C_PATH/lib/" | grep -i md4c || echo "No md4c files found"
+          echo "Searching for md4c libraries system-wide..."
+          find "$HOMEBREW_PREFIX" -name "*md4c*" 2>/dev/null || echo "No md4c libraries found"
+          exit 1
+        fi
+        
+        # Test that Qt tools can find libb2 and md4c with the exported paths
         echo "Testing Qt uic tool with library paths..."
         echo "Current DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
         if DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH" "$QT6_PATH/share/qt/libexec/uic" -h > /dev/null 2>&1; then
-          echo "✅ Qt uic tool can load with libb2"
+          echo "✅ Qt uic tool can load with all required libraries"
         else
           echo "❌ Qt uic tool failed to load"
           echo "Trying to diagnose..."
-          DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH" otool -L "$QT6_PATH/share/qt/libexec/uic" | grep -i libb2 || true
+          DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH" otool -L "$QT6_PATH/share/qt/libexec/uic" | grep -i -E "(libb2|md4c)" || true
           exit 1
         fi
 

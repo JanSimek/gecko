@@ -193,7 +193,7 @@ const sf::Image ResourceManager::imageFromFrm(Frm* frm, Pal* pal) {
             for (int x = 0; x < frame.width(); x++) {
                 for (int y = 0; y < frame.height(); y++) {
 
-                    uint8_t paletteIndex = frame.index(x, y);
+                    uint8_t paletteIndex = frame.index(static_cast<uint16_t>(x), static_cast<uint16_t>(y));
                     geck::Rgb color = colors[paletteIndex];
 
                     constexpr uint8_t white = 255;

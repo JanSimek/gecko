@@ -20,7 +20,7 @@ void Map::setMapFile(std::unique_ptr<MapFile> newMapFile) {
 }
 
 int Map::elevations() const {
-    return static_cast<int>(mapFile->tiles.size());
+    return static_cast<int>(objects().size());
 }
 
 } // namespace geck

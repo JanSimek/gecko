@@ -90,6 +90,7 @@ private:
     void setupPanelsMenu();
     void connectMenuSignals();
     void updatePanelMenuActions();
+    void updateElevationMenu(Map* map);
 
     // Dock widget state management
     void saveDockWidgetState();
@@ -141,6 +142,11 @@ private:
     QAction* _tilePalettePanelAction;
     QAction* _objectPalettePanelAction;
     QAction* _fileBrowserPanelAction;
+
+    // Elevation menu actions
+    QAction* _elevation1Action;
+    QAction* _elevation2Action;
+    QAction* _elevation3Action;
 
     bool _isRunning;
 };

@@ -146,5 +146,5 @@ This project wouldn't be possible without the excellent work from:
 ## Useful Links
 
 - [Complete Fallout 1 & 2 Artwork Collection](https://www.nma-fallout.com/threads/the-complete-fallout-1-2-artwork.191548/)
-- [Fallout File Format Documentation](https://falloutmods.fandom.com/wiki/Fallout_file_formats)
+- [Fallout File Format Documentation](https://falloutmods.fandom.com/wiki/Category:Fallout_and_Fallout_2_file_formats)
 - [Modding guide by Femic et al.](https://f3mic.github.io/)

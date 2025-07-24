@@ -63,13 +63,11 @@ void MapInfoPanel::setupUI() {
     QFormLayout* headerLayout = new QFormLayout(_mapHeaderGroup);
 
     _filenameEdit = new QLineEdit();
-    _filenameEdit->setReadOnly(true);
     headerLayout->addRow("Filename:", _filenameEdit);
 
     _elevationsSpin = new QSpinBox();
-    _elevationsSpin->setRange(0, 99);
-    _elevationsSpin->setReadOnly(true);  // Keep read-only as this depends on actual map data
-    _elevationsSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    _elevationsSpin->setRange(ELEVATION_1, ELEVATION_3);
+    _elevationsSpin->setButtonSymbols(QAbstractSpinBox::PlusMinus);
     headerLayout->addRow("Map elevations:", _elevationsSpin);
 
     // Player position with button
@@ -84,7 +82,7 @@ void MapInfoPanel::setupUI() {
     headerLayout->addRow("Player default position:", positionLayout);
 
     _playerElevationSpin = new QSpinBox();
-    _playerElevationSpin->setRange(0, 99);
+    _playerElevationSpin->setRange(ELEVATION_1, ELEVATION_3);
     headerLayout->addRow("Player default elevation:", _playerElevationSpin);
 
     _playerOrientationCombo = new QComboBox();
@@ -112,7 +110,8 @@ void MapInfoPanel::setupUI() {
     headerLayout->addRow("Map script ID:", _mapScriptIdSpin);
 
     _darknessSpin = new QSpinBox();
-    _darknessSpin->setRange(0, 10);  // Typical darkness range
+    _darknessSpin->setReadOnly(true);  // unused
+    _darknessSpin->setRange(0, 10);
     headerLayout->addRow("Darkness:", _darknessSpin);
 
     _mapIdSpin = new QSpinBox();
@@ -193,7 +192,20 @@ void MapInfoPanel::updateMapInfo() {
 
     try {
         auto& mapInfo = _map->getMapFile();
-        int elevations = mapInfo.tiles.size();
+
+        int elevations = 0;
+        if ((mapInfo.header.flags & 0x2) == 0) {
+            spdlog::debug("Map has elevation at level 1");
+            elevations++;
+        }
+        if ((mapInfo.header.flags & 0x4) == 0) {
+            spdlog::debug("Map has elevation at level 2");
+            elevations++;
+        }
+        if ((mapInfo.header.flags & 0x8) == 0) {
+            spdlog::debug("Map has elevation at level 3");
+            elevations++;
+        }
 
         // Update map header information
         _filenameEdit->setText(QString::fromStdString(mapInfo.header.filename));
@@ -322,53 +334,17 @@ void MapInfoPanel::loadScriptVars() {
             // Load map script name
             int map_script_id = _map->getMapFile().header.script_id;
             if (map_script_id > 0) {
-                // Try different possible locations for scripts.lst in VFS
-                std::vector<std::string> possibleScriptPaths = {
-                    "scripts/scripts.lst",           // Standard location
-                    "scripts.lst",                   // Root directory
-                    "data/scripts.lst",              // Data directory
-                    "data/scripts/scripts.lst",      // Data/scripts directory
-                    "text/english/game/scripts.lst", // Localized location
-                    "art/intrface/scripts.lst"       // Alternative location
-                };
-                
-                bool scriptFound = false;
-                for (const auto& path : possibleScriptPaths) {
-                    // Check if file exists in VFS before trying to load it
-                    if (ResourceManager::getInstance().fileExistsInVFS(path)) {
-                        auto scripts = ResourceManager::getInstance().loadResource<Lst>(path);
-                        if (scripts) {
-                            try {
-                                // Get the list and validate script ID bounds
-                                const auto& scriptList = scripts->list();
-                                if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
-                                    _mapScriptName = scripts->at(map_script_id - 1); // script id starts at 1
-                                    scriptFound = true;
-                                    spdlog::debug("Script name '{}' found for ID {} in: {}", _mapScriptName, map_script_id, path);
-                                    break;
-                                } else {
-                                    spdlog::warn("Script ID {} out of bounds for scripts.lst size {} in: {}", map_script_id, scriptList.size(), path);
-                                }
-                            } catch (const std::exception& e) {
-                                spdlog::warn("Failed to get script name for ID {} from {}: {}", map_script_id, path, e.what());
-                            }
-                        } else {
-                            spdlog::warn("Failed to load scripts.lst from VFS path: {}", path);
-                        }
-                    }
+                auto scripts = ResourceManager::getInstance().loadResource<Lst>("scripts/scripts.lst");
+                const auto& scriptList = scripts->list();
+                if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
+                    _mapScriptName = scripts->at(map_script_id - 1); // script id starts at 1
+                    spdlog::debug("Script name '{}' found for ID {} in: {}", _mapScriptName, map_script_id, "scripts/scripts.lst");
+                } else {
+                    _mapScriptName = "invalid script index";
+                    spdlog::warn("Script ID {} out of bounds for scripts.lst size {} in: {}", map_script_id, scriptList.size(), "scripts/scripts.lst");
                 }
-                
-                if (!scriptFound) {
-                    _mapScriptName = QString("Script ID %1 (scripts.lst not found)").arg(map_script_id).toStdString();
-                    spdlog::warn("Could not load scripts.lst from any VFS location for script ID {}:", map_script_id);
-                    for (const auto& path : possibleScriptPaths) {
-                        spdlog::warn("  - Tried: {}", path);
-                    }
-                }
-            } else if (map_script_id == -1) {
-                _mapScriptName = "no script";
             } else {
-                _mapScriptName = QString("Invalid script ID: %1").arg(map_script_id).toStdString();
+                _mapScriptName = "no script";
             }
         }
     } catch (const std::exception& e) {
@@ -504,7 +480,7 @@ void MapInfoPanel::updateMapScriptsDisplay() {
             } else if (_mapScriptName != "no script") {
                 scriptsInfo += "✅ Script information loaded successfully\n";
             }
-        } else if (mapInfo.header.script_id == -1) {
+        } else if (mapInfo.header.script_id == -1 || mapInfo.header.script_id == 0) {
             scriptsInfo += "No map script assigned\n";
         } else {
             scriptsInfo += QString("⚠️ Invalid script ID: %1\n").arg(mapInfo.header.script_id);

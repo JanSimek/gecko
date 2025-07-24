@@ -338,24 +338,27 @@ void MainWindow::setupMenuBar() {
     // Create action group for mutually exclusive elevation selection
     QActionGroup* elevationGroup = new QActionGroup(this);
 
-    QAction* elevation0Action = _elevationMenu->addAction("Elevation &0");
-    elevation0Action->setCheckable(true);
-    elevation0Action->setChecked(true);
-    elevation0Action->setData(0);
-    elevationGroup->addAction(elevation0Action);
-    connect(elevation0Action, &QAction::triggered, [this]() { elevationChanged(0); });
+    _elevation1Action = _elevationMenu->addAction("Elevation &1");
+    _elevation1Action->setCheckable(true);
+    _elevation1Action->setChecked(true);
+    _elevation1Action->setData(ELEVATION_1);
+    _elevation1Action->setDisabled(true);
+    elevationGroup->addAction(_elevation1Action);
+    connect(_elevation1Action, &QAction::triggered, [this]() { elevationChanged(ELEVATION_1); });
 
-    QAction* elevation1Action = _elevationMenu->addAction("Elevation &1");
-    elevation1Action->setCheckable(true);
-    elevation1Action->setData(1);
-    elevationGroup->addAction(elevation1Action);
-    connect(elevation1Action, &QAction::triggered, [this]() { elevationChanged(1); });
+    _elevation2Action = _elevationMenu->addAction("Elevation &2");
+    _elevation2Action->setCheckable(true);
+    _elevation2Action->setData(ELEVATION_2);
+    _elevation2Action->setDisabled(true);
+    elevationGroup->addAction(_elevation2Action);
+    connect(_elevation2Action, &QAction::triggered, [this]() { elevationChanged(ELEVATION_2); });
 
-    QAction* elevation2Action = _elevationMenu->addAction("Elevation &2");
-    elevation2Action->setCheckable(true);
-    elevation2Action->setData(2);
-    elevationGroup->addAction(elevation2Action);
-    connect(elevation2Action, &QAction::triggered, [this]() { elevationChanged(2); });
+    _elevation3Action = _elevationMenu->addAction("Elevation &3");
+    _elevation3Action->setCheckable(true);
+    _elevation3Action->setData(ELEVATION_3);
+    _elevation3Action->setDisabled(true);
+    elevationGroup->addAction(_elevation3Action);
+    connect(_elevation3Action, &QAction::triggered, [this]() { elevationChanged(ELEVATION_3); });
 }
 
 void MainWindow::setupToolBar() {
@@ -743,6 +746,9 @@ void MainWindow::updateMapInfo(Map* map) {
         _mapInfoPanel->setMap(map);
     }
 
+    // Update elevation menu based on available elevations
+    updateElevationMenu(map);
+
     // Load tiles into palette when map is loaded
     if (_tilePalettePanel && map) {
         // Load tile list from ResourceManager using the same method as original implementation
@@ -773,6 +779,39 @@ void MainWindow::updateMapInfo(Map* map) {
             spdlog::error("Failed to load objects for palette: {}", e.what());
         }
     }
+}
+
+void MainWindow::updateElevationMenu(Map* map) {
+    if (!map) {
+        // No map loaded, disable all elevation actions
+        _elevation1Action->setDisabled(true);
+        _elevation2Action->setDisabled(true);
+        _elevation3Action->setDisabled(true);
+        return;
+    }
+
+    // Get map flags to determine available elevations
+    uint32_t map_flags = map->getMapFile().header.flags;
+    bool hasElevation1 = ((map_flags & 0x2) == 0);
+    bool hasElevation2 = ((map_flags & 0x4) == 0);
+    bool hasElevation3 = ((map_flags & 0x8) == 0);
+
+    // Enable/disable elevation actions based on availability
+    _elevation1Action->setEnabled(hasElevation1);
+    _elevation2Action->setEnabled(hasElevation2);
+    _elevation3Action->setEnabled(hasElevation3);
+
+    // Ensure the first available elevation is selected
+    if (hasElevation1) {
+        _elevation1Action->setChecked(true);
+    } else if (hasElevation2) {
+        _elevation2Action->setChecked(true);
+    } else if (hasElevation3) {
+        _elevation3Action->setChecked(true);
+    }
+
+    spdlog::debug("Updated elevation menu: E1={}, E2={}, E3={}", 
+                  hasElevation1, hasElevation2, hasElevation3);
 }
 
 void MainWindow::handleMapLoadRequest(const std::string& mapPath) {

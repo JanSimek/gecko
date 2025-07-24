@@ -1041,7 +1041,7 @@ void EditorWidget::rotateSelectedObject() {
 }
 
 void EditorWidget::changeElevation(int elevation) {
-    if (elevation >= 0 && elevation < 2) { // Maps have 2 elevations (0 and 1)
+    if (elevation >= ELEVATION_1 && elevation < ELEVATION_3) {
         _currentElevation = elevation;
         loadSprites(); // Reload sprites for new elevation
     }
