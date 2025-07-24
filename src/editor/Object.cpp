@@ -16,6 +16,28 @@ Object::Object(const Frm* frm)
     , _frm(frm)
     , _direction(0)
     , _selected(false) {
+    
+    // Validate FRM has at least one direction
+    if (!frm) {
+        spdlog::error("Object constructor: FRM pointer is null");
+        throw std::runtime_error("Cannot create Object with null FRM");
+    }
+    
+    if (frm->directions().empty()) {
+        spdlog::error("Object constructor: FRM '{}' has no directions (size: {})", 
+                     frm->filename(), frm->directions().size());
+        throw std::runtime_error("Cannot create Object with FRM that has no directions: " + frm->filename());
+    }
+    
+    // Validate first direction has at least one frame
+    if (frm->directions().at(0).frames().empty()) {
+        spdlog::error("Object constructor: FRM '{}' direction 0 has no frames (size: {})", 
+                     frm->filename(), frm->directions().at(0).frames().size());
+        throw std::runtime_error("Cannot create Object with FRM direction that has no frames: " + frm->filename());
+    }
+    
+    spdlog::debug("Object constructor: Created object with FRM '{}' ({} directions, {} frames in direction 0)", 
+                  frm->filename(), frm->directions().size(), frm->directions().at(0).frames().size());
 }
 
 sf::Texture& Object::createBlankTexture() {

@@ -12,8 +12,8 @@ public:
         , _path(path) { }
     virtual ~IFile() = default;
 
-    const std::string& filename() { return _filename; }
-    const std::filesystem::path& path() { return _path; }
+    const std::string& filename() const { return _filename; }
+    const std::filesystem::path& path() const { return _path; }
 
 protected:
     std::string _filename;

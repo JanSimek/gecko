@@ -55,7 +55,9 @@ public:
     Resource* loadResource(const std::filesystem::path& path) {
         static_assert(std::is_base_of<IFile, Resource>::value, "Resource must derive from IFile");
 
-        if (!exists(path.string())) {
+        std::string pathKey = path.string();
+        
+        if (!exists(pathKey)) {
             // Detect format and create appropriate reader
             auto format = ReaderFactory::detectFormat(path);
             auto reader = ReaderFactory::createReader<Resource>(format);
@@ -69,10 +71,10 @@ public:
             }
             std::vector<uint8_t> data(file->Size());
             file->Read(data, file->Size());
-            _resources.emplace(path.string(), std::move(reader->openFile(path.string(), data)));
+            _resources.emplace(pathKey, std::move(reader->openFile(pathKey, data)));
         }
 
-        return dynamic_cast<Resource*>(_resources.at(path.string()).get());
+        return dynamic_cast<Resource*>(_resources.at(pathKey).get());
     }
 
     bool exists(const std::string& filename);

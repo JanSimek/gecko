@@ -176,6 +176,9 @@ void EditorWidget::setupUI() {
 
 void EditorWidget::init() {
     loadSprites();
+    
+    // Show error summary if there were loading issues
+    showLoadingErrorsSummary();
 
     // Initialize spatial index for O(1) area selection performance
     _selectionManager->initializeSpatialIndex();
@@ -251,23 +254,74 @@ void EditorWidget::loadObjectSprites() {
     if (_map->objects().empty())
         return;
 
+    size_t totalObjects = _map->objects().at(_currentElevation).size();
+    size_t objectsLoaded = 0;
+    size_t objectsSkipped = 0;
+    
+    spdlog::debug("Loading {} objects for elevation {}", totalObjects, _currentElevation);
+
     for (const auto& object : _map->objects().at(_currentElevation)) {
         if (object->position == -1)
             continue; // object inside an inventory/container
 
         const std::string frm_name = ResourceManager::getInstance().FIDtoFrmName(object->frm_pid);
 
-        spdlog::debug("Loading sprite {}", frm_name);
+        spdlog::debug("Loading object sprite: FRM='{}', position={}, direction={}, frm_pid={}", 
+                     frm_name, object->position, object->direction, object->frm_pid);
+        auto frm = ResourceManager::getInstance().getResource<Frm>(frm_name);
 
-        const auto& frm = ResourceManager::getInstance().getResource<Frm>(frm_name);
+        if (!frm) {
+            spdlog::debug("FRM '{}' not in cache, attempting on-demand loading", frm_name);
+            try {
+                ResourceManager::getInstance().loadResource<Frm>(frm_name);
+                frm = ResourceManager::getInstance().getResource<Frm>(frm_name);
+                if (!frm) {
+                    spdlog::error("Failed to load FRM resource '{}' for object at position {} - resource still null after loading", frm_name, object->position);
+                    _lastLoadErrors.failedFrmNames.insert(frm_name);
+                    _lastLoadErrors.failedObjects.emplace_back(frm_name, object->position);
+                    objectsSkipped++;
+                    continue;
+                }
+                spdlog::debug("Successfully loaded FRM '{}' on-demand", frm_name);
+            } catch (const std::exception& e) {
+                spdlog::error("Failed to load FRM '{}' for object at position {}: {}", frm_name, object->position, e.what());
+                _lastLoadErrors.failedFrmNames.insert(frm_name);
+                _lastLoadErrors.failedObjects.emplace_back(frm_name, object->position);
+                objectsSkipped++;
+                continue;
+            }
+        }
+        
+        spdlog::debug("FRM '{}' available: {} directions, filename='{}'", 
+                     frm_name, frm->directions().size(), frm->filename());
 
-        _objects.emplace_back(std::make_shared<Object>(frm));
-        sf::Sprite object_sprite{ ResourceManager::getInstance().texture(frm_name) };
-        _objects.back()->setSprite(std::move(object_sprite));
-        _objects.back()->setHexPosition(_hexgrid.grid().at(object->position));
-        _objects.back()->setMapObject(object);
-        _objects.back()->setDirection(static_cast<ObjectDirection>(object->direction));
+        try {
+            _objects.emplace_back(std::make_shared<Object>(frm));
+            sf::Sprite object_sprite{ ResourceManager::getInstance().texture(frm_name) };
+            _objects.back()->setSprite(std::move(object_sprite));
+            _objects.back()->setHexPosition(_hexgrid.grid().at(object->position));
+            _objects.back()->setMapObject(object);
+            _objects.back()->setDirection(static_cast<ObjectDirection>(object->direction));
+            
+            spdlog::debug("Successfully created object for FRM '{}' at position {}", frm_name, object->position);
+            objectsLoaded++;
+        } catch (const std::exception& e) {
+            spdlog::error("Failed to create object for FRM '{}' at position {}: {}", 
+                         frm_name, object->position, e.what());
+            // Remove the partially created object if it was added
+            if (!_objects.empty() && _objects.back() != nullptr) {
+                _objects.pop_back();
+            }
+            _lastLoadErrors.failedFrmNames.insert(frm_name);
+            _lastLoadErrors.failedObjects.emplace_back(frm_name, object->position);
+            objectsSkipped++;
+            continue; // Skip this object and continue with others
+        }
     }
+    
+    _lastLoadErrors.objectsSkipped = objectsSkipped;
+    spdlog::info("Object loading complete for elevation {}: {} loaded, {} skipped, {} total", 
+                _currentElevation, objectsLoaded, objectsSkipped, totalObjects);
 }
 
 // Tiles
@@ -315,6 +369,9 @@ void EditorWidget::loadTileSprites() {
 
 void EditorWidget::loadSprites() {
     spdlog::stopwatch sw;
+    
+    // Clear previous loading errors
+    _lastLoadErrors.clear();
 
     if (_sfmlWidget && _sfmlWidget->getRenderWindow()) {
         _sfmlWidget->getRenderWindow()->setTitle(_map->filename() + " - Gecko");
@@ -905,6 +962,7 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
 
     // Render objects with visibility filtering
     if (_showObjects) {
+        // FIXME: show walls
         for (const auto& object : _objects) {
             window->draw(object->getSprite());
         }
@@ -2131,6 +2189,46 @@ void EditorWidget::enterPlayerPositionSelectionMode() {
     _playerPositionSelectionMode = true;
     
     spdlog::debug("EditorWidget: Entered player position selection mode");
+}
+
+void EditorWidget::showLoadingErrorsSummary() {
+    if (!_lastLoadErrors.hasErrors()) {
+        return; // No errors to show
+    }
+    
+    QString title = "Map Loading Warnings";
+    QString message;
+    
+    // Build the error summary message
+    message += QString("Some objects could not be loaded:\n\n");
+    message += QString("• %1 objects skipped due to missing or invalid FRM files\n")
+               .arg(_lastLoadErrors.objectsSkipped);
+    
+    if (!_lastLoadErrors.failedFrmNames.empty()) {
+        message += QString("• %1 unique FRM files failed to load:\n\n")
+                   .arg(_lastLoadErrors.failedFrmNames.size());
+        
+        // Show up to 10 FRM files to avoid overwhelming the user
+        int count = 0;
+        const int maxShow = 10;
+        for (const auto& frmName : _lastLoadErrors.failedFrmNames) {
+            if (count >= maxShow) {
+                message += QString("  ... and %1 more\n")
+                          .arg(_lastLoadErrors.failedFrmNames.size() - maxShow);
+                break;
+            }
+            message += QString("  - %1\n").arg(QString::fromStdString(frmName));
+            count++;
+        }
+    }
+    
+    message += "\nPossible causes:\n";
+    message += "• Missing or corrupted game data files (master.dat, critter.dat)\n";
+    message += "• Incomplete Fallout 2 installation\n";
+    message += "• Custom map using non-standard resources\n\n";
+    message += "The map will continue to work with the objects that loaded successfully.";
+    
+    QtDialogs::showWarning(this, title, message);
 }
 
 } // namespace geck

@@ -68,7 +68,8 @@ bool ResourceManager::fileExistsInVFS(const std::filesystem::path& filepath) con
 }
 
 void ResourceManager::insertTexture(const std::string& filename) {
-    if (exists(filename)) {
+    // Check if texture is already in cache
+    if (_textures.find(filename) != _textures.end()) {
         return;
     }
 
@@ -97,23 +98,50 @@ const sf::Texture& ResourceManager::texture(const std::string& filename) {
         auto frm = getResource<Frm>(filename); // TODO: check extension?
 
         if (frm == nullptr) {
-            throw std::runtime_error{ "Texture " + filename + " does not exist" };
+            // Try on-demand loading if FRM resource not found
+            try {
+                insertTexture(filename);
+                
+                frm = getResource<Frm>(filename);
+                if (frm == nullptr) {
+                    // Check if texture was created directly (for non-FRM files)
+                    const auto& foundAfterLoad = _textures.find(filename);
+                    if (foundAfterLoad != _textures.end()) {
+                        return *foundAfterLoad->second;
+                    }
+                    // If still null, this file doesn't exist
+                    throw std::runtime_error{ "Texture " + filename + " does not exist" };
+                }
+            } catch (const std::exception& e) {
+                spdlog::error("ResourceManager: On-demand texture loading failed for {}: {}", filename, e.what());
+                throw std::runtime_error{ "Texture " + filename + " does not exist" };
+            }
         }
 
         auto texture = std::make_unique<sf::Texture>();
-        //        texture->create(frame.width(), frame.height());
-        //        texture->update(&frame.rgba[
+        
+        // Load palette for FRM texture creation
+        auto pal = loadResource<Pal>("color.pal"); // TODO: custom pal
+        if (!pal) {
+            throw std::runtime_error{ "Failed to load color palette for texture " + filename };
+        }
 
-        auto pal = loadResource<Pal>("color.pal"); // TODO: custom pal0]);
+        // Create image from FRM and load it into texture
+        try {
+            sf::Image image = imageFromFrm(frm, pal);
+            if (!texture->loadFromImage(image)) {
+                throw std::runtime_error{ "Failed to load texture from FRM image: " + filename };
+            }
+        } catch (const std::exception& e) {
+            throw std::runtime_error{ "Failed to create texture from FRM " + filename + ": " + e.what() };
+        }
 
-        [[maybe_unused]] bool loadSuccess = texture->loadFromImage(imageFromFrm(frm, pal));
-
+        // Store texture in cache
         auto loaded = _textures.emplace(filename, std::move(texture));
-
         if (loaded.second) {
-            return *loaded.first->second; // uh huh
+            return *loaded.first->second;
         } else {
-            throw std::runtime_error{ "Couldn't load " + filename + " from image" };
+            throw std::runtime_error{ "Failed to cache texture " + filename };
         }
     }
     return *found->second;

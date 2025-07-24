@@ -6,6 +6,9 @@
 #include <thread>
 #include <optional>
 #include <array>
+#include <set>
+#include <vector>
+#include <utility>
 
 #include <QWidget>
 #include <QVBoxLayout>
@@ -119,6 +122,23 @@ signals:
     void playerPositionSelected(int hexPosition);
 
 private:
+    // Error tracking for sprite loading
+    struct LoadingErrors {
+        size_t objectsSkipped = 0;
+        std::set<std::string> failedFrmNames;
+        std::vector<std::pair<std::string, int>> failedObjects; // FRM name, position
+        
+        void clear() {
+            objectsSkipped = 0;
+            failedFrmNames.clear();
+            failedObjects.clear();
+        }
+        
+        bool hasErrors() const {
+            return objectsSkipped > 0;
+        }
+    };
+    
     void setupUI();
     void centerViewOnMap();
     void initializeSelectionSystem();
@@ -126,6 +146,7 @@ private:
     void loadSprites();
     void loadTileSprites();
     void loadObjectSprites();
+    void showLoadingErrorsSummary();
 
     // Object selection methods (moved to public)
     bool isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
@@ -193,6 +214,9 @@ private:
     std::vector<sf::Sprite> _roofSprites;
 
     std::vector<std::shared_ptr<Object>> _objects;
+    
+    // Error tracking for last sprite loading operation
+    LoadingErrors _lastLoadErrors;
 
     sf::View _view;
 
