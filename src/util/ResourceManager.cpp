@@ -1,5 +1,15 @@
 #include "ResourceManager.h"
 
+// Prevent Windows API macros from interfering with method names
+#ifdef _WIN32
+#ifdef CreateFile
+#undef CreateFile
+#endif
+#ifdef CopyFile
+#undef CopyFile
+#endif
+#endif
+
 #include <filesystem>
 #include <memory>
 #include <stdexcept>

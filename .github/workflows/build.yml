@@ -147,12 +147,16 @@ jobs:
         echo "libb2 installed at: $LIBB2_PATH"
     
         # Set up library paths for Qt tools to find libb2
-        echo "DYLD_LIBRARY_PATH=$HOMEBREW_PREFIX/lib:$LIBB2_PATH/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
-        echo "LD_LIBRARY_PATH=$HOMEBREW_PREFIX/lib:$LIBB2_PATH/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        export DYLD_LIBRARY_PATH="$LIBB2_PATH/lib:$HOMEBREW_PREFIX/lib:$DYLD_LIBRARY_PATH"
+        export LD_LIBRARY_PATH="$LIBB2_PATH/lib:$HOMEBREW_PREFIX/lib:$LD_LIBRARY_PATH"
+        echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> $GITHUB_ENV
         
         # Export CMake path hints
-        echo "CMAKE_PREFIX_PATH=$QT6_PATH/lib/cmake" >> $GITHUB_ENV
-        echo "Qt6_DIR=$QT6_PATH/lib/cmake/Qt6" >> $GITHUB_ENV
+        export CMAKE_PREFIX_PATH="$QT6_PATH/lib/cmake:$CMAKE_PREFIX_PATH"
+        export Qt6_DIR="$QT6_PATH/lib/cmake/Qt6"
+        echo "CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH" >> $GITHUB_ENV
+        echo "Qt6_DIR=$Qt6_DIR" >> $GITHUB_ENV
     
         # Confirm existence
         echo "Looking for Qt6Config.cmake in $QT6_PATH/lib/cmake/Qt6"
@@ -182,6 +186,18 @@ jobs:
           ls -la "$LIBB2_PATH/lib/" | grep -i libb2 || echo "No libb2 files found"
           echo "Searching for libb2 libraries system-wide..."
           find "$HOMEBREW_PREFIX" -name "*libb2*" 2>/dev/null || echo "No libb2 libraries found"
+          exit 1
+        fi
+        
+        # Test that Qt tools can find libb2 with the exported paths
+        echo "Testing Qt uic tool with library paths..."
+        echo "Current DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
+        if DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH" "$QT6_PATH/share/qt/libexec/uic" -h > /dev/null 2>&1; then
+          echo "✅ Qt uic tool can load with libb2"
+        else
+          echo "❌ Qt uic tool failed to load"
+          echo "Trying to diagnose..."
+          DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH" otool -L "$QT6_PATH/share/qt/libexec/uic" | grep -i libb2 || true
           exit 1
         fi
 

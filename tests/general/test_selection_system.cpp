@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <memory>
 #include <functional>
+#include <cstdlib>
 #include <fstream>
 #include <chrono>
 #include <vector>
@@ -22,10 +23,21 @@ public:
     static std::filesystem::path getTestDataPath() {
         // Default: master directory relative to project root
         // This can be overridden with environment variable GECK_TEST_DATA_PATH
+#ifdef _WIN32
+        char* envPath = nullptr;
+        size_t len = 0;
+        _dupenv_s(&envPath, &len, "GECK_TEST_DATA_PATH");
+        if (envPath) {
+            std::filesystem::path result(envPath);
+            free(envPath);
+            return result;
+        }
+#else
         const char* envPath = std::getenv("GECK_TEST_DATA_PATH");
         if (envPath) {
             return std::filesystem::path(envPath);
         }
+#endif
 
         // Try multiple potential paths for test assets
         std::vector<std::filesystem::path> candidatePaths = {
@@ -333,6 +345,18 @@ TEST_CASE("Test Configuration and Environment", "[config][environment]") {
         INFO("Test path exists: " << (std::filesystem::exists(testPath) ? "YES" : "NO"));
 
         // Test environment variable override capability
+#ifdef _WIN32
+        char* envPath = nullptr;
+        size_t len = 0;
+        _dupenv_s(&envPath, &len, "GECK_TEST_DATA_PATH");
+        if (envPath) {
+            INFO("Environment override detected: " << envPath);
+            REQUIRE(testPath == std::filesystem::path(envPath));
+            free(envPath);
+        } else {
+            INFO("Using default test data path (no env override)");
+        }
+#else
         const char* envPath = std::getenv("GECK_TEST_DATA_PATH");
         if (envPath) {
             INFO("Environment override detected: " << envPath);
@@ -340,6 +364,7 @@ TEST_CASE("Test Configuration and Environment", "[config][environment]") {
         } else {
             INFO("Using default test data path (no env override)");
         }
+#endif
     }
 
     SECTION("Available test maps inventory") {
