@@ -219,32 +219,37 @@ void MainWindow::setupMenuBar() {
 
     QAction* showObjectsAction = _viewMenu->addAction("Show &Objects");
     showObjectsAction->setCheckable(true);
-    showObjectsAction->setChecked(true);
+    showObjectsAction->setChecked(UI::DEFAULT_SHOW_OBJECTS);
     connect(showObjectsAction, &QAction::toggled, this, &MainWindow::showObjectsToggled);
 
     QAction* showCrittersAction = _viewMenu->addAction("Show &Critters");
     showCrittersAction->setCheckable(true);
-    showCrittersAction->setChecked(true);
+    showCrittersAction->setChecked(UI::DEFAULT_SHOW_CRITTERS);
     connect(showCrittersAction, &QAction::toggled, this, &MainWindow::showCrittersToggled);
 
     QAction* showWallsAction = _viewMenu->addAction("Show &Walls");
     showWallsAction->setCheckable(true);
-    showWallsAction->setChecked(true);
+    showWallsAction->setChecked(UI::DEFAULT_SHOW_WALLS);
     connect(showWallsAction, &QAction::toggled, this, &MainWindow::showWallsToggled);
 
     QAction* showRoofsAction = _viewMenu->addAction("Show &Roofs");
     showRoofsAction->setCheckable(true);
-    showRoofsAction->setChecked(true);
+    showRoofsAction->setChecked(UI::DEFAULT_SHOW_ROOF);
     connect(showRoofsAction, &QAction::toggled, this, &MainWindow::showRoofsToggled);
 
     QAction* showScrollBlkAction = _viewMenu->addAction("Show Scroll &Blockers");
     showScrollBlkAction->setCheckable(true);
-    showScrollBlkAction->setChecked(false);
+    showScrollBlkAction->setChecked(UI::DEFAULT_SHOW_SCROLL_BLK);
     connect(showScrollBlkAction, &QAction::toggled, this, &MainWindow::showScrollBlockersToggled);
+
+    QAction* showWallBlkAction = _viewMenu->addAction("Show &Wall Blockers");
+    showWallBlkAction->setCheckable(true);
+    showWallBlkAction->setChecked(UI::DEFAULT_SHOW_WALL_BLK);
+    connect(showWallBlkAction, &QAction::toggled, this, &MainWindow::showWallBlockersToggled);
 
     QAction* showHexGridAction = _viewMenu->addAction("Show &Hex Grid");
     showHexGridAction->setCheckable(true);
-    showHexGridAction->setChecked(false);
+    showHexGridAction->setChecked(UI::DEFAULT_SHOW_HEX_GRID);
     connect(showHexGridAction, &QAction::toggled, this, &MainWindow::showHexGridToggled);
 
     _viewMenu->addSeparator();
@@ -633,6 +638,9 @@ void MainWindow::connectToEditorWidget() {
     });
     connect(this, &MainWindow::showScrollBlockersToggled, [this](bool enabled) {
         _currentEditorWidget->setShowScrollBlk(enabled);
+    });
+    connect(this, &MainWindow::showWallBlockersToggled, [this](bool enabled) {
+        _currentEditorWidget->setShowWallBlockers(enabled);
     });
 
     connect(this, &MainWindow::showHexGridToggled, [this](bool enabled) {

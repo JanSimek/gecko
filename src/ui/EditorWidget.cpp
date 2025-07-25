@@ -123,6 +123,25 @@ void EditorWidget::initializeSelectionSystem() {
                     }
                     break;
                 }
+
+                case selection::SelectionType::HEX: {
+                    int hexIndex = item.getHexIndex();
+                    if (hexIndex >= 0 && hexIndex < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT)) {
+                        // Create a hex selection sprite using the hex highlight texture
+                        if (hexIndex < static_cast<int>(_hexgrid.grid().size())) {
+                            const auto& hex = _hexgrid.grid().at(hexIndex);
+                            sf::Sprite hexSelectionSprite = _hexHighlightSprite; // Copy the highlight sprite
+                            // Use the same positioning as hover highlight (offset by -16, -8)
+                            float spriteX = static_cast<float>(hex.x() - 16);
+                            float spriteY = static_cast<float>(hex.y() - 8);
+                            hexSelectionSprite.setPosition(sf::Vector2f(spriteX, spriteY));
+                            // Use a different color for selection vs hover (blue for selection, red for hover)
+                            hexSelectionSprite.setColor(sf::Color(100, 150, 255, 200)); // Semi-transparent blue
+                            this->_selectedHexSprites.push_back(hexSelectionSprite);
+                        }
+                    }
+                    break;
+                }
             }
         }
 
@@ -264,10 +283,34 @@ void EditorWidget::loadObjectSprites() {
         if (object->position == -1)
             continue; // object inside an inventory/container
 
-        const std::string frm_name = ResourceManager::getInstance().FIDtoFrmName(object->frm_pid);
+        // Special handling for wall blockers - use wallblock.frm based on blocking behavior
+        std::string frm_name;
+        if (object->isGapFillingWallBlocker()) {
+            // Special PIDs 620/621 are invisible gap-filling wall blockers
+            if (object->isNormalWallBlocker()) {
+                frm_name = "art/tiles/wallblock.frm";
+                spdlog::debug("Gap-filling wall blocker detected: using wallblock.frm for pro_pid 0x{:08X}", object->pro_pid);
+            } else if (object->isShootThroughWallBlocker()) {
+                frm_name = "art/tiles/wallblockF.frm";
+                spdlog::debug("Gap-filling shoot-through wall blocker detected: using wallblockF.frm for pro_pid 0x{:08X}", object->pro_pid);
+            } else {
+                // This shouldn't happen, but use normal FRM as fallback
+                spdlog::warn("Gap-filling wall blocker with unexpected PID 0x{:08X}, using normal FRM", object->pro_pid);
+                frm_name = ResourceManager::getInstance().FIDtoFrmName(object->frm_pid);
+            }
+        } else {
+            // Regular objects use their normal FRM
+            frm_name = ResourceManager::getInstance().FIDtoFrmName(object->frm_pid);
+        }
 
-        spdlog::debug("Loading object sprite: FRM='{}', position={}, direction={}, frm_pid={}", 
-                     frm_name, object->position, object->direction, object->frm_pid);
+        if (frm_name.empty()) {
+            spdlog::error("Empty FRM name for object at position {} (frm_pid=0x{:08X}, pro_pid=0x{:08X})", 
+                         object->position, object->frm_pid, object->pro_pid);
+            continue;
+        }
+        
+        spdlog::debug("Loading object sprite: FRM='{}', position={}, direction={}, frm_pid=0x{:08X}, pro_pid=0x{:08X}", 
+                     frm_name, object->position, object->direction, object->frm_pid, object->pro_pid);
         auto frm = ResourceManager::getInstance().getResource<Frm>(frm_name);
 
         if (!frm) {
@@ -319,9 +362,62 @@ void EditorWidget::loadObjectSprites() {
         }
     }
     
+    // Create wall blocker overlays for objects that block movement (but aren't gap-filling blockers)
+    _wallBlockerOverlays.clear();
+    size_t overlaysCreated = 0;
+    
+    for (const auto& object : _map->objects().at(_currentElevation)) {
+        if (object->position == -1) continue; // Skip inventory objects
+        
+        size_t overlayCountBefore = _wallBlockerOverlays.size();
+        createWallBlockerOverlay(object, object->position);
+        if (_wallBlockerOverlays.size() > overlayCountBefore) {
+            overlaysCreated++;
+        }
+    }
+    
     _lastLoadErrors.objectsSkipped = objectsSkipped;
-    spdlog::info("Object loading complete for elevation {}: {} loaded, {} skipped, {} total", 
-                _currentElevation, objectsLoaded, objectsSkipped, totalObjects);
+    spdlog::info("Object loading complete for elevation {}: {} loaded, {} skipped, {} total, {} wall blocker overlays", 
+                _currentElevation, objectsLoaded, objectsSkipped, totalObjects, overlaysCreated);
+}
+
+void EditorWidget::createWallBlockerOverlay(const std::shared_ptr<MapObject>& mapObject, int hexPosition) {
+    // Only create overlays for regular objects that block movement
+    // Gap-filling wall blockers (PIDs 620/621) already show wallblock.frm as their main sprite
+    bool blocks = mapObject->blocksMovement();
+    bool isGapFilling = mapObject->isGapFillingWallBlocker();
+    
+    spdlog::debug("createWallBlockerOverlay: hex {}, pro_pid 0x{:08X}, blocks: {}, isGapFilling: {}", 
+                 hexPosition, mapObject->pro_pid, blocks, isGapFilling);
+    
+    if (!blocks || isGapFilling) {
+        return; // No overlay needed
+    }
+    
+    try {
+        // Load wallblock.frm as overlay  
+        const std::string overlayFrmPath = "art/tiles/wallblock.frm";
+        ResourceManager::getInstance().insertTexture(overlayFrmPath);
+        
+        sf::Sprite overlaySprite{ ResourceManager::getInstance().texture(overlayFrmPath) };
+        
+        // Position overlay at the specified hex position
+        auto hex = _hexgrid.grid().at(hexPosition);
+        float x = static_cast<float>(hex.x() - 16); // Use same offset as hex selection
+        float y = static_cast<float>(hex.y() - 8);
+        overlaySprite.setPosition(sf::Vector2f(x, y));
+        
+        // Make overlay semi-transparent to show the object underneath
+        overlaySprite.setColor(sf::Color(255, 255, 255, 180));
+        
+        _wallBlockerOverlays.push_back(std::move(overlaySprite));
+        
+        spdlog::debug("Created wall blocker overlay for object at hex {} (pro_pid {})", 
+                     hexPosition, mapObject->pro_pid);
+    } catch (const std::exception& e) {
+        spdlog::warn("Failed to create wall blocker overlay for object at hex {}: {}", 
+                    hexPosition, e.what());
+    }
 }
 
 // Tiles
@@ -378,6 +474,7 @@ void EditorWidget::loadSprites() {
     }
 
     _objects.clear();
+    _wallBlockerOverlays.clear();
 
     // Data
     loadTileSprites();
@@ -564,6 +661,9 @@ void EditorWidget::clearAllVisualSelections() {
 
     // Clear roof tile selection background sprites
     _selectedRoofTileBackgroundSprites.clear();
+
+    // Clear hex selection sprites
+    _selectedHexSprites.clear();
 }
 
 void EditorWidget::zoomView(float direction) {
@@ -962,9 +1062,25 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
 
     // Render objects with visibility filtering
     if (_showObjects) {
-        // FIXME: show walls
         for (const auto& object : _objects) {
+            // Filter wall objects based on show walls setting
+            if (!_showWalls && object->getMapObject().isWallObject()) {
+                continue; // Skip wall objects when walls are hidden
+            }
+            
+            // Filter scroll blockers based on show scroll blockers setting
+            if (!_showScrollBlk && object->getMapObject().isScrollBlocker()) {
+                continue; // Skip scroll blockers when they are hidden
+            }
+            
             window->draw(object->getSprite());
+        }
+        
+        // Render wall blocker overlays on top of regular objects (controlled by toggle)
+        if (_showWallBlockers) {
+            for (const auto& overlay : _wallBlockerOverlays) {
+                window->draw(overlay);
+            }
         }
     }
     
@@ -984,6 +1100,11 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
         for (const auto& roof : _roofSprites) {
             window->draw(roof);
         }
+    }
+
+    // Render selected hex sprites
+    for (const auto& hexSprite : _selectedHexSprites) {
+        window->draw(hexSprite);
     }
 
     // Render drag selection rectangle
@@ -1919,9 +2040,8 @@ void EditorWidget::updateHoverHex(sf::Vector2f worldPos) {
 }
 
 const sf::Texture& EditorWidget::createHexTexture() {
-    ResourceManager::getInstance().loadResource<Frm>("art/tiles/HEX.frm");
-
-    return ResourceManager::getInstance().texture("art/tiles/HEX.frm");
+    ResourceManager::getInstance().loadResource<Frm>("art/misc/HEX.frm");
+    return ResourceManager::getInstance().texture("art/misc/HEX.frm");
 }
 
 const sf::Texture& EditorWidget::createCursorHexTexture() {
@@ -2044,6 +2164,11 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
         // Add to objects list for immediate display
         _objects.push_back(object);
         
+        // Create wall blocker overlay if the object blocks movement
+        createWallBlockerOverlay(mapObject, hexPosition);
+        
+        spdlog::info("EditorWidget: Successfully placed object at hex {} (pro_pid: {})", 
+                    hexPosition, mapObject->pro_pid);
             
     } catch (const std::exception& e) {
         spdlog::warn("EditorWidget: Failed to create visual object for placed item: {}", e.what());

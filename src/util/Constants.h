@@ -25,7 +25,9 @@ constexpr int TILE_X_OFFSET = 48;       ///< X offset for tile positioning
 constexpr int TILE_Y_OFFSET_LARGE = 32; ///< Large Y offset for tile positioning
 constexpr int TILE_Y_OFFSET_SMALL = 24; ///< Small Y offset for tile positioning
 constexpr int TILE_Y_OFFSET_TINY = 12;  ///< Tiny Y offset for tile positioning
-constexpr int ROOF_OFFSET = 96;         ///< Roof height offset
+
+// NOTE: the original offset was 96, there is likely a bug somewhere in the positional calculation
+constexpr int ROOF_OFFSET = 84;         ///< Roof height offset (adjusted for coordinate system alignment)
 
 // View movement constants
 constexpr float VIEW_MOVE_STEP = 50.0f; ///< Distance to move view with arrow keys
@@ -104,6 +106,33 @@ namespace FileFormat {
     constexpr int TYPE_MASK_SHIFT = 24;             ///< Bit shift for type mask in PIDs/FIDs
     constexpr uint32_t TYPE_MASK = 0x0F000000;      ///< Type mask for PIDs/FIDs
     constexpr uint32_t FULL_TYPE_MASK = 0xFF000000; ///< Full type mask
+}
+
+// Wall Blocker constants
+namespace WallBlockers {
+    // Proto IDs for wall blockers (MISC type objects)
+    // These objects mark hexes as unwalkable for pathfinding
+    constexpr uint32_t NORMAL_WALL_BLOCKER_PID = 0x05000000 | 620;      ///< Proto 620 - Normal wall blocker
+    constexpr uint32_t SHOOT_THROUGH_BLOCKER_PID = 0x05000000 | 621;    ///< Proto 621 - Shoot-through wall blocker
+    
+    // Base ID for scroll blocker visualization (from FRM_PID)
+    constexpr uint32_t SCROLL_BLOCKER_BASE_ID = 1;                      ///< Base ID for scroll blocker FRM
+    
+    // Flag bit for blocking objects
+    constexpr uint32_t BLOCKING_FLAG = 0x00000010;                      ///< Flag indicating object blocks movement
+    
+    // MISC object type ID
+    constexpr uint32_t MISC_TYPE_ID = 5;                                ///< MISC type in object type enum
+}
+
+namespace UI {
+    constexpr bool DEFAULT_SHOW_OBJECTS = true;
+    constexpr bool DEFAULT_SHOW_CRITTERS = true;
+    constexpr bool DEFAULT_SHOW_ROOF = true;
+    constexpr bool DEFAULT_SHOW_WALLS = true;
+    constexpr bool DEFAULT_SHOW_SCROLL_BLK = false;
+    constexpr bool DEFAULT_SHOW_WALL_BLK = false;
+    constexpr bool DEFAULT_SHOW_HEX_GRID = false;
 }
 
 } // namespace geck

@@ -71,6 +71,9 @@ set(GECK_SOURCES
     
     # Path utilities
     util/PathUtils.h
+    
+    # MapObject implementation (needs ResourceManager access)
+    format/map/MapObject.cpp
 )
 
 # Platform-specific executable settings

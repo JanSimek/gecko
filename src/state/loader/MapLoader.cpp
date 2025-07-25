@@ -170,6 +170,8 @@ void MapLoader::load() {
     }
 
     ResourceManager::getInstance().insertTexture("art/tiles/blank.frm");
+    ResourceManager::getInstance().insertTexture("art/misc/wallblock.frm");
+    ResourceManager::getInstance().insertTexture("art/misc/wallblockF.frm");
 
     spdlog::info("... objects loaded in {:.3} seconds", stopwatch_chunk);
     stopwatch_chunk.reset();

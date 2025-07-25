@@ -35,4 +35,15 @@ std::vector<std::shared_ptr<Object>> SelectionState::getObjects() const {
     return objects;
 }
 
+std::vector<int> SelectionState::getHexIndices() const {
+    std::vector<int> indices;
+    indices.reserve(items.size()); // Reserve space for worst-case scenario
+    for (const auto& item : items) {
+        if (item.type == SelectionType::HEX) {
+            indices.push_back(item.getHexIndex());
+        }
+    }
+    return indices;
+}
+
 } // namespace geck::selection

@@ -91,6 +91,7 @@ public:
     std::vector<int> getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) const;
     std::vector<int> getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const;
     std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area, int elevation) const;
+    std::vector<int> getHexesInArea(const sf::FloatRect& area) const;
 
     // Drag & drop implementation helpers (public for EditorWidget usage)
     bool moveObject(std::shared_ptr<Object> object, sf::Vector2f offset);

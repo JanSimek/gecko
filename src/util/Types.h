@@ -18,6 +18,7 @@ enum class SelectionMode : int {
     ROOF_TILES,     ///< Select only roof tiles (with textures)
     ROOF_TILES_ALL, ///< Select all roof tiles including empty ones
     OBJECTS,        ///< Select only objects
+    HEXES,          ///< Select only hexes (for wall blocker placement)
 
     NUM_SELECTION_TYPES ///< Total number of selection modes (for cycling)
 };
@@ -39,6 +40,8 @@ inline const char* selectionModeToString(SelectionMode mode) {
             return "Roof Tiles + Empty";
         case SelectionMode::OBJECTS:
             return "Objects";
+        case SelectionMode::HEXES:
+            return "Hexes";
         default:
             return "Unknown";
     }

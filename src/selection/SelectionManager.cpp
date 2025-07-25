@@ -3,6 +3,7 @@
 #include "../format/map/MapObject.h"
 #include "../util/Constants.h"
 #include "../util/TileUtils.h"
+#include "../editor/HexagonGrid.h"
 #include <algorithm>
 #include <unordered_set>
 #include <spdlog/spdlog.h>
@@ -33,6 +34,7 @@ SelectionResult SelectionManager::selectAtPosition(sf::Vector2f worldPos, Select
         case SelectionMode::FLOOR_TILES:
         case SelectionMode::ROOF_TILES:
         case SelectionMode::ROOF_TILES_ALL:
+        case SelectionMode::HEXES:
             return selectSingleAtPosition(worldPos, mode, currentElevation);
 
         default:
@@ -97,6 +99,15 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
             auto roofTiles = getTilesInArea(area, true, currentElevation);
             for (int tileIndex : roofTiles) {
                 SelectedItem item{ SelectionType::ROOF_TILE, tileIndex };
+                addItemToSelection(item);
+            }
+            break;
+        }
+
+        case SelectionMode::HEXES: {
+            auto hexIndices = getHexesInArea(area);
+            for (int hexIndex : hexIndices) {
+                SelectedItem item{ SelectionType::HEX, hexIndex };
                 addItemToSelection(item);
             }
             break;
@@ -669,6 +680,18 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
             break;
         }
 
+        case SelectionMode::HEXES: {
+            int hexIndex = _editorWidget->worldPosToHexPosition(worldPos);
+            if (hexIndex >= 0 && hexIndex < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT)) {
+                SelectedItem item{ SelectionType::HEX, hexIndex };
+                addItemToSelection(item);
+                _state.mode = mode;
+                notifySelectionChanged();
+                return SelectionResult::createSuccess();
+            }
+            break;
+        }
+
         default:
             return SelectionResult::createError("Invalid selection mode for single selection");
     }
@@ -934,6 +957,30 @@ bool SelectionManager::moveTile(int sourceTileIndex, sf::Vector2f offset, bool i
     // Note: Tile sprites will be updated on next render cycle
 
     return true;
+}
+
+std::vector<int> SelectionManager::getHexesInArea(const sf::FloatRect& area) const {
+    std::vector<int> result;
+    result.reserve(1000); // Reserve space for typical selection
+    
+    // Convert area bounds to hex grid coordinates and iterate through potential hexes
+    for (int hexIndex = 0; hexIndex < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT); ++hexIndex) {
+        // Convert hex index to world position and check if it's in the selection area
+        auto hexGrid = _editorWidget->getHexagonGrid();
+        if (hexGrid && hexIndex < static_cast<int>(hexGrid->grid().size())) {
+            const auto& hex = hexGrid->grid().at(hexIndex);
+            sf::Vector2f hexPos(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
+            
+            // Check if hex center is within selection area
+            // Using a small hex-sized bounds for better selection feel
+            sf::FloatRect hexBounds(sf::Vector2f(hexPos.x - 16, hexPos.y - 8), sf::Vector2f(32, 16));
+            if (area.findIntersection(hexBounds)) {
+                result.push_back(hexIndex);
+            }
+        }
+    }
+    
+    return result;
 }
 
 void SelectionManager::initializeSpatialIndex() {

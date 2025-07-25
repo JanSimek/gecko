@@ -24,7 +24,15 @@ FileTreeItem::FileTreeItem(const QString& name, ItemType type)
     if (type == Directory) {
         setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
     } else {
-        setIcon(QApplication::style()->standardIcon(QStyle::SP_FileIcon));
+        QFileInfo fileInfo(name);
+        QString suffix = fileInfo.suffix().toLower();
+
+        // TODO: image icon for .frm
+        if (suffix == "frm") {
+            setIcon(QApplication::style()->standardIcon(QStyle::SP_FileIcon));
+        } else {
+            setIcon(QApplication::style()->standardIcon(QStyle::SP_FileIcon));
+        }
     }
 }
 

@@ -264,7 +264,6 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
         type = static_cast<Frm::FRM_TYPE>((FID & 0x0F000000) >> 24); // FIXME: WTF?
     }
 
-    // TODO: EditorState::_showScrlBlk
     if (type == Frm::FRM_TYPE::MISC && baseId == 1) {
         static const std::string SCROLL_BLOCKERS_PATH("art/misc/scrblk.frm");
         // Map scroll blockers

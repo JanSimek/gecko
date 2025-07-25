@@ -4,8 +4,11 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include "../../util/Constants.h"
 
 namespace geck {
+
+class Pro; // Forward declaration
 
 // scenery, walls, items, containers, keys and critters
 struct MapObject {
@@ -83,6 +86,40 @@ struct MapObject {
         auto baseId = frm_pid & 0x00FFFFFF;
         return baseId == 1 && flags & 0x00000010;
     }
+
+    bool isWallBlocker() {
+        // Any object that blocks movement OR is a gap-filling wall blocker
+        return blocksMovement() || isGapFillingWallBlocker();
+    }
+
+    bool isNormalWallBlocker() {
+        return pro_pid == (0x05000000 | 620);
+    }
+
+    bool isShootThroughWallBlocker() {
+        return pro_pid == (0x05000000 | 621);
+    }
+
+    bool isScrollBlocker() {
+        // Scroll blockers are visual indicators only (FRM-based, not proto-based)
+        // They use scrblk.frm (FRM baseId == 1)
+        auto baseId = frm_pid & 0x00FFFFFF;
+        return baseId == 1;
+    }
+
+private:
+    // Helper method to get PRO file data on demand
+    Pro* getProData() const;
+
+public:
+    // Check if object blocks movement based on PRO file flags
+    bool blocksMovement() const;
+    
+    // Check if object is a gap-filling wall blocker (PIDs 620/621)
+    bool isGapFillingWallBlocker() const;
+    
+    // Check if object is a wall (OBJECT_TYPE::WALL)
+    bool isWallObject() const;
 };
 
 } // namespace geck

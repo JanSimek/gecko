@@ -17,7 +17,8 @@ namespace geck::selection {
 enum class SelectionType {
     ROOF_TILE,
     FLOOR_TILE,
-    OBJECT
+    OBJECT,
+    HEX
 };
 
 /**
@@ -30,8 +31,10 @@ struct SelectedItem {
     // Helper methods
     bool isTile() const { return type == SelectionType::ROOF_TILE || type == SelectionType::FLOOR_TILE; }
     bool isObject() const { return type == SelectionType::OBJECT; }
+    bool isHex() const { return type == SelectionType::HEX; }
 
     int getTileIndex() const { return std::get<int>(data); }
+    int getHexIndex() const { return std::get<int>(data); } // Same as tile index for data storage
     std::shared_ptr<Object> getObject() const { return std::get<std::shared_ptr<Object>>(data); }
 
     // Equality operator for finding/removing items
@@ -99,6 +102,7 @@ public:
     std::vector<int> getRoofTileIndices() const;
     std::vector<int> getFloorTileIndices() const;
     std::vector<std::shared_ptr<Object>> getObjects() const;
+    std::vector<int> getHexIndices() const;
 
     // Area selection state
     void startAreaSelection(sf::Vector2f startPos, SelectionMode selectionMode) {

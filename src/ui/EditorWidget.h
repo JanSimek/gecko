@@ -43,6 +43,7 @@ public:
     void setShowWalls(bool show) { _showWalls = show; }
     void setShowRoof(bool show) { _showRoof = show; }
     void setShowScrollBlk(bool show) { _showScrollBlk = show; }
+    void setShowWallBlockers(bool show) { _showWallBlockers = show; }
     void setShowHexGrid(bool show) { _showHexGrid = show; }
 
     Map* getMap() const { return _map.get(); }
@@ -112,6 +113,12 @@ public:
     // Access to objects for SelectionManager
     const std::vector<std::shared_ptr<Object>>& getObjects() const { return _objects; }
 
+    // Access to hex grid for SelectionManager
+    const HexagonGrid* getHexagonGrid() const { return &_hexgrid; }
+
+    // Hex grid utilities for SelectionManager
+    int worldPosToHexPosition(sf::Vector2f worldPos) const;
+
 signals:
     void objectSelected(std::shared_ptr<Object> object);
     void tileSelected(int tileIndex, int elevation, bool isRoof);
@@ -179,7 +186,6 @@ private:
 
     // Hex grid snapping helpers
     sf::Vector2f snapToHexGrid(sf::Vector2f worldPos) const;
-    int worldPosToHexPosition(sf::Vector2f worldPos) const;
 
     // Hex grid visualization
     void renderHexGrid();
@@ -190,6 +196,9 @@ private:
 
     // Helper methods
     int worldPosToHexIndex(sf::Vector2f worldPos) const;
+    
+    // Wall blocker overlay management
+    void createWallBlockerOverlay(const std::shared_ptr<MapObject>& mapObject, int hexPosition);
 
     enum class EditorAction {
         NONE,
@@ -215,6 +224,9 @@ private:
 
     std::vector<std::shared_ptr<Object>> _objects;
     
+    // Wall blocker overlay sprites (rendered on top of regular objects)
+    std::vector<sf::Sprite> _wallBlockerOverlays;
+    
     // Error tracking for last sprite loading operation
     LoadingErrors _lastLoadErrors;
 
@@ -223,12 +235,13 @@ private:
     int _currentElevation = 0;
     std::unique_ptr<Map> _map;
 
-    bool _showObjects = true;
-    bool _showCritters = true;
-    bool _showRoof = true;
-    bool _showWalls = true;
-    bool _showScrollBlk = true;
-    bool _showHexGrid = false;
+    bool _showObjects = UI::DEFAULT_SHOW_OBJECTS;
+    bool _showCritters = UI::DEFAULT_SHOW_CRITTERS;
+    bool _showRoof = UI::DEFAULT_SHOW_ROOF;
+    bool _showWalls = UI::DEFAULT_SHOW_WALLS;
+    bool _showScrollBlk = UI::DEFAULT_SHOW_SCROLL_BLK;
+    bool _showWallBlockers = UI::DEFAULT_SHOW_WALL_BLK;
+    bool _showHexGrid = UI::DEFAULT_SHOW_HEX_GRID;
 
     sf::Vector2i _mouseStartingPosition{ 0, 0 }; // panning started
     sf::Vector2i _mouseLastPosition{ 0, 0 };     // current panning position
@@ -282,6 +295,9 @@ private:
 
     // Selected roof tile background sprites (blank.frm tiles for transparent pixel visibility)
     std::vector<sf::Sprite> _selectedRoofTileBackgroundSprites;
+
+    // Selected hex sprites for visual feedback
+    std::vector<sf::Sprite> _selectedHexSprites;
 
     // Tile placement state
     bool _tilePlacementMode = false;
