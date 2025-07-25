@@ -45,6 +45,8 @@ set(GECK_SOURCES
     ui/ObjectPalettePanel.cpp
     ui/FileBrowserPanel.h
     ui/FileBrowserPanel.cpp
+    ui/PaginationWidget.h
+    ui/PaginationWidget.cpp
 
     # Selection management
     selection/SelectionState.h

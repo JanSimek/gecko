@@ -191,55 +191,14 @@ void TilePalettePanel::setupTileGrid() {
 }
 
 void TilePalettePanel::setupPaginationControls() {
-    _paginationGroup = new QGroupBox("Pages", this);
+    _paginationGroup = new QGroupBox("Page Navigation", this);
     auto* paginationLayout = new QVBoxLayout(_paginationGroup);
 
-    // Navigation buttons row
-    auto* navLayout = new QHBoxLayout();
-    
-    _firstPageButton = new QPushButton("First", this);
-    _firstPageButton->setEnabled(false);
-    _prevPageButton = new QPushButton("Previous", this);
-    _prevPageButton->setEnabled(false);
-    
-    _nextPageButton = new QPushButton("Next", this);
-    _nextPageButton->setEnabled(false);
-    _lastPageButton = new QPushButton("Last", this);
-    _lastPageButton->setEnabled(false);
-    
-    navLayout->addWidget(_firstPageButton);
-    navLayout->addWidget(_prevPageButton);
-    navLayout->addStretch();
-    navLayout->addWidget(_nextPageButton);
-    navLayout->addWidget(_lastPageButton);
-    
-    paginationLayout->addLayout(navLayout);
-    
-    // Page selection row
-    auto* pageLayout = new QHBoxLayout();
-    pageLayout->addWidget(new QLabel("Page:", this));
-    
-    _pageSpinBox = new QSpinBox(this);
-    _pageSpinBox->setMinimum(1);
-    _pageSpinBox->setMaximum(1);
-    _pageSpinBox->setValue(1);
-    _pageSpinBox->setEnabled(false);
-    pageLayout->addWidget(_pageSpinBox);
-    
-    _pageInfoLabel = new QLabel("of 0", this);
-    _pageInfoLabel->setStyleSheet("color: gray; font-style: italic;");
-    pageLayout->addWidget(_pageInfoLabel);
-    pageLayout->addStretch();
-    
-    paginationLayout->addLayout(pageLayout);
-    
-    // Connect pagination signals
-    connect(_firstPageButton, &QPushButton::clicked, this, &TilePalettePanel::goToFirstPage);
-    connect(_prevPageButton, &QPushButton::clicked, this, &TilePalettePanel::goToPrevPage);
-    connect(_nextPageButton, &QPushButton::clicked, this, &TilePalettePanel::goToNextPage);
-    connect(_lastPageButton, &QPushButton::clicked, this, &TilePalettePanel::goToLastPage);
-    connect(_pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-        this, &TilePalettePanel::onPageSpinBoxChanged);
+    // Shared pagination widget with all controls
+    _paginationWidget = new PaginationWidget(this);
+    _paginationWidget->setShowFirstLastButtons(true);
+    connect(_paginationWidget, &PaginationWidget::pageChanged, this, &TilePalettePanel::onPaginationPageChanged);
+    paginationLayout->addWidget(_paginationWidget);
 
     _mainLayout->addWidget(_paginationGroup);
 }
@@ -589,59 +548,19 @@ void TilePalettePanel::updatePaginationControls() {
     
     _paginationGroup->show();
     
-    // Update button states
-    _firstPageButton->setEnabled(_currentPage > 0);
-    _prevPageButton->setEnabled(_currentPage > 0);
-    _nextPageButton->setEnabled(_currentPage < _totalPages - 1);
-    _lastPageButton->setEnabled(_currentPage < _totalPages - 1);
-    
-    // Update page spinbox
-    _pageSpinBox->setEnabled(_totalPages > 1);
-    _pageSpinBox->setMaximum(_totalPages);
-    _pageSpinBox->setValue(_currentPage + 1);
-    
-    // Update page info label
-    _pageInfoLabel->setText(QString("of %1").arg(_totalPages));
+    // Update shared pagination widget
+    _paginationWidget->setTotalPages(_totalPages);
+    _paginationWidget->setCurrentPage(_currentPage + 1); // Convert to 1-based
+    _paginationWidget->setEnabled(_totalPages > 1);
 }
 
-void TilePalettePanel::goToFirstPage() {
-    if (_currentPage != 0) {
-        _currentPage = 0;
-        updateTileGrid();
-    }
-}
 
-void TilePalettePanel::goToLastPage() {
-    if (_currentPage != _totalPages - 1) {
-        _currentPage = std::max(0, _totalPages - 1);
-        updateTileGrid();
-    }
-}
-
-void TilePalettePanel::goToPrevPage() {
-    if (_currentPage > 0) {
-        _currentPage--;
-        updateTileGrid();
-    }
-}
-
-void TilePalettePanel::goToNextPage() {
-    if (_currentPage < _totalPages - 1) {
-        _currentPage++;
-        updateTileGrid();
-    }
-}
-
-void TilePalettePanel::onPageSpinBoxChanged(int page) {
+void TilePalettePanel::onPaginationPageChanged(int page) {
     int newPage = page - 1; // Convert from 1-based to 0-based
     if (newPage != _currentPage && newPage >= 0 && newPage < _totalPages) {
         _currentPage = newPage;
         updateTileGrid();
     }
-}
-
-void TilePalettePanel::onPageChanged() {
-    updateTileGrid();
 }
 
 } // namespace geck

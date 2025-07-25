@@ -17,6 +17,7 @@
 #include <QMimeData>
 #include <vector>
 #include <memory>
+#include "PaginationWidget.h"
 
 namespace geck {
 
@@ -125,11 +126,7 @@ public slots:
     void onSearchTextChanged(const QString& text);
 
     // Pagination navigation
-    void goToFirstPage();
-    void goToLastPage();
-    void goToPrevPage();
-    void goToNextPage();
-    void onPageSpinBoxChanged(int page);
+    void onPaginationPageChanged(int page);
 
 private slots:
     void updateObjectGrid();
@@ -163,12 +160,7 @@ private:
 
     // Pagination controls
     QGroupBox* _paginationGroup = nullptr;
-    QPushButton* _prevPageButton = nullptr;
-    QPushButton* _nextPageButton = nullptr;
-    QPushButton* _firstPageButton = nullptr;
-    QPushButton* _lastPageButton = nullptr;
-    QSpinBox* _pageSpinBox = nullptr;
-    QLabel* _pageInfoLabel = nullptr;
+    PaginationWidget* _paginationWidget = nullptr;
 
     // Object grid for current category
     QScrollArea* _scrollArea = nullptr;

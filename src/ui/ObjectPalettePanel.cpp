@@ -134,8 +134,8 @@ void ObjectPalettePanel::setupUI() {
 
     setupCategoryTabs();
     setupSearchControls();
-    setupObjectGrid();
     setupPaginationControls();
+    setupObjectGrid();
 
     // Status label
     _statusLabel = new QLabel("No objects loaded", this);
@@ -162,10 +162,10 @@ void ObjectPalettePanel::setupCategoryTabs() {
 }
 
 void ObjectPalettePanel::setupSearchControls() {
-    _searchGroup = new QGroupBox("Search", this);
+    _searchGroup = new QGroupBox("Filter", this);
     auto* searchLayout = new QHBoxLayout(_searchGroup);
 
-    searchLayout->addWidget(new QLabel("Find:", this));
+    searchLayout->addWidget(new QLabel("Search:", this));
     _searchLineEdit = new QLineEdit(this);
     _searchLineEdit->setPlaceholderText("Enter object name...");
     _searchLineEdit->setClearButtonEnabled(true);
@@ -196,46 +196,11 @@ void ObjectPalettePanel::setupPaginationControls() {
     _paginationGroup = new QGroupBox("Page Navigation", this);
     auto* paginationLayout = new QHBoxLayout(_paginationGroup);
 
-    // First page button
-    _firstPageButton = new QPushButton("|<", this);
-    _firstPageButton->setToolTip("Go to first page");
-    _firstPageButton->setMaximumWidth(40);
-    connect(_firstPageButton, &QPushButton::clicked, this, &ObjectPalettePanel::goToFirstPage);
-    paginationLayout->addWidget(_firstPageButton);
-
-    // Previous page button
-    _prevPageButton = new QPushButton("<", this);
-    _prevPageButton->setToolTip("Go to previous page");
-    _prevPageButton->setMaximumWidth(30);
-    connect(_prevPageButton, &QPushButton::clicked, this, &ObjectPalettePanel::goToPrevPage);
-    paginationLayout->addWidget(_prevPageButton);
-
-    // Page selector
-    paginationLayout->addWidget(new QLabel("Page:", this));
-    _pageSpinBox = new QSpinBox(this);
-    _pageSpinBox->setMinimum(1);
-    _pageSpinBox->setMaximumWidth(60);
-    connect(_pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &ObjectPalettePanel::onPageSpinBoxChanged);
-    paginationLayout->addWidget(_pageSpinBox);
-
-    _pageInfoLabel = new QLabel("of 1", this);
-    paginationLayout->addWidget(_pageInfoLabel);
-
-    // Next page button
-    _nextPageButton = new QPushButton(">", this);
-    _nextPageButton->setToolTip("Go to next page");
-    _nextPageButton->setMaximumWidth(30);
-    connect(_nextPageButton, &QPushButton::clicked, this, &ObjectPalettePanel::goToNextPage);
-    paginationLayout->addWidget(_nextPageButton);
-
-    // Last page button
-    _lastPageButton = new QPushButton(">|", this);
-    _lastPageButton->setToolTip("Go to last page");
-    _lastPageButton->setMaximumWidth(40);
-    connect(_lastPageButton, &QPushButton::clicked, this, &ObjectPalettePanel::goToLastPage);
-    paginationLayout->addWidget(_lastPageButton);
-
-    paginationLayout->addStretch(); // Push buttons to left
+    // Shared pagination widget with all controls
+    _paginationWidget = new PaginationWidget(this);
+    _paginationWidget->setShowFirstLastButtons(true);
+    connect(_paginationWidget, &PaginationWidget::pageChanged, this, &ObjectPalettePanel::onPaginationPageChanged);
+    paginationLayout->addWidget(_paginationWidget);
 
     _mainLayout->addWidget(_paginationGroup);
     _paginationGroup->hide(); // Initially hidden
@@ -737,51 +702,14 @@ void ObjectPalettePanel::updatePaginationControls() {
 
     _paginationGroup->show();
 
-    // Update button states
-    _firstPageButton->setEnabled(_currentPage > 0);
-    _prevPageButton->setEnabled(_currentPage > 0);
-    _nextPageButton->setEnabled(_currentPage < _totalPages - 1);
-    _lastPageButton->setEnabled(_currentPage < _totalPages - 1);
-
-    // Update page spinbox
-    _pageSpinBox->setEnabled(_totalPages > 1);
-    _pageSpinBox->setMaximum(_totalPages);
-    _pageSpinBox->setValue(_currentPage + 1); // Convert to 1-based
-
-    // Update page info label
-    _pageInfoLabel->setText(QString("of %1").arg(_totalPages));
+    // Update shared pagination widget
+    _paginationWidget->setTotalPages(_totalPages);
+    _paginationWidget->setCurrentPage(_currentPage + 1); // Convert to 1-based
+    _paginationWidget->setEnabled(_totalPages > 1);
 }
 
-void ObjectPalettePanel::goToFirstPage() {
-    if (_currentPage != 0) {
-        _currentPage = 0;
-        updateObjectGrid();
-    }
-}
 
-void ObjectPalettePanel::goToLastPage() {
-    int lastPage = std::max(0, _totalPages - 1);
-    if (_currentPage != lastPage) {
-        _currentPage = lastPage;
-        updateObjectGrid();
-    }
-}
-
-void ObjectPalettePanel::goToPrevPage() {
-    if (_currentPage > 0) {
-        _currentPage--;
-        updateObjectGrid();
-    }
-}
-
-void ObjectPalettePanel::goToNextPage() {
-    if (_currentPage < _totalPages - 1) {
-        _currentPage++;
-        updateObjectGrid();
-    }
-}
-
-void ObjectPalettePanel::onPageSpinBoxChanged(int page) {
+void ObjectPalettePanel::onPaginationPageChanged(int page) {
     int newPage = page - 1; // Convert from 1-based to 0-based
     if (newPage != _currentPage && newPage >= 0 && newPage < _totalPages) {
         _currentPage = newPage;

@@ -2243,7 +2243,7 @@ int EditorWidget::worldPosToHexPosition(sf::Vector2f worldPos) const {
     uint32_t hexPosition = _hexgrid.positionAt(static_cast<uint32_t>(worldPos.x),
         static_cast<uint32_t>(worldPos.y));
 
-    if (hexPosition == static_cast<uint32_t>(-1)) {
+    if (hexPosition == Hex::HEX_OUT_OF_MAP) {
         return -1;
     }
 

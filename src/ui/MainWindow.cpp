@@ -380,6 +380,7 @@ void MainWindow::setupMenuBar() {
 
 void MainWindow::setupToolBar() {
     _mainToolBar = addToolBar("Main");
+    _mainToolBar->setObjectName("MainToolBar");
 
     // Selection mode action - start with "All" mode
     QAction* selectionModeAction = _mainToolBar->addAction("Mode: All");

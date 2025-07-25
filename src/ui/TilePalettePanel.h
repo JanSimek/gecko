@@ -14,6 +14,7 @@
 #include <QLineEdit>
 #include <vector>
 #include <memory>
+#include "PaginationWidget.h"
 
 namespace geck {
 
@@ -111,12 +112,7 @@ private slots:
     void updateTileGrid();
     void filterTiles();
     void onSearchTextChanged(const QString& text);
-    void onPageChanged();
-    void goToFirstPage();
-    void goToLastPage();
-    void goToPrevPage();
-    void goToNextPage();
-    void onPageSpinBoxChanged(int page);
+    void onPaginationPageChanged(int page);
 
 private:
     void setupUI();
@@ -174,12 +170,7 @@ private:
 
     // Pagination controls
     QGroupBox* _paginationGroup = nullptr;
-    QPushButton* _prevPageButton = nullptr;
-    QPushButton* _nextPageButton = nullptr;
-    QPushButton* _firstPageButton = nullptr;
-    QPushButton* _lastPageButton = nullptr;
-    QSpinBox* _pageSpinBox = nullptr;
-    QLabel* _pageInfoLabel = nullptr;
+    PaginationWidget* _paginationWidget = nullptr;
 
     // Pagination state
     int _currentPage = 0;
