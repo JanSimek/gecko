@@ -19,6 +19,7 @@ enum class SelectionMode : int {
     ROOF_TILES_ALL, ///< Select all roof tiles including empty ones
     OBJECTS,        ///< Select only objects
     HEXES,          ///< Select only hexes (for wall blocker placement)
+    SCROLL_BLOCKER_RECTANGLE, ///< Draw rectangle and place scroll blockers on borders
 
     NUM_SELECTION_TYPES ///< Total number of selection modes (for cycling)
 };
@@ -42,6 +43,8 @@ inline const char* selectionModeToString(SelectionMode mode) {
             return "Objects";
         case SelectionMode::HEXES:
             return "Hexes";
+        case SelectionMode::SCROLL_BLOCKER_RECTANGLE:
+            return "Scroll Blocker";
         default:
             return "Unknown";
     }

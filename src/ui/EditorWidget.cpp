@@ -7,6 +7,7 @@
 #include <algorithm> // std::sort, std::find, std::max, std::min
 #include <limits>    // std::numeric_limits
 #include <cstdlib>   // std::abs
+#include <set>       // std::set
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
 #include "../editor/HexagonGrid.h"
@@ -394,6 +395,130 @@ void EditorWidget::createWallBlockerOverlay(const std::shared_ptr<MapObject>& ma
     }
 }
 
+std::vector<int> EditorWidget::calculateRectangleBorderHexes(sf::FloatRect rectangle) {
+    std::vector<int> borderHexes;
+    
+    // Convert rectangle corners to hex positions
+    sf::Vector2f topLeft = sf::Vector2f(rectangle.position.x, rectangle.position.y);
+    sf::Vector2f topRight = sf::Vector2f(rectangle.position.x + rectangle.size.x, rectangle.position.y);
+    sf::Vector2f bottomLeft = sf::Vector2f(rectangle.position.x, rectangle.position.y + rectangle.size.y);
+    sf::Vector2f bottomRight = sf::Vector2f(rectangle.position.x + rectangle.size.x, rectangle.position.y + rectangle.size.y);
+    
+    // Convert corner world positions to hex indices
+    int topLeftHex = worldPosToHexPosition(topLeft);
+    int topRightHex = worldPosToHexPosition(topRight);
+    int bottomLeftHex = worldPosToHexPosition(bottomLeft);
+    int bottomRightHex = worldPosToHexPosition(bottomRight);
+    
+    // Validate hex positions
+    const int maxHex = HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT;
+    if (topLeftHex < 0 || topLeftHex >= maxHex || 
+        topRightHex < 0 || topRightHex >= maxHex ||
+        bottomLeftHex < 0 || bottomLeftHex >= maxHex ||
+        bottomRightHex < 0 || bottomRightHex >= maxHex) {
+        spdlog::warn("Rectangle contains invalid hex positions, skipping border calculation");
+        return borderHexes;
+    }
+    
+    // Calculate hex grid coordinates for rectangle bounds
+    int leftX = topLeftHex % HexagonGrid::GRID_WIDTH;
+    int rightX = topRightHex % HexagonGrid::GRID_WIDTH;
+    int topY = topLeftHex / HexagonGrid::GRID_WIDTH;
+    int bottomY = bottomLeftHex / HexagonGrid::GRID_WIDTH;
+    
+    // Ensure proper ordering (left < right, top < bottom)
+    if (leftX > rightX) std::swap(leftX, rightX);
+    if (topY > bottomY) std::swap(topY, bottomY);
+    
+    std::set<int> uniqueHexes; // Use set to avoid duplicates
+    
+    // Top border (left to right)
+    for (int x = leftX; x <= rightX; x++) {
+        int hexPos = topY * HexagonGrid::GRID_WIDTH + x;
+        if (hexPos >= 0 && hexPos < maxHex) {
+            uniqueHexes.insert(hexPos);
+        }
+    }
+    
+    // Bottom border (left to right)
+    if (bottomY != topY) {
+        for (int x = leftX; x <= rightX; x++) {
+            int hexPos = bottomY * HexagonGrid::GRID_WIDTH + x;
+            if (hexPos >= 0 && hexPos < maxHex) {
+                uniqueHexes.insert(hexPos);
+            }
+        }
+    }
+    
+    // Left border (top to bottom, excluding corners already added)
+    for (int y = topY + 1; y < bottomY; y++) {
+        int hexPos = y * HexagonGrid::GRID_WIDTH + leftX;
+        if (hexPos >= 0 && hexPos < maxHex) {
+            uniqueHexes.insert(hexPos);
+        }
+    }
+    
+    // Right border (top to bottom, excluding corners already added)
+    if (rightX != leftX) {
+        for (int y = topY + 1; y < bottomY; y++) {
+            int hexPos = y * HexagonGrid::GRID_WIDTH + rightX;
+            if (hexPos >= 0 && hexPos < maxHex) {
+                uniqueHexes.insert(hexPos);
+            }
+        }
+    }
+    
+    // Convert set to vector
+    borderHexes.assign(uniqueHexes.begin(), uniqueHexes.end());
+    
+    spdlog::debug("Calculated {} border hexes for rectangle ({}, {}, {}, {})", 
+                 borderHexes.size(), rectangle.position.x, rectangle.position.y, rectangle.size.x, rectangle.size.y);
+    
+    return borderHexes;
+}
+
+std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPosition) {
+    auto mapObject = std::make_shared<MapObject>();
+    
+    // Set basic properties
+    mapObject->position = hexPosition;
+    mapObject->elevation = _currentElevation;
+    mapObject->direction = 0;
+    mapObject->frame_number = 0;
+
+    // Set scroll blocker FRM PID (base ID = 1 for scrblk.frm)
+    mapObject->frm_pid = 0x05000000 | WallBlockers::SCROLL_BLOCKER_BASE_ID; // MISC type (0x05) with base ID 1
+    
+    // Set proto PID to a valid MISC object proto
+    mapObject->pro_pid = 0x05000000 | 24; // MISC type, proto 24 (generic small object)
+    
+    // Set flags - scroll blockers don't block movement, just visual indicators
+    mapObject->flags = 0;
+    
+    // Initialize other fields to default values
+    mapObject->unknown0 = 0;
+    mapObject->x = 0;
+    mapObject->y = 0;
+    mapObject->sx = 0;
+    mapObject->sy = 0;
+    mapObject->critter_index = -1;
+    mapObject->light_radius = 0;
+    mapObject->light_intensity = 0;
+    mapObject->outline_color = 0;
+    mapObject->map_scripts_pid = -1;
+    mapObject->script_id = -1;
+    mapObject->objects_in_inventory = 0;
+    mapObject->max_inventory_size = 0;
+    mapObject->amount = 1;
+    mapObject->unknown10 = 0;
+    mapObject->unknown11 = 0;
+    
+    spdlog::debug("Created scroll blocker object at hex {} (frm_pid: 0x{:08X}, pro_pid: 0x{:08X})", 
+                 hexPosition, mapObject->frm_pid, mapObject->pro_pid);
+    
+    return mapObject;
+}
+
 // Tiles
 void EditorWidget::loadTileSprites() {
     const auto& lst = ResourceManager::getInstance().getResource<Lst, std::string>("art/tiles/tiles.lst");
@@ -737,7 +862,7 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 }
             } else {
                 // Determine if we should start drag selection or do immediate selection
-                bool canDragSelect = !hasModifiers && (_currentSelectionMode == SelectionMode::ALL || _currentSelectionMode == SelectionMode::FLOOR_TILES || _currentSelectionMode == SelectionMode::ROOF_TILES || _currentSelectionMode == SelectionMode::ROOF_TILES_ALL || _currentSelectionMode == SelectionMode::OBJECTS);
+                bool canDragSelect = !hasModifiers && (_currentSelectionMode == SelectionMode::ALL || _currentSelectionMode == SelectionMode::FLOOR_TILES || _currentSelectionMode == SelectionMode::ROOF_TILES || _currentSelectionMode == SelectionMode::ROOF_TILES_ALL || _currentSelectionMode == SelectionMode::OBJECTS || _currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE);
 
                 if (canDragSelect) {
                     // Start drag selection
@@ -802,10 +927,57 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     float height = std::abs(worldPos.y - _dragStartWorldPos.y);
                     sf::FloatRect selectionArea({ left, top }, { width, height });
 
-                    // Perform area selection - this will trigger observer notification and apply final colors
-                    auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
-                    if (result.success) {
-                        spdlog::info("Drag selection: {} items selected", _selectionManager->getCurrentSelection().count());
+                    if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
+                        // Handle scroll blocker rectangle placement
+                        auto borderHexes = calculateRectangleBorderHexes(selectionArea);
+                        
+                        if (!borderHexes.empty()) {
+                            // Create scroll blocker objects at border hexes
+                            int scrollBlockersCreated = 0;
+                            for (int hexPos : borderHexes) {
+                                auto scrollBlockerObject = createScrollBlockerObject(hexPos);
+                                
+                                // Add to map storage
+                                _map->getMapFile().map_objects[_currentElevation].push_back(scrollBlockerObject);
+                                
+                                // Create visual object for immediate display
+                                try {
+                                    std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(scrollBlockerObject->frm_pid);
+                                    auto frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
+                                    if (!frm) {
+                                        // Try loading the FRM if not in cache
+                                        ResourceManager::getInstance().loadResource<Frm>(frmPath);
+                                        frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
+                                    }
+                                    
+                                    if (frm) {
+                                        auto object = std::make_shared<Object>(frm);
+                                        sf::Sprite sprite{ ResourceManager::getInstance().texture(frmPath) };
+                                        object->setSprite(std::move(sprite));
+                                        object->setDirection(static_cast<ObjectDirection>(scrollBlockerObject->direction));
+                                        object->setHexPosition(_hexgrid.grid().at(hexPos));
+                                        object->setMapObject(scrollBlockerObject);
+                                        _objects.push_back(object);
+                                        scrollBlockersCreated++;
+                                    } else {
+                                        spdlog::warn("Failed to load FRM {} for scroll blocker", frmPath);
+                                    }
+                                } catch (const std::exception& e) {
+                                    spdlog::warn("Failed to create visual scroll blocker object at hex {}: {}", hexPos, e.what());
+                                    // MapObject is still saved, just won't be visible until reload
+                                }
+                            }
+                            
+                            spdlog::info("Scroll blocker rectangle: {} scroll blockers created on border", scrollBlockersCreated);
+                        } else {
+                            spdlog::warn("No valid border hexes found for scroll blocker rectangle");
+                        }
+                    } else {
+                        // Normal area selection - this will trigger observer notification and apply final colors
+                        auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
+                        if (result.success) {
+                            spdlog::info("Drag selection: {} items selected", _selectionManager->getCurrentSelection().count());
+                        }
                     }
 
                     _isDragSelecting = false;
@@ -1083,6 +1255,16 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
 
     // Render drag selection rectangle
     if (_isDragSelecting && (_currentAction == EditorAction::DRAG_SELECTING || _currentAction == EditorAction::TILE_PLACING)) {
+        // Use different colors for scroll blocker rectangle mode
+        if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
+            // Green colors for scroll blocker rectangle mode
+            _selectionRectangle.setFillColor(sf::Color(100, 255, 100, 50));    // Light green fill
+            _selectionRectangle.setOutlineColor(sf::Color(0, 200, 0, 200));    // Green outline
+        } else {
+            // Default blue colors for normal selection
+            _selectionRectangle.setFillColor(TileColors::selectionFill());
+            _selectionRectangle.setOutlineColor(TileColors::selectionOutline());
+        }
         window->draw(_selectionRectangle);
     }
 
@@ -1176,6 +1358,26 @@ void EditorWidget::cycleSelectionMode() {
     _selectionManager->clearSelection();
 
     spdlog::info("Selection mode changed to: {}", selectionModeToString(_currentSelectionMode));
+}
+
+void EditorWidget::toggleScrollBlockerRectangleMode() {
+    if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
+        // Switch back to ALL mode
+        _currentSelectionMode = SelectionMode::ALL;
+        spdlog::info("Scroll blocker rectangle mode disabled, switched to ALL mode");
+    } else {
+        // Switch to scroll blocker rectangle mode
+        _currentSelectionMode = SelectionMode::SCROLL_BLOCKER_RECTANGLE;
+        // Automatically enable scroll blocker visibility for better UX
+        if (!_showScrollBlk) {
+            _showScrollBlk = true;
+            spdlog::info("Automatically enabled scroll blocker visibility");
+        }
+        spdlog::info("Scroll blocker rectangle mode enabled");
+    }
+    
+    // Clear current selection when mode changes
+    _selectionManager->clearSelection();
 }
 
 void EditorWidget::rotateSelectedObject() {

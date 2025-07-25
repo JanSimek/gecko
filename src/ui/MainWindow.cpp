@@ -214,6 +214,13 @@ void MainWindow::setupMenuBar() {
     deselectAllAction->setStatusTip("Clear all selections");
     connect(deselectAllAction, &QAction::triggered, this, &MainWindow::deselectAllRequested);
 
+    _editMenu->addSeparator();
+
+    QAction* scrollBlockerRectangleAction = _editMenu->addAction("Scroll &Blocker Rectangle");
+    scrollBlockerRectangleAction->setShortcut(QKeySequence("B"));
+    scrollBlockerRectangleAction->setStatusTip("Draw rectangle and place scroll blockers on borders");
+    connect(scrollBlockerRectangleAction, &QAction::triggered, this, &MainWindow::toggleScrollBlockerRectangleMode);
+
     // View Menu
     _viewMenu = _menuBar->addMenu("&View");
 
@@ -602,6 +609,9 @@ void MainWindow::convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, 
         case Qt::Key_M:
             key = sf::Keyboard::Key::M;
             break;
+        case Qt::Key_B:
+            key = sf::Keyboard::Key::B;
+            break;
         default:
             key = sf::Keyboard::Key::Unknown;
             break;
@@ -658,6 +668,9 @@ void MainWindow::connectToEditorWidget() {
     });
     connect(this, &MainWindow::rotateObjectRequested, [this]() {
         _currentEditorWidget->rotateSelectedObject();
+    });
+    connect(this, &MainWindow::toggleScrollBlockerRectangleMode, [this]() {
+        _currentEditorWidget->toggleScrollBlockerRectangleMode();
     });
 
     // Connect EditorWidget's selection signals to the unified SelectionPanel

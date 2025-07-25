@@ -71,6 +71,7 @@ signals:
     void elevationChanged(int elevation);
     void selectionModeRequested();
     void rotateObjectRequested();
+    void toggleScrollBlockerRectangleMode();
 
 protected:
     void closeEvent(QCloseEvent* event) override;

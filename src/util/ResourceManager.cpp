@@ -10,6 +10,8 @@
 #endif
 #endif
 
+#include "Constants.h"
+
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
@@ -264,7 +266,7 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
         type = static_cast<Frm::FRM_TYPE>((FID & 0x0F000000) >> 24); // FIXME: WTF?
     }
 
-    if (type == Frm::FRM_TYPE::MISC && baseId == 1) {
+    if (type == Frm::FRM_TYPE::MISC && baseId == WallBlockers::SCROLL_BLOCKER_BASE_ID) {
         static const std::string SCROLL_BLOCKERS_PATH("art/misc/scrblk.frm");
         // Map scroll blockers
         return SCROLL_BLOCKERS_PATH;

@@ -52,6 +52,7 @@ public:
     void cycleSelectionMode();
     void rotateSelectedObject();
     void changeElevation(int elevation);
+    void toggleScrollBlockerRectangleMode();
     
     // Player position selection
     void enterPlayerPositionSelectionMode();
@@ -196,6 +197,10 @@ private:
     
     // Wall blocker overlay management
     void createWallBlockerOverlay(const std::shared_ptr<MapObject>& mapObject, int hexPosition);
+    
+    // Scroll blocker rectangle functionality
+    std::vector<int> calculateRectangleBorderHexes(sf::FloatRect rectangle);
+    std::shared_ptr<MapObject> createScrollBlockerObject(int hexPosition);
 
     enum class EditorAction {
         NONE,
