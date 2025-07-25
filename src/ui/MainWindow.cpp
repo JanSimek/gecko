@@ -137,8 +137,13 @@ void MainWindow::connectMenuSignals() {
     connect(this, &MainWindow::newMapRequested, [this]() {
         if (_currentEditorWidget) {
             _currentEditorWidget->createNewMap();
+        } else {
+            // Create new EditorWidget with empty map when no EditorWidget exists
+            auto editorWidget = std::make_unique<EditorWidget>(nullptr);
+            setEditorWidget(std::move(editorWidget));
+            // Now create the new map
+            _currentEditorWidget->createNewMap();
         }
-        // TODO: Handle new map creation when no EditorWidget exists
     });
     connect(this, &MainWindow::openMapRequested, [this]() {
         if (_currentEditorWidget) {

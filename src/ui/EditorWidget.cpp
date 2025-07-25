@@ -15,7 +15,7 @@
 #include "../util/QtDialogs.h"
 
 #include "../editor/Object.h"
-
+#include "../format/lst/Lst.h"
 
 #include "../writer/map/MapWriter.h"
 
@@ -57,18 +57,14 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
             sf::Vector2i(static_cast<int>(textureSize.x / 2), static_cast<int>(textureSize.y))));
     _playerPositionSprite.setColor(sf::Color(50, 150, 255, 200)); // Semi-transparent blue
 
-    // Initialize sprite vectors with blank texture
-    const sf::Texture& blankTexture = createBlankTexture();
+    // Initialize sprite vectors - will be populated when sprites are loaded
     _floorSprites.reserve(Map::TILES_PER_ELEVATION);
     _roofSprites.reserve(Map::TILES_PER_ELEVATION);
 
-    for (size_t i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
-        _floorSprites.emplace_back(blankTexture);
-        _roofSprites.emplace_back(blankTexture);
+    // Initialize selection management only if map is provided
+    if (_map) {
+        initializeSelectionSystem();
     }
-
-    // Initialize selection management
-    initializeSelectionSystem();
 
     setupUI();
     centerViewOnMap();
@@ -169,13 +165,18 @@ void EditorWidget::setupUI() {
 }
 
 void EditorWidget::init() {
-    loadSprites();
-    
-    // Show error summary if there were loading issues
-    showLoadingErrorsSummary();
-
-    // Initialize spatial index for O(1) area selection performance
-    _selectionManager->initializeSpatialIndex();
+    // Only load sprites if we have a map
+    if (_map) {
+        loadSprites();
+        
+        // Show error summary if there were loading issues
+        showLoadingErrorsSummary();
+        
+        // Initialize spatial index for O(1) area selection performance
+        if (_selectionManager) {
+            _selectionManager->initializeSpatialIndex();
+        }
+    }
 
     // Initialize selection rectangle for drag selection
     _selectionRectangle.setFillColor(TileColors::selectionFill());
@@ -240,7 +241,111 @@ void EditorWidget::openMap() {
 }
 
 void EditorWidget::createNewMap() {
-    spdlog::info("Create new map functionality not yet implemented");
+    spdlog::info("Creating new empty map");
+    
+    // Create a new empty MapFile
+    auto newMapFile = std::make_unique<Map::MapFile>();
+    
+    // Initialize header with default values
+    newMapFile->header.version = 20; // Standard Fallout 2 map version
+    newMapFile->header.filename = "newmap"; // Default filename
+    newMapFile->header.player_default_position = 19896; // Center of map (hex 99,99 area)
+    newMapFile->header.player_default_elevation = 0; // Ground level
+    newMapFile->header.player_default_orientation = 0; // North
+    newMapFile->header.num_local_vars = 0;
+    newMapFile->header.script_id = -1; // No map script
+    newMapFile->header.flags = 0; // All elevations enabled
+    newMapFile->header.darkness = 0; // No darkness
+    newMapFile->header.num_global_vars = 0;
+    newMapFile->header.map_id = 0; // Default map ID
+    newMapFile->header.timestamp = 0;
+    
+    // Initialize empty variables
+    newMapFile->map_local_vars.clear();
+    newMapFile->map_global_vars.clear();
+    
+    // Initialize empty tiles for all elevations (0, 1, 2)
+    for (int elevation = ELEVATION_1; elevation <= ELEVATION_3; elevation++) {
+        std::vector<Tile> elevationTiles;
+        elevationTiles.reserve(Map::TILES_PER_ELEVATION);
+        
+        // Create empty tiles (EMPTY_TILE = 1 for both floor and roof)
+        for (unsigned int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+            Tile tile(Map::EMPTY_TILE, Map::EMPTY_TILE); // Empty floor and roof tiles
+            elevationTiles.push_back(tile);
+        }
+        
+        newMapFile->tiles[elevation] = std::move(elevationTiles);
+    }
+    
+    // Initialize empty scripts
+    for (int i = 0; i < Map::SCRIPT_SECTIONS; i++) {
+        newMapFile->map_scripts[i].clear();
+        newMapFile->scripts_in_section[i] = 0;
+    }
+    
+    // Initialize empty objects for all elevations
+    for (int elevation = ELEVATION_1; elevation <= ELEVATION_3; elevation++) {
+        newMapFile->map_objects[elevation].clear();
+    }
+    
+    // Create a new Map instance with default filename for new map
+    _map = std::make_unique<Map>(std::filesystem::path("newmap.map"));
+    _map->setMapFile(std::move(newMapFile));
+    
+    // Reset current elevation to 0
+    _currentElevation = 0;
+    
+    // Clear all existing visual data
+    _objects.clear();
+    _floorSprites.clear();
+    _roofSprites.clear();
+    _wallBlockerOverlays.clear();
+    _selectedHexSprites.clear();
+    
+    // Load essential resources for empty map
+    try {
+        // Load essential textures
+        ResourceManager::getInstance().insertTexture("art/tiles/blank.frm");
+        ResourceManager::getInstance().insertTexture("art/misc/scrblk.frm");
+        ResourceManager::getInstance().insertTexture("art/misc/wallblock.frm");
+        ResourceManager::getInstance().insertTexture("art/misc/wallblockF.frm");
+        
+        // Load all LST files needed for palettes and object loading
+        ResourceManager::getInstance().loadResource<Lst>("art/items/items.lst");
+        ResourceManager::getInstance().loadResource<Lst>("art/critters/critters.lst");
+        ResourceManager::getInstance().loadResource<Lst>("art/scenery/scenery.lst");
+        ResourceManager::getInstance().loadResource<Lst>("art/walls/walls.lst");
+        ResourceManager::getInstance().loadResource<Lst>("art/tiles/tiles.lst");
+        ResourceManager::getInstance().loadResource<Lst>("art/misc/misc.lst");
+        ResourceManager::getInstance().loadResource<Lst>("art/intrface/intrface.lst");
+        ResourceManager::getInstance().loadResource<Lst>("art/inven/inven.lst");
+        
+        spdlog::info("Loaded essential resources for new map");
+    } catch (const std::exception& e) {
+        spdlog::warn("Failed to load some essential resources for new map: {}", e.what());
+    }
+    
+    // Initialize selection system now that map is available
+    if (!_selectionManager) {
+        initializeSelectionSystem();
+    }
+    
+    // Initialize sprites for the new empty map
+    loadSprites();
+    
+    // Clear selection
+    _selectionManager->clearSelection();
+    
+    // Center view on the map
+    centerViewOnMap();
+    
+    // Update palettes and UI now that map is created
+    if (_mainWindow) {
+        _mainWindow->updateMapInfo(_map.get());
+    }
+    
+    spdlog::info("Created new empty map with {} tiles per elevation", Map::TILES_PER_ELEVATION);
 }
 
 void EditorWidget::loadObjectSprites() {
@@ -523,6 +628,12 @@ std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPositi
 void EditorWidget::loadTileSprites() {
     const auto& lst = ResourceManager::getInstance().getResource<Lst, std::string>("art/tiles/tiles.lst");
 
+    // Clear previous sprites and reserve space
+    _floorSprites.clear();
+    _roofSprites.clear();
+    _floorSprites.reserve(Map::TILES_PER_ELEVATION);
+    _roofSprites.reserve(Map::TILES_PER_ELEVATION);
+
     for (auto tileNumber = 0U; tileNumber < Map::TILES_PER_ELEVATION; ++tileNumber) {
         auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileNumber);
 
@@ -543,9 +654,9 @@ void EditorWidget::loadTileSprites() {
         if (floorId == Map::EMPTY_TILE) {
             sf::Sprite tile_sprite(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
             tile_sprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-            _floorSprites[tileNumber] = tile_sprite;
+            _floorSprites.push_back(tile_sprite);
         } else {
-            _floorSprites[tileNumber] = createTileSprite(floorId);
+            _floorSprites.push_back(createTileSprite(floorId));
         }
 
         // roof
@@ -555,9 +666,9 @@ void EditorWidget::loadTileSprites() {
             tile_sprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) - ROOF_OFFSET });
             // Make empty roof tiles fully transparent by default
             tile_sprite.setColor(geck::TileColors::transparent());
-            _roofSprites[tileNumber] = tile_sprite;
+            _roofSprites.push_back(tile_sprite);
         } else {
-            _roofSprites[tileNumber] = createTileSprite(roofId, ROOF_OFFSET);
+            _roofSprites.push_back(createTileSprite(roofId, ROOF_OFFSET));
         }
     }
 }
@@ -568,8 +679,13 @@ void EditorWidget::loadSprites() {
     // Clear previous loading errors
     _lastLoadErrors.clear();
 
-    if (_sfmlWidget && _sfmlWidget->getRenderWindow()) {
-        _sfmlWidget->getRenderWindow()->setTitle(_map->filename() + " - Gecko");
+    if (_sfmlWidget && _sfmlWidget->getRenderWindow() && _map) {
+        std::string title = _map->filename();
+        if (title.empty()) {
+            title = "Untitled Map";
+        }
+        title += " - Gecko";
+        _sfmlWidget->getRenderWindow()->setTitle(title);
     }
 
     _objects.clear();
