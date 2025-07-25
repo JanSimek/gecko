@@ -130,28 +130,31 @@ jobs:
         echo "=== Setting up Qt6 on macOS ==="
         
         # Install Qt6 and required dependencies
-        brew install qt@6 double-conversion libb2 md4c
+        brew install qt@6 double-conversion libb2 md4c dbus
     
         # Link Qt6 (since it's keg-only and not linked by default)
         brew link qt@6 --force --overwrite
         brew link double-conversion --force
         brew link libb2 --force
         brew link md4c --force
+        brew link dbus --force
     
         # Get Homebrew prefix and paths
         HOMEBREW_PREFIX=$(brew --prefix)
         QT6_PATH=$(brew --prefix qt@6)
         LIBB2_PATH=$(brew --prefix libb2)
         MD4C_PATH=$(brew --prefix md4c)
+        DBUS_PATH=$(brew --prefix dbus)
         
         echo "Homebrew prefix: $HOMEBREW_PREFIX"
         echo "Qt6 installed at: $QT6_PATH"
         echo "libb2 installed at: $LIBB2_PATH"
         echo "md4c installed at: $MD4C_PATH"
+        echo "dbus installed at: $DBUS_PATH"
     
-        # Set up library paths for Qt tools to find libb2 and md4c
-        export DYLD_LIBRARY_PATH="$LIBB2_PATH/lib:$MD4C_PATH/lib:$HOMEBREW_PREFIX/lib:$DYLD_LIBRARY_PATH"
-        export LD_LIBRARY_PATH="$LIBB2_PATH/lib:$MD4C_PATH/lib:$HOMEBREW_PREFIX/lib:$LD_LIBRARY_PATH"
+        # Set up library paths for Qt tools to find libb2, md4c, and dbus
+        export DYLD_LIBRARY_PATH="$LIBB2_PATH/lib:$MD4C_PATH/lib:$DBUS_PATH/lib:$HOMEBREW_PREFIX/lib:$DYLD_LIBRARY_PATH"
+        export LD_LIBRARY_PATH="$LIBB2_PATH/lib:$MD4C_PATH/lib:$DBUS_PATH/lib:$HOMEBREW_PREFIX/lib:$LD_LIBRARY_PATH"
         echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
         echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> $GITHUB_ENV
         

@@ -304,7 +304,7 @@ QString FileBrowserPanel::getFileIcon(const QString& extension) const {
 }
 
 void FileBrowserPanel::updateFileCount() {
-    int totalFiles = _allFiles.size();
+    int totalFiles = static_cast<int>(_allFiles.size());
     int displayedFiles = 0;
 
     // Count displayed files in tree
