@@ -145,34 +145,8 @@ void EditorWidget::initializeSelectionSystem() {
             }
         }
 
-        // Emit efficient batched selection update instead of individual signals
+        // Emit unified selection update
         emit selectionChanged(selection, _currentElevation);
-
-        // Keep legacy signals for backward compatibility if needed
-        if (selection.isEmpty()) {
-            emit tileSelectionCleared();
-        } else {
-            // For single-item selections, emit legacy signals for compatibility
-            if (selection.items.size() == 1) {
-                const auto& item = selection.items[0];
-                switch (item.type) {
-                    case selection::SelectionType::OBJECT: {
-                        auto object = item.getObject();
-                        if (object) {
-                            emit objectSelected(object);
-                        }
-                        break;
-                    }
-                    case selection::SelectionType::ROOF_TILE:
-                    case selection::SelectionType::FLOOR_TILE: {
-                        int tileIndex = item.getTileIndex();
-                        bool isRoof = (item.type == selection::SelectionType::ROOF_TILE);
-                        emit tileSelected(tileIndex, _currentElevation, isRoof);
-                        break;
-                    }
-                }
-            }
-        }
     });
 
     // Register the observer with the selection manager

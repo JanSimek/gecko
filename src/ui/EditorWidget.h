@@ -120,9 +120,6 @@ public:
     int worldPosToHexPosition(sf::Vector2f worldPos) const;
 
 signals:
-    void objectSelected(std::shared_ptr<Object> object);
-    void tileSelected(int tileIndex, int elevation, bool isRoof);
-    void tileSelectionCleared();
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
     void hexHoverChanged(int hexIndex);

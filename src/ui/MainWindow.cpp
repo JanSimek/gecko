@@ -665,16 +665,7 @@ void MainWindow::connectToEditorWidget() {
         // Set the map reference for the selection panel
         _selectionPanel->setMap(_currentEditorWidget->getMap());
 
-        // Connect object selection signals
-        connect(_currentEditorWidget, &EditorWidget::objectSelected, _selectionPanel, &SelectionPanel::selectObject);
-
-        // Connect efficient batched selection signal
         connect(_currentEditorWidget, &EditorWidget::selectionChanged, _selectionPanel, &SelectionPanel::handleSelectionChanged);
-
-        // Keep legacy tile selection signals for single-item selections
-        connect(_currentEditorWidget, &EditorWidget::tileSelected, _selectionPanel, &SelectionPanel::selectTile);
-        connect(_currentEditorWidget, &EditorWidget::tileSelectionCleared, _selectionPanel, &SelectionPanel::clearSelection);
-
         spdlog::info("Connected EditorWidget selection signals to unified SelectionPanel");
     }
 
