@@ -258,12 +258,12 @@ const sf::Image ResourceManager::imageFromFrm(Frm* frm, Pal* pal) {
 }
 std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
 
-    /*const*/ auto baseId = FID & 0x00FFFFFF; // FIXME? 0x00000FFF;
-    /*const*/ auto type = static_cast<Frm::FRM_TYPE>(FID >> 24);
+    /*const*/ auto baseId = FID & FileFormat::BASE_ID_MASK; 
+    /*const*/ auto type = static_cast<Frm::FRM_TYPE>(FID >> FileFormat::TYPE_MASK_SHIFT);
 
     if (type == Frm::FRM_TYPE::CRITTER) {
-        baseId = FID & 0x00000FFF;
-        type = static_cast<Frm::FRM_TYPE>((FID & 0x0F000000) >> 24); // FIXME: WTF?
+        baseId = FID & FileFormat::CRITTER_ID_MASK;
+        type = static_cast<Frm::FRM_TYPE>((FID & FileFormat::TYPE_MASK) >> FileFormat::TYPE_MASK_SHIFT);
     }
 
     if (type == Frm::FRM_TYPE::MISC && baseId == WallBlockers::SCROLL_BLOCKER_BASE_ID) {
@@ -296,7 +296,7 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
     const auto& lst = getResource<Lst>(typeArtDescription.lstFilePath);
 
     if (baseId >= lst->list().size()) {
-        throw std::runtime_error{ "LST " + typeArtDescription.lstFilePath + " size " + std::to_string(lst->list().size()) + " <= frmID: " + std::to_string(baseId) + ", frmType: " + std::to_string((unsigned)type) };
+        throw std::runtime_error{ "LST " + typeArtDescription.lstFilePath + " size " + std::to_string(lst->list().size()) + " <= frmID: " + std::to_string(baseId) + ", frmType: " + std::to_string(static_cast<unsigned>(type)) };
     }
 
     std::string frm_name = lst->list().at(baseId);

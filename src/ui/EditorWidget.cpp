@@ -10,6 +10,7 @@
 #include <set>       // std::set
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
+#include "../util/ResourceInitializer.h"
 #include "../editor/HexagonGrid.h"
 #include "../util/TileUtils.h"
 #include "../util/QtDialogs.h"
@@ -20,7 +21,6 @@
 #include "../writer/map/MapWriter.h"
 
 #include "../format/frm/Frm.h"
-#include "../format/lst/Lst.h"
 #include "../format/map/Tile.h"
 #include "../format/pro/Pro.h"
 #include "../format/map/MapObject.h"
@@ -36,7 +36,7 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
     , _layout(nullptr)
     , _sfmlWidget(nullptr)
     , _mainWindow(nullptr)
-    , _view({ 0.f, 0.f }, sf::Vector2f(800.f, 600.f)) // Default size, will be updated on first resize
+    , _view({ 0.f, 0.f }, sf::Vector2f(View::DEFAULT_WIDTH, View::DEFAULT_HEIGHT)) // Default size, will be updated on first resize
     , _map(std::move(map))
     , _hexSprite(createHexTexture())
     , _hexHighlightSprite(createCursorHexTexture())
@@ -55,7 +55,7 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
         sf::IntRect(
             sf::Vector2i(static_cast<int>(textureSize.x / 2), 0),
             sf::Vector2i(static_cast<int>(textureSize.x / 2), static_cast<int>(textureSize.y))));
-    _playerPositionSprite.setColor(sf::Color(50, 150, 255, 200)); // Semi-transparent blue
+    _playerPositionSprite.setColor(sf::Color(PlayerColors::POSITION_R, PlayerColors::POSITION_G, PlayerColors::POSITION_B, PlayerColors::POSITION_ALPHA)); // Semi-transparent blue
 
     // Initialize sprite vectors - will be populated when sprites are loaded
     _floorSprites.reserve(Map::TILES_PER_ELEVATION);
@@ -128,12 +128,12 @@ void EditorWidget::initializeSelectionSystem() {
                         if (hexIndex < static_cast<int>(_hexgrid.grid().size())) {
                             const auto& hex = _hexgrid.grid().at(hexIndex);
                             sf::Sprite hexSelectionSprite = _hexHighlightSprite; // Copy the highlight sprite
-                            // Use the same positioning as hover highlight (offset by -16, -8)
-                            float spriteX = static_cast<float>(hex.x() - 16);
-                            float spriteY = static_cast<float>(hex.y() - 8);
+                            // Use the same positioning as hover highlight
+                            float spriteX = static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X);
+                            float spriteY = static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y);
                             hexSelectionSprite.setPosition(sf::Vector2f(spriteX, spriteY));
                             // Use a different color for selection vs hover (blue for selection, red for hover)
-                            hexSelectionSprite.setColor(sf::Color(100, 150, 255, 200)); // Semi-transparent blue
+                            hexSelectionSprite.setColor(sf::Color(SelectionColors::HEX_R, SelectionColors::HEX_G, SelectionColors::HEX_B, SelectionColors::HEX_ALPHA)); // Semi-transparent blue
                             this->_selectedHexSprites.push_back(hexSelectionSprite);
                         }
                     }
@@ -247,18 +247,18 @@ void EditorWidget::createNewMap() {
     auto newMapFile = std::make_unique<Map::MapFile>();
     
     // Initialize header with default values
-    newMapFile->header.version = 20; // Standard Fallout 2 map version
+    newMapFile->header.version = FileFormat::FALLOUT2_MAP_VERSION; // Standard Fallout 2 map version
     newMapFile->header.filename = "newmap"; // Default filename
-    newMapFile->header.player_default_position = 19896; // Center of map (hex 99,99 area)
-    newMapFile->header.player_default_elevation = 0; // Ground level
-    newMapFile->header.player_default_orientation = 0; // North
+    newMapFile->header.player_default_position = MapDefaults::PLAYER_DEFAULT_POSITION; // Center of map (hex 99,99 area)
+    newMapFile->header.player_default_elevation = MapDefaults::PLAYER_DEFAULT_ELEVATION; // Ground level
+    newMapFile->header.player_default_orientation = MapDefaults::PLAYER_DEFAULT_ORIENTATION; // North
     newMapFile->header.num_local_vars = 0;
-    newMapFile->header.script_id = -1; // No map script
-    newMapFile->header.flags = 0; // All elevations enabled
-    newMapFile->header.darkness = 0; // No darkness
+    newMapFile->header.script_id = MapDefaults::NO_SCRIPT_ID; // No map script
+    newMapFile->header.flags = MapDefaults::DEFAULT_FLAGS; // All elevations enabled
+    newMapFile->header.darkness = MapDefaults::NO_DARKNESS; // No darkness
     newMapFile->header.num_global_vars = 0;
-    newMapFile->header.map_id = 0; // Default map ID
-    newMapFile->header.timestamp = 0;
+    newMapFile->header.map_id = MapDefaults::DEFAULT_MAP_ID; // Default map ID
+    newMapFile->header.timestamp = MapDefaults::DEFAULT_TIMESTAMP;
     
     // Initialize empty variables
     newMapFile->map_local_vars.clear();
@@ -305,23 +305,7 @@ void EditorWidget::createNewMap() {
     
     // Load essential resources for empty map
     try {
-        // Load essential textures
-        ResourceManager::getInstance().insertTexture("art/tiles/blank.frm");
-        ResourceManager::getInstance().insertTexture("art/misc/scrblk.frm");
-        ResourceManager::getInstance().insertTexture("art/misc/wallblock.frm");
-        ResourceManager::getInstance().insertTexture("art/misc/wallblockF.frm");
-        
-        // Load all LST files needed for palettes and object loading
-        ResourceManager::getInstance().loadResource<Lst>("art/items/items.lst");
-        ResourceManager::getInstance().loadResource<Lst>("art/critters/critters.lst");
-        ResourceManager::getInstance().loadResource<Lst>("art/scenery/scenery.lst");
-        ResourceManager::getInstance().loadResource<Lst>("art/walls/walls.lst");
-        ResourceManager::getInstance().loadResource<Lst>("art/tiles/tiles.lst");
-        ResourceManager::getInstance().loadResource<Lst>("art/misc/misc.lst");
-        ResourceManager::getInstance().loadResource<Lst>("art/intrface/intrface.lst");
-        ResourceManager::getInstance().loadResource<Lst>("art/inven/inven.lst");
-        
-        spdlog::info("Loaded essential resources for new map");
+        ResourceInitializer::loadEssentialResources();
     } catch (const std::exception& e) {
         spdlog::warn("Failed to load some essential resources for new map: {}", e.what());
     }
@@ -483,12 +467,12 @@ void EditorWidget::createWallBlockerOverlay(const std::shared_ptr<MapObject>& ma
         
         // Position overlay at the specified hex position
         auto hex = _hexgrid.grid().at(hexPosition);
-        float x = static_cast<float>(hex.x() - 16); // Use same offset as hex selection
-        float y = static_cast<float>(hex.y() - 8);
+        float x = static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X); // Use same offset as hex selection
+        float y = static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y);
         overlaySprite.setPosition(sf::Vector2f(x, y));
         
         // Make overlay semi-transparent to show the object underneath
-        overlaySprite.setColor(sf::Color(255, 255, 255, 180));
+        overlaySprite.setColor(sf::Color(255, 255, 255, OverlayColors::WALL_BLOCKER_ALPHA));
         
         _wallBlockerOverlays.push_back(std::move(overlaySprite));
         
@@ -595,7 +579,7 @@ std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPositi
     mapObject->frm_pid = 0x05000000 | WallBlockers::SCROLL_BLOCKER_BASE_ID; // MISC type (0x05) with base ID 1
     
     // Set proto PID to a valid MISC object proto
-    mapObject->pro_pid = 0x05000000 | 24; // MISC type, proto 24 (generic small object)
+    mapObject->pro_pid = 0x05000000 | WallBlockers::GENERIC_PROTO_ID; // MISC type, generic small object
     
     // Set flags - scroll blockers don't block movement, just visual indicators
     mapObject->flags = 0;
@@ -763,7 +747,7 @@ std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vect
         spdlog::debug("getObjectsAtPosition: Found {} overlapping objects:", objectsAtPos.size());
         for (size_t i = 0; i < objectsAtPos.size(); i++) {
             uint32_t pid = objectsAtPos[i]->getMapObject().pro_pid;
-            unsigned int typeId = pid >> 24;
+            unsigned int typeId = pid >> FileFormat::TYPE_MASK_SHIFT;
             const char* typeName = "UNKNOWN";
             switch (static_cast<Pro::OBJECT_TYPE>(typeId)) {
                 case Pro::OBJECT_TYPE::ITEM:
@@ -1374,8 +1358,8 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
         // Use different colors for scroll blocker rectangle mode
         if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
             // Green colors for scroll blocker rectangle mode
-            _selectionRectangle.setFillColor(sf::Color(100, 255, 100, 50));    // Light green fill
-            _selectionRectangle.setOutlineColor(sf::Color(0, 200, 0, 200));    // Green outline
+            _selectionRectangle.setFillColor(sf::Color(SelectionColors::SCROLL_BLOCKER_R, SelectionColors::SCROLL_BLOCKER_G, SelectionColors::SCROLL_BLOCKER_B, SelectionColors::SCROLL_BLOCKER_FILL_ALPHA));    // Light green fill
+            _selectionRectangle.setOutlineColor(sf::Color(0, 200, 0, SelectionColors::SCROLL_BLOCKER_OUTLINE_ALPHA));    // Green outline
         } else {
             // Default blue colors for normal selection
             _selectionRectangle.setFillColor(TileColors::selectionFill());
@@ -1389,8 +1373,8 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
         // Find the hex with the matching position
         for (const auto& hex : _hexgrid.grid()) {
             if (hex.position() == static_cast<uint32_t>(_currentHoverHex)) {
-                float spriteX = static_cast<float>(hex.x() - 16);
-                float spriteY = static_cast<float>(hex.y() - 8);
+                float spriteX = static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X);
+                float spriteY = static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y);
 
                 _hexHighlightSprite.setPosition({ spriteX, spriteY });
                 window->draw(_hexHighlightSprite);
@@ -1406,8 +1390,8 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
             // Find the hex with the matching position
             for (const auto& hex : _hexgrid.grid()) {
                 if (hex.position() == playerPosition) {
-                    float spriteX = static_cast<float>(hex.x() - 16);
-                    float spriteY = static_cast<float>(hex.y() - 8);
+                    float spriteX = static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X);
+                    float spriteY = static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y);
 
                     _playerPositionSprite.setPosition({ spriteX, spriteY });
                     window->draw(_playerPositionSprite);

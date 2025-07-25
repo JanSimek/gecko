@@ -13,6 +13,9 @@ set(GECK_SOURCES
     util/ResourceManager.h
     util/ResourceManager.cpp
 
+    util/ResourceInitializer.h
+    util/ResourceInitializer.cpp
+
     util/ProHelper.h
     util/ProHelper.cpp
 

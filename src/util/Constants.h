@@ -106,6 +106,9 @@ namespace FileFormat {
     constexpr int TYPE_MASK_SHIFT = 24;             ///< Bit shift for type mask in PIDs/FIDs
     constexpr uint32_t TYPE_MASK = 0x0F000000;      ///< Type mask for PIDs/FIDs
     constexpr uint32_t FULL_TYPE_MASK = 0xFF000000; ///< Full type mask
+    constexpr uint32_t BASE_ID_MASK = 0x00FFFFFF;   ///< Base ID mask for PIDs/FIDs
+    constexpr uint32_t CRITTER_ID_MASK = 0x00000FFF; ///< Special mask for critter IDs
+    constexpr int FALLOUT2_MAP_VERSION = 20;        ///< Standard Fallout 2 map version
 }
 
 // Wall Blocker constants
@@ -123,6 +126,33 @@ namespace WallBlockers {
     
     // MISC object type ID
     constexpr uint32_t MISC_TYPE_ID = 5;                                ///< MISC type in object type enum
+    
+    // Generic proto ID for simple objects
+    constexpr uint32_t GENERIC_PROTO_ID = 24;                           ///< Proto 24 - Generic small object
+}
+
+// Map defaults
+namespace MapDefaults {
+    constexpr uint32_t PLAYER_DEFAULT_POSITION = 19896;                 ///< Center of map (hex 99,99 area)
+    constexpr uint32_t PLAYER_DEFAULT_ELEVATION = 0;                    ///< Ground level
+    constexpr uint32_t PLAYER_DEFAULT_ORIENTATION = 0;                  ///< North
+    constexpr int32_t NO_SCRIPT_ID = -1;                                ///< No map script
+    constexpr uint32_t DEFAULT_FLAGS = 0;                               ///< All elevations enabled
+    constexpr uint32_t NO_DARKNESS = 0;                                 ///< No darkness
+    constexpr uint32_t DEFAULT_MAP_ID = 0;                              ///< Default map ID
+    constexpr uint32_t DEFAULT_TIMESTAMP = 0;                           ///< Default timestamp
+}
+
+// Sprite positioning constants
+namespace SpriteOffset {
+    constexpr int HEX_HIGHLIGHT_X = -16;                                ///< X offset for hex highlighting
+    constexpr int HEX_HIGHLIGHT_Y = -8;                                 ///< Y offset for hex highlighting
+}
+
+// View constants
+namespace View {
+    constexpr float DEFAULT_WIDTH = 800.0f;                             ///< Default view width
+    constexpr float DEFAULT_HEIGHT = 600.0f;                            ///< Default view height
 }
 
 namespace UI {
@@ -133,6 +163,31 @@ namespace UI {
     constexpr bool DEFAULT_SHOW_SCROLL_BLK = false;
     constexpr bool DEFAULT_SHOW_WALL_BLK = false;
     constexpr bool DEFAULT_SHOW_HEX_GRID = false;
+}
+
+// Additional color constants for player and UI elements
+namespace PlayerColors {
+    constexpr int POSITION_R = 50;                                       ///< Player position marker red
+    constexpr int POSITION_G = 150;                                      ///< Player position marker green  
+    constexpr int POSITION_B = 255;                                      ///< Player position marker blue
+    constexpr int POSITION_ALPHA = 200;                                  ///< Player position marker alpha
+}
+
+namespace SelectionColors {
+    constexpr int HEX_R = 100;                                           ///< Hex selection red
+    constexpr int HEX_G = 150;                                           ///< Hex selection green
+    constexpr int HEX_B = 255;                                           ///< Hex selection blue
+    constexpr int HEX_ALPHA = 200;                                       ///< Hex selection alpha
+    
+    constexpr int SCROLL_BLOCKER_R = 100;                                ///< Scroll blocker rectangle red
+    constexpr int SCROLL_BLOCKER_G = 255;                                ///< Scroll blocker rectangle green
+    constexpr int SCROLL_BLOCKER_B = 100;                                ///< Scroll blocker rectangle blue
+    constexpr int SCROLL_BLOCKER_FILL_ALPHA = 50;                        ///< Scroll blocker fill alpha
+    constexpr int SCROLL_BLOCKER_OUTLINE_ALPHA = 200;                    ///< Scroll blocker outline alpha
+}
+
+namespace OverlayColors {
+    constexpr int WALL_BLOCKER_ALPHA = 180;                              ///< Wall blocker overlay alpha
 }
 
 } // namespace geck
