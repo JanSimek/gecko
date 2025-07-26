@@ -102,6 +102,7 @@ private:
     void updateFileTypeComboBox();
     void exportFile(const QString& filePath);
     void resizeNameColumnToContent();
+    bool isTextFile(const QString& filePath) const;
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;

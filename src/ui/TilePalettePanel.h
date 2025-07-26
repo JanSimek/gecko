@@ -70,10 +70,7 @@ public:
         // Note: REPLACE_SELECTED removed - automatic replacement when tiles are selected
     };
 
-    enum class InteractionMode {
-        SELECTION,    // Normal selection mode (default editor behavior)
-        TILE_PAINTING // Tile painting mode (place tiles from palette)
-    };
+    // Note: InteractionMode removed - tiles auto-paint when selected
 
     explicit TilePalettePanel(QWidget* parent = nullptr);
     ~TilePalettePanel() = default;
@@ -85,12 +82,11 @@ public:
     // Tile selection
     int getSelectedTileIndex() const { return _selectedTileIndex; }
     bool hasSelectedTile() const { return _selectedTileIndex >= 0; }
+    void deselectTile();
 
-    // Interaction modes
-    InteractionMode getInteractionMode() const { return _interactionMode; }
-    void setInteractionMode(InteractionMode mode);
+    // Note: Interaction modes removed - tiles auto-paint when selected
 
-    // Placement modes (only relevant in TILE_PAINTING interaction mode)
+    // Placement modes 
     PlacementMode getPlacementMode() const { return _placementMode; }
     void setPlacementMode(PlacementMode mode);
 
@@ -98,7 +94,6 @@ public:
 
 signals:
     void tileSelected(int tileIndex);
-    void interactionModeChanged(InteractionMode mode);
     void placementModeChanged(PlacementMode mode);
     void placeTileAtPosition(int tileIndex, int position, bool isRoof);
     void fillAreaWithTile(int tileIndex, const QRect& area, bool isRoof);
@@ -106,7 +101,6 @@ signals:
 
 public slots:
     void onTileClicked(int tileIndex);
-    void onInteractionModeChanged();
     void onPlacementModeChanged();
 
 private slots:
@@ -120,7 +114,6 @@ protected:
 
 private:
     void setupUI();
-    void setupInteractionModeControls();
     void setupModeControls();
     void setupTileGrid();
     void setupFilterControls();
@@ -135,13 +128,7 @@ private:
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
 
-    // Interaction mode controls
-    QGroupBox* _interactionGroup = nullptr;
-    QButtonGroup* _interactionButtonGroup = nullptr;
-    QPushButton* _selectionModeButton = nullptr;
-    QPushButton* _tilePaintingModeButton = nullptr;
-
-    // Placement mode info (shown only in tile painting mode)
+    // Placement mode info
     QGroupBox* _modeGroup = nullptr;
     QLabel* _placementModeLabel = nullptr;
 
@@ -166,7 +153,6 @@ private:
 
     // State
     int _selectedTileIndex = -1;
-    InteractionMode _interactionMode = InteractionMode::SELECTION;
     PlacementMode _placementMode = PlacementMode::UNIFIED_PLACEMENT;
     int _tilesPerRow = 8;
     int _previousColumnsPerRow = -1; // Cache to avoid unnecessary grid rebuilds

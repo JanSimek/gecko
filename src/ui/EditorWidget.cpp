@@ -26,6 +26,7 @@
 #include "../format/pro/Pro.h"
 #include "../format/map/MapObject.h"
 #include "ObjectPalettePanel.h"
+#include "TilePalettePanel.h"
 #include "MainWindow.h"
 
 #include "../util/ProHelper.h"
@@ -967,10 +968,21 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 }
             }
         } else if (mousePressed->button == sf::Mouse::Button::Right) {
-            // Start panning
-            _currentAction = EditorAction::PANNING;
-            _mouseStartingPosition = mousePressed->position;
-            _mouseLastPosition = _mouseStartingPosition;
+            // Check if we're in tile placement mode - if so, deselect tile instead of panning
+            if (_tilePlacementMode) {
+                _tilePlacementMode = false;
+                _tilePlacementIndex = -1;
+                // Notify MainWindow to deselect tile in palette
+                if (_mainWindow && _mainWindow->getTilePalettePanel()) {
+                    _mainWindow->getTilePalettePanel()->deselectTile();
+                }
+                spdlog::info("Tile placement mode cancelled with right-click");
+            } else {
+                // Start panning
+                _currentAction = EditorAction::PANNING;
+                _mouseStartingPosition = mousePressed->position;
+                _mouseLastPosition = _mouseStartingPosition;
+            }
         }
     } else if (const auto* mouseReleased = event.getIf<sf::Event::MouseButtonReleased>()) {
         if (mouseReleased->button == sf::Mouse::Button::Left) {
@@ -1248,6 +1260,15 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                     cancelObjectDrag();
                     _currentAction = EditorAction::NONE;
                     spdlog::info("Object drag cancelled with ESC key");
+                } else if (_tilePlacementMode) {
+                    // Deselect tile and exit tile placement mode
+                    _tilePlacementMode = false;
+                    _tilePlacementIndex = -1;
+                    // Notify MainWindow to deselect tile in palette
+                    if (_mainWindow && _mainWindow->getTilePalettePanel()) {
+                        _mainWindow->getTilePalettePanel()->deselectTile();
+                    }
+                    spdlog::info("Tile placement mode cancelled with ESC key");
                 }
                 break;
             default:

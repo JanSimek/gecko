@@ -142,6 +142,7 @@ This project wouldn't be possible without the excellent work from:
 - [FRM-Viewer](https://github.com/Primagen/Fallout-FRM-Viewer) - Fallout graphics format viewer
 - [Dims Mapper](https://github.com/FakelsHub/F2_Mapper_Dims) - Legacy Fallout 2 map editor
 - [darkfo](https://github.com/darkf/darkfo) - Web-based Fallout engine
+- [Tabler icons](https://tabler-icons.io/)
 
 ## Useful Links
 

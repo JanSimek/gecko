@@ -49,6 +49,9 @@ QIcon FileTreeItem::getFileIcon(const QString& fileName) {
         {"int", ":/icons/filetypes/script.svg"},
         {"ssl", ":/icons/filetypes/script.svg"},
         {"txt", ":/icons/filetypes/text.svg"},
+        {"cfg", ":/icons/filetypes/text.svg"},
+        {"gam", ":/icons/filetypes/text.svg"},
+        {"ini", ":/icons/filetypes/text.svg"},
         {"pal", ":/icons/filetypes/palette.svg"}
     };
     
@@ -57,6 +60,14 @@ QIcon FileTreeItem::getFileIcon(const QString& fileName) {
     }
     
     return QIcon(":/icons/filetypes/default.svg");
+}
+
+bool FileBrowserPanel::isTextFile(const QString& filePath) const {
+    static const QStringList textExtensions = {
+        "cfg", "txt", "gam", "msg", "lst", "int", "ssl", "ini"
+    };
+    QString suffix = QFileInfo(filePath).suffix().toLower();
+    return textExtensions.contains(suffix);
 }
 
 // FileBrowserPanel implementation
@@ -443,9 +454,20 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
     // Create context menu
     QMenu contextMenu(this);
     
-    // Add Open action
-    QAction* openAction = contextMenu.addAction("Open");
-    openAction->setIcon(QIcon(":/icons/actions/open.svg"));
+    QString filePath = item->getFilePath();
+    
+    // Add Open action with different text based on file type
+    QAction* openAction = nullptr;
+    if (filePath.endsWith(".map", Qt::CaseInsensitive)) {
+        openAction = contextMenu.addAction("Open Map");
+        openAction->setIcon(QIcon(":/icons/filetypes/map.svg"));
+    } else if (isTextFile(filePath)) {
+        openAction = contextMenu.addAction("Open with System Editor");
+        openAction->setIcon(QIcon(":/icons/filetypes/text.svg"));
+    } else {
+        openAction = contextMenu.addAction("Open");
+        openAction->setIcon(QIcon(":/icons/actions/open.svg"));
+    }
     
     // Add Export action
     QAction* exportAction = contextMenu.addAction("Export");
@@ -456,12 +478,10 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
     
     if (selectedAction == openAction) {
         // Emit the double-click signal (same behavior as double-clicking)
-        QString filePath = item->getFilePath();
         spdlog::debug("FileBrowserPanel: Open action triggered for: {}", filePath.toStdString());
         emit fileDoubleClicked(filePath);
     } else if (selectedAction == exportAction) {
         // Export the file
-        QString filePath = item->getFilePath();
         spdlog::debug("FileBrowserPanel: Export action triggered for: {}", filePath.toStdString());
         exportFile(filePath);
     }

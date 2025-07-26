@@ -14,6 +14,7 @@
 #include "../util/ResourceManager.h"
 #include "../util/Settings.h"
 #include "../util/QtDialogs.h"
+#include "../util/PathUtils.h"
 #include "../reader/lst/LstReader.h"
 #include "../format/lst/Lst.h"
 
@@ -31,6 +32,10 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QIcon>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QTemporaryFile>
+#include <QStandardPaths>
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 
@@ -502,9 +507,15 @@ void MainWindow::setupDockWidgets() {
             
             // File browser always uses VFS loading (forceFilesystem = false)
             handleMapLoadRequest(filePath.toStdString(), false);
+        } else if (isTextFile(filePath)) {
+            spdlog::info("MainWindow: Opening text file from file browser: {}", filePath.toStdString());
+            
+            // Open text files with system default editor
+            openTextFileWithSystemEditor(filePath);
         } else {
-            spdlog::debug("MainWindow: Non-map file double-clicked: {}", filePath.toStdString());
-            // TODO: Handle other file types (e.g., open in appropriate viewer/editor)
+            spdlog::debug("MainWindow: Unsupported file type double-clicked: {}", filePath.toStdString());
+            QtDialogs::showInfo(this, "File Type Not Supported", 
+                QString("File type not supported for opening: %1\n\nYou can export the file using the right-click context menu.").arg(filePath));
         }
     });
 
@@ -767,14 +778,7 @@ void MainWindow::connectToEditorWidget() {
                 _currentEditorWidget->replaceSelectedTiles(newTileIndex);
             });
 
-        // Connect interaction mode changes to enable/disable tile placement functionality
-        connect(_tilePalettePanel, &TilePalettePanel::interactionModeChanged,
-            [](TilePalettePanel::InteractionMode mode) {
-                bool tilePaintingEnabled = (mode == TilePalettePanel::InteractionMode::TILE_PAINTING);
-                // TODO: Implement EditorWidget method to toggle tile painting interaction mode
-                // _currentEditorWidget->setTilePaintingInteractionMode(tilePaintingEnabled);
-                spdlog::debug("Interaction mode changed: tile painting {}", tilePaintingEnabled ? "enabled" : "disabled");
-            });
+        // Note: Interaction mode selection removed - tiles auto-paint when selected
 
         spdlog::info("Connected TilePalettePanel to EditorWidget");
     }
@@ -1227,6 +1231,93 @@ void MainWindow::showPreferences() {
     
     // Ensure file browser panel is visible after closing preferences
     showFileBrowserPanel();
+}
+
+bool MainWindow::isTextFile(const QString& filePath) const {
+    static const QStringList textExtensions = {
+        "cfg", "txt", "gam", "msg", "lst", "int", "ssl", "ini"
+    };
+    QString suffix = QFileInfo(filePath).suffix().toLower();
+    return textExtensions.contains(suffix);
+}
+
+void MainWindow::openTextFileWithSystemEditor(const QString& vfsFilePath) {
+    try {
+        spdlog::info("MainWindow: Opening text file with system editor: {}", vfsFilePath.toStdString());
+        
+        // Get file from VFS
+        auto& resourceManager = ResourceManager::getInstance();
+        auto vfs = resourceManager.getVFS();
+        
+        if (!vfs) {
+            QtDialogs::showError(this, "Error", "Virtual file system not available");
+            return;
+        }
+        
+        // Prepare VFS path (needs leading slash)
+        std::filesystem::path vfsPath = "/" / std::filesystem::path(vfsFilePath.toStdString());
+        vfspp::FileInfo vfsFileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
+        
+        // Open file in VFS
+        vfspp::IFilePtr vfsFile = vfs->OpenFile(vfsFileInfo, vfspp::IFile::FileMode::Read);
+        if (!vfsFile) {
+            QtDialogs::showError(this, "Error", 
+                QString("Failed to open file: %1").arg(vfsFilePath));
+            return;
+        }
+        
+        // Read file data
+        size_t fileSize = vfsFile->Size();
+        std::vector<uint8_t> buffer(fileSize);
+        size_t bytesRead = vfsFile->Read(buffer.data(), fileSize);
+        
+        if (bytesRead != fileSize) {
+            QtDialogs::showError(this, "Error", 
+                QString("Failed to read complete file: %1").arg(vfsFilePath));
+            return;
+        }
+        
+        // Create temporary file with same extension
+        QFileInfo fileInfo(vfsFilePath);
+        QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+        QString tempFileName = QString("%1_XXXXXX.%2")
+            .arg(fileInfo.baseName())
+            .arg(fileInfo.suffix());
+        QString tempFilePath = tempDir + "/" + tempFileName;
+        
+        QTemporaryFile tempFile(tempFilePath);
+        tempFile.setAutoRemove(false); // Keep file for editor to open
+        
+        if (!tempFile.open()) {
+            QtDialogs::showError(this, "Error", 
+                QString("Failed to create temporary file for: %1").arg(vfsFilePath));
+            return;
+        }
+        
+        // Write data to temporary file
+        tempFile.write(reinterpret_cast<const char*>(buffer.data()), fileSize);
+        tempFile.close();
+        
+        // Get the actual temporary file path
+        QString actualTempPath = tempFile.fileName();
+        
+        // Open with system default application
+        QUrl fileUrl = QUrl::fromLocalFile(actualTempPath);
+        bool opened = QDesktopServices::openUrl(fileUrl);
+        
+        if (!opened) {
+            QtDialogs::showError(this, "Error", 
+                QString("Failed to open file with system default editor.\nTemporary file: %1").arg(actualTempPath));
+            // Clean up the temp file if opening failed
+            QFile::remove(actualTempPath);
+        } else {
+            spdlog::info("MainWindow: Successfully opened file with system editor: {}", actualTempPath.toStdString());
+        }
+        
+    } catch (const std::exception& e) {
+        QtDialogs::showError(this, "Error", 
+            QString("Failed to open text file: %1").arg(e.what()));
+    }
 }
 
 } // namespace geck

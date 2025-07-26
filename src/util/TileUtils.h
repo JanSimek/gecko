@@ -19,9 +19,9 @@ struct TileCoordinates {
     unsigned int x; ///< X coordinate (row) in the tile grid
     unsigned int y; ///< Y coordinate (column) in the tile grid
 
-    TileCoordinates(unsigned int x = 0, unsigned int y = 0)
-        : x(x)
-        , y(y) { }
+    TileCoordinates(unsigned int initX = 0, unsigned int initY = 0)
+        : x(initX)
+        , y(initY) { }
 };
 
 /**

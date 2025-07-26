@@ -56,8 +56,9 @@ public:
     void refreshFileBrowser();
     void showFileBrowserPanel();
     
-    // Access to palette panel for drag and drop
+    // Access to palette panels for drag and drop and tile deselection
     ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
+    TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
 
 signals:
     void newMapRequested();
@@ -99,6 +100,10 @@ private:
     void connectMenuSignals();
     void updatePanelMenuActions();
     void updateElevationMenu(Map* map);
+    
+    // Text file handling
+    bool isTextFile(const QString& filePath) const;
+    void openTextFileWithSystemEditor(const QString& vfsFilePath);
 
     // Dock widget state management
     void saveDockWidgetState();

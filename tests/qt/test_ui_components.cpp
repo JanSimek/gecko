@@ -4,6 +4,10 @@
 #include <QTimer>
 #include <cstdlib>
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 // Example Qt Test for UI components
 // This demonstrates the Qt Test framework structure for future UI tests
 
@@ -26,8 +30,17 @@ private:
 };
 
 void TestUIComponents::initTestCase() {
-    // Check if running in CI environment
-    isCI = (std::getenv("CI") != nullptr) || (std::getenv("GITHUB_ACTIONS") != nullptr);
+    // Check if running in CI environment using portable method
+    auto checkEnvVar = [](const char* varName) -> bool {
+#ifdef _WIN32
+        size_t envLen;
+        return _dupenv_s(nullptr, &envLen, varName) == 0 && envLen > 0;
+#else
+        return std::getenv(varName) != nullptr;
+#endif
+    };
+    
+    isCI = checkEnvVar("CI") || checkEnvVar("GITHUB_ACTIONS");
     
     if (isCI) {
         qDebug() << "Running in CI environment, skipping GUI-dependent tests";
