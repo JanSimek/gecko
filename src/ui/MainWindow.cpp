@@ -30,6 +30,7 @@
 #include <QKeyEvent>
 #include <QAction>
 #include <QActionGroup>
+#include <QIcon>
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 
@@ -86,41 +87,26 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
-    spdlog::info("setEditorWidget: Starting to set editor widget");
-    
     _currentEditorWidget = editorWidget.release();
-    spdlog::info("setEditorWidget: Released editor widget pointer");
-    
     _centralStack->addWidget(_currentEditorWidget);
-    spdlog::info("setEditorWidget: Added widget to central stack");
-    
     _centralStack->setCurrentWidget(_currentEditorWidget);
-    spdlog::info("setEditorWidget: Set current widget in stack");
 
     // Set main window reference for palette access
     _currentEditorWidget->setMainWindow(this);
-    spdlog::info("setEditorWidget: Set main window reference");
 
     // Initialize the editor widget
     _currentEditorWidget->init();
-    spdlog::info("setEditorWidget: Initialized editor widget");
 
     // Connect signals
     connectToEditorWidget();
-    spdlog::info("setEditorWidget: Connected signals");
 
     // Update map info panel
     if (_currentEditorWidget->getMap()) {
-        spdlog::info("setEditorWidget: Map exists, updating map info and showing panels");
         updateMapInfo(_currentEditorWidget->getMap());
         
         // Show all panels when a map is loaded
         showAllPanels();
-    } else {
-        spdlog::error("setEditorWidget: EditorWidget has no map!");
     }
-    
-    spdlog::info("setEditorWidget: Completed");
 }
 
 
@@ -192,31 +178,31 @@ void MainWindow::setupMenuBar() {
     // File Menu
     _fileMenu = _menuBar->addMenu("&File");
 
-    QAction* newAction = _fileMenu->addAction("&New Map");
+    QAction* newAction = _fileMenu->addAction(QIcon(":/icons/actions/new.svg"), "&New Map");
     newAction->setShortcut(QKeySequence::New);
     newAction->setStatusTip("Create a new map");
     connect(newAction, &QAction::triggered, this, &MainWindow::newMapRequested);
 
-    QAction* openAction = _fileMenu->addAction("&Open Map");
+    QAction* openAction = _fileMenu->addAction(QIcon(":/icons/actions/open.svg"), "&Open Map");
     openAction->setShortcut(QKeySequence::Open);
     openAction->setStatusTip("Open an existing map");
     connect(openAction, &QAction::triggered, this, &MainWindow::openMapRequested);
 
-    QAction* saveAction = _fileMenu->addAction("&Save Map");
+    QAction* saveAction = _fileMenu->addAction(QIcon(":/icons/actions/save.svg"), "&Save Map");
     saveAction->setShortcut(QKeySequence::Save);
     saveAction->setStatusTip("Save current map");
     connect(saveAction, &QAction::triggered, this, &MainWindow::saveMapRequested);
 
     _fileMenu->addSeparator();
     
-    QAction* preferencesAction = _fileMenu->addAction("&Preferences...");
+    QAction* preferencesAction = _fileMenu->addAction(QIcon(":/icons/actions/settings.svg"), "&Preferences...");
     preferencesAction->setShortcut(QKeySequence::Preferences);
     preferencesAction->setStatusTip("Open application preferences");
     connect(preferencesAction, &QAction::triggered, this, &MainWindow::showPreferences);
 
     _fileMenu->addSeparator();
 
-    QAction* quitAction = _fileMenu->addAction("&Quit");
+    QAction* quitAction = _fileMenu->addAction(QIcon(":/icons/actions/quit.svg"), "&Quit");
     quitAction->setShortcut(QKeySequence::Quit);
     quitAction->setStatusTip("Exit the application");
     connect(quitAction, &QAction::triggered, this, &QWidget::close);
@@ -224,19 +210,19 @@ void MainWindow::setupMenuBar() {
     // Edit Menu
     _editMenu = _menuBar->addMenu("&Edit");
 
-    QAction* selectAllAction = _editMenu->addAction("Select &All");
+    QAction* selectAllAction = _editMenu->addAction(QIcon(":/icons/actions/select-all.svg"), "Select &All");
     selectAllAction->setShortcut(QKeySequence("Ctrl+A"));
     selectAllAction->setStatusTip("Select all items of current type");
     connect(selectAllAction, &QAction::triggered, this, &MainWindow::selectAllRequested);
 
-    QAction* deselectAllAction = _editMenu->addAction("&Deselect All");
+    QAction* deselectAllAction = _editMenu->addAction(QIcon(":/icons/actions/deselect.svg"), "&Deselect All");
     deselectAllAction->setShortcut(QKeySequence("Ctrl+D"));
     deselectAllAction->setStatusTip("Clear all selections");
     connect(deselectAllAction, &QAction::triggered, this, &MainWindow::deselectAllRequested);
 
     _editMenu->addSeparator();
 
-    QAction* scrollBlockerRectangleAction = _editMenu->addAction("Scroll &Blocker Rectangle");
+    QAction* scrollBlockerRectangleAction = _editMenu->addAction(QIcon(":/icons/actions/scroll-blocker.svg"), "Scroll &Blocker Rectangle");
     scrollBlockerRectangleAction->setShortcut(QKeySequence("B"));
     scrollBlockerRectangleAction->setStatusTip("Draw rectangle and place scroll blockers on borders");
     connect(scrollBlockerRectangleAction, &QAction::triggered, this, &MainWindow::toggleScrollBlockerRectangleMode);
@@ -401,9 +387,28 @@ void MainWindow::setupMenuBar() {
 void MainWindow::setupToolBar() {
     _mainToolBar = addToolBar("Main");
     _mainToolBar->setObjectName("MainToolBar");
+    _mainToolBar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+
+    // File operations
+    QAction* newAction = _mainToolBar->addAction(QIcon(":/icons/actions/new.svg"), "New");
+    newAction->setStatusTip("Create a new map");
+    newAction->setShortcut(QKeySequence::New);
+    connect(newAction, &QAction::triggered, this, &MainWindow::newMapRequested);
+
+    QAction* openAction = _mainToolBar->addAction(QIcon(":/icons/actions/open.svg"), "Open");
+    openAction->setStatusTip("Open an existing map");
+    openAction->setShortcut(QKeySequence::Open);
+    connect(openAction, &QAction::triggered, this, &MainWindow::openMapRequested);
+
+    QAction* saveAction = _mainToolBar->addAction(QIcon(":/icons/actions/save.svg"), "Save");
+    saveAction->setStatusTip("Save the current map");
+    saveAction->setShortcut(QKeySequence::Save);
+    connect(saveAction, &QAction::triggered, this, &MainWindow::saveMapRequested);
+
+    _mainToolBar->addSeparator();
 
     // Selection mode action - start with "All" mode
-    QAction* selectionModeAction = _mainToolBar->addAction("Mode: All");
+    QAction* selectionModeAction = _mainToolBar->addAction(QIcon(":/icons/actions/select.svg"), "Mode: All");
     selectionModeAction->setStatusTip("Toggle selection mode (Objects/Floor/Roof/All)");
     connect(selectionModeAction, &QAction::triggered, this, &MainWindow::selectionModeRequested);
 
@@ -419,7 +424,7 @@ void MainWindow::setupToolBar() {
     _mainToolBar->addSeparator();
 
     // Rotate action
-    QAction* rotateAction = _mainToolBar->addAction("Rotate");
+    QAction* rotateAction = _mainToolBar->addAction(QIcon(":/icons/actions/rotate.svg"), "Rotate");
     rotateAction->setShortcut(QKeySequence("R"));
     rotateAction->setStatusTip("Rotate selected object");
     connect(rotateAction, &QAction::triggered, this, &MainWindow::rotateObjectRequested);
@@ -883,14 +888,9 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFile
     loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, forceFilesystem, [this](auto map) {
         // Check if loading was successful
         if (map) {
-            spdlog::info("MapLoader callback: Map object received, creating EditorWidget");
             // When loading is complete, create new editor widget and switch to it
             auto editorWidget = std::make_unique<EditorWidget>(std::move(map));
-            spdlog::info("MapLoader callback: EditorWidget created, calling setEditorWidget");
             setEditorWidget(std::move(editorWidget));
-            spdlog::info("MapLoader callback: setEditorWidget completed");
-        } else {
-            spdlog::error("MapLoader callback: Map object is null, loading failed");
         }
         // If map is null, error was already shown by MapLoader::onDone()
     }));

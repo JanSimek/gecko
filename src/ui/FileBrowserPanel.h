@@ -37,6 +37,8 @@ public:
     QString getFilePath() const { return _filePath; }
     void setFileSize(qint64 size) { _fileSize = size; }
     qint64 getFileSize() const { return _fileSize; }
+    
+    static QIcon getFileIcon(const QString& fileName);
 
 private:
     ItemType _type;

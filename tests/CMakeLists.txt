@@ -62,6 +62,11 @@ endif()
 # Qt test discovery for Qt tests
 add_test(NAME qt_tests COMMAND qt_tests)
 
+# Set shorter timeout for Qt tests in CI
+if(DEFINED ENV{CI} OR DEFINED ENV{GITHUB_ACTIONS})
+    set_tests_properties(qt_tests PROPERTIES TIMEOUT 60)
+endif()
+
 # copy shared external libraries to the build directory for Windows builds
 if(WIN32)
     add_custom_command(
@@ -81,18 +86,21 @@ if(WIN32)
     )
 endif()
 
-# Copy test data
+# Copy test data to both the executable directory and the test working directory
 add_custom_command(
     TARGET general_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:general_tests>/data
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data ${CMAKE_CURRENT_BINARY_DIR}/data
 )
 
 add_custom_command(
     TARGET performance_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:performance_tests>/data
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data ${CMAKE_CURRENT_BINARY_DIR}/data
 )
 
 add_custom_command(
     TARGET qt_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:qt_tests>/data
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data ${CMAKE_CURRENT_BINARY_DIR}/data
 )

@@ -86,6 +86,9 @@ set(GECK_SOURCES
     
     # MapObject implementation (needs ResourceManager access)
     format/map/MapObject.cpp
+    
+    # Qt Resource files
+    ${CMAKE_SOURCE_DIR}/resources/icons.qrc
 )
 
 # Platform-specific executable settings

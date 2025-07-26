@@ -13,6 +13,7 @@
 #include <QStyle>
 #include <QMessageBox>
 #include <QFile>
+#include <QIcon>
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <vfspp/VirtualFileSystem.hpp>
@@ -27,18 +28,35 @@ FileTreeItem::FileTreeItem(const QString& name, ItemType type)
 
     // Set different icons for files and directories
     if (type == Directory) {
-        setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+        setIcon(QIcon(":/icons/filetypes/folder.svg"));
     } else {
-        QFileInfo fileInfo(name);
-        QString suffix = fileInfo.suffix().toLower();
-
-        // TODO: image icon for .frm
-        if (suffix == "frm") {
-            setIcon(QApplication::style()->standardIcon(QStyle::SP_FileIcon));
-        } else {
-            setIcon(QApplication::style()->standardIcon(QStyle::SP_FileIcon));
-        }
+        setIcon(getFileIcon(name));
     }
+}
+
+QIcon FileTreeItem::getFileIcon(const QString& fileName) {
+    QFileInfo fileInfo(fileName);
+    QString suffix = fileInfo.suffix().toLower();
+    
+    // Map file extensions to icon paths
+    static const QMap<QString, QString> iconMap = {
+        {"map", ":/icons/filetypes/map.svg"},
+        {"frm", ":/icons/filetypes/image.svg"},
+        {"pro", ":/icons/filetypes/proto.svg"},
+        {"msg", ":/icons/filetypes/message.svg"},
+        {"dat", ":/icons/filetypes/data.svg"},
+        {"lst", ":/icons/filetypes/list.svg"},
+        {"int", ":/icons/filetypes/script.svg"},
+        {"ssl", ":/icons/filetypes/script.svg"},
+        {"txt", ":/icons/filetypes/text.svg"},
+        {"pal", ":/icons/filetypes/palette.svg"}
+    };
+    
+    if (iconMap.contains(suffix)) {
+        return QIcon(iconMap[suffix]);
+    }
+    
+    return QIcon(":/icons/filetypes/default.svg");
 }
 
 // FileBrowserPanel implementation
@@ -106,7 +124,7 @@ void FileBrowserPanel::setupFilterControls() {
     typeLayout->addWidget(_fileTypeComboBox, 1);
 
     _refreshButton = new QPushButton("Refresh", this);
-    _refreshButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_BrowserReload));
+    _refreshButton->setIcon(QIcon(":/icons/ui/refresh.svg"));
     connect(_refreshButton, &QPushButton::clicked, this, &FileBrowserPanel::onRefreshClicked);
     typeLayout->addWidget(_refreshButton);
 
@@ -427,11 +445,11 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
     
     // Add Open action
     QAction* openAction = contextMenu.addAction("Open");
-    openAction->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+    openAction->setIcon(QIcon(":/icons/actions/open.svg"));
     
     // Add Export action
     QAction* exportAction = contextMenu.addAction("Export");
-    exportAction->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogSaveButton));
+    exportAction->setIcon(QIcon(":/icons/actions/save.svg"));
     
     // Execute menu and handle selected action
     QAction* selectedAction = contextMenu.exec(_treeView->viewport()->mapToGlobal(pos));
