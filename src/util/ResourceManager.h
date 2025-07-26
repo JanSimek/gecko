@@ -103,6 +103,12 @@ public:
      * @return Vector of matching file paths
      */
     std::vector<std::string> listFilesByPattern(const std::string& pattern) const;
+    
+    /**
+     * @brief Get access to the virtual file system
+     * @return Shared pointer to the VFS
+     */
+    vfspp::VirtualFileSystemPtr getVFS() const { return _vfs; }
 };
 
 } // namespace geck

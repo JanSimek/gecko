@@ -12,6 +12,8 @@
 #include <QHeaderView>
 #include <QTimer>
 #include <QStandardItem>
+#include <QMenu>
+#include <QAction>
 #include <vector>
 #include <memory>
 #include <unordered_set>
@@ -70,6 +72,7 @@ public:
 signals:
     void fileSelected(const QString& filePath);
     void fileDoubleClicked(const QString& filePath);
+    void fileExportRequested(const QString& filePath);
 
 public slots:
     void onSearchTextChanged(const QString& text);
@@ -80,6 +83,7 @@ public slots:
 
 private slots:
     void updateFileDisplay();
+    void onCustomContextMenuRequested(const QPoint& pos);
 
 private:
     void setupUI();
@@ -94,6 +98,7 @@ private:
     QString getFileIcon(const QString& extension) const;
     void updateFileCount();
     void updateFileTypeComboBox();
+    void exportFile(const QString& filePath);
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;

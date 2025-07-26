@@ -37,7 +37,7 @@ uint32_t HexagonGrid::positionAt(uint32_t x, uint32_t y) const {
             return hex.position(); // Return the hex's actual position, not the array index
         }
     }
-    return Hex::HEX_OUT_OF_MAP;
+    return static_cast<uint32_t>(Hex::HEX_OUT_OF_MAP);
 }
 
 std::optional<std::reference_wrapper<const Hex>> HexagonGrid::getHexByPosition(uint32_t position) const {
