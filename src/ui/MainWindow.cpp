@@ -12,12 +12,10 @@
 #include "../util/Types.h"
 #include "../util/ResourceManager.h"
 #include "../util/QtDialogs.h"
-#include "../util/PathUtils.h"
 #include "../reader/lst/LstReader.h"
 #include "../format/lst/Lst.h"
 
 #include <fstream>
-#include <vfspp/VirtualFileSystem.hpp>
 
 #include <QApplication>
 #include <QVBoxLayout>
@@ -157,7 +155,7 @@ void MainWindow::connectMenuSignals() {
             // Fallback case: handle directly in MainWindow
             QString mapPath = QtDialogs::openMapFile(this, "Choose Fallout 2 map to load");
             if (!mapPath.isEmpty()) {
-                handleMapLoadRequest(mapPath.toStdString());
+                handleMapLoadRequest(mapPath.toStdString(), true); // Force filesystem for File menu
             }
         }
     });
@@ -484,12 +482,8 @@ void MainWindow::setupDockWidgets() {
         if (filePath.endsWith(".map", Qt::CaseInsensitive)) {
             spdlog::info("MainWindow: Opening map from file browser: {}", filePath.toStdString());
             
-            // If there's an active editor widget, request to load the map
-            if (_currentEditorWidget) {
-                _currentEditorWidget->mapLoadRequested(filePath.toStdString());
-            } else {
-                spdlog::warn("MainWindow: No active editor widget to load map");
-            }
+            // File browser always uses VFS loading (forceFilesystem = false)
+            handleMapLoadRequest(filePath.toStdString(), false);
         } else {
             spdlog::debug("MainWindow: Non-map file double-clicked: {}", filePath.toStdString());
             // TODO: Handle other file types (e.g., open in appropriate viewer/editor)
@@ -770,8 +764,10 @@ void MainWindow::connectToEditorWidget() {
     // Connect hex hover signal to status bar
     connect(_currentEditorWidget, &EditorWidget::hexHoverChanged, this, &MainWindow::updateHexIndexDisplay);
 
-    // Connect map loading signal
-    connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, &MainWindow::handleMapLoadRequest);
+    // Connect map loading signal (from File menu, so force filesystem)
+    connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, [this](const std::string& mapPath) {
+        handleMapLoadRequest(mapPath, true); // Force filesystem for File menu
+    });
     
     // Connect player position selection
     if (_mapInfoPanel) {
@@ -863,75 +859,14 @@ void MainWindow::updateElevationMenu(Map* map) {
                   hasElevation1, hasElevation2, hasElevation3);
 }
 
-void MainWindow::handleMapLoadRequest(const std::string& mapPath) {
-    spdlog::info("MainWindow: Handling request to load map: {}", mapPath);
-
-    // Check if this is a VFS path (starts with /)
-    std::string actualMapPath = mapPath;
-    if (mapPath.starts_with("/")) {
-        // This is a VFS path, we need to extract the file to a temporary location
-        // or modify the MapLoader to handle VFS paths directly
-        
-        // For now, let's try to extract the file from VFS to a temporary location
-        try {
-            auto& resourceManager = ResourceManager::getInstance();
-            auto vfs = resourceManager.getVFS();
-            
-            if (!vfs) {
-                spdlog::error("MainWindow: VFS not available for map loading");
-                return;
-            }
-            
-            // Prepare VFS path
-            std::filesystem::path vfsPath = "/" / std::filesystem::path(mapPath.substr(1)); // Remove leading slash and re-add
-            vfspp::FileInfo vfsFileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
-            
-            // Open file in VFS
-            vfspp::IFilePtr vfsFile = vfs->OpenFile(vfsFileInfo, vfspp::IFile::FileMode::Read);
-            if (!vfsFile) {
-                spdlog::error("MainWindow: Failed to open map file in VFS: {}", mapPath);
-                return;
-            }
-            
-            // Read file data
-            size_t fileSize = vfsFile->Size();
-            std::vector<uint8_t> buffer(fileSize);
-            size_t bytesRead = vfsFile->Read(buffer.data(), fileSize);
-            
-            if (bytesRead != fileSize) {
-                spdlog::error("MainWindow: Failed to read complete map file from VFS: {} (read {} of {} bytes)", 
-                             mapPath, bytesRead, fileSize);
-                return;
-            }
-            
-            // Create temporary file
-            std::filesystem::path tempDir = std::filesystem::temp_directory_path();
-            std::filesystem::path tempMapFile = tempDir / ("gecko_temp_" + std::filesystem::path(mapPath).filename().string());
-            
-            // Write to temporary file
-            std::ofstream tempFile(tempMapFile, std::ios::binary);
-            if (!tempFile.is_open()) {
-                spdlog::error("MainWindow: Failed to create temporary map file: {}", tempMapFile.string());
-                return;
-            }
-            
-            tempFile.write(reinterpret_cast<const char*>(buffer.data()), bytesRead);
-            tempFile.close();
-            
-            actualMapPath = tempMapFile.string();
-            spdlog::info("MainWindow: Extracted VFS map to temporary file: {}", actualMapPath);
-            
-        } catch (const std::exception& e) {
-            spdlog::error("MainWindow: Failed to extract map from VFS: {}", e.what());
-            return;
-        }
-    }
+void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem) {
+    spdlog::info("MainWindow: Handling request to load map: {} (filesystem: {})", mapPath, forceFilesystem);
 
     // Create loading widget and show it
     auto loadingWidget = std::make_unique<LoadingWidget>();
 
-    // Add map loader with callback to create new editor widget
-    loadingWidget->addLoader(std::make_unique<MapLoader>(actualMapPath, -1, [this](auto map) {
+    // Use unified MapLoader with source context
+    loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, forceFilesystem, [this](auto map) {
         // Check if loading was successful
         if (map) {
             // When loading is complete, create new editor widget and switch to it

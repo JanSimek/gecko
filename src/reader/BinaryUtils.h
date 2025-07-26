@@ -121,6 +121,10 @@ public:
         return {_stream.position(), _stream.size()};
     }
 
+    size_t bytesRemaining() const {
+        return _stream.size() - _stream.position();
+    }
+
     void setPosition(size_t pos) {
         if (pos > _stream.size()) {
             throw ParseException("Invalid seek position", _filePath, pos);
@@ -135,8 +139,7 @@ private:
 
     void validatePosition(size_t requiredBytes) {
         if (_stream.position() + requiredBytes > _stream.size()) {
-            throw ParseException("Attempt to read beyond end of file", 
-                                _filePath, _stream.position());
+            throw ParseException("Attempt to read beyond end of file", _filePath, _stream.position());
         }
     }
 

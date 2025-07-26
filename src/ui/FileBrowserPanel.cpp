@@ -132,9 +132,10 @@ void FileBrowserPanel::setupTreeView() {
     // Configure headers
     QHeaderView* header = _treeView->header();
     header->setStretchLastSection(false);
-    header->resizeSection(0, 200);                         // Name column
-    header->resizeSection(1, 80);                          // Type column
-    header->setSectionResizeMode(2, QHeaderView::Stretch); // Path column stretches
+    header->setSectionResizeMode(0, QHeaderView::Interactive);     // Name column user-resizable
+    header->resizeSection(0, 300);                                 // Start with wider default for long filenames
+    header->resizeSection(1, 80);                                  // Type column fixed width
+    header->setSectionResizeMode(2, QHeaderView::Stretch);         // Path column stretches
 
     // Enable context menu
     _treeView->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -277,6 +278,9 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
         QModelIndex index = _treeModel->index(i, 0);
         _treeView->expand(index);
     }
+    
+    // Resize Name column to fit content after tree is built and expanded
+    resizeNameColumnToContent();
 }
 
 FileTreeItem* FileBrowserPanel::findOrCreateDirectory(FileTreeItem* parent, const QString& dirName) {
@@ -531,6 +535,49 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
             QString("An error occurred during export: %1").arg(e.what()));
         _statusLabel->setText("Export failed");
         spdlog::error("FileBrowserPanel: Export failed for {}: {}", filePath.toStdString(), e.what());
+    }
+}
+
+void FileBrowserPanel::resizeNameColumnToContent() {
+    if (!_treeView || !_treeModel) {
+        return;
+    }
+    
+    // Temporarily expand all items to measure their content
+    _treeView->expandAll();
+    
+    // Let the header resize to content now that everything is expanded
+    QHeaderView* header = _treeView->header();
+    header->resizeSection(0, header->sectionSizeHint(0));
+    
+    // Find the maximum width needed for all visible items
+    int maxWidth = 200; // Minimum width
+    
+    std::function<void(const QModelIndex&)> measureItems = [&](const QModelIndex& parent) {
+        for (int i = 0; i < _treeModel->rowCount(parent); ++i) {
+            QModelIndex index = _treeModel->index(i, 0, parent);
+            if (index.isValid()) {
+                // Get the size hint for this item
+                QSize sizeHint = _treeView->sizeHintForIndex(index);
+                maxWidth = std::max(maxWidth, sizeHint.width() + 20); // Add some padding
+                
+                // Recursively check children
+                measureItems(index);
+            }
+        }
+    };
+    
+    measureItems(QModelIndex());
+    
+    // Apply the calculated width, but cap it at a reasonable maximum
+    int finalWidth = std::min(maxWidth, 500); // Cap at 500px to avoid excessive width
+    header->resizeSection(0, finalWidth);
+    
+    // Collapse back to original state (only first level expanded)
+    _treeView->collapseAll();
+    for (int i = 0; i < _treeModel->rowCount(); ++i) {
+        QModelIndex index = _treeModel->index(i, 0);
+        _treeView->expand(index);
     }
 }
 

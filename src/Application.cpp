@@ -75,8 +75,8 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
     // Create loading widget and show it in main window
     auto loadingWidget = std::make_unique<LoadingWidget>();
 
-    // Add map loader
-    loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, [this](auto map) {
+    // Add map loader (filesystem loading for command line args)
+    loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, true, [this](auto map) {
         // Check if loading was successful
         if (map) {
             // When loading is complete, create editor widget and switch to it

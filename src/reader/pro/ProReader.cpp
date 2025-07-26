@@ -181,7 +181,14 @@ std::unique_ptr<Pro> ProReader::read() {
             utils.skipWithLog(4, "critter body type");
             utils.skipWithLog(4, "critter experience for kill");
             utils.skipWithLog(4, "critter kill type");
-            utils.skipWithLog(4, "critter damage type");
+            
+            // Damage type field is optional - certain maps (depolva, depolvb, kladwtwn) contains PRO files without it
+            // Could be a remnant from Fallout 1 where the PRO format was 412 bytes vs 416 bytes in Fallout 2
+            if (utils.bytesRemaining() >= 4) {
+                utils.skipWithLog(4, "critter damage type");
+            } else {
+                spdlog::debug("Critter PRO missing damage type field (412-byte format, likely Fallout 1 compatibility)");
+            }
             break;
         }
         case Pro::OBJECT_TYPE::SCENERY: {

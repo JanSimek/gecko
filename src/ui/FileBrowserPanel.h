@@ -99,6 +99,7 @@ private:
     void updateFileCount();
     void updateFileTypeComboBox();
     void exportFile(const QString& filePath);
+    void resizeNameColumnToContent();
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;

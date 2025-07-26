@@ -81,7 +81,7 @@ protected:
 
 private slots:
     void updateAndRender();
-    void handleMapLoadRequest(const std::string& mapPath);
+    void handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem = false);
     void updateHexIndexDisplay(int hexIndex);
 
 private:
