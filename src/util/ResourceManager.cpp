@@ -260,6 +260,9 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
 
     /*const*/ auto baseId = FID & FileFormat::BASE_ID_MASK; 
     /*const*/ auto type = static_cast<Frm::FRM_TYPE>(FID >> FileFormat::TYPE_MASK_SHIFT);
+    
+    spdlog::debug("ResourceManager: FIDtoFrmName called with FID=0x{:08X}, type={}, baseId={}", 
+                  FID, static_cast<int>(type), baseId);
 
     if (type == Frm::FRM_TYPE::CRITTER) {
         baseId = FID & FileFormat::CRITTER_ID_MASK;
@@ -271,6 +274,21 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
         // Map scroll blockers
         return SCROLL_BLOCKERS_PATH;
     }
+
+    if (type == Frm::FRM_TYPE::WALL && baseId == 620) {
+        static const std::string SCROLL_BLOCKERS_PATH("art/misc/wallblock.frm");
+        // Map scroll blockers
+        return SCROLL_BLOCKERS_PATH;
+    }
+
+    // FIXME: Light source object (proto/scenery/00000142.pro) uses FID=0x02000015, so baseId=21 which currently points to block.frm
+    /*
+    if (type == Frm::FRM_TYPE::SCENERY && FID == 0x02000015) {
+        static const std::string LIGHT_PATH("art/misc/light.frm");
+        spdlog::info("ResourceManager: FIDtoFrmName detected light source scenery baseId 21, returning light.frm (FID=0x{:08X}), FID={}", FID, FID);
+        return LIGHT_PATH;
+    }
+    */
 
     if (type > Frm::FRM_TYPE::INVENTORY) {
         throw std::runtime_error{ "Invalid FRM_TYPE" };

@@ -10,6 +10,7 @@
 #include <set>       // std::set
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
+#include "../editor/Object.h"
 #include "../util/ResourceInitializer.h"
 #include "../editor/HexagonGrid.h"
 #include "../util/TileUtils.h"
@@ -348,24 +349,7 @@ void EditorWidget::loadObjectSprites() {
             continue; // object inside an inventory/container
 
         // Special handling for wall blockers - use wallblock.frm based on blocking behavior
-        std::string frm_name;
-        if (object->isGapFillingWallBlocker()) {
-            // Special PIDs 620/621 are invisible gap-filling wall blockers
-            if (object->isNormalWallBlocker()) {
-                frm_name = "art/tiles/wallblock.frm";
-                spdlog::debug("Gap-filling wall blocker detected: using wallblock.frm for pro_pid 0x{:08X}", object->pro_pid);
-            } else if (object->isShootThroughWallBlocker()) {
-                frm_name = "art/tiles/wallblockF.frm";
-                spdlog::debug("Gap-filling shoot-through wall blocker detected: using wallblockF.frm for pro_pid 0x{:08X}", object->pro_pid);
-            } else {
-                // This shouldn't happen, but use normal FRM as fallback
-                spdlog::warn("Gap-filling wall blocker with unexpected PID 0x{:08X}, using normal FRM", object->pro_pid);
-                frm_name = ResourceManager::getInstance().FIDtoFrmName(object->frm_pid);
-            }
-        } else {
-            // Regular objects use their normal FRM
-            frm_name = ResourceManager::getInstance().FIDtoFrmName(object->frm_pid);
-        }
+        std::string frm_name = ResourceManager::getInstance().FIDtoFrmName(object->frm_pid);
 
         if (frm_name.empty()) {
             spdlog::error("Empty FRM name for object at position {} (frm_pid=0x{:08X}, pro_pid=0x{:08X})", 
@@ -449,18 +433,24 @@ void EditorWidget::createWallBlockerOverlay(const std::shared_ptr<MapObject>& ma
     // Only create overlays for regular objects that block movement
     // Gap-filling wall blockers (PIDs 620/621) already show wallblock.frm as their main sprite
     bool blocks = mapObject->blocksMovement();
-    bool isGapFilling = mapObject->isGapFillingWallBlocker();
+
+    spdlog::debug("createWallBlockerOverlay: hex {}, pro_pid 0x{:08X}, blocks: {}",
+                 hexPosition, mapObject->pro_pid, blocks);
     
-    spdlog::debug("createWallBlockerOverlay: hex {}, pro_pid 0x{:08X}, blocks: {}, isGapFilling: {}", 
-                 hexPosition, mapObject->pro_pid, blocks, isGapFilling);
-    
-    if (!blocks || isGapFilling) {
+    if (!blocks) {
         return; // No overlay needed
     }
+
+    bool is_shoot_through = mapObject->isShootThroughWallBlocker();
     
     try {
         // Load wallblock.frm as overlay  
-        const std::string overlayFrmPath = "art/tiles/wallblock.frm";
+        std::string overlayFrmPath;
+        if (is_shoot_through) {
+            overlayFrmPath = "art/tiles/wallblock.frm";
+        } else {
+            overlayFrmPath = "art/tiles/wallblockF.frm";
+        }
         ResourceManager::getInstance().insertTexture(overlayFrmPath);
         
         sf::Sprite overlaySprite{ ResourceManager::getInstance().texture(overlayFrmPath) };
@@ -1320,6 +1310,11 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
             }
             
             window->draw(object->getSprite());
+            
+            // Draw light overlay if enabled and object has light
+            if (_showLightOverlays && object->hasLight()) {
+                window->draw(object->getLightOverlay());
+            }
         }
         
         // Render wall blocker overlays on top of regular objects (controlled by toggle)
@@ -2630,6 +2625,23 @@ void EditorWidget::showLoadingErrorsSummary() {
     message += "The map will continue to work with the objects that loaded successfully.";
     
     QtDialogs::showWarning(this, title, message);
+}
+
+void EditorWidget::setShowLightOverlays(bool show) {
+    _showLightOverlays = show;
+    
+    int lightObjectCount = 0;
+    // Update all objects to show/hide their light overlays
+    for (auto& object : _objects) {
+        if (object->hasLight()) {
+            lightObjectCount++;
+            spdlog::debug("EditorWidget: Found light source object with light_radius={}, light_intensity={}", 
+                         object->getMapObject().light_radius, object->getMapObject().light_intensity);
+        }
+        object->setShowLightOverlay(show);
+    }
+    
+    spdlog::info("Light overlay display set to: {} (found {} light objects)", show, lightObjectCount);
 }
 
 } // namespace geck

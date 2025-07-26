@@ -45,6 +45,7 @@ public:
     void setShowScrollBlk(bool show) { _showScrollBlk = show; }
     void setShowWallBlockers(bool show) { _showWallBlockers = show; }
     void setShowHexGrid(bool show) { _showHexGrid = show; }
+    void setShowLightOverlays(bool show);
 
     Map* getMap() const { return _map.get(); }
 
@@ -244,6 +245,7 @@ private:
     bool _showScrollBlk = UI::DEFAULT_SHOW_SCROLL_BLK;
     bool _showWallBlockers = UI::DEFAULT_SHOW_WALL_BLK;
     bool _showHexGrid = UI::DEFAULT_SHOW_HEX_GRID;
+    bool _showLightOverlays = false;  // Toggle for showing light overlays
 
     sf::Vector2i _mouseStartingPosition{ 0, 0 }; // panning started
     sf::Vector2i _mouseLastPosition{ 0, 0 };     // current panning position

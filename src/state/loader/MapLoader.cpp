@@ -129,18 +129,6 @@ void MapLoader::load() {
         return;
     }
 
-    //    auto tiles = _map->tiles().at(_elevation);
-    //    for (auto tileNumber = 0U; tileNumber < geck::Map::TILES_PER_ELEVATION; tileNumber++) {
-    //        setProgress("Loading map tile texture " + std::to_string(tileNumber + 1) + " of " + std::to_string(geck::Map::TILES_PER_ELEVATION));
-    //        auto tile = tiles.at(tileNumber);
-    //        if (tile.getFloor() != Map::EMPTY_TILE) {
-    //            ResourceManager::getInstance().insert("art/tiles/" + lst->at(tile.getFloor()));
-    //        }
-    //        if (tile.getRoof() != Map::EMPTY_TILE) {
-    //            ResourceManager::getInstance().insert("art/tiles/" + lst->at(tile.getRoof()));
-    //        }
-    //    }
-
     // Tiles
     size_t tile_number = 1;
     size_t tiles_total = lst->list().size();
@@ -170,6 +158,7 @@ void MapLoader::load() {
     }
 
     ResourceManager::getInstance().insertTexture("art/tiles/blank.frm");
+    ResourceManager::getInstance().insertTexture("art/misc/light.frm");
     ResourceManager::getInstance().insertTexture("art/misc/wallblock.frm");
     ResourceManager::getInstance().insertTexture("art/misc/wallblockF.frm");
     ResourceManager::getInstance().insertTexture("art/misc/scrblk.frm");

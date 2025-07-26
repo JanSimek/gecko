@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include "../../util/Constants.h"
+#include <spdlog/spdlog.h>
 
 namespace geck {
 
@@ -89,16 +90,10 @@ struct MapObject {
 
     bool isWallBlocker() {
         // Any object that blocks movement OR is a gap-filling wall blocker
-        return blocksMovement() || isGapFillingWallBlocker();
+        return blocksMovement();
     }
 
-    bool isNormalWallBlocker() {
-        return pro_pid == (0x05000000 | 620);
-    }
-
-    bool isShootThroughWallBlocker() {
-        return pro_pid == (0x05000000 | 621);
-    }
+    bool isShootThroughWallBlocker();
 
     bool isScrollBlocker() {
         // Scroll blockers are visual indicators only (FRM-based, not proto-based)
@@ -114,12 +109,30 @@ private:
 public:
     // Check if object blocks movement based on PRO file flags
     bool blocksMovement() const;
-    
-    // Check if object is a gap-filling wall blocker (PIDs 620/621)
-    bool isGapFillingWallBlocker() const;
-    
+
     // Check if object is a wall (OBJECT_TYPE::WALL)
     bool isWallObject() const;
+    
+    // Check if object is a light source (has light properties)
+    bool isLightSource() const {
+        // An object is considered a light source if it has non-zero light radius or intensity
+        bool hasLight = light_radius > 0 || light_intensity > 0;
+        return hasLight;
+    }
+    
+    // Check if object has significant light properties (both radius and intensity)
+    bool hasSignificantLight() const {
+        return light_radius > 0 && light_intensity > 0;
+    }
+    
+    // Check if object is the specific light source scenery object (tile #140 in F2 Dims)
+    bool isLightSourceScenery() const {
+        // In F2, light sources are scenery objects with specific PID
+        // Scenery objects typically have PID format: 0x00000000 | index
+        // Light source is typically at index 140 in scenery category
+        // This would correspond to PID 0x00000000 | 140 = 140
+        return (pro_pid & 0xFF000000) == 0x00000000 && (pro_pid & 0x00FFFFFF) == 140;
+    }
 };
 
 } // namespace geck

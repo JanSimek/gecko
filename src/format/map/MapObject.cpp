@@ -6,6 +6,19 @@
 
 namespace geck {
 
+bool MapObject::isShootThroughWallBlocker() {
+
+    // Get PRO file data to check flags
+    Pro* pro = getProData();
+    if (!pro) {
+        return false;
+    }
+
+    const uint32_t SHOOT_THROUGH_FLAG = 0x80000000;
+    bool is_shoot_through = ((pro->header.flags & SHOOT_THROUGH_FLAG) != 0);
+    return is_shoot_through;
+}
+
 Pro* MapObject::getProData() const {
     try {
         return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(pro_pid));
@@ -16,11 +29,9 @@ Pro* MapObject::getProData() const {
 }
 
 bool MapObject::blocksMovement() const {
-    // Special case: gap-filling wall blockers always block
-    if (isGapFillingWallBlocker()) {
-        return true;
-    }
-    
+
+    // TODO: save it the value
+
     // Get PRO file data to check flags
     Pro* pro = getProData();
     if (!pro) {
@@ -37,11 +48,6 @@ bool MapObject::blocksMovement() const {
                  pro_pid, pro->header.flags, hasNoBlockFlag, !hasNoBlockFlag);
     
     return !hasNoBlockFlag;
-}
-
-// FIXME: probably incorrect
-bool MapObject::isGapFillingWallBlocker() const {
-    return pro_pid == (0x05000000 | 620) || pro_pid == (0x05000000 | 621);
 }
 
 bool MapObject::isWallObject() const {

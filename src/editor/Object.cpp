@@ -8,6 +8,7 @@
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
 #include <spdlog/spdlog.h>
+#include <algorithm>
 
 namespace geck {
 
@@ -15,7 +16,8 @@ Object::Object(const Frm* frm)
     : _sprite(createBlankTexture())
     , _frm(frm)
     , _direction(0)
-    , _selected(false) {
+    , _selected(false)
+    , _showLightOverlay(false) {
     
     // Validate FRM has at least one direction
     if (!frm) {
@@ -35,9 +37,16 @@ Object::Object(const Frm* frm)
                      frm->filename(), frm->directions().at(0).frames().size());
         throw std::runtime_error("Cannot create Object with FRM direction that has no frames: " + frm->filename());
     }
+
+    uint32_t fid = -1;
+    if (_mapObject && _mapObject->frm_pid) {
+        fid = _mapObject->frm_pid;
+    }
+    spdlog::debug("Object constructor: Created object with FRM '{}' (FID: {}) ({} directions, {} frames in direction 0)",
+                  frm->filename(), fid, frm->directions().size(), frm->directions().at(0).frames().size());
     
-    spdlog::debug("Object constructor: Created object with FRM '{}' ({} directions, {} frames in direction 0)", 
-                  frm->filename(), frm->directions().size(), frm->directions().at(0).frames().size());
+    // Initialize light overlay
+    initializeLightOverlay();
 }
 
 sf::Texture& Object::createBlankTexture() {
@@ -87,6 +96,11 @@ void Object::setHexPosition(const Hex& hex) {
     _sprite.setPosition({ x, y });
     if (_mapObject != nullptr) {
         _mapObject->position = hex.position();
+    }
+    
+    // Update light overlay position if needed
+    if (_showLightOverlay && hasLight()) {
+        updateLightOverlay();
     }
 }
 
@@ -151,6 +165,62 @@ void Object::unselect() {
 
 bool Object::isSelected() {
     return _selected;
+}
+
+void Object::initializeLightOverlay() {
+    // Initialize the light overlay circle
+    _lightOverlay.setFillColor(sf::Color(255, 255, 100, 30)); // Light yellow, semi-transparent
+    _lightOverlay.setOutlineColor(sf::Color(255, 255, 150, 80)); // Brighter yellow outline
+    _lightOverlay.setOutlineThickness(1.0f);
+    _lightOverlay.setPointCount(6); // Hexagonal shape to match the grid
+    
+    spdlog::debug("Object: Initialized light overlay circle");
+}
+
+void Object::setShowLightOverlay(bool show) {
+    spdlog::debug("Object: setShowLightOverlay({}) called", show);
+    _showLightOverlay = show;
+    if (show && _mapObject) {
+        spdlog::debug("Object: Calling updateLightOverlay for mapObject with light_radius={}, light_intensity={}", 
+                     _mapObject->light_radius, _mapObject->light_intensity);
+        updateLightOverlay();
+    }
+}
+
+void Object::updateLightOverlay() {
+    if (!_mapObject || !_mapObject->isLightSource()) {
+        return;
+    }
+    
+    // Calculate radius based on light_radius property
+    // Each hex is approximately 32 pixels wide in standard zoom
+    float hexWidth = 32.0f;
+    float radius = _mapObject->light_radius * hexWidth / 2.0f;
+    
+    _lightOverlay.setRadius(radius);
+    _lightOverlay.setOrigin(sf::Vector2f(radius, radius));
+    
+    // Position the overlay at the object's center
+    auto spritePos = _sprite.getPosition();
+    auto spriteBounds = _sprite.getLocalBounds();
+    _lightOverlay.setPosition(sf::Vector2f(
+        spritePos.x + spriteBounds.size.x / 2.0f,
+        spritePos.y + spriteBounds.size.y / 2.0f
+    ));
+    
+    // Adjust opacity based on light intensity
+    auto color = _lightOverlay.getFillColor();
+    // Map intensity (0-65535) to alpha (30-100)
+    uint8_t alpha = static_cast<uint8_t>(30 + (_mapObject->light_intensity / 65535.0f) * 70);
+    color.a = alpha;
+    _lightOverlay.setFillColor(color);
+    
+    spdlog::debug("Object: Updated light overlay circle at position ({}, {}) with radius {} and alpha {}", 
+                  _lightOverlay.getPosition().x, _lightOverlay.getPosition().y, radius, alpha);
+}
+
+bool Object::hasLight() const {
+    return _mapObject && _mapObject->isLightSource();
 }
 
 } // namespace geck

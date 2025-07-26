@@ -33,6 +33,7 @@ void ResourceInitializer::loadEssentialTextures() {
     try {
         // Load essential textures for map display and object visualization
         resourceManager.insertTexture("art/tiles/blank.frm");
+        resourceManager.insertTexture("art/misc/light.frm");
         resourceManager.insertTexture("art/misc/scrblk.frm");
         resourceManager.insertTexture("art/misc/wallblock.frm");
         resourceManager.insertTexture("art/misc/wallblockF.frm");

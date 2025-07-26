@@ -29,12 +29,14 @@ class Frm;
 class Object {
 private:
     sf::Sprite _sprite;
+    sf::CircleShape _lightOverlay; // Light radius visualization
 
     std::shared_ptr<MapObject> _mapObject;
 
     const Frm* _frm;
     int _direction;
     bool _selected;
+    bool _showLightOverlay;
 
 public:
     Object(const Frm* frm);
@@ -53,6 +55,13 @@ public:
     void select();
     void unselect();
     bool isSelected();
+    
+    // Light overlay methods
+    void setShowLightOverlay(bool show);
+    bool isShowingLightOverlay() const { return _showLightOverlay; }
+    void updateLightOverlay();
+    const sf::CircleShape& getLightOverlay() const { return _lightOverlay; }
+    bool hasLight() const;
 
     // sf::RectangleShape border -> selected
 
@@ -64,6 +73,7 @@ public:
 
 private:
     static sf::Texture& createBlankTexture();
+    void initializeLightOverlay();
 };
 
 } // namespace geck

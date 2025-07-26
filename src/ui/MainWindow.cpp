@@ -264,6 +264,11 @@ void MainWindow::setupMenuBar() {
     showHexGridAction->setChecked(UI::DEFAULT_SHOW_HEX_GRID);
     connect(showHexGridAction, &QAction::toggled, this, &MainWindow::showHexGridToggled);
 
+    QAction* showLightOverlaysAction = _viewMenu->addAction("Show &Light Overlays");
+    showLightOverlaysAction->setCheckable(true);
+    showLightOverlaysAction->setChecked(false);
+    connect(showLightOverlaysAction, &QAction::toggled, this, &MainWindow::showLightOverlaysToggled);
+
     _viewMenu->addSeparator();
 
     // Panels submenu (will be set up later in setupPanelsMenu)
@@ -661,6 +666,10 @@ void MainWindow::connectToEditorWidget() {
 
     connect(this, &MainWindow::showHexGridToggled, [this](bool enabled) {
         _currentEditorWidget->setShowHexGrid(enabled);
+    });
+
+    connect(this, &MainWindow::showLightOverlaysToggled, [this](bool enabled) {
+        _currentEditorWidget->setShowLightOverlays(enabled);
     });
 
     // Connect elevation changes
