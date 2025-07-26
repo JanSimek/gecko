@@ -22,6 +22,9 @@ set(GECK_SOURCES
     util/QtDialogs.h
     util/QtDialogs.cpp
 
+    util/Settings.h
+    util/Settings.cpp
+
     util/Types.h
     util/SpatialIndex.h
     util/SpatialIndex.cpp
@@ -47,6 +50,8 @@ set(GECK_SOURCES
     ui/FileBrowserPanel.cpp
     ui/PaginationWidget.h
     ui/PaginationWidget.cpp
+    ui/SettingsDialog.h
+    ui/SettingsDialog.cpp
 
     # Selection management
     selection/SelectionState.h
@@ -58,6 +63,8 @@ set(GECK_SOURCES
     state/loader/Loader.h
     state/loader/MapLoader.cpp
     state/loader/MapLoader.h
+    state/loader/DataPathLoader.cpp
+    state/loader/DataPathLoader.h
 
     editor/Object.h
     editor/Object.cpp

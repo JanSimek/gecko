@@ -7,12 +7,13 @@
 #include <QProgressBar>
 #include <QTimer>
 #include <QFont>
+#include <QApplication>
 #include <spdlog/spdlog.h>
 
 namespace geck {
 
 LoadingWidget::LoadingWidget(QWidget* parent)
-    : QWidget(parent)
+    : QDialog(parent)
     , _layout(nullptr)
     , _titleLabel(nullptr)
     , _statusLabel(nullptr)
@@ -20,10 +21,19 @@ LoadingWidget::LoadingWidget(QWidget* parent)
     , _updateTimer(new QTimer(this))
     , _isLoading(false) {
 
+    // Set up as modal dialog
+    setModal(true);
+    setWindowTitle("Loading");
+    setWindowFlags(Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
+    setFixedSize(400, 150);
+    
     setupUI();
 
     // Connect timer to update progress
     connect(_updateTimer, &QTimer::timeout, this, &LoadingWidget::updateProgress);
+    
+    // Auto-close when loading completes
+    connect(this, &LoadingWidget::loadingComplete, this, &QDialog::accept);
 }
 
 LoadingWidget::~LoadingWidget() {
@@ -34,48 +44,59 @@ LoadingWidget::~LoadingWidget() {
 
 void LoadingWidget::setupUI() {
     _layout = new QVBoxLayout(this);
-    _layout->setAlignment(Qt::AlignCenter);
+    _layout->setContentsMargins(20, 20, 20, 20);
+    _layout->setSpacing(10);
 
     // Title label
     _titleLabel = new QLabel("Loading", this);
-    QFont titleFont = _titleLabel->font();
-    titleFont.setPointSize(UI::TITLE_FONT_SIZE);
-    titleFont.setBold(true);
+    QFont titleFont = font();
+    titleFont.setPointSize(16);
+    titleFont.setWeight(QFont::DemiBold);
     _titleLabel->setFont(titleFont);
     _titleLabel->setAlignment(Qt::AlignCenter);
-    _titleLabel->setStyleSheet("color: white;");
 
     // Status label
     _statusLabel = new QLabel("Initializing...", this);
-    QFont statusFont = _statusLabel->font();
-    statusFont.setPointSize(UI::STATUS_FONT_SIZE);
+    QFont statusFont = font();
+    statusFont.setPointSize(11);
     _statusLabel->setFont(statusFont);
     _statusLabel->setAlignment(Qt::AlignCenter);
-    _statusLabel->setStyleSheet("color: white;");
+    _statusLabel->setStyleSheet("QLabel { color: #666; }");
 
     // Progress bar
     _progressBar = new QProgressBar(this);
-    _progressBar->setMinimum(UI::PROGRESS_BAR_MIN);
-    _progressBar->setMaximum(UI::PROGRESS_BAR_MAX);
-    _progressBar->setValue(UI::PROGRESS_BAR_MIN);
+    _progressBar->setMinimum(0);
+    _progressBar->setMaximum(100);
+    _progressBar->setValue(0);
+    _progressBar->setTextVisible(true);
+    
+    // Style the progress bar for better visibility
+    _progressBar->setStyleSheet(R"(
+        QProgressBar {
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            text-align: center;
+            height: 20px;
+        }
+        QProgressBar::chunk {
+            background-color: #4CAF50;
+            border-radius: 2px;
+        }
+    )");
 
     // Add widgets to layout
-    _layout->addStretch();
     _layout->addWidget(_titleLabel);
-    _layout->addSpacing(UI::SPACING_LARGE);
     _layout->addWidget(_statusLabel);
-    _layout->addSpacing(UI::SPACING_SMALL);
+    _layout->addSpacing(10);
     _layout->addWidget(_progressBar);
     _layout->addStretch();
-
-    // Set background color
-    setStyleSheet("background-color: black;");
 
     setLayout(_layout);
 }
 
 void LoadingWidget::addLoader(std::unique_ptr<Loader> loader) {
     _loaders.push_back(std::move(loader));
+    _loadersCompleted.push_back(false); // Track completion status
 }
 
 void LoadingWidget::start() {
@@ -104,33 +125,72 @@ void LoadingWidget::updateProgress() {
     }
 
     bool allDone = true;
+    int totalProgress = 0;
+    int activeLoaders = 0;
 
-    for (const auto& loader : _loaders) {
+    for (size_t i = 0; i < _loaders.size(); ++i) {
+        auto& loader = _loaders[i];
+        
         if (!loader->isDone()) {
             allDone = false;
+            activeLoaders++;
 
             // Update UI with current loader status
             _statusLabel->setText(QString::fromStdString(loader->status()));
 
-            // Try to extract progress percentage from progress string
-            std::string progressStr = loader->progress();
-            _statusLabel->setText(QString::fromStdString(progressStr));
-
-            // For now, just use indeterminate progress
-            // TODO: Implement actual progress percentage in loaders
-            break;
+            // Get actual progress percentage from loader
+            int loaderProgress = loader->percentDone();
+            totalProgress += loaderProgress;
+            
+            // Update progress bar with actual percentage
+            if (activeLoaders == 1) {
+                _progressBar->setValue(loaderProgress);
+            }
+            
+            // Only show status from first active loader
+            if (activeLoaders == 1) {
+                std::string progressStr = loader->progress();
+                if (!progressStr.empty()) {
+                    _statusLabel->setText(QString::fromStdString(progressStr));
+                }
+            }
         } else {
-            // Execute completion callback
-            loader->onDone();
+            // Loader is done, execute completion callback once
+            if (!_loadersCompleted[i]) {
+                spdlog::debug("LoadingWidget: Calling onDone() for completed loader {}", i);
+                loader->onDone();
+                _loadersCompleted[i] = true;
+            }
+            totalProgress += 100; // Completed loaders contribute 100%
         }
+    }
+
+    // If multiple loaders, show average progress
+    if (_loaders.size() > 1 && !allDone) {
+        int averageProgress = totalProgress / _loaders.size();
+        _progressBar->setValue(averageProgress);
     }
 
     if (allDone) {
         _updateTimer->stop();
         _isLoading = false;
+        _progressBar->setValue(100);
+        _statusLabel->setText("Complete");
         spdlog::info("LoadingWidget completed all loaders");
-        emit loadingComplete();
+        
+        // Emit signal after a short delay to show completion
+        QTimer::singleShot(200, this, [this]() {
+            emit loadingComplete();
+        });
     }
+}
+
+int LoadingWidget::exec() {
+    // Auto-start loading when exec() is called
+    start();
+    
+    // Call parent exec() for modal behavior
+    return QDialog::exec();
 }
 
 } // namespace geck

@@ -42,8 +42,6 @@ public:
     ~MainWindow();
 
     void setEditorWidget(std::unique_ptr<EditorWidget> editorWidget);
-    void setLoadingWidget(std::unique_ptr<LoadingWidget> loadingWidget);
-    void clearLoadingWidget();
 
     void updateMapInfo(Map* map);
 
@@ -55,6 +53,8 @@ public:
     // Panel visibility management
     void showAllPanels();
     void hideNonEssentialPanels();
+    void refreshFileBrowser();
+    void showFileBrowserPanel();
     
     // Access to palette panel for drag and drop
     ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
@@ -87,6 +87,7 @@ private slots:
     void updateAndRender();
     void handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem = false);
     void updateHexIndexDisplay(int hexIndex);
+    void showPreferences();
 
 private:
     void setupUI();
@@ -112,7 +113,6 @@ private:
 
     // Current widgets
     EditorWidget* _currentEditorWidget;
-    LoadingWidget* _currentLoadingWidget;
 
     // Menu items
     QMenuBar* _menuBar;

@@ -30,6 +30,8 @@ public:
 private:
     void initUI();
     std::string processCommandLineArgs();
+    void checkFirstRun();
+    void loadDataPaths();
 
     std::unique_ptr<QApplication> _qtApp;
     std::unique_ptr<MainWindow> _mainWindow;

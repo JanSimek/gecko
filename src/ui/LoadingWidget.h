@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QWidget>
+#include <QDialog>
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QProgressBar>
@@ -11,7 +11,7 @@ namespace geck {
 
 class Loader;
 
-class LoadingWidget : public QWidget {
+class LoadingWidget : public QDialog {
     Q_OBJECT
 
 public:
@@ -20,6 +20,9 @@ public:
 
     void addLoader(std::unique_ptr<Loader> loader);
     void start();
+    
+    // Override exec() to auto-start loading
+    int exec() override;
 
 signals:
     void loadingComplete();
@@ -37,6 +40,7 @@ private:
     QTimer* _updateTimer;
 
     std::vector<std::unique_ptr<Loader>> _loaders;
+    std::vector<bool> _loadersCompleted; // Track which loaders have had onDone() called
     bool _isLoading;
 };
 

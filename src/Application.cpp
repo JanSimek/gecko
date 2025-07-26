@@ -10,10 +10,13 @@
 
 #include "state/loader/MapLoader.h"
 #include "util/ResourceManager.h"
+#include "util/Settings.h"
 #include "util/QtDialogs.h"
 #include "ui/MainWindow.h"
 #include "ui/EditorWidget.h"
 #include "ui/LoadingWidget.h"
+#include "ui/SettingsDialog.h"
+#include "state/loader/DataPathLoader.h"
 
 namespace geck {
 
@@ -50,30 +53,23 @@ Application::Application(int argc, char** argv)
     const std::string finalMapPath = processCommandLineArgs();
 
     initUI();
+    
+    // Check for first run and show settings dialog if needed
+    checkFirstRun();
 
     loadMap(finalMapPath);
 }
 
 void Application::loadMap(const std::filesystem::path& mapPath) {
     if (mapPath.empty()) {
-        // No map specified, show file dialog to select one
-        QString selectedMapQString = QtDialogs::openMapFile(nullptr, "Choose Fallout 2 map to load");
-        std::filesystem::path selectedMapPath = selectedMapQString.toStdString();
-
-        if (selectedMapPath.empty()) {
-            spdlog::info("No map file selected, starting empty editor");
-            // For now, just show empty main window
-            // TODO: Could show a "New Map" wizard or welcome screen
-            return;
-        }
-
-        // Recursively call with the selected path
-        loadMap(selectedMapPath);
+        spdlog::info("No map file specified, starting with empty editor");
+        // Don't show file dialog automatically - user can use File > Open or File Browser
         return;
     }
 
-    // Create loading widget and show it in main window
-    auto loadingWidget = std::make_unique<LoadingWidget>();
+    // Create loading dialog for map loading
+    auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
+    loadingWidget->setWindowTitle("Loading Map");
 
     // Add map loader (filesystem loading for command line args)
     loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, true, [this](auto map) {
@@ -86,17 +82,8 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
         // If map is null, error was already shown by MapLoader::onDone()
     }));
 
-    // Connect loading complete signal
-    QObject::connect(loadingWidget.get(), &LoadingWidget::loadingComplete, _mainWindow.get(), [this]() {
-        // Loading widget will automatically be replaced by editor widget
-        // when the map loader completes
-        spdlog::info("Map loading completed");
-        // Remove loading widget when loading completes (success or failure)
-        _mainWindow->clearLoadingWidget();
-    });
-
-    // Show loading widget in main window
-    _mainWindow->setLoadingWidget(std::move(loadingWidget));
+    // Show modal loading dialog
+    loadingWidget->exec();
 }
 
 std::string Application::processCommandLineArgs() {
@@ -144,9 +131,25 @@ std::string Application::processCommandLineArgs() {
         spdlog::set_level(spdlog::level::debug);
     }
 
-    QString dataPath = parser.value(dataOption);
-    spdlog::info("Added {} as the default path for loading game files", dataPath.toStdString());
-    ResourceManager::getInstance().addDataPath(dataPath.toStdString());
+    // Check if settings file exists first (for first-run detection)
+    auto& settings = Settings::getInstance();
+    bool isFirstRun = !settings.exists();
+    
+    // Load settings if they exist
+    if (!isFirstRun) {
+        settings.load();
+    }
+    
+    // For first run, we'll add the default path but won't load it yet
+    if (settings.getDataPaths().empty()) {
+        QString dataPath = parser.value(dataOption);
+        spdlog::info("No data paths in settings, will use command line default: {}", dataPath.toStdString());
+        
+        // Add to settings but don't save or load yet
+        settings.addDataPath(dataPath.toStdString());
+    }
+    
+    // Data paths will be loaded after settings dialog in checkFirstRun()
 
     // TODO: this dialog will be available in the configuration screen to append path to data paths
     /*
@@ -185,5 +188,58 @@ bool Application::isRunning() const {
     return _mainWindow && _mainWindow->isVisible();
 }
 
+void Application::checkFirstRun() {
+    auto& settings = Settings::getInstance();
+    if (!settings.exists()) {
+        spdlog::info("First run detected, showing settings dialog");
+        
+        SettingsDialog dialog(_mainWindow.get());
+        int result = dialog.exec();
+        
+        // Always save settings after first run, even if cancelled
+        // This ensures we have at least the default data path from command line
+        settings.save();
+        
+        if (result == QDialog::Accepted) {
+            spdlog::info("Settings dialog accepted, configuration saved");
+            loadDataPaths();
+        } else {
+            spdlog::info("Settings dialog cancelled, saving default configuration");
+            // Still load data paths even if cancelled, so the app is usable
+            loadDataPaths();
+        }
+    } else {
+        // Not first run, load data paths normally
+        loadDataPaths();
+    }
+}
+
+void Application::loadDataPaths() {
+    auto& settings = Settings::getInstance();
+    auto dataPaths = settings.getDataPaths();
+    
+    if (dataPaths.empty()) {
+        spdlog::warn("No data paths configured, application may not function properly");
+        return;
+    }
+    
+    spdlog::info("Loading {} data paths with progress dialog", dataPaths.size());
+    
+    // Create loading dialog for data paths
+    auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
+    loadingWidget->setWindowTitle("Loading Game Data");
+    loadingWidget->addLoader(std::make_unique<DataPathLoader>(dataPaths));
+    
+    // Show modal loading dialog
+    loadingWidget->exec();
+    
+    // After data loading completes, refresh the file browser so it shows the loaded files
+    if (_mainWindow) {
+        _mainWindow->refreshFileBrowser();
+        _mainWindow->showFileBrowserPanel();
+    }
+    
+    spdlog::info("Data paths loaded successfully");
+}
 
 } // namespace geck

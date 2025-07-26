@@ -8,9 +8,11 @@
 #include "TilePalettePanel.h"
 #include "ObjectPalettePanel.h"
 #include "FileBrowserPanel.h"
+#include "SettingsDialog.h"
 #include "../state/loader/MapLoader.h"
 #include "../util/Types.h"
 #include "../util/ResourceManager.h"
+#include "../util/Settings.h"
 #include "../util/QtDialogs.h"
 #include "../reader/lst/LstReader.h"
 #include "../format/lst/Lst.h"
@@ -38,7 +40,6 @@ MainWindow::MainWindow(QWidget* parent)
     , _centralStack(nullptr)
     , _gameLoopTimer(new QTimer(this))
     , _currentEditorWidget(nullptr)
-    , _currentLoadingWidget(nullptr)
     , _menuBar(nullptr)
     , _fileMenu(nullptr)
     , _editMenu(nullptr)
@@ -85,44 +86,43 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
+    spdlog::info("setEditorWidget: Starting to set editor widget");
+    
     _currentEditorWidget = editorWidget.release();
+    spdlog::info("setEditorWidget: Released editor widget pointer");
+    
     _centralStack->addWidget(_currentEditorWidget);
+    spdlog::info("setEditorWidget: Added widget to central stack");
+    
     _centralStack->setCurrentWidget(_currentEditorWidget);
+    spdlog::info("setEditorWidget: Set current widget in stack");
 
     // Set main window reference for palette access
     _currentEditorWidget->setMainWindow(this);
+    spdlog::info("setEditorWidget: Set main window reference");
 
     // Initialize the editor widget
     _currentEditorWidget->init();
+    spdlog::info("setEditorWidget: Initialized editor widget");
 
     // Connect signals
     connectToEditorWidget();
+    spdlog::info("setEditorWidget: Connected signals");
 
     // Update map info panel
     if (_currentEditorWidget->getMap()) {
+        spdlog::info("setEditorWidget: Map exists, updating map info and showing panels");
         updateMapInfo(_currentEditorWidget->getMap());
         
         // Show all panels when a map is loaded
         showAllPanels();
+    } else {
+        spdlog::error("setEditorWidget: EditorWidget has no map!");
     }
+    
+    spdlog::info("setEditorWidget: Completed");
 }
 
-void MainWindow::setLoadingWidget(std::unique_ptr<LoadingWidget> loadingWidget) {
-    _currentLoadingWidget = loadingWidget.release();
-    _centralStack->addWidget(_currentLoadingWidget);
-    _centralStack->setCurrentWidget(_currentLoadingWidget);
-
-    // Start the loading process
-    _currentLoadingWidget->start();
-}
-
-void MainWindow::clearLoadingWidget() {
-    if (_currentLoadingWidget) {
-        _centralStack->removeWidget(_currentLoadingWidget);
-        _currentLoadingWidget->deleteLater();
-        _currentLoadingWidget = nullptr;
-    }
-}
 
 void MainWindow::setupUI() {
     // Create central stacked widget to hold loading and editor widgets
@@ -206,6 +206,13 @@ void MainWindow::setupMenuBar() {
     saveAction->setShortcut(QKeySequence::Save);
     saveAction->setStatusTip("Save current map");
     connect(saveAction, &QAction::triggered, this, &MainWindow::saveMapRequested);
+
+    _fileMenu->addSeparator();
+    
+    QAction* preferencesAction = _fileMenu->addAction("&Preferences...");
+    preferencesAction->setShortcut(QKeySequence::Preferences);
+    preferencesAction->setStatusTip("Open application preferences");
+    connect(preferencesAction, &QAction::triggered, this, &MainWindow::showPreferences);
 
     _fileMenu->addSeparator();
 
@@ -868,29 +875,30 @@ void MainWindow::updateElevationMenu(Map* map) {
 void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem) {
     spdlog::info("MainWindow: Handling request to load map: {} (filesystem: {})", mapPath, forceFilesystem);
 
-    // Create loading widget and show it
-    auto loadingWidget = std::make_unique<LoadingWidget>();
+    // Create loading dialog
+    auto loadingWidget = std::make_unique<LoadingWidget>(this);
+    loadingWidget->setWindowTitle("Loading Map");
 
     // Use unified MapLoader with source context
     loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, forceFilesystem, [this](auto map) {
         // Check if loading was successful
         if (map) {
+            spdlog::info("MapLoader callback: Map object received, creating EditorWidget");
             // When loading is complete, create new editor widget and switch to it
             auto editorWidget = std::make_unique<EditorWidget>(std::move(map));
+            spdlog::info("MapLoader callback: EditorWidget created, calling setEditorWidget");
             setEditorWidget(std::move(editorWidget));
+            spdlog::info("MapLoader callback: setEditorWidget completed");
+        } else {
+            spdlog::error("MapLoader callback: Map object is null, loading failed");
         }
         // If map is null, error was already shown by MapLoader::onDone()
     }));
 
-    // Connect loading complete signal
-    QObject::connect(loadingWidget.get(), &LoadingWidget::loadingComplete, this, [this]() {
-        spdlog::info("Map loading completed from MainWindow");
-        // Remove loading widget when loading completes (success or failure)
-        clearLoadingWidget();
-    });
-
-    // Show loading widget
-    setLoadingWidget(std::move(loadingWidget));
+    // Show modal loading dialog
+    loadingWidget->exec();
+    
+    spdlog::info("Map loading completed from MainWindow");
 }
 
 void MainWindow::setupPanelsMenu() {
@@ -1011,79 +1019,75 @@ void MainWindow::setupPanelsMenu() {
 
 // Dock widget state management methods
 void MainWindow::saveDockWidgetState() {
-    QSettings settings("gecko", "editor");
-    settings.setValue("dockWidgetState", saveState());
-    settings.setValue("windowGeometry", saveGeometry());
+    auto& settings = Settings::getInstance();
+    settings.setDockState(saveState());
+    settings.setWindowGeometry(saveGeometry());
 
     // Save individual floating dock widget geometries for better persistence
-    settings.beginGroup("FloatingDockGeometries");
-
     if (_mapInfoDock->isFloating()) {
-        settings.setValue("MapInfoDock", _mapInfoDock->saveGeometry());
+        settings.setFloatingDockGeometry("MapInfoDock", _mapInfoDock->saveGeometry());
     }
     if (_selectionDock->isFloating()) {
-        settings.setValue("SelectionDock", _selectionDock->saveGeometry());
+        settings.setFloatingDockGeometry("SelectionDock", _selectionDock->saveGeometry());
     }
     if (_tilePaletteDock->isFloating()) {
-        settings.setValue("TilePaletteDock", _tilePaletteDock->saveGeometry());
+        settings.setFloatingDockGeometry("TilePaletteDock", _tilePaletteDock->saveGeometry());
     }
     if (_objectPaletteDock->isFloating()) {
-        settings.setValue("ObjectPaletteDock", _objectPaletteDock->saveGeometry());
+        settings.setFloatingDockGeometry("ObjectPaletteDock", _objectPaletteDock->saveGeometry());
     }
     if (_fileBrowserDock->isFloating()) {
-        settings.setValue("FileBrowserDock", _fileBrowserDock->saveGeometry());
+        settings.setFloatingDockGeometry("FileBrowserDock", _fileBrowserDock->saveGeometry());
     }
 
-    settings.endGroup();
+    settings.save();
     spdlog::debug("Saved dock widget state, window geometry, and floating dock geometries");
 }
 
 void MainWindow::restoreDockWidgetState() {
-    QSettings settings("gecko", "editor");
+    auto& settings = Settings::getInstance();
 
     // Restore window geometry first
-    QByteArray geometry = settings.value("windowGeometry").toByteArray();
+    QByteArray geometry = settings.getWindowGeometry();
     if (!geometry.isEmpty()) {
         restoreGeometry(geometry);
     }
 
     // Restore dock widget state
-    QByteArray state = settings.value("dockWidgetState").toByteArray();
+    QByteArray state = settings.getDockState();
     if (!state.isEmpty()) {
         restoreState(state);
 
         // Restore individual floating dock widget geometries after a short delay
         // This ensures the dock widgets are fully initialized first
         QTimer::singleShot(100, this, [this]() {
-            QSettings timerSettings("geck", "mapper"); // Create new settings instance in timer callback
-            timerSettings.beginGroup("FloatingDockGeometries");
+            auto& timerSettings = Settings::getInstance();
 
-            QByteArray mapInfoGeometry = timerSettings.value("MapInfoDock").toByteArray();
+            QByteArray mapInfoGeometry = timerSettings.getFloatingDockGeometry("MapInfoDock");
             if (!mapInfoGeometry.isEmpty() && _mapInfoDock->isFloating()) {
                 _mapInfoDock->restoreGeometry(mapInfoGeometry);
             }
 
-            QByteArray selectionGeometry = timerSettings.value("SelectionDock").toByteArray();
+            QByteArray selectionGeometry = timerSettings.getFloatingDockGeometry("SelectionDock");
             if (!selectionGeometry.isEmpty() && _selectionDock->isFloating()) {
                 _selectionDock->restoreGeometry(selectionGeometry);
             }
 
-            QByteArray tilePaletteGeometry = timerSettings.value("TilePaletteDock").toByteArray();
+            QByteArray tilePaletteGeometry = timerSettings.getFloatingDockGeometry("TilePaletteDock");
             if (!tilePaletteGeometry.isEmpty() && _tilePaletteDock->isFloating()) {
                 _tilePaletteDock->restoreGeometry(tilePaletteGeometry);
             }
 
-            QByteArray objectPaletteGeometry = timerSettings.value("ObjectPaletteDock").toByteArray();
+            QByteArray objectPaletteGeometry = timerSettings.getFloatingDockGeometry("ObjectPaletteDock");
             if (!objectPaletteGeometry.isEmpty() && _objectPaletteDock->isFloating()) {
                 _objectPaletteDock->restoreGeometry(objectPaletteGeometry);
             }
 
-            QByteArray fileBrowserGeometry = timerSettings.value("FileBrowserDock").toByteArray();
+            QByteArray fileBrowserGeometry = timerSettings.getFloatingDockGeometry("FileBrowserDock");
             if (!fileBrowserGeometry.isEmpty() && _fileBrowserDock->isFloating()) {
                 _fileBrowserDock->restoreGeometry(fileBrowserGeometry);
             }
 
-            timerSettings.endGroup();
             spdlog::debug("Restored floating dock widget geometries");
         });
 
@@ -1188,6 +1192,41 @@ void MainWindow::hideNonEssentialPanels() {
     
     // Update menu actions to reflect visibility
     QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
+}
+
+void MainWindow::refreshFileBrowser() {
+    if (_fileBrowserPanel) {
+        spdlog::debug("Refreshing file browser after data loading");
+        _fileBrowserPanel->refreshFileList();
+    }
+}
+
+void MainWindow::showFileBrowserPanel() {
+    // Show and raise the dock widget containing the file browser
+    _fileBrowserDock->show();
+    _fileBrowserDock->raise();
+    
+    // Make the file browser tab active within the tabbed dock area
+    // Since file browser is tabified with tile and object palettes, we need to ensure it's the active tab
+    _fileBrowserDock->widget()->setFocus();
+    
+    spdlog::debug("File browser panel shown and raised");
+}
+
+void MainWindow::showPreferences() {
+    SettingsDialog dialog(this);
+    int result = dialog.exec();
+    
+    if (result == QDialog::Accepted) {
+        // Settings were saved, we might need to reload resources if data paths changed
+        spdlog::info("Settings dialog closed with changes");
+        // TODO: Reload ResourceManager if data paths changed
+    } else {
+        spdlog::info("Settings dialog cancelled");
+    }
+    
+    // Ensure file browser panel is visible after closing preferences
+    showFileBrowserPanel();
 }
 
 } // namespace geck

@@ -41,6 +41,7 @@ void MapLoader::load() {
     }
 
     setStatus("Loading map " + _mapPath.filename().string());
+    _percentDone = 0;
     
     // Dispatch to appropriate loading method based on source context
     if (_forceFilesystem) {
@@ -103,9 +104,14 @@ void MapLoader::loadFromVFS() {
 
         // Load required LST files into ResourceManager cache
         try {
+            setProgress("Loading resource lists");
+            _percentDone = 5;
+            
             for (const auto& lst_path : requiredLstFiles) {
                 resourceManager.loadResource<Lst>(lst_path);
             }
+            
+            _percentDone = 10;
         } catch (const std::exception& e) {
             _errorMessage = QString("Failed to load required resource files:\n%1\n\nPlease ensure all game data files are properly configured.")
                 .arg(e.what()).toStdString();
@@ -116,6 +122,7 @@ void MapLoader::loadFromVFS() {
         }
         
         setProgress("Parsing map file from VFS");
+        _percentDone = 15;
         
         // Let VFS handle path resolution - it knows which files are mounted
         vfspp::FileInfo vfsFileInfo = PathUtils::createNormalizedFileInfo(_mapPath);
@@ -161,6 +168,7 @@ void MapLoader::loadFromVFS() {
             return;
         }
         
+        _percentDone = 20;
         spdlog::info("MapLoader: Successfully loaded map from VFS: {}", _mapPath.string());
         
         // Load additional resources (textures, etc.) - reuse existing code
@@ -220,9 +228,14 @@ void MapLoader::loadFromFilesystem() {
 
     // TODO: move to a new loader that is called only once per application start
     try {
+        setProgress("Loading resource lists");
+        _percentDone = 5;
+        
         for (const auto& lst_path : requiredLstFiles) {
             ResourceManager::getInstance().loadResource<Lst>(lst_path);
         }
+        
+        _percentDone = 10;
     } catch (const std::exception& e) {
         _errorMessage = QString("Failed to load required resource files:\n%1\n\nPlease ensure all game data files are properly configured.")
             .arg(e.what()).toStdString();
@@ -233,6 +246,7 @@ void MapLoader::loadFromFilesystem() {
     }
 
     setProgress("Parsing map file from filesystem");
+    _percentDone = 15;
 
     // MapReader requires callback in constructor, so we need to create it directly
     try {
@@ -250,6 +264,7 @@ void MapLoader::loadFromFilesystem() {
         return;
     }
 
+    _percentDone = 20;
     spdlog::info("MapLoader: Successfully loaded map from filesystem: {}", _mapPath.string());
     
     // Load additional resources (textures, etc.)
@@ -284,9 +299,15 @@ void MapLoader::loadMapResources() {
     size_t tile_number = 1;
     size_t tiles_total = lst->list().size();
 
+    // Progress for tiles: 20% to 60% (40% of total progress)
     for (const auto& tile : lst->list()) {
-        setProgress("Loading map tile texture " + std::to_string(tile_number++) + " of " + std::to_string(tiles_total));
+        setProgress("Loading map tile texture " + std::to_string(tile_number) + " of " + std::to_string(tiles_total));
         ResourceManager::getInstance().insertTexture("art/tiles/" + tile);
+        
+        // Calculate progress: 20% base + (current/total * 40%)
+        int tileProgress = (tile_number * 40) / tiles_total;
+        _percentDone = 20 + tileProgress;
+        tile_number++;
     }
 
     spdlog::info("... tile textures loaded in {:.3} seconds", stopwatch_chunk);
@@ -296,14 +317,22 @@ void MapLoader::loadMapResources() {
     size_t objectNumber = 1;
     size_t objectsTotal = _map->objects().at(_elevation).size();
 
+    // Progress for objects: 60% to 95% (35% of total progress)
     for (const auto& object : _map->objects().at(_elevation)) {
-        setProgress("Loading map object " + std::to_string(objectNumber++) + " of " + std::to_string(objectsTotal));
+        setProgress("Loading map object " + std::to_string(objectNumber) + " of " + std::to_string(objectsTotal));
 
-        if (object->position == -1)
+        if (object->position == -1) {
+            objectNumber++;
             continue; // object inside an inventory/container
+        }
 
         const std::string frmName = ResourceManager::getInstance().FIDtoFrmName(object->frm_pid);
         ResourceManager::getInstance().insertTexture(frmName);
+        
+        // Calculate progress: 60% base + (current/total * 35%)
+        int objectProgress = (objectNumber * 35) / std::max(objectsTotal, size_t(1));
+        _percentDone = 60 + objectProgress;
+        objectNumber++;
     }
 
     // Load essential editor textures
@@ -314,6 +343,10 @@ void MapLoader::loadMapResources() {
     ResourceManager::getInstance().insertTexture("art/misc/scrblk.frm");
 
     spdlog::info("... objects and resources loaded in {:.3} seconds", stopwatch_chunk);
+    
+    // Mark as complete
+    _percentDone = 100;
+    setProgress("Map loading complete");
 }
 
 MapLoader::~MapLoader() {
