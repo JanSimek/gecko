@@ -101,6 +101,9 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     // Update map info panel
     if (_currentEditorWidget->getMap()) {
         updateMapInfo(_currentEditorWidget->getMap());
+        
+        // Show all panels when a map is loaded
+        showAllPanels();
     }
 }
 
@@ -132,6 +135,9 @@ void MainWindow::setupUI() {
     setupPanelsMenu();
     setupStatusBar();
     connectMenuSignals();
+    
+    // Initially hide all panels except file browser (no map loaded)
+    hideNonEssentialPanels();
 }
 
 void MainWindow::connectMenuSignals() {
@@ -1151,6 +1157,37 @@ void MainWindow::updatePanelMenuActions() {
     }
 
     spdlog::debug("Panel menu action sync completed");
+}
+
+void MainWindow::showAllPanels() {
+    spdlog::debug("Showing all panels (map loaded)");
+    
+    // Show all dock widgets
+    _mapInfoDock->show();
+    _selectionDock->show();
+    _tilePaletteDock->show();
+    _objectPaletteDock->show();
+    _fileBrowserDock->show();
+    
+    // Update menu actions to reflect visibility
+    QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
+}
+
+void MainWindow::hideNonEssentialPanels() {
+    spdlog::debug("Hiding non-essential panels (no map loaded)");
+    
+    // Hide all panels except file browser
+    _mapInfoDock->hide();
+    _selectionDock->hide();
+    _tilePaletteDock->hide();
+    _objectPaletteDock->hide();
+    
+    // Keep file browser visible - it's essential for loading maps
+    _fileBrowserDock->show();
+    _fileBrowserDock->raise();
+    
+    // Update menu actions to reflect visibility
+    QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
 }
 
 } // namespace geck

@@ -52,6 +52,10 @@ public:
 
     void connectToEditorWidget();
     
+    // Panel visibility management
+    void showAllPanels();
+    void hideNonEssentialPanels();
+    
     // Access to palette panel for drag and drop
     ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
 
