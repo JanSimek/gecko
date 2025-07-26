@@ -38,7 +38,7 @@ Object::Object(const Frm* frm)
         throw std::runtime_error("Cannot create Object with FRM direction that has no frames: " + frm->filename());
     }
 
-    uint32_t fid = -1;
+    uint32_t fid = UINT32_MAX;
     if (_mapObject && _mapObject->frm_pid) {
         fid = _mapObject->frm_pid;
     }
