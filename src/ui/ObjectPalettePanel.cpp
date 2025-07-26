@@ -180,7 +180,7 @@ void ObjectPalettePanel::setupSearchControls() {
 void ObjectPalettePanel::setupObjectGrid() {
     _scrollArea = new QScrollArea(this);
     _scrollArea->setWidgetResizable(true);
-    _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); // Never show horizontal scrollbar
     _scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
     _objectGridWidget = new QWidget();
@@ -337,6 +337,13 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
 }
 
 void ObjectPalettePanel::updateObjectGrid() {
+    // Recalculate optimal columns based on current panel width
+    int newColumnsPerRow = calculateOptimalColumnsPerRow();
+    if (newColumnsPerRow != _objectsPerRow) {
+        _objectsPerRow = newColumnsPerRow;
+        _previousColumnsPerRow = newColumnsPerRow;
+    }
+    
     // Clear existing widgets
     _objectWidgets.clear();
     QLayoutItem* item;
@@ -803,6 +810,56 @@ const ObjectInfo* ObjectPalettePanel::getObjectInfo(int objectIndex, ObjectCateg
     }
     
     return (*categoryList)[objectIndex].get();
+}
+
+int ObjectPalettePanel::calculateOptimalColumnsPerRow() const {
+    if (!_scrollArea || !_scrollArea->viewport()) {
+        return DEFAULT_OBJECTS_PER_ROW;
+    }
+    
+    // Get available width from the scroll area viewport
+    int availableWidth = _scrollArea->viewport()->width();
+    
+    // Calculate space needed per object (widget size + margins)
+    int itemWidth = ObjectWidget::OBJECT_SIZE + 4; // Object size + margin
+    
+    // Get spacing and margins from the grid layout
+    int spacing = _objectGridLayout ? _objectGridLayout->spacing() : 2;
+    int leftMargin = _objectGridLayout ? _objectGridLayout->contentsMargins().left() : 4;
+    int rightMargin = _objectGridLayout ? _objectGridLayout->contentsMargins().right() : 4;
+    
+    // Calculate effective width available for objects
+    int effectiveWidth = availableWidth - leftMargin - rightMargin;
+    
+    // Calculate how many objects can fit per row
+    // Each object needs itemWidth + spacing, except the last one doesn't need spacing
+    int columns = 1; // At least 1 column
+    if (effectiveWidth >= itemWidth) {
+        columns = (effectiveWidth + spacing) / (itemWidth + spacing);
+    }
+    
+    // Apply reasonable bounds
+    columns = std::max(1, std::min(columns, MAX_OBJECTS_PER_ROW));
+    
+    return columns;
+}
+
+void ObjectPalettePanel::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    
+    // Calculate optimal columns for the new size
+    int newColumnsPerRow = calculateOptimalColumnsPerRow();
+    
+    // Only update if the column count actually changed to avoid unnecessary rebuilds
+    if (newColumnsPerRow != _previousColumnsPerRow) {
+        _objectsPerRow = newColumnsPerRow;
+        _previousColumnsPerRow = newColumnsPerRow;
+        
+        // Trigger grid update only if we have objects loaded
+        if (!_objectWidgets.empty()) {
+            updateObjectGrid();
+        }
+    }
 }
 
 } // namespace geck

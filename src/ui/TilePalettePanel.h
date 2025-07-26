@@ -12,6 +12,7 @@
 #include <QGroupBox>
 #include <QButtonGroup>
 #include <QLineEdit>
+#include <QResizeEvent>
 #include <vector>
 #include <memory>
 #include "PaginationWidget.h"
@@ -114,6 +115,9 @@ private slots:
     void onSearchTextChanged(const QString& text);
     void onPaginationPageChanged(int page);
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
     void setupUI();
     void setupInteractionModeControls();
@@ -126,6 +130,7 @@ private:
 
     void clearTileSelection();
     void updateTileDisplay();
+    int calculateOptimalColumnsPerRow() const;
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
@@ -164,6 +169,7 @@ private:
     InteractionMode _interactionMode = InteractionMode::SELECTION;
     PlacementMode _placementMode = PlacementMode::UNIFIED_PLACEMENT;
     int _tilesPerRow = 8;
+    int _previousColumnsPerRow = -1; // Cache to avoid unnecessary grid rebuilds
     int _filterStart = 0;
     int _filterEnd = -1;      // -1 means show all
     QString _searchText = ""; // Current search filter text
@@ -180,6 +186,7 @@ private:
     // Constants
     static constexpr int TILES_PER_PAGE = 200; // Tiles to load per page
     static constexpr int DEFAULT_TILES_PER_ROW = 8;
+    static constexpr int MAX_TILES_PER_ROW = 20; // Reasonable maximum for very wide panels
 };
 
 } // namespace geck

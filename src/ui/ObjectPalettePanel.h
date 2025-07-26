@@ -15,6 +15,7 @@
 #include <QSpinBox>
 #include <QDrag>
 #include <QMimeData>
+#include <QResizeEvent>
 #include <vector>
 #include <memory>
 #include "PaginationWidget.h"
@@ -133,6 +134,9 @@ private slots:
     void calculatePagination();
     void updatePaginationControls();
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
     void setupUI();
     void setupCategoryTabs();
@@ -147,6 +151,7 @@ private:
     QString getCategoryDisplayName(ObjectCategory category) const;
 
     void clearObjectSelection();
+    int calculateOptimalColumnsPerRow() const;
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
@@ -178,6 +183,7 @@ private:
     ObjectCategory _currentCategory = ObjectCategory::ITEMS;
     QString _searchText = ""; // Current search filter text
     int _objectsPerRow = 6;
+    int _previousColumnsPerRow = -1; // Cache to avoid unnecessary grid rebuilds
 
     // Pagination state
     int _currentPage = 0;
@@ -194,6 +200,7 @@ private:
     // Constants
     static constexpr int OBJECTS_PER_PAGE = 200; // Objects to load per page
     static constexpr int DEFAULT_OBJECTS_PER_ROW = 6;
+    static constexpr int MAX_OBJECTS_PER_ROW = 20; // Reasonable maximum for very wide panels
 };
 
 } // namespace geck

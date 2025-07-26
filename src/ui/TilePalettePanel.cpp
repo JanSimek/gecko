@@ -178,7 +178,7 @@ void TilePalettePanel::setupFilterControls() {
 void TilePalettePanel::setupTileGrid() {
     _scrollArea = new QScrollArea(this);
     _scrollArea->setWidgetResizable(true);
-    _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); // Never show horizontal scrollbar
     _scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
     _tileGridWidget = new QWidget();
@@ -224,6 +224,13 @@ void TilePalettePanel::loadTiles(const Lst* tileList) {
 void TilePalettePanel::updateTileGrid() {
     if (!_tileList) {
         return;
+    }
+    
+    // Recalculate optimal columns based on current panel width
+    int newColumnsPerRow = calculateOptimalColumnsPerRow();
+    if (newColumnsPerRow != _tilesPerRow) {
+        _tilesPerRow = newColumnsPerRow;
+        _previousColumnsPerRow = newColumnsPerRow;
     }
 
     // Clear existing tiles
@@ -560,6 +567,56 @@ void TilePalettePanel::onPaginationPageChanged(int page) {
     if (newPage != _currentPage && newPage >= 0 && newPage < _totalPages) {
         _currentPage = newPage;
         updateTileGrid();
+    }
+}
+
+int TilePalettePanel::calculateOptimalColumnsPerRow() const {
+    if (!_scrollArea || !_scrollArea->viewport()) {
+        return DEFAULT_TILES_PER_ROW;
+    }
+    
+    // Get available width from the scroll area viewport
+    int availableWidth = _scrollArea->viewport()->width();
+    
+    // Calculate space needed per tile (widget size + margins)
+    int itemWidth = TileWidget::TILE_SIZE + 4; // Tile size + margin
+    
+    // Get spacing and margins from the grid layout
+    int spacing = _tileGridLayout ? _tileGridLayout->spacing() : 2;
+    int leftMargin = _tileGridLayout ? _tileGridLayout->contentsMargins().left() : 4;
+    int rightMargin = _tileGridLayout ? _tileGridLayout->contentsMargins().right() : 4;
+    
+    // Calculate effective width available for tiles
+    int effectiveWidth = availableWidth - leftMargin - rightMargin;
+    
+    // Calculate how many tiles can fit per row
+    // Each tile needs itemWidth + spacing, except the last one doesn't need spacing
+    int columns = 1; // At least 1 column
+    if (effectiveWidth >= itemWidth) {
+        columns = (effectiveWidth + spacing) / (itemWidth + spacing);
+    }
+    
+    // Apply reasonable bounds
+    columns = std::max(1, std::min(columns, MAX_TILES_PER_ROW));
+    
+    return columns;
+}
+
+void TilePalettePanel::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    
+    // Calculate optimal columns for the new size
+    int newColumnsPerRow = calculateOptimalColumnsPerRow();
+    
+    // Only update if the column count actually changed to avoid unnecessary rebuilds
+    if (newColumnsPerRow != _previousColumnsPerRow) {
+        _tilesPerRow = newColumnsPerRow;
+        _previousColumnsPerRow = newColumnsPerRow;
+        
+        // Trigger grid update only if we have tiles loaded
+        if (!_tileWidgets.empty()) {
+            updateTileGrid();
+        }
     }
 }
 
