@@ -56,12 +56,7 @@ std::unique_ptr<Msg> MsgReader::read() {
                 int id = std::stoi(matches[1].str());
                 std::string audio = matches[2].str();
                 std::string message = matches[3].str();
-                
-                // Validate message ID range
-                if (id < 0 || id > 99999) {
-                    spdlog::warn("MSG file has unusual message ID: {}", id);
-                }
-                
+
                 // Clean up message text
                 // Remove newlines (TODO: better handling of \r\n sequences)
                 message.erase(std::remove(message.begin(), message.end(), '\n'), message.end());

@@ -45,6 +45,10 @@ public:
     QByteArray getDockState() const;
     void setDockState(const QByteArray& state);
     
+    // Window state (normal/maximized)
+    bool getWindowMaximized() const;
+    void setWindowMaximized(bool maximized);
+    
     // Floating dock geometries
     QByteArray getFloatingDockGeometry(const QString& dockName) const;
     void setFloatingDockGeometry(const QString& dockName, const QByteArray& geometry);
@@ -84,6 +88,7 @@ private:
     std::vector<std::filesystem::path> _dataPaths;
     QByteArray _windowGeometry;
     QByteArray _dockState;
+    bool _windowMaximized = true; // Default to maximized
     QMap<QString, QByteArray> _floatingDockGeometries;
     QString _version;
     

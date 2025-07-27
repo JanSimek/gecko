@@ -96,6 +96,7 @@ QJsonObject Settings::toJson() const {
     if (!_dockState.isEmpty()) {
         ui["dockState"] = QString::fromLatin1(_dockState.toBase64());
     }
+    ui["windowMaximized"] = _windowMaximized;
     
     // Floating dock geometries
     if (!_floatingDockGeometries.isEmpty()) {
@@ -137,6 +138,10 @@ void Settings::fromJson(const QJsonObject& json) {
         
         if (ui.contains("dockState")) {
             _dockState = QByteArray::fromBase64(ui["dockState"].toString().toLatin1());
+        }
+        
+        if (ui.contains("windowMaximized")) {
+            _windowMaximized = ui["windowMaximized"].toBool(true); // Default to true
         }
         
         if (ui.contains("floatingDockGeometries")) {
@@ -219,6 +224,14 @@ QByteArray Settings::getWindowGeometry() const {
 
 void Settings::setWindowGeometry(const QByteArray& geometry) {
     _windowGeometry = geometry;
+}
+
+bool Settings::getWindowMaximized() const {
+    return _windowMaximized;
+}
+
+void Settings::setWindowMaximized(bool maximized) {
+    _windowMaximized = maximized;
 }
 
 QByteArray Settings::getDockState() const {

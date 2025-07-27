@@ -175,7 +175,14 @@ Application::~Application() {
 
 void Application::initUI() {
     _mainWindow = std::make_unique<MainWindow>();
-    _mainWindow->show();
+    
+    // Check if this is first run or if user prefers maximized
+    auto& settings = Settings::getInstance();
+    if (!settings.exists() || settings.getWindowMaximized()) {
+        _mainWindow->showMaximized();
+    } else {
+        _mainWindow->show();
+    }
 }
 
 void Application::run() {

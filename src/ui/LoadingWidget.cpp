@@ -167,7 +167,7 @@ void LoadingWidget::updateProgress() {
 
     // If multiple loaders, show average progress
     if (_loaders.size() > 1 && !allDone) {
-        int averageProgress = totalProgress / _loaders.size();
+        int averageProgress = totalProgress / static_cast<int>(_loaders.size());
         _progressBar->setValue(averageProgress);
     }
 

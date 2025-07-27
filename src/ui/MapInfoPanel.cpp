@@ -300,35 +300,18 @@ void MapInfoPanel::loadScriptVars() {
         std::string mapFilename = _map->filename();
         std::string baseName = mapFilename.substr(0, mapFilename.find("."));
         std::string gam_filename = baseName + ".gam";
-        
-        // Try different possible locations for GAM files in VFS
-        std::vector<std::string> possibleGamPaths = {
-            gam_filename,                    // Root directory
-            "maps/" + gam_filename,         // maps subdirectory  
-            "data/" + gam_filename,         // data subdirectory
-            "data/maps/" + gam_filename     // data/maps subdirectory
-        };
-        
+        std::string gam_path = "maps/" + gam_filename;
+
         Gam* gam_file = nullptr;
-        std::string foundGamPath;
-        
-        // Try to find and load GAM file from VFS
-        for (const auto& path : possibleGamPaths) {
-            if (ResourceManager::getInstance().fileExistsInVFS(path)) {
-                gam_file = ResourceManager::getInstance().loadResource<Gam>(path);
-                if (gam_file) {
-                    foundGamPath = path;
-                    spdlog::debug("GAM file loaded from VFS: {}", path);
-                    break;
-                }
+        if (ResourceManager::getInstance().fileExistsInVFS(gam_path)) {
+            gam_file = ResourceManager::getInstance().loadResource<Gam>(gam_path);
+            if (gam_file) {
+                spdlog::debug("GAM file loaded from VFS: {}", gam_path);
             }
         }
-        
+
         if (!gam_file) {
-            spdlog::warn("GAM file '{}' not found in VFS at any expected location:", gam_filename);
-            for (const auto& path : possibleGamPaths) {
-                spdlog::warn("  - Tried: {}", path);
-            }
+            spdlog::warn("GAM file '{}' not found in VFS", gam_path);
             _mapScriptName = "GAM file not found";
             return;
         }

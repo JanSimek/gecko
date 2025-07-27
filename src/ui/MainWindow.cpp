@@ -1035,6 +1035,7 @@ void MainWindow::saveDockWidgetState() {
     auto& settings = Settings::getInstance();
     settings.setDockState(saveState());
     settings.setWindowGeometry(saveGeometry());
+    settings.setWindowMaximized(isMaximized());
 
     // Save individual floating dock widget geometries for better persistence
     if (_mapInfoDock->isFloating()) {
@@ -1064,6 +1065,11 @@ void MainWindow::restoreDockWidgetState() {
     QByteArray geometry = settings.getWindowGeometry();
     if (!geometry.isEmpty()) {
         restoreGeometry(geometry);
+    }
+    
+    // Restore window state (maximized/normal)
+    if (settings.getWindowMaximized()) {
+        setWindowState(Qt::WindowMaximized);
     }
 
     // Restore dock widget state

@@ -25,9 +25,10 @@ std::unique_ptr<Gam> GamReader::read() {
         auto gam = std::make_unique<Gam>(_path);
 
         // Define regex patterns for GAM file parsing
-        const std::regex regex_key_value(R"~(^\s*(\w+)\s*:=(\d+)\s*;)~");
+        const std::regex regex_key_value(R"~(^\s*(\w+)\s*:=\s*(\d+)\s*;)~"); // More flexible whitespace
         const std::regex regex_gvars_start(R"~(^\s*GAME_GLOBAL_VARS:)~"); // GVARS
         const std::regex regex_mvars_start(R"~(^\s*MAP_GLOBAL_VARS:)~");  // MVARS
+        const std::regex regex_comment(R"~(^\s*//.*$)~"); // Comment lines
 
         std::smatch regex_match;
 
@@ -49,6 +50,17 @@ std::unique_ptr<Gam> GamReader::read() {
         std::stringstream stream(contents);
         for (std::string line; std::getline(stream, line);) {
             lines_processed++;
+            
+            // Skip comment lines
+            if (std::regex_search(line, regex_comment)) {
+                spdlog::trace("Skipping comment line {}: {}", lines_processed, line);
+                continue;
+            }
+            
+            // Skip empty lines
+            if (line.empty() || std::regex_match(line, std::regex(R"~(^\s*$)~"))) {
+                continue;
+            }
             
             // GAME_GLOBAL_VARS section start
             if (std::regex_search(line, regex_gvars_start)) {
@@ -85,14 +97,17 @@ std::unique_ptr<Gam> GamReader::read() {
                         } else {
                             throw ParseException(
                                 ErrorMessages::corruptedData(_path, 
-                                    "Variable " + key + " outside of GVARS/MVARS section at line " + std::to_string(lines_processed)), _path);
+                                    "Variable " + key + " outside of GVARS/MVARS section at line " + std::to_string(lines_processed) + ": " + line), _path);
                         }
                     } catch (const std::invalid_argument&) {
                         throw ParseException(
                             ErrorMessages::corruptedData(_path,
-                                "Invalid variable value '" + value_str + "' for " + key + " at line " + std::to_string(lines_processed)), _path);
+                                "Invalid variable value '" + value_str + "' for " + key + " at line " + std::to_string(lines_processed) + ": " + line), _path);
                     }
                 }
+            } else if (!line.empty()) {
+                // Log non-matching lines for debugging (but don't treat as error)
+                spdlog::trace("Line {} doesn't match any pattern: '{}'", lines_processed, line);
             }
         }
         

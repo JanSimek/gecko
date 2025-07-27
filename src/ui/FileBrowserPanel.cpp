@@ -184,26 +184,48 @@ FileBrowserPanel::FileBrowserPanel(QWidget* parent)
 FileBrowserPanel::~FileBrowserPanel() {
     spdlog::debug("FileBrowserPanel: Destructor called, cleaning up threads...");
     
-    // Stop any ongoing loading
-    stopLoading();
-    
-    // Clean up worker and thread
+    // First, signal the worker to stop
     if (_loaderWorker) {
-        _loaderWorker->deleteLater();
-        _loaderWorker = nullptr;
+        _loaderWorker->_shouldStop.store(true);
     }
     
+    // Stop timers
+    if (_searchTimer) {
+        _searchTimer->stop();
+    }
+    
+    if (_chunkTimer) {
+        _chunkTimer->stop();
+    }
+    
+    // Handle thread cleanup carefully
     if (_loaderThread) {
+        // Disconnect signals to prevent any further processing
+        if (_loaderWorker) {
+            disconnect(_loaderWorker, nullptr, this, nullptr);
+        }
+        disconnect(_loaderThread, nullptr, this, nullptr);
+        
+        // Only try to quit if the thread is still running
         if (_loaderThread->isRunning()) {
             _loaderThread->quit();
-            if (!_loaderThread->wait(5000)) {
-                spdlog::warn("FileBrowserPanel: Thread didn't finish within 5 seconds, terminating");
+            // Wait for thread to finish with a reasonable timeout
+            if (!_loaderThread->wait(2000)) {
+                spdlog::warn("FileBrowserPanel: Thread didn't finish within 2 seconds, forcing termination");
                 _loaderThread->terminate();
-                _loaderThread->wait(1000);
+                _loaderThread->wait(500);
             }
         }
-        _loaderThread->deleteLater();
+        
+        // Clean up the thread object
+        delete _loaderThread;
         _loaderThread = nullptr;
+    }
+    
+    // Clean up worker
+    if (_loaderWorker) {
+        delete _loaderWorker;
+        _loaderWorker = nullptr;
     }
     
     spdlog::debug("FileBrowserPanel: Destructor completed");
@@ -363,16 +385,8 @@ void FileBrowserPanel::loadFiles() {
     connect(_loaderWorker, &FileLoaderWorker::loadingError, this, &FileBrowserPanel::onLoadingError, Qt::QueuedConnection);
     connect(_loaderWorker, &FileLoaderWorker::loadingComplete, _loaderThread, &QThread::quit, Qt::QueuedConnection);
     
-    // Connect finished signal to clean up thread and worker
-    connect(_loaderThread, &QThread::finished, [this]() {
-        spdlog::debug("FileBrowserPanel: Thread finished, cleaning up...");
-        if (_loaderWorker) {
-            _loaderWorker->deleteLater();
-            _loaderWorker = nullptr;
-        }
-        // Note: _loaderThread will be set to nullptr in the next loadFiles() call
-    });
-    connect(_loaderThread, &QThread::finished, _loaderThread, &QThread::deleteLater);
+    // Don't use deleteLater for thread/worker - we'll manage cleanup manually
+    // This prevents crashes during destruction
     
     spdlog::debug("FileBrowserPanel: Worker signals connected");
 
@@ -390,7 +404,7 @@ void FileBrowserPanel::stopLoading() {
         _loaderWorker->_shouldStop.store(true);
     }
     
-    if (_loaderThread) {
+    if (_loaderThread && _loaderThread->isRunning()) {
         _loaderThread->quit();
         // Don't wait here - let the finished signal handle cleanup
     }
@@ -399,8 +413,13 @@ void FileBrowserPanel::stopLoading() {
         _chunkTimer->stop();
     }
     
-    _progressBar->setVisible(false);
-    _statusLabel->setText("Loading stopped");
+    if (_progressBar) {
+        _progressBar->setVisible(false);
+    }
+    
+    if (_statusLabel) {
+        _statusLabel->setText("Loading stopped");
+    }
 }
 
 void FileBrowserPanel::updateFileTypeComboBox() {
