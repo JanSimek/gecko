@@ -52,6 +52,13 @@ set(GECK_SOURCES
     ui/PaginationWidget.cpp
     ui/SettingsDialog.h
     ui/SettingsDialog.cpp
+    ui/DataPathsWidget.h
+    ui/DataPathsWidget.cpp
+    ui/GameLocationWidget.h
+    ui/GameLocationWidget.cpp
+    ui/TextEditorWidget.h
+    ui/TextEditorWidget.cpp
+    ui/UIConstants.h
 
     # Selection management
     selection/SelectionState.h
