@@ -42,6 +42,7 @@ public:
     Object(const Frm* frm);
 
     MapObject& getMapObject();
+    bool hasMapObject() const;
     void setMapObject(std::shared_ptr<MapObject> newMapObject);
 
     void setSprite(sf::Sprite sprite);

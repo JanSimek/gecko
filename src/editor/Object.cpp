@@ -68,7 +68,14 @@ sf::Texture& Object::createBlankTexture() {
 }
 
 MapObject& Object::getMapObject() {
+    if (!_mapObject) {
+        throw std::runtime_error("Object::getMapObject() called but _mapObject is null");
+    }
     return *_mapObject; //.get();
+}
+
+bool Object::hasMapObject() const {
+    return _mapObject != nullptr;
 }
 
 void Object::setMapObject(std::shared_ptr<MapObject> newMapObject) {

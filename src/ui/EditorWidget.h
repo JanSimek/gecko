@@ -26,6 +26,8 @@ namespace geck {
 // Forward declarations
 class RenderingEngine;
 class InputHandler;
+class DragDropManager;
+class TilePlacementManager;
 
 class SFMLWidget;
 struct ObjectInfo;
@@ -63,7 +65,7 @@ public:
     void enterPlayerPositionSelectionMode();
     void centerViewOnPlayerPosition();
 
-    // Tile placement functionality
+    // Tile placement functionality (delegated to TilePlacementManager)
     void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);
     void fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof);
     void replaceSelectedTiles(int newTileIndex);
@@ -71,7 +73,7 @@ public:
     // Object placement functionality
     void placeObjectAtPosition(sf::Vector2f worldPos);
     
-    // Drag preview functionality (for palette drag and drop)
+    // Drag preview functionality (for palette drag and drop) - now delegated to DragDropManager
     void startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos);
     void updateDragPreview(sf::Vector2f worldPos);
     void finishDragPreview(sf::Vector2f worldPos);
@@ -80,13 +82,13 @@ public:
     // Efficient tile update
     void updateTileSprite(int hexIndex, bool isRoof);
 
-    // Tile placement mode control
+    // Tile placement mode control (delegated to TilePlacementManager)
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
     void setTilePlacementAreaFill(bool enabled);
     void setTilePlacementReplaceMode(bool enabled);
     void selectAll();
     void clearSelection();
-    bool isTilePlacementMode() const { return _tilePlacementMode; }
+    bool isTilePlacementMode() const;
 
     // SFML rendering interface (called by SFMLWidget)
     void handleEvent(const sf::Event& event);
@@ -99,6 +101,12 @@ public:
     
     // Set main window reference for accessing palette panels
     void setMainWindow(class MainWindow* mainWindow) { _mainWindow = mainWindow; }
+    class MainWindow* getMainWindow() const { return _mainWindow; }
+    
+    // Access to internal components for extracted managers
+    selection::SelectionManager* getSelectionManager() const { return _selectionManager.get(); }
+    TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
+    int& getCurrentHoverHex() { return _currentHoverHex; }
 
     // Methods for SelectionManager (moved from private)
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
@@ -125,6 +133,11 @@ public:
 
     // Hex grid utilities for SelectionManager
     int worldPosToHexPosition(sf::Vector2f worldPos) const;
+    
+    // Helper methods for extracted managers (made public)
+    int worldPosToHexIndex(sf::Vector2f worldPos) const;
+    sf::Vector2f snapToHexGrid(sf::Vector2f worldPos) const;
+    void clearDragSelectionPreview();
 
 signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
@@ -190,8 +203,6 @@ private:
     void cancelObjectDrag();
     bool canStartObjectDrag(sf::Vector2f worldPos) const;
 
-    // Hex grid snapping helpers
-    sf::Vector2f snapToHexGrid(sf::Vector2f worldPos) const;
 
     // Hex grid visualization
     void updateHoverHex(sf::Vector2f worldPos);
@@ -199,8 +210,6 @@ private:
     // Zoom management
     void zoomView(float direction);
 
-    // Helper methods
-    int worldPosToHexIndex(sf::Vector2f worldPos) const;
     
     // Wall blocker overlay management
     void createWallBlockerOverlay(const std::shared_ptr<MapObject>& mapObject, int hexPosition);
@@ -219,9 +228,11 @@ private:
     SFMLWidget* _sfmlWidget;
     class MainWindow* _mainWindow;
     
-    // Input and rendering systems
+    // Input, rendering, drag/drop, and tile placement systems
     std::unique_ptr<InputHandler> _inputHandler;
     std::unique_ptr<RenderingEngine> _renderingEngine;
+    std::unique_ptr<DragDropManager> _dragDropManager;
+    std::unique_ptr<TilePlacementManager> _tilePlacementManager;
 
     // Game/Editor State
     SelectionMode _currentSelectionMode = SelectionMode::ALL;
@@ -302,13 +313,6 @@ private:
 
     // Selected hex sprites for visual feedback
     std::vector<sf::Sprite> _selectedHexSprites;
-
-    // Tile placement state
-    bool _tilePlacementMode = false;
-    bool _tilePlacementAreaFill = false;
-    bool _tilePlacementReplaceMode = false;
-    int _tilePlacementIndex = -1;
-    bool _tilePlacementIsRoof = false;
     
     // Player position selection state
     bool _playerPositionSelectionMode = false;

@@ -45,6 +45,7 @@ public:
         // Mouse events
         std::function<void(sf::Vector2f worldPos, SelectionModifier modifier)> onSelectionClick;
         std::function<void(sf::Vector2f startPos, sf::Vector2f endPos)> onDragSelection;
+        std::function<void(sf::Vector2f startPos, sf::Vector2f currentPos)> onDragSelectionPreview;
         std::function<void(sf::Vector2f worldPos)> onTilePlacement;
         std::function<void(sf::Vector2f startPos, sf::Vector2f endPos, bool isRoof)> onTileAreaFill;
         std::function<void(sf::Vector2f delta)> onPan;
@@ -116,6 +117,7 @@ private:
     void handleMouseWheelScrolled(const sf::Event::MouseWheelScrolled& event);
     void handleKeyPressed(const sf::Event::KeyPressed& event);
     void handleKeyReleased(const sf::Event::KeyReleased& event);
+    void handleWindowResized(const sf::Event::Resized& event, sf::RenderWindow* window);
 
     // Helper methods
     SelectionModifier getSelectionModifier() const;

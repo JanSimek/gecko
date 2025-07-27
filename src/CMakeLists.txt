@@ -63,6 +63,10 @@ set(GECK_SOURCES
     ui/rendering/RenderingEngine.cpp
     ui/input/InputHandler.h
     ui/input/InputHandler.cpp
+    ui/dragdrop/DragDropManager.h
+    ui/dragdrop/DragDropManager.cpp
+    ui/tiles/TilePlacementManager.h
+    ui/tiles/TilePlacementManager.cpp
 
     # Selection management
     selection/SelectionState.h

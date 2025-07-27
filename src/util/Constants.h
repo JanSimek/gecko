@@ -149,7 +149,7 @@ namespace SpriteOffset {
     constexpr int HEX_HIGHLIGHT_Y = -8;                                 ///< Y offset for hex highlighting
 }
 
-// View constants
+// View constants - fixed size for consistent coordinate system
 namespace View {
     constexpr float DEFAULT_WIDTH = 800.0f;                             ///< Default view width
     constexpr float DEFAULT_HEIGHT = 600.0f;                            ///< Default view height

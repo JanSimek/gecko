@@ -11,8 +11,8 @@ private:
     uint32_t _position;
 
 public:
-    static constexpr int HEX_WIDTH = 16;
-    static constexpr int HEX_HEIGHT = 12;
+    static constexpr int HEX_WIDTH = 16;  // Logical hex coordinate spacing
+    static constexpr int HEX_HEIGHT = 12; // Logical hex coordinate spacing
 
     static constexpr uint32_t HEX_OUT_OF_MAP = UINT32_MAX;
 

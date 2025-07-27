@@ -55,9 +55,15 @@ void SFMLWidget::showEvent(QShowEvent* event) {
         _renderWindow = std::make_unique<sf::RenderWindow>(handle);
 
         if (_renderWindow) {
+            // Configure for pixel-perfect rendering (matching Fallout 2 style)
             _renderWindow->setVerticalSyncEnabled(true);
+            
+            // Disable smoothing for pixel-perfect rendering
+            sf::View defaultView = _renderWindow->getDefaultView();
+            _renderWindow->setView(defaultView);
+            
             _initialized = true;
-            spdlog::info("SFML render window created successfully");
+            spdlog::info("SFML render window created successfully with pixel-perfect settings");
         } else {
             spdlog::error("Failed to create SFML render window");
         }

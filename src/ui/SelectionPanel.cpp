@@ -540,6 +540,13 @@ void geck::SelectionPanel::handleSelectionChanged(const selection::SelectionStat
             selectTile(tileIndex, elevation, isRoof);
             break;
         }
+        case selection::SelectionType::HEX: {
+            // Hex selection - could show hex coordinates or other hex-specific info
+            int hexIndex = item.getHexIndex();
+            // For now, just log hex selection
+            spdlog::debug("SelectionPanel: Hex {} selected", hexIndex);
+            break;
+        }
     }
 }
 

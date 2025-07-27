@@ -1,5 +1,6 @@
 #include "InputHandler.h"
 #include "../EditorWidget.h"
+#include "../../util/Constants.h"
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/Mouse.hpp>
 #include <spdlog/spdlog.h>
@@ -28,6 +29,8 @@ void InputHandler::handleEvent(const sf::Event& event,
         handleKeyPressed(*keyPressed);
     } else if (const auto* keyReleased = event.getIf<sf::Event::KeyReleased>()) {
         handleKeyReleased(*keyReleased);
+    } else if (const auto* resized = event.getIf<sf::Event::Resized>()) {
+        handleWindowResized(*resized, window);
     }
 }
 
@@ -195,6 +198,20 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
         }
 
         case EditorAction::DRAG_SELECTING:
+            // Start dragging after minimum movement
+            if (!_isDragging) {
+                sf::Vector2f dragDelta = worldPos - _dragStartWorldPos;
+                float dragDistance = std::sqrt(dragDelta.x * dragDelta.x + dragDelta.y * dragDelta.y);
+                if (dragDistance > 5.0f) { // 5 pixel threshold
+                    _isDragging = true;
+                }
+            }
+            // Update drag selection preview
+            if (_isDragging && _callbacks.onDragSelectionPreview) {
+                _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos);
+            }
+            break;
+            
         case EditorAction::TILE_PLACING:
             // Start dragging after minimum movement
             if (!_isDragging) {
@@ -241,6 +258,19 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
 
 void InputHandler::handleKeyReleased(const sf::Event::KeyReleased& event) {
     // Currently no key release handling needed
+}
+
+void InputHandler::handleWindowResized(const sf::Event::Resized& event, sf::RenderWindow* window) {
+    if (!window || !_editor) return;
+    
+    // Keep view size fixed to maintain consistent coordinate system
+    // SFML will handle letterboxing/pillarboxing automatically
+    sf::View view = window->getView();
+    view.setSize({ View::DEFAULT_WIDTH, View::DEFAULT_HEIGHT });
+    window->setView(view);
+    
+    spdlog::debug("InputHandler::handleWindowResized - Maintained fixed view size {:.1f}x{:.1f} (window: {}x{})", 
+                 View::DEFAULT_WIDTH, View::DEFAULT_HEIGHT, event.size.x, event.size.y);
 }
 
 void InputHandler::setTilePlacementMode(bool enabled, int tileIndex, bool replaceMode) {
