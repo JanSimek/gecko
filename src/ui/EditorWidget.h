@@ -23,6 +23,9 @@
 
 namespace geck {
 
+// Forward declarations
+class RenderingEngine;
+
 class SFMLWidget;
 struct ObjectInfo;
 
@@ -190,7 +193,6 @@ private:
     sf::Vector2f snapToHexGrid(sf::Vector2f worldPos) const;
 
     // Hex grid visualization
-    void renderHexGrid();
     void updateHoverHex(sf::Vector2f worldPos);
 
     // Zoom management
@@ -315,6 +317,9 @@ private:
     
     // Player position selection state
     bool _playerPositionSelectionMode = false;
+    
+    // Rendering engine
+    std::unique_ptr<RenderingEngine> _renderingEngine;
 };
 
 } // namespace geck

@@ -59,6 +59,8 @@ set(GECK_SOURCES
     ui/TextEditorWidget.h
     ui/TextEditorWidget.cpp
     ui/UIConstants.h
+    ui/rendering/RenderingEngine.h
+    ui/rendering/RenderingEngine.cpp
 
     # Selection management
     selection/SelectionState.h

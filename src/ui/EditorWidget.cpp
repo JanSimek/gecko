@@ -28,6 +28,7 @@
 #include "ObjectPalettePanel.h"
 #include "TilePalettePanel.h"
 #include "MainWindow.h"
+#include "rendering/RenderingEngine.h"
 
 #include "../util/ProHelper.h"
 
@@ -67,6 +68,9 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
     if (_map) {
         initializeSelectionSystem();
     }
+
+    // Initialize rendering engine
+    _renderingEngine = std::make_unique<RenderingEngine>();
 
     setupUI();
     centerViewOnMap();
@@ -1320,120 +1324,46 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
     // Render the game here
     // This is called by the SFMLWidget's render loop
 
-    if (!_sfmlWidget || !_sfmlWidget->getRenderWindow()) {
+    if (!_sfmlWidget || !_sfmlWidget->getRenderWindow() || !_renderingEngine) {
         return;
     }
 
     auto* window = _sfmlWidget->getRenderWindow();
-    window->setView(_view);
-
-    // Render floor tiles (10,000 tiles per elevation)
-    for (const auto& floor : _floorSprites) {
-        window->draw(floor);
-    }
-
-    // Render hex grid overlay
-    renderHexGrid();
-
-    // Render objects with visibility filtering
-    if (_showObjects) {
-        for (const auto& object : _objects) {
-            // Filter wall objects based on show walls setting
-            if (!_showWalls && object->getMapObject().isWallObject()) {
-                continue; // Skip wall objects when walls are hidden
-            }
-            
-            // Filter scroll blockers based on show scroll blockers setting
-            if (!_showScrollBlk && object->getMapObject().isScrollBlocker()) {
-                continue; // Skip scroll blockers when they are hidden
-            }
-            
-            window->draw(object->getSprite());
-            
-            // Draw light overlay if enabled and object has light
-            if (_showLightOverlays && object->hasLight()) {
-                window->draw(object->getLightOverlay());
-            }
-        }
-        
-        // Render wall blocker overlays on top of regular objects (controlled by toggle)
-        if (_showWallBlockers) {
-            for (const auto& overlay : _wallBlockerOverlays) {
-                window->draw(overlay);
-            }
-        }
-    }
     
-    // Render drag preview object if active
-    if (_isDraggingFromPalette && _dragPreviewObject) {
-        window->draw(_dragPreviewObject->getSprite());
-    }
-
-    // Render roof tiles
-    if (_showRoof) {
-        // First draw background sprites for selected roof tiles (blank.frm tiles)
-        for (const auto& backgroundSprite : _selectedRoofTileBackgroundSprites) {
-            window->draw(backgroundSprite);
-        }
-
-        // Then draw the roof sprites on top
-        for (const auto& roof : _roofSprites) {
-            window->draw(roof);
-        }
-    }
-
-    // Render selected hex sprites
-    for (const auto& hexSprite : _selectedHexSprites) {
-        window->draw(hexSprite);
-    }
-
-    // Render drag selection rectangle
-    if (_isDragSelecting && (_currentAction == EditorAction::DRAG_SELECTING || _currentAction == EditorAction::TILE_PLACING)) {
-        // Use different colors for scroll blocker rectangle mode
-        if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
-            // Green colors for scroll blocker rectangle mode
-            _selectionRectangle.setFillColor(sf::Color(SelectionColors::SCROLL_BLOCKER_R, SelectionColors::SCROLL_BLOCKER_G, SelectionColors::SCROLL_BLOCKER_B, SelectionColors::SCROLL_BLOCKER_FILL_ALPHA));    // Light green fill
-            _selectionRectangle.setOutlineColor(sf::Color(0, 200, 0, SelectionColors::SCROLL_BLOCKER_OUTLINE_ALPHA));    // Green outline
-        } else {
-            // Default blue colors for normal selection
-            _selectionRectangle.setFillColor(TileColors::selectionFill());
-            _selectionRectangle.setOutlineColor(TileColors::selectionOutline());
-        }
-        window->draw(_selectionRectangle);
-    }
-
-    // Render hex highlight if there's a valid hover hex
-    if (_currentHoverHex >= 0) {
-        // Find the hex with the matching position
-        for (const auto& hex : _hexgrid.grid()) {
-            if (hex.position() == static_cast<uint32_t>(_currentHoverHex)) {
-                float spriteX = static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X);
-                float spriteY = static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y);
-
-                _hexHighlightSprite.setPosition({ spriteX, spriteY });
-                window->draw(_hexHighlightSprite);
-                break;
-            }
-        }
-    }
+    // Prepare visibility settings
+    RenderingEngine::VisibilitySettings visibility;
+    visibility.showObjects = _showObjects;
+    visibility.showCritters = _showCritters;
+    visibility.showWalls = _showWalls;
+    visibility.showRoof = _showRoof;
+    visibility.showScrollBlockers = _showScrollBlk;
+    visibility.showWallBlockers = _showWallBlockers;
+    visibility.showHexGrid = _showHexGrid;
+    visibility.showLightOverlays = _showLightOverlays;
     
-    // Render player default position marker
-    if (_map) {
-        uint32_t playerPosition = _map->getMapFile().header.player_default_position;
-        if (playerPosition < HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT) {
-            // Find the hex with the matching position
-            for (const auto& hex : _hexgrid.grid()) {
-                if (hex.position() == playerPosition) {
-                    float spriteX = static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X);
-                    float spriteY = static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y);
-
-                    _playerPositionSprite.setPosition({ spriteX, spriteY });
-                    window->draw(_playerPositionSprite);
-                    break;
-                }
-            }
-        }
-    }
+    // Prepare render data
+    RenderingEngine::RenderData renderData;
+    renderData.floorSprites = &_floorSprites;
+    renderData.roofSprites = &_roofSprites;
+    renderData.objects = &_objects;
+    renderData.wallBlockerOverlays = &_wallBlockerOverlays;
+    renderData.selectedRoofTileBackgroundSprites = &_selectedRoofTileBackgroundSprites;
+    renderData.selectedHexSprites = &_selectedHexSprites;
+    renderData.dragPreviewObject = &_dragPreviewObject;
+    renderData.isDraggingFromPalette = _isDraggingFromPalette;
+    renderData.selectionRectangle = &_selectionRectangle;
+    renderData.isDragSelecting = _isDragSelecting && 
+        (_currentAction == EditorAction::DRAG_SELECTING || _currentAction == EditorAction::TILE_PLACING);
+    renderData.currentSelectionMode = _currentSelectionMode;
+    renderData.hexGrid = &_hexgrid;
+    renderData.hexSprite = &_hexSprite;
+    renderData.hexHighlightSprite = &_hexHighlightSprite;
+    renderData.playerPositionSprite = &_playerPositionSprite;
+    renderData.currentHoverHex = _currentHoverHex;
+    renderData.map = _map.get();
+    
+    // Delegate rendering to the engine
+    _renderingEngine->render(window, _view, renderData, visibility);
 }
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
@@ -2284,61 +2214,6 @@ int EditorWidget::worldPosToHexPosition(sf::Vector2f worldPos) const {
     return static_cast<int>(hexPosition);
 }
 
-void EditorWidget::renderHexGrid() {
-    if (!_showHexGrid) {
-        return;
-    }
-
-    auto* window = _sfmlWidget->getRenderWindow();
-    if (!window) {
-        spdlog::debug("renderHexGrid: No render window available");
-        return;
-    }
-
-    // Get viewport bounds for culling (similar to legacy implementation)
-    sf::Vector2f viewCenter = _view.getCenter();
-    sf::Vector2f viewSize = _view.getSize();
-
-    // Calculate visible area bounds
-    int worldX = static_cast<int>(viewCenter.x - viewSize.x / 2);
-    int worldY = static_cast<int>(viewCenter.y - viewSize.y / 2);
-    int viewWidth = static_cast<int>(viewSize.x);
-    int viewHeight = static_cast<int>(viewSize.y);
-
-    // Iterate through hex grid
-    for (int y = 0; y < HexagonGrid::GRID_HEIGHT; y++) {
-        for (int x = 0; x < HexagonGrid::GRID_WIDTH; x++) {
-            // Convert hex coordinates to world coordinates using existing HexagonGrid
-            int hexIndex = y * HexagonGrid::GRID_WIDTH + x;
-            if (hexIndex >= static_cast<int>(_hexgrid.grid().size())) {
-                continue;
-            }
-
-            // Get the hex data for this grid index
-            const auto& hex = _hexgrid.grid().at(hexIndex);
-            int actualHexPosition = hex.position();
-
-            // Skip rendering the hex that's currently being highlighted
-            if (actualHexPosition == _currentHoverHex) {
-                continue;
-            }
-
-            int hexWorldX = hex.x();
-            int hexWorldY = hex.y();
-
-            // Viewport culling - only render visible hex sprites
-            if ((hexWorldX + Hex::HEX_WIDTH * 2 > worldX && hexWorldX < worldX + viewWidth) && (hexWorldY + Hex::HEX_HEIGHT + 4 > worldY && hexWorldY < worldY + viewHeight)) {
-
-                // Position hex sprite
-                float spriteX = static_cast<float>(hexWorldX - Hex::HEX_WIDTH);
-                float spriteY = static_cast<float>(hexWorldY - Hex::HEX_HEIGHT + 4);
-
-                _hexSprite.setPosition({ spriteX, spriteY });
-                window->draw(_hexSprite);
-            }
-        }
-    }
-}
 
 void EditorWidget::updateHoverHex(sf::Vector2f worldPos) {
     int newHoverHex = worldPosToHexPosition(worldPos);
