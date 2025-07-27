@@ -1,5 +1,7 @@
 #include "EditorWidget.h"
 #include "SFMLWidget.h"
+#include "input/InputHandler.h"
+#include "rendering/RenderingEngine.h"
 
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
@@ -69,8 +71,10 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
         initializeSelectionSystem();
     }
 
-    // Initialize rendering engine
+    // Initialize rendering engine and input handler
     _renderingEngine = std::make_unique<RenderingEngine>();
+    _inputHandler = std::make_unique<InputHandler>(this);
+    setupInputCallbacks();
 
     setupUI();
     centerViewOnMap();
@@ -895,424 +899,184 @@ void EditorWidget::zoomView(float direction) {
 
 // SFML Event handling interface (called by SFMLWidget)
 void EditorWidget::handleEvent(const sf::Event& event) {
-    // Handle SFML events here
-    // This is called by the SFMLWidget when it receives events
+    // Delegate all event handling to InputHandler
+    if (_inputHandler) {
+        _inputHandler->handleEvent(event, _sfmlWidget->getRenderWindow(), _view);
+    }
+}
 
-    if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>()) {
-        if (mousePressed->button == sf::Mouse::Button::Left) {
-            sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                mousePressed->position, _view);
+void EditorWidget::setupInputCallbacks() {
+    if (!_inputHandler) return;
+    
+    InputHandler::Callbacks callbacks;
+    
+    // Mouse events
+    callbacks.onSelectionClick = [this](sf::Vector2f worldPos, InputHandler::SelectionModifier modifier) {
+        SelectionModifier selectionModifier;
+        switch (modifier) {
+            case InputHandler::SelectionModifier::ADD: selectionModifier = SelectionModifier::ADD; break;
+            case InputHandler::SelectionModifier::TOGGLE: selectionModifier = SelectionModifier::TOGGLE; break;
+            case InputHandler::SelectionModifier::RANGE: selectionModifier = SelectionModifier::RANGE; break;
+            default: selectionModifier = SelectionModifier::NONE; break;
+        }
+        selectAtPosition(worldPos, selectionModifier);
+    };
+    
+    callbacks.onDragSelection = [this](sf::Vector2f startPos, sf::Vector2f endPos) {
+        float left = std::min(startPos.x, endPos.x);
+        float top = std::min(startPos.y, endPos.y);
+        float width = std::abs(endPos.x - startPos.x);
+        float height = std::abs(endPos.y - startPos.y);
+        sf::FloatRect selectionArea({left, top}, {width, height});
+        
+        if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
+            // Handle scroll blocker rectangle placement
+            auto borderHexes = calculateRectangleBorderHexes(selectionArea);
+            createScrollBlockersFromHexes(borderHexes);
+        } else {
+            // Normal area selection
+            auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
+            if (result.success) {
+                spdlog::debug("Area selection completed: {}", result.message);
+            }
+        }
+    };
+    
+    callbacks.onTilePlacement = [this](sf::Vector2f worldPos) {
+        if (_tilePlacementMode && _tilePlacementIndex >= 0) {
+            bool isRoof = _inputHandler->isInTilePlacementMode() && 
+                         sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
+            placeTileAtPosition(_tilePlacementIndex, worldPos, isRoof);
+        }
+    };
+    
+    callbacks.onTileAreaFill = [this](sf::Vector2f startPos, sf::Vector2f endPos, bool isRoof) {
+        if (_tilePlacementMode && _tilePlacementIndex >= 0) {
+            float left = std::min(startPos.x, endPos.x);
+            float top = std::min(startPos.y, endPos.y);
+            float width = std::abs(endPos.x - startPos.x);
+            float height = std::abs(endPos.y - startPos.y);
+            sf::FloatRect fillArea({left, top}, {width, height});
+            fillAreaWithTile(_tilePlacementIndex, fillArea, isRoof);
+        }
+    };
+    
+    callbacks.onPan = [this](sf::Vector2f delta) {
+        sf::Vector2f center = _view.getCenter();
+        _view.setCenter(center + delta);
+    };
+    
+    callbacks.onZoom = [this](float direction) {
+        zoomView(direction);
+    };
+    
+    // Object dragging
+    callbacks.canStartObjectDrag = [this](sf::Vector2f worldPos) {
+        return canStartObjectDrag(worldPos);
+    };
+    
+    callbacks.onObjectDragStart = [this](sf::Vector2f worldPos) {
+        return startObjectDrag(worldPos);
+    };
+    
+    callbacks.onObjectDragUpdate = [this](sf::Vector2f worldPos) {
+        updateObjectDrag(worldPos);
+    };
+    
+    callbacks.onObjectDragEnd = [this](sf::Vector2f worldPos) {
+        finishObjectDrag(worldPos);
+    };
+    
+    callbacks.onObjectDragCancel = [this]() {
+        cancelObjectDrag();
+    };
+    
+    // Special modes
+    callbacks.onPlayerPositionSelect = [this](sf::Vector2f worldPos) {
+        int hexPosition = worldPosToHexPosition(worldPos);
+        if (hexPosition >= 0) {
+            emit playerPositionSelected(hexPosition);
+            spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
+        }
+        emit statusMessageClearRequested();
+    };
+    
+    callbacks.onScrollBlockerRectangle = [this](sf::FloatRect area) {
+        auto borderHexes = calculateRectangleBorderHexes(area);
+        createScrollBlockersFromHexes(borderHexes);
+    };
+    
+    callbacks.onTilePlacementCancel = [this]() {
+        _tilePlacementMode = false;
+        _tilePlacementIndex = -1;
+        if (_mainWindow && _mainWindow->getTilePalettePanel()) {
+            _mainWindow->getTilePalettePanel()->deselectTile();
+        }
+        spdlog::info("Tile placement mode cancelled");
+    };
+    
+    // Hover
+    callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
+        updateHoverHex(worldPos);
+    };
+    
+    // Keyboard
+    callbacks.onEscape = [this]() {
+        // Handle escape key logic
+        if (_tilePlacementMode) {
+            _tilePlacementMode = false;
+            _tilePlacementIndex = -1;
+            if (_mainWindow && _mainWindow->getTilePalettePanel()) {
+                _mainWindow->getTilePalettePanel()->deselectTile();
+            }
+        }
+    };
+    
+    _inputHandler->setCallbacks(callbacks);
+    
+    // Set initial modes
+    _inputHandler->setSelectionMode(_currentSelectionMode);
+}
 
-            // Check if we're in player position selection mode first (prevents other selections)
-            if (_playerPositionSelectionMode) {
-                int hexPosition = worldPosToHexPosition(worldPos);
-                if (hexPosition >= 0) {
-                    emit playerPositionSelected(hexPosition);
-                    spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
-                } else {
-                    spdlog::debug("EditorWidget: Invalid hex position during player position selection");
-                }
-                
-                // Exit selection mode after selection
-                _playerPositionSelectionMode = false;
-                
-                
-                // Clear status message
-                emit statusMessageClearRequested();
-                
-                return; // Don't process as tile placement or normal selection
+// Helper method to extract scroll blocker creation logic
+void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderHexes) {
+    if (borderHexes.empty()) {
+        spdlog::warn("No valid border hexes found for scroll blocker rectangle");
+        return;
+    }
+    
+    int scrollBlockersCreated = 0;
+    for (int hexPos : borderHexes) {
+        auto scrollBlockerObject = createScrollBlockerObject(hexPos);
+        
+        // Add to map storage
+        _map->getMapFile().map_objects[_currentElevation].push_back(scrollBlockerObject);
+        
+        // Create visual object for immediate display
+        try {
+            std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(scrollBlockerObject->frm_pid);
+            auto frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
+            if (!frm) {
+                ResourceManager::getInstance().loadResource<Frm>(frmPath);
+                frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
             }
             
-            // Check if we're in tile placement mode
-            if (_tilePlacementMode && _tilePlacementIndex >= 0 && !_tilePlacementReplaceMode) {
-                // Check if Shift is held to place roof tiles instead of floor tiles
-                bool placeOnRoof = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
-
-                // Unified placement mode: prepare for either single or area placement
-                _currentAction = EditorAction::TILE_PLACING;
-                _dragStartWorldPos = worldPos;
-                _isDragSelecting = false; // Will become true on first mouse move if dragging
-                _tilePlacementIsRoof = placeOnRoof;
-
-                // Don't place immediately - let mouse release handle single placement
-                // and mouse move handle area drag detection
-                return; // Don't process as selection
+            if (frm) {
+                auto object = std::make_shared<Object>(frm);
+                sf::Sprite sprite{ ResourceManager::getInstance().texture(frmPath) };
+                object->setSprite(std::move(sprite));
+                object->setDirection(static_cast<ObjectDirection>(scrollBlockerObject->direction));
+                object->setHexPosition(_hexgrid.grid().at(hexPos));
+                object->setMapObject(scrollBlockerObject);
+                _objects.push_back(object);
+                scrollBlockersCreated++;
             }
-
-            // Detect modifier keys for multi-selection
-            SelectionModifier modifier = SelectionModifier::NONE;
-            bool hasModifiers = false;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl)) {
-                modifier = SelectionModifier::TOGGLE; // Ctrl+Click toggles items
-                hasModifiers = true;
-            } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LAlt) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RAlt)) {
-                modifier = SelectionModifier::ADD; // Alt+Click (Option on macOS) adds items
-                hasModifiers = true;
-            } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift)) {
-                modifier = SelectionModifier::RANGE; // Shift+Click range selection
-                hasModifiers = true;
-            }
-
-            // Check if we can start object dragging (no modifiers and clicking on selected object)
-            bool canObjectDrag = !hasModifiers && canStartObjectDrag(worldPos);
-
-            if (canObjectDrag) {
-                // Start object drag operation
-                if (startObjectDrag(worldPos)) {
-                    _currentAction = EditorAction::OBJECT_MOVING;
-                    _isDragSelecting = false; // Will become true on first mouse move
-                }
-            } else {
-                // Determine if we should start drag selection or do immediate selection
-                bool canDragSelect = !hasModifiers && (_currentSelectionMode == SelectionMode::ALL || _currentSelectionMode == SelectionMode::FLOOR_TILES || _currentSelectionMode == SelectionMode::ROOF_TILES || _currentSelectionMode == SelectionMode::ROOF_TILES_ALL || _currentSelectionMode == SelectionMode::OBJECTS || _currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE);
-
-                if (canDragSelect) {
-                    // Start drag selection
-                    _currentAction = EditorAction::DRAG_SELECTING;
-                    _dragStartWorldPos = worldPos;
-                    _isDragSelecting = false;             // Will become true on first mouse move
-                    _immediateSelectionPerformed = false; // Reset flag
-                } else {
-                    // Immediate selection
-                    selectAtPosition(worldPos, modifier);
-                    _immediateSelectionPerformed = true; // Mark that immediate selection was performed
-                }
-            }
-        } else if (mousePressed->button == sf::Mouse::Button::Right) {
-            // Check if we're in tile placement mode - if so, deselect tile instead of panning
-            if (_tilePlacementMode) {
-                _tilePlacementMode = false;
-                _tilePlacementIndex = -1;
-                // Notify MainWindow to deselect tile in palette
-                if (_mainWindow && _mainWindow->getTilePalettePanel()) {
-                    _mainWindow->getTilePalettePanel()->deselectTile();
-                }
-                spdlog::info("Tile placement mode cancelled with right-click");
-            } else {
-                // Start panning
-                _currentAction = EditorAction::PANNING;
-                _mouseStartingPosition = mousePressed->position;
-                _mouseLastPosition = _mouseStartingPosition;
-            }
-        }
-    } else if (const auto* mouseReleased = event.getIf<sf::Event::MouseButtonReleased>()) {
-        if (mouseReleased->button == sf::Mouse::Button::Left) {
-            // Check if we're in player position selection mode (prevent all other selections)
-            if (_playerPositionSelectionMode) {
-                return; // Don't process any selections during player position mode
-            }
-            
-            if (_currentAction == EditorAction::TILE_PLACING) {
-                // Clear preview visuals first
-                clearDragPreview();
-
-                if (_isDragSelecting && _tilePlacementMode) {
-                    // Complete tile area fill
-                    sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                        mouseReleased->position, _view);
-
-                    // Create fill area
-                    float left = std::min(_dragStartWorldPos.x, worldPos.x);
-                    float top = std::min(_dragStartWorldPos.y, worldPos.y);
-                    float width = std::abs(worldPos.x - _dragStartWorldPos.x);
-                    float height = std::abs(worldPos.y - _dragStartWorldPos.y);
-                    sf::FloatRect fillArea({ left, top }, { width, height });
-
-                    // Fill area with selected tile
-                    fillAreaWithTile(_tilePlacementIndex, fillArea, _tilePlacementIsRoof);
-
-                    _isDragSelecting = false;
-                } else if (_tilePlacementMode && _tilePlacementIndex >= 0) {
-                    // Single tile placement - no dragging occurred
-                    placeTileAtPosition(_tilePlacementIndex, _dragStartWorldPos, _tilePlacementIsRoof);
-                    spdlog::debug("Placed single tile at mouse release");
-                }
-
-                _currentAction = EditorAction::NONE;
-            } else if (_currentAction == EditorAction::DRAG_SELECTING) {
-                // Clear preview visuals first
-                clearDragPreview();
-
-                if (_isDragSelecting) {
-                    // Complete drag selection
-                    sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                        mouseReleased->position, _view);
-
-                    // Create selection area
-                    float left = std::min(_dragStartWorldPos.x, worldPos.x);
-                    float top = std::min(_dragStartWorldPos.y, worldPos.y);
-                    float width = std::abs(worldPos.x - _dragStartWorldPos.x);
-                    float height = std::abs(worldPos.y - _dragStartWorldPos.y);
-                    sf::FloatRect selectionArea({ left, top }, { width, height });
-
-                    if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
-                        // Handle scroll blocker rectangle placement
-                        auto borderHexes = calculateRectangleBorderHexes(selectionArea);
-                        
-                        if (!borderHexes.empty()) {
-                            // Create scroll blocker objects at border hexes
-                            int scrollBlockersCreated = 0;
-                            for (int hexPos : borderHexes) {
-                                auto scrollBlockerObject = createScrollBlockerObject(hexPos);
-                                
-                                // Add to map storage
-                                _map->getMapFile().map_objects[_currentElevation].push_back(scrollBlockerObject);
-                                
-                                // Create visual object for immediate display
-                                try {
-                                    std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(scrollBlockerObject->frm_pid);
-                                    auto frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
-                                    if (!frm) {
-                                        // Try loading the FRM if not in cache
-                                        ResourceManager::getInstance().loadResource<Frm>(frmPath);
-                                        frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
-                                    }
-                                    
-                                    if (frm) {
-                                        auto object = std::make_shared<Object>(frm);
-                                        sf::Sprite sprite{ ResourceManager::getInstance().texture(frmPath) };
-                                        object->setSprite(std::move(sprite));
-                                        object->setDirection(static_cast<ObjectDirection>(scrollBlockerObject->direction));
-                                        object->setHexPosition(_hexgrid.grid().at(hexPos));
-                                        object->setMapObject(scrollBlockerObject);
-                                        _objects.push_back(object);
-                                        scrollBlockersCreated++;
-                                    } else {
-                                        spdlog::warn("Failed to load FRM {} for scroll blocker", frmPath);
-                                    }
-                                } catch (const std::exception& e) {
-                                    spdlog::warn("Failed to create visual scroll blocker object at hex {}: {}", hexPos, e.what());
-                                    // MapObject is still saved, just won't be visible until reload
-                                }
-                            }
-                            
-                            spdlog::info("Scroll blocker rectangle: {} scroll blockers created on border", scrollBlockersCreated);
-                        } else {
-                            spdlog::warn("No valid border hexes found for scroll blocker rectangle");
-                        }
-                    } else {
-                        // Normal area selection - this will trigger observer notification and apply final colors
-                        auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
-                        if (result.success) {
-                            spdlog::info("Drag selection: {} items selected", _selectionManager->getCurrentSelection().count());
-                        }
-                    }
-
-                    _isDragSelecting = false;
-                } else if (!_immediateSelectionPerformed) {
-                    // Was a click, not a drag - do normal selection (only if immediate selection wasn't already performed)
-                    selectAtPosition(_dragStartWorldPos, SelectionModifier::NONE);
-                }
-
-                _currentAction = EditorAction::NONE;
-                _immediateSelectionPerformed = false; // Reset flag when action completes
-            } else if (_currentAction == EditorAction::OBJECT_MOVING) {
-                // Complete object drag operation
-                sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                    mouseReleased->position, _view);
-
-                if (_isDraggingObjects) {
-                    // Complete the drag operation
-                    finishObjectDrag(worldPos);
-                }
-
-                _currentAction = EditorAction::NONE;
-            }
-        } else if (mouseReleased->button == sf::Mouse::Button::Right) {
-            // Stop panning
-            _currentAction = EditorAction::NONE;
-        }
-    } else if (const auto* mouseMoved = event.getIf<sf::Event::MouseMoved>()) {
-        if (_currentAction == EditorAction::PANNING) {
-            // Calculate pan delta
-            sf::Vector2i currentPos = mouseMoved->position;
-            sf::Vector2i delta = _mouseLastPosition - currentPos;
-
-            // Scale panning delta by zoom level for consistent visual speed
-            // When zoomed out (_zoomLevel > 1.0), we need to move more in world coordinates
-            // When zoomed in (_zoomLevel < 1.0), we need to move less for precision
-            float panScale = _zoomLevel;
-            sf::Vector2f scaledDelta = {
-                static_cast<float>(delta.x) * panScale,
-                static_cast<float>(delta.y) * panScale
-            };
-
-            // Pan the view with zoom-scaled movement
-            _view.move(scaledDelta);
-
-            _mouseLastPosition = currentPos;
-        } else if (_currentAction == EditorAction::DRAG_SELECTING) {
-            // Update drag selection rectangle
-            sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                mouseMoved->position, _view);
-
-            // Mark as actively dragging if we've moved enough
-            float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + std::pow(currentWorldPos.y - _dragStartWorldPos.y, 2));
-            if (distance > DRAG_START_THRESHOLD) {
-                _isDragSelecting = true;
-            }
-
-            if (_isDragSelecting) {
-                // Update selection rectangle
-                float left = std::min(_dragStartWorldPos.x, currentWorldPos.x);
-                float top = std::min(_dragStartWorldPos.y, currentWorldPos.y);
-                float width = std::abs(currentWorldPos.x - _dragStartWorldPos.x);
-                float height = std::abs(currentWorldPos.y - _dragStartWorldPos.y);
-
-                _selectionRectangle.setPosition({ left, top });
-                _selectionRectangle.setSize(sf::Vector2f(width, height));
-
-                // Update preview of items that would be selected
-                updateDragSelectionPreview(currentWorldPos);
-            }
-        } else if (_currentAction == EditorAction::TILE_PLACING) {
-            // Handle tile area fill drag
-            if (_tilePlacementMode) {
-                sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                    mouseMoved->position, _view);
-
-                // Mark as actively dragging if we've moved enough
-                float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + std::pow(currentWorldPos.y - _dragStartWorldPos.y, 2));
-                if (distance > DRAG_START_THRESHOLD) {
-                    _isDragSelecting = true;
-                }
-
-                if (_isDragSelecting) {
-                    // Update selection rectangle for tile area fill (same as selection mode)
-                    float left = std::min(_dragStartWorldPos.x, currentWorldPos.x);
-                    float top = std::min(_dragStartWorldPos.y, currentWorldPos.y);
-                    float width = std::abs(currentWorldPos.x - _dragStartWorldPos.x);
-                    float height = std::abs(currentWorldPos.y - _dragStartWorldPos.y);
-
-                    _selectionRectangle.setPosition({ left, top });
-                    _selectionRectangle.setSize(sf::Vector2f(width, height));
-
-                    // Update tile area fill preview
-                    updateTileAreaFillPreview(currentWorldPos);
-                }
-            }
-        } else if (_currentAction == EditorAction::OBJECT_MOVING) {
-            // Handle object drag movement
-            sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                mouseMoved->position, _view);
-
-            // Mark as actively dragging if we've moved enough
-            float distance = std::sqrt(std::pow(currentWorldPos.x - _dragStartWorldPos.x, 2) + std::pow(currentWorldPos.y - _dragStartWorldPos.y, 2));
-            if (distance > DRAG_START_THRESHOLD) {
-                _isDraggingObjects = true;
-            }
-
-            if (_isDraggingObjects) {
-                // Update object positions for visual feedback
-                updateObjectDrag(currentWorldPos);
-            }
-        }
-
-        // Always update hex hover for any mouse movement
-        {
-            sf::Vector2f currentWorldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
-                mouseMoved->position, _view);
-
-            updateHoverHex(currentWorldPos);
-        }
-    } else if (const auto* wheelScrolled = event.getIf<sf::Event::MouseWheelScrolled>()) {
-        // Zoom in/out with limits and sensitivity control
-        if (wheelScrolled->wheel == sf::Mouse::Wheel::Vertical) {
-            // Use smaller steps for smoother trackpad experience
-            zoomView(wheelScrolled->delta);
-        }
-    } else if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>()) {
-        // Arrow key movement
-        switch (keyPressed->scancode) {
-            case sf::Keyboard::Scancode::Left:
-                // Left arrow key - move view left
-                if (!(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl))) {
-                    float panScale = _zoomLevel;
-                    _view.move({ -VIEW_MOVE_STEP * panScale, 0.0f });
-                }
-                break;
-
-            case sf::Keyboard::Scancode::A:
-                // Note: Ctrl+A should be handled by Qt menu shortcuts, not SFML
-                // SFML only handles 'A' for movement (if not using WASD)
-                // Removed Ctrl+A logic to prevent conflicts with Qt shortcuts
-                break;
-            case sf::Keyboard::Scancode::Right:
-                // Right arrow key - move view right
-                if (!(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl))) {
-                    float panScale = _zoomLevel;
-                    _view.move({ VIEW_MOVE_STEP * panScale, 0.0f });
-                }
-                break;
-
-            case sf::Keyboard::Scancode::D:
-                // Note: Ctrl+D deselection is handled by Qt menu shortcut, not SFML
-                // Do nothing here to avoid conflicts with Qt shortcut handling
-                break;
-            case sf::Keyboard::Scancode::Up:
-            case sf::Keyboard::Scancode::W: {
-                float panScale = _zoomLevel;
-                _view.move({ 0.0f, -VIEW_MOVE_STEP * panScale });
-            } break;
-            case sf::Keyboard::Scancode::Down:
-            case sf::Keyboard::Scancode::S: {
-                float panScale = _zoomLevel;
-                _view.move({ 0.0f, VIEW_MOVE_STEP * panScale });
-            } break;
-            case sf::Keyboard::Scancode::Home:
-                // Reset to center and normal zoom
-                centerViewOnMap();
-                // Reset zoom to 1.0
-                if (_zoomLevel != 1.0f) {
-                    float resetFactor = 1.0f / _zoomLevel;
-                    _view.zoom(resetFactor);
-                    _zoomLevel = 1.0f;
-                    spdlog::debug("Reset zoom to 1.0");
-                }
-                break;
-            case sf::Keyboard::Scancode::Escape:
-                // Cancel any active operation
-                if (_currentAction == EditorAction::OBJECT_MOVING && _isDraggingObjects) {
-                    cancelObjectDrag();
-                    _currentAction = EditorAction::NONE;
-                    spdlog::info("Object drag cancelled with ESC key");
-                } else if (_tilePlacementMode) {
-                    // Deselect tile and exit tile placement mode
-                    _tilePlacementMode = false;
-                    _tilePlacementIndex = -1;
-                    // Notify MainWindow to deselect tile in palette
-                    if (_mainWindow && _mainWindow->getTilePalettePanel()) {
-                        _mainWindow->getTilePalettePanel()->deselectTile();
-                    }
-                    spdlog::info("Tile placement mode cancelled with ESC key");
-                } else if (_playerPositionSelectionMode) {
-                    // Exit player position selection mode
-                    _playerPositionSelectionMode = false;
-                    // Clear status message
-                    emit statusMessageClearRequested();
-                    spdlog::info("Player position selection mode cancelled with ESC key");
-                }
-                break;
-            default:
-                break;
-        }
-    } else if (const auto* resized = event.getIf<sf::Event::Resized>()) {
-        // Update view size when window is resized
-        float newWidth = static_cast<float>(resized->size.x);
-        float newHeight = static_cast<float>(resized->size.y);
-
-        // Preserve the current view center
-        sf::Vector2f currentCenter = _view.getCenter();
-
-        // Set the view to the new size at 1:1 scale
-        _view.setSize({ newWidth, newHeight });
-        _view.setCenter(currentCenter);
-
-        // Reapply the current zoom level by scaling the view size directly
-        if (_zoomLevel != 1.0f) {
-            _view.zoom(_zoomLevel);
+        } catch (const std::exception& e) {
+            spdlog::warn("Failed to create visual scroll blocker object at hex {}: {}", hexPos, e.what());
         }
     }
+    
+    spdlog::info("Scroll blocker rectangle: {} scroll blockers created on border", scrollBlockersCreated);
 }
 
 void EditorWidget::update([[maybe_unused]] const float dt) {
@@ -1352,8 +1116,8 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
     renderData.selectionRectangle = &_selectionRectangle;
-    renderData.isDragSelecting = _isDragSelecting && 
-        (_currentAction == EditorAction::DRAG_SELECTING || _currentAction == EditorAction::TILE_PLACING);
+    // Use InputHandler state for drag selection rendering
+    renderData.isDragSelecting = _inputHandler && _inputHandler->isDragging();
     renderData.currentSelectionMode = _currentSelectionMode;
     renderData.hexGrid = &_hexgrid;
     renderData.hexSprite = &_hexSprite;
@@ -1418,6 +1182,11 @@ void EditorWidget::cycleSelectionMode() {
     currentMode = (currentMode + 1) % static_cast<int>(SelectionMode::NUM_SELECTION_TYPES);
     _currentSelectionMode = static_cast<SelectionMode>(currentMode);
 
+    // Update InputHandler with new selection mode
+    if (_inputHandler) {
+        _inputHandler->setSelectionMode(_currentSelectionMode);
+    }
+
     // Clear current selection when mode changes
     _selectionManager->clearSelection();
 
@@ -1438,6 +1207,11 @@ void EditorWidget::toggleScrollBlockerRectangleMode() {
             spdlog::info("Automatically enabled scroll blocker visibility");
         }
         spdlog::info("Scroll blocker rectangle mode enabled");
+    }
+    
+    // Update InputHandler with new selection mode
+    if (_inputHandler) {
+        _inputHandler->setSelectionMode(_currentSelectionMode);
     }
     
     // Clear current selection when mode changes
@@ -1609,6 +1383,11 @@ void EditorWidget::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof
     _tilePlacementMode = enabled;
     _tilePlacementIndex = tileIndex;
     _tilePlacementIsRoof = isRoof;
+
+    // Update InputHandler with new tile placement state
+    if (_inputHandler) {
+        _inputHandler->setTilePlacementMode(enabled, tileIndex, false); // replaceMode is always false for now
+    }
 
     if (enabled) {
         spdlog::debug("EditorWidget: Enabled tile placement mode - tile {}, roof: {}", tileIndex, isRoof);
@@ -2498,6 +2277,11 @@ void EditorWidget::enterPlayerPositionSelectionMode() {
     // Enter player position selection mode
     _playerPositionSelectionMode = true;
     
+    // Update InputHandler
+    if (_inputHandler) {
+        _inputHandler->setPlayerPositionMode(true);
+        _inputHandler->setTilePlacementMode(false);
+    }
     
     // Show status message
     emit statusMessageRequested("Click on a hex to set the player starting position (Press Escape to cancel)");

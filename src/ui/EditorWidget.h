@@ -25,6 +25,7 @@ namespace geck {
 
 // Forward declarations
 class RenderingEngine;
+class InputHandler;
 
 class SFMLWidget;
 struct ObjectInfo;
@@ -207,19 +208,20 @@ private:
     // Scroll blocker rectangle functionality
     std::vector<int> calculateRectangleBorderHexes(sf::FloatRect rectangle);
     std::shared_ptr<MapObject> createScrollBlockerObject(int hexPosition);
+    void createScrollBlockersFromHexes(const std::vector<int>& borderHexes);
+    
+    // Input system setup
+    void setupInputCallbacks();
 
-    enum class EditorAction {
-        NONE,
-        PANNING,
-        DRAG_SELECTING,
-        TILE_PLACING,
-        OBJECT_MOVING
-    };
 
     // UI Components
     QVBoxLayout* _layout;
     SFMLWidget* _sfmlWidget;
     class MainWindow* _mainWindow;
+    
+    // Input and rendering systems
+    std::unique_ptr<InputHandler> _inputHandler;
+    std::unique_ptr<RenderingEngine> _renderingEngine;
 
     // Game/Editor State
     SelectionMode _currentSelectionMode = SelectionMode::ALL;
@@ -252,9 +254,6 @@ private:
     bool _showHexGrid = UI::DEFAULT_SHOW_HEX_GRID;
     bool _showLightOverlays = false;  // Toggle for showing light overlays
 
-    sf::Vector2i _mouseStartingPosition{ 0, 0 }; // panning started
-    sf::Vector2i _mouseLastPosition{ 0, 0 };     // current panning position
-    EditorAction _currentAction = EditorAction::NONE;
     // sf::Cursor _cursor; // TODO: Fix cursor initialization for SFML 3
     const sf::Texture& createBlankTexture();
     const sf::Texture& createHexTexture();
@@ -272,16 +271,12 @@ private:
     static constexpr float DOUBLE_CLICK_TIME = 0.5f;      // 500ms
     static constexpr float DOUBLE_CLICK_DISTANCE = 10.0f; // pixels
 
-    // Drag selection state
-    sf::Vector2f _dragStartWorldPos;
+    // Drag selection state (managed by InputHandler now)
     sf::RectangleShape _selectionRectangle;
-    bool _isDragSelecting = false;
-    bool _immediateSelectionPerformed = false;            // Track if immediate selection was performed on mouse press
     std::vector<int> _previewTiles;                       // Tiles being previewed during drag
     std::vector<std::shared_ptr<Object>> _previewObjects; // Objects being previewed during drag
 
-    // Object drag state
-    bool _isDraggingObjects = false;
+    // Object drag state (managed by InputHandler now)
     std::vector<std::shared_ptr<Object>> _draggedObjects; // Objects being dragged
     std::vector<sf::Vector2f> _objectDragStartPositions;  // Original positions for cancel/revert
     sf::Vector2f _objectDragOffset;                       // Current drag offset from start position
@@ -318,8 +313,9 @@ private:
     // Player position selection state
     bool _playerPositionSelectionMode = false;
     
-    // Rendering engine
-    std::unique_ptr<RenderingEngine> _renderingEngine;
+    // Temporary state for methods not yet fully integrated with InputHandler
+    bool _isDraggingObjects = false;
+    sf::Vector2f _dragStartWorldPos;
 };
 
 } // namespace geck

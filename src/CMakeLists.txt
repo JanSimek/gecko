@@ -61,6 +61,8 @@ set(GECK_SOURCES
     ui/UIConstants.h
     ui/rendering/RenderingEngine.h
     ui/rendering/RenderingEngine.cpp
+    ui/input/InputHandler.h
+    ui/input/InputHandler.cpp
 
     # Selection management
     selection/SelectionState.h
