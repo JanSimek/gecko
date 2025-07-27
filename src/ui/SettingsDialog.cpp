@@ -14,6 +14,11 @@ namespace geck {
 SettingsDialog::SettingsDialog(QWidget* parent)
     : QDialog(parent)
     , _mainLayout(nullptr)
+    , _tabWidget(nullptr)
+    , _generalTab(nullptr)
+    , _generalTabLayout(nullptr)
+    , _editorTab(nullptr)
+    , _editorTabLayout(nullptr)
     , _dataPathsGroup(nullptr)
     , _dataPathsLayout(nullptr)
     , _pathsControlLayout(nullptr)
@@ -22,6 +27,21 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     , _removePathButton(nullptr)
     , _autoDetectButton(nullptr)
     , _pathsHelpLabel(nullptr)
+    , _gameLocationGroup(nullptr)
+    , _gameLocationLayout(nullptr)
+    , _steamGameRadio(nullptr)
+    , _executableGameRadio(nullptr)
+    , _steamGameControlLayout(nullptr)
+    , _steamAppIdEdit(nullptr)
+    , _executableGameControlLayout(nullptr)
+    , _executableGameLocationEdit(nullptr)
+    , _browseExecutableGameButton(nullptr)
+    , _gameDataControlLayout(nullptr)
+    , _gameDataDirectoryEdit(nullptr)
+    , _browseGameDataButton(nullptr)
+    , _gameLocationControlLayout(nullptr)
+    , _autoDetectGameButton(nullptr)
+    , _gameLocationHelpLabel(nullptr)
     , _statusLabel(nullptr)
     , _progressBar(nullptr)
     , _buttonBox(nullptr)
@@ -31,8 +51,8 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     
     setWindowTitle("Preferences");
     setModal(true);
-    setMinimumSize(600, 400);
-    resize(700, 500);
+    setMinimumSize(700, 500);
+    resize(800, 650);
     
     setupUI();
     loadSettings();
@@ -44,8 +64,7 @@ void SettingsDialog::setupUI() {
     _mainLayout->setContentsMargins(12, 12, 12, 12);
     _mainLayout->setSpacing(12);
     
-    setupDataPathsGroup();
-    setupTextEditorGroup();
+    setupTabs();
     
     // Status area
     _statusLabel = new QLabel("Ready");
@@ -59,6 +78,42 @@ void SettingsDialog::setupUI() {
     setupButtonBox();
     
     setLayout(_mainLayout);
+}
+
+void SettingsDialog::setupTabs() {
+    _tabWidget = new QTabWidget();
+    
+    setupGeneralTab();
+    setupEditorTab();
+    
+    _mainLayout->addWidget(_tabWidget);
+}
+
+void SettingsDialog::setupGeneralTab() {
+    _generalTab = new QWidget();
+    _generalTabLayout = new QVBoxLayout(_generalTab);
+    _generalTabLayout->setContentsMargins(12, 12, 12, 12);
+    _generalTabLayout->setSpacing(12);
+    
+    setupDataPathsGroup();
+    setupGameLocationGroup();
+    
+    _generalTabLayout->addStretch();
+    
+    _tabWidget->addTab(_generalTab, "General");
+}
+
+void SettingsDialog::setupEditorTab() {
+    _editorTab = new QWidget();
+    _editorTabLayout = new QVBoxLayout(_editorTab);
+    _editorTabLayout->setContentsMargins(12, 12, 12, 12);
+    _editorTabLayout->setSpacing(12);
+    
+    setupTextEditorGroup();
+    
+    _editorTabLayout->addStretch();
+    
+    _tabWidget->addTab(_editorTab, "Text Editor");
 }
 
 void SettingsDialog::setupDataPathsGroup() {
@@ -77,6 +132,8 @@ void SettingsDialog::setupDataPathsGroup() {
     _dataPathsList = new QListWidget();
     _dataPathsList->setSelectionMode(QAbstractItemView::SingleSelection);
     _dataPathsList->setAlternatingRowColors(true);
+    _dataPathsList->setMaximumHeight(100); // Constrain height to allow space for game location section
+    _dataPathsList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     _dataPathsLayout->addWidget(_dataPathsList);
     
     // Control buttons
@@ -99,7 +156,7 @@ void SettingsDialog::setupDataPathsGroup() {
     _pathsControlLayout->addWidget(_autoDetectButton);
     
     _dataPathsLayout->addLayout(_pathsControlLayout);
-    _mainLayout->addWidget(_dataPathsGroup);
+    _generalTabLayout->addWidget(_dataPathsGroup);
     
     // Connect signals
     connect(_addPathButton, &QPushButton::clicked, this, &SettingsDialog::onAddDataPath);
@@ -157,13 +214,122 @@ void SettingsDialog::setupTextEditorGroup() {
     _customEditorLayout->addWidget(_browseEditorButton);
     
     _textEditorLayout->addLayout(_customEditorLayout);
-    _mainLayout->addWidget(_textEditorGroup);
+    _editorTabLayout->addWidget(_textEditorGroup);
     
     // Connect signals
     connect(_systemEditorRadio, &QRadioButton::toggled, this, &SettingsDialog::onEditorModeChanged);
     connect(_customEditorRadio, &QRadioButton::toggled, this, &SettingsDialog::onEditorModeChanged);
     connect(_browseEditorButton, &QPushButton::clicked, this, &SettingsDialog::onBrowseEditor);
     connect(_customEditorPathEdit, &QLineEdit::textChanged, [this]() {
+        _hasChanges = true;
+        updateUI();
+    });
+}
+
+void SettingsDialog::setupGameLocationGroup() {
+    _gameLocationGroup = new QGroupBox("Fallout 2 Game Location");
+    _gameLocationLayout = new QVBoxLayout(_gameLocationGroup);
+    
+    // Help text
+    _gameLocationHelpLabel = new QLabel(
+        "Select the Fallout 2 game installation directory. This is used for the Play feature to launch the game with your current map."
+    );
+    _gameLocationHelpLabel->setWordWrap(true);
+    _gameLocationHelpLabel->setStyleSheet("QLabel { color: gray; font-size: 11px; margin-bottom: 8px; }");
+    _gameLocationLayout->addWidget(_gameLocationHelpLabel);
+    
+    // Radio buttons for installation type
+    _steamGameRadio = new QRadioButton("Steam Installation");
+    _steamGameRadio->setChecked(false);
+    _gameLocationLayout->addWidget(_steamGameRadio);
+    
+    // Steam App ID input layout
+    _steamGameControlLayout = new QHBoxLayout();
+    _steamGameControlLayout->setContentsMargins(20, 0, 0, 0); // Indent under radio button
+    
+    QLabel* steamAppIdLabel = new QLabel("Steam App ID:");
+    _steamGameControlLayout->addWidget(steamAppIdLabel);
+    
+    _steamAppIdEdit = new QLineEdit();
+    _steamAppIdEdit->setPlaceholderText("38410");
+    _steamAppIdEdit->setEnabled(false);
+    _steamAppIdEdit->setMaximumWidth(100);
+    _steamGameControlLayout->addWidget(_steamAppIdEdit);
+    
+    QLabel* steamHelpLabel = new QLabel("(Default: 38410 for Fallout 2)");
+    steamHelpLabel->setStyleSheet("QLabel { color: gray; font-size: 11px; }");
+    _steamGameControlLayout->addWidget(steamHelpLabel);
+    
+    _steamGameControlLayout->addStretch();
+    
+    _gameLocationLayout->addLayout(_steamGameControlLayout);
+    
+    _executableGameRadio = new QRadioButton("Executable/GOG Installation");
+    _executableGameRadio->setChecked(true); // Default selection
+    _gameLocationLayout->addWidget(_executableGameRadio);
+    
+    // Executable game location input layout
+    _executableGameControlLayout = new QHBoxLayout();
+    _executableGameControlLayout->setContentsMargins(20, 0, 0, 0); // Indent under radio button
+    
+    _executableGameLocationEdit = new QLineEdit();
+    _executableGameLocationEdit->setPlaceholderText("Path to Fallout 2 executable installation...");
+    _executableGameControlLayout->addWidget(_executableGameLocationEdit);
+    
+    _browseExecutableGameButton = new QPushButton("Browse...");
+    _browseExecutableGameButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirOpenIcon));
+    _browseExecutableGameButton->setToolTip("Browse for Fallout 2 executable installation directory");
+    _executableGameControlLayout->addWidget(_browseExecutableGameButton);
+    
+    _gameLocationLayout->addLayout(_executableGameControlLayout);
+    
+    // Game data directory input layout (for executable installs)
+    QLabel* gameDataLabel = new QLabel("Game Data Directory:");
+    gameDataLabel->setContentsMargins(20, 8, 0, 0); // Indent and add some spacing
+    gameDataLabel->setStyleSheet("QLabel { color: gray; font-size: 11px; }");
+    _gameLocationLayout->addWidget(gameDataLabel);
+    
+    _gameDataControlLayout = new QHBoxLayout();
+    _gameDataControlLayout->setContentsMargins(20, 0, 0, 0); // Indent under radio button
+    
+    _gameDataDirectoryEdit = new QLineEdit();
+    _gameDataDirectoryEdit->setPlaceholderText("Path to game directory containing ddraw.ini...");
+    _gameDataControlLayout->addWidget(_gameDataDirectoryEdit);
+    
+    _browseGameDataButton = new QPushButton("Browse...");
+    _browseGameDataButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirOpenIcon));
+    _browseGameDataButton->setToolTip("Browse for Fallout 2 game data directory");
+    _gameDataControlLayout->addWidget(_browseGameDataButton);
+    
+    _gameLocationLayout->addLayout(_gameDataControlLayout);
+    
+    // Auto-detect button (shared)
+    _gameLocationControlLayout = new QHBoxLayout();
+    _gameLocationControlLayout->addStretch();
+    
+    _autoDetectGameButton = new QPushButton("Auto-Detect");
+    _autoDetectGameButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ComputerIcon));
+    _autoDetectGameButton->setToolTip("Automatically detect Fallout 2 game installations");
+    _gameLocationControlLayout->addWidget(_autoDetectGameButton);
+    
+    _gameLocationLayout->addLayout(_gameLocationControlLayout);
+    _generalTabLayout->addWidget(_gameLocationGroup);
+    
+    // Connect signals
+    connect(_steamGameRadio, &QRadioButton::toggled, this, &SettingsDialog::onGameTypeChanged);
+    connect(_executableGameRadio, &QRadioButton::toggled, this, &SettingsDialog::onGameTypeChanged);
+    connect(_autoDetectGameButton, &QPushButton::clicked, this, &SettingsDialog::onAutoDetectGame);
+    connect(_browseExecutableGameButton, &QPushButton::clicked, this, &SettingsDialog::onBrowseGameLocation);
+    connect(_browseGameDataButton, &QPushButton::clicked, this, &SettingsDialog::onBrowseGameLocation);
+    connect(_steamAppIdEdit, &QLineEdit::textChanged, [this]() {
+        _hasChanges = true;
+        updateUI();
+    });
+    connect(_executableGameLocationEdit, &QLineEdit::textChanged, [this]() {
+        _hasChanges = true;
+        updateUI();
+    });
+    connect(_gameDataDirectoryEdit, &QLineEdit::textChanged, [this]() {
         _hasChanges = true;
         updateUI();
     });
@@ -203,8 +369,31 @@ void SettingsDialog::loadSettings() {
         _systemEditorRadio->setChecked(true);
     }
     
-    // Update UI state for editor controls
+    // Load game location settings
+    if (settings.getGameInstallationType() == Settings::GameInstallationType::STEAM) {
+        _steamGameRadio->setChecked(true);
+    } else {
+        _executableGameRadio->setChecked(true);
+    }
+    
+    auto steamAppId = settings.getSteamAppId();
+    if (!steamAppId.empty()) {
+        _steamAppIdEdit->setText(QString::fromStdString(steamAppId));
+    }
+    
+    auto executableGameLocation = settings.getExecutableGameLocation();
+    if (!executableGameLocation.empty()) {
+        _executableGameLocationEdit->setText(QString::fromStdString(executableGameLocation.string()));
+    }
+    
+    auto gameDataDirectory = settings.getGameDataDirectory();
+    if (!gameDataDirectory.empty()) {
+        _gameDataDirectoryEdit->setText(QString::fromStdString(gameDataDirectory.string()));
+    }
+    
+    // Update UI state for editor and game controls
     onEditorModeChanged();
+    onGameTypeChanged();
     
     _hasChanges = false;
 }
@@ -223,6 +412,34 @@ void SettingsDialog::saveSettings() {
     } else {
         settings.setTextEditorMode(Settings::TextEditorMode::SYSTEM_DEFAULT);
         settings.setCustomEditorPath(""); // Clear custom path when using system default
+    }
+    
+    // Save game location settings
+    if (_steamGameRadio->isChecked()) {
+        settings.setGameInstallationType(Settings::GameInstallationType::STEAM);
+    } else {
+        settings.setGameInstallationType(Settings::GameInstallationType::EXECUTABLE);
+    }
+    
+    QString steamAppIdText = _steamAppIdEdit->text().trimmed();
+    if (!steamAppIdText.isEmpty()) {
+        settings.setSteamAppId(steamAppIdText.toStdString());
+    } else {
+        settings.setSteamAppId("38410"); // Default Fallout 2 Steam App ID
+    }
+    
+    QString executableGameLocationText = _executableGameLocationEdit->text().trimmed();
+    if (!executableGameLocationText.isEmpty()) {
+        settings.setExecutableGameLocation(std::filesystem::path(executableGameLocationText.toStdString()));
+    } else {
+        settings.setExecutableGameLocation(std::filesystem::path{});
+    }
+    
+    QString gameDataDirectoryText = _gameDataDirectoryEdit->text().trimmed();
+    if (!gameDataDirectoryText.isEmpty()) {
+        settings.setGameDataDirectory(std::filesystem::path(gameDataDirectoryText.toStdString()));
+    } else {
+        settings.setGameDataDirectory(std::filesystem::path{});
     }
     
     settings.save();
@@ -426,6 +643,23 @@ void SettingsDialog::onEditorModeChanged() {
     }
 }
 
+void SettingsDialog::onGameTypeChanged() {
+    bool steamSelected = _steamGameRadio->isChecked();
+    
+    // Enable/disable game location controls based on selection
+    _steamAppIdEdit->setEnabled(steamSelected);
+    _executableGameLocationEdit->setEnabled(!steamSelected);
+    _browseExecutableGameButton->setEnabled(!steamSelected);
+    _gameDataDirectoryEdit->setEnabled(!steamSelected);
+    _browseGameDataButton->setEnabled(!steamSelected);
+    
+    // Set has changes flag if this was a user action (not just loading settings)
+    if (isVisible()) {
+        _hasChanges = true;
+        updateUI();
+    }
+}
+
 void SettingsDialog::onBrowseEditor() {
     QString currentPath = _customEditorPathEdit->text();
     
@@ -444,6 +678,175 @@ void SettingsDialog::onBrowseEditor() {
         _hasChanges = true;
         updateUI();
     }
+}
+
+void SettingsDialog::onAutoDetectGame() {
+    _autoDetectGameButton->setEnabled(false);
+    _progressBar->setVisible(true);
+    _progressBar->setRange(0, 0); // Indeterminate progress
+    _statusLabel->setText("Detecting Fallout 2 game installations...");
+    
+    QApplication::processEvents(); // Update UI
+    
+    auto detectedInstallations = Settings::detectFallout2InstallationsDetailed();
+    
+    _progressBar->setVisible(false);
+    _autoDetectGameButton->setEnabled(true);
+    
+    if (!detectedInstallations.empty()) {
+        // Populate both Steam and Executable fields based on detected installations
+        bool foundSteam = false;
+        bool foundExecutable = false;
+        QString statusMessages;
+        
+        for (const auto& installation : detectedInstallations) {
+            QString pathStr = QString::fromStdString(installation.path.string());
+            QString description = QString::fromStdString(installation.description);
+            
+            if (installation.type == Settings::GameInstallationType::STEAM && !foundSteam) {
+                _steamAppIdEdit->setText("38410"); // Set default Steam App ID
+                foundSteam = true;
+                statusMessages += QString("Steam: %1; ").arg(description);
+            } else if (installation.type == Settings::GameInstallationType::EXECUTABLE && !foundExecutable) {
+                _executableGameLocationEdit->setText(pathStr);
+                foundExecutable = true;
+                statusMessages += QString("Executable: %1; ").arg(description);
+            }
+        }
+        
+        // Set the radio button to the first detected type
+        if (foundSteam && !foundExecutable) {
+            _steamGameRadio->setChecked(true);
+        } else if (foundExecutable) {
+            _executableGameRadio->setChecked(true);
+        }
+        
+        _hasChanges = true;
+        statusMessages = statusMessages.trimmed();
+        if (statusMessages.endsWith(";")) {
+            statusMessages.chop(1);
+        }
+        
+        _statusLabel->setText(QString("Auto-detected installations: %1").arg(statusMessages));
+        _statusLabel->setStyleSheet("QLabel { color: green; }");
+    } else {
+        _statusLabel->setText("No Fallout 2 game installations detected automatically.");
+        _statusLabel->setStyleSheet("QLabel { color: orange; }");
+    }
+    
+    updateUI();
+}
+
+void SettingsDialog::onBrowseGameLocation() {
+    // Determine which button was clicked
+    QPushButton* sender = qobject_cast<QPushButton*>(QObject::sender());
+    bool isDataDirectoryBrowse = (sender == _browseGameDataButton);
+    
+    QString currentPath;
+    QLineEdit* targetEdit;
+    QString dialogTitle;
+    
+    if (isDataDirectoryBrowse) {
+        currentPath = _gameDataDirectoryEdit->text();
+        targetEdit = _gameDataDirectoryEdit;
+        dialogTitle = "Select Fallout 2 Game Data Directory";
+    } else {
+        currentPath = _executableGameLocationEdit->text();
+        targetEdit = _executableGameLocationEdit;
+        dialogTitle = "Select Fallout 2 Executable";
+    }
+    
+    // Default to the current path or standard locations
+    QString startPath = currentPath.isEmpty() ? 
+        QStandardPaths::writableLocation(QStandardPaths::ApplicationsLocation) : 
+        currentPath;
+    
+#ifdef __APPLE__
+    if (isDataDirectoryBrowse) {
+        // For data directory, only allow directory selection
+        QString gameDir = QFileDialog::getExistingDirectory(this, dialogTitle, startPath);
+        if (!gameDir.isEmpty()) {
+            targetEdit->setText(gameDir);
+            _hasChanges = true;
+        }
+    } else {
+        // For executable, allow both .app bundles and directories
+        QFileDialog dialog(this, dialogTitle, startPath);
+        dialog.setFileMode(QFileDialog::AnyFile);
+        dialog.setOption(QFileDialog::ShowDirsOnly, false);
+        dialog.setOption(QFileDialog::DontUseNativeDialog, false);
+        dialog.setNameFilter("Applications (*.app);;All Files and Directories (*)");
+        
+        // Custom filter to accept both .app bundles and directories
+        dialog.setFilter(QDir::AllDirs | QDir::NoDotAndDotDot | QDir::AllEntries);
+        
+        if (dialog.exec() == QDialog::Accepted) {
+            QStringList selectedFiles = dialog.selectedFiles();
+            if (!selectedFiles.isEmpty()) {
+                QString gameDir = selectedFiles.first();
+                targetEdit->setText(gameDir);
+                _hasChanges = true;
+            }
+        }
+    }
+#else
+    QString gameDir = QFileDialog::getExistingDirectory(this, dialogTitle, startPath);
+    if (!gameDir.isEmpty()) {
+        targetEdit->setText(gameDir);
+        _hasChanges = true;
+    }
+#endif
+}
+
+void SettingsDialog::validateGameLocation(const QString& gameDir, bool isSteam) {
+    std::filesystem::path gamePath(gameDir.toStdString());
+    
+#ifdef __APPLE__
+    if (isSteam && gameDir.endsWith(".app")) {
+        // For .app bundles on macOS, just check if it exists
+        if (std::filesystem::exists(gamePath)) {
+            _statusLabel->setText("Valid macOS Fallout 2 application selected.");
+            _statusLabel->setStyleSheet("QLabel { color: green; }");
+        } else {
+            _statusLabel->setText("Warning: Selected application does not exist.");
+            _statusLabel->setStyleSheet("QLabel { color: red; }");
+        }
+    } else {
+        // Check for data directory and executable files
+        bool hasDataDir = std::filesystem::exists(gamePath / "data");
+        bool hasExecutable = std::filesystem::exists(gamePath / "fallout2.exe") || 
+                           std::filesystem::exists(gamePath / "Fallout2.exe") ||
+                           std::filesystem::exists(gamePath / "fallout2") ||
+                           std::filesystem::exists(gamePath / "Fallout2.app");
+        
+        if (hasDataDir || hasExecutable) {
+            _statusLabel->setText(isSteam ? "Valid Steam Fallout 2 installation directory selected." : 
+                                          "Valid Fallout 2 executable installation directory selected.");
+            _statusLabel->setStyleSheet("QLabel { color: green; }");
+        } else {
+            _statusLabel->setText("Warning: Selected directory may not be a valid Fallout 2 installation.");
+            _statusLabel->setStyleSheet("QLabel { color: orange; }");
+        }
+    }
+#else
+    // Windows/Linux validation
+    bool hasDataDir = std::filesystem::exists(gamePath / "data");
+    bool hasExecutable = std::filesystem::exists(gamePath / "fallout2.exe") || 
+                       std::filesystem::exists(gamePath / "Fallout2.exe") ||
+                       std::filesystem::exists(gamePath / "fallout2") ||
+                       std::filesystem::exists(gamePath / "Fallout2");
+    
+    if (hasDataDir && hasExecutable) {
+        _statusLabel->setText(isSteam ? "Valid Steam Fallout 2 installation directory selected." : 
+                                      "Valid Fallout 2 executable installation directory selected.");
+        _statusLabel->setStyleSheet("QLabel { color: green; }");
+    } else {
+        _statusLabel->setText("Warning: Selected directory may not be a valid Fallout 2 installation.");
+        _statusLabel->setStyleSheet("QLabel { color: orange; }");
+    }
+#endif
+    
+    updateUI();
 }
 
 } // namespace geck

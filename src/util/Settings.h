@@ -67,9 +67,40 @@ public:
     QString getCustomEditorPath() const;
     void setCustomEditorPath(const QString& path);
 
+    // Game location configuration
+    enum class GameInstallationType {
+        STEAM,
+        EXECUTABLE
+    };
+    
+    std::filesystem::path getGameLocation() const;
+    void setGameLocation(const std::filesystem::path& location);
+    bool isGameLocationValid() const;
+    void autoDetectGameLocation();
+    
+    GameInstallationType getGameInstallationType() const;
+    void setGameInstallationType(GameInstallationType type);
+    
+    std::string getSteamAppId() const;
+    void setSteamAppId(const std::string& appId);
+    
+    std::filesystem::path getExecutableGameLocation() const;
+    void setExecutableGameLocation(const std::filesystem::path& location);
+    
+    std::filesystem::path getGameDataDirectory() const;
+    void setGameDataDirectory(const std::filesystem::path& location);
+
     // Auto-detection helpers
     static std::vector<std::filesystem::path> detectFallout2Installations();
     static std::vector<std::filesystem::path> detectSteamLibraries();
+    
+    struct DetectedInstallation {
+        std::filesystem::path path;
+        GameInstallationType type;
+        std::string description;
+    };
+    
+    static std::vector<DetectedInstallation> detectFallout2InstallationsDetailed();
 
 private:
     Settings();
@@ -95,6 +126,13 @@ private:
     // Text editor configuration
     TextEditorMode _textEditorMode = TextEditorMode::SYSTEM_DEFAULT;
     QString _customEditorPath;
+    
+    // Game location configuration
+    GameInstallationType _gameInstallationType = GameInstallationType::EXECUTABLE;
+    std::string _steamAppId = "38410"; // Default Fallout 2 Steam App ID
+    std::filesystem::path _executableGameLocation;
+    std::filesystem::path _gameDataDirectory;
+    std::filesystem::path _gameLocation; // Keep for backward compatibility
     
     // Constants
     static constexpr const char* SETTINGS_VERSION = "1.0";

@@ -11,6 +11,7 @@
 #include <QLabel>
 #include <QSettings>
 #include <memory>
+#include <filesystem>
 
 QT_BEGIN_NAMESPACE
 class QVBoxLayout;
@@ -90,6 +91,7 @@ private slots:
     void handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem = false);
     void updateHexIndexDisplay(int hexIndex);
     void showPreferences();
+    void onPlayGame();
 
 public slots:
     void showStatusMessage(const QString& message);
@@ -117,6 +119,11 @@ private:
     void restoreDefaultLayout();
 
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
+    
+    // Play game helper methods
+    bool modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const std::string& mapFilename);
+    void launchGame(const std::filesystem::path& gameLocation);
+    void launchGameViaSteam(const std::string& appId);
 
     QStackedWidget* _centralStack;
     QTimer* _gameLoopTimer;

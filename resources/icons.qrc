@@ -11,6 +11,7 @@
         <file alias="actions/quit.svg">icons/tabler/actions/power.svg</file>
         <file alias="actions/map-pin.svg">icons/tabler/actions/map-pin.svg</file>
         <file alias="actions/target-arrow.svg">icons/tabler/actions/target-arrow.svg</file>
+        <file alias="actions/play.svg">icons/tabler/actions/player-play.svg</file>
         
         <!-- Edit Menu Actions -->
         <file alias="actions/select-all.svg">icons/tabler/actions/select-all.svg</file>

@@ -1530,7 +1530,7 @@ void EditorWidget::rotateSelectedObject() {
 }
 
 void EditorWidget::changeElevation(int elevation) {
-    if (elevation >= ELEVATION_1 && elevation < ELEVATION_3) {
+    if (elevation >= ELEVATION_1 && elevation <= ELEVATION_3) {
         _currentElevation = elevation;
         loadSprites(); // Reload sprites for new elevation
     }

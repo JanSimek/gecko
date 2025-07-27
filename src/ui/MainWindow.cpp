@@ -15,8 +15,10 @@
 #include "../util/Settings.h"
 #include "../util/QtDialogs.h"
 #include "../util/PathUtils.h"
+#include "../util/ProHelper.h"
 #include "../reader/lst/LstReader.h"
 #include "../format/lst/Lst.h"
+#include "../writer/map/MapWriter.h"
 
 #include <fstream>
 
@@ -37,6 +39,7 @@
 #include <QTemporaryFile>
 #include <QStandardPaths>
 #include <QProcess>
+#include <QDir>
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 
@@ -410,6 +413,12 @@ void MainWindow::setupToolBar() {
     saveAction->setStatusTip("Save the current map");
     saveAction->setShortcut(QKeySequence::Save);
     connect(saveAction, &QAction::triggered, this, &MainWindow::saveMapRequested);
+
+    // Play game action
+    QAction* playAction = _mainToolBar->addAction(QIcon(":/icons/actions/play.svg"), "Play");
+    playAction->setStatusTip("Save and play the current map in Fallout 2");
+    playAction->setShortcut(QKeySequence("F5"));
+    connect(playAction, &QAction::triggered, this, &MainWindow::onPlayGame);
 
     _mainToolBar->addSeparator();
 
@@ -1248,6 +1257,98 @@ void MainWindow::showPreferences() {
     showFileBrowserPanel();
 }
 
+void MainWindow::onPlayGame() {
+    auto& settings = Settings::getInstance();
+    
+    // Check if game location is configured and valid
+    if (!settings.isGameLocationValid()) {
+        QtDialogs::showWarning(this, "Game Location Not Configured",
+            "Fallout 2 game location is not configured or invalid.\n\n"
+            "Please set up the game location in Preferences (File > Preferences > Game Location).");
+        return;
+    }
+    
+    // Check if a map is currently loaded
+    if (!_currentEditorWidget) {
+        QtDialogs::showWarning(this, "No Map Loaded",
+            "No map is currently loaded. Please open or create a map before playing.");
+        return;
+    }
+    
+    // Get the current map
+    const auto& mapFile = _currentEditorWidget->getMapFile();
+    std::string mapFilename = _currentEditorWidget->getMap()->filename();
+    
+    // Ensure the filename has .map extension
+    if (!mapFilename.ends_with(".map")) {
+        mapFilename += ".map";
+    }
+    
+    // Handle different installation types
+    if (settings.getGameInstallationType() == Settings::GameInstallationType::STEAM) {
+        // For Steam installations, we don't need to copy the map file
+        // Steam will handle the game launch via App ID
+        launchGameViaSteam(settings.getSteamAppId());
+        return;
+    }
+    
+    // Get game data directory for map copying and ddraw.ini modification
+    std::filesystem::path gameDataDir = settings.getGameLocation(); // Returns data directory for executable installs
+    if (gameDataDir.empty()) {
+        QtDialogs::showError(this, "Play Failed", 
+            "No game data directory configured. Please set the game data directory in Preferences.");
+        return;
+    }
+    
+    // Get executable location for launching
+    std::filesystem::path executableLocation = settings.getExecutableGameLocation();
+    if (executableLocation.empty()) {
+        QtDialogs::showError(this, "Play Failed", 
+            "No game executable configured. Please set the game executable in Preferences.");
+        return;
+    }
+    
+    std::filesystem::path mapsDir = gameDataDir / "data" / "maps";
+    std::filesystem::path mapDestination = mapsDir / mapFilename;
+    
+    showStatusMessage(QString("Playing map: %1").arg(QString::fromStdString(mapFilename)));
+    
+    try {
+        // 1. Save the current map to the game directory
+        if (!std::filesystem::exists(mapsDir)) {
+            std::filesystem::create_directories(mapsDir);
+        }
+        
+        MapWriter mapWriter{ [](int32_t PID) {
+            return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(PID));
+        } };
+        mapWriter.openFile(mapDestination.string());
+        
+        if (!mapWriter.write(mapFile)) {
+            QtDialogs::showError(this, "Save Failed", 
+                QString("Failed to save map to game directory: %1").arg(QString::fromStdString(mapDestination.string())));
+            return;
+        }
+        
+        spdlog::info("Saved map to game directory: {} ({} bytes)", mapDestination.string(), mapWriter.getBytesWritten());
+        
+        // 2. Modify ddraw.ini
+        std::filesystem::path ddrawIniPath = gameDataDir / "ddraw.ini";
+        if (!modifyDdrawIni(ddrawIniPath, mapFilename)) {
+            QtDialogs::showWarning(this, "Configuration Warning",
+                "Map saved successfully, but failed to modify ddraw.ini. You may need to manually set the starting map.");
+        }
+        
+        // 3. Launch the game
+        launchGame(executableLocation);
+        
+    } catch (const std::exception& e) {
+        QtDialogs::showError(this, "Play Failed", 
+            QString("Failed to play map: %1").arg(e.what()));
+        spdlog::error("Failed to play map: {}", e.what());
+    }
+}
+
 bool MainWindow::isTextFile(const QString& filePath) const {
     static const QStringList textExtensions = {
         "cfg", "txt", "gam", "msg", "lst", "int", "ssl", "ini"
@@ -1382,6 +1483,286 @@ void MainWindow::clearStatusMessage() {
     if (_statusLabel) {
         _statusLabel->setText("Ready");
     }
+}
+
+bool MainWindow::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const std::string& mapFilename) {
+    try {
+        std::string content;
+        bool foundMiscSection = false;
+        bool foundStartingMap = false;
+        std::string miscSection;
+        
+        // Read existing file if it exists
+        if (std::filesystem::exists(ddrawIniPath)) {
+            std::ifstream file(ddrawIniPath);
+            if (!file.is_open()) {
+                spdlog::error("Failed to open ddraw.ini for reading: {}", ddrawIniPath.string());
+                return false;
+            }
+            
+            std::string line;
+            std::string currentSection;
+            
+            while (std::getline(file, line)) {
+                // Check for section headers
+                if (line.starts_with("[") && line.ends_with("]")) {
+                    currentSection = line;
+                    if (line == "[Misc]") {
+                        foundMiscSection = true;
+                    }
+                }
+                
+                // Check for StartingMap in Misc section
+                if (foundMiscSection && currentSection == "[Misc]" && 
+                    (line.starts_with("StartingMap=") || line.starts_with(";StartingMap="))) {
+                    foundStartingMap = true;
+                    line = "StartingMap=" + mapFilename;
+                }
+                
+                content += line + "\n";
+            }
+            file.close();
+        }
+        
+        // If no [Misc] section found, add it
+        if (!foundMiscSection) {
+            content += "\n[Misc]\n";
+            foundMiscSection = true;
+        }
+        
+        // If no StartingMap found in [Misc] section, add it
+        if (!foundStartingMap && foundMiscSection) {
+            // Find the [Misc] section and add StartingMap after it
+            size_t miscPos = content.find("[Misc]");
+            if (miscPos != std::string::npos) {
+                size_t nextSection = content.find("\n[", miscPos + 6);
+                if (nextSection != std::string::npos) {
+                    content.insert(nextSection, "StartingMap=" + mapFilename + "\n");
+                } else {
+                    content += "StartingMap=" + mapFilename + "\n";
+                }
+            }
+        }
+        
+        // Write the modified content back
+        std::ofstream outFile(ddrawIniPath);
+        if (!outFile.is_open()) {
+            spdlog::error("Failed to open ddraw.ini for writing: {}", ddrawIniPath.string());
+            return false;
+        }
+        
+        outFile << content;
+        outFile.close();
+        
+        spdlog::info("Modified {}: set StartingMap to {}", ddrawIniPath.string(), mapFilename);
+        return true;
+        
+    } catch (const std::exception& e) {
+        spdlog::error("Failed to modify {}: {}", ddrawIniPath.string(), e.what());
+        return false;
+    }
+}
+
+void MainWindow::launchGame(const std::filesystem::path& gameLocation) {
+#ifdef __APPLE__
+    std::filesystem::path gameApp;
+    
+    // Check if the gameLocation itself is a .app bundle
+    if (gameLocation.extension() == ".app" && std::filesystem::exists(gameLocation)) {
+        gameApp = gameLocation;
+        spdlog::info("Using configured .app bundle: {}", gameApp.string());
+    } else {
+        // Look for .app bundles inside the gameLocation directory
+        std::vector<std::string> possibleApps = {
+            "Fallout 2.app",
+            "fallout2.app"
+        };
+        
+        for (const auto& appName : possibleApps) {
+            std::filesystem::path candidate = gameLocation / appName;
+            if (std::filesystem::exists(candidate)) {
+                gameApp = candidate;
+                spdlog::info("Found .app bundle in directory: {}", gameApp.string());
+                break;
+            }
+        }
+    }
+    
+    if (gameApp.empty()) {
+        // Try launching via Steam if no .app found
+        QProcess* steamProcess = new QProcess(this);
+        connect(steamProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [steamProcess](int exitCode, QProcess::ExitStatus exitStatus) {
+                spdlog::info("Steam launch finished with exit code: {}", exitCode);
+                steamProcess->deleteLater();
+            });
+        
+        connect(steamProcess, &QProcess::errorOccurred,
+            [this, steamProcess](QProcess::ProcessError error) {
+                QtDialogs::showError(this, "Game Launch Error",
+                    "Could not find Fallout 2.app and failed to launch via Steam.\n\n"
+                    "Please ensure Fallout 2 is installed through Steam or as a .app bundle.");
+                spdlog::error("Failed to launch game via Steam");
+                steamProcess->deleteLater();
+            });
+        
+        spdlog::info("Attempting to launch Fallout 2 via Steam");
+        steamProcess->start("open", QStringList() << "steam://run/38410"); // Fallout 2 Steam App ID
+        showStatusMessage("Launching Fallout 2 via Steam...");
+        return;
+    }
+    
+    spdlog::info("Launching game app: {}", gameApp.string());
+    
+    // Launch the app using 'open' command on macOS
+    QProcess* gameProcess = new QProcess(this);
+    
+    connect(gameProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+        [gameProcess](int exitCode, QProcess::ExitStatus exitStatus) {
+            if (exitStatus == QProcess::CrashExit) {
+                spdlog::warn("Game process crashed with exit code: {}", exitCode);
+            } else {
+                spdlog::info("Game process finished with exit code: {}", exitCode);
+            }
+            gameProcess->deleteLater();
+        });
+    
+    connect(gameProcess, &QProcess::errorOccurred,
+        [this, gameProcess](QProcess::ProcessError error) {
+            QString errorMsg;
+            switch (error) {
+                case QProcess::FailedToStart:
+                    errorMsg = "Failed to start the game process";
+                    break;
+                case QProcess::Crashed:
+                    errorMsg = "Game process crashed";
+                    break;
+                default:
+                    errorMsg = "Unknown error occurred while running the game";
+                    break;
+            }
+            QtDialogs::showError(this, "Game Launch Error", errorMsg);
+            spdlog::error("Game process error: {}", errorMsg.toStdString());
+            gameProcess->deleteLater();
+        });
+    
+    // Use 'open' command to launch the .app bundle
+    gameProcess->start("open", QStringList() << QString::fromStdString(gameApp.string()));
+    
+#else
+    // Windows/Linux: Look for executable files
+    std::vector<std::string> possibleExes = {
+        "fallout2.exe",
+        "Fallout2.exe",
+        "fallout2HR.exe",
+        "f2_res.exe",
+        "fallout2",     // Linux executable
+        "Fallout2"      // Linux executable
+    };
+    
+    std::filesystem::path gameExecutable;
+    for (const auto& exeName : possibleExes) {
+        std::filesystem::path candidate = gameLocation / exeName;
+        if (std::filesystem::exists(candidate)) {
+            gameExecutable = candidate;
+            break;
+        }
+    }
+    
+    if (gameExecutable.empty()) {
+        QtDialogs::showError(this, "Game Executable Not Found",
+            "Could not find Fallout 2 executable in the game directory.\n\n"
+            "Looked for: fallout2.exe, Fallout2.exe, fallout2HR.exe, f2_res.exe, fallout2, Fallout2");
+        return;
+    }
+    
+    spdlog::info("Launching game: {}", gameExecutable.string());
+    
+    // Launch the game using QProcess
+    QProcess* gameProcess = new QProcess(this);
+    
+    // Set working directory to game location
+    gameProcess->setWorkingDirectory(QString::fromStdString(gameLocation.string()));
+    
+    // Connect to handle process events
+    connect(gameProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+        [gameProcess](int exitCode, QProcess::ExitStatus exitStatus) {
+            if (exitStatus == QProcess::CrashExit) {
+                spdlog::warn("Game process crashed with exit code: {}", exitCode);
+            } else {
+                spdlog::info("Game process finished with exit code: {}", exitCode);
+            }
+            gameProcess->deleteLater();
+        });
+    
+    connect(gameProcess, &QProcess::errorOccurred,
+        [this, gameProcess](QProcess::ProcessError error) {
+            QString errorMsg;
+            switch (error) {
+                case QProcess::FailedToStart:
+                    errorMsg = "Failed to start the game process";
+                    break;
+                case QProcess::Crashed:
+                    errorMsg = "Game process crashed";
+                    break;
+                default:
+                    errorMsg = "Unknown error occurred while running the game";
+                    break;
+            }
+            QtDialogs::showError(this, "Game Launch Error", errorMsg);
+            spdlog::error("Game process error: {}", errorMsg.toStdString());
+            gameProcess->deleteLater();
+        });
+    
+    // Start the game process
+    gameProcess->start(QString::fromStdString(gameExecutable.string()));
+    
+#endif
+    
+    if (!gameProcess->waitForStarted(5000)) {
+        QtDialogs::showError(this, "Game Launch Failed", 
+            "Failed to start the game within 5 seconds.");
+        gameProcess->deleteLater();
+        return;
+    }
+    
+    showStatusMessage("Game launched successfully!");
+    spdlog::info("Game launched successfully");
+}
+
+void MainWindow::launchGameViaSteam(const std::string& appId) {
+    spdlog::info("Launching Fallout 2 via Steam with App ID: {}", appId);
+    
+    QProcess* steamProcess = new QProcess(this);
+    
+    connect(steamProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+        [steamProcess](int exitCode, QProcess::ExitStatus exitStatus) {
+            spdlog::info("Steam launch finished with exit code: {}", exitCode);
+            steamProcess->deleteLater();
+        });
+    
+    connect(steamProcess, &QProcess::errorOccurred,
+        [this, steamProcess, appId](QProcess::ProcessError error) {
+            QString errorMsg = QString("Failed to launch Fallout 2 via Steam (App ID: %1).\n\n"
+                                     "Please ensure Steam is installed and Fallout 2 is available in your Steam library.")
+                                     .arg(QString::fromStdString(appId));
+            QtDialogs::showError(this, "Steam Launch Error", errorMsg);
+            spdlog::error("Failed to launch game via Steam: App ID {}", appId);
+            steamProcess->deleteLater();
+        });
+    
+    QString steamUrl = QString("steam://run/%1").arg(QString::fromStdString(appId));
+    
+#ifdef __APPLE__
+    steamProcess->start("open", QStringList() << steamUrl);
+#elif defined(_WIN32)
+    steamProcess->start("cmd", QStringList() << "/c" << "start" << steamUrl);
+#else
+    // Linux - try xdg-open first, then steam directly
+    steamProcess->start("xdg-open", QStringList() << steamUrl);
+#endif
+    
+    showStatusMessage(QString("Launching Fallout 2 via Steam (App ID: %1)...").arg(QString::fromStdString(appId)));
 }
 
 } // namespace geck

@@ -43,7 +43,7 @@ void DataPathLoader::load() {
             
             // Update percentage
             _currentPathIndex++;
-            _percentDone = (_currentPathIndex * 100) / _dataPaths.size();
+            _percentDone = static_cast<int>((_currentPathIndex * 100) / _dataPaths.size());
             
         } catch (const std::exception& e) {
             spdlog::error("DataPathLoader: Failed to load data path {}: {}", path.string(), e.what());

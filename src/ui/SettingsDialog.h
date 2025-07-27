@@ -14,6 +14,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QRadioButton>
+#include <QTabWidget>
 #include <filesystem>
 #include <vector>
 
@@ -44,11 +45,18 @@ private slots:
     void onReset();
     void onEditorModeChanged();
     void onBrowseEditor();
+    void onAutoDetectGame();
+    void onBrowseGameLocation();
+    void onGameTypeChanged();
 
 private:
     void setupUI();
+    void setupTabs();
+    void setupGeneralTab();
+    void setupEditorTab();
     void setupDataPathsGroup();
     void setupTextEditorGroup();
+    void setupGameLocationGroup();
     void setupButtonBox();
     
     void loadSettings();
@@ -59,9 +67,19 @@ private:
     void addDataPathToList(const std::filesystem::path& path);
     void removeSelectedDataPath();
     std::vector<std::filesystem::path> getDataPathsFromUI() const;
+    void validateGameLocation(const QString& gameDir, bool isSteam);
     
     // UI Components
     QVBoxLayout* _mainLayout;
+    QTabWidget* _tabWidget;
+    
+    // General Tab
+    QWidget* _generalTab;
+    QVBoxLayout* _generalTabLayout;
+    
+    // Editor Tab  
+    QWidget* _editorTab;
+    QVBoxLayout* _editorTabLayout;
     
     // Data Paths Group
     QGroupBox* _dataPathsGroup;
@@ -82,6 +100,23 @@ private:
     QLineEdit* _customEditorPathEdit;
     QPushButton* _browseEditorButton;
     QLabel* _editorHelpLabel;
+    
+    // Game Location Group
+    QGroupBox* _gameLocationGroup;
+    QVBoxLayout* _gameLocationLayout;
+    QRadioButton* _steamGameRadio;
+    QRadioButton* _executableGameRadio;
+    QHBoxLayout* _steamGameControlLayout;
+    QLineEdit* _steamAppIdEdit;
+    QHBoxLayout* _executableGameControlLayout;
+    QLineEdit* _executableGameLocationEdit;
+    QPushButton* _browseExecutableGameButton;
+    QHBoxLayout* _gameDataControlLayout;
+    QLineEdit* _gameDataDirectoryEdit;
+    QPushButton* _browseGameDataButton;
+    QHBoxLayout* _gameLocationControlLayout;
+    QPushButton* _autoDetectGameButton;
+    QLabel* _gameLocationHelpLabel;
     
     // Status
     QLabel* _statusLabel;

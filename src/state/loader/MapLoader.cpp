@@ -305,7 +305,7 @@ void MapLoader::loadMapResources() {
         ResourceManager::getInstance().insertTexture("art/tiles/" + tile);
         
         // Calculate progress: 20% base + (current/total * 40%)
-        int tileProgress = (tile_number * 40) / tiles_total;
+        int tileProgress = static_cast<int>((tile_number * 40) / tiles_total);
         _percentDone = 20 + tileProgress;
         tile_number++;
     }
@@ -330,7 +330,7 @@ void MapLoader::loadMapResources() {
         ResourceManager::getInstance().insertTexture(frmName);
         
         // Calculate progress: 60% base + (current/total * 35%)
-        int objectProgress = (objectNumber * 35) / std::max(objectsTotal, size_t(1));
+        int objectProgress = static_cast<int>((objectNumber * 35) / std::max(objectsTotal, size_t(1)));
         _percentDone = 60 + objectProgress;
         objectNumber++;
     }
