@@ -14,11 +14,36 @@
 #include <QStandardItem>
 #include <QMenu>
 #include <QAction>
+#include <QThread>
+#include <QProgressBar>
 #include <vector>
 #include <memory>
 #include <unordered_set>
+#include <atomic>
 
 namespace geck {
+
+/**
+ * @brief Worker class for loading files in background thread
+ */
+class FileLoaderWorker : public QObject {
+    Q_OBJECT
+
+public:
+    explicit FileLoaderWorker(QObject* parent = nullptr);
+    
+    std::atomic<bool> _shouldStop{false};
+
+public slots:
+    void loadFiles();
+
+signals:
+    void filesLoaded(const std::vector<std::string>& files);
+    void fileTypesExtracted(const std::unordered_set<std::string>& fileTypes);
+    void loadingProgress(int current, int total, const QString& status);
+    void loadingError(const QString& error);
+    void loadingComplete();
+};
 
 /**
  * @brief Custom QStandardItem for file/directory entries
@@ -61,11 +86,12 @@ class FileBrowserPanel : public QWidget {
 
 public:
     explicit FileBrowserPanel(QWidget* parent = nullptr);
-    ~FileBrowserPanel() = default;
+    ~FileBrowserPanel();
 
     // File operations
     void refreshFileList();
     void loadFiles();
+    void stopLoading();
 
     // Search and filtering
     void setSearchFilter(const QString& filter);
@@ -86,6 +112,11 @@ public slots:
 private slots:
     void updateFileDisplay();
     void onCustomContextMenuRequested(const QPoint& pos);
+    void onFilesLoaded(const std::vector<std::string>& files);
+    void onFileTypesExtracted(const std::unordered_set<std::string>& fileTypes);
+    void onLoadingProgress(int current, int total, const QString& status);
+    void onLoadingError(const QString& error);
+    void processNextChunk();
 
 private:
     void setupUI();
@@ -94,6 +125,8 @@ private:
     void setupStatusBar();
 
     void buildFileTree(const std::vector<std::string>& files);
+    void buildFileTreeProgressive(const std::vector<std::string>& files);
+    void startProgressiveTreeBuild(const std::vector<std::string>& filteredFiles);
     FileTreeItem* createDirectoryStructure(const QString& path);
     FileTreeItem* findOrCreateDirectory(FileTreeItem* parent, const QString& dirName);
     QString getFileExtension(const QString& filePath) const;
@@ -117,8 +150,13 @@ private:
     QTreeView* _treeView = nullptr;
     QStandardItemModel* _treeModel = nullptr;
 
-    // Status
+    // Status and progress
     QLabel* _statusLabel = nullptr;
+    QProgressBar* _progressBar = nullptr;
+
+    // Background loading
+    QThread* _loaderThread = nullptr;
+    FileLoaderWorker* _loaderWorker = nullptr;
 
     // Data
     std::vector<std::string> _allFiles;
@@ -128,9 +166,17 @@ private:
     QString _currentSearchFilter;
     QString _currentFileTypeFilter;
     QTimer* _searchTimer = nullptr;
+    
+    // Progressive building state
+    std::vector<std::string> _pendingFiles;
+    size_t _currentChunkIndex = 0;
+    QTimer* _chunkTimer = nullptr;
+    bool _isLoading = false;
 
     // Constants
     static constexpr int SEARCH_DELAY_MS = 300; // Delay before applying search filter
+    static constexpr int CHUNK_SIZE = 1000; // Files processed per chunk
+    static constexpr int CHUNK_DELAY_MS = 10; // Delay between chunks
 };
 
 } // namespace geck

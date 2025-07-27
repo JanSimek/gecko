@@ -14,11 +14,86 @@
 #include <QMessageBox>
 #include <QFile>
 #include <QIcon>
+#include <QProgressBar>
+#include <QThread>
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <vfspp/VirtualFileSystem.hpp>
 
 namespace geck {
+
+// FileLoaderWorker implementation
+FileLoaderWorker::FileLoaderWorker(QObject* parent)
+    : QObject(parent) {
+}
+
+void FileLoaderWorker::loadFiles() {
+    try {
+        spdlog::info("FileLoaderWorker: Starting background file loading...");
+        emit loadingProgress(0, 100, "Initializing file system...");
+
+        // Get files from ResourceManager
+        auto& resourceManager = ResourceManager::getInstance();
+        spdlog::debug("FileLoaderWorker: Calling ResourceManager::listAllFiles()...");
+        auto allFiles = resourceManager.listAllFiles();
+        spdlog::debug("FileLoaderWorker: Got {} files from ResourceManager", allFiles.size());
+        
+        if (allFiles.empty()) {
+            spdlog::warn("FileLoaderWorker: ResourceManager returned no files - data may not be loaded yet");
+            emit loadingError("No files found - data paths may not be loaded yet");
+            emit loadingComplete();
+            return;
+        }
+        
+        emit loadingProgress(50, 100, "Processing file list...");
+        
+        if (_shouldStop.load()) {
+            return;
+        }
+
+        // Extract file types for filter dropdown
+        std::unordered_set<std::string> fileTypes;
+        int processed = 0;
+        const int totalFiles = static_cast<int>(allFiles.size());
+        
+        for (const auto& file : allFiles) {
+            if (_shouldStop.load()) {
+                return;
+            }
+            
+            QString qFile = QString::fromStdString(file);
+            QFileInfo fileInfo(qFile);
+            QString suffix = fileInfo.suffix().toLower();
+            if (!suffix.isEmpty()) {
+                fileTypes.insert(("." + suffix).toStdString());
+            }
+            
+            // Update progress every 1000 files
+            if (++processed % 1000 == 0) {
+                int progressPercent = 50 + (processed * 50) / totalFiles;
+                emit loadingProgress(progressPercent, 100, 
+                    QString("Processing files... %1/%2").arg(processed).arg(totalFiles));
+            }
+        }
+
+        emit loadingProgress(100, 100, "File loading completed");
+        spdlog::debug("FileLoaderWorker: Emitting fileTypesExtracted with {} types", fileTypes.size());
+        emit fileTypesExtracted(fileTypes);
+        spdlog::debug("FileLoaderWorker: Emitting filesLoaded with {} files", allFiles.size());
+        emit filesLoaded(allFiles);
+        
+        spdlog::info("FileLoaderWorker: Loaded {} files with {} file types", 
+                     allFiles.size(), fileTypes.size());
+        
+        // Signal that work is complete
+        emit loadingComplete();
+
+    } catch (const std::exception& e) {
+        spdlog::error("FileLoaderWorker: Error loading files: {}", e.what());
+        emit loadingError(QString::fromStdString(e.what()));
+        emit loadingComplete();
+    }
+}
 
 // FileTreeItem implementation
 FileTreeItem::FileTreeItem(const QString& name, ItemType type)
@@ -81,9 +156,14 @@ FileBrowserPanel::FileBrowserPanel(QWidget* parent)
     , _treeView(nullptr)
     , _treeModel(nullptr)
     , _statusLabel(nullptr)
+    , _progressBar(nullptr)
+    , _loaderThread(nullptr)
+    , _loaderWorker(nullptr)
     , _currentSearchFilter("")
     , _currentFileTypeFilter("All Files")
-    , _searchTimer(new QTimer(this)) {
+    , _searchTimer(new QTimer(this))
+    , _chunkTimer(new QTimer(this))
+    , _isLoading(false) {
 
     setupUI();
 
@@ -92,8 +172,41 @@ FileBrowserPanel::FileBrowserPanel(QWidget* parent)
     _searchTimer->setInterval(SEARCH_DELAY_MS);
     connect(_searchTimer, &QTimer::timeout, this, &FileBrowserPanel::updateFileDisplay);
 
-    // Load files on startup
-    loadFiles();
+    // Setup chunk processing timer
+    _chunkTimer->setSingleShot(true);
+    _chunkTimer->setInterval(CHUNK_DELAY_MS);
+    connect(_chunkTimer, &QTimer::timeout, this, &FileBrowserPanel::processNextChunk);
+
+    // Set initial status
+    _statusLabel->setText("Ready - Click Refresh to load files");
+}
+
+FileBrowserPanel::~FileBrowserPanel() {
+    spdlog::debug("FileBrowserPanel: Destructor called, cleaning up threads...");
+    
+    // Stop any ongoing loading
+    stopLoading();
+    
+    // Clean up worker and thread
+    if (_loaderWorker) {
+        _loaderWorker->deleteLater();
+        _loaderWorker = nullptr;
+    }
+    
+    if (_loaderThread) {
+        if (_loaderThread->isRunning()) {
+            _loaderThread->quit();
+            if (!_loaderThread->wait(5000)) {
+                spdlog::warn("FileBrowserPanel: Thread didn't finish within 5 seconds, terminating");
+                _loaderThread->terminate();
+                _loaderThread->wait(1000);
+            }
+        }
+        _loaderThread->deleteLater();
+        _loaderThread = nullptr;
+    }
+    
+    spdlog::debug("FileBrowserPanel: Destructor completed");
 }
 
 void FileBrowserPanel::setupUI() {
@@ -178,45 +291,116 @@ void FileBrowserPanel::setupTreeView() {
 }
 
 void FileBrowserPanel::setupStatusBar() {
+    // Create horizontal layout for status bar
+    QHBoxLayout* statusLayout = new QHBoxLayout();
+    
     _statusLabel = new QLabel("Ready", this);
     _statusLabel->setStyleSheet("QLabel { color: gray; font-size: 11px; }");
-    _mainLayout->addWidget(_statusLabel);
+    statusLayout->addWidget(_statusLabel, 1);
+    
+    _progressBar = new QProgressBar(this);
+    _progressBar->setMaximumHeight(16);
+    _progressBar->setVisible(false);
+    statusLayout->addWidget(_progressBar);
+    
+    // Add the layout to main layout
+    _mainLayout->addLayout(statusLayout);
 }
 
 void FileBrowserPanel::loadFiles() {
-    try {
-        spdlog::info("FileBrowserPanel: Loading files from VFS...");
-        _statusLabel->setText("Loading files...");
-
-        // Get files from ResourceManager
-        auto& resourceManager = ResourceManager::getInstance();
-        _allFiles = resourceManager.listAllFiles();
-
-        // Extract file types for filter dropdown
-        _fileTypes.clear();
-        for (const auto& file : _allFiles) {
-            QString qFile = QString::fromStdString(file);
-            QString extension = getFileExtension(qFile);
-            if (!extension.isEmpty()) {
-                _fileTypes.insert(extension.toStdString());
-            }
-        }
-
-        // Update file type combo box
-        updateFileTypeComboBox();
-
-        // Build tree
-        buildFileTree(_allFiles);
-
-        // Update status
-        updateFileCount();
-
-        spdlog::info("FileBrowserPanel: Loaded {} files", _allFiles.size());
-
-    } catch (const std::exception& e) {
-        spdlog::error("FileBrowserPanel: Error loading files: {}", e.what());
-        _statusLabel->setText("Error loading files");
+    if (_isLoading) {
+        stopLoading();
     }
+
+    _isLoading = true;
+    _allFiles.clear();
+    _fileTypes.clear();
+    _pendingFiles.clear();
+    _currentChunkIndex = 0;
+
+    // Clear existing tree
+    _treeModel->clear();
+    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path");
+
+    // Show progress bar and update status
+    _progressBar->setVisible(true);
+    _progressBar->setRange(0, 100);
+    _progressBar->setValue(0);
+    _statusLabel->setText("Starting file loading...");
+
+    // Clean up previous thread and worker if they exist
+    if (_loaderThread) {
+        if (_loaderWorker) {
+            _loaderWorker->_shouldStop.store(true);
+        }
+        
+        if (_loaderThread->isRunning()) {
+            _loaderThread->quit();
+            _loaderThread->wait(3000);
+        }
+        
+        // Clean up old worker and thread
+        if (_loaderWorker) {
+            _loaderWorker->deleteLater();
+            _loaderWorker = nullptr;
+        }
+        
+        _loaderThread->deleteLater();
+        _loaderThread = nullptr;
+    }
+
+    // Create new worker thread
+    _loaderThread = new QThread(this);
+    _loaderWorker = new FileLoaderWorker();
+    _loaderWorker->moveToThread(_loaderThread);
+
+    // Connect signals with explicit Qt::QueuedConnection for cross-thread communication
+    spdlog::debug("FileBrowserPanel: Connecting worker signals...");
+    connect(_loaderThread, &QThread::started, _loaderWorker, &FileLoaderWorker::loadFiles);
+    connect(_loaderWorker, &FileLoaderWorker::filesLoaded, this, &FileBrowserPanel::onFilesLoaded, Qt::QueuedConnection);
+    connect(_loaderWorker, &FileLoaderWorker::fileTypesExtracted, this, &FileBrowserPanel::onFileTypesExtracted, Qt::QueuedConnection);
+    connect(_loaderWorker, &FileLoaderWorker::loadingProgress, this, &FileBrowserPanel::onLoadingProgress, Qt::QueuedConnection);
+    connect(_loaderWorker, &FileLoaderWorker::loadingError, this, &FileBrowserPanel::onLoadingError, Qt::QueuedConnection);
+    connect(_loaderWorker, &FileLoaderWorker::loadingComplete, _loaderThread, &QThread::quit, Qt::QueuedConnection);
+    
+    // Connect finished signal to clean up thread and worker
+    connect(_loaderThread, &QThread::finished, [this]() {
+        spdlog::debug("FileBrowserPanel: Thread finished, cleaning up...");
+        if (_loaderWorker) {
+            _loaderWorker->deleteLater();
+            _loaderWorker = nullptr;
+        }
+        // Note: _loaderThread will be set to nullptr in the next loadFiles() call
+    });
+    connect(_loaderThread, &QThread::finished, _loaderThread, &QThread::deleteLater);
+    
+    spdlog::debug("FileBrowserPanel: Worker signals connected");
+
+    // Start loading
+    spdlog::info("FileBrowserPanel: Starting background file loading...");
+    _loaderThread->start();
+}
+
+void FileBrowserPanel::stopLoading() {
+    spdlog::debug("FileBrowserPanel: Stopping loading operations...");
+    
+    _isLoading = false;
+    
+    if (_loaderWorker) {
+        _loaderWorker->_shouldStop.store(true);
+    }
+    
+    if (_loaderThread) {
+        _loaderThread->quit();
+        // Don't wait here - let the finished signal handle cleanup
+    }
+    
+    if (_chunkTimer) {
+        _chunkTimer->stop();
+    }
+    
+    _progressBar->setVisible(false);
+    _statusLabel->setText("Loading stopped");
 }
 
 void FileBrowserPanel::updateFileTypeComboBox() {
@@ -373,6 +557,7 @@ void FileBrowserPanel::updateFileCount() {
 }
 
 void FileBrowserPanel::refreshFileList() {
+    spdlog::info("FileBrowserPanel: Refreshing file list");
     loadFiles();
 }
 
@@ -428,8 +613,161 @@ void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
 }
 
 void FileBrowserPanel::updateFileDisplay() {
+    if (_isLoading) {
+        return; // Don't update while loading
+    }
     buildFileTree(_allFiles);
     updateFileCount();
+}
+
+void FileBrowserPanel::onFilesLoaded(const std::vector<std::string>& files) {
+    spdlog::debug("FileBrowserPanel::onFilesLoaded called with {} files", files.size());
+    _allFiles = files;
+    spdlog::info("FileBrowserPanel: Received {} files from background loader", files.size());
+    
+    // Start progressive tree building
+    buildFileTreeProgressive(files);
+}
+
+void FileBrowserPanel::onFileTypesExtracted(const std::unordered_set<std::string>& fileTypes) {
+    spdlog::debug("FileBrowserPanel::onFileTypesExtracted called with {} types", fileTypes.size());
+    _fileTypes = fileTypes;
+    
+    // Update file type combo box on main thread
+    updateFileTypeComboBox();
+    
+    spdlog::debug("FileBrowserPanel: Extracted {} file types", fileTypes.size());
+}
+
+void FileBrowserPanel::onLoadingProgress(int current, int total, const QString& status) {
+    if (total > 0) {
+        _progressBar->setRange(0, total);
+        _progressBar->setValue(current);
+    }
+    _statusLabel->setText(status);
+}
+
+void FileBrowserPanel::onLoadingError(const QString& error) {
+    spdlog::error("FileBrowserPanel: Loading error: {}", error.toStdString());
+    _statusLabel->setText("Error: " + error);
+    _progressBar->setVisible(false);
+    _isLoading = false;
+}
+
+void FileBrowserPanel::buildFileTreeProgressive(const std::vector<std::string>& files) {
+    // Apply filters first
+    std::vector<std::string> filteredFiles;
+    for (const auto& file : files) {
+        QString qFile = QString::fromStdString(file);
+
+        // Apply search filter
+        if (!_currentSearchFilter.isEmpty()) {
+            if (!qFile.contains(_currentSearchFilter, Qt::CaseInsensitive)) {
+                continue;
+            }
+        }
+
+        // Apply file type filter
+        if (_currentFileTypeFilter != "All Files") {
+            QString extension = getFileExtension(qFile);
+            if (extension != _currentFileTypeFilter) {
+                continue;
+            }
+        }
+
+        filteredFiles.push_back(file);
+    }
+
+    spdlog::info("FileBrowserPanel: Starting progressive build of {} filtered files", filteredFiles.size());
+    startProgressiveTreeBuild(filteredFiles);
+}
+
+void FileBrowserPanel::startProgressiveTreeBuild(const std::vector<std::string>& filteredFiles) {
+    // Store files to process
+    _pendingFiles = filteredFiles;
+    _currentChunkIndex = 0;
+
+    // Clear existing tree
+    _treeModel->clear();
+    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path");
+
+    // Update progress bar for tree building phase
+    _progressBar->setRange(0, static_cast<int>(_pendingFiles.size()));
+    _progressBar->setValue(0);
+    _statusLabel->setText("Building file tree...");
+
+    // Start processing chunks
+    processNextChunk();
+}
+
+void FileBrowserPanel::processNextChunk() {
+    if (_currentChunkIndex >= _pendingFiles.size()) {
+        // Finished processing all files
+        _isLoading = false;
+        _progressBar->setVisible(false);
+        
+        // Expand first level directories
+        for (int i = 0; i < _treeModel->rowCount(); ++i) {
+            QModelIndex index = _treeModel->index(i, 0);
+            _treeView->expand(index);
+        }
+        
+        // Resize Name column to fit content
+        resizeNameColumnToContent();
+        
+        // Update file count
+        updateFileCount();
+        
+        spdlog::info("FileBrowserPanel: Progressive tree building completed");
+        return;
+    }
+
+    FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
+    
+    // Process next chunk
+    size_t endIndex = std::min(_currentChunkIndex + CHUNK_SIZE, _pendingFiles.size());
+    for (size_t i = _currentChunkIndex; i < endIndex; ++i) {
+        const auto& file = _pendingFiles[i];
+        QString qFile = QString::fromStdString(file);
+
+        // Split path into components
+        QStringList pathComponents = qFile.split('/', Qt::SkipEmptyParts);
+        if (pathComponents.isEmpty())
+            continue;
+
+        FileTreeItem* currentParent = rootItem;
+        QString currentPath = "";
+
+        // Create directory structure
+        for (int j = 0; j < pathComponents.size() - 1; ++j) {
+            currentPath += "/" + pathComponents[j];
+            currentParent = findOrCreateDirectory(currentParent, pathComponents[j]);
+        }
+
+        // Add file
+        QString fileName = pathComponents.last();
+        FileTreeItem* fileItem = new FileTreeItem(fileName, FileTreeItem::File);
+        fileItem->setFilePath(qFile);
+
+        QString extension = getFileExtension(fileName);
+        QStandardItem* typeItem = new QStandardItem(extension);
+        typeItem->setEditable(false);
+
+        QStandardItem* pathItem = new QStandardItem(qFile);
+        pathItem->setEditable(false);
+
+        currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << pathItem);
+    }
+
+    // Update progress
+    _currentChunkIndex = endIndex;
+    _progressBar->setValue(static_cast<int>(_currentChunkIndex));
+    _statusLabel->setText(QString("Building tree... %1/%2 files")
+        .arg(_currentChunkIndex)
+        .arg(_pendingFiles.size()));
+
+    // Schedule next chunk
+    _chunkTimer->start();
 }
 
 void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
