@@ -57,6 +57,7 @@ public:
     
     // Player position selection
     void enterPlayerPositionSelectionMode();
+    void centerViewOnPlayerPosition();
 
     // Tile placement functionality
     void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);
@@ -126,6 +127,8 @@ signals:
     void mapLoadRequested(const std::string& mapPath);
     void hexHoverChanged(int hexIndex);
     void playerPositionSelected(int hexPosition);
+    void statusMessageRequested(const QString& message);
+    void statusMessageClearRequested();
 
 private:
     // Error tracking for sprite loading

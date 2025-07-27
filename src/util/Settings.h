@@ -52,6 +52,17 @@ public:
     // Settings validation
     bool validateDataPath(const std::filesystem::path& path) const;
     
+    // Text editor configuration
+    enum class TextEditorMode {
+        SYSTEM_DEFAULT,
+        CUSTOM
+    };
+    
+    TextEditorMode getTextEditorMode() const;
+    void setTextEditorMode(TextEditorMode mode);
+    QString getCustomEditorPath() const;
+    void setCustomEditorPath(const QString& path);
+
     // Auto-detection helpers
     static std::vector<std::filesystem::path> detectFallout2Installations();
     static std::vector<std::filesystem::path> detectSteamLibraries();
@@ -75,6 +86,10 @@ private:
     QByteArray _dockState;
     QMap<QString, QByteArray> _floatingDockGeometries;
     QString _version;
+    
+    // Text editor configuration
+    TextEditorMode _textEditorMode = TextEditorMode::SYSTEM_DEFAULT;
+    QString _customEditorPath;
     
     // Constants
     static constexpr const char* SETTINGS_VERSION = "1.0";

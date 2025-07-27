@@ -36,6 +36,7 @@
 #include <QUrl>
 #include <QTemporaryFile>
 #include <QStandardPaths>
+#include <QProcess>
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 
@@ -510,8 +511,8 @@ void MainWindow::setupDockWidgets() {
         } else if (isTextFile(filePath)) {
             spdlog::info("MainWindow: Opening text file from file browser: {}", filePath.toStdString());
             
-            // Open text files with system default editor
-            openTextFileWithSystemEditor(filePath);
+            // Open text files with configured editor
+            openTextFileWithEditor(filePath);
         } else {
             spdlog::debug("MainWindow: Unsupported file type double-clicked: {}", filePath.toStdString());
             QtDialogs::showInfo(this, "File Type Not Supported", 
@@ -556,13 +557,15 @@ void MainWindow::setupDockWidgets() {
 void MainWindow::setupStatusBar() {
     _statusBar = statusBar();
 
+    // Create main status label for messages
+    _statusLabel = new QLabel("Ready");
+    _statusLabel->setMinimumWidth(200);
+    _statusBar->addWidget(_statusLabel, 1); // Stretch to take available space
+
     // Create hex index label
     _hexIndexLabel = new QLabel("Hex: N/A");
     _hexIndexLabel->setMinimumWidth(80);
-    _statusBar->addWidget(_hexIndexLabel);
-
-    // Add a spacer to push hex info to the left
-    _statusBar->addPermanentWidget(new QLabel(" "), 1);
+    _statusBar->addPermanentWidget(_hexIndexLabel);
 }
 
 void MainWindow::updateHexIndexDisplay(int hexIndex) {
@@ -741,6 +744,10 @@ void MainWindow::connectToEditorWidget() {
         connect(_currentEditorWidget, &EditorWidget::selectionChanged, _selectionPanel, &SelectionPanel::handleSelectionChanged);
         spdlog::info("Connected EditorWidget selection signals to unified SelectionPanel");
     }
+    
+    // Connect status message signals
+    connect(_currentEditorWidget, &EditorWidget::statusMessageRequested, this, &MainWindow::showStatusMessage);
+    connect(_currentEditorWidget, &EditorWidget::statusMessageClearRequested, this, &MainWindow::clearStatusMessage);
 
     // Connect TilePalettePanel to EditorWidget
     if (_tilePalettePanel) {
@@ -795,6 +802,8 @@ void MainWindow::connectToEditorWidget() {
     if (_mapInfoPanel) {
         connect(_mapInfoPanel, &MapInfoPanel::selectPlayerPositionRequested, 
                 _currentEditorWidget, &EditorWidget::enterPlayerPositionSelectionMode);
+        connect(_mapInfoPanel, &MapInfoPanel::centerViewOnPlayerPositionRequested,
+                _currentEditorWidget, &EditorWidget::centerViewOnPlayerPosition);
         connect(_currentEditorWidget, &EditorWidget::playerPositionSelected, 
                 this, [this](int hexPosition) {
                     if (_mapInfoPanel) {
@@ -1241,9 +1250,16 @@ bool MainWindow::isTextFile(const QString& filePath) const {
     return textExtensions.contains(suffix);
 }
 
-void MainWindow::openTextFileWithSystemEditor(const QString& vfsFilePath) {
+void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
     try {
-        spdlog::info("MainWindow: Opening text file with system editor: {}", vfsFilePath.toStdString());
+        // Get editor configuration from settings
+        auto& settings = Settings::getInstance();
+        auto editorMode = settings.getTextEditorMode();
+        QString customEditorPath = settings.getCustomEditorPath();
+        
+        spdlog::info("MainWindow: Opening text file with {} editor: {}", 
+                    (editorMode == Settings::TextEditorMode::CUSTOM) ? "custom" : "system", 
+                    vfsFilePath.toStdString());
         
         // Get file from VFS
         auto& resourceManager = ResourceManager::getInstance();
@@ -1301,22 +1317,64 @@ void MainWindow::openTextFileWithSystemEditor(const QString& vfsFilePath) {
         // Get the actual temporary file path
         QString actualTempPath = tempFile.fileName();
         
-        // Open with system default application
-        QUrl fileUrl = QUrl::fromLocalFile(actualTempPath);
-        bool opened = QDesktopServices::openUrl(fileUrl);
+        bool opened = false;
         
+        if (editorMode == Settings::TextEditorMode::CUSTOM && !customEditorPath.isEmpty()) {
+            // Validate custom editor exists
+            if (!QFile::exists(customEditorPath)) {
+                QtDialogs::showError(this, "Editor Not Found", 
+                    QString("Custom editor not found: %1\n\nFalling back to system default editor.").arg(customEditorPath));
+                spdlog::warn("Custom editor not found: {}, falling back to system default", customEditorPath.toStdString());
+                // Fall through to system default
+            } else {
+                // Use custom editor with QProcess
+                QStringList arguments;
+                arguments << actualTempPath;
+                
+                opened = QProcess::startDetached(customEditorPath, arguments);
+                
+                if (!opened) {
+                    QtDialogs::showError(this, "Error", 
+                        QString("Failed to start custom editor: %1\n\nFalling back to system default editor.").arg(customEditorPath));
+                    spdlog::warn("Failed to start custom editor: {}, falling back to system default", customEditorPath.toStdString());
+                    // Fall through to system default
+                } else {
+                    spdlog::info("MainWindow: Successfully opened file with custom editor: {} -> {}", 
+                                customEditorPath.toStdString(), actualTempPath.toStdString());
+                }
+            }
+        }
+        
+        // Use system default editor if custom failed or not configured
         if (!opened) {
-            QtDialogs::showError(this, "Error", 
-                QString("Failed to open file with system default editor.\nTemporary file: %1").arg(actualTempPath));
-            // Clean up the temp file if opening failed
-            QFile::remove(actualTempPath);
-        } else {
-            spdlog::info("MainWindow: Successfully opened file with system editor: {}", actualTempPath.toStdString());
+            QUrl fileUrl = QUrl::fromLocalFile(actualTempPath);
+            opened = QDesktopServices::openUrl(fileUrl);
+            
+            if (!opened) {
+                QtDialogs::showError(this, "Error", 
+                    QString("Failed to open file with any editor.\nTemporary file: %1").arg(actualTempPath));
+                // Clean up the temp file if opening failed
+                QFile::remove(actualTempPath);
+            } else {
+                spdlog::info("MainWindow: Successfully opened file with system default editor: {}", actualTempPath.toStdString());
+            }
         }
         
     } catch (const std::exception& e) {
         QtDialogs::showError(this, "Error", 
             QString("Failed to open text file: %1").arg(e.what()));
+    }
+}
+
+void MainWindow::showStatusMessage(const QString& message) {
+    if (_statusLabel) {
+        _statusLabel->setText(message);
+    }
+}
+
+void MainWindow::clearStatusMessage() {
+    if (_statusLabel) {
+        _statusLabel->setText("Ready");
     }
 }
 

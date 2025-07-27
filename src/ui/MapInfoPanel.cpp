@@ -24,6 +24,7 @@ MapInfoPanel::MapInfoPanel(QWidget* parent)
     , _elevationsSpin(nullptr)
     , _playerPositionSpin(nullptr)
     , _setPositionButton(nullptr)
+    , _centerViewButton(nullptr)
     , _playerElevationSpin(nullptr)
     , _playerOrientationCombo(nullptr)
     , _globalVarsSpin(nullptr)
@@ -74,11 +75,17 @@ void MapInfoPanel::setupUI() {
     QHBoxLayout* positionLayout = new QHBoxLayout();
     _playerPositionSpin = new QSpinBox();
     _playerPositionSpin->setRange(0, 39999);  // Max hex position (200x200 grid)
-    _setPositionButton = new QPushButton("📍");  // Crosshair/pin icon
+    _setPositionButton = new QPushButton();
+    _setPositionButton->setIcon(QIcon(":/icons/actions/map-pin.svg"));
     _setPositionButton->setMaximumWidth(30);
     _setPositionButton->setToolTip("Click to select position on map");
+    _centerViewButton = new QPushButton();
+    _centerViewButton->setIcon(QIcon(":/icons/actions/target-arrow.svg"));
+    _centerViewButton->setMaximumWidth(30);
+    _centerViewButton->setToolTip("Center view on player position");
     positionLayout->addWidget(_playerPositionSpin);
     positionLayout->addWidget(_setPositionButton);
+    positionLayout->addWidget(_centerViewButton);
     headerLayout->addRow("Player default position:", positionLayout);
 
     _playerElevationSpin = new QSpinBox();
@@ -135,6 +142,7 @@ void MapInfoPanel::setupUI() {
     connect(_playerElevationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
     connect(_playerOrientationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MapInfoPanel::onOrientationChanged);
     connect(_setPositionButton, &QPushButton::clicked, this, &MapInfoPanel::onSelectPositionClicked);
+    connect(_centerViewButton, &QPushButton::clicked, this, &MapInfoPanel::onCenterViewClicked);
     connect(_mapScriptIdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
     connect(_darknessSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
     connect(_timestampSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
@@ -436,6 +444,11 @@ void MapInfoPanel::onOrientationChanged(int index) {
 void MapInfoPanel::onSelectPositionClicked() {
     emit selectPlayerPositionRequested();
     spdlog::debug("MapInfoPanel: Player position selection requested");
+}
+
+void MapInfoPanel::onCenterViewClicked() {
+    emit centerViewOnPlayerPositionRequested();
+    spdlog::debug("MapInfoPanel: Center view on player position requested");
 }
 
 void MapInfoPanel::setPlayerPosition(int hexPosition) {

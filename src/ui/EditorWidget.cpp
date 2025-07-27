@@ -899,6 +899,26 @@ void EditorWidget::handleEvent(const sf::Event& event) {
             sf::Vector2f worldPos = _sfmlWidget->getRenderWindow()->mapPixelToCoords(
                 mousePressed->position, _view);
 
+            // Check if we're in player position selection mode first (prevents other selections)
+            if (_playerPositionSelectionMode) {
+                int hexPosition = worldPosToHexPosition(worldPos);
+                if (hexPosition >= 0) {
+                    emit playerPositionSelected(hexPosition);
+                    spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
+                } else {
+                    spdlog::debug("EditorWidget: Invalid hex position during player position selection");
+                }
+                
+                // Exit selection mode after selection
+                _playerPositionSelectionMode = false;
+                
+                
+                // Clear status message
+                emit statusMessageClearRequested();
+                
+                return; // Don't process as tile placement or normal selection
+            }
+            
             // Check if we're in tile placement mode
             if (_tilePlacementMode && _tilePlacementIndex >= 0 && !_tilePlacementReplaceMode) {
                 // Check if Shift is held to place roof tiles instead of floor tiles
@@ -913,19 +933,6 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                 // Don't place immediately - let mouse release handle single placement
                 // and mouse move handle area drag detection
                 return; // Don't process as selection
-            }
-            
-            // Check if we're in player position selection mode
-            if (_playerPositionSelectionMode) {
-                int hexPosition = worldPosToHexPosition(worldPos);
-                if (hexPosition >= 0) {
-                    emit playerPositionSelected(hexPosition);
-                    spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
-                }
-                
-                // Exit selection mode after selection
-                _playerPositionSelectionMode = false;
-                return; // Don't process as normal selection
             }
 
             // Detect modifier keys for multi-selection
@@ -986,6 +993,11 @@ void EditorWidget::handleEvent(const sf::Event& event) {
         }
     } else if (const auto* mouseReleased = event.getIf<sf::Event::MouseButtonReleased>()) {
         if (mouseReleased->button == sf::Mouse::Button::Left) {
+            // Check if we're in player position selection mode (prevent all other selections)
+            if (_playerPositionSelectionMode) {
+                return; // Don't process any selections during player position mode
+            }
+            
             if (_currentAction == EditorAction::TILE_PLACING) {
                 // Clear preview visuals first
                 clearDragPreview();
@@ -1269,6 +1281,12 @@ void EditorWidget::handleEvent(const sf::Event& event) {
                         _mainWindow->getTilePalettePanel()->deselectTile();
                     }
                     spdlog::info("Tile placement mode cancelled with ESC key");
+                } else if (_playerPositionSelectionMode) {
+                    // Exit player position selection mode
+                    _playerPositionSelectionMode = false;
+                    // Clear status message
+                    emit statusMessageClearRequested();
+                    spdlog::info("Player position selection mode cancelled with ESC key");
                 }
                 break;
             default:
@@ -2605,7 +2623,38 @@ void EditorWidget::enterPlayerPositionSelectionMode() {
     // Enter player position selection mode
     _playerPositionSelectionMode = true;
     
+    
+    // Show status message
+    emit statusMessageRequested("Click on a hex to set the player starting position (Press Escape to cancel)");
+    
     spdlog::debug("EditorWidget: Entered player position selection mode");
+}
+
+void EditorWidget::centerViewOnPlayerPosition() {
+    if (!_map) {
+        spdlog::warn("EditorWidget::centerViewOnPlayerPosition: No map loaded");
+        return;
+    }
+    
+    // Get player default position from map header
+    uint32_t playerHexPosition = _map->getMapFile().header.player_default_position;
+    
+    // Get the hex at the player position
+    auto hex = _hexgrid.getHexByPosition(playerHexPosition);
+    if (!hex) {
+        spdlog::warn("EditorWidget::centerViewOnPlayerPosition: Invalid player hex position {}", playerHexPosition);
+        return;
+    }
+    
+    // Get screen coordinates from the hex
+    float screenX = static_cast<float>(hex->get().x());
+    float screenY = static_cast<float>(hex->get().y());
+    
+    // Set view center to the hex position
+    _view.setCenter(sf::Vector2f(screenX, screenY));
+    
+    spdlog::debug("EditorWidget::centerViewOnPlayerPosition: Centered view on player position {} at screen ({}, {})", 
+                  playerHexPosition, screenX, screenY);
 }
 
 void EditorWidget::showLoadingErrorsSummary() {

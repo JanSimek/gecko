@@ -36,6 +36,7 @@ signals:
     void playerElevationChanged(int elevation);
     void playerOrientationChanged(int orientation);
     void selectPlayerPositionRequested();
+    void centerViewOnPlayerPositionRequested();
     void mapScriptIdChanged(int scriptId);
     void darknessChanged(int darkness);
     void timestampChanged(int timestamp);
@@ -44,6 +45,7 @@ private slots:
     void onFieldChanged();
     void onOrientationChanged(int index);
     void onSelectPositionClicked();
+    void onCenterViewClicked();
 
 private:
     void setupUI();
@@ -63,6 +65,7 @@ private:
     QSpinBox* _elevationsSpin;
     QSpinBox* _playerPositionSpin;
     QPushButton* _setPositionButton;
+    QPushButton* _centerViewButton;
     QSpinBox* _playerElevationSpin;
     QComboBox* _playerOrientationCombo;
     QSpinBox* _globalVarsSpin;

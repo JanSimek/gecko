@@ -17,6 +17,7 @@
 #include "ui/LoadingWidget.h"
 #include "ui/SettingsDialog.h"
 #include "state/loader/DataPathLoader.h"
+#include "ui/FileBrowserPanel.h"
 
 namespace geck {
 
@@ -225,12 +226,17 @@ void Application::loadDataPaths() {
     
     spdlog::info("Loading {} data paths with progress dialog", dataPaths.size());
     
-    // Create loading dialog for data paths
+    // Load Fallout 2 game data files (DAT files, directories) even when no map is loaded
+    // This is essential because:
+    // 1. ResourceManager needs access to game assets (textures, sprites, sounds)
+    // 2. File browser requires loaded data to display available maps and resources
+    // 3. Creating new maps needs tile/object assets from game data
+    // 4. Editor cannot function properly without access to FRM files and other resources
     auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
     loadingWidget->setWindowTitle("Loading Game Data");
     loadingWidget->addLoader(std::make_unique<DataPathLoader>(dataPaths));
     
-    // Show modal loading dialog
+    // Show modal loading dialog - this appears even without a map loaded
     loadingWidget->exec();
     
     // After data loading completes, refresh the file browser so it shows the loaded files

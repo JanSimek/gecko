@@ -59,6 +59,7 @@ public:
     // Access to palette panels for drag and drop and tile deselection
     ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
     TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
+    FileBrowserPanel* getFileBrowserPanel() const { return _fileBrowserPanel; }
 
 signals:
     void newMapRequested();
@@ -90,6 +91,10 @@ private slots:
     void updateHexIndexDisplay(int hexIndex);
     void showPreferences();
 
+public slots:
+    void showStatusMessage(const QString& message);
+    void clearStatusMessage();
+
 private:
     void setupUI();
     void setupMenuBar();
@@ -103,7 +108,7 @@ private:
     
     // Text file handling
     bool isTextFile(const QString& filePath) const;
-    void openTextFileWithSystemEditor(const QString& vfsFilePath);
+    void openTextFileWithEditor(const QString& vfsFilePath);
 
     // Dock widget state management
     void saveDockWidgetState();
@@ -132,6 +137,7 @@ private:
 
     // Status bar
     QStatusBar* _statusBar;
+    QLabel* _statusLabel;
     QLabel* _hexIndexLabel;
 
     // Dock widgets for panels

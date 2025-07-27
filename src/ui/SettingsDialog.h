@@ -13,6 +13,7 @@
 #include <QProgressBar>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QRadioButton>
 #include <filesystem>
 #include <vector>
 
@@ -41,10 +42,13 @@ private slots:
     void onAccept();
     void onApply();
     void onReset();
+    void onEditorModeChanged();
+    void onBrowseEditor();
 
 private:
     void setupUI();
     void setupDataPathsGroup();
+    void setupTextEditorGroup();
     void setupButtonBox();
     
     void loadSettings();
@@ -68,6 +72,16 @@ private:
     QPushButton* _removePathButton;
     QPushButton* _autoDetectButton;
     QLabel* _pathsHelpLabel;
+    
+    // Text Editor Group
+    QGroupBox* _textEditorGroup;
+    QVBoxLayout* _textEditorLayout;
+    QRadioButton* _systemEditorRadio;
+    QRadioButton* _customEditorRadio;
+    QHBoxLayout* _customEditorLayout;
+    QLineEdit* _customEditorPathEdit;
+    QPushButton* _browseEditorButton;
+    QLabel* _editorHelpLabel;
     
     // Status
     QLabel* _statusLabel;

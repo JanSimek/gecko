@@ -108,6 +108,14 @@ QJsonObject Settings::toJson() const {
     
     json["ui"] = ui;
     
+    // Text editor configuration
+    QJsonObject textEditor;
+    textEditor["mode"] = (_textEditorMode == TextEditorMode::SYSTEM_DEFAULT) ? "system" : "custom";
+    if (!_customEditorPath.isEmpty()) {
+        textEditor["customPath"] = _customEditorPath;
+    }
+    json["textEditor"] = textEditor;
+    
     return json;
 }
 
@@ -136,6 +144,18 @@ void Settings::fromJson(const QJsonObject& json) {
             for (auto it = floatingDocks.begin(); it != floatingDocks.end(); ++it) {
                 _floatingDockGeometries[it.key()] = QByteArray::fromBase64(it.value().toString().toLatin1());
             }
+        }
+    }
+    
+    // Text editor configuration
+    if (json.contains("textEditor")) {
+        QJsonObject textEditor = json["textEditor"].toObject();
+        
+        QString mode = textEditor["mode"].toString("system");
+        _textEditorMode = (mode == "custom") ? TextEditorMode::CUSTOM : TextEditorMode::SYSTEM_DEFAULT;
+        
+        if (textEditor.contains("customPath")) {
+            _customEditorPath = textEditor["customPath"].toString();
         }
     }
 }
@@ -215,6 +235,23 @@ QByteArray Settings::getFloatingDockGeometry(const QString& dockName) const {
 
 void Settings::setFloatingDockGeometry(const QString& dockName, const QByteArray& geometry) {
     _floatingDockGeometries[dockName] = geometry;
+}
+
+// Text editor configuration
+Settings::TextEditorMode Settings::getTextEditorMode() const {
+    return _textEditorMode;
+}
+
+void Settings::setTextEditorMode(TextEditorMode mode) {
+    _textEditorMode = mode;
+}
+
+QString Settings::getCustomEditorPath() const {
+    return _customEditorPath;
+}
+
+void Settings::setCustomEditorPath(const QString& path) {
+    _customEditorPath = path;
 }
 
 // Validation
