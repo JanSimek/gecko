@@ -70,7 +70,7 @@ inline int coordinatesToIndex(const TileCoordinates& coords) {
  */
 inline ScreenPosition coordinatesToScreenPosition(const TileCoordinates& coords, bool isRoof = false) {
     unsigned int x = (MAP_WIDTH - coords.y - 1) * TILE_X_OFFSET + TILE_Y_OFFSET_LARGE * coords.x;
-    unsigned int y = coords.x * TILE_Y_OFFSET_SMALL + coords.y * TILE_Y_OFFSET_TINY;
+    unsigned int y = coords.x * TILE_Y_OFFSET_SMALL + coords.y * TILE_Y_OFFSET_TINY + TILE_Y_OFFSET_TINY;
 
     if (isRoof) {
         // Apply roof offset

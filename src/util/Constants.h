@@ -26,8 +26,7 @@ constexpr int TILE_Y_OFFSET_LARGE = 32; ///< Large Y offset for tile positioning
 constexpr int TILE_Y_OFFSET_SMALL = 24; ///< Small Y offset for tile positioning
 constexpr int TILE_Y_OFFSET_TINY = 12;  ///< Tiny Y offset for tile positioning
 
-// NOTE: the original offset was 96, there is likely a bug somewhere in the positional calculation
-constexpr int ROOF_OFFSET = 84;         ///< Roof height offset (adjusted for coordinate system alignment)
+constexpr int ROOF_OFFSET = 96;         ///< Roof height offset (adjusted for coordinate system alignment)
 
 // View movement constants
 constexpr float VIEW_MOVE_STEP = 50.0f; ///< Distance to move view with arrow keys
