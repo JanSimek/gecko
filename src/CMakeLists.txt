@@ -16,6 +16,9 @@ set(GECK_SOURCES
     util/ResourceInitializer.h
     util/ResourceInitializer.cpp
 
+    util/SpriteFactory.h
+    util/SpriteFactory.cpp
+
     util/ProHelper.h
     util/ProHelper.cpp
 

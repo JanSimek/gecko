@@ -38,13 +38,6 @@ Object::Object(const Frm* frm)
         throw std::runtime_error("Cannot create Object with FRM direction that has no frames: " + frm->filename());
     }
 
-    uint32_t fid = UINT32_MAX;
-    if (_mapObject && _mapObject->frm_pid) {
-        fid = _mapObject->frm_pid;
-    }
-    spdlog::debug("Object constructor: Created object with FRM '{}' (FID: {}) ({} directions, {} frames in direction 0)",
-                  frm->filename(), fid, frm->directions().size(), frm->directions().at(0).frames().size());
-    
     // Initialize light overlay
     initializeLightOverlay();
 }
@@ -74,7 +67,7 @@ MapObject& Object::getMapObject() {
     return *_mapObject; //.get();
 }
 
-bool Object::hasMapObject() const {
+bool Object::hasMapObject() const noexcept {
     return _mapObject != nullptr;
 }
 
@@ -92,11 +85,11 @@ void Object::setSprite(sf::Sprite sprite) {
     }
 }
 
-const sf::Sprite& Object::getSprite() const {
+const sf::Sprite& Object::getSprite() const noexcept {
     return _sprite;
 }
 
-sf::Sprite& Object::getSprite() {
+sf::Sprite& Object::getSprite() noexcept {
     return _sprite;
 }
 
@@ -121,8 +114,6 @@ void Object::setFrm(const Frm* frm) {
     // Reset direction to 0 and update texture rectangle
     _direction = 0;
     setDirection(static_cast<ObjectDirection>(_direction));
-    
-    spdlog::debug("Object::setFrm - updated FRM to: {}", frm->filename());
 }
 
 void Object::setHexPosition(const Hex& hex) {
@@ -201,7 +192,7 @@ void Object::unselect() {
     _selected = false;
 }
 
-bool Object::isSelected() {
+bool Object::isSelected() const noexcept {
     return _selected;
 }
 
@@ -211,16 +202,11 @@ void Object::initializeLightOverlay() {
     _lightOverlay.setOutlineColor(sf::Color(255, 255, 150, 80)); // Brighter yellow outline
     _lightOverlay.setOutlineThickness(1.0f);
     _lightOverlay.setPointCount(6); // Hexagonal shape to match the grid
-    
-    spdlog::debug("Object: Initialized light overlay circle");
 }
 
 void Object::setShowLightOverlay(bool show) {
-    spdlog::debug("Object: setShowLightOverlay({}) called", show);
     _showLightOverlay = show;
     if (show && _mapObject) {
-        spdlog::debug("Object: Calling updateLightOverlay for mapObject with light_radius={}, light_intensity={}", 
-                     _mapObject->light_radius, _mapObject->light_intensity);
         updateLightOverlay();
     }
 }
@@ -252,12 +238,9 @@ void Object::updateLightOverlay() {
     uint8_t alpha = static_cast<uint8_t>(30 + (_mapObject->light_intensity / 65535.0f) * 70);
     color.a = alpha;
     _lightOverlay.setFillColor(color);
-    
-    spdlog::debug("Object: Updated light overlay circle at position ({}, {}) with radius {} and alpha {}", 
-                  _lightOverlay.getPosition().x, _lightOverlay.getPosition().y, radius, alpha);
 }
 
-bool Object::hasLight() const {
+bool Object::hasLight() const noexcept {
     return _mapObject && _mapObject->isLightSource();
 }
 

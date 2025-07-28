@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <optional>
 
 #include <SFML/Graphics.hpp>
 
@@ -41,16 +42,16 @@ private:
 public:
     Object(const Frm* frm);
 
-    MapObject& getMapObject();
-    bool hasMapObject() const;
+    [[nodiscard]] MapObject& getMapObject();
+    [[nodiscard]] bool hasMapObject() const noexcept;
     void setMapObject(std::shared_ptr<MapObject> newMapObject);
 
     void setSprite(sf::Sprite sprite);
-    const sf::Sprite& getSprite() const;
-    sf::Sprite& getSprite();
+    [[nodiscard]] const sf::Sprite& getSprite() const noexcept;
+    [[nodiscard]] sf::Sprite& getSprite() noexcept;
 
     void setFrm(const Frm* frm);
-    const Frm* getFrm() const { return _frm; }
+    [[nodiscard]] const Frm* getFrm() const noexcept { return _frm; }
 
     void setHexPosition(const Hex& hex);
     void setDirection(ObjectDirection direction);
@@ -58,22 +59,20 @@ public:
 
     void select();
     void unselect();
-    bool isSelected();
+    [[nodiscard]] bool isSelected() const noexcept;
     
     // Light overlay methods
     void setShowLightOverlay(bool show);
-    bool isShowingLightOverlay() const { return _showLightOverlay; }
+    [[nodiscard]] bool isShowingLightOverlay() const noexcept { return _showLightOverlay; }
     void updateLightOverlay();
-    const sf::CircleShape& getLightOverlay() const { return _lightOverlay; }
-    bool hasLight() const;
+    [[nodiscard]] const sf::CircleShape& getLightOverlay() const noexcept { return _lightOverlay; }
+    [[nodiscard]] bool hasLight() const noexcept;
 
-    // sf::RectangleShape border -> selected
+    [[nodiscard]] int16_t shiftX() const;
+    [[nodiscard]] int16_t shiftY() const;
 
-    int16_t shiftX() const;
-    int16_t shiftY() const;
-
-    int width() const;
-    int height() const;
+    [[nodiscard]] int width() const;
+    [[nodiscard]] int height() const;
 
 private:
     static sf::Texture& createBlankTexture();

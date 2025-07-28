@@ -44,46 +44,48 @@ public:
     }
 
     template <class T, typename Key>
-    T* getResource(const Key& filepath);
+    [[nodiscard]] T* getResource(const Key& filepath);
 
     void cleanup();
 
     // Store a custom texture in the resource manager
-    void storeTexture(const std::string& name, std::unique_ptr<sf::Texture> texture);
+    void storeTexture(std::string_view name, std::unique_ptr<sf::Texture> texture);
 
     template <class Resource>
-    Resource* loadResource(const std::filesystem::path& path) {
+    [[nodiscard]] Resource* loadResource(const std::filesystem::path& path) {
         static_assert(std::is_base_of<IFile, Resource>::value, "Resource must derive from IFile");
 
-        std::string pathKey = path.string();
+        const std::string pathKey = path.string();
         
-        if (!exists(pathKey)) {
+        // Use try_emplace for better performance
+        if (const auto [iter, inserted] = _resources.try_emplace(pathKey); inserted) {
             // Detect format and create appropriate reader
-            auto format = ReaderFactory::detectFormat(path);
+            const auto format = ReaderFactory::detectFormat(path);
             auto reader = ReaderFactory::createReader<Resource>(format);
 
             // vfspp adds / to the root by default
-            std::filesystem::path vfsPath = "/" / path;
+            const std::filesystem::path vfsPath = "/" / path;
             vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::createNormalizedFileInfo(vfsPath), vfspp::IFile::FileMode::Read);
 
             if (!file || !file->IsOpened()) {
+                _resources.erase(iter); // Clean up failed insertion
                 throw std::runtime_error{ "Failed to open file from VFS: " + vfsPath.string() };
             }
             std::vector<uint8_t> data(file->Size());
             file->Read(data, file->Size());
-            _resources.emplace(pathKey, std::move(reader->openFile(pathKey, data)));
+            iter->second = reader->openFile(pathKey, data);
         }
 
         return dynamic_cast<Resource*>(_resources.at(pathKey).get());
     }
 
-    bool exists(const std::string& filename);
-    bool fileExistsInVFS(const std::filesystem::path& filepath) const;
-    void insertTexture(const std::string& filename);
+    [[nodiscard]] bool exists(std::string_view filename) const;
+    [[nodiscard]] bool fileExistsInVFS(const std::filesystem::path& filepath) const;
+    void insertTexture(std::string_view filename);
 
-    const sf::Texture& texture(const std::string& filename);
+    [[nodiscard]] const sf::Texture& texture(std::string_view filename);
 
-    std::string FIDtoFrmName(unsigned int FID);
+    [[nodiscard]] std::string FIDtoFrmName(unsigned int FID);
 
     void addDataPath(const std::filesystem::path& path);
 

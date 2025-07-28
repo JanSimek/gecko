@@ -46,13 +46,13 @@ void ResourceManager::cleanup() {
     spdlog::info("ResourceManager cleanup completed");
 }
 
-void ResourceManager::storeTexture(const std::string& name, std::unique_ptr<sf::Texture> texture) {
-    _textures[name] = std::move(texture);
+void ResourceManager::storeTexture(std::string_view name, std::unique_ptr<sf::Texture> texture) {
+    _textures.try_emplace(std::string{name}, std::move(texture));
 }
 
-bool ResourceManager::exists(const std::string& filename) {
-    return _textures.find(filename) != _textures.end()
-        || _resources.find(filename) != _resources.end();
+bool ResourceManager::exists(std::string_view filename) const {
+    const std::string filenameStr{filename};
+    return _textures.contains(filenameStr) || _resources.contains(filenameStr);
 }
 
 bool ResourceManager::fileExistsInVFS(const std::filesystem::path& filepath) const {
@@ -69,60 +69,59 @@ bool ResourceManager::fileExistsInVFS(const std::filesystem::path& filepath) con
     return file != nullptr;
 }
 
-void ResourceManager::insertTexture(const std::string& filename) {
+void ResourceManager::insertTexture(std::string_view filename) {
+    const std::string filenameStr{filename};
     // Check if texture is already in cache
-    if (_textures.find(filename) != _textures.end()) {
+    if (_textures.contains(filenameStr)) {
         return;
     }
 
     // lowercase file extension
     std::string extension = [&]() {
-        std::string s = std::filesystem::path(filename).extension().string();
+        std::string s = std::filesystem::path(filenameStr).extension().string();
         std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
         return s;
     }();
 
     if (extension.rfind(".frm", 0) == 0) { // frm, frm0, frmX..
-        loadResource<Frm>(filename);
+        [[maybe_unused]] auto frm = loadResource<Frm>(filenameStr);
     } else {
         auto texture = std::make_unique<sf::Texture>();
-        if (!texture->loadFromFile(filename)) { // default to SFML's implementation
-            throw std::runtime_error{ "Failed to load texture " + filename + ", extension: " + extension };
+        if (!texture->loadFromFile(filenameStr)) { // default to SFML's implementation
+            throw std::runtime_error{ "Failed to load texture " + filenameStr + ", extension: " + extension };
         }
-        _textures.insert(std::make_pair(filename, std::move(texture)));
+        _textures.try_emplace(filenameStr, std::move(texture));
     }
 }
 
-const sf::Texture& ResourceManager::texture(const std::string& filename) {
-    const auto& found = _textures.find(filename);
+const sf::Texture& ResourceManager::texture(std::string_view filename) {
+    const std::string filenameStr{filename};
+    const auto found = _textures.find(filenameStr);
     
     if (found != _textures.end()) {
-        spdlog::debug("ResourceManager::texture - returning cached texture for: {}, ptr: {}", 
-                     filename, static_cast<const void*>(found->second.get()));
         return *found->second;
     }
 
-    if (found == _textures.end()) {
-        auto frm = getResource<Frm>(filename); // TODO: check extension?
+    auto frm = getResource<Frm>(filenameStr); // TODO: check extension?
 
-        if (frm == nullptr) {
-            // Try on-demand loading if FRM resource not found
-            try {
-                insertTexture(filename);
-                
-                frm = getResource<Frm>(filename);
-                if (frm == nullptr) {
-                    // Check if texture was created directly (for non-FRM files)
-                    const auto& foundAfterLoad = _textures.find(filename);
-                    if (foundAfterLoad != _textures.end()) {
-                        return *foundAfterLoad->second;
-                    }
-                    // If still null, this file doesn't exist
-                    throw std::runtime_error{ "Texture " + filename + " does not exist" };
+    if (frm == nullptr) {
+        // Try on-demand loading if FRM resource not found
+        try {
+            insertTexture(filename);
+            
+            frm = getResource<Frm>(filenameStr);
+            if (frm == nullptr) {
+                // Check if texture was created directly (for non-FRM files)
+                const auto foundAfterLoad = _textures.find(filenameStr);
+                if (foundAfterLoad != _textures.end()) {
+                    return *foundAfterLoad->second;
                 }
-            } catch (const std::exception& e) {
+                // If still null, this file doesn't exist
+                throw std::runtime_error{ "Texture " + filenameStr + " does not exist" };
+            }
+        } catch (const std::exception& e) {
                 spdlog::error("ResourceManager: On-demand texture loading failed for {}: {}", filename, e.what());
-                throw std::runtime_error{ "Texture " + filename + " does not exist" };
+                throw std::runtime_error{ "Texture " + filenameStr + " does not exist" };
             }
         }
 
@@ -131,28 +130,26 @@ const sf::Texture& ResourceManager::texture(const std::string& filename) {
         // Load palette for FRM texture creation
         auto pal = loadResource<Pal>("color.pal"); // TODO: custom pal
         if (!pal) {
-            throw std::runtime_error{ "Failed to load color palette for texture " + filename };
+            throw std::runtime_error{ "Failed to load color palette for texture " + filenameStr };
         }
 
         // Create image from FRM and load it into texture
         try {
-            sf::Image image = imageFromFrm(frm, pal);
+            const sf::Image image = imageFromFrm(frm, pal);
             if (!texture->loadFromImage(image)) {
-                throw std::runtime_error{ "Failed to load texture from FRM image: " + filename };
+                throw std::runtime_error{ "Failed to load texture from FRM image: " + filenameStr };
             }
         } catch (const std::exception& e) {
-            throw std::runtime_error{ "Failed to create texture from FRM " + filename + ": " + e.what() };
+            throw std::runtime_error{ "Failed to create texture from FRM " + filenameStr + ": " + e.what() };
         }
 
-        // Store texture in cache
-        auto loaded = _textures.emplace(filename, std::move(texture));
-        if (loaded.second) {
-            return *loaded.first->second;
+        // Store texture in cache using try_emplace
+        const auto [iter, inserted] = _textures.try_emplace(filenameStr, std::move(texture));
+        if (inserted) {
+            return *iter->second;
         } else {
-            throw std::runtime_error{ "Failed to cache texture " + filename };
+            throw std::runtime_error{ "Failed to cache texture " + filenameStr };
         }
-    }
-    return *found->second;
 }
 
 void ResourceManager::addDataPath(const std::filesystem::path& path) {

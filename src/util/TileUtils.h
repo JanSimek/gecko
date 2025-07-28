@@ -1,5 +1,6 @@
 #pragma once
 
+#include <tuple>
 #include <SFML/Graphics.hpp>
 #include "Constants.h"
 
@@ -14,26 +15,42 @@ namespace geck {
 
 /**
  * @brief Represents tile coordinates in the grid
+ * Supports structured bindings: auto [x, y] = coords;
  */
 struct TileCoordinates {
     unsigned int x; ///< X coordinate (row) in the tile grid
     unsigned int y; ///< Y coordinate (column) in the tile grid
 
-    TileCoordinates(unsigned int initX = 0, unsigned int initY = 0)
+    constexpr TileCoordinates(unsigned int initX = 0, unsigned int initY = 0) noexcept
         : x(initX)
         , y(initY) { }
+
+    // Support for structured bindings
+    template<std::size_t I>
+    [[nodiscard]] constexpr auto get() const noexcept {
+        if constexpr (I == 0) return x;
+        else if constexpr (I == 1) return y;
+    }
 };
 
 /**
  * @brief Represents screen position in pixels
+ * Supports structured bindings: auto [x, y] = screenPos;
  */
 struct ScreenPosition {
     unsigned int x; ///< X position in pixels
     unsigned int y; ///< Y position in pixels
 
-    ScreenPosition(unsigned int posX = 0, unsigned int posY = 0)
+    constexpr ScreenPosition(unsigned int posX = 0, unsigned int posY = 0) noexcept
         : x(posX)
         , y(posY) { }
+
+    // Support for structured bindings
+    template<std::size_t I>
+    [[nodiscard]] constexpr auto get() const noexcept {
+        if constexpr (I == 0) return x;
+        else if constexpr (I == 1) return y;
+    }
 };
 
 /**
@@ -157,3 +174,17 @@ inline void removePreviewHighlight(sf::Sprite& sprite) {
 }
 
 } // namespace geck
+
+// Structured binding support for TileCoordinates
+namespace std {
+    template<> struct tuple_size<geck::TileCoordinates> : integral_constant<size_t, 2> {};
+    template<> struct tuple_element<0, geck::TileCoordinates> { using type = unsigned int; };
+    template<> struct tuple_element<1, geck::TileCoordinates> { using type = unsigned int; };
+}
+
+// Structured binding support for ScreenPosition
+namespace std {
+    template<> struct tuple_size<geck::ScreenPosition> : integral_constant<size_t, 2> {};
+    template<> struct tuple_element<0, geck::ScreenPosition> { using type = unsigned int; };
+    template<> struct tuple_element<1, geck::ScreenPosition> { using type = unsigned int; };
+}

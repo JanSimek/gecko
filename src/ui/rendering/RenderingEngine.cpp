@@ -9,9 +9,7 @@
 
 namespace geck {
 
-RenderingEngine::RenderingEngine() {
-    // Constructor - currently empty but allows for future initialization
-}
+RenderingEngine::RenderingEngine() = default;
 
 void RenderingEngine::render(sf::RenderWindow* window, 
                             const sf::View& view,
@@ -66,7 +64,6 @@ void RenderingEngine::renderHexGrid(sf::RenderWindow* window,
                                    const sf::View& view,
                                    const RenderData& renderData) {
     if (!renderData.hexGrid || !renderData.hexSprite) {
-        spdlog::debug("renderHexGrid: Missing hex grid data");
         return;
     }
 

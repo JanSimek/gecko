@@ -5,38 +5,36 @@
 #include "dragdrop/DragDropManager.h"
 #include "tiles/TilePlacementManager.h"
 #include "viewport/ViewportController.h"
-
-#include <spdlog/spdlog.h>
-#include <spdlog/stopwatch.h>
-#include <cmath>     // ceil, sqrt, pow
-#include <algorithm> // std::sort, std::find, std::max, std::min
-#include <limits>    // std::numeric_limits
-#include <cstdlib>   // std::abs
-#include <set>       // std::set
-#include "../util/Constants.h"
-#include "../util/ColorUtils.h"
-#include "../editor/Object.h"
-#include "../util/ResourceInitializer.h"
-#include "../editor/HexagonGrid.h"
-#include "../format/frm/Frm.h"
-#include "../util/TileUtils.h"
-#include "../util/QtDialogs.h"
-
-#include "../editor/Object.h"
-#include "../format/lst/Lst.h"
-
-#include "../writer/map/MapWriter.h"
-
-#include "../format/frm/Frm.h"
-#include "../format/map/Tile.h"
-#include "../format/pro/Pro.h"
-#include "../format/map/MapObject.h"
 #include "ObjectPalettePanel.h"
 #include "TilePalettePanel.h"
 #include "MainWindow.h"
-#include "rendering/RenderingEngine.h"
 
+#include <spdlog/spdlog.h>
+#include <spdlog/stopwatch.h>
+#include <cmath>
+#include <algorithm>
+#include <limits>
+#include <cstdlib>
+#include <set>
+
+#include "../util/Constants.h"
+#include "../util/ColorUtils.h"
+#include "../util/ResourceInitializer.h"
+#include "../util/TileUtils.h"
+#include "../util/QtDialogs.h"
 #include "../util/ProHelper.h"
+#include "../util/SpriteFactory.h"
+
+#include "../editor/Object.h"
+#include "../editor/HexagonGrid.h"
+
+#include "../format/frm/Frm.h"
+#include "../format/lst/Lst.h"
+#include "../format/map/Tile.h"
+#include "../format/pro/Pro.h"
+#include "../format/map/MapObject.h"
+
+#include "../writer/map/MapWriter.h"
 
 namespace geck {
 
@@ -606,16 +604,11 @@ std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPositi
     mapObject->unknown10 = 0;
     mapObject->unknown11 = 0;
     
-    spdlog::debug("Created scroll blocker object at hex {} (frm_pid: 0x{:08X}, pro_pid: 0x{:08X})", 
-                 hexPosition, mapObject->frm_pid, mapObject->pro_pid);
-    
     return mapObject;
 }
 
 // Tiles
 void EditorWidget::loadTileSprites() {
-    const auto& lst = ResourceManager::getInstance().getResource<Lst, std::string>("art/tiles/tiles.lst");
-
     // Clear previous sprites and reserve space
     _floorSprites.clear();
     _roofSprites.clear();
@@ -629,41 +622,15 @@ void EditorWidget::loadTileSprites() {
     }
 
     for (auto tileNumber = 0U; tileNumber < Map::TILES_PER_ELEVATION; ++tileNumber) {
-        auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileNumber);
+        const auto& tile = _map->getMapFile().tiles.at(_currentElevation).at(tileNumber);
 
-        // Convert tile number to hex grid coordinates using utility function
-        auto coords = indexToCoordinates(static_cast<int>(tileNumber));
+        // Convert tile number to screen coordinates
+        const auto coords = indexToCoordinates(static_cast<int>(tileNumber));
+        const auto screenPos = coordinatesToScreenPosition(coords);
 
-        // Convert to screen coordinates using utility function
-        auto screenPos = coordinatesToScreenPosition(coords);
-
-        const auto& createTileSprite = [&](const uint16_t tile_id, int offset = 0) {
-            sf::Sprite tile_sprite(ResourceManager::getInstance().texture("art/tiles/" + lst->at(tile_id)));
-            tile_sprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) - offset });
-            return tile_sprite;
-        };
-
-        // floor
-        uint16_t floorId = tile.getFloor();
-        if (floorId == Map::EMPTY_TILE) {
-            sf::Sprite tile_sprite(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
-            tile_sprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-            _floorSprites.push_back(tile_sprite);
-        } else {
-            _floorSprites.push_back(createTileSprite(floorId));
-        }
-
-        // roof
-        uint16_t roofId = tile.getRoof();
-        if (roofId == Map::EMPTY_TILE) {
-            sf::Sprite tile_sprite(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
-            tile_sprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) - ROOF_OFFSET });
-            // Make empty roof tiles fully transparent by default
-            tile_sprite.setColor(geck::TileColors::transparent());
-            _roofSprites.push_back(tile_sprite);
-        } else {
-            _roofSprites.push_back(createTileSprite(roofId, ROOF_OFFSET));
-        }
+        // Create floor and roof sprites using factory
+        _floorSprites.push_back(SpriteFactory::createFloorTileSprite(tile.getFloor(), screenPos));
+        _roofSprites.push_back(SpriteFactory::createRoofTileSprite(tile.getRoof(), screenPos));
     }
 }
 
