@@ -40,12 +40,15 @@ signals:
     void mapScriptIdChanged(int scriptId);
     void darknessChanged(int darkness);
     void timestampChanged(int timestamp);
+    void elevationAdded(int elevation);
+    void elevationRemoved(int elevation);
 
 private slots:
     void onFieldChanged();
     void onOrientationChanged(int index);
     void onSelectPositionClicked();
     void onCenterViewClicked();
+    void onElevationCheckboxChanged();
 
 private:
     void setupUI();
@@ -53,6 +56,7 @@ private:
     void loadScriptVars();
     void clearMapInfo();
     void updateMapScriptsDisplay();
+    void updateElevationCheckboxStates();
 
     QVBoxLayout* _mainLayout;
     QScrollArea* _scrollArea;
@@ -62,7 +66,9 @@ private:
     // Map header group
     QGroupBox* _mapHeaderGroup;
     QLineEdit* _filenameEdit;
-    QSpinBox* _elevationsSpin;
+    QCheckBox* _elevation1Check;
+    QCheckBox* _elevation2Check; 
+    QCheckBox* _elevation3Check;
     QSpinBox* _playerPositionSpin;
     QPushButton* _setPositionButton;
     QPushButton* _centerViewButton;

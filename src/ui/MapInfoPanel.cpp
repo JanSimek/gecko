@@ -2,6 +2,7 @@
 
 #include <QHeaderView>
 #include <QApplication>
+#include <QMessageBox>
 #include <spdlog/spdlog.h>
 #include <filesystem>
 
@@ -21,7 +22,9 @@ MapInfoPanel::MapInfoPanel(QWidget* parent)
     , _contentLayout(nullptr)
     , _mapHeaderGroup(nullptr)
     , _filenameEdit(nullptr)
-    , _elevationsSpin(nullptr)
+    , _elevation1Check(nullptr)
+    , _elevation2Check(nullptr)
+    , _elevation3Check(nullptr)
     , _playerPositionSpin(nullptr)
     , _setPositionButton(nullptr)
     , _centerViewButton(nullptr)
@@ -66,10 +69,21 @@ void MapInfoPanel::setupUI() {
     _filenameEdit = new QLineEdit();
     headerLayout->addRow("Filename:", _filenameEdit);
 
-    _elevationsSpin = new QSpinBox();
-    _elevationsSpin->setRange(ELEVATION_1, ELEVATION_3);
-    _elevationsSpin->setButtonSymbols(QAbstractSpinBox::PlusMinus);
-    headerLayout->addRow("Map elevations:", _elevationsSpin);
+    // Elevation checkboxes
+    QWidget* elevationsWidget = new QWidget();
+    QVBoxLayout* elevationsLayout = new QVBoxLayout(elevationsWidget);
+    elevationsLayout->setContentsMargins(0, 0, 0, 0);
+    elevationsLayout->setSpacing(5);
+    
+    _elevation1Check = new QCheckBox("Elevation 1");
+    _elevation2Check = new QCheckBox("Elevation 2");
+    _elevation3Check = new QCheckBox("Elevation 3");
+    
+    elevationsLayout->addWidget(_elevation1Check);
+    elevationsLayout->addWidget(_elevation2Check);
+    elevationsLayout->addWidget(_elevation3Check);
+    
+    headerLayout->addRow("Map elevations:", elevationsWidget);
 
     // Player position with button
     QHBoxLayout* positionLayout = new QHBoxLayout();
@@ -147,6 +161,11 @@ void MapInfoPanel::setupUI() {
     connect(_darknessSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
     connect(_timestampSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
     connect(_savegameCheck, &QCheckBox::toggled, this, &MapInfoPanel::onFieldChanged);
+    
+    // Connect elevation checkbox signals
+    connect(_elevation1Check, &QCheckBox::toggled, this, &MapInfoPanel::onElevationCheckboxChanged);
+    connect(_elevation2Check, &QCheckBox::toggled, this, &MapInfoPanel::onElevationCheckboxChanged);
+    connect(_elevation3Check, &QCheckBox::toggled, this, &MapInfoPanel::onElevationCheckboxChanged);
 
     // Global variables group
     _globalVarsGroup = new QGroupBox("Map Global Variables");
@@ -201,23 +220,28 @@ void MapInfoPanel::updateMapInfo() {
     try {
         auto& mapInfo = _map->getMapFile();
 
-        int elevations = 0;
-        if ((mapInfo.header.flags & 0x2) == 0) {
-            spdlog::debug("Map has elevation at level 1");
-            elevations++;
-        }
-        if ((mapInfo.header.flags & 0x4) == 0) {
-            spdlog::debug("Map has elevation at level 2");
-            elevations++;
-        }
-        if ((mapInfo.header.flags & 0x8) == 0) {
-            spdlog::debug("Map has elevation at level 3");
-            elevations++;
-        }
+        // Update elevation checkboxes based on flags (inverted logic: 0 = enabled, 1 = disabled)
+        bool hasElevation1 = (mapInfo.header.flags & 0x2) == 0;
+        bool hasElevation2 = (mapInfo.header.flags & 0x4) == 0;
+        bool hasElevation3 = (mapInfo.header.flags & 0x8) == 0;
+        
+        // Temporarily disconnect signals to avoid triggering changes during update
+        _elevation1Check->blockSignals(true);
+        _elevation2Check->blockSignals(true);
+        _elevation3Check->blockSignals(true);
+        
+        _elevation1Check->setChecked(hasElevation1);
+        _elevation2Check->setChecked(hasElevation2);
+        _elevation3Check->setChecked(hasElevation3);
+        
+        _elevation1Check->blockSignals(false);
+        _elevation2Check->blockSignals(false);
+        _elevation3Check->blockSignals(false);
+        
+        spdlog::debug("Map elevations: 1={}, 2={}, 3={}", hasElevation1, hasElevation2, hasElevation3);
 
         // Update map header information
         _filenameEdit->setText(QString::fromStdString(mapInfo.header.filename));
-        _elevationsSpin->setValue(elevations);
         _playerPositionSpin->setValue(static_cast<int>(mapInfo.header.player_default_position));
         _playerElevationSpin->setValue(static_cast<int>(mapInfo.header.player_default_elevation));
         _playerOrientationCombo->setCurrentIndex(static_cast<int>(mapInfo.header.player_default_orientation));
@@ -280,6 +304,9 @@ void MapInfoPanel::updateMapInfo() {
         
         // Update map scripts display
         updateMapScriptsDisplay();
+        
+        // Update elevation checkbox states (disable last remaining elevation)
+        updateElevationCheckboxStates();
 
     } catch (const std::exception& e) {
         spdlog::error("Error updating map info: {}", e.what());
@@ -350,7 +377,18 @@ void MapInfoPanel::clearMapInfo() {
     _filenameEdit->clear();
     _filenameEdit->setPlaceholderText("No map loaded");
 
-    _elevationsSpin->setValue(0);
+    // Clear elevation checkboxes
+    _elevation1Check->blockSignals(true);
+    _elevation2Check->blockSignals(true);
+    _elevation3Check->blockSignals(true);
+    
+    _elevation1Check->setChecked(false);
+    _elevation2Check->setChecked(false);
+    _elevation3Check->setChecked(false);
+    
+    _elevation1Check->blockSignals(false);
+    _elevation2Check->blockSignals(false);
+    _elevation3Check->blockSignals(false);
     _playerPositionSpin->setValue(0);
     _playerElevationSpin->setValue(0);
     _playerOrientationCombo->setCurrentIndex(0);
@@ -565,6 +603,163 @@ void MapInfoPanel::updateMapScriptsDisplay() {
         _mapScriptsLabel->setText(errorMsg);
         _mapScriptsLabel->setStyleSheet("color: #D32F2F; font-style: italic; font-family: monospace;");
         spdlog::error("Error updating map scripts display: {}", e.what());
+    }
+}
+
+void MapInfoPanel::updateElevationCheckboxStates() {
+    if (!_map) {
+        return;
+    }
+    
+    auto& mapFile = _map->getMapFile();
+    
+    // Count how many elevations are currently enabled
+    int enabledCount = 0;
+    bool hasElevation1 = (mapFile.header.flags & 0x2) == 0;
+    bool hasElevation2 = (mapFile.header.flags & 0x4) == 0;
+    bool hasElevation3 = (mapFile.header.flags & 0x8) == 0;
+    
+    if (hasElevation1) enabledCount++;
+    if (hasElevation2) enabledCount++;
+    if (hasElevation3) enabledCount++;
+    
+    // If only one elevation remains, disable that checkbox to prevent removal
+    // (but only if it's currently checked - we don't want to prevent adding elevations)
+    if (enabledCount <= 1) {
+        if (hasElevation1 && _elevation1Check->isChecked()) {
+            _elevation1Check->setEnabled(false);
+            _elevation1Check->setToolTip("Cannot remove the last remaining elevation");
+        }
+        if (hasElevation2 && _elevation2Check->isChecked()) {
+            _elevation2Check->setEnabled(false);
+            _elevation2Check->setToolTip("Cannot remove the last remaining elevation");
+        }
+        if (hasElevation3 && _elevation3Check->isChecked()) {
+            _elevation3Check->setEnabled(false);
+            _elevation3Check->setToolTip("Cannot remove the last remaining elevation");
+        }
+    } else {
+        // Multiple elevations exist, enable all checkboxes
+        _elevation1Check->setEnabled(true);
+        _elevation1Check->setToolTip("");
+        _elevation2Check->setEnabled(true);
+        _elevation2Check->setToolTip("");
+        _elevation3Check->setEnabled(true);
+        _elevation3Check->setToolTip("");
+    }
+    
+    spdlog::debug("MapInfoPanel: Updated elevation checkbox states - {} elevations enabled", enabledCount);
+}
+
+void MapInfoPanel::onElevationCheckboxChanged() {
+    if (!_map) {
+        return;
+    }
+    
+    // Determine which checkbox triggered the change and what elevation it represents
+    QCheckBox* sender = qobject_cast<QCheckBox*>(QObject::sender());
+    if (!sender) {
+        return;
+    }
+    
+    int elevation = -1;
+    uint32_t flagBit = 0;
+    QString elevationName;
+    
+    if (sender == _elevation1Check) {
+        elevation = ELEVATION_1;
+        flagBit = 0x2;
+        elevationName = "Elevation 1";
+    } else if (sender == _elevation2Check) {
+        elevation = ELEVATION_2;
+        flagBit = 0x4;
+        elevationName = "Elevation 2";
+    } else if (sender == _elevation3Check) {
+        elevation = ELEVATION_3;
+        flagBit = 0x8;
+        elevationName = "Elevation 3";
+    } else {
+        return;
+    }
+    
+    auto& mapFile = _map->getMapFile();
+    bool isChecked = sender->isChecked();
+    bool wasEnabled = (mapFile.header.flags & flagBit) == 0;
+    
+    if (isChecked && !wasEnabled) {
+        // Adding elevation - enable it in the map
+        mapFile.header.flags &= ~flagBit; // Clear bit to enable elevation
+        
+        // Initialize empty tile data for this elevation if it doesn't exist
+        if (mapFile.tiles.find(elevation) == mapFile.tiles.end()) {
+            mapFile.tiles[elevation].clear();
+            mapFile.tiles[elevation].reserve(Map::TILES_PER_ELEVATION);
+            
+            // Fill with empty tiles
+            for (unsigned int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+                mapFile.tiles[elevation].emplace_back(Map::EMPTY_TILE, Map::EMPTY_TILE);
+            }
+        }
+        
+        // Initialize empty object list for this elevation if it doesn't exist
+        if (mapFile.map_objects.find(elevation) == mapFile.map_objects.end()) {
+            mapFile.map_objects[elevation].clear();
+        }
+        
+        emit elevationAdded(elevation);
+        spdlog::info("MapInfoPanel: Added {} to map", elevationName.toStdString());
+        
+        // Update checkbox states after adding elevation
+        updateElevationCheckboxStates();
+        
+    } else if (!isChecked && wasEnabled) {
+        // Removing elevation - show confirmation dialog
+        QString message = QString("Are you sure you want to remove %1?\n\n"
+                                "This will permanently delete:\n"
+                                "• All tiles on this elevation\n"
+                                "• All objects on this elevation\n"
+                                "• Any scripts associated with objects on this elevation\n\n"
+                                "This action cannot be undone.").arg(elevationName);
+        
+        QMessageBox::StandardButton reply = QMessageBox::question(
+            this,
+            "Remove Elevation",
+            message,
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No
+        );
+        
+        if (reply == QMessageBox::Yes) {
+            // User confirmed removal
+            mapFile.header.flags |= flagBit; // Set bit to disable elevation
+            
+            // Remove tile data for this elevation
+            auto tileIt = mapFile.tiles.find(elevation);
+            if (tileIt != mapFile.tiles.end()) {
+                tileIt->second.clear();
+                mapFile.tiles.erase(tileIt);
+            }
+            
+            // Remove object data for this elevation
+            auto objectIt = mapFile.map_objects.find(elevation);
+            if (objectIt != mapFile.map_objects.end()) {
+                objectIt->second.clear();
+                mapFile.map_objects.erase(objectIt);
+            }
+            
+            emit elevationRemoved(elevation);
+            spdlog::info("MapInfoPanel: Removed {} from map", elevationName.toStdString());
+            
+            // Update checkbox states after removing elevation
+            updateElevationCheckboxStates();
+            
+        } else {
+            // User cancelled - revert checkbox state
+            sender->blockSignals(true);
+            sender->setChecked(true);
+            sender->blockSignals(false);
+            spdlog::debug("MapInfoPanel: Elevation removal cancelled by user");
+        }
     }
 }
 

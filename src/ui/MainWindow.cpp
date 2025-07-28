@@ -844,6 +844,40 @@ void MainWindow::connectToEditorWidget() {
                 _currentEditorWidget, &EditorWidget::enterPlayerPositionSelectionMode);
         connect(_mapInfoPanel, &MapInfoPanel::centerViewOnPlayerPositionRequested,
                 _currentEditorWidget, &EditorWidget::centerViewOnPlayerPosition);
+        
+        // Connect elevation added/removed signals to update elevation menu
+        connect(_mapInfoPanel, &MapInfoPanel::elevationAdded,
+                this, [this](int elevation) {
+                    updateElevationMenu(_currentEditorWidget->getMap());
+                    
+                    // If the added elevation is the current one, reload sprites
+                    if (_currentEditorWidget->getCurrentElevation() == elevation) {
+                        _currentEditorWidget->loadTileSprites();
+                        spdlog::info("MainWindow: Reloaded sprites for newly added elevation {}", elevation);
+                    }
+                });
+        connect(_mapInfoPanel, &MapInfoPanel::elevationRemoved,
+                this, [this](int elevation) {
+                    updateElevationMenu(_currentEditorWidget->getMap());
+                    
+                    // If the removed elevation was the current one, switch to an available elevation
+                    if (_currentEditorWidget->getCurrentElevation() == elevation) {
+                        // Find first available elevation and switch to it
+                        auto* map = _currentEditorWidget->getMap();
+                        if (map) {
+                            uint32_t flags = map->getMapFile().header.flags;
+                            if ((flags & 0x2) == 0) { // Elevation 1 available
+                                elevationChanged(ELEVATION_1);
+                            } else if ((flags & 0x4) == 0) { // Elevation 2 available  
+                                elevationChanged(ELEVATION_2);
+                            } else if ((flags & 0x8) == 0) { // Elevation 3 available
+                                elevationChanged(ELEVATION_3);
+                            }
+                        }
+                        spdlog::info("MainWindow: Switched away from removed elevation {}", elevation);
+                    }
+                });
+        
         connect(_currentEditorWidget, &EditorWidget::playerPositionSelected, 
                 this, [this](int hexPosition) {
                     if (_mapInfoPanel) {

@@ -147,6 +147,9 @@ signals:
 public slots:
     void onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
     void onObjectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
+    
+    // Sprite loading methods (public for MainWindow access)
+    void loadTileSprites();
 
 private:
     // Object management
@@ -172,7 +175,6 @@ private:
     void initializeSelectionSystem();
 
     void loadSprites();
-    void loadTileSprites();
     void loadObjectSprites();
     void showLoadingErrorsSummary();
 

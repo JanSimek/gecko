@@ -379,6 +379,14 @@ void geck::SelectionPanel::updateTileInfo() {
     try {
         // Get the actual tile data from the map
         auto& mapFile = _map->getMapFile();
+        
+        // Check if the selected elevation exists in the map data
+        if (mapFile.tiles.find(_selectedElevation) == mapFile.tiles.end()) {
+            spdlog::warn("SelectionPanel::updateTileInfo: Selected elevation {} does not exist in map data", _selectedElevation);
+            clearTileInfo();
+            return;
+        }
+        
         auto& tile = mapFile.tiles.at(_selectedElevation).at(_selectedTileIndex);
 
         // Calculate hex coordinates from tile index

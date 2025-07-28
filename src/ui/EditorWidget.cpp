@@ -112,7 +112,8 @@ void EditorWidget::initializeSelectionSystem() {
 
                 case selection::SelectionType::ROOF_TILE: {
                     int tileIndex = item.getTileIndex();
-                    if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
+                    if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION) &&
+                        _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
                         // Check if this is an empty roof tile and we're in ROOF_TILES_ALL mode
                         [[maybe_unused]] auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
                         // Apply highlighting to roof sprite with higher visibility for better contrast
@@ -621,6 +622,12 @@ void EditorWidget::loadTileSprites() {
     _floorSprites.reserve(Map::TILES_PER_ELEVATION);
     _roofSprites.reserve(Map::TILES_PER_ELEVATION);
 
+    // Check if current elevation exists in the map data
+    if (!_map || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
+        spdlog::warn("EditorWidget::loadTileSprites: Current elevation {} does not exist in map data", _currentElevation);
+        return;
+    }
+
     for (auto tileNumber = 0U; tileNumber < Map::TILES_PER_ELEVATION; ++tileNumber) {
         auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileNumber);
 
@@ -841,12 +848,19 @@ void EditorWidget::clearAllVisualSelections() {
     }
 
     // Reset roof sprites - empty tiles back to transparent, others to white
-    for (int i = 0; i < static_cast<int>(_roofSprites.size()); ++i) {
-        auto tile = _map->getMapFile().tiles.at(_currentElevation).at(i);
-        if (tile.getRoof() == Map::EMPTY_TILE) {
-            _roofSprites[i].setColor(geck::TileColors::transparent()); // Transparent
-        } else {
-            _roofSprites[i].setColor(sf::Color::White); // Opaque white
+    if (_map && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
+        for (int i = 0; i < static_cast<int>(_roofSprites.size()); ++i) {
+            auto tile = _map->getMapFile().tiles.at(_currentElevation).at(i);
+            if (tile.getRoof() == Map::EMPTY_TILE) {
+                _roofSprites[i].setColor(geck::TileColors::transparent()); // Transparent
+            } else {
+                _roofSprites[i].setColor(sf::Color::White); // Opaque white
+            }
+        }
+    } else {
+        // If elevation doesn't exist, just set all roof sprites to white
+        for (auto& roofSprite : _roofSprites) {
+            roofSprite.setColor(sf::Color::White);
         }
     }
 
@@ -1319,6 +1333,11 @@ bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& spri
 // Methods for SelectionManager to access tile and object data
 
 std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool isRoof) {
+    // Check if current elevation exists in the map data
+    if (!_map || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
+        return std::nullopt;
+    }
+    
     auto& sprites = isRoof ? _roofSprites : _floorSprites;
 
     for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); i++) {
@@ -1538,10 +1557,15 @@ void EditorWidget::clearDragPreview() {
             removePreviewHighlight(_floorSprites.at(tileIndex));
 
             // For roof sprites, check if it's empty and set back to transparent
-            auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
-            if (tile.getRoof() == Map::EMPTY_TILE) {
-                _roofSprites.at(tileIndex).setColor(geck::TileColors::transparent()); // Transparent
+            if (_map && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
+                auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
+                if (tile.getRoof() == Map::EMPTY_TILE) {
+                    _roofSprites.at(tileIndex).setColor(geck::TileColors::transparent()); // Transparent
+                } else {
+                    removePreviewHighlight(_roofSprites.at(tileIndex));
+                }
             } else {
+                // If elevation doesn't exist, just remove preview highlight
                 removePreviewHighlight(_roofSprites.at(tileIndex));
             }
         }
