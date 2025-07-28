@@ -19,7 +19,7 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
     }
 
     // Convert world position to hex index
-    int hexIndex = worldPosToHexIndex(worldPos);
+    int hexIndex = _editor->getViewportController()->worldPosToHexIndex(worldPos);
     if (hexIndex < 0) {
         spdlog::debug("TilePlacementManager::placeTileAtPosition: No tile found at worldPos ({:.1f}, {:.1f})",
             worldPos.x, worldPos.y);
@@ -181,8 +181,5 @@ void TilePlacementManager::updateTileSprite(int hexIndex, bool isRoof) {
     _editor->updateTileSprite(hexIndex, isRoof);
 }
 
-int TilePlacementManager::worldPosToHexIndex(sf::Vector2f worldPos) const {
-    return _editor->getViewportController()->worldPosToHexIndex(worldPos);
-}
 
 } // namespace geck

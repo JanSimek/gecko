@@ -1509,6 +1509,7 @@ void EditorWidget::updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vec
 void EditorWidget::clearDragPreview() {
     // Clear selection rectangle
     _selectionRectangle.setSize({ 0, 0 });
+    _selectionRectangle.setPosition({ 0, 0 });
     
     // Clear tile preview coloring
     for (int tileIndex : _previewTiles) {
@@ -1536,13 +1537,6 @@ void EditorWidget::clearDragPreview() {
     _previewTiles.clear();
     _previewObjects.clear();
 }
-
-// Object drag management methods (note: these are obsolete - functionality moved to DragDropManager)
-
-
-
-
-
 
 const sf::Texture& EditorWidget::createHexTexture() {
     ResourceManager::getInstance().loadResource<Frm>("art/misc/HEX.frm");
@@ -1683,14 +1677,29 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
 }
 
 void EditorWidget::startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos) {
+    // Get object info from palette
+    if (_mainWindow) {
+        auto palette = _mainWindow->getObjectPalettePanel();
+        if (palette) {
+            _previewObjectInfo = palette->getObjectInfo(objectIndex, static_cast<ObjectCategory>(categoryInt));
+        }
+    }
+    
     if (_dragDropManager) {
         _dragDropManager->startDragPreview(objectIndex, categoryInt, worldPos);
+        // Sync the preview object with DragDropManager for rendering
+        _dragPreviewObject = _dragDropManager->getDragPreviewObject();
+        _isDraggingFromPalette = (_dragPreviewObject != nullptr);
     }
 }
 
 void EditorWidget::updateDragPreview(sf::Vector2f worldPos) {
     if (_dragDropManager) {
         _dragDropManager->updateDragPreview(worldPos);
+        // Keep the preview object in sync for rendering
+        if (_isDraggingFromPalette) {
+            _dragPreviewObject = _dragDropManager->getDragPreviewObject();
+        }
     }
 }
 
@@ -1698,9 +1707,15 @@ void EditorWidget::finishDragPreview(sf::Vector2f worldPos) {
     if (_dragDropManager) {
         _dragDropManager->finishDragPreview(worldPos);
     }
+    _previewObjectInfo = nullptr;
+    _dragPreviewObject.reset();
+    _isDraggingFromPalette = false;
 }
 
 void EditorWidget::cancelDragPreview() {
+    _previewObjectInfo = nullptr;
+    _dragPreviewObject.reset();
+    _isDraggingFromPalette = false;
     if (_dragDropManager) {
         _dragDropManager->cancelDragPreview();
     }
@@ -1810,11 +1825,7 @@ void EditorWidget::setShowLightOverlays(bool show) {
 }
 
 void EditorWidget::clearDragSelectionPreview() {
-    // Clear the visual selection rectangle
-    _selectionRectangle.setSize({ 0, 0 });
-    _selectionRectangle.setPosition({ 0, 0 });
-    
-    // Clear any preview highlighting
+    // Clear all drag preview highlighting and selection rectangle
     clearDragPreview();
     
     spdlog::debug("EditorWidget::clearDragSelectionPreview() - cleared selection rectangle");

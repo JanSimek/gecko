@@ -67,10 +67,8 @@ public:
     enum class PlacementMode {
         UNIFIED_PLACEMENT // Single click = single tile, drag = area fill (like selection mode)
         // Note: SINGLE_PLACEMENT and AREA_FILL merged into unified system
-        // Note: REPLACE_SELECTED removed - automatic replacement when tiles are selected
     };
 
-    // Note: InteractionMode removed - tiles auto-paint when selected
 
     explicit TilePalettePanel(QWidget* parent = nullptr);
     ~TilePalettePanel() = default;
@@ -84,13 +82,10 @@ public:
     bool hasSelectedTile() const { return _selectedTileIndex >= 0; }
     void deselectTile();
 
-    // Note: Interaction modes removed - tiles auto-paint when selected
-
     // Placement modes 
     PlacementMode getPlacementMode() const { return _placementMode; }
     void setPlacementMode(PlacementMode mode);
 
-    // Note: Target selection removed - tiles are replaced based on what's actually selected
 
 signals:
     void tileSelected(int tileIndex);

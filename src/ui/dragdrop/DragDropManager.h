@@ -60,8 +60,6 @@ public:
 
 private:
     // Helper methods
-    int worldPosToHexIndex(sf::Vector2f worldPos) const;
-    sf::Vector2f snapToHexGrid(sf::Vector2f worldPos) const;
     
     // Reference to editor for accessing shared state
     EditorWidget* _editor;

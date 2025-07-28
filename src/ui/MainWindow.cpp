@@ -794,8 +794,6 @@ void MainWindow::connectToEditorWidget() {
                 _currentEditorWidget->replaceSelectedTiles(newTileIndex);
             });
 
-        // Note: Interaction mode selection removed - tiles auto-paint when selected
-
         spdlog::info("Connected TilePalettePanel to EditorWidget");
     }
 

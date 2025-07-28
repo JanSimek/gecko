@@ -248,11 +248,9 @@ private:
     bool _showHexGrid = UI::DEFAULT_SHOW_HEX_GRID;
     bool _showLightOverlays = false;  // Toggle for showing light overlays
 
-    // sf::Cursor _cursor; // TODO: Fix cursor initialization for SFML 3
     const sf::Texture& createBlankTexture();
     const sf::Texture& createHexTexture();
     const sf::Texture& createCursorHexTexture();
-
 
     // Double-click detection for object cycling
     sf::Clock _lastClickTime;
