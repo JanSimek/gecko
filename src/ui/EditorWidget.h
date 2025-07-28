@@ -28,6 +28,7 @@ class RenderingEngine;
 class InputHandler;
 class DragDropManager;
 class TilePlacementManager;
+class ViewportController;
 
 class SFMLWidget;
 struct ObjectInfo;
@@ -106,6 +107,7 @@ public:
     // Access to internal components for extracted managers
     selection::SelectionManager* getSelectionManager() const { return _selectionManager.get(); }
     TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
+    ViewportController* getViewportController() const { return _viewportController.get(); }
     int& getCurrentHoverHex() { return _currentHoverHex; }
 
     // Methods for SelectionManager (moved from private)
@@ -131,12 +133,7 @@ public:
     // Access to hex grid for SelectionManager
     const HexagonGrid* getHexagonGrid() const { return &_hexgrid; }
 
-    // Hex grid utilities for SelectionManager
-    int worldPosToHexPosition(sf::Vector2f worldPos) const;
-    
-    // Helper methods for extracted managers (made public)
-    int worldPosToHexIndex(sf::Vector2f worldPos) const;
-    sf::Vector2f snapToHexGrid(sf::Vector2f worldPos) const;
+    // Helper methods for extracted managers (made public)  
     void clearDragSelectionPreview();
 
 signals:
@@ -166,7 +163,6 @@ private:
     };
     
     void setupUI();
-    void centerViewOnMap();
     void initializeSelectionSystem();
 
     void loadSprites();
@@ -193,22 +189,9 @@ private:
 
     void clearAllVisualSelections();
     void clearDragPreview();
-    void updateDragSelectionPreview(sf::Vector2f currentWorldPos);
-    void updateTileAreaFillPreview(sf::Vector2f currentWorldPos);
+    void updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
+    void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
 
-    // Object drag management
-    bool startObjectDrag(sf::Vector2f worldPos);
-    void updateObjectDrag(sf::Vector2f currentWorldPos);
-    void finishObjectDrag(sf::Vector2f finalWorldPos);
-    void cancelObjectDrag();
-    bool canStartObjectDrag(sf::Vector2f worldPos) const;
-
-
-    // Hex grid visualization
-    void updateHoverHex(sf::Vector2f worldPos);
-
-    // Zoom management
-    void zoomView(float direction);
 
     
     // Wall blocker overlay management
@@ -228,11 +211,12 @@ private:
     SFMLWidget* _sfmlWidget;
     class MainWindow* _mainWindow;
     
-    // Input, rendering, drag/drop, and tile placement systems
+    // Input, rendering, drag/drop, tile placement, and viewport systems
     std::unique_ptr<InputHandler> _inputHandler;
     std::unique_ptr<RenderingEngine> _renderingEngine;
     std::unique_ptr<DragDropManager> _dragDropManager;
     std::unique_ptr<TilePlacementManager> _tilePlacementManager;
+    std::unique_ptr<ViewportController> _viewportController;
 
     // Game/Editor State
     SelectionMode _currentSelectionMode = SelectionMode::ALL;
@@ -251,7 +235,6 @@ private:
     // Error tracking for last sprite loading operation
     LoadingErrors _lastLoadErrors;
 
-    sf::View _view;
 
     int _currentElevation = 0;
     std::unique_ptr<Map> _map;
@@ -270,11 +253,6 @@ private:
     const sf::Texture& createHexTexture();
     const sf::Texture& createCursorHexTexture();
 
-    // Zoom level tracking and limits
-    float _zoomLevel = 1.0f;
-    static constexpr float MIN_ZOOM = 0.1f;   // Can zoom out to 10% of original size
-    static constexpr float MAX_ZOOM = 5.0f;   // Can zoom in to 500% of original size
-    static constexpr float ZOOM_STEP = 0.05f; // 5% zoom steps for smooth zooming
 
     // Double-click detection for object cycling
     sf::Clock _lastClickTime;
@@ -287,11 +265,6 @@ private:
     std::vector<int> _previewTiles;                       // Tiles being previewed during drag
     std::vector<std::shared_ptr<Object>> _previewObjects; // Objects being previewed during drag
 
-    // Object drag state (managed by InputHandler now)
-    std::vector<std::shared_ptr<Object>> _draggedObjects; // Objects being dragged
-    std::vector<sf::Vector2f> _objectDragStartPositions;  // Original positions for cancel/revert
-    sf::Vector2f _objectDragOffset;                       // Current drag offset from start position
-    
     // Drag preview state (for palette drag and drop)
     bool _isDraggingFromPalette = false;
     std::shared_ptr<Object> _dragPreviewObject;           // Preview object being dragged from palette
@@ -316,10 +289,6 @@ private:
     
     // Player position selection state
     bool _playerPositionSelectionMode = false;
-    
-    // Temporary state for methods not yet fully integrated with InputHandler
-    bool _isDraggingObjects = false;
-    sf::Vector2f _dragStartWorldPos;
 };
 
 } // namespace geck

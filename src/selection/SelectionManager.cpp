@@ -1,5 +1,6 @@
 #include "SelectionManager.h"
 #include "../ui/EditorWidget.h"
+#include "../ui/viewport/ViewportController.h"
 #include "../format/map/MapObject.h"
 #include "../util/Constants.h"
 #include "../util/TileUtils.h"
@@ -681,7 +682,7 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
         }
 
         case SelectionMode::HEXES: {
-            int hexIndex = _editorWidget->worldPosToHexPosition(worldPos);
+            int hexIndex = _editorWidget->getViewportController()->worldPosToHexIndex(worldPos);
             if (hexIndex >= 0 && hexIndex < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT)) {
                 SelectedItem item{ SelectionType::HEX, hexIndex };
                 addItemToSelection(item);

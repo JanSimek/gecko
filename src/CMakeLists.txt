@@ -67,6 +67,8 @@ set(GECK_SOURCES
     ui/dragdrop/DragDropManager.cpp
     ui/tiles/TilePlacementManager.h
     ui/tiles/TilePlacementManager.cpp
+    ui/viewport/ViewportController.h
+    ui/viewport/ViewportController.cpp
 
     # Selection management
     selection/SelectionState.h

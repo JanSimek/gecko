@@ -1,5 +1,6 @@
 #include "DragDropManager.h"
 #include "../EditorWidget.h"
+#include "../viewport/ViewportController.h"
 #include "../../editor/Object.h"
 #include "../../editor/HexagonGrid.h"
 #include "../../util/ResourceManager.h"
@@ -119,7 +120,7 @@ void DragDropManager::updateObjectDrag(sf::Vector2f currentWorldPos) {
             // Calculate where the object would be placed
             sf::Vector2f newWorldPos = originalWorldPos + _objectDragOffset;
             sf::Vector2f snappedPos = snapToHexGrid(newWorldPos);
-            int targetHexPosition = worldPosToHexPosition(snappedPos);
+            int targetHexPosition = worldPosToHexIndex(snappedPos);
             
             // Update hover hex to highlight the target position
             if (targetHexPosition >= 0) {
@@ -158,7 +159,7 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
             // Snap to nearest hex grid position
             // Note: Don't manually apply shift offsets here - setHexPosition() will handle them
             sf::Vector2f snappedPos = snapToHexGrid(newWorldPos);
-            int newHexPosition = worldPosToHexPosition(snappedPos);
+            int newHexPosition = worldPosToHexIndex(snappedPos);
             
             spdlog::debug("DragDropManager: Object {} - original({:.1f},{:.1f}) + offset({:.1f},{:.1f}) = new({:.1f},{:.1f}) -> hex {}", 
                          i, originalWorldPos.x, originalWorldPos.y, dragOffset.x, dragOffset.y, 
@@ -299,7 +300,7 @@ void DragDropManager::updateDragPreview(sf::Vector2f worldPos) {
     }
     
     // Find the closest hex position directly
-    int hexPosition = worldPosToHexPosition(worldPos);
+    int hexPosition = worldPosToHexIndex(worldPos);
     if (hexPosition >= 0) {
         const auto* hexGrid = _editor->getHexagonGrid();
         if (hexPosition < static_cast<int>(hexGrid->grid().size())) {
@@ -315,7 +316,7 @@ void DragDropManager::finishDragPreview(sf::Vector2f worldPos) {
     }
     
     // Convert to hex position
-    int hexPosition = worldPosToHexPosition(worldPos);
+    int hexPosition = worldPosToHexIndex(worldPos);
     if (hexPosition >= 0) {
         // Place the object at this position
         _editor->placeObjectAtPosition(worldPos);
@@ -343,12 +344,12 @@ DragDropManager::DragType DragDropManager::getCurrentDragType() const {
     return DragType::NONE;
 }
 
-int DragDropManager::worldPosToHexPosition(sf::Vector2f worldPos) const {
-    return _editor->worldPosToHexIndex(worldPos);
+int DragDropManager::worldPosToHexIndex(sf::Vector2f worldPos) const {
+    return _editor->getViewportController()->worldPosToHexIndex(worldPos);
 }
 
 sf::Vector2f DragDropManager::snapToHexGrid(sf::Vector2f worldPos) const {
-    return _editor->snapToHexGrid(worldPos);
+    return _editor->getViewportController()->snapToHexGrid(worldPos);
 }
 
 } // namespace geck

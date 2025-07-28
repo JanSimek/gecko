@@ -52,7 +52,7 @@ public:
 private:
     // Helper methods
     void updateTileSprite(int hexIndex, bool isRoof);
-    int worldPosToHexPosition(sf::Vector2f worldPos) const;
+    int worldPosToHexIndex(sf::Vector2f worldPos) const;
 
 private:
     EditorWidget* _editor;

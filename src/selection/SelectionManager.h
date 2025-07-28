@@ -15,6 +15,7 @@
 
 namespace geck {
 class EditorWidget; // Forward declaration
+class ViewportController;
 }
 
 namespace geck::selection {
