@@ -253,6 +253,11 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
         } else if (_callbacks.onEscape) {
             _callbacks.onEscape();
         }
+    } else if (event.code == sf::Keyboard::Key::Delete || event.code == sf::Keyboard::Key::Backspace) {
+        // Handle delete/backspace key for removing selected objects
+        if (_callbacks.onDeleteObjects) {
+            _callbacks.onDeleteObjects();
+        }
     }
 }
 

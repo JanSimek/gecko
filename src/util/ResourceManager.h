@@ -109,6 +109,9 @@ public:
      * @return Shared pointer to the VFS
      */
     vfspp::VirtualFileSystemPtr getVFS() const { return _vfs; }
+    
+    // Cache management methods
+    void clearTextureCache(const std::string& filename);
 };
 
 } // namespace geck

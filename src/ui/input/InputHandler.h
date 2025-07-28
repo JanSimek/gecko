@@ -68,6 +68,7 @@ public:
         
         // Keyboard
         std::function<void()> onEscape;
+        std::function<void()> onDeleteObjects;
     };
 
     explicit InputHandler(EditorWidget* editor);

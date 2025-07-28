@@ -1,8 +1,10 @@
 #include "SelectionPanel.h"
+#include "FrmSelectorDialog.h"
 
 #include <QFormLayout>
 #include <QPixmap>
 #include <QApplication>
+#include <QTimer>
 #include <spdlog/spdlog.h>
 #include <cmath>
 
@@ -114,6 +116,25 @@ void SelectionPanel::setupUI() {
     _objectProtoPidSpin->setReadOnly(true);
     _objectProtoPidSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
     objectFormLayout->addRow("Proto PID:", _objectProtoPidSpin);
+    
+    // FRM PID field
+    _objectFrmPidSpin = new QSpinBox();
+    _objectFrmPidSpin->setRange(0, INT_MAX);
+    _objectFrmPidSpin->setReadOnly(true);
+    _objectFrmPidSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    objectFormLayout->addRow("FRM PID:", _objectFrmPidSpin);
+    
+    // FRM Path display
+    _objectFrmPathEdit = new QLineEdit();
+    _objectFrmPathEdit->setReadOnly(true);
+    _objectFrmPathEdit->setPlaceholderText("FRM path");
+    objectFormLayout->addRow("FRM Path:", _objectFrmPathEdit);
+    
+    // Change FRM button
+    _changeFrmButton = new QPushButton("Change FRM...");
+    _changeFrmButton->setEnabled(false);
+    connect(_changeFrmButton, &QPushButton::clicked, this, &SelectionPanel::onChangeFrmClicked);
+    objectFormLayout->addRow("", _changeFrmButton);
 
     objectLayout->addWidget(_objectInfoGroup);
     objectLayout->addStretch();
@@ -293,6 +314,17 @@ void SelectionPanel::updateObjectInfo() {
             _objectMessageIdSpin->setValue(static_cast<int>(pro->header.message_id));
             _objectPositionSpin->setValue(selectedMapObject.position);
             _objectProtoPidSpin->setValue(static_cast<int>(selectedMapObject.pro_pid));
+            
+            // Update FRM information
+            _objectFrmPidSpin->setValue(static_cast<int>(selectedMapObject.frm_pid));
+            
+            // Determine which FRM is actually being used
+            uint32_t activeFrmPid = selectedMapObject.frm_pid != 0 ? selectedMapObject.frm_pid : pro->header.FID;
+            std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(activeFrmPid);
+            _objectFrmPathEdit->setText(QString::fromStdString(frmPath));
+            
+            // Enable the change FRM button
+            _changeFrmButton->setEnabled(true);
 
             // Convert SFML sprite to QPixmap for display
             const auto& sprite = _selectedObject.value()->getSprite();
@@ -420,6 +452,12 @@ void geck::SelectionPanel::clearObjectInfo() {
     _objectMessageIdSpin->setValue(0);
     _objectPositionSpin->setValue(0);
     _objectProtoPidSpin->setValue(0);
+    _objectFrmPidSpin->setValue(0);
+    
+    _objectFrmPathEdit->clear();
+    _objectFrmPathEdit->setPlaceholderText("FRM path");
+    
+    _changeFrmButton->setEnabled(false);
 
     _objectSpriteLabel->clear();
     _objectSpriteLabel->setText("No object selected");
@@ -546,6 +584,124 @@ void geck::SelectionPanel::handleSelectionChanged(const selection::SelectionStat
             // For now, just log hex selection
             spdlog::debug("SelectionPanel: Hex {} selected", hexIndex);
             break;
+        }
+    }
+}
+
+void SelectionPanel::onChangeFrmClicked() {
+    if (!_selectedObject || !_selectedObject.value()) {
+        return;
+    }
+
+    auto& mapObject = _selectedObject.value()->getMapObject();
+    
+    // Create and show FRM selector dialog
+    FrmSelectorDialog dialog(this);
+    
+    // Set the current FRM PID as initial selection
+    uint32_t currentFrmPid = mapObject.frm_pid != 0 ? mapObject.frm_pid : mapObject.pro_pid;
+    dialog.setInitialFrmPid(currentFrmPid);
+    
+    // Set object type filter - extract type from current FRM PID
+    uint32_t objectType = (currentFrmPid >> 24) & 0xFF;
+    dialog.setObjectTypeFilter(objectType);
+    spdlog::info("SelectionPanel: Filtering FRM dialog by object type: {}", objectType);
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        uint32_t newFrmPid = dialog.getSelectedFrmPid();
+        std::string newFrmPath = dialog.getSelectedFrmPath();
+        
+        if (!newFrmPath.empty()) {
+            // Validate that the FRM file actually exists before attempting the change
+            try {
+                auto& resourceManager = ResourceManager::getInstance();
+                auto testLoad = resourceManager.loadResource<Frm>(newFrmPath);
+                if (!testLoad) {
+                    spdlog::error("SelectionPanel: FRM file not found or invalid: {} - aborting change", newFrmPath);
+                    return;
+                }
+            } catch (const std::exception& e) {
+                spdlog::error("SelectionPanel: Failed to validate FRM file {}: {} - aborting change", newFrmPath, e.what());
+                return;
+            }
+            
+            // Always update the visual representation using the path first
+            emit objectFrmPathChanged(_selectedObject.value(), newFrmPath);
+            
+            // Try to update MapObject's frm_pid if we have a valid derived FID
+            if (newFrmPid != 0) {
+                // Check if this is a custom FID (has 0xFF in high byte of baseId)
+                bool isCustomFid = ((newFrmPid & 0x00FF0000) == 0x00FF0000);
+                
+                if (newFrmPid != currentFrmPid) {
+                    if (isCustomFid) {
+                        // Custom FID - visual will work in editor but may not persist in game
+                        spdlog::warn("SelectionPanel: Using custom FID 0x{:08X} for non-LST FRM - may not work in game", newFrmPid);
+                        
+                        // For custom FIDs, we'll update the visual but keep original frm_pid for game compatibility
+                        // This allows the editor to show the new FRM while maintaining game compatibility
+                        spdlog::info("SelectionPanel: Keeping original frm_pid {} for game compatibility, visual uses custom FRM", currentFrmPid);
+                        
+                        // Show warning to user
+                        emit statusMessage(QString("Warning: Custom FRM may not display correctly in game"));
+                    } else {
+                        // Valid LST-based FID, safe to update
+                        mapObject.frm_pid = newFrmPid;
+                        spdlog::info("SelectionPanel: Updated MapObject frm_pid from {} to {} for persistent save", 
+                                    currentFrmPid, newFrmPid);
+                    }
+                    
+                    // Refresh the object info display to show updated FRM PID
+                    updateObjectInfo();
+                } else {
+                    spdlog::debug("SelectionPanel: FRM PID unchanged ({}), no MapObject update needed", newFrmPid);
+                    // Still update the FRM path display
+                    _objectFrmPathEdit->setText(QString::fromStdString(newFrmPath));
+                }
+            } else {
+                // For paths that don't have reliable FIDs, we need to be more careful
+                spdlog::warn("SelectionPanel: Could not derive reliable FID for path: {} - using alternative approach", 
+                            newFrmPath);
+                
+                // IMPORTANT: The FRM might be valid but just not in the LST file
+                // In this case, we should still try to use it by keeping the visual change
+                // but warning the user about potential game compatibility issues
+                
+                // Extract just the filename for analysis
+                size_t lastSlash = newFrmPath.find_last_of('/');
+                std::string filename = (lastSlash != std::string::npos) ? newFrmPath.substr(lastSlash + 1) : newFrmPath;
+                
+                // For critters, we have a special case - many FRMs work in-game even if not in LST
+                if ((currentFrmPid >> 24) == 1) { // Critter type
+                    // Try to find a similar base in the LST file
+                    // For example, "hanpwraa.frm" might work if "hapowr" is in the LST
+                    
+                    // Keep the visual change but warn about compatibility
+                    spdlog::warn("SelectionPanel: FRM '{}' not found in critters.lst - change may not persist in game", filename);
+                    spdlog::info("SelectionPanel: Keeping original FRM PID ({}) for game compatibility", currentFrmPid);
+                    
+                    // Show warning to user
+                    emit statusMessage(QString("Warning: FRM '%1' may not display correctly in game - not found in critters.lst")
+                                     .arg(QString::fromStdString(filename)));
+                }
+                
+                // Update the FRM path display
+                _objectFrmPathEdit->setText(QString::fromStdString(newFrmPath));
+                updateObjectInfo();
+            }
+            
+            spdlog::info("SelectionPanel: Changed object FRM visual to path: {}", newFrmPath);
+            
+            // Ensure the object remains selected and highlighted after FRM change
+            if (_selectedObject.has_value() && _selectedObject.value()) {
+                // Use a single-shot timer to delay the highlight request
+                // This ensures the texture update is fully processed before highlighting
+                QTimer::singleShot(50, this, [this]() {
+                    if (_selectedObject.has_value() && _selectedObject.value()) {
+                        emit requestObjectHighlight(_selectedObject.value());
+                    }
+                });
+            }
         }
     }
 }

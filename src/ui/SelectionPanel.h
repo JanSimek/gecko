@@ -9,6 +9,7 @@
 #include <QGroupBox>
 #include <QScrollArea>
 #include <QStackedWidget>
+#include <QPushButton>
 #include <memory>
 
 #include "../editor/Object.h"
@@ -27,11 +28,20 @@ public:
 
     void setMap(Map* map);
 
+signals:
+    void objectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
+    void objectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
+    void requestObjectHighlight(std::shared_ptr<Object> object);
+    void statusMessage(const QString& message);
+
 public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);
     void selectTile(int tileIndex, int elevation, bool isRoof);
     void clearSelection();
     void handleSelectionChanged(const selection::SelectionState& selection, int elevation);
+
+private slots:
+    void onChangeFrmClicked();
 
 private:
     void setupUI();
@@ -60,6 +70,9 @@ private:
     QSpinBox* _objectMessageIdSpin;
     QSpinBox* _objectPositionSpin;
     QSpinBox* _objectProtoPidSpin;
+    QSpinBox* _objectFrmPidSpin;
+    QLineEdit* _objectFrmPathEdit;
+    QPushButton* _changeFrmButton;
 
     // Tile panel widgets
     QWidget* _tilePanelWidget;

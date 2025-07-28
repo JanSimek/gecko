@@ -18,6 +18,7 @@
 #include "../editor/Object.h"
 #include "../util/ResourceInitializer.h"
 #include "../editor/HexagonGrid.h"
+#include "../format/frm/Frm.h"
 #include "../util/TileUtils.h"
 #include "../util/QtDialogs.h"
 
@@ -999,6 +1000,11 @@ void EditorWidget::setupInputCallbacks() {
         }
     };
     
+    callbacks.onDeleteObjects = [this]() {
+        // Handle delete key to remove selected objects
+        deleteSelectedObjects();
+    };
+    
     _inputHandler->setCallbacks(callbacks);
     
     // Set initial modes
@@ -1844,6 +1850,191 @@ void EditorWidget::clearDragSelectionPreview() {
     clearDragPreview();
     
     spdlog::debug("EditorWidget::clearDragSelectionPreview() - cleared selection rectangle");
+}
+
+void EditorWidget::onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid) {
+    if (!object) {
+        spdlog::warn("EditorWidget::onObjectFrmChanged - null object provided");
+        return;
+    }
+
+    try {
+        // Get the new FRM path from the FRM PID
+        auto& resourceManager = ResourceManager::getInstance();
+        std::string newFrmPath = resourceManager.FIDtoFrmName(newFrmPid);
+        
+        if (newFrmPath.empty()) {
+            spdlog::error("EditorWidget::onObjectFrmChanged - could not resolve FRM path for PID {}", newFrmPid);
+            return;
+        }
+
+        // Load the new FRM texture
+        const auto& newTexture = resourceManager.texture(newFrmPath);
+        
+        // Create new sprite with the updated texture
+        sf::Sprite newSprite(newTexture);
+        object->setSprite(std::move(newSprite));
+        
+        // Set the direction to update texture rectangle (use current direction)
+        auto& mapObject = object->getMapObject();
+        object->setDirection(static_cast<ObjectDirection>(mapObject.direction));
+        
+        spdlog::info("EditorWidget::onObjectFrmChanged - updated object visual to FRM PID {} ({})", 
+                    newFrmPid, newFrmPath);
+        
+    } catch (const std::exception& e) {
+        spdlog::error("EditorWidget::onObjectFrmChanged - failed to update object FRM: {}", e.what());
+    }
+}
+
+void EditorWidget::onObjectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath) {
+    if (!object) {
+        spdlog::warn("EditorWidget::onObjectFrmPathChanged - null object provided");
+        return;
+    }
+    
+    if (newFrmPath.empty()) {
+        spdlog::warn("EditorWidget::onObjectFrmPathChanged - empty FRM path provided");
+        return;
+    }
+
+    try {
+        auto& resourceManager = ResourceManager::getInstance();
+        
+        // Load the new FRM data (not just texture)
+        auto newFrm = resourceManager.loadResource<Frm>(newFrmPath);
+        if (!newFrm) {
+            spdlog::error("EditorWidget::onObjectFrmPathChanged - failed to load FRM data for: {}", newFrmPath);
+            return;
+        }
+        
+        // Load the new FRM texture 
+        const auto& newTexture = resourceManager.texture(newFrmPath);
+        
+        // Debug: Check object state before FRM change
+        sf::Vector2f oldPosition = object->getSprite().getPosition();
+        const auto& oldTexture = object->getSprite().getTexture();
+        spdlog::info("EditorWidget::onObjectFrmPathChanged - CHANGING FRM FROM existing to: {}", newFrmPath);
+        spdlog::debug("EditorWidget::onObjectFrmPathChanged - BEFORE: object position: ({}, {})", 
+                     oldPosition.x, oldPosition.y);
+        spdlog::debug("EditorWidget::onObjectFrmPathChanged - OLD texture ptr: {}, NEW texture ptr: {}", 
+                     static_cast<const void*>(&oldTexture), static_cast<const void*>(&newTexture));
+        spdlog::debug("EditorWidget::onObjectFrmPathChanged - OLD texture size: {}x{}, NEW texture size: {}x{}", 
+                     oldTexture.getSize().x, oldTexture.getSize().y, newTexture.getSize().x, newTexture.getSize().y);
+                     
+        // Additional check: Are the textures actually different?
+        bool texturesAreDifferent = (&oldTexture != &newTexture);
+        spdlog::info("EditorWidget::onObjectFrmPathChanged - Textures are different: {}", texturesAreDifferent);
+        
+        // Create new sprite with the updated texture
+        sf::Sprite newSprite(newTexture);
+        // IMPORTANT: Preserve the original position
+        newSprite.setPosition(oldPosition);
+        object->setSprite(std::move(newSprite));
+        
+        // Update the FRM data in the object (this is crucial!)
+        object->setFrm(newFrm);
+        
+        // Validate that the object still has its MapObject association
+        if (!object->hasMapObject()) {
+            spdlog::error("EditorWidget::onObjectFrmPathChanged - Object lost MapObject association during FRM change!");
+            return;
+        }
+        
+        // Set the direction to update texture rectangle (use current direction)
+        auto& mapObject = object->getMapObject();
+        object->setDirection(static_cast<ObjectDirection>(mapObject.direction));
+        
+        // Note: MapObject's frm_pid is updated by SelectionPanel for persistence
+        
+        // Final validation: Ensure the object is still properly configured
+        const auto& currentSpriteTexture = object->getSprite().getTexture();
+        if (currentSpriteTexture.getSize().x == 0 || currentSpriteTexture.getSize().y == 0) {
+            spdlog::error("EditorWidget::onObjectFrmPathChanged - Object sprite has invalid texture after FRM change!");
+            return;
+        }
+        
+        // Debug: Check object state after FRM change
+        sf::Vector2f position = object->getSprite().getPosition();
+        sf::IntRect textureRect = object->getSprite().getTextureRect();
+        const auto& currentTexture = object->getSprite().getTexture();
+        spdlog::debug("EditorWidget::onObjectFrmPathChanged - AFTER: object position: ({}, {}), textureRect: ({}, {}, {}, {})", 
+                     position.x, position.y, textureRect.position.x, textureRect.position.y, textureRect.size.x, textureRect.size.y);
+        spdlog::debug("EditorWidget::onObjectFrmPathChanged - AFTER: current texture ptr: {}, size: {}x{}", 
+                     static_cast<const void*>(&currentTexture), currentTexture.getSize().x, currentTexture.getSize().y);
+        
+        // Force a frame update/redraw to ensure the visual change is applied
+        if (_sfmlWidget && _sfmlWidget->getRenderWindow()) {
+            _sfmlWidget->getRenderWindow()->display();
+            spdlog::debug("EditorWidget::onObjectFrmPathChanged - forced SFML window display() call");
+        }
+        
+        spdlog::info("EditorWidget::onObjectFrmPathChanged - updated object visual to FRM path: {}", newFrmPath);
+        
+    } catch (const std::exception& e) {
+        spdlog::error("EditorWidget::onObjectFrmPathChanged - failed to update object FRM from path {}: {}", 
+                     newFrmPath, e.what());
+    }
+}
+
+void EditorWidget::deleteSelectedObjects() {
+    if (!_map) {
+        return;
+    }
+    
+    auto& selectionState = _selectionManager->getCurrentSelection();
+    const auto& selectedObjects = selectionState.getObjects();
+    
+    if (selectedObjects.empty()) {
+        spdlog::debug("EditorWidget::deleteSelectedObjects - No objects selected");
+        return;
+    }
+    
+    spdlog::info("EditorWidget::deleteSelectedObjects - Deleting {} selected objects", selectedObjects.size());
+    
+    // Remove objects from map and clear from visual objects
+    int deletedCount = 0;
+    for (const auto& object : selectedObjects) {
+        if (!object) continue;
+        
+        try {
+            // Remove from map objects
+            uint32_t elevation = object->getMapObject().elevation;
+            // Access mapFile directly to modify objects
+            auto& mapFile = _map->getMapFile();
+            auto& elevationObjects = mapFile.map_objects[elevation];
+            
+            // Find and remove the object from the map
+            auto it = std::find_if(elevationObjects.begin(), elevationObjects.end(),
+                [&object](const std::shared_ptr<MapObject>& mapObj) {
+                    return mapObj.get() == &object->getMapObject();
+                });
+                
+            if (it != elevationObjects.end()) {
+                elevationObjects.erase(it);
+                deletedCount++;
+                spdlog::debug("EditorWidget::deleteSelectedObjects - Removed object at elevation {}", elevation);
+            }
+            
+            // Remove from visual objects list
+            auto visualIt = std::find(_objects.begin(), _objects.end(), object);
+            if (visualIt != _objects.end()) {
+                _objects.erase(visualIt);
+                spdlog::debug("EditorWidget::deleteSelectedObjects - Removed from visual objects");
+            }
+            
+        } catch (const std::exception& e) {
+            spdlog::error("EditorWidget::deleteSelectedObjects - Error deleting object: {}", e.what());
+        }
+    }
+    
+    // Clear selection
+    _selectionManager->clearSelection();
+    
+    // Update UI
+    emit selectionChanged(_selectionManager->getCurrentSelection(), _currentElevation);
+    
+    spdlog::info("EditorWidget::deleteSelectedObjects - Successfully deleted {} objects", deletedCount);
 }
 
 } // namespace geck

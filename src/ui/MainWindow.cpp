@@ -751,6 +751,39 @@ void MainWindow::connectToEditorWidget() {
         _selectionPanel->setMap(_currentEditorWidget->getMap());
 
         connect(_currentEditorWidget, &EditorWidget::selectionChanged, _selectionPanel, &SelectionPanel::handleSelectionChanged);
+        connect(_selectionPanel, &SelectionPanel::objectFrmChanged, _currentEditorWidget, &EditorWidget::onObjectFrmChanged);
+        connect(_selectionPanel, &SelectionPanel::objectFrmPathChanged, _currentEditorWidget, &EditorWidget::onObjectFrmPathChanged);
+        connect(_selectionPanel, &SelectionPanel::statusMessage, this, &MainWindow::showStatusMessage);
+        
+        // Connect highlight request signal
+        connect(_selectionPanel, &SelectionPanel::requestObjectHighlight, 
+                [this](std::shared_ptr<Object> object) {
+                    if (_currentEditorWidget && object) {
+                        // Get current selection state
+                        auto* selectionManager = _currentEditorWidget->getSelectionManager();
+                        auto& selectionState = selectionManager->getMutableSelection();
+                        
+                        // Check if object is already selected
+                        selection::SelectedItem item;
+                        item.type = selection::SelectionType::OBJECT;
+                        item.data = object;
+                        
+                        if (!selectionState.hasItem(item)) {
+                            // Object not selected, add it
+                            selectionState.addItem(item);
+                        }
+                        
+                        // Always notify the rendering system to refresh highlight
+                        _currentEditorWidget->selectionChanged(selectionState, _currentEditorWidget->getCurrentElevation());
+                        
+                        // Force a complete render update to ensure highlighting is visible
+                        if (_currentEditorWidget->getSFMLWidget()) {
+                            _currentEditorWidget->getSFMLWidget()->update();
+                            _currentEditorWidget->getSFMLWidget()->repaint();
+                        }
+                    }
+                });
+        
         spdlog::info("Connected EditorWidget selection signals to unified SelectionPanel");
     }
     

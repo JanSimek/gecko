@@ -95,6 +95,12 @@ void ResourceManager::insertTexture(const std::string& filename) {
 
 const sf::Texture& ResourceManager::texture(const std::string& filename) {
     const auto& found = _textures.find(filename);
+    
+    if (found != _textures.end()) {
+        spdlog::debug("ResourceManager::texture - returning cached texture for: {}, ptr: {}", 
+                     filename, static_cast<const void*>(found->second.get()));
+        return *found->second;
+    }
 
     if (found == _textures.end()) {
         auto frm = getResource<Frm>(filename); // TODO: check extension?
@@ -362,6 +368,16 @@ std::vector<std::string> ResourceManager::listFilesByPattern(const std::string& 
     }
 
     return matchingFiles;
+}
+
+void ResourceManager::clearTextureCache(const std::string& filename) {
+    auto it = _textures.find(filename);
+    if (it != _textures.end()) {
+        spdlog::debug("ResourceManager::clearTextureCache - removing cached texture for: {}", filename);
+        _textures.erase(it);
+    } else {
+        spdlog::debug("ResourceManager::clearTextureCache - texture not found in cache: {}", filename);
+    }
 }
 
 } // namespace geck

@@ -25,6 +25,9 @@ set(GECK_SOURCES
     util/Settings.h
     util/Settings.cpp
 
+    util/CritterFrmResolver.h
+    util/CritterFrmResolver.cpp
+
     util/Types.h
     util/SpatialIndex.h
     util/SpatialIndex.cpp
@@ -40,6 +43,8 @@ set(GECK_SOURCES
     ui/LoadingWidget.cpp
     ui/SelectionPanel.h
     ui/SelectionPanel.cpp
+    ui/FrmSelectorDialog.h
+    ui/FrmSelectorDialog.cpp
     ui/MapInfoPanel.h
     ui/MapInfoPanel.cpp
     ui/TilePalettePanel.h

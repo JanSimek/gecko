@@ -65,27 +65,9 @@ public:
             throw UnsupportedFormatException(
                 ErrorMessages::invalidFileSize(filePath, pos.total, 24), filePath);
         }
-        
-        // Read and validate PID (should be reasonable range)
+
         int32_t pid = utils.readBE32Signed();
-        if (pid < 0 || pid > 0x6000000) { // Reasonable PID range for Fallout
-            spdlog::warn(ErrorMessages::unusualFieldValue(filePath, "PID", 
-                "0x" + std::to_string(pid)));
-        }
-        
-        // Message ID should be reasonable
-        uint32_t messageId = utils.readBE32();
-        if (messageId > 10000) { // Reasonable message ID range
-            spdlog::warn("PRO file has unusual message ID: {}", messageId);
-        }
-        
-        // FID validation
-        int32_t fid = utils.readBE32Signed();
-        if (fid != -1 && (fid < 0 || fid > 0x1000000)) {
-            spdlog::warn("PRO file has unusual FID: 0x{:08X}", fid);
-        }
-        
-        // Reset to start for actual reading
+
         utils.setPosition(0);
         spdlog::debug("PRO format validation passed: PID=0x{:08X}", pid);
     }

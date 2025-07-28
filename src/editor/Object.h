@@ -49,6 +49,9 @@ public:
     const sf::Sprite& getSprite() const;
     sf::Sprite& getSprite();
 
+    void setFrm(const Frm* frm);
+    const Frm* getFrm() const { return _frm; }
+
     void setHexPosition(const Hex& hex);
     void setDirection(ObjectDirection direction);
     void rotate();

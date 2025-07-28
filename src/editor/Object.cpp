@@ -83,7 +83,13 @@ void Object::setMapObject(std::shared_ptr<MapObject> newMapObject) {
 }
 
 void Object::setSprite(sf::Sprite sprite) {
+    bool wasSelected = _selected;
     _sprite = sprite;
+    
+    // Preserve selection state by re-applying selection color if the object was selected
+    if (wasSelected) {
+        _sprite.setColor(geck::ColorUtils::createObjectSelectionColor());
+    }
 }
 
 const sf::Sprite& Object::getSprite() const {
@@ -92,6 +98,31 @@ const sf::Sprite& Object::getSprite() const {
 
 sf::Sprite& Object::getSprite() {
     return _sprite;
+}
+
+void Object::setFrm(const Frm* frm) {
+    if (!frm) {
+        spdlog::error("Object::setFrm - FRM pointer is null");
+        return;
+    }
+    
+    if (frm->directions().empty()) {
+        spdlog::error("Object::setFrm - FRM '{}' has no directions", frm->filename());
+        return;
+    }
+    
+    if (frm->directions()[0].frames().empty()) {
+        spdlog::error("Object::setFrm - FRM '{}' direction 0 has no frames", frm->filename());
+        return;
+    }
+    
+    _frm = frm;
+    
+    // Reset direction to 0 and update texture rectangle
+    _direction = 0;
+    setDirection(static_cast<ObjectDirection>(_direction));
+    
+    spdlog::debug("Object::setFrm - updated FRM to: {}", frm->filename());
 }
 
 void Object::setHexPosition(const Hex& hex) {

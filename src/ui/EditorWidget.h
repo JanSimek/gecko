@@ -144,7 +144,13 @@ signals:
     void statusMessageRequested(const QString& message);
     void statusMessageClearRequested();
 
+public slots:
+    void onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
+    void onObjectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
+
 private:
+    // Object management
+    void deleteSelectedObjects();
     // Error tracking for sprite loading
     struct LoadingErrors {
         size_t objectsSkipped = 0;
