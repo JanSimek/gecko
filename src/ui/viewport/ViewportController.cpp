@@ -13,15 +13,15 @@ ViewportController::ViewportController(const HexagonGrid* hexGrid)
     : _hexGrid(hexGrid) {
 }
 
-void ViewportController::initialize([[maybe_unused]] sf::Vector2u windowSize) {
-    // Use fixed view size for consistent coordinate system
-    _view.setSize(sf::Vector2f(800.0f, 600.0f));
+void ViewportController::initialize(sf::Vector2u windowSize) {
+    // Initialize with proper aspect ratio management
+    updateViewForWindowSize(windowSize);
     
     // Center the view on the map initially
     centerViewOnMap();
     
-    spdlog::debug("ViewportController: Initialized with fixed view size {}x{}", 
-                  800, 600);
+    spdlog::debug("ViewportController: Initialized with window size {}x{}", 
+                  windowSize.x, windowSize.y);
 }
 
 void ViewportController::centerViewOnMap() {
@@ -103,6 +103,43 @@ sf::Vector2f ViewportController::snapToHexGrid(sf::Vector2f worldPos) const {
     }
     
     return worldPos; // Return original position if no valid hex found
+}
+
+void ViewportController::updateViewForWindowSize(sf::Vector2u windowSize) {
+    if (windowSize.x == 0 || windowSize.y == 0) {
+        spdlog::warn("ViewportController: Invalid window size {}x{}", windowSize.x, windowSize.y);
+        return;
+    }
+    
+    // Use full viewport (no black bars)
+    sf::FloatRect viewport({0, 0}, {1, 1});
+    _view.setViewport(viewport);
+    
+    // Scale view size to match window aspect ratio while maintaining proportional scaling
+    // Base reference size is 800x600
+    float baseWidth = 800.0f;
+    float baseHeight = 600.0f;
+    float baseAspect = baseWidth / baseHeight;
+    
+    // Calculate window aspect ratio
+    float windowAspect = static_cast<float>(windowSize.x) / static_cast<float>(windowSize.y);
+    
+    float viewWidth, viewHeight;
+    
+    if (windowAspect > baseAspect) {
+        // Window is wider - scale to match window width, adjust height proportionally
+        viewHeight = baseHeight;
+        viewWidth = viewHeight * windowAspect;
+    } else {
+        // Window is taller or same aspect - scale to match window height, adjust width proportionally  
+        viewWidth = baseWidth;
+        viewHeight = viewWidth / windowAspect;
+    }
+    
+    _view.setSize(sf::Vector2f(viewWidth, viewHeight));
+    
+    spdlog::debug("ViewportController: Updated view for {}x{} window - view size: {:.1f}x{:.1f} (aspect: {:.3f})",
+                  windowSize.x, windowSize.y, viewWidth, viewHeight, windowAspect);
 }
 
 } // namespace geck

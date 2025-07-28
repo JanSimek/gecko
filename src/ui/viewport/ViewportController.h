@@ -22,6 +22,12 @@ public:
      * @param windowSize The size of the SFML window
      */
     void initialize(sf::Vector2u windowSize);
+    
+    /**
+     * @brief Update viewport for window resize with aspect ratio preservation
+     * @param windowSize New window size
+     */
+    void updateViewForWindowSize(sf::Vector2u windowSize);
 
     /**
      * @brief Get the current view

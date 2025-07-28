@@ -198,8 +198,15 @@ void EditorWidget::init() {
     _selectionRectangle.setOutlineColor(TileColors::selectionOutline());
     _selectionRectangle.setOutlineThickness(2.0f);
 
-    // Initialize viewport controller (windowSize is from SFMLWidget, for now use default)
-    _viewportController->initialize(sf::Vector2u(800, 600));
+    // Initialize viewport controller with current widget size
+    sf::Vector2u windowSize(800, 600); // Default size
+    if (_sfmlWidget) {
+        windowSize = sf::Vector2u(
+            static_cast<unsigned int>(_sfmlWidget->width()),
+            static_cast<unsigned int>(_sfmlWidget->height())
+        );
+    }
+    _viewportController->initialize(windowSize);
 }
 
 void EditorWidget::saveMap() {
@@ -852,7 +859,15 @@ void EditorWidget::clearAllVisualSelections() {
 
 // SFML Event handling interface (called by SFMLWidget)
 void EditorWidget::handleEvent(const sf::Event& event) {
-    // Delegate all event handling to InputHandler
+    // Handle resize events to maintain aspect ratio (SFML 3 syntax)
+    if (const auto* resized = event.getIf<sf::Event::Resized>()) {
+        if (_viewportController) {
+            _viewportController->updateViewForWindowSize(sf::Vector2u(resized->size.x, resized->size.y));
+            spdlog::debug("EditorWidget: Handled window resize to {}x{}", resized->size.x, resized->size.y);
+        }
+    }
+    
+    // Delegate all other event handling to InputHandler
     if (_inputHandler) {
         _inputHandler->handleEvent(event, _sfmlWidget->getRenderWindow(), _viewportController->getView());
     }
