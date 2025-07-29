@@ -1314,35 +1314,78 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
     if (!_map || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
         return std::nullopt;
     }
+
+    // FIXME: this is inaccurate and we should not use hex-to-tile conversion in the future
+    // Use hex-based selection for consistency with hex highlighting
+    // This ensures tile selection matches what users see in the hex highlights
     
-    auto& sprites = isRoof ? _roofSprites : _floorSprites;
-
-    for (unsigned int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
-        // Use the actual sprite's bounds instead of a fake sprite
-        const sf::Sprite& tileSprite = sprites.at(i);
-
-        if (isSpriteClicked(worldPos, tileSprite)) {
-            if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(i).getRoof() == Map::EMPTY_TILE) {
-                return std::nullopt;
-            }
-            return i;
-        }
+    // Adjust world position for roof offset if selecting roof tiles
+    sf::Vector2f adjustedWorldPos = worldPos;
+    if (isRoof) {
+        adjustedWorldPos.y += ROOF_OFFSET;  // Roof tiles are visually offset upward
     }
-    return std::nullopt;
+    
+    int hexIndex = _viewportController->worldPosToHexIndex(adjustedWorldPos);
+    if (hexIndex < 0) {
+        spdlog::debug("EditorWidget::getTileAtPosition: No hex found at worldPos ({:.1f}, {:.1f}) adjusted({:.1f}, {:.1f}) [roof: {}]",
+                      worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, isRoof);
+        return std::nullopt;
+    }
+    
+    // Convert hex coordinates (200x200 grid) to tile coordinates (100x100 grid)
+    int hexX = hexIndex % HexagonGrid::GRID_WIDTH;  // 0-199
+    int hexY = hexIndex / HexagonGrid::GRID_WIDTH;  // 0-199
+    int tileX = hexX / 2;  // 0-99
+    int tileY = hexY / 2;  // 0-99
+    int tileIndex = tileY * MAP_WIDTH + tileX; // Convert to tile index
+    
+    // Validate tile bounds (should be redundant but kept for safety)
+    if (tileIndex >= TILES_PER_ELEVATION) {
+        spdlog::debug("EditorWidget::getTileAtPosition: Tile index {} out of bounds", tileIndex);
+        return std::nullopt;
+    }
+    
+    // For roof tiles, check if there's actually a roof tile at this position
+    if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(tileIndex).getRoof() == Map::EMPTY_TILE) {
+        spdlog::debug("EditorWidget::getTileAtPosition: Empty roof tile at index {} [worldPos: ({:.1f}, {:.1f})]",
+                      tileIndex, worldPos.x, worldPos.y);
+        return std::nullopt;
+    }
+    
+    spdlog::debug("EditorWidget::getTileAtPosition: Found tile {} at worldPos ({:.1f}, {:.1f}) [roof: {}]",
+                  tileIndex, worldPos.x, worldPos.y, isRoof);
+    
+    return tileIndex;
 }
 
 std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
-    // This version includes empty roof tiles in the selection
-    for (unsigned int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
-        sf::FloatRect tileBounds = _roofSprites.at(i).getGlobalBounds();
-
-        // Check if world position is within tile bounds
-        if (tileBounds.contains(worldPos)) {
-            return i;
-        }
+    // This version includes empty roof tiles in the selection using F2 Mapper algorithm
+    if (!_map || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
+        return std::nullopt;
     }
-
-    return std::nullopt;
+    
+    // Use hex-based selection for roof tiles too, for consistency
+    // Adjust world position for roof offset since we're selecting roof tiles
+    sf::Vector2f adjustedWorldPos = worldPos;
+    adjustedWorldPos.y += ROOF_OFFSET;  // Roof tiles are visually offset upward
+    
+    int hexIndex = _viewportController->worldPosToHexIndex(adjustedWorldPos);
+    if (hexIndex < 0) {
+        return std::nullopt;
+    }
+    
+    // Convert hex coordinates to tile coordinates
+    int hexX = hexIndex % HexagonGrid::GRID_WIDTH;  // 0-199
+    int hexY = hexIndex / HexagonGrid::GRID_WIDTH;  // 0-199
+    int tileX = hexX / 2;  // 0-99
+    int tileY = hexY / 2;  // 0-99
+    int tileIndex = tileY * MAP_WIDTH + tileX; // Convert to tile index
+    
+    if (tileIndex < 0 || tileIndex >= TILES_PER_ELEVATION) {
+        return std::nullopt;
+    }
+    
+    return tileIndex;
 }
 
 selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f worldPos) {

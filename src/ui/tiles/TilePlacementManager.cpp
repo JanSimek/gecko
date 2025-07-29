@@ -19,28 +19,20 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
         return;
     }
 
-    // Convert world position to hex index
-    int hexIndex = _editor->getViewportController()->worldPosToHexIndex(worldPos);
-    if (hexIndex < 0) {
+    // Convert world position directly to tile index using pixel-perfect algorithm
+    int tileIndex_pos = _editor->getViewportController()->worldPosToTileIndex(worldPos, isRoof);
+    if (tileIndex_pos < 0) {
         spdlog::debug("TilePlacementManager::placeTileAtPosition: No tile found at worldPos ({:.1f}, {:.1f})",
             worldPos.x, worldPos.y);
         return;
     }
 
-    // Convert hex coordinates (200x200 grid) to tile coordinates (100x100 grid)
-    // Hex grid: 0-39999 positions, Tile grid: 0-9999 positions
-    int hexX = hexIndex % HexagonGrid::GRID_WIDTH;  // 0-199
-    int hexY = hexIndex / HexagonGrid::GRID_WIDTH;  // 0-199
-    int tileX = hexX / 2;  // 0-99
-    int tileY = hexY / 2;  // 0-99
-    int tileIndex_pos = tileX + (tileY * Map::COLS); // 0-9999
-
     auto& mapFile = _editor->getMapFile();
     auto& elevationTiles = mapFile.tiles[_editor->getCurrentElevation()];
 
     if (tileIndex_pos >= static_cast<int>(elevationTiles.size())) {
-        spdlog::warn("TilePlacementManager::placeTileAtPosition: Tile index {} out of bounds (converted from hex {})", 
-            tileIndex_pos, hexIndex);
+        spdlog::warn("TilePlacementManager::placeTileAtPosition: Tile index {} out of bounds", 
+            tileIndex_pos);
         return;
     }
 
@@ -54,8 +46,8 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
     // Efficiently update just this tile's sprite
     updateTileSprite(tileIndex_pos, isRoof);
 
-    spdlog::debug("TilePlacementManager::placeTileAtPosition: Placed tile {} at tile {} (converted from hex {}, roof: {})",
-        tileIndex, tileIndex_pos, hexIndex, isRoof);
+    spdlog::debug("TilePlacementManager::placeTileAtPosition: Placed tile {} at tile position {} (roof: {})",
+        tileIndex, tileIndex_pos, isRoof);
 }
 
 void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof) {

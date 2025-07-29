@@ -2,8 +2,10 @@
 
 #include <SFML/Graphics.hpp>
 #include <optional>
+#include <memory>
 #include "../../editor/HexagonGrid.h"
 #include "../../util/Coordinates.h"
+#include "../../util/TileUtils.h"
 
 namespace geck {
 
@@ -56,11 +58,19 @@ public:
     int updateHoverHex(sf::Vector2f worldPos);
 
     /**
-     * @brief Convert world position to hex grid index
+     * @brief Convert world position to hex grid index (accurate algorithm)
      * @param worldPos World position to convert
      * @return Hex index, -1 if invalid
      */
     int worldPosToHexIndex(sf::Vector2f worldPos) const;
+
+    /**
+     * @brief Convert world position to tile index (pixel-perfect algorithm)
+     * @param worldPos World position to convert
+     * @param isRoof Whether this is for roof tile selection
+     * @return Tile index (0-9999), -1 if invalid
+     */
+    int worldPosToTileIndex(sf::Vector2f worldPos, bool isRoof = false) const;
 
     /**
      * @brief Convert world position to hex position (type-safe)

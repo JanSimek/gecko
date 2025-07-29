@@ -69,24 +69,54 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
         return -1;
     }
     
-    // Find the closest hex by checking distance to each hex center
-    int closestHex = -1;
-    float minDistance = std::numeric_limits<float>::max();
+    // Use improved hex grid position lookup with better accuracy
+    uint32_t hexPosition = _hexGrid->positionAt(static_cast<uint32_t>(worldPos.x), static_cast<uint32_t>(worldPos.y));
     
+    if (hexPosition == Hex::HEX_OUT_OF_MAP) {
+        spdlog::debug("ViewportController::worldPosToHexIndex: world({:.1f}, {:.1f}) -> out of map",
+                      worldPos.x, worldPos.y);
+        return -1;
+    }
+    
+    // Find the hex index from position
     const auto& hexGrid = _hexGrid->grid();
     for (int i = 0; i < static_cast<int>(hexGrid.size()); ++i) {
-        const auto& hex = hexGrid[i];
-        float dx = worldPos.x - static_cast<float>(hex.x());
-        float dy = worldPos.y - static_cast<float>(hex.y());
-        float distance = dx * dx + dy * dy; // squared distance is sufficient for comparison
-        
-        if (distance < minDistance) {
-            minDistance = distance;
-            closestHex = i;
+        if (hexGrid[i].position() == hexPosition) {
+            spdlog::debug("ViewportController::worldPosToHexIndex: world({:.1f}, {:.1f}) -> hex({})",
+                          worldPos.x, worldPos.y, i);
+            return i;
         }
     }
     
-    return closestHex;
+    return -1;
+}
+
+int ViewportController::worldPosToTileIndex(sf::Vector2f worldPos, bool isRoof) const {
+    // Use hex-based approach for consistency with tile selection
+    // Adjust world position for roof offset if selecting roof tiles
+    sf::Vector2f adjustedWorldPos = worldPos;
+    if (isRoof) {
+        adjustedWorldPos.y += ROOF_OFFSET;  // Roof tiles are visually offset upward
+    }
+    
+    int hexIndex = worldPosToHexIndex(adjustedWorldPos);
+    if (hexIndex < 0) {
+        spdlog::debug("ViewportController::worldPosToTileIndex: No hex found at world({:.1f}, {:.1f}) adjusted({:.1f}, {:.1f}) [roof: {}]",
+                      worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, isRoof);
+        return -1;
+    }
+    
+    // Convert hex coordinates to tile coordinates
+    int hexX = hexIndex % HexagonGrid::GRID_WIDTH;  // 0-199
+    int hexY = hexIndex / HexagonGrid::GRID_WIDTH;  // 0-199
+    int tileX = hexX / 2;  // 0-99
+    int tileY = hexY / 2;  // 0-99
+    int tileIndex = tileY * MAP_WIDTH + tileX;
+    
+    spdlog::debug("ViewportController::worldPosToTileIndex: world({:.1f}, {:.1f}) adjusted({:.1f}, {:.1f}) -> hex({}) -> tile({}) [roof: {}]",
+                  worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, hexIndex, tileIndex, isRoof);
+    
+    return tileIndex;
 }
 
 
