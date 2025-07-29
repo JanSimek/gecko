@@ -372,8 +372,7 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
 
     // Always emit signals for tile operations (auto-paint mode)
     emit tileSelected(tileIndex);
-    // Also emit the replacement signal - EditorWidget will handle whether tiles are actually selected
-    emit replaceSelectedTiles(tileIndex);
+    // Note: replaceSelectedTiles should only be called when explicitly replacing tiles, not on every tile selection
 
     spdlog::debug("TilePalettePanel: Selected tile {} for auto-painting", tileIndex);
 }

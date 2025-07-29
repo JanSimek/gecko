@@ -907,10 +907,13 @@ void EditorWidget::setupInputCallbacks() {
         bool isRoof = _inputHandler->isInTilePlacementMode() && 
                      sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
         _tilePlacementManager->handleTilePlacement(worldPos, isRoof);
+        clearDragSelectionPreview(); // Clear yellow selection tint after placement
     };
     
     callbacks.onTileAreaFill = [this](sf::Vector2f startPos, sf::Vector2f endPos, bool isRoof) {
         _tilePlacementManager->handleTileAreaFill(startPos, endPos, isRoof);
+        clearDragSelectionPreview(); // Clear yellow selection tint after area fill
+        _selectionManager->clearSelection(); // Clear selection so it doesn't interfere with next tile selection
     };
     
     callbacks.onPan = [this](sf::Vector2f delta) {

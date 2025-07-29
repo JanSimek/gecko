@@ -3,6 +3,7 @@
 #include "../viewport/ViewportController.h"
 #include "../../format/map/Map.h"
 #include "../../selection/SelectionManager.h"
+#include "../../editor/HexagonGrid.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 
@@ -26,29 +27,41 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
         return;
     }
 
+    // Convert hex coordinates (200x200 grid) to tile coordinates (100x100 grid)
+    // Hex grid: 0-39999 positions, Tile grid: 0-9999 positions
+    int hexX = hexIndex % HexagonGrid::GRID_WIDTH;  // 0-199
+    int hexY = hexIndex / HexagonGrid::GRID_WIDTH;  // 0-199
+    int tileX = hexX / 2;  // 0-99
+    int tileY = hexY / 2;  // 0-99
+    int tileIndex_pos = tileX + (tileY * Map::COLS); // 0-9999
+
     auto& mapFile = _editor->getMapFile();
     auto& elevationTiles = mapFile.tiles[_editor->getCurrentElevation()];
 
-    if (hexIndex >= static_cast<int>(elevationTiles.size())) {
-        spdlog::warn("TilePlacementManager::placeTileAtPosition: Hex index {} out of bounds", hexIndex);
+    if (tileIndex_pos >= static_cast<int>(elevationTiles.size())) {
+        spdlog::warn("TilePlacementManager::placeTileAtPosition: Tile index {} out of bounds (converted from hex {})", 
+            tileIndex_pos, hexIndex);
         return;
     }
 
     // Place the tile
     if (isRoof) {
-        elevationTiles[hexIndex].setRoof(tileIndex);
+        elevationTiles[tileIndex_pos].setRoof(tileIndex);
     } else {
-        elevationTiles[hexIndex].setFloor(tileIndex);
+        elevationTiles[tileIndex_pos].setFloor(tileIndex);
     }
 
     // Efficiently update just this tile's sprite
-    updateTileSprite(hexIndex, isRoof);
+    updateTileSprite(tileIndex_pos, isRoof);
 
-    spdlog::debug("TilePlacementManager::placeTileAtPosition: Placed tile {} at hex {} (roof: {})",
-        tileIndex, hexIndex, isRoof);
+    spdlog::debug("TilePlacementManager::placeTileAtPosition: Placed tile {} at tile {} (converted from hex {}, roof: {})",
+        tileIndex, tileIndex_pos, hexIndex, isRoof);
 }
 
 void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof) {
+    spdlog::info("TilePlacementManager::fillAreaWithTile called with tile {} area ({:.1f},{:.1f},{:.1f},{:.1f}) roof: {}", 
+        tileIndex, area.position.x, area.position.y, area.size.x, area.size.y, isRoof);
+    
     if (!_editor->getMap()) {
         spdlog::warn("TilePlacementManager::fillAreaWithTile: No map loaded");
         return;
@@ -157,6 +170,9 @@ void TilePlacementManager::handleTilePlacement(sf::Vector2f worldPos, bool isRoo
 }
 
 void TilePlacementManager::handleTileAreaFill(sf::Vector2f startPos, sf::Vector2f endPos, bool isRoof) {
+    spdlog::info("TilePlacementManager::handleTileAreaFill called with start ({:.1f},{:.1f}) end ({:.1f},{:.1f}) roof: {} mode: {} index: {}", 
+        startPos.x, startPos.y, endPos.x, endPos.y, isRoof, _tilePlacementMode, _tilePlacementIndex);
+    
     if (_tilePlacementMode && _tilePlacementIndex >= 0) {
         float left = std::min(startPos.x, endPos.x);
         float top = std::min(startPos.y, endPos.y);
@@ -164,6 +180,8 @@ void TilePlacementManager::handleTileAreaFill(sf::Vector2f startPos, sf::Vector2
         float height = std::abs(endPos.y - startPos.y);
         sf::FloatRect fillArea({left, top}, {width, height});
         fillAreaWithTile(_tilePlacementIndex, fillArea, isRoof);
+    } else {
+        spdlog::warn("TilePlacementManager::handleTileAreaFill: Not in tile placement mode or no tile selected");
     }
 }
 

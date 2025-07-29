@@ -129,7 +129,7 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
                     _callbacks.onTileAreaFill(_dragStartWorldPos, worldPos, _tilePlacementIsRoof);
                 } else if (_tilePlacementMode && _tilePlacementIndex >= 0 && _callbacks.onTilePlacement) {
                     // Single tile placement
-                    _callbacks.onTilePlacement(_dragStartWorldPos);
+                    _callbacks.onTilePlacement(worldPos);
                 }
                 break;
 
@@ -220,6 +220,10 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
                 if (dragDistance > 5.0f) { // 5 pixel threshold
                     _isDragging = true;
                 }
+            }
+            // Show selection rectangle during tile placement drag
+            if (_isDragging && _callbacks.onDragSelectionPreview) {
+                _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos);
             }
             break;
 
