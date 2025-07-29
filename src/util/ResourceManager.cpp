@@ -11,6 +11,7 @@
 #endif
 
 #include "Constants.h"
+#include "Exceptions.h"
 
 #include <filesystem>
 #include <memory>
@@ -88,7 +89,7 @@ void ResourceManager::insertTexture(std::string_view filename) {
     } else {
         auto texture = std::make_unique<sf::Texture>();
         if (!texture->loadFromFile(filenameStr)) { // default to SFML's implementation
-            throw std::runtime_error{ "Failed to load texture " + filenameStr + ", extension: " + extension };
+            throw ResourceException("Failed to load texture with extension: " + extension, filenameStr);
         }
         _textures.try_emplace(filenameStr, std::move(texture));
     }
@@ -117,11 +118,11 @@ const sf::Texture& ResourceManager::texture(std::string_view filename) {
                     return *foundAfterLoad->second;
                 }
                 // If still null, this file doesn't exist
-                throw std::runtime_error{ "Texture " + filenameStr + " does not exist" };
+                throw ResourceException("Texture does not exist", filenameStr);
             }
         } catch (const std::exception& e) {
                 spdlog::error("ResourceManager: On-demand texture loading failed for {}: {}", filename, e.what());
-                throw std::runtime_error{ "Texture " + filenameStr + " does not exist" };
+                throw ResourceException("Texture loading failed", filenameStr);
             }
         }
 
@@ -130,17 +131,17 @@ const sf::Texture& ResourceManager::texture(std::string_view filename) {
         // Load palette for FRM texture creation
         auto pal = loadResource<Pal>("color.pal"); // TODO: custom pal
         if (!pal) {
-            throw std::runtime_error{ "Failed to load color palette for texture " + filenameStr };
+            throw ResourceException("Failed to load color palette for texture", filenameStr);
         }
 
         // Create image from FRM and load it into texture
         try {
             const sf::Image image = imageFromFrm(frm, pal);
             if (!texture->loadFromImage(image)) {
-                throw std::runtime_error{ "Failed to load texture from FRM image: " + filenameStr };
+                throw SpriteException("Failed to load texture from FRM image", filenameStr);
             }
         } catch (const std::exception& e) {
-            throw std::runtime_error{ "Failed to create texture from FRM " + filenameStr + ": " + e.what() };
+            throw SpriteException("Failed to create texture from FRM: " + std::string(e.what()), filenameStr);
         }
 
         // Store texture in cache using try_emplace
@@ -148,7 +149,7 @@ const sf::Texture& ResourceManager::texture(std::string_view filename) {
         if (inserted) {
             return *iter->second;
         } else {
-            throw std::runtime_error{ "Failed to cache texture " + filenameStr };
+            throw ResourceException("Failed to cache texture", filenameStr);
         }
 }
 

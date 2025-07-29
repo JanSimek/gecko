@@ -4,6 +4,7 @@
 #include "../format/map/MapObject.h"
 #include "../util/Constants.h"
 #include "../util/TileUtils.h"
+#include "../util/Exceptions.h"
 #include "../editor/HexagonGrid.h"
 #include <algorithm>
 #include <unordered_set>
@@ -16,10 +17,10 @@ SelectionManager::SelectionManager(Map* map, geck::EditorWidget* editorWidget)
     : _map(map)
     , _editorWidget(editorWidget) {
     if (!_map) {
-        throw std::invalid_argument("Map cannot be null");
+        throw InvalidArgumentException("Map cannot be null", "map");
     }
     if (!_editorWidget) {
-        throw std::invalid_argument("EditorWidget cannot be null");
+        throw InvalidArgumentException("EditorWidget cannot be null", "editorWidget");
     }
 
     // Initialize spatial index for performance
@@ -49,28 +50,25 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
     switch (mode) {
         case SelectionMode::FLOOR_TILES: {
             auto tiles = getTilesInArea(area, false, currentElevation);
-            for (int tileIndex : tiles) {
-                SelectedItem item{ SelectionType::FLOOR_TILE, tileIndex };
-                addItemToSelection(item);
-            }
+            std::ranges::for_each(tiles, [this](int tileIndex) {
+                addItemToSelection(SelectedItem{ SelectionType::FLOOR_TILE, tileIndex });
+            });
             break;
         }
 
         case SelectionMode::ROOF_TILES: {
             auto tiles = getTilesInArea(area, true, currentElevation);
-            for (int tileIndex : tiles) {
-                SelectedItem item{ SelectionType::ROOF_TILE, tileIndex };
-                addItemToSelection(item);
-            }
+            std::ranges::for_each(tiles, [this](int tileIndex) {
+                addItemToSelection(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
+            });
             break;
         }
 
         case SelectionMode::ROOF_TILES_ALL: {
             auto tiles = getTilesInAreaIncludingEmpty(area, true, currentElevation);
-            for (int tileIndex : tiles) {
-                SelectedItem item{ SelectionType::ROOF_TILE, tileIndex };
-                addItemToSelection(item);
-            }
+            std::ranges::for_each(tiles, [this](int tileIndex) {
+                addItemToSelection(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
+            });
             break;
         }
 
@@ -86,31 +84,27 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
         case SelectionMode::ALL: {
             // Select all items in the area: objects, floor tiles, and roof tiles
             auto objects = getObjectsInArea(area, currentElevation);
-            for (auto& object : objects) {
-                SelectedItem item{ SelectionType::OBJECT, object };
-                addItemToSelection(item);
-            }
+            std::ranges::for_each(objects, [this](auto& object) {
+                addItemToSelection(SelectedItem{ SelectionType::OBJECT, object });
+            });
 
             auto floorTiles = getTilesInArea(area, false, currentElevation);
-            for (int tileIndex : floorTiles) {
-                SelectedItem item{ SelectionType::FLOOR_TILE, tileIndex };
-                addItemToSelection(item);
-            }
+            std::ranges::for_each(floorTiles, [this](int tileIndex) {
+                addItemToSelection(SelectedItem{ SelectionType::FLOOR_TILE, tileIndex });
+            });
 
             auto roofTiles = getTilesInArea(area, true, currentElevation);
-            for (int tileIndex : roofTiles) {
-                SelectedItem item{ SelectionType::ROOF_TILE, tileIndex };
-                addItemToSelection(item);
-            }
+            std::ranges::for_each(roofTiles, [this](int tileIndex) {
+                addItemToSelection(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
+            });
             break;
         }
 
         case SelectionMode::HEXES: {
             auto hexIndices = getHexesInArea(area);
-            for (int hexIndex : hexIndices) {
-                SelectedItem item{ SelectionType::HEX, hexIndex };
-                addItemToSelection(item);
-            }
+            std::ranges::for_each(hexIndices, [this](int hexIndex) {
+                addItemToSelection(SelectedItem{ SelectionType::HEX, hexIndex });
+            });
             break;
         }
 

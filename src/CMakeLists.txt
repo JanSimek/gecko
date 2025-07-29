@@ -32,6 +32,8 @@ set(GECK_SOURCES
     util/CritterFrmResolver.cpp
 
     util/Types.h
+    util/Exceptions.h
+    util/Coordinates.h
     util/SpatialIndex.h
     util/SpatialIndex.cpp
 

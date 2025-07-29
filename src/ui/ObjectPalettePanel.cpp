@@ -641,9 +641,9 @@ void ObjectPalettePanel::onSearchTextChanged(const QString& text) {
 }
 
 void ObjectPalettePanel::clearObjectSelection() {
-    for (auto& objectWidget : _objectWidgets) {
-        objectWidget->setSelected(false);
-    }
+    std::ranges::for_each(_objectWidgets, [](auto& widget) {
+        widget->setSelected(false);
+    });
     _selectedObjectIndex = -1;
 }
 

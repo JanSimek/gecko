@@ -7,6 +7,8 @@
 #include "../util/ResourceManager.h"
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
+#include "../util/Exceptions.h"
+#include "../util/Coordinates.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 
@@ -22,20 +24,20 @@ Object::Object(const Frm* frm)
     // Validate FRM has at least one direction
     if (!frm) {
         spdlog::error("Object constructor: FRM pointer is null");
-        throw std::runtime_error("Cannot create Object with null FRM");
+        throw SpriteException("Cannot create Object with null FRM");
     }
     
     if (frm->directions().empty()) {
         spdlog::error("Object constructor: FRM '{}' has no directions (size: {})", 
                      frm->filename(), frm->directions().size());
-        throw std::runtime_error("Cannot create Object with FRM that has no directions: " + frm->filename());
+        throw SpriteException("FRM has no directions", frm->filename());
     }
     
     // Validate first direction has at least one frame
     if (frm->directions().at(0).frames().empty()) {
         spdlog::error("Object constructor: FRM '{}' direction 0 has no frames (size: {})", 
                      frm->filename(), frm->directions().at(0).frames().size());
-        throw std::runtime_error("Cannot create Object with FRM direction that has no frames: " + frm->filename());
+        throw SpriteException("FRM direction has no frames", frm->filename());
     }
 
     // Initialize light overlay
@@ -62,7 +64,7 @@ sf::Texture& Object::createBlankTexture() {
 
 MapObject& Object::getMapObject() {
     if (!_mapObject) {
-        throw std::runtime_error("Object::getMapObject() called but _mapObject is null");
+        throw ObjectException("getMapObject() called but _mapObject is null");
     }
     return *_mapObject; //.get();
 }
@@ -113,16 +115,18 @@ void Object::setFrm(const Frm* frm) {
     
     // Reset direction to 0 and update texture rectangle
     _direction = 0;
-    setDirection(static_cast<ObjectDirection>(_direction));
+    setDirection(ObjectDirection(_direction));
 }
 
 void Object::setHexPosition(const Hex& hex) {
 
     // center on the hex
-    float x = static_cast<float>(hex.x() - (width() / 2) + shiftX());
-    float y = static_cast<float>(hex.y() - height() + shiftY());
+    WorldCoords position(
+        hex.x() - (width() / 2) + shiftX(),
+        hex.y() - height() + shiftY()
+    );
 
-    _sprite.setPosition({ x, y });
+    _sprite.setPosition(position.toVector());
     if (_mapObject != nullptr) {
         _mapObject->position = hex.position();
     }
@@ -179,7 +183,7 @@ void Object::rotate() {
     } else {
         _direction++;
     }
-    setDirection(static_cast<ObjectDirection>(_direction));
+    setDirection(ObjectDirection(_direction));
 }
 
 void Object::select() {

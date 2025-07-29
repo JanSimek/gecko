@@ -387,11 +387,10 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
     _selectedTileIndex = tileIndex;
 
     // Update visual selection
-    for (auto& tileWidget : _tileWidgets) {
-        if (tileWidget->getTileIndex() == tileIndex) {
-            tileWidget->setSelected(true);
-            break;
-        }
+    auto it = std::ranges::find_if(_tileWidgets, 
+        [tileIndex](const auto& widget) { return widget->getTileIndex() == tileIndex; });
+    if (it != _tileWidgets.end()) {
+        (*it)->setSelected(true);
     }
 
     // Always emit signals for tile operations (auto-paint mode)
@@ -403,9 +402,9 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
 }
 
 void TilePalettePanel::clearTileSelection() {
-    for (auto& tileWidget : _tileWidgets) {
-        tileWidget->setSelected(false);
-    }
+    std::ranges::for_each(_tileWidgets, [](auto& widget) {
+        widget->setSelected(false);
+    });
 }
 
 void TilePalettePanel::deselectTile() {

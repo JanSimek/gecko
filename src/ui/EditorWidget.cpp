@@ -24,6 +24,7 @@
 #include "../util/QtDialogs.h"
 #include "../util/ProHelper.h"
 #include "../util/SpriteFactory.h"
+#include "../util/Coordinates.h"
 
 #include "../editor/Object.h"
 #include "../editor/HexagonGrid.h"
@@ -110,7 +111,7 @@ void EditorWidget::initializeSelectionSystem() {
 
                 case selection::SelectionType::ROOF_TILE: {
                     int tileIndex = item.getTileIndex();
-                    if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION) &&
+                    if (isValidTileIndex(tileIndex) &&
                         _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
                         // Check if this is an empty roof tile and we're in ROOF_TILES_ALL mode
                         [[maybe_unused]] auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
@@ -130,7 +131,7 @@ void EditorWidget::initializeSelectionSystem() {
 
                 case selection::SelectionType::FLOOR_TILE: {
                     int tileIndex = item.getTileIndex();
-                    if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
+                    if (isValidTileIndex(tileIndex)) {
                         this->_floorSprites.at(tileIndex).setColor(geck::ColorUtils::createErrorIndicatorColor());
                     }
                     break;
@@ -667,11 +668,10 @@ void EditorWidget::loadSprites() {
 std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vector2f worldPos) {
     std::vector<std::shared_ptr<Object>> objectsAtPos;
 
-    for (auto& object : _objects) {
-        if (isPointInSpritePixel(worldPos, object->getSprite())) {
-            objectsAtPos.push_back(object);
-        }
-    }
+    std::ranges::copy_if(_objects, std::back_inserter(objectsAtPos),
+        [this, worldPos](const auto& object) {
+            return isPointInSpritePixel(worldPos, object->getSprite());
+        });
 
     // Sort by map position (z-order) - higher positions are "in front"
     // For objects with same position, prioritize by object type (scenery > wall > others)
@@ -803,16 +803,16 @@ bool EditorWidget::isDoubleClick(sf::Vector2f worldPos) {
 
 void EditorWidget::clearAllVisualSelections() {
     // Clear all object selections
-    for (auto& object : _objects) {
+    std::ranges::for_each(_objects, [](auto& object) {
         if (object) {
             object->unselect();
         }
-    }
+    });
 
     // Clear all tile colors
-    for (auto& floorSprite : _floorSprites) {
-        floorSprite.setColor(sf::Color::White);
-    }
+    std::ranges::for_each(_floorSprites, [](auto& sprite) {
+        sprite.setColor(sf::Color::White);
+    });
 
     // Reset roof sprites - empty tiles back to transparent, others to white
     if (_map && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
@@ -826,9 +826,9 @@ void EditorWidget::clearAllVisualSelections() {
         }
     } else {
         // If elevation doesn't exist, just set all roof sprites to white
-        for (auto& roofSprite : _roofSprites) {
-            roofSprite.setColor(sf::Color::White);
-        }
+        std::ranges::for_each(_roofSprites, [](auto& sprite) {
+            sprite.setColor(sf::Color::White);
+        });
     }
 
     // Clear roof tile selection background sprites
@@ -1177,10 +1177,10 @@ void EditorWidget::rotateSelectedObject() {
     auto objects = selection.getObjects();
 
     if (!objects.empty()) {
-        for (auto& object : objects) {
+        std::ranges::for_each(objects, [](auto& object) {
             object->rotate();
             spdlog::debug("Rotated object to direction {}", object->getMapObject().direction);
-        }
+        });
         spdlog::info("Rotated {} selected object(s)", objects.size());
     } else {
         spdlog::debug("No objects selected for rotation");
@@ -1240,7 +1240,7 @@ bool EditorWidget::isTilePlacementMode() const {
 }
 
 void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
-    if (!_map || hexIndex < 0 || hexIndex >= static_cast<int>(Map::TILES_PER_ELEVATION)) {
+    if (!_map || !isValidHexPosition(hexIndex)) {
         return;
     }
 
@@ -1307,7 +1307,7 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
     
     auto& sprites = isRoof ? _roofSprites : _floorSprites;
 
-    for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); i++) {
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
         // Use the actual sprite's bounds instead of a fake sprite
         const sf::Sprite& tileSprite = sprites.at(i);
 
@@ -1323,7 +1323,7 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
 
 std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
     // This version includes empty roof tiles in the selection
-    for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
+    for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
         sf::FloatRect tileBounds = _roofSprites.at(i).getGlobalBounds();
 
         // Check if world position is within tile bounds
@@ -1413,7 +1413,7 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
             _previewTiles = _selectionManager->getTilesInArea(selectionArea, false, _currentElevation);
             // Apply preview coloring to floor tiles
             for (int tileIndex : _previewTiles) {
-                if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
+                if (isValidTileIndex(tileIndex)) {
                     applyPreviewHighlight(_floorSprites.at(tileIndex));
                 }
             }
@@ -1424,7 +1424,7 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
             _previewTiles = _selectionManager->getTilesInArea(selectionArea, true, _currentElevation);
             // Apply preview coloring to roof tiles
             for (int tileIndex : _previewTiles) {
-                if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
+                if (isValidTileIndex(tileIndex)) {
                     applyPreviewHighlight(_roofSprites.at(tileIndex));
                 }
             }
@@ -1435,7 +1435,7 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
             _previewTiles = _selectionManager->getTilesInAreaIncludingEmpty(selectionArea, true, _currentElevation);
             // Apply preview coloring to roof tiles including empty ones
             for (int tileIndex : _previewTiles) {
-                if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
+                if (isValidTileIndex(tileIndex)) {
                     // Apply preview coloring to roof sprite (makes empty tiles visible if they were transparent)
                     applyPreviewHighlight(_roofSprites.at(tileIndex));
                 }
@@ -1446,11 +1446,11 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
         case SelectionMode::OBJECTS: {
             _previewObjects = _selectionManager->getObjectsInArea(selectionArea, _currentElevation);
             // Apply preview coloring to objects
-            for (auto& object : _previewObjects) {
+            std::ranges::for_each(_previewObjects, [](auto& object) {
                 if (object) {
                     applyPreviewHighlight(object->getSprite());
                 }
-            }
+            });
             break;
         }
 
@@ -1460,7 +1460,7 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
             // Preview floor tiles
             _previewTiles = _selectionManager->getTilesInArea(selectionArea, false, _currentElevation);
             for (int tileIndex : _previewTiles) {
-                if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
+                if (isValidTileIndex(tileIndex)) {
                     applyPreviewHighlight(_floorSprites.at(tileIndex));
                 }
             }
@@ -1468,7 +1468,7 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
             // Preview roof tiles
             auto roofTiles = _selectionManager->getTilesInArea(selectionArea, true, _currentElevation);
             for (int tileIndex : roofTiles) {
-                if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
+                if (isValidTileIndex(tileIndex)) {
                     applyPreviewHighlight(_roofSprites.at(tileIndex));
                 }
             }
@@ -1476,11 +1476,11 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
 
             // Preview objects
             _previewObjects = _selectionManager->getObjectsInArea(selectionArea, _currentElevation);
-            for (auto& object : _previewObjects) {
+            std::ranges::for_each(_previewObjects, [](auto& object) {
                 if (object) {
                     applyPreviewHighlight(object->getSprite());
                 }
-            }
+            });
             break;
         }
 
@@ -1507,7 +1507,7 @@ void EditorWidget::updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vec
     // Apply preview coloring to tiles (same as selection mode)
     auto& sprites = isRoof ? _roofSprites : _floorSprites;
     for (int tileIndex : _previewTiles) {
-        if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
+        if (isValidTileIndex(tileIndex)) {
             applyPreviewHighlight(sprites.at(tileIndex));
         }
     }
@@ -1520,7 +1520,7 @@ void EditorWidget::clearDragPreview() {
     
     // Clear tile preview coloring
     for (int tileIndex : _previewTiles) {
-        if (tileIndex >= 0 && tileIndex < static_cast<int>(Map::TILES_PER_ELEVATION)) {
+        if (isValidTileIndex(tileIndex)) {
             removePreviewHighlight(_floorSprites.at(tileIndex));
 
             // For roof sprites, check if it's empty and set back to transparent
@@ -1539,11 +1539,11 @@ void EditorWidget::clearDragPreview() {
     }
 
     // Clear object preview coloring
-    for (auto& object : _previewObjects) {
+    std::ranges::for_each(_previewObjects, [](auto& object) {
         if (object) {
             removePreviewHighlight(object->getSprite());
         }
-    }
+    });
 
     // Clear the preview arrays
     _previewTiles.clear();
@@ -1824,14 +1824,14 @@ void EditorWidget::setShowLightOverlays(bool show) {
     
     int lightObjectCount = 0;
     // Update all objects to show/hide their light overlays
-    for (auto& object : _objects) {
+    std::ranges::for_each(_objects, [&lightObjectCount, show](auto& object) {
         if (object->hasLight()) {
             lightObjectCount++;
             spdlog::debug("EditorWidget: Found light source object with light_radius={}, light_intensity={}", 
                          object->getMapObject().light_radius, object->getMapObject().light_intensity);
         }
         object->setShowLightOverlay(show);
-    }
+    });
     
     spdlog::info("Light overlay display set to: {} (found {} light objects)", show, lightObjectCount);
 }
