@@ -11,6 +11,7 @@
 #endif
 
 #include "Constants.h"
+#include "ResourcePaths.h"
 #include "Exceptions.h"
 
 #include <filesystem>
@@ -22,7 +23,6 @@
 #include <vfspp/NativeFileSystem.hpp>
 #include "vfs/Dat2FileSystem.hpp"
 
-#include "reader/ReaderFactory.h"
 
 #include "format/frm/Direction.h"
 #include "format/frm/Frame.h"
@@ -129,7 +129,7 @@ const sf::Texture& ResourceManager::texture(std::string_view filename) {
         auto texture = std::make_unique<sf::Texture>();
         
         // Load palette for FRM texture creation
-        auto pal = loadResource<Pal>("color.pal"); // TODO: custom pal
+        auto pal = loadResource<Pal>(ResourcePaths::Pal::COLOR); // TODO: custom pal
         if (!pal) {
             throw ResourceException("Failed to load color palette for texture", filenameStr);
         }
@@ -159,12 +159,12 @@ void ResourceManager::addDataPath(const std::filesystem::path& path) {
     if (std::filesystem::is_directory(path)) {
         vfsPtr = std::make_shared<vfspp::NativeFileSystem>(path.string());
 
-        std::filesystem::path masterDat = path / "master.dat";
+        std::filesystem::path masterDat = path / ResourcePaths::Dat::MASTER;
         if (std::filesystem::exists(masterDat) && std::filesystem::is_regular_file(masterDat)) {
             addDataPath(masterDat);
         }
 
-        std::filesystem::path critterDat = path / "critter.dat";
+        std::filesystem::path critterDat = path / ResourcePaths::Dat::CRITTER;
         if (std::filesystem::exists(critterDat) && std::filesystem::is_regular_file(critterDat)) {
             addDataPath(critterDat);
         }
@@ -262,8 +262,8 @@ const sf::Image ResourceManager::imageFromFrm(Frm* frm, Pal* pal) {
 }
 std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
 
-    /*const*/ auto baseId = FID & FileFormat::BASE_ID_MASK; 
-    /*const*/ auto type = static_cast<Frm::FRM_TYPE>(FID >> FileFormat::TYPE_MASK_SHIFT);
+    auto baseId = FID & FileFormat::BASE_ID_MASK; 
+    auto type = static_cast<Frm::FRM_TYPE>(FID >> FileFormat::TYPE_MASK_SHIFT);
     
     spdlog::debug("ResourceManager: FIDtoFrmName called with FID=0x{:08X}, type={}, baseId={}", 
                   FID, static_cast<int>(type), baseId);
@@ -274,15 +274,13 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
     }
 
     if (type == Frm::FRM_TYPE::MISC && baseId == WallBlockers::SCROLL_BLOCKER_BASE_ID) {
-        static const std::string SCROLL_BLOCKERS_PATH("art/misc/scrblk.frm");
         // Map scroll blockers
-        return SCROLL_BLOCKERS_PATH;
+        return std::string(ResourcePaths::Frm::SCROLL_BLOCKER);
     }
 
     if (type == Frm::FRM_TYPE::WALL && baseId == 620) {
-        static const std::string SCROLL_BLOCKERS_PATH("art/misc/wallblock.frm");
-        // Map scroll blockers
-        return SCROLL_BLOCKERS_PATH;
+        // Wall blockers
+        return std::string(ResourcePaths::Frm::WALL_BLOCK);
     }
 
     // FIXME: Light source object (proto/scenery/00000142.pro) uses FID=0x02000015, so baseId=21 which currently points to block.frm
@@ -298,19 +296,18 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
         throw std::runtime_error{ "Invalid FRM_TYPE" };
     }
 
-    // TODO: art/$/
     static struct TypeArtListDecription {
         const std::string prefixPath;
         const std::string lstFilePath;
     } const frmTypeDescription[] = {
-        { "art/items/", "art/items/items.lst" },
-        { "art/critters/", "art/critters/critters.lst" },
-        { "art/scenery/", "art/scenery/scenery.lst" },
-        { "art/walls/", "art/walls/walls.lst" },
-        { "art/tiles/", "art/tiles/tiles.lst" },
-        { "art/misc/", "art/misc/misc.lst" },
-        { "art/intrface/", "art/intrface/intrface.lst" },
-        { "art/inven/", "art/inven/inven.lst" },
+        { std::string(ResourcePaths::Directories::ITEMS), std::string(ResourcePaths::Lst::ITEMS) },
+        { std::string(ResourcePaths::Directories::CRITTERS), std::string(ResourcePaths::Lst::CRITTERS) },
+        { std::string(ResourcePaths::Directories::SCENERY), std::string(ResourcePaths::Lst::SCENERY) },
+        { std::string(ResourcePaths::Directories::WALLS), std::string(ResourcePaths::Lst::WALLS) },
+        { std::string(ResourcePaths::Directories::TILES), std::string(ResourcePaths::Lst::TILES) },
+        { std::string(ResourcePaths::Directories::MISC), std::string(ResourcePaths::Lst::MISC) },
+        { std::string(ResourcePaths::Directories::INTERFACE), std::string(ResourcePaths::Lst::INTERFACE) },
+        { std::string(ResourcePaths::Directories::INVENTORY), std::string(ResourcePaths::Lst::INVENTORY) },
     };
 
     const auto& typeArtDescription = frmTypeDescription[static_cast<size_t>(type)];

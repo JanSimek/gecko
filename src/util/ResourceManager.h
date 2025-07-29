@@ -57,23 +57,29 @@ public:
 
         const std::string pathKey = path.string();
         
-        // Use try_emplace for better performance
-        if (const auto [iter, inserted] = _resources.try_emplace(pathKey); inserted) {
-            // Detect format and create appropriate reader
-            const auto format = ReaderFactory::detectFormat(path);
-            auto reader = ReaderFactory::createReader<Resource>(format);
+        // Check if already loaded
+        auto existingIter = _resources.find(pathKey);
+        if (existingIter == _resources.end()) {
+            try {
+                // Load data from VFS
+                const std::filesystem::path vfsPath = "/" / path;
+                vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::createNormalizedFileInfo(vfsPath), vfspp::IFile::FileMode::Read);
 
-            // vfspp adds / to the root by default
-            const std::filesystem::path vfsPath = "/" / path;
-            vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::createNormalizedFileInfo(vfsPath), vfspp::IFile::FileMode::Read);
+                if (!file || !file->IsOpened()) {
+                    throw ResourceException("Failed to open file from VFS", vfsPath);
+                }
 
-            if (!file || !file->IsOpened()) {
-                _resources.erase(iter); // Clean up failed insertion
-                throw std::runtime_error{ "Failed to open file from VFS: " + vfsPath.string() };
+                // Read file data from VFS into memory
+                std::vector<uint8_t> data(file->Size());
+                file->Read(data, file->Size());
+
+                auto resource = ReaderFactory::readFileFromMemory<Resource>(data, pathKey);
+
+                _resources[pathKey] = std::move(resource);
+                
+            } catch (const std::exception& e) {
+                throw ResourceException("Failed to load resource: " + std::string(e.what()), path);
             }
-            std::vector<uint8_t> data(file->Size());
-            file->Read(data, file->Size());
-            iter->second = reader->openFile(pathKey, data);
         }
 
         return dynamic_cast<Resource*>(_resources.at(pathKey).get());

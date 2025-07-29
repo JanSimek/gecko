@@ -142,4 +142,17 @@ void ViewportController::updateViewForWindowSize(sf::Vector2u windowSize) {
                   windowSize.x, windowSize.y, viewWidth, viewHeight, windowAspect);
 }
 
+std::optional<HexPosition> ViewportController::worldPosToHexPosition(const WorldCoords& worldPos) const {
+    int hexIndex = worldPosToHexIndex(worldPos.toVector());
+    if (hexIndex >= 0 && isValidHexPosition(hexIndex)) {
+        return HexPosition(hexIndex);
+    }
+    return std::nullopt;
+}
+
+WorldCoords ViewportController::snapToHexGrid(const WorldCoords& worldPos) const {
+    sf::Vector2f snapped = snapToHexGrid(worldPos.toVector());
+    return WorldCoords(snapped.x, snapped.y);
+}
+
 } // namespace geck

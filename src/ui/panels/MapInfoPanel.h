@@ -15,6 +15,8 @@
 #include <QPushButton>
 #include <unordered_map>
 
+#include "../../util/EventBus.h"
+
 namespace geck {
 
 class Map;

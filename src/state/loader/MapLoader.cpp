@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
 #include "../../util/Constants.h"
+#include "../../util/ResourcePaths.h"
 
 #include "../../reader/ReaderFactory.h"
 #include "../../reader/map/MapReader.h"
@@ -71,14 +72,14 @@ void MapLoader::loadFromVFS() {
         
         // Validate and load required LST files (same as filesystem loading)
         const std::vector<std::string> requiredLstFiles = {
-            "art/items/items.lst", 
-            "art/critters/critters.lst", 
-            "art/scenery/scenery.lst", 
-            "art/walls/walls.lst", 
-            "art/tiles/tiles.lst", 
-            "art/misc/misc.lst", 
-            "art/intrface/intrface.lst", 
-            "art/inven/inven.lst"
+            std::string(ResourcePaths::Lst::ITEMS),
+            std::string(ResourcePaths::Lst::CRITTERS),
+            std::string(ResourcePaths::Lst::SCENERY),
+            std::string(ResourcePaths::Lst::WALLS),
+            std::string(ResourcePaths::Lst::TILES),
+            std::string(ResourcePaths::Lst::MISC),
+            std::string(ResourcePaths::Lst::INTERFACE),
+            std::string(ResourcePaths::Lst::INVENTORY)
         };
         
         std::vector<std::string> missingFiles;
@@ -193,14 +194,14 @@ void MapLoader::loadFromFilesystem() {
 
     // Validate required LST files exist before loading
     const std::vector<std::string> requiredLstFiles = {
-        "art/items/items.lst", 
-        "art/critters/critters.lst", 
-        "art/scenery/scenery.lst", 
-        "art/walls/walls.lst", 
-        "art/tiles/tiles.lst", 
-        "art/misc/misc.lst", 
-        "art/intrface/intrface.lst", 
-        "art/inven/inven.lst"
+        std::string(ResourcePaths::Lst::ITEMS),
+        std::string(ResourcePaths::Lst::CRITTERS),
+        std::string(ResourcePaths::Lst::SCENERY),
+        std::string(ResourcePaths::Lst::WALLS),
+        std::string(ResourcePaths::Lst::TILES),
+        std::string(ResourcePaths::Lst::MISC),
+        std::string(ResourcePaths::Lst::INTERFACE),
+        std::string(ResourcePaths::Lst::INVENTORY)
     };
     
     std::vector<std::string> missingFiles;
@@ -286,7 +287,7 @@ void MapLoader::loadMapResources() {
     // Load tile textures
     Lst* lst = nullptr;
     try {
-        lst = ResourceManager::getInstance().loadResource<Lst>("art/tiles/tiles.lst");
+        lst = ResourceManager::getInstance().loadResource<Lst>(ResourcePaths::Lst::TILES);
     } catch (const std::exception& e) {
         _errorMessage = QString("Failed to load tiles list file:\n%1\n\nPlease ensure all game data files are properly configured.")
             .arg(e.what()).toStdString();
@@ -336,11 +337,11 @@ void MapLoader::loadMapResources() {
     }
 
     // Load essential editor textures
-    ResourceManager::getInstance().insertTexture("art/tiles/blank.frm");
-    ResourceManager::getInstance().insertTexture("art/misc/light.frm");
-    ResourceManager::getInstance().insertTexture("art/misc/wallblock.frm");
-    ResourceManager::getInstance().insertTexture("art/misc/wallblockF.frm");
-    ResourceManager::getInstance().insertTexture("art/misc/scrblk.frm");
+    ResourceManager::getInstance().insertTexture(ResourcePaths::Frm::BLANK_TILE);
+    ResourceManager::getInstance().insertTexture(ResourcePaths::Frm::LIGHT);
+    ResourceManager::getInstance().insertTexture(ResourcePaths::Frm::WALL_BLOCK);
+    ResourceManager::getInstance().insertTexture(ResourcePaths::Frm::WALL_BLOCK_FULL);
+    ResourceManager::getInstance().insertTexture(ResourcePaths::Frm::SCROLL_BLOCKER);
 
     spdlog::info("... objects and resources loaded in {:.3} seconds", stopwatch_chunk);
     

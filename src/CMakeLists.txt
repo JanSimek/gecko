@@ -34,6 +34,7 @@ set(GECK_SOURCES
     util/Types.h
     util/Exceptions.h
     util/Coordinates.h
+    util/Coordinates.cpp
     util/Factory.h
     util/EventBus.h
     util/SpatialIndex.h
@@ -229,7 +230,6 @@ add_library(vault STATIC
     reader/FileParser.h
     reader/ReaderFactory.h
     reader/ReaderFactory.cpp
-    reader/UnifiedReaderFactory.h
 
     reader/dat/DatReader.h
     reader/dat/DatReader.cpp

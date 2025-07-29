@@ -1,7 +1,9 @@
 #pragma once
 
 #include <SFML/Graphics.hpp>
+#include <optional>
 #include "../../editor/HexagonGrid.h"
+#include "../../util/Coordinates.h"
 
 namespace geck {
 
@@ -60,6 +62,12 @@ public:
      */
     int worldPosToHexIndex(sf::Vector2f worldPos) const;
 
+    /**
+     * @brief Convert world position to hex position (type-safe)
+     * @param worldPos World position to convert
+     * @return HexPosition, or invalid if conversion fails
+     */
+    std::optional<HexPosition> worldPosToHexPosition(const WorldCoords& worldPos) const;
 
     /**
      * @brief Snap world position to nearest hex grid center
@@ -67,6 +75,13 @@ public:
      * @return Snapped position
      */
     sf::Vector2f snapToHexGrid(sf::Vector2f worldPos) const;
+
+    /**
+     * @brief Snap world position to nearest hex grid center (type-safe)
+     * @param worldPos World position to snap
+     * @return Snapped position
+     */
+    WorldCoords snapToHexGrid(const WorldCoords& worldPos) const;
 
     /**
      * @brief Get current zoom level

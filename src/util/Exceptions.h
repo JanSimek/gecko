@@ -118,4 +118,5 @@ public:
         : GeckoException("Configuration error for '" + settingName + "': " + message) {}
 };
 
+
 } // namespace geck

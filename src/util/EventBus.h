@@ -7,6 +7,7 @@
 #include <typeindex>
 #include <memory>
 #include <mutex>
+#include <SFML/Graphics.hpp>
 #include "Coordinates.h"
 
 namespace geck {
@@ -66,6 +67,31 @@ struct DragDropEvent {
     std::variant<TileIndex, int> data; // TileIndex or object index
 };
 
+struct PlayerPositionChangedEvent {
+    HexPosition position;
+    int elevation;
+};
+
+struct PlayerOrientationChangedEvent {
+    int orientation; // 0-5 for hex directions
+};
+
+struct ElevationChangedEvent {
+    enum class Type { Added, Removed };
+    Type type;
+    int elevation;
+};
+
+struct MapScriptChangedEvent {
+    int scriptId;
+};
+
+struct MapPropertiesChangedEvent {
+    enum class Property { Darkness, Timestamp };
+    Property property;
+    int value;
+};
+
 /**
  * @brief All UI events as a variant
  */
@@ -77,7 +103,12 @@ using UIEvent = std::variant<
     CoordinateClickedEvent,
     ViewportChangedEvent,
     PlacementModeChangedEvent,
-    DragDropEvent
+    DragDropEvent,
+    PlayerPositionChangedEvent,
+    PlayerOrientationChangedEvent,
+    ElevationChangedEvent,
+    MapScriptChangedEvent,
+    MapPropertiesChangedEvent
 >;
 
 /**

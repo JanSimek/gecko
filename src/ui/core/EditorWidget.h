@@ -20,6 +20,7 @@
 #include "../../format/pro/Pro.h"
 #include "../../selection/SelectionManager.h"
 #include "../../util/Constants.h"
+#include "../../util/EventBus.h"
 
 namespace geck {
 

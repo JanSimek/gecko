@@ -14,11 +14,13 @@ namespace geck {
  */
 class HexPosition {
 public:
+    static constexpr int MAX_VALUE = 39999; // 0-39999 range for 200x200 hex grid
+    
     constexpr explicit HexPosition(int position = 0) : _position(position) {}
 
     [[nodiscard]] constexpr int value() const noexcept { return _position; }
     [[nodiscard]] constexpr bool isValid() const noexcept { 
-        return _position >= 0 && _position < 40000; 
+        return _position >= 0 && _position <= MAX_VALUE; 
     }
 
     // Comparison operators
@@ -48,11 +50,13 @@ private:
  */
 class TileIndex {
 public:
+    static constexpr int MAX_VALUE = 9999; // 0-9999 range for 100x100 tile grid
+    
     constexpr explicit TileIndex(int index = 0) : _index(index) {}
 
     [[nodiscard]] constexpr int value() const noexcept { return _index; }
     [[nodiscard]] constexpr bool isValid() const noexcept { 
-        return _index >= 0 && _index < 10000; 
+        return _index >= 0 && _index <= MAX_VALUE; 
     }
 
     // Comparison operators
@@ -186,11 +190,51 @@ constexpr int toInt(Elevation elevation) noexcept {
 
 // Helper functions for tile validation
 constexpr bool isValidTileIndex(int index) noexcept {
-    return index >= 0 && index < 10000; // Map::TILES_PER_ELEVATION
+    return index >= 0 && index <= TileIndex::MAX_VALUE;
 }
 
 constexpr bool isValidHexPosition(int position) noexcept {
-    return position >= 0 && position < 40000; // HexagonGrid::GRID_WIDTH * GRID_HEIGHT
+    return position >= 0 && position <= HexPosition::MAX_VALUE;
+}
+
+/**
+ * @brief Type conversion utilities for gradual migration
+ * 
+ * These functions help migrate from raw int coordinates to type-safe classes
+ * without breaking existing code all at once.
+ */
+namespace CoordinateUtils {
+    
+    // Convert legacy int values to type-safe classes
+    [[nodiscard]] constexpr HexPosition toHexPosition(int position) {
+        return HexPosition(position);
+    }
+    
+    [[nodiscard]] constexpr TileIndex toTileIndex(int index) {
+        return TileIndex(index);
+    }
+    
+    [[nodiscard]] constexpr WorldCoords toWorldCoords(float x, float y) {
+        return WorldCoords(x, y);
+    }
+    
+    [[nodiscard]] constexpr ScreenCoords toScreenCoords(int x, int y) {
+        return ScreenCoords(x, y);
+    }
+    
+    // Convert from SFML types
+    [[nodiscard]] constexpr WorldCoords fromVector2f(const sf::Vector2f& vec) {
+        return WorldCoords(vec.x, vec.y);
+    }
+    
+    [[nodiscard]] constexpr ScreenCoords fromVector2i(const sf::Vector2i& vec) {
+        return ScreenCoords(vec.x, vec.y);
+    }
+    
+    // Validate and convert (throws on invalid input)
+    [[nodiscard]] HexPosition toValidHexPosition(int position);
+    [[nodiscard]] TileIndex toValidTileIndex(int index);
+    [[nodiscard]] Elevation toValidElevation(int elevation);
 }
 
 } // namespace geck

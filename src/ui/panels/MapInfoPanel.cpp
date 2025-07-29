@@ -11,6 +11,8 @@
 #include "../../format/lst/Lst.h"
 #include "../../reader/ReaderFactory.h"
 #include "../../util/ResourceManager.h"
+#include "../../util/ResourcePaths.h"
+#include "../../util/Coordinates.h"
 
 namespace geck {
 
@@ -88,7 +90,7 @@ void MapInfoPanel::setupUI() {
     // Player position with button
     QHBoxLayout* positionLayout = new QHBoxLayout();
     _playerPositionSpin = new QSpinBox();
-    _playerPositionSpin->setRange(0, 39999);  // Max hex position (200x200 grid)
+    _playerPositionSpin->setRange(0, HexPosition::MAX_VALUE);  // Max hex position
     _setPositionButton = new QPushButton();
     _setPositionButton->setIcon(QIcon(":/icons/actions/map-pin.svg"));
     _setPositionButton->setMaximumWidth(30);
@@ -352,14 +354,14 @@ void MapInfoPanel::loadScriptVars() {
             // Load map script name
             int map_script_id = _map->getMapFile().header.script_id;
             if (map_script_id > 0) {
-                auto scripts = ResourceManager::getInstance().loadResource<Lst>("scripts/scripts.lst");
+                auto scripts = ResourceManager::getInstance().loadResource<Lst>(ResourcePaths::Lst::SCRIPTS);
                 const auto& scriptList = scripts->list();
                 if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
                     _mapScriptName = scripts->at(map_script_id - 1); // script id starts at 1
-                    spdlog::debug("Script name '{}' found for ID {} in: {}", _mapScriptName, map_script_id, "scripts/scripts.lst");
+                    spdlog::debug("Script name '{}' found for ID {} in: {}", _mapScriptName, map_script_id, ResourcePaths::Lst::SCRIPTS);
                 } else {
                     _mapScriptName = "invalid script index";
-                    spdlog::warn("Script ID {} out of bounds for scripts.lst size {} in: {}", map_script_id, scriptList.size(), "scripts/scripts.lst");
+                    spdlog::warn("Script ID {} out of bounds for scripts.lst size {} in: {}", map_script_id, scriptList.size(), ResourcePaths::Lst::SCRIPTS);
                 }
             } else {
                 _mapScriptName = "no script";
@@ -437,14 +439,35 @@ void MapInfoPanel::onFieldChanged() {
     QObject* sender = QObject::sender();
     if (sender == _playerPositionSpin) {
         emit playerPositionChanged(_playerPositionSpin->value());
+        // Also publish to EventBus
+        EventBus::getInstance().publish(PlayerPositionChangedEvent{
+            HexPosition(_playerPositionSpin->value()),
+            _playerElevationSpin->value()
+        });
     } else if (sender == _playerElevationSpin) {
         emit playerElevationChanged(_playerElevationSpin->value());
+        // Position event also carries elevation
+        EventBus::getInstance().publish(PlayerPositionChangedEvent{
+            HexPosition(_playerPositionSpin->value()),
+            _playerElevationSpin->value()
+        });
     } else if (sender == _mapScriptIdSpin) {
         emit mapScriptIdChanged(_mapScriptIdSpin->value());
+        EventBus::getInstance().publish(MapScriptChangedEvent{
+            _mapScriptIdSpin->value()
+        });
     } else if (sender == _darknessSpin) {
         emit darknessChanged(_darknessSpin->value());
+        EventBus::getInstance().publish(MapPropertiesChangedEvent{
+            MapPropertiesChangedEvent::Property::Darkness,
+            _darknessSpin->value()
+        });
     } else if (sender == _timestampSpin) {
         emit timestampChanged(_timestampSpin->value());
+        EventBus::getInstance().publish(MapPropertiesChangedEvent{
+            MapPropertiesChangedEvent::Property::Timestamp,
+            _timestampSpin->value()
+        });
     }
     
     spdlog::debug("MapInfoPanel: Field changed, map header updated");
@@ -459,6 +482,7 @@ void MapInfoPanel::onOrientationChanged(int index) {
     mapInfo.header.player_default_orientation = static_cast<uint32_t>(index);
     
     emit playerOrientationChanged(index);
+    EventBus::getInstance().publish(PlayerOrientationChangedEvent{index});
     spdlog::debug("MapInfoPanel: Player orientation changed to {}", index);
 }
 
@@ -485,6 +509,10 @@ void MapInfoPanel::setPlayerPosition(int hexPosition) {
     mapInfo.header.player_default_position = static_cast<uint32_t>(hexPosition);
     
     emit playerPositionChanged(hexPosition);
+    EventBus::getInstance().publish(PlayerPositionChangedEvent{
+        HexPosition(hexPosition),
+        _playerElevationSpin->value()
+    });
     spdlog::debug("MapInfoPanel: Player position set to hex {}", hexPosition);
 }
 
@@ -707,6 +735,10 @@ void MapInfoPanel::onElevationCheckboxChanged() {
         }
         
         emit elevationAdded(elevation);
+        EventBus::getInstance().publish(ElevationChangedEvent{
+            ElevationChangedEvent::Type::Added,
+            elevation
+        });
         spdlog::info("MapInfoPanel: Added {} to map", elevationName.toStdString());
         
         // Update checkbox states after adding elevation
@@ -748,6 +780,10 @@ void MapInfoPanel::onElevationCheckboxChanged() {
             }
             
             emit elevationRemoved(elevation);
+            EventBus::getInstance().publish(ElevationChangedEvent{
+                ElevationChangedEvent::Type::Removed,
+                elevation
+            });
             spdlog::info("MapInfoPanel: Removed {} from map", elevationName.toStdString());
             
             // Update checkbox states after removing elevation

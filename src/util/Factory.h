@@ -6,6 +6,9 @@
 #include <string>
 #include <string_view>
 #include <stdexcept>
+#include <any>
+#include <ranges>
+#include <algorithm>
 #include "Exceptions.h"
 
 namespace geck {

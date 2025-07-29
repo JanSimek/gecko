@@ -1,11 +1,6 @@
 #include "ReaderFactory.h"
 
-#include <algorithm>
-#include <fstream>
-#include <regex>
-#include <spdlog/spdlog.h>
-
-// Include all reader headers
+// Reader implementations
 #include "dat/DatReader.h"
 #include "pro/ProReader.h"
 #include "frm/FrmReader.h"
@@ -13,32 +8,32 @@
 #include "gam/GamReader.h"
 #include "msg/MsgReader.h"
 #include "lst/LstReader.h"
-#include "map/MapReader.h"
+// #include "map/MapReader.h" - Not used, requires callback parameter
 
-// Include format headers
-#include "format/dat/Dat.h"
-#include "format/pro/Pro.h"
-#include "format/frm/Frm.h"
-#include "format/pal/Pal.h"
-#include "format/gam/Gam.h"
-#include "format/msg/Msg.h"
-#include "format/lst/Lst.h"
-#include "format/map/Map.h"
+#include <fstream>
+#include <algorithm>
+#include <ranges>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <stdexcept>
+#include <spdlog/spdlog.h>
 
 namespace geck {
 
-// Static initialization of format information
+// Format information mapping
 const std::map<ReaderFactory::Format, ReaderFactory::FormatInfo> ReaderFactory::format_info_map = {
-    {Format::DAT, {Format::DAT, "Fallout DAT Archive", {".dat"}, {}, 0, 8, 0.0}},
-    {Format::PRO, {Format::PRO, "Fallout PRO Object", {".pro"}, {}, 0, 24, 0.0}},
-    {Format::FRM, {Format::FRM, "Fallout FRM Animation", {".frm"}, {0x00, 0x00, 0x00, 0x04}, 0, 62, 0.0}}, // Version 4
-    {Format::PAL, {Format::PAL, "Fallout PAL Palette", {".pal"}, {}, 0, 0x8300, 0.0}}, // Fixed size
-    {Format::GAM, {Format::GAM, "Fallout GAM Save", {".gam"}, {}, 0, 10, 0.0}}, // Text format, minimal size
-    {Format::MSG, {Format::MSG, "Fallout MSG Messages", {".msg"}, {}, 0, 1, 0.0}}, // Text format, minimal size
-    {Format::LST, {Format::LST, "Fallout LST List", {".lst"}, {}, 0, 0, 0.0}}, // Text format, can be empty
-    {Format::MAP, {Format::MAP, "Fallout MAP File", {".map"}, {}, 0, 8, 0.0}} // Has version field
+    {Format::DAT, {Format::DAT, "Fallout Data Archive", {".dat"}, {}, 0, 32, 1.0}},
+    {Format::PRO, {Format::PRO, "Fallout PRO Object", {".pro"}, {}, 0, 24, 1.0}},
+    {Format::FRM, {Format::FRM, "Fallout Frame", {".frm"}, {}, 0, 62, 1.0}},  
+    {Format::PAL, {Format::PAL, "Fallout Palette", {".pal"}, {}, 0, 768, 1.0}},
+    {Format::GAM, {Format::GAM, "Fallout Game Save", {".gam"}, {'F', 'A', 'L', 'L'}, 0, 4, 1.0}},
+    {Format::MSG, {Format::MSG, "Fallout Message File", {".msg"}, {}, 0, 1, 1.0}},
+    {Format::LST, {Format::LST, "Fallout List File", {".lst"}, {}, 0, 1, 1.0}},
+    {Format::MAP, {Format::MAP, "Fallout Map", {".map"}, {'M', 'A', 'P', ' '}, 0, 4, 1.0}},
 };
 
+// Extension to format mapping
 const std::map<std::string, ReaderFactory::Format> ReaderFactory::extension_format_map = {
     {".dat", Format::DAT},
     {".pro", Format::PRO},
@@ -53,86 +48,91 @@ const std::map<std::string, ReaderFactory::Format> ReaderFactory::extension_form
 // Template specializations for createReader
 template<>
 std::unique_ptr<FileParser<Dat>> ReaderFactory::createReader<Dat>(Format format) {
-    if (format != Format::DAT) {
-        throw UnsupportedFormatException("Format mismatch: expected DAT format");
+    switch (format) {
+    case Format::DAT:
+        return std::make_unique<DatReader>();
+    default:
+        throw UnsupportedFormatException("Invalid format for Dat reader");
     }
-    return std::make_unique<DatReader>();
 }
 
 template<>
 std::unique_ptr<FileParser<Pro>> ReaderFactory::createReader<Pro>(Format format) {
-    if (format != Format::PRO) {
-        throw UnsupportedFormatException("Format mismatch: expected PRO format");
+    switch (format) {
+    case Format::PRO:
+        return std::make_unique<ProReader>();
+    default:
+        throw UnsupportedFormatException("Invalid format for Pro reader");
     }
-    return std::make_unique<ProReader>();
 }
 
 template<>
 std::unique_ptr<FileParser<Frm>> ReaderFactory::createReader<Frm>(Format format) {
-    if (format != Format::FRM) {
-        throw UnsupportedFormatException("Format mismatch: expected FRM format");
+    switch (format) {
+    case Format::FRM:
+        return std::make_unique<FrmReader>();
+    default:
+        throw UnsupportedFormatException("Invalid format for Frm reader");
     }
-    return std::make_unique<FrmReader>();
 }
 
 template<>
 std::unique_ptr<FileParser<Pal>> ReaderFactory::createReader<Pal>(Format format) {
-    if (format != Format::PAL) {
-        throw UnsupportedFormatException("Format mismatch: expected PAL format");
+    switch (format) {
+    case Format::PAL:
+        return std::make_unique<PalReader>();
+    default:
+        throw UnsupportedFormatException("Invalid format for Pal reader");
     }
-    return std::make_unique<PalReader>();
 }
 
 template<>
 std::unique_ptr<FileParser<Gam>> ReaderFactory::createReader<Gam>(Format format) {
-    if (format != Format::GAM) {
-        throw UnsupportedFormatException("Format mismatch: expected GAM format");
+    switch (format) {
+    case Format::GAM:
+        return std::make_unique<GamReader>();
+    default:
+        throw UnsupportedFormatException("Invalid format for Gam reader");
     }
-    return std::make_unique<GamReader>();
 }
 
 template<>
 std::unique_ptr<FileParser<Msg>> ReaderFactory::createReader<Msg>(Format format) {
-    if (format != Format::MSG) {
-        throw UnsupportedFormatException("Format mismatch: expected MSG format");
+    switch (format) {
+    case Format::MSG:
+        return std::make_unique<MsgReader>();
+    default:
+        throw UnsupportedFormatException("Invalid format for Msg reader");
     }
-    return std::make_unique<MsgReader>();
 }
 
 template<>
 std::unique_ptr<FileParser<Lst>> ReaderFactory::createReader<Lst>(Format format) {
-    if (format != Format::LST) {
-        throw UnsupportedFormatException("Format mismatch: expected LST format");
+    switch (format) {
+    case Format::LST:
+        return std::make_unique<LstReader>();
+    default:
+        throw UnsupportedFormatException("Invalid format for Lst reader");
     }
-    return std::make_unique<LstReader>();
 }
 
-template<>
-std::unique_ptr<FileParser<Map>> ReaderFactory::createReader<Map>(Format format) {
-    if (format != Format::MAP) {
-        throw UnsupportedFormatException("Format mismatch: expected MAP format");
-    }
-    // MapReader requires a callback - provide default null callback
-    return std::make_unique<MapReader>([](uint32_t) -> Pro* { return nullptr; });
-}
+// Map reader not supported - requires callback parameter
 
-// Generic reader creation with format detection
+// Legacy interface support methods
 void* ReaderFactory::createGenericReader(const std::filesystem::path& filePath, Format& detectedFormat) {
     detectedFormat = detectFormat(filePath);
     
     switch (detectedFormat) {
-        case Format::DAT: return new DatReader();
-        case Format::PRO: return new ProReader();
-        case Format::FRM: return new FrmReader();
-        case Format::PAL: return new PalReader();
-        case Format::GAM: return new GamReader();
-        case Format::MSG: return new MsgReader();
-        case Format::LST: return new LstReader();
-        case Format::MAP: 
-            // MapReader requires a callback - provide default null callback
-            return new MapReader([](uint32_t) -> Pro* { return nullptr; });
-        default:
-            throw UnsupportedFormatException("Unknown or unsupported file format: " + filePath.string());
+    case Format::DAT: return createReader<Dat>(detectedFormat).release();
+    case Format::PRO: return createReader<Pro>(detectedFormat).release();
+    case Format::FRM: return createReader<Frm>(detectedFormat).release();
+    case Format::PAL: return createReader<Pal>(detectedFormat).release();
+    case Format::GAM: return createReader<Gam>(detectedFormat).release();
+    case Format::MSG: return createReader<Msg>(detectedFormat).release();
+    case Format::LST: return createReader<Lst>(detectedFormat).release();
+    case Format::MAP: throw UnsupportedFormatException("Map reader requires callback - use MapReader constructor directly");
+    default:
+        throw UnsupportedFormatException("Unsupported file format: " + filePath.filename().string());
     }
 }
 
@@ -140,99 +140,99 @@ void* ReaderFactory::createGenericReader(const std::vector<uint8_t>& data, const
     detectedFormat = detectFormat(data, filename);
     
     switch (detectedFormat) {
-        case Format::DAT: return new DatReader();
-        case Format::PRO: return new ProReader();
-        case Format::FRM: return new FrmReader();
-        case Format::PAL: return new PalReader();
-        case Format::GAM: return new GamReader();
-        case Format::MSG: return new MsgReader();
-        case Format::LST: return new LstReader();
-        case Format::MAP:
-            // MapReader requires a callback - provide default null callback
-            return new MapReader([](uint32_t) -> Pro* { return nullptr; });
-        default:
-            throw UnsupportedFormatException("Unknown or unsupported format for data: " + filename);
+    case Format::DAT: return createReader<Dat>(detectedFormat).release();
+    case Format::PRO: return createReader<Pro>(detectedFormat).release();
+    case Format::FRM: return createReader<Frm>(detectedFormat).release();
+    case Format::PAL: return createReader<Pal>(detectedFormat).release();
+    case Format::GAM: return createReader<Gam>(detectedFormat).release();
+    case Format::MSG: return createReader<Msg>(detectedFormat).release();
+    case Format::LST: return createReader<Lst>(detectedFormat).release();
+    case Format::MAP: throw UnsupportedFormatException("Map reader requires callback - use MapReader constructor directly");
+    default:
+        throw UnsupportedFormatException("Unsupported file format: " + filename);
     }
 }
 
 // Format detection methods
 ReaderFactory::Format ReaderFactory::detectFormat(const std::filesystem::path& filePath) {
-    spdlog::trace("Detecting format for file: {}", filePath.string());
-    
-    // First, try by extension
-    Format format = detectByExtension(filePath);
-    if (format != Format::UNKNOWN) {
-        spdlog::debug("Format detected by extension: {}", filePath.extension().string());
-        return format;
+    // First try extension-based detection
+    Format extensionFormat = detectByExtension(filePath);
+    if (extensionFormat != Format::UNKNOWN) {
+        return extensionFormat;
     }
     
-    // If extension detection fails, read file and analyze content
+    // If extension detection fails, try content-based detection
     try {
         std::ifstream file(filePath, std::ios::binary);
-        if (!file) {
-            throw IOException("Could not open file for format detection", filePath);
+        if (!file.is_open()) {
+            spdlog::warn("ReaderFactory: Cannot open file for format detection: {}", filePath.string());
+            return Format::UNKNOWN;
         }
         
-        // Read first 1KB for analysis
-        std::vector<uint8_t> data(1024);
-        file.read(reinterpret_cast<char*>(data.data()), data.size());
-        data.resize(file.gcount());
+        // Read first few bytes for magic number detection
+        constexpr size_t BUFFER_SIZE = 512;
+        std::vector<uint8_t> buffer(BUFFER_SIZE);
+        file.read(reinterpret_cast<char*>(buffer.data()), BUFFER_SIZE);
+        size_t bytes_read = file.gcount();
+        buffer.resize(bytes_read);
         
-        format = detectFormat(data, filePath.filename().string());
+        Format magicFormat = detectByMagicNumber(buffer);
+        if (magicFormat != Format::UNKNOWN) {
+            return magicFormat;
+        }
         
+        return detectByContent(buffer);
     } catch (const std::exception& e) {
-        spdlog::warn("Failed to analyze file content for format detection: {}", e.what());
+        spdlog::error("ReaderFactory: Error during format detection for {}: {}", filePath.string(), e.what());
         return Format::UNKNOWN;
     }
-    
-    return format;
 }
 
 ReaderFactory::Format ReaderFactory::detectFormat(const std::vector<uint8_t>& data, const std::string& filename) {
-    spdlog::trace("Detecting format for data buffer, filename: {}", filename);
-    
-    // Try extension first if filename provided
-    if (!filename.empty()) {
-        std::filesystem::path path(filename);
-        Format format = detectByExtension(path);
-        if (format != Format::UNKNOWN) {
-            spdlog::debug("Format detected by filename extension: {}", path.extension().string());
-            return format;
-        }
+    // First try extension-based detection from filename
+    std::filesystem::path path(filename);
+    Format extensionFormat = detectByExtension(path);
+    if (extensionFormat != Format::UNKNOWN) {
+        return extensionFormat;
     }
     
-    // Try magic number detection
-    Format format = detectByMagicNumber(data);
-    if (format != Format::UNKNOWN) {
-        spdlog::debug("Format detected by magic number");
-        return format;
+    // If extension detection fails, try content-based detection
+    Format magicFormat = detectByMagicNumber(data);
+    if (magicFormat != Format::UNKNOWN) {
+        return magicFormat;
     }
     
-    // Try content-based detection
-    format = detectByContent(data);
-    spdlog::debug("Format detection result: {}", static_cast<int>(format));
-    
-    return format;
+    return detectByContent(data);
 }
 
 ReaderFactory::Format ReaderFactory::detectByExtension(const std::filesystem::path& filePath) {
-    std::string ext = filePath.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    std::string extension = filePath.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
     
-    auto it = extension_format_map.find(ext);
+    auto it = extension_format_map.find(extension);
     return (it != extension_format_map.end()) ? it->second : Format::UNKNOWN;
 }
 
 ReaderFactory::Format ReaderFactory::detectByMagicNumber(const std::vector<uint8_t>& data) {
-    // Check FRM magic number (version 4 at start)
-    if (data.size() >= 4) {
-        if (data[0] == 0x00 && data[1] == 0x00 && data[2] == 0x00 && data[3] == 0x04) {
-            return Format::FRM;
-        }
+    if (data.empty()) {
+        return Format::UNKNOWN;
     }
     
-    // DAT files have their signature at the end, need full file for proper detection
-    // For now, we'll rely on extension or content analysis
+    for (const auto& [format, info] : format_info_map) {
+        if (!info.magic_signature.empty() && 
+            data.size() >= info.signature_offset + info.magic_signature.size()) {
+            
+            bool matches = std::equal(
+                info.magic_signature.begin(),
+                info.magic_signature.end(),
+                data.begin() + info.signature_offset
+            );
+            
+            if (matches) {
+                return format;
+            }
+        }
+    }
     
     return Format::UNKNOWN;
 }
@@ -242,76 +242,61 @@ ReaderFactory::Format ReaderFactory::detectByContent(const std::vector<uint8_t>&
         return Format::UNKNOWN;
     }
     
-    // Check for text-based formats
-    bool is_text = std::all_of(data.begin(), data.end(), [](uint8_t byte) {
-        return byte == '\n' || byte == '\r' || byte == '\t' || 
-               (byte >= 32 && byte <= 126); // Printable ASCII
-    });
+    // Content-based heuristics for formats without clear magic numbers
     
-    if (is_text) {
-        std::string content(data.begin(), data.end());
-        
-        // Check for GAM format patterns
-        if (content.find("GAME_GLOBAL_VARS:") != std::string::npos ||
-            content.find("MAP_GLOBAL_VARS:") != std::string::npos) {
-            return Format::GAM;
-        }
-        
-        // Check for MSG format patterns
-        if (content.find("{") != std::string::npos && content.find("}") != std::string::npos) {
-            // MSG files have {id}{audio}{text} format
-            std::regex msg_pattern(R"(\{\d+\}\{.*?\}\{.*?\})");
-            if (std::regex_search(content, msg_pattern)) {
-                return Format::MSG;
-            }
-        }
-        
-        // LST files are simple text lists
-        return Format::LST;
-    }
-    
-    // Check for binary formats based on size and structure
-    
-    // PAL files have a fixed size
-    if (data.size() >= 0x8300) {
+    // PAL files are exactly 768 bytes (256 colors * 3 channels)
+    if (data.size() == 768) {
         return Format::PAL;
     }
     
-    // PRO files have minimum size
-    if (data.size() >= 24) {
-        return Format::PRO;
+    // MSG files typically start with lines in format {number}{}
+    if (data.size() > 10) {
+        std::string start(data.begin(), data.begin() + std::min(size_t(10), data.size()));
+        if (start.find("{") != std::string::npos && start.find("}") != std::string::npos) {
+            return Format::MSG;
+        }
     }
     
-    // MAP files typically start with a version number
-    if (data.size() >= 4) {
-        uint32_t possible_version = 
-            (static_cast<uint32_t>(data[0]) << 24) |
-            (static_cast<uint32_t>(data[1]) << 16) |
-            (static_cast<uint32_t>(data[2]) << 8) |
-            static_cast<uint32_t>(data[3]);
+    // LST files contain text with file names, typically one per line
+    if (data.size() > 4) {
+        // Check if data contains mostly printable ASCII characters
+        size_t printable_count = 0;
+        size_t total_count = std::min(data.size(), size_t(100)); // Check first 100 bytes
         
-        if (possible_version >= 19 && possible_version <= 21) {
-            return Format::MAP;
+        for (size_t i = 0; i < total_count; ++i) {
+            if (std::isprint(data[i]) || std::isspace(data[i])) {
+                printable_count++;
+            }
         }
+        
+        // If more than 80% are printable, likely text file (LST)
+        if (printable_count > (total_count * 4 / 5)) {
+            return Format::LST;
+        }
+    }
+    
+    // PRO files have specific structure - check size and some known patterns
+    if (data.size() >= 80) { // Minimum PRO size
+        // PRO files typically have specific patterns in first few bytes
+        // This is a simple heuristic and might need refinement
+        return Format::PRO;
     }
     
     return Format::UNKNOWN;
 }
 
 double ReaderFactory::calculateConfidence(Format format, const std::vector<uint8_t>& data) {
-    (void)data; // Suppress unused parameter warning
-    // This could be expanded to provide confidence scores for format detection
-    // For now, return simple binary confidence
-    return (format != Format::UNKNOWN) ? 1.0 : 0.0;
+    // This is a simplified confidence calculation
+    // In a more sophisticated implementation, this would analyze the data
+    return (format != Format::UNKNOWN) ? 0.8 : 0.0;
 }
 
-// Utility methods
 ReaderFactory::FormatInfo ReaderFactory::getFormatInfo(Format format) {
     auto it = format_info_map.find(format);
     if (it != format_info_map.end()) {
         return it->second;
     }
-    return {Format::UNKNOWN, "Unknown Format", {}, {}, 0, 0, 0.0};
+    return {Format::UNKNOWN, "Unknown", {}, {}, 0, 0, 0.0};
 }
 
 std::vector<ReaderFactory::FormatInfo> ReaderFactory::getAllSupportedFormats() {
@@ -327,9 +312,9 @@ bool ReaderFactory::isFormatSupported(Format format) {
 }
 
 bool ReaderFactory::isFormatSupported(const std::string& extension) {
-    std::string ext = extension;
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-    return extension_format_map.find(ext) != extension_format_map.end();
+    std::string lower_ext = extension;
+    std::transform(lower_ext.begin(), lower_ext.end(), lower_ext.begin(), ::tolower);
+    return extension_format_map.find(lower_ext) != extension_format_map.end();
 }
 
 std::vector<std::string> ReaderFactory::getSupportedExtensions() {
@@ -344,9 +329,9 @@ std::map<ReaderFactory::Format, std::vector<std::filesystem::path>>
 ReaderFactory::groupFilesByFormat(const std::vector<std::filesystem::path>& filePaths) {
     std::map<Format, std::vector<std::filesystem::path>> groups;
     
-    for (const auto& filePath : filePaths) {
-        Format format = detectFormat(filePath);
-        groups[format].push_back(filePath);
+    for (const auto& path : filePaths) {
+        Format format = detectFormat(path);
+        groups[format].push_back(path);
     }
     
     return groups;

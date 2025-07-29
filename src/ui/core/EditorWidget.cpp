@@ -18,6 +18,7 @@
 #include <set>
 
 #include "../../util/Constants.h"
+#include "../../util/ResourcePaths.h"
 #include "../../util/ColorUtils.h"
 #include "../../util/ResourceInitializer.h"
 #include "../../util/TileUtils.h"
@@ -160,6 +161,12 @@ void EditorWidget::initializeSelectionSystem() {
 
         // Emit unified selection update
         emit selectionChanged(selection, _currentElevation);
+        
+        // Publish to EventBus
+        EventBus::getInstance().publish(SelectionChangedEvent{
+            selection.items.empty() ? SelectionChangedEvent::Type::Cleared : SelectionChangedEvent::Type::Added,
+            static_cast<int>(selection.items.size())
+        });
     });
 
     // Register the observer with the selection manager
@@ -460,9 +467,9 @@ void EditorWidget::createWallBlockerOverlay(const std::shared_ptr<MapObject>& ma
         // Load wallblock.frm as overlay  
         std::string overlayFrmPath;
         if (is_shoot_through) {
-            overlayFrmPath = "art/tiles/wallblock.frm";
+            overlayFrmPath = std::string(ResourcePaths::Frm::WALL_BLOCK);
         } else {
-            overlayFrmPath = "art/tiles/wallblockF.frm";
+            overlayFrmPath = std::string(ResourcePaths::Frm::WALL_BLOCK_FULL);
         }
         ResourceManager::getInstance().insertTexture(overlayFrmPath);
         
@@ -1307,7 +1314,7 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
     
     auto& sprites = isRoof ? _roofSprites : _floorSprites;
 
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
+    for (unsigned int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
         // Use the actual sprite's bounds instead of a fake sprite
         const sf::Sprite& tileSprite = sprites.at(i);
 
@@ -1323,7 +1330,7 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
 
 std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
     // This version includes empty roof tiles in the selection
-    for (int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+    for (unsigned int i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
         sf::FloatRect tileBounds = _roofSprites.at(i).getGlobalBounds();
 
         // Check if world position is within tile bounds
@@ -1551,8 +1558,8 @@ void EditorWidget::clearDragPreview() {
 }
 
 const sf::Texture& EditorWidget::createHexTexture() {
-    ResourceManager::getInstance().loadResource<Frm>("art/misc/HEX.frm");
-    return ResourceManager::getInstance().texture("art/misc/HEX.frm");
+    ResourceManager::getInstance().loadResource<Frm>(ResourcePaths::Frm::HEX_GRID);
+    return ResourceManager::getInstance().texture(ResourcePaths::Frm::HEX_GRID);
 }
 
 const sf::Texture& EditorWidget::createCursorHexTexture() {
@@ -2024,6 +2031,12 @@ void EditorWidget::deleteSelectedObjects() {
     
     // Update UI
     emit selectionChanged(_selectionManager->getCurrentSelection(), _currentElevation);
+    
+    // Publish to EventBus - objects were removed
+    EventBus::getInstance().publish(SelectionChangedEvent{
+        SelectionChangedEvent::Type::Removed,
+        0  // After deletion, selection is cleared
+    });
     
     spdlog::info("EditorWidget::deleteSelectedObjects - Successfully deleted {} objects", deletedCount);
 }
