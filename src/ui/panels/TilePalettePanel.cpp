@@ -1,9 +1,10 @@
 #include "TilePalettePanel.h"
-#include "../format/map/Map.h"
-#include "../format/lst/Lst.h"
-#include "../util/ResourceManager.h"
-#include "../util/Constants.h"
-#include "../util/ColorUtils.h"
+#include "../../format/map/Map.h"
+#include "../../format/lst/Lst.h"
+#include "../../util/ResourceManager.h"
+#include "../../util/Constants.h"
+#include "../../util/ColorUtils.h"
+#include "../common/BaseWidget.h"
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -15,46 +16,22 @@
 namespace geck {
 
 TileWidget::TileWidget(int tileIndex, const QPixmap& pixmap, QWidget* parent)
-    : QLabel(parent)
-    , _tileIndex(tileIndex) {
+    : BasePaletteWidget(tileIndex, parent) {
 
-    QPixmap scaledPixmap = pixmap.scaled(TILE_SIZE, TILE_SIZE, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QPixmap scaledPixmap = BaseWidget::scalePixmapToSize(pixmap, TILE_SIZE);
     setPixmap(scaledPixmap);
 
-    setFixedSize(TILE_SIZE + 4, TILE_SIZE + 4); // Add border space
-    setAlignment(Qt::AlignCenter);
-    setFrameStyle(QFrame::Box);
+    setupCommonProperties(TILE_SIZE);
     setToolTip(QString("Tile %1").arg(tileIndex));
 
-    setCursor(Qt::PointingHandCursor);
-}
-
-void TileWidget::setSelected(bool selected) {
-    if (_selected != selected) {
-        _selected = selected;
-        update(); // Trigger repaint
-    }
-}
-
-void TileWidget::mousePressEvent(QMouseEvent* event) {
-    if (event->button() == Qt::LeftButton) {
-        emit tileClicked(_tileIndex);
-    }
-    QLabel::mousePressEvent(event);
-}
-
-void TileWidget::paintEvent(QPaintEvent* event) {
-    QLabel::paintEvent(event);
-
-    if (_selected) {
-        QPainter painter(this);
-        painter.setPen(QPen(geck::ColorUtils::createSelectionBorderColor(), 3));
-        painter.drawRect(rect().adjusted(1, 1, -1, -1));
-    }
+    // Connect base class signal to our specific signal
+    connect(this, &BasePaletteWidget::clicked, this, [this](int index) {
+        emit tileClicked(index);
+    });
 }
 
 TilePalettePanel::TilePalettePanel(QWidget* parent)
-    : QWidget(parent) {
+    : BasePanel("Tiles", parent) {
     setupUI();
     setMinimumWidth(300);
 }

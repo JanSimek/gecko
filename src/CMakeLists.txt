@@ -34,40 +34,56 @@ set(GECK_SOURCES
     util/Types.h
     util/Exceptions.h
     util/Coordinates.h
+    util/Factory.h
+    util/EventBus.h
     util/SpatialIndex.h
     util/SpatialIndex.cpp
 
-    # Qt6 UI
-    ui/MainWindow.h
-    ui/MainWindow.cpp
-    ui/SFMLWidget.h
-    ui/SFMLWidget.cpp
-    ui/EditorWidget.h
-    ui/EditorWidget.cpp
-    ui/LoadingWidget.h
-    ui/LoadingWidget.cpp
-    ui/SelectionPanel.h
-    ui/SelectionPanel.cpp
-    ui/FrmSelectorDialog.h
-    ui/FrmSelectorDialog.cpp
-    ui/MapInfoPanel.h
-    ui/MapInfoPanel.cpp
-    ui/TilePalettePanel.h
-    ui/TilePalettePanel.cpp
-    ui/ObjectPalettePanel.h
-    ui/ObjectPalettePanel.cpp
-    ui/FileBrowserPanel.h
-    ui/FileBrowserPanel.cpp
-    ui/PaginationWidget.h
-    ui/PaginationWidget.cpp
-    ui/SettingsDialog.h
-    ui/SettingsDialog.cpp
-    ui/DataPathsWidget.h
-    ui/DataPathsWidget.cpp
-    ui/GameLocationWidget.h
-    ui/GameLocationWidget.cpp
-    ui/TextEditorWidget.h
-    ui/TextEditorWidget.cpp
+    # Qt6 UI Common
+    ui/common/BaseWidget.h
+    ui/common/BaseWidget.cpp
+    ui/common/BasePaletteWidget.h
+    ui/common/BasePanel.h
+
+    # Qt6 UI Core
+    ui/core/MainWindow.h
+    ui/core/MainWindow.cpp
+    ui/core/EditorWidget.h
+    ui/core/EditorWidget.cpp
+
+    # Qt6 UI Panels
+    ui/panels/TilePalettePanel.h
+    ui/panels/TilePalettePanel.cpp
+    ui/panels/ObjectPalettePanel.h
+    ui/panels/ObjectPalettePanel.cpp
+    ui/panels/MapInfoPanel.h
+    ui/panels/MapInfoPanel.cpp
+    ui/panels/SelectionPanel.h
+    ui/panels/SelectionPanel.cpp
+    ui/panels/FileBrowserPanel.h
+    ui/panels/FileBrowserPanel.cpp
+
+    # Qt6 UI Dialogs
+    ui/dialogs/FrmSelectorDialog.h
+    ui/dialogs/FrmSelectorDialog.cpp
+    ui/dialogs/SettingsDialog.h
+    ui/dialogs/SettingsDialog.cpp
+
+    # Qt6 UI Widgets
+    ui/widgets/SFMLWidget.h
+    ui/widgets/SFMLWidget.cpp
+    ui/widgets/LoadingWidget.h
+    ui/widgets/LoadingWidget.cpp
+    ui/widgets/PaginationWidget.h
+    ui/widgets/PaginationWidget.cpp
+    ui/widgets/DataPathsWidget.h
+    ui/widgets/DataPathsWidget.cpp
+    ui/widgets/GameLocationWidget.h
+    ui/widgets/GameLocationWidget.cpp
+    ui/widgets/TextEditorWidget.h
+    ui/widgets/TextEditorWidget.cpp
+
+    # Qt6 UI Constants
     ui/UIConstants.h
     ui/rendering/RenderingEngine.h
     ui/rendering/RenderingEngine.cpp
@@ -213,6 +229,7 @@ add_library(vault STATIC
     reader/FileParser.h
     reader/ReaderFactory.h
     reader/ReaderFactory.cpp
+    reader/UnifiedReaderFactory.h
 
     reader/dat/DatReader.h
     reader/dat/DatReader.cpp

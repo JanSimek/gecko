@@ -7,10 +7,10 @@
 #include <algorithm>
 #include <functional>
 
-#include "../util/ResourceManager.h"
-#include "../util/CritterFrmResolver.h"
-#include "../format/frm/Frm.h"
-#include "../format/lst/Lst.h"
+#include "../../util/ResourceManager.h"
+#include "../../util/CritterFrmResolver.h"
+#include "../../format/frm/Frm.h"
+#include "../../format/lst/Lst.h"
 
 namespace geck {
 

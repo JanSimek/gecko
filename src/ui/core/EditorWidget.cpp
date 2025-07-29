@@ -1,12 +1,12 @@
 #include "EditorWidget.h"
-#include "SFMLWidget.h"
-#include "input/InputHandler.h"
-#include "rendering/RenderingEngine.h"
-#include "dragdrop/DragDropManager.h"
-#include "tiles/TilePlacementManager.h"
-#include "viewport/ViewportController.h"
-#include "ObjectPalettePanel.h"
-#include "TilePalettePanel.h"
+#include "../widgets/SFMLWidget.h"
+#include "../input/InputHandler.h"
+#include "../rendering/RenderingEngine.h"
+#include "../dragdrop/DragDropManager.h"
+#include "../tiles/TilePlacementManager.h"
+#include "../viewport/ViewportController.h"
+#include "../panels/ObjectPalettePanel.h"
+#include "../panels/TilePalettePanel.h"
 #include "MainWindow.h"
 
 #include <spdlog/spdlog.h>
@@ -17,25 +17,25 @@
 #include <cstdlib>
 #include <set>
 
-#include "../util/Constants.h"
-#include "../util/ColorUtils.h"
-#include "../util/ResourceInitializer.h"
-#include "../util/TileUtils.h"
-#include "../util/QtDialogs.h"
-#include "../util/ProHelper.h"
-#include "../util/SpriteFactory.h"
-#include "../util/Coordinates.h"
+#include "../../util/Constants.h"
+#include "../../util/ColorUtils.h"
+#include "../../util/ResourceInitializer.h"
+#include "../../util/TileUtils.h"
+#include "../../util/QtDialogs.h"
+#include "../../util/ProHelper.h"
+#include "../../util/SpriteFactory.h"
+#include "../../util/Coordinates.h"
 
-#include "../editor/Object.h"
-#include "../editor/HexagonGrid.h"
+#include "../../editor/Object.h"
+#include "../../editor/HexagonGrid.h"
 
-#include "../format/frm/Frm.h"
-#include "../format/lst/Lst.h"
-#include "../format/map/Tile.h"
-#include "../format/pro/Pro.h"
-#include "../format/map/MapObject.h"
+#include "../../format/frm/Frm.h"
+#include "../../format/lst/Lst.h"
+#include "../../format/map/Tile.h"
+#include "../../format/pro/Pro.h"
+#include "../../format/map/MapObject.h"
 
-#include "../writer/map/MapWriter.h"
+#include "../../writer/map/MapWriter.h"
 
 namespace geck {
 

@@ -1,5 +1,5 @@
 #include "SelectionPanel.h"
-#include "FrmSelectorDialog.h"
+#include "../dialogs/FrmSelectorDialog.h"
 
 #include <QFormLayout>
 #include <QPixmap>
@@ -8,11 +8,11 @@
 #include <spdlog/spdlog.h>
 #include <cmath>
 
-#include "../format/map/Map.h"
-#include "../format/lst/Lst.h"
-#include "../util/ResourceManager.h"
-#include "../util/ProHelper.h"
-#include "../format/map/MapObject.h"
+#include "../../format/map/Map.h"
+#include "../../format/lst/Lst.h"
+#include "../../util/ResourceManager.h"
+#include "../../util/ProHelper.h"
+#include "../../format/map/MapObject.h"
 
 namespace geck {
 

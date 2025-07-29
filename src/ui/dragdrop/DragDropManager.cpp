@@ -1,5 +1,5 @@
 #include "DragDropManager.h"
-#include "../EditorWidget.h"
+#include "../core/EditorWidget.h"
 #include "../viewport/ViewportController.h"
 #include "../../editor/Object.h"
 #include "../../editor/HexagonGrid.h"
@@ -8,8 +8,8 @@
 #include "../../format/map/MapObject.h"
 #include "../../util/Constants.h"
 #include "../../selection/SelectionState.h"
-#include "../ObjectPalettePanel.h"
-#include "../MainWindow.h"
+#include "../panels/ObjectPalettePanel.h"
+#include "../core/MainWindow.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 

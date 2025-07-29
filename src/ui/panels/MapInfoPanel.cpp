@@ -6,11 +6,11 @@
 #include <spdlog/spdlog.h>
 #include <filesystem>
 
-#include "../format/map/Map.h"
-#include "../format/gam/Gam.h"
-#include "../format/lst/Lst.h"
-#include "../reader/ReaderFactory.h"
-#include "../util/ResourceManager.h"
+#include "../../format/map/Map.h"
+#include "../../format/gam/Gam.h"
+#include "../../format/lst/Lst.h"
+#include "../../reader/ReaderFactory.h"
+#include "../../util/ResourceManager.h"
 
 namespace geck {
 

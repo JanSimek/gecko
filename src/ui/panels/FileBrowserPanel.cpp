@@ -1,7 +1,7 @@
 #include "FileBrowserPanel.h"
-#include "../util/ResourceManager.h"
-#include "../util/QtDialogs.h"
-#include "../util/PathUtils.h"
+#include "../../util/ResourceManager.h"
+#include "../../util/QtDialogs.h"
+#include "../../util/PathUtils.h"
 
 #include <QFileInfo>
 #include <QDir>

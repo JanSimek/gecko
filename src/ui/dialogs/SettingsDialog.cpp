@@ -1,9 +1,9 @@
 #include "SettingsDialog.h"
-#include "DataPathsWidget.h"
-#include "GameLocationWidget.h"
-#include "TextEditorWidget.h"
-#include "UIConstants.h"
-#include "../util/Settings.h"
+#include "../widgets/DataPathsWidget.h"
+#include "../widgets/GameLocationWidget.h"
+#include "../widgets/TextEditorWidget.h"
+#include "../UIConstants.h"
+#include "../../util/Settings.h"
 
 #include <QApplication>
 #include <QStyle>

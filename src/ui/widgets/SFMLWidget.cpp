@@ -1,5 +1,5 @@
 #include "SFMLWidget.h"
-#include "EditorWidget.h"
+#include "../core/EditorWidget.h"
 
 #include <QShowEvent>
 #include <QPaintEvent>

@@ -1,5 +1,5 @@
 #include "InputHandler.h"
-#include "../EditorWidget.h"
+#include "../core/EditorWidget.h"
 #include "../../util/Constants.h"
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/Mouse.hpp>

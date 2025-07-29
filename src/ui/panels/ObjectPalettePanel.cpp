@@ -1,12 +1,13 @@
 #include "ObjectPalettePanel.h"
-#include "../format/map/Map.h"
-#include "../format/lst/Lst.h"
-#include "../format/pro/Pro.h"
-#include "../format/frm/Frm.h"
-#include "../format/pal/Pal.h"
-#include "../util/ResourceManager.h"
-#include "../util/Constants.h"
-#include "../util/ColorUtils.h"
+#include "../../format/map/Map.h"
+#include "../../format/lst/Lst.h"
+#include "../../format/pro/Pro.h"
+#include "../../format/frm/Frm.h"
+#include "../../format/pal/Pal.h"
+#include "../../util/ResourceManager.h"
+#include "../../util/Constants.h"
+#include "../../util/ColorUtils.h"
+#include "../common/BaseWidget.h"
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -20,25 +21,15 @@
 namespace geck {
 
 ObjectWidget::ObjectWidget(int objectIndex, const ObjectInfo* objectInfo, const QPixmap& pixmap, ObjectCategory category, QWidget* parent)
-    : QLabel(parent)
-    , _objectIndex(objectIndex)
+    : BasePaletteWidget(objectIndex, parent)
     , _objectInfo(objectInfo)
     , _category(category) {
 
-    QPixmap scaledPixmap = pixmap.scaled(OBJECT_SIZE, OBJECT_SIZE, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QPixmap scaledPixmap = BaseWidget::scalePixmapToSize(pixmap, OBJECT_SIZE);
+    QPixmap centeredPixmap = BaseWidget::createCenteredPixmap(scaledPixmap, OBJECT_SIZE);
+    setPixmap(centeredPixmap);
 
-    // Create a square canvas with the object centered
-    QPixmap canvas(OBJECT_SIZE, OBJECT_SIZE);
-    canvas.fill(Qt::transparent);
-
-    QPainter painter(&canvas);
-    int x = (OBJECT_SIZE - scaledPixmap.width()) / 2;
-    int y = (OBJECT_SIZE - scaledPixmap.height()) / 2;
-    painter.drawPixmap(x, y, scaledPixmap);
-
-    setPixmap(canvas);
-    setFixedSize(OBJECT_SIZE + 4, OBJECT_SIZE + 4); // Small margin
-    setAlignment(Qt::AlignCenter);
+    setupCommonProperties(OBJECT_SIZE);
     setStyleSheet("border: 1px solid gray; background-color: white;");
 
     // Add tooltip with object information
@@ -50,29 +41,23 @@ ObjectWidget::ObjectWidget(int objectIndex, const ObjectInfo* objectInfo, const 
     } else {
         setToolTip(QString("Object %1").arg(objectIndex));
     }
-}
 
-void ObjectWidget::setSelected(bool selected) {
-    if (_selected != selected) {
-        _selected = selected;
-        update(); // Trigger repaint
-    }
-}
-
-void ObjectWidget::mousePressEvent(QMouseEvent* event) {
-    if (event->button() == Qt::LeftButton) {
-        emit objectClicked(_objectIndex);
-        _dragStartPosition = event->pos();
-    }
-    QLabel::mousePressEvent(event);
+    // Connect base class signal to our specific signal
+    connect(this, &BasePaletteWidget::clicked, this, [this](int index) {
+        emit objectClicked(index);
+    });
 }
 
 void ObjectWidget::mouseMoveEvent(QMouseEvent* event) {
     if (!(event->buttons() & Qt::LeftButton)) {
+        BasePaletteWidget::mouseMoveEvent(event);
         return;
     }
 
-    if ((event->pos() - _dragStartPosition).manhattanLength() < QApplication::startDragDistance()) {
+    // Get drag start position from base class event handling
+    QPoint startPos = mapFromGlobal(QCursor::pos()) - event->pos();
+    if ((event->pos() + startPos).manhattanLength() < QApplication::startDragDistance()) {
+        BasePaletteWidget::mouseMoveEvent(event);
         return;
     }
 
@@ -83,7 +68,7 @@ void ObjectWidget::mouseMoveEvent(QMouseEvent* event) {
     // Set MIME data with object information
     mimeData->setText(QString("geck/object"));
     mimeData->setData("application/x-geck-object", 
-        QByteArray::number(_objectIndex) + "," + QByteArray::number(static_cast<int>(_category)));
+        QByteArray::number(getIndex()) + "," + QByteArray::number(static_cast<int>(_category)));
 
     // Use the object's pixmap as drag pixmap
     drag->setPixmap(pixmap().scaled(32, 32, Qt::KeepAspectRatio, Qt::SmoothTransformation));
@@ -92,16 +77,6 @@ void ObjectWidget::mouseMoveEvent(QMouseEvent* event) {
     // Execute the drag
     Qt::DropAction dropAction = drag->exec(Qt::CopyAction);
     Q_UNUSED(dropAction);
-}
-
-void ObjectWidget::paintEvent(QPaintEvent* event) {
-    QLabel::paintEvent(event);
-
-    if (_selected) {
-        QPainter painter(this);
-        painter.setPen(QPen(QColor(255, 165, 0), 3)); // Orange selection border
-        painter.drawRect(rect().adjusted(1, 1, -2, -2));
-    }
 }
 
 ObjectPalettePanel::ObjectPalettePanel(QWidget* parent)

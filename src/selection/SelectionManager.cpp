@@ -1,5 +1,5 @@
 #include "SelectionManager.h"
-#include "../ui/EditorWidget.h"
+#include "../ui/core/EditorWidget.h"
 #include "../ui/viewport/ViewportController.h"
 #include "../format/map/MapObject.h"
 #include "../util/Constants.h"

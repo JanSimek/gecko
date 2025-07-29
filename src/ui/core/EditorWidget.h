@@ -12,14 +12,14 @@
 
 #include <QWidget>
 #include <QVBoxLayout>
-#include "../editor/Object.h"
-#include "../editor/HexagonGrid.h"
-#include "../util/ResourceManager.h"
-#include "../util/Types.h"
-#include "../format/map/Map.h"
-#include "../format/pro/Pro.h"
-#include "../selection/SelectionManager.h"
-#include "../util/Constants.h"
+#include "../../editor/Object.h"
+#include "../../editor/HexagonGrid.h"
+#include "../../util/ResourceManager.h"
+#include "../../util/Types.h"
+#include "../../format/map/Map.h"
+#include "../../format/pro/Pro.h"
+#include "../../selection/SelectionManager.h"
+#include "../../util/Constants.h"
 
 namespace geck {
 

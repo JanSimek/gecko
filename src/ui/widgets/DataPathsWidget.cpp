@@ -1,5 +1,5 @@
 #include "DataPathsWidget.h"
-#include "../util/Settings.h"
+#include "../../util/Settings.h"
 
 #include <QApplication>
 #include <QStyle>

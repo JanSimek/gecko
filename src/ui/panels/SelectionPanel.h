@@ -12,9 +12,9 @@
 #include <QPushButton>
 #include <memory>
 
-#include "../editor/Object.h"
-#include "../format/map/Tile.h"
-#include "../selection/SelectionState.h"
+#include "../../editor/Object.h"
+#include "../../format/map/Tile.h"
+#include "../../selection/SelectionState.h"
 
 namespace geck {
 

@@ -1,24 +1,12 @@
 #pragma once
 
-#include <QWidget>
-#include <QScrollArea>
-#include <QGridLayout>
-#include <QLabel>
-#include <QPixmap>
-#include <QPushButton>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QGroupBox>
-#include <QButtonGroup>
-#include <QLineEdit>
+#include "../common/BasePanel.h"
+#include "../common/BasePaletteWidget.h"
 #include <QTabWidget>
-#include <QSpinBox>
 #include <QDrag>
 #include <QMimeData>
-#include <QResizeEvent>
 #include <vector>
 #include <memory>
-#include "PaginationWidget.h"
 
 namespace geck {
 
@@ -56,36 +44,30 @@ struct ObjectInfo {
 
 /**
  * @brief Widget representing a single object in the palette
+ * Now inherits from BasePaletteWidget to eliminate duplication
  */
-class ObjectWidget : public QLabel {
+class ObjectWidget : public BasePaletteWidget {
     Q_OBJECT
 
 public:
     explicit ObjectWidget(int objectIndex, const ObjectInfo* objectInfo, const QPixmap& pixmap, ObjectCategory category, QWidget* parent = nullptr);
 
-    int getObjectIndex() const { return _objectIndex; }
+    int getObjectIndex() const { return getIndex(); }
     const ObjectInfo* getObjectInfo() const { return _objectInfo; }
     ObjectCategory getCategory() const { return _category; }
-    bool isSelected() const { return _selected; }
-    void setSelected(bool selected);
 
 signals:
     void objectClicked(int objectIndex);
 
 protected:
-    void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
-    void paintEvent(QPaintEvent* event) override;
 
 public:
     static constexpr int OBJECT_SIZE = 64; // Display size for objects
 
 private:
-    int _objectIndex;
     const ObjectInfo* _objectInfo;
     ObjectCategory _category;
-    bool _selected = false;
-    QPoint _dragStartPosition;
 };
 
 /**

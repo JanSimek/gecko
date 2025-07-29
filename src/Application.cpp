@@ -12,12 +12,12 @@
 #include "util/ResourceManager.h"
 #include "util/Settings.h"
 #include "util/QtDialogs.h"
-#include "ui/MainWindow.h"
-#include "ui/EditorWidget.h"
-#include "ui/LoadingWidget.h"
-#include "ui/SettingsDialog.h"
+#include "ui/core/MainWindow.h"
+#include "ui/core/EditorWidget.h"
+#include "ui/widgets/LoadingWidget.h"
+#include "ui/dialogs/SettingsDialog.h"
 #include "state/loader/DataPathLoader.h"
-#include "ui/FileBrowserPanel.h"
+#include "ui/panels/FileBrowserPanel.h"
 
 namespace geck {
 

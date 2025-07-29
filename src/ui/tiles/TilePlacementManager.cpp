@@ -1,5 +1,5 @@
 #include "TilePlacementManager.h"
-#include "../EditorWidget.h"
+#include "../core/EditorWidget.h"
 #include "../viewport/ViewportController.h"
 #include "../../format/map/Map.h"
 #include "../../selection/SelectionManager.h"

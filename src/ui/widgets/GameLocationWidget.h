@@ -10,7 +10,7 @@
 #include <QGroupBox>
 #include <QProgressBar>
 #include <filesystem>
-#include "../util/Settings.h"
+#include "../../util/Settings.h"
 
 namespace geck {
 

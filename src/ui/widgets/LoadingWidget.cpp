@@ -1,6 +1,6 @@
 #include "LoadingWidget.h"
-#include "../state/loader/Loader.h"
-#include "../util/Constants.h"
+#include "../../state/loader/Loader.h"
+#include "../../util/Constants.h"
 
 #include <QVBoxLayout>
 #include <QLabel>

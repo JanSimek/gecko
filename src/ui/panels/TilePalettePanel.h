@@ -1,21 +1,11 @@
 #pragma once
 
-#include <QWidget>
-#include <QScrollArea>
-#include <QGridLayout>
-#include <QLabel>
-#include <QPixmap>
-#include <QPushButton>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
+#include "../common/BasePanel.h"
+#include "../common/BasePaletteWidget.h"
 #include <QSpinBox>
-#include <QGroupBox>
-#include <QButtonGroup>
-#include <QLineEdit>
-#include <QResizeEvent>
+#include <QPushButton>
 #include <vector>
 #include <memory>
-#include "PaginationWidget.h"
 
 namespace geck {
 
@@ -24,30 +14,21 @@ class Lst;
 
 /**
  * @brief Widget representing a single tile in the palette
+ * Now inherits from BasePaletteWidget to eliminate duplication
  */
-class TileWidget : public QLabel {
+class TileWidget : public BasePaletteWidget {
     Q_OBJECT
 
 public:
     explicit TileWidget(int tileIndex, const QPixmap& pixmap, QWidget* parent = nullptr);
 
-    int getTileIndex() const { return _tileIndex; }
-    bool isSelected() const { return _selected; }
-    void setSelected(bool selected);
+    int getTileIndex() const { return getIndex(); }
 
 signals:
     void tileClicked(int tileIndex);
 
-protected:
-    void mousePressEvent(QMouseEvent* event) override;
-    void paintEvent(QPaintEvent* event) override;
-
 public:
     static constexpr int TILE_SIZE = 64; // Display size for tiles
-
-private:
-    int _tileIndex;
-    bool _selected = false;
 };
 
 /**
@@ -60,7 +41,7 @@ private:
  * - Area fill mode with selection box
  * - Replace selected tiles mode
  */
-class TilePalettePanel : public QWidget {
+class TilePalettePanel : public BasePanel {
     Q_OBJECT
 
 public:
@@ -101,14 +82,14 @@ public slots:
 private slots:
     void updateTileGrid();
     void filterTiles();
-    void onSearchTextChanged(const QString& text);
+    void onSearchTextChanged(const QString& text) override;
     void onPaginationPageChanged(int page);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
-    void setupUI();
+    void setupUI() override;
     void setupModeControls();
     void setupTileGrid();
     void setupFilterControls();
