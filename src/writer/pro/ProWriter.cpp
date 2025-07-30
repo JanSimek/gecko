@@ -140,12 +140,12 @@ void ProWriter::writeArmorData(const Pro& pro) {
     utils.writeBE32(pro.armorData.armorClass);
     
     // Write damage resistance array (7 damage types)
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < Pro::DAMAGE_TYPES_ARMOR; ++i) {
         utils.writeBE32(pro.armorData.damageResist[i]);
     }
     
     // Write damage threshold array (7 damage types)
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < Pro::DAMAGE_TYPES_ARMOR; ++i) {
         utils.writeBE32(pro.armorData.damageThreshold[i]);
     }
     
@@ -272,7 +272,7 @@ void ProWriter::writeCritterData(const Pro& pro) {
     utils.writeBE32(critterData.flags);
 
     // S P E C I A L stats (7 base stats)
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < Pro::SPECIAL_STATS_COUNT; ++i) {
         utils.writeBE32(critterData.specialStats[i]);
     }
     
@@ -288,12 +288,12 @@ void ProWriter::writeCritterData(const Pro& pro) {
     utils.writeBE32(critterData.betterCriticals);
 
     // Damage threshold (7 damage types)
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < Pro::DAMAGE_TYPES_ARMOR; ++i) {
         utils.writeBE32(critterData.damageThreshold[i]);
     }
     
     // Damage resist (9 damage types)
-    for (int i = 0; i < 9; ++i) {
+    for (int i = 0; i < Pro::DAMAGE_TYPES_CRITTER; ++i) {
         utils.writeBE32(critterData.damageResist[i]);
     }
 
@@ -301,7 +301,7 @@ void ProWriter::writeCritterData(const Pro& pro) {
     utils.writeBE32(critterData.gender);
 
     // Bonus SPECIAL stats (7 stats)
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < Pro::SPECIAL_STATS_COUNT; ++i) {
         utils.writeBE32(critterData.bonusSpecialStats[i]);
     }
 
@@ -317,12 +317,12 @@ void ProWriter::writeCritterData(const Pro& pro) {
     utils.writeBE32(critterData.bonusBetterCriticals);
 
     // Bonus Damage threshold (8 values)
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < Pro::BONUS_DAMAGE_ARRAYS; ++i) {
         utils.writeBE32(critterData.bonusDamageThreshold[i]);
     }
 
     // Bonus Damage resistance (8 values)
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < Pro::BONUS_DAMAGE_ARRAYS; ++i) {
         utils.writeBE32(critterData.bonusDamageResistance[i]);
     }
 
@@ -330,7 +330,7 @@ void ProWriter::writeCritterData(const Pro& pro) {
     utils.writeBE32(critterData.bonusGender);
 
     // Skills (18 different skills)
-    for (int i = 0; i < 18; ++i) {
+    for (int i = 0; i < Pro::SKILLS_COUNT; ++i) {
         utils.writeBE32(critterData.skills[i]);
     }
 

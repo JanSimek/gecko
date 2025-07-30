@@ -32,7 +32,7 @@ std::unique_ptr<Pro> ProReader::read() {
         case Pro::OBJECT_TYPE::MISC:
             break;
         default:
-            utils.skipWithLog(4, "_flagsExt field");
+            pro->commonItemData.flagsExt = utils.readBE32();
             break;
     }
 
@@ -41,7 +41,7 @@ std::unique_ptr<Pro> ProReader::read() {
         case Pro::OBJECT_TYPE::CRITTER:
         case Pro::OBJECT_TYPE::SCENERY:
         case Pro::OBJECT_TYPE::WALL:
-            utils.skipWithLog(4, "_SID field");
+            pro->commonItemData.SID = utils.readBE32();
             break;
         case Pro::OBJECT_TYPE::TILE:
         case Pro::OBJECT_TYPE::MISC:
@@ -64,10 +64,10 @@ std::unique_ptr<Pro> ProReader::read() {
             switch ((Pro::ITEM_TYPE)subtypeId) {
                 case Pro::ITEM_TYPE::ARMOR: {
                     pro->armorData.armorClass = utils.readBE32();
-                    for (int i = 0; i < 7; ++i) {
+                    for (int i = 0; i < Pro::DAMAGE_TYPES_ARMOR; ++i) {
                         pro->armorData.damageResist[i] = utils.readBE32();
                     }
-                    for (int i = 0; i < 7; ++i) {
+                    for (int i = 0; i < Pro::DAMAGE_TYPES_ARMOR; ++i) {
                         pro->armorData.damageThreshold[i] = utils.readBE32();
                     }
                     pro->armorData.perk = utils.readBE32();
@@ -122,7 +122,7 @@ std::unique_ptr<Pro> ProReader::read() {
                     pro->weaponData.soundId = utils.readU8();
                     
                     // Extended weapon flags (optional field, may not exist in older PRO files)
-                    if (utils.bytesRemaining() >= 4) {
+                    if (utils.bytesRemaining() >= Pro::FIELD_SIZE_BYTES) {
                         pro->weaponData.weaponFlags = utils.readBE32();
                     } else {
                         pro->weaponData.weaponFlags = 0; // Default value for compatibility
@@ -161,7 +161,7 @@ std::unique_ptr<Pro> ProReader::read() {
             critterData.flags = utils.readBE32();
 
             // S P E C I A L stats (7 base stats)
-            for (int i = 0; i < 7; ++i) {
+            for (int i = 0; i < Pro::SPECIAL_STATS_COUNT; ++i) {
                 critterData.specialStats[i] = utils.readBE32();
             }
             
@@ -177,12 +177,12 @@ std::unique_ptr<Pro> ProReader::read() {
             critterData.betterCriticals = utils.readBE32();
 
             // Damage threshold (7 damage types)
-            for (int i = 0; i < 7; ++i) {
+            for (int i = 0; i < Pro::DAMAGE_TYPES_ARMOR; ++i) {
                 critterData.damageThreshold[i] = utils.readBE32();
             }
             
             // Damage resist (9 damage types)
-            for (int i = 0; i < 9; ++i) {
+            for (int i = 0; i < Pro::DAMAGE_TYPES_CRITTER; ++i) {
                 critterData.damageResist[i] = utils.readBE32();
             }
 
@@ -190,7 +190,7 @@ std::unique_ptr<Pro> ProReader::read() {
             critterData.gender = utils.readBE32();
 
             // Bonus SPECIAL stats (7 stats)
-            for (int i = 0; i < 7; ++i) {
+            for (int i = 0; i < Pro::SPECIAL_STATS_COUNT; ++i) {
                 critterData.bonusSpecialStats[i] = utils.readBE32();
             }
 
@@ -206,12 +206,12 @@ std::unique_ptr<Pro> ProReader::read() {
             critterData.bonusBetterCriticals = utils.readBE32();
 
             // Bonus Damage threshold (8 values)
-            for (int i = 0; i < 8; ++i) {
+            for (int i = 0; i < Pro::BONUS_DAMAGE_ARRAYS; ++i) {
                 critterData.bonusDamageThreshold[i] = utils.readBE32();
             }
 
             // Bonus Damage resistance (8 values)
-            for (int i = 0; i < 8; ++i) {
+            for (int i = 0; i < Pro::BONUS_DAMAGE_ARRAYS; ++i) {
                 critterData.bonusDamageResistance[i] = utils.readBE32();
             }
 
@@ -219,7 +219,7 @@ std::unique_ptr<Pro> ProReader::read() {
             critterData.bonusGender = utils.readBE32();
 
             // Skills (18 different skills)
-            for (int i = 0; i < 18; ++i) {
+            for (int i = 0; i < Pro::SKILLS_COUNT; ++i) {
                 critterData.skills[i] = utils.readBE32();
             }
 
@@ -229,7 +229,7 @@ std::unique_ptr<Pro> ProReader::read() {
             
             // Damage type field is optional - certain maps (depolva, depolvb, kladwtwn) contains PRO files without it
             // Could be a remnant from Fallout 1 where the PRO format was 412 bytes vs 416 bytes in Fallout 2
-            if (utils.bytesRemaining() >= 4) {
+            if (utils.bytesRemaining() >= Pro::FIELD_SIZE_BYTES) {
                 critterData.damageType = utils.readBE32();
             } else {
                 critterData.damageType = 0; // Default value for 412-byte format
@@ -282,15 +282,15 @@ std::unique_ptr<Pro> ProReader::read() {
             break;
         }
         case Pro::OBJECT_TYPE::WALL: {
-            utils.skipWithLog(4, "wall material ID");
+            utils.skipWithLog(Pro::FIELD_SIZE_BYTES, "wall material ID");
             break;
         }
         case Pro::OBJECT_TYPE::TILE: {
-            utils.skipWithLog(4, "tile material ID");
+            utils.skipWithLog(Pro::FIELD_SIZE_BYTES, "tile material ID");
             break;
         }
         case Pro::OBJECT_TYPE::MISC: {
-            utils.skipWithLog(4, "misc unknown field");
+            utils.skipWithLog(Pro::FIELD_SIZE_BYTES, "misc unknown field");
             break;
         }
     }

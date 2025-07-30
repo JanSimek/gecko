@@ -56,7 +56,21 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _inventoryFIDSelectorButton(nullptr)
     , _armorMaleFIDSelectorButton(nullptr)
     , _armorFemaleFIDSelectorButton(nullptr)
-    , _flagsExtEdit(nullptr)
+    , _extendedFlagsGroup(nullptr)
+    , _animationPrimaryEdit(nullptr)
+    , _animationSecondaryEdit(nullptr)
+    , _bigGunCheck(nullptr)
+    , _twoHandedCheck(nullptr)
+    , _canUseCheck(nullptr)
+    , _canUseOnCheck(nullptr)
+    , _generalFlagCheck(nullptr)
+    , _interactionFlagCheck(nullptr)
+    , _itemHiddenCheck(nullptr)
+    , _lightFlag1Check(nullptr)
+    , _lightFlag2Check(nullptr)
+    , _lightFlag3Check(nullptr)
+    , _lightFlag4Check(nullptr)
+    , _flagsExtRawEdit(nullptr)
     , _sidEdit(nullptr)
     , _materialIdEdit(nullptr)
     , _containerSizeEdit(nullptr)
@@ -225,10 +239,9 @@ void ProEditorDialog::setupCommonTab() {
     
     // Extended Flags (not for TILE and MISC types)
     if (_pro->type() != Pro::OBJECT_TYPE::TILE && _pro->type() != Pro::OBJECT_TYPE::MISC) {
-        _flagsExtEdit = createHexSpinBox(INT32_MAX, "Extended flags (hex) - additional object properties");
-        _flagsExtEdit->setValue(_pro->commonItemData.flagsExt);
-        layout->addRow("Flags Ext:", _flagsExtEdit);
+        setupExtendedFlagsGroup(layout);
     }
+    
     
     // Script ID (not for TILE and MISC types)
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM || _pro->type() == Pro::OBJECT_TYPE::CRITTER || 
@@ -301,6 +314,194 @@ void ProEditorDialog::setupCommonTab() {
     }
     
     _tabWidget->addTab(_commonTab, "Common");
+}
+
+void ProEditorDialog::setupExtendedFlagsGroup(QFormLayout* layout) {
+    _extendedFlagsGroup = new QGroupBox("Extended Flags");
+    QVBoxLayout* flagsLayout = new QVBoxLayout(_extendedFlagsGroup);
+    
+    // Determine which type-specific flags to show
+    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
+        switch (_pro->itemType()) {
+            case Pro::ITEM_TYPE::WEAPON:
+                setupWeaponExtendedFlags(flagsLayout);
+                break;
+            case Pro::ITEM_TYPE::CONTAINER:
+                setupContainerExtendedFlags(flagsLayout);
+                break;
+            default:
+                setupItemExtendedFlags(flagsLayout);
+                break;
+        }
+    } else {
+        setupOtherExtendedFlags(flagsLayout);
+    }
+    
+    // Raw hex editor for advanced users (always shown)
+    QGroupBox* rawGroup = new QGroupBox("Raw Editor (Advanced)");
+    QFormLayout* rawLayout = new QFormLayout(rawGroup);
+    
+    _flagsExtRawEdit = createHexSpinBox(UINT32_MAX, "Raw extended flags value in hexadecimal");
+    // Set initial value based on object type
+    uint32_t initialFlags = _pro->type() == Pro::OBJECT_TYPE::ITEM ? 
+        _pro->commonItemData.flagsExt : 
+        (_pro->header.flags & 0xF0000000); // Only high bits for non-items
+    _flagsExtRawEdit->setValue(initialFlags);
+    connect(_flagsExtRawEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onExtendedFlagRawChanged);
+    rawLayout->addRow("Raw Hex:", _flagsExtRawEdit);
+    
+    flagsLayout->addWidget(rawGroup);
+    
+    layout->addRow("Extended Flags:", _extendedFlagsGroup);
+}
+
+void ProEditorDialog::setupWeaponExtendedFlags(QVBoxLayout* layout) {
+    // Animation flags group
+    QGroupBox* animGroup = new QGroupBox("Animation");
+    QFormLayout* animLayout = new QFormLayout(animGroup);
+    
+    _animationPrimaryEdit = new QSpinBox();
+    _animationPrimaryEdit->setRange(0, 15);
+    _animationPrimaryEdit->setValue(Pro::getAnimationPrimary(_pro->commonItemData.flagsExt));
+    _animationPrimaryEdit->setToolTip("Primary attack animation index (0-15)");
+    connect(_animationPrimaryEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onExtendedFlagChanged);
+    animLayout->addRow("Primary Anim:", _animationPrimaryEdit);
+    
+    _animationSecondaryEdit = new QSpinBox();
+    _animationSecondaryEdit->setRange(0, 15);
+    _animationSecondaryEdit->setValue(Pro::getAnimationSecondary(_pro->commonItemData.flagsExt));
+    _animationSecondaryEdit->setToolTip("Secondary attack animation index (0-15)");
+    connect(_animationSecondaryEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onExtendedFlagChanged);
+    animLayout->addRow("Secondary Anim:", _animationSecondaryEdit);
+    
+    layout->addWidget(animGroup);
+    
+    // Weapon behavior flags
+    QGroupBox* behaviorGroup = new QGroupBox("Weapon Behavior");
+    QVBoxLayout* behaviorLayout = new QVBoxLayout(behaviorGroup);
+    
+    _bigGunCheck = new QCheckBox("Big Gun");
+    _bigGunCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::BIG_GUN));
+    _bigGunCheck->setToolTip("Forces weapon to use Big Guns skill instead of Small Guns");
+    connect(_bigGunCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    behaviorLayout->addWidget(_bigGunCheck);
+    
+    _twoHandedCheck = new QCheckBox("Two-Handed");
+    _twoHandedCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::TWO_HANDED));
+    _twoHandedCheck->setToolTip("Weapon requires both hands, prevents dual-wielding");
+    connect(_twoHandedCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    behaviorLayout->addWidget(_twoHandedCheck);
+    
+    _itemHiddenCheck = new QCheckBox("Hidden Item");
+    _itemHiddenCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::ITEM_HIDDEN));
+    _itemHiddenCheck->setToolTip("Item is integral part of owner, cannot be dropped (creature weapons)");
+    connect(_itemHiddenCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    behaviorLayout->addWidget(_itemHiddenCheck);
+    
+    layout->addWidget(behaviorGroup);
+}
+
+void ProEditorDialog::setupContainerExtendedFlags(QVBoxLayout* layout) {
+    // Action flags group for containers
+    QGroupBox* actionGroup = new QGroupBox("Container Actions");
+    QVBoxLayout* actionLayout = new QVBoxLayout(actionGroup);
+    
+    _canUseCheck = new QCheckBox("Can Use");
+    _canUseCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE));
+    _canUseCheck->setToolTip("Container can be 'used' (automatically set for containers)");
+    connect(_canUseCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    actionLayout->addWidget(_canUseCheck);
+    
+    _canUseOnCheck = new QCheckBox("Can Use On");
+    _canUseOnCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE_ON));
+    _canUseOnCheck->setToolTip("Container can be 'used on' target");
+    connect(_canUseOnCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    actionLayout->addWidget(_canUseOnCheck);
+    
+    _interactionFlagCheck = new QCheckBox("Interaction Flag");
+    _interactionFlagCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::INTERACTION_FLAG));
+    _interactionFlagCheck->setToolTip("Related to item interactions");
+    connect(_interactionFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    actionLayout->addWidget(_interactionFlagCheck);
+    
+    layout->addWidget(actionGroup);
+}
+
+void ProEditorDialog::setupItemExtendedFlags(QVBoxLayout* layout) {
+    // General item flags (for armor, drugs, ammo, misc, keys)
+    QGroupBox* generalGroup = new QGroupBox("Item Actions");
+    QVBoxLayout* generalLayout = new QVBoxLayout(generalGroup);
+    
+    _canUseCheck = new QCheckBox("Can Use");
+    _canUseCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE));
+    _canUseCheck->setToolTip("Item can be 'used'");
+    connect(_canUseCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    generalLayout->addWidget(_canUseCheck);
+    
+    _canUseOnCheck = new QCheckBox("Can Use On");
+    _canUseOnCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE_ON));
+    _canUseOnCheck->setToolTip("Item can be 'used on' target (automatically set for drugs)");
+    connect(_canUseOnCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    generalLayout->addWidget(_canUseOnCheck);
+    
+    _generalFlagCheck = new QCheckBox("General Flag");
+    _generalFlagCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG));
+    _generalFlagCheck->setToolTip("General purpose flag");
+    connect(_generalFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    generalLayout->addWidget(_generalFlagCheck);
+    
+    layout->addWidget(generalGroup);
+}
+
+void ProEditorDialog::setupOtherExtendedFlags(QVBoxLayout* layout) {
+    // For critters, scenery, walls - show general flags
+    QGroupBox* generalGroup = new QGroupBox("Extended Flags");
+    QVBoxLayout* generalLayout = new QVBoxLayout(generalGroup);
+    
+    _generalFlagCheck = new QCheckBox("General Flag");
+    _generalFlagCheck->setChecked(_pro->type() == Pro::OBJECT_TYPE::ITEM ? 
+        (_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG)) : 
+        (_pro->header.flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG)));
+    _generalFlagCheck->setToolTip("General purpose flag (scenery/walls/tiles)");
+    connect(_generalFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    generalLayout->addWidget(_generalFlagCheck);
+    
+    // Light flags for objects that can have light
+    if (_pro->type() != Pro::OBJECT_TYPE::TILE) {
+        QGroupBox* lightGroup = new QGroupBox("Light Flags");
+        QVBoxLayout* lightLayout = new QVBoxLayout(lightGroup);
+        
+        uint32_t flagsToCheck = _pro->type() == Pro::OBJECT_TYPE::ITEM ? 
+            _pro->commonItemData.flagsExt : _pro->header.flags;
+        
+        _lightFlag1Check = new QCheckBox("Light Flag 1");
+        _lightFlag1Check->setChecked(flagsToCheck & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_1));
+        _lightFlag1Check->setToolTip("Light rendering flag 1");
+        connect(_lightFlag1Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+        lightLayout->addWidget(_lightFlag1Check);
+        
+        _lightFlag2Check = new QCheckBox("Light Flag 2");
+        _lightFlag2Check->setChecked(flagsToCheck & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_2));
+        _lightFlag2Check->setToolTip("Light rendering flag 2");
+        connect(_lightFlag2Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+        lightLayout->addWidget(_lightFlag2Check);
+        
+        _lightFlag3Check = new QCheckBox("Light Flag 3");
+        _lightFlag3Check->setChecked(flagsToCheck & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_3));
+        _lightFlag3Check->setToolTip("Light rendering flag 3");
+        connect(_lightFlag3Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+        lightLayout->addWidget(_lightFlag3Check);
+        
+        _lightFlag4Check = new QCheckBox("Light Flag 4");
+        _lightFlag4Check->setChecked(flagsToCheck & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_4));
+        _lightFlag4Check->setToolTip("Light rendering flag 4");
+        connect(_lightFlag4Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+        lightLayout->addWidget(_lightFlag4Check);
+        
+        generalLayout->addWidget(lightGroup);
+    }
+    
+    layout->addWidget(generalGroup);
 }
 
 void ProEditorDialog::setupArmorTab() {
@@ -1084,9 +1285,9 @@ void ProEditorDialog::saveProData() {
     _pro->header.light_intensity = _lightIntensityEdit->value();
     _pro->header.flags = _flagsEdit->value();
     
-    // Save extended fields if they exist
-    if (_flagsExtEdit) {
-        _pro->commonItemData.flagsExt = _flagsExtEdit->value();
+    // Save extended fields if they exist (flagsExt is updated real-time via signal handlers)
+    if (_flagsExtRawEdit) {
+        _pro->commonItemData.flagsExt = _flagsExtRawEdit->value();
     }
     if (_sidEdit) {
         _pro->commonItemData.SID = _sidEdit->value();
@@ -1360,7 +1561,7 @@ void ProEditorDialog::validateField(QWidget* field) {
         // Projectile PID validation
         if (field == _weaponProjectilePIDEdit && spinBox) {
             int32_t pid = spinBox->value();
-            if (pid != 0 && !validateFIDReference(pid, "Projectile")) {
+            if (pid != 0 && pid != -1 && !validateFIDReference(pid, "Projectile")) {
                 addValidationIssue(field, "Projectile PID may not reference a valid game object", ValidationLevel::WARNING, "References");
             }
         }
@@ -1441,14 +1642,14 @@ void ProEditorDialog::validateField(QWidget* field) {
     // === FID REFERENCE VALIDATIONS ===
     if (field == _fidEdit && spinBox) {
         int32_t fid = spinBox->value();
-        if (fid != 0 && !validateFIDReference(fid, "Main FRM")) {
+        if (fid != 0 && fid != -1 && !validateFIDReference(fid, "Main FRM")) {
             addValidationIssue(field, "FID may not reference a valid FRM file", ValidationLevel::WARNING, "References");
         }
     }
     
     if (field == _inventoryFIDEdit && spinBox) {
         int32_t fid = spinBox->value();
-        if (fid != 0 && !validateFIDReference(fid, "Inventory FRM")) {
+        if (fid != 0 && fid != -1 && !validateFIDReference(fid, "Inventory FRM")) {
             addValidationIssue(field, "Inventory FID may not reference a valid FRM file", ValidationLevel::WARNING, "References");
         }
     }
@@ -2828,6 +3029,10 @@ bool ProEditorDialog::validateFIDReference(int32_t fid, const QString& context) 
         return true; // 0 is valid (no FRM)
     }
     
+    if (fid == -1) {
+        return true; // -1 is valid (indicates no FRM/invalid reference)
+    }
+    
     try {
         auto& resourceManager = ResourceManager::getInstance();
         std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(fid));
@@ -2954,6 +3159,161 @@ void ProEditorDialog::onValidationItemDoubleClicked(QListWidgetItem* item) {
         
         spdlog::debug("ProEditorDialog: Jumped to validation issue field");
     }
+}
+
+void ProEditorDialog::onExtendedFlagChanged() {
+    uint32_t flags = 0;
+    
+    // Rebuild flags from individual controls
+    flags |= Pro::setAnimationPrimary(flags, _animationPrimaryEdit ? _animationPrimaryEdit->value() : 0);
+    flags |= Pro::setAnimationSecondary(flags, _animationSecondaryEdit ? _animationSecondaryEdit->value() : 0);
+    
+    if (_bigGunCheck && _bigGunCheck->isChecked()) {
+        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::BIG_GUN);
+    }
+    if (_twoHandedCheck && _twoHandedCheck->isChecked()) {
+        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::TWO_HANDED);
+    }
+    if (_canUseCheck && _canUseCheck->isChecked()) {
+        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE);
+    }
+    if (_canUseOnCheck && _canUseOnCheck->isChecked()) {
+        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE_ON);
+    }
+    if (_generalFlagCheck && _generalFlagCheck->isChecked()) {
+        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG);
+    }
+    if (_interactionFlagCheck && _interactionFlagCheck->isChecked()) {
+        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::INTERACTION_FLAG);
+    }
+    if (_itemHiddenCheck && _itemHiddenCheck->isChecked()) {
+        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::ITEM_HIDDEN);
+    }
+    if (_lightFlag1Check && _lightFlag1Check->isChecked()) {
+        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_1);
+    }
+    if (_lightFlag2Check && _lightFlag2Check->isChecked()) {
+        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_2);
+    }
+    if (_lightFlag3Check && _lightFlag3Check->isChecked()) {
+        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_3);
+    }
+    if (_lightFlag4Check && _lightFlag4Check->isChecked()) {
+        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_4);
+    }
+    
+    // Update the raw editor
+    if (_flagsExtRawEdit) {
+        _flagsExtRawEdit->blockSignals(true);
+        _flagsExtRawEdit->setValue(flags);
+        _flagsExtRawEdit->blockSignals(false);
+    }
+    
+    // Store in pro data (different location based on object type)
+    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
+        _pro->commonItemData.flagsExt = flags;
+    } else {
+        // For critters, scenery, walls - store in header flags
+        _pro->header.flags = (_pro->header.flags & 0x0FFFFFFF) | (flags & 0xF0000000); // Keep lower bits, update upper bits
+    }
+    
+    spdlog::debug("ProEditorDialog: Extended flags updated to 0x{:08X}", flags);
+}
+
+void ProEditorDialog::onExtendedFlagRawChanged() {
+    if (!_flagsExtRawEdit) return;
+    
+    uint32_t flags = _flagsExtRawEdit->value();
+    
+    // Update all individual controls based on the raw value
+    if (_animationPrimaryEdit) {
+        _animationPrimaryEdit->blockSignals(true);
+        _animationPrimaryEdit->setValue(Pro::getAnimationPrimary(flags));
+        _animationPrimaryEdit->blockSignals(false);
+    }
+    
+    if (_animationSecondaryEdit) {
+        _animationSecondaryEdit->blockSignals(true);
+        _animationSecondaryEdit->setValue(Pro::getAnimationSecondary(flags));
+        _animationSecondaryEdit->blockSignals(false);
+    }
+    
+    // Update checkboxes
+    if (_bigGunCheck) {
+        _bigGunCheck->blockSignals(true);
+        _bigGunCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::BIG_GUN));
+        _bigGunCheck->blockSignals(false);
+    }
+    
+    if (_twoHandedCheck) {
+        _twoHandedCheck->blockSignals(true);
+        _twoHandedCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::TWO_HANDED));
+        _twoHandedCheck->blockSignals(false);
+    }
+    
+    if (_canUseCheck) {
+        _canUseCheck->blockSignals(true);
+        _canUseCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE));
+        _canUseCheck->blockSignals(false);
+    }
+    
+    if (_canUseOnCheck) {
+        _canUseOnCheck->blockSignals(true);
+        _canUseOnCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE_ON));
+        _canUseOnCheck->blockSignals(false);
+    }
+    
+    if (_generalFlagCheck) {
+        _generalFlagCheck->blockSignals(true);
+        _generalFlagCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG));
+        _generalFlagCheck->blockSignals(false);
+    }
+    
+    if (_interactionFlagCheck) {
+        _interactionFlagCheck->blockSignals(true);
+        _interactionFlagCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::INTERACTION_FLAG));
+        _interactionFlagCheck->blockSignals(false);
+    }
+    
+    if (_itemHiddenCheck) {
+        _itemHiddenCheck->blockSignals(true);
+        _itemHiddenCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::ITEM_HIDDEN));
+        _itemHiddenCheck->blockSignals(false);
+    }
+    
+    if (_lightFlag1Check) {
+        _lightFlag1Check->blockSignals(true);
+        _lightFlag1Check->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_1));
+        _lightFlag1Check->blockSignals(false);
+    }
+    
+    if (_lightFlag2Check) {
+        _lightFlag2Check->blockSignals(true);
+        _lightFlag2Check->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_2));
+        _lightFlag2Check->blockSignals(false);
+    }
+    
+    if (_lightFlag3Check) {
+        _lightFlag3Check->blockSignals(true);
+        _lightFlag3Check->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_3));
+        _lightFlag3Check->blockSignals(false);
+    }
+    
+    if (_lightFlag4Check) {
+        _lightFlag4Check->blockSignals(true);
+        _lightFlag4Check->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_4));
+        _lightFlag4Check->blockSignals(false);
+    }
+    
+    // Store in pro data (different location based on object type)
+    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
+        _pro->commonItemData.flagsExt = flags;
+    } else {
+        // For critters, scenery, walls - store in header flags
+        _pro->header.flags = (_pro->header.flags & 0x0FFFFFFF) | (flags & 0xF0000000); // Keep lower bits, update upper bits
+    }
+    
+    spdlog::debug("ProEditorDialog: Extended flags raw value updated to 0x{:08X}", flags);
 }
 
 void ProEditorDialog::updateValidationPanel() {

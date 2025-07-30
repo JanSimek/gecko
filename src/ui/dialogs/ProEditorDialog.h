@@ -57,6 +57,8 @@ private slots:
     void onAnimationTick();
     void onValidationToggleClicked();
     void onValidationItemDoubleClicked(QListWidgetItem* item);
+    void onExtendedFlagChanged();
+    void onExtendedFlagRawChanged();
 
 private:
     void setupUI();
@@ -64,6 +66,11 @@ private:
     void setupPreview();
     void setupValidationPanel();
     void setupCommonTab();
+    void setupExtendedFlagsGroup(QFormLayout* layout);
+    void setupWeaponExtendedFlags(QVBoxLayout* layout);
+    void setupContainerExtendedFlags(QVBoxLayout* layout);
+    void setupItemExtendedFlags(QVBoxLayout* layout);
+    void setupOtherExtendedFlags(QVBoxLayout* layout);
     void setupArmorTab();
     void setupContainerTab();
     void setupDrugTab();
@@ -361,7 +368,22 @@ private:
     QSpinBox* _lightDistanceEdit;
     QSpinBox* _lightIntensityEdit;
     QSpinBox* _flagsEdit;
-    QSpinBox* _flagsExtEdit;
+    // Extended flags controls - organized by category
+    QGroupBox* _extendedFlagsGroup;
+    QSpinBox* _animationPrimaryEdit;
+    QSpinBox* _animationSecondaryEdit;
+    QCheckBox* _bigGunCheck;
+    QCheckBox* _twoHandedCheck;
+    QCheckBox* _canUseCheck;
+    QCheckBox* _canUseOnCheck;
+    QCheckBox* _generalFlagCheck;
+    QCheckBox* _interactionFlagCheck;
+    QCheckBox* _itemHiddenCheck;
+    QCheckBox* _lightFlag1Check;
+    QCheckBox* _lightFlag2Check;
+    QCheckBox* _lightFlag3Check;
+    QCheckBox* _lightFlag4Check;
+    QSpinBox* _flagsExtRawEdit;  // Raw hex editor for advanced users
     QSpinBox* _sidEdit;
     QSpinBox* _materialIdEdit;
     QSpinBox* _containerSizeEdit;

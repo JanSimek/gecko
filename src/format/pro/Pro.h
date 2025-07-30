@@ -44,10 +44,61 @@ public:
         GENERIC
     };
 
+    // PRO file format constants
+    static constexpr int SPECIAL_STATS_COUNT = 7;        // STR, PER, END, CHR, INT, AGL, LCK
+    static constexpr int DAMAGE_TYPES_ARMOR = 7;         // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
+    static constexpr int DAMAGE_TYPES_CRITTER = 9;       // Includes Gas and Radiation
+    static constexpr int SKILLS_COUNT = 18;              // All Fallout 2 skills
+    static constexpr int BONUS_DAMAGE_ARRAYS = 8;        // Extended arrays for critter bonuses
+    static constexpr int FIELD_SIZE_BYTES = 4;           // Standard 32-bit field size
+    
     // Weapon flag constants
     enum class WEAPON_FLAGS : uint32_t {
         ENERGY_WEAPON = 0x00000001  // Forces weapon to use Energy Weapons skill (sfall 4.2/3.8.20)
     };
+    
+    // Extended Flags constants (flags_ext field) - based on Fallout 2 engine analysis
+    enum class EXTENDED_FLAGS : uint32_t {
+        // Animation control flags (low 8 bits)
+        ANIMATION_PRIMARY_MASK      = 0x0000000F,  // Primary attack animation index (bits 0-3)
+        ANIMATION_SECONDARY_MASK    = 0x000000F0,  // Secondary attack animation index (bits 4-7)
+        
+        // Weapon behavior flags
+        BIG_GUN                     = 0x00000100,  // Forces weapon to use Big Guns skill instead of Small Guns
+        TWO_HANDED                  = 0x00000200,  // Weapon requires both hands, prevents dual-wielding
+        
+        // Action/interaction flags
+        CAN_USE                     = 0x00000800,  // Item can be "used" (containers get this automatically)
+        CAN_USE_ON                  = 0x00001000,  // Item can be "used on" target (drugs get this automatically)
+        GENERAL_FLAG                = 0x00002000,  // General purpose flag (scenery/walls/tiles)
+        INTERACTION_FLAG            = 0x00008000,  // Related to item interactions
+        
+        // Special item flags
+        ITEM_HIDDEN                 = 0x08000000,  // Item is integral part of owner, cannot be dropped (creature weapons)
+        
+        // Light/rendering flags (high bits)
+        LIGHT_FLAG_1                = 0x10000000,  // Light rendering flag
+        LIGHT_FLAG_2                = 0x20000000,  // Light rendering flag
+        LIGHT_FLAG_3                = 0x40000000,  // Light rendering flag
+        LIGHT_FLAG_4                = 0x80000000   // Light rendering flag
+    };
+    
+    // Extended flags helper functions
+    static constexpr uint32_t getAnimationPrimary(uint32_t flags) {
+        return flags & static_cast<uint32_t>(EXTENDED_FLAGS::ANIMATION_PRIMARY_MASK);
+    }
+    
+    static constexpr uint32_t getAnimationSecondary(uint32_t flags) {
+        return (flags & static_cast<uint32_t>(EXTENDED_FLAGS::ANIMATION_SECONDARY_MASK)) >> 4;
+    }
+    
+    static constexpr uint32_t setAnimationPrimary(uint32_t flags, uint32_t animation) {
+        return (flags & ~static_cast<uint32_t>(EXTENDED_FLAGS::ANIMATION_PRIMARY_MASK)) | (animation & 0xF);
+    }
+    
+    static constexpr uint32_t setAnimationSecondary(uint32_t flags, uint32_t animation) {
+        return (flags & ~static_cast<uint32_t>(EXTENDED_FLAGS::ANIMATION_SECONDARY_MASK)) | ((animation & 0xF) << 4);
+    }
 
     struct ProHeader {
         int32_t PID;
@@ -72,8 +123,8 @@ public:
 
     struct ArmorData {
         uint32_t armorClass;
-        uint32_t damageResist[7];     // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
-        uint32_t damageThreshold[7];
+        uint32_t damageResist[DAMAGE_TYPES_ARMOR];     // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
+        uint32_t damageThreshold[DAMAGE_TYPES_ARMOR];
         uint32_t perk;
         int32_t armorMaleFID;
         int32_t armorFemaleFID;
@@ -138,7 +189,7 @@ public:
         uint32_t teamNumber;
         uint32_t flags;
         // SPECIAL stats (7 stats: STR, PER, END, CHR, INT, AGL, LCK)
-        uint32_t specialStats[7];
+        uint32_t specialStats[SPECIAL_STATS_COUNT];
         uint32_t maxHitPoints;
         uint32_t actionPoints;
         uint32_t armorClass;
@@ -150,13 +201,13 @@ public:
         uint32_t criticalChance;
         uint32_t betterCriticals;
         // Damage threshold (7 damage types)
-        uint32_t damageThreshold[7];
+        uint32_t damageThreshold[DAMAGE_TYPES_ARMOR];
         // Damage resist (9 damage types)
-        uint32_t damageResist[9];
+        uint32_t damageResist[DAMAGE_TYPES_CRITTER];
         uint32_t age;
         uint32_t gender;
         // Bonus SPECIAL stats (7 stats)
-        uint32_t bonusSpecialStats[7];
+        uint32_t bonusSpecialStats[SPECIAL_STATS_COUNT];
         uint32_t bonusHealthPoints;
         uint32_t bonusActionPoints;
         uint32_t bonusArmorClass;
@@ -168,13 +219,13 @@ public:
         uint32_t bonusCriticalChance;
         uint32_t bonusBetterCriticals;
         // Bonus damage threshold (8 values)
-        uint32_t bonusDamageThreshold[8];
+        uint32_t bonusDamageThreshold[BONUS_DAMAGE_ARRAYS];
         // Bonus damage resistance (8 values)
-        uint32_t bonusDamageResistance[8];
+        uint32_t bonusDamageResistance[BONUS_DAMAGE_ARRAYS];
         uint32_t bonusAge;
         uint32_t bonusGender;
         // Skills (18 different skills)
-        uint32_t skills[18];
+        uint32_t skills[SKILLS_COUNT];
         uint32_t bodyType;
         uint32_t experienceForKill;
         uint32_t killType;
