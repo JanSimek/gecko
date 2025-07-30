@@ -19,6 +19,8 @@
 #include <QSlider>
 #include <QTimer>
 #include <QListWidget>
+#include <QRadioButton>
+#include <QButtonGroup>
 #include <memory>
 #include <unordered_map>
 
@@ -59,11 +61,14 @@ private slots:
     void onValidationItemDoubleClicked(QListWidgetItem* item);
     void onExtendedFlagChanged();
     void onExtendedFlagRawChanged();
+    void onPreviewViewChanged();
 
 private:
     void setupUI();
     void setupTabs();
     void setupPreview();
+    void setupDualPreview();
+    void setupAnimationControls();
     void setupValidationPanel();
     void setupCommonTab();
     void setupExtendedFlagsGroup(QFormLayout* layout);
@@ -106,13 +111,17 @@ private:
     void updateTabVisibility();
     void validateField(QWidget* field);
     void updatePreview();
+    void updateInventoryPreview();
+    void updateGroundPreview();  
     int32_t getPreviewFid();
+    int32_t getInventoryFid();
+    int32_t getGroundFid();
     void openFrmSelector(QSpinBox* targetField, uint32_t objectType);
     void loadAnimationFrames();
     
     // FRM thumbnail generation (based on ObjectPalettePanel approach)
-    QPixmap createFrmThumbnail(const std::string& frmPath);
-    QPixmap createFrameThumbnail(const class Frame& frame, const class Pal* palette);
+    QPixmap createFrmThumbnail(const std::string& frmPath, const QSize& targetSize = QSize(250, 250));
+    QPixmap createFrameThumbnail(const class Frame& frame, const class Pal* palette, const QSize& targetSize = QSize(250, 250));
     
     // MSG file loading for name and description
     void loadNameAndDescription();
@@ -301,6 +310,14 @@ private:
     QVBoxLayout* _previewLayout;
     QGroupBox* _previewGroup;
     QLabel* _previewLabel;
+    
+    // Dual preview system
+    QWidget* _dualPreviewWidget;
+    QHBoxLayout* _dualPreviewLayout;
+    QGroupBox* _inventoryPreviewGroup;
+    QGroupBox* _groundPreviewGroup;
+    QLabel* _inventoryPreviewLabel;
+    QLabel* _groundPreviewLabel;
     
     // Animation controls
     QWidget* _animationControls;

@@ -31,6 +31,12 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _previewLayout(nullptr)
     , _previewGroup(nullptr)
     , _previewLabel(nullptr)
+    , _dualPreviewWidget(nullptr)
+    , _dualPreviewLayout(nullptr)
+    , _inventoryPreviewGroup(nullptr)
+    , _groundPreviewGroup(nullptr)
+    , _inventoryPreviewLabel(nullptr)
+    , _groundPreviewLabel(nullptr)
     , _animationControls(nullptr)
     , _animationLayout(nullptr)
     , _playPauseButton(nullptr)
@@ -96,14 +102,12 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _weaponAIPriorityLabel(nullptr)
     , _armorAIPriorityLabel(nullptr) {
     
-    spdlog::debug("ProEditorDialog: Constructor starting");
     
     setWindowTitle("PRO Editor");
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setModal(true);
     resize(800, 600); // Increased size to accommodate preview panel
     
-    spdlog::debug("ProEditorDialog: Window setup complete");
     
     // Initialize data structures with defaults
     memset(&_commonData, 0, sizeof(_commonData));
@@ -117,13 +121,10 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     memset(&_critterData, 0, sizeof(_critterData));
     memset(&_sceneryData, 0, sizeof(_sceneryData));
     
-    spdlog::debug("ProEditorDialog: Data structures initialized");
     
     setupUI();
-    spdlog::debug("ProEditorDialog: UI setup complete");
     
     loadProData();
-    spdlog::debug("ProEditorDialog: PRO data loaded, constructor complete");
     
     // Load name and description from MSG files
     loadNameAndDescription();
@@ -937,20 +938,78 @@ void ProEditorDialog::setupPreview() {
     _previewPanel = new QWidget();
     _previewLayout = new QVBoxLayout(_previewPanel);
     
-    // Preview group
-    _previewGroup = new QGroupBox("FRM Preview");
-    QVBoxLayout* previewGroupLayout = new QVBoxLayout(_previewGroup);
+    // Setup dual preview system for items, single preview for others
+    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM) {
+        setupDualPreview();
+    } else {
+        // Original single preview for non-items
+        _previewGroup = new QGroupBox("FRM Preview");
+        QVBoxLayout* previewGroupLayout = new QVBoxLayout(_previewGroup);
+        
+        _previewLabel = new QLabel();
+        _previewLabel->setAlignment(Qt::AlignCenter);
+        _previewLabel->setMinimumHeight(200);
+        _previewLabel->setMaximumHeight(250);
+        _previewLabel->setMinimumWidth(250);
+        _previewLabel->setScaledContents(false);
+        _previewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
+        _previewLabel->setText("No FRM loaded");
+        previewGroupLayout->addWidget(_previewLabel);
+        
+        // Add animation controls to single preview
+        setupAnimationControls();
+        previewGroupLayout->addWidget(_animationControls);
+        
+        _previewLayout->addWidget(_previewGroup);
+    }
     
-    _previewLabel = new QLabel();
-    _previewLabel->setAlignment(Qt::AlignCenter);
-    _previewLabel->setMinimumHeight(200);
-    _previewLabel->setMaximumHeight(250);
-    _previewLabel->setMinimumWidth(250);
-    _previewLabel->setScaledContents(false);
-    _previewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
-    _previewLabel->setText("No FRM loaded");
-    previewGroupLayout->addWidget(_previewLabel);
+    // Animation controls are set up in setupAnimationControls() or setupDualPreview()  
+    _previewLayout->addStretch(); // Push preview to top
+}
+
+void ProEditorDialog::setupDualPreview() {
+    // Create dual preview widget for side-by-side display
+    _dualPreviewWidget = new QWidget();
+    _dualPreviewLayout = new QHBoxLayout(_dualPreviewWidget);
     
+    // Inventory preview group (left side)
+    _inventoryPreviewGroup = new QGroupBox("Inventory View");
+    QVBoxLayout* inventoryLayout = new QVBoxLayout(_inventoryPreviewGroup);
+    
+    _inventoryPreviewLabel = new QLabel();
+    _inventoryPreviewLabel->setAlignment(Qt::AlignCenter);
+    _inventoryPreviewLabel->setMinimumHeight(150);
+    _inventoryPreviewLabel->setMaximumHeight(200);
+    _inventoryPreviewLabel->setMinimumWidth(150);
+    _inventoryPreviewLabel->setScaledContents(false);
+    _inventoryPreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
+    _inventoryPreviewLabel->setText("No inventory FRM");
+    inventoryLayout->addWidget(_inventoryPreviewLabel);
+    
+    // Ground preview group (right side)
+    _groundPreviewGroup = new QGroupBox("Ground View");
+    QVBoxLayout* groundLayout = new QVBoxLayout(_groundPreviewGroup);
+    
+    _groundPreviewLabel = new QLabel();
+    _groundPreviewLabel->setAlignment(Qt::AlignCenter);
+    _groundPreviewLabel->setMinimumHeight(150);
+    _groundPreviewLabel->setMaximumHeight(200);
+    _groundPreviewLabel->setMinimumWidth(150);
+    _groundPreviewLabel->setScaledContents(false);
+    _groundPreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
+    _groundPreviewLabel->setText("No ground FRM");
+    groundLayout->addWidget(_groundPreviewLabel);
+    
+    // Add both preview groups to the layout
+    _dualPreviewLayout->addWidget(_inventoryPreviewGroup);
+    _dualPreviewLayout->addWidget(_groundPreviewGroup);
+    
+    _previewLayout->addWidget(_dualPreviewWidget);
+    
+    // No copy buttons or animation controls - items use static dual preview
+}
+
+void ProEditorDialog::setupAnimationControls() {
     // Animation controls
     _animationControls = new QWidget();
     _animationLayout = new QHBoxLayout(_animationControls);
@@ -983,8 +1042,6 @@ void ProEditorDialog::setupPreview() {
     _frameLabel->setMinimumWidth(40);
     _animationLayout->addWidget(_frameLabel);
     
-    previewGroupLayout->addWidget(_animationControls);
-    
     // Setup animation timer
     _animationTimer = new QTimer(this);
     _animationTimer->setSingleShot(false);
@@ -998,9 +1055,6 @@ void ProEditorDialog::setupPreview() {
     
     // Initially disable controls
     _animationControls->setEnabled(false);
-    
-    _previewLayout->addWidget(_previewGroup);
-    _previewLayout->addStretch(); // Push preview to top
 }
 
 void ProEditorDialog::setupValidationPanel() {
@@ -1055,7 +1109,6 @@ void ProEditorDialog::setupValidationPanel() {
 }
 
 void ProEditorDialog::loadProData() {
-    spdlog::debug("ProEditorDialog::loadProData() starting");
     
     try {
         // Load common data from PRO header
@@ -1066,7 +1119,6 @@ void ProEditorDialog::loadProData() {
         _commonData.light_intensity = _pro->header.light_intensity;
         _commonData.flags = _pro->header.flags;
         
-        spdlog::debug("ProEditorDialog::loadProData() - header loaded, PID={}, FID={}", _commonData.PID, _commonData.FID);
         
         // Load extended data
         _commonData.flagsExt = _pro->commonItemData.flagsExt;
@@ -1074,7 +1126,6 @@ void ProEditorDialog::loadProData() {
         _commonData.materialId = _pro->commonItemData.materialId;
         _commonData.containerSize = _pro->commonItemData.containerSize;
         
-        spdlog::debug("ProEditorDialog::loadProData() - extended data loaded");
     } catch (const std::exception& e) {
         spdlog::error("ProEditorDialog::loadProData() - exception loading header/extended data: {}", e.what());
         throw;
@@ -1082,31 +1133,25 @@ void ProEditorDialog::loadProData() {
     
     try {
         // Update common UI controls
-        spdlog::debug("ProEditorDialog::loadProData() - updating UI controls");
         
         if (_messageIdEdit) {
             _messageIdEdit->setValue(_commonData.message_id);
-            spdlog::debug("ProEditorDialog::loadProData() - messageIdEdit updated");
         }
         
         if (_fidEdit) {
             _fidEdit->setValue(_commonData.FID);
-            spdlog::debug("ProEditorDialog::loadProData() - fidEdit updated");
         }
         
         if (_lightDistanceEdit) {
             _lightDistanceEdit->setValue(_commonData.light_distance);
-            spdlog::debug("ProEditorDialog::loadProData() - lightDistanceEdit updated");
         }
         
         if (_lightIntensityEdit) {
             _lightIntensityEdit->setValue(_commonData.light_intensity);
-            spdlog::debug("ProEditorDialog::loadProData() - lightIntensityEdit updated");
         }
         
         if (_flagsEdit) {
             _flagsEdit->setValue(_commonData.flags);
-            spdlog::debug("ProEditorDialog::loadProData() - flagsEdit updated");
         }
     } catch (const std::exception& e) {
         spdlog::error("ProEditorDialog::loadProData() - exception updating UI controls: {}", e.what());
@@ -1114,58 +1159,40 @@ void ProEditorDialog::loadProData() {
     }
     
     // Load type-specific data based on object type
-    spdlog::debug("ProEditorDialog::loadProData() - loading type-specific data");
     
     Pro::OBJECT_TYPE objectType = _pro->type();
-    spdlog::debug("ProEditorDialog::loadProData() - object type = {}", static_cast<int>(objectType));
     
     switch (objectType) {
         case Pro::OBJECT_TYPE::ITEM: {
-            spdlog::debug("ProEditorDialog::loadProData() - processing ITEM type");
             
             Pro::ITEM_TYPE itemType = _pro->itemType();
-            spdlog::debug("ProEditorDialog::loadProData() - item type = {}", static_cast<int>(itemType));
             
             switch (itemType) {
                 case Pro::ITEM_TYPE::ARMOR:
-                    spdlog::debug("ProEditorDialog::loadProData() - loading ARMOR data");
                     try {
                         loadArmorData();
-                        spdlog::debug("ProEditorDialog::loadProData() - ARMOR data loaded");
                     } catch (const std::exception& e) {
                         spdlog::error("ProEditorDialog::loadProData() - exception in loadArmorData(): {}", e.what());
                         throw;
                     }
                     break;
                 case Pro::ITEM_TYPE::CONTAINER:
-                    spdlog::debug("ProEditorDialog::loadProData() - loading CONTAINER data");
                     loadContainerData();
-                    spdlog::debug("ProEditorDialog::loadProData() - CONTAINER data loaded");
                     break;
                 case Pro::ITEM_TYPE::DRUG:
-                    spdlog::debug("ProEditorDialog::loadProData() - loading DRUG data");
                     loadDrugData();
-                    spdlog::debug("ProEditorDialog::loadProData() - DRUG data loaded");
                     break;
                 case Pro::ITEM_TYPE::WEAPON:
-                    spdlog::debug("ProEditorDialog::loadProData() - loading WEAPON data");
                     loadWeaponData();
-                    spdlog::debug("ProEditorDialog::loadProData() - WEAPON data loaded");
                     break;
                 case Pro::ITEM_TYPE::AMMO:
-                    spdlog::debug("ProEditorDialog::loadProData() - loading AMMO data");
                     loadAmmoData();
-                    spdlog::debug("ProEditorDialog::loadProData() - AMMO data loaded");
                     break;
                 case Pro::ITEM_TYPE::MISC:
-                    spdlog::debug("ProEditorDialog::loadProData() - loading MISC data");
                     loadMiscData();
-                    spdlog::debug("ProEditorDialog::loadProData() - MISC data loaded");
                     break;
                 case Pro::ITEM_TYPE::KEY:
-                    spdlog::debug("ProEditorDialog::loadProData() - loading KEY data");
                     loadKeyData();
-                    spdlog::debug("ProEditorDialog::loadProData() - KEY data loaded");
                     break;
             }
             break;
@@ -1179,13 +1206,10 @@ void ProEditorDialog::loadProData() {
         case Pro::OBJECT_TYPE::WALL:
         case Pro::OBJECT_TYPE::TILE:
         case Pro::OBJECT_TYPE::MISC:
-            spdlog::debug("ProEditorDialog::loadProData() - processing WALL/TILE/MISC type (common data only)");
             // These types only have common data
             break;
     }
     
-    spdlog::debug("ProEditorDialog::loadProData() - type-specific loading completed");
-    spdlog::debug("ProEditorDialog: Loaded PRO data for PID {}", _commonData.PID);
 }
 
 void ProEditorDialog::loadArmorData() {
@@ -1342,7 +1366,6 @@ void ProEditorDialog::saveProData() {
             break;
     }
     
-    spdlog::debug("ProEditorDialog: Saved PRO data for PID {}", _pro->header.PID);
 }
 
 void ProEditorDialog::saveArmorData() {
@@ -1678,39 +1701,54 @@ void ProEditorDialog::validateField(QWidget* field) {
 }
 
 void ProEditorDialog::updatePreview() {
-    spdlog::debug("ProEditorDialog::updatePreview() called");
-    
-    // Make sure preview label exists
-    if (!_previewLabel) {
-        spdlog::debug("ProEditorDialog::updatePreview() - _previewLabel is null, returning");
-        return;
-    }
     
     // Stop current animation
     if (_animationTimer && _animationTimer->isActive()) {
         _animationTimer->stop();
         _isAnimating = false;
-        _playPauseButton->setText("▶");
+        if (_playPauseButton) {
+            _playPauseButton->setText("▶");
+        }
+    }
+    
+    // Check if we're using dual preview system (for items)
+    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryPreviewLabel && _groundPreviewLabel) {
+        // Update both dual previews (items use static thumbnails)
+        updateInventoryPreview();
+        updateGroundPreview();
+        
+        // Items don't animate, so disable animation controls and return
+        if (_animationControls) {
+            _animationControls->setEnabled(false);
+        }
+        return;
+    }
+    
+    // Original single preview for non-items
+    if (!_previewLabel) {
+        return;
     }
     
     // Determine which FID to use for preview
     int32_t previewFid = 0;
     try {
         previewFid = getPreviewFid();
-        spdlog::debug("ProEditorDialog::updatePreview() - got previewFid = {}", previewFid);
     } catch (const std::exception& e) {
         spdlog::error("ProEditorDialog::updatePreview() - exception getting preview FID: {}", e.what());
         _previewLabel->clear();
         _previewLabel->setText("Failed to get FID");
-        _animationControls->setEnabled(false);
+        if (_animationControls) {
+            _animationControls->setEnabled(false);
+        }
         return;
     }
     
     if (previewFid <= 0) {
-        spdlog::debug("ProEditorDialog::updatePreview() - previewFid <= 0, clearing preview");
         _previewLabel->clear();
         _previewLabel->setText("No FRM loaded");
-        _animationControls->setEnabled(false);
+        if (_animationControls) {
+            _animationControls->setEnabled(false);
+        }
         return;
     }
     
@@ -1719,26 +1757,23 @@ void ProEditorDialog::updatePreview() {
 }
 
 int32_t ProEditorDialog::getPreviewFid() {
-    spdlog::debug("ProEditorDialog::getPreviewFid() called");
     
     // Check if basic widgets are initialized
     if (!_fidEdit) {
-        spdlog::debug("ProEditorDialog::getPreviewFid() - _fidEdit is null, returning 0");
         return 0;
     }
     
     // Check if PRO is valid
     if (!_pro) {
-        spdlog::debug("ProEditorDialog::getPreviewFid() - _pro is null, returning 0");
         return 0;
     }
     
-    // For items, prefer inventory FID over world FID for preview
+    // Items use dual preview system, not single preview, so they don't need getPreviewFid()
+    
+    // For items without dual preview, prefer inventory FID over world FID for preview
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryFIDEdit) {
         int32_t inventoryFid = _inventoryFIDEdit->value();
-        spdlog::debug("ProEditorDialog::getPreviewFid() - inventoryFid = {}", inventoryFid);
         if (inventoryFid > 0) {
-            spdlog::debug("ProEditorDialog::getPreviewFid() - returning inventoryFid = {}", inventoryFid);
             return inventoryFid;
         }
         
@@ -1758,8 +1793,117 @@ int32_t ProEditorDialog::getPreviewFid() {
     
     // Fall back to main FID
     int32_t basicFid = _fidEdit->value();
-    spdlog::debug("ProEditorDialog::getPreviewFid() - returning basicFid = {}", basicFid);
     return basicFid;
+}
+
+int32_t ProEditorDialog::getInventoryFid() {
+    
+    // Check if basic widgets are initialized
+    if (!_pro || !_inventoryFIDEdit) {
+        return 0;
+    }
+    
+    // For items, return inventory FID
+    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
+        int32_t inventoryFid = _inventoryFIDEdit->value();
+        return inventoryFid;
+    }
+    
+    return 0;
+}
+
+int32_t ProEditorDialog::getGroundFid() {
+    
+    // Check if basic widgets are initialized
+    if (!_pro || !_fidEdit) {
+        return 0;
+    }
+    
+    // For items, return main FID (ground view)
+    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
+        int32_t groundFid = _fidEdit->value();
+        return groundFid;
+    }
+    
+    return 0;
+}
+
+void ProEditorDialog::updateInventoryPreview() {
+    
+    if (!_inventoryPreviewLabel) {
+        return;
+    }
+    
+    int32_t inventoryFid = getInventoryFid();
+    if (inventoryFid <= 0) {
+        _inventoryPreviewLabel->clear();
+        _inventoryPreviewLabel->setText("No inventory FRM");
+        return;
+    }
+    
+    // Generate thumbnail for inventory view
+    try {
+        auto& resourceManager = ResourceManager::getInstance();
+        std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(inventoryFid));
+        
+        if (frmPath.empty()) {
+            _inventoryPreviewLabel->clear();
+            _inventoryPreviewLabel->setText("Invalid inventory FID");
+            return;
+        }
+        
+        QPixmap thumbnail = createFrmThumbnail(frmPath, QSize(150, 150));
+        if (!thumbnail.isNull()) {
+            _inventoryPreviewLabel->setPixmap(thumbnail);
+        } else {
+            _inventoryPreviewLabel->clear();
+            _inventoryPreviewLabel->setText("Failed to load inventory FRM");
+        }
+        
+    } catch (const std::exception& e) {
+        spdlog::error("ProEditorDialog::updateInventoryPreview() - exception: {}", e.what());
+        _inventoryPreviewLabel->clear();
+        _inventoryPreviewLabel->setText("Error loading inventory FRM");
+    }
+}
+
+void ProEditorDialog::updateGroundPreview() {
+    
+    if (!_groundPreviewLabel) {
+        return;
+    }
+    
+    int32_t groundFid = getGroundFid();
+    if (groundFid <= 0) {
+        _groundPreviewLabel->clear();
+        _groundPreviewLabel->setText("No ground FRM");
+        return;
+    }
+    
+    // Generate thumbnail for ground view
+    try {
+        auto& resourceManager = ResourceManager::getInstance();
+        std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(groundFid));
+        
+        if (frmPath.empty()) {
+            _groundPreviewLabel->clear();
+            _groundPreviewLabel->setText("Invalid ground FID");
+            return;
+        }
+        
+        QPixmap thumbnail = createFrmThumbnail(frmPath, QSize(150, 150));
+        if (!thumbnail.isNull()) {
+            _groundPreviewLabel->setPixmap(thumbnail);
+        } else {
+            _groundPreviewLabel->clear();
+            _groundPreviewLabel->setText("Failed to load ground FRM");
+        }
+        
+    } catch (const std::exception& e) {
+        spdlog::error("ProEditorDialog::updateGroundPreview() - exception: {}", e.what());
+        _groundPreviewLabel->clear();
+        _groundPreviewLabel->setText("Error loading ground FRM");
+    }
 }
 
 void ProEditorDialog::onAccept() {
@@ -2459,7 +2603,6 @@ void ProEditorDialog::loadCritterData() {
         }
     }
     
-    spdlog::debug("ProEditorDialog: Loaded critter data from PRO structure");
 }
 
 void ProEditorDialog::loadSceneryData() {
@@ -2510,7 +2653,6 @@ void ProEditorDialog::loadSceneryData() {
             break;
     }
     
-    spdlog::debug("ProEditorDialog: Loaded scenery data from PRO structure (type: {})", static_cast<int>(sceneryType));
 }
 
 void ProEditorDialog::saveCritterData() {
@@ -2604,7 +2746,6 @@ void ProEditorDialog::saveCritterData() {
         }
     }
     
-    spdlog::debug("ProEditorDialog: Saved critter data to PRO structure");
 }
 
 void ProEditorDialog::saveSceneryData() {
@@ -2654,14 +2795,11 @@ void ProEditorDialog::saveSceneryData() {
             break;
     }
     
-    spdlog::debug("ProEditorDialog: Saved scenery data to PRO structure (type: {})", static_cast<int>(sceneryType));
 }
 
-QPixmap ProEditorDialog::createFrmThumbnail(const std::string& frmPath) {
-    spdlog::debug("ProEditorDialog::createFrmThumbnail() called with frmPath: {}", frmPath);
+QPixmap ProEditorDialog::createFrmThumbnail(const std::string& frmPath, const QSize& targetSize) {
     
-    constexpr int THUMBNAIL_SIZE = 250; // Match the label size
-    QPixmap thumbnail(THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+    QPixmap thumbnail(targetSize);
     thumbnail.fill(Qt::transparent);
 
     try {
@@ -2670,7 +2808,6 @@ QPixmap ProEditorDialog::createFrmThumbnail(const std::string& frmPath) {
         // Load the FRM object directly (not the texture)
         const auto* frm = resourceManager.loadResource<Frm>(frmPath);
         if (!frm) {
-            spdlog::debug("ProEditorDialog: Failed to load FRM {}", frmPath);
             return thumbnail;
         }
 
@@ -2694,16 +2831,12 @@ QPixmap ProEditorDialog::createFrmThumbnail(const std::string& frmPath) {
                 
                 if (palette) {
                     // Convert single frame to thumbnail
-                    thumbnail = createFrameThumbnail(firstFrame, palette);
-                    spdlog::debug("ProEditorDialog: Created single-frame thumbnail for {} ({}x{})",
-                        frmPath, firstFrame.width(), firstFrame.height());
+                    thumbnail = createFrameThumbnail(firstFrame, palette, targetSize);
                     return thumbnail;
                 }
             } else {
-                spdlog::debug("ProEditorDialog: No frames found in FRM {}", frmPath);
             }
         } else {
-            spdlog::debug("ProEditorDialog: No directions found in FRM {}", frmPath);
         }
     } catch (const std::exception& e) {
         spdlog::warn("ProEditorDialog: Exception creating thumbnail for {}: {}", frmPath, e.what());
@@ -2712,9 +2845,8 @@ QPixmap ProEditorDialog::createFrmThumbnail(const std::string& frmPath) {
     return thumbnail; // Return empty/transparent thumbnail on failure
 }
 
-QPixmap ProEditorDialog::createFrameThumbnail(const Frame& frame, const Pal* palette) {
-    constexpr int THUMBNAIL_SIZE = 250; // Match the label size
-    QPixmap thumbnail(THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+QPixmap ProEditorDialog::createFrameThumbnail(const Frame& frame, const Pal* palette, const QSize& targetSize) {
+    QPixmap thumbnail(targetSize);
     thumbnail.fill(Qt::transparent);
 
     // Get frame dimensions
@@ -2722,14 +2854,12 @@ QPixmap ProEditorDialog::createFrameThumbnail(const Frame& frame, const Pal* pal
     uint16_t frameHeight = frame.height();
     
     if (frameWidth == 0 || frameHeight == 0) {
-        spdlog::debug("ProEditorDialog: Frame has zero dimensions");
         return thumbnail;
     }
 
     // Always use RGBA data with palette - no fallback to grayscale
     uint8_t* rgbaData = const_cast<Frame&>(frame).rgba(const_cast<Pal*>(palette));
     if (!rgbaData) {
-        spdlog::debug("ProEditorDialog: Failed to get RGBA data from frame");
         return thumbnail;
     }
     
@@ -2739,37 +2869,32 @@ QPixmap ProEditorDialog::createFrameThumbnail(const Frame& frame, const Pal* pal
     // Scale frame to fit thumbnail size while preserving aspect ratio
     QPixmap framePixmap = QPixmap::fromImage(frameImage);
     
-    // Calculate scaling
-    int newWidth = frameWidth;
-    int newHeight = frameHeight;
+    // Calculate optimal scaling with maximum 2x original size
+    constexpr double MAX_SCALE = 2.0;
     
-    // Constrain to thumbnail size
-    if (newWidth > THUMBNAIL_SIZE) {
-        newWidth = THUMBNAIL_SIZE;
-    }
-    if (newHeight > THUMBNAIL_SIZE) {
-        newHeight = THUMBNAIL_SIZE;
-    }
+    // Calculate scaling factors to fit target size
+    double scaleX = static_cast<double>(targetSize.width()) / frameWidth;
+    double scaleY = static_cast<double>(targetSize.height()) / frameHeight;
+    double scale = qMin(scaleX, scaleY);
     
-    // Preserve aspect ratio
-    double aspectRatioX = static_cast<double>(frameWidth) / newWidth;
-    double aspectRatioY = static_cast<double>(frameHeight) / newHeight;
-    double aspectRatio = qMax(aspectRatioX, aspectRatioY);
+    // Limit scale to maximum 2x original size for crisp display
+    scale = qMin(scale, MAX_SCALE);
     
-    if (aspectRatio > 1.001) { // Avoid division by very small numbers
-        newWidth = static_cast<int>(frameWidth / aspectRatio);
-        newHeight = static_cast<int>(frameHeight / aspectRatio);
-    }
+    // Calculate final size
+    int scaledWidth = static_cast<int>(frameWidth * scale);
+    int scaledHeight = static_cast<int>(frameHeight * scale);
     
-    // Scale the frame
-    QPixmap scaledFrame = framePixmap.scaled(newWidth, newHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    // Use high-quality scaling directly from QImage to QPixmap
+    QImage scaledImage = frameImage.scaled(scaledWidth, scaledHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QPixmap scaledFrame = QPixmap::fromImage(scaledImage);
     
-    // Center the scaled frame in the thumbnail
+    // Center the scaled frame in the thumbnail with enhanced rendering
     QPainter painter(&thumbnail);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     
-    int x = (THUMBNAIL_SIZE - scaledFrame.width()) / 2;
-    int y = (THUMBNAIL_SIZE - scaledFrame.height()) / 2;
+    int x = (targetSize.width() - scaledFrame.width()) / 2;
+    int y = (targetSize.height() - scaledFrame.height()) / 2;
     
     painter.drawPixmap(x, y, scaledFrame);
     painter.end();
@@ -2812,7 +2937,6 @@ void ProEditorDialog::loadNameAndDescription() {
                 return;
         }
         
-        spdlog::debug("ProEditorDialog::loadNameAndDescription() - loading MSG file: {}", msgFileName);
         
         // Load the MSG file
         const auto* msgFile = resourceManager.loadResource<Msg>(msgFileName);
@@ -2824,7 +2948,6 @@ void ProEditorDialog::loadNameAndDescription() {
         }
         
         uint32_t messageId = _pro->header.message_id;
-        spdlog::debug("ProEditorDialog::loadNameAndDescription() - looking for message ID: {}", messageId);
         
         // Get name (message at messageId)
         std::string name;
@@ -2833,7 +2956,6 @@ void ProEditorDialog::loadNameAndDescription() {
             name = nameMessage.text;
         } catch (const std::exception& e) {
             name = QString("No name (ID: %1)").arg(messageId).toStdString();
-            spdlog::debug("ProEditorDialog::loadNameAndDescription() - name message not found: {}", e.what());
         }
         
         if (name.empty()) {
@@ -2847,14 +2969,12 @@ void ProEditorDialog::loadNameAndDescription() {
             description = descMessage.text;
         } catch (const std::exception& e) {
             description = QString("No description (ID: %1)").arg(messageId + 1).toStdString();
-            spdlog::debug("ProEditorDialog::loadNameAndDescription() - description message not found: {}", e.what());
         }
         
         if (description.empty()) {
             description = QString("No description (ID: %1)").arg(messageId + 1).toStdString();
         }
         
-        spdlog::debug("ProEditorDialog::loadNameAndDescription() - name: '{}', description: '{}'", name, description);
         
         // Update labels
         _nameLabel->setText(QString::fromStdString(name));
@@ -2891,7 +3011,6 @@ void ProEditorDialog::onPlayPauseClicked() {
         _isAnimating = true;
     }
     
-    spdlog::debug("ProEditorDialog: Animation {}", _isAnimating ? "started" : "stopped");
 }
 
 void ProEditorDialog::onFrameChanged(int frame) {
@@ -2901,10 +3020,13 @@ void ProEditorDialog::onFrameChanged(int frame) {
         
         // Update preview with new frame
         if (frame < _frameCache.size() && !_frameCache[frame].isNull()) {
-            _previewLabel->setPixmap(_frameCache[frame]);
+            // Items use static dual preview, not animation frames
+            if (_previewLabel) {
+                // Single preview mode for critters and scenery
+                _previewLabel->setPixmap(_frameCache[frame]);
+            }
         }
         
-        spdlog::debug("ProEditorDialog: Frame changed to {}", frame);
     }
 }
 
@@ -2915,7 +3037,6 @@ void ProEditorDialog::onDirectionChanged(int direction) {
         // Reload frames for new direction
         loadAnimationFrames();
         
-        spdlog::debug("ProEditorDialog: Direction changed to {}", direction);
     }
 }
 
@@ -2969,10 +3090,12 @@ void ProEditorDialog::loadAnimationFrames() {
             return;
         }
         
-        // Generate thumbnails for all frames
+        // Generate thumbnails for all frames using fixed target size for better quality
         _frameCache.reserve(_totalFrames);
+        QSize frameTargetSize(200, 200); // Fixed size for crisp animation frames
+        
         for (const auto& frame : frames) {
-            QPixmap thumbnail = createFrameThumbnail(frame, palette);
+            QPixmap thumbnail = createFrameThumbnail(frame, palette, frameTargetSize);
             _frameCache.push_back(thumbnail);
         }
         
@@ -2984,15 +3107,32 @@ void ProEditorDialog::loadAnimationFrames() {
         // Enable/disable direction combo based on available directions
         _directionCombo->setEnabled(_totalDirections > 1);
         
-        // Enable animation controls if we have multiple frames
-        _animationControls->setEnabled(_totalFrames > 0);
+        // Enable animation controls only for critters and scenery with multiple frames
+        // Items never animate (they have static single-frame FRMs)
+        bool shouldEnableAnimation = false;
+        if (_pro) {
+            if (_pro->type() == Pro::OBJECT_TYPE::CRITTER) {
+                // Critters can have animations
+                shouldEnableAnimation = (_totalFrames > 1 || _totalDirections > 1);
+            } else if (_pro->type() == Pro::OBJECT_TYPE::SCENERY) {
+                // Some scenery can have animations (doors, etc.)
+                shouldEnableAnimation = (_totalFrames > 1 || _totalDirections > 1);
+            }
+            // Items, walls, tiles, misc never animate
+        }
+        _animationControls->setEnabled(shouldEnableAnimation);
         
-        // Show the first frame
+ 
+        
+        // Show the first frame in the appropriate preview label
         if (!_frameCache.empty() && !_frameCache[0].isNull()) {
-            _previewLabel->setPixmap(_frameCache[0]);
+            // Items use static dual preview, not animation frames
+            if (_previewLabel) {
+                // Single preview mode for critters and scenery
+                _previewLabel->setPixmap(_frameCache[0]);
+            }
         }
         
-        spdlog::debug("ProEditorDialog: Loaded {} frames for direction {}", _totalFrames, _currentDirection);
         
     } catch (const std::exception& e) {
         spdlog::warn("ProEditorDialog: Exception loading animation frames: {}", e.what());
@@ -3008,7 +3148,6 @@ void ProEditorDialog::addValidationIssue(QWidget* field, const QString& message,
     issue.category = category;
     _validationIssues.push_back(issue);
     
-    spdlog::debug("ProEditorDialog: Validation issue added - {}: {}", category.toStdString(), message.toStdString());
 }
 
 void ProEditorDialog::clearValidationIssues(QWidget* field) {
@@ -3038,21 +3177,18 @@ bool ProEditorDialog::validateFIDReference(int32_t fid, const QString& context) 
         std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(fid));
         
         if (frmPath.empty()) {
-            spdlog::debug("ProEditorDialog: FID {} ({}) has no corresponding FRM path", fid, context.toStdString());
             return false;
         }
         
         // Try to load the FRM to verify it exists
         const auto* frm = resourceManager.loadResource<Frm>(frmPath);
         if (!frm) {
-            spdlog::debug("ProEditorDialog: FID {} ({}) references non-existent FRM: {}", fid, context.toStdString(), frmPath);
             return false;
         }
         
         return true;
         
     } catch (const std::exception& e) {
-        spdlog::debug("ProEditorDialog: Exception validating FID {} ({}): {}", fid, context.toStdString(), e.what());
         return false;
     }
 }
@@ -3060,7 +3196,6 @@ bool ProEditorDialog::validateFIDReference(int32_t fid, const QString& context) 
 bool ProEditorDialog::validateStatValue(int value, int min, int max, const QString& statName) {
     bool isValid = (value >= min && value <= max);
     if (!isValid) {
-        spdlog::debug("ProEditorDialog: {} value {} is outside valid range [{}, {}]", statName.toStdString(), value, min, max);
     }
     return isValid;
 }
@@ -3104,7 +3239,6 @@ void ProEditorDialog::updateValidationStatus() {
     
     setWindowTitle(title);
     
-    spdlog::debug("ProEditorDialog: Validation status - {} errors, {} warnings, {} info", errorCount, warningCount, infoCount);
     
     // Update validation panel
     updateValidationPanel();
@@ -3120,7 +3254,6 @@ void ProEditorDialog::onValidationToggleClicked() {
         _validationToggleButton->setText("▶ Validation Issues");
     }
     
-    spdlog::debug("ProEditorDialog: Validation panel {}", _validationPanelVisible ? "expanded" : "collapsed");
 }
 
 void ProEditorDialog::onValidationItemDoubleClicked(QListWidgetItem* item) {
@@ -3157,7 +3290,6 @@ void ProEditorDialog::onValidationItemDoubleClicked(QListWidgetItem* item) {
             scrollArea->ensureWidgetVisible(field);
         }
         
-        spdlog::debug("ProEditorDialog: Jumped to validation issue field");
     }
 }
 
@@ -3217,7 +3349,6 @@ void ProEditorDialog::onExtendedFlagChanged() {
         _pro->header.flags = (_pro->header.flags & 0x0FFFFFFF) | (flags & 0xF0000000); // Keep lower bits, update upper bits
     }
     
-    spdlog::debug("ProEditorDialog: Extended flags updated to 0x{:08X}", flags);
 }
 
 void ProEditorDialog::onExtendedFlagRawChanged() {
@@ -3313,7 +3444,12 @@ void ProEditorDialog::onExtendedFlagRawChanged() {
         _pro->header.flags = (_pro->header.flags & 0x0FFFFFFF) | (flags & 0xF0000000); // Keep lower bits, update upper bits
     }
     
-    spdlog::debug("ProEditorDialog: Extended flags raw value updated to 0x{:08X}", flags);
+}
+
+// Copy button methods removed - functionality deemed unnecessary
+
+void ProEditorDialog::onPreviewViewChanged() {
+    // No longer used - items use static dual preview without animation controls
 }
 
 void ProEditorDialog::updateValidationPanel() {

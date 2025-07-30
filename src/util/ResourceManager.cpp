@@ -207,7 +207,6 @@ T* ResourceManager::getResource(const Key& id) {
 
 const sf::Image ResourceManager::imageFromFrm(Frm* frm, Pal* pal) {
 
-    spdlog::debug("Stitching {} texture from {} directions", frm->filename(), frm->directions().size());
 
     auto colors = pal->palette();
 
@@ -265,8 +264,6 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
     auto baseId = FID & FileFormat::BASE_ID_MASK; 
     auto type = static_cast<Frm::FRM_TYPE>(FID >> FileFormat::TYPE_MASK_SHIFT);
     
-    spdlog::debug("ResourceManager: FIDtoFrmName called with FID=0x{:08X}, type={}, baseId={}", 
-                  FID, static_cast<int>(type), baseId);
 
     if (type == Frm::FRM_TYPE::CRITTER) {
         baseId = FID & FileFormat::CRITTER_ID_MASK;
@@ -312,7 +309,23 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
 
     const auto& typeArtDescription = frmTypeDescription[static_cast<size_t>(type)];
 
-    const auto& lst = getResource<Lst>(typeArtDescription.lstFilePath);
+    // Try to get the LST resource, loading on-demand if not available
+    Lst* lst = getResource<Lst>(typeArtDescription.lstFilePath);
+    
+    if (!lst) {
+        
+        // Try to load LST file on-demand
+        try {
+            lst = loadResource<Lst>(typeArtDescription.lstFilePath);
+        } catch (const std::exception& loadError) {
+            spdlog::error("ResourceManager: Failed to load LST file {} on-demand: {}", typeArtDescription.lstFilePath, loadError.what());
+            throw std::runtime_error("Failed to load LST file " + typeArtDescription.lstFilePath + ": " + loadError.what());
+        }
+        
+        if (!lst) {
+            throw std::runtime_error("Failed to load LST resource on-demand: " + typeArtDescription.lstFilePath);
+        }
+    }
 
     if (baseId >= lst->list().size()) {
         throw std::runtime_error{ "LST " + typeArtDescription.lstFilePath + " size " + std::to_string(lst->list().size()) + " <= frmID: " + std::to_string(baseId) + ", frmType: " + std::to_string(static_cast<unsigned>(type)) };
@@ -368,10 +381,8 @@ std::vector<std::string> ResourceManager::listFilesByPattern(const std::string& 
 void ResourceManager::clearTextureCache(const std::string& filename) {
     auto it = _textures.find(filename);
     if (it != _textures.end()) {
-        spdlog::debug("ResourceManager::clearTextureCache - removing cached texture for: {}", filename);
         _textures.erase(it);
     } else {
-        spdlog::debug("ResourceManager::clearTextureCache - texture not found in cache: {}", filename);
     }
 }
 
