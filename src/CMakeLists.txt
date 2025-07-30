@@ -69,6 +69,8 @@ set(GECK_SOURCES
     ui/dialogs/FrmSelectorDialog.cpp
     ui/dialogs/SettingsDialog.h
     ui/dialogs/SettingsDialog.cpp
+    ui/dialogs/ProEditorDialog.h
+    ui/dialogs/ProEditorDialog.cpp
 
     # Qt6 UI Widgets
     ui/widgets/SFMLWidget.h
@@ -221,6 +223,9 @@ add_library(vault STATIC
 
     writer/map/MapWriter.h
     writer/map/MapWriter.cpp
+    
+    writer/pro/ProWriter.h
+    writer/pro/ProWriter.cpp
 
     #
     # FILE LOADERS

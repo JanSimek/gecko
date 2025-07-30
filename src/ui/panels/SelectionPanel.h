@@ -33,6 +33,7 @@ signals:
     void objectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
     void requestObjectHighlight(std::shared_ptr<Object> object);
     void statusMessage(const QString& message);
+    void requestProEditor(std::shared_ptr<Object> object);
 
 public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);
@@ -42,6 +43,7 @@ public slots:
 
 private slots:
     void onChangeFrmClicked();
+    void onEditProClicked();
 
 private:
     void setupUI();
@@ -73,6 +75,7 @@ private:
     QSpinBox* _objectFrmPidSpin;
     QLineEdit* _objectFrmPathEdit;
     QPushButton* _changeFrmButton;
+    QPushButton* _editProButton;
 
     // Tile panel widgets
     QWidget* _tilePanelWidget;

@@ -134,6 +134,7 @@ private:
     void updateFileCount();
     void updateFileTypeComboBox();
     void exportFile(const QString& filePath);
+    void openProEditor(const QString& filePath);
     void resizeNameColumnToContent();
     bool isTextFile(const QString& filePath) const;
 

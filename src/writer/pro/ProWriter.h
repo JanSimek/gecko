@@ -24,6 +24,15 @@ private:
     void writeWallData(const Pro& pro);
     void writeTileData(const Pro& pro);
     void writeMiscData(const Pro& pro);
+    
+    // Item-specific write methods
+    void writeArmorData(const Pro& pro);
+    void writeContainerData(const Pro& pro);
+    void writeDrugData(const Pro& pro);
+    void writeWeaponData(const Pro& pro);
+    void writeAmmoData(const Pro& pro);
+    void writeMiscItemData(const Pro& pro);
+    void writeKeyData(const Pro& pro);
 };
 
 } // namespace geck

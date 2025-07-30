@@ -61,6 +61,9 @@ public:
     ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
     TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
     FileBrowserPanel* getFileBrowserPanel() const { return _fileBrowserPanel; }
+    
+    // PRO editor functionality
+    bool openProEditorForSelectedObject();
 
 signals:
     void newMapRequested();

@@ -7,6 +7,9 @@
 
 namespace geck {
 
+/**
+ * NOTE: All fields in PRO files are stored in big-endian format
+ */
 std::unique_ptr<Pro> ProReader::read() {
     try {
         // Use format validation
@@ -50,181 +53,232 @@ std::unique_ptr<Pro> ProReader::read() {
             uint32_t subtypeId = utils.readBE32();
             pro->setObjectSubtypeId(subtypeId);
 
-            utils.skipWithLog(4, "_materialId");
-            utils.skipWithLog(4, "_containerSize");
-            utils.skipWithLog(4, "_weight");
-            utils.skipWithLog(4, "_basePrice");
-            utils.skipWithLog(4, "_inventoryFID");
-            utils.skipWithLog(1, "_soundId");
+            // Read common item data
+            pro->commonItemData.materialId = utils.readBE32();
+            pro->commonItemData.containerSize = utils.readBE32();
+            pro->commonItemData.weight = utils.readBE32();
+            pro->commonItemData.basePrice = utils.readBE32();
+            pro->commonItemData.inventoryFID = utils.readBE32Signed();
+            pro->commonItemData.soundId = utils.readU8();
 
             switch ((Pro::ITEM_TYPE)subtypeId) {
                 case Pro::ITEM_TYPE::ARMOR: {
-                    utils.skipWithLog(4, "_armorClass");
-                    utils.skipWithLog(7 * 4, "damage resist array (7 elements)");
-                    utils.skipWithLog(7 * 4, "damage threshold array (7 elements)");
-                    utils.skipWithLog(4, "_perk");
-                    utils.skipWithLog(4, "_armorMaleFID");
-                    utils.skipWithLog(4, "_armorFemaleFID");
+                    pro->armorData.armorClass = utils.readBE32();
+                    for (int i = 0; i < 7; ++i) {
+                        pro->armorData.damageResist[i] = utils.readBE32();
+                    }
+                    for (int i = 0; i < 7; ++i) {
+                        pro->armorData.damageThreshold[i] = utils.readBE32();
+                    }
+                    pro->armorData.perk = utils.readBE32();
+                    pro->armorData.armorMaleFID = utils.readBE32Signed();
+                    pro->armorData.armorFemaleFID = utils.readBE32Signed();
                     break;
                 }
                 case Pro::ITEM_TYPE::CONTAINER: {
-                    utils.skipWithLog(4, "container max size");
-                    utils.skipWithLog(4, "container flags");
+                    pro->containerData.maxSize = utils.readBE32();
+                    pro->containerData.flags = utils.readBE32();
                     break;
                 }
                 case Pro::ITEM_TYPE::DRUG: {
-                    utils.skipWithLog(4, "drug stat0 base");
-                    utils.skipWithLog(4, "drug stat1 base");
-                    utils.skipWithLog(4, "drug stat2 base");
-                    utils.skipWithLog(4, "drug stat0 amount");
-                    utils.skipWithLog(4, "drug stat1 amount");
-                    utils.skipWithLog(4, "drug stat2 amount");
+                    pro->drugData.stat0Base = utils.readBE32();
+                    pro->drugData.stat1Base = utils.readBE32();
+                    pro->drugData.stat2Base = utils.readBE32();
+                    pro->drugData.stat0Amount = utils.readBE32Signed();
+                    pro->drugData.stat1Amount = utils.readBE32Signed();
+                    pro->drugData.stat2Amount = utils.readBE32Signed();
                     // first delayed effect
-                    utils.skipWithLog(4, "drug first delay minutes");
-                    utils.skipWithLog(4, "drug first stat0 amount");
-                    utils.skipWithLog(4, "drug first stat1 amount");
-                    utils.skipWithLog(4, "drug first stat2 amount");
+                    pro->drugData.firstDelayMinutes = utils.readBE32();
+                    pro->drugData.firstStat0Amount = utils.readBE32Signed();
+                    pro->drugData.firstStat1Amount = utils.readBE32Signed();
+                    pro->drugData.firstStat2Amount = utils.readBE32Signed();
                     // second delayed effect
-                    utils.skipWithLog(4, "drug second delay minutes");
-                    utils.skipWithLog(4, "drug second stat0 amount");
-                    utils.skipWithLog(4, "drug second stat1 amount");
-                    utils.skipWithLog(4, "drug second stat2 amount");
-                    utils.skipWithLog(4, "drug addiction chance");
-                    utils.skipWithLog(4, "drug addiction perk");
-                    utils.skipWithLog(4, "drug addiction delay");
+                    pro->drugData.secondDelayMinutes = utils.readBE32();
+                    pro->drugData.secondStat0Amount = utils.readBE32Signed();
+                    pro->drugData.secondStat1Amount = utils.readBE32Signed();
+                    pro->drugData.secondStat2Amount = utils.readBE32Signed();
+                    pro->drugData.addictionChance = utils.readBE32();
+                    pro->drugData.addictionPerk = utils.readBE32();
+                    pro->drugData.addictionDelay = utils.readBE32();
                     break;
                 }
-                case Pro::ITEM_TYPE::WEAPON:
-                    utils.skipWithLog(4, "weapon animation code");
-                    utils.skipWithLog(4, "weapon damage min");
-                    utils.skipWithLog(4, "weapon damage max");
-                    utils.skipWithLog(4, "weapon damage type");
-                    utils.skipWithLog(4, "weapon range primary");
-                    utils.skipWithLog(4, "weapon range secondary");
-                    utils.skipWithLog(4, "weapon projectile PID");
-                    utils.skipWithLog(4, "weapon minimum strength");
-                    utils.skipWithLog(4, "weapon action cost primary");
-                    utils.skipWithLog(4, "weapon action cost secondary");
-                    utils.skipWithLog(4, "weapon critical fail");
-                    utils.skipWithLog(4, "weapon perk");
-                    utils.skipWithLog(4, "weapon burst rounds");
-                    utils.skipWithLog(4, "weapon ammo type");
-                    utils.skipWithLog(4, "weapon ammo PID");
-                    utils.skipWithLog(4, "weapon ammo capacity");
-                    utils.skipWithLog(1, "weapon sound ID");
+                case Pro::ITEM_TYPE::WEAPON: {
+                    pro->weaponData.animationCode = utils.readBE32();
+                    pro->weaponData.damageMin = utils.readBE32();
+                    pro->weaponData.damageMax = utils.readBE32();
+                    pro->weaponData.damageType = utils.readBE32();
+                    pro->weaponData.rangePrimary = utils.readBE32();
+                    pro->weaponData.rangeSecondary = utils.readBE32();
+                    pro->weaponData.projectilePID = utils.readBE32Signed();
+                    pro->weaponData.minimumStrength = utils.readBE32();
+                    pro->weaponData.actionCostPrimary = utils.readBE32();
+                    pro->weaponData.actionCostSecondary = utils.readBE32();
+                    pro->weaponData.criticalFail = utils.readBE32();
+                    pro->weaponData.perk = utils.readBE32();
+                    pro->weaponData.burstRounds = utils.readBE32();
+                    pro->weaponData.ammoType = utils.readBE32();
+                    pro->weaponData.ammoPID = utils.readBE32Signed();
+                    pro->weaponData.ammoCapacity = utils.readBE32();
+                    pro->weaponData.soundId = utils.readU8();
+                    
+                    // Extended weapon flags (optional field, may not exist in older PRO files)
+                    if (utils.bytesRemaining() >= 4) {
+                        pro->weaponData.weaponFlags = utils.readBE32();
+                    } else {
+                        pro->weaponData.weaponFlags = 0; // Default value for compatibility
+                        spdlog::debug("Weapon PRO missing weapon flags field (older format)");
+                    }
                     break;
-                case Pro::ITEM_TYPE::AMMO:
+                }
+                case Pro::ITEM_TYPE::AMMO: {
+                    pro->ammoData.caliber = utils.readBE32();
+                    pro->ammoData.quantity = utils.readBE32();
+                    pro->ammoData.damageModifier = utils.readBE32Signed();
+                    pro->ammoData.damageResistModifier = utils.readBE32Signed();
+                    pro->ammoData.damageMultiplier = utils.readBE32Signed();
+                    pro->ammoData.damageTypeModifier = utils.readBE32Signed();
                     break;
-                case Pro::ITEM_TYPE::MISC:
+                }
+                case Pro::ITEM_TYPE::MISC: {
+                    pro->miscData.powerType = utils.readBE32();
+                    pro->miscData.charges = utils.readBE32();
                     break;
-                case Pro::ITEM_TYPE::KEY:
+                }
+                case Pro::ITEM_TYPE::KEY: {
+                    pro->keyData.keyId = utils.readBE32();
                     break;
+                }
             }
             break;
         }
         case Pro::OBJECT_TYPE::CRITTER: {
-            utils.skipWithLog(4, "critter head FID");
-
-            utils.skipWithLog(4, "critter AI packet number");
-            utils.skipWithLog(4, "critter team number");
-            utils.skipWithLog(4, "critter flags");
+            // Read critter data into the structure
+            auto& critterData = pro->critterData;
+            
+            critterData.headFID = utils.readBE32();
+            critterData.aiPacket = utils.readBE32();
+            critterData.teamNumber = utils.readBE32();
+            critterData.flags = utils.readBE32();
 
             // S P E C I A L stats (7 base stats)
-            utils.skipArray<uint32_t>(7, "critter SPECIAL stats (STR,PER,END,CHR,INT,AGL,LCK)");
+            for (int i = 0; i < 7; ++i) {
+                critterData.specialStats[i] = utils.readBE32();
+            }
             
-            utils.skipWithLog(4, "critter max hit points");
-            utils.skipWithLog(4, "critter action points");
-            utils.skipWithLog(4, "critter armor class");
-            utils.skipWithLog(4, "critter unused field");
-            utils.skipWithLog(4, "critter melee damage");
-            utils.skipWithLog(4, "critter carry weight max");
-            utils.skipWithLog(4, "critter sequence");
-            utils.skipWithLog(4, "critter healing rate");
-            utils.skipWithLog(4, "critter critical chance");
-            utils.skipWithLog(4, "critter better criticals");
+            critterData.maxHitPoints = utils.readBE32();
+            critterData.actionPoints = utils.readBE32();
+            critterData.armorClass = utils.readBE32();
+            critterData.unused = utils.readBE32();
+            critterData.meleeDamage = utils.readBE32();
+            critterData.carryWeightMax = utils.readBE32();
+            critterData.sequence = utils.readBE32();
+            critterData.healingRate = utils.readBE32();
+            critterData.criticalChance = utils.readBE32();
+            critterData.betterCriticals = utils.readBE32();
 
             // Damage threshold (7 damage types)
-            utils.skipArray<uint32_t>(7, "critter damage threshold array");
+            for (int i = 0; i < 7; ++i) {
+                critterData.damageThreshold[i] = utils.readBE32();
+            }
             
             // Damage resist (9 damage types)
-            utils.skipArray<uint32_t>(9, "critter damage resist array");
+            for (int i = 0; i < 9; ++i) {
+                critterData.damageResist[i] = utils.readBE32();
+            }
 
-            utils.skipWithLog(4, "critter age");
-            utils.skipWithLog(4, "critter gender");
+            critterData.age = utils.readBE32();
+            critterData.gender = utils.readBE32();
 
             // Bonus SPECIAL stats (7 stats)
-            utils.skipArray<uint32_t>(7, "critter SPECIAL bonus stats");
+            for (int i = 0; i < 7; ++i) {
+                critterData.bonusSpecialStats[i] = utils.readBE32();
+            }
 
-            utils.skipWithLog(4, "critter bonus health points");
-            utils.skipWithLog(4, "critter bonus action points");
-            utils.skipWithLog(4, "critter bonus armor class");
-            utils.skipWithLog(4, "critter bonus unused field");
-            utils.skipWithLog(4, "critter bonus melee damage");
-            utils.skipWithLog(4, "critter bonus carry weight");
-            utils.skipWithLog(4, "critter bonus sequence");
-            utils.skipWithLog(4, "critter bonus healing rate");
-            utils.skipWithLog(4, "critter bonus critical chance");
-            utils.skipWithLog(4, "critter bonus better criticals");
+            critterData.bonusHealthPoints = utils.readBE32();
+            critterData.bonusActionPoints = utils.readBE32();
+            critterData.bonusArmorClass = utils.readBE32();
+            critterData.bonusUnused = utils.readBE32();
+            critterData.bonusMeleeDamage = utils.readBE32();
+            critterData.bonusCarryWeight = utils.readBE32();
+            critterData.bonusSequence = utils.readBE32();
+            critterData.bonusHealingRate = utils.readBE32();
+            critterData.bonusCriticalChance = utils.readBE32();
+            critterData.bonusBetterCriticals = utils.readBE32();
 
             // Bonus Damage threshold (8 values)
-            utils.skipArray<uint32_t>(8, "critter bonus damage threshold array");
+            for (int i = 0; i < 8; ++i) {
+                critterData.bonusDamageThreshold[i] = utils.readBE32();
+            }
 
             // Bonus Damage resistance (8 values)
-            utils.skipArray<uint32_t>(8, "critter bonus damage resistance array");
+            for (int i = 0; i < 8; ++i) {
+                critterData.bonusDamageResistance[i] = utils.readBE32();
+            }
 
-            utils.skipWithLog(4, "critter bonus age");
-            utils.skipWithLog(4, "critter bonus gender");
+            critterData.bonusAge = utils.readBE32();
+            critterData.bonusGender = utils.readBE32();
 
             // Skills (18 different skills)
-            utils.skipArray<uint32_t>(18, "critter skills array (18 skills)");
+            for (int i = 0; i < 18; ++i) {
+                critterData.skills[i] = utils.readBE32();
+            }
 
-            utils.skipWithLog(4, "critter body type");
-            utils.skipWithLog(4, "critter experience for kill");
-            utils.skipWithLog(4, "critter kill type");
+            critterData.bodyType = utils.readBE32();
+            critterData.experienceForKill = utils.readBE32();
+            critterData.killType = utils.readBE32();
             
             // Damage type field is optional - certain maps (depolva, depolvb, kladwtwn) contains PRO files without it
             // Could be a remnant from Fallout 1 where the PRO format was 412 bytes vs 416 bytes in Fallout 2
             if (utils.bytesRemaining() >= 4) {
-                utils.skipWithLog(4, "critter damage type");
+                critterData.damageType = utils.readBE32();
             } else {
+                critterData.damageType = 0; // Default value for 412-byte format
                 spdlog::debug("Critter PRO missing damage type field (412-byte format, likely Fallout 1 compatibility)");
             }
+            
+            spdlog::debug("ProReader: Loaded critter data - headFID: {}, aiPacket: {}, teamNumber: {}", 
+                         critterData.headFID, critterData.aiPacket, critterData.teamNumber);
             break;
         }
         case Pro::OBJECT_TYPE::SCENERY: {
             uint32_t subtypeId = utils.readBE32();
             pro->setObjectSubtypeId(subtypeId);
+            
+            // Read scenery data into the structure
+            auto& sceneryData = pro->sceneryData;
 
-            utils.skipWithLog(4, "scenery material ID");
-            utils.skipWithLog(1, "scenery sound ID");
+            sceneryData.materialId = utils.readBE32();
+            sceneryData.soundId = utils.readU8();
 
             switch ((Pro::SCENERY_TYPE)subtypeId) {
                 case Pro::SCENERY_TYPE::DOOR: {
-                    utils.skipWithLog(4, "door walk through flag");
-                    utils.skipWithLog(4, "door unknown field");
+                    sceneryData.doorData.walkThroughFlag = utils.readBE32();
+                    sceneryData.doorData.unknownField = utils.readBE32();
                     break;
                 }
                 case Pro::SCENERY_TYPE::STAIRS: {
-                    utils.skipWithLog(4, "stairs dest tile");
-                    utils.skipWithLog(4, "stairs dest elevation");
+                    sceneryData.stairsData.destTile = utils.readBE32();
+                    sceneryData.stairsData.destElevation = utils.readBE32();
                     break;
                 }
                 case Pro::SCENERY_TYPE::ELEVATOR: {
-                    utils.skipWithLog(4, "elevator type");
-                    utils.skipWithLog(4, "elevator level");
+                    sceneryData.elevatorData.elevatorType = utils.readBE32();
+                    sceneryData.elevatorData.elevatorLevel = utils.readBE32();
                     break;
                 }
                 case Pro::SCENERY_TYPE::LADDER_BOTTOM:
                 case Pro::SCENERY_TYPE::LADDER_TOP: {
-                    utils.skipWithLog(4, "ladder dest tile and elevation");
+                    sceneryData.ladderData.destTileAndElevation = utils.readBE32();
                     break;
                 }
                 case Pro::SCENERY_TYPE::GENERIC: {
-                    utils.skipWithLog(4, "generic scenery unknown field");
+                    sceneryData.genericData.unknownField = utils.readBE32();
                     break;
                 }
             }
-
+            
+            spdlog::debug("ProReader: Loaded scenery data - materialId: {}, soundId: {}, type: {}", 
+                         sceneryData.materialId, sceneryData.soundId, static_cast<int>(subtypeId));
             break;
         }
         case Pro::OBJECT_TYPE::WALL: {

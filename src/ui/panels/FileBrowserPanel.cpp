@@ -2,6 +2,9 @@
 #include "../../util/ResourceManager.h"
 #include "../../util/QtDialogs.h"
 #include "../../util/PathUtils.h"
+#include "../dialogs/ProEditorDialog.h"
+#include "../../reader/pro/ProReader.h"
+#include "../../reader/ReaderFactory.h"
 
 #include <QFileInfo>
 #include <QDir>
@@ -18,6 +21,8 @@
 #include <QThread>
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <fstream>
+#include <filesystem>
 #include <vfspp/VirtualFileSystem.hpp>
 
 namespace geck {
@@ -627,6 +632,15 @@ void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
     if (treeItem && treeItem->getType() == FileTreeItem::File) {
         QString filePath = treeItem->getFilePath();
         spdlog::debug("FileBrowserPanel: File double-clicked: {}", filePath.toStdString());
+        
+        // Handle PRO files specially - open the PRO editor directly
+        if (filePath.endsWith(".pro", Qt::CaseInsensitive)) {
+            spdlog::debug("FileBrowserPanel: Opening PRO editor for double-clicked file: {}", filePath.toStdString());
+            openProEditor(filePath);
+            return;
+        }
+        
+        // For other files, emit the standard signal
         emit fileDoubleClicked(filePath);
     }
 }
@@ -813,11 +827,19 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
     
     QString filePath = item->getFilePath();
     
-    // Add Open action with different text based on file type
+    // Add type-specific actions
     QAction* openAction = nullptr;
+    QAction* editProAction = nullptr;
+    
     if (filePath.endsWith(".map", Qt::CaseInsensitive)) {
         openAction = contextMenu.addAction("Open Map");
         openAction->setIcon(QIcon(":/icons/filetypes/map.svg"));
+    } else if (filePath.endsWith(".pro", Qt::CaseInsensitive)) {
+        editProAction = contextMenu.addAction("Edit PRO");
+        editProAction->setIcon(QIcon(":/icons/actions/settings.svg"));
+        contextMenu.addSeparator();
+        openAction = contextMenu.addAction("Open");
+        openAction->setIcon(QIcon(":/icons/actions/open.svg"));
     } else if (isTextFile(filePath)) {
         openAction = contextMenu.addAction("Open with System Editor");
         openAction->setIcon(QIcon(":/icons/filetypes/text.svg"));
@@ -837,6 +859,10 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
         // Emit the double-click signal (same behavior as double-clicking)
         spdlog::debug("FileBrowserPanel: Open action triggered for: {}", filePath.toStdString());
         emit fileDoubleClicked(filePath);
+    } else if (selectedAction == editProAction) {
+        // Open PRO editor
+        spdlog::debug("FileBrowserPanel: Edit PRO action triggered for: {}", filePath.toStdString());
+        openProEditor(filePath);
     } else if (selectedAction == exportAction) {
         // Export the file
         spdlog::debug("FileBrowserPanel: Export action triggered for: {}", filePath.toStdString());
@@ -973,6 +999,84 @@ void FileBrowserPanel::resizeNameColumnToContent() {
     for (int i = 0; i < _treeModel->rowCount(); ++i) {
         QModelIndex index = _treeModel->index(i, 0);
         _treeView->expand(index);
+    }
+}
+
+void FileBrowserPanel::openProEditor(const QString& filePath) {
+    try {
+        _statusLabel->setText(QString("Loading PRO file: %1...").arg(filePath));
+        
+        // Read PRO file from VFS
+        auto& resourceManager = ResourceManager::getInstance();
+        auto vfs = resourceManager.getVFS();
+        
+        if (!vfs) {
+            QMessageBox::critical(this, "PRO Editor Error", "Virtual file system not available");
+            _statusLabel->setText("PRO Editor failed: VFS not available");
+            return;
+        }
+        
+        // Prepare VFS path (needs leading slash)
+        std::filesystem::path vfsPath = "/" / std::filesystem::path(filePath.toStdString());
+        vfspp::FileInfo vfsFileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
+        
+        // Open file in VFS  
+        vfspp::IFilePtr vfsFile = vfs->OpenFile(vfsFileInfo, vfspp::IFile::FileMode::Read);
+        if (!vfsFile) {
+            QMessageBox::critical(this, "PRO Editor Error", 
+                QString("Failed to open PRO file in virtual file system: %1").arg(filePath));
+            _statusLabel->setText("PRO Editor failed: Could not open PRO file");
+            return;
+        }
+        
+        // Read file data
+        size_t fileSize = vfsFile->Size();
+        std::vector<uint8_t> buffer(fileSize);
+        size_t bytesRead = vfsFile->Read(buffer.data(), fileSize);
+        
+        if (bytesRead != fileSize) {
+            QMessageBox::warning(this, "PRO Editor Warning", 
+                QString("Only read %1 of %2 bytes from PRO file").arg(bytesRead).arg(fileSize));
+        }
+        
+        // Create a temporary file to load the PRO data
+        auto tempPath = std::filesystem::temp_directory_path() / ("temp_" + std::filesystem::path(filePath.toStdString()).filename().string());
+        
+        // Write buffer to temporary file
+        std::ofstream tempFile(tempPath, std::ios::binary);
+        tempFile.write(reinterpret_cast<const char*>(buffer.data()), bytesRead);
+        tempFile.close();
+        
+        // Use ReaderFactory to read the PRO file
+        auto pro = ReaderFactory::readFile<Pro>(tempPath);
+        
+        if (!pro) {
+            QMessageBox::critical(this, "PRO Editor Error", 
+                "Failed to parse PRO file. It may be corrupted or in an unsupported format.");
+            _statusLabel->setText("PRO Editor failed: Could not parse PRO file");
+            
+            // Clean up temp file
+            std::filesystem::remove(tempPath);
+            return;
+        }
+        
+        // Set the original file path for saving later
+        pro->setPath(std::filesystem::path(filePath.toStdString()));
+        
+        // Create and show PRO editor dialog
+        ProEditorDialog dialog(std::shared_ptr<Pro>(pro.release()), this);
+        dialog.exec();
+        
+        // Clean up temp file
+        std::filesystem::remove(tempPath);
+        
+        _statusLabel->setText("Ready");
+        
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, "PRO Editor Error", 
+            QString("Failed to open PRO editor: %1").arg(e.what()));
+        _statusLabel->setText("PRO Editor failed");
+        spdlog::error("FileBrowserPanel::openProEditor failed: {}", e.what());
     }
 }
 

@@ -9,7 +9,9 @@
 #include "../panels/ObjectPalettePanel.h"
 #include "../panels/FileBrowserPanel.h"
 #include "../dialogs/SettingsDialog.h"
+#include "../dialogs/ProEditorDialog.h"
 #include "../../state/loader/MapLoader.h"
+#include "../../selection/SelectionState.h"
 #include "../../util/Types.h"
 #include "../../util/ResourceManager.h"
 #include "../../util/Settings.h"
@@ -17,8 +19,11 @@
 #include "../../util/PathUtils.h"
 #include "../../util/ProHelper.h"
 #include "../../reader/lst/LstReader.h"
+#include "../../reader/ReaderFactory.h"
 #include "../../format/lst/Lst.h"
+#include "../../format/pro/Pro.h"
 #include "../../writer/map/MapWriter.h"
+#include "../../editor/Object.h"
 
 #include <fstream>
 
@@ -617,6 +622,15 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent* event) {
+    // Handle special shortcuts before forwarding to SFML
+    if (event->key() == Qt::Key_P && _currentEditorWidget) {
+        // Open PRO editor for selected object
+        if (openProEditorForSelectedObject()) {
+            event->accept();
+            return;
+        }
+    }
+    
     if (_currentEditorWidget) {
         SFMLWidget* sfmlWidget = _currentEditorWidget->getSFMLWidget();
         if (sfmlWidget) {
@@ -754,6 +768,11 @@ void MainWindow::connectToEditorWidget() {
         connect(_selectionPanel, &SelectionPanel::objectFrmChanged, _currentEditorWidget, &EditorWidget::onObjectFrmChanged);
         connect(_selectionPanel, &SelectionPanel::objectFrmPathChanged, _currentEditorWidget, &EditorWidget::onObjectFrmPathChanged);
         connect(_selectionPanel, &SelectionPanel::statusMessage, this, &MainWindow::showStatusMessage);
+        connect(_selectionPanel, &SelectionPanel::requestProEditor, [this](std::shared_ptr<Object> object) {
+            if (object && object->hasMapObject()) {
+                openProEditorForSelectedObject();
+            }
+        });
         
         // Connect highlight request signal
         connect(_selectionPanel, &SelectionPanel::requestObjectHighlight, 
@@ -1828,6 +1847,106 @@ void MainWindow::launchGameViaSteam(const std::string& appId) {
 #endif
     
     showStatusMessage(QString("Launching Fallout 2 via Steam (App ID: %1)...").arg(QString::fromStdString(appId)));
+}
+
+bool MainWindow::openProEditorForSelectedObject() {
+    if (!_currentEditorWidget) {
+        return false;
+    }
+    
+    auto* selectionManager = _currentEditorWidget->getSelectionManager();
+    if (!selectionManager) {
+        return false;
+    }
+    
+    const auto& selectionState = selectionManager->getCurrentSelection();
+    if (selectionState.isEmpty()) {
+        spdlog::debug("MainWindow::openProEditorForSelectedObject() - no selection");
+        return false;
+    }
+    
+    // Find the first selected object
+    for (const auto& item : selectionState.items) {
+        if (item.isObject()) {
+            auto selectedObject = item.getObject();
+            if (!selectedObject) {
+                continue;
+            }
+            
+            // Get the MapObject which contains the PID
+            if (!selectedObject->hasMapObject()) {
+                spdlog::debug("MainWindow::openProEditorForSelectedObject() - selected object has no MapObject");
+                continue;
+            }
+            
+            auto& mapObject = selectedObject->getMapObject();
+            
+            // Get the PRO file path based on PID
+            try {
+                std::string proFileName = ProHelper::basePath(mapObject.pro_pid);
+                spdlog::debug("MainWindow::openProEditorForSelectedObject() - opening PRO: {}", proFileName);
+                
+                // Use the same approach as FileBrowserPanel to open PRO editor
+                auto& resourceManager = ResourceManager::getInstance();
+                auto vfs = resourceManager.getVFS();
+                
+                if (!vfs) {
+                    spdlog::error("MainWindow::openProEditorForSelectedObject() - VFS not available");
+                    return false;
+                }
+                
+                // Create path in VFS format
+                std::filesystem::path vfsPath = std::filesystem::path("/") / proFileName;
+                auto fileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
+                
+                vfspp::IFilePtr file = vfs->OpenFile(fileInfo, vfspp::IFile::FileMode::Read);
+                if (!file || !file->IsOpened()) {
+                    spdlog::error("MainWindow::openProEditorForSelectedObject() - could not open PRO file: {}", proFileName);
+                    return false;
+                }
+                
+                // Read PRO file data
+                std::vector<uint8_t> buffer(file->Size());
+                size_t bytesRead = file->Read(buffer, file->Size());
+                
+                if (bytesRead != file->Size()) {
+                    spdlog::error("MainWindow::openProEditorForSelectedObject() - failed to read PRO file completely");
+                    return false;
+                }
+                
+                // Create temporary file
+                auto tempPath = std::filesystem::temp_directory_path() / ("temp_" + std::filesystem::path(proFileName).filename().string());
+                
+                std::ofstream tempFile(tempPath, std::ios::binary);
+                tempFile.write(reinterpret_cast<const char*>(buffer.data()), bytesRead);
+                tempFile.close();
+                
+                // Load PRO file
+                auto pro = ReaderFactory::readFile<Pro>(tempPath);
+                if (!pro) {
+                    spdlog::error("MainWindow::openProEditorForSelectedObject() - could not parse PRO file");
+                    std::filesystem::remove(tempPath);
+                    return false;
+                }
+                
+                // Create and show PRO editor dialog
+                ProEditorDialog dialog(std::move(pro), this);
+                dialog.exec();
+                
+                // Clean up temp file
+                std::filesystem::remove(tempPath);
+                
+                return true;
+                
+            } catch (const std::exception& e) {
+                spdlog::error("MainWindow::openProEditorForSelectedObject() - exception: {}", e.what());
+                return false;
+            }
+        }
+    }
+    
+    spdlog::debug("MainWindow::openProEditorForSelectedObject() - no object selected");
+    return false;
 }
 
 } // namespace geck

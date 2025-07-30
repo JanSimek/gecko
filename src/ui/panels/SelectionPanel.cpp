@@ -31,6 +31,10 @@ SelectionPanel::SelectionPanel(QWidget* parent)
     , _objectMessageIdSpin(nullptr)
     , _objectPositionSpin(nullptr)
     , _objectProtoPidSpin(nullptr)
+    , _objectFrmPidSpin(nullptr)
+    , _objectFrmPathEdit(nullptr)
+    , _changeFrmButton(nullptr)
+    , _editProButton(nullptr)
     , _tilePanelWidget(nullptr)
     , _tileInfoGroup(nullptr)
     , _tilePreviewLabel(nullptr)
@@ -135,6 +139,12 @@ void SelectionPanel::setupUI() {
     _changeFrmButton->setEnabled(false);
     connect(_changeFrmButton, &QPushButton::clicked, this, &SelectionPanel::onChangeFrmClicked);
     objectFormLayout->addRow("", _changeFrmButton);
+    
+    // Edit PRO button
+    _editProButton = new QPushButton("Edit PRO...");
+    _editProButton->setEnabled(false);
+    connect(_editProButton, &QPushButton::clicked, this, &SelectionPanel::onEditProClicked);
+    objectFormLayout->addRow("", _editProButton);
 
     objectLayout->addWidget(_objectInfoGroup);
     objectLayout->addStretch();
@@ -325,6 +335,9 @@ void SelectionPanel::updateObjectInfo() {
             
             // Enable the change FRM button
             _changeFrmButton->setEnabled(true);
+            
+            // Enable the edit PRO button
+            _editProButton->setEnabled(true);
 
             // Convert SFML sprite to QPixmap for display
             const auto& sprite = _selectedObject.value()->getSprite();
@@ -466,6 +479,7 @@ void geck::SelectionPanel::clearObjectInfo() {
     _objectFrmPathEdit->setPlaceholderText("FRM path");
     
     _changeFrmButton->setEnabled(false);
+    _editProButton->setEnabled(false);
 
     _objectSpriteLabel->clear();
     _objectSpriteLabel->setText("No object selected");
@@ -712,6 +726,15 @@ void SelectionPanel::onChangeFrmClicked() {
             }
         }
     }
+}
+
+void SelectionPanel::onEditProClicked() {
+    if (!_selectedObject || !_selectedObject.value()) {
+        return;
+    }
+    
+    // Emit signal to request PRO editor for the selected object
+    emit requestProEditor(_selectedObject.value());
 }
 
 } // namespace geck
