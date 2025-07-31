@@ -20,6 +20,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_set>
+#include <unordered_map>
 #include <atomic>
 
 namespace geck {
@@ -139,6 +140,16 @@ private:
     void resizeNameColumnToContent();
     bool isTextFile(const QString& filePath) const;
     void expandFilteredItems();
+    
+    // Column visibility management
+    void setupHeaderContextMenu();
+    void showHeaderContextMenu(const QPoint& pos);
+    void toggleColumnVisibility(int column);
+    void applyDefaultColumnVisibility();
+    
+    // PRO name loading
+    QString getProName(const QString& filePath) const;
+    QString loadProNameFromFile(const QString& filePath) const;
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
@@ -175,6 +186,12 @@ private:
     size_t _currentChunkIndex = 0;
     QTimer* _chunkTimer = nullptr;
     bool _isLoading = false;
+    
+    // Column visibility default state - used only for initialization
+    static constexpr bool DEFAULT_COLUMN_VISIBILITY[4] = {true, false, false, true}; // Name, Type, Path, PRO Name
+    
+    // PRO name caching
+    mutable std::unordered_map<std::string, QString> _proNameCache;
 
     // Constants
     static constexpr int CHUNK_SIZE = 50; // Files processed per chunk (small for better UI responsiveness)

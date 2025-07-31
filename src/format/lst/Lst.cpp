@@ -6,7 +6,7 @@ void Lst::setList(const std::vector<std::string>& list) {
     _list = list;
 }
 
-std::vector<std::string> Lst::list() const {
+const std::vector<std::string>& Lst::list() const {
     return _list;
 }
 

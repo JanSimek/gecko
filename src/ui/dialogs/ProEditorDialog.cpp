@@ -188,17 +188,17 @@ void ProEditorDialog::setupCommonTab() {
     // Name and Description (loaded from MSG files)
     _nameLabel = new QLabel("Loading...");
     _nameLabel->setStyleSheet("QLabel { background-color: #f0f8ff; padding: 4px; border: 1px solid #add8e6; font-weight: bold; }");
-    _nameLabel->setWordWrap(true);
+    //_nameLabel->setWordWrap(true);
+    _nameLabel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
     layout->addRow("Name:", _nameLabel);
     
     _descriptionLabel = new QTextEdit("Loading...");
     _descriptionLabel->setStyleSheet("QTextEdit { background-color: #f0f8ff; padding: 4px; border: 1px solid #add8e6; }");
     _descriptionLabel->setReadOnly(true);
     _descriptionLabel->setMinimumHeight(30);
-    _descriptionLabel->setMaximumHeight(120); // Allow more height for longer descriptions
     _descriptionLabel->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     _descriptionLabel->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    _descriptionLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::MinimumExpanding);
+    _descriptionLabel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
     layout->addRow("Description:", _descriptionLabel);
     
     // Message ID

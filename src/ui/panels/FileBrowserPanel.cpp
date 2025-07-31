@@ -5,6 +5,8 @@
 #include "../dialogs/ProEditorDialog.h"
 #include "../../reader/pro/ProReader.h"
 #include "../../reader/ReaderFactory.h"
+#include "../../format/pro/Pro.h"
+#include "../../format/msg/Msg.h"
 
 #include <QFileInfo>
 #include <QDir>
@@ -283,7 +285,7 @@ void FileBrowserPanel::setupTreeView() {
     _proxyModel = new QSortFilterProxyModel(this);
 
     // Set up model headers
-    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path");
+    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path" << "PRO Name");
 
     // Configure proxy model
     _proxyModel->setSourceModel(_treeModel);
@@ -304,14 +306,21 @@ void FileBrowserPanel::setupTreeView() {
 
     // Configure headers
     QHeaderView* header = _treeView->header();
-    header->setStretchLastSection(false);
+    header->setStretchLastSection(true);  // Let the last visible column stretch
     header->setSectionResizeMode(0, QHeaderView::Interactive);     // Name column user-resizable
     header->resizeSection(0, 300);                                 // Start with wider default for long filenames
     header->resizeSection(1, 80);                                  // Type column fixed width
-    header->setSectionResizeMode(2, QHeaderView::Stretch);         // Path column stretches
+    header->setSectionResizeMode(2, QHeaderView::Interactive);     // Path column user-resizable when visible
+    header->setSectionResizeMode(3, QHeaderView::Interactive);     // PRO Name column user-resizable
+
+    // Apply default column visibility BEFORE setting up context menu
+    applyDefaultColumnVisibility();
 
     // Enable context menu
     _treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    
+    // Setup header context menu for column visibility
+    setupHeaderContextMenu();
     
     // Connect signals
     connect(_treeView, &QTreeView::clicked, this, &FileBrowserPanel::onTreeItemClicked);
@@ -352,7 +361,10 @@ void FileBrowserPanel::loadFiles() {
 
     // Clear existing tree
     _treeModel->clear();
-    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path");
+    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path" << "PRO Name");
+    
+    // Reapply column visibility after clearing
+    applyDefaultColumnVisibility();
 
     // Show progress bar and update status
     _progressBar->setVisible(true);
@@ -455,7 +467,10 @@ void FileBrowserPanel::updateFileTypeComboBox() {
 
 void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
     _treeModel->clear();
-    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path");
+    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path" << "PRO Name");
+    
+    // Reapply column visibility after clearing
+    applyDefaultColumnVisibility();
 
     FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
 
@@ -511,8 +526,13 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
 
         QStandardItem* pathItem = new QStandardItem(qFile);
         pathItem->setEditable(false);
+        
+        // Add PRO name for .pro files
+        QString proName = (extension.toLower() == ".pro") ? getProName(qFile) : QString();
+        QStandardItem* proNameItem = new QStandardItem(proName);
+        proNameItem->setEditable(false);
 
-        currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << pathItem);
+        currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << pathItem << proNameItem);
     }
 
     // Expand first level directories
@@ -542,8 +562,10 @@ FileTreeItem* FileBrowserPanel::findOrCreateDirectory(FileTreeItem* parent, cons
     typeItem->setEditable(false);
     QStandardItem* pathItem = new QStandardItem("");
     pathItem->setEditable(false);
+    QStandardItem* proNameItem = new QStandardItem("");
+    proNameItem->setEditable(false);
 
-    parent->appendRow(QList<QStandardItem*>() << dirItem << typeItem << pathItem);
+    parent->appendRow(QList<QStandardItem*>() << dirItem << typeItem << pathItem << proNameItem);
     return dirItem;
 }
 
@@ -751,7 +773,10 @@ void FileBrowserPanel::startProgressiveTreeBuild(const std::vector<std::string>&
 
     // Clear existing tree
     _treeModel->clear();
-    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path");
+    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path" << "PRO Name");
+    
+    // Reapply column visibility after clearing
+    applyDefaultColumnVisibility();
 
     // Update progress bar for tree building phase
     _progressBar->setRange(0, static_cast<int>(_pendingFiles.size()));
@@ -822,8 +847,13 @@ void FileBrowserPanel::processNextChunk() {
 
         QStandardItem* pathItem = new QStandardItem(qFile);
         pathItem->setEditable(false);
+        
+        // Add PRO name for .pro files
+        QString proName = (extension.toLower() == ".pro") ? getProName(qFile) : QString();
+        QStandardItem* proNameItem = new QStandardItem(proName);
+        proNameItem->setEditable(false);
 
-        currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << pathItem);
+        currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << pathItem << proNameItem);
     }
 
     // Update progress
@@ -1139,6 +1169,140 @@ void FileBrowserPanel::expandFilteredItems() {
     
     // Re-enable updates
     _treeView->setUpdatesEnabled(true);
+}
+
+// Column visibility management
+void FileBrowserPanel::setupHeaderContextMenu() {
+    QHeaderView* header = _treeView->header();
+    header->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(header, &QHeaderView::customContextMenuRequested, this, &FileBrowserPanel::showHeaderContextMenu);
+}
+
+void FileBrowserPanel::showHeaderContextMenu(const QPoint& pos) {
+    QHeaderView* header = _treeView->header();
+    QMenu contextMenu(this);
+    
+    QStringList columnNames = {"Name", "Type", "Path", "PRO Name"};
+    
+    for (int i = 0; i < columnNames.size(); ++i) {
+        QAction* action = contextMenu.addAction(columnNames[i]);
+        action->setCheckable(true);
+        action->setChecked(!_treeView->isColumnHidden(i));
+        action->setData(i);
+        
+        // Name column cannot be hidden
+        if (i == 0) {
+            action->setEnabled(false);
+        }
+        
+        connect(action, &QAction::triggered, [this, i]() {
+            toggleColumnVisibility(i);
+        });
+    }
+    
+    contextMenu.exec(header->mapToGlobal(pos));
+}
+
+void FileBrowserPanel::toggleColumnVisibility(int column) {
+    if (column == 0) return; // Name column cannot be hidden
+    
+    // Toggle based on current actual visibility
+    bool currentlyHidden = _treeView->isColumnHidden(column);
+    _treeView->setColumnHidden(column, !currentlyHidden);
+}
+
+void FileBrowserPanel::applyDefaultColumnVisibility() {
+    // Apply default column visibility
+    for (int i = 0; i < 4; ++i) {
+        _treeView->setColumnHidden(i, !DEFAULT_COLUMN_VISIBILITY[i]);
+    }
+}
+
+// PRO name loading
+QString FileBrowserPanel::getProName(const QString& filePath) const {
+    std::string stdPath = filePath.toStdString();
+    
+    // Check cache first
+    auto cacheIt = _proNameCache.find(stdPath);
+    if (cacheIt != _proNameCache.end()) {
+        return cacheIt->second;
+    }
+    
+    // Load PRO name from file
+    QString proName = loadProNameFromFile(filePath);
+    
+    // Cache the result
+    _proNameCache[stdPath] = proName;
+    
+    return proName;
+}
+
+QString FileBrowserPanel::loadProNameFromFile(const QString& filePath) const {
+    try {
+        auto& resourceManager = ResourceManager::getInstance();
+        
+        // Create normalized path for VFS access
+        std::string stdPath = filePath.toStdString();
+        if (stdPath.front() == '/') {
+            stdPath = stdPath.substr(1); // Remove leading slash for VFS
+        }
+        
+        // Check if file exists in VFS
+        if (!resourceManager.fileExistsInVFS(stdPath)) {
+            return QString("File not found");
+        }
+        
+        // Load PRO file using ResourceManager
+        const auto* pro = resourceManager.loadResource<Pro>(stdPath);
+        if (!pro) {
+            return QString("Failed to load");
+        }
+        
+        // Determine MSG file based on object type
+        std::string msgFileName;
+        switch (pro->type()) {
+            case Pro::OBJECT_TYPE::ITEM:
+                msgFileName = "text/english/game/pro_item.msg";
+                break;
+            case Pro::OBJECT_TYPE::CRITTER:
+                msgFileName = "text/english/game/pro_crit.msg";
+                break;
+            case Pro::OBJECT_TYPE::SCENERY:
+                msgFileName = "text/english/game/pro_scen.msg";
+                break;
+            case Pro::OBJECT_TYPE::WALL:
+                msgFileName = "text/english/game/pro_wall.msg";
+                break;
+            case Pro::OBJECT_TYPE::TILE:
+                msgFileName = "text/english/game/pro_tile.msg";
+                break;
+            case Pro::OBJECT_TYPE::MISC:
+                msgFileName = "text/english/game/pro_misc.msg";
+                break;
+            default:
+                return QString("Unknown type");
+        }
+        
+        // Load the MSG file
+        const auto* msgFile = resourceManager.loadResource<Msg>(msgFileName);
+        if (!msgFile) {
+            return QString("MSG not found");
+        }
+        
+        uint32_t messageId = pro->header.message_id;
+        
+        // Get name (message at messageId)
+        try {
+            const auto& nameMessage = const_cast<Msg*>(msgFile)->message(messageId);
+            QString name = QString::fromStdString(nameMessage.text);
+            return name.isEmpty() ? QString("No name (ID: %1)").arg(messageId) : name;
+        } catch (const std::exception& e) {
+            return QString("No name (ID: %1)").arg(messageId);
+        }
+        
+    } catch (const std::exception& e) {
+        return QString("Error: %1").arg(e.what());
+    }
 }
 
 } // namespace geck
