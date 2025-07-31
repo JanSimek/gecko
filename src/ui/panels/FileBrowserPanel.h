@@ -3,6 +3,7 @@
 #include <QWidget>
 #include <QTreeView>
 #include <QStandardItemModel>
+#include <QSortFilterProxyModel>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLineEdit>
@@ -137,6 +138,7 @@ private:
     void openProEditor(const QString& filePath);
     void resizeNameColumnToContent();
     bool isTextFile(const QString& filePath) const;
+    void expandFilteredItems();
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
@@ -150,6 +152,7 @@ private:
     // Tree view
     QTreeView* _treeView = nullptr;
     QStandardItemModel* _treeModel = nullptr;
+    QSortFilterProxyModel* _proxyModel = nullptr;
 
     // Status and progress
     QLabel* _statusLabel = nullptr;
@@ -166,7 +169,6 @@ private:
     // State
     QString _currentSearchFilter;
     QString _currentFileTypeFilter;
-    QTimer* _searchTimer = nullptr;
     
     // Progressive building state
     std::vector<std::string> _pendingFiles;
@@ -175,9 +177,8 @@ private:
     bool _isLoading = false;
 
     // Constants
-    static constexpr int SEARCH_DELAY_MS = 300; // Delay before applying search filter
-    static constexpr int CHUNK_SIZE = 1000; // Files processed per chunk
-    static constexpr int CHUNK_DELAY_MS = 10; // Delay between chunks
+    static constexpr int CHUNK_SIZE = 50; // Files processed per chunk (small for better UI responsiveness)
+    static constexpr int CHUNK_DELAY_MS = 0; // No delay, use Qt event queue instead
 };
 
 } // namespace geck

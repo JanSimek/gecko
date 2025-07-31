@@ -19,6 +19,8 @@
 #include <QIcon>
 #include <QProgressBar>
 #include <QThread>
+#include <QMetaObject>
+#include <QApplication>
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <fstream>
@@ -166,16 +168,10 @@ FileBrowserPanel::FileBrowserPanel(QWidget* parent)
     , _loaderWorker(nullptr)
     , _currentSearchFilter("")
     , _currentFileTypeFilter("All Files")
-    , _searchTimer(new QTimer(this))
     , _chunkTimer(new QTimer(this))
     , _isLoading(false) {
 
     setupUI();
-
-    // Setup search timer for delayed filtering
-    _searchTimer->setSingleShot(true);
-    _searchTimer->setInterval(SEARCH_DELAY_MS);
-    connect(_searchTimer, &QTimer::timeout, this, &FileBrowserPanel::updateFileDisplay);
 
     // Setup chunk processing timer
     _chunkTimer->setSingleShot(true);
@@ -195,9 +191,6 @@ FileBrowserPanel::~FileBrowserPanel() {
     }
     
     // Stop timers
-    if (_searchTimer) {
-        _searchTimer->stop();
-    }
     
     if (_chunkTimer) {
         _chunkTimer->stop();
@@ -257,7 +250,7 @@ void FileBrowserPanel::setupFilterControls() {
     searchLayout->addWidget(new QLabel("Search:", this));
 
     _searchLineEdit = new QLineEdit(this);
-    _searchLineEdit->setPlaceholderText("Filter files...");
+    _searchLineEdit->setPlaceholderText("Type to search in all files instantly...");
     _searchLineEdit->setClearButtonEnabled(true);
     connect(_searchLineEdit, &QLineEdit::textChanged, this, &FileBrowserPanel::onSearchTextChanged);
     searchLayout->addWidget(_searchLineEdit);
@@ -287,16 +280,27 @@ void FileBrowserPanel::setupFilterControls() {
 void FileBrowserPanel::setupTreeView() {
     _treeView = new QTreeView(this);
     _treeModel = new QStandardItemModel(this);
+    _proxyModel = new QSortFilterProxyModel(this);
 
     // Set up model headers
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path");
 
-    _treeView->setModel(_treeModel);
+    // Configure proxy model
+    _proxyModel->setSourceModel(_treeModel);
+    _proxyModel->setRecursiveFilteringEnabled(true);
+    _proxyModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
+    _proxyModel->setFilterKeyColumn(0); // Filter on Name column
+
+    _treeView->setModel(_proxyModel);
     _treeView->setAlternatingRowColors(true);
     _treeView->setSelectionBehavior(QAbstractItemView::SelectRows);
     _treeView->setSelectionMode(QAbstractItemView::SingleSelection);
     _treeView->setSortingEnabled(true);
     _treeView->sortByColumn(0, Qt::AscendingOrder);
+    
+    // Optimize performance
+    _treeView->setUniformRowHeights(true);
+    _treeView->setAnimated(false);
 
     // Configure headers
     QHeaderView* header = _treeView->header();
@@ -314,6 +318,7 @@ void FileBrowserPanel::setupTreeView() {
     connect(_treeView, &QTreeView::doubleClicked, this, &FileBrowserPanel::onTreeItemDoubleClicked);
     connect(_treeView, &QTreeView::customContextMenuRequested, this, &FileBrowserPanel::onCustomContextMenuRequested);
 
+    // Add tree view to main layout
     _mainLayout->addWidget(_treeView, 1);
 }
 
@@ -555,28 +560,36 @@ QString FileBrowserPanel::getFileIcon(const QString& extension) const {
 
 void FileBrowserPanel::updateFileCount() {
     int totalFiles = static_cast<int>(_allFiles.size());
-    int displayedFiles = 0;
+    int visibleFiles = 0;
 
-    // Count displayed files in tree
-    std::function<void(QStandardItem*)> countFiles = [&](QStandardItem* item) {
-        for (int i = 0; i < item->rowCount(); ++i) {
-            QStandardItem* child = item->child(i, 0);
-            FileTreeItem* treeItem = static_cast<FileTreeItem*>(child);
-            if (treeItem && treeItem->getType() == FileTreeItem::File) {
-                displayedFiles++;
+    // Count visible files in the filtered proxy model
+    std::function<void(const QModelIndex&)> countVisibleFiles = [&](const QModelIndex& parent) {
+        int rowCount = _proxyModel->rowCount(parent);
+        for (int i = 0; i < rowCount; ++i) {
+            QModelIndex proxyIndex = _proxyModel->index(i, 0, parent);
+            if (proxyIndex.isValid()) {
+                QModelIndex sourceIndex = _proxyModel->mapToSource(proxyIndex);
+                QStandardItem* item = _treeModel->itemFromIndex(sourceIndex);
+                if (item) {
+                    FileTreeItem* treeItem = static_cast<FileTreeItem*>(item);
+                    if (treeItem->getType() == FileTreeItem::File) {
+                        visibleFiles++;
+                    }
+                }
+                // Recursively count in subdirectories
+                countVisibleFiles(proxyIndex);
             }
-            countFiles(child);
         }
     };
 
-    countFiles(_treeModel->invisibleRootItem());
+    countVisibleFiles(QModelIndex());
 
-    if (displayedFiles < totalFiles) {
-        _statusLabel->setText(QString("Showing %1 of %2 files (filtered)")
-                .arg(displayedFiles)
+    if (!_currentSearchFilter.isEmpty() || _currentFileTypeFilter != "All Files") {
+        _statusLabel->setText(QString("Showing %1 of %2 files")
+                .arg(visibleFiles)
                 .arg(totalFiles));
     } else {
-        _statusLabel->setText(QString("Showing %1 files").arg(totalFiles));
+        _statusLabel->setText(QString("%1 files loaded").arg(totalFiles));
     }
 }
 
@@ -587,7 +600,7 @@ void FileBrowserPanel::refreshFileList() {
 
 void FileBrowserPanel::setSearchFilter(const QString& filter) {
     _currentSearchFilter = filter;
-    _searchTimer->start();
+    updateFileDisplay();
 }
 
 void FileBrowserPanel::setFileTypeFilter(const QString& fileType) {
@@ -597,7 +610,25 @@ void FileBrowserPanel::setFileTypeFilter(const QString& fileType) {
 
 void FileBrowserPanel::onSearchTextChanged(const QString& text) {
     _currentSearchFilter = text;
-    _searchTimer->start();
+    
+    // Apply filter immediately using proxy model
+    if (!text.isEmpty()) {
+        _proxyModel->setFilterWildcard("*" + text + "*");
+        
+        // Auto-expand all filtered items to show search results
+        expandFilteredItems();
+    } else {
+        _proxyModel->setFilterWildcard("");
+        
+        // When search is cleared, collapse all and expand only first level
+        _treeView->collapseAll();
+        for (int i = 0; i < _proxyModel->rowCount(); ++i) {
+            _treeView->expand(_proxyModel->index(i, 0));
+        }
+    }
+    
+    // Update file count after filtering
+    updateFileCount();
 }
 
 void FileBrowserPanel::onFileTypeChanged(const QString& fileType) {
@@ -612,7 +643,9 @@ void FileBrowserPanel::onTreeItemClicked(const QModelIndex& index) {
     if (!index.isValid())
         return;
 
-    QStandardItem* item = _treeModel->itemFromIndex(index);
+    // Map proxy index to source index
+    QModelIndex sourceIndex = _proxyModel->mapToSource(index);
+    QStandardItem* item = _treeModel->itemFromIndex(sourceIndex);
     FileTreeItem* treeItem = static_cast<FileTreeItem*>(item);
 
     if (treeItem && treeItem->getType() == FileTreeItem::File) {
@@ -626,7 +659,9 @@ void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
     if (!index.isValid())
         return;
 
-    QStandardItem* item = _treeModel->itemFromIndex(index);
+    // Map proxy index to source index
+    QModelIndex sourceIndex = _proxyModel->mapToSource(index);
+    QStandardItem* item = _treeModel->itemFromIndex(sourceIndex);
     FileTreeItem* treeItem = static_cast<FileTreeItem*>(item);
 
     if (treeItem && treeItem->getType() == FileTreeItem::File) {
@@ -688,17 +723,11 @@ void FileBrowserPanel::onLoadingError(const QString& error) {
 }
 
 void FileBrowserPanel::buildFileTreeProgressive(const std::vector<std::string>& files) {
-    // Apply filters first
+    // Don't filter by search text here - search is handled separately now
+    // Only apply file type filter for tree view
     std::vector<std::string> filteredFiles;
     for (const auto& file : files) {
         QString qFile = QString::fromStdString(file);
-
-        // Apply search filter
-        if (!_currentSearchFilter.isEmpty()) {
-            if (!qFile.contains(_currentSearchFilter, Qt::CaseInsensitive)) {
-                continue;
-            }
-        }
 
         // Apply file type filter
         if (_currentFileTypeFilter != "All Files") {
@@ -760,6 +789,11 @@ void FileBrowserPanel::processNextChunk() {
     // Process next chunk
     size_t endIndex = std::min(_currentChunkIndex + CHUNK_SIZE, _pendingFiles.size());
     for (size_t i = _currentChunkIndex; i < endIndex; ++i) {
+        // Process events every 10 files to keep UI responsive
+        if ((i - _currentChunkIndex) % 10 == 0) {
+            QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
+        }
+        
         const auto& file = _pendingFiles[i];
         QString qFile = QString::fromStdString(file);
 
@@ -799,8 +833,9 @@ void FileBrowserPanel::processNextChunk() {
         .arg(_currentChunkIndex)
         .arg(_pendingFiles.size()));
 
-    // Schedule next chunk
-    _chunkTimer->start();
+    // Schedule next chunk using Qt event queue
+    // This allows UI events to be processed between chunks
+    QMetaObject::invokeMethod(this, &FileBrowserPanel::processNextChunk, Qt::QueuedConnection);
 }
 
 void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
@@ -810,8 +845,11 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
         return;
     }
     
+    // Map proxy index to source index
+    QModelIndex sourceIndex = _proxyModel->mapToSource(index);
+    
     // Get the item from the first column (Name column)
-    QModelIndex nameIndex = index.sibling(index.row(), 0);
+    QModelIndex nameIndex = sourceIndex.sibling(sourceIndex.row(), 0);
     FileTreeItem* item = static_cast<FileTreeItem*>(_treeModel->itemFromIndex(nameIndex));
     if (!item) {
         return;
@@ -1078,6 +1116,29 @@ void FileBrowserPanel::openProEditor(const QString& filePath) {
         _statusLabel->setText("PRO Editor failed");
         spdlog::error("FileBrowserPanel::openProEditor failed: {}", e.what());
     }
+}
+
+void FileBrowserPanel::expandFilteredItems() {
+    // Disable updates while expanding for better performance
+    _treeView->setUpdatesEnabled(false);
+    
+    // Recursive function to expand all visible items
+    std::function<void(const QModelIndex&)> expandRecursive = [&](const QModelIndex& parent) {
+        int rowCount = _proxyModel->rowCount(parent);
+        for (int i = 0; i < rowCount; ++i) {
+            QModelIndex index = _proxyModel->index(i, 0, parent);
+            if (index.isValid()) {
+                _treeView->expand(index);
+                expandRecursive(index);
+            }
+        }
+    };
+    
+    // Start expansion from root
+    expandRecursive(QModelIndex());
+    
+    // Re-enable updates
+    _treeView->setUpdatesEnabled(true);
 }
 
 } // namespace geck
