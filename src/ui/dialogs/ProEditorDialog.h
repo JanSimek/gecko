@@ -72,6 +72,27 @@ private slots:
 private:
     void setupUI();
     void setupTabs();
+    void setupTabContent();
+    void setupCommonFields();
+    void setupCompactPreview(QVBoxLayout* parentLayout);
+    void setupCompactAnimationControls(QVBoxLayout* parentLayout);
+    void setupCompactArmorAnimationControls(QVBoxLayout* parentLayout);
+    void setupDualPreviewCompact(QVBoxLayout* parentLayout);
+    void setupArmorPreviewCompact(QVBoxLayout* parentLayout);
+    void setupLeftPanelCommonFields(QVBoxLayout* parentLayout);
+    void setupItemFields();
+    void setupArmorFields();
+    void setupContainerFields();
+    void setupDrugFields();
+    void setupWeaponFields();
+    void setupAmmoFields();
+    void setupMiscItemFields();
+    void setupKeyFields();
+    void setupCritterFields();
+    void setupSceneryFields();
+    void setupWallFields();
+    void setupTileFields();
+    void setupMiscFields();
     void setupPreview();
     void setupDualPreview();
     void setupArmorPreview();
@@ -322,6 +343,10 @@ private:
     QTabWidget* _tabWidget;
     QDialogButtonBox* _buttonBox;
     
+    // Field column layouts
+    QVBoxLayout* _leftFieldsLayout;
+    QVBoxLayout* _rightFieldsLayout;
+    
     // Validation summary panel
     QWidget* _validationPanel;
     QVBoxLayout* _validationLayout;
@@ -435,7 +460,6 @@ private:
     QPushButton* _fidSelectorButton;
     QSpinBox* _lightDistanceEdit;
     QSpinBox* _lightIntensityEdit;
-    QSpinBox* _flagsEdit;
     
     // Basic object flag checkboxes
     QCheckBox* _flatCheck;           // 0x00000008 - Flat (rendered first, just after tiles)

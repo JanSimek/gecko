@@ -125,7 +125,7 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     setWindowTitle("PRO Editor");
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setModal(true);
-    resize(800, 600); // Increased size to accommodate preview panel
+    resize(950, 650); // True 3-column layout with preview
     
     
     // Initialize data structures with defaults
@@ -140,15 +140,156 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     memset(&_critterData, 0, sizeof(_critterData));
     memset(&_sceneryData, 0, sizeof(_sceneryData));
     
+    // Initialize critter UI element arrays to nullptr
+    for (int i = 0; i < 18; ++i) {
+        _critterSkillEdits[i] = nullptr;
+    }
+    for (int i = 0; i < 7; ++i) {
+        _critterSpecialStatEdits[i] = nullptr;
+        _critterBonusSpecialStatEdits[i] = nullptr;
+        _critterDamageThresholdEdits[i] = nullptr;
+    }
+    for (int i = 0; i < 9; ++i) {
+        _critterDamageResistEdits[i] = nullptr;
+    }
+    for (int i = 0; i < 8; ++i) {
+        _critterBonusDamageThresholdEdits[i] = nullptr;
+        _critterBonusDamageResistanceEdits[i] = nullptr;
+    }
+    
+    // Initialize individual critter UI pointers to nullptr
+    _critterHeadFIDLabel = nullptr;
+    _critterHeadFIDSelectorButton = nullptr;
+    _critterAIPacketEdit = nullptr;
+    _critterTeamNumberEdit = nullptr;
+    _critterFlagsEdit = nullptr;
+    _critterMaxHitPointsEdit = nullptr;
+    _critterActionPointsEdit = nullptr;
+    _critterArmorClassEdit = nullptr;
+    _critterMeleeDamageEdit = nullptr;
+    _critterCarryWeightMaxEdit = nullptr;
+    _critterSequenceEdit = nullptr;
+    _critterHealingRateEdit = nullptr;
+    _critterCriticalChanceEdit = nullptr;
+    _critterBetterCriticalsEdit = nullptr;
+    _critterAgeEdit = nullptr;
+    _critterGenderCombo = nullptr;
+    _critterBodyTypeCombo = nullptr;
+    _critterExperienceEdit = nullptr;
+    _critterKillTypeEdit = nullptr;
+    _critterDamageTypeEdit = nullptr;
+    _critterBonusHealthPointsEdit = nullptr;
+    _critterBonusActionPointsEdit = nullptr;
+    _critterBonusArmorClassEdit = nullptr;
+    _critterBonusMeleeDamageEdit = nullptr;
+    _critterBonusCarryWeightEdit = nullptr;
+    _critterBonusSequenceEdit = nullptr;
+    _critterBonusHealingRateEdit = nullptr;
+    _critterBonusCriticalChanceEdit = nullptr;
+    _critterBonusBetterCriticalsEdit = nullptr;
+    _critterBonusAgeEdit = nullptr;
+    _critterBonusGenderEdit = nullptr;
+    
+    // Initialize all item UI elements to nullptr to prevent crashes
+    // Armor elements
+    _armorClassEdit = nullptr;
+    for (int i = 0; i < 7; ++i) {
+        _damageResistEdits[i] = nullptr;
+        _damageThresholdEdits[i] = nullptr;
+    }
+    _armorPerkCombo = nullptr;
+    _armorMaleFIDLabel = nullptr;
+    _armorFemaleFIDLabel = nullptr;
+    _armorAIPriorityLabel = nullptr;
+    
+    // Container elements
+    _containerMaxSizeEdit = nullptr;
+    for (int i = 0; i < 5; ++i) {
+        _containerFlagChecks[i] = nullptr;
+    }
+    
+    // Drug elements
+    for (int i = 0; i < 3; ++i) {
+        _drugStatCombos[i] = nullptr;
+        _drugStatAmountEdits[i] = nullptr;
+        _drugFirstStatAmountEdits[i] = nullptr;
+        _drugSecondStatAmountEdits[i] = nullptr;
+    }
+    _drugFirstDelayEdit = nullptr;
+    _drugSecondDelayEdit = nullptr;
+    _drugAddictionChanceEdit = nullptr;
+    _drugAddictionPerkCombo = nullptr;
+    _drugAddictionDelayEdit = nullptr;
+    
+    // Weapon elements
+    _weaponAnimationCombo = nullptr;
+    _weaponDamageMinEdit = nullptr;
+    _weaponDamageMaxEdit = nullptr;
+    _weaponDamageTypeCombo = nullptr;
+    _weaponRangePrimaryEdit = nullptr;
+    _weaponRangeSecondaryEdit = nullptr;
+    _weaponProjectilePIDEdit = nullptr;
+    _weaponMinStrengthEdit = nullptr;
+    _weaponAPPrimaryEdit = nullptr;
+    _weaponAPSecondaryEdit = nullptr;
+    _weaponCriticalFailEdit = nullptr;
+    _weaponPerkCombo = nullptr;
+    _weaponBurstRoundsEdit = nullptr;
+    _weaponAmmoTypeCombo = nullptr;
+    _weaponAmmoPIDEdit = nullptr;
+    _weaponAmmoCapacityEdit = nullptr;
+    _weaponSoundIdEdit = nullptr;
+    _weaponEnergyWeaponCheck = nullptr;
+    _weaponAIPriorityLabel = nullptr;
+    
+    // Ammo elements
+    _ammoCaliberCombo = nullptr;
+    _ammoQuantityEdit = nullptr;
+    _ammoDamageModEdit = nullptr;
+    _ammoDRModEdit = nullptr;
+    _ammoDamageMultEdit = nullptr;
+    _ammoDamageTypeModCombo = nullptr;
+    
+    // Misc elements
+    _miscPowerTypeCombo = nullptr;
+    _miscChargesEdit = nullptr;
+    
+    // Key elements
+    _keyIdEdit = nullptr;
+    
+    // Extended flags and common elements
+    _extendedFlagsGroup = nullptr;
+    _animationPrimaryEdit = nullptr;
+    _animationSecondaryEdit = nullptr;
+    _bigGunCheck = nullptr;
+    _twoHandedCheck = nullptr;
+    _canUseCheck = nullptr;
+    _canUseOnCheck = nullptr;
+    _generalFlagCheck = nullptr;
+    _interactionFlagCheck = nullptr;
+    _itemHiddenCheck = nullptr;
+    _lightFlag1Check = nullptr;
+    _lightFlag2Check = nullptr;
+    _lightFlag3Check = nullptr;
+    _lightFlag4Check = nullptr;
+    _sidEdit = nullptr;
+    _materialIdEdit = nullptr;
+    _containerSizeEdit = nullptr;
+    _weightEdit = nullptr;
+    _basePriceEdit = nullptr;
+    _inventoryFIDLabel = nullptr;
+    _inventoryFIDSelectorButton = nullptr;
+    _soundIdEdit = nullptr;
     
     setupUI();
     
     loadProData();
     
+    
     // Load name and description from MSG files
     loadNameAndDescription();
     
-    updateTabVisibility();
+    // NOTE: updateTabVisibility() is already called from setupUI() -> setupTabContent()
     // Call updatePreview after a brief delay to ensure all widgets are fully initialized
     QTimer::singleShot(0, this, &ProEditorDialog::updatePreview);
     // Update AI priority displays
@@ -158,14 +299,72 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
 void ProEditorDialog::setupUI() {
     _mainLayout = new QVBoxLayout(this);
     
-    // Create horizontal layout for tabs and preview
+    // Create horizontal layout: Left Info Panel | Right Type-Specific Fields
     _contentLayout = new QHBoxLayout();
     
-    setupTabs();
-    setupPreview();
+    // === LEFT PANEL: Image + Name + Description + Common Fields ===
+    QWidget* leftInfoPanel = new QWidget();
+    leftInfoPanel->setFixedWidth(320);  // Fixed width for consistent layout
+    QVBoxLayout* leftInfoLayout = new QVBoxLayout(leftInfoPanel);
+    leftInfoLayout->setContentsMargins(8, 8, 8, 8);
+    leftInfoLayout->setSpacing(6);
     
-    _contentLayout->addWidget(_tabWidget, 2); // Give tabs more space
-    _contentLayout->addWidget(_previewPanel, 1); // Preview takes less space
+    // Setup compact preview at top
+    setupCompactPreview(leftInfoLayout);
+    
+    // Name (bold)
+    _nameLabel = new QLabel("Loading...");
+    _nameLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; color: #2c5282; padding: 4px 0; }");
+    _nameLabel->setWordWrap(true);
+    _nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    leftInfoLayout->addWidget(_nameLabel);
+    
+    // Description (compact)
+    _descriptionLabel = new QTextEdit("Loading...");
+    _descriptionLabel->setStyleSheet("QTextEdit { background-color: #f7fafc; border: 1px solid #e2e8f0; font-size: 11px; }");
+    _descriptionLabel->setReadOnly(true);
+    _descriptionLabel->setFixedHeight(60);
+    _descriptionLabel->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    _descriptionLabel->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    leftInfoLayout->addWidget(_descriptionLabel);
+    
+    // Common fields section
+    setupLeftPanelCommonFields(leftInfoLayout);
+    
+    leftInfoLayout->addStretch(); // Push everything to top
+    
+    // === RIGHT PANEL: Two-Column Type-Specific Fields ===
+    QWidget* rightFieldsPanel = new QWidget();
+    QHBoxLayout* rightMainLayout = new QHBoxLayout(rightFieldsPanel);
+    rightMainLayout->setContentsMargins(8, 8, 8, 8);
+    rightMainLayout->setSpacing(12);
+    
+    // Column 1: Left side of type-specific fields
+    QWidget* rightColumn1 = new QWidget();
+    QVBoxLayout* rightColumn1Layout = new QVBoxLayout(rightColumn1);
+    rightColumn1Layout->setContentsMargins(0, 0, 0, 0);
+    rightColumn1Layout->setSpacing(8);
+    
+    // Column 2: Right side of type-specific fields  
+    QWidget* rightColumn2 = new QWidget();
+    QVBoxLayout* rightColumn2Layout = new QVBoxLayout(rightColumn2);
+    rightColumn2Layout->setContentsMargins(0, 0, 0, 0);
+    rightColumn2Layout->setSpacing(8);
+    
+    // Add both columns to right panel with equal width
+    rightMainLayout->addWidget(rightColumn1, 1);
+    rightMainLayout->addWidget(rightColumn2, 1);
+    
+    // Store references for type-specific field setup
+    _leftFieldsLayout = rightColumn1Layout;
+    _rightFieldsLayout = rightColumn2Layout;
+    
+    // Add main panels to content layout
+    _contentLayout->addWidget(leftInfoPanel, 0); // Fixed width
+    _contentLayout->addWidget(rightFieldsPanel, 1); // Flexible width
+    
+    // Setup type-specific content in the right columns
+    setupTabContent();
     
     // Button box
     _buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -178,6 +377,369 @@ void ProEditorDialog::setupUI() {
     setupValidationPanel();
     
     _mainLayout->addWidget(_buttonBox);
+}
+
+void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
+    // Create compact preview group
+    QGroupBox* previewGroup = new QGroupBox("Preview");
+    QVBoxLayout* previewLayout = new QVBoxLayout(previewGroup);
+    previewLayout->setContentsMargins(8, 8, 8, 8);
+    previewLayout->setSpacing(4);
+    
+    // Check if we need specialized previews for items
+    bool hasSpecializedPreview = (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM);
+    
+    // Only show main preview image if no specialized previews
+    if (!hasSpecializedPreview) {
+        // Main preview image - smaller than original
+        _previewLabel = new QLabel();
+        _previewLabel->setAlignment(Qt::AlignCenter);
+        _previewLabel->setFixedSize(180, 150);  // Compact size
+        _previewLabel->setScaledContents(false);
+        _previewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
+        _previewLabel->setText("No FRM");
+        previewLayout->addWidget(_previewLabel);
+        
+        // FID field with selector button (compact)
+        QWidget* fidWidget = new QWidget();
+        QHBoxLayout* fidLayout = new QHBoxLayout(fidWidget);
+        fidLayout->setContentsMargins(0, 0, 0, 0);
+        fidLayout->setSpacing(4);
+        
+        _fidLabel = new QLabel("0");
+        _fidLabel->setStyleSheet("QLabel { border: 1px solid #e2e8f0; padding: 2px 4px; background-color: white; font-family: monospace; }");
+        _fidLabel->setToolTip("Current FID value");
+        
+        _fidSelectorButton = new QPushButton("...");
+        _fidSelectorButton->setMaximumWidth(24);
+        _fidSelectorButton->setMaximumHeight(22);
+        _fidSelectorButton->setToolTip("Browse FRM files");
+        connect(_fidSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onFidSelectorClicked);
+        
+        QLabel* fidLabel = new QLabel("FID:");
+        fidLabel->setFixedWidth(30);
+        
+        fidLayout->addWidget(fidLabel);
+        fidLayout->addWidget(_fidLabel, 1);
+        fidLayout->addWidget(_fidSelectorButton);
+        previewLayout->addWidget(fidWidget);
+        
+        // Compact animation controls (only for animated FRMs)
+        setupCompactAnimationControls(previewLayout);
+    }
+    
+    // Handle dual preview for items (inventory/ground) if needed
+    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM) {
+        setupDualPreviewCompact(previewLayout);
+    }
+
+    parentLayout->addWidget(previewGroup);
+}
+
+void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
+    _animationControls = new QWidget();
+    QHBoxLayout* animLayout = new QHBoxLayout(_animationControls);
+    animLayout->setContentsMargins(0, 0, 0, 0);
+    animLayout->setSpacing(4);
+    
+    // Play/Pause button (small)
+    _playPauseButton = new QPushButton("▶");
+    _playPauseButton->setMaximumSize(24, 20);
+    _playPauseButton->setToolTip("Play/Pause animation");
+    connect(_playPauseButton, &QPushButton::clicked, this, &ProEditorDialog::onPlayPauseClicked);
+    
+    // Frame slider (compact)
+    _frameSlider = new QSlider(Qt::Horizontal);
+    _frameSlider->setMinimum(0);
+    _frameSlider->setMaximum(0);
+    _frameSlider->setValue(0);
+    _frameSlider->setToolTip("Animation frame");
+    connect(_frameSlider, &QSlider::valueChanged, this, &ProEditorDialog::onFrameChanged);
+    
+    // Frame label (small)
+    _frameLabel = new QLabel("0/0");
+    _frameLabel->setFixedWidth(30);
+    _frameLabel->setStyleSheet("QLabel { font-size: 10px; }");
+    
+    // Direction combo (compact)
+    _directionCombo = new QComboBox();
+    _directionCombo->setMaximumWidth(50); // Slightly wider for compass strings
+    _directionCombo->setToolTip("Animation direction");
+    _directionCombo->addItems({"NE", "E", "SE", "SW", "W", "NW"}); // Fallout 2 uses 6 directions
+    connect(_directionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onDirectionChanged);
+    
+    animLayout->addWidget(_playPauseButton);
+    animLayout->addWidget(_frameSlider, 1);
+    animLayout->addWidget(_frameLabel);
+    animLayout->addWidget(_directionCombo);
+    
+    // Animation timer
+    _animationTimer = new QTimer(this);
+    _animationTimer->setInterval(200); // 5 FPS
+    connect(_animationTimer, &QTimer::timeout, this, &ProEditorDialog::onAnimationTick);
+    
+    _animationControls->setVisible(false); // Hidden by default, shown when FRM is loaded
+    parentLayout->addWidget(_animationControls);
+}
+
+void ProEditorDialog::setupCompactArmorAnimationControls(QVBoxLayout* parentLayout) {
+    // Check if armor animation controls are already initialized (from full preview setup)
+    if (!_armorAnimationControls) {
+        // Create armor animation controls with compact styling
+        _armorAnimationControls = new QWidget();
+        QHBoxLayout* animLayout = new QHBoxLayout(_armorAnimationControls);
+        animLayout->setContentsMargins(0, 0, 0, 0);
+        animLayout->setSpacing(4);
+        
+        // Play/Pause button (small)
+        _armorPlayPauseButton = new QPushButton("▶");
+        _armorPlayPauseButton->setMaximumSize(24, 20);
+        _armorPlayPauseButton->setToolTip("Play/Pause armor animation");
+        
+        // Frame slider (compact)
+        _armorFrameSlider = new QSlider(Qt::Horizontal);
+        _armorFrameSlider->setMinimum(0);
+        _armorFrameSlider->setMaximum(0);
+        _armorFrameSlider->setValue(0);
+        _armorFrameSlider->setToolTip("Armor animation frame");
+        
+        // Frame label (small)
+        _armorFrameLabel = new QLabel("0/0");
+        _armorFrameLabel->setFixedWidth(30);
+        _armorFrameLabel->setStyleSheet("QLabel { font-size: 10px; }");
+        
+        // Direction combo (compact)
+        _armorDirectionCombo = new QComboBox();
+        _armorDirectionCombo->setMaximumWidth(50);
+        _armorDirectionCombo->setToolTip("Armor animation direction");
+        _armorDirectionCombo->addItems({"NE", "E", "SE", "SW", "W", "NW"}); // Fallout 2 uses 6 directions
+        
+        animLayout->addWidget(_armorPlayPauseButton);
+        animLayout->addWidget(_armorFrameSlider, 1);
+        animLayout->addWidget(_armorFrameLabel);
+        animLayout->addWidget(_armorDirectionCombo);
+        
+        // Animation timer
+        if (!_armorAnimationTimer) {
+            _armorAnimationTimer = new QTimer(this);
+            _armorAnimationTimer->setInterval(200); // 5 FPS
+        }
+        
+        // Connect signals
+        connect(_armorPlayPauseButton, &QPushButton::clicked, this, &ProEditorDialog::onArmorPlayPauseClicked);
+        connect(_armorFrameSlider, &QSlider::valueChanged, this, &ProEditorDialog::onArmorFrameChanged);
+        connect(_armorDirectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onArmorDirectionChanged);
+        connect(_armorAnimationTimer, &QTimer::timeout, this, &ProEditorDialog::onArmorAnimationTick);
+    }
+    
+    _armorAnimationControls->setEnabled(false); // Disabled by default, enabled when FRM is loaded
+    parentLayout->addWidget(_armorAnimationControls);
+}
+
+void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
+    // Compact dual preview for inventory/ground
+    QGroupBox* dualGroup = new QGroupBox("Item Views");
+    QHBoxLayout* dualLayout = new QHBoxLayout(dualGroup);
+    dualLayout->setContentsMargins(4, 4, 4, 4);
+    dualLayout->setSpacing(4);
+    
+    // Inventory preview (small)
+    QWidget* invWidget = new QWidget();
+    QVBoxLayout* invLayout = new QVBoxLayout(invWidget);
+    invLayout->setContentsMargins(0, 0, 0, 0);
+    invLayout->setSpacing(2);
+    
+    _inventoryPreviewLabel = new QLabel();
+    _inventoryPreviewLabel->setFixedSize(100, 80);
+    _inventoryPreviewLabel->setAlignment(Qt::AlignCenter);
+    _inventoryPreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
+    _inventoryPreviewLabel->setText("Inv");
+    _inventoryPreviewLabel->setScaledContents(true);
+    
+    QLabel* invLabel = new QLabel("Inventory");
+    invLabel->setAlignment(Qt::AlignCenter);
+    invLabel->setStyleSheet("QLabel { font-size: 10px; }");
+    
+    invLayout->addWidget(_inventoryPreviewLabel);
+    invLayout->addWidget(invLabel);
+    
+    // Ground preview (small)
+    QWidget* groundWidget = new QWidget();
+    QVBoxLayout* groundLayout = new QVBoxLayout(groundWidget);
+    groundLayout->setContentsMargins(0, 0, 0, 0);
+    groundLayout->setSpacing(2);
+    
+    _groundPreviewLabel = new QLabel();
+    _groundPreviewLabel->setFixedSize(100, 80);
+    _groundPreviewLabel->setAlignment(Qt::AlignCenter);
+    _groundPreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
+    _groundPreviewLabel->setText("Ground");
+    _groundPreviewLabel->setScaledContents(true);
+    
+    QLabel* groundLabel = new QLabel("Ground");
+    groundLabel->setAlignment(Qt::AlignCenter);
+    groundLabel->setStyleSheet("QLabel { font-size: 10px; }");
+    
+    groundLayout->addWidget(_groundPreviewLabel);
+    groundLayout->addWidget(groundLabel);
+    
+    dualLayout->addWidget(invWidget);
+    dualLayout->addWidget(groundWidget);
+    
+    parentLayout->addWidget(dualGroup);
+}
+
+void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
+    // Compact armor preview for male/female with animation controls
+    QGroupBox* armorGroup = new QGroupBox("Armor Views");
+    QVBoxLayout* armorGroupLayout = new QVBoxLayout(armorGroup);
+    armorGroupLayout->setContentsMargins(4, 4, 4, 4);
+    armorGroupLayout->setSpacing(4);
+    
+    // Horizontal layout for male/female previews
+    QWidget* previewsWidget = new QWidget();
+    QHBoxLayout* previewsLayout = new QHBoxLayout(previewsWidget);
+    previewsLayout->setContentsMargins(0, 0, 0, 0);
+    previewsLayout->setSpacing(4);
+    
+    // Male preview (small)
+    QWidget* maleWidget = new QWidget();
+    QVBoxLayout* maleLayout = new QVBoxLayout(maleWidget);
+    maleLayout->setContentsMargins(0, 0, 0, 0);
+    maleLayout->setSpacing(2);
+    
+    _armorMalePreviewLabel = new QLabel();
+    _armorMalePreviewLabel->setFixedSize(120, 120);
+    _armorMalePreviewLabel->setAlignment(Qt::AlignCenter);
+    _armorMalePreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
+    _armorMalePreviewLabel->setText("Male");
+    _armorMalePreviewLabel->setScaledContents(false); // Preserve aspect ratio
+    
+    QLabel* maleLabel = new QLabel("Male");
+    maleLabel->setAlignment(Qt::AlignCenter);
+    maleLabel->setStyleSheet("QLabel { font-size: 10px; }");
+    
+    maleLayout->addWidget(_armorMalePreviewLabel);
+    maleLayout->addWidget(maleLabel);
+    
+    // Female preview (small)
+    QWidget* femaleWidget = new QWidget();
+    QVBoxLayout* femaleLayout = new QVBoxLayout(femaleWidget);
+    femaleLayout->setContentsMargins(0, 0, 0, 0);
+    femaleLayout->setSpacing(2);
+    
+    _armorFemalePreviewLabel = new QLabel();
+    _armorFemalePreviewLabel->setFixedSize(120, 120);
+    _armorFemalePreviewLabel->setAlignment(Qt::AlignCenter);
+    _armorFemalePreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
+    _armorFemalePreviewLabel->setText("Female");
+    _armorFemalePreviewLabel->setScaledContents(false); // Preserve aspect ratio
+    
+    QLabel* femaleLabel = new QLabel("Female");
+    femaleLabel->setAlignment(Qt::AlignCenter);
+    femaleLabel->setStyleSheet("QLabel { font-size: 10px; }");
+    
+    femaleLayout->addWidget(_armorFemalePreviewLabel);
+    femaleLayout->addWidget(femaleLabel);
+    
+    previewsLayout->addWidget(maleWidget);
+    previewsLayout->addWidget(femaleWidget);
+    
+    // Add previews to main layout
+    armorGroupLayout->addWidget(previewsWidget);
+    
+    // Add compact armor animation controls
+    setupCompactArmorAnimationControls(armorGroupLayout);
+    
+    parentLayout->addWidget(armorGroup);
+}
+
+void ProEditorDialog::setupLeftPanelCommonFields(QVBoxLayout* parentLayout) {
+    // === COMMON FIELDS IN LEFT PANEL ===
+    QGroupBox* commonGroup = new QGroupBox("Properties");
+    QFormLayout* commonLayout = new QFormLayout(commonGroup);
+    commonLayout->setContentsMargins(8, 8, 8, 8);
+    commonLayout->setSpacing(4);
+    
+    // PID (read-only display)
+    QLabel* pidLabel = new QLabel(QString::number(_pro->header.PID));
+    pidLabel->setStyleSheet("QLabel { background-color: #f7fafc; padding: 2px 4px; border: 1px solid #e2e8f0; font-family: monospace; }");
+    pidLabel->setToolTip("Prototype ID (read-only)");
+    commonLayout->addRow("PID:", pidLabel);
+    
+    // Message ID
+    _messageIdEdit = createSpinBox(0, 999999, "Message ID for displaying object name and description");
+    _messageIdEdit->setValue(_pro->header.message_id);
+    commonLayout->addRow("Message ID:", _messageIdEdit);
+    
+    // Light properties (compact)
+    _lightDistanceEdit = createSpinBox(0, 999, "Distance that light from this object reaches (0 = no light)");
+    _lightDistanceEdit->setValue(_pro->header.light_distance);
+    commonLayout->addRow("Light Dist:", _lightDistanceEdit);
+    
+    _lightIntensityEdit = createSpinBox(0, 999, "Brightness of the light (higher values = brighter)");
+    _lightIntensityEdit->setValue(_pro->header.light_intensity);
+    commonLayout->addRow("Light Int:", _lightIntensityEdit);
+    
+    parentLayout->addWidget(commonGroup);
+    
+    // === OBJECT FLAGS (COMPACT) ===
+    QGroupBox* flagsGroup = new QGroupBox("Object Flags");
+    QVBoxLayout* flagsLayout = new QVBoxLayout(flagsGroup);
+    flagsLayout->setContentsMargins(8, 8, 8, 8);
+    flagsLayout->setSpacing(2);
+    
+    // NOTE: Hex flags field removed - using user-friendly checkboxes only
+    
+    // Key flags as checkboxes (most important ones)
+    _flatCheck = new QCheckBox("Flat");
+    _flatCheck->setToolTip("Rendered first, just after tiles");
+    connect(_flatCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
+    
+    _noBlockCheck = new QCheckBox("No Block");
+    _noBlockCheck->setToolTip("Doesn't block the tile");
+    connect(_noBlockCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
+    
+    _multiHexCheck = new QCheckBox("Multi-Hex");
+    _multiHexCheck->setToolTip("Object spans multiple hexes");
+    connect(_multiHexCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
+    
+    _lightThruCheck = new QCheckBox("Light Thru");
+    _lightThruCheck->setToolTip("Light passes through this object");
+    connect(_lightThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
+    
+    _shootThruCheck = new QCheckBox("Shoot Thru");
+    _shootThruCheck->setToolTip("Projectiles pass through this object");
+    connect(_shootThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
+    
+    // Compact checkbox layout (2 columns)
+    QWidget* checkboxWidget = new QWidget();
+    QGridLayout* checkboxLayout = new QGridLayout(checkboxWidget);
+    checkboxLayout->setContentsMargins(0, 0, 0, 0);
+    checkboxLayout->setSpacing(2);
+    
+    checkboxLayout->addWidget(_flatCheck, 0, 0);
+    checkboxLayout->addWidget(_noBlockCheck, 0, 1);
+    checkboxLayout->addWidget(_multiHexCheck, 1, 0);
+    checkboxLayout->addWidget(_lightThruCheck, 1, 1);
+    checkboxLayout->addWidget(_shootThruCheck, 2, 0, 1, 2); // Span 2 columns
+    
+    flagsLayout->addWidget(checkboxWidget);
+    parentLayout->addWidget(flagsGroup);
+    
+    // Load object flags from current value
+    loadObjectFlags(_pro->header.flags);
+}
+
+void ProEditorDialog::setupTabContent() {
+    // No longer setup common fields here - they're in left panel
+    // Only setup type-specific fields in right columns
+    updateTabVisibility();
+}
+
+void ProEditorDialog::setupCommonFields() {
+    // This method is now obsolete - common fields are handled in setupLeftPanelCommonFields()
+    // Left for compatibility with existing code structure
 }
 
 void ProEditorDialog::setupTabs() {
@@ -704,6 +1266,9 @@ void ProEditorDialog::setupDrugTab() {
     _drugTab = new QWidget();
     QVBoxLayout* mainLayout = new QVBoxLayout(_drugTab);
     
+    // Create horizontal layout for the three effect groups
+    QHBoxLayout* effectsLayout = new QHBoxLayout();
+    
     // Immediate Effects
     QGroupBox* immediateGroup = new QGroupBox("Immediate Effects");
     QGridLayout* immediateLayout = new QGridLayout(immediateGroup);
@@ -725,7 +1290,7 @@ void ProEditorDialog::setupDrugTab() {
         immediateLayout->addWidget(_drugStatAmountEdits[i], i + 1, 1);
     }
     
-    mainLayout->addWidget(immediateGroup);
+    effectsLayout->addWidget(immediateGroup);
     
     // First Delayed Effect
     QGroupBox* firstDelayGroup = new QGroupBox("First Delayed Effect");
@@ -746,7 +1311,7 @@ void ProEditorDialog::setupDrugTab() {
         firstDelayLayout->addWidget(_drugFirstStatAmountEdits[i], i + 1, 1);
     }
     
-    mainLayout->addWidget(firstDelayGroup);
+    effectsLayout->addWidget(firstDelayGroup);
     
     // Second Delayed Effect
     QGroupBox* secondDelayGroup = new QGroupBox("Second Delayed Effect");
@@ -767,7 +1332,10 @@ void ProEditorDialog::setupDrugTab() {
         secondDelayLayout->addWidget(_drugSecondStatAmountEdits[i], i + 1, 1);
     }
     
-    mainLayout->addWidget(secondDelayGroup);
+    effectsLayout->addWidget(secondDelayGroup);
+    
+    // Add effects layout to main layout
+    mainLayout->addLayout(effectsLayout);
     
     // Addiction
     QGroupBox* addictionGroup = new QGroupBox("Addiction");
@@ -800,6 +1368,20 @@ void ProEditorDialog::setupWeaponTab() {
     _weaponTab = new QWidget();
     QVBoxLayout* mainLayout = new QVBoxLayout(_weaponTab);
     
+    // Create horizontal layout for 2 columns
+    QHBoxLayout* columnsLayout = new QHBoxLayout();
+    
+    // Column 1: Basic & Attack Properties
+    QWidget* column1 = new QWidget();
+    QVBoxLayout* column1Layout = new QVBoxLayout(column1);
+    column1Layout->setContentsMargins(5, 5, 5, 5);
+    
+    // Column 2: Ammo & Advanced Properties
+    QWidget* column2 = new QWidget();
+    QVBoxLayout* column2Layout = new QVBoxLayout(column2);
+    column2Layout->setContentsMargins(5, 5, 5, 5);
+    
+    // === COLUMN 1: Basic & Attack Properties ===
     // Basic Properties
     QGroupBox* basicGroup = new QGroupBox("Basic Properties");
     QFormLayout* basicLayout = new QFormLayout(basicGroup);
@@ -829,7 +1411,7 @@ void ProEditorDialog::setupWeaponTab() {
     connect(_weaponMinStrengthEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     basicLayout->addRow("Min Strength:", _weaponMinStrengthEdit);
     
-    mainLayout->addWidget(basicGroup);
+    column1Layout->addWidget(basicGroup);
     
     // Attack Properties
     QGroupBox* attackGroup = new QGroupBox("Attack Properties");
@@ -871,8 +1453,10 @@ void ProEditorDialog::setupWeaponTab() {
     connect(_weaponPerkCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
     attackLayout->addRow("Perk:", _weaponPerkCombo);
     
-    mainLayout->addWidget(attackGroup);
+    column1Layout->addWidget(attackGroup);
+    column1Layout->addStretch();
     
+    // === COLUMN 2: Ammo & Advanced Properties ===
     // Ammo Properties
     QGroupBox* ammoGroup = new QGroupBox("Ammo Properties");
     QFormLayout* ammoLayout = new QFormLayout(ammoGroup);
@@ -902,7 +1486,7 @@ void ProEditorDialog::setupWeaponTab() {
     connect(_weaponSoundIdEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     ammoLayout->addRow("Sound ID:", _weaponSoundIdEdit);
     
-    mainLayout->addWidget(ammoGroup);
+    column2Layout->addWidget(ammoGroup);
     
     // Advanced weapon flags
     QGroupBox* flagsGroup = new QGroupBox("Weapon Flags");
@@ -913,7 +1497,7 @@ void ProEditorDialog::setupWeaponTab() {
     connect(_weaponEnergyWeaponCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
     flagsLayout->addWidget(_weaponEnergyWeaponCheck);
     
-    mainLayout->addWidget(flagsGroup);
+    column2Layout->addWidget(flagsGroup);
     
     // AI Priority display
     QGroupBox* aiGroup = new QGroupBox("AI Information");
@@ -924,8 +1508,14 @@ void ProEditorDialog::setupWeaponTab() {
     _weaponAIPriorityLabel->setToolTip("AI Priority = damage + range + accuracy factors (used by AI to select best weapon)");
     aiLayout->addRow("AI Priority:", _weaponAIPriorityLabel);
     
-    mainLayout->addWidget(aiGroup);
-    mainLayout->addStretch();
+    column2Layout->addWidget(aiGroup);
+    column2Layout->addStretch();
+    
+    // Add columns to main layout
+    columnsLayout->addWidget(column1, 1);
+    columnsLayout->addWidget(column2, 1);
+    
+    mainLayout->addLayout(columnsLayout);
     
     _tabWidget->addTab(_weaponTab, "Weapon");
 }
@@ -1432,8 +2022,9 @@ void ProEditorDialog::loadProData() {
             _messageIdEdit->setValue(_commonData.message_id);
         }
         
+        // Always set _mainFID from PRO data (needed for compact preview)
+        _mainFID = _commonData.FID;
         if (_fidLabel) {
-            _mainFID = _commonData.FID;
             _fidLabel->setText(getFrmFilename(_mainFID));
         }
         
@@ -1445,8 +2036,9 @@ void ProEditorDialog::loadProData() {
             _lightIntensityEdit->setValue(_commonData.light_intensity);
         }
         
+        // Always set _inventoryFID from PRO data (needed for compact preview)
+        _inventoryFID = _commonData.inventoryFID;
         if (_inventoryFIDLabel) {
-            _inventoryFID = _commonData.inventoryFID;
             _inventoryFIDLabel->setText(getFrmFilename(_inventoryFID));
         }
         
@@ -1513,100 +2105,194 @@ void ProEditorDialog::loadProData() {
             break;
     }
     
+    // Update dual previews for items now that all data is loaded
+    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryPreviewLabel && _groundPreviewLabel) {
+        updateInventoryPreview();
+        updateGroundPreview();
+    }
 }
 
 void ProEditorDialog::loadArmorData() {
-    _armorClassEdit->setValue(_pro->armorData.armorClass);
-    
-    for (int i = 0; i < 7; ++i) {
-        _damageResistEdits[i]->setValue(_pro->armorData.damageResist[i]);
-        _damageThresholdEdits[i]->setValue(_pro->armorData.damageThreshold[i]);
+    if (_armorClassEdit) {
+        _armorClassEdit->setValue(_pro->armorData.armorClass);
     }
     
-    _armorPerkCombo->setCurrentIndex(_pro->armorData.perk);
+    for (int i = 0; i < 7; ++i) {
+        if (_damageResistEdits[i]) {
+            _damageResistEdits[i]->setValue(_pro->armorData.damageResist[i]);
+        }
+        if (_damageThresholdEdits[i]) {
+            _damageThresholdEdits[i]->setValue(_pro->armorData.damageThreshold[i]);
+        }
+    }
+    
+    if (_armorPerkCombo) {
+        _armorPerkCombo->setCurrentIndex(_pro->armorData.perk);
+    }
+    
     _armorMaleFID = _pro->armorData.armorMaleFID;
-    _armorMaleFIDLabel->setText(getFrmFilename(_armorMaleFID));
+    if (_armorMaleFIDLabel) {
+        _armorMaleFIDLabel->setText(getFrmFilename(_armorMaleFID));
+    }
+    
     _armorFemaleFID = _pro->armorData.armorFemaleFID;
-    _armorFemaleFIDLabel->setText(getFrmFilename(_armorFemaleFID));
+    if (_armorFemaleFIDLabel) {
+        _armorFemaleFIDLabel->setText(getFrmFilename(_armorFemaleFID));
+    }
     
     // Load armor animation frames and update preview
     loadArmorAnimationFrames();
 }
 
 void ProEditorDialog::loadContainerData() {
-    _containerMaxSizeEdit->setValue(_pro->containerData.maxSize);
+    if (_containerMaxSizeEdit) {
+        _containerMaxSizeEdit->setValue(_pro->containerData.maxSize);
+    }
     
     // Load container flags (bit flags)
     uint32_t flags = _pro->containerData.flags;
     for (int i = 0; i < 5; ++i) {
-        _containerFlagChecks[i]->setChecked(flags & (1 << i));
+        if (_containerFlagChecks[i]) {
+            _containerFlagChecks[i]->setChecked(flags & (1 << i));
+        }
     }
 }
 
 void ProEditorDialog::loadDrugData() {
-    _drugStatCombos[0]->setCurrentIndex(_pro->drugData.stat0Base);
-    _drugStatCombos[1]->setCurrentIndex(_pro->drugData.stat1Base);
-    _drugStatCombos[2]->setCurrentIndex(_pro->drugData.stat2Base);
+    for (int i = 0; i < 3; ++i) {
+        if (_drugStatCombos[i]) {
+            _drugStatCombos[i]->setCurrentIndex(i == 0 ? _pro->drugData.stat0Base : 
+                                                i == 1 ? _pro->drugData.stat1Base : 
+                                                _pro->drugData.stat2Base);
+        }
+        if (_drugStatAmountEdits[i]) {
+            _drugStatAmountEdits[i]->setValue(i == 0 ? _pro->drugData.stat0Amount : 
+                                              i == 1 ? _pro->drugData.stat1Amount : 
+                                              _pro->drugData.stat2Amount);
+        }
+        if (_drugFirstStatAmountEdits[i]) {
+            _drugFirstStatAmountEdits[i]->setValue(i == 0 ? _pro->drugData.firstStat0Amount : 
+                                                   i == 1 ? _pro->drugData.firstStat1Amount : 
+                                                   _pro->drugData.firstStat2Amount);
+        }
+        if (_drugSecondStatAmountEdits[i]) {
+            _drugSecondStatAmountEdits[i]->setValue(i == 0 ? _pro->drugData.secondStat0Amount : 
+                                                    i == 1 ? _pro->drugData.secondStat1Amount : 
+                                                    _pro->drugData.secondStat2Amount);
+        }
+    }
     
-    _drugStatAmountEdits[0]->setValue(_pro->drugData.stat0Amount);
-    _drugStatAmountEdits[1]->setValue(_pro->drugData.stat1Amount);
-    _drugStatAmountEdits[2]->setValue(_pro->drugData.stat2Amount);
-    
-    _drugFirstDelayEdit->setValue(_pro->drugData.firstDelayMinutes);
-    _drugFirstStatAmountEdits[0]->setValue(_pro->drugData.firstStat0Amount);
-    _drugFirstStatAmountEdits[1]->setValue(_pro->drugData.firstStat1Amount);
-    _drugFirstStatAmountEdits[2]->setValue(_pro->drugData.firstStat2Amount);
-    
-    _drugSecondDelayEdit->setValue(_pro->drugData.secondDelayMinutes);
-    _drugSecondStatAmountEdits[0]->setValue(_pro->drugData.secondStat0Amount);
-    _drugSecondStatAmountEdits[1]->setValue(_pro->drugData.secondStat1Amount);
-    _drugSecondStatAmountEdits[2]->setValue(_pro->drugData.secondStat2Amount);
-    
-    _drugAddictionChanceEdit->setValue(_pro->drugData.addictionChance);
-    _drugAddictionPerkCombo->setCurrentIndex(_pro->drugData.addictionPerk);
-    _drugAddictionDelayEdit->setValue(_pro->drugData.addictionDelay);
+    if (_drugFirstDelayEdit) {
+        _drugFirstDelayEdit->setValue(_pro->drugData.firstDelayMinutes);
+    }
+    if (_drugSecondDelayEdit) {
+        _drugSecondDelayEdit->setValue(_pro->drugData.secondDelayMinutes);
+    }
+    if (_drugAddictionChanceEdit) {
+        _drugAddictionChanceEdit->setValue(_pro->drugData.addictionChance);
+    }
+    if (_drugAddictionPerkCombo) {
+        _drugAddictionPerkCombo->setCurrentIndex(_pro->drugData.addictionPerk);
+    }
+    if (_drugAddictionDelayEdit) {
+        _drugAddictionDelayEdit->setValue(_pro->drugData.addictionDelay);
+    }
 }
 
 void ProEditorDialog::loadWeaponData() {
-    _weaponAnimationCombo->setCurrentIndex(_pro->weaponData.animationCode);
-    _weaponDamageMinEdit->setValue(_pro->weaponData.damageMin);
-    _weaponDamageMaxEdit->setValue(_pro->weaponData.damageMax);
-    _weaponDamageTypeCombo->setCurrentIndex(_pro->weaponData.damageType);
-    _weaponRangePrimaryEdit->setValue(_pro->weaponData.rangePrimary);
-    _weaponRangeSecondaryEdit->setValue(_pro->weaponData.rangeSecondary);
-    _weaponProjectilePIDEdit->setValue(_pro->weaponData.projectilePID);
-    _weaponMinStrengthEdit->setValue(_pro->weaponData.minimumStrength);
-    _weaponAPPrimaryEdit->setValue(_pro->weaponData.actionCostPrimary);
-    _weaponAPSecondaryEdit->setValue(_pro->weaponData.actionCostSecondary);
-    _weaponCriticalFailEdit->setValue(_pro->weaponData.criticalFail);
-    _weaponPerkCombo->setCurrentIndex(_pro->weaponData.perk);
-    _weaponBurstRoundsEdit->setValue(_pro->weaponData.burstRounds);
-    _weaponAmmoTypeCombo->setCurrentIndex(_pro->weaponData.ammoType);
-    _weaponAmmoPIDEdit->setValue(_pro->weaponData.ammoPID);
-    _weaponAmmoCapacityEdit->setValue(_pro->weaponData.ammoCapacity);
-    _weaponSoundIdEdit->setValue(_pro->weaponData.soundId);
+    if (_weaponAnimationCombo) {
+        _weaponAnimationCombo->setCurrentIndex(_pro->weaponData.animationCode);
+    }
+    if (_weaponDamageMinEdit) {
+        _weaponDamageMinEdit->setValue(_pro->weaponData.damageMin);
+    }
+    if (_weaponDamageMaxEdit) {
+        _weaponDamageMaxEdit->setValue(_pro->weaponData.damageMax);
+    }
+    if (_weaponDamageTypeCombo) {
+        _weaponDamageTypeCombo->setCurrentIndex(_pro->weaponData.damageType);
+    }
+    if (_weaponRangePrimaryEdit) {
+        _weaponRangePrimaryEdit->setValue(_pro->weaponData.rangePrimary);
+    }
+    if (_weaponRangeSecondaryEdit) {
+        _weaponRangeSecondaryEdit->setValue(_pro->weaponData.rangeSecondary);
+    }
+    if (_weaponProjectilePIDEdit) {
+        _weaponProjectilePIDEdit->setValue(_pro->weaponData.projectilePID);
+    }
+    if (_weaponMinStrengthEdit) {
+        _weaponMinStrengthEdit->setValue(_pro->weaponData.minimumStrength);
+    }
+    if (_weaponAPPrimaryEdit) {
+        _weaponAPPrimaryEdit->setValue(_pro->weaponData.actionCostPrimary);
+    }
+    if (_weaponAPSecondaryEdit) {
+        _weaponAPSecondaryEdit->setValue(_pro->weaponData.actionCostSecondary);
+    }
+    if (_weaponCriticalFailEdit) {
+        _weaponCriticalFailEdit->setValue(_pro->weaponData.criticalFail);
+    }
+    if (_weaponPerkCombo) {
+        _weaponPerkCombo->setCurrentIndex(_pro->weaponData.perk);
+    }
+    if (_weaponBurstRoundsEdit) {
+        _weaponBurstRoundsEdit->setValue(_pro->weaponData.burstRounds);
+    }
+    if (_weaponAmmoTypeCombo) {
+        _weaponAmmoTypeCombo->setCurrentIndex(_pro->weaponData.ammoType);
+    }
+    if (_weaponAmmoPIDEdit) {
+        _weaponAmmoPIDEdit->setValue(_pro->weaponData.ammoPID);
+    }
+    if (_weaponAmmoCapacityEdit) {
+        _weaponAmmoCapacityEdit->setValue(_pro->weaponData.ammoCapacity);
+    }
+    if (_weaponSoundIdEdit) {
+        _weaponSoundIdEdit->setValue(_pro->weaponData.soundId);
+    }
     
     // Load weapon flags
-    bool isEnergyWeapon = (_pro->weaponData.weaponFlags & static_cast<uint32_t>(Pro::WEAPON_FLAGS::ENERGY_WEAPON)) != 0;
-    _weaponEnergyWeaponCheck->setChecked(isEnergyWeapon);
+    if (_weaponEnergyWeaponCheck) {
+        bool isEnergyWeapon = (_pro->weaponData.weaponFlags & static_cast<uint32_t>(Pro::WEAPON_FLAGS::ENERGY_WEAPON)) != 0;
+        _weaponEnergyWeaponCheck->setChecked(isEnergyWeapon);
+    }
 }
 
 void ProEditorDialog::loadAmmoData() {
-    _ammoCaliberCombo->setCurrentIndex(_pro->ammoData.caliber);
-    _ammoQuantityEdit->setValue(_pro->ammoData.quantity);
-    _ammoDamageModEdit->setValue(_pro->ammoData.damageModifier);
-    _ammoDRModEdit->setValue(_pro->ammoData.damageResistModifier);
-    _ammoDamageMultEdit->setValue(_pro->ammoData.damageMultiplier);
-    _ammoDamageTypeModCombo->setCurrentIndex(_pro->ammoData.damageTypeModifier);
+    if (_ammoCaliberCombo) {
+        _ammoCaliberCombo->setCurrentIndex(_pro->ammoData.caliber);
+    }
+    if (_ammoQuantityEdit) {
+        _ammoQuantityEdit->setValue(_pro->ammoData.quantity);
+    }
+    if (_ammoDamageModEdit) {
+        _ammoDamageModEdit->setValue(_pro->ammoData.damageModifier);
+    }
+    if (_ammoDRModEdit) {
+        _ammoDRModEdit->setValue(_pro->ammoData.damageResistModifier);
+    }
+    if (_ammoDamageMultEdit) {
+        _ammoDamageMultEdit->setValue(_pro->ammoData.damageMultiplier);
+    }
+    if (_ammoDamageTypeModCombo) {
+        _ammoDamageTypeModCombo->setCurrentIndex(_pro->ammoData.damageTypeModifier);
+    }
 }
 
 void ProEditorDialog::loadMiscData() {
-    _miscPowerTypeCombo->setCurrentIndex(_pro->miscData.powerType);
-    _miscChargesEdit->setValue(_pro->miscData.charges);
+    if (_miscPowerTypeCombo) {
+        _miscPowerTypeCombo->setCurrentIndex(_pro->miscData.powerType);
+    }
+    if (_miscChargesEdit) {
+        _miscChargesEdit->setValue(_pro->miscData.charges);
+    }
 }
 
 void ProEditorDialog::loadKeyData() {
-    _keyIdEdit->setValue(_pro->keyData.keyId);
+    if (_keyIdEdit) {
+        _keyIdEdit->setValue(_pro->keyData.keyId);
+    }
 }
 
 void ProEditorDialog::saveProData() {
@@ -1787,55 +2473,416 @@ void ProEditorDialog::saveKeyData() {
 void ProEditorDialog::updateTabVisibility() {
     if (!_pro) return;
     
-    // Show/hide tabs based on PRO type
+    // Add type-specific fields to the two columns
     Pro::OBJECT_TYPE type = _pro->type();
     
-    // Hide all type-specific tabs first
-    for (int i = 1; i < _tabWidget->count(); ++i) {
-        _tabWidget->setTabVisible(i, false);
-    }
-    
+    // Add type-specific fields based on PRO type
     switch (type) {
-        case Pro::OBJECT_TYPE::ITEM: {
-            Pro::ITEM_TYPE itemType = static_cast<Pro::ITEM_TYPE>(_pro->objectSubtypeId());
-            
-            switch (itemType) {
-                case Pro::ITEM_TYPE::ARMOR:
-                    _tabWidget->setTabVisible(_tabWidget->indexOf(_armorTab), true);
-                    break;
-                case Pro::ITEM_TYPE::CONTAINER:
-                    _tabWidget->setTabVisible(_tabWidget->indexOf(_containerTab), true);
-                    break;
-                case Pro::ITEM_TYPE::DRUG:
-                    _tabWidget->setTabVisible(_tabWidget->indexOf(_drugTab), true);
-                    break;
-                case Pro::ITEM_TYPE::WEAPON:
-                    _tabWidget->setTabVisible(_tabWidget->indexOf(_weaponTab), true);
-                    break;
-                case Pro::ITEM_TYPE::AMMO:
-                    _tabWidget->setTabVisible(_tabWidget->indexOf(_ammoTab), true);
-                    break;
-                case Pro::ITEM_TYPE::MISC:
-                    _tabWidget->setTabVisible(_tabWidget->indexOf(_miscTab), true);
-                    break;
-                case Pro::ITEM_TYPE::KEY:
-                    _tabWidget->setTabVisible(_tabWidget->indexOf(_keyTab), true);
-                    break;
-            }
+        case Pro::OBJECT_TYPE::ITEM:
+            setupItemFields();
             break;
-        }
         case Pro::OBJECT_TYPE::CRITTER:
-            _tabWidget->setTabVisible(_tabWidget->indexOf(_critterTab), true);
+            setupCritterFields();
             break;
         case Pro::OBJECT_TYPE::SCENERY:
-            _tabWidget->setTabVisible(_tabWidget->indexOf(_sceneryTab), true);
+            setupSceneryFields();
             break;
         case Pro::OBJECT_TYPE::WALL:
+            setupWallFields();
+            break;
         case Pro::OBJECT_TYPE::TILE:
+            setupTileFields();
+            break;
         case Pro::OBJECT_TYPE::MISC:
-            // These types only have common tab, no additional tabs
+            setupMiscFields();
             break;
     }
+}
+
+void ProEditorDialog::setupItemFields() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM) return;
+    
+    Pro::ITEM_TYPE itemType = _pro->itemType();
+    
+    // Clear any existing widgets in the right panels
+    while (QLayoutItem* item = _leftFieldsLayout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+    while (QLayoutItem* item = _rightFieldsLayout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+    
+    // Setup type-specific fields based on item subtype
+    switch (itemType) {
+        case Pro::ITEM_TYPE::ARMOR:
+            setupArmorFields();
+            break;
+        case Pro::ITEM_TYPE::CONTAINER:
+            setupContainerFields();
+            break;
+        case Pro::ITEM_TYPE::DRUG:
+            setupDrugFields();
+            break;
+        case Pro::ITEM_TYPE::WEAPON:
+            setupWeaponFields();
+            break;
+        case Pro::ITEM_TYPE::AMMO:
+            setupAmmoFields();
+            break;
+        case Pro::ITEM_TYPE::MISC:
+            setupMiscItemFields();
+            break;
+        case Pro::ITEM_TYPE::KEY:
+            setupKeyFields();
+            break;
+    }
+}
+
+void ProEditorDialog::setupCritterFields() {
+    // Clear any existing widgets in the right panels
+    while (QLayoutItem* item = _leftFieldsLayout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+    while (QLayoutItem* item = _rightFieldsLayout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+    
+    // === COLUMN 1: Critter-Specific Properties and SPECIAL Stats ===
+    
+    // Critter-Specific Properties (not shown in left panel)
+    QGroupBox* critterGroup = new QGroupBox("Critter Properties");
+    QFormLayout* critterLayout = new QFormLayout(critterGroup);
+    critterLayout->setContentsMargins(8, 8, 8, 8);
+    critterLayout->setSpacing(4);
+    
+    // Head FID with selector button
+    QWidget* headFidWidget = new QWidget();
+    QHBoxLayout* headFidLayout = new QHBoxLayout(headFidWidget);
+    headFidLayout->setContentsMargins(0, 0, 0, 0);
+    headFidLayout->setSpacing(4);
+    
+    _critterHeadFIDLabel = new QLabel("No FRM");
+    _critterHeadFIDLabel->setToolTip("FRM filename for critter head appearance");
+    _critterHeadFIDLabel->setStyleSheet("QLabel { border: 1px solid #e2e8f0; padding: 2px 4px; background-color: white; }");
+    
+    _critterHeadFIDSelectorButton = new QPushButton("...");
+    _critterHeadFIDSelectorButton->setMaximumWidth(24);
+    _critterHeadFIDSelectorButton->setMaximumHeight(22);
+    _critterHeadFIDSelectorButton->setToolTip("Browse FRM files for critter head");
+    connect(_critterHeadFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onCritterHeadFidSelectorClicked);
+    
+    headFidLayout->addWidget(_critterHeadFIDLabel, 1);
+    headFidLayout->addWidget(_critterHeadFIDSelectorButton);
+    critterLayout->addRow("Head FID:", headFidWidget);
+    
+    _critterAIPacketEdit = createSpinBox(0, 999, "AI packet number for critter behavior");
+    connectSpinBox(_critterAIPacketEdit);
+    critterLayout->addRow("AI Packet:", _critterAIPacketEdit);
+    
+    _critterTeamNumberEdit = createSpinBox(0, 999, "Team number for faction identification");
+    connectSpinBox(_critterTeamNumberEdit);
+    critterLayout->addRow("Team Number:", _critterTeamNumberEdit);
+    
+    _leftFieldsLayout->addWidget(critterGroup);
+    
+    // SPECIAL Stats (compact)
+    QGroupBox* specialGroup = new QGroupBox("SPECIAL Stats");
+    QGridLayout* specialLayout = new QGridLayout(specialGroup);
+    specialLayout->setContentsMargins(8, 8, 8, 8);
+    specialLayout->setSpacing(4);
+    
+    const char* specialNames[] = {"STR", "PER", "END", "CHR", "INT", "AGL", "LCK"};
+    for (int i = 0; i < 7; ++i) {
+        _critterSpecialStatEdits[i] = new QSpinBox();
+        _critterSpecialStatEdits[i]->setRange(1, 10);
+        _critterSpecialStatEdits[i]->setToolTip(QString("Base %1 stat").arg(specialNames[i]));
+        connect(_critterSpecialStatEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        
+        QLabel* label = new QLabel(specialNames[i]);
+        label->setFixedWidth(30);
+        specialLayout->addWidget(label, i / 4, (i % 4) * 2);
+        specialLayout->addWidget(_critterSpecialStatEdits[i], i / 4, (i % 4) * 2 + 1);
+    }
+    _leftFieldsLayout->addWidget(specialGroup);
+    
+    // Primary Combat Stats
+    QGroupBox* combatGroup = new QGroupBox("Combat Stats");
+    QFormLayout* combatLayout = new QFormLayout(combatGroup);
+    combatLayout->setContentsMargins(8, 8, 8, 8);
+    combatLayout->setSpacing(4);
+    
+    _critterMaxHitPointsEdit = new QSpinBox();
+    _critterMaxHitPointsEdit->setRange(1, 9999);
+    _critterMaxHitPointsEdit->setToolTip("Maximum hit points");
+    connect(_critterMaxHitPointsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Max HP:", _critterMaxHitPointsEdit);
+    
+    _critterActionPointsEdit = new QSpinBox();
+    _critterActionPointsEdit->setRange(1, 20);
+    _critterActionPointsEdit->setToolTip("Action points per turn");
+    connect(_critterActionPointsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Action Points:", _critterActionPointsEdit);
+    
+    _critterArmorClassEdit = new QSpinBox();
+    _critterArmorClassEdit->setRange(0, 90);
+    _critterArmorClassEdit->setToolTip("Base armor class");
+    connect(_critterArmorClassEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Armor Class:", _critterArmorClassEdit);
+    
+    _critterMeleeDamageEdit = new QSpinBox();
+    _critterMeleeDamageEdit->setRange(0, 999);
+    _critterMeleeDamageEdit->setToolTip("Melee damage bonus");
+    connect(_critterMeleeDamageEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Melee Damage:", _critterMeleeDamageEdit);
+    
+    _leftFieldsLayout->addWidget(combatGroup);
+    
+    // === COLUMN 2: Advanced Stats, Damage Resistance/Threshold, Skills ===
+    
+    // Advanced Stats & Characteristics
+    QGroupBox* advancedGroup = new QGroupBox("Advanced Stats");
+    QFormLayout* advancedLayout = new QFormLayout(advancedGroup);
+    advancedLayout->setContentsMargins(8, 8, 8, 8);
+    advancedLayout->setSpacing(4);
+    
+    _critterCarryWeightMaxEdit = new QSpinBox();
+    _critterCarryWeightMaxEdit->setRange(0, 99999);
+    _critterCarryWeightMaxEdit->setToolTip("Maximum carry weight");
+    connect(_critterCarryWeightMaxEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    advancedLayout->addRow("Carry Weight:", _critterCarryWeightMaxEdit);
+    
+    _critterSequenceEdit = new QSpinBox();
+    _critterSequenceEdit->setRange(0, 50);
+    _critterSequenceEdit->setToolTip("Initiative sequence bonus");
+    connect(_critterSequenceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    advancedLayout->addRow("Sequence:", _critterSequenceEdit);
+    
+    _critterHealingRateEdit = new QSpinBox();
+    _critterHealingRateEdit->setRange(0, 50);
+    _critterHealingRateEdit->setToolTip("Healing rate bonus");
+    connect(_critterHealingRateEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    advancedLayout->addRow("Healing Rate:", _critterHealingRateEdit);
+    
+    _critterCriticalChanceEdit = new QSpinBox();
+    _critterCriticalChanceEdit->setRange(0, 100);
+    _critterCriticalChanceEdit->setToolTip("Critical hit chance bonus");
+    connect(_critterCriticalChanceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    advancedLayout->addRow("Critical Chance:", _critterCriticalChanceEdit);
+    
+    _critterBetterCriticalsEdit = new QSpinBox();
+    _critterBetterCriticalsEdit->setRange(0, 100);
+    _critterBetterCriticalsEdit->setToolTip("Better criticals bonus");
+    connect(_critterBetterCriticalsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    advancedLayout->addRow("Better Criticals:", _critterBetterCriticalsEdit);
+    
+    _critterAgeEdit = new QSpinBox();
+    _critterAgeEdit->setRange(0, 999);
+    _critterAgeEdit->setToolTip("Critter age");
+    connect(_critterAgeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    advancedLayout->addRow("Age:", _critterAgeEdit);
+    
+    _critterGenderCombo = new QComboBox();
+    _critterGenderCombo->addItems({"Male", "Female"});
+    _critterGenderCombo->setToolTip("Critter gender");
+    connect(_critterGenderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
+    advancedLayout->addRow("Gender:", _critterGenderCombo);
+    
+    _critterBodyTypeCombo = new QComboBox();
+    _critterBodyTypeCombo->addItems({"Biped", "Quadruped", "Robotic"});
+    _critterBodyTypeCombo->setToolTip("Body type for animations");
+    connect(_critterBodyTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
+    advancedLayout->addRow("Body Type:", _critterBodyTypeCombo);
+    
+    _critterExperienceEdit = new QSpinBox();
+    _critterExperienceEdit->setRange(0, 99999);
+    _critterExperienceEdit->setToolTip("Experience points for killing this critter");
+    connect(_critterExperienceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    advancedLayout->addRow("Experience:", _critterExperienceEdit);
+    
+    _critterKillTypeEdit = new QSpinBox();
+    _critterKillTypeEdit->setRange(0, 999);
+    _critterKillTypeEdit->setToolTip("Kill type for karma tracking");
+    connect(_critterKillTypeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    advancedLayout->addRow("Kill Type:", _critterKillTypeEdit);
+    
+    _critterDamageTypeEdit = new QSpinBox();
+    _critterDamageTypeEdit->setRange(0, 10);
+    _critterDamageTypeEdit->setToolTip("Default damage type");
+    connect(_critterDamageTypeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    advancedLayout->addRow("Damage Type:", _critterDamageTypeEdit);
+    
+    _rightFieldsLayout->addWidget(advancedGroup);
+    
+    // Damage Resistance (compact grid)
+    QGroupBox* damageResistGroup = new QGroupBox("Damage Resistance");
+    QGridLayout* damageResistLayout = new QGridLayout(damageResistGroup);
+    damageResistLayout->setContentsMargins(8, 8, 8, 8);
+    damageResistLayout->setSpacing(2);
+    
+    const char* damageTypes[] = {"Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion", "Gas", "Radiation"};
+    for (int i = 0; i < 9; ++i) {
+        _critterDamageResistEdits[i] = new QSpinBox();
+        _critterDamageResistEdits[i]->setRange(0, 999);
+        _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes[i]));
+        connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        
+        QLabel* label = new QLabel(QString(damageTypes[i]).left(4) + ":");  // Shorten labels
+        label->setFixedWidth(40);
+        damageResistLayout->addWidget(label, i / 2, (i % 2) * 2);
+        damageResistLayout->addWidget(_critterDamageResistEdits[i], i / 2, (i % 2) * 2 + 1);
+    }
+    _rightFieldsLayout->addWidget(damageResistGroup);
+    
+    // Damage Threshold (compact grid)
+    QGroupBox* damageThresholdGroup = new QGroupBox("Damage Threshold");
+    QGridLayout* damageThresholdLayout = new QGridLayout(damageThresholdGroup);
+    damageThresholdLayout->setContentsMargins(8, 8, 8, 8);
+    damageThresholdLayout->setSpacing(2);
+    
+    for (int i = 0; i < 7; ++i) {
+        _critterDamageThresholdEdits[i] = new QSpinBox();
+        _critterDamageThresholdEdits[i]->setRange(0, 999);
+        _critterDamageThresholdEdits[i]->setToolTip(QString("%1 damage threshold").arg(damageTypes[i]));
+        connect(_critterDamageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        
+        QLabel* label = new QLabel(QString(damageTypes[i]).left(4) + ":");  // Shorten labels
+        label->setFixedWidth(40);
+        damageThresholdLayout->addWidget(label, i / 2, (i % 2) * 2);
+        damageThresholdLayout->addWidget(_critterDamageThresholdEdits[i], i / 2, (i % 2) * 2 + 1);
+    }
+    _rightFieldsLayout->addWidget(damageThresholdGroup);
+    
+    // Add stretch to push everything to top
+    _leftFieldsLayout->addStretch();
+    _rightFieldsLayout->addStretch();
+}
+
+void ProEditorDialog::setupSceneryFields() {
+    // Clear any existing widgets in the right panels
+    while (QLayoutItem* item = _leftFieldsLayout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+    while (QLayoutItem* item = _rightFieldsLayout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+    
+    // === COLUMN 1: Basic Scenery Properties ===
+    
+    QGroupBox* basicGroup = new QGroupBox("Basic Properties");
+    QFormLayout* basicLayout = new QFormLayout(basicGroup);
+    basicLayout->setContentsMargins(8, 8, 8, 8);
+    basicLayout->setSpacing(4);
+    
+    _sceneryMaterialIdEdit = createMaterialComboBox("Material type for scenery");
+    connectComboBox(_sceneryMaterialIdEdit);
+    basicLayout->addRow("Material:", _sceneryMaterialIdEdit);
+    
+    _scenerySoundIdEdit = createSpinBox(0, 255, "Sound ID for interactions");
+    connectSpinBox(_scenerySoundIdEdit);
+    basicLayout->addRow("Sound ID:", _scenerySoundIdEdit);
+    
+    _sceneryTypeCombo = createComboBox({"Door", "Stairs", "Elevator", "Ladder Bottom", "Ladder Top", "Generic"}, "Scenery subtype");
+    connectComboBox(_sceneryTypeCombo);
+    basicLayout->addRow("Type:", _sceneryTypeCombo);
+    
+    _leftFieldsLayout->addWidget(basicGroup);
+    
+    // === COLUMN 2: Type-Specific Properties ===
+    
+    // Door Properties
+    QGroupBox* doorGroup = new QGroupBox("Door Properties");
+    QFormLayout* doorLayout = new QFormLayout(doorGroup);
+    doorLayout->setContentsMargins(8, 8, 8, 8);
+    doorLayout->setSpacing(4);
+    
+    _doorWalkThroughCheck = new QCheckBox("Walk Through");
+    _doorWalkThroughCheck->setToolTip("Allow walking through the door");
+    connectCheckBox(_doorWalkThroughCheck);
+    doorLayout->addRow("", _doorWalkThroughCheck);
+    
+    _doorUnknownEdit = createSpinBox(0, 0xFFFFFFFF, "Door unknown field");
+    connectSpinBox(_doorUnknownEdit);
+    doorLayout->addRow("Unknown Field:", _doorUnknownEdit);
+    
+    _rightFieldsLayout->addWidget(doorGroup);
+    
+    // Stairs Properties
+    QGroupBox* stairsGroup = new QGroupBox("Stairs Properties");
+    QFormLayout* stairsLayout = new QFormLayout(stairsGroup);
+    stairsLayout->setContentsMargins(8, 8, 8, 8);
+    stairsLayout->setSpacing(4);
+    
+    _stairsDestTileEdit = createSpinBox(0, 39999, "Destination tile number");
+    connectSpinBox(_stairsDestTileEdit);
+    stairsLayout->addRow("Dest Tile:", _stairsDestTileEdit);
+    
+    _stairsDestElevationEdit = createSpinBox(0, 3, "Destination elevation");
+    connectSpinBox(_stairsDestElevationEdit);
+    stairsLayout->addRow("Dest Elevation:", _stairsDestElevationEdit);
+    
+    _rightFieldsLayout->addWidget(stairsGroup);
+    
+    // Elevator Properties (these will be shown/hidden based on scenery type)
+    QGroupBox* elevatorGroup = new QGroupBox("Elevator Properties");
+    QFormLayout* elevatorLayout = new QFormLayout(elevatorGroup);
+    elevatorLayout->setContentsMargins(8, 8, 8, 8);
+    elevatorLayout->setSpacing(4);
+    
+    _elevatorTypeEdit = createSpinBox(0, 999, "Elevator type");
+    connectSpinBox(_elevatorTypeEdit);
+    elevatorLayout->addRow("Type:", _elevatorTypeEdit);
+    
+    _elevatorLevelEdit = createSpinBox(0, 999, "Elevator level");
+    connectSpinBox(_elevatorLevelEdit);
+    elevatorLayout->addRow("Level:", _elevatorLevelEdit);
+    
+    _rightFieldsLayout->addWidget(elevatorGroup);
+    
+    // Ladder Properties
+    QGroupBox* ladderGroup = new QGroupBox("Ladder Properties");
+    QFormLayout* ladderLayout = new QFormLayout(ladderGroup);
+    ladderLayout->setContentsMargins(8, 8, 8, 8);
+    ladderLayout->setSpacing(4);
+    
+    _ladderDestTileElevationEdit = createSpinBox(0, 0xFFFFFFFF, "Destination tile and elevation combined");
+    connectSpinBox(_ladderDestTileElevationEdit);
+    ladderLayout->addRow("Dest Tile+Elev:", _ladderDestTileElevationEdit);
+    
+    _rightFieldsLayout->addWidget(ladderGroup);
+    
+    // Generic Properties
+    QGroupBox* genericGroup = new QGroupBox("Generic Properties");
+    QFormLayout* genericLayout = new QFormLayout(genericGroup);
+    genericLayout->setContentsMargins(8, 8, 8, 8);
+    genericLayout->setSpacing(4);
+    
+    _genericUnknownEdit = createSpinBox(0, 0xFFFFFFFF, "Generic unknown field");
+    connectSpinBox(_genericUnknownEdit);
+    genericLayout->addRow("Unknown Field:", _genericUnknownEdit);
+    
+    _rightFieldsLayout->addWidget(genericGroup);
+    
+    // Add stretch to push content to top
+    _leftFieldsLayout->addStretch();
+    _rightFieldsLayout->addStretch();
+}
+
+void ProEditorDialog::setupWallFields() {
+    // TODO: Implement wall-specific fields  
+}
+
+void ProEditorDialog::setupTileFields() {
+    // TODO: Implement tile-specific fields
+}
+
+void ProEditorDialog::setupMiscFields() {
+    // TODO: Implement misc-specific fields
 }
 
 void ProEditorDialog::validateField(QWidget* field) {
@@ -2127,14 +3174,18 @@ int32_t ProEditorDialog::getPreviewFid() {
 
 int32_t ProEditorDialog::getInventoryFid() {
     
-    // Check if basic widgets are initialized
-    if (!_pro || !_inventoryFIDLabel) {
+    // Check if pro is loaded
+    if (!_pro) {
         return 0;
     }
     
-    // For items, return inventory FID
+    // For items, return inventory FID, or fallback to main FID if inventory FID is not set
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
         int32_t inventoryFid = _inventoryFID;
+        // If inventory FID is not set (0 or -1), use main FID as fallback
+        if (inventoryFid <= 0) {
+            inventoryFid = _mainFID;
+        }
         return inventoryFid;
     }
     
@@ -2143,8 +3194,8 @@ int32_t ProEditorDialog::getInventoryFid() {
 
 int32_t ProEditorDialog::getGroundFid() {
     
-    // Check if basic widgets are initialized
-    if (!_pro || !_fidLabel) {
+    // Check if pro is loaded
+    if (!_pro) {
         return 0;
     }
     
@@ -2164,6 +3215,7 @@ void ProEditorDialog::updateInventoryPreview() {
     }
     
     int32_t inventoryFid = getInventoryFid();
+    
     if (inventoryFid <= 0) {
         _inventoryPreviewLabel->clear();
         _inventoryPreviewLabel->setText("No inventory FRM");
@@ -2203,6 +3255,7 @@ void ProEditorDialog::updateGroundPreview() {
     }
     
     int32_t groundFid = getGroundFid();
+    
     if (groundFid <= 0) {
         _groundPreviewLabel->clear();
         _groundPreviewLabel->setText("No ground FRM");
@@ -2248,7 +3301,8 @@ void ProEditorDialog::updateArmorPreview() {
         // Use cached frame if available, otherwise fall back to static thumbnail
         if (_armorCurrentFrame < static_cast<int>(_armorMaleFrameCache.size()) && 
             !_armorMaleFrameCache[_armorCurrentFrame].isNull()) {
-            _armorMalePreviewLabel->setPixmap(_armorMaleFrameCache[_armorCurrentFrame]);
+            QPixmap scaledPixmap = _armorMaleFrameCache[_armorCurrentFrame].scaled(_armorMalePreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            _armorMalePreviewLabel->setPixmap(scaledPixmap);
         } else {
             // Fall back to static thumbnail generation
             try {
@@ -2259,9 +3313,10 @@ void ProEditorDialog::updateArmorPreview() {
                     _armorMalePreviewLabel->clear();
                     _armorMalePreviewLabel->setText("Invalid male armor FID");
                 } else {
-                    QPixmap maleThumbnail = createFrmThumbnail(maleFrmPath, QSize(150, 150));
+                    QPixmap maleThumbnail = createFrmThumbnail(maleFrmPath, QSize(120, 120));
                     if (!maleThumbnail.isNull()) {
-                        _armorMalePreviewLabel->setPixmap(maleThumbnail);
+                        QPixmap scaledPixmap = maleThumbnail.scaled(_armorMalePreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                        _armorMalePreviewLabel->setPixmap(scaledPixmap);
                     } else {
                         _armorMalePreviewLabel->clear();
                         _armorMalePreviewLabel->setText("Failed to load male armor FRM");
@@ -2283,7 +3338,8 @@ void ProEditorDialog::updateArmorPreview() {
         // Use cached frame if available, otherwise fall back to static thumbnail
         if (_armorCurrentFrame < static_cast<int>(_armorFemaleFrameCache.size()) && 
             !_armorFemaleFrameCache[_armorCurrentFrame].isNull()) {
-            _armorFemalePreviewLabel->setPixmap(_armorFemaleFrameCache[_armorCurrentFrame]);
+            QPixmap scaledPixmap = _armorFemaleFrameCache[_armorCurrentFrame].scaled(_armorFemalePreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            _armorFemalePreviewLabel->setPixmap(scaledPixmap);
         } else {
             // Fall back to static thumbnail generation
             try {
@@ -2294,9 +3350,10 @@ void ProEditorDialog::updateArmorPreview() {
                     _armorFemalePreviewLabel->clear();
                     _armorFemalePreviewLabel->setText("Invalid female armor FID");
                 } else {
-                    QPixmap femaleThumbnail = createFrmThumbnail(femaleFrmPath, QSize(150, 150));
+                    QPixmap femaleThumbnail = createFrmThumbnail(femaleFrmPath, QSize(120, 120));
                     if (!femaleThumbnail.isNull()) {
-                        _armorFemalePreviewLabel->setPixmap(femaleThumbnail);
+                        QPixmap scaledPixmap = femaleThumbnail.scaled(_armorFemalePreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                        _armorFemalePreviewLabel->setPixmap(scaledPixmap);
                     } else {
                         _armorFemalePreviewLabel->clear();
                         _armorFemalePreviewLabel->setText("Failed to load female armor FRM");
@@ -2491,10 +3548,27 @@ void ProEditorDialog::setupCritterTab() {
     _critterTab = new QWidget();
     QVBoxLayout* mainLayout = new QVBoxLayout(_critterTab);
     
-    // Create scroll area for all the critter fields
-    QScrollArea* scrollArea = new QScrollArea();
-    QWidget* scrollWidget = new QWidget();
-    QFormLayout* layout = new QFormLayout(scrollWidget);
+    // Create horizontal layout for 3 columns
+    QHBoxLayout* columnsLayout = new QHBoxLayout();
+    
+    // Column 1: Basic & SPECIAL Stats
+    QWidget* column1 = new QWidget();
+    QVBoxLayout* column1Layout = new QVBoxLayout(column1);
+    column1Layout->setContentsMargins(5, 5, 5, 5);
+    
+    // Column 2: Combat & Skills
+    QWidget* column2 = new QWidget(); 
+    QVBoxLayout* column2Layout = new QVBoxLayout(column2);
+    column2Layout->setContentsMargins(5, 5, 5, 5);
+    
+    // Column 3: Bonus Stats
+    QWidget* column3 = new QWidget();
+    QVBoxLayout* column3Layout = new QVBoxLayout(column3);
+    column3Layout->setContentsMargins(5, 5, 5, 5);
+    
+    // === COLUMN 1: Basic & SPECIAL Stats ===
+    QGroupBox* basicGroup = new QGroupBox("Basic Info");
+    QFormLayout* basicLayout = new QFormLayout(basicGroup);
     
     // Basic critter data - Head FID with selector button
     QWidget* headFidWidget = new QWidget();
@@ -2512,23 +3586,55 @@ void ProEditorDialog::setupCritterTab() {
     
     headFidLayout->addWidget(_critterHeadFIDLabel);
     headFidLayout->addWidget(_critterHeadFIDSelectorButton);
-    layout->addRow("Head FID:", headFidWidget);
+    basicLayout->addRow("Head FID:", headFidWidget);
     
     _critterAIPacketEdit = new QSpinBox();
     _critterAIPacketEdit->setRange(0, 999);
     _critterAIPacketEdit->setToolTip("AI packet number for critter behavior");
-    layout->addRow("AI Packet:", _critterAIPacketEdit);
+    basicLayout->addRow("AI Packet:", _critterAIPacketEdit);
     
     _critterTeamNumberEdit = new QSpinBox();
     _critterTeamNumberEdit->setRange(0, 999);
     _critterTeamNumberEdit->setToolTip("Team number for faction identification");
-    layout->addRow("Team Number:", _critterTeamNumberEdit);
+    basicLayout->addRow("Team Number:", _critterTeamNumberEdit);
     
     _critterFlagsEdit = new QSpinBox();
     _critterFlagsEdit->setRange(0, 0xFFFFFF);
     _critterFlagsEdit->setDisplayIntegerBase(16);
     _critterFlagsEdit->setToolTip("Critter behavior flags (hex)");
-    layout->addRow("Flags:", _critterFlagsEdit);
+    basicLayout->addRow("Flags:", _critterFlagsEdit);
+    
+    _critterAgeEdit = new QSpinBox();
+    _critterAgeEdit->setRange(0, 999);
+    _critterAgeEdit->setToolTip("Critter age");
+    basicLayout->addRow("Age:", _critterAgeEdit);
+    
+    _critterGenderCombo = new QComboBox();
+    _critterGenderCombo->addItems({"Male", "Female"});
+    _critterGenderCombo->setToolTip("Critter gender");
+    basicLayout->addRow("Gender:", _critterGenderCombo);
+    
+    _critterBodyTypeCombo = new QComboBox();
+    _critterBodyTypeCombo->addItems({"Biped", "Quadruped", "Robotic"});
+    _critterBodyTypeCombo->setToolTip("Body type for animations");
+    basicLayout->addRow("Body Type:", _critterBodyTypeCombo);
+    
+    _critterExperienceEdit = new QSpinBox();
+    _critterExperienceEdit->setRange(0, 99999);
+    _critterExperienceEdit->setToolTip("Experience points for killing this critter");
+    basicLayout->addRow("Experience:", _critterExperienceEdit);
+    
+    _critterKillTypeEdit = new QSpinBox();
+    _critterKillTypeEdit->setRange(0, 999);
+    _critterKillTypeEdit->setToolTip("Kill type for karma tracking");
+    basicLayout->addRow("Kill Type:", _critterKillTypeEdit);
+    
+    _critterDamageTypeEdit = new QSpinBox();
+    _critterDamageTypeEdit->setRange(0, 10);
+    _critterDamageTypeEdit->setToolTip("Default damage type");
+    basicLayout->addRow("Damage Type:", _critterDamageTypeEdit);
+    
+    column1Layout->addWidget(basicGroup);
     
     // SPECIAL stats group
     QGroupBox* specialGroup = new QGroupBox("SPECIAL Stats");
@@ -2542,9 +3648,10 @@ void ProEditorDialog::setupCritterTab() {
         specialLayout->addWidget(new QLabel(specialNames[i]), i / 4, (i % 4) * 2);
         specialLayout->addWidget(_critterSpecialStatEdits[i], i / 4, (i % 4) * 2 + 1);
     }
-    layout->addWidget(specialGroup);
+    column1Layout->addWidget(specialGroup);
+    column1Layout->addStretch();
     
-    // Combat stats
+    // === COLUMN 2: Combat & Skills ===
     QGroupBox* combatGroup = new QGroupBox("Combat Stats");
     QGridLayout* combatLayout = new QGridLayout(combatGroup);
     
@@ -2572,33 +3679,37 @@ void ProEditorDialog::setupCritterTab() {
     combatLayout->addWidget(new QLabel("Melee Damage:"), 1, 2);
     combatLayout->addWidget(_critterMeleeDamageEdit, 1, 3);
     
-    layout->addWidget(combatGroup);
-    
-    // Other stats
     _critterCarryWeightMaxEdit = new QSpinBox();
     _critterCarryWeightMaxEdit->setRange(0, 99999);
     _critterCarryWeightMaxEdit->setToolTip("Maximum carrying capacity");
-    layout->addRow("Carry Weight:", _critterCarryWeightMaxEdit);
+    combatLayout->addWidget(new QLabel("Carry Weight:"), 2, 0);
+    combatLayout->addWidget(_critterCarryWeightMaxEdit, 2, 1);
     
     _critterSequenceEdit = new QSpinBox();
     _critterSequenceEdit->setRange(0, 50);
     _critterSequenceEdit->setToolTip("Combat sequence modifier");
-    layout->addRow("Sequence:", _critterSequenceEdit);
+    combatLayout->addWidget(new QLabel("Sequence:"), 2, 2);
+    combatLayout->addWidget(_critterSequenceEdit, 2, 3);
     
     _critterHealingRateEdit = new QSpinBox();
     _critterHealingRateEdit->setRange(0, 50);
     _critterHealingRateEdit->setToolTip("Natural healing rate");
-    layout->addRow("Healing Rate:", _critterHealingRateEdit);
+    combatLayout->addWidget(new QLabel("Healing Rate:"), 3, 0);
+    combatLayout->addWidget(_critterHealingRateEdit, 3, 1);
     
     _critterCriticalChanceEdit = new QSpinBox();
     _critterCriticalChanceEdit->setRange(0, 100);
     _critterCriticalChanceEdit->setToolTip("Critical hit chance percentage");
-    layout->addRow("Critical Chance:", _critterCriticalChanceEdit);
+    combatLayout->addWidget(new QLabel("Critical Chance:"), 3, 2);
+    combatLayout->addWidget(_critterCriticalChanceEdit, 3, 3);
     
     _critterBetterCriticalsEdit = new QSpinBox();
     _critterBetterCriticalsEdit->setRange(0, 100);
     _critterBetterCriticalsEdit->setToolTip("Better criticals bonus");
-    layout->addRow("Better Criticals:", _critterBetterCriticalsEdit);
+    combatLayout->addWidget(new QLabel("Better Criticals:"), 4, 0);
+    combatLayout->addWidget(_critterBetterCriticalsEdit, 4, 1);
+    
+    column2Layout->addWidget(combatGroup);
     
     // Damage threshold group (7 damage types: Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion)
     QGroupBox* thresholdGroup = new QGroupBox("Damage Threshold");
@@ -2612,7 +3723,7 @@ void ProEditorDialog::setupCritterTab() {
         thresholdLayout->addWidget(new QLabel(damageTypes[i]), i / 4, (i % 4) * 2);
         thresholdLayout->addWidget(_critterDamageThresholdEdits[i], i / 4, (i % 4) * 2 + 1);
     }
-    layout->addWidget(thresholdGroup);
+    column2Layout->addWidget(thresholdGroup);
     
     // Damage resistance group (9 damage types: Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion, Combat, Radiation)
     QGroupBox* resistanceGroup = new QGroupBox("Damage Resistance");
@@ -2627,7 +3738,7 @@ void ProEditorDialog::setupCritterTab() {
         resistanceLayout->addWidget(new QLabel(resistanceTypes[i]), i / 3, (i % 3) * 2);
         resistanceLayout->addWidget(_critterDamageResistEdits[i], i / 3, (i % 3) * 2 + 1);
     }
-    layout->addWidget(resistanceGroup);
+    column2Layout->addWidget(resistanceGroup);
     
     // Skills group (18 skills)
     QGroupBox* skillsGroup = new QGroupBox("Skills");
@@ -2646,9 +3757,10 @@ void ProEditorDialog::setupCritterTab() {
         skillsLayout->addWidget(new QLabel(skillNames[i]), i / 3, (i % 3) * 2);
         skillsLayout->addWidget(_critterSkillEdits[i], i / 3, (i % 3) * 2 + 1);
     }
-    layout->addWidget(skillsGroup);
+    column2Layout->addWidget(skillsGroup);
+    column2Layout->addStretch();
     
-    // Bonus SPECIAL stats group
+    // === COLUMN 3: Bonus Stats ===
     QGroupBox* bonusSpecialGroup = new QGroupBox("Bonus SPECIAL Stats");
     QGridLayout* bonusSpecialLayout = new QGridLayout(bonusSpecialGroup);
     const char* bonusSpecialNames[] = {"STR", "PER", "END", "CHR", "INT", "AGL", "LCK"};
@@ -2660,68 +3772,79 @@ void ProEditorDialog::setupCritterTab() {
         bonusSpecialLayout->addWidget(new QLabel(QString("Bonus %1:").arg(bonusSpecialNames[i])), i / 4, (i % 4) * 2);
         bonusSpecialLayout->addWidget(_critterBonusSpecialStatEdits[i], i / 4, (i % 4) * 2 + 1);
     }
-    layout->addWidget(bonusSpecialGroup);
+    column3Layout->addWidget(bonusSpecialGroup);
     
     // Bonus derived stats group
     QGroupBox* bonusDerivedGroup = new QGroupBox("Bonus Derived Stats");
-    QFormLayout* bonusDerivedLayout = new QFormLayout(bonusDerivedGroup);
+    QGridLayout* bonusDerivedLayout = new QGridLayout(bonusDerivedGroup);
     
     _critterBonusHealthPointsEdit = new QSpinBox();
     _critterBonusHealthPointsEdit->setRange(-999, 999);
     _critterBonusHealthPointsEdit->setToolTip("Bonus hit points modifier");
-    bonusDerivedLayout->addRow("Bonus Hit Points:", _critterBonusHealthPointsEdit);
+    bonusDerivedLayout->addWidget(new QLabel("Hit Points:"), 0, 0);
+    bonusDerivedLayout->addWidget(_critterBonusHealthPointsEdit, 0, 1);
     
     _critterBonusActionPointsEdit = new QSpinBox();
     _critterBonusActionPointsEdit->setRange(-20, 20);
     _critterBonusActionPointsEdit->setToolTip("Bonus action points modifier");
-    bonusDerivedLayout->addRow("Bonus Action Points:", _critterBonusActionPointsEdit);
+    bonusDerivedLayout->addWidget(new QLabel("Action Points:"), 1, 0);
+    bonusDerivedLayout->addWidget(_critterBonusActionPointsEdit, 1, 1);
     
     _critterBonusArmorClassEdit = new QSpinBox();
     _critterBonusArmorClassEdit->setRange(-50, 50);
     _critterBonusArmorClassEdit->setToolTip("Bonus armor class modifier");
-    bonusDerivedLayout->addRow("Bonus Armor Class:", _critterBonusArmorClassEdit);
+    bonusDerivedLayout->addWidget(new QLabel("Armor Class:"), 2, 0);
+    bonusDerivedLayout->addWidget(_critterBonusArmorClassEdit, 2, 1);
     
     _critterBonusMeleeDamageEdit = new QSpinBox();
     _critterBonusMeleeDamageEdit->setRange(-50, 50);
     _critterBonusMeleeDamageEdit->setToolTip("Bonus melee damage modifier");
-    bonusDerivedLayout->addRow("Bonus Melee Damage:", _critterBonusMeleeDamageEdit);
+    bonusDerivedLayout->addWidget(new QLabel("Melee Damage:"), 3, 0);
+    bonusDerivedLayout->addWidget(_critterBonusMeleeDamageEdit, 3, 1);
     
     _critterBonusCarryWeightEdit = new QSpinBox();
     _critterBonusCarryWeightEdit->setRange(-999, 999);
     _critterBonusCarryWeightEdit->setToolTip("Bonus carry weight modifier");
-    bonusDerivedLayout->addRow("Bonus Carry Weight:", _critterBonusCarryWeightEdit);
+    bonusDerivedLayout->addWidget(new QLabel("Carry Weight:"), 4, 0);
+    bonusDerivedLayout->addWidget(_critterBonusCarryWeightEdit, 4, 1);
     
     _critterBonusSequenceEdit = new QSpinBox();
     _critterBonusSequenceEdit->setRange(-20, 20);
     _critterBonusSequenceEdit->setToolTip("Bonus sequence modifier");
-    bonusDerivedLayout->addRow("Bonus Sequence:", _critterBonusSequenceEdit);
+    bonusDerivedLayout->addWidget(new QLabel("Sequence:"), 5, 0);
+    bonusDerivedLayout->addWidget(_critterBonusSequenceEdit, 5, 1);
     
     _critterBonusHealingRateEdit = new QSpinBox();
     _critterBonusHealingRateEdit->setRange(-10, 10);
     _critterBonusHealingRateEdit->setToolTip("Bonus healing rate modifier");
-    bonusDerivedLayout->addRow("Bonus Healing Rate:", _critterBonusHealingRateEdit);
+    bonusDerivedLayout->addWidget(new QLabel("Healing Rate:"), 6, 0);
+    bonusDerivedLayout->addWidget(_critterBonusHealingRateEdit, 6, 1);
     
     _critterBonusCriticalChanceEdit = new QSpinBox();
     _critterBonusCriticalChanceEdit->setRange(-50, 50);
     _critterBonusCriticalChanceEdit->setToolTip("Bonus critical chance modifier");
-    bonusDerivedLayout->addRow("Bonus Critical Chance:", _critterBonusCriticalChanceEdit);
+    bonusDerivedLayout->addWidget(new QLabel("Critical Chance:"), 7, 0);
+    bonusDerivedLayout->addWidget(_critterBonusCriticalChanceEdit, 7, 1);
     
     _critterBonusBetterCriticalsEdit = new QSpinBox();
     _critterBonusBetterCriticalsEdit->setRange(-50, 50);
     _critterBonusBetterCriticalsEdit->setToolTip("Bonus better criticals modifier");
-    bonusDerivedLayout->addRow("Bonus Better Criticals:", _critterBonusBetterCriticalsEdit);
+    bonusDerivedLayout->addWidget(new QLabel("Better Criticals:"), 8, 0);
+    bonusDerivedLayout->addWidget(_critterBonusBetterCriticalsEdit, 8, 1);
     
     _critterBonusAgeEdit = new QSpinBox();
     _critterBonusAgeEdit->setRange(-999, 999);
     _critterBonusAgeEdit->setToolTip("Bonus age modifier");
-    bonusDerivedLayout->addRow("Bonus Age:", _critterBonusAgeEdit);
+    bonusDerivedLayout->addWidget(new QLabel("Age:"), 9, 0);
+    bonusDerivedLayout->addWidget(_critterBonusAgeEdit, 9, 1);
     
     _critterBonusGenderEdit = new QSpinBox();
     _critterBonusGenderEdit->setRange(-1, 1);
     _critterBonusGenderEdit->setToolTip("Bonus gender modifier");
-    bonusDerivedLayout->addRow("Bonus Gender:", _critterBonusGenderEdit);
+    bonusDerivedLayout->addWidget(new QLabel("Gender:"), 10, 0);
+    bonusDerivedLayout->addWidget(_critterBonusGenderEdit, 10, 1);
     
-    layout->addWidget(bonusDerivedGroup);
+    column3Layout->addWidget(bonusDerivedGroup);
     
     // Bonus damage threshold group (8 damage types)
     QGroupBox* bonusThresholdGroup = new QGroupBox("Bonus Damage Threshold");
@@ -2735,7 +3858,7 @@ void ProEditorDialog::setupCritterTab() {
         bonusThresholdLayout->addWidget(new QLabel(bonusThresholdTypes[i]), i / 4, (i % 4) * 2);
         bonusThresholdLayout->addWidget(_critterBonusDamageThresholdEdits[i], i / 4, (i % 4) * 2 + 1);
     }
-    layout->addWidget(bonusThresholdGroup);
+    column3Layout->addWidget(bonusThresholdGroup);
     
     // Bonus damage resistance group (8 damage types)
     QGroupBox* bonusResistanceGroup = new QGroupBox("Bonus Damage Resistance");
@@ -2750,42 +3873,15 @@ void ProEditorDialog::setupCritterTab() {
         bonusResistanceLayout->addWidget(new QLabel(bonusResistanceTypes[i]), i / 4, (i % 4) * 2);
         bonusResistanceLayout->addWidget(_critterBonusDamageResistanceEdits[i], i / 4, (i % 4) * 2 + 1);
     }
-    layout->addWidget(bonusResistanceGroup);
+    column3Layout->addWidget(bonusResistanceGroup);
+    column3Layout->addStretch();
     
-    _critterAgeEdit = new QSpinBox();
-    _critterAgeEdit->setRange(0, 999);
-    _critterAgeEdit->setToolTip("Critter age");
-    layout->addRow("Age:", _critterAgeEdit);
+    // Add columns to main layout
+    columnsLayout->addWidget(column1, 1);
+    columnsLayout->addWidget(column2, 1);
+    columnsLayout->addWidget(column3, 1);
     
-    _critterGenderCombo = new QComboBox();
-    _critterGenderCombo->addItems({"Male", "Female"});
-    _critterGenderCombo->setToolTip("Critter gender");
-    layout->addRow("Gender:", _critterGenderCombo);
-    
-    _critterBodyTypeCombo = new QComboBox();
-    _critterBodyTypeCombo->addItems({"Biped", "Quadruped", "Robotic"});
-    _critterBodyTypeCombo->setToolTip("Body type for animations");
-    layout->addRow("Body Type:", _critterBodyTypeCombo);
-    
-    _critterExperienceEdit = new QSpinBox();
-    _critterExperienceEdit->setRange(0, 99999);
-    _critterExperienceEdit->setToolTip("Experience points for killing this critter");
-    layout->addRow("Experience:", _critterExperienceEdit);
-    
-    _critterKillTypeEdit = new QSpinBox();
-    _critterKillTypeEdit->setRange(0, 999);
-    _critterKillTypeEdit->setToolTip("Kill type for karma tracking");
-    layout->addRow("Kill Type:", _critterKillTypeEdit);
-    
-    _critterDamageTypeEdit = new QSpinBox();
-    _critterDamageTypeEdit->setRange(0, 10);
-    _critterDamageTypeEdit->setToolTip("Default damage type");
-    layout->addRow("Damage Type:", _critterDamageTypeEdit);
-    
-    // Set up scroll area
-    scrollArea->setWidget(scrollWidget);
-    scrollArea->setWidgetResizable(true);
-    mainLayout->addWidget(scrollArea);
+    mainLayout->addLayout(columnsLayout);
     
     _tabWidget->addTab(_critterTab, "Critter");
     
@@ -3621,6 +4717,7 @@ void ProEditorDialog::loadAnimationFrames() {
             // Items, walls, tiles, misc never animate
         }
         _animationControls->setEnabled(shouldEnableAnimation);
+        _animationControls->setVisible(shouldEnableAnimation); // Show controls when animation is available
         
  
         
@@ -3643,6 +4740,12 @@ void ProEditorDialog::loadAnimationFrames() {
 void ProEditorDialog::loadArmorAnimationFrames() {
     _armorMaleFrameCache.clear();
     _armorFemaleFrameCache.clear();
+    
+    // Check if armor animation controls are initialized - return early if not
+    if (!_armorFrameSlider || !_armorFrameLabel || !_armorDirectionCombo || !_armorAnimationControls) {
+        spdlog::debug("ProEditorDialog::loadArmorAnimationFrames() - armor animation controls not initialized yet, skipping");
+        return;
+    }
     
     if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::ARMOR) {
         _armorAnimationControls->setEnabled(false);
@@ -3739,7 +4842,9 @@ void ProEditorDialog::loadArmorAnimationFrames() {
         
     } catch (const std::exception& e) {
         spdlog::warn("ProEditorDialog: Exception loading armor animation frames: {}", e.what());
-        _armorAnimationControls->setEnabled(false);
+        if (_armorAnimationControls) {
+            _armorAnimationControls->setEnabled(false);
+        }
     }
 }
 
@@ -4209,6 +5314,291 @@ QString ProEditorDialog::getFrmFilename(int32_t fid) {
 
 void ProEditorDialog::onCritterHeadFidSelectorClicked() {
     openFrmSelectorForLabel(_critterHeadFIDLabel, &_critterHeadFID, 1); // Object type 1 for critters
+}
+
+void ProEditorDialog::setupArmorFields() {
+    // === COLUMN 1: Armor Class and Damage Resistance ===
+    
+    // Armor Class
+    QGroupBox* acGroup = new QGroupBox("Armor Class");
+    QFormLayout* acLayout = new QFormLayout(acGroup);
+    acLayout->setContentsMargins(8, 8, 8, 8);
+    acLayout->setSpacing(4);
+    
+    _armorClassEdit = createSpinBox(0, 999, "Armor Class - higher values provide better protection");
+    connectSpinBox(_armorClassEdit);
+    acLayout->addRow("AC:", _armorClassEdit);
+    
+    _leftFieldsLayout->addWidget(acGroup);
+    
+    // Damage Resistance
+    QGroupBox* resistGroup = new QGroupBox("Damage Resistance");
+    QGridLayout* resistLayout = new QGridLayout(resistGroup);
+    resistLayout->setContentsMargins(8, 8, 8, 8);
+    resistLayout->setSpacing(4);
+    
+    const QStringList damageTypes = {"Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion"};
+    
+    resistLayout->addWidget(new QLabel("Type"), 0, 0);
+    resistLayout->addWidget(new QLabel("Resist %"), 0, 1);
+    
+    for (int i = 0; i < 7; ++i) {
+        resistLayout->addWidget(new QLabel(damageTypes[i]), i + 1, 0);
+        
+        _damageResistEdits[i] = createSpinBox(0, 100, QString("Damage resistance against %1 damage").arg(damageTypes[i]));
+        _damageResistEdits[i]->setSuffix("%");
+        connectSpinBox(_damageResistEdits[i]);
+        resistLayout->addWidget(_damageResistEdits[i], i + 1, 1);
+    }
+    
+    _leftFieldsLayout->addWidget(resistGroup);
+    
+    // Armor Views (Male/Female armor preview with animation controls)
+    setupArmorPreviewCompact(_leftFieldsLayout);
+    
+    // === COLUMN 2: Damage Threshold and Misc Properties ===
+    
+    // Damage Threshold
+    QGroupBox* thresholdGroup = new QGroupBox("Damage Threshold");
+    QGridLayout* thresholdLayout = new QGridLayout(thresholdGroup);
+    thresholdLayout->setContentsMargins(8, 8, 8, 8);
+    thresholdLayout->setSpacing(4);
+    
+    thresholdLayout->addWidget(new QLabel("Type"), 0, 0);
+    thresholdLayout->addWidget(new QLabel("Threshold"), 0, 1);
+    
+    for (int i = 0; i < 7; ++i) {
+        thresholdLayout->addWidget(new QLabel(damageTypes[i]), i + 1, 0);
+        
+        _damageThresholdEdits[i] = createSpinBox(0, 999, QString("Damage threshold against %1 damage").arg(damageTypes[i]));
+        connectSpinBox(_damageThresholdEdits[i]);
+        thresholdLayout->addWidget(_damageThresholdEdits[i], i + 1, 1);
+    }
+    
+    _rightFieldsLayout->addWidget(thresholdGroup);
+    
+    // Misc Properties
+    QGroupBox* miscGroup = new QGroupBox("Misc Properties");
+    QFormLayout* miscLayout = new QFormLayout(miscGroup);
+    miscLayout->setContentsMargins(8, 8, 8, 8);
+    miscLayout->setSpacing(4);
+    
+    _armorPerkCombo = createComboBox({"None", "PowerArmor", "CombatArmor", "Other"}, "Special perk associated with this armor");
+    connectComboBox(_armorPerkCombo);
+    miscLayout->addRow("Perk:", _armorPerkCombo);
+    
+    // AI Priority display
+    _armorAIPriorityLabel = new QLabel("0");
+    _armorAIPriorityLabel->setStyleSheet("font-weight: bold; color: #0066CC;");
+    _armorAIPriorityLabel->setToolTip("AI Priority = AC + all DT values + all DR values (used by AI to select best armor)");
+    miscLayout->addRow("AI Priority:", _armorAIPriorityLabel);
+    
+    _rightFieldsLayout->addWidget(miscGroup);
+    
+    // Add stretch to push content to top
+    _leftFieldsLayout->addStretch();
+    _rightFieldsLayout->addStretch();
+}
+
+void ProEditorDialog::setupContainerFields() {
+    // === COLUMN 1: Container Properties ===
+    
+    QGroupBox* containerGroup = new QGroupBox("Container Properties");
+    QFormLayout* containerLayout = new QFormLayout(containerGroup);
+    containerLayout->setContentsMargins(8, 8, 8, 8);
+    containerLayout->setSpacing(4);
+    
+    _containerMaxSizeEdit = createSpinBox(0, 999999, "Maximum size in volume units that this container can hold");
+    connectSpinBox(_containerMaxSizeEdit);
+    containerLayout->addRow("Max Size:", _containerMaxSizeEdit);
+    
+    _leftFieldsLayout->addWidget(containerGroup);
+    
+    // === COLUMN 2: Container Flags ===
+    
+    QGroupBox* flagsGroup = new QGroupBox("Container Flags");
+    QVBoxLayout* flagsLayout = new QVBoxLayout(flagsGroup);
+    flagsLayout->setContentsMargins(8, 8, 8, 8);
+    flagsLayout->setSpacing(4);
+    
+    const QStringList flagNames = {"Use", "Use On", "Look", "Talk", "Pickup"};
+    for (int i = 0; i < 5; ++i) {
+        _containerFlagChecks[i] = new QCheckBox(flagNames[i]);
+        connectCheckBox(_containerFlagChecks[i]);
+        flagsLayout->addWidget(_containerFlagChecks[i]);
+    }
+    
+    _rightFieldsLayout->addWidget(flagsGroup);
+    
+    // Add stretch to push content to top
+    _leftFieldsLayout->addStretch();
+    _rightFieldsLayout->addStretch();
+}
+
+void ProEditorDialog::setupDrugFields() {
+    // TODO: Implement drug fields - placeholder for now
+    QLabel* placeholder = new QLabel("Drug fields - coming soon");
+    _leftFieldsLayout->addWidget(placeholder);
+    _leftFieldsLayout->addStretch();
+    _rightFieldsLayout->addStretch();
+}
+
+void ProEditorDialog::setupWeaponFields() {
+    // === COLUMN 1: Basic Weapon Properties ===
+    
+    // Basic Properties
+    QGroupBox* basicGroup = new QGroupBox("Basic Properties");
+    QFormLayout* basicLayout = new QFormLayout(basicGroup);
+    basicLayout->setContentsMargins(8, 8, 8, 8);
+    basicLayout->setSpacing(4);
+    
+    _weaponAnimationCombo = createComboBox({"None", "Knife", "Club", "Hammer", "Spear", "Pistol", "SMG", "Rifle", "Big Gun", "Minigun", "Rocket Launcher"}, "Weapon animation type");
+    connectComboBox(_weaponAnimationCombo);
+    basicLayout->addRow("Animation:", _weaponAnimationCombo);
+    
+    _weaponDamageMinEdit = createSpinBox(0, 999, "Minimum damage");
+    connectSpinBox(_weaponDamageMinEdit);
+    basicLayout->addRow("Min Damage:", _weaponDamageMinEdit);
+    
+    _weaponDamageMaxEdit = createSpinBox(0, 999, "Maximum damage");
+    connectSpinBox(_weaponDamageMaxEdit);
+    basicLayout->addRow("Max Damage:", _weaponDamageMaxEdit);
+    
+    _weaponDamageTypeCombo = createComboBox({"Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion"}, "Damage type");
+    connectComboBox(_weaponDamageTypeCombo);
+    basicLayout->addRow("Damage Type:", _weaponDamageTypeCombo);
+    
+    _leftFieldsLayout->addWidget(basicGroup);
+    
+    // Range and Action Points
+    QGroupBox* rangeGroup = new QGroupBox("Range & Action Points");
+    QFormLayout* rangeLayout = new QFormLayout(rangeGroup);
+    rangeLayout->setContentsMargins(8, 8, 8, 8);
+    rangeLayout->setSpacing(4);
+    
+    _weaponRangePrimaryEdit = createSpinBox(0, 999, "Primary attack range");
+    connectSpinBox(_weaponRangePrimaryEdit);
+    rangeLayout->addRow("Range Primary:", _weaponRangePrimaryEdit);
+    
+    _weaponRangeSecondaryEdit = createSpinBox(0, 999, "Secondary attack range");
+    connectSpinBox(_weaponRangeSecondaryEdit);
+    rangeLayout->addRow("Range Secondary:", _weaponRangeSecondaryEdit);
+    
+    _weaponAPPrimaryEdit = createSpinBox(0, 99, "Action points for primary attack");
+    connectSpinBox(_weaponAPPrimaryEdit);
+    rangeLayout->addRow("AP Primary:", _weaponAPPrimaryEdit);
+    
+    _weaponAPSecondaryEdit = createSpinBox(0, 99, "Action points for secondary attack");
+    connectSpinBox(_weaponAPSecondaryEdit);
+    rangeLayout->addRow("AP Secondary:", _weaponAPSecondaryEdit);
+    
+    _leftFieldsLayout->addWidget(rangeGroup);
+    
+    // === COLUMN 2: Advanced Properties ===
+    
+    // Requirements and Projectile
+    QGroupBox* reqGroup = new QGroupBox("Requirements & Projectile");
+    QFormLayout* reqLayout = new QFormLayout(reqGroup);
+    reqLayout->setContentsMargins(8, 8, 8, 8);
+    reqLayout->setSpacing(4);
+    
+    _weaponMinStrengthEdit = createSpinBox(0, 10, "Minimum strength required");
+    connectSpinBox(_weaponMinStrengthEdit);
+    reqLayout->addRow("Min Strength:", _weaponMinStrengthEdit);
+    
+    _weaponProjectilePIDEdit = createSpinBox(-1, 0x0FFFFFFF, "Projectile PID (or -1 for none)");
+    connectSpinBox(_weaponProjectilePIDEdit);
+    reqLayout->addRow("Projectile PID:", _weaponProjectilePIDEdit);
+    
+    _weaponCriticalFailEdit = createSpinBox(0, 100, "Critical failure chance");
+    connectSpinBox(_weaponCriticalFailEdit);
+    reqLayout->addRow("Critical Fail:", _weaponCriticalFailEdit);
+    
+    _weaponPerkCombo = createComboBox({"None", "Fast Shot", "Long Range", "Accurate", "Penetrate", "Knockback", "Knockdown", "Flame", "Other"}, "Weapon perk");
+    connectComboBox(_weaponPerkCombo);
+    reqLayout->addRow("Perk:", _weaponPerkCombo);
+    
+    _rightFieldsLayout->addWidget(reqGroup);
+    
+    // Ammo and Special
+    QGroupBox* ammoGroup = new QGroupBox("Ammo & Special");
+    QFormLayout* ammoLayout = new QFormLayout(ammoGroup);
+    ammoLayout->setContentsMargins(8, 8, 8, 8);
+    ammoLayout->setSpacing(4);
+    
+    _weaponAmmoTypeCombo = createComboBox({"None", "Small Energy Cell", "Micro Fusion Cell", "2mm EC", ".223 FMJ", "5mm JHP", "5mm AP", ".45 Caliber", "10mm JHP", "10mm AP", "14mm AP", "Flame Fuel", "Flamethrower Fuel Mk. II", "Rocket", "Explosive Rocket", "BB's", "Small Energy Cell", "Micro Fusion Cell"}, "Ammo type");
+    connectComboBox(_weaponAmmoTypeCombo);
+    ammoLayout->addRow("Ammo Type:", _weaponAmmoTypeCombo);
+    
+    _weaponAmmoPIDEdit = createSpinBox(-1, 0x0FFFFFFF, "Ammo PID (or -1 for none)");
+    connectSpinBox(_weaponAmmoPIDEdit);
+    ammoLayout->addRow("Ammo PID:", _weaponAmmoPIDEdit);
+    
+    _weaponAmmoCapacityEdit = createSpinBox(0, 999, "Maximum ammo capacity");
+    connectSpinBox(_weaponAmmoCapacityEdit);
+    ammoLayout->addRow("Ammo Capacity:", _weaponAmmoCapacityEdit);
+    
+    _weaponBurstRoundsEdit = createSpinBox(0, 99, "Rounds per burst");
+    connectSpinBox(_weaponBurstRoundsEdit);
+    ammoLayout->addRow("Burst Rounds:", _weaponBurstRoundsEdit);
+    
+    _weaponSoundIdEdit = createSpinBox(0, 255, "Sound effect ID");
+    connectSpinBox(_weaponSoundIdEdit);
+    ammoLayout->addRow("Sound ID:", _weaponSoundIdEdit);
+    
+    _rightFieldsLayout->addWidget(ammoGroup);
+    
+    // Weapon Flags
+    QGroupBox* flagsGroup = new QGroupBox("Weapon Flags");
+    QVBoxLayout* flagsLayout = new QVBoxLayout(flagsGroup);
+    flagsLayout->setContentsMargins(8, 8, 8, 8);
+    flagsLayout->setSpacing(4);
+    
+    _weaponEnergyWeaponCheck = new QCheckBox("Energy Weapon");
+    _weaponEnergyWeaponCheck->setToolTip("Mark as energy weapon (sfall extension)");
+    connectCheckBox(_weaponEnergyWeaponCheck);
+    flagsLayout->addWidget(_weaponEnergyWeaponCheck);
+    
+    _rightFieldsLayout->addWidget(flagsGroup);
+    
+    // Add stretch to push content to top
+    _leftFieldsLayout->addStretch();
+    _rightFieldsLayout->addStretch();
+}
+
+void ProEditorDialog::setupAmmoFields() {
+    // TODO: Implement ammo fields - placeholder for now
+    QLabel* placeholder = new QLabel("Ammo fields - coming soon");
+    _leftFieldsLayout->addWidget(placeholder);
+    _leftFieldsLayout->addStretch();
+    _rightFieldsLayout->addStretch();
+}
+
+void ProEditorDialog::setupMiscItemFields() {
+    // TODO: Implement misc item fields - placeholder for now
+    QLabel* placeholder = new QLabel("Misc item fields - coming soon");
+    _leftFieldsLayout->addWidget(placeholder);
+    _leftFieldsLayout->addStretch();
+    _rightFieldsLayout->addStretch();
+}
+
+void ProEditorDialog::setupKeyFields() {
+    // === COLUMN 1: Key Properties ===
+    
+    QGroupBox* keyGroup = new QGroupBox("Key Properties");
+    QFormLayout* keyLayout = new QFormLayout(keyGroup);
+    keyLayout->setContentsMargins(8, 8, 8, 8);
+    keyLayout->setSpacing(4);
+    
+    _keyIdEdit = createSpinBox(0, 999999, "Unique key identifier");
+    connectSpinBox(_keyIdEdit);
+    keyLayout->addRow("Key ID:", _keyIdEdit);
+    
+    _leftFieldsLayout->addWidget(keyGroup);
+    
+    // Add stretch to push content to top
+    _leftFieldsLayout->addStretch();
+    _rightFieldsLayout->addStretch();
 }
 
 } // namespace geck
