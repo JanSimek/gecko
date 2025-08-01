@@ -683,7 +683,10 @@ void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
 
     // Map proxy index to source index
     QModelIndex sourceIndex = _proxyModel->mapToSource(index);
-    QStandardItem* item = _treeModel->itemFromIndex(sourceIndex);
+    
+    // Always get the FileTreeItem from column 0 (first column), regardless of which column was clicked
+    QModelIndex fileItemIndex = sourceIndex.sibling(sourceIndex.row(), 0);
+    QStandardItem* item = _treeModel->itemFromIndex(fileItemIndex);
     FileTreeItem* treeItem = static_cast<FileTreeItem*>(item);
 
     if (treeItem && treeItem->getType() == FileTreeItem::File) {

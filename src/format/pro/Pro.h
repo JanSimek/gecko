@@ -260,6 +260,14 @@ public:
         } genericData;
     } sceneryData;
 
+    struct WallData {
+        uint32_t materialId;
+    } wallData;
+
+    struct TileData {
+        uint32_t materialId;
+    } tileData;
+
     unsigned int objectSubtypeId() const;
     void setObjectSubtypeId(unsigned int objectSubtypeId);
 

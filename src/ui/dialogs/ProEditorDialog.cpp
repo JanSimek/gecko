@@ -76,7 +76,6 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _lightFlag2Check(nullptr)
     , _lightFlag3Check(nullptr)
     , _lightFlag4Check(nullptr)
-    , _flagsExtRawEdit(nullptr)
     , _sidEdit(nullptr)
     , _materialIdEdit(nullptr)
     , _containerSizeEdit(nullptr)
@@ -206,23 +205,6 @@ void ProEditorDialog::setupCommonTab() {
     _messageIdEdit->setValue(_pro->header.message_id);
     layout->addRow("Message ID:", _messageIdEdit);
     
-    // FID with selector button
-    QWidget* fidWidget = new QWidget();
-    QHBoxLayout* fidLayout = new QHBoxLayout(fidWidget);
-    fidLayout->setContentsMargins(0, 0, 0, 0);
-    
-    _fidEdit = createSpinBox(INT32_MIN, INT32_MAX, "Frame ID - determines the visual appearance of the object");
-    _fidEdit->setValue(_pro->header.FID);
-    
-    _fidSelectorButton = new QPushButton("...");
-    _fidSelectorButton->setMaximumWidth(30);
-    _fidSelectorButton->setToolTip("Browse FRM files");
-    connect(_fidSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onFidSelectorClicked);
-    
-    fidLayout->addWidget(_fidEdit);
-    fidLayout->addWidget(_fidSelectorButton);
-    layout->addRow("FID:", fidWidget);
-    
     // Light Distance
     _lightDistanceEdit = createSpinBox(0, 999, "Distance that light from this object reaches (0 = no light)");
     _lightDistanceEdit->setValue(_pro->header.light_distance);
@@ -233,10 +215,8 @@ void ProEditorDialog::setupCommonTab() {
     _lightIntensityEdit->setValue(_pro->header.light_intensity);
     layout->addRow("Light Intensity:", _lightIntensityEdit);
     
-    // Flags (hex display)
-    _flagsEdit = createHexSpinBox(INT32_MAX, "Object flags (hex) - controls special behaviors and properties");
-    _flagsEdit->setValue(_pro->header.flags);
-    layout->addRow("Flags:", _flagsEdit);
+    // Object Flags (organized checkboxes instead of hex)
+    setupObjectFlagsGroup(layout);
     
     // Extended Flags (not for TILE and MISC types)
     if (_pro->type() != Pro::OBJECT_TYPE::TILE && _pro->type() != Pro::OBJECT_TYPE::MISC) {
@@ -255,12 +235,10 @@ void ProEditorDialog::setupCommonTab() {
     // Add item-specific common fields (only for items)
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
         // Material ID
-        _materialIdEdit = new QSpinBox();
-        _materialIdEdit->setRange(0, 999999);
-        _materialIdEdit->setValue(_pro->commonItemData.materialId);
-        _materialIdEdit->setToolTip("Material ID - determines material properties");
-        connect(_materialIdEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        layout->addRow("Material ID:", _materialIdEdit);
+        _materialIdEdit = createMaterialComboBox("Material type - determines material properties");
+        _materialIdEdit->setCurrentIndex(_pro->commonItemData.materialId);
+        connect(_materialIdEdit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
+        layout->addRow("Material:", _materialIdEdit);
         
         // Container Size
         _containerSizeEdit = new QSpinBox();
@@ -285,26 +263,6 @@ void ProEditorDialog::setupCommonTab() {
         connect(_basePriceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         layout->addRow("Base Price:", _basePriceEdit);
         
-        // Inventory FID with selector button
-        QWidget* invFidWidget = new QWidget();
-        QHBoxLayout* invFidLayout = new QHBoxLayout(invFidWidget);
-        invFidLayout->setContentsMargins(0, 0, 0, 0);
-        
-        _inventoryFIDEdit = new QSpinBox();
-        _inventoryFIDEdit->setRange(INT32_MIN, INT32_MAX);
-        _inventoryFIDEdit->setValue(_pro->commonItemData.inventoryFID);
-        _inventoryFIDEdit->setToolTip("Frame ID for inventory/interface view");
-        connect(_inventoryFIDEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        
-        _inventoryFIDSelectorButton = new QPushButton("...");
-        _inventoryFIDSelectorButton->setMaximumWidth(30);
-        _inventoryFIDSelectorButton->setToolTip("Browse FRM files for inventory view");
-        connect(_inventoryFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onInventoryFidSelectorClicked);
-        
-        invFidLayout->addWidget(_inventoryFIDEdit);
-        invFidLayout->addWidget(_inventoryFIDSelectorButton);
-        layout->addRow("Inventory FID:", invFidWidget);
-        
         // Sound ID
         _soundIdEdit = new QSpinBox();
         _soundIdEdit->setRange(0, 255);
@@ -312,6 +270,22 @@ void ProEditorDialog::setupCommonTab() {
         _soundIdEdit->setToolTip("Sound effect ID when using/manipulating the item");
         connect(_soundIdEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         layout->addRow("Sound ID:", _soundIdEdit);
+    }
+    
+    // Add wall-specific fields (only for walls)
+    if (_pro->type() == Pro::OBJECT_TYPE::WALL) {
+        _wallMaterialIdEdit = createMaterialComboBox("Material type - determines wall material properties and interactions");
+        _wallMaterialIdEdit->setCurrentIndex(_pro->wallData.materialId);
+        connect(_wallMaterialIdEdit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
+        layout->addRow("Material:", _wallMaterialIdEdit);
+    }
+    
+    // Add tile-specific fields (only for tiles)
+    if (_pro->type() == Pro::OBJECT_TYPE::TILE) {
+        _tileMaterialIdEdit = createMaterialComboBox("Material type - determines tile material properties and interactions");
+        _tileMaterialIdEdit->setCurrentIndex(_pro->tileData.materialId);
+        connect(_tileMaterialIdEdit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
+        layout->addRow("Material:", _tileMaterialIdEdit);
     }
     
     _tabWidget->addTab(_commonTab, "Common");
@@ -337,21 +311,6 @@ void ProEditorDialog::setupExtendedFlagsGroup(QFormLayout* layout) {
     } else {
         setupOtherExtendedFlags(flagsLayout);
     }
-    
-    // Raw hex editor for advanced users (always shown)
-    QGroupBox* rawGroup = new QGroupBox("Raw Editor (Advanced)");
-    QFormLayout* rawLayout = new QFormLayout(rawGroup);
-    
-    _flagsExtRawEdit = createHexSpinBox(UINT32_MAX, "Raw extended flags value in hexadecimal");
-    // Set initial value based on object type
-    uint32_t initialFlags = _pro->type() == Pro::OBJECT_TYPE::ITEM ? 
-        _pro->commonItemData.flagsExt : 
-        (_pro->header.flags & 0xF0000000); // Only high bits for non-items
-    _flagsExtRawEdit->setValue(initialFlags);
-    connect(_flagsExtRawEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onExtendedFlagRawChanged);
-    rawLayout->addRow("Raw Hex:", _flagsExtRawEdit);
-    
-    flagsLayout->addWidget(rawGroup);
     
     layout->addRow("Extended Flags:", _extendedFlagsGroup);
 }
@@ -456,16 +415,13 @@ void ProEditorDialog::setupItemExtendedFlags(QVBoxLayout* layout) {
 
 void ProEditorDialog::setupOtherExtendedFlags(QVBoxLayout* layout) {
     // For critters, scenery, walls - show general flags
-    QGroupBox* generalGroup = new QGroupBox("Extended Flags");
-    QVBoxLayout* generalLayout = new QVBoxLayout(generalGroup);
-    
     _generalFlagCheck = new QCheckBox("General Flag");
     _generalFlagCheck->setChecked(_pro->type() == Pro::OBJECT_TYPE::ITEM ? 
         (_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG)) : 
         (_pro->header.flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG)));
     _generalFlagCheck->setToolTip("General purpose flag (scenery/walls/tiles)");
     connect(_generalFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    generalLayout->addWidget(_generalFlagCheck);
+    layout->addWidget(_generalFlagCheck);
     
     // Light flags for objects that can have light
     if (_pro->type() != Pro::OBJECT_TYPE::TILE) {
@@ -499,10 +455,113 @@ void ProEditorDialog::setupOtherExtendedFlags(QVBoxLayout* layout) {
         connect(_lightFlag4Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
         lightLayout->addWidget(_lightFlag4Check);
         
-        generalLayout->addWidget(lightGroup);
+        layout->addWidget(lightGroup);
     }
+}
+
+void ProEditorDialog::setupObjectFlagsGroup(QFormLayout* layout) {
+    QGroupBox* objectFlagsGroup = new QGroupBox("Object Flags");
+    QVBoxLayout* flagsLayout = new QVBoxLayout(objectFlagsGroup);
     
-    layout->addWidget(generalGroup);
+    uint32_t flags = _pro->header.flags;
+    
+    // Rendering flags group
+    QGroupBox* renderingGroup = new QGroupBox("Rendering");
+    QVBoxLayout* renderingLayout = new QVBoxLayout(renderingGroup);
+    
+    _flatCheck = new QCheckBox("Flat");
+    _flatCheck->setChecked(flags & 0x00000008);
+    _flatCheck->setToolTip("Rendered first, just after tiles");
+    connect(_flatCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    renderingLayout->addWidget(_flatCheck);
+    
+    _noBlockCheck = new QCheckBox("No Block");
+    _noBlockCheck->setChecked(flags & 0x00000010);
+    _noBlockCheck->setToolTip("Doesn't block the tile");
+    connect(_noBlockCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    renderingLayout->addWidget(_noBlockCheck);
+    
+    _multiHexCheck = new QCheckBox("Multi-Hex");
+    _multiHexCheck->setChecked(flags & 0x00000800);
+    _multiHexCheck->setToolTip("Object occupies multiple hexes");
+    connect(_multiHexCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    renderingLayout->addWidget(_multiHexCheck);
+    
+    _noHighlightCheck = new QCheckBox("No Highlight");
+    _noHighlightCheck->setChecked(flags & 0x00001000);
+    _noHighlightCheck->setToolTip("Doesn't highlight border; used for containers");
+    connect(_noHighlightCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    renderingLayout->addWidget(_noHighlightCheck);
+    
+    flagsLayout->addWidget(renderingGroup);
+    
+    // Transparency flags group (mutually exclusive)
+    QGroupBox* transparencyGroup = new QGroupBox("Transparency (Mutually Exclusive)");
+    QVBoxLayout* transparencyLayout = new QVBoxLayout(transparencyGroup);
+    
+    _transNoneCheck = new QCheckBox("Opaque (TransNone)");
+    _transNoneCheck->setChecked(flags & 0x00008000);
+    _transNoneCheck->setToolTip("Opaque - not the default value");
+    connect(_transNoneCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    transparencyLayout->addWidget(_transNoneCheck);
+    
+    _transRedCheck = new QCheckBox("Red Transparency");
+    _transRedCheck->setChecked(flags & 0x00004000);
+    _transRedCheck->setToolTip("Red transparency effect");
+    connect(_transRedCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    transparencyLayout->addWidget(_transRedCheck);
+    
+    _transWallCheck = new QCheckBox("Wall Transparency");
+    _transWallCheck->setChecked(flags & 0x00010000);
+    _transWallCheck->setToolTip("Wall transparency effect");
+    connect(_transWallCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    transparencyLayout->addWidget(_transWallCheck);
+    
+    _transGlassCheck = new QCheckBox("Glass Transparency");
+    _transGlassCheck->setChecked(flags & 0x00020000);
+    _transGlassCheck->setToolTip("Glass transparency effect");
+    connect(_transGlassCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    transparencyLayout->addWidget(_transGlassCheck);
+    
+    _transSteamCheck = new QCheckBox("Steam Transparency");
+    _transSteamCheck->setChecked(flags & 0x00040000);
+    _transSteamCheck->setToolTip("Steam transparency effect");
+    connect(_transSteamCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    transparencyLayout->addWidget(_transSteamCheck);
+    
+    _transEnergyCheck = new QCheckBox("Energy Transparency");
+    _transEnergyCheck->setChecked(flags & 0x00080000);
+    _transEnergyCheck->setToolTip("Energy transparency effect");
+    connect(_transEnergyCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    transparencyLayout->addWidget(_transEnergyCheck);
+    
+    flagsLayout->addWidget(transparencyGroup);
+    
+    // Interaction flags group
+    QGroupBox* interactionGroup = new QGroupBox("Interaction");
+    QVBoxLayout* interactionLayout = new QVBoxLayout(interactionGroup);
+    
+    _wallTransEndCheck = new QCheckBox("Wall Trans End");
+    _wallTransEndCheck->setChecked(flags & 0x10000000);
+    _wallTransEndCheck->setToolTip("Changes transparency egg logic");
+    connect(_wallTransEndCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    interactionLayout->addWidget(_wallTransEndCheck);
+    
+    _lightThruCheck = new QCheckBox("Light Thru");
+    _lightThruCheck->setChecked(flags & 0x20000000);
+    _lightThruCheck->setToolTip("Light passes through");
+    connect(_lightThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    interactionLayout->addWidget(_lightThruCheck);
+    
+    _shootThruCheck = new QCheckBox("Shoot Thru");
+    _shootThruCheck->setChecked(flags & 0x80000000);
+    _shootThruCheck->setToolTip("Projectiles pass through");
+    connect(_shootThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    interactionLayout->addWidget(_shootThruCheck);
+    
+    flagsLayout->addWidget(interactionGroup);
+    
+    layout->addRow("Object Flags:", objectFlagsGroup);
 }
 
 void ProEditorDialog::setupArmorTab() {
@@ -956,6 +1015,25 @@ void ProEditorDialog::setupPreview() {
         _previewLabel->setText("No FRM loaded");
         previewGroupLayout->addWidget(_previewLabel);
         
+        // Add FID field between image and animation controls
+        QWidget* fidWidget = new QWidget();
+        QHBoxLayout* fidLayout = new QHBoxLayout(fidWidget);
+        fidLayout->setContentsMargins(0, 0, 0, 0);
+        
+        QLabel* fidLabel = new QLabel("FID:");
+        fidLabel->setMinimumWidth(30);
+        _fidEdit = createSpinBox(INT32_MIN, INT32_MAX, "Frame ID - determines the visual appearance of the object");
+        
+        _fidSelectorButton = new QPushButton("...");
+        _fidSelectorButton->setMaximumWidth(30);
+        _fidSelectorButton->setToolTip("Browse FRM files");
+        connect(_fidSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onFidSelectorClicked);
+        
+        fidLayout->addWidget(fidLabel);
+        fidLayout->addWidget(_fidEdit);
+        fidLayout->addWidget(_fidSelectorButton);
+        previewGroupLayout->addWidget(fidWidget);
+        
         // Add animation controls to single preview
         setupAnimationControls();
         previewGroupLayout->addWidget(_animationControls);
@@ -968,14 +1046,26 @@ void ProEditorDialog::setupPreview() {
 }
 
 void ProEditorDialog::setupDualPreview() {
-    // Create dual preview widget for side-by-side display
-    _dualPreviewWidget = new QWidget();
-    _dualPreviewLayout = new QHBoxLayout(_dualPreviewWidget);
+    // Create unified FRM Preview group box
+    _previewGroup = new QGroupBox("FRM Preview");
+    QVBoxLayout* previewGroupLayout = new QVBoxLayout(_previewGroup);
     
-    // Inventory preview group (left side)
-    _inventoryPreviewGroup = new QGroupBox("Inventory View");
-    QVBoxLayout* inventoryLayout = new QVBoxLayout(_inventoryPreviewGroup);
+    // Create horizontal container for the two preview images
+    QWidget* imagesContainer = new QWidget();
+    QHBoxLayout* imagesLayout = new QHBoxLayout(imagesContainer);
     
+    // Left side - Inventory preview with label and FID field
+    QWidget* inventoryContainer = new QWidget();
+    QVBoxLayout* inventoryLayout = new QVBoxLayout(inventoryContainer);
+    inventoryLayout->setContentsMargins(0, 0, 0, 0);
+    
+    // Inventory label
+    QLabel* inventoryTitleLabel = new QLabel("Inventory View");
+    inventoryTitleLabel->setAlignment(Qt::AlignCenter);
+    inventoryTitleLabel->setStyleSheet("QLabel { font-weight: bold; margin-bottom: 5px; }");
+    inventoryLayout->addWidget(inventoryTitleLabel);
+    
+    // Inventory preview image
     _inventoryPreviewLabel = new QLabel();
     _inventoryPreviewLabel->setAlignment(Qt::AlignCenter);
     _inventoryPreviewLabel->setMinimumHeight(150);
@@ -986,10 +1076,40 @@ void ProEditorDialog::setupDualPreview() {
     _inventoryPreviewLabel->setText("No inventory FRM");
     inventoryLayout->addWidget(_inventoryPreviewLabel);
     
-    // Ground preview group (right side)
-    _groundPreviewGroup = new QGroupBox("Ground View");
-    QVBoxLayout* groundLayout = new QVBoxLayout(_groundPreviewGroup);
+    // Inventory FID field (moved from Common tab)
+    QWidget* invFidWidget = new QWidget();
+    QHBoxLayout* invFidLayout = new QHBoxLayout(invFidWidget);
+    invFidLayout->setContentsMargins(0, 0, 0, 0);
     
+    QLabel* invFidLabel = new QLabel("Inventory FID:");
+    invFidLabel->setMinimumWidth(80);
+    _inventoryFIDEdit = new QSpinBox();
+    _inventoryFIDEdit->setRange(INT32_MIN, INT32_MAX);
+    _inventoryFIDEdit->setToolTip("Frame ID for inventory/interface view");
+    connect(_inventoryFIDEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    
+    _inventoryFIDSelectorButton = new QPushButton("...");
+    _inventoryFIDSelectorButton->setMaximumWidth(30);
+    _inventoryFIDSelectorButton->setToolTip("Browse FRM files for inventory view");
+    connect(_inventoryFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onInventoryFidSelectorClicked);
+    
+    invFidLayout->addWidget(invFidLabel);
+    invFidLayout->addWidget(_inventoryFIDEdit);
+    invFidLayout->addWidget(_inventoryFIDSelectorButton);
+    inventoryLayout->addWidget(invFidWidget);
+    
+    // Right side - Ground preview with label and FID field  
+    QWidget* groundContainer = new QWidget();
+    QVBoxLayout* groundLayout = new QVBoxLayout(groundContainer);
+    groundLayout->setContentsMargins(0, 0, 0, 0);
+    
+    // Ground label
+    QLabel* groundTitleLabel = new QLabel("Ground View");
+    groundTitleLabel->setAlignment(Qt::AlignCenter);
+    groundTitleLabel->setStyleSheet("QLabel { font-weight: bold; margin-bottom: 5px; }");
+    groundLayout->addWidget(groundTitleLabel);
+    
+    // Ground preview image
     _groundPreviewLabel = new QLabel();
     _groundPreviewLabel->setAlignment(Qt::AlignCenter);
     _groundPreviewLabel->setMinimumHeight(150);
@@ -1000,11 +1120,32 @@ void ProEditorDialog::setupDualPreview() {
     _groundPreviewLabel->setText("No ground FRM");
     groundLayout->addWidget(_groundPreviewLabel);
     
-    // Add both preview groups to the layout
-    _dualPreviewLayout->addWidget(_inventoryPreviewGroup);
-    _dualPreviewLayout->addWidget(_groundPreviewGroup);
+    // Ground FID field (main FID)
+    QWidget* groundFidWidget = new QWidget();
+    QHBoxLayout* groundFidLayout = new QHBoxLayout(groundFidWidget);
+    groundFidLayout->setContentsMargins(0, 0, 0, 0);
     
-    _previewLayout->addWidget(_dualPreviewWidget);
+    QLabel* groundFidLabel = new QLabel("FID:");
+    groundFidLabel->setMinimumWidth(80);
+    _fidEdit = createSpinBox(INT32_MIN, INT32_MAX, "Frame ID - determines the visual appearance of the object");
+    
+    _fidSelectorButton = new QPushButton("...");
+    _fidSelectorButton->setMaximumWidth(30);
+    _fidSelectorButton->setToolTip("Browse FRM files");
+    connect(_fidSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onFidSelectorClicked);
+    
+    groundFidLayout->addWidget(groundFidLabel);
+    groundFidLayout->addWidget(_fidEdit);
+    groundFidLayout->addWidget(_fidSelectorButton);
+    groundLayout->addWidget(groundFidWidget);
+    
+    // Add both containers to images layout
+    imagesLayout->addWidget(inventoryContainer);
+    imagesLayout->addWidget(groundContainer);
+    previewGroupLayout->addWidget(imagesContainer);
+    
+    // Add the unified preview group to the main preview layout
+    _previewLayout->addWidget(_previewGroup);
     
     // No copy buttons or animation controls - items use static dual preview
 }
@@ -1125,6 +1266,10 @@ void ProEditorDialog::loadProData() {
         _commonData.SID = _pro->commonItemData.SID;
         _commonData.materialId = _pro->commonItemData.materialId;
         _commonData.containerSize = _pro->commonItemData.containerSize;
+        _commonData.weight = _pro->commonItemData.weight;
+        _commonData.basePrice = _pro->commonItemData.basePrice;
+        _commonData.inventoryFID = _pro->commonItemData.inventoryFID;
+        _commonData.soundId = _pro->commonItemData.soundId;
         
     } catch (const std::exception& e) {
         spdlog::error("ProEditorDialog::loadProData() - exception loading header/extended data: {}", e.what());
@@ -1150,9 +1295,12 @@ void ProEditorDialog::loadProData() {
             _lightIntensityEdit->setValue(_commonData.light_intensity);
         }
         
-        if (_flagsEdit) {
-            _flagsEdit->setValue(_commonData.flags);
+        if (_inventoryFIDEdit) {
+            _inventoryFIDEdit->setValue(_commonData.inventoryFID);
         }
+        
+        // Update flag checkboxes based on loaded flags
+        loadObjectFlags(_commonData.flags);
     } catch (const std::exception& e) {
         spdlog::error("ProEditorDialog::loadProData() - exception updating UI controls: {}", e.what());
         throw;
@@ -1204,9 +1352,13 @@ void ProEditorDialog::loadProData() {
             loadSceneryData();
             break;
         case Pro::OBJECT_TYPE::WALL:
+            loadWallData();
+            break;
         case Pro::OBJECT_TYPE::TILE:
+            loadTileData();
+            break;
         case Pro::OBJECT_TYPE::MISC:
-            // These types only have common data
+            // This type only has common data
             break;
     }
     
@@ -1307,20 +1459,29 @@ void ProEditorDialog::saveProData() {
     _pro->header.FID = _fidEdit->value();
     _pro->header.light_distance = _lightDistanceEdit->value();
     _pro->header.light_intensity = _lightIntensityEdit->value();
-    _pro->header.flags = _flagsEdit->value();
+    // Flags are updated real-time via checkbox signal handlers
     
-    // Save extended fields if they exist (flagsExt is updated real-time via signal handlers)
-    if (_flagsExtRawEdit) {
-        _pro->commonItemData.flagsExt = _flagsExtRawEdit->value();
-    }
+    // Extended flags are updated real-time via signal handlers
     if (_sidEdit) {
         _pro->commonItemData.SID = _sidEdit->value();
     }
     if (_materialIdEdit) {
-        _pro->commonItemData.materialId = _materialIdEdit->value();
+        _pro->commonItemData.materialId = _materialIdEdit->currentIndex();
     }
     if (_containerSizeEdit) {
         _pro->commonItemData.containerSize = _containerSizeEdit->value();
+    }
+    if (_weightEdit) {
+        _pro->commonItemData.weight = _weightEdit->value();
+    }
+    if (_basePriceEdit) {
+        _pro->commonItemData.basePrice = _basePriceEdit->value();
+    }
+    if (_inventoryFIDEdit) {
+        _pro->commonItemData.inventoryFID = _inventoryFIDEdit->value();
+    }
+    if (_soundIdEdit) {
+        _pro->commonItemData.soundId = _soundIdEdit->value();
     }
     
     // Save type-specific data based on object type
@@ -1360,9 +1521,13 @@ void ProEditorDialog::saveProData() {
             saveSceneryData();
             break;
         case Pro::OBJECT_TYPE::WALL:
+            saveWallData();
+            break;
         case Pro::OBJECT_TYPE::TILE:
+            saveTileData();
+            break;
         case Pro::OBJECT_TYPE::MISC:
-            // These types only have common data
+            // This type only has common data
             break;
     }
     
@@ -2416,10 +2581,8 @@ void ProEditorDialog::setupSceneryTab() {
     _sceneryTab = new QWidget();
     QFormLayout* layout = new QFormLayout(_sceneryTab);
     
-    _sceneryMaterialIdEdit = new QSpinBox();
-    _sceneryMaterialIdEdit->setRange(0, 999999);
-    _sceneryMaterialIdEdit->setToolTip("Material ID for scenery");
-    layout->addRow("Material ID:", _sceneryMaterialIdEdit);
+    _sceneryMaterialIdEdit = createMaterialComboBox("Material type for scenery");
+    layout->addRow("Material:", _sceneryMaterialIdEdit);
     
     _scenerySoundIdEdit = new QSpinBox();
     _scenerySoundIdEdit->setRange(0, 255);
@@ -2503,7 +2666,7 @@ void ProEditorDialog::setupSceneryTab() {
     _tabWidget->addTab(_sceneryTab, "Scenery");
     
     // Connect signals
-    connect(_sceneryMaterialIdEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    connect(_sceneryMaterialIdEdit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
     connect(_scenerySoundIdEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     connect(_sceneryTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
     connect(_doorWalkThroughCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
@@ -2614,7 +2777,7 @@ void ProEditorDialog::loadSceneryData() {
     const auto& sceneryData = _pro->sceneryData;
     
     // Load basic scenery properties
-    if (_sceneryMaterialIdEdit) _sceneryMaterialIdEdit->setValue(static_cast<int>(sceneryData.materialId));
+    if (_sceneryMaterialIdEdit) _sceneryMaterialIdEdit->setCurrentIndex(static_cast<int>(sceneryData.materialId));
     if (_scenerySoundIdEdit) _scenerySoundIdEdit->setValue(static_cast<int>(sceneryData.soundId));
     
     // Set scenery type based on object subtype
@@ -2757,7 +2920,7 @@ void ProEditorDialog::saveSceneryData() {
     auto& sceneryData = _pro->sceneryData;
     
     // Save basic scenery properties
-    if (_sceneryMaterialIdEdit) sceneryData.materialId = static_cast<uint32_t>(_sceneryMaterialIdEdit->value());
+    if (_sceneryMaterialIdEdit) sceneryData.materialId = static_cast<uint32_t>(_sceneryMaterialIdEdit->currentIndex());
     if (_scenerySoundIdEdit) sceneryData.soundId = static_cast<uint8_t>(_scenerySoundIdEdit->value());
     
     // Update object subtype if scenery type changed
@@ -2795,6 +2958,28 @@ void ProEditorDialog::saveSceneryData() {
             break;
     }
     
+}
+
+void ProEditorDialog::loadWallData() {
+    // Wall data is simple - just load the materialId value that's already been read from the file
+    // The UI field is set up in setupCommonTab when _pro->type() == Pro::OBJECT_TYPE::WALL
+}
+
+void ProEditorDialog::loadTileData() {
+    // Tile data is simple - just load the materialId value that's already been read from the file  
+    // The UI field is set up in setupCommonTab when _pro->type() == Pro::OBJECT_TYPE::TILE
+}
+
+void ProEditorDialog::saveWallData() {
+    if (_wallMaterialIdEdit) {
+        _pro->wallData.materialId = static_cast<uint32_t>(_wallMaterialIdEdit->currentIndex());
+    }
+}
+
+void ProEditorDialog::saveTileData() {
+    if (_tileMaterialIdEdit) {
+        _pro->tileData.materialId = static_cast<uint32_t>(_tileMaterialIdEdit->currentIndex());
+    }
 }
 
 QPixmap ProEditorDialog::createFrmThumbnail(const std::string& frmPath, const QSize& targetSize) {
@@ -3334,12 +3519,6 @@ void ProEditorDialog::onExtendedFlagChanged() {
         flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_4);
     }
     
-    // Update the raw editor
-    if (_flagsExtRawEdit) {
-        _flagsExtRawEdit->blockSignals(true);
-        _flagsExtRawEdit->setValue(flags);
-        _flagsExtRawEdit->blockSignals(false);
-    }
     
     // Store in pro data (different location based on object type)
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
@@ -3351,100 +3530,6 @@ void ProEditorDialog::onExtendedFlagChanged() {
     
 }
 
-void ProEditorDialog::onExtendedFlagRawChanged() {
-    if (!_flagsExtRawEdit) return;
-    
-    uint32_t flags = _flagsExtRawEdit->value();
-    
-    // Update all individual controls based on the raw value
-    if (_animationPrimaryEdit) {
-        _animationPrimaryEdit->blockSignals(true);
-        _animationPrimaryEdit->setValue(Pro::getAnimationPrimary(flags));
-        _animationPrimaryEdit->blockSignals(false);
-    }
-    
-    if (_animationSecondaryEdit) {
-        _animationSecondaryEdit->blockSignals(true);
-        _animationSecondaryEdit->setValue(Pro::getAnimationSecondary(flags));
-        _animationSecondaryEdit->blockSignals(false);
-    }
-    
-    // Update checkboxes
-    if (_bigGunCheck) {
-        _bigGunCheck->blockSignals(true);
-        _bigGunCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::BIG_GUN));
-        _bigGunCheck->blockSignals(false);
-    }
-    
-    if (_twoHandedCheck) {
-        _twoHandedCheck->blockSignals(true);
-        _twoHandedCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::TWO_HANDED));
-        _twoHandedCheck->blockSignals(false);
-    }
-    
-    if (_canUseCheck) {
-        _canUseCheck->blockSignals(true);
-        _canUseCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE));
-        _canUseCheck->blockSignals(false);
-    }
-    
-    if (_canUseOnCheck) {
-        _canUseOnCheck->blockSignals(true);
-        _canUseOnCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE_ON));
-        _canUseOnCheck->blockSignals(false);
-    }
-    
-    if (_generalFlagCheck) {
-        _generalFlagCheck->blockSignals(true);
-        _generalFlagCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG));
-        _generalFlagCheck->blockSignals(false);
-    }
-    
-    if (_interactionFlagCheck) {
-        _interactionFlagCheck->blockSignals(true);
-        _interactionFlagCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::INTERACTION_FLAG));
-        _interactionFlagCheck->blockSignals(false);
-    }
-    
-    if (_itemHiddenCheck) {
-        _itemHiddenCheck->blockSignals(true);
-        _itemHiddenCheck->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::ITEM_HIDDEN));
-        _itemHiddenCheck->blockSignals(false);
-    }
-    
-    if (_lightFlag1Check) {
-        _lightFlag1Check->blockSignals(true);
-        _lightFlag1Check->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_1));
-        _lightFlag1Check->blockSignals(false);
-    }
-    
-    if (_lightFlag2Check) {
-        _lightFlag2Check->blockSignals(true);
-        _lightFlag2Check->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_2));
-        _lightFlag2Check->blockSignals(false);
-    }
-    
-    if (_lightFlag3Check) {
-        _lightFlag3Check->blockSignals(true);
-        _lightFlag3Check->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_3));
-        _lightFlag3Check->blockSignals(false);
-    }
-    
-    if (_lightFlag4Check) {
-        _lightFlag4Check->blockSignals(true);
-        _lightFlag4Check->setChecked(flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_4));
-        _lightFlag4Check->blockSignals(false);
-    }
-    
-    // Store in pro data (different location based on object type)
-    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        _pro->commonItemData.flagsExt = flags;
-    } else {
-        // For critters, scenery, walls - store in header flags
-        _pro->header.flags = (_pro->header.flags & 0x0FFFFFFF) | (flags & 0xF0000000); // Keep lower bits, update upper bits
-    }
-    
-}
 
 // Copy button methods removed - functionality deemed unnecessary
 
@@ -3597,6 +3682,99 @@ void ProEditorDialog::updateAIPriorityDisplays() {
         int weaponPriority = calculateWeaponAIPriority();
         _weaponAIPriorityLabel->setText(QString::number(weaponPriority));
     }
+}
+
+void ProEditorDialog::onObjectFlagChanged() {
+    // Calculate combined flags value from all checkboxes
+    uint32_t flags = 0;
+    
+    // Rendering flags
+    if (_flatCheck && _flatCheck->isChecked()) flags |= 0x00000008;
+    if (_noBlockCheck && _noBlockCheck->isChecked()) flags |= 0x00000010;
+    if (_multiHexCheck && _multiHexCheck->isChecked()) flags |= 0x00000800;
+    if (_noHighlightCheck && _noHighlightCheck->isChecked()) flags |= 0x00001000;
+    
+    // Transparency flags (keep existing transparency values)
+    flags |= (_pro->header.flags & 0x000FC000); // Preserve transparency bits
+    
+    // Interaction flags
+    if (_wallTransEndCheck && _wallTransEndCheck->isChecked()) flags |= 0x10000000;
+    if (_lightThruCheck && _lightThruCheck->isChecked()) flags |= 0x20000000;
+    if (_shootThruCheck && _shootThruCheck->isChecked()) flags |= 0x80000000;
+    
+    // Update the PRO data
+    _pro->header.flags = flags;
+}
+
+void ProEditorDialog::onTransparencyFlagChanged() {
+    // Handle mutually exclusive transparency flags
+    QCheckBox* sender = qobject_cast<QCheckBox*>(QObject::sender());
+    if (!sender || !sender->isChecked()) return;
+    
+    // Uncheck all other transparency flags when one is selected
+    if (sender != _transNoneCheck && _transNoneCheck) _transNoneCheck->setChecked(false);
+    if (sender != _transRedCheck && _transRedCheck) _transRedCheck->setChecked(false);
+    if (sender != _transWallCheck && _transWallCheck) _transWallCheck->setChecked(false);
+    if (sender != _transGlassCheck && _transGlassCheck) _transGlassCheck->setChecked(false);
+    if (sender != _transSteamCheck && _transSteamCheck) _transSteamCheck->setChecked(false);
+    if (sender != _transEnergyCheck && _transEnergyCheck) _transEnergyCheck->setChecked(false);
+    
+    // Calculate combined flags value
+    uint32_t flags = _pro->header.flags & ~0x000FC000; // Clear transparency bits
+    
+    // Add the selected transparency flag
+    if (sender == _transNoneCheck) flags |= 0x00008000;
+    else if (sender == _transRedCheck) flags |= 0x00004000;
+    else if (sender == _transWallCheck) flags |= 0x00010000;
+    else if (sender == _transGlassCheck) flags |= 0x00020000;
+    else if (sender == _transSteamCheck) flags |= 0x00040000;
+    else if (sender == _transEnergyCheck) flags |= 0x00080000;
+    
+    // Update the PRO data
+    _pro->header.flags = flags;
+}
+
+void ProEditorDialog::loadObjectFlags(uint32_t flags) {
+    // Load rendering flags
+    if (_flatCheck) _flatCheck->setChecked(flags & 0x00000008);
+    if (_noBlockCheck) _noBlockCheck->setChecked(flags & 0x00000010);
+    if (_multiHexCheck) _multiHexCheck->setChecked(flags & 0x00000800);
+    if (_noHighlightCheck) _noHighlightCheck->setChecked(flags & 0x00001000);
+    
+    // Load transparency flags (mutually exclusive)
+    if (_transNoneCheck) _transNoneCheck->setChecked(flags & 0x00008000);
+    if (_transRedCheck) _transRedCheck->setChecked(flags & 0x00004000);
+    if (_transWallCheck) _transWallCheck->setChecked(flags & 0x00010000);
+    if (_transGlassCheck) _transGlassCheck->setChecked(flags & 0x00020000);
+    if (_transSteamCheck) _transSteamCheck->setChecked(flags & 0x00040000);
+    if (_transEnergyCheck) _transEnergyCheck->setChecked(flags & 0x00080000);
+    
+    // Load interaction flags
+    if (_wallTransEndCheck) _wallTransEndCheck->setChecked(flags & 0x10000000);
+    if (_lightThruCheck) _lightThruCheck->setChecked(flags & 0x20000000);
+    if (_shootThruCheck) _shootThruCheck->setChecked(flags & 0x80000000);
+}
+
+const QStringList ProEditorDialog::getMaterialNames() {
+    return QStringList{
+        "Glass",     // 0
+        "Metal",     // 1
+        "Plastic",   // 2
+        "Wood",      // 3
+        "Dirt",      // 4
+        "Stone",     // 5
+        "Cement",    // 6
+        "Leather"    // 7
+    };
+}
+
+QComboBox* ProEditorDialog::createMaterialComboBox(const QString& tooltip) {
+    QComboBox* comboBox = new QComboBox();
+    comboBox->addItems(getMaterialNames());
+    if (!tooltip.isEmpty()) {
+        comboBox->setToolTip(tooltip);
+    }
+    return comboBox;
 }
 
 } // namespace geck

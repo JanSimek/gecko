@@ -60,7 +60,8 @@ private slots:
     void onValidationToggleClicked();
     void onValidationItemDoubleClicked(QListWidgetItem* item);
     void onExtendedFlagChanged();
-    void onExtendedFlagRawChanged();
+    void onObjectFlagChanged();
+    void onTransparencyFlagChanged();
     void onPreviewViewChanged();
 
 private:
@@ -71,6 +72,7 @@ private:
     void setupAnimationControls();
     void setupValidationPanel();
     void setupCommonTab();
+    void setupObjectFlagsGroup(QFormLayout* layout);
     void setupExtendedFlagsGroup(QFormLayout* layout);
     void setupWeaponExtendedFlags(QVBoxLayout* layout);
     void setupContainerExtendedFlags(QVBoxLayout* layout);
@@ -85,6 +87,8 @@ private:
     void setupKeyTab();
     void setupCritterTab();
     void setupSceneryTab();
+    void setupWallTab();
+    void setupTileTab();
     
     void loadProData();
     void loadArmorData();
@@ -96,6 +100,9 @@ private:
     void loadKeyData();
     void loadCritterData();
     void loadSceneryData();
+    void loadWallData();
+    void loadTileData();
+    void loadObjectFlags(uint32_t flags);
     
     void saveProData();
     void saveArmorData();
@@ -107,6 +114,8 @@ private:
     void saveKeyData();
     void saveCritterData();
     void saveSceneryData();
+    void saveWallData();
+    void saveTileData();
     
     void updateTabVisibility();
     void validateField(QWidget* field);
@@ -130,9 +139,13 @@ private:
     QSpinBox* createSpinBox(int min, int max, const QString& tooltip = QString());
     QSpinBox* createHexSpinBox(int max, const QString& tooltip = QString());
     QComboBox* createComboBox(const QStringList& items, const QString& tooltip = QString());
+    QComboBox* createMaterialComboBox(const QString& tooltip = QString());
     void connectSpinBox(QSpinBox* spinBox);
     void connectComboBox(QComboBox* comboBox);
     void connectCheckBox(QCheckBox* checkBox);
+    
+    // Material names mapping
+    static const QStringList getMaterialNames();
     
     // Extended PRO data structures
     struct CommonData {
@@ -374,6 +387,8 @@ private:
     QWidget* _keyTab;
     QWidget* _critterTab;
     QWidget* _sceneryTab;
+    QWidget* _wallTab;
+    QWidget* _tileTab;
     
     // Common tab controls
     QLabel* _nameLabel;
@@ -385,6 +400,22 @@ private:
     QSpinBox* _lightDistanceEdit;
     QSpinBox* _lightIntensityEdit;
     QSpinBox* _flagsEdit;
+    
+    // Basic object flag checkboxes
+    QCheckBox* _flatCheck;           // 0x00000008 - Flat (rendered first, just after tiles)
+    QCheckBox* _noBlockCheck;        // 0x00000010 - NoBlock (doesn't block the tile)
+    QCheckBox* _multiHexCheck;       // 0x00000800 - MultiHex
+    QCheckBox* _noHighlightCheck;    // 0x00001000 - No Highlight (doesn't highlight border; used for containers)
+    QCheckBox* _transRedCheck;       // 0x00004000 - TransRed
+    QCheckBox* _transNoneCheck;      // 0x00008000 - TransNone (opaque)
+    QCheckBox* _transWallCheck;      // 0x00010000 - TransWall  
+    QCheckBox* _transGlassCheck;     // 0x00020000 - TransGlass
+    QCheckBox* _transSteamCheck;     // 0x00040000 - TransSteam
+    QCheckBox* _transEnergyCheck;    // 0x00080000 - TransEnergy
+    QCheckBox* _wallTransEndCheck;   // 0x10000000 - WallTransEnd (changes transparency egg logic)
+    QCheckBox* _lightThruCheck;      // 0x20000000 - LightThru
+    QCheckBox* _shootThruCheck;      // 0x80000000 - ShootThru
+    
     // Extended flags controls - organized by category
     QGroupBox* _extendedFlagsGroup;
     QSpinBox* _animationPrimaryEdit;
@@ -400,9 +431,8 @@ private:
     QCheckBox* _lightFlag2Check;
     QCheckBox* _lightFlag3Check;
     QCheckBox* _lightFlag4Check;
-    QSpinBox* _flagsExtRawEdit;  // Raw hex editor for advanced users
     QSpinBox* _sidEdit;
-    QSpinBox* _materialIdEdit;
+    QComboBox* _materialIdEdit;
     QSpinBox* _containerSizeEdit;
     QSpinBox* _weightEdit;
     QSpinBox* _basePriceEdit;
@@ -514,7 +544,13 @@ private:
     QSpinBox* _critterDamageTypeEdit;
     
     // Scenery tab controls
-    QSpinBox* _sceneryMaterialIdEdit;
+    QComboBox* _sceneryMaterialIdEdit;
+    
+    // Wall tab controls
+    QComboBox* _wallMaterialIdEdit;
+    
+    // Tile tab controls
+    QComboBox* _tileMaterialIdEdit;
     QSpinBox* _scenerySoundIdEdit;
     QComboBox* _sceneryTypeCombo;
     // Door controls

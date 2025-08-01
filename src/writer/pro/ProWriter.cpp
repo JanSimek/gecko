@@ -386,21 +386,28 @@ void ProWriter::writeSceneryData(const Pro& pro) {
 void ProWriter::writeWallData(const Pro& pro) {
     auto& utils = getBinaryUtils();
     
-    // Write basic wall data
+    // Write wall data
+    /*
+     * TODO:
+     *   0x0018	2	Wall Light Type Flags
+     *   0x001A	2	Action Flags
+     *   0x001C	4	ScriptType & ScriptID
+     *   0x0020	4	MaterialID
+     */
     utils.writeBE32(0); // flagsExt placeholder
     utils.writeBE32(0); // SID placeholder
-    utils.writeBE32(0); // materialId placeholder
+    utils.writeBE32(pro.wallData.materialId);
     
-    spdlog::debug("ProWriter: Basic wall data written (minimal implementation)");
+    spdlog::debug("ProWriter: Wall data written - materialId: {}", pro.wallData.materialId);
 }
 
 void ProWriter::writeTileData(const Pro& pro) {
     auto& utils = getBinaryUtils();
     
-    // Write basic tile data
-    utils.writeBE32(0); // materialId placeholder
+    // Write tile data
+    utils.writeBE32(pro.tileData.materialId);
     
-    spdlog::debug("ProWriter: Basic tile data written (minimal implementation)");
+    spdlog::debug("ProWriter: Tile data written - materialId: {}", pro.tileData.materialId);
 }
 
 void ProWriter::writeMiscData(const Pro& pro) {

@@ -282,11 +282,13 @@ std::unique_ptr<Pro> ProReader::read() {
             break;
         }
         case Pro::OBJECT_TYPE::WALL: {
-            utils.skipWithLog(Pro::FIELD_SIZE_BYTES, "wall material ID");
+            pro->wallData.materialId = utils.readBE32();
+            spdlog::debug("ProReader: Loaded wall data - materialId: {}", pro->wallData.materialId);
             break;
         }
         case Pro::OBJECT_TYPE::TILE: {
-            utils.skipWithLog(Pro::FIELD_SIZE_BYTES, "tile material ID");
+            pro->tileData.materialId = utils.readBE32();
+            spdlog::debug("ProReader: Loaded tile data - materialId: {}", pro->tileData.materialId);
             break;
         }
         case Pro::OBJECT_TYPE::MISC: {
