@@ -53,6 +53,7 @@ private slots:
     void onInventoryFidSelectorClicked();
     void onArmorMaleFidSelectorClicked();
     void onArmorFemaleFidSelectorClicked();
+    void onCritterHeadFidSelectorClicked();
     void onPlayPauseClicked();
     void onFrameChanged(int frame);
     void onDirectionChanged(int direction);
@@ -126,6 +127,7 @@ private:
     int32_t getInventoryFid();
     int32_t getGroundFid();
     void openFrmSelector(QSpinBox* targetField, uint32_t objectType);
+    void openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidStorage, uint32_t objectType);
     void loadAnimationFrames();
     
     // FRM thumbnail generation (based on ObjectPalettePanel approach)
@@ -146,6 +148,9 @@ private:
     
     // Material names mapping
     static const QStringList getMaterialNames();
+    
+    // FID to FRM filename conversion
+    QString getFrmFilename(int32_t fid);
     
     // Extended PRO data structures
     struct CommonData {
@@ -395,7 +400,7 @@ private:
     QTextEdit* _descriptionLabel;
     QSpinBox* _pidEdit;
     QSpinBox* _messageIdEdit;
-    QSpinBox* _fidEdit;
+    QLabel* _fidLabel;
     QPushButton* _fidSelectorButton;
     QSpinBox* _lightDistanceEdit;
     QSpinBox* _lightIntensityEdit;
@@ -436,7 +441,7 @@ private:
     QSpinBox* _containerSizeEdit;
     QSpinBox* _weightEdit;
     QSpinBox* _basePriceEdit;
-    QSpinBox* _inventoryFIDEdit;
+    QLabel* _inventoryFIDLabel;
     QPushButton* _inventoryFIDSelectorButton;
     QSpinBox* _soundIdEdit;
     
@@ -445,9 +450,9 @@ private:
     QSpinBox* _damageResistEdits[7];
     QSpinBox* _damageThresholdEdits[7];
     QComboBox* _armorPerkCombo;
-    QSpinBox* _armorMaleFIDEdit;
+    QLabel* _armorMaleFIDLabel;
     QPushButton* _armorMaleFIDSelectorButton;
-    QSpinBox* _armorFemaleFIDEdit;
+    QLabel* _armorFemaleFIDLabel;
     QPushButton* _armorFemaleFIDSelectorButton;
     QLabel* _armorAIPriorityLabel;  // Read-only AI priority calculation display
     
@@ -503,7 +508,8 @@ private:
     QSpinBox* _keyIdEdit;
     
     // Critter tab controls
-    QSpinBox* _critterHeadFIDEdit;
+    QLabel* _critterHeadFIDLabel;
+    QPushButton* _critterHeadFIDSelectorButton;
     QSpinBox* _critterAIPacketEdit;
     QSpinBox* _critterTeamNumberEdit;
     QSpinBox* _critterFlagsEdit;
@@ -570,6 +576,13 @@ private:
     // Data
     std::shared_ptr<Pro> _pro;
     CommonData _commonData;
+    
+    // Internal FID storage (since labels only display text)
+    int32_t _mainFID = 0;           // Ground/main FID
+    int32_t _inventoryFID = 0;
+    int32_t _armorMaleFID = 0;
+    int32_t _armorFemaleFID = 0;
+    int32_t _critterHeadFID = 0;
     ArmorData _armorData;
     ContainerData _containerData;
     DrugData _drugData;

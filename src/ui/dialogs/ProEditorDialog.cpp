@@ -62,6 +62,11 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _inventoryFIDSelectorButton(nullptr)
     , _armorMaleFIDSelectorButton(nullptr)
     , _armorFemaleFIDSelectorButton(nullptr)
+    , _inventoryFIDLabel(nullptr)
+    , _armorMaleFIDLabel(nullptr)
+    , _armorFemaleFIDLabel(nullptr)
+    , _critterHeadFIDLabel(nullptr)
+    , _critterHeadFIDSelectorButton(nullptr)
     , _extendedFlagsGroup(nullptr)
     , _animationPrimaryEdit(nullptr)
     , _animationSecondaryEdit(nullptr)
@@ -621,17 +626,16 @@ void ProEditorDialog::setupArmorTab() {
     QHBoxLayout* maleFidLayout = new QHBoxLayout(maleFidWidget);
     maleFidLayout->setContentsMargins(0, 0, 0, 0);
     
-    _armorMaleFIDEdit = new QSpinBox();
-    _armorMaleFIDEdit->setRange(INT32_MIN, INT32_MAX);
-    _armorMaleFIDEdit->setToolTip("Frame ID for male character wearing this armor");
-    connect(_armorMaleFIDEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    _armorMaleFIDLabel = new QLabel("No FRM");
+    _armorMaleFIDLabel->setToolTip("FRM filename for male character wearing this armor");
+    _armorMaleFIDLabel->setStyleSheet("QLabel { border: 1px solid gray; padding: 2px; background-color: white; }");
     
     _armorMaleFIDSelectorButton = new QPushButton("...");
     _armorMaleFIDSelectorButton->setMaximumWidth(30);
     _armorMaleFIDSelectorButton->setToolTip("Browse FRM files for male armor");
     connect(_armorMaleFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onArmorMaleFidSelectorClicked);
     
-    maleFidLayout->addWidget(_armorMaleFIDEdit);
+    maleFidLayout->addWidget(_armorMaleFIDLabel);
     maleFidLayout->addWidget(_armorMaleFIDSelectorButton);
     miscLayout->addRow("Male FID:", maleFidWidget);
     
@@ -640,17 +644,16 @@ void ProEditorDialog::setupArmorTab() {
     QHBoxLayout* femaleFidLayout = new QHBoxLayout(femaleFidWidget);
     femaleFidLayout->setContentsMargins(0, 0, 0, 0);
     
-    _armorFemaleFIDEdit = new QSpinBox();
-    _armorFemaleFIDEdit->setRange(INT32_MIN, INT32_MAX);
-    _armorFemaleFIDEdit->setToolTip("Frame ID for female character wearing this armor");
-    connect(_armorFemaleFIDEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    _armorFemaleFIDLabel = new QLabel("No FRM");
+    _armorFemaleFIDLabel->setToolTip("FRM filename for female character wearing this armor");
+    _armorFemaleFIDLabel->setStyleSheet("QLabel { border: 1px solid gray; padding: 2px; background-color: white; }");
     
     _armorFemaleFIDSelectorButton = new QPushButton("...");
     _armorFemaleFIDSelectorButton->setMaximumWidth(30);
     _armorFemaleFIDSelectorButton->setToolTip("Browse FRM files for female armor");
     connect(_armorFemaleFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onArmorFemaleFidSelectorClicked);
     
-    femaleFidLayout->addWidget(_armorFemaleFIDEdit);
+    femaleFidLayout->addWidget(_armorFemaleFIDLabel);
     femaleFidLayout->addWidget(_armorFemaleFIDSelectorButton);
     miscLayout->addRow("Female FID:", femaleFidWidget);
     
@@ -1022,7 +1025,9 @@ void ProEditorDialog::setupPreview() {
         
         QLabel* fidLabel = new QLabel("FID:");
         fidLabel->setMinimumWidth(30);
-        _fidEdit = createSpinBox(INT32_MIN, INT32_MAX, "Frame ID - determines the visual appearance of the object");
+        _fidLabel = new QLabel("No FRM");
+        _fidLabel->setToolTip("FRM filename for ground/world view");
+        _fidLabel->setStyleSheet("QLabel { border: 1px solid gray; padding: 2px; background-color: white; }");
         
         _fidSelectorButton = new QPushButton("...");
         _fidSelectorButton->setMaximumWidth(30);
@@ -1030,7 +1035,7 @@ void ProEditorDialog::setupPreview() {
         connect(_fidSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onFidSelectorClicked);
         
         fidLayout->addWidget(fidLabel);
-        fidLayout->addWidget(_fidEdit);
+        fidLayout->addWidget(_fidLabel);
         fidLayout->addWidget(_fidSelectorButton);
         previewGroupLayout->addWidget(fidWidget);
         
@@ -1083,10 +1088,9 @@ void ProEditorDialog::setupDualPreview() {
     
     QLabel* invFidLabel = new QLabel("Inventory FID:");
     invFidLabel->setMinimumWidth(80);
-    _inventoryFIDEdit = new QSpinBox();
-    _inventoryFIDEdit->setRange(INT32_MIN, INT32_MAX);
-    _inventoryFIDEdit->setToolTip("Frame ID for inventory/interface view");
-    connect(_inventoryFIDEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    _inventoryFIDLabel = new QLabel("No FRM");
+    _inventoryFIDLabel->setToolTip("FRM filename for inventory/interface view");
+    _inventoryFIDLabel->setStyleSheet("QLabel { border: 1px solid gray; padding: 2px; background-color: white; }");
     
     _inventoryFIDSelectorButton = new QPushButton("...");
     _inventoryFIDSelectorButton->setMaximumWidth(30);
@@ -1094,7 +1098,7 @@ void ProEditorDialog::setupDualPreview() {
     connect(_inventoryFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onInventoryFidSelectorClicked);
     
     invFidLayout->addWidget(invFidLabel);
-    invFidLayout->addWidget(_inventoryFIDEdit);
+    invFidLayout->addWidget(_inventoryFIDLabel);
     invFidLayout->addWidget(_inventoryFIDSelectorButton);
     inventoryLayout->addWidget(invFidWidget);
     
@@ -1127,7 +1131,9 @@ void ProEditorDialog::setupDualPreview() {
     
     QLabel* groundFidLabel = new QLabel("FID:");
     groundFidLabel->setMinimumWidth(80);
-    _fidEdit = createSpinBox(INT32_MIN, INT32_MAX, "Frame ID - determines the visual appearance of the object");
+    _fidLabel = new QLabel("No FRM");
+    _fidLabel->setToolTip("FRM filename for ground/world view");
+    _fidLabel->setStyleSheet("QLabel { border: 1px solid gray; padding: 2px; background-color: white; }");
     
     _fidSelectorButton = new QPushButton("...");
     _fidSelectorButton->setMaximumWidth(30);
@@ -1135,7 +1141,7 @@ void ProEditorDialog::setupDualPreview() {
     connect(_fidSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onFidSelectorClicked);
     
     groundFidLayout->addWidget(groundFidLabel);
-    groundFidLayout->addWidget(_fidEdit);
+    groundFidLayout->addWidget(_fidLabel);
     groundFidLayout->addWidget(_fidSelectorButton);
     groundLayout->addWidget(groundFidWidget);
     
@@ -1283,8 +1289,9 @@ void ProEditorDialog::loadProData() {
             _messageIdEdit->setValue(_commonData.message_id);
         }
         
-        if (_fidEdit) {
-            _fidEdit->setValue(_commonData.FID);
+        if (_fidLabel) {
+            _mainFID = _commonData.FID;
+            _fidLabel->setText(getFrmFilename(_mainFID));
         }
         
         if (_lightDistanceEdit) {
@@ -1295,8 +1302,9 @@ void ProEditorDialog::loadProData() {
             _lightIntensityEdit->setValue(_commonData.light_intensity);
         }
         
-        if (_inventoryFIDEdit) {
-            _inventoryFIDEdit->setValue(_commonData.inventoryFID);
+        if (_inventoryFIDLabel) {
+            _inventoryFID = _commonData.inventoryFID;
+            _inventoryFIDLabel->setText(getFrmFilename(_inventoryFID));
         }
         
         // Update flag checkboxes based on loaded flags
@@ -1373,8 +1381,10 @@ void ProEditorDialog::loadArmorData() {
     }
     
     _armorPerkCombo->setCurrentIndex(_pro->armorData.perk);
-    _armorMaleFIDEdit->setValue(_pro->armorData.armorMaleFID);
-    _armorFemaleFIDEdit->setValue(_pro->armorData.armorFemaleFID);
+    _armorMaleFID = _pro->armorData.armorMaleFID;
+    _armorMaleFIDLabel->setText(getFrmFilename(_armorMaleFID));
+    _armorFemaleFID = _pro->armorData.armorFemaleFID;
+    _armorFemaleFIDLabel->setText(getFrmFilename(_armorFemaleFID));
 }
 
 void ProEditorDialog::loadContainerData() {
@@ -1456,7 +1466,7 @@ void ProEditorDialog::loadKeyData() {
 void ProEditorDialog::saveProData() {
     // Save common data back to PRO header
     _pro->header.message_id = _messageIdEdit->value();
-    _pro->header.FID = _fidEdit->value();
+    _pro->header.FID = _mainFID;
     _pro->header.light_distance = _lightDistanceEdit->value();
     _pro->header.light_intensity = _lightIntensityEdit->value();
     // Flags are updated real-time via checkbox signal handlers
@@ -1477,8 +1487,8 @@ void ProEditorDialog::saveProData() {
     if (_basePriceEdit) {
         _pro->commonItemData.basePrice = _basePriceEdit->value();
     }
-    if (_inventoryFIDEdit) {
-        _pro->commonItemData.inventoryFID = _inventoryFIDEdit->value();
+    if (_inventoryFIDLabel) {
+        _pro->commonItemData.inventoryFID = _inventoryFID;
     }
     if (_soundIdEdit) {
         _pro->commonItemData.soundId = _soundIdEdit->value();
@@ -1542,8 +1552,8 @@ void ProEditorDialog::saveArmorData() {
     }
     
     _pro->armorData.perk = _armorPerkCombo->currentIndex();
-    _pro->armorData.armorMaleFID = _armorMaleFIDEdit->value();
-    _pro->armorData.armorFemaleFID = _armorFemaleFIDEdit->value();
+    _pro->armorData.armorMaleFID = _armorMaleFID;
+    _pro->armorData.armorFemaleFID = _armorFemaleFID;
 }
 
 void ProEditorDialog::saveContainerData() {
@@ -1828,19 +1838,14 @@ void ProEditorDialog::validateField(QWidget* field) {
     }
     
     // === FID REFERENCE VALIDATIONS ===
-    if (field == _fidEdit && spinBox) {
-        int32_t fid = spinBox->value();
-        if (fid != 0 && fid != -1 && !validateFIDReference(fid, "Main FRM")) {
+    if (field == _fidLabel) {
+        // Main FID validation - use internal storage
+        if (_mainFID != 0 && _mainFID != -1 && !validateFIDReference(_mainFID, "Main FRM")) {
             addValidationIssue(field, "FID may not reference a valid FRM file", ValidationLevel::WARNING, "References");
         }
     }
     
-    if (field == _inventoryFIDEdit && spinBox) {
-        int32_t fid = spinBox->value();
-        if (fid != 0 && fid != -1 && !validateFIDReference(fid, "Inventory FRM")) {
-            addValidationIssue(field, "Inventory FID may not reference a valid FRM file", ValidationLevel::WARNING, "References");
-        }
-    }
+    // Inventory FID validation is no longer needed since it's now a label showing filename
     
     // Apply visual styling based on validation results
     for (const auto& issue : _validationIssues) {
@@ -1924,7 +1929,7 @@ void ProEditorDialog::updatePreview() {
 int32_t ProEditorDialog::getPreviewFid() {
     
     // Check if basic widgets are initialized
-    if (!_fidEdit) {
+    if (!_fidLabel) {
         return 0;
     }
     
@@ -1936,20 +1941,20 @@ int32_t ProEditorDialog::getPreviewFid() {
     // Items use dual preview system, not single preview, so they don't need getPreviewFid()
     
     // For items without dual preview, prefer inventory FID over world FID for preview
-    if (_pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryFIDEdit) {
-        int32_t inventoryFid = _inventoryFIDEdit->value();
+    if (_pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryFIDLabel) {
+        int32_t inventoryFid = _inventoryFID;
         if (inventoryFid > 0) {
             return inventoryFid;
         }
         
         // For armor, check for male/female specific FIDs
-        if (_pro->itemType() == Pro::ITEM_TYPE::ARMOR && _armorMaleFIDEdit && _armorFemaleFIDEdit) {
-            int32_t maleFid = _armorMaleFIDEdit->value();
+        if (_pro->itemType() == Pro::ITEM_TYPE::ARMOR && _armorMaleFIDLabel && _armorFemaleFIDLabel) {
+            int32_t maleFid = _armorMaleFID;
             if (maleFid > 0) {
                 return maleFid; // Default to male version
             }
             
-            int32_t femaleFid = _armorFemaleFIDEdit->value();
+            int32_t femaleFid = _armorFemaleFID;
             if (femaleFid > 0) {
                 return femaleFid;
             }
@@ -1957,20 +1962,19 @@ int32_t ProEditorDialog::getPreviewFid() {
     }
     
     // Fall back to main FID
-    int32_t basicFid = _fidEdit->value();
-    return basicFid;
+    return _mainFID;
 }
 
 int32_t ProEditorDialog::getInventoryFid() {
     
     // Check if basic widgets are initialized
-    if (!_pro || !_inventoryFIDEdit) {
+    if (!_pro || !_inventoryFIDLabel) {
         return 0;
     }
     
     // For items, return inventory FID
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        int32_t inventoryFid = _inventoryFIDEdit->value();
+        int32_t inventoryFid = _inventoryFID;
         return inventoryFid;
     }
     
@@ -1980,13 +1984,13 @@ int32_t ProEditorDialog::getInventoryFid() {
 int32_t ProEditorDialog::getGroundFid() {
     
     // Check if basic widgets are initialized
-    if (!_pro || !_fidEdit) {
+    if (!_pro || !_fidLabel) {
         return 0;
     }
     
     // For items, return main FID (ground view)
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        int32_t groundFid = _fidEdit->value();
+        int32_t groundFid = _mainFID;
         return groundFid;
     }
     
@@ -2127,11 +2131,8 @@ void ProEditorDialog::onFieldChanged() {
     if (sender) {
         validateField(sender);
         
-        // Update preview if any FID field changed
-        if (sender == _fidEdit || 
-            (sender == _inventoryFIDEdit && _inventoryFIDEdit) || 
-            (sender == _armorMaleFIDEdit && _armorMaleFIDEdit) || 
-            (sender == _armorFemaleFIDEdit && _armorFemaleFIDEdit)) {
+        // Update preview if ground FID field changed
+        if (sender == _fidLabel) {
             updatePreview();
         }
         
@@ -2157,19 +2158,19 @@ void ProEditorDialog::onCheckBoxChanged() {
 }
 
 void ProEditorDialog::onFidSelectorClicked() {
-    openFrmSelector(_fidEdit, 0); // Items type
+    openFrmSelectorForLabel(_fidLabel, &_mainFID, 0); // Items type
 }
 
 void ProEditorDialog::onInventoryFidSelectorClicked() {
-    openFrmSelector(_inventoryFIDEdit, 7); // Inventory type
+    openFrmSelectorForLabel(_inventoryFIDLabel, &_inventoryFID, 7); // Inventory type
 }
 
 void ProEditorDialog::onArmorMaleFidSelectorClicked() {
-    openFrmSelector(_armorMaleFIDEdit, 7); // Inventory type for armor
+    openFrmSelectorForLabel(_armorMaleFIDLabel, &_armorMaleFID, 7); // Inventory type for armor
 }
 
 void ProEditorDialog::onArmorFemaleFidSelectorClicked() {
-    openFrmSelector(_armorFemaleFIDEdit, 7); // Inventory type for armor
+    openFrmSelectorForLabel(_armorFemaleFIDLabel, &_armorFemaleFID, 7); // Inventory type for armor
 }
 
 void ProEditorDialog::openFrmSelector(QSpinBox* targetField, uint32_t objectType) {
@@ -2183,6 +2184,23 @@ void ProEditorDialog::openFrmSelector(QSpinBox* targetField, uint32_t objectType
         uint32_t selectedFrmPid = dialog.getSelectedFrmPid();
         if (selectedFrmPid > 0) {
             targetField->setValue(static_cast<int>(selectedFrmPid));
+        }
+    }
+}
+
+void ProEditorDialog::openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidStorage, uint32_t objectType) {
+    if (!targetLabel || !fidStorage) return;
+    
+    FrmSelectorDialog dialog(this);
+    dialog.setObjectTypeFilter(objectType);
+    dialog.setInitialFrmPid(static_cast<uint32_t>(*fidStorage));
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        uint32_t selectedFrmPid = dialog.getSelectedFrmPid();
+        if (selectedFrmPid > 0) {
+            *fidStorage = static_cast<int32_t>(selectedFrmPid);
+            targetLabel->setText(getFrmFilename(*fidStorage));
+            updatePreview(); // Update preview when FID changes
         }
     }
 }
@@ -2240,11 +2258,23 @@ void ProEditorDialog::setupCritterTab() {
     QWidget* scrollWidget = new QWidget();
     QFormLayout* layout = new QFormLayout(scrollWidget);
     
-    // Basic critter data
-    _critterHeadFIDEdit = new QSpinBox();
-    _critterHeadFIDEdit->setRange(0, 999999);
-    _critterHeadFIDEdit->setToolTip("Head FID for critter appearance");
-    layout->addRow("Head FID:", _critterHeadFIDEdit);
+    // Basic critter data - Head FID with selector button
+    QWidget* headFidWidget = new QWidget();
+    QHBoxLayout* headFidLayout = new QHBoxLayout(headFidWidget);
+    headFidLayout->setContentsMargins(0, 0, 0, 0);
+    
+    _critterHeadFIDLabel = new QLabel("No FRM");
+    _critterHeadFIDLabel->setToolTip("FRM filename for critter head appearance");
+    _critterHeadFIDLabel->setStyleSheet("QLabel { border: 1px solid gray; padding: 2px; background-color: white; }");
+    
+    _critterHeadFIDSelectorButton = new QPushButton("...");
+    _critterHeadFIDSelectorButton->setMaximumWidth(30);
+    _critterHeadFIDSelectorButton->setToolTip("Browse FRM files for critter head");
+    connect(_critterHeadFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onCritterHeadFidSelectorClicked);
+    
+    headFidLayout->addWidget(_critterHeadFIDLabel);
+    headFidLayout->addWidget(_critterHeadFIDSelectorButton);
+    layout->addRow("Head FID:", headFidWidget);
     
     _critterAIPacketEdit = new QSpinBox();
     _critterAIPacketEdit->setRange(0, 999);
@@ -2522,7 +2552,7 @@ void ProEditorDialog::setupCritterTab() {
     _tabWidget->addTab(_critterTab, "Critter");
     
     // Connect signals
-    connect(_critterHeadFIDEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    // _critterHeadFIDLabel is now a label and doesn't need signal connection
     connect(_critterAIPacketEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     connect(_critterTeamNumberEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     connect(_critterFlagsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
@@ -2684,7 +2714,10 @@ void ProEditorDialog::loadCritterData() {
     const auto& critterData = _pro->critterData;
     
     // Load basic critter properties
-    if (_critterHeadFIDEdit) _critterHeadFIDEdit->setValue(static_cast<int>(critterData.headFID));
+    if (_critterHeadFIDLabel) {
+        _critterHeadFID = static_cast<int32_t>(critterData.headFID);
+        _critterHeadFIDLabel->setText(getFrmFilename(_critterHeadFID));
+    }
     if (_critterAIPacketEdit) _critterAIPacketEdit->setValue(static_cast<int>(critterData.aiPacket));
     if (_critterTeamNumberEdit) _critterTeamNumberEdit->setValue(static_cast<int>(critterData.teamNumber));
     if (_critterFlagsEdit) _critterFlagsEdit->setValue(static_cast<int>(critterData.flags));
@@ -2827,7 +2860,7 @@ void ProEditorDialog::saveCritterData() {
     auto& critterData = _pro->critterData;
     
     // Save basic critter properties
-    if (_critterHeadFIDEdit) critterData.headFID = static_cast<uint32_t>(_critterHeadFIDEdit->value());
+    if (_critterHeadFIDLabel) critterData.headFID = static_cast<uint32_t>(_critterHeadFID);
     if (_critterAIPacketEdit) critterData.aiPacket = static_cast<uint32_t>(_critterAIPacketEdit->value());
     if (_critterTeamNumberEdit) critterData.teamNumber = static_cast<uint32_t>(_critterTeamNumberEdit->value());
     if (_critterFlagsEdit) critterData.flags = static_cast<uint32_t>(_critterFlagsEdit->value());
@@ -3775,6 +3808,22 @@ QComboBox* ProEditorDialog::createMaterialComboBox(const QString& tooltip) {
         comboBox->setToolTip(tooltip);
     }
     return comboBox;
+}
+
+QString ProEditorDialog::getFrmFilename(int32_t fid) {
+    if (fid <= 0) {
+        return "No FRM";
+    }
+    std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(static_cast<unsigned int>(fid));
+    if (frmPath.empty()) {
+        return QString("Invalid FID (%1)").arg(fid);
+    }
+    // Extract just the filename from the full path
+    return QString::fromStdString(std::filesystem::path(frmPath).filename().string());
+}
+
+void ProEditorDialog::onCritterHeadFidSelectorClicked() {
+    openFrmSelectorForLabel(_critterHeadFIDLabel, &_critterHeadFID, 1); // Object type 1 for critters
 }
 
 } // namespace geck
