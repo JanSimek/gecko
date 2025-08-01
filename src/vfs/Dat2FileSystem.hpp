@@ -280,6 +280,9 @@ private:
     {
         for (const auto& datEntry : datArchive->getEntries()) {
             // TODO: add directories !!!!
+            // DAT entries use forward slashes (e.g., "art/tiles/tile.frm")
+            // FileInfo constructor will call Configure() which uses generic_string()
+            // This ensures consistent forward slash usage in the VFS layer
             vfspp::FileInfo fileInfo(BasePathST(), datEntry.first, false);
             vfspp::IFilePtr file(new Dat2File(fileInfo, datEntry.second, m_datReader));
             outFileList.insert(std::pair(file->GetFileInfo().AbsolutePath(), file));

@@ -11,44 +11,45 @@ namespace geck {
 class PathUtils {
 public:
     /**
-     * @brief Create a normalized FileInfo with native path separators
+     * @brief Create a normalized FileInfo with forward slash separators for VFS consistency
      *
-     * This function addresses VFSPP compatibility by ensuring path separators
-     * are converted to the native format. For example:
-     * - On Windows: "C:\\geck\\resources/art/tiles/tiles.lst" -> "C:\\geck\\resources\\art\\tiles\\tiles.lst"
+     * This function ensures path separators are converted to forward slashes,
+     * which matches the format used in DAT archives and provides consistency
+     * across platforms in the VFS layer. For example:
+     * - On Windows: "C:\\geck\\resources\\art\\tiles\\tiles.lst" -> "C:/geck/resources/art/tiles/tiles.lst"
      * - On Unix: "/home/user/resources\\art\\tiles\\tiles.lst" -> "/home/user/resources/art/tiles/tiles.lst"
      *
-     * This replaces the need for modifications in VFSPP's OpenFileST method.
+     * This approach ensures that paths stored in VFS file lists match the lookup
+     * paths regardless of the host platform.
      *
      * @param path The path to normalize
-     * @return vfspp::FileInfo with normalized native path separators
+     * @return vfspp::FileInfo with forward slash separators
      */
     static vfspp::FileInfo createNormalizedFileInfo(const std::filesystem::path& path) {
-        // Convert to native format with make_preferred()
-        std::filesystem::path nativePath = path;
-        nativePath.make_preferred();
-        return vfspp::FileInfo(nativePath.string());
+        // Convert to generic format with forward slashes for VFS consistency
+        // This matches the format used in DAT archives and ensures cross-platform compatibility
+        return vfspp::FileInfo(path.generic_string());
     }
 
     /**
      * @brief Create a normalized FileInfo from string path
      *
      * @param pathStr The path string to normalize
-     * @return vfspp::FileInfo with normalized native path separators
+     * @return vfspp::FileInfo with forward slash separators
      */
     static vfspp::FileInfo createNormalizedFileInfo(const std::string& pathStr) {
         return createNormalizedFileInfo(std::filesystem::path(pathStr));
     }
 
     /**
-     * @brief Normalize path separators to native format
+     * @brief Normalize path separators to forward slashes
      *
      * @param path The path to normalize
-     * @return Normalized path with native separators
+     * @return Normalized path with forward slash separators
      */
     static std::filesystem::path normalize(const std::filesystem::path& path) {
-        std::filesystem::path normalized = path;
-        return normalized.make_preferred();
+        // Return path with forward slashes for consistency
+        return std::filesystem::path(path.generic_string());
     }
 };
 

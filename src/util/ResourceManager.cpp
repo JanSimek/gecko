@@ -62,6 +62,8 @@ bool ResourceManager::fileExistsInVFS(const std::filesystem::path& filepath) con
     }
     
     // vfspp needs leading slash for root-relative paths
+    // Note: The VFS layer uses forward slashes internally for cross-platform consistency
+    // This matches the format used in DAT archives (e.g., "/art/tiles/tile.frm")
     std::filesystem::path vfsPath = "/" / filepath;
     vfspp::FileInfo fileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
     

@@ -62,6 +62,7 @@ public:
         if (existingIter == _resources.end()) {
             try {
                 // Load data from VFS
+                // The VFS layer uses forward slashes internally, matching DAT archive format
                 const std::filesystem::path vfsPath = "/" / path;
                 vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::createNormalizedFileInfo(vfsPath), vfspp::IFile::FileMode::Read);
 
