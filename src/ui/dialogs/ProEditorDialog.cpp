@@ -321,7 +321,7 @@ void ProEditorDialog::setupUI() {
     
     // Description (compact)
     _descriptionLabel = new QTextEdit("Loading...");
-    _descriptionLabel->setStyleSheet("QTextEdit { background-color: #f7fafc; border: 1px solid #e2e8f0; font-size: 11px; }");
+    _descriptionLabel->setStyleSheet("QTextEdit { background-color: #f7fafc; border: 1px solid #e2e8f0; font-size: 12px; }");
     _descriptionLabel->setReadOnly(true);
     _descriptionLabel->setFixedHeight(60);
     _descriptionLabel->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -384,7 +384,7 @@ void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
     QGroupBox* previewGroup = new QGroupBox("Preview");
 
     QVBoxLayout* previewLayout = new QVBoxLayout(previewGroup);
-    previewLayout->setContentsMargins(8, 8, 8, 8);
+    previewLayout->setContentsMargins(4, 4, 4, 4);
     previewLayout->setSpacing(4);
 
     // Check if we need specialized previews for items
@@ -538,9 +538,9 @@ void ProEditorDialog::setupCompactArmorAnimationControls(QVBoxLayout* parentLayo
 }
 
 void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
-    // Compact dual preview for inventory/ground
-    QGroupBox* dualGroup = new QGroupBox("Item Views");
-    QHBoxLayout* dualLayout = new QHBoxLayout(dualGroup);
+    // Compact dual preview for inventory/ground (no group box border)
+    QWidget* dualWidget = new QWidget();
+    QHBoxLayout* dualLayout = new QHBoxLayout(dualWidget);
     dualLayout->setContentsMargins(0, 0, 0, 0);
     dualLayout->setSpacing(4);
     dualLayout->setAlignment(Qt::AlignCenter);
@@ -549,6 +549,7 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     QWidget* invWidget = new QWidget();
     QVBoxLayout* invLayout = new QVBoxLayout(invWidget);
     invLayout->setContentsMargins(0, 0, 0, 0);
+    invLayout->setSpacing(2);
 
     _inventoryPreviewLabel = new QLabel();
     _inventoryPreviewLabel->setFixedSize(120, 120);
@@ -587,7 +588,7 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     dualLayout->addWidget(invWidget);
     dualLayout->addWidget(groundWidget);
 
-    parentLayout->addWidget(dualGroup);
+    parentLayout->addWidget(dualWidget);
 }
 
 void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
@@ -837,7 +838,7 @@ void ProEditorDialog::setupCommonTab() {
     layout->addRow("Name:", _nameLabel);
     
     _descriptionLabel = new QTextEdit("Loading...");
-    _descriptionLabel->setStyleSheet("QTextEdit { background-color: #f0f8ff; padding: 4px; border: 1px solid #add8e6; }");
+    _descriptionLabel->setStyleSheet("QTextEdit { background-color: #f0f8ff; padding: 4px; border: 1px solid #add8e6; font-size: 12px; }");
     _descriptionLabel->setReadOnly(true);
     _descriptionLabel->setMinimumHeight(30);
     _descriptionLabel->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -2319,6 +2320,14 @@ void ProEditorDialog::loadWeaponData() {
     if (_weaponEnergyWeaponCheck) {
         bool isEnergyWeapon = (_pro->weaponData.weaponFlags & static_cast<uint32_t>(Pro::WEAPON_FLAGS::ENERGY_WEAPON)) != 0;
         _weaponEnergyWeaponCheck->setChecked(isEnergyWeapon);
+    }
+    
+    // Validate min/max damage after loading
+    if (_weaponDamageMinEdit) {
+        validateField(_weaponDamageMinEdit);
+    }
+    if (_weaponDamageMaxEdit) {
+        validateField(_weaponDamageMaxEdit);
     }
 }
 
