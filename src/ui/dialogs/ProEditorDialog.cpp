@@ -382,10 +382,11 @@ void ProEditorDialog::setupUI() {
 void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
     // Create compact preview group
     QGroupBox* previewGroup = new QGroupBox("Preview");
+
     QVBoxLayout* previewLayout = new QVBoxLayout(previewGroup);
     previewLayout->setContentsMargins(8, 8, 8, 8);
     previewLayout->setSpacing(4);
-    
+
     // Check if we need specialized previews for items
     bool hasSpecializedPreview = (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM);
     
@@ -540,22 +541,22 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     // Compact dual preview for inventory/ground
     QGroupBox* dualGroup = new QGroupBox("Item Views");
     QHBoxLayout* dualLayout = new QHBoxLayout(dualGroup);
-    dualLayout->setContentsMargins(4, 4, 4, 4);
+    dualLayout->setContentsMargins(0, 0, 0, 0);
     dualLayout->setSpacing(4);
+    dualLayout->setAlignment(Qt::AlignCenter);
     
     // Inventory preview (small)
     QWidget* invWidget = new QWidget();
     QVBoxLayout* invLayout = new QVBoxLayout(invWidget);
     invLayout->setContentsMargins(0, 0, 0, 0);
-    invLayout->setSpacing(2);
-    
+
     _inventoryPreviewLabel = new QLabel();
-    _inventoryPreviewLabel->setFixedSize(100, 80);
+    _inventoryPreviewLabel->setFixedSize(120, 120);
     _inventoryPreviewLabel->setAlignment(Qt::AlignCenter);
     _inventoryPreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
     _inventoryPreviewLabel->setText("Inv");
-    _inventoryPreviewLabel->setScaledContents(true);
-    
+    _inventoryPreviewLabel->setScaledContents(false); // Preserve aspect ratio
+
     QLabel* invLabel = new QLabel("Inventory");
     invLabel->setAlignment(Qt::AlignCenter);
     invLabel->setStyleSheet("QLabel { font-size: 10px; }");
@@ -570,11 +571,11 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     groundLayout->setSpacing(2);
     
     _groundPreviewLabel = new QLabel();
-    _groundPreviewLabel->setFixedSize(100, 80);
+    _groundPreviewLabel->setFixedSize(120, 120);
     _groundPreviewLabel->setAlignment(Qt::AlignCenter);
     _groundPreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
     _groundPreviewLabel->setText("Ground");
-    _groundPreviewLabel->setScaledContents(true);
+    _groundPreviewLabel->setScaledContents(false); // Preserve aspect ratio
     
     QLabel* groundLabel = new QLabel("Ground");
     groundLabel->setAlignment(Qt::AlignCenter);
@@ -585,7 +586,7 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     
     dualLayout->addWidget(invWidget);
     dualLayout->addWidget(groundWidget);
-    
+
     parentLayout->addWidget(dualGroup);
 }
 
@@ -691,44 +692,106 @@ void ProEditorDialog::setupLeftPanelCommonFields(QVBoxLayout* parentLayout) {
     
     // NOTE: Hex flags field removed - using user-friendly checkboxes only
     
-    // Key flags as checkboxes (most important ones)
+    // Complete flags as checkboxes (organized in compact layout)
+    uint32_t flags = _pro->header.flags;
+    
+    // Basic rendering flags
     _flatCheck = new QCheckBox("Flat");
+    _flatCheck->setChecked(flags & 0x00000008);
     _flatCheck->setToolTip("Rendered first, just after tiles");
-    connect(_flatCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
+    connect(_flatCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
     _noBlockCheck = new QCheckBox("No Block");
+    _noBlockCheck->setChecked(flags & 0x00000010);
     _noBlockCheck->setToolTip("Doesn't block the tile");
-    connect(_noBlockCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
+    connect(_noBlockCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
     _multiHexCheck = new QCheckBox("Multi-Hex");
+    _multiHexCheck->setChecked(flags & 0x00000800);
     _multiHexCheck->setToolTip("Object spans multiple hexes");
-    connect(_multiHexCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
+    connect(_multiHexCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    
+    _noHighlightCheck = new QCheckBox("No Highlight");
+    _noHighlightCheck->setChecked(flags & 0x00001000);
+    _noHighlightCheck->setToolTip("Doesn't highlight border; used for containers");
+    connect(_noHighlightCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    
+    // Transparency flags
+    _transRedCheck = new QCheckBox("Trans Red");
+    _transRedCheck->setChecked(flags & 0x00004000);
+    _transRedCheck->setToolTip("Red transparency effect");
+    connect(_transRedCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    
+    _transNoneCheck = new QCheckBox("Opaque");
+    _transNoneCheck->setChecked(flags & 0x00008000);
+    _transNoneCheck->setToolTip("Opaque - not the default value");
+    connect(_transNoneCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    
+    _transWallCheck = new QCheckBox("Trans Wall");
+    _transWallCheck->setChecked(flags & 0x00010000);
+    _transWallCheck->setToolTip("Wall transparency effect");
+    connect(_transWallCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    
+    _transGlassCheck = new QCheckBox("Trans Glass");
+    _transGlassCheck->setChecked(flags & 0x00020000);
+    _transGlassCheck->setToolTip("Glass transparency effect");
+    connect(_transGlassCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    
+    _transSteamCheck = new QCheckBox("Trans Steam");
+    _transSteamCheck->setChecked(flags & 0x00040000);
+    _transSteamCheck->setToolTip("Steam transparency effect");
+    connect(_transSteamCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    
+    _transEnergyCheck = new QCheckBox("Trans Energy");
+    _transEnergyCheck->setChecked(flags & 0x00080000);
+    _transEnergyCheck->setToolTip("Energy transparency effect");
+    connect(_transEnergyCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
+    
+    // Advanced flags
+    _wallTransEndCheck = new QCheckBox("Wall Trans End");
+    _wallTransEndCheck->setChecked(flags & 0x10000000);
+    _wallTransEndCheck->setToolTip("Changes transparency egg logic");
+    connect(_wallTransEndCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
     _lightThruCheck = new QCheckBox("Light Thru");
+    _lightThruCheck->setChecked(flags & 0x20000000);
     _lightThruCheck->setToolTip("Light passes through this object");
-    connect(_lightThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
+    connect(_lightThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
     _shootThruCheck = new QCheckBox("Shoot Thru");
+    _shootThruCheck->setChecked(flags & 0x80000000);
     _shootThruCheck->setToolTip("Projectiles pass through this object");
-    connect(_shootThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
+    connect(_shootThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
-    // Compact checkbox layout (2 columns)
+    // Compact checkbox layout (3 columns for better organization)
     QWidget* checkboxWidget = new QWidget();
     QGridLayout* checkboxLayout = new QGridLayout(checkboxWidget);
     checkboxLayout->setContentsMargins(0, 0, 0, 0);
     checkboxLayout->setSpacing(2);
     
+    // Column 1: Basic rendering
     checkboxLayout->addWidget(_flatCheck, 0, 0);
-    checkboxLayout->addWidget(_noBlockCheck, 0, 1);
-    checkboxLayout->addWidget(_multiHexCheck, 1, 0);
-    checkboxLayout->addWidget(_lightThruCheck, 1, 1);
-    checkboxLayout->addWidget(_shootThruCheck, 2, 0, 1, 2); // Span 2 columns
+    checkboxLayout->addWidget(_noBlockCheck, 1, 0);
+    checkboxLayout->addWidget(_multiHexCheck, 2, 0);
+    checkboxLayout->addWidget(_noHighlightCheck, 3, 0);
+    
+    // Column 2: Transparency
+    checkboxLayout->addWidget(_transRedCheck, 0, 1);
+    checkboxLayout->addWidget(_transNoneCheck, 1, 1);
+    checkboxLayout->addWidget(_transWallCheck, 2, 1);
+    checkboxLayout->addWidget(_transGlassCheck, 3, 1);
+    
+    // Column 3: Advanced
+    checkboxLayout->addWidget(_transSteamCheck, 0, 2);
+    checkboxLayout->addWidget(_transEnergyCheck, 1, 2);
+    checkboxLayout->addWidget(_wallTransEndCheck, 2, 2);
+    checkboxLayout->addWidget(_lightThruCheck, 3, 2);
+    
+    // Shoot thru spans all columns at bottom
+    checkboxLayout->addWidget(_shootThruCheck, 4, 0, 1, 3);
     
     flagsLayout->addWidget(checkboxWidget);
     parentLayout->addWidget(flagsGroup);
-    
-    // Load object flags from current value
-    loadObjectFlags(_pro->header.flags);
 }
 
 void ProEditorDialog::setupTabContent() {
@@ -3233,9 +3296,10 @@ void ProEditorDialog::updateInventoryPreview() {
             return;
         }
         
-        QPixmap thumbnail = createFrmThumbnail(frmPath, QSize(150, 150));
+        QPixmap thumbnail = createFrmThumbnail(frmPath, QSize(120, 120));
         if (!thumbnail.isNull()) {
-            _inventoryPreviewLabel->setPixmap(thumbnail);
+            QPixmap scaledPixmap = thumbnail.scaled(_inventoryPreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            _inventoryPreviewLabel->setPixmap(scaledPixmap);
         } else {
             _inventoryPreviewLabel->clear();
             _inventoryPreviewLabel->setText("Failed to load inventory FRM");
@@ -3273,9 +3337,10 @@ void ProEditorDialog::updateGroundPreview() {
             return;
         }
         
-        QPixmap thumbnail = createFrmThumbnail(frmPath, QSize(150, 150));
+        QPixmap thumbnail = createFrmThumbnail(frmPath, QSize(120, 120));
         if (!thumbnail.isNull()) {
-            _groundPreviewLabel->setPixmap(thumbnail);
+            QPixmap scaledPixmap = thumbnail.scaled(_groundPreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            _groundPreviewLabel->setPixmap(scaledPixmap);
         } else {
             _groundPreviewLabel->clear();
             _groundPreviewLabel->setText("Failed to load ground FRM");
