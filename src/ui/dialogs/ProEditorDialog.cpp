@@ -37,6 +37,9 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _groundPreviewGroup(nullptr)
     , _inventoryPreviewLabel(nullptr)
     , _groundPreviewLabel(nullptr)
+    , _armorPreviewGroup(nullptr)
+    , _armorMalePreviewLabel(nullptr)
+    , _armorFemalePreviewLabel(nullptr)
     , _animationControls(nullptr)
     , _animationLayout(nullptr)
     , _playPauseButton(nullptr)
@@ -621,11 +624,7 @@ void ProEditorDialog::setupArmorTab() {
     connect(_armorPerkCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
     miscLayout->addRow("Perk:", _armorPerkCombo);
     
-    // Male FID with selector button
-    QWidget* maleFidWidget = new QWidget();
-    QHBoxLayout* maleFidLayout = new QHBoxLayout(maleFidWidget);
-    maleFidLayout->setContentsMargins(0, 0, 0, 0);
-    
+    // Create male and female FID labels and buttons (they will be used in armor preview)
     _armorMaleFIDLabel = new QLabel("No FRM");
     _armorMaleFIDLabel->setToolTip("FRM filename for male character wearing this armor");
     _armorMaleFIDLabel->setStyleSheet("QLabel { border: 1px solid gray; padding: 2px; background-color: white; }");
@@ -634,15 +633,6 @@ void ProEditorDialog::setupArmorTab() {
     _armorMaleFIDSelectorButton->setMaximumWidth(30);
     _armorMaleFIDSelectorButton->setToolTip("Browse FRM files for male armor");
     connect(_armorMaleFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onArmorMaleFidSelectorClicked);
-    
-    maleFidLayout->addWidget(_armorMaleFIDLabel);
-    maleFidLayout->addWidget(_armorMaleFIDSelectorButton);
-    miscLayout->addRow("Male FID:", maleFidWidget);
-    
-    // Female FID with selector button
-    QWidget* femaleFidWidget = new QWidget();
-    QHBoxLayout* femaleFidLayout = new QHBoxLayout(femaleFidWidget);
-    femaleFidLayout->setContentsMargins(0, 0, 0, 0);
     
     _armorFemaleFIDLabel = new QLabel("No FRM");
     _armorFemaleFIDLabel->setToolTip("FRM filename for female character wearing this armor");
@@ -653,9 +643,7 @@ void ProEditorDialog::setupArmorTab() {
     _armorFemaleFIDSelectorButton->setToolTip("Browse FRM files for female armor");
     connect(_armorFemaleFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onArmorFemaleFidSelectorClicked);
     
-    femaleFidLayout->addWidget(_armorFemaleFIDLabel);
-    femaleFidLayout->addWidget(_armorFemaleFIDSelectorButton);
-    miscLayout->addRow("Female FID:", femaleFidWidget);
+    // Note: Male/Female FID fields are now displayed in the Armor Preview panel
     
     // AI Priority display
     _armorAIPriorityLabel = new QLabel("0");
@@ -1003,6 +991,12 @@ void ProEditorDialog::setupPreview() {
     // Setup dual preview system for items, single preview for others
     if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM) {
         setupDualPreview();
+        
+        // Add armor preview for armor items
+        if (_pro->itemType() == Pro::ITEM_TYPE::ARMOR) {
+            setupArmorPreview();
+            _previewLayout->addWidget(_armorPreviewGroup);
+        }
     } else {
         // Original single preview for non-items
         _previewGroup = new QGroupBox("FRM Preview");
@@ -1154,6 +1148,91 @@ void ProEditorDialog::setupDualPreview() {
     _previewLayout->addWidget(_previewGroup);
     
     // No copy buttons or animation controls - items use static dual preview
+}
+
+void ProEditorDialog::setupArmorPreview() {
+    // Create armor preview group box
+    _armorPreviewGroup = new QGroupBox("Armor Preview");
+    QVBoxLayout* armorPreviewLayout = new QVBoxLayout(_armorPreviewGroup);
+    
+    // Create horizontal container for the two armor preview images
+    QWidget* armorImagesContainer = new QWidget();
+    QHBoxLayout* armorImagesLayout = new QHBoxLayout(armorImagesContainer);
+    
+    // Left side - Male armor preview with label and FID field
+    QWidget* maleContainer = new QWidget();
+    QVBoxLayout* maleLayout = new QVBoxLayout(maleContainer);
+    maleLayout->setContentsMargins(0, 0, 0, 0);
+    
+    // Male armor label
+    QLabel* maleTitleLabel = new QLabel("Male Armor");
+    maleTitleLabel->setAlignment(Qt::AlignCenter);
+    maleTitleLabel->setStyleSheet("QLabel { font-weight: bold; margin-bottom: 5px; }");
+    maleLayout->addWidget(maleTitleLabel);
+    
+    // Male armor preview image
+    _armorMalePreviewLabel = new QLabel();
+    _armorMalePreviewLabel->setAlignment(Qt::AlignCenter);
+    _armorMalePreviewLabel->setMinimumHeight(150);
+    _armorMalePreviewLabel->setMaximumHeight(200);
+    _armorMalePreviewLabel->setMinimumWidth(150);
+    _armorMalePreviewLabel->setScaledContents(false);
+    _armorMalePreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
+    _armorMalePreviewLabel->setText("No male armor FRM");
+    maleLayout->addWidget(_armorMalePreviewLabel);
+    
+    // Male armor FID field (moved from Armor tab)
+    QWidget* maleFidWidget = new QWidget();
+    QHBoxLayout* maleFidLayout = new QHBoxLayout(maleFidWidget);
+    maleFidLayout->setContentsMargins(0, 0, 0, 0);
+    
+    QLabel* maleFidLabel = new QLabel("Male FID:");
+    maleFidLabel->setMinimumWidth(60);
+    maleFidLayout->addWidget(maleFidLabel);
+    maleFidLayout->addWidget(_armorMaleFIDLabel);
+    maleFidLayout->addWidget(_armorMaleFIDSelectorButton);
+    maleLayout->addWidget(maleFidWidget);
+    
+    // Right side - Female armor preview with label and FID field  
+    QWidget* femaleContainer = new QWidget();
+    QVBoxLayout* femaleLayout = new QVBoxLayout(femaleContainer);
+    femaleLayout->setContentsMargins(0, 0, 0, 0);
+    
+    // Female armor label
+    QLabel* femaleTitleLabel = new QLabel("Female Armor");
+    femaleTitleLabel->setAlignment(Qt::AlignCenter);
+    femaleTitleLabel->setStyleSheet("QLabel { font-weight: bold; margin-bottom: 5px; }");
+    femaleLayout->addWidget(femaleTitleLabel);
+    
+    // Female armor preview image
+    _armorFemalePreviewLabel = new QLabel();
+    _armorFemalePreviewLabel->setAlignment(Qt::AlignCenter);
+    _armorFemalePreviewLabel->setMinimumHeight(150);
+    _armorFemalePreviewLabel->setMaximumHeight(200);
+    _armorFemalePreviewLabel->setMinimumWidth(150);
+    _armorFemalePreviewLabel->setScaledContents(false);
+    _armorFemalePreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
+    _armorFemalePreviewLabel->setText("No female armor FRM");
+    femaleLayout->addWidget(_armorFemalePreviewLabel);
+    
+    // Female armor FID field (moved from Armor tab)
+    QWidget* femaleFidWidget = new QWidget();
+    QHBoxLayout* femaleFidLayout = new QHBoxLayout(femaleFidWidget);
+    femaleFidLayout->setContentsMargins(0, 0, 0, 0);
+    
+    QLabel* femaleFidLabel = new QLabel("Female FID:");
+    femaleFidLabel->setMinimumWidth(60);
+    femaleFidLayout->addWidget(femaleFidLabel);
+    femaleFidLayout->addWidget(_armorFemaleFIDLabel);
+    femaleFidLayout->addWidget(_armorFemaleFIDSelectorButton);
+    femaleLayout->addWidget(femaleFidWidget);
+    
+    // Add both containers to horizontal layout
+    armorImagesLayout->addWidget(maleContainer);
+    armorImagesLayout->addWidget(femaleContainer);
+    
+    // Add images container to main armor preview layout
+    armorPreviewLayout->addWidget(armorImagesContainer);
 }
 
 void ProEditorDialog::setupAnimationControls() {
@@ -1385,6 +1464,9 @@ void ProEditorDialog::loadArmorData() {
     _armorMaleFIDLabel->setText(getFrmFilename(_armorMaleFID));
     _armorFemaleFID = _pro->armorData.armorFemaleFID;
     _armorFemaleFIDLabel->setText(getFrmFilename(_armorFemaleFID));
+    
+    // Update armor preview with loaded FIDs
+    updateArmorPreview();
 }
 
 void ProEditorDialog::loadContainerData() {
@@ -1887,6 +1969,11 @@ void ProEditorDialog::updatePreview() {
         updateInventoryPreview();
         updateGroundPreview();
         
+        // Update armor preview if this is an armor item
+        if (_pro->itemType() == Pro::ITEM_TYPE::ARMOR && _armorMalePreviewLabel && _armorFemalePreviewLabel) {
+            updateArmorPreview();
+        }
+        
         // Items don't animate, so disable animation controls and return
         if (_animationControls) {
             _animationControls->setEnabled(false);
@@ -2075,6 +2162,68 @@ void ProEditorDialog::updateGroundPreview() {
     }
 }
 
+void ProEditorDialog::updateArmorPreview() {
+    if (!_armorMalePreviewLabel || !_armorFemalePreviewLabel) {
+        return;
+    }
+    
+    // Update male armor preview
+    if (_armorMaleFID <= 0) {
+        _armorMalePreviewLabel->clear();
+        _armorMalePreviewLabel->setText("No male armor FRM");
+    } else {
+        try {
+            auto& resourceManager = ResourceManager::getInstance();
+            std::string maleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorMaleFID));
+            
+            if (maleFrmPath.empty()) {
+                _armorMalePreviewLabel->clear();
+                _armorMalePreviewLabel->setText("Invalid male armor FID");
+            } else {
+                QPixmap maleThumbnail = createFrmThumbnail(maleFrmPath, QSize(150, 150));
+                if (!maleThumbnail.isNull()) {
+                    _armorMalePreviewLabel->setPixmap(maleThumbnail);
+                } else {
+                    _armorMalePreviewLabel->clear();
+                    _armorMalePreviewLabel->setText("Failed to load male armor FRM");
+                }
+            }
+        } catch (const std::exception& e) {
+            spdlog::error("ProEditorDialog::updateArmorPreview() - male armor exception: {}", e.what());
+            _armorMalePreviewLabel->clear();
+            _armorMalePreviewLabel->setText("Error loading male armor FRM");
+        }
+    }
+    
+    // Update female armor preview
+    if (_armorFemaleFID <= 0) {
+        _armorFemalePreviewLabel->clear();
+        _armorFemalePreviewLabel->setText("No female armor FRM");
+    } else {
+        try {
+            auto& resourceManager = ResourceManager::getInstance();
+            std::string femaleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorFemaleFID));
+            
+            if (femaleFrmPath.empty()) {
+                _armorFemalePreviewLabel->clear();
+                _armorFemalePreviewLabel->setText("Invalid female armor FID");
+            } else {
+                QPixmap femaleThumbnail = createFrmThumbnail(femaleFrmPath, QSize(150, 150));
+                if (!femaleThumbnail.isNull()) {
+                    _armorFemalePreviewLabel->setPixmap(femaleThumbnail);
+                } else {
+                    _armorFemalePreviewLabel->clear();
+                    _armorFemalePreviewLabel->setText("Failed to load female armor FRM");
+                }
+            }
+        } catch (const std::exception& e) {
+            spdlog::error("ProEditorDialog::updateArmorPreview() - female armor exception: {}", e.what());
+            _armorFemalePreviewLabel->clear();
+            _armorFemalePreviewLabel->setText("Error loading female armor FRM");
+        }
+    }
+}
+
 void ProEditorDialog::onAccept() {
     saveProData();
     
@@ -2167,10 +2316,12 @@ void ProEditorDialog::onInventoryFidSelectorClicked() {
 
 void ProEditorDialog::onArmorMaleFidSelectorClicked() {
     openFrmSelectorForLabel(_armorMaleFIDLabel, &_armorMaleFID, 7); // Inventory type for armor
+    updateArmorPreview(); // Refresh armor preview after selection
 }
 
 void ProEditorDialog::onArmorFemaleFidSelectorClicked() {
     openFrmSelectorForLabel(_armorFemaleFIDLabel, &_armorFemaleFID, 7); // Inventory type for armor
+    updateArmorPreview(); // Refresh armor preview after selection
 }
 
 void ProEditorDialog::openFrmSelector(QSpinBox* targetField, uint32_t objectType) {

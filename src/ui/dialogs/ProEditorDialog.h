@@ -70,6 +70,7 @@ private:
     void setupTabs();
     void setupPreview();
     void setupDualPreview();
+    void setupArmorPreview();
     void setupAnimationControls();
     void setupValidationPanel();
     void setupCommonTab();
@@ -122,7 +123,8 @@ private:
     void validateField(QWidget* field);
     void updatePreview();
     void updateInventoryPreview();
-    void updateGroundPreview();  
+    void updateGroundPreview();
+    void updateArmorPreview();  
     int32_t getPreviewFid();
     int32_t getInventoryFid();
     int32_t getGroundFid();
@@ -336,6 +338,11 @@ private:
     QGroupBox* _groundPreviewGroup;
     QLabel* _inventoryPreviewLabel;
     QLabel* _groundPreviewLabel;
+    
+    // Armor preview system
+    QGroupBox* _armorPreviewGroup;
+    QLabel* _armorMalePreviewLabel;
+    QLabel* _armorFemalePreviewLabel;
     
     // Animation controls
     QWidget* _animationControls;
