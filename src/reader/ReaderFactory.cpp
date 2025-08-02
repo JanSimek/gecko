@@ -25,7 +25,7 @@ namespace geck {
 const std::map<ReaderFactory::Format, ReaderFactory::FormatInfo> ReaderFactory::format_info_map = {
     {Format::DAT, {Format::DAT, "Fallout Data Archive", {".dat"}, {}, 0, 32, 1.0}},
     {Format::PRO, {Format::PRO, "Fallout PRO Object", {".pro"}, {}, 0, 24, 1.0}},
-    {Format::FRM, {Format::FRM, "Fallout Frame", {".frm"}, {}, 0, 62, 1.0}},  
+    {Format::FRM, {Format::FRM, "Fallout Frame", {".frm"}, {0x00, 0x00, 0x00, 0x04}, 0, 62, 1.0}},  
     {Format::PAL, {Format::PAL, "Fallout Palette", {".pal"}, {}, 0, 768, 1.0}},
     {Format::GAM, {Format::GAM, "Fallout Game Save", {".gam"}, {'F', 'A', 'L', 'L'}, 0, 4, 1.0}},
     {Format::MSG, {Format::MSG, "Fallout Message File", {".msg"}, {}, 0, 1, 1.0}},
@@ -247,6 +247,14 @@ ReaderFactory::Format ReaderFactory::detectByContent(const std::vector<uint8_t>&
     // PAL files are exactly 768 bytes (256 colors * 3 channels)
     if (data.size() == 768) {
         return Format::PAL;
+    }
+    
+    // GAM files may contain GAME_GLOBAL_VARS pattern
+    if (data.size() > 16) {
+        std::string start(data.begin(), data.begin() + std::min(size_t(20), data.size()));
+        if (start.find("GAME_GLOBAL_VARS") != std::string::npos) {
+            return Format::GAM;
+        }
     }
     
     // MSG files typically start with lines in format {number}{}

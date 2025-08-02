@@ -139,13 +139,16 @@ public:
         uint32_t stat0;                // Stat ID for immediate effect (0-14)
         uint32_t stat1;                // Stat ID for immediate effect (0-14)
         uint32_t stat2;                // Stat ID for immediate effect (0-14)
+        // instant effects
         int32_t amount0;              // Modifier for stat0 (signed)
         int32_t amount1;              // Modifier for stat1 (signed)
         int32_t amount2;              // Modifier for stat2 (signed)
+        // mid-delayed effects
         uint32_t duration1;           // Delay before first effect (game minutes)
         int32_t amount0_1;            // First delayed effect for stat0
         int32_t amount1_1;            // First delayed effect for stat1
         int32_t amount2_1;            // First delayed effect for stat2
+        // long-delayed effects
         uint32_t duration2;           // Delay before second effect (game minutes)
         int32_t amount0_2;            // Second delayed effect for stat0
         int32_t amount1_2;            // Second delayed effect for stat1
