@@ -23,6 +23,7 @@
 #include <QThread>
 #include <QMetaObject>
 #include <QApplication>
+#include <QRegularExpression>
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <fstream>
@@ -30,6 +31,37 @@
 #include <vfspp/VirtualFileSystem.hpp>
 
 namespace geck {
+
+// FileBrowserProxyModel implementation
+FileBrowserProxyModel::FileBrowserProxyModel(QObject* parent)
+    : QSortFilterProxyModel(parent) {
+    setFilterCaseSensitivity(Qt::CaseInsensitive);
+    setRecursiveFilteringEnabled(true);
+}
+
+bool FileBrowserProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const {
+    if (filterRegularExpression().pattern().isEmpty()) {
+        return true; // Accept all rows when no filter is set
+    }
+
+    QModelIndex sourceModel = this->sourceModel()->index(sourceRow, 0, sourceParent);
+    if (!sourceModel.isValid()) {
+        return false;
+    }
+
+    // Get the filename from column 0 (Name column)
+    QString fileName = sourceModel.data(Qt::DisplayRole).toString();
+    
+    // Get the PRO name from column 3 (PRO Name column)
+    QModelIndex proNameIndex = this->sourceModel()->index(sourceRow, 3, sourceParent);
+    QString proName = proNameIndex.isValid() ? proNameIndex.data(Qt::DisplayRole).toString() : QString();
+    
+    // Check if either filename or PRO name matches the filter
+    bool fileNameMatches = fileName.contains(filterRegularExpression());
+    bool proNameMatches = !proName.isEmpty() && proName.contains(filterRegularExpression());
+    
+    return fileNameMatches || proNameMatches;
+}
 
 // FileLoaderWorker implementation
 FileLoaderWorker::FileLoaderWorker(QObject* parent)
@@ -282,16 +314,13 @@ void FileBrowserPanel::setupFilterControls() {
 void FileBrowserPanel::setupTreeView() {
     _treeView = new QTreeView(this);
     _treeModel = new QStandardItemModel(this);
-    _proxyModel = new QSortFilterProxyModel(this);
+    _proxyModel = new FileBrowserProxyModel(this);
 
     // Set up model headers
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path" << "PRO Name");
 
     // Configure proxy model
     _proxyModel->setSourceModel(_treeModel);
-    _proxyModel->setRecursiveFilteringEnabled(true);
-    _proxyModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
-    _proxyModel->setFilterKeyColumn(0); // Filter on Name column
 
     _treeView->setModel(_proxyModel);
     _treeView->setAlternatingRowColors(true);
@@ -635,12 +664,15 @@ void FileBrowserPanel::onSearchTextChanged(const QString& text) {
     
     // Apply filter immediately using proxy model
     if (!text.isEmpty()) {
-        _proxyModel->setFilterWildcard("*" + text + "*");
+        // Escape special regex characters and use case-insensitive search
+        QString escapedText = QRegularExpression::escape(text);
+        QRegularExpression regex(escapedText, QRegularExpression::CaseInsensitiveOption);
+        _proxyModel->setFilterRegularExpression(regex);
         
         // Auto-expand all filtered items to show search results
         expandFilteredItems();
     } else {
-        _proxyModel->setFilterWildcard("");
+        _proxyModel->setFilterRegularExpression(QRegularExpression(""));
         
         // When search is cleared, collapse all and expand only first level
         _treeView->collapseAll();

@@ -48,6 +48,19 @@ signals:
 };
 
 /**
+ * @brief Custom proxy model that filters on both filename and PRO name columns
+ */
+class FileBrowserProxyModel : public QSortFilterProxyModel {
+    Q_OBJECT
+
+public:
+    explicit FileBrowserProxyModel(QObject* parent = nullptr);
+
+protected:
+    bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override;
+};
+
+/**
  * @brief Custom QStandardItem for file/directory entries
  */
 class FileTreeItem : public QStandardItem {
@@ -163,7 +176,7 @@ private:
     // Tree view
     QTreeView* _treeView = nullptr;
     QStandardItemModel* _treeModel = nullptr;
-    QSortFilterProxyModel* _proxyModel = nullptr;
+    FileBrowserProxyModel* _proxyModel = nullptr;
 
     // Status and progress
     QLabel* _statusLabel = nullptr;
