@@ -141,18 +141,18 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     memset(&_sceneryData, 0, sizeof(_sceneryData));
     
     // Initialize critter UI element arrays to nullptr
-    for (int i = 0; i < 18; ++i) {
+    for (int i = 0; i < NUM_SKILLS; ++i) {
         _critterSkillEdits[i] = nullptr;
     }
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < NUM_SPECIAL_STATS; ++i) {
         _critterSpecialStatEdits[i] = nullptr;
         _critterBonusSpecialStatEdits[i] = nullptr;
         _critterDamageThresholdEdits[i] = nullptr;
     }
-    for (int i = 0; i < 9; ++i) {
+    for (int i = 0; i < NUM_DAMAGE_TYPES_WITH_RADIATION; ++i) {
         _critterDamageResistEdits[i] = nullptr;
     }
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < NUM_DAMAGE_TYPES_WITH_SPECIAL; ++i) {
         _critterBonusDamageThresholdEdits[i] = nullptr;
         _critterBonusDamageResistanceEdits[i] = nullptr;
     }
@@ -193,7 +193,7 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     // Initialize all item UI elements to nullptr to prevent crashes
     // Armor elements
     _armorClassEdit = nullptr;
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < NUM_DAMAGE_TYPES; ++i) {
         _damageResistEdits[i] = nullptr;
         _damageThresholdEdits[i] = nullptr;
     }
@@ -209,7 +209,7 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     }
     
     // Drug elements
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         _drugStatCombos[i] = nullptr;
         _drugStatAmountEdits[i] = nullptr;
         _drugFirstStatAmountEdits[i] = nullptr;
@@ -395,7 +395,7 @@ void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
         // Main preview image - smaller than original
         _previewLabel = new QLabel();
         _previewLabel->setAlignment(Qt::AlignCenter);
-        _previewLabel->setFixedSize(180, 150);  // Compact size
+        _previewLabel->setFixedSize(PREVIEW_COMPACT_WIDTH, PREVIEW_COMPACT_HEIGHT);  // Compact size
         _previewLabel->setScaledContents(false);
         _previewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
         _previewLabel->setText("No FRM");
@@ -445,7 +445,7 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
     
     // Play/Pause button (small)
     _playPauseButton = new QPushButton("▶");
-    _playPauseButton->setMaximumSize(24, 20);
+    _playPauseButton->setMaximumSize(BUTTON_MAX_WIDTH, BUTTON_MAX_HEIGHT);
     _playPauseButton->setToolTip("Play/Pause animation");
     connect(_playPauseButton, &QPushButton::clicked, this, &ProEditorDialog::onPlayPauseClicked);
     
@@ -464,7 +464,7 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
     
     // Direction combo (compact)
     _directionCombo = new QComboBox();
-    _directionCombo->setMaximumWidth(50); // Slightly wider for compass strings
+    _directionCombo->setMaximumWidth(DIRECTION_COMBO_MAX_WIDTH); // Slightly wider for compass strings
     _directionCombo->setToolTip("Animation direction");
     _directionCombo->addItems({"NE", "E", "SE", "SW", "W", "NW"}); // Fallout 2 uses 6 directions
     connect(_directionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onDirectionChanged);
@@ -476,7 +476,7 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
     
     // Animation timer
     _animationTimer = new QTimer(this);
-    _animationTimer->setInterval(200); // 5 FPS
+    _animationTimer->setInterval(ANIMATION_TIMER_INTERVAL); // 5 FPS
     connect(_animationTimer, &QTimer::timeout, this, &ProEditorDialog::onAnimationTick);
     
     _animationControls->setVisible(false); // Hidden by default, shown when FRM is loaded
@@ -494,7 +494,7 @@ void ProEditorDialog::setupCompactArmorAnimationControls(QVBoxLayout* parentLayo
         
         // Play/Pause button (small)
         _armorPlayPauseButton = new QPushButton("▶");
-        _armorPlayPauseButton->setMaximumSize(24, 20);
+        _armorPlayPauseButton->setMaximumSize(BUTTON_MAX_WIDTH, BUTTON_MAX_HEIGHT);
         _armorPlayPauseButton->setToolTip("Play/Pause armor animation");
         
         // Frame slider (compact)
@@ -511,7 +511,7 @@ void ProEditorDialog::setupCompactArmorAnimationControls(QVBoxLayout* parentLayo
         
         // Direction combo (compact)
         _armorDirectionCombo = new QComboBox();
-        _armorDirectionCombo->setMaximumWidth(50);
+        _armorDirectionCombo->setMaximumWidth(DIRECTION_COMBO_MAX_WIDTH);
         _armorDirectionCombo->setToolTip("Armor animation direction");
         _armorDirectionCombo->addItems({"NE", "E", "SE", "SW", "W", "NW"}); // Fallout 2 uses 6 directions
         
@@ -523,7 +523,7 @@ void ProEditorDialog::setupCompactArmorAnimationControls(QVBoxLayout* parentLayo
         // Animation timer
         if (!_armorAnimationTimer) {
             _armorAnimationTimer = new QTimer(this);
-            _armorAnimationTimer->setInterval(200); // 5 FPS
+            _armorAnimationTimer->setInterval(ANIMATION_TIMER_INTERVAL); // 5 FPS
         }
         
         // Connect signals
@@ -552,7 +552,7 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     invLayout->setSpacing(2);
 
     _inventoryPreviewLabel = new QLabel();
-    _inventoryPreviewLabel->setFixedSize(120, 120);
+    _inventoryPreviewLabel->setFixedSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE);
     _inventoryPreviewLabel->setAlignment(Qt::AlignCenter);
     _inventoryPreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
     _inventoryPreviewLabel->setText("Inv");
@@ -572,7 +572,7 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     groundLayout->setSpacing(2);
     
     _groundPreviewLabel = new QLabel();
-    _groundPreviewLabel->setFixedSize(120, 120);
+    _groundPreviewLabel->setFixedSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE);
     _groundPreviewLabel->setAlignment(Qt::AlignCenter);
     _groundPreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
     _groundPreviewLabel->setText("Ground");
@@ -611,7 +611,7 @@ void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
     maleLayout->setSpacing(2);
     
     _armorMalePreviewLabel = new QLabel();
-    _armorMalePreviewLabel->setFixedSize(120, 120);
+    _armorMalePreviewLabel->setFixedSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE);
     _armorMalePreviewLabel->setAlignment(Qt::AlignCenter);
     _armorMalePreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
     _armorMalePreviewLabel->setText("Male");
@@ -631,7 +631,7 @@ void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
     femaleLayout->setSpacing(2);
     
     _armorFemalePreviewLabel = new QLabel();
-    _armorFemalePreviewLabel->setFixedSize(120, 120);
+    _armorFemalePreviewLabel->setFixedSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE);
     _armorFemalePreviewLabel->setAlignment(Qt::AlignCenter);
     _armorFemalePreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
     _armorFemalePreviewLabel->setText("Female");
@@ -675,11 +675,11 @@ void ProEditorDialog::setupLeftPanelCommonFields(QVBoxLayout* parentLayout) {
     commonLayout->addRow("Message ID:", _messageIdEdit);
     
     // Light properties (compact)
-    _lightDistanceEdit = createSpinBox(0, 999, "Distance that light from this object reaches (0 = no light)");
+    _lightDistanceEdit = createSpinBox(0, MAX_LIGHT_DISTANCE, "Distance that light from this object reaches (0 = no light)");
     _lightDistanceEdit->setValue(_pro->header.light_distance);
     commonLayout->addRow("Light Dist:", _lightDistanceEdit);
     
-    _lightIntensityEdit = createSpinBox(0, 999, "Brightness of the light (higher values = brighter)");
+    _lightIntensityEdit = createSpinBox(0, MAX_LIGHT_INTENSITY, "Brightness of the light (higher values = brighter)");
     _lightIntensityEdit->setValue(_pro->header.light_intensity);
     commonLayout->addRow("Light Int:", _lightIntensityEdit);
     
@@ -852,12 +852,12 @@ void ProEditorDialog::setupCommonTab() {
     layout->addRow("Message ID:", _messageIdEdit);
     
     // Light Distance
-    _lightDistanceEdit = createSpinBox(0, 999, "Distance that light from this object reaches (0 = no light)");
+    _lightDistanceEdit = createSpinBox(0, MAX_LIGHT_DISTANCE, "Distance that light from this object reaches (0 = no light)");
     _lightDistanceEdit->setValue(_pro->header.light_distance);
     layout->addRow("Light Distance:", _lightDistanceEdit);
     
     // Light Intensity
-    _lightIntensityEdit = createSpinBox(0, 999, "Brightness of the light (higher values = brighter)");
+    _lightIntensityEdit = createSpinBox(0, MAX_LIGHT_INTENSITY, "Brightness of the light (higher values = brighter)");
     _lightIntensityEdit->setValue(_pro->header.light_intensity);
     layout->addRow("Light Intensity:", _lightIntensityEdit);
     
@@ -888,14 +888,14 @@ void ProEditorDialog::setupCommonTab() {
         
         // Container Size
         _containerSizeEdit = new QSpinBox();
-        _containerSizeEdit->setRange(0, 999999);
+        _containerSizeEdit->setRange(0, MAX_CONTAINER_SIZE);
         _containerSizeEdit->setValue(_pro->commonItemData.containerSize);
         _containerSizeEdit->setToolTip("Container size - volume capacity for containers");
         connect(_containerSizeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         layout->addRow("Container Size:", _containerSizeEdit);
         // Weight
         _weightEdit = new QSpinBox();
-        _weightEdit->setRange(0, 999999);
+        _weightEdit->setRange(0, MAX_WEIGHT);
         _weightEdit->setValue(_pro->commonItemData.weight);
         _weightEdit->setToolTip("Weight in pounds - affects carry capacity");
         connect(_weightEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
@@ -903,7 +903,7 @@ void ProEditorDialog::setupCommonTab() {
         
         // Base Price
         _basePriceEdit = new QSpinBox();
-        _basePriceEdit->setRange(0, 999999);
+        _basePriceEdit->setRange(0, MAX_PRICE);
         _basePriceEdit->setValue(_pro->commonItemData.basePrice);
         _basePriceEdit->setToolTip("Base price in caps for trading");
         connect(_basePriceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
@@ -911,7 +911,7 @@ void ProEditorDialog::setupCommonTab() {
         
         // Sound ID
         _soundIdEdit = new QSpinBox();
-        _soundIdEdit->setRange(0, 255);
+        _soundIdEdit->setRange(0, MAX_SOUND_ID);
         _soundIdEdit->setValue(_pro->commonItemData.soundId);
         _soundIdEdit->setToolTip("Sound effect ID when using/manipulating the item");
         connect(_soundIdEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
@@ -967,14 +967,14 @@ void ProEditorDialog::setupWeaponExtendedFlags(QVBoxLayout* layout) {
     QFormLayout* animLayout = new QFormLayout(animGroup);
     
     _animationPrimaryEdit = new QSpinBox();
-    _animationPrimaryEdit->setRange(0, 15);
+    _animationPrimaryEdit->setRange(0, MAX_ANIMATION_CODE);
     _animationPrimaryEdit->setValue(Pro::getAnimationPrimary(_pro->commonItemData.flagsExt));
     _animationPrimaryEdit->setToolTip("Primary attack animation index (0-15)");
     connect(_animationPrimaryEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onExtendedFlagChanged);
     animLayout->addRow("Primary Anim:", _animationPrimaryEdit);
     
     _animationSecondaryEdit = new QSpinBox();
-    _animationSecondaryEdit->setRange(0, 15);
+    _animationSecondaryEdit->setRange(0, MAX_ANIMATION_CODE);
     _animationSecondaryEdit->setValue(Pro::getAnimationSecondary(_pro->commonItemData.flagsExt));
     _animationSecondaryEdit->setToolTip("Secondary attack animation index (0-15)");
     connect(_animationSecondaryEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onExtendedFlagChanged);
@@ -1219,7 +1219,7 @@ void ProEditorDialog::setupArmorTab() {
     QFormLayout* acLayout = new QFormLayout(acGroup);
     
     _armorClassEdit = new QSpinBox();
-    _armorClassEdit->setRange(0, 999);
+    _armorClassEdit->setRange(0, MAX_GENERAL_DAMAGE);
     _armorClassEdit->setToolTip("Armor Class - higher values provide better protection");
     connect(_armorClassEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     acLayout->addRow("AC:", _armorClassEdit);
@@ -1240,13 +1240,13 @@ void ProEditorDialog::setupArmorTab() {
         damageLayout->addWidget(new QLabel(damageTypes[i]), i + 1, 0);
         
         _damageResistEdits[i] = new QSpinBox();
-        _damageResistEdits[i]->setRange(0, 100);
+        _damageResistEdits[i]->setRange(0, MAX_DAMAGE_RESIST_PERCENT);
         _damageResistEdits[i]->setSuffix("%");
         connect(_damageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageLayout->addWidget(_damageResistEdits[i], i + 1, 1);
         
         _damageThresholdEdits[i] = new QSpinBox();
-        _damageThresholdEdits[i]->setRange(0, 999);
+        _damageThresholdEdits[i]->setRange(0, MAX_DAMAGE_RESISTANCE);
         connect(_damageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageLayout->addWidget(_damageThresholdEdits[i], i + 1, 2);
     }
@@ -1303,7 +1303,7 @@ void ProEditorDialog::setupContainerTab() {
     
     // Max Size
     _containerMaxSizeEdit = new QSpinBox();
-    _containerMaxSizeEdit->setRange(1, 999999);
+    _containerMaxSizeEdit->setRange(1, MAX_CONTAINER_SIZE);
     connect(_containerMaxSizeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     formLayout->addRow("Max Size:", _containerMaxSizeEdit);
     
@@ -1342,14 +1342,14 @@ void ProEditorDialog::setupDrugTab() {
     immediateLayout->addWidget(new QLabel("Stat"), 0, 0);
     immediateLayout->addWidget(new QLabel("Amount"), 0, 1);
     
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         _drugStatCombos[i] = new QComboBox();
         _drugStatCombos[i]->addItems(statNames);
         connect(_drugStatCombos[i], QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
         immediateLayout->addWidget(_drugStatCombos[i], i + 1, 0);
         
         _drugStatAmountEdits[i] = new QSpinBox();
-        _drugStatAmountEdits[i]->setRange(-999, 999);
+        _drugStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
         connect(_drugStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         immediateLayout->addWidget(_drugStatAmountEdits[i], i + 1, 1);
     }
@@ -1361,15 +1361,15 @@ void ProEditorDialog::setupDrugTab() {
     QGridLayout* firstDelayLayout = new QGridLayout(firstDelayGroup);
     
     _drugFirstDelayEdit = new QSpinBox();
-    _drugFirstDelayEdit->setRange(0, 999);
+    _drugFirstDelayEdit->setRange(0, MAX_DRUG_DELAY);
     _drugFirstDelayEdit->setSuffix(" min");
     connect(_drugFirstDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     firstDelayLayout->addWidget(new QLabel("Delay:"), 0, 0);
     firstDelayLayout->addWidget(_drugFirstDelayEdit, 0, 1);
     
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         _drugFirstStatAmountEdits[i] = new QSpinBox();
-        _drugFirstStatAmountEdits[i]->setRange(-999, 999);
+        _drugFirstStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
         connect(_drugFirstStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         firstDelayLayout->addWidget(new QLabel(QString("Stat %1 Amount:").arg(i)), i + 1, 0);
         firstDelayLayout->addWidget(_drugFirstStatAmountEdits[i], i + 1, 1);
@@ -1382,15 +1382,15 @@ void ProEditorDialog::setupDrugTab() {
     QGridLayout* secondDelayLayout = new QGridLayout(secondDelayGroup);
     
     _drugSecondDelayEdit = new QSpinBox();
-    _drugSecondDelayEdit->setRange(0, 999);
+    _drugSecondDelayEdit->setRange(0, MAX_DRUG_DELAY);
     _drugSecondDelayEdit->setSuffix(" min");
     connect(_drugSecondDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     secondDelayLayout->addWidget(new QLabel("Delay:"), 0, 0);
     secondDelayLayout->addWidget(_drugSecondDelayEdit, 0, 1);
     
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         _drugSecondStatAmountEdits[i] = new QSpinBox();
-        _drugSecondStatAmountEdits[i]->setRange(-999, 999);
+        _drugSecondStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
         connect(_drugSecondStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         secondDelayLayout->addWidget(new QLabel(QString("Stat %1 Amount:").arg(i)), i + 1, 0);
         secondDelayLayout->addWidget(_drugSecondStatAmountEdits[i], i + 1, 1);
@@ -1406,7 +1406,7 @@ void ProEditorDialog::setupDrugTab() {
     QFormLayout* addictionLayout = new QFormLayout(addictionGroup);
     
     _drugAddictionChanceEdit = new QSpinBox();
-    _drugAddictionChanceEdit->setRange(0, 100);
+    _drugAddictionChanceEdit->setRange(0, MAX_ADDICTION_CHANCE);
     _drugAddictionChanceEdit->setSuffix("%");
     connect(_drugAddictionChanceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     addictionLayout->addRow("Chance:", _drugAddictionChanceEdit);
@@ -1417,7 +1417,7 @@ void ProEditorDialog::setupDrugTab() {
     addictionLayout->addRow("Perk:", _drugAddictionPerkCombo);
     
     _drugAddictionDelayEdit = new QSpinBox();
-    _drugAddictionDelayEdit->setRange(0, 999);
+    _drugAddictionDelayEdit->setRange(0, MAX_DRUG_DELAY);
     _drugAddictionDelayEdit->setSuffix(" min");
     connect(_drugAddictionDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     addictionLayout->addRow("Delay:", _drugAddictionDelayEdit);
@@ -1456,12 +1456,12 @@ void ProEditorDialog::setupWeaponTab() {
     basicLayout->addRow("Animation:", _weaponAnimationCombo);
     
     _weaponDamageMinEdit = new QSpinBox();
-    _weaponDamageMinEdit->setRange(0, 999);
+    _weaponDamageMinEdit->setRange(0, MAX_GENERAL_DAMAGE);
     connect(_weaponDamageMinEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     basicLayout->addRow("Min Damage:", _weaponDamageMinEdit);
     
     _weaponDamageMaxEdit = new QSpinBox();
-    _weaponDamageMaxEdit->setRange(0, 999);
+    _weaponDamageMaxEdit->setRange(0, MAX_GENERAL_DAMAGE);
     connect(_weaponDamageMaxEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     basicLayout->addRow("Max Damage:", _weaponDamageMaxEdit);
     
@@ -1471,7 +1471,7 @@ void ProEditorDialog::setupWeaponTab() {
     basicLayout->addRow("Damage Type:", _weaponDamageTypeCombo);
     
     _weaponMinStrengthEdit = new QSpinBox();
-    _weaponMinStrengthEdit->setRange(1, 10);
+    _weaponMinStrengthEdit->setRange(MIN_SPECIAL_STAT, MAX_SPECIAL_STAT);
     connect(_weaponMinStrengthEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     basicLayout->addRow("Min Strength:", _weaponMinStrengthEdit);
     
@@ -1482,12 +1482,12 @@ void ProEditorDialog::setupWeaponTab() {
     QFormLayout* attackLayout = new QFormLayout(attackGroup);
     
     _weaponRangePrimaryEdit = new QSpinBox();
-    _weaponRangePrimaryEdit->setRange(1, 50);
+    _weaponRangePrimaryEdit->setRange(1, MAX_WEAPON_RANGE);
     connect(_weaponRangePrimaryEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     attackLayout->addRow("Primary Range:", _weaponRangePrimaryEdit);
     
     _weaponRangeSecondaryEdit = new QSpinBox();
-    _weaponRangeSecondaryEdit->setRange(1, 50);
+    _weaponRangeSecondaryEdit->setRange(1, MAX_WEAPON_RANGE);
     connect(_weaponRangeSecondaryEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     attackLayout->addRow("Secondary Range:", _weaponRangeSecondaryEdit);
     
@@ -1497,17 +1497,17 @@ void ProEditorDialog::setupWeaponTab() {
     attackLayout->addRow("Projectile PID:", _weaponProjectilePIDEdit);
     
     _weaponAPPrimaryEdit = new QSpinBox();
-    _weaponAPPrimaryEdit->setRange(1, 10);
+    _weaponAPPrimaryEdit->setRange(1, MAX_WEAPON_AP);
     connect(_weaponAPPrimaryEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     attackLayout->addRow("Primary AP Cost:", _weaponAPPrimaryEdit);
     
     _weaponAPSecondaryEdit = new QSpinBox();
-    _weaponAPSecondaryEdit->setRange(1, 10);
+    _weaponAPSecondaryEdit->setRange(1, MAX_WEAPON_AP);
     connect(_weaponAPSecondaryEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     attackLayout->addRow("Secondary AP Cost:", _weaponAPSecondaryEdit);
     
     _weaponCriticalFailEdit = new QSpinBox();
-    _weaponCriticalFailEdit->setRange(0, 100);
+    _weaponCriticalFailEdit->setRange(0, MAX_CRITICAL_CHANCE);
     connect(_weaponCriticalFailEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     attackLayout->addRow("Critical Fail:", _weaponCriticalFailEdit);
     
@@ -1536,17 +1536,17 @@ void ProEditorDialog::setupWeaponTab() {
     ammoLayout->addRow("Ammo PID:", _weaponAmmoPIDEdit);
     
     _weaponAmmoCapacityEdit = new QSpinBox();
-    _weaponAmmoCapacityEdit->setRange(1, 999);
+    _weaponAmmoCapacityEdit->setRange(1, MAX_AMMO_CAPACITY);
     connect(_weaponAmmoCapacityEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     ammoLayout->addRow("Capacity:", _weaponAmmoCapacityEdit);
     
     _weaponBurstRoundsEdit = new QSpinBox();
-    _weaponBurstRoundsEdit->setRange(1, 50);
+    _weaponBurstRoundsEdit->setRange(1, MAX_BURST_ROUNDS);
     connect(_weaponBurstRoundsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     ammoLayout->addRow("Burst Rounds:", _weaponBurstRoundsEdit);
     
     _weaponSoundIdEdit = new QSpinBox();
-    _weaponSoundIdEdit->setRange(0, 255);
+    _weaponSoundIdEdit->setRange(0, MAX_SOUND_ID);
     connect(_weaponSoundIdEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     ammoLayout->addRow("Sound ID:", _weaponSoundIdEdit);
     
@@ -1594,22 +1594,22 @@ void ProEditorDialog::setupAmmoTab() {
     layout->addRow("Caliber:", _ammoCaliberCombo);
     
     _ammoQuantityEdit = new QSpinBox();
-    _ammoQuantityEdit->setRange(1, 999);
+    _ammoQuantityEdit->setRange(1, MAX_AMMO_QUANTITY);
     connect(_ammoQuantityEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     layout->addRow("Quantity:", _ammoQuantityEdit);
     
     _ammoDamageModEdit = new QSpinBox();
-    _ammoDamageModEdit->setRange(-100, 100);
+    _ammoDamageModEdit->setRange(-MAX_DAMAGE_MOD, MAX_DAMAGE_MOD);
     connect(_ammoDamageModEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     layout->addRow("Damage Modifier:", _ammoDamageModEdit);
     
     _ammoDRModEdit = new QSpinBox();
-    _ammoDRModEdit->setRange(-100, 100);
+    _ammoDRModEdit->setRange(-MAX_DAMAGE_MOD, MAX_DAMAGE_MOD);
     connect(_ammoDRModEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     layout->addRow("DR Modifier:", _ammoDRModEdit);
     
     _ammoDamageMultEdit = new QSpinBox();
-    _ammoDamageMultEdit->setRange(1, 10);
+    _ammoDamageMultEdit->setRange(1, MAX_DAMAGE_MULT);
     connect(_ammoDamageMultEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     layout->addRow("Damage Multiplier:", _ammoDamageMultEdit);
     
@@ -1631,7 +1631,7 @@ void ProEditorDialog::setupMiscTab() {
     layout->addRow("Power Type:", _miscPowerTypeCombo);
     
     _miscChargesEdit = new QSpinBox();
-    _miscChargesEdit->setRange(0, 999);
+    _miscChargesEdit->setRange(0, MAX_CHARGES);
     connect(_miscChargesEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     layout->addRow("Charges:", _miscChargesEdit);
     
@@ -1643,7 +1643,7 @@ void ProEditorDialog::setupKeyTab() {
     QFormLayout* layout = new QFormLayout(_keyTab);
     
     _keyIdEdit = new QSpinBox();
-    _keyIdEdit->setRange(0, 999999);
+    _keyIdEdit->setRange(0, MAX_KEY_ID);
     connect(_keyIdEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     layout->addRow("Key ID:", _keyIdEdit);
     
@@ -1670,8 +1670,8 @@ void ProEditorDialog::setupPreview() {
         
         _previewLabel = new QLabel();
         _previewLabel->setAlignment(Qt::AlignCenter);
-        _previewLabel->setMinimumHeight(200);
-        _previewLabel->setMaximumHeight(250);
+        _previewLabel->setMinimumHeight(PREVIEW_MIN_HEIGHT);
+        _previewLabel->setMaximumHeight(PREVIEW_MAX_HEIGHT);
         _previewLabel->setMinimumWidth(250);
         _previewLabel->setScaledContents(false);
         _previewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
@@ -1733,9 +1733,9 @@ void ProEditorDialog::setupDualPreview() {
     // Inventory preview image
     _inventoryPreviewLabel = new QLabel();
     _inventoryPreviewLabel->setAlignment(Qt::AlignCenter);
-    _inventoryPreviewLabel->setMinimumHeight(150);
-    _inventoryPreviewLabel->setMaximumHeight(200);
-    _inventoryPreviewLabel->setMinimumWidth(150);
+    _inventoryPreviewLabel->setMinimumHeight(PREVIEW_FULL_MIN_HEIGHT);
+    _inventoryPreviewLabel->setMaximumHeight(PREVIEW_FULL_MAX_HEIGHT);
+    _inventoryPreviewLabel->setMinimumWidth(PREVIEW_FULL_MIN_WIDTH);
     _inventoryPreviewLabel->setScaledContents(false);
     _inventoryPreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
     _inventoryPreviewLabel->setText("No inventory FRM");
@@ -1776,9 +1776,9 @@ void ProEditorDialog::setupDualPreview() {
     // Ground preview image
     _groundPreviewLabel = new QLabel();
     _groundPreviewLabel->setAlignment(Qt::AlignCenter);
-    _groundPreviewLabel->setMinimumHeight(150);
-    _groundPreviewLabel->setMaximumHeight(200);
-    _groundPreviewLabel->setMinimumWidth(150);
+    _groundPreviewLabel->setMinimumHeight(PREVIEW_FULL_MIN_HEIGHT);
+    _groundPreviewLabel->setMaximumHeight(PREVIEW_FULL_MAX_HEIGHT);
+    _groundPreviewLabel->setMinimumWidth(PREVIEW_FULL_MIN_WIDTH);
     _groundPreviewLabel->setScaledContents(false);
     _groundPreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
     _groundPreviewLabel->setText("No ground FRM");
@@ -1839,9 +1839,9 @@ void ProEditorDialog::setupArmorPreview() {
     // Male armor preview image
     _armorMalePreviewLabel = new QLabel();
     _armorMalePreviewLabel->setAlignment(Qt::AlignCenter);
-    _armorMalePreviewLabel->setMinimumHeight(150);
-    _armorMalePreviewLabel->setMaximumHeight(200);
-    _armorMalePreviewLabel->setMinimumWidth(150);
+    _armorMalePreviewLabel->setMinimumHeight(PREVIEW_FULL_MIN_HEIGHT);
+    _armorMalePreviewLabel->setMaximumHeight(PREVIEW_FULL_MAX_HEIGHT);
+    _armorMalePreviewLabel->setMinimumWidth(PREVIEW_FULL_MIN_WIDTH);
     _armorMalePreviewLabel->setScaledContents(false);
     _armorMalePreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
     _armorMalePreviewLabel->setText("No male armor FRM");
@@ -1873,9 +1873,9 @@ void ProEditorDialog::setupArmorPreview() {
     // Female armor preview image
     _armorFemalePreviewLabel = new QLabel();
     _armorFemalePreviewLabel->setAlignment(Qt::AlignCenter);
-    _armorFemalePreviewLabel->setMinimumHeight(150);
-    _armorFemalePreviewLabel->setMaximumHeight(200);
-    _armorFemalePreviewLabel->setMinimumWidth(150);
+    _armorFemalePreviewLabel->setMinimumHeight(PREVIEW_FULL_MIN_HEIGHT);
+    _armorFemalePreviewLabel->setMaximumHeight(PREVIEW_FULL_MAX_HEIGHT);
+    _armorFemalePreviewLabel->setMinimumWidth(PREVIEW_FULL_MIN_WIDTH);
     _armorFemalePreviewLabel->setScaledContents(false);
     _armorFemalePreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
     _armorFemalePreviewLabel->setText("No female armor FRM");
@@ -1918,7 +1918,7 @@ void ProEditorDialog::setupAnimationControls() {
     _animationLayout->addWidget(new QLabel("Direction:"));
     _animationLayout->addWidget(_directionCombo);
     
-    _animationLayout->addSpacing(10);
+    _animationLayout->addSpacing(LAYOUT_SPACING);
     
     // Play/pause button
     _playPauseButton = new QPushButton("▶");
@@ -1941,7 +1941,7 @@ void ProEditorDialog::setupAnimationControls() {
     // Setup animation timer
     _animationTimer = new QTimer(this);
     _animationTimer->setSingleShot(false);
-    _animationTimer->setInterval(200); // 5 FPS default
+    _animationTimer->setInterval(ANIMATION_TIMER_INTERVAL); // 5 FPS default
     
     // Connect signals
     connect(_playPauseButton, &QPushButton::clicked, this, &ProEditorDialog::onPlayPauseClicked);
@@ -1966,7 +1966,7 @@ void ProEditorDialog::setupArmorAnimationControls() {
     _armorAnimationLayout->addWidget(new QLabel("Direction:"));
     _armorAnimationLayout->addWidget(_armorDirectionCombo);
     
-    _armorAnimationLayout->addSpacing(10);
+    _armorAnimationLayout->addSpacing(LAYOUT_SPACING);
     
     // Play/pause button
     _armorPlayPauseButton = new QPushButton("▶");
@@ -2223,7 +2223,7 @@ void ProEditorDialog::loadContainerData() {
 }
 
 void ProEditorDialog::loadDrugData() {
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         if (_drugStatCombos[i]) {
             _drugStatCombos[i]->setCurrentIndex(i == 0 ? _pro->drugData.stat0Base : 
                                                 i == 1 ? _pro->drugData.stat1Base : 
@@ -2651,11 +2651,11 @@ void ProEditorDialog::setupCritterFields() {
     headFidLayout->addWidget(_critterHeadFIDSelectorButton);
     critterLayout->addRow("Head FID:", headFidWidget);
     
-    _critterAIPacketEdit = createSpinBox(0, 999, "AI packet number for critter behavior");
+    _critterAIPacketEdit = createSpinBox(0, MAX_AI_PACKET, "AI packet number for critter behavior");
     connectSpinBox(_critterAIPacketEdit);
     critterLayout->addRow("AI Packet:", _critterAIPacketEdit);
     
-    _critterTeamNumberEdit = createSpinBox(0, 999, "Team number for faction identification");
+    _critterTeamNumberEdit = createSpinBox(0, MAX_TEAM_NUMBER, "Team number for faction identification");
     connectSpinBox(_critterTeamNumberEdit);
     critterLayout->addRow("Team Number:", _critterTeamNumberEdit);
     
@@ -2670,7 +2670,7 @@ void ProEditorDialog::setupCritterFields() {
     const char* specialNames[] = {"STR", "PER", "END", "CHR", "INT", "AGL", "LCK"};
     for (int i = 0; i < 7; ++i) {
         _critterSpecialStatEdits[i] = new QSpinBox();
-        _critterSpecialStatEdits[i]->setRange(1, 10);
+        _critterSpecialStatEdits[i]->setRange(MIN_SPECIAL_STAT, MAX_SPECIAL_STAT);
         _critterSpecialStatEdits[i]->setToolTip(QString("Base %1 stat").arg(specialNames[i]));
         connect(_critterSpecialStatEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         
@@ -2688,25 +2688,25 @@ void ProEditorDialog::setupCritterFields() {
     combatLayout->setSpacing(4);
     
     _critterMaxHitPointsEdit = new QSpinBox();
-    _critterMaxHitPointsEdit->setRange(1, 9999);
+    _critterMaxHitPointsEdit->setRange(1, MAX_CRITTER_HIT_POINTS);
     _critterMaxHitPointsEdit->setToolTip("Maximum hit points");
     connect(_critterMaxHitPointsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     combatLayout->addRow("Max HP:", _critterMaxHitPointsEdit);
     
     _critterActionPointsEdit = new QSpinBox();
-    _critterActionPointsEdit->setRange(1, 20);
+    _critterActionPointsEdit->setRange(1, MAX_ACTION_POINTS);
     _critterActionPointsEdit->setToolTip("Action points per turn");
     connect(_critterActionPointsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     combatLayout->addRow("Action Points:", _critterActionPointsEdit);
     
     _critterArmorClassEdit = new QSpinBox();
-    _critterArmorClassEdit->setRange(0, 90);
+    _critterArmorClassEdit->setRange(0, MAX_ARMOR_CLASS);
     _critterArmorClassEdit->setToolTip("Base armor class");
     connect(_critterArmorClassEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     combatLayout->addRow("Armor Class:", _critterArmorClassEdit);
     
     _critterMeleeDamageEdit = new QSpinBox();
-    _critterMeleeDamageEdit->setRange(0, 999);
+    _critterMeleeDamageEdit->setRange(0, MAX_MELEE_DAMAGE);
     _critterMeleeDamageEdit->setToolTip("Melee damage bonus");
     connect(_critterMeleeDamageEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     combatLayout->addRow("Melee Damage:", _critterMeleeDamageEdit);
@@ -2722,37 +2722,37 @@ void ProEditorDialog::setupCritterFields() {
     advancedLayout->setSpacing(4);
     
     _critterCarryWeightMaxEdit = new QSpinBox();
-    _critterCarryWeightMaxEdit->setRange(0, 99999);
+    _critterCarryWeightMaxEdit->setRange(0, MAX_CARRY_WEIGHT);
     _critterCarryWeightMaxEdit->setToolTip("Maximum carry weight");
     connect(_critterCarryWeightMaxEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Carry Weight:", _critterCarryWeightMaxEdit);
     
     _critterSequenceEdit = new QSpinBox();
-    _critterSequenceEdit->setRange(0, 50);
+    _critterSequenceEdit->setRange(0, MAX_SEQUENCE);
     _critterSequenceEdit->setToolTip("Initiative sequence bonus");
     connect(_critterSequenceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Sequence:", _critterSequenceEdit);
     
     _critterHealingRateEdit = new QSpinBox();
-    _critterHealingRateEdit->setRange(0, 50);
+    _critterHealingRateEdit->setRange(0, MAX_HEALING_RATE);
     _critterHealingRateEdit->setToolTip("Healing rate bonus");
     connect(_critterHealingRateEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Healing Rate:", _critterHealingRateEdit);
     
     _critterCriticalChanceEdit = new QSpinBox();
-    _critterCriticalChanceEdit->setRange(0, 100);
+    _critterCriticalChanceEdit->setRange(0, MAX_CRITICAL_CHANCE);
     _critterCriticalChanceEdit->setToolTip("Critical hit chance bonus");
     connect(_critterCriticalChanceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Critical Chance:", _critterCriticalChanceEdit);
     
     _critterBetterCriticalsEdit = new QSpinBox();
-    _critterBetterCriticalsEdit->setRange(0, 100);
+    _critterBetterCriticalsEdit->setRange(0, MAX_BETTER_CRITICALS);
     _critterBetterCriticalsEdit->setToolTip("Better criticals bonus");
     connect(_critterBetterCriticalsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Better Criticals:", _critterBetterCriticalsEdit);
     
     _critterAgeEdit = new QSpinBox();
-    _critterAgeEdit->setRange(0, 999);
+    _critterAgeEdit->setRange(0, MAX_AGE);
     _critterAgeEdit->setToolTip("Critter age");
     connect(_critterAgeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Age:", _critterAgeEdit);
@@ -2770,19 +2770,19 @@ void ProEditorDialog::setupCritterFields() {
     advancedLayout->addRow("Body Type:", _critterBodyTypeCombo);
     
     _critterExperienceEdit = new QSpinBox();
-    _critterExperienceEdit->setRange(0, 99999);
+    _critterExperienceEdit->setRange(0, MAX_EXPERIENCE);
     _critterExperienceEdit->setToolTip("Experience points for killing this critter");
     connect(_critterExperienceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Experience:", _critterExperienceEdit);
     
     _critterKillTypeEdit = new QSpinBox();
-    _critterKillTypeEdit->setRange(0, 999);
+    _critterKillTypeEdit->setRange(0, MAX_KILL_TYPE);
     _critterKillTypeEdit->setToolTip("Kill type for karma tracking");
     connect(_critterKillTypeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Kill Type:", _critterKillTypeEdit);
     
     _critterDamageTypeEdit = new QSpinBox();
-    _critterDamageTypeEdit->setRange(0, 10);
+    _critterDamageTypeEdit->setRange(0, MAX_DAMAGE_TYPE);
     _critterDamageTypeEdit->setToolTip("Default damage type");
     connect(_critterDamageTypeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Damage Type:", _critterDamageTypeEdit);
@@ -2798,7 +2798,7 @@ void ProEditorDialog::setupCritterFields() {
     const char* damageTypes[] = {"Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion", "Gas", "Radiation"};
     for (int i = 0; i < 9; ++i) {
         _critterDamageResistEdits[i] = new QSpinBox();
-        _critterDamageResistEdits[i]->setRange(0, 999);
+        _critterDamageResistEdits[i]->setRange(0, MAX_DAMAGE_RESISTANCE);
         _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes[i]));
         connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         
@@ -2817,7 +2817,7 @@ void ProEditorDialog::setupCritterFields() {
     
     for (int i = 0; i < 7; ++i) {
         _critterDamageThresholdEdits[i] = new QSpinBox();
-        _critterDamageThresholdEdits[i]->setRange(0, 999);
+        _critterDamageThresholdEdits[i]->setRange(0, MAX_DAMAGE_RESISTANCE);
         _critterDamageThresholdEdits[i]->setToolTip(QString("%1 damage threshold").arg(damageTypes[i]));
         connect(_critterDamageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         
@@ -2906,11 +2906,11 @@ void ProEditorDialog::setupSceneryFields() {
     elevatorLayout->setContentsMargins(8, 8, 8, 8);
     elevatorLayout->setSpacing(4);
     
-    _elevatorTypeEdit = createSpinBox(0, 999, "Elevator type");
+    _elevatorTypeEdit = createSpinBox(0, MAX_ELEVATOR_VALUE, "Elevator type");
     connectSpinBox(_elevatorTypeEdit);
     elevatorLayout->addRow("Type:", _elevatorTypeEdit);
     
-    _elevatorLevelEdit = createSpinBox(0, 999, "Elevator level");
+    _elevatorLevelEdit = createSpinBox(0, MAX_ELEVATOR_VALUE, "Elevator level");
     connectSpinBox(_elevatorLevelEdit);
     elevatorLayout->addRow("Level:", _elevatorLevelEdit);
     
@@ -2967,150 +2967,17 @@ void ProEditorDialog::validateField(QWidget* field) {
     field->setStyleSheet("");
     field->setToolTip("");
     
-    // Get field value as spinbox (most common case)
-    QSpinBox* spinBox = qobject_cast<QSpinBox*>(field);
-    QComboBox* comboBox = qobject_cast<QComboBox*>(field);
-    
-    // === WEAPON VALIDATIONS ===
+    // Call appropriate validation method based on object type
     if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM && _pro->itemType() == Pro::ITEM_TYPE::WEAPON) {
-        // Weapon damage validation
-        if ((field == _weaponDamageMinEdit || field == _weaponDamageMaxEdit) && 
-            _weaponDamageMinEdit && _weaponDamageMaxEdit) {
-            int minDamage = _weaponDamageMinEdit->value();
-            int maxDamage = _weaponDamageMaxEdit->value();
-            
-            if (minDamage > maxDamage) {
-                addValidationIssue(field, "Minimum damage cannot be greater than maximum damage", ValidationLevel::ERROR, "Weapon Stats");
-            } else if (minDamage == 0 && maxDamage == 0) {
-                addValidationIssue(field, "Weapon should have some damage", ValidationLevel::WARNING, "Weapon Stats");
-            }
-        }
-        
-        // Action Points validation
-        if (field == _weaponAPPrimaryEdit && spinBox) {
-            int ap = spinBox->value();
-            if (ap <= 0) {
-                addValidationIssue(field, "Primary attack should cost at least 1 AP", ValidationLevel::ERROR, "Weapon Stats");
-            } else if (ap > 12) {
-                addValidationIssue(field, "Very high AP cost may make weapon unusable", ValidationLevel::WARNING, "Weapon Stats");
-            }
-        }
-        
-        if (field == _weaponAPSecondaryEdit && spinBox) {
-            int ap = spinBox->value();
-            if (ap > 0 && ap > 15) {
-                addValidationIssue(field, "Extremely high AP cost for secondary attack", ValidationLevel::WARNING, "Weapon Stats");
-            }
-        }
-        
-        // Range validation
-        if (field == _weaponRangePrimaryEdit && spinBox) {
-            int range = spinBox->value();
-            if (range <= 0) {
-                addValidationIssue(field, "Weapon range should be greater than 0", ValidationLevel::ERROR, "Weapon Stats");
-            } else if (range > 50) {
-                addValidationIssue(field, "Very long range weapon - check if intended", ValidationLevel::INFO, "Weapon Stats");
-            }
-        }
-        
-        // Strength requirement validation
-        if (field == _weaponMinStrengthEdit && spinBox) {
-            int str = spinBox->value();
-            if (str > 10) {
-                addValidationIssue(field, "Strength requirement exceeds maximum character stat (10)", ValidationLevel::WARNING, "Weapon Stats");
-            }
-        }
-        
-        // Projectile PID validation
-        if (field == _weaponProjectilePIDEdit && spinBox) {
-            int32_t pid = spinBox->value();
-            if (pid != 0 && pid != -1 && !validateFIDReference(pid, "Projectile")) {
-                addValidationIssue(field, "Projectile PID may not reference a valid game object", ValidationLevel::WARNING, "References");
-            }
-        }
+        validateWeaponField(field);
+    } else if (_pro && _pro->type() == Pro::OBJECT_TYPE::CRITTER) {
+        validateCritterField(field);
+    } else if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM) {
+        validateItemField(field);
     }
     
-    // === CRITTER VALIDATIONS ===
-    if (_pro && _pro->type() == Pro::OBJECT_TYPE::CRITTER) {
-        // SPECIAL stats validation (1-10 range)
-        for (int i = 0; i < 7; ++i) {
-            if (field == _critterSpecialStatEdits[i] && spinBox) {
-                int stat = spinBox->value();
-                if (!validateStatValue(stat, 1, 10, "SPECIAL stat")) {
-                    if (stat < 1) {
-                        addValidationIssue(field, "SPECIAL stats cannot be less than 1", ValidationLevel::ERROR, "Critter Stats");
-                    } else if (stat > 10) {
-                        addValidationIssue(field, "SPECIAL stats cannot exceed 10", ValidationLevel::ERROR, "Critter Stats");
-                    }
-                }
-            }
-        }
-        
-        // Hit points validation
-        if (field == _critterMaxHitPointsEdit && spinBox) {
-            int hp = spinBox->value();
-            if (hp <= 0) {
-                addValidationIssue(field, "Hit points must be greater than 0", ValidationLevel::ERROR, "Critter Stats");
-            } else if (hp > 999) {
-                addValidationIssue(field, "Very high hit points - boss-level critter?", ValidationLevel::INFO, "Critter Stats");
-            }
-        }
-        
-        // Action points validation
-        if (field == _critterActionPointsEdit && spinBox) {
-            int ap = spinBox->value();
-            if (ap <= 0) {
-                addValidationIssue(field, "Action points must be greater than 0", ValidationLevel::ERROR, "Critter Stats");
-            } else if (ap > 20) {
-                addValidationIssue(field, "Very high action points - may unbalance combat", ValidationLevel::WARNING, "Critter Stats");
-            }
-        }
-        
-        // Armor class validation
-        if (field == _critterArmorClassEdit && spinBox) {
-            int ac = spinBox->value();
-            if (ac < 0) {
-                addValidationIssue(field, "Armor class cannot be negative", ValidationLevel::ERROR, "Critter Stats");
-            } else if (ac > 50) {
-                addValidationIssue(field, "Very high armor class - may be unhittable", ValidationLevel::WARNING, "Critter Stats");
-            }
-        }
-    }
-    
-    // === GENERAL ITEM VALIDATIONS ===
-    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        // Weight validation
-        if (field == _weightEdit && spinBox) {
-            int weight = spinBox->value();
-            if (weight < 0) {
-                addValidationIssue(field, "Weight cannot be negative", ValidationLevel::ERROR, "Item Properties");
-            } else if (weight > 1000) {
-                addValidationIssue(field, "Very heavy item - check if realistic", ValidationLevel::WARNING, "Item Properties");
-            }
-        }
-        
-        // Price validation
-        if (field == _basePriceEdit && spinBox) {
-            int price = spinBox->value();
-            if (price < 0) {
-                addValidationIssue(field, "Base price cannot be negative", ValidationLevel::ERROR, "Item Properties");
-            } else if (price == 0) {
-                addValidationIssue(field, "Item has no value - is this intended?", ValidationLevel::INFO, "Item Properties");
-            } else if (price > 100000) {
-                addValidationIssue(field, "Very expensive item - luxury goods?", ValidationLevel::INFO, "Item Properties");
-            }
-        }
-    }
-    
-    // === FID REFERENCE VALIDATIONS ===
-    if (field == _fidLabel) {
-        // Main FID validation - use internal storage
-        if (_mainFID != 0 && _mainFID != -1 && !validateFIDReference(_mainFID, "Main FRM")) {
-            addValidationIssue(field, "FID may not reference a valid FRM file", ValidationLevel::WARNING, "References");
-        }
-    }
-    
-    // Inventory FID validation is no longer needed since it's now a label showing filename
+    // Always check FID references
+    validateFIDField(field);
     
     // Apply visual styling based on validation results
     for (const auto& issue : _validationIssues) {
@@ -3133,6 +3000,149 @@ void ProEditorDialog::validateField(QWidget* field) {
     
     // Update validation status indicators
     updateValidationStatus();
+}
+
+void ProEditorDialog::validateWeaponField(QWidget* field) {
+    QSpinBox* spinBox = qobject_cast<QSpinBox*>(field);
+    
+    // Weapon damage validation
+    if ((field == _weaponDamageMinEdit || field == _weaponDamageMaxEdit) && 
+        _weaponDamageMinEdit && _weaponDamageMaxEdit) {
+        int minDamage = _weaponDamageMinEdit->value();
+        int maxDamage = _weaponDamageMaxEdit->value();
+        
+        if (minDamage > maxDamage) {
+            addValidationIssue(field, "Minimum damage cannot be greater than maximum damage", ValidationLevel::ERROR, "Weapon Stats");
+        } else if (minDamage == 0 && maxDamage == 0) {
+            addValidationIssue(field, "Weapon should have some damage", ValidationLevel::WARNING, "Weapon Stats");
+        }
+    }
+    
+    // Action Points validation
+    if (field == _weaponAPPrimaryEdit && spinBox) {
+        int ap = spinBox->value();
+        if (ap <= 0) {
+            addValidationIssue(field, "Primary attack should cost at least 1 AP", ValidationLevel::ERROR, "Weapon Stats");
+        } else if (ap > MAX_WEAPON_AP_WARNING) {
+            addValidationIssue(field, "Very high AP cost may make weapon unusable", ValidationLevel::WARNING, "Weapon Stats");
+        }
+    }
+    
+    if (field == _weaponAPSecondaryEdit && spinBox) {
+        int ap = spinBox->value();
+        if (ap > 0 && ap > MAX_WEAPON_AP_SECONDARY_WARNING) {
+            addValidationIssue(field, "Extremely high AP cost for secondary attack", ValidationLevel::WARNING, "Weapon Stats");
+        }
+    }
+    
+    // Range validation
+    if (field == _weaponRangePrimaryEdit && spinBox) {
+        int range = spinBox->value();
+        if (range <= 0) {
+            addValidationIssue(field, "Weapon range should be greater than 0", ValidationLevel::ERROR, "Weapon Stats");
+        } else if (range > MAX_WEAPON_RANGE) {
+            addValidationIssue(field, "Very long range weapon - check if intended", ValidationLevel::INFO, "Weapon Stats");
+        }
+    }
+    
+    // Strength requirement validation
+    if (field == _weaponMinStrengthEdit && spinBox) {
+        int str = spinBox->value();
+        if (str > MAX_SPECIAL_STAT) {
+            addValidationIssue(field, "Strength requirement exceeds maximum character stat (10)", ValidationLevel::WARNING, "Weapon Stats");
+        }
+    }
+    
+    // Projectile PID validation
+    if (field == _weaponProjectilePIDEdit && spinBox) {
+        int32_t pid = spinBox->value();
+        if (pid != 0 && pid != -1 && !validateFIDReference(pid, "Projectile")) {
+            addValidationIssue(field, "Projectile PID may not reference a valid game object", ValidationLevel::WARNING, "References");
+        }
+    }
+}
+
+void ProEditorDialog::validateCritterField(QWidget* field) {
+    QSpinBox* spinBox = qobject_cast<QSpinBox*>(field);
+    
+    // SPECIAL stats validation (1-10 range)
+    for (int i = 0; i < 7; ++i) {
+        if (field == _critterSpecialStatEdits[i] && spinBox) {
+            int stat = spinBox->value();
+            if (!validateStatValue(stat, MIN_SPECIAL_STAT, MAX_SPECIAL_STAT, "SPECIAL stat")) {
+                if (stat < MIN_SPECIAL_STAT) {
+                    addValidationIssue(field, "SPECIAL stats cannot be less than 1", ValidationLevel::ERROR, "Critter Stats");
+                } else if (stat > MAX_SPECIAL_STAT) {
+                    addValidationIssue(field, "SPECIAL stats cannot exceed 10", ValidationLevel::ERROR, "Critter Stats");
+                }
+            }
+        }
+    }
+    
+    // Hit points validation
+    if (field == _critterMaxHitPointsEdit && spinBox) {
+        int hp = spinBox->value();
+        if (hp <= 0) {
+            addValidationIssue(field, "Hit points must be greater than 0", ValidationLevel::ERROR, "Critter Stats");
+        } else if (hp > MAX_CRITTER_HIT_POINTS_WARNING) {
+            addValidationIssue(field, "Very high hit points - boss-level critter?", ValidationLevel::INFO, "Critter Stats");
+        }
+    }
+    
+    // Action points validation
+    if (field == _critterActionPointsEdit && spinBox) {
+        int ap = spinBox->value();
+        if (ap <= 0) {
+            addValidationIssue(field, "Action points must be greater than 0", ValidationLevel::ERROR, "Critter Stats");
+        } else if (ap > MAX_ACTION_POINTS) {
+            addValidationIssue(field, "Very high action points - may unbalance combat", ValidationLevel::WARNING, "Critter Stats");
+        }
+    }
+    
+    // Armor class validation
+    if (field == _critterArmorClassEdit && spinBox) {
+        int ac = spinBox->value();
+        if (ac < 0) {
+            addValidationIssue(field, "Armor class cannot be negative", ValidationLevel::ERROR, "Critter Stats");
+        } else if (ac > MAX_ARMOR_CLASS_WARNING) {
+            addValidationIssue(field, "Very high armor class - may be unhittable", ValidationLevel::WARNING, "Critter Stats");
+        }
+    }
+}
+
+void ProEditorDialog::validateItemField(QWidget* field) {
+    QSpinBox* spinBox = qobject_cast<QSpinBox*>(field);
+    
+    // Weight validation
+    if (field == _weightEdit && spinBox) {
+        int weight = spinBox->value();
+        if (weight < 0) {
+            addValidationIssue(field, "Weight cannot be negative", ValidationLevel::ERROR, "Item Properties");
+        } else if (weight > MAX_WEIGHT_WARNING) {
+            addValidationIssue(field, "Very heavy item - check if realistic", ValidationLevel::WARNING, "Item Properties");
+        }
+    }
+    
+    // Price validation
+    if (field == _basePriceEdit && spinBox) {
+        int price = spinBox->value();
+        if (price < 0) {
+            addValidationIssue(field, "Base price cannot be negative", ValidationLevel::ERROR, "Item Properties");
+        } else if (price == 0) {
+            addValidationIssue(field, "Item has no value - is this intended?", ValidationLevel::INFO, "Item Properties");
+        } else if (price > MAX_PRICE_WARNING) {
+            addValidationIssue(field, "Very expensive item - luxury goods?", ValidationLevel::INFO, "Item Properties");
+        }
+    }
+}
+
+void ProEditorDialog::validateFIDField(QWidget* field) {
+    if (field == _fidLabel) {
+        // Main FID validation - use internal storage
+        if (_mainFID != 0 && _mainFID != -1 && !validateFIDReference(_mainFID, "Main FRM")) {
+            addValidationIssue(field, "FID may not reference a valid FRM file", ValidationLevel::WARNING, "References");
+        }
+    }
 }
 
 void ProEditorDialog::updatePreview() {
@@ -3576,7 +3586,7 @@ void ProEditorDialog::openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidS
 
 QSpinBox* ProEditorDialog::createSpinBox(int min, int max, const QString& tooltip) {
     QSpinBox* spinBox = new QSpinBox();
-    spinBox->setRange(min, max);
+        spinBox->setRange(min, max);
     if (!tooltip.isEmpty()) {
         spinBox->setToolTip(tooltip);
     }
@@ -3586,7 +3596,7 @@ QSpinBox* ProEditorDialog::createSpinBox(int min, int max, const QString& toolti
 
 QSpinBox* ProEditorDialog::createHexSpinBox(int max, const QString& tooltip) {
     QSpinBox* spinBox = new QSpinBox();
-    spinBox->setRange(0, max);
+        spinBox->setRange(0, max);
     spinBox->setDisplayIntegerBase(16);
     spinBox->setPrefix("0x");
     if (!tooltip.isEmpty()) {
@@ -3616,6 +3626,51 @@ void ProEditorDialog::connectComboBox(QComboBox* comboBox) {
 
 void ProEditorDialog::connectCheckBox(QCheckBox* checkBox) {
     connect(checkBox, &QCheckBox::toggled, this, &ProEditorDialog::onCheckBoxChanged);
+}
+
+QFormLayout* ProEditorDialog::createStandardFormLayout(QWidget* parent) {
+    QFormLayout* layout = new QFormLayout(parent);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(4);
+    return layout;
+}
+
+QGroupBox* ProEditorDialog::createStandardGroupBox(const QString& title) {
+    QGroupBox* groupBox = new QGroupBox(title);
+    createStandardFormLayout(groupBox);
+    return groupBox;
+}
+
+QHBoxLayout* ProEditorDialog::createTwoColumnLayout(QWidget* parent) {
+    QHBoxLayout* layout = new QHBoxLayout(parent);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(4);
+    return layout;
+}
+
+// Widget array helper methods (DRY principle)
+void ProEditorDialog::loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* data, int count) {
+    for (int i = 0; i < count; ++i) {
+        if (widgets[i]) {
+            widgets[i]->setValue(static_cast<int>(data[i]));
+        }
+    }
+}
+
+void ProEditorDialog::saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* data, int count) {
+    for (int i = 0; i < count; ++i) {
+        if (widgets[i]) {
+            data[i] = static_cast<uint32_t>(widgets[i]->value());
+        }
+    }
+}
+
+QSpinBox** ProEditorDialog::createConnectedSpinBoxArray(int count, int min, int max, const QStringList& tooltips) {
+    QSpinBox** widgets = new QSpinBox*[count];
+    for (int i = 0; i < count; ++i) {
+        widgets[i] = createSpinBox(min, max, i < tooltips.size() ? tooltips[i] : QString());
+    }
+    return widgets;
 }
 
 void ProEditorDialog::setupCritterTab() {
@@ -3663,23 +3718,23 @@ void ProEditorDialog::setupCritterTab() {
     basicLayout->addRow("Head FID:", headFidWidget);
     
     _critterAIPacketEdit = new QSpinBox();
-    _critterAIPacketEdit->setRange(0, 999);
+    _critterAIPacketEdit->setRange(0, MAX_AI_PACKET);
     _critterAIPacketEdit->setToolTip("AI packet number for critter behavior");
     basicLayout->addRow("AI Packet:", _critterAIPacketEdit);
     
     _critterTeamNumberEdit = new QSpinBox();
-    _critterTeamNumberEdit->setRange(0, 999);
+    _critterTeamNumberEdit->setRange(0, MAX_TEAM_NUMBER);
     _critterTeamNumberEdit->setToolTip("Team number for faction identification");
     basicLayout->addRow("Team Number:", _critterTeamNumberEdit);
     
     _critterFlagsEdit = new QSpinBox();
-    _critterFlagsEdit->setRange(0, 0xFFFFFF);
+    _critterFlagsEdit->setRange(0, MAX_FLAGS_HEX);
     _critterFlagsEdit->setDisplayIntegerBase(16);
     _critterFlagsEdit->setToolTip("Critter behavior flags (hex)");
     basicLayout->addRow("Flags:", _critterFlagsEdit);
     
     _critterAgeEdit = new QSpinBox();
-    _critterAgeEdit->setRange(0, 999);
+    _critterAgeEdit->setRange(0, MAX_AGE);
     _critterAgeEdit->setToolTip("Critter age");
     basicLayout->addRow("Age:", _critterAgeEdit);
     
@@ -3694,17 +3749,17 @@ void ProEditorDialog::setupCritterTab() {
     basicLayout->addRow("Body Type:", _critterBodyTypeCombo);
     
     _critterExperienceEdit = new QSpinBox();
-    _critterExperienceEdit->setRange(0, 99999);
+    _critterExperienceEdit->setRange(0, MAX_EXPERIENCE);
     _critterExperienceEdit->setToolTip("Experience points for killing this critter");
     basicLayout->addRow("Experience:", _critterExperienceEdit);
     
     _critterKillTypeEdit = new QSpinBox();
-    _critterKillTypeEdit->setRange(0, 999);
+    _critterKillTypeEdit->setRange(0, MAX_KILL_TYPE);
     _critterKillTypeEdit->setToolTip("Kill type for karma tracking");
     basicLayout->addRow("Kill Type:", _critterKillTypeEdit);
     
     _critterDamageTypeEdit = new QSpinBox();
-    _critterDamageTypeEdit->setRange(0, 10);
+    _critterDamageTypeEdit->setRange(0, MAX_DAMAGE_TYPE);
     _critterDamageTypeEdit->setToolTip("Default damage type");
     basicLayout->addRow("Damage Type:", _critterDamageTypeEdit);
     
@@ -3717,7 +3772,7 @@ void ProEditorDialog::setupCritterTab() {
     const char* specialNames[] = {"Strength", "Perception", "Endurance", "Charisma", "Intelligence", "Agility", "Luck"};
     for (int i = 0; i < 7; ++i) {
         _critterSpecialStatEdits[i] = new QSpinBox();
-        _critterSpecialStatEdits[i]->setRange(1, 10);
+        _critterSpecialStatEdits[i]->setRange(MIN_SPECIAL_STAT, MAX_SPECIAL_STAT);
         _critterSpecialStatEdits[i]->setToolTip(QString("Base %1 stat").arg(specialNames[i]));
         specialLayout->addWidget(new QLabel(specialNames[i]), i / 4, (i % 4) * 2);
         specialLayout->addWidget(_critterSpecialStatEdits[i], i / 4, (i % 4) * 2 + 1);
@@ -3730,55 +3785,55 @@ void ProEditorDialog::setupCritterTab() {
     QGridLayout* combatLayout = new QGridLayout(combatGroup);
     
     _critterMaxHitPointsEdit = new QSpinBox();
-    _critterMaxHitPointsEdit->setRange(1, 9999);
+    _critterMaxHitPointsEdit->setRange(1, MAX_CRITTER_HIT_POINTS);
     _critterMaxHitPointsEdit->setToolTip("Maximum hit points");
     combatLayout->addWidget(new QLabel("Max HP:"), 0, 0);
     combatLayout->addWidget(_critterMaxHitPointsEdit, 0, 1);
     
     _critterActionPointsEdit = new QSpinBox();
-    _critterActionPointsEdit->setRange(1, 20);
+    _critterActionPointsEdit->setRange(1, MAX_ACTION_POINTS);
     _critterActionPointsEdit->setToolTip("Action points per turn");
     combatLayout->addWidget(new QLabel("Action Points:"), 0, 2);
     combatLayout->addWidget(_critterActionPointsEdit, 0, 3);
     
     _critterArmorClassEdit = new QSpinBox();
-    _critterArmorClassEdit->setRange(0, 90);
+    _critterArmorClassEdit->setRange(0, MAX_ARMOR_CLASS);
     _critterArmorClassEdit->setToolTip("Base armor class");
     combatLayout->addWidget(new QLabel("Armor Class:"), 1, 0);
     combatLayout->addWidget(_critterArmorClassEdit, 1, 1);
     
     _critterMeleeDamageEdit = new QSpinBox();
-    _critterMeleeDamageEdit->setRange(0, 999);
+    _critterMeleeDamageEdit->setRange(0, MAX_MELEE_DAMAGE);
     _critterMeleeDamageEdit->setToolTip("Melee damage bonus");
     combatLayout->addWidget(new QLabel("Melee Damage:"), 1, 2);
     combatLayout->addWidget(_critterMeleeDamageEdit, 1, 3);
     
     _critterCarryWeightMaxEdit = new QSpinBox();
-    _critterCarryWeightMaxEdit->setRange(0, 99999);
+    _critterCarryWeightMaxEdit->setRange(0, MAX_CARRY_WEIGHT);
     _critterCarryWeightMaxEdit->setToolTip("Maximum carrying capacity");
     combatLayout->addWidget(new QLabel("Carry Weight:"), 2, 0);
     combatLayout->addWidget(_critterCarryWeightMaxEdit, 2, 1);
     
     _critterSequenceEdit = new QSpinBox();
-    _critterSequenceEdit->setRange(0, 50);
+    _critterSequenceEdit->setRange(0, MAX_SEQUENCE);
     _critterSequenceEdit->setToolTip("Combat sequence modifier");
     combatLayout->addWidget(new QLabel("Sequence:"), 2, 2);
     combatLayout->addWidget(_critterSequenceEdit, 2, 3);
     
     _critterHealingRateEdit = new QSpinBox();
-    _critterHealingRateEdit->setRange(0, 50);
+    _critterHealingRateEdit->setRange(0, MAX_HEALING_RATE);
     _critterHealingRateEdit->setToolTip("Natural healing rate");
     combatLayout->addWidget(new QLabel("Healing Rate:"), 3, 0);
     combatLayout->addWidget(_critterHealingRateEdit, 3, 1);
     
     _critterCriticalChanceEdit = new QSpinBox();
-    _critterCriticalChanceEdit->setRange(0, 100);
+    _critterCriticalChanceEdit->setRange(0, MAX_CRITICAL_CHANCE);
     _critterCriticalChanceEdit->setToolTip("Critical hit chance percentage");
     combatLayout->addWidget(new QLabel("Critical Chance:"), 3, 2);
     combatLayout->addWidget(_critterCriticalChanceEdit, 3, 3);
     
     _critterBetterCriticalsEdit = new QSpinBox();
-    _critterBetterCriticalsEdit->setRange(0, 100);
+    _critterBetterCriticalsEdit->setRange(0, MAX_BETTER_CRITICALS);
     _critterBetterCriticalsEdit->setToolTip("Better criticals bonus");
     combatLayout->addWidget(new QLabel("Better Criticals:"), 4, 0);
     combatLayout->addWidget(_critterBetterCriticalsEdit, 4, 1);
@@ -3792,7 +3847,7 @@ void ProEditorDialog::setupCritterTab() {
     
     for (int i = 0; i < 7; ++i) {
         _critterDamageThresholdEdits[i] = new QSpinBox();
-        _critterDamageThresholdEdits[i]->setRange(0, 200);
+        _critterDamageThresholdEdits[i]->setRange(0, MAX_DAMAGE_THRESHOLD);
         _critterDamageThresholdEdits[i]->setToolTip(QString("%1 damage threshold").arg(damageTypes[i]));
         thresholdLayout->addWidget(new QLabel(damageTypes[i]), i / 4, (i % 4) * 2);
         thresholdLayout->addWidget(_critterDamageThresholdEdits[i], i / 4, (i % 4) * 2 + 1);
@@ -3806,7 +3861,7 @@ void ProEditorDialog::setupCritterTab() {
     
     for (int i = 0; i < 9; ++i) {
         _critterDamageResistEdits[i] = new QSpinBox();
-        _critterDamageResistEdits[i]->setRange(0, 100);
+        _critterDamageResistEdits[i]->setRange(0, MAX_DAMAGE_RESIST_PERCENT);
         _critterDamageResistEdits[i]->setSuffix("%");
         _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance percentage").arg(resistanceTypes[i]));
         resistanceLayout->addWidget(new QLabel(resistanceTypes[i]), i / 3, (i % 3) * 2);
@@ -3825,7 +3880,7 @@ void ProEditorDialog::setupCritterTab() {
     
     for (int i = 0; i < 18; ++i) {
         _critterSkillEdits[i] = new QSpinBox();
-        _critterSkillEdits[i]->setRange(0, 300);
+        _critterSkillEdits[i]->setRange(0, MAX_SKILL_PERCENT);
         _critterSkillEdits[i]->setSuffix("%");
         _critterSkillEdits[i]->setToolTip(QString("%1 skill percentage").arg(skillNames[i]));
         skillsLayout->addWidget(new QLabel(skillNames[i]), i / 3, (i % 3) * 2);
@@ -3841,7 +3896,7 @@ void ProEditorDialog::setupCritterTab() {
     
     for (int i = 0; i < 7; ++i) {
         _critterBonusSpecialStatEdits[i] = new QSpinBox();
-        _critterBonusSpecialStatEdits[i]->setRange(-10, 10);
+        _critterBonusSpecialStatEdits[i]->setRange(-BONUS_SPECIAL_STAT_RANGE, BONUS_SPECIAL_STAT_RANGE);
         _critterBonusSpecialStatEdits[i]->setToolTip(QString("Bonus %1 modifier").arg(bonusSpecialNames[i]));
         bonusSpecialLayout->addWidget(new QLabel(QString("Bonus %1:").arg(bonusSpecialNames[i])), i / 4, (i % 4) * 2);
         bonusSpecialLayout->addWidget(_critterBonusSpecialStatEdits[i], i / 4, (i % 4) * 2 + 1);
@@ -3853,67 +3908,67 @@ void ProEditorDialog::setupCritterTab() {
     QGridLayout* bonusDerivedLayout = new QGridLayout(bonusDerivedGroup);
     
     _critterBonusHealthPointsEdit = new QSpinBox();
-    _critterBonusHealthPointsEdit->setRange(-999, 999);
+    _critterBonusHealthPointsEdit->setRange(-BONUS_HIT_POINTS_RANGE, BONUS_HIT_POINTS_RANGE);
     _critterBonusHealthPointsEdit->setToolTip("Bonus hit points modifier");
     bonusDerivedLayout->addWidget(new QLabel("Hit Points:"), 0, 0);
     bonusDerivedLayout->addWidget(_critterBonusHealthPointsEdit, 0, 1);
     
     _critterBonusActionPointsEdit = new QSpinBox();
-    _critterBonusActionPointsEdit->setRange(-20, 20);
+    _critterBonusActionPointsEdit->setRange(-BONUS_ACTION_POINTS_RANGE, BONUS_ACTION_POINTS_RANGE);
     _critterBonusActionPointsEdit->setToolTip("Bonus action points modifier");
     bonusDerivedLayout->addWidget(new QLabel("Action Points:"), 1, 0);
     bonusDerivedLayout->addWidget(_critterBonusActionPointsEdit, 1, 1);
     
     _critterBonusArmorClassEdit = new QSpinBox();
-    _critterBonusArmorClassEdit->setRange(-50, 50);
+    _critterBonusArmorClassEdit->setRange(-BONUS_ARMOR_CLASS_RANGE, BONUS_ARMOR_CLASS_RANGE);
     _critterBonusArmorClassEdit->setToolTip("Bonus armor class modifier");
     bonusDerivedLayout->addWidget(new QLabel("Armor Class:"), 2, 0);
     bonusDerivedLayout->addWidget(_critterBonusArmorClassEdit, 2, 1);
     
     _critterBonusMeleeDamageEdit = new QSpinBox();
-    _critterBonusMeleeDamageEdit->setRange(-50, 50);
+    _critterBonusMeleeDamageEdit->setRange(-BONUS_MELEE_DAMAGE_RANGE, BONUS_MELEE_DAMAGE_RANGE);
     _critterBonusMeleeDamageEdit->setToolTip("Bonus melee damage modifier");
     bonusDerivedLayout->addWidget(new QLabel("Melee Damage:"), 3, 0);
     bonusDerivedLayout->addWidget(_critterBonusMeleeDamageEdit, 3, 1);
     
     _critterBonusCarryWeightEdit = new QSpinBox();
-    _critterBonusCarryWeightEdit->setRange(-999, 999);
+    _critterBonusCarryWeightEdit->setRange(-BONUS_CARRY_WEIGHT_RANGE, BONUS_CARRY_WEIGHT_RANGE);
     _critterBonusCarryWeightEdit->setToolTip("Bonus carry weight modifier");
     bonusDerivedLayout->addWidget(new QLabel("Carry Weight:"), 4, 0);
     bonusDerivedLayout->addWidget(_critterBonusCarryWeightEdit, 4, 1);
     
     _critterBonusSequenceEdit = new QSpinBox();
-    _critterBonusSequenceEdit->setRange(-20, 20);
+    _critterBonusSequenceEdit->setRange(-BONUS_SEQUENCE_RANGE, BONUS_SEQUENCE_RANGE);
     _critterBonusSequenceEdit->setToolTip("Bonus sequence modifier");
     bonusDerivedLayout->addWidget(new QLabel("Sequence:"), 5, 0);
     bonusDerivedLayout->addWidget(_critterBonusSequenceEdit, 5, 1);
     
     _critterBonusHealingRateEdit = new QSpinBox();
-    _critterBonusHealingRateEdit->setRange(-10, 10);
+    _critterBonusHealingRateEdit->setRange(-BONUS_HEALING_RATE_RANGE, BONUS_HEALING_RATE_RANGE);
     _critterBonusHealingRateEdit->setToolTip("Bonus healing rate modifier");
     bonusDerivedLayout->addWidget(new QLabel("Healing Rate:"), 6, 0);
     bonusDerivedLayout->addWidget(_critterBonusHealingRateEdit, 6, 1);
     
     _critterBonusCriticalChanceEdit = new QSpinBox();
-    _critterBonusCriticalChanceEdit->setRange(-50, 50);
+    _critterBonusCriticalChanceEdit->setRange(-BONUS_CRITICAL_RANGE, BONUS_CRITICAL_RANGE);
     _critterBonusCriticalChanceEdit->setToolTip("Bonus critical chance modifier");
     bonusDerivedLayout->addWidget(new QLabel("Critical Chance:"), 7, 0);
     bonusDerivedLayout->addWidget(_critterBonusCriticalChanceEdit, 7, 1);
     
     _critterBonusBetterCriticalsEdit = new QSpinBox();
-    _critterBonusBetterCriticalsEdit->setRange(-50, 50);
+    _critterBonusBetterCriticalsEdit->setRange(-BONUS_CRITICAL_RANGE, BONUS_CRITICAL_RANGE);
     _critterBonusBetterCriticalsEdit->setToolTip("Bonus better criticals modifier");
     bonusDerivedLayout->addWidget(new QLabel("Better Criticals:"), 8, 0);
     bonusDerivedLayout->addWidget(_critterBonusBetterCriticalsEdit, 8, 1);
     
     _critterBonusAgeEdit = new QSpinBox();
-    _critterBonusAgeEdit->setRange(-999, 999);
+    _critterBonusAgeEdit->setRange(-BONUS_AGE_RANGE, BONUS_AGE_RANGE);
     _critterBonusAgeEdit->setToolTip("Bonus age modifier");
     bonusDerivedLayout->addWidget(new QLabel("Age:"), 9, 0);
     bonusDerivedLayout->addWidget(_critterBonusAgeEdit, 9, 1);
     
     _critterBonusGenderEdit = new QSpinBox();
-    _critterBonusGenderEdit->setRange(-1, 1);
+    _critterBonusGenderEdit->setRange(BONUS_GENDER_MIN, BONUS_GENDER_MAX);
     _critterBonusGenderEdit->setToolTip("Bonus gender modifier");
     bonusDerivedLayout->addWidget(new QLabel("Gender:"), 10, 0);
     bonusDerivedLayout->addWidget(_critterBonusGenderEdit, 10, 1);
@@ -3927,7 +3982,7 @@ void ProEditorDialog::setupCritterTab() {
     
     for (int i = 0; i < 8; ++i) {
         _critterBonusDamageThresholdEdits[i] = new QSpinBox();
-        _critterBonusDamageThresholdEdits[i]->setRange(-200, 200);
+        _critterBonusDamageThresholdEdits[i]->setRange(-BONUS_DAMAGE_THRESHOLD_RANGE, BONUS_DAMAGE_THRESHOLD_RANGE);
         _critterBonusDamageThresholdEdits[i]->setToolTip(QString("Bonus %1 damage threshold").arg(bonusThresholdTypes[i]));
         bonusThresholdLayout->addWidget(new QLabel(bonusThresholdTypes[i]), i / 4, (i % 4) * 2);
         bonusThresholdLayout->addWidget(_critterBonusDamageThresholdEdits[i], i / 4, (i % 4) * 2 + 1);
@@ -3941,7 +3996,7 @@ void ProEditorDialog::setupCritterTab() {
     
     for (int i = 0; i < 8; ++i) {
         _critterBonusDamageResistanceEdits[i] = new QSpinBox();
-        _critterBonusDamageResistanceEdits[i]->setRange(-100, 100);
+        _critterBonusDamageResistanceEdits[i]->setRange(-BONUS_DAMAGE_RESIST_RANGE, BONUS_DAMAGE_RESIST_RANGE);
         _critterBonusDamageResistanceEdits[i]->setSuffix("%");
         _critterBonusDamageResistanceEdits[i]->setToolTip(QString("Bonus %1 damage resistance percentage").arg(bonusResistanceTypes[i]));
         bonusResistanceLayout->addWidget(new QLabel(bonusResistanceTypes[i]), i / 4, (i % 4) * 2);
@@ -4023,7 +4078,7 @@ void ProEditorDialog::setupSceneryTab() {
     layout->addRow("Material:", _sceneryMaterialIdEdit);
     
     _scenerySoundIdEdit = new QSpinBox();
-    _scenerySoundIdEdit->setRange(0, 255);
+    _scenerySoundIdEdit->setRange(0, MAX_SOUND_ID);
     _scenerySoundIdEdit->setToolTip("Sound ID for interactions");
     layout->addRow("Sound ID:", _scenerySoundIdEdit);
     
@@ -4146,39 +4201,19 @@ void ProEditorDialog::loadCritterData() {
     if (_critterDamageTypeEdit) _critterDamageTypeEdit->setValue(static_cast<int>(critterData.damageType));
     
     // Load SPECIAL stats (STR, PER, END, CHR, INT, AGL, LCK)
-    for (int i = 0; i < 7; ++i) {
-        if (_critterSpecialStatEdits[i]) {
-            _critterSpecialStatEdits[i]->setValue(static_cast<int>(critterData.specialStats[i]));
-        }
-    }
+    loadIntArrayToWidgets(_critterSpecialStatEdits, critterData.specialStats, 7);
     
     // Load damage thresholds (7 damage types)
-    for (int i = 0; i < 7; ++i) {
-        if (_critterDamageThresholdEdits[i]) {
-            _critterDamageThresholdEdits[i]->setValue(static_cast<int>(critterData.damageThreshold[i]));
-        }
-    }
+    loadIntArrayToWidgets(_critterDamageThresholdEdits, critterData.damageThreshold, 7);
     
     // Load damage resistances (9 damage types)
-    for (int i = 0; i < 9; ++i) {
-        if (_critterDamageResistEdits[i]) {
-            _critterDamageResistEdits[i]->setValue(static_cast<int>(critterData.damageResist[i]));
-        }
-    }
+    loadIntArrayToWidgets(_critterDamageResistEdits, critterData.damageResist, 9);
     
     // Load skills (18 different skills)
-    for (int i = 0; i < 18; ++i) {
-        if (_critterSkillEdits[i]) {
-            _critterSkillEdits[i]->setValue(static_cast<int>(critterData.skills[i]));
-        }
-    }
+    loadIntArrayToWidgets(_critterSkillEdits, critterData.skills, 18);
     
     // Load bonus SPECIAL stats (7 stats)
-    for (int i = 0; i < 7; ++i) {
-        if (_critterBonusSpecialStatEdits[i]) {
-            _critterBonusSpecialStatEdits[i]->setValue(static_cast<int>(critterData.bonusSpecialStats[i]));
-        }
-    }
+    loadIntArrayToWidgets(_critterBonusSpecialStatEdits, critterData.bonusSpecialStats, 7);
     
     // Load bonus derived stats
     if (_critterBonusHealthPointsEdit) _critterBonusHealthPointsEdit->setValue(static_cast<int>(critterData.bonusHealthPoints));
@@ -4817,7 +4852,7 @@ void ProEditorDialog::loadArmorAnimationFrames() {
     
     // Check if armor animation controls are initialized - return early if not
     if (!_armorFrameSlider || !_armorFrameLabel || !_armorDirectionCombo || !_armorAnimationControls) {
-        spdlog::debug("ProEditorDialog::loadArmorAnimationFrames() - armor animation controls not initialized yet, skipping");
+        // Armor animation controls not initialized yet, skip loading frames
         return;
     }
     
@@ -5257,7 +5292,7 @@ int ProEditorDialog::calculateWeaponAIPriority() {
     
     // Add burst rounds bonus
     if (weaponData.burstRounds > 1) {
-        priority += static_cast<int>(weaponData.burstRounds) * 3;
+        priority += static_cast<int>(weaponData.burstRounds) * BURST_ROUND_PRIORITY_MULTIPLIER;
     }
     
     return std::max(0, priority);  // Ensure non-negative
@@ -5394,13 +5429,10 @@ void ProEditorDialog::setupArmorFields() {
     // === COLUMN 1: Armor Class and Damage Resistance ===
     
     // Armor Class
-    QGroupBox* acGroup = new QGroupBox("Armor Class");
-    QFormLayout* acLayout = new QFormLayout(acGroup);
-    acLayout->setContentsMargins(8, 8, 8, 8);
-    acLayout->setSpacing(4);
+    QGroupBox* acGroup = createStandardGroupBox("Armor Class");
+    QFormLayout* acLayout = static_cast<QFormLayout*>(acGroup->layout());
     
     _armorClassEdit = createSpinBox(0, 999, "Armor Class - higher values provide better protection");
-    connectSpinBox(_armorClassEdit);
     acLayout->addRow("AC:", _armorClassEdit);
     
     _leftFieldsLayout->addWidget(acGroup);
@@ -5452,13 +5484,10 @@ void ProEditorDialog::setupArmorFields() {
     _rightFieldsLayout->addWidget(thresholdGroup);
     
     // Misc Properties
-    QGroupBox* miscGroup = new QGroupBox("Misc Properties");
-    QFormLayout* miscLayout = new QFormLayout(miscGroup);
-    miscLayout->setContentsMargins(8, 8, 8, 8);
-    miscLayout->setSpacing(4);
+    QGroupBox* miscGroup = createStandardGroupBox("Misc Properties");
+    QFormLayout* miscLayout = static_cast<QFormLayout*>(miscGroup->layout());
     
     _armorPerkCombo = createComboBox({"None", "PowerArmor", "CombatArmor", "Other"}, "Special perk associated with this armor");
-    connectComboBox(_armorPerkCombo);
     miscLayout->addRow("Perk:", _armorPerkCombo);
     
     // AI Priority display
@@ -5477,13 +5506,10 @@ void ProEditorDialog::setupArmorFields() {
 void ProEditorDialog::setupContainerFields() {
     // === COLUMN 1: Container Properties ===
     
-    QGroupBox* containerGroup = new QGroupBox("Container Properties");
-    QFormLayout* containerLayout = new QFormLayout(containerGroup);
-    containerLayout->setContentsMargins(8, 8, 8, 8);
-    containerLayout->setSpacing(4);
+    QGroupBox* containerGroup = createStandardGroupBox("Container Properties");
+    QFormLayout* containerLayout = static_cast<QFormLayout*>(containerGroup->layout());
     
     _containerMaxSizeEdit = createSpinBox(0, 999999, "Maximum size in volume units that this container can hold");
-    connectSpinBox(_containerMaxSizeEdit);
     containerLayout->addRow("Max Size:", _containerMaxSizeEdit);
     
     _leftFieldsLayout->addWidget(containerGroup);

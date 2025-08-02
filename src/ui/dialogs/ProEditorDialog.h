@@ -43,6 +43,103 @@ public:
     ~ProEditorDialog() = default;
 
     std::shared_ptr<Pro> getModifiedPro() const { return _pro; }
+    
+    // UI Size Constants
+    static constexpr int PREVIEW_COMPACT_WIDTH = 180;
+    static constexpr int PREVIEW_COMPACT_HEIGHT = 150;
+    static constexpr int PREVIEW_MIN_HEIGHT = 200;
+    static constexpr int PREVIEW_MAX_HEIGHT = 250;
+    static constexpr int PREVIEW_ITEM_SIZE = 120;
+    static constexpr int PREVIEW_FULL_MIN_HEIGHT = 150;
+    static constexpr int PREVIEW_FULL_MAX_HEIGHT = 200;
+    static constexpr int PREVIEW_FULL_MIN_WIDTH = 150;
+    
+    static constexpr int BUTTON_MAX_WIDTH = 24;
+    static constexpr int BUTTON_MAX_HEIGHT = 20;
+    static constexpr int DIRECTION_COMBO_MAX_WIDTH = 50;
+    static constexpr int ANIMATION_TIMER_INTERVAL = 200; // 5 FPS
+    static constexpr int LAYOUT_SPACING = 10;
+    
+    // Game Constants
+    static constexpr int MAX_SPECIAL_STAT = 10;
+    static constexpr int MIN_SPECIAL_STAT = 1;
+    static constexpr int MAX_WEAPON_RANGE = 50;
+    static constexpr int MAX_ACTION_POINTS = 20;
+    static constexpr int MAX_WEAPON_AP = 10;
+    static constexpr int MAX_WEAPON_AP_WARNING = 12;
+    static constexpr int MAX_WEAPON_AP_SECONDARY_WARNING = 15;
+    static constexpr int MAX_BURST_ROUNDS = 50;
+    static constexpr int MAX_ARMOR_CLASS = 90;
+    static constexpr int MAX_ARMOR_CLASS_WARNING = 50;
+    static constexpr int MAX_SEQUENCE = 50;
+    static constexpr int MAX_HEALING_RATE = 50;
+    static constexpr int MAX_CRITICAL_CHANCE = 100;
+    static constexpr int MAX_BETTER_CRITICALS = 100;
+    static constexpr int MAX_SKILL_PERCENT = 300;
+    static constexpr int MAX_DAMAGE_RESIST_PERCENT = 100;
+    static constexpr int MAX_CRITTER_HIT_POINTS = 9999;
+    static constexpr int MAX_CRITTER_HIT_POINTS_WARNING = 999;
+    static constexpr int MAX_DAMAGE_THRESHOLD = 200;
+    static constexpr int MAX_DAMAGE_RESISTANCE = 999;
+    static constexpr int MAX_GENERAL_DAMAGE = 999;
+    static constexpr int MAX_MELEE_DAMAGE = 999;
+    static constexpr int MAX_CARRY_WEIGHT = 99999;
+    static constexpr int MAX_EXPERIENCE = 99999;
+    static constexpr int MAX_DAMAGE_TYPE = 10;
+    static constexpr int MAX_KILL_TYPE = 999;
+    static constexpr int MAX_AI_PACKET = 999;
+    static constexpr int MAX_TEAM_NUMBER = 999;
+    static constexpr int MAX_AGE = 999;
+    static constexpr int MAX_LIGHT_DISTANCE = 999;
+    static constexpr int MAX_LIGHT_INTENSITY = 999;
+    static constexpr int MAX_ELEVATOR_VALUE = 999;
+    static constexpr int MAX_SOUND_ID = 255;
+    static constexpr int MAX_FLAGS_HEX = 0xFFFFFF;
+    static constexpr int MAX_CONTAINER_SIZE = 999999;
+    static constexpr int MAX_WEIGHT = 999999;
+    static constexpr int MAX_PRICE = 999999;
+    static constexpr int MAX_PRICE_WARNING = 100000;
+    static constexpr int MAX_WEIGHT_WARNING = 1000;
+    static constexpr int MAX_KEY_ID = 999999;
+    static constexpr int MAX_CHARGES = 999;
+    static constexpr int MAX_AMMO_QUANTITY = 999;
+    static constexpr int MAX_AMMO_CAPACITY = 999;
+    static constexpr int MAX_DRUG_STAT_MODIFIER = 999;
+    static constexpr int MAX_DRUG_DELAY = 999;
+    static constexpr int MAX_DAMAGE_MOD = 100;
+    static constexpr int MAX_DAMAGE_MULT = 10;
+    static constexpr int MAX_ADDICTION_CHANCE = 100;
+    static constexpr int MAX_ANIMATION_CODE = 15;
+    
+    // Bonus/Modifier Constants
+    static constexpr int BONUS_SPECIAL_STAT_RANGE = 10;
+    static constexpr int BONUS_HIT_POINTS_RANGE = 999;
+    static constexpr int BONUS_ACTION_POINTS_RANGE = 20;
+    static constexpr int BONUS_ARMOR_CLASS_RANGE = 50;
+    static constexpr int BONUS_MELEE_DAMAGE_RANGE = 50;
+    static constexpr int BONUS_CARRY_WEIGHT_RANGE = 999;
+    static constexpr int BONUS_SEQUENCE_RANGE = 20;
+    static constexpr int BONUS_HEALING_RATE_RANGE = 10;
+    static constexpr int BONUS_CRITICAL_RANGE = 50;
+    static constexpr int BONUS_DAMAGE_THRESHOLD_RANGE = 200;
+    static constexpr int BONUS_DAMAGE_RESIST_RANGE = 100;
+    static constexpr int BONUS_AGE_RANGE = 999;
+    static constexpr int BONUS_GENDER_MIN = -1;
+    static constexpr int BONUS_GENDER_MAX = 1;
+    
+    // Array Size Constants
+    static constexpr int NUM_SPECIAL_STATS = 7;
+    static constexpr int NUM_DAMAGE_TYPES = 7;
+    static constexpr int NUM_DAMAGE_TYPES_WITH_COMBAT = 8;
+    static constexpr int NUM_DAMAGE_TYPES_WITH_SPECIAL = 8;
+    static constexpr int NUM_DAMAGE_TYPES_WITH_RADIATION = 9;
+    static constexpr int NUM_SKILLS = 18;
+    static constexpr int NUM_DRUG_STATS = 3;
+    static constexpr int NUM_COMMON_FLAGS = 13;
+    static constexpr int DIRECTIONS_COUNT = 6;
+    
+    // Other Constants
+    static constexpr int BURST_ROUND_PRIORITY_MULTIPLIER = 3;
 
 private slots:
     void onAccept();
@@ -174,6 +271,16 @@ private:
     void connectSpinBox(QSpinBox* spinBox);
     void connectComboBox(QComboBox* comboBox);
     void connectCheckBox(QCheckBox* checkBox);
+    
+    // Layout helper methods (DRY principle)
+    QFormLayout* createStandardFormLayout(QWidget* parent);
+    QGroupBox* createStandardGroupBox(const QString& title);
+    QHBoxLayout* createTwoColumnLayout(QWidget* parent);
+    
+    // Widget array helper methods (DRY principle)
+    void loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* data, int count);
+    void saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* data, int count);
+    QSpinBox** createConnectedSpinBoxArray(int count, int min, int max, const QStringList& tooltips);
     
     // Material names mapping
     static const QStringList getMaterialNames();
@@ -431,6 +538,12 @@ private:
     bool validateStatValue(int value, int min, int max, const QString& statName);
     void updateValidationStatus();
     void updateValidationPanel();
+    
+    // Split validation methods (KISS principle)
+    void validateWeaponField(QWidget* field);
+    void validateCritterField(QWidget* field);
+    void validateItemField(QWidget* field);
+    void validateFIDField(QWidget* field);
     
     // AI Priority calculations (f2wedit feature)
     int calculateArmorAIPriority();
