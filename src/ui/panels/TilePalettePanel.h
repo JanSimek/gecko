@@ -12,6 +12,10 @@ namespace geck {
 class Map;
 class Lst;
 
+namespace selection {
+    class SelectionManager;
+}
+
 /**
  * @brief Widget representing a single tile in the palette
  * Now inherits from BasePaletteWidget to eliminate duplication
@@ -57,6 +61,7 @@ public:
     // Initialization
     void loadTiles(const Lst* tileList);
     void setMap(Map* map) { _map = map; }
+    void setSelectionManager(selection::SelectionManager* selectionManager) { _selectionManager = selectionManager; }
 
     // Tile selection
     int getSelectedTileIndex() const { return _selectedTileIndex; }
@@ -126,6 +131,7 @@ private:
     Map* _map = nullptr;
     const Lst* _tileList = nullptr;
     std::vector<std::unique_ptr<TileWidget>> _tileWidgets;
+    selection::SelectionManager* _selectionManager = nullptr;
 
     // State
     int _selectedTileIndex = -1;

@@ -5,6 +5,7 @@
 #include "../../util/Constants.h"
 #include "../../util/ColorUtils.h"
 #include "../common/BaseWidget.h"
+#include "../../selection/SelectionManager.h"
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -352,8 +353,6 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
 
         // Disable tile placement mode
         emit tileSelected(-1); // -1 signals no tile selected
-
-        spdlog::debug("TilePalettePanel: Deselected tile {}", tileIndex);
         return;
     }
 
@@ -370,11 +369,16 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
         (*it)->setSelected(true);
     }
 
-    // Always emit signals for tile operations (auto-paint mode)
+    // Always enable normal tile placement mode and clear any existing selection
+    // This allows the user to paint tiles by clicking individual tiles
+    bool hasExistingSelection = _selectionManager && _selectionManager->hasSelection();
+    if (hasExistingSelection) {
+        // Clear the existing selection first
+        _selectionManager->clearSelection();
+    }
+    
+    // Enable tile placement mode for painting individual tiles
     emit tileSelected(tileIndex);
-    // Note: replaceSelectedTiles should only be called when explicitly replacing tiles, not on every tile selection
-
-    spdlog::debug("TilePalettePanel: Selected tile {} for auto-painting", tileIndex);
 }
 
 void TilePalettePanel::clearTileSelection() {
@@ -388,7 +392,6 @@ void TilePalettePanel::deselectTile() {
         clearTileSelection();
         _selectedTileIndex = -1;
         emit tileSelected(-1); // -1 signals no tile selected
-        spdlog::debug("TilePalettePanel: Tile deselected via deselectTile()");
     }
 }
 
@@ -398,7 +401,6 @@ void TilePalettePanel::onPlacementModeChanged() {
 
     QString modeText = "Unified placement mode - click or drag to place tiles (auto-replace if tiles selected)";
     _statusLabel->setText(modeText);
-    spdlog::debug("TilePalettePanel: Using unified placement mode");
 }
 
 void TilePalettePanel::setPlacementMode(PlacementMode mode) {

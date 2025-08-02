@@ -82,7 +82,7 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
     const auto& hexGrid = _hexGrid->grid();
     for (int i = 0; i < static_cast<int>(hexGrid.size()); ++i) {
         if (hexGrid[i].position() == hexPosition) {
-            spdlog::debug("ViewportController::worldPosToHexIndex: world({:.1f}, {:.1f}) -> hex({})",
+            spdlog::trace("ViewportController::worldPosToHexIndex: world({:.1f}, {:.1f}) -> hex({})",
                           worldPos.x, worldPos.y, i);
             return i;
         }

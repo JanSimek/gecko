@@ -50,7 +50,7 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
         }
 
         // Handle tile placement mode
-        if (_tilePlacementMode && _tilePlacementIndex >= 0 && !_tilePlacementReplaceMode) {
+        if (_tilePlacementMode && _tilePlacementIndex >= 0) {
             _currentAction = EditorAction::TILE_PLACING;
             _dragStartWorldPos = worldPos;
             _isDragging = false;

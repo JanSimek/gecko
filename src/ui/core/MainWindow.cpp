@@ -814,6 +814,9 @@ void MainWindow::connectToEditorWidget() {
     if (_tilePalettePanel) {
         // Set the map reference for the tile palette panel
         _tilePalettePanel->setMap(_currentEditorWidget->getMap());
+        
+        // Set the selection manager reference for tile replacement detection
+        _tilePalettePanel->setSelectionManager(_currentEditorWidget->getSelectionManager());
 
         // Connect tile selection to enable tile placement mode
         connect(_tilePalettePanel, &TilePalettePanel::tileSelected,
@@ -821,11 +824,9 @@ void MainWindow::connectToEditorWidget() {
                 if (tileIndex >= 0) {
                     // Default to floor for single placement and area fill (roof/floor detection is automatic for replace mode)
                     _currentEditorWidget->setTilePlacementMode(true, tileIndex, false);
-                    spdlog::debug("Enabled tile placement mode with tile {}", tileIndex);
                 } else {
                     // Disable tile placement mode
                     _currentEditorWidget->setTilePlacementMode(false);
-                    spdlog::debug("Disabled tile placement mode");
                 }
             });
 

@@ -138,40 +138,42 @@ void TilePlacementManager::setTilePlacementMode(bool enabled, int tileIndex, boo
     _tilePlacementIndex = tileIndex;
     _tilePlacementIsRoof = isRoof;
 
-    if (enabled) {
-        spdlog::debug("TilePlacementManager: Enabled tile placement mode (tile: {}, roof: {})", tileIndex, isRoof);
-    } else {
-        spdlog::debug("TilePlacementManager: Disabled tile placement mode");
-    }
 }
 
 void TilePlacementManager::setTilePlacementAreaFill(bool enabled) {
     _tilePlacementAreaFill = enabled;
-    spdlog::debug("TilePlacementManager: Area fill mode {}", enabled ? "enabled" : "disabled");
 }
 
 void TilePlacementManager::setTilePlacementReplaceMode(bool enabled) {
     _tilePlacementReplaceMode = enabled;
-    spdlog::debug("TilePlacementManager: Replace mode {}", enabled ? "enabled" : "disabled");
 }
 
 void TilePlacementManager::handleTilePlacement(sf::Vector2f worldPos, bool isRoof) {
     if (_tilePlacementMode && _tilePlacementIndex >= 0) {
-        placeTileAtPosition(_tilePlacementIndex, worldPos, isRoof);
+        // Check if there are already selected tiles - if so, replace them instead of placing new tile
+        if (_editor->getSelectionManager()->hasSelection()) {
+            replaceSelectedTiles(_tilePlacementIndex);
+        } else {
+            // No selection, place tile at clicked position
+            placeTileAtPosition(_tilePlacementIndex, worldPos, isRoof);
+        }
     }
 }
 
 void TilePlacementManager::handleTileAreaFill(sf::Vector2f startPos, sf::Vector2f endPos, bool isRoof) {
-    spdlog::info("TilePlacementManager::handleTileAreaFill called with start ({:.1f},{:.1f}) end ({:.1f},{:.1f}) roof: {} mode: {} index: {}", 
-        startPos.x, startPos.y, endPos.x, endPos.y, isRoof, _tilePlacementMode, _tilePlacementIndex);
-    
     if (_tilePlacementMode && _tilePlacementIndex >= 0) {
-        float left = std::min(startPos.x, endPos.x);
-        float top = std::min(startPos.y, endPos.y);
-        float width = std::abs(endPos.x - startPos.x);
-        float height = std::abs(endPos.y - startPos.y);
-        sf::FloatRect fillArea({left, top}, {width, height});
-        fillAreaWithTile(_tilePlacementIndex, fillArea, isRoof);
+        // Check if there are already selected tiles - if so, replace them instead of area fill
+        if (_editor->getSelectionManager()->hasSelection()) {
+            replaceSelectedTiles(_tilePlacementIndex);
+        } else {
+            // No selection, perform normal area fill
+            float left = std::min(startPos.x, endPos.x);
+            float top = std::min(startPos.y, endPos.y);
+            float width = std::abs(endPos.x - startPos.x);
+            float height = std::abs(endPos.y - startPos.y);
+            sf::FloatRect fillArea({left, top}, {width, height});
+            fillAreaWithTile(_tilePlacementIndex, fillArea, isRoof);
+        }
     } else {
         spdlog::warn("TilePlacementManager::handleTileAreaFill: Not in tile placement mode or no tile selected");
     }
@@ -183,8 +185,6 @@ void TilePlacementManager::resetState() {
     _tilePlacementReplaceMode = false;
     _tilePlacementIndex = -1;
     _tilePlacementIsRoof = false;
-    
-    spdlog::debug("TilePlacementManager: Reset all tile placement state");
 }
 
 void TilePlacementManager::updateTileSprite(int hexIndex, bool isRoof) {
