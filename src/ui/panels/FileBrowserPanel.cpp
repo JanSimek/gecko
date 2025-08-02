@@ -63,6 +63,34 @@ bool FileBrowserProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& s
     return fileNameMatches || proNameMatches;
 }
 
+bool FileBrowserProxyModel::lessThan(const QModelIndex& left, const QModelIndex& right) const {
+    // The left and right indexes are already from the source model
+    if (!left.isValid() || !right.isValid()) {
+        return QSortFilterProxyModel::lessThan(left, right);
+    }
+    
+    // Get the type from column 1 (Type column)
+    QModelIndex leftTypeIndex = left.sibling(left.row(), 1);
+    QModelIndex rightTypeIndex = right.sibling(right.row(), 1);
+    
+    QString leftType = leftTypeIndex.data(Qt::DisplayRole).toString();
+    QString rightType = rightTypeIndex.data(Qt::DisplayRole).toString();
+    
+    // Sort directories before files
+    bool leftIsDir = (leftType == "Directory");
+    bool rightIsDir = (rightType == "Directory");
+    
+    if (leftIsDir && !rightIsDir) {
+        return true;  // Directory comes before file
+    }
+    if (!leftIsDir && rightIsDir) {
+        return false; // File comes after directory
+    }
+    
+    // Both are directories or both are files - use default alphabetical comparison
+    return QSortFilterProxyModel::lessThan(left, right);
+}
+
 // FileLoaderWorker implementation
 FileLoaderWorker::FileLoaderWorker(QObject* parent)
     : QObject(parent) {
@@ -570,6 +598,9 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
         _treeView->expand(index);
     }
     
+    // Trigger sorting to ensure proper directory/file order
+    _proxyModel->sort(0, Qt::AscendingOrder);
+    
     // Resize Name column to fit content after tree is built and expanded
     resizeNameColumnToContent();
 }
@@ -836,6 +867,9 @@ void FileBrowserPanel::processNextChunk() {
         
         // Resize Name column to fit content
         resizeNameColumnToContent();
+        
+        // Trigger sorting to ensure proper directory/file order
+        _proxyModel->sort(0, Qt::AscendingOrder);
         
         // Update file count
         updateFileCount();
