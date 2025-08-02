@@ -81,25 +81,28 @@ std::unique_ptr<Pro> ProReader::read() {
                     break;
                 }
                 case Pro::ITEM_TYPE::DRUG: {
-                    pro->drugData.stat0Base = utils.readBE32();
-                    pro->drugData.stat1Base = utils.readBE32();
-                    pro->drugData.stat2Base = utils.readBE32();
-                    pro->drugData.stat0Amount = utils.readBE32Signed();
-                    pro->drugData.stat1Amount = utils.readBE32Signed();
-                    pro->drugData.stat2Amount = utils.readBE32Signed();
-                    // first delayed effect
-                    pro->drugData.firstDelayMinutes = utils.readBE32();
-                    pro->drugData.firstStat0Amount = utils.readBE32Signed();
-                    pro->drugData.firstStat1Amount = utils.readBE32Signed();
-                    pro->drugData.firstStat2Amount = utils.readBE32Signed();
-                    // second delayed effect
-                    pro->drugData.secondDelayMinutes = utils.readBE32();
-                    pro->drugData.secondStat0Amount = utils.readBE32Signed();
-                    pro->drugData.secondStat1Amount = utils.readBE32Signed();
-                    pro->drugData.secondStat2Amount = utils.readBE32Signed();
-                    pro->drugData.addictionChance = utils.readBE32();
-                    pro->drugData.addictionPerk = utils.readBE32();
-                    pro->drugData.addictionDelay = utils.readBE32();
+                    // Immediate effect stats (which stats to modify)
+                    pro->drugData.stat0 = utils.readBE32();
+                    pro->drugData.stat1 = utils.readBE32();
+                    pro->drugData.stat2 = utils.readBE32();
+                    // Immediate effect amounts (how much to modify)
+                    pro->drugData.amount0 = utils.readBE32Signed();
+                    pro->drugData.amount1 = utils.readBE32Signed();
+                    pro->drugData.amount2 = utils.readBE32Signed();
+                    // First delayed effect
+                    pro->drugData.duration1 = utils.readBE32();
+                    pro->drugData.amount0_1 = utils.readBE32Signed();
+                    pro->drugData.amount1_1 = utils.readBE32Signed();
+                    pro->drugData.amount2_1 = utils.readBE32Signed();
+                    // Second delayed effect
+                    pro->drugData.duration2 = utils.readBE32();
+                    pro->drugData.amount0_2 = utils.readBE32Signed();
+                    pro->drugData.amount1_2 = utils.readBE32Signed();
+                    pro->drugData.amount2_2 = utils.readBE32Signed();
+                    // Addiction data
+                    pro->drugData.addictionRate = utils.readBE32();
+                    pro->drugData.addictionEffect = utils.readBE32();
+                    pro->drugData.addictionOnset = utils.readBE32();
                     break;
                 }
                 case Pro::ITEM_TYPE::WEAPON: {

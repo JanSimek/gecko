@@ -16,6 +16,7 @@
 #include "../../format/frm/Frame.h"
 #include "../../format/pal/Pal.h"
 #include "../../format/msg/Msg.h"
+#include "../../util/ResourcePaths.h"
 #include "FrmSelectorDialog.h"
 
 namespace geck {
@@ -280,6 +281,9 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     _inventoryFIDLabel = nullptr;
     _inventoryFIDSelectorButton = nullptr;
     _soundIdEdit = nullptr;
+    
+    // Load stat and perk names from MSG files BEFORE setting up UI (needed for drug fields)
+    loadStatAndPerkNames();
     
     setupUI();
     
@@ -1328,104 +1332,10 @@ void ProEditorDialog::setupContainerTab() {
 
 void ProEditorDialog::setupDrugTab() {
     _drugTab = new QWidget();
-    QVBoxLayout* mainLayout = new QVBoxLayout(_drugTab);
-    
-    // Create horizontal layout for the three effect groups
-    QHBoxLayout* effectsLayout = new QHBoxLayout();
-    
-    // Immediate Effects
-    QGroupBox* immediateGroup = new QGroupBox("Immediate Effects");
-    QGridLayout* immediateLayout = new QGridLayout(immediateGroup);
-    
-    const QStringList statNames = {"STR", "PER", "END", "CHR", "INT", "AGL", "LCK", "HP", "AP", "AC", "Melee", "Carry", "Sequence", "Heal", "Critical"};
-    
-    immediateLayout->addWidget(new QLabel("Stat"), 0, 0);
-    immediateLayout->addWidget(new QLabel("Amount"), 0, 1);
-    
-    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
-        _drugStatCombos[i] = new QComboBox();
-        _drugStatCombos[i]->addItems(statNames);
-        connect(_drugStatCombos[i], QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
-        immediateLayout->addWidget(_drugStatCombos[i], i + 1, 0);
-        
-        _drugStatAmountEdits[i] = new QSpinBox();
-        _drugStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
-        connect(_drugStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        immediateLayout->addWidget(_drugStatAmountEdits[i], i + 1, 1);
-    }
-    
-    effectsLayout->addWidget(immediateGroup);
-    
-    // First Delayed Effect
-    QGroupBox* firstDelayGroup = new QGroupBox("First Delayed Effect");
-    QGridLayout* firstDelayLayout = new QGridLayout(firstDelayGroup);
-    
-    _drugFirstDelayEdit = new QSpinBox();
-    _drugFirstDelayEdit->setRange(0, MAX_DRUG_DELAY);
-    _drugFirstDelayEdit->setSuffix(" min");
-    connect(_drugFirstDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-    firstDelayLayout->addWidget(new QLabel("Delay:"), 0, 0);
-    firstDelayLayout->addWidget(_drugFirstDelayEdit, 0, 1);
-    
-    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
-        _drugFirstStatAmountEdits[i] = new QSpinBox();
-        _drugFirstStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
-        connect(_drugFirstStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        firstDelayLayout->addWidget(new QLabel(QString("Stat %1 Amount:").arg(i)), i + 1, 0);
-        firstDelayLayout->addWidget(_drugFirstStatAmountEdits[i], i + 1, 1);
-    }
-    
-    effectsLayout->addWidget(firstDelayGroup);
-    
-    // Second Delayed Effect
-    QGroupBox* secondDelayGroup = new QGroupBox("Second Delayed Effect");
-    QGridLayout* secondDelayLayout = new QGridLayout(secondDelayGroup);
-    
-    _drugSecondDelayEdit = new QSpinBox();
-    _drugSecondDelayEdit->setRange(0, MAX_DRUG_DELAY);
-    _drugSecondDelayEdit->setSuffix(" min");
-    connect(_drugSecondDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-    secondDelayLayout->addWidget(new QLabel("Delay:"), 0, 0);
-    secondDelayLayout->addWidget(_drugSecondDelayEdit, 0, 1);
-    
-    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
-        _drugSecondStatAmountEdits[i] = new QSpinBox();
-        _drugSecondStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
-        connect(_drugSecondStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        secondDelayLayout->addWidget(new QLabel(QString("Stat %1 Amount:").arg(i)), i + 1, 0);
-        secondDelayLayout->addWidget(_drugSecondStatAmountEdits[i], i + 1, 1);
-    }
-    
-    effectsLayout->addWidget(secondDelayGroup);
-    
-    // Add effects layout to main layout
-    mainLayout->addLayout(effectsLayout);
-    
-    // Addiction
-    QGroupBox* addictionGroup = new QGroupBox("Addiction");
-    QFormLayout* addictionLayout = new QFormLayout(addictionGroup);
-    
-    _drugAddictionChanceEdit = new QSpinBox();
-    _drugAddictionChanceEdit->setRange(0, MAX_ADDICTION_CHANCE);
-    _drugAddictionChanceEdit->setSuffix("%");
-    connect(_drugAddictionChanceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-    addictionLayout->addRow("Chance:", _drugAddictionChanceEdit);
-    
-    _drugAddictionPerkCombo = new QComboBox();
-    _drugAddictionPerkCombo->addItems({"None", "JetAddiction", "AlcoholAddiction", "Other"});
-    connect(_drugAddictionPerkCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
-    addictionLayout->addRow("Perk:", _drugAddictionPerkCombo);
-    
-    _drugAddictionDelayEdit = new QSpinBox();
-    _drugAddictionDelayEdit->setRange(0, MAX_DRUG_DELAY);
-    _drugAddictionDelayEdit->setSuffix(" min");
-    connect(_drugAddictionDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-    addictionLayout->addRow("Delay:", _drugAddictionDelayEdit);
-    
-    mainLayout->addWidget(addictionGroup);
-    mainLayout->addStretch();
-    
     _tabWidget->addTab(_drugTab, "Drug");
+    
+    // Note: Drug tab content is populated by setupDrugFields() when item type is DRUG
+    // This is called from updateTabVisibility() -> setupItemFields() based on PRO type
 }
 
 void ProEditorDialog::setupWeaponTab() {
@@ -2223,43 +2133,80 @@ void ProEditorDialog::loadContainerData() {
 }
 
 void ProEditorDialog::loadDrugData() {
-    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
-        if (_drugStatCombos[i]) {
-            _drugStatCombos[i]->setCurrentIndex(i == 0 ? _pro->drugData.stat0Base : 
-                                                i == 1 ? _pro->drugData.stat1Base : 
-                                                _pro->drugData.stat2Base);
+    // Load stat selections (0xFFFF means "None", map to index 0)
+    if (_drugStatCombos[0]) {
+        uint32_t stat = _pro->drugData.stat0;
+        if (stat == 0xFFFF || stat == 0xFFFFFFFF) {
+            _drugStatCombos[0]->setCurrentIndex(0);  // "None"
+        } else {
+            _drugStatCombos[0]->setCurrentIndex(stat + 1);  // Offset by 1 to account for "None" at index 0
         }
-        if (_drugStatAmountEdits[i]) {
-            _drugStatAmountEdits[i]->setValue(i == 0 ? _pro->drugData.stat0Amount : 
-                                              i == 1 ? _pro->drugData.stat1Amount : 
-                                              _pro->drugData.stat2Amount);
+    }
+    if (_drugStatCombos[1]) {
+        uint32_t stat = _pro->drugData.stat1;
+        if (stat == 0xFFFF || stat == 0xFFFFFFFF) {
+            _drugStatCombos[1]->setCurrentIndex(0);  // "None"
+        } else {
+            _drugStatCombos[1]->setCurrentIndex(stat + 1);  // Offset by 1 to account for "None" at index 0
         }
-        if (_drugFirstStatAmountEdits[i]) {
-            _drugFirstStatAmountEdits[i]->setValue(i == 0 ? _pro->drugData.firstStat0Amount : 
-                                                   i == 1 ? _pro->drugData.firstStat1Amount : 
-                                                   _pro->drugData.firstStat2Amount);
-        }
-        if (_drugSecondStatAmountEdits[i]) {
-            _drugSecondStatAmountEdits[i]->setValue(i == 0 ? _pro->drugData.secondStat0Amount : 
-                                                    i == 1 ? _pro->drugData.secondStat1Amount : 
-                                                    _pro->drugData.secondStat2Amount);
+    }
+    if (_drugStatCombos[2]) {
+        uint32_t stat = _pro->drugData.stat2;
+        if (stat == 0xFFFF || stat == 0xFFFFFFFF) {
+            _drugStatCombos[2]->setCurrentIndex(0);  // "None"
+        } else {
+            _drugStatCombos[2]->setCurrentIndex(stat + 1);  // Offset by 1 to account for "None" at index 0
         }
     }
     
+    // Load immediate effect amounts
+    if (_drugStatAmountEdits[0]) {
+        _drugStatAmountEdits[0]->setValue(_pro->drugData.amount0);
+    }
+    if (_drugStatAmountEdits[1]) {
+        _drugStatAmountEdits[1]->setValue(_pro->drugData.amount1);
+    }
+    if (_drugStatAmountEdits[2]) {
+        _drugStatAmountEdits[2]->setValue(_pro->drugData.amount2);
+    }
+    
+    // Load first delayed effect
     if (_drugFirstDelayEdit) {
-        _drugFirstDelayEdit->setValue(_pro->drugData.firstDelayMinutes);
+        _drugFirstDelayEdit->setValue(_pro->drugData.duration1);
     }
+    if (_drugFirstStatAmountEdits[0]) {
+        _drugFirstStatAmountEdits[0]->setValue(_pro->drugData.amount0_1);
+    }
+    if (_drugFirstStatAmountEdits[1]) {
+        _drugFirstStatAmountEdits[1]->setValue(_pro->drugData.amount1_1);
+    }
+    if (_drugFirstStatAmountEdits[2]) {
+        _drugFirstStatAmountEdits[2]->setValue(_pro->drugData.amount2_1);
+    }
+    
+    // Load second delayed effect
     if (_drugSecondDelayEdit) {
-        _drugSecondDelayEdit->setValue(_pro->drugData.secondDelayMinutes);
+        _drugSecondDelayEdit->setValue(_pro->drugData.duration2);
     }
+    if (_drugSecondStatAmountEdits[0]) {
+        _drugSecondStatAmountEdits[0]->setValue(_pro->drugData.amount0_2);
+    }
+    if (_drugSecondStatAmountEdits[1]) {
+        _drugSecondStatAmountEdits[1]->setValue(_pro->drugData.amount1_2);
+    }
+    if (_drugSecondStatAmountEdits[2]) {
+        _drugSecondStatAmountEdits[2]->setValue(_pro->drugData.amount2_2);
+    }
+    
+    // Load addiction data
     if (_drugAddictionChanceEdit) {
-        _drugAddictionChanceEdit->setValue(_pro->drugData.addictionChance);
+        _drugAddictionChanceEdit->setValue(_pro->drugData.addictionRate);
     }
     if (_drugAddictionPerkCombo) {
-        _drugAddictionPerkCombo->setCurrentIndex(_pro->drugData.addictionPerk);
+        _drugAddictionPerkCombo->setCurrentIndex(_pro->drugData.addictionEffect);
     }
     if (_drugAddictionDelayEdit) {
-        _drugAddictionDelayEdit->setValue(_pro->drugData.addictionDelay);
+        _drugAddictionDelayEdit->setValue(_pro->drugData.addictionOnset);
     }
 }
 
@@ -2474,27 +2421,32 @@ void ProEditorDialog::saveContainerData() {
 }
 
 void ProEditorDialog::saveDrugData() {
-    _pro->drugData.stat0Base = _drugStatCombos[0]->currentIndex();
-    _pro->drugData.stat1Base = _drugStatCombos[1]->currentIndex();
-    _pro->drugData.stat2Base = _drugStatCombos[2]->currentIndex();
+    // Save stat selections (index 0 = "None" maps to 0xFFFF)
+    _pro->drugData.stat0 = _drugStatCombos[0]->currentIndex() == 0 ? 0xFFFF : _drugStatCombos[0]->currentIndex() - 1;
+    _pro->drugData.stat1 = _drugStatCombos[1]->currentIndex() == 0 ? 0xFFFF : _drugStatCombos[1]->currentIndex() - 1;
+    _pro->drugData.stat2 = _drugStatCombos[2]->currentIndex() == 0 ? 0xFFFF : _drugStatCombos[2]->currentIndex() - 1;
     
-    _pro->drugData.stat0Amount = _drugStatAmountEdits[0]->value();
-    _pro->drugData.stat1Amount = _drugStatAmountEdits[1]->value();
-    _pro->drugData.stat2Amount = _drugStatAmountEdits[2]->value();
+    // Save immediate effect amounts
+    _pro->drugData.amount0 = _drugStatAmountEdits[0]->value();
+    _pro->drugData.amount1 = _drugStatAmountEdits[1]->value();
+    _pro->drugData.amount2 = _drugStatAmountEdits[2]->value();
     
-    _pro->drugData.firstDelayMinutes = _drugFirstDelayEdit->value();
-    _pro->drugData.firstStat0Amount = _drugFirstStatAmountEdits[0]->value();
-    _pro->drugData.firstStat1Amount = _drugFirstStatAmountEdits[1]->value();
-    _pro->drugData.firstStat2Amount = _drugFirstStatAmountEdits[2]->value();
+    // Save first delayed effect
+    _pro->drugData.duration1 = _drugFirstDelayEdit->value();
+    _pro->drugData.amount0_1 = _drugFirstStatAmountEdits[0]->value();
+    _pro->drugData.amount1_1 = _drugFirstStatAmountEdits[1]->value();
+    _pro->drugData.amount2_1 = _drugFirstStatAmountEdits[2]->value();
     
-    _pro->drugData.secondDelayMinutes = _drugSecondDelayEdit->value();
-    _pro->drugData.secondStat0Amount = _drugSecondStatAmountEdits[0]->value();
-    _pro->drugData.secondStat1Amount = _drugSecondStatAmountEdits[1]->value();
-    _pro->drugData.secondStat2Amount = _drugSecondStatAmountEdits[2]->value();
+    // Save second delayed effect
+    _pro->drugData.duration2 = _drugSecondDelayEdit->value();
+    _pro->drugData.amount0_2 = _drugSecondStatAmountEdits[0]->value();
+    _pro->drugData.amount1_2 = _drugSecondStatAmountEdits[1]->value();
+    _pro->drugData.amount2_2 = _drugSecondStatAmountEdits[2]->value();
     
-    _pro->drugData.addictionChance = _drugAddictionChanceEdit->value();
-    _pro->drugData.addictionPerk = _drugAddictionPerkCombo->currentIndex();
-    _pro->drugData.addictionDelay = _drugAddictionDelayEdit->value();
+    // Save addiction data
+    _pro->drugData.addictionRate = _drugAddictionChanceEdit->value();
+    _pro->drugData.addictionEffect = _drugAddictionPerkCombo->currentIndex();
+    _pro->drugData.addictionOnset = _drugAddictionDelayEdit->value();
 }
 
 void ProEditorDialog::saveWeaponData() {
@@ -2613,6 +2565,12 @@ void ProEditorDialog::setupItemFields() {
 }
 
 void ProEditorDialog::setupCritterFields() {
+    // Show the right column for critter tab (ensure both columns are visible)
+    QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
+    if (rightColumn2) {
+        rightColumn2->show();
+    }
+    
     // Clear any existing widgets in the right panels
     while (QLayoutItem* item = _leftFieldsLayout->takeAt(0)) {
         if (item->widget()) item->widget()->deleteLater();
@@ -3261,13 +3219,10 @@ int32_t ProEditorDialog::getInventoryFid() {
         return 0;
     }
     
-    // For items, return inventory FID, or fallback to main FID if inventory FID is not set
+    // For items, return inventory FID only if set, don't fallback to main FID
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
         int32_t inventoryFid = _inventoryFID;
-        // If inventory FID is not set (0 or -1), use main FID as fallback
-        if (inventoryFid <= 0) {
-            inventoryFid = _mainFID;
-        }
+        // Return the inventory FID as-is, even if 0 or -1 (let caller handle "no image" case)
         return inventoryFid;
     }
     
@@ -3300,7 +3255,7 @@ void ProEditorDialog::updateInventoryPreview() {
     
     if (inventoryFid <= 0) {
         _inventoryPreviewLabel->clear();
-        _inventoryPreviewLabel->setText("No inventory FRM");
+        _inventoryPreviewLabel->setText("No inventory image");
         return;
     }
     
@@ -5426,6 +5381,12 @@ void ProEditorDialog::onCritterHeadFidSelectorClicked() {
 }
 
 void ProEditorDialog::setupArmorFields() {
+    // Show the right column for armor tab (ensure both columns are visible)
+    QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
+    if (rightColumn2) {
+        rightColumn2->show();
+    }
+    
     // === COLUMN 1: Armor Class and Damage Resistance ===
     
     // Armor Class
@@ -5504,6 +5465,12 @@ void ProEditorDialog::setupArmorFields() {
 }
 
 void ProEditorDialog::setupContainerFields() {
+    // Show the right column for container tab (ensure both columns are visible)
+    QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
+    if (rightColumn2) {
+        rightColumn2->show();
+    }
+    
     // === COLUMN 1: Container Properties ===
     
     QGroupBox* containerGroup = createStandardGroupBox("Container Properties");
@@ -5536,14 +5503,191 @@ void ProEditorDialog::setupContainerFields() {
 }
 
 void ProEditorDialog::setupDrugFields() {
-    // TODO: Implement drug fields - placeholder for now
-    QLabel* placeholder = new QLabel("Drug fields - coming soon");
-    _leftFieldsLayout->addWidget(placeholder);
+    // Hide the right column for drug tab to extend left column to full width
+    QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
+    if (rightColumn2) {
+        rightColumn2->hide();
+    }
+    
+    // Debug: Check what MSG data we actually have
+    spdlog::debug("ProEditorDialog::setupDrugFields() - _statNames.size(): {}, _perkNames.size(): {}", 
+                  _statNames.size(), _perkNames.size());
+    if (!_statNames.isEmpty()) {
+        spdlog::debug("ProEditorDialog::setupDrugFields() - First few stat names: {}, {}, {}", 
+                      _statNames.value(0).toStdString(), 
+                      _statNames.value(1).toStdString(), 
+                      _statNames.value(2).toStdString());
+    }
+    if (!_perkNames.isEmpty()) {
+        spdlog::debug("ProEditorDialog::setupDrugFields() - First few perk names: {}, {}, {}", 
+                      _perkNames.value(0).toStdString(), 
+                      _perkNames.value(1).toStdString(), 
+                      _perkNames.value(2).toStdString());
+    }
+    
+    // Use loaded stat names from MSG file and add special values
+    QStringList baseStatNames = _statNames;
+    if (baseStatNames.isEmpty()) {
+        spdlog::error("ProEditorDialog::setupDrugFields() - No stat names loaded from MSG file!");
+        baseStatNames = {"Unknown"};  // Fallback if MSG loading fails
+    }
+    
+    // === LEFT PANEL: Stat Effects ===
+    
+    // Stat Effects with column headers
+    QGroupBox* effectsGroup = new QGroupBox("Stat Effects");
+    QGridLayout* effectsGridLayout = new QGridLayout(effectsGroup);
+    effectsGridLayout->setContentsMargins(8, 8, 8, 8);
+    effectsGridLayout->setSpacing(6);
+    
+    // Header row (row 0)
+    effectsGridLayout->addWidget(new QLabel(""), 0, 0);  // Empty space for stat labels
+    
+    QLabel* statHeader = new QLabel("Stat");
+    statHeader->setAlignment(Qt::AlignCenter);
+    statHeader->setStyleSheet("font-weight: bold;");
+    effectsGridLayout->addWidget(statHeader, 0, 1);
+    
+    QLabel* immediateHeader = new QLabel("Immediate");
+    immediateHeader->setAlignment(Qt::AlignCenter);
+    immediateHeader->setStyleSheet("font-weight: bold;");
+    effectsGridLayout->addWidget(immediateHeader, 0, 2);
+    
+    QLabel* midTimeHeader = new QLabel("Mid-time");
+    midTimeHeader->setAlignment(Qt::AlignCenter);
+    midTimeHeader->setStyleSheet("font-weight: bold;");
+    effectsGridLayout->addWidget(midTimeHeader, 0, 3);
+    
+    QLabel* longTimeHeader = new QLabel("Long-time");
+    longTimeHeader->setAlignment(Qt::AlignCenter);
+    longTimeHeader->setStyleSheet("font-weight: bold;");
+    effectsGridLayout->addWidget(longTimeHeader, 0, 4);
+    
+    // Set column stretches for proper sizing
+    effectsGridLayout->setColumnStretch(0, 0);  // Fixed width for labels
+    effectsGridLayout->setColumnStretch(1, 2);  // Stretch for combo boxes
+    effectsGridLayout->setColumnStretch(2, 1);  // Stretch for spin boxes
+    effectsGridLayout->setColumnStretch(3, 1);  // Stretch for spin boxes
+    effectsGridLayout->setColumnStretch(4, 1);  // Stretch for spin boxes
+    
+    // Create rows for each stat (rows 1-3)
+    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
+        int row = i + 1;
+        
+        // Stat label (column 0)
+        QLabel* statLabel = new QLabel(QString("Stat %1:").arg(i + 1));
+        effectsGridLayout->addWidget(statLabel, row, 0);
+        
+        // Stat dropdown (column 1)
+        _drugStatCombos[i] = new QComboBox();
+        QStringList statNames;
+        statNames << "None";  // -1/0xFFFF
+        statNames << baseStatNames;  // 0, 1, 2, ...
+        _drugStatCombos[i]->addItems(statNames);
+        _drugStatCombos[i]->setToolTip(QString("Stat %1 to modify (None=no effect)").arg(i + 1));
+        connect(_drugStatCombos[i], QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
+        effectsGridLayout->addWidget(_drugStatCombos[i], row, 1);
+        
+        // Immediate effect value (column 2)
+        _drugStatAmountEdits[i] = new QSpinBox();
+        _drugStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
+        _drugStatAmountEdits[i]->setToolTip(QString("Immediate effect amount for stat %1").arg(i + 1));
+        connect(_drugStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        effectsGridLayout->addWidget(_drugStatAmountEdits[i], row, 2);
+        
+        // Mid-time effect value (column 3)
+        _drugFirstStatAmountEdits[i] = new QSpinBox();
+        _drugFirstStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
+        _drugFirstStatAmountEdits[i]->setToolTip(QString("Mid-time effect amount for stat %1").arg(i + 1));
+        connect(_drugFirstStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        effectsGridLayout->addWidget(_drugFirstStatAmountEdits[i], row, 3);
+        
+        // Long-time effect value (column 4)
+        _drugSecondStatAmountEdits[i] = new QSpinBox();
+        _drugSecondStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
+        _drugSecondStatAmountEdits[i]->setToolTip(QString("Long-time effect amount for stat %1").arg(i + 1));
+        connect(_drugSecondStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        effectsGridLayout->addWidget(_drugSecondStatAmountEdits[i], row, 4);
+    }
+    
+    _leftFieldsLayout->addWidget(effectsGroup);
+    
+    // Add some spacing between stat effects and timing
+    _leftFieldsLayout->addSpacing(10);
+    
+    // Effect Timing (moved from right panel to under Stat Effects)
+    QGroupBox* timingGroup = new QGroupBox("Effect Timing");
+    QFormLayout* timingLayout = new QFormLayout(timingGroup);
+    timingLayout->setContentsMargins(8, 8, 8, 8);
+    timingLayout->setSpacing(4);
+    
+    // Mid-time delay
+    _drugFirstDelayEdit = new QSpinBox();
+    _drugFirstDelayEdit->setRange(0, MAX_DRUG_DELAY);
+    _drugFirstDelayEdit->setSuffix(" min");
+    _drugFirstDelayEdit->setToolTip("Delay in game minutes before mid-time effect");
+    connect(_drugFirstDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    timingLayout->addRow("Mid-time Delay:", _drugFirstDelayEdit);
+    
+    // Long-time delay
+    _drugSecondDelayEdit = new QSpinBox();
+    _drugSecondDelayEdit->setRange(0, MAX_DRUG_DELAY);
+    _drugSecondDelayEdit->setSuffix(" min");
+    _drugSecondDelayEdit->setToolTip("Delay in game minutes before long-time effect");
+    connect(_drugSecondDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    timingLayout->addRow("Long-time Delay:", _drugSecondDelayEdit);
+    
+    _leftFieldsLayout->addWidget(timingGroup);
+    
+    // Add some spacing between timing and addiction
+    _leftFieldsLayout->addSpacing(10);
+    
+    // Addiction Settings
+    QGroupBox* addictionGroup = new QGroupBox("Addiction");
+    QFormLayout* addictionLayout = new QFormLayout(addictionGroup);
+    addictionLayout->setContentsMargins(8, 8, 8, 8);
+    addictionLayout->setSpacing(4);
+    
+    _drugAddictionChanceEdit = new QSpinBox();
+    _drugAddictionChanceEdit->setRange(0, MAX_ADDICTION_CHANCE);
+    _drugAddictionChanceEdit->setSuffix("%");
+    _drugAddictionChanceEdit->setToolTip("Percentage chance of addiction");
+    connect(_drugAddictionChanceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    addictionLayout->addRow("Rate:", _drugAddictionChanceEdit);
+    
+    _drugAddictionPerkCombo = new QComboBox();
+    // Use loaded perk names from MSG file directly
+    if (_perkNames.isEmpty()) {
+        spdlog::error("ProEditorDialog::setupDrugFields() - No perk names loaded from MSG file!");
+        _drugAddictionPerkCombo->addItems({"No perk"});
+    } else {
+        _drugAddictionPerkCombo->addItems(_perkNames);
+    }
+    _drugAddictionPerkCombo->setToolTip("Perk applied when addicted");
+    connect(_drugAddictionPerkCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
+    addictionLayout->addRow("Effect:", _drugAddictionPerkCombo);
+    
+    // Addiction onset
+    _drugAddictionDelayEdit = new QSpinBox();
+    _drugAddictionDelayEdit->setRange(0, MAX_DRUG_DELAY);
+    _drugAddictionDelayEdit->setSuffix(" min");
+    _drugAddictionDelayEdit->setToolTip("Delay in game minutes before addiction effect is applied");
+    connect(_drugAddictionDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    addictionLayout->addRow("Onset:", _drugAddictionDelayEdit);
+    
+    _leftFieldsLayout->addWidget(addictionGroup);
+    
+    // Add stretch to push content to top (only left panel used for drugs)
     _leftFieldsLayout->addStretch();
-    _rightFieldsLayout->addStretch();
 }
 
 void ProEditorDialog::setupWeaponFields() {
+    // Show the right column for weapon tab (ensure both columns are visible)
+    QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
+    if (rightColumn2) {
+        rightColumn2->show();
+    }
+    
     // === COLUMN 1: Basic Weapon Properties ===
     
     // Basic Properties
@@ -5699,6 +5843,85 @@ void ProEditorDialog::setupKeyFields() {
     // Add stretch to push content to top
     _leftFieldsLayout->addStretch();
     _rightFieldsLayout->addStretch();
+}
+
+void ProEditorDialog::loadStatAndPerkNames() {
+    try {
+        // Load stat and perk MSG files using ResourceManager
+        _statMsg = ResourceManager::getInstance().loadResource<Msg>(std::string(ResourcePaths::Msg::STAT));
+        _perkMsg = ResourceManager::getInstance().loadResource<Msg>(std::string(ResourcePaths::Msg::PERK));
+        
+        // Load names into cached lists
+        loadStatNames();
+        loadPerkNames();
+        
+        spdlog::debug("ProEditorDialog: Loaded {} stat names and {} perk names", 
+                      _statNames.size(), _perkNames.size());
+        
+    } catch (const std::exception& e) {
+        spdlog::warn("ProEditorDialog: Failed to load MSG files: {}", e.what());
+        
+        // Provide fallback generic names
+        _statNames.clear();
+        for (int i = 0; i < 38; ++i) {
+            _statNames.append(QString("Stat %1").arg(i));
+        }
+        
+        _perkNames.clear();
+        _perkNames.append("No perk");
+        for (int i = 1; i <= 119; ++i) {
+            _perkNames.append(QString("Perk %1").arg(i));
+        }
+    }
+}
+
+void ProEditorDialog::loadStatNames() {
+    _statNames.clear();
+    
+    if (!_statMsg) {
+        spdlog::warn("ProEditorDialog: Stat MSG file not loaded");
+        return;
+    }
+    
+    // Load 38 stat names from indices 100-137
+    for (int i = 0; i < 38; ++i) {
+        try {
+            const auto& message = _statMsg->message(100 + i);
+            _statNames.append(QString::fromStdString(message.text));
+        } catch (const std::exception& e) {
+            spdlog::warn("ProEditorDialog: Failed to load stat name at index {}: {}", 100 + i, e.what());
+            _statNames.append(QString("Stat %1").arg(i));
+        }
+    }
+}
+
+void ProEditorDialog::loadPerkNames() {
+    _perkNames.clear();
+    
+    if (!_perkMsg) {
+        spdlog::warn("ProEditorDialog: Perk MSG file not loaded");
+        return;
+    }
+    
+    try {
+        // Index 100 = "No perk"
+        const auto& noPerkMessage = _perkMsg->message(100);
+        _perkNames.append(QString::fromStdString(noPerkMessage.text));
+        
+        // Indices 101-219 = actual perks (119 perks)
+        for (int i = 101; i <= 219; ++i) {
+            try {
+                const auto& message = _perkMsg->message(i);
+                _perkNames.append(QString::fromStdString(message.text));
+            } catch (const std::exception& e) {
+                spdlog::warn("ProEditorDialog: Failed to load perk name at index {}: {}", i, e.what());
+                _perkNames.append(QString("Perk %1").arg(i - 100));
+            }
+        }
+    } catch (const std::exception& e) {
+        spdlog::warn("ProEditorDialog: Failed to load 'No perk' message: {}", e.what());
+        _perkNames.append("No perk");
+    }
 }
 
 } // namespace geck

@@ -76,6 +76,10 @@ namespace ResourcePaths {
         constexpr std::string_view PRO_TILE = "text/english/game/pro_tile.msg";
         constexpr std::string_view PRO_MISC = "text/english/game/pro_misc.msg";
         
+        // Game data messages
+        constexpr std::string_view STAT = "text/english/game/stat.msg";
+        constexpr std::string_view PERK = "text/english/game/perk.msg";
+        
         // Script names
         constexpr std::string_view SCRNAME = "scrname.msg";
     }

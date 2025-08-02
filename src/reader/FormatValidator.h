@@ -97,16 +97,6 @@ public:
         if (pos.total == 0) {
             throw UnsupportedFormatException("Empty MSG file", filePath);
         }
-        
-        // MSG files should start with a number or '{' for comments
-        utils.setPosition(0);
-        uint8_t firstByte = utils.readU8();
-        
-        if (firstByte != '{' && (firstByte < '0' || firstByte > '9')) {
-            throw UnsupportedFormatException("MSG file has invalid header", filePath);
-        }
-        
-        utils.setPosition(0);
         spdlog::debug("MSG format validation passed");
     }
     

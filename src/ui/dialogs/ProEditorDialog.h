@@ -25,6 +25,7 @@
 #include <unordered_map>
 
 #include "../../format/pro/Pro.h"
+#include "../../format/msg/Msg.h"
 #include "../../util/ResourceManager.h"
 
 namespace geck {
@@ -321,15 +322,23 @@ private:
     };
     
     struct DrugData {
-        uint32_t stat0Base, stat1Base, stat2Base;
-        int32_t stat0Amount, stat1Amount, stat2Amount;
-        uint32_t firstDelayMinutes;
-        int32_t firstStat0Amount, firstStat1Amount, firstStat2Amount;
-        uint32_t secondDelayMinutes;
-        int32_t secondStat0Amount, secondStat1Amount, secondStat2Amount;
-        uint32_t addictionChance;
-        uint32_t addictionPerk;
-        uint32_t addictionDelay;
+        uint32_t stat0;                // Stat ID for immediate effect (0-14)
+        uint32_t stat1;                // Stat ID for immediate effect (0-14)
+        uint32_t stat2;                // Stat ID for immediate effect (0-14)
+        int32_t amount0;              // Modifier for stat0 (signed)
+        int32_t amount1;              // Modifier for stat1 (signed)
+        int32_t amount2;              // Modifier for stat2 (signed)
+        uint32_t duration1;           // Delay before first effect (game minutes)
+        int32_t amount0_1;            // First delayed effect for stat0
+        int32_t amount1_1;            // First delayed effect for stat1
+        int32_t amount2_1;            // First delayed effect for stat2
+        uint32_t duration2;           // Delay before second effect (game minutes)
+        int32_t amount0_2;            // Second delayed effect for stat0
+        int32_t amount1_2;            // Second delayed effect for stat1
+        int32_t amount2_2;            // Second delayed effect for stat2
+        uint32_t addictionRate;       // Addiction chance (percentage)
+        uint32_t addictionEffect;     // Addiction perk ID
+        uint32_t addictionOnset;      // Delay before addiction effect (game minutes)
     };
     
     struct WeaponData {
@@ -760,6 +769,19 @@ private:
     KeyData _keyData;
     CritterData _critterData;
     SceneryData _sceneryData;
+    
+    // MSG files for stat and perk names
+    Msg* _statMsg = nullptr;
+    Msg* _perkMsg = nullptr;
+    
+    // Cached stat and perk names
+    QStringList _statNames;
+    QStringList _perkNames;
+    
+    // Helper methods for MSG loading
+    void loadStatAndPerkNames();
+    void loadStatNames();
+    void loadPerkNames();
 };
 
 } // namespace geck

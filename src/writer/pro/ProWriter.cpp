@@ -169,32 +169,34 @@ void ProWriter::writeContainerData(const Pro& pro) {
 void ProWriter::writeDrugData(const Pro& pro) {
     auto& utils = getBinaryUtils();
     
-    // Write immediate effect stats
-    utils.writeBE32(pro.drugData.stat0Base);
-    utils.writeBE32(pro.drugData.stat1Base);
-    utils.writeBE32(pro.drugData.stat2Base);
-    utils.writeBE32Signed(pro.drugData.stat0Amount);
-    utils.writeBE32Signed(pro.drugData.stat1Amount);
-    utils.writeBE32Signed(pro.drugData.stat2Amount);
+    // Write immediate effect stats (which stats to modify)
+    utils.writeBE32(pro.drugData.stat0);
+    utils.writeBE32(pro.drugData.stat1);
+    utils.writeBE32(pro.drugData.stat2);
     
-    // Write first delayed effect
-    utils.writeBE32(pro.drugData.firstDelayMinutes);
-    utils.writeBE32Signed(pro.drugData.firstStat0Amount);
-    utils.writeBE32Signed(pro.drugData.firstStat1Amount);
-    utils.writeBE32Signed(pro.drugData.firstStat2Amount);
+    // Write immediate effect amounts (how much to modify)
+    utils.writeBE32Signed(pro.drugData.amount0);
+    utils.writeBE32Signed(pro.drugData.amount1);
+    utils.writeBE32Signed(pro.drugData.amount2);
     
-    // Write second delayed effect
-    utils.writeBE32(pro.drugData.secondDelayMinutes);
-    utils.writeBE32Signed(pro.drugData.secondStat0Amount);
-    utils.writeBE32Signed(pro.drugData.secondStat1Amount);
-    utils.writeBE32Signed(pro.drugData.secondStat2Amount);
+    // Write first delayed effect data
+    utils.writeBE32(pro.drugData.duration1);
+    utils.writeBE32Signed(pro.drugData.amount0_1);
+    utils.writeBE32Signed(pro.drugData.amount1_1);
+    utils.writeBE32Signed(pro.drugData.amount2_1);
+    
+    // Write second delayed effect data
+    utils.writeBE32(pro.drugData.duration2);
+    utils.writeBE32Signed(pro.drugData.amount0_2);
+    utils.writeBE32Signed(pro.drugData.amount1_2);
+    utils.writeBE32Signed(pro.drugData.amount2_2);
     
     // Write addiction data
-    utils.writeBE32(pro.drugData.addictionChance);
-    utils.writeBE32(pro.drugData.addictionPerk);
-    utils.writeBE32(pro.drugData.addictionDelay);
+    utils.writeBE32(pro.drugData.addictionRate);
+    utils.writeBE32(pro.drugData.addictionEffect);
+    utils.writeBE32(pro.drugData.addictionOnset);
     
-    spdlog::trace("ProWriter: Wrote drug data (addiction chance: {}%)", pro.drugData.addictionChance);
+    spdlog::trace("ProWriter: Wrote drug data (addiction rate: {}%)", pro.drugData.addictionRate);
 }
 
 void ProWriter::writeWeaponData(const Pro& pro) {
