@@ -248,14 +248,18 @@ void ObjectPreviewWidget::updatePreview() {
                 labelSize = QSize(PREVIEW_MIN_WIDTH, PREVIEW_MIN_HEIGHT);
             }
         }
+
+        // Scale image to 2x size, but constrain to widget bounds if too large
+        QSize targetSize = QSize(thumbnail.width() * SCALE_FACTOR, thumbnail.height() * SCALE_FACTOR);
         
-        // Scale down only if image is larger than widget, otherwise keep original size
-        if (thumbnail.width() > labelSize.width() || thumbnail.height() > labelSize.height()) {
+        // If 2x size exceeds widget bounds, scale down to fit
+        if (targetSize.width() > labelSize.width() || targetSize.height() > labelSize.height()) {
             QPixmap scaled = thumbnail.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
             _previewLabel->setPixmap(scaled);
         } else {
-            // Keep original size for small images
-            _previewLabel->setPixmap(thumbnail);
+            // Use 2x scaled size
+            QPixmap scaled = thumbnail.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            _previewLabel->setPixmap(scaled);
         }
         
         // Load animation frames if animation controls are present
@@ -311,13 +315,17 @@ void ObjectPreviewWidget::onFrameChanged(int frame) {
             }
         }
         
-        // Scale down only if image is larger than widget, otherwise keep original size
-        if (_frameCache[frame].width() > labelSize.width() || _frameCache[frame].height() > labelSize.height()) {
+        // Scale image to 2x size, but constrain to widget bounds if too large
+        QSize targetSize = QSize(_frameCache[frame].width() * SCALE_FACTOR, _frameCache[frame].height() * SCALE_FACTOR);
+        
+        // If 2x size exceeds widget bounds, scale down to fit
+        if (targetSize.width() > labelSize.width() || targetSize.height() > labelSize.height()) {
             QPixmap scaled = _frameCache[frame].scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
             _previewLabel->setPixmap(scaled);
         } else {
-            // Keep original size for small images
-            _previewLabel->setPixmap(_frameCache[frame]);
+            // Use 2x scaled size
+            QPixmap scaled = _frameCache[frame].scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            _previewLabel->setPixmap(scaled);
         }
     }
     

@@ -28,6 +28,8 @@ class ObjectPreviewWidget : public QWidget {
     Q_OBJECT
 
 public:
+    constexpr double SCALE_FACTOR = 1.25;
+
     enum PreviewOption {
         ShowAnimationControls = 0x01,
         ShowFidField = 0x02,
