@@ -92,6 +92,15 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _lightFlag2Check(nullptr)
     , _lightFlag3Check(nullptr)
     , _lightFlag4Check(nullptr)
+    , _hiddenCheck(nullptr)
+    , _noSaveCheck(nullptr)
+    , _lightingCheck(nullptr)
+    , _noRemoveCheck(nullptr)
+    , _queuedCheck(nullptr)
+    , _leftHandCheck(nullptr)
+    , _rightHandCheck(nullptr)
+    , _wornCheck(nullptr)
+    , _seenCheck(nullptr)
     , _sidEdit(nullptr)
     , _materialIdEdit(nullptr)
     , _containerSizeEdit(nullptr)
@@ -1105,6 +1114,32 @@ void ProEditorDialog::setupOtherExtendedFlags(QVBoxLayout* layout) {
     }
 }
 
+void ProEditorDialog::addStandardItemFlags(QVBoxLayout* parentLayout) {
+    // Standard ExtendedItemFlags group for all item types
+    QGroupBox* itemFlagsGroup = new QGroupBox("Item Flags");
+    QVBoxLayout* itemFlagsLayout = new QVBoxLayout(itemFlagsGroup);
+    
+    _canUseCheck = new QCheckBox("Can Use");
+    _canUseCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE));
+    _canUseCheck->setToolTip("Item can be 'used' (right-click action)");
+    connect(_canUseCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    itemFlagsLayout->addWidget(_canUseCheck);
+    
+    _canUseOnCheck = new QCheckBox("Can Use On");
+    _canUseOnCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE_ON));
+    _canUseOnCheck->setToolTip("Item can be 'used on' target (drag and drop on target)");
+    connect(_canUseOnCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    itemFlagsLayout->addWidget(_canUseOnCheck);
+    
+    _generalFlagCheck = new QCheckBox("General Flag");
+    _generalFlagCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::GENERAL_FLAG));
+    _generalFlagCheck->setToolTip("General purpose flag for special behaviors");
+    connect(_generalFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
+    itemFlagsLayout->addWidget(_generalFlagCheck);
+    
+    parentLayout->addWidget(itemFlagsGroup);
+}
+
 void ProEditorDialog::setupObjectFlagsGroup(QFormLayout* layout) {
     QGroupBox* objectFlagsGroup = new QGroupBox("Object Flags");
     QVBoxLayout* flagsLayout = new QVBoxLayout(objectFlagsGroup);
@@ -1206,6 +1241,78 @@ void ProEditorDialog::setupObjectFlagsGroup(QFormLayout* layout) {
     interactionLayout->addWidget(_shootThruCheck);
     
     flagsLayout->addWidget(interactionGroup);
+    
+    // System flags group
+    QGroupBox* systemGroup = new QGroupBox("System Flags");
+    QVBoxLayout* systemLayout = new QVBoxLayout(systemGroup);
+    
+    _hiddenCheck = new QCheckBox("Hidden");
+    _hiddenCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_HIDDEN));
+    _hiddenCheck->setToolTip("Object is hidden from view");
+    connect(_hiddenCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    systemLayout->addWidget(_hiddenCheck);
+    
+    _noSaveCheck = new QCheckBox("No Save");
+    _noSaveCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_SAVE));
+    _noSaveCheck->setToolTip("Should not be saved to savegame file");
+    connect(_noSaveCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    systemLayout->addWidget(_noSaveCheck);
+    
+    _noRemoveCheck = new QCheckBox("No Remove");
+    _noRemoveCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_REMOVE));
+    _noRemoveCheck->setToolTip("Should not be removed from game world");
+    connect(_noRemoveCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    systemLayout->addWidget(_noRemoveCheck);
+    
+    _queuedCheck = new QCheckBox("Queued");
+    _queuedCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_QUEUED));
+    _queuedCheck->setToolTip("Set if there was/is any event for the object");
+    connect(_queuedCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    systemLayout->addWidget(_queuedCheck);
+    
+    _seenCheck = new QCheckBox("Seen");
+    _seenCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_SEEN));
+    _seenCheck->setToolTip("Has been seen by the player");
+    connect(_seenCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    systemLayout->addWidget(_seenCheck);
+    
+    flagsLayout->addWidget(systemGroup);
+    
+    // Lighting group
+    QGroupBox* lightingGroup = new QGroupBox("Lighting");
+    QVBoxLayout* lightingLayout = new QVBoxLayout(lightingGroup);
+    
+    _lightingCheck = new QCheckBox("Has Lighting");
+    _lightingCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_LIGHTING));
+    _lightingCheck->setToolTip("Object has lighting properties");
+    connect(_lightingCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    lightingLayout->addWidget(_lightingCheck);
+    
+    flagsLayout->addWidget(lightingGroup);
+    
+    // Equipment flags group
+    QGroupBox* equipmentGroup = new QGroupBox("Equipment State");
+    QVBoxLayout* equipmentLayout = new QVBoxLayout(equipmentGroup);
+    
+    _leftHandCheck = new QCheckBox("In Left Hand");
+    _leftHandCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_IN_LEFT_HAND));
+    _leftHandCheck->setToolTip("Object is in left hand");
+    connect(_leftHandCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    equipmentLayout->addWidget(_leftHandCheck);
+    
+    _rightHandCheck = new QCheckBox("In Right Hand");
+    _rightHandCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_IN_RIGHT_HAND));
+    _rightHandCheck->setToolTip("Object is in right hand");
+    connect(_rightHandCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    equipmentLayout->addWidget(_rightHandCheck);
+    
+    _wornCheck = new QCheckBox("Worn");
+    _wornCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_WORN));
+    _wornCheck->setToolTip("Object is being worn");
+    connect(_wornCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
+    equipmentLayout->addWidget(_wornCheck);
+    
+    flagsLayout->addWidget(equipmentGroup);
     
     layout->addRow("Object Flags:", objectFlagsGroup);
 }
@@ -4028,11 +4135,21 @@ void ProEditorDialog::onObjectFlagChanged() {
     // Calculate combined flags value from all checkboxes
     uint32_t flags = 0;
     
+    // System flags
+    if (_hiddenCheck && _hiddenCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_HIDDEN);
+    if (_noSaveCheck && _noSaveCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_NO_SAVE);
+    if (_noRemoveCheck && _noRemoveCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_NO_REMOVE);
+    if (_queuedCheck && _queuedCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_QUEUED);
+    if (_seenCheck && _seenCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_SEEN);
+    
     // Rendering flags
     if (_flatCheck && _flatCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_FLAT);
     if (_noBlockCheck && _noBlockCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK);
     if (_multiHexCheck && _multiHexCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_MULTIHEX);
     if (_noHighlightCheck && _noHighlightCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_NO_HIGHLIGHT);
+    
+    // Lighting flags
+    if (_lightingCheck && _lightingCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_LIGHTING);
     
     // Transparency flags (keep existing transparency values)
     flags |= (_pro->header.flags & 0x000FC000); // Preserve transparency bits
@@ -4041,6 +4158,11 @@ void ProEditorDialog::onObjectFlagChanged() {
     if (_wallTransEndCheck && _wallTransEndCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_WALL_TRANS_END);
     if (_lightThruCheck && _lightThruCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_LIGHT_THRU);
     if (_shootThruCheck && _shootThruCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_SHOOT_THRU);
+    
+    // Equipment state flags
+    if (_leftHandCheck && _leftHandCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_IN_LEFT_HAND);
+    if (_rightHandCheck && _rightHandCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_IN_RIGHT_HAND);
+    if (_wornCheck && _wornCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_WORN);
     
     // Update the PRO data
     _pro->header.flags = flags;
@@ -4075,24 +4197,39 @@ void ProEditorDialog::onTransparencyFlagChanged() {
 }
 
 void ProEditorDialog::loadObjectFlags(uint32_t flags) {
+    // Load system flags
+    if (_hiddenCheck) _hiddenCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_HIDDEN));
+    if (_noSaveCheck) _noSaveCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_SAVE));
+    if (_noRemoveCheck) _noRemoveCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_REMOVE));
+    if (_queuedCheck) _queuedCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_QUEUED));
+    if (_seenCheck) _seenCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_SEEN));
+    
     // Load rendering flags
-    if (_flatCheck) _flatCheck->setChecked(flags & 0x00000008);
-    if (_noBlockCheck) _noBlockCheck->setChecked(flags & 0x00000010);
-    if (_multiHexCheck) _multiHexCheck->setChecked(flags & 0x00000800);
-    if (_noHighlightCheck) _noHighlightCheck->setChecked(flags & 0x00001000);
+    if (_flatCheck) _flatCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_FLAT));
+    if (_noBlockCheck) _noBlockCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK));
+    if (_multiHexCheck) _multiHexCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_MULTIHEX));
+    if (_noHighlightCheck) _noHighlightCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_HIGHLIGHT));
+    
+    // Load lighting flags
+    if (_lightingCheck) _lightingCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_LIGHTING));
     
     // Load transparency flags (mutually exclusive)
-    if (_transNoneCheck) _transNoneCheck->setChecked(flags & 0x00008000);
-    if (_transRedCheck) _transRedCheck->setChecked(flags & 0x00004000);
-    if (_transWallCheck) _transWallCheck->setChecked(flags & 0x00010000);
-    if (_transGlassCheck) _transGlassCheck->setChecked(flags & 0x00020000);
-    if (_transSteamCheck) _transSteamCheck->setChecked(flags & 0x00040000);
-    if (_transEnergyCheck) _transEnergyCheck->setChecked(flags & 0x00080000);
+    if (_transNoneCheck) _transNoneCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_NONE));
+    if (_transRedCheck) _transRedCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_RED));
+    if (_transWallCheck) _transWallCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_WALL));
+    if (_transGlassCheck) _transGlassCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_GLASS));
+    if (_transSteamCheck) _transSteamCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_STEAM));
+    if (_transEnergyCheck) _transEnergyCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_ENERGY));
     
     // Load interaction flags
-    if (_wallTransEndCheck) _wallTransEndCheck->setChecked(flags & 0x10000000);
-    if (_lightThruCheck) _lightThruCheck->setChecked(flags & 0x20000000);
-    if (_shootThruCheck) _shootThruCheck->setChecked(flags & 0x80000000);
+    if (_wallTransEndCheck) _wallTransEndCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_WALL_TRANS_END));
+    if (_lightThruCheck) _lightThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_LIGHT_THRU));
+    if (_shootThruCheck) _shootThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_SHOOT_THRU));
+    
+    // Load equipment state flags
+    if (_leftHandCheck) _leftHandCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_IN_LEFT_HAND));
+    if (_rightHandCheck) _rightHandCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_IN_RIGHT_HAND));
+    if (_wornCheck) _wornCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_WORN));
 }
 
 const QStringList ProEditorDialog::getMaterialNames() {
@@ -4211,6 +4348,9 @@ void ProEditorDialog::setupArmorFields() {
     miscLayout->addRow("AI Priority:", _armorAIPriorityLabel);
     
     _rightFieldsLayout->addWidget(miscGroup);
+    
+    // Add standard item flags
+    addStandardItemFlags(_rightFieldsLayout);
     
     // Add stretch to push content to top
     _leftFieldsLayout->addStretch();
@@ -4415,6 +4555,9 @@ void ProEditorDialog::setupDrugFields() {
     
     _leftFieldsLayout->addWidget(addictionGroup);
     
+    // Add standard item flags
+    addStandardItemFlags(_leftFieldsLayout);
+    
     // Add stretch to push content to top (only left panel used for drugs)
     _leftFieldsLayout->addStretch();
 }
@@ -4552,6 +4695,10 @@ void ProEditorDialog::setupAmmoFields() {
     // TODO: Implement ammo fields - placeholder for now
     QLabel* placeholder = new QLabel("Ammo fields - coming soon");
     _leftFieldsLayout->addWidget(placeholder);
+    
+    // Add standard item flags
+    addStandardItemFlags(_leftFieldsLayout);
+    
     _leftFieldsLayout->addStretch();
     _rightFieldsLayout->addStretch();
 }
@@ -4560,6 +4707,10 @@ void ProEditorDialog::setupMiscItemFields() {
     // TODO: Implement misc item fields - placeholder for now
     QLabel* placeholder = new QLabel("Misc item fields - coming soon");
     _leftFieldsLayout->addWidget(placeholder);
+    
+    // Add standard item flags
+    addStandardItemFlags(_leftFieldsLayout);
+    
     _leftFieldsLayout->addStretch();
     _rightFieldsLayout->addStretch();
 }
@@ -4577,6 +4728,9 @@ void ProEditorDialog::setupKeyFields() {
     keyLayout->addRow("Key ID:", _keyIdEdit);
     
     _leftFieldsLayout->addWidget(keyGroup);
+    
+    // Add standard item flags
+    addStandardItemFlags(_leftFieldsLayout);
     
     // Add stretch to push content to top
     _leftFieldsLayout->addStretch();

@@ -202,6 +202,7 @@ private:
     void setupContainerExtendedFlags(QVBoxLayout* layout);
     void setupItemExtendedFlags(QVBoxLayout* layout);
     void setupOtherExtendedFlags(QVBoxLayout* layout);
+    void addStandardItemFlags(QVBoxLayout* parentLayout);
     
     void loadProData();
     void loadArmorData();
@@ -535,6 +536,17 @@ private:
     QCheckBox* _wallTransEndCheck;   // 0x10000000 - WallTransEnd (changes transparency egg logic)
     QCheckBox* _lightThruCheck;      // 0x20000000 - LightThru
     QCheckBox* _shootThruCheck;      // 0x80000000 - ShootThru
+    
+    // Missing ObjectFlags checkboxes
+    QCheckBox* _hiddenCheck;         // 0x00000001 - Object is hidden from view
+    QCheckBox* _noSaveCheck;         // 0x00000004 - Should not be saved to savegame file
+    QCheckBox* _lightingCheck;       // 0x00000020 - Has lighting
+    QCheckBox* _noRemoveCheck;       // 0x00000400 - Should not be removed from game world
+    QCheckBox* _queuedCheck;         // 0x00002000 - Set if there was/is any event for the object
+    QCheckBox* _leftHandCheck;       // 0x01000000 - In left hand
+    QCheckBox* _rightHandCheck;      // 0x02000000 - In right hand
+    QCheckBox* _wornCheck;           // 0x04000000 - Being worn
+    QCheckBox* _seenCheck;           // 0x40000000 - Has been seen
     
     // Extended flags controls - organized by category
     QGroupBox* _extendedFlagsGroup;
