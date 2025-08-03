@@ -93,6 +93,7 @@ private slots:
     void updateAndRender();
     void handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem = false);
     void updateHexIndexDisplay(int hexIndex);
+    void updateModeDisplay(const QString& modeText, const QString& iconPath);
     void showPreferences();
     void onPlayGame();
 
@@ -170,6 +171,9 @@ private:
     QAction* _tilePalettePanelAction;
     QAction* _objectPalettePanelAction;
     QAction* _fileBrowserPanelAction;
+    
+    // Toolbar actions
+    QAction* _modeAction;
 
     // Elevation menu actions
     QAction* _elevation1Action;

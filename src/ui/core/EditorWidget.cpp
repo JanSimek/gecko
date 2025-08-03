@@ -978,6 +978,7 @@ void EditorWidget::setupInputCallbacks() {
     // Hover
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
         _currentHoverHex = _viewportController->updateHoverHex(worldPos);
+        emit hexHoverChanged(_currentHoverHex);
     };
     
     // Keyboard

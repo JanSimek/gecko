@@ -7,6 +7,7 @@
         <file alias="actions/save.svg">icons/tabler/actions/device-floppy.svg</file>
         <file alias="actions/rotate.svg">icons/tabler/actions/rotate-clockwise.svg</file>
         <file alias="actions/select.svg">icons/tabler/actions/pointer.svg</file>
+        <file alias="actions/paint.svg">icons/tabler/actions/brush.svg</file>
         <file alias="actions/settings.svg">icons/tabler/actions/settings.svg</file>
         <file alias="actions/quit.svg">icons/tabler/actions/power.svg</file>
         <file alias="actions/map-pin.svg">icons/tabler/actions/map-pin.svg</file>

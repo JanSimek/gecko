@@ -428,17 +428,18 @@ void MainWindow::setupToolBar() {
     _mainToolBar->addSeparator();
 
     // Selection mode action - start with "All" mode
-    QAction* selectionModeAction = _mainToolBar->addAction(QIcon(":/icons/actions/select.svg"), "Mode: All");
-    selectionModeAction->setStatusTip("Toggle selection mode (Objects/Floor/Roof/All)");
-    connect(selectionModeAction, &QAction::triggered, this, &MainWindow::selectionModeRequested);
+    _modeAction = _mainToolBar->addAction(QIcon(":/icons/actions/select.svg"), "Mode: All");
+    _modeAction->setStatusTip("Toggle selection mode (Objects/Floor/Roof/All)");
+    connect(_modeAction, &QAction::triggered, this, &MainWindow::selectionModeRequested);
 
     // Update selection mode button text when mode changes
-    connect(this, &MainWindow::selectionModeRequested, [selectionModeAction]() {
+    connect(this, &MainWindow::selectionModeRequested, [this]() {
         static SelectionMode currentMode = SelectionMode::ALL;
         currentMode = static_cast<SelectionMode>((static_cast<int>(currentMode) + 1) % static_cast<int>(SelectionMode::NUM_SELECTION_TYPES));
 
         QString modeText = QString("Mode: %1").arg(selectionModeToString(currentMode));
-        selectionModeAction->setText(modeText);
+        _modeAction->setText(modeText);
+        _modeAction->setIcon(QIcon(":/icons/actions/select.svg"));
     });
 
     _mainToolBar->addSeparator();
@@ -587,6 +588,13 @@ void MainWindow::updateHexIndexDisplay(int hexIndex) {
         _hexIndexLabel->setText(QString("Hex: %1").arg(hexIndex));
     } else {
         _hexIndexLabel->setText("Hex: N/A");
+    }
+}
+
+void MainWindow::updateModeDisplay(const QString& modeText, const QString& iconPath) {
+    if (_modeAction) {
+        _modeAction->setText(modeText);
+        _modeAction->setIcon(QIcon(iconPath));
     }
 }
 
@@ -824,9 +832,13 @@ void MainWindow::connectToEditorWidget() {
                 if (tileIndex >= 0) {
                     // Default to floor for single placement and area fill (roof/floor detection is automatic for replace mode)
                     _currentEditorWidget->setTilePlacementMode(true, tileIndex, false);
+                    // Update toolbar to show tile painting mode
+                    updateModeDisplay("Mode: Tile painting", ":/icons/actions/paint.svg");
                 } else {
                     // Disable tile placement mode
                     _currentEditorWidget->setTilePlacementMode(false);
+                    // Reset toolbar to selection mode
+                    updateModeDisplay("Mode: All", ":/icons/actions/select.svg");
                 }
             });
 
