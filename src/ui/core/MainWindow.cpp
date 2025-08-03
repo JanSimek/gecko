@@ -8,6 +8,7 @@
 #include "../panels/TilePalettePanel.h"
 #include "../panels/ObjectPalettePanel.h"
 #include "../panels/FileBrowserPanel.h"
+#include "../tiles/TilePlacementManager.h"
 #include "../dialogs/SettingsDialog.h"
 #include "../dialogs/ProEditorDialog.h"
 #include "../../state/loader/MapLoader.h"
@@ -434,6 +435,21 @@ void MainWindow::setupToolBar() {
 
     // Update selection mode button text when mode changes
     connect(this, &MainWindow::selectionModeRequested, [this]() {
+        // Check if we're in tile painting mode first
+        if (_currentEditorWidget && 
+            _currentEditorWidget->getTilePlacementManager() && 
+            _currentEditorWidget->getTilePlacementManager()->isTilePlacementMode()) {
+            
+            // Exit tile painting mode (same behavior as ESC key)
+            _currentEditorWidget->getTilePlacementManager()->resetState();
+            if (_tilePalettePanel) {
+                _tilePalettePanel->deselectTile();
+            }
+            // Mode display will be updated by the tile deselection callback
+            return;
+        }
+        
+        // Normal mode cycling behavior
         static SelectionMode currentMode = SelectionMode::ALL;
         currentMode = static_cast<SelectionMode>((static_cast<int>(currentMode) + 1) % static_cast<int>(SelectionMode::NUM_SELECTION_TYPES));
 
