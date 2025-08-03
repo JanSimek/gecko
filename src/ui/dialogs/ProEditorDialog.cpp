@@ -67,13 +67,6 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _armorTotalFrames(0)
     , _armorTotalDirections(0)
     , _armorIsAnimating(false)
-    , _validationPanel(nullptr)
-    , _validationLayout(nullptr)
-    , _validationGroup(nullptr)
-    , _validationList(nullptr)
-    , _validationToggleButton(nullptr)
-    , _validationStatusLabel(nullptr)
-    , _validationPanelVisible(false)
     , _nameLabel(nullptr)
     , _descriptionLabel(nullptr)
     , _fidSelectorButton(nullptr)
@@ -392,8 +385,6 @@ void ProEditorDialog::setupUI() {
     
     _mainLayout->addLayout(_contentLayout);
     
-    // Setup validation panel
-    setupValidationPanel();
     
     _mainLayout->addWidget(_buttonBox);
 }
@@ -1926,56 +1917,6 @@ void ProEditorDialog::setupArmorAnimationControls() {
     _armorAnimationControls->setEnabled(false);
 }
 
-void ProEditorDialog::setupValidationPanel() {
-    // Create validation panel (initially hidden)
-    _validationPanel = new QWidget();
-    _validationLayout = new QVBoxLayout(_validationPanel);
-    _validationLayout->setContentsMargins(5, 0, 5, 5);
-    
-    // Create header with toggle button and status
-    QWidget* validationHeader = new QWidget();
-    QHBoxLayout* headerLayout = new QHBoxLayout(validationHeader);
-    headerLayout->setContentsMargins(0, 0, 0, 0);
-    
-    _validationToggleButton = new QPushButton("▶ Validation Issues");
-    _validationToggleButton->setFlat(true);
-    _validationToggleButton->setStyleSheet("text-align: left; font-weight: bold;");
-    connect(_validationToggleButton, &QPushButton::clicked, this, &ProEditorDialog::onValidationToggleClicked);
-    
-    _validationStatusLabel = new QLabel("No issues");
-    _validationStatusLabel->setStyleSheet("color: green; font-weight: bold;");
-    
-    headerLayout->addWidget(_validationToggleButton);
-    headerLayout->addStretch();
-    headerLayout->addWidget(_validationStatusLabel);
-    
-    // Create collapsible content
-    _validationGroup = new QGroupBox();
-    _validationGroup->setVisible(false); // Initially collapsed
-    QVBoxLayout* groupLayout = new QVBoxLayout(_validationGroup);
-    
-    _validationList = new QListWidget();
-    _validationList->setMaximumHeight(150);
-    _validationList->setAlternatingRowColors(true);
-    connect(_validationList, &QListWidget::itemDoubleClicked, this, &ProEditorDialog::onValidationItemDoubleClicked);
-    
-    // Add help text
-    QLabel* helpLabel = new QLabel("Double-click an issue to jump to the field. Issues are categorized by severity:");
-    QLabel* legendLabel = new QLabel("🔴 <span style='color: red;'>Error</span> - Must be fixed  "
-                                    "🟠 <span style='color: orange;'>Warning</span> - Should be reviewed  "
-                                    "🔵 <span style='color: blue;'>Info</span> - Suggestion");
-    helpLabel->setWordWrap(true);
-    legendLabel->setWordWrap(true);
-    
-    groupLayout->addWidget(helpLabel);
-    groupLayout->addWidget(legendLabel);
-    groupLayout->addWidget(_validationList);
-    
-    _validationLayout->addWidget(validationHeader);
-    _validationLayout->addWidget(_validationGroup);
-    
-    _mainLayout->addWidget(_validationPanel);
-}
 
 void ProEditorDialog::loadProData() {
     
@@ -2284,13 +2225,6 @@ void ProEditorDialog::loadWeaponData() {
         _weaponEnergyWeaponCheck->setChecked(isEnergyWeapon);
     }
     
-    // Validate min/max damage after loading
-    if (_weaponDamageMinEdit) {
-        validateField(_weaponDamageMinEdit);
-    }
-    if (_weaponDamageMaxEdit) {
-        validateField(_weaponDamageMaxEdit);
-    }
 }
 
 void ProEditorDialog::loadAmmoData() {
@@ -2930,193 +2864,7 @@ void ProEditorDialog::setupMiscFields() {
     // TODO: Implement misc-specific fields
 }
 
-void ProEditorDialog::validateField(QWidget* field) {
-    if (!field) return;
-    
-    // Clear previous validation issues for this field
-    clearValidationIssues(field);
-    
-    // Clear any error styling first
-    field->setStyleSheet("");
-    field->setToolTip("");
-    
-    // Call appropriate validation method based on object type
-    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM && _pro->itemType() == Pro::ITEM_TYPE::WEAPON) {
-        validateWeaponField(field);
-    } else if (_pro && _pro->type() == Pro::OBJECT_TYPE::CRITTER) {
-        validateCritterField(field);
-    } else if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        validateItemField(field);
-    }
-    
-    // Always check FID references
-    validateFIDField(field);
-    
-    // Apply visual styling based on validation results
-    for (const auto& issue : _validationIssues) {
-        if (issue.field == field) {
-            switch (issue.level) {
-                case ValidationLevel::ERROR:
-                    field->setStyleSheet("border: 2px solid red;");
-                    break;
-                case ValidationLevel::WARNING:
-                    field->setStyleSheet("border: 2px solid orange;");
-                    break;
-                case ValidationLevel::INFO:
-                    field->setStyleSheet("border: 1px solid blue;");
-                    break;
-            }
-            field->setToolTip(issue.message);
-            break; // Use the first (highest priority) issue for styling
-        }
-    }
-    
-    // Update validation status indicators
-    updateValidationStatus();
-}
 
-void ProEditorDialog::validateWeaponField(QWidget* field) {
-    QSpinBox* spinBox = qobject_cast<QSpinBox*>(field);
-    
-    // Weapon damage validation
-    if ((field == _weaponDamageMinEdit || field == _weaponDamageMaxEdit) && 
-        _weaponDamageMinEdit && _weaponDamageMaxEdit) {
-        int minDamage = _weaponDamageMinEdit->value();
-        int maxDamage = _weaponDamageMaxEdit->value();
-        
-        if (minDamage > maxDamage) {
-            addValidationIssue(field, "Minimum damage cannot be greater than maximum damage", ValidationLevel::ERROR, "Weapon Stats");
-        } else if (minDamage == 0 && maxDamage == 0) {
-            addValidationIssue(field, "Weapon should have some damage", ValidationLevel::WARNING, "Weapon Stats");
-        }
-    }
-    
-    // Action Points validation
-    if (field == _weaponAPPrimaryEdit && spinBox) {
-        int ap = spinBox->value();
-        if (ap <= 0) {
-            addValidationIssue(field, "Primary attack should cost at least 1 AP", ValidationLevel::ERROR, "Weapon Stats");
-        } else if (ap > MAX_WEAPON_AP_WARNING) {
-            addValidationIssue(field, "Very high AP cost may make weapon unusable", ValidationLevel::WARNING, "Weapon Stats");
-        }
-    }
-    
-    if (field == _weaponAPSecondaryEdit && spinBox) {
-        int ap = spinBox->value();
-        if (ap > 0 && ap > MAX_WEAPON_AP_SECONDARY_WARNING) {
-            addValidationIssue(field, "Extremely high AP cost for secondary attack", ValidationLevel::WARNING, "Weapon Stats");
-        }
-    }
-    
-    // Range validation
-    if (field == _weaponRangePrimaryEdit && spinBox) {
-        int range = spinBox->value();
-        if (range <= 0) {
-            addValidationIssue(field, "Weapon range should be greater than 0", ValidationLevel::ERROR, "Weapon Stats");
-        } else if (range > MAX_WEAPON_RANGE) {
-            addValidationIssue(field, "Very long range weapon - check if intended", ValidationLevel::INFO, "Weapon Stats");
-        }
-    }
-    
-    // Strength requirement validation
-    if (field == _weaponMinStrengthEdit && spinBox) {
-        int str = spinBox->value();
-        if (str > MAX_SPECIAL_STAT) {
-            addValidationIssue(field, "Strength requirement exceeds maximum character stat (10)", ValidationLevel::WARNING, "Weapon Stats");
-        }
-    }
-    
-    // Projectile PID validation
-    if (field == _weaponProjectilePIDEdit && spinBox) {
-        int32_t pid = spinBox->value();
-        if (pid != 0 && pid != -1 && !validateFIDReference(pid, "Projectile")) {
-            addValidationIssue(field, "Projectile PID may not reference a valid game object", ValidationLevel::WARNING, "References");
-        }
-    }
-}
-
-void ProEditorDialog::validateCritterField(QWidget* field) {
-    QSpinBox* spinBox = qobject_cast<QSpinBox*>(field);
-    
-    // SPECIAL stats validation (1-10 range)
-    for (int i = 0; i < 7; ++i) {
-        if (field == _critterSpecialStatEdits[i] && spinBox) {
-            int stat = spinBox->value();
-            if (!validateStatValue(stat, MIN_SPECIAL_STAT, MAX_SPECIAL_STAT, "SPECIAL stat")) {
-                if (stat < MIN_SPECIAL_STAT) {
-                    addValidationIssue(field, "SPECIAL stats cannot be less than 1", ValidationLevel::ERROR, "Critter Stats");
-                } else if (stat > MAX_SPECIAL_STAT) {
-                    addValidationIssue(field, "SPECIAL stats cannot exceed 10", ValidationLevel::ERROR, "Critter Stats");
-                }
-            }
-        }
-    }
-    
-    // Hit points validation
-    if (field == _critterMaxHitPointsEdit && spinBox) {
-        int hp = spinBox->value();
-        if (hp <= 0) {
-            addValidationIssue(field, "Hit points must be greater than 0", ValidationLevel::ERROR, "Critter Stats");
-        } else if (hp > MAX_CRITTER_HIT_POINTS_WARNING) {
-            addValidationIssue(field, "Very high hit points - boss-level critter?", ValidationLevel::INFO, "Critter Stats");
-        }
-    }
-    
-    // Action points validation
-    if (field == _critterActionPointsEdit && spinBox) {
-        int ap = spinBox->value();
-        if (ap <= 0) {
-            addValidationIssue(field, "Action points must be greater than 0", ValidationLevel::ERROR, "Critter Stats");
-        } else if (ap > MAX_ACTION_POINTS) {
-            addValidationIssue(field, "Very high action points - may unbalance combat", ValidationLevel::WARNING, "Critter Stats");
-        }
-    }
-    
-    // Armor class validation
-    if (field == _critterArmorClassEdit && spinBox) {
-        int ac = spinBox->value();
-        if (ac < 0) {
-            addValidationIssue(field, "Armor class cannot be negative", ValidationLevel::ERROR, "Critter Stats");
-        } else if (ac > MAX_ARMOR_CLASS_WARNING) {
-            addValidationIssue(field, "Very high armor class - may be unhittable", ValidationLevel::WARNING, "Critter Stats");
-        }
-    }
-}
-
-void ProEditorDialog::validateItemField(QWidget* field) {
-    QSpinBox* spinBox = qobject_cast<QSpinBox*>(field);
-    
-    // Weight validation
-    if (field == _weightEdit && spinBox) {
-        int weight = spinBox->value();
-        if (weight < 0) {
-            addValidationIssue(field, "Weight cannot be negative", ValidationLevel::ERROR, "Item Properties");
-        } else if (weight > MAX_WEIGHT_WARNING) {
-            addValidationIssue(field, "Very heavy item - check if realistic", ValidationLevel::WARNING, "Item Properties");
-        }
-    }
-    
-    // Price validation
-    if (field == _basePriceEdit && spinBox) {
-        int price = spinBox->value();
-        if (price < 0) {
-            addValidationIssue(field, "Base price cannot be negative", ValidationLevel::ERROR, "Item Properties");
-        } else if (price == 0) {
-            addValidationIssue(field, "Item has no value - is this intended?", ValidationLevel::INFO, "Item Properties");
-        } else if (price > MAX_PRICE_WARNING) {
-            addValidationIssue(field, "Very expensive item - luxury goods?", ValidationLevel::INFO, "Item Properties");
-        }
-    }
-}
-
-void ProEditorDialog::validateFIDField(QWidget* field) {
-    if (field == _fidLabel) {
-        // Main FID validation - use internal storage
-        if (_mainFID != 0 && _mainFID != -1 && !validateFIDReference(_mainFID, "Main FRM")) {
-            addValidationIssue(field, "FID may not reference a valid FRM file", ValidationLevel::WARNING, "References");
-        }
-    }
-}
 
 void ProEditorDialog::updatePreview() {
     
@@ -3476,8 +3224,6 @@ void ProEditorDialog::onAccept() {
 void ProEditorDialog::onFieldChanged() {
     QWidget* sender = qobject_cast<QWidget*>(QObject::sender());
     if (sender) {
-        validateField(sender);
-        
         // Update preview if ground FID field changed
         if (sender == _fidLabel) {
             updatePreview();
@@ -3491,7 +3237,6 @@ void ProEditorDialog::onFieldChanged() {
 void ProEditorDialog::onComboBoxChanged() {
     QComboBox* sender = qobject_cast<QComboBox*>(QObject::sender());
     if (sender) {
-        validateField(sender);
         // Update AI priority displays when relevant fields change
         updateAIPriorityDisplays();
     }
@@ -3500,7 +3245,7 @@ void ProEditorDialog::onComboBoxChanged() {
 void ProEditorDialog::onCheckBoxChanged() {
     QCheckBox* sender = qobject_cast<QCheckBox*>(QObject::sender());
     if (sender) {
-        validateField(sender);
+        // CheckBox changed - no additional action needed
     }
 }
 
@@ -4631,8 +4376,6 @@ void ProEditorDialog::loadNameAndDescription() {
     }
     
     try {
-        auto& resourceManager = ResourceManager::getInstance();
-
         const auto* msgFile = ProHelper::msgFile(_pro->type());
         if (!msgFile) {
             _nameLabel->setText("MSG file not found");
@@ -4990,158 +4733,6 @@ void ProEditorDialog::loadArmorAnimationFrames() {
     }
 }
 
-void ProEditorDialog::addValidationIssue(QWidget* field, const QString& message, ValidationLevel level, const QString& category) {
-    ValidationIssue issue;
-    issue.field = field;
-    issue.message = message;
-    issue.level = level;
-    issue.category = category;
-    _validationIssues.push_back(issue);
-    
-}
-
-void ProEditorDialog::clearValidationIssues(QWidget* field) {
-    if (field) {
-        // Clear issues for specific field
-        _validationIssues.erase(
-            std::remove_if(_validationIssues.begin(), _validationIssues.end(),
-                [field](const ValidationIssue& issue) { return issue.field == field; }),
-            _validationIssues.end());
-    } else {
-        // Clear all issues
-        _validationIssues.clear();
-    }
-}
-
-bool ProEditorDialog::validateFIDReference(int32_t fid, const QString& context) {
-    if (fid == 0) {
-        return true; // 0 is valid (no FRM)
-    }
-    
-    if (fid == -1) {
-        return true; // -1 is valid (indicates no FRM/invalid reference)
-    }
-    
-    try {
-        auto& resourceManager = ResourceManager::getInstance();
-        std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(fid));
-        
-        if (frmPath.empty()) {
-            return false;
-        }
-        
-        // Try to load the FRM to verify it exists
-        const auto* frm = resourceManager.loadResource<Frm>(frmPath);
-        if (!frm) {
-            return false;
-        }
-        
-        return true;
-        
-    } catch (const std::exception& e) {
-        return false;
-    }
-}
-
-bool ProEditorDialog::validateStatValue(int value, int min, int max, const QString& statName) {
-    bool isValid = (value >= min && value <= max);
-    if (!isValid) {
-    }
-    return isValid;
-}
-
-void ProEditorDialog::updateValidationStatus() {
-    // Count validation issues by level
-    int errorCount = 0;
-    int warningCount = 0;
-    int infoCount = 0;
-    
-    for (const auto& issue : _validationIssues) {
-        switch (issue.level) {
-            case ValidationLevel::ERROR:
-                errorCount++;
-                break;
-            case ValidationLevel::WARNING:
-                warningCount++;
-                break;
-            case ValidationLevel::INFO:
-                infoCount++;
-                break;
-        }
-    }
-    
-    // Update window title with validation status
-    QString title = "PRO Editor";
-    if (errorCount > 0) {
-        title += QString(" - %1 Error%2").arg(errorCount).arg(errorCount > 1 ? "s" : "");
-    }
-    if (warningCount > 0) {
-        title += QString("%1%2 Warning%3")
-            .arg(errorCount > 0 ? ", " : " - ")
-            .arg(warningCount)
-            .arg(warningCount > 1 ? "s" : "");
-    }
-    if (infoCount > 0) {
-        title += QString("%1%2 Info")
-            .arg((errorCount > 0 || warningCount > 0) ? ", " : " - ")
-            .arg(infoCount);
-    }
-    
-    setWindowTitle(title);
-    
-    
-    // Update validation panel
-    updateValidationPanel();
-}
-
-void ProEditorDialog::onValidationToggleClicked() {
-    _validationPanelVisible = !_validationPanelVisible;
-    _validationGroup->setVisible(_validationPanelVisible);
-    
-    if (_validationPanelVisible) {
-        _validationToggleButton->setText("▼ Validation Issues");
-    } else {
-        _validationToggleButton->setText("▶ Validation Issues");
-    }
-    
-}
-
-void ProEditorDialog::onValidationItemDoubleClicked(QListWidgetItem* item) {
-    if (!item) return;
-    
-    // Get the field widget from the item data
-    QWidget* field = qvariant_cast<QWidget*>(item->data(Qt::UserRole));
-    if (field) {
-        // Find the tab containing this field and switch to it
-        QWidget* parent = field;
-        while (parent && parent->parent()) {
-            parent = qobject_cast<QWidget*>(parent->parent());
-            if (parent && _tabWidget) {
-                int tabIndex = _tabWidget->indexOf(parent);
-                if (tabIndex >= 0) {
-                    _tabWidget->setCurrentIndex(tabIndex);
-                    break;
-                }
-            }
-        }
-        
-        // Focus and scroll to the field
-        field->setFocus();
-        
-        // If it's in a scroll area, scroll to make it visible
-        QScrollArea* scrollArea = nullptr;
-        QWidget* scrollParent = field;
-        while (scrollParent && !scrollArea) {
-            scrollParent = qobject_cast<QWidget*>(scrollParent->parent());
-            scrollArea = qobject_cast<QScrollArea*>(scrollParent);
-        }
-        
-        if (scrollArea) {
-            scrollArea->ensureWidgetVisible(field);
-        }
-        
-    }
-}
 
 void ProEditorDialog::onExtendedFlagChanged() {
     uint32_t flags = 0;
@@ -5202,80 +4793,6 @@ void ProEditorDialog::onPreviewViewChanged() {
     // No longer used - items use static dual preview without animation controls
 }
 
-void ProEditorDialog::updateValidationPanel() {
-    if (!_validationList || !_validationStatusLabel || !_validationToggleButton) {
-        return;
-    }
-    
-    // Clear existing items
-    _validationList->clear();
-    
-    // Count issues by level
-    int errorCount = 0;
-    int warningCount = 0;
-    int infoCount = 0;
-    
-    // Add items to list
-    for (const auto& issue : _validationIssues) {
-        QListWidgetItem* item = new QListWidgetItem();
-        
-        QString prefix;
-        QString color;
-        switch (issue.level) {
-            case ValidationLevel::ERROR:
-                prefix = "🔴";
-                color = "red";
-                errorCount++;
-                break;
-            case ValidationLevel::WARNING:
-                prefix = "🟠";
-                color = "orange";
-                warningCount++;
-                break;
-            case ValidationLevel::INFO:
-                prefix = "🔵";
-                color = "blue";
-                infoCount++;
-                break;
-        }
-        
-        QString text = QString("%1 [%2] %3").arg(prefix).arg(issue.category).arg(issue.message);
-        item->setText(text);
-        item->setForeground(QColor(color));
-        item->setData(Qt::UserRole, QVariant::fromValue(issue.field));
-        
-        _validationList->addItem(item);
-    }
-    
-    // Update status label
-    if (errorCount > 0) {
-        _validationStatusLabel->setText(QString("%1 error%2, %3 warning%4")
-            .arg(errorCount).arg(errorCount > 1 ? "s" : "")
-            .arg(warningCount).arg(warningCount > 1 ? "s" : ""));
-        _validationStatusLabel->setStyleSheet("color: red; font-weight: bold;");
-    } else if (warningCount > 0) {
-        _validationStatusLabel->setText(QString("%1 warning%2, %3 info")
-            .arg(warningCount).arg(warningCount > 1 ? "s" : "")
-            .arg(infoCount));
-        _validationStatusLabel->setStyleSheet("color: orange; font-weight: bold;");
-    } else if (infoCount > 0) {
-        _validationStatusLabel->setText(QString("%1 suggestion%2")
-            .arg(infoCount).arg(infoCount > 1 ? "s" : ""));
-        _validationStatusLabel->setStyleSheet("color: blue; font-weight: bold;");
-    } else {
-        _validationStatusLabel->setText("No issues");
-        _validationStatusLabel->setStyleSheet("color: green; font-weight: bold;");
-    }
-    
-    // Update button text with count
-    QString buttonText = _validationPanelVisible ? "▼" : "▶";
-    if (errorCount + warningCount + infoCount > 0) {
-        buttonText += QString(" Validation Issues (%1)").arg(errorCount + warningCount + infoCount);
-    } else {
-        buttonText += " Validation Issues";
-    }
-    _validationToggleButton->setText(buttonText);
-}
 
 int ProEditorDialog::calculateArmorAIPriority() {
     if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || 
@@ -5587,21 +5104,6 @@ void ProEditorDialog::setupDrugFields() {
         rightColumn2->hide();
     }
     
-    // Debug: Check what MSG data we actually have
-    spdlog::debug("ProEditorDialog::setupDrugFields() - _statNames.size(): {}, _perkNames.size(): {}", 
-                  _statNames.size(), _perkNames.size());
-    if (!_statNames.isEmpty()) {
-        spdlog::debug("ProEditorDialog::setupDrugFields() - First few stat names: {}, {}, {}", 
-                      _statNames.value(0).toStdString(), 
-                      _statNames.value(1).toStdString(), 
-                      _statNames.value(2).toStdString());
-    }
-    if (!_perkNames.isEmpty()) {
-        spdlog::debug("ProEditorDialog::setupDrugFields() - First few perk names: {}, {}, {}", 
-                      _perkNames.value(0).toStdString(), 
-                      _perkNames.value(1).toStdString(), 
-                      _perkNames.value(2).toStdString());
-    }
     
     // Use loaded stat names from MSG file and add special values
     QStringList baseStatNames = _statNames;
@@ -5932,9 +5434,6 @@ void ProEditorDialog::loadStatAndPerkNames() {
         // Load names into cached lists
         loadStatNames();
         loadPerkNames();
-        
-        spdlog::debug("ProEditorDialog: Loaded {} stat names and {} perk names", 
-                      _statNames.size(), _perkNames.size());
         
     } catch (const std::exception& e) {
         spdlog::warn("ProEditorDialog: Failed to load MSG files: {}", e.what());

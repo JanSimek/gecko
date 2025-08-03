@@ -161,8 +161,6 @@ private slots:
     void onArmorFrameChanged(int frame);
     void onArmorDirectionChanged(int direction);
     void onArmorAnimationTick();
-    void onValidationToggleClicked();
-    void onValidationItemDoubleClicked(QListWidgetItem* item);
     void onExtendedFlagChanged();
     void onObjectFlagChanged();
     void onTransparencyFlagChanged();
@@ -197,7 +195,6 @@ private:
     void setupArmorPreview();
     void setupAnimationControls();
     void setupArmorAnimationControls();
-    void setupValidationPanel();
     void setupCommonTab();
     void setupObjectFlagsGroup(QFormLayout* layout);
     void setupExtendedFlagsGroup(QFormLayout* layout);
@@ -245,7 +242,6 @@ private:
     void saveTileData();
     
     void updateTabVisibility();
-    void validateField(QWidget* field);
     void updatePreview();
     void updateInventoryPreview();
     void updateGroundPreview();
@@ -464,15 +460,6 @@ private:
     QVBoxLayout* _leftFieldsLayout;
     QVBoxLayout* _rightFieldsLayout;
     
-    // Validation summary panel
-    QWidget* _validationPanel;
-    QVBoxLayout* _validationLayout;
-    QGroupBox* _validationGroup;
-    QListWidget* _validationList;
-    QPushButton* _validationToggleButton;
-    QLabel* _validationStatusLabel;
-    bool _validationPanelVisible;
-    
     // Preview panel
     QWidget* _previewPanel;
     QVBoxLayout* _previewLayout;
@@ -526,34 +513,6 @@ private:
     bool _armorIsAnimating;
     std::vector<QPixmap> _armorMaleFrameCache;
     std::vector<QPixmap> _armorFemaleFrameCache;
-    
-    // Validation system
-    enum class ValidationLevel {
-        INFO,
-        WARNING,
-        ERROR
-    };
-    
-    struct ValidationIssue {
-        QWidget* field;
-        QString message;
-        ValidationLevel level;
-        QString category;
-    };
-    
-    std::vector<ValidationIssue> _validationIssues;
-    void addValidationIssue(QWidget* field, const QString& message, ValidationLevel level, const QString& category = "General");
-    void clearValidationIssues(QWidget* field = nullptr);
-    bool validateFIDReference(int32_t fid, const QString& context);
-    bool validateStatValue(int value, int min, int max, const QString& statName);
-    void updateValidationStatus();
-    void updateValidationPanel();
-    
-    // Split validation methods (KISS principle)
-    void validateWeaponField(QWidget* field);
-    void validateCritterField(QWidget* field);
-    void validateItemField(QWidget* field);
-    void validateFIDField(QWidget* field);
     
     // AI Priority calculations (f2wedit feature)
     int calculateArmorAIPriority();
