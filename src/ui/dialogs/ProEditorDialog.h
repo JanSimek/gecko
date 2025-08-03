@@ -202,17 +202,6 @@ private:
     void setupContainerExtendedFlags(QVBoxLayout* layout);
     void setupItemExtendedFlags(QVBoxLayout* layout);
     void setupOtherExtendedFlags(QVBoxLayout* layout);
-    void setupArmorTab();
-    void setupContainerTab();
-    void setupDrugTab();
-    void setupWeaponTab();
-    void setupAmmoTab();
-    void setupMiscTab();
-    void setupKeyTab();
-    void setupCritterTab();
-    void setupSceneryTab();
-    void setupWallTab();
-    void setupTileTab();
     
     void loadProData();
     void loadArmorData();
@@ -521,17 +510,6 @@ private:
     
     // Tabs
     QWidget* _commonTab;
-    QWidget* _armorTab;
-    QWidget* _containerTab;
-    QWidget* _drugTab;
-    QWidget* _weaponTab;
-    QWidget* _ammoTab;
-    QWidget* _miscTab;
-    QWidget* _keyTab;
-    QWidget* _critterTab;
-    QWidget* _sceneryTab;
-    QWidget* _wallTab;
-    QWidget* _tileTab;
     
     // Common tab controls
     QLabel* _nameLabel;
