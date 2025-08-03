@@ -459,10 +459,8 @@ private:
     // Dual preview system
     QWidget* _dualPreviewWidget;
     QHBoxLayout* _dualPreviewLayout;
-    QGroupBox* _inventoryPreviewGroup;
-    QGroupBox* _groundPreviewGroup;
-    QLabel* _inventoryPreviewLabel;
-    QLabel* _groundPreviewLabel;
+    ObjectPreviewWidget* _inventoryPreviewWidget;
+    ObjectPreviewWidget* _groundPreviewWidget;
     
     // Armor preview system
     QGroupBox* _armorPreviewGroup;

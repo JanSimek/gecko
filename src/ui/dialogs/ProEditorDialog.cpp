@@ -35,10 +35,8 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _objectPreviewWidget(nullptr)
     , _dualPreviewWidget(nullptr)
     , _dualPreviewLayout(nullptr)
-    , _inventoryPreviewGroup(nullptr)
-    , _groundPreviewGroup(nullptr)
-    , _inventoryPreviewLabel(nullptr)
-    , _groundPreviewLabel(nullptr)
+    , _inventoryPreviewWidget(nullptr)
+    , _groundPreviewWidget(nullptr)
     , _armorPreviewGroup(nullptr)
     , _armorMalePreviewLabel(nullptr)
     , _armorFemalePreviewLabel(nullptr)
@@ -398,10 +396,10 @@ void ProEditorDialog::setupUI() {
 
 void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
     // Create compact preview group
-    QGroupBox* previewGroup = new QGroupBox("Preview");
+    QWidget* previewGroup = new QWidget();
 
     QVBoxLayout* previewLayout = new QVBoxLayout(previewGroup);
-    previewLayout->setContentsMargins(4, 4, 4, 4);
+    previewLayout->setContentsMargins(0, 0, 0, 0);
     previewLayout->setSpacing(4);
 
     // Check if we need specialized previews for items
@@ -422,7 +420,7 @@ void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
     }
     
     // Handle dual preview for items (inventory/ground) if needed
-    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM) {
+    if (hasSpecializedPreview) {
         setupDualPreviewCompact(previewLayout);
     }
 
@@ -530,55 +528,27 @@ void ProEditorDialog::setupCompactArmorAnimationControls(QVBoxLayout* parentLayo
 }
 
 void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
-    // Compact dual preview for inventory/ground (no group box border)
+    // Compact dual preview for inventory/ground using ObjectPreviewWidget
     QWidget* dualWidget = new QWidget();
     QHBoxLayout* dualLayout = new QHBoxLayout(dualWidget);
     dualLayout->setContentsMargins(0, 0, 0, 0);
     dualLayout->setSpacing(4);
     dualLayout->setAlignment(Qt::AlignCenter);
     
-    // Inventory preview (small)
-    QWidget* invWidget = new QWidget();
-    QVBoxLayout* invLayout = new QVBoxLayout(invWidget);
-    invLayout->setContentsMargins(0, 0, 0, 0);
-    invLayout->setSpacing(2);
-
-    _inventoryPreviewLabel = new QLabel();
-    _inventoryPreviewLabel->setFixedSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE);
-    _inventoryPreviewLabel->setAlignment(Qt::AlignCenter);
-    _inventoryPreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
-    _inventoryPreviewLabel->setText("Inv");
-    _inventoryPreviewLabel->setScaledContents(false); // Preserve aspect ratio
-
-    QLabel* invLabel = new QLabel("Inventory");
-    invLabel->setAlignment(Qt::AlignCenter);
-    invLabel->setStyleSheet("QLabel { font-size: 10px; }");
+    // Inventory preview - no animation controls, just group box with title
+    _inventoryPreviewWidget = new ObjectPreviewWidget(this, 
+        ObjectPreviewWidget::ShowGroupBox, 
+        QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
+    _inventoryPreviewWidget->setGroupBoxTitle("Inventory");
     
-    invLayout->addWidget(_inventoryPreviewLabel);
-    invLayout->addWidget(invLabel);
+    // Ground preview - no animation controls, just group box with title  
+    _groundPreviewWidget = new ObjectPreviewWidget(this,
+        ObjectPreviewWidget::ShowGroupBox,
+        QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
+    _groundPreviewWidget->setGroupBoxTitle("Ground");
     
-    // Ground preview (small)
-    QWidget* groundWidget = new QWidget();
-    QVBoxLayout* groundLayout = new QVBoxLayout(groundWidget);
-    groundLayout->setContentsMargins(0, 0, 0, 0);
-    groundLayout->setSpacing(2);
-    
-    _groundPreviewLabel = new QLabel();
-    _groundPreviewLabel->setFixedSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE);
-    _groundPreviewLabel->setAlignment(Qt::AlignCenter);
-    _groundPreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
-    _groundPreviewLabel->setText("Ground");
-    _groundPreviewLabel->setScaledContents(false); // Preserve aspect ratio
-    
-    QLabel* groundLabel = new QLabel("Ground");
-    groundLabel->setAlignment(Qt::AlignCenter);
-    groundLabel->setStyleSheet("QLabel { font-size: 10px; }");
-    
-    groundLayout->addWidget(_groundPreviewLabel);
-    groundLayout->addWidget(groundLabel);
-    
-    dualLayout->addWidget(invWidget);
-    dualLayout->addWidget(groundWidget);
+    dualLayout->addWidget(_inventoryPreviewWidget);
+    dualLayout->addWidget(_groundPreviewWidget);
 
     parentLayout->addWidget(dualWidget);
 }
@@ -1514,7 +1484,7 @@ void ProEditorDialog::loadProData() {
     }
     
     // Update dual previews for items now that all data is loaded
-    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryPreviewLabel && _groundPreviewLabel) {
+    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryPreviewWidget && _groundPreviewWidget) {
         updateInventoryPreview();
         updateGroundPreview();
     }
@@ -2458,7 +2428,7 @@ void ProEditorDialog::updatePreview() {
     }
     
     // Check if we're using dual preview system (for items)
-    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryPreviewLabel && _groundPreviewLabel) {
+    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryPreviewWidget && _groundPreviewWidget) {
         // Update both dual previews (items use static thumbnails)
         updateInventoryPreview();
         updateGroundPreview();
@@ -2561,83 +2531,63 @@ int32_t ProEditorDialog::getGroundFid() {
 
 void ProEditorDialog::updateInventoryPreview() {
     
-    if (!_inventoryPreviewLabel) {
+    if (!_inventoryPreviewWidget) {
         return;
     }
     
     int32_t inventoryFid = getInventoryFid();
     
     if (inventoryFid <= 0) {
-        _inventoryPreviewLabel->clear();
-        _inventoryPreviewLabel->setText("No inventory image");
+        _inventoryPreviewWidget->clear();
         return;
     }
     
-    // Generate thumbnail for inventory view
+    // Set FRM path for inventory view
     try {
         auto& resourceManager = ResourceManager::getInstance();
         std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(inventoryFid));
         
         if (frmPath.empty()) {
-            _inventoryPreviewLabel->clear();
-            _inventoryPreviewLabel->setText("Invalid inventory FID");
+            _inventoryPreviewWidget->clear();
             return;
         }
         
-        QPixmap thumbnail = createFrmThumbnail(frmPath, QSize(120, 120));
-        if (!thumbnail.isNull()) {
-            QPixmap scaledPixmap = thumbnail.scaled(_inventoryPreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            _inventoryPreviewLabel->setPixmap(scaledPixmap);
-        } else {
-            _inventoryPreviewLabel->clear();
-            _inventoryPreviewLabel->setText("Failed to load inventory FRM");
-        }
+        _inventoryPreviewWidget->setFrmPath(QString::fromStdString(frmPath));
         
     } catch (const std::exception& e) {
         spdlog::error("ProEditorDialog::updateInventoryPreview() - exception: {}", e.what());
-        _inventoryPreviewLabel->clear();
-        _inventoryPreviewLabel->setText("Error loading inventory FRM");
+        _inventoryPreviewWidget->clear();
     }
 }
 
 void ProEditorDialog::updateGroundPreview() {
     
-    if (!_groundPreviewLabel) {
+    if (!_groundPreviewWidget) {
         return;
     }
     
     int32_t groundFid = getGroundFid();
     
     if (groundFid <= 0) {
-        _groundPreviewLabel->clear();
-        _groundPreviewLabel->setText("No ground FRM");
+        _groundPreviewWidget->clear();
         return;
     }
     
-    // Generate thumbnail for ground view
+    // Set FRM path for ground view
     try {
         auto& resourceManager = ResourceManager::getInstance();
         std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(groundFid));
         
         if (frmPath.empty()) {
-            _groundPreviewLabel->clear();
-            _groundPreviewLabel->setText("Invalid ground FID");
+            _groundPreviewWidget->clear();
             return;
         }
         
-        QPixmap thumbnail = createFrmThumbnail(frmPath, QSize(120, 120));
-        if (!thumbnail.isNull()) {
-            QPixmap scaledPixmap = thumbnail.scaled(_groundPreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            _groundPreviewLabel->setPixmap(scaledPixmap);
-        } else {
-            _groundPreviewLabel->clear();
-            _groundPreviewLabel->setText("Failed to load ground FRM");
-        }
+        _groundPreviewWidget->setFrmPath(QString::fromStdString(frmPath));
         
     } catch (const std::exception& e) {
         spdlog::error("ProEditorDialog::updateGroundPreview() - exception: {}", e.what());
-        _groundPreviewLabel->clear();
-        _groundPreviewLabel->setText("Error loading ground FRM");
+        _groundPreviewWidget->clear();
     }
 }
 
