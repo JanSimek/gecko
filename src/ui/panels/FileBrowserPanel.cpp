@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <fstream>
 #include <filesystem>
+#include <util/ProHelper.h>
 #include <vfspp/VirtualFileSystem.hpp>
 
 namespace geck {
@@ -1326,34 +1327,8 @@ QString FileBrowserPanel::loadProNameFromFile(const QString& filePath) const {
         if (!pro) {
             return QString("Failed to load");
         }
-        
-        // Determine MSG file based on object type
-        std::string msgFileName;
-        switch (pro->type()) {
-            case Pro::OBJECT_TYPE::ITEM:
-                msgFileName = "text/english/game/pro_item.msg";
-                break;
-            case Pro::OBJECT_TYPE::CRITTER:
-                msgFileName = "text/english/game/pro_crit.msg";
-                break;
-            case Pro::OBJECT_TYPE::SCENERY:
-                msgFileName = "text/english/game/pro_scen.msg";
-                break;
-            case Pro::OBJECT_TYPE::WALL:
-                msgFileName = "text/english/game/pro_wall.msg";
-                break;
-            case Pro::OBJECT_TYPE::TILE:
-                msgFileName = "text/english/game/pro_tile.msg";
-                break;
-            case Pro::OBJECT_TYPE::MISC:
-                msgFileName = "text/english/game/pro_misc.msg";
-                break;
-            default:
-                return QString("Unknown type");
-        }
-        
-        // Load the MSG file
-        const auto* msgFile = resourceManager.loadResource<Msg>(msgFileName);
+
+        const auto* msgFile = ProHelper::msgFile(pro->type());
         if (!msgFile) {
             return QString("MSG not found");
         }

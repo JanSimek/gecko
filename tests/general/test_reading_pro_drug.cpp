@@ -17,7 +17,16 @@ TEST_CASE("Parse .pro drug file", "[pro]") {
     // Verify common item data
     REQUIRE(pro_file->commonItemData.weight == 0);
     REQUIRE(pro_file->commonItemData.basePrice == 300);
-    
+    REQUIRE(pro_file->commonItemData.SID == 0xffffffff);
+    REQUIRE(pro_file->commonItemData.materialId == 1);
+    REQUIRE(pro_file->commonItemData.containerSize == 0);
+    REQUIRE(pro_file->commonItemData.inventoryFID == 0x700002b);
+    REQUIRE(pro_file->commonItemData.soundId == 48); // ASCII '0'
+
+    REQUIRE(geck::Pro::hasFlag(pro_file->commonItemData.flagsExt, geck::Pro::ObjectFlags::OBJECT_FLAT));
+
+    // TODO: check other flags
+
     // Verify drug-specific data fields
     // The drug data structure contains immediate and delayed effects
     REQUIRE(pro_file->drugData.stat0 == 31); // Radiation resistance

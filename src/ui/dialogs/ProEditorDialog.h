@@ -152,6 +152,7 @@ private slots:
     void onArmorMaleFidSelectorClicked();
     void onArmorFemaleFidSelectorClicked();
     void onCritterHeadFidSelectorClicked();
+    void onCritterFlagChanged();
     void onPlayPauseClicked();
     void onFrameChanged(int frame);
     void onDirectionChanged(int direction);
@@ -690,6 +691,19 @@ private:
     QSpinBox* _critterAIPacketEdit;
     QSpinBox* _critterTeamNumberEdit;
     QSpinBox* _critterFlagsEdit;
+    
+    // Critter flag checkboxes
+    QCheckBox* _critterBarterCheck;
+    QCheckBox* _critterNoStealCheck;
+    QCheckBox* _critterNoDropCheck;
+    QCheckBox* _critterNoLimbsCheck;
+    QCheckBox* _critterNoAgeCheck;
+    QCheckBox* _critterNoHealCheck;
+    QCheckBox* _critterInvulnerableCheck;
+    QCheckBox* _critterFlatCheck;
+    QCheckBox* _critterSpecialDeathCheck;
+    QCheckBox* _critterLongLimbsCheck;
+    QCheckBox* _critterNoKnockbackCheck;
     QSpinBox* _critterSpecialStatEdits[7]; // STR, PER, END, CHR, INT, AGL, LCK
     QSpinBox* _critterMaxHitPointsEdit;
     QSpinBox* _critterActionPointsEdit;

@@ -19,6 +19,8 @@
 #include "../../util/ResourcePaths.h"
 #include "FrmSelectorDialog.h"
 
+#include <util/ProHelper.h>
+
 namespace geck {
 
 ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
@@ -190,6 +192,19 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     _critterBonusBetterCriticalsEdit = nullptr;
     _critterBonusAgeEdit = nullptr;
     _critterBonusGenderEdit = nullptr;
+    
+    // Initialize critter flag checkboxes to nullptr
+    _critterBarterCheck = nullptr;
+    _critterNoStealCheck = nullptr;
+    _critterNoDropCheck = nullptr;
+    _critterNoLimbsCheck = nullptr;
+    _critterNoAgeCheck = nullptr;
+    _critterNoHealCheck = nullptr;
+    _critterInvulnerableCheck = nullptr;
+    _critterFlatCheck = nullptr;
+    _critterSpecialDeathCheck = nullptr;
+    _critterLongLimbsCheck = nullptr;
+    _critterNoKnockbackCheck = nullptr;
     
     // Initialize all item UI elements to nullptr to prevent crashes
     // Armor elements
@@ -702,69 +717,69 @@ void ProEditorDialog::setupLeftPanelCommonFields(QVBoxLayout* parentLayout) {
     
     // Basic rendering flags
     _flatCheck = new QCheckBox("Flat");
-    _flatCheck->setChecked(flags & 0x00000008);
+    _flatCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_FLAT));
     _flatCheck->setToolTip("Rendered first, just after tiles");
     connect(_flatCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
     _noBlockCheck = new QCheckBox("No Block");
-    _noBlockCheck->setChecked(flags & 0x00000010);
+    _noBlockCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK));
     _noBlockCheck->setToolTip("Doesn't block the tile");
     connect(_noBlockCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
     _multiHexCheck = new QCheckBox("Multi-Hex");
-    _multiHexCheck->setChecked(flags & 0x00000800);
+    _multiHexCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_MULTIHEX));
     _multiHexCheck->setToolTip("Object spans multiple hexes");
     connect(_multiHexCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
     _noHighlightCheck = new QCheckBox("No Highlight");
-    _noHighlightCheck->setChecked(flags & 0x00001000);
+    _noHighlightCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_HIGHLIGHT));
     _noHighlightCheck->setToolTip("Doesn't highlight border; used for containers");
     connect(_noHighlightCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
     // Transparency flags
     _transRedCheck = new QCheckBox("Trans Red");
-    _transRedCheck->setChecked(flags & 0x00004000);
+    _transRedCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_RED));
     _transRedCheck->setToolTip("Red transparency effect");
     connect(_transRedCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     
     _transNoneCheck = new QCheckBox("Opaque");
-    _transNoneCheck->setChecked(flags & 0x00008000);
+    _transNoneCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_NONE));
     _transNoneCheck->setToolTip("Opaque - not the default value");
     connect(_transNoneCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     
     _transWallCheck = new QCheckBox("Trans Wall");
-    _transWallCheck->setChecked(flags & 0x00010000);
+    _transWallCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_WALL));
     _transWallCheck->setToolTip("Wall transparency effect");
     connect(_transWallCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     
     _transGlassCheck = new QCheckBox("Trans Glass");
-    _transGlassCheck->setChecked(flags & 0x00020000);
+    _transGlassCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_GLASS));
     _transGlassCheck->setToolTip("Glass transparency effect");
     connect(_transGlassCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     
     _transSteamCheck = new QCheckBox("Trans Steam");
-    _transSteamCheck->setChecked(flags & 0x00040000);
+    _transSteamCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_STEAM));
     _transSteamCheck->setToolTip("Steam transparency effect");
     connect(_transSteamCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     
     _transEnergyCheck = new QCheckBox("Trans Energy");
-    _transEnergyCheck->setChecked(flags & 0x00080000);
+    _transEnergyCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_ENERGY));
     _transEnergyCheck->setToolTip("Energy transparency effect");
     connect(_transEnergyCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     
     // Advanced flags
     _wallTransEndCheck = new QCheckBox("Wall Trans End");
-    _wallTransEndCheck->setChecked(flags & 0x10000000);
+    _wallTransEndCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_WALL_TRANS_END));
     _wallTransEndCheck->setToolTip("Changes transparency egg logic");
     connect(_wallTransEndCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
     _lightThruCheck = new QCheckBox("Light Thru");
-    _lightThruCheck->setChecked(flags & 0x20000000);
+    _lightThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_LIGHT_THRU));
     _lightThruCheck->setToolTip("Light passes through this object");
     connect(_lightThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
     _shootThruCheck = new QCheckBox("Shoot Thru");
-    _shootThruCheck->setChecked(flags & 0x80000000);
+    _shootThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_SHOOT_THRU));
     _shootThruCheck->setToolTip("Projectiles pass through this object");
     connect(_shootThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     
@@ -991,19 +1006,19 @@ void ProEditorDialog::setupWeaponExtendedFlags(QVBoxLayout* layout) {
     QVBoxLayout* behaviorLayout = new QVBoxLayout(behaviorGroup);
     
     _bigGunCheck = new QCheckBox("Big Gun");
-    _bigGunCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::BIG_GUN));
+    _bigGunCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::BIG_GUN));
     _bigGunCheck->setToolTip("Forces weapon to use Big Guns skill instead of Small Guns");
     connect(_bigGunCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
     behaviorLayout->addWidget(_bigGunCheck);
     
     _twoHandedCheck = new QCheckBox("Two-Handed");
-    _twoHandedCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::TWO_HANDED));
+    _twoHandedCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::TWO_HANDED));
     _twoHandedCheck->setToolTip("Weapon requires both hands, prevents dual-wielding");
     connect(_twoHandedCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
     behaviorLayout->addWidget(_twoHandedCheck);
     
     _itemHiddenCheck = new QCheckBox("Hidden Item");
-    _itemHiddenCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::ITEM_HIDDEN));
+    _itemHiddenCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::ITEM_HIDDEN));
     _itemHiddenCheck->setToolTip("Item is integral part of owner, cannot be dropped (creature weapons)");
     connect(_itemHiddenCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
     behaviorLayout->addWidget(_itemHiddenCheck);
@@ -1017,19 +1032,19 @@ void ProEditorDialog::setupContainerExtendedFlags(QVBoxLayout* layout) {
     QVBoxLayout* actionLayout = new QVBoxLayout(actionGroup);
     
     _canUseCheck = new QCheckBox("Can Use");
-    _canUseCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE));
+    _canUseCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE));
     _canUseCheck->setToolTip("Container can be 'used' (automatically set for containers)");
     connect(_canUseCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
     actionLayout->addWidget(_canUseCheck);
     
     _canUseOnCheck = new QCheckBox("Can Use On");
-    _canUseOnCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE_ON));
+    _canUseOnCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE_ON));
     _canUseOnCheck->setToolTip("Container can be 'used on' target");
     connect(_canUseOnCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
     actionLayout->addWidget(_canUseOnCheck);
     
     _interactionFlagCheck = new QCheckBox("Interaction Flag");
-    _interactionFlagCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::INTERACTION_FLAG));
+    _interactionFlagCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::INTERACTION_FLAG));
     _interactionFlagCheck->setToolTip("Related to item interactions");
     connect(_interactionFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
     actionLayout->addWidget(_interactionFlagCheck);
@@ -1043,19 +1058,19 @@ void ProEditorDialog::setupItemExtendedFlags(QVBoxLayout* layout) {
     QVBoxLayout* generalLayout = new QVBoxLayout(generalGroup);
     
     _canUseCheck = new QCheckBox("Can Use");
-    _canUseCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE));
+    _canUseCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE));
     _canUseCheck->setToolTip("Item can be 'used'");
     connect(_canUseCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
     generalLayout->addWidget(_canUseCheck);
     
     _canUseOnCheck = new QCheckBox("Can Use On");
-    _canUseOnCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE_ON));
+    _canUseOnCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE_ON));
     _canUseOnCheck->setToolTip("Item can be 'used on' target (automatically set for drugs)");
     connect(_canUseOnCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
     generalLayout->addWidget(_canUseOnCheck);
     
     _generalFlagCheck = new QCheckBox("General Flag");
-    _generalFlagCheck->setChecked(_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG));
+    _generalFlagCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::GENERAL_FLAG));
     _generalFlagCheck->setToolTip("General purpose flag");
     connect(_generalFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
     generalLayout->addWidget(_generalFlagCheck);
@@ -1067,8 +1082,8 @@ void ProEditorDialog::setupOtherExtendedFlags(QVBoxLayout* layout) {
     // For critters, scenery, walls - show general flags
     _generalFlagCheck = new QCheckBox("General Flag");
     _generalFlagCheck->setChecked(_pro->type() == Pro::OBJECT_TYPE::ITEM ? 
-        (_pro->commonItemData.flagsExt & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG)) : 
-        (_pro->header.flags & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG)));
+        Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::GENERAL_FLAG) :
+        Pro::hasFlag(_pro->header.flags, Pro::ExtendedItemFlags::GENERAL_FLAG));
     _generalFlagCheck->setToolTip("General purpose flag (scenery/walls/tiles)");
     connect(_generalFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
     layout->addWidget(_generalFlagCheck);
@@ -1081,27 +1096,27 @@ void ProEditorDialog::setupOtherExtendedFlags(QVBoxLayout* layout) {
         uint32_t flagsToCheck = _pro->type() == Pro::OBJECT_TYPE::ITEM ? 
             _pro->commonItemData.flagsExt : _pro->header.flags;
         
-        _lightFlag1Check = new QCheckBox("Light Flag 1");
-        _lightFlag1Check->setChecked(flagsToCheck & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_1));
-        _lightFlag1Check->setToolTip("Light rendering flag 1");
+        _lightFlag1Check = new QCheckBox("OBJECT_WALL_TRANS_END");
+        _lightFlag1Check->setChecked(Pro::hasFlag(flagsToCheck, Pro::ObjectFlags::OBJECT_WALL_TRANS_END));
+        _lightFlag1Check->setToolTip("OBJECT_WALL_TRANS_END");
         connect(_lightFlag1Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
         lightLayout->addWidget(_lightFlag1Check);
         
-        _lightFlag2Check = new QCheckBox("Light Flag 2");
-        _lightFlag2Check->setChecked(flagsToCheck & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_2));
-        _lightFlag2Check->setToolTip("Light rendering flag 2");
+        _lightFlag2Check = new QCheckBox("OBJECT_LIGHT_THRU");
+        _lightFlag2Check->setChecked(Pro::hasFlag(flagsToCheck, Pro::ObjectFlags::OBJECT_LIGHT_THRU));
+        _lightFlag2Check->setToolTip("OBJECT_LIGHT_THRU");
         connect(_lightFlag2Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
         lightLayout->addWidget(_lightFlag2Check);
         
-        _lightFlag3Check = new QCheckBox("Light Flag 3");
-        _lightFlag3Check->setChecked(flagsToCheck & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_3));
-        _lightFlag3Check->setToolTip("Light rendering flag 3");
+        _lightFlag3Check = new QCheckBox("OBJECT_SEEN");
+        _lightFlag3Check->setChecked(Pro::hasFlag(flagsToCheck, Pro::ObjectFlags::OBJECT_SEEN));
+        _lightFlag3Check->setToolTip("OBJECT_SEEN");
         connect(_lightFlag3Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
         lightLayout->addWidget(_lightFlag3Check);
         
-        _lightFlag4Check = new QCheckBox("Light Flag 4");
-        _lightFlag4Check->setChecked(flagsToCheck & static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_4));
-        _lightFlag4Check->setToolTip("Light rendering flag 4");
+        _lightFlag4Check = new QCheckBox("OBJECT_SHOOT_THRU");
+        _lightFlag4Check->setChecked(Pro::hasFlag(flagsToCheck, Pro::ObjectFlags::OBJECT_SHOOT_THRU));
+        _lightFlag4Check->setToolTip("OBJECT_SHOOT_THRU");
         connect(_lightFlag4Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
         lightLayout->addWidget(_lightFlag4Check);
         
@@ -1120,25 +1135,25 @@ void ProEditorDialog::setupObjectFlagsGroup(QFormLayout* layout) {
     QVBoxLayout* renderingLayout = new QVBoxLayout(renderingGroup);
     
     _flatCheck = new QCheckBox("Flat");
-    _flatCheck->setChecked(flags & 0x00000008);
+    _flatCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_FLAT));
     _flatCheck->setToolTip("Rendered first, just after tiles");
     connect(_flatCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     renderingLayout->addWidget(_flatCheck);
     
     _noBlockCheck = new QCheckBox("No Block");
-    _noBlockCheck->setChecked(flags & 0x00000010);
+    _noBlockCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK));
     _noBlockCheck->setToolTip("Doesn't block the tile");
     connect(_noBlockCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     renderingLayout->addWidget(_noBlockCheck);
     
     _multiHexCheck = new QCheckBox("Multi-Hex");
-    _multiHexCheck->setChecked(flags & 0x00000800);
+    _multiHexCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_MULTIHEX));
     _multiHexCheck->setToolTip("Object occupies multiple hexes");
     connect(_multiHexCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     renderingLayout->addWidget(_multiHexCheck);
     
     _noHighlightCheck = new QCheckBox("No Highlight");
-    _noHighlightCheck->setChecked(flags & 0x00001000);
+    _noHighlightCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_HIGHLIGHT));
     _noHighlightCheck->setToolTip("Doesn't highlight border; used for containers");
     connect(_noHighlightCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     renderingLayout->addWidget(_noHighlightCheck);
@@ -1150,37 +1165,37 @@ void ProEditorDialog::setupObjectFlagsGroup(QFormLayout* layout) {
     QVBoxLayout* transparencyLayout = new QVBoxLayout(transparencyGroup);
     
     _transNoneCheck = new QCheckBox("Opaque (TransNone)");
-    _transNoneCheck->setChecked(flags & 0x00008000);
+    _transNoneCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_NONE));
     _transNoneCheck->setToolTip("Opaque - not the default value");
     connect(_transNoneCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     transparencyLayout->addWidget(_transNoneCheck);
     
     _transRedCheck = new QCheckBox("Red Transparency");
-    _transRedCheck->setChecked(flags & 0x00004000);
+    _transRedCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_RED));
     _transRedCheck->setToolTip("Red transparency effect");
     connect(_transRedCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     transparencyLayout->addWidget(_transRedCheck);
     
     _transWallCheck = new QCheckBox("Wall Transparency");
-    _transWallCheck->setChecked(flags & 0x00010000);
+    _transWallCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_WALL));
     _transWallCheck->setToolTip("Wall transparency effect");
     connect(_transWallCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     transparencyLayout->addWidget(_transWallCheck);
     
     _transGlassCheck = new QCheckBox("Glass Transparency");
-    _transGlassCheck->setChecked(flags & 0x00020000);
+    _transGlassCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_GLASS));
     _transGlassCheck->setToolTip("Glass transparency effect");
     connect(_transGlassCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     transparencyLayout->addWidget(_transGlassCheck);
     
     _transSteamCheck = new QCheckBox("Steam Transparency");
-    _transSteamCheck->setChecked(flags & 0x00040000);
+    _transSteamCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_STEAM));
     _transSteamCheck->setToolTip("Steam transparency effect");
     connect(_transSteamCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     transparencyLayout->addWidget(_transSteamCheck);
     
     _transEnergyCheck = new QCheckBox("Energy Transparency");
-    _transEnergyCheck->setChecked(flags & 0x00080000);
+    _transEnergyCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_ENERGY));
     _transEnergyCheck->setToolTip("Energy transparency effect");
     connect(_transEnergyCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
     transparencyLayout->addWidget(_transEnergyCheck);
@@ -1192,19 +1207,19 @@ void ProEditorDialog::setupObjectFlagsGroup(QFormLayout* layout) {
     QVBoxLayout* interactionLayout = new QVBoxLayout(interactionGroup);
     
     _wallTransEndCheck = new QCheckBox("Wall Trans End");
-    _wallTransEndCheck->setChecked(flags & 0x10000000);
+    _wallTransEndCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_WALL_TRANS_END));
     _wallTransEndCheck->setToolTip("Changes transparency egg logic");
     connect(_wallTransEndCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     interactionLayout->addWidget(_wallTransEndCheck);
     
     _lightThruCheck = new QCheckBox("Light Thru");
-    _lightThruCheck->setChecked(flags & 0x20000000);
+    _lightThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_LIGHT_THRU));
     _lightThruCheck->setToolTip("Light passes through");
     connect(_lightThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     interactionLayout->addWidget(_lightThruCheck);
     
     _shootThruCheck = new QCheckBox("Shoot Thru");
-    _shootThruCheck->setChecked(flags & 0x80000000);
+    _shootThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_SHOOT_THRU));
     _shootThruCheck->setToolTip("Projectiles pass through");
     connect(_shootThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
     interactionLayout->addWidget(_shootThruCheck);
@@ -2265,7 +2280,7 @@ void ProEditorDialog::loadWeaponData() {
     
     // Load weapon flags
     if (_weaponEnergyWeaponCheck) {
-        bool isEnergyWeapon = (_pro->weaponData.weaponFlags & static_cast<uint32_t>(Pro::WEAPON_FLAGS::ENERGY_WEAPON)) != 0;
+        bool isEnergyWeapon = Pro::hasFlag(_pro->weaponData.weaponFlags, Pro::WEAPON_FLAGS::ENERGY_WEAPON);
         _weaponEnergyWeaponCheck->setChecked(isEnergyWeapon);
     }
     
@@ -2470,9 +2485,9 @@ void ProEditorDialog::saveWeaponData() {
     
     // Save weapon flags
     if (_weaponEnergyWeaponCheck->isChecked()) {
-        _pro->weaponData.weaponFlags |= static_cast<uint32_t>(Pro::WEAPON_FLAGS::ENERGY_WEAPON);
+        _pro->weaponData.weaponFlags = Pro::setFlag(_pro->weaponData.weaponFlags, Pro::WEAPON_FLAGS::ENERGY_WEAPON);
     } else {
-        _pro->weaponData.weaponFlags &= ~static_cast<uint32_t>(Pro::WEAPON_FLAGS::ENERGY_WEAPON);
+        _pro->weaponData.weaponFlags = Pro::clearFlag(_pro->weaponData.weaponFlags, Pro::WEAPON_FLAGS::ENERGY_WEAPON);
     }
 }
 
@@ -3688,6 +3703,67 @@ void ProEditorDialog::setupCritterTab() {
     _critterFlagsEdit->setToolTip("Critter behavior flags (hex)");
     basicLayout->addRow("Flags:", _critterFlagsEdit);
     
+    // Critter Flags Group
+    QGroupBox* critterFlagsGroup = new QGroupBox("Critter Flags");
+    QVBoxLayout* critterFlagsLayout = new QVBoxLayout(critterFlagsGroup);
+    
+    _critterBarterCheck = new QCheckBox("Can Barter");
+    _critterBarterCheck->setToolTip("Can barter with this critter");
+    connect(_critterBarterCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterBarterCheck);
+    
+    _critterNoStealCheck = new QCheckBox("No Steal");
+    _critterNoStealCheck->setToolTip("Cannot steal from this critter");
+    connect(_critterNoStealCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoStealCheck);
+    
+    _critterNoDropCheck = new QCheckBox("No Drop");
+    _critterNoDropCheck->setToolTip("Cannot drop items");
+    connect(_critterNoDropCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoDropCheck);
+    
+    _critterNoLimbsCheck = new QCheckBox("No Limbs");
+    _critterNoLimbsCheck->setToolTip("No limb damage");
+    connect(_critterNoLimbsCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoLimbsCheck);
+    
+    _critterNoAgeCheck = new QCheckBox("No Age");
+    _critterNoAgeCheck->setToolTip("Does not age");
+    connect(_critterNoAgeCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoAgeCheck);
+    
+    _critterNoHealCheck = new QCheckBox("No Heal");
+    _critterNoHealCheck->setToolTip("Cannot heal");
+    connect(_critterNoHealCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoHealCheck);
+    
+    _critterInvulnerableCheck = new QCheckBox("Invulnerable");
+    _critterInvulnerableCheck->setToolTip("Cannot be damaged");
+    connect(_critterInvulnerableCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterInvulnerableCheck);
+    
+    _critterFlatCheck = new QCheckBox("Flat");
+    _critterFlatCheck->setToolTip("Flat critter");
+    connect(_critterFlatCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterFlatCheck);
+    
+    _critterSpecialDeathCheck = new QCheckBox("Special Death");
+    _critterSpecialDeathCheck->setToolTip("Special death animation");
+    connect(_critterSpecialDeathCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterSpecialDeathCheck);
+    
+    _critterLongLimbsCheck = new QCheckBox("Long Limbs");
+    _critterLongLimbsCheck->setToolTip("Has long limbs");
+    connect(_critterLongLimbsCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterLongLimbsCheck);
+    
+    _critterNoKnockbackCheck = new QCheckBox("No Knockback");
+    _critterNoKnockbackCheck->setToolTip("Cannot be knocked back");
+    connect(_critterNoKnockbackCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoKnockbackCheck);
+    
+    column1Layout->addWidget(critterFlagsGroup);
+    
     _critterAgeEdit = new QSpinBox();
     _critterAgeEdit->setRange(0, MAX_AGE);
     _critterAgeEdit->setToolTip("Critter age");
@@ -4139,6 +4215,19 @@ void ProEditorDialog::loadCritterData() {
     if (_critterAIPacketEdit) _critterAIPacketEdit->setValue(static_cast<int>(critterData.aiPacket));
     if (_critterTeamNumberEdit) _critterTeamNumberEdit->setValue(static_cast<int>(critterData.teamNumber));
     if (_critterFlagsEdit) _critterFlagsEdit->setValue(static_cast<int>(critterData.flags));
+    
+    // Load critter flag checkboxes
+    if (_critterBarterCheck) _critterBarterCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_BARTER));
+    if (_critterNoStealCheck) _critterNoStealCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_NO_STEAL));
+    if (_critterNoDropCheck) _critterNoDropCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_NO_DROP));
+    if (_critterNoLimbsCheck) _critterNoLimbsCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_NO_LIMBS));
+    if (_critterNoAgeCheck) _critterNoAgeCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_NO_AGE));
+    if (_critterNoHealCheck) _critterNoHealCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_NO_HEAL));
+    if (_critterInvulnerableCheck) _critterInvulnerableCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_INVULNERABLE));
+    if (_critterFlatCheck) _critterFlatCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_FLAT));
+    if (_critterSpecialDeathCheck) _critterSpecialDeathCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_SPECIAL_DEATH));
+    if (_critterLongLimbsCheck) _critterLongLimbsCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_LONG_LIMBS));
+    if (_critterNoKnockbackCheck) _critterNoKnockbackCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_NO_KNOCKBACK));
     if (_critterMaxHitPointsEdit) _critterMaxHitPointsEdit->setValue(static_cast<int>(critterData.maxHitPoints));
     if (_critterActionPointsEdit) _critterActionPointsEdit->setValue(static_cast<int>(critterData.actionPoints));
     if (_critterArmorClassEdit) _critterArmorClassEdit->setValue(static_cast<int>(critterData.armorClass));
@@ -4261,7 +4350,25 @@ void ProEditorDialog::saveCritterData() {
     if (_critterHeadFIDLabel) critterData.headFID = static_cast<uint32_t>(_critterHeadFID);
     if (_critterAIPacketEdit) critterData.aiPacket = static_cast<uint32_t>(_critterAIPacketEdit->value());
     if (_critterTeamNumberEdit) critterData.teamNumber = static_cast<uint32_t>(_critterTeamNumberEdit->value());
-    if (_critterFlagsEdit) critterData.flags = static_cast<uint32_t>(_critterFlagsEdit->value());
+    
+    // Save critter flags from checkboxes (preferred) or numeric field (fallback)
+    if (_critterBarterCheck) {
+        uint32_t flags = 0;
+        if (_critterBarterCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_BARTER);
+        if (_critterNoStealCheck && _critterNoStealCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_STEAL);
+        if (_critterNoDropCheck && _critterNoDropCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_DROP);
+        if (_critterNoLimbsCheck && _critterNoLimbsCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_LIMBS);
+        if (_critterNoAgeCheck && _critterNoAgeCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_AGE);
+        if (_critterNoHealCheck && _critterNoHealCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_HEAL);
+        if (_critterInvulnerableCheck && _critterInvulnerableCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_INVULNERABLE);
+        if (_critterFlatCheck && _critterFlatCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_FLAT);
+        if (_critterSpecialDeathCheck && _critterSpecialDeathCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_SPECIAL_DEATH);
+        if (_critterLongLimbsCheck && _critterLongLimbsCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_LONG_LIMBS);
+        if (_critterNoKnockbackCheck && _critterNoKnockbackCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_KNOCKBACK);
+        critterData.flags = flags;
+    } else if (_critterFlagsEdit) {
+        critterData.flags = static_cast<uint32_t>(_critterFlagsEdit->value());
+    }
     if (_critterMaxHitPointsEdit) critterData.maxHitPoints = static_cast<uint32_t>(_critterMaxHitPointsEdit->value());
     if (_critterActionPointsEdit) critterData.actionPoints = static_cast<uint32_t>(_critterActionPointsEdit->value());
     if (_critterArmorClassEdit) critterData.armorClass = static_cast<uint32_t>(_critterArmorClassEdit->value());
@@ -4525,41 +4632,12 @@ void ProEditorDialog::loadNameAndDescription() {
     
     try {
         auto& resourceManager = ResourceManager::getInstance();
-        
-        // Determine MSG file based on object type
-        std::string msgFileName;
-        switch (_pro->type()) {
-            case Pro::OBJECT_TYPE::ITEM:
-                msgFileName = "text/english/game/pro_item.msg";
-                break;
-            case Pro::OBJECT_TYPE::CRITTER:
-                msgFileName = "text/english/game/pro_crit.msg";
-                break;
-            case Pro::OBJECT_TYPE::SCENERY:
-                msgFileName = "text/english/game/pro_scen.msg";
-                break;
-            case Pro::OBJECT_TYPE::WALL:
-                msgFileName = "text/english/game/pro_wall.msg";
-                break;
-            case Pro::OBJECT_TYPE::TILE:
-                msgFileName = "text/english/game/pro_tile.msg";
-                break;
-            case Pro::OBJECT_TYPE::MISC:
-                msgFileName = "text/english/game/pro_misc.msg";
-                break;
-            default:
-                _nameLabel->setText("Unknown object type");
-                _descriptionLabel->setPlainText("Cannot load description for unknown object type");
-                return;
-        }
-        
-        
-        // Load the MSG file
-        const auto* msgFile = resourceManager.loadResource<Msg>(msgFileName);
+
+        const auto* msgFile = ProHelper::msgFile(_pro->type());
         if (!msgFile) {
             _nameLabel->setText("MSG file not found");
-            _descriptionLabel->setPlainText(QString("Could not load: %1").arg(QString::fromStdString(msgFileName)));
-            spdlog::warn("ProEditorDialog::loadNameAndDescription() - MSG file not found: {}", msgFileName);
+            _descriptionLabel->setPlainText(QString("Could not load MSG file for %1").arg(QString::fromStdString(_pro->typeToString())));
+            spdlog::warn("ProEditorDialog::loadNameAndDescription() - MSG file not found for {}", _pro->typeToString());
             return;
         }
         
@@ -5073,37 +5151,37 @@ void ProEditorDialog::onExtendedFlagChanged() {
     flags |= Pro::setAnimationSecondary(flags, _animationSecondaryEdit ? _animationSecondaryEdit->value() : 0);
     
     if (_bigGunCheck && _bigGunCheck->isChecked()) {
-        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::BIG_GUN);
+        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::BIG_GUN);
     }
     if (_twoHandedCheck && _twoHandedCheck->isChecked()) {
-        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::TWO_HANDED);
+        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::TWO_HANDED);
     }
     if (_canUseCheck && _canUseCheck->isChecked()) {
-        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE);
+        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::CAN_USE);
     }
     if (_canUseOnCheck && _canUseOnCheck->isChecked()) {
-        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::CAN_USE_ON);
+        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::CAN_USE_ON);
     }
     if (_generalFlagCheck && _generalFlagCheck->isChecked()) {
-        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::GENERAL_FLAG);
+        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::GENERAL_FLAG);
     }
     if (_interactionFlagCheck && _interactionFlagCheck->isChecked()) {
-        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::INTERACTION_FLAG);
+        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::INTERACTION_FLAG);
     }
     if (_itemHiddenCheck && _itemHiddenCheck->isChecked()) {
-        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::ITEM_HIDDEN);
+        flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_HIDDEN);
     }
     if (_lightFlag1Check && _lightFlag1Check->isChecked()) {
-        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_1);
+        flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_WALL_TRANS_END);
     }
     if (_lightFlag2Check && _lightFlag2Check->isChecked()) {
-        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_2);
+        flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_LIGHT_THRU);
     }
     if (_lightFlag3Check && _lightFlag3Check->isChecked()) {
-        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_3);
+        flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_SEEN);
     }
     if (_lightFlag4Check && _lightFlag4Check->isChecked()) {
-        flags |= static_cast<uint32_t>(Pro::EXTENDED_FLAGS::LIGHT_FLAG_4);
+        flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_SHOOT_THRU);
     }
     
     
@@ -5276,18 +5354,18 @@ void ProEditorDialog::onObjectFlagChanged() {
     uint32_t flags = 0;
     
     // Rendering flags
-    if (_flatCheck && _flatCheck->isChecked()) flags |= 0x00000008;
-    if (_noBlockCheck && _noBlockCheck->isChecked()) flags |= 0x00000010;
-    if (_multiHexCheck && _multiHexCheck->isChecked()) flags |= 0x00000800;
-    if (_noHighlightCheck && _noHighlightCheck->isChecked()) flags |= 0x00001000;
+    if (_flatCheck && _flatCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_FLAT);
+    if (_noBlockCheck && _noBlockCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK);
+    if (_multiHexCheck && _multiHexCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_MULTIHEX);
+    if (_noHighlightCheck && _noHighlightCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_NO_HIGHLIGHT);
     
     // Transparency flags (keep existing transparency values)
     flags |= (_pro->header.flags & 0x000FC000); // Preserve transparency bits
     
     // Interaction flags
-    if (_wallTransEndCheck && _wallTransEndCheck->isChecked()) flags |= 0x10000000;
-    if (_lightThruCheck && _lightThruCheck->isChecked()) flags |= 0x20000000;
-    if (_shootThruCheck && _shootThruCheck->isChecked()) flags |= 0x80000000;
+    if (_wallTransEndCheck && _wallTransEndCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_WALL_TRANS_END);
+    if (_lightThruCheck && _lightThruCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_LIGHT_THRU);
+    if (_shootThruCheck && _shootThruCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_SHOOT_THRU);
     
     // Update the PRO data
     _pro->header.flags = flags;
@@ -5310,12 +5388,12 @@ void ProEditorDialog::onTransparencyFlagChanged() {
     uint32_t flags = _pro->header.flags & ~0x000FC000; // Clear transparency bits
     
     // Add the selected transparency flag
-    if (sender == _transNoneCheck) flags |= 0x00008000;
-    else if (sender == _transRedCheck) flags |= 0x00004000;
-    else if (sender == _transWallCheck) flags |= 0x00010000;
-    else if (sender == _transGlassCheck) flags |= 0x00020000;
-    else if (sender == _transSteamCheck) flags |= 0x00040000;
-    else if (sender == _transEnergyCheck) flags |= 0x00080000;
+    if (sender == _transNoneCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_NONE);
+    else if (sender == _transRedCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_RED);
+    else if (sender == _transWallCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_WALL);
+    else if (sender == _transGlassCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_GLASS);
+    else if (sender == _transSteamCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_STEAM);
+    else if (sender == _transEnergyCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_ENERGY);
     
     // Update the PRO data
     _pro->header.flags = flags;
@@ -5921,6 +5999,35 @@ void ProEditorDialog::loadPerkNames() {
     } catch (const std::exception& e) {
         spdlog::warn("ProEditorDialog: Failed to load 'No perk' message: {}", e.what());
         _perkNames.append("No perk");
+    }
+}
+
+void ProEditorDialog::onCritterFlagChanged() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::CRITTER) {
+        return;
+    }
+    
+    // Calculate combined critter flags value from all checkboxes
+    uint32_t flags = 0;
+    
+    if (_critterBarterCheck && _critterBarterCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_BARTER);
+    if (_critterNoStealCheck && _critterNoStealCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_STEAL);
+    if (_critterNoDropCheck && _critterNoDropCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_DROP);
+    if (_critterNoLimbsCheck && _critterNoLimbsCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_LIMBS);
+    if (_critterNoAgeCheck && _critterNoAgeCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_AGE);
+    if (_critterNoHealCheck && _critterNoHealCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_HEAL);
+    if (_critterInvulnerableCheck && _critterInvulnerableCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_INVULNERABLE);
+    if (_critterFlatCheck && _critterFlatCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_FLAT);
+    if (_critterSpecialDeathCheck && _critterSpecialDeathCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_SPECIAL_DEATH);
+    if (_critterLongLimbsCheck && _critterLongLimbsCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_LONG_LIMBS);
+    if (_critterNoKnockbackCheck && _critterNoKnockbackCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_KNOCKBACK);
+    
+    // Update the PRO data
+    _pro->critterData.flags = flags;
+    
+    // Also update the numeric display if it exists
+    if (_critterFlagsEdit) {
+        _critterFlagsEdit->setValue(static_cast<int>(flags));
     }
 }
 

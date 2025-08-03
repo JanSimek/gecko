@@ -57,11 +57,58 @@ public:
         ENERGY_WEAPON = 0x00000001  // Forces weapon to use Energy Weapons skill (sfall 4.2/3.8.20)
     };
     
-    // Extended Flags constants (flags_ext field) - based on Fallout 2 engine analysis
-    enum class EXTENDED_FLAGS : uint32_t {
+    // Object Flags - from Fallout 2 CE obj_types.h
+    enum class ObjectFlags : uint32_t {
         // Animation control flags (low 8 bits)
         ANIMATION_PRIMARY_MASK      = 0x0000000F,  // Primary attack animation index (bits 0-3)
         ANIMATION_SECONDARY_MASK    = 0x000000F0,  // Secondary attack animation index (bits 4-7)
+
+        OBJECT_HIDDEN = 0x01,                // Object is hidden from view
+        OBJECT_NO_SAVE = 0x04,              // Specifies that the object should not be saved to the savegame file
+        OBJECT_FLAT = 0x08,                 // Flat object (no height)
+        OBJECT_NO_BLOCK = 0x10,             // Does not block movement
+        OBJECT_LIGHTING = 0x20,             // Has lighting
+        OBJECT_NO_REMOVE = 0x400,           // Specifies that the object should not be removed (freed) from the game world
+        OBJECT_MULTIHEX = 0x800,            // Occupies multiple hexes
+        OBJECT_NO_HIGHLIGHT = 0x1000,       // Cannot be highlighted
+        OBJECT_QUEUED = 0x2000,             // Set if there was/is any event for the object
+        OBJECT_TRANS_RED = 0x4000,          // Red transparency
+        OBJECT_TRANS_NONE = 0x8000,         // No transparency
+        OBJECT_TRANS_WALL = 0x10000,        // Wall transparency
+        OBJECT_TRANS_GLASS = 0x20000,       // Glass transparency
+        OBJECT_TRANS_STEAM = 0x40000,       // Steam transparency
+        OBJECT_TRANS_ENERGY = 0x80000,      // Energy transparency
+        OBJECT_IN_LEFT_HAND = 0x1000000,    // In left hand
+        OBJECT_IN_RIGHT_HAND = 0x2000000,   // In right hand
+        OBJECT_WORN = 0x4000000,            // Being worn
+        OBJECT_WALL_TRANS_END = 0x10000000, // Wall transparency end
+        OBJECT_LIGHT_THRU = 0x20000000,     // Light passes through
+        OBJECT_SEEN = 0x40000000,           // Has been seen
+        OBJECT_SHOOT_THRU = 0x80000000,     // Can shoot through
+        
+        // Composite flags
+        OBJECT_IN_ANY_HAND = OBJECT_IN_LEFT_HAND | OBJECT_IN_RIGHT_HAND,
+        OBJECT_EQUIPPED = OBJECT_IN_ANY_HAND | OBJECT_WORN,
+        OBJECT_OPEN_DOOR = OBJECT_SHOOT_THRU | OBJECT_LIGHT_THRU | OBJECT_NO_BLOCK,
+    };
+    
+    // Critter Flags - from Fallout 2 CE obj_types.h
+    enum class CritterFlags : uint32_t {
+        CRITTER_BARTER = 0x02,         // Can barter with
+        CRITTER_NO_STEAL = 0x20,       // Cannot steal from
+        CRITTER_NO_DROP = 0x40,        // Cannot drop items
+        CRITTER_NO_LIMBS = 0x80,       // No limb damage
+        CRITTER_NO_AGE = 0x100,        // Does not age
+        CRITTER_NO_HEAL = 0x200,       // Cannot heal
+        CRITTER_INVULNERABLE = 0x400,  // Cannot be damaged
+        CRITTER_FLAT = 0x800,          // Flat critter
+        CRITTER_SPECIAL_DEATH = 0x1000, // Special death animation
+        CRITTER_LONG_LIMBS = 0x2000,   // Has long limbs
+        CRITTER_NO_KNOCKBACK = 0x4000, // Cannot be knocked back
+    };
+    
+    // Extended Item Flags
+    enum class ExtendedItemFlags : uint32_t {
         
         // Weapon behavior flags
         BIG_GUN                     = 0x00000100,  // Forces weapon to use Big Guns skill instead of Small Guns
@@ -74,30 +121,45 @@ public:
         INTERACTION_FLAG            = 0x00008000,  // Related to item interactions
         
         // Special item flags
+        // This flag is used on weapons to indicate that's an natural (integral)
+        // part of it's owner, for example Claw, or Robot's Rocket Launcher. Items
+        // with this flag on do count toward total weight and cannot be dropped.
         ITEM_HIDDEN                 = 0x08000000,  // Item is integral part of owner, cannot be dropped (creature weapons)
-        
-        // Light/rendering flags (high bits)
-        LIGHT_FLAG_1                = 0x10000000,  // Light rendering flag
-        LIGHT_FLAG_2                = 0x20000000,  // Light rendering flag
-        LIGHT_FLAG_3                = 0x40000000,  // Light rendering flag
-        LIGHT_FLAG_4                = 0x80000000   // Light rendering flag
     };
-    
+
     // Extended flags helper functions
     static constexpr uint32_t getAnimationPrimary(uint32_t flags) {
-        return flags & static_cast<uint32_t>(EXTENDED_FLAGS::ANIMATION_PRIMARY_MASK);
+        return flags & static_cast<uint32_t>(ObjectFlags::ANIMATION_PRIMARY_MASK);
     }
     
     static constexpr uint32_t getAnimationSecondary(uint32_t flags) {
-        return (flags & static_cast<uint32_t>(EXTENDED_FLAGS::ANIMATION_SECONDARY_MASK)) >> 4;
+        return (flags & static_cast<uint32_t>(ObjectFlags::ANIMATION_SECONDARY_MASK)) >> 4;
     }
     
     static constexpr uint32_t setAnimationPrimary(uint32_t flags, uint32_t animation) {
-        return (flags & ~static_cast<uint32_t>(EXTENDED_FLAGS::ANIMATION_PRIMARY_MASK)) | (animation & 0xF);
+        return (flags & ~static_cast<uint32_t>(ObjectFlags::ANIMATION_PRIMARY_MASK)) | (animation & 0xF);
     }
     
     static constexpr uint32_t setAnimationSecondary(uint32_t flags, uint32_t animation) {
-        return (flags & ~static_cast<uint32_t>(EXTENDED_FLAGS::ANIMATION_SECONDARY_MASK)) | ((animation & 0xF) << 4);
+        return (flags & ~static_cast<uint32_t>(ObjectFlags::ANIMATION_SECONDARY_MASK)) | ((animation & 0xF) << 4);
+    }
+    
+    // Helper function to check if a flag is set
+    template<typename FlagEnum>
+    static constexpr bool hasFlag(uint32_t flags, FlagEnum flag) {
+        return (flags & static_cast<uint32_t>(flag)) != 0;
+    }
+    
+    // Helper function to set a flag
+    template<typename FlagEnum>
+    static constexpr uint32_t setFlag(uint32_t flags, FlagEnum flag) {
+        return flags | static_cast<uint32_t>(flag);
+    }
+    
+    // Helper function to clear a flag
+    template<typename FlagEnum>
+    static constexpr uint32_t clearFlag(uint32_t flags, FlagEnum flag) {
+        return flags & ~static_cast<uint32_t>(flag);
     }
 
     struct ProHeader {
