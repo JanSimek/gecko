@@ -27,6 +27,7 @@
 #include "../../format/pro/Pro.h"
 #include "../../format/msg/Msg.h"
 #include "../../util/ResourceManager.h"
+#include "../widgets/ObjectPreviewWidget.h"
 
 namespace geck {
 
@@ -49,7 +50,6 @@ public:
     static constexpr int PREVIEW_COMPACT_WIDTH = 180;
     static constexpr int PREVIEW_COMPACT_HEIGHT = 150;
     static constexpr int PREVIEW_MIN_HEIGHT = 200;
-    static constexpr int PREVIEW_MAX_HEIGHT = 250;
     static constexpr int PREVIEW_ITEM_SIZE = 120;
     static constexpr int PREVIEW_FULL_MIN_HEIGHT = 150;
     static constexpr int PREVIEW_FULL_MAX_HEIGHT = 200;
@@ -153,6 +153,8 @@ private slots:
     void onArmorFemaleFidSelectorClicked();
     void onCritterHeadFidSelectorClicked();
     void onCritterFlagChanged();
+    void onObjectFidChangeRequested();
+    void onObjectFidChanged(int32_t newFid);
     void onPlayPauseClicked();
     void onFrameChanged(int frame);
     void onDirectionChanged(int direction);
@@ -190,9 +192,6 @@ private:
     void setupWallFields();
     void setupTileFields();
     void setupMiscFields();
-    void setupPreview();
-    void setupDualPreview();
-    void setupArmorPreview();
     void setupAnimationControls();
     void setupArmorAnimationControls();
     void setupCommonTab();
@@ -450,11 +449,12 @@ private:
     QVBoxLayout* _leftFieldsLayout;
     QVBoxLayout* _rightFieldsLayout;
     
-    // Preview panel
-    QWidget* _previewPanel;
-    QVBoxLayout* _previewLayout;
+    // Preview panel (for items only)
     QGroupBox* _previewGroup;
     QLabel* _previewLabel;
+    
+    // Object preview widget
+    ObjectPreviewWidget* _objectPreviewWidget;
     
     // Dual preview system
     QWidget* _dualPreviewWidget;
@@ -478,7 +478,7 @@ private:
     QComboBox* _armorDirectionCombo;
     QTimer* _armorAnimationTimer;
     
-    // Animation controls
+    // Animation controls (non-critter types still use old system)
     QWidget* _animationControls;
     QHBoxLayout* _animationLayout;
     QPushButton* _playPauseButton;
@@ -487,7 +487,7 @@ private:
     QComboBox* _directionCombo;
     QTimer* _animationTimer;
     
-    // Animation state
+    // Animation state (non-critter types)
     int _currentFrame;
     int _currentDirection;
     int _totalFrames;

@@ -85,6 +85,8 @@ set(GECK_SOURCES
     ui/widgets/GameLocationWidget.cpp
     ui/widgets/TextEditorWidget.h
     ui/widgets/TextEditorWidget.cpp
+    ui/widgets/ObjectPreviewWidget.h
+    ui/widgets/ObjectPreviewWidget.cpp
 
     # Qt6 UI Constants
     ui/UIConstants.h

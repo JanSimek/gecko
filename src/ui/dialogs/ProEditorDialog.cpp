@@ -30,10 +30,9 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _contentLayout(nullptr)
     , _tabWidget(nullptr)
     , _buttonBox(nullptr)
-    , _previewPanel(nullptr)
-    , _previewLayout(nullptr)
     , _previewGroup(nullptr)
     , _previewLabel(nullptr)
+    , _objectPreviewWidget(nullptr)
     , _dualPreviewWidget(nullptr)
     , _dualPreviewLayout(nullptr)
     , _inventoryPreviewGroup(nullptr)
@@ -410,41 +409,16 @@ void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
     
     // Only show main preview image if no specialized previews
     if (!hasSpecializedPreview) {
-        // Main preview image - smaller than original
-        _previewLabel = new QLabel();
-        _previewLabel->setAlignment(Qt::AlignCenter);
-        _previewLabel->setFixedSize(PREVIEW_COMPACT_WIDTH, PREVIEW_COMPACT_HEIGHT);  // Compact size
-        _previewLabel->setScaledContents(false);
-        _previewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
-        _previewLabel->setText("No FRM");
-        previewLayout->addWidget(_previewLabel);
+        // Use ObjectPreviewWidget for non-item objects (all with full animation controls)
+        _objectPreviewWidget = new ObjectPreviewWidget();
         
-        // FID field with selector button (compact)
-        QWidget* fidWidget = new QWidget();
-        QHBoxLayout* fidLayout = new QHBoxLayout(fidWidget);
-        fidLayout->setContentsMargins(0, 0, 0, 0);
-        fidLayout->setSpacing(4);
+        // Connect signals
+        connect(_objectPreviewWidget, &ObjectPreviewWidget::fidChangeRequested, 
+                this, &ProEditorDialog::onObjectFidChangeRequested);
+        connect(_objectPreviewWidget, &ObjectPreviewWidget::fidChanged, 
+                this, &ProEditorDialog::onObjectFidChanged);
         
-        _fidLabel = new QLabel("0");
-        _fidLabel->setStyleSheet("QLabel { border: 1px solid #e2e8f0; padding: 2px 4px; background-color: white; font-family: monospace; }");
-        _fidLabel->setToolTip("Current FID value");
-        
-        _fidSelectorButton = new QPushButton("...");
-        _fidSelectorButton->setMaximumWidth(24);
-        _fidSelectorButton->setMaximumHeight(22);
-        _fidSelectorButton->setToolTip("Browse FRM files");
-        connect(_fidSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onFidSelectorClicked);
-        
-        QLabel* fidLabel = new QLabel("FID:");
-        fidLabel->setFixedWidth(30);
-        
-        fidLayout->addWidget(fidLabel);
-        fidLayout->addWidget(_fidLabel, 1);
-        fidLayout->addWidget(_fidSelectorButton);
-        previewLayout->addWidget(fidWidget);
-        
-        // Compact animation controls (only for animated FRMs)
-        setupCompactAnimationControls(previewLayout);
+        previewLayout->addWidget(_objectPreviewWidget);
     }
     
     // Handle dual preview for items (inventory/ground) if needed
@@ -1324,260 +1298,6 @@ void ProEditorDialog::setupObjectFlagsGroup(QFormLayout* layout) {
 
 
 
-void ProEditorDialog::setupPreview() {
-    _previewPanel = new QWidget();
-    _previewLayout = new QVBoxLayout(_previewPanel);
-    
-    // Setup dual preview system for items, single preview for others
-    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        setupDualPreview();
-        
-        // Add armor preview for armor items
-        if (_pro->itemType() == Pro::ITEM_TYPE::ARMOR) {
-            setupArmorPreview();
-            _previewLayout->addWidget(_armorPreviewGroup);
-        }
-    } else {
-        // Original single preview for non-items
-        _previewGroup = new QGroupBox("FRM Preview");
-        QVBoxLayout* previewGroupLayout = new QVBoxLayout(_previewGroup);
-        
-        _previewLabel = new QLabel();
-        _previewLabel->setAlignment(Qt::AlignCenter);
-        _previewLabel->setMinimumHeight(PREVIEW_MIN_HEIGHT);
-        _previewLabel->setMaximumHeight(PREVIEW_MAX_HEIGHT);
-        _previewLabel->setMinimumWidth(250);
-        _previewLabel->setScaledContents(false);
-        _previewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
-        _previewLabel->setText("No FRM loaded");
-        previewGroupLayout->addWidget(_previewLabel);
-        
-        // Add FID field between image and animation controls
-        QWidget* fidWidget = new QWidget();
-        QHBoxLayout* fidLayout = new QHBoxLayout(fidWidget);
-        fidLayout->setContentsMargins(0, 0, 0, 0);
-        
-        QLabel* fidLabel = new QLabel("FID:");
-        fidLabel->setMinimumWidth(30);
-        _fidLabel = new QLabel("No FRM");
-        _fidLabel->setToolTip("FRM filename for ground/world view");
-        _fidLabel->setStyleSheet("QLabel { border: 1px solid gray; padding: 2px; background-color: white; }");
-        
-        _fidSelectorButton = new QPushButton("...");
-        _fidSelectorButton->setMaximumWidth(30);
-        _fidSelectorButton->setToolTip("Browse FRM files");
-        connect(_fidSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onFidSelectorClicked);
-        
-        fidLayout->addWidget(fidLabel);
-        fidLayout->addWidget(_fidLabel);
-        fidLayout->addWidget(_fidSelectorButton);
-        previewGroupLayout->addWidget(fidWidget);
-        
-        // Add animation controls to single preview
-        setupAnimationControls();
-        previewGroupLayout->addWidget(_animationControls);
-        
-        _previewLayout->addWidget(_previewGroup);
-    }
-    
-    // Animation controls are set up in setupAnimationControls() or setupDualPreview()  
-    _previewLayout->addStretch(); // Push preview to top
-}
-
-void ProEditorDialog::setupDualPreview() {
-    // Create unified FRM Preview group box
-    _previewGroup = new QGroupBox("FRM Preview");
-    QVBoxLayout* previewGroupLayout = new QVBoxLayout(_previewGroup);
-    
-    // Create horizontal container for the two preview images
-    QWidget* imagesContainer = new QWidget();
-    QHBoxLayout* imagesLayout = new QHBoxLayout(imagesContainer);
-    
-    // Left side - Inventory preview with label and FID field
-    QWidget* inventoryContainer = new QWidget();
-    QVBoxLayout* inventoryLayout = new QVBoxLayout(inventoryContainer);
-    inventoryLayout->setContentsMargins(0, 0, 0, 0);
-    
-    // Inventory label
-    QLabel* inventoryTitleLabel = new QLabel("Inventory View");
-    inventoryTitleLabel->setAlignment(Qt::AlignCenter);
-    inventoryTitleLabel->setStyleSheet("QLabel { font-weight: bold; margin-bottom: 5px; }");
-    inventoryLayout->addWidget(inventoryTitleLabel);
-    
-    // Inventory preview image
-    _inventoryPreviewLabel = new QLabel();
-    _inventoryPreviewLabel->setAlignment(Qt::AlignCenter);
-    _inventoryPreviewLabel->setMinimumHeight(PREVIEW_FULL_MIN_HEIGHT);
-    _inventoryPreviewLabel->setMaximumHeight(PREVIEW_FULL_MAX_HEIGHT);
-    _inventoryPreviewLabel->setMinimumWidth(PREVIEW_FULL_MIN_WIDTH);
-    _inventoryPreviewLabel->setScaledContents(false);
-    _inventoryPreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
-    _inventoryPreviewLabel->setText("No inventory FRM");
-    inventoryLayout->addWidget(_inventoryPreviewLabel);
-    
-    // Inventory FID field (moved from Common tab)
-    QWidget* invFidWidget = new QWidget();
-    QHBoxLayout* invFidLayout = new QHBoxLayout(invFidWidget);
-    invFidLayout->setContentsMargins(0, 0, 0, 0);
-    
-    QLabel* invFidLabel = new QLabel("Inventory FID:");
-    invFidLabel->setMinimumWidth(80);
-    _inventoryFIDLabel = new QLabel("No FRM");
-    _inventoryFIDLabel->setToolTip("FRM filename for inventory/interface view");
-    _inventoryFIDLabel->setStyleSheet("QLabel { border: 1px solid gray; padding: 2px; background-color: white; }");
-    
-    _inventoryFIDSelectorButton = new QPushButton("...");
-    _inventoryFIDSelectorButton->setMaximumWidth(30);
-    _inventoryFIDSelectorButton->setToolTip("Browse FRM files for inventory view");
-    connect(_inventoryFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onInventoryFidSelectorClicked);
-    
-    invFidLayout->addWidget(invFidLabel);
-    invFidLayout->addWidget(_inventoryFIDLabel);
-    invFidLayout->addWidget(_inventoryFIDSelectorButton);
-    inventoryLayout->addWidget(invFidWidget);
-    
-    // Right side - Ground preview with label and FID field  
-    QWidget* groundContainer = new QWidget();
-    QVBoxLayout* groundLayout = new QVBoxLayout(groundContainer);
-    groundLayout->setContentsMargins(0, 0, 0, 0);
-    
-    // Ground label
-    QLabel* groundTitleLabel = new QLabel("Ground View");
-    groundTitleLabel->setAlignment(Qt::AlignCenter);
-    groundTitleLabel->setStyleSheet("QLabel { font-weight: bold; margin-bottom: 5px; }");
-    groundLayout->addWidget(groundTitleLabel);
-    
-    // Ground preview image
-    _groundPreviewLabel = new QLabel();
-    _groundPreviewLabel->setAlignment(Qt::AlignCenter);
-    _groundPreviewLabel->setMinimumHeight(PREVIEW_FULL_MIN_HEIGHT);
-    _groundPreviewLabel->setMaximumHeight(PREVIEW_FULL_MAX_HEIGHT);
-    _groundPreviewLabel->setMinimumWidth(PREVIEW_FULL_MIN_WIDTH);
-    _groundPreviewLabel->setScaledContents(false);
-    _groundPreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
-    _groundPreviewLabel->setText("No ground FRM");
-    groundLayout->addWidget(_groundPreviewLabel);
-    
-    // Ground FID field (main FID)
-    QWidget* groundFidWidget = new QWidget();
-    QHBoxLayout* groundFidLayout = new QHBoxLayout(groundFidWidget);
-    groundFidLayout->setContentsMargins(0, 0, 0, 0);
-    
-    QLabel* groundFidLabel = new QLabel("FID:");
-    groundFidLabel->setMinimumWidth(80);
-    _fidLabel = new QLabel("No FRM");
-    _fidLabel->setToolTip("FRM filename for ground/world view");
-    _fidLabel->setStyleSheet("QLabel { border: 1px solid gray; padding: 2px; background-color: white; }");
-    
-    _fidSelectorButton = new QPushButton("...");
-    _fidSelectorButton->setMaximumWidth(30);
-    _fidSelectorButton->setToolTip("Browse FRM files");
-    connect(_fidSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onFidSelectorClicked);
-    
-    groundFidLayout->addWidget(groundFidLabel);
-    groundFidLayout->addWidget(_fidLabel);
-    groundFidLayout->addWidget(_fidSelectorButton);
-    groundLayout->addWidget(groundFidWidget);
-    
-    // Add both containers to images layout
-    imagesLayout->addWidget(inventoryContainer);
-    imagesLayout->addWidget(groundContainer);
-    previewGroupLayout->addWidget(imagesContainer);
-    
-    // Add the unified preview group to the main preview layout
-    _previewLayout->addWidget(_previewGroup);
-    
-    // No copy buttons or animation controls - items use static dual preview
-}
-
-void ProEditorDialog::setupArmorPreview() {
-    // Create armor preview group box
-    _armorPreviewGroup = new QGroupBox("Armor Preview");
-    QVBoxLayout* armorPreviewLayout = new QVBoxLayout(_armorPreviewGroup);
-    
-    // Create horizontal container for the two armor preview images
-    QWidget* armorImagesContainer = new QWidget();
-    QHBoxLayout* armorImagesLayout = new QHBoxLayout(armorImagesContainer);
-    
-    // Left side - Male armor preview with label and FID field
-    QWidget* maleContainer = new QWidget();
-    QVBoxLayout* maleLayout = new QVBoxLayout(maleContainer);
-    maleLayout->setContentsMargins(0, 0, 0, 0);
-    
-    // Male armor label
-    QLabel* maleTitleLabel = new QLabel("Male Armor");
-    maleTitleLabel->setAlignment(Qt::AlignCenter);
-    maleTitleLabel->setStyleSheet("QLabel { font-weight: bold; margin-bottom: 5px; }");
-    maleLayout->addWidget(maleTitleLabel);
-    
-    // Male armor preview image
-    _armorMalePreviewLabel = new QLabel();
-    _armorMalePreviewLabel->setAlignment(Qt::AlignCenter);
-    _armorMalePreviewLabel->setMinimumHeight(PREVIEW_FULL_MIN_HEIGHT);
-    _armorMalePreviewLabel->setMaximumHeight(PREVIEW_FULL_MAX_HEIGHT);
-    _armorMalePreviewLabel->setMinimumWidth(PREVIEW_FULL_MIN_WIDTH);
-    _armorMalePreviewLabel->setScaledContents(false);
-    _armorMalePreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
-    _armorMalePreviewLabel->setText("No male armor FRM");
-    maleLayout->addWidget(_armorMalePreviewLabel);
-    
-    // Male armor FID field (moved from Armor tab)
-    QWidget* maleFidWidget = new QWidget();
-    QHBoxLayout* maleFidLayout = new QHBoxLayout(maleFidWidget);
-    maleFidLayout->setContentsMargins(0, 0, 0, 0);
-    
-    QLabel* maleFidLabel = new QLabel("Male FID:");
-    maleFidLabel->setMinimumWidth(60);
-    maleFidLayout->addWidget(maleFidLabel);
-    maleFidLayout->addWidget(_armorMaleFIDLabel);
-    maleFidLayout->addWidget(_armorMaleFIDSelectorButton);
-    maleLayout->addWidget(maleFidWidget);
-    
-    // Right side - Female armor preview with label and FID field  
-    QWidget* femaleContainer = new QWidget();
-    QVBoxLayout* femaleLayout = new QVBoxLayout(femaleContainer);
-    femaleLayout->setContentsMargins(0, 0, 0, 0);
-    
-    // Female armor label
-    QLabel* femaleTitleLabel = new QLabel("Female Armor");
-    femaleTitleLabel->setAlignment(Qt::AlignCenter);
-    femaleTitleLabel->setStyleSheet("QLabel { font-weight: bold; margin-bottom: 5px; }");
-    femaleLayout->addWidget(femaleTitleLabel);
-    
-    // Female armor preview image
-    _armorFemalePreviewLabel = new QLabel();
-    _armorFemalePreviewLabel->setAlignment(Qt::AlignCenter);
-    _armorFemalePreviewLabel->setMinimumHeight(PREVIEW_FULL_MIN_HEIGHT);
-    _armorFemalePreviewLabel->setMaximumHeight(PREVIEW_FULL_MAX_HEIGHT);
-    _armorFemalePreviewLabel->setMinimumWidth(PREVIEW_FULL_MIN_WIDTH);
-    _armorFemalePreviewLabel->setScaledContents(false);
-    _armorFemalePreviewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
-    _armorFemalePreviewLabel->setText("No female armor FRM");
-    femaleLayout->addWidget(_armorFemalePreviewLabel);
-    
-    // Female armor FID field (moved from Armor tab)
-    QWidget* femaleFidWidget = new QWidget();
-    QHBoxLayout* femaleFidLayout = new QHBoxLayout(femaleFidWidget);
-    femaleFidLayout->setContentsMargins(0, 0, 0, 0);
-    
-    QLabel* femaleFidLabel = new QLabel("Female FID:");
-    femaleFidLabel->setMinimumWidth(60);
-    femaleFidLayout->addWidget(femaleFidLabel);
-    femaleFidLayout->addWidget(_armorFemaleFIDLabel);
-    femaleFidLayout->addWidget(_armorFemaleFIDSelectorButton);
-    femaleLayout->addWidget(femaleFidWidget);
-    
-    // Add both containers to horizontal layout
-    armorImagesLayout->addWidget(maleContainer);
-    armorImagesLayout->addWidget(femaleContainer);
-    
-    // Add images container to main armor preview layout
-    armorPreviewLayout->addWidget(armorImagesContainer);
-    
-    // Add armor animation controls
-    setupArmorAnimationControls();
-    armorPreviewLayout->addWidget(_armorAnimationControls);
-}
 
 void ProEditorDialog::setupAnimationControls() {
     // Animation controls
@@ -2755,36 +2475,16 @@ void ProEditorDialog::updatePreview() {
         return;
     }
     
-    // Original single preview for non-items
-    if (!_previewLabel) {
+    // Check if we're using object preview widget (all non-item objects)
+    if (_pro && _pro->type() != Pro::OBJECT_TYPE::ITEM && _objectPreviewWidget) {
+        std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(static_cast<unsigned int>(_pro->header.FID));
+        spdlog::debug("ObjectPreviewWidget: Setting FRM path: {}", frmPath);
+        _objectPreviewWidget->setFrmPath(QString::fromStdString(frmPath));
+        _objectPreviewWidget->setFid(_pro->header.FID);
         return;
     }
     
-    // Determine which FID to use for preview
-    int32_t previewFid = 0;
-    try {
-        previewFid = getPreviewFid();
-    } catch (const std::exception& e) {
-        spdlog::error("ProEditorDialog::updatePreview() - exception getting preview FID: {}", e.what());
-        _previewLabel->clear();
-        _previewLabel->setText("Failed to get FID");
-        if (_animationControls) {
-            _animationControls->setEnabled(false);
-        }
-        return;
-    }
-    
-    if (previewFid <= 0) {
-        _previewLabel->clear();
-        _previewLabel->setText("No FRM loaded");
-        if (_animationControls) {
-            _animationControls->setEnabled(false);
-        }
-        return;
-    }
-    
-    // Load animation frames for the new FRM
-    loadAnimationFrames();
+    // No specific action needed - ObjectPreviewWidget handles everything for non-item objects
 }
 
 int32_t ProEditorDialog::getPreviewFid() {
@@ -4300,6 +4000,64 @@ QString ProEditorDialog::getFrmFilename(int32_t fid) {
 
 void ProEditorDialog::onCritterHeadFidSelectorClicked() {
     openFrmSelectorForLabel(_critterHeadFIDLabel, &_critterHeadFID, 1); // Object type 1 for critters
+}
+
+void ProEditorDialog::onObjectFidChangeRequested() {
+    if (_objectPreviewWidget && _pro && _pro->type() != Pro::OBJECT_TYPE::ITEM) {
+        FrmSelectorDialog dialog(this);
+        
+        // Set appropriate object type filter based on PRO type
+        uint32_t objectTypeFilter = 0;
+        switch (_pro->type()) {
+            case Pro::OBJECT_TYPE::CRITTER:
+                objectTypeFilter = 1;
+                break;
+            case Pro::OBJECT_TYPE::SCENERY:
+                objectTypeFilter = 2;
+                break;
+            case Pro::OBJECT_TYPE::WALL:
+                objectTypeFilter = 3;
+                break;
+            case Pro::OBJECT_TYPE::TILE:
+                objectTypeFilter = 4;
+                break;
+            case Pro::OBJECT_TYPE::MISC:
+                objectTypeFilter = 5;
+                break;
+            default:
+                objectTypeFilter = 0; // No filter
+                break;
+        }
+        
+        dialog.setObjectTypeFilter(objectTypeFilter);
+        dialog.setInitialFrmPid(static_cast<uint32_t>(_pro->header.FID));
+        
+        if (dialog.exec() == QDialog::Accepted) {
+            uint32_t selectedFrmPid = dialog.getSelectedFrmPid();
+            if (selectedFrmPid > 0) {
+                // Update the PRO data
+                _pro->header.FID = static_cast<int32_t>(selectedFrmPid);
+                
+                // Update the preview widget
+                std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(selectedFrmPid);
+                _objectPreviewWidget->setFrmPath(QString::fromStdString(frmPath));
+                _objectPreviewWidget->setFid(static_cast<int32_t>(selectedFrmPid));
+            }
+        }
+    }
+}
+
+void ProEditorDialog::onObjectFidChanged(int32_t newFid) {
+    if (_pro && _pro->type() != Pro::OBJECT_TYPE::ITEM) {
+        _pro->header.FID = newFid;
+        
+        // Update the preview
+        std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(static_cast<unsigned int>(newFid));
+        if (_objectPreviewWidget) {
+            _objectPreviewWidget->setFrmPath(QString::fromStdString(frmPath));
+            _objectPreviewWidget->setFid(newFid);
+        }
+    }
 }
 
 void ProEditorDialog::setupArmorFields() {
