@@ -535,17 +535,17 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     dualLayout->setSpacing(4);
     dualLayout->setAlignment(Qt::AlignCenter);
     
-    // Inventory preview - no animation controls, just group box with title
+    // Inventory preview - no animation controls, just title below image
     _inventoryPreviewWidget = new ObjectPreviewWidget(this, 
-        ObjectPreviewWidget::ShowGroupBox, 
+        ObjectPreviewWidget::PreviewOptions(), 
         QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
-    _inventoryPreviewWidget->setGroupBoxTitle("Inventory");
+    _inventoryPreviewWidget->setTitle("Inventory");
     
-    // Ground preview - no animation controls, just group box with title  
+    // Ground preview - no animation controls, just title below image  
     _groundPreviewWidget = new ObjectPreviewWidget(this,
-        ObjectPreviewWidget::ShowGroupBox,
+        ObjectPreviewWidget::PreviewOptions(),
         QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
-    _groundPreviewWidget->setGroupBoxTitle("Ground");
+    _groundPreviewWidget->setTitle("Ground");
     
     dualLayout->addWidget(_inventoryPreviewWidget);
     dualLayout->addWidget(_groundPreviewWidget);

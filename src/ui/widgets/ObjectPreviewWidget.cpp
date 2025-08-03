@@ -21,8 +21,8 @@ namespace geck {
 
 ObjectPreviewWidget::ObjectPreviewWidget(QWidget* parent, PreviewOptions options, const QSize& previewSize)
     : QWidget(parent)
-    , _previewGroup(nullptr)
     , _previewLabel(nullptr)
+    , _titleLabel(nullptr)
     , _fidWidget(nullptr)
     , _fidLabel(nullptr)
     , _fidSelectorButton(nullptr)
@@ -47,18 +47,7 @@ ObjectPreviewWidget::ObjectPreviewWidget(QWidget* parent, PreviewOptions options
 void ObjectPreviewWidget::setupUI() {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
-    
-    QVBoxLayout* contentLayout = nullptr;
-    
-    // Create preview group box if requested
-    if (_options & ShowGroupBox) {
-        _previewGroup = new QGroupBox("FRM Preview");
-        contentLayout = new QVBoxLayout(_previewGroup);
-        mainLayout->addWidget(_previewGroup);
-    } else {
-        // No group box, add content directly to main layout
-        contentLayout = mainLayout;
-    }
+    mainLayout->setSpacing(2);
     
     // Preview image label
     _previewLabel = new QLabel();
@@ -77,7 +66,14 @@ void ObjectPreviewWidget::setupUI() {
     _previewLabel->setScaledContents(false);
     _previewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
     _previewLabel->setText("No FRM loaded");
-    contentLayout->addWidget(_previewLabel);
+    mainLayout->addWidget(_previewLabel);
+    
+    // Title label below image (like armor preview)
+    _titleLabel = new QLabel();
+    _titleLabel->setAlignment(Qt::AlignCenter);
+    _titleLabel->setStyleSheet("QLabel { font-size: 10px; }");
+    _titleLabel->hide(); // Initially hidden until title is set
+    mainLayout->addWidget(_titleLabel);
     
     // FID field (optional)
     if (_options & ShowFidField) {
@@ -100,7 +96,7 @@ void ObjectPreviewWidget::setupUI() {
         fidLayout->addWidget(fidTextLabel);
         fidLayout->addWidget(_fidLabel);
         fidLayout->addWidget(_fidSelectorButton);
-        contentLayout->addWidget(_fidWidget);
+        mainLayout->addWidget(_fidWidget);
     }
     
     // Animation controls (optional)
@@ -137,7 +133,7 @@ void ObjectPreviewWidget::setupUI() {
         _frameLabel->setMinimumWidth(40);
         animationLayout->addWidget(_frameLabel);
         
-        contentLayout->addWidget(_animationControls);
+        mainLayout->addWidget(_animationControls);
         
         // Setup animation timer
         _animationTimer = new QTimer(this);
@@ -499,10 +495,16 @@ QPixmap ObjectPreviewWidget::createFrmThumbnail(const std::string& frmPath, cons
     }
 }
 
-void ObjectPreviewWidget::setGroupBoxTitle(const QString& title) {
-    if (_previewGroup) {
-        _previewGroup->setTitle(title);
+void ObjectPreviewWidget::setTitle(const QString& title) {
+    _title = title;
+    if (_titleLabel) {
+        _titleLabel->setText(title);
+        _titleLabel->setVisible(!title.isEmpty());
     }
+}
+
+QString ObjectPreviewWidget::getTitle() const {
+    return _title;
 }
 
 void ObjectPreviewWidget::setPreviewSize(const QSize& size) {

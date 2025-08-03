@@ -28,7 +28,7 @@ class ObjectPreviewWidget : public QWidget {
     Q_OBJECT
 
 public:
-    constexpr double SCALE_FACTOR = 1.25;
+    static constexpr double SCALE_FACTOR = 1.25;
 
     enum PreviewOption {
         ShowAnimationControls = 0x01,
@@ -49,7 +49,8 @@ public:
     void clear();
     
     // Runtime configuration
-    void setGroupBoxTitle(const QString& title);
+    void setTitle(const QString& title);
+    QString getTitle() const;
     void setPreviewSize(const QSize& size);
     void setShowAnimationControls(bool show);
     void setShowFidField(bool show);
@@ -79,8 +80,8 @@ private:
     QPixmap createFrmThumbnail(const std::string& frmPath, const QSize& targetSize = QSize(250, 250));
     
     // UI Components
-    QGroupBox* _previewGroup;
     QLabel* _previewLabel;
+    QLabel* _titleLabel;
     QWidget* _fidWidget;
     QLabel* _fidLabel;
     QPushButton* _fidSelectorButton;
@@ -108,6 +109,7 @@ private:
     // Configuration
     PreviewOptions _options;
     QSize _customPreviewSize;
+    QString _title;
     
     // Constants
     static constexpr int PREVIEW_MIN_HEIGHT = 150;
