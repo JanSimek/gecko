@@ -47,7 +47,7 @@ public:
     // PRO file format constants
     static constexpr int SPECIAL_STATS_COUNT = 7;        // STR, PER, END, CHR, INT, AGL, LCK
     static constexpr int DAMAGE_TYPES_ARMOR = 7;         // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
-    static constexpr int DAMAGE_TYPES_CRITTER = 9;       // Includes Gas and Radiation
+    static constexpr int DAMAGE_TYPES_CRITTER = 9;       // Includes Radiation and Poison
     static constexpr int SKILLS_COUNT = 18;              // All Fallout 2 skills
     static constexpr int BONUS_DAMAGE_ARRAYS = 8;        // Extended arrays for critter bonuses
     static constexpr int FIELD_SIZE_BYTES = 4;           // Standard 32-bit field size
