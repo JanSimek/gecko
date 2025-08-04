@@ -2,6 +2,7 @@
 #include "MainWindow.h"
 #include "EditorWidget.h"
 #include "../widgets/LoadingWidget.h"
+#include "../widgets/WelcomeWidget.h"
 #include "../widgets/SFMLWidget.h"
 #include "../panels/SelectionPanel.h"
 #include "../panels/MapInfoPanel.h"
@@ -56,6 +57,7 @@ MainWindow::MainWindow(QWidget* parent)
     , _centralStack(nullptr)
     , _gameLoopTimer(new QTimer(this))
     , _currentEditorWidget(nullptr)
+    , _welcomeWidget(nullptr)
     , _menuBar(nullptr)
     , _fileMenu(nullptr)
     , _editMenu(nullptr)
@@ -129,6 +131,11 @@ void MainWindow::setupUI() {
     // Create central stacked widget to hold loading and editor widgets
     _centralStack = new QStackedWidget(this);
     setCentralWidget(_centralStack);
+    
+    // Create and add welcome widget (shown when no map is loaded)
+    _welcomeWidget = new WelcomeWidget(this);
+    _centralStack->addWidget(_welcomeWidget);
+    _centralStack->setCurrentWidget(_welcomeWidget);
 
     setupMenuBar();
     setupToolBar();

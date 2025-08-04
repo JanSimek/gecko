@@ -28,6 +28,7 @@ namespace geck {
 class SFMLWidget;
 class EditorWidget;
 class LoadingWidget;
+class WelcomeWidget;
 class SelectionPanel;
 class MapInfoPanel;
 class TilePalettePanel;
@@ -134,6 +135,7 @@ private:
 
     // Current widgets
     EditorWidget* _currentEditorWidget;
+    WelcomeWidget* _welcomeWidget;
 
     // Menu items
     QMenuBar* _menuBar;

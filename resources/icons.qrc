@@ -60,5 +60,8 @@
         <file alias="panels/tiles.svg">icons/tabler/panels/layout-grid.svg</file>
         <file alias="panels/objects.svg">icons/tabler/panels/box-multiple.svg</file>
         <file alias="panels/files.svg">icons/tabler/panels/files.svg</file>
+        
+        <!-- Welcome Screen -->
+        <file alias="welcome/vault-boy.svg">images/vault-boy.svg</file>
     </qresource>
 </RCC>

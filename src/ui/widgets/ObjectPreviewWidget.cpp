@@ -22,7 +22,7 @@
 
 namespace geck {
 
-ObjectPreviewWidget::ObjectPreviewWidget(QWidget* parent, PreviewOptions options, const QSize& previewSize)
+ObjectPreviewWidget::ObjectPreviewWidget(QWidget* parent, PreviewOptions options, const QSize& previewSize, double scaleFactor)
     : QWidget(parent)
     , _previewLabel(nullptr)
     , _titleLabel(nullptr)
@@ -40,6 +40,7 @@ ObjectPreviewWidget::ObjectPreviewWidget(QWidget* parent, PreviewOptions options
     , _currentFid(0)
     , _options(options)
     , _customPreviewSize(previewSize)
+    , _scaleFactor(scaleFactor)
 {
     setupUI();
 }
@@ -179,42 +180,43 @@ void ObjectPreviewWidget::setupUI() {
         _rotateButton->setIconSize(QSize(18, 18));
         _rotateButton->hide(); // Initially hidden until preview is loaded
         
-        // Create edit button overlay positioned on the preview label
-        _editButton = new QPushButton(this);
-        _editButton->setIcon(QIcon(":/icons/actions/edit.svg"));
-        _editButton->setToolTip("Change FRM file");
-        _editButton->setFixedSize(24, 24);
-        _editButton->setStyleSheet(
-            "QPushButton {"
-            "  background-color: rgba(255, 255, 255, 180);"
-            "  border: 1px solid rgba(0, 0, 0, 100);"
-            "  border-radius: 12px;"
-            "}"
-            "QPushButton:hover {"
-            "  background-color: rgba(255, 255, 255, 220);"
-            "  border-color: rgba(0, 0, 0, 150);"
-            "}"
-            "QPushButton:pressed {"
-            "  background-color: rgba(255, 255, 255, 255);"
-            "}"
-        );
-        _editButton->setIconSize(QSize(18, 18));
-        _editButton->setVisible(true); // Always visible
-        
-        // Connect signals
+        // Connect animation control signals
         if (_playPauseButton) {
             connect(_playPauseButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onPlayPauseClicked);
         }
         if (_rotateButton) {
             connect(_rotateButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onRotateClicked);
         }
-        if (_editButton) {
-            connect(_editButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onFidSelectorClicked);
-        }
         if (_animationTimer) {
             connect(_animationTimer, &QTimer::timeout, this, &ObjectPreviewWidget::onAnimationTick);
         }
-        
+    }
+    
+    // Always create edit button (independent of animation controls)
+    _editButton = new QPushButton(this);
+    _editButton->setIcon(QIcon(":/icons/actions/edit.svg"));
+    _editButton->setToolTip("Change FRM file");
+    _editButton->setFixedSize(24, 24);
+    _editButton->setStyleSheet(
+        "QPushButton {"
+        "  background-color: rgba(255, 255, 255, 180);"
+        "  border: 1px solid rgba(0, 0, 0, 100);"
+        "  border-radius: 12px;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: rgba(255, 255, 255, 220);"
+        "  border-color: rgba(0, 0, 0, 150);"
+        "}"
+        "QPushButton:pressed {"
+        "  background-color: rgba(255, 255, 255, 255);"
+        "}"
+    );
+    _editButton->setIconSize(QSize(18, 18));
+    _editButton->setVisible(true); // Always visible
+    
+    // Connect edit button signal
+    if (_editButton) {
+        connect(_editButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onFidSelectorClicked);
     }
     
     mainLayout->addStretch();
@@ -282,6 +284,14 @@ void ObjectPreviewWidget::clear() {
     // Animation controls removed - using overlay buttons instead
 }
 
+void ObjectPreviewWidget::setScaleFactor(double scaleFactor) {
+    _scaleFactor = scaleFactor;
+    // Update preview with new scale factor if FRM is loaded
+    if (!_currentFrmPath.isEmpty()) {
+        updatePreview();
+    }
+}
+
 void ObjectPreviewWidget::updatePreview() {
     stopAnimation();
     
@@ -306,8 +316,8 @@ void ObjectPreviewWidget::updatePreview() {
             }
         }
 
-        // Scale image to 2x size, but constrain to widget bounds if too large
-        QSize targetSize = QSize(thumbnail.width() * SCALE_FACTOR, thumbnail.height() * SCALE_FACTOR);
+        // Scale image to configured size, but constrain to widget bounds if too large
+        QSize targetSize = QSize(thumbnail.width() * _scaleFactor, thumbnail.height() * _scaleFactor);
         
         // If 2x size exceeds widget bounds, scale down to fit
         if (targetSize.width() > labelSize.width() || targetSize.height() > labelSize.height()) {
@@ -329,9 +339,10 @@ void ObjectPreviewWidget::updatePreview() {
             if (_playPauseButton) {
                 _playPauseButton->setVisible(_totalFrames > 1);
             }
-            // Position the overlay buttons (including always-visible edit button)
-            positionOverlayButtons();
         }
+        
+        // Always position overlay buttons (edit button is always visible)
+        positionOverlayButtons();
     } else {
         _previewLabel->setText("Failed to load FRM");
         // Animation controls removed - using overlay buttons instead
@@ -387,8 +398,8 @@ void ObjectPreviewWidget::onFrameChanged(int frame) {
             }
         }
         
-        // Scale image to 2x size, but constrain to widget bounds if too large
-        QSize targetSize = QSize(_frameCache[frame].width() * SCALE_FACTOR, _frameCache[frame].height() * SCALE_FACTOR);
+        // Scale image to configured size, but constrain to widget bounds if too large
+        QSize targetSize = QSize(_frameCache[frame].width() * _scaleFactor, _frameCache[frame].height() * _scaleFactor);
         
         // If 2x size exceeds widget bounds, scale down to fit
         if (targetSize.width() > labelSize.width() || targetSize.height() > labelSize.height()) {

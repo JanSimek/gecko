@@ -36,7 +36,7 @@ option(GECK_AUTO_TEST "Automatically run tests after build" ON)
 find_package(PkgConfig QUIET)
 
 # Qt6 for dialogs and future UI migration
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Svg)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)

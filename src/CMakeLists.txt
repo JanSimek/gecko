@@ -89,6 +89,8 @@ set(GECK_SOURCES
     ui/widgets/TextEditorWidget.cpp
     ui/widgets/ObjectPreviewWidget.h
     ui/widgets/ObjectPreviewWidget.cpp
+    ui/widgets/WelcomeWidget.h
+    ui/widgets/WelcomeWidget.cpp
 
     # Qt6 UI Constants
     ui/UIConstants.h
@@ -284,6 +286,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     SFML::System SFML::Graphics SFML::Window
     Qt6::Core
     Qt6::Widgets
+    Qt6::Svg
     spdlog::spdlog_header_only
     vfspp
     vault

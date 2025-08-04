@@ -298,6 +298,9 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     // Load name and description from MSG files
     loadNameAndDescription();
     
+    // Update window title with object name and type
+    updateWindowTitle();
+    
     // NOTE: updateTabVisibility() is already called from setupUI() -> setupTabContent()
     // Call updatePreview after a brief delay to ensure all widgets are fully initialized
     QTimer::singleShot(0, this, &ProEditorDialog::updatePreview);
@@ -519,6 +522,14 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
         QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
     _groundPreviewWidget->setTitle("Ground");
     
+    // Connect signals for inventory preview
+    connect(_inventoryPreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
+            this, &ProEditorDialog::onObjectFidChangeRequested);
+    
+    // Connect signals for ground preview  
+    connect(_groundPreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
+            this, &ProEditorDialog::onObjectFidChangeRequested);
+    
     dualLayout->addWidget(_inventoryPreviewWidget);
     dualLayout->addWidget(_groundPreviewWidget);
 
@@ -563,6 +574,14 @@ void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
     _armorFemalePreviewWidget->setTitle("Female");
     
     femaleLayout->addWidget(_armorFemalePreviewWidget);
+    
+    // Connect signals for male armor preview
+    connect(_armorMalePreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
+            this, &ProEditorDialog::onObjectFidChangeRequested);
+            
+    // Connect signals for female armor preview
+    connect(_armorFemalePreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
+            this, &ProEditorDialog::onObjectFidChangeRequested);
     
     previewsLayout->addWidget(maleWidget);
     previewsLayout->addWidget(femaleWidget);
@@ -2643,6 +2662,9 @@ void ProEditorDialog::onEditMessageClicked() {
                 // Refresh the name and description display
                 loadNameAndDescription();
                 
+                // Update window title with new object name
+                updateWindowTitle();
+                
                 spdlog::debug("ProEditorDialog: Message ID changed to {}", selectedMessageId);
             }
         }
@@ -3278,6 +3300,85 @@ void ProEditorDialog::loadNameAndDescription() {
     }
 }
 
+void ProEditorDialog::updateWindowTitle() {
+    QString objectName = "Unknown";
+    QString objectType = "Object";
+    
+    // Get object name from the name label if available
+    if (_nameLabel && !_nameLabel->text().isEmpty() && 
+        _nameLabel->text() != "Loading..." && 
+        _nameLabel->text() != "MSG file not found" && 
+        _nameLabel->text() != "Error loading name") {
+        objectName = _nameLabel->text();
+    }
+    
+    // Get object type based on PRO type
+    try {
+        Pro::OBJECT_TYPE proType = _pro->type();
+        
+        switch (proType) {
+            case Pro::OBJECT_TYPE::ITEM: {
+                // For items, get the specific item subtype
+                Pro::ITEM_TYPE itemType = _pro->itemType();
+                switch (itemType) {
+                    case Pro::ITEM_TYPE::ARMOR:
+                        objectType = "Armor";
+                        break;
+                    case Pro::ITEM_TYPE::CONTAINER:
+                        objectType = "Container";
+                        break;
+                    case Pro::ITEM_TYPE::DRUG:
+                        objectType = "Drug";
+                        break;
+                    case Pro::ITEM_TYPE::WEAPON:
+                        objectType = "Weapon";
+                        break;
+                    case Pro::ITEM_TYPE::AMMO:
+                        objectType = "Ammo";
+                        break;
+                    case Pro::ITEM_TYPE::MISC:
+                        objectType = "Misc Item";
+                        break;
+                    case Pro::ITEM_TYPE::KEY:
+                        objectType = "Key";
+                        break;
+                    default:
+                        objectType = "Item";
+                        break;
+                }
+                break;
+            }
+            case Pro::OBJECT_TYPE::CRITTER:
+                objectType = "Critter";
+                break;
+            case Pro::OBJECT_TYPE::SCENERY:
+                objectType = "Scenery";
+                break;
+            case Pro::OBJECT_TYPE::WALL:
+                objectType = "Wall";
+                break;
+            case Pro::OBJECT_TYPE::TILE:
+                objectType = "Tile";
+                break;
+            case Pro::OBJECT_TYPE::MISC:
+                objectType = "Misc";
+                break;
+            default:
+                objectType = "Object";
+                break;
+        }
+    } catch (const std::exception& e) {
+        spdlog::warn("ProEditorDialog::updateWindowTitle() - Error getting object type: {}", e.what());
+        objectType = "Object";
+    }
+    
+    // Set the window title in the format: "ObjectName (ObjectType) - PRO editor"
+    QString newTitle = QString("%1 (%2) - PRO editor").arg(objectName, objectType);
+    setWindowTitle(newTitle);
+    
+    spdlog::debug("ProEditorDialog::updateWindowTitle() - Set title to: {}", newTitle.toStdString());
+}
+
 void ProEditorDialog::onPlayPauseClicked() {
     if (_totalFrames <= 1) {
         return; // Nothing to animate
@@ -3697,7 +3798,12 @@ void ProEditorDialog::onCritterHeadFidSelectorClicked() {
 }
 
 void ProEditorDialog::onObjectFidChangeRequested() {
-    if (_objectPreviewWidget && _pro && _pro->type() != Pro::OBJECT_TYPE::ITEM) {
+    if (_pro) {
+        // Identify which preview widget sent the signal
+        ObjectPreviewWidget* senderWidget = qobject_cast<ObjectPreviewWidget*>(sender());
+        if (!senderWidget) {
+            return;
+        }
         FrmSelectorDialog dialog(this);
         
         // Set appropriate object type filter based on PRO type
@@ -3723,19 +3829,44 @@ void ProEditorDialog::onObjectFidChangeRequested() {
                 break;
         }
         
+        // Set initial FID based on sender widget and PRO type
+        uint32_t initialFid = 0;
+        if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
+            // Items use object type 0
+            objectTypeFilter = 0;
+            if (senderWidget == _inventoryPreviewWidget) {
+                initialFid = static_cast<uint32_t>(_inventoryFID > 0 ? _inventoryFID : _mainFID);
+            } else if (senderWidget == _groundPreviewWidget) {
+                initialFid = static_cast<uint32_t>(_mainFID);
+            }
+        } else {
+            initialFid = static_cast<uint32_t>(_pro->header.FID);
+        }
+        
         dialog.setObjectTypeFilter(objectTypeFilter);
-        dialog.setInitialFrmPid(static_cast<uint32_t>(_pro->header.FID));
+        dialog.setInitialFrmPid(initialFid);
         
         if (dialog.exec() == QDialog::Accepted) {
             uint32_t selectedFrmPid = dialog.getSelectedFrmPid();
             if (selectedFrmPid > 0) {
-                // Update the PRO data
-                _pro->header.FID = static_cast<int32_t>(selectedFrmPid);
-                
-                // Update the preview widget
-                std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(selectedFrmPid);
-                _objectPreviewWidget->setFrmPath(QString::fromStdString(frmPath));
-                _objectPreviewWidget->setFid(static_cast<int32_t>(selectedFrmPid));
+                // Update appropriate FID storage based on sender widget and PRO type
+                if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
+                    if (senderWidget == _inventoryPreviewWidget) {
+                        _inventoryFID = static_cast<int32_t>(selectedFrmPid);
+                        _pro->commonItemData.inventoryFID = static_cast<int32_t>(selectedFrmPid);
+                        updateInventoryPreview();
+                    } else if (senderWidget == _groundPreviewWidget) {
+                        _mainFID = static_cast<int32_t>(selectedFrmPid);
+                        _pro->header.FID = static_cast<int32_t>(selectedFrmPid);
+                        updateGroundPreview();
+                    }
+                } else {
+                    // Non-items: update main FID
+                    _pro->header.FID = static_cast<int32_t>(selectedFrmPid);
+                    std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(selectedFrmPid);
+                    senderWidget->setFrmPath(QString::fromStdString(frmPath));
+                    senderWidget->setFid(static_cast<int32_t>(selectedFrmPid));
+                }
             }
         }
     }

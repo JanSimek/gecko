@@ -28,8 +28,6 @@ class ObjectPreviewWidget : public QWidget {
     Q_OBJECT
 
 public:
-    static constexpr double SCALE_FACTOR = 1.25;
-
     enum PreviewOption {
         ShowAnimationControls = 0x01,
         ShowFidField = 0x02,
@@ -40,7 +38,8 @@ public:
     
     explicit ObjectPreviewWidget(QWidget* parent = nullptr, 
                                 PreviewOptions options = Default,
-                                const QSize& previewSize = QSize(150, 150));
+                                const QSize& previewSize = QSize(150, 150),
+                                double scaleFactor = 1.25);
     ~ObjectPreviewWidget() = default;
     
     // Configuration
@@ -54,6 +53,7 @@ public:
     void setPreviewSize(const QSize& size);
     void setShowAnimationControls(bool show);
     void setShowFidField(bool show);
+    void setScaleFactor(double scaleFactor);
     
     // Preview control
     void updatePreview();
@@ -108,6 +108,7 @@ private:
     PreviewOptions _options;
     QSize _customPreviewSize;
     QString _title;
+    double _scaleFactor;
     
     // Constants
     static constexpr int PREVIEW_MIN_HEIGHT = 150;

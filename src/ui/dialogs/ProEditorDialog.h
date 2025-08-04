@@ -237,6 +237,7 @@ private:
     void openFrmSelector(QSpinBox* targetField, uint32_t objectType);
     void openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidStorage, uint32_t objectType);
     void loadAnimationFrames();
+    void updateWindowTitle();
 
     // FRM thumbnail generation (based on ObjectPalettePanel approach)
     QPixmap createFrmThumbnail(const std::string& frmPath, const QSize& targetSize = QSize(250, 250));
