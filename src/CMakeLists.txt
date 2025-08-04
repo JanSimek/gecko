@@ -71,6 +71,8 @@ set(GECK_SOURCES
     ui/dialogs/SettingsDialog.cpp
     ui/dialogs/ProEditorDialog.h
     ui/dialogs/ProEditorDialog.cpp
+    ui/dialogs/MessageSelectorDialog.h
+    ui/dialogs/MessageSelectorDialog.cpp
 
     # Qt6 UI Widgets
     ui/widgets/SFMLWidget.h

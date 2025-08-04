@@ -133,6 +133,7 @@ private slots:
     void onLoadingProgress(int current, int total, const QString& status);
     void onLoadingError(const QString& error);
     void processNextChunk();
+    void performDebouncedSearch();
 
 private:
     void setupUI();
@@ -199,6 +200,7 @@ private:
     std::vector<std::string> _pendingFiles;
     size_t _currentChunkIndex = 0;
     QTimer* _chunkTimer = nullptr;
+    QTimer* _searchTimer = nullptr;
     bool _isLoading = false;
     
     // Column visibility default state - used only for initialization

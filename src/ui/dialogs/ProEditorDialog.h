@@ -148,6 +148,7 @@ private slots:
     void onComboBoxChanged();
     void onCheckBoxChanged();
     void onFidSelectorClicked();
+    void onEditMessageClicked();
     void onInventoryFidSelectorClicked();
     void onArmorMaleFidSelectorClicked();
     void onArmorFemaleFidSelectorClicked();
@@ -488,9 +489,9 @@ private:
     
     // Common tab controls
     QLabel* _nameLabel;
+    QPushButton* _editMessageButton;
     QTextEdit* _descriptionLabel;
     QSpinBox* _pidEdit;
-    QSpinBox* _messageIdEdit;
     QLabel* _fidLabel;
     QPushButton* _fidSelectorButton;
     QSpinBox* _lightDistanceEdit;

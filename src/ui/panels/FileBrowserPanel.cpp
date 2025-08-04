@@ -232,6 +232,7 @@ FileBrowserPanel::FileBrowserPanel(QWidget* parent)
     , _currentSearchFilter("")
     , _currentFileTypeFilter("All Files")
     , _chunkTimer(new QTimer(this))
+    , _searchTimer(new QTimer(this))
     , _isLoading(false) {
 
     setupUI();
@@ -240,6 +241,11 @@ FileBrowserPanel::FileBrowserPanel(QWidget* parent)
     _chunkTimer->setSingleShot(true);
     _chunkTimer->setInterval(CHUNK_DELAY_MS);
     connect(_chunkTimer, &QTimer::timeout, this, &FileBrowserPanel::processNextChunk);
+
+    // Setup search debouncing timer
+    _searchTimer->setSingleShot(true);
+    _searchTimer->setInterval(300); // 300ms debounce delay
+    connect(_searchTimer, &QTimer::timeout, this, &FileBrowserPanel::performDebouncedSearch);
 
     // Set initial status
     _statusLabel->setText("Ready - Click Refresh to load files");
@@ -254,9 +260,12 @@ FileBrowserPanel::~FileBrowserPanel() {
     }
     
     // Stop timers
-    
     if (_chunkTimer) {
         _chunkTimer->stop();
+    }
+    
+    if (_searchTimer) {
+        _searchTimer->stop();
     }
     
     // Handle thread cleanup carefully
@@ -493,6 +502,10 @@ void FileBrowserPanel::stopLoading() {
         _chunkTimer->stop();
     }
     
+    if (_searchTimer) {
+        _searchTimer->stop();
+    }
+    
     if (_progressBar) {
         _progressBar->setVisible(false);
     }
@@ -694,10 +707,18 @@ void FileBrowserPanel::setFileTypeFilter(const QString& fileType) {
 void FileBrowserPanel::onSearchTextChanged(const QString& text) {
     _currentSearchFilter = text;
     
-    // Apply filter immediately using proxy model
-    if (!text.isEmpty()) {
+    // Stop the previous search timer if it's running
+    _searchTimer->stop();
+    
+    // Start the debounce timer - actual search will happen after delay
+    _searchTimer->start();
+}
+
+void FileBrowserPanel::performDebouncedSearch() {
+    // Apply filter using proxy model
+    if (!_currentSearchFilter.isEmpty()) {
         // Escape special regex characters and use case-insensitive search
-        QString escapedText = QRegularExpression::escape(text);
+        QString escapedText = QRegularExpression::escape(_currentSearchFilter);
         QRegularExpression regex(escapedText, QRegularExpression::CaseInsensitiveOption);
         _proxyModel->setFilterRegularExpression(regex);
         
@@ -744,6 +765,13 @@ void FileBrowserPanel::onTreeItemClicked(const QModelIndex& index) {
 void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
     if (!index.isValid())
         return;
+
+    // Prevent file operations while still loading
+    if (_isLoading) {
+        QMessageBox::information(this, "Loading in Progress", 
+            "Files are still being loaded. Please wait for loading to complete before opening files.");
+        return;
+    }
 
     // Map proxy index to source index
     QModelIndex sourceIndex = _proxyModel->mapToSource(index);
@@ -1141,6 +1169,13 @@ void FileBrowserPanel::resizeNameColumnToContent() {
 }
 
 void FileBrowserPanel::openProEditor(const QString& filePath) {
+    // Additional safety check - prevent opening during loading state
+    if (_isLoading) {
+        QMessageBox::information(this, "Loading in Progress", 
+            "Files are still being loaded. Please wait for loading to complete before opening PRO files.");
+        return;
+    }
+    
     try {
         _statusLabel->setText(QString("Loading PRO file: %1...").arg(filePath));
         
@@ -1219,23 +1254,53 @@ void FileBrowserPanel::openProEditor(const QString& filePath) {
 }
 
 void FileBrowserPanel::expandFilteredItems() {
+    // Only expand if we have a reasonable number of visible items to avoid UI freeze
+    int totalVisibleRows = 0;
+    
+    // Count visible rows to decide if we should expand all
+    std::function<void(const QModelIndex&)> countRows = [&](const QModelIndex& parent) {
+        int rowCount = _proxyModel->rowCount(parent);
+        totalVisibleRows += rowCount;
+        if (totalVisibleRows > 200) return; // Stop counting if too many items
+        
+        for (int i = 0; i < rowCount && totalVisibleRows <= 200; ++i) {
+            QModelIndex index = _proxyModel->index(i, 0, parent);
+            if (index.isValid()) {
+                countRows(index);
+            }
+        }
+    };
+    
+    countRows(QModelIndex());
+    
+    // If too many items, only expand first level to maintain performance
+    if (totalVisibleRows > 200) {
+        // Just expand first level directories
+        for (int i = 0; i < _proxyModel->rowCount(); ++i) {
+            _treeView->expand(_proxyModel->index(i, 0));
+        }
+        return;
+    }
+    
     // Disable updates while expanding for better performance
     _treeView->setUpdatesEnabled(false);
     
-    // Recursive function to expand all visible items
-    std::function<void(const QModelIndex&)> expandRecursive = [&](const QModelIndex& parent) {
+    // Recursive function to expand all visible items (limited scope)
+    std::function<void(const QModelIndex&, int)> expandRecursive = [&](const QModelIndex& parent, int depth) {
+        if (depth > 3) return; // Limit expansion depth to prevent UI freeze
+        
         int rowCount = _proxyModel->rowCount(parent);
         for (int i = 0; i < rowCount; ++i) {
             QModelIndex index = _proxyModel->index(i, 0, parent);
             if (index.isValid()) {
                 _treeView->expand(index);
-                expandRecursive(index);
+                expandRecursive(index, depth + 1);
             }
         }
     };
     
-    // Start expansion from root
-    expandRecursive(QModelIndex());
+    // Start expansion from root with depth limit
+    expandRecursive(QModelIndex(), 0);
     
     // Re-enable updates
     _treeView->setUpdatesEnabled(true);

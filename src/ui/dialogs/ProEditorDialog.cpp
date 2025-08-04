@@ -1,4 +1,5 @@
 #include "ProEditorDialog.h"
+#include "MessageSelectorDialog.h"
 
 #include <QApplication>
 #include <QMessageBox>
@@ -54,6 +55,7 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _isAnimating(false)
     // Armor animation state now managed by ObjectPreviewWidget instances
     , _nameLabel(nullptr)
+    , _editMessageButton(nullptr)
     , _descriptionLabel(nullptr)
     , _fidSelectorButton(nullptr)
     , _inventoryFIDSelectorButton(nullptr)
@@ -109,7 +111,8 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _weaponSoundIdEdit(nullptr)
     , _weaponEnergyWeaponCheck(nullptr)
     , _weaponAIPriorityLabel(nullptr)
-    , _armorAIPriorityLabel(nullptr) {
+    , _armorAIPriorityLabel(nullptr)
+    , _fidLabel(nullptr) {
     
     
     setWindowTitle("PRO Editor");
@@ -315,12 +318,44 @@ void ProEditorDialog::setupUI() {
     leftInfoLayout->setContentsMargins(8, 8, 8, 8);
     leftInfoLayout->setSpacing(6);
 
-    // Name (bold)
+    // Name (bold) with edit button
+    QWidget* nameWidget = new QWidget();
+    QHBoxLayout* nameLayout = new QHBoxLayout(nameWidget);
+    nameLayout->setContentsMargins(0, 0, 0, 0);
+    nameLayout->setSpacing(4);
+    
     _nameLabel = new QLabel("Loading...");
     _nameLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; color: #2c5282; padding: 4px 0; }");
     _nameLabel->setWordWrap(true);
     _nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    leftInfoLayout->addWidget(_nameLabel);
+    nameLayout->addWidget(_nameLabel);
+    
+    nameLayout->addStretch(); // Push edit button to the right
+    
+    // Add pencil icon button for message selection
+    _editMessageButton = new QPushButton();
+    _editMessageButton->setIcon(QIcon(":/icons/actions/edit.svg"));
+    _editMessageButton->setToolTip("Select message from MSG file");
+    _editMessageButton->setFixedSize(24, 24);
+    _editMessageButton->setStyleSheet(
+        "QPushButton {"
+        "  border: 1px solid #d0d0d0;"
+        "  border-radius: 3px;"
+        "  background-color: #f8f9fa;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #e9ecef;"
+        "  border-color: #999;"
+        "}"
+        "QPushButton:pressed {"
+        "  background-color: #dee2e6;"
+        "}"
+    );
+    nameLayout->addWidget(_editMessageButton);
+    
+    leftInfoLayout->addWidget(nameWidget);
+    
+    connect(_editMessageButton, &QPushButton::clicked, this, &ProEditorDialog::onEditMessageClicked);
 
     // Setup compact preview at top
     setupCompactPreview(leftInfoLayout);
@@ -551,10 +586,6 @@ void ProEditorDialog::setupLeftPanelCommonFields(QVBoxLayout* parentLayout) {
     pidLabel->setToolTip("Prototype ID (read-only)");
     commonLayout->addRow("PID:", pidLabel);
     
-    // Message ID
-    _messageIdEdit = createSpinBox(0, 999999, "Message ID for displaying object name and description");
-    _messageIdEdit->setValue(_pro->header.message_id);
-    commonLayout->addRow("Message ID:", _messageIdEdit);
     
     // Light properties (compact)
     _lightDistanceEdit = createSpinBox(0, MAX_LIGHT_DISTANCE, "Distance that light from this object reaches (0 = no light)");
@@ -703,12 +734,7 @@ void ProEditorDialog::setupCommonTab() {
     pidLabel->setStyleSheet("QLabel { background-color: #f0f0f0; padding: 2px; border: 1px solid #ccc; }");
     layout->addRow("PID:", pidLabel);
     
-    // Name and Description (loaded from MSG files)
-    _nameLabel = new QLabel("Loading...");
-    _nameLabel->setStyleSheet("QLabel { background-color: #f0f8ff; padding: 4px; border: 1px solid #add8e6; font-weight: bold; }");
-    //_nameLabel->setWordWrap(true);
-    _nameLabel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
-    layout->addRow("Name:", _nameLabel);
+    // Name and Description are now handled in setupUI() with the edit button
     
     _descriptionLabel = new QTextEdit("Loading...");
     _descriptionLabel->setStyleSheet("QTextEdit { background-color: #f0f8ff; padding: 4px; border: 1px solid #add8e6; font-size: 12px; }");
@@ -719,10 +745,12 @@ void ProEditorDialog::setupCommonTab() {
     _descriptionLabel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
     layout->addRow("Description:", _descriptionLabel);
     
-    // Message ID
-    _messageIdEdit = createSpinBox(0, 999999, "Message ID for displaying object name and description");
-    _messageIdEdit->setValue(_pro->header.message_id);
-    layout->addRow("Message ID:", _messageIdEdit);
+    
+    // FID (Frame Resource Manager) - shows which FRM file this object uses
+    _fidLabel = new QLabel("Loading...");
+    _fidLabel->setToolTip("FRM filename for object appearance");
+    _fidLabel->setStyleSheet("QLabel { border: 1px solid #e2e8f0; padding: 2px 4px; background-color: white; }");
+    layout->addRow("FRM File:", _fidLabel);
     
     // Light Distance
     _lightDistanceEdit = createSpinBox(0, MAX_LIGHT_DISTANCE, "Distance that light from this object reaches (0 = no light)");
@@ -1270,14 +1298,18 @@ void ProEditorDialog::loadProData() {
     try {
         // Update common UI controls
         
-        if (_messageIdEdit) {
-            _messageIdEdit->setValue(_commonData.message_id);
-        }
         
         // Always set _mainFID from PRO data (needed for compact preview)
         _mainFID = _commonData.FID;
         if (_fidLabel) {
-            _fidLabel->setText(getFrmFilename(_mainFID));
+            try {
+                _fidLabel->setText(getFrmFilename(_mainFID));
+            } catch (const std::exception& e) {
+                spdlog::error("ProEditorDialog: Error setting FID label text: {}", e.what());
+                if (_fidLabel) {
+                    _fidLabel->setText("Error loading FRM");
+                }
+            }
         }
         
         if (_lightDistanceEdit) {
@@ -1587,7 +1619,7 @@ void ProEditorDialog::loadKeyData() {
 
 void ProEditorDialog::saveProData() {
     // Save common data back to PRO header
-    _pro->header.message_id = _messageIdEdit->value();
+    // Message ID is now handled by the message selector dialog
     _pro->header.FID = _mainFID;
     _pro->header.light_distance = _lightDistanceEdit->value();
     _pro->header.light_intensity = _lightIntensityEdit->value();
@@ -2591,6 +2623,37 @@ void ProEditorDialog::onFidSelectorClicked() {
     openFrmSelectorForLabel(_fidLabel, &_mainFID, 0); // Items type
 }
 
+void ProEditorDialog::onEditMessageClicked() {
+    try {
+        const auto* msgFile = ProHelper::msgFile(_pro->type());
+        if (!msgFile) {
+            QMessageBox::warning(this, "Message Selection", 
+                "Could not load MSG file for this object type.");
+            return;
+        }
+        
+        // Open message selector dialog with current message ID
+        MessageSelectorDialog dialog(msgFile, _pro->header.message_id, this);
+        if (dialog.exec() == QDialog::Accepted) {
+            int selectedMessageId = dialog.getSelectedMessageId();
+            if (selectedMessageId >= 0) {
+                // Update the message ID in the PRO header
+                _pro->header.message_id = selectedMessageId;
+                
+                // Refresh the name and description display
+                loadNameAndDescription();
+                
+                spdlog::debug("ProEditorDialog: Message ID changed to {}", selectedMessageId);
+            }
+        }
+        
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, "Message Selection Error", 
+            QString("Error opening message selector: %1").arg(e.what()));
+        spdlog::error("ProEditorDialog::onEditMessageClicked - Error: {}", e.what());
+    }
+}
+
 void ProEditorDialog::onInventoryFidSelectorClicked() {
     openFrmSelectorForLabel(_inventoryFIDLabel, &_inventoryFID, 7); // Inventory type
 }
@@ -3204,7 +3267,7 @@ void ProEditorDialog::loadNameAndDescription() {
         // Auto-resize the description text area to fit content
         QTextDocument* doc = _descriptionLabel->document();
         doc->setTextWidth(_descriptionLabel->viewport()->width());
-        int docHeight = doc->size().height() + 10; // Add some padding
+        int docHeight = doc->size().height() + 15; // Add some padding
         int clampedHeight = std::max(30, std::min(docHeight, 120)); // Clamp between min and max
         _descriptionLabel->setFixedHeight(clampedHeight);
         
