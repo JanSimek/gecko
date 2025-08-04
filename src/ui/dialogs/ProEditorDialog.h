@@ -159,10 +159,6 @@ private slots:
     void onFrameChanged(int frame);
     void onDirectionChanged(int direction);
     void onAnimationTick();
-    void onArmorPlayPauseClicked();
-    void onArmorFrameChanged(int frame);
-    void onArmorDirectionChanged(int direction);
-    void onArmorAnimationTick();
     void onExtendedFlagChanged();
     void onObjectFlagChanged();
     void onTransparencyFlagChanged();
@@ -193,7 +189,6 @@ private:
     void setupTileFields();
     void setupMiscFields();
     void setupAnimationControls();
-    void setupArmorAnimationControls();
     void setupCommonTab();
     void setupObjectFlagsGroup(QFormLayout* layout);
     void setupExtendedFlagsGroup(QFormLayout* layout);
@@ -241,8 +236,7 @@ private:
     void openFrmSelector(QSpinBox* targetField, uint32_t objectType);
     void openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidStorage, uint32_t objectType);
     void loadAnimationFrames();
-    void loadArmorAnimationFrames();
-    
+
     // FRM thumbnail generation (based on ObjectPalettePanel approach)
     QPixmap createFrmThumbnail(const std::string& frmPath, const QSize& targetSize = QSize(250, 250));
     QPixmap createFrameThumbnail(const class Frame& frame, const class Pal* palette, const QSize& targetSize = QSize(250, 250));
@@ -464,17 +458,8 @@ private:
     
     // Armor preview system
     QGroupBox* _armorPreviewGroup;
-    QLabel* _armorMalePreviewLabel;
-    QLabel* _armorFemalePreviewLabel;
-    
-    // Armor animation controls
-    QWidget* _armorAnimationControls;
-    QHBoxLayout* _armorAnimationLayout;
-    QPushButton* _armorPlayPauseButton;
-    QSlider* _armorFrameSlider;
-    QLabel* _armorFrameLabel;
-    QComboBox* _armorDirectionCombo;
-    QTimer* _armorAnimationTimer;
+    ObjectPreviewWidget* _armorMalePreviewWidget;
+    ObjectPreviewWidget* _armorFemalePreviewWidget;
     
     // Animation controls (non-critter types still use old system)
     QWidget* _animationControls;
@@ -492,15 +477,6 @@ private:
     int _totalDirections;
     bool _isAnimating;
     std::vector<QPixmap> _frameCache;
-    
-    // Armor animation state
-    int _armorCurrentFrame;
-    int _armorCurrentDirection;
-    int _armorTotalFrames;
-    int _armorTotalDirections;
-    bool _armorIsAnimating;
-    std::vector<QPixmap> _armorMaleFrameCache;
-    std::vector<QPixmap> _armorFemaleFrameCache;
     
     // AI Priority calculations (f2wedit feature)
     int calculateArmorAIPriority();

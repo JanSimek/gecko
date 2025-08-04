@@ -9,6 +9,8 @@
 #include <QPushButton>
 #include <QSlider>
 #include <QTimer>
+#include <QApplication>
+#include <QStyle>
 #include <spdlog/spdlog.h>
 
 #include "../../format/frm/Frm.h"
@@ -24,12 +26,9 @@ ObjectPreviewWidget::ObjectPreviewWidget(QWidget* parent, PreviewOptions options
     , _previewLabel(nullptr)
     , _titleLabel(nullptr)
     , _fidWidget(nullptr)
-    , _fidLabel(nullptr)
-    , _fidSelectorButton(nullptr)
+    , _fidButton(nullptr)
     , _animationControls(nullptr)
     , _playPauseButton(nullptr)
-    , _frameSlider(nullptr)
-    , _frameLabel(nullptr)
     , _directionCombo(nullptr)
     , _animationTimer(nullptr)
     , _currentFrame(0)
@@ -84,18 +83,43 @@ void ObjectPreviewWidget::setupUI() {
         QLabel* fidTextLabel = new QLabel("FID:");
         fidTextLabel->setMinimumWidth(30);
         
-        _fidLabel = new QLabel("No FRM");
-        _fidLabel->setToolTip("FRM filename for ground/world view");
-        _fidLabel->setStyleSheet("QLabel { border: 1px solid gray; padding: 2px; background-color: white; }");
+        // Create combined button that looks like a label with icon
+        _fidButton = new QPushButton("No FRM");
+        _fidButton->setToolTip("Click to browse FRM files");
         
-        _fidSelectorButton = new QPushButton("...");
-        _fidSelectorButton->setMaximumWidth(30);
-        _fidSelectorButton->setToolTip("Browse FRM files");
-        connect(_fidSelectorButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onFidSelectorClicked);
+        // Get standard folder icon from system style
+        QStyle* style = QApplication::style();
+        QIcon folderIcon = style->standardIcon(QStyle::SP_DirOpenIcon);
+        _fidButton->setIcon(folderIcon);
+        
+        // Style the button to look like a clickable label
+        _fidButton->setStyleSheet(
+            "QPushButton {"
+            "  border: 1px solid #d0d0d0;"
+            "  padding: 2px 4px;"
+            "  background-color: white;"
+            "  text-align: left;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #f5f5f5;"
+            "  border-color: #999;"
+            "}"
+            "QPushButton:pressed {"
+            "  background-color: #e0e0e0;"
+            "}"
+        );
+        
+        // Make the icon appear on the right side
+        _fidButton->setLayoutDirection(Qt::RightToLeft);
+        
+        // Make button size to its contents (text + icon + padding)
+        _fidButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+        
+        connect(_fidButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onFidSelectorClicked);
         
         fidLayout->addWidget(fidTextLabel);
-        fidLayout->addWidget(_fidLabel);
-        fidLayout->addWidget(_fidSelectorButton);
+        fidLayout->addWidget(_fidButton); // Don't expand, size to content
+        fidLayout->addStretch(); // Add stretch to push everything to the left
         mainLayout->addWidget(_fidWidget);
     }
     
@@ -109,29 +133,17 @@ void ObjectPreviewWidget::setupUI() {
         _directionCombo = new QComboBox();
         _directionCombo->addItems({"NE", "E", "SE", "SW", "W", "NW"});
         _directionCombo->setToolTip("Select animation direction");
-        _directionCombo->setMaximumWidth(50);
+        _directionCombo->setMaximumWidth(80); // Increased from 50 to 80 for better readability
         animationLayout->addWidget(new QLabel("Direction:"));
         animationLayout->addWidget(_directionCombo);
         
         animationLayout->addSpacing(10);
         
-        // Play/pause button
+        // Play/stop button
         _playPauseButton = new QPushButton("▶");
         _playPauseButton->setMaximumWidth(30);
-        _playPauseButton->setToolTip("Play/Pause animation");
+        _playPauseButton->setToolTip("Play/Stop animation");
         animationLayout->addWidget(_playPauseButton);
-        
-        // Frame slider
-        _frameSlider = new QSlider(Qt::Horizontal);
-        _frameSlider->setMinimum(0);
-        _frameSlider->setMaximum(0);
-        _frameSlider->setToolTip("Select frame");
-        animationLayout->addWidget(_frameSlider);
-        
-        // Frame label
-        _frameLabel = new QLabel("0/0");
-        _frameLabel->setMinimumWidth(40);
-        animationLayout->addWidget(_frameLabel);
         
         mainLayout->addWidget(_animationControls);
         
@@ -143,9 +155,6 @@ void ObjectPreviewWidget::setupUI() {
         // Connect signals
         if (_playPauseButton) {
             connect(_playPauseButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onPlayPauseClicked);
-        }
-        if (_frameSlider) {
-            connect(_frameSlider, &QSlider::valueChanged, this, &ObjectPreviewWidget::onFrameChanged);
         }
         if (_directionCombo) {
             connect(_directionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ObjectPreviewWidget::onDirectionChanged);
@@ -168,12 +177,12 @@ void ObjectPreviewWidget::setFrmPath(const QString& frmPath) {
     
     _currentFrmPath = frmPath;
     
-    // Update FID label if it exists
-    if (_fidLabel) {
+    // Update FID button if it exists
+    if (_fidButton) {
         if (!frmPath.isEmpty()) {
-            _fidLabel->setText(frmPath.split('/').last());
+            _fidButton->setText(frmPath.split('/').last());
         } else {
-            _fidLabel->setText("No FRM");
+            _fidButton->setText("No FRM");
         }
     }
     
@@ -202,17 +211,11 @@ void ObjectPreviewWidget::clear() {
     
     _previewLabel->setText("No FRM loaded");
     
-    if (_fidLabel) {
-        _fidLabel->setText("No FRM");
+    if (_fidButton) {
+        _fidButton->setText("No FRM");
     }
     
-    if (_frameLabel) {
-        _frameLabel->setText("0/0");
-    }
-    
-    if (_frameSlider) {
-        _frameSlider->setMaximum(0);
-    }
+    // Frame controls removed for compact design
     
     if (_animationControls) {
         _animationControls->setEnabled(false);
@@ -279,19 +282,25 @@ void ObjectPreviewWidget::stopAnimation() {
         if (_playPauseButton) {
             _playPauseButton->setText("▶");
         }
+        // Reset to first frame when stopping
+        _currentFrame = 0;
+        onFrameChanged(0);
     }
 }
 
 void ObjectPreviewWidget::onPlayPauseClicked() {
     if (_isAnimating) {
+        // Stop animation and reset to first frame
         _animationTimer->stop();
         _isAnimating = false;
         _playPauseButton->setText("▶");
+        _currentFrame = 0;
+        onFrameChanged(0); // Reset to first frame
     } else {
         if (_totalFrames > 1) {
             _animationTimer->start();
             _isAnimating = true;
-            _playPauseButton->setText("⏸");
+            _playPauseButton->setText("⏹"); // Stop button (not pause)
         }
     }
 }
@@ -324,10 +333,6 @@ void ObjectPreviewWidget::onFrameChanged(int frame) {
             _previewLabel->setPixmap(scaled);
         }
     }
-    
-    if (_frameLabel) {
-        _frameLabel->setText(QString("%1/%2").arg(_currentFrame + 1).arg(_totalFrames));
-    }
 }
 
 void ObjectPreviewWidget::onDirectionChanged(int direction) {
@@ -345,9 +350,6 @@ void ObjectPreviewWidget::onDirectionChanged(int direction) {
     
     // Reset to first frame
     _currentFrame = 0;
-    if (_frameSlider) {
-        _frameSlider->setValue(0);
-    }
     onFrameChanged(0);
 }
 
@@ -357,13 +359,8 @@ void ObjectPreviewWidget::onAnimationTick() {
     }
     
     _currentFrame = (_currentFrame + 1) % _totalFrames;
-    if (_frameSlider) {
-        _frameSlider->setValue(_currentFrame);
-        // onFrameChanged will be called automatically via signal
-    } else {
-        // No slider, call onFrameChanged directly
-        onFrameChanged(_currentFrame);
-    }
+    // Frame slider removed, call onFrameChanged directly
+    onFrameChanged(_currentFrame);
 }
 
 void ObjectPreviewWidget::onFidSelectorClicked() {
@@ -427,15 +424,6 @@ void ObjectPreviewWidget::loadAnimationFrames() {
             
             _frameCache.push_back(QPixmap::fromImage(frameImage));
         }
-        
-        // Update UI
-        if (_frameSlider) {
-            _frameSlider->setMaximum(_totalFrames - 1);
-        }
-        if (_frameLabel) {
-            _frameLabel->setText(QString("%1/%2").arg(_currentFrame + 1).arg(_totalFrames));
-        }
-        
     } catch (const std::exception& e) {
         spdlog::error("Error loading animation frames: {}", e.what());
         _frameCache.clear();

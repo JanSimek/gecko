@@ -38,15 +38,8 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _inventoryPreviewWidget(nullptr)
     , _groundPreviewWidget(nullptr)
     , _armorPreviewGroup(nullptr)
-    , _armorMalePreviewLabel(nullptr)
-    , _armorFemalePreviewLabel(nullptr)
-    , _armorAnimationControls(nullptr)
-    , _armorAnimationLayout(nullptr)
-    , _armorPlayPauseButton(nullptr)
-    , _armorFrameSlider(nullptr)
-    , _armorFrameLabel(nullptr)
-    , _armorDirectionCombo(nullptr)
-    , _armorAnimationTimer(nullptr)
+    , _armorMalePreviewWidget(nullptr)
+    , _armorFemalePreviewWidget(nullptr)
     , _animationControls(nullptr)
     , _animationLayout(nullptr)
     , _playPauseButton(nullptr)
@@ -59,11 +52,7 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _totalFrames(0)
     , _totalDirections(0)
     , _isAnimating(false)
-    , _armorCurrentFrame(0)
-    , _armorCurrentDirection(0)
-    , _armorTotalFrames(0)
-    , _armorTotalDirections(0)
-    , _armorIsAnimating(false)
+    // Armor animation state now managed by ObjectPreviewWidget instances
     , _nameLabel(nullptr)
     , _descriptionLabel(nullptr)
     , _fidSelectorButton(nullptr)
@@ -473,59 +462,7 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
     parentLayout->addWidget(_animationControls);
 }
 
-void ProEditorDialog::setupCompactArmorAnimationControls(QVBoxLayout* parentLayout) {
-    // Check if armor animation controls are already initialized (from full preview setup)
-    if (!_armorAnimationControls) {
-        // Create armor animation controls with compact styling
-        _armorAnimationControls = new QWidget();
-        QHBoxLayout* animLayout = new QHBoxLayout(_armorAnimationControls);
-        animLayout->setContentsMargins(0, 0, 0, 0);
-        animLayout->setSpacing(4);
-        
-        // Play/Pause button (small)
-        _armorPlayPauseButton = new QPushButton("▶");
-        _armorPlayPauseButton->setMaximumSize(BUTTON_MAX_WIDTH, BUTTON_MAX_HEIGHT);
-        _armorPlayPauseButton->setToolTip("Play/Pause armor animation");
-        
-        // Frame slider (compact)
-        _armorFrameSlider = new QSlider(Qt::Horizontal);
-        _armorFrameSlider->setMinimum(0);
-        _armorFrameSlider->setMaximum(0);
-        _armorFrameSlider->setValue(0);
-        _armorFrameSlider->setToolTip("Armor animation frame");
-        
-        // Frame label (small)
-        _armorFrameLabel = new QLabel("0/0");
-        _armorFrameLabel->setFixedWidth(30);
-        _armorFrameLabel->setStyleSheet("QLabel { font-size: 10px; }");
-        
-        // Direction combo (compact)
-        _armorDirectionCombo = new QComboBox();
-        _armorDirectionCombo->setMaximumWidth(DIRECTION_COMBO_MAX_WIDTH);
-        _armorDirectionCombo->setToolTip("Armor animation direction");
-        _armorDirectionCombo->addItems({"NE", "E", "SE", "SW", "W", "NW"}); // Fallout 2 uses 6 directions
-        
-        animLayout->addWidget(_armorPlayPauseButton);
-        animLayout->addWidget(_armorFrameSlider, 1);
-        animLayout->addWidget(_armorFrameLabel);
-        animLayout->addWidget(_armorDirectionCombo);
-        
-        // Animation timer
-        if (!_armorAnimationTimer) {
-            _armorAnimationTimer = new QTimer(this);
-            _armorAnimationTimer->setInterval(ANIMATION_TIMER_INTERVAL); // 5 FPS
-        }
-        
-        // Connect signals
-        connect(_armorPlayPauseButton, &QPushButton::clicked, this, &ProEditorDialog::onArmorPlayPauseClicked);
-        connect(_armorFrameSlider, &QSlider::valueChanged, this, &ProEditorDialog::onArmorFrameChanged);
-        connect(_armorDirectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onArmorDirectionChanged);
-        connect(_armorAnimationTimer, &QTimer::timeout, this, &ProEditorDialog::onArmorAnimationTick);
-    }
-    
-    _armorAnimationControls->setEnabled(false); // Disabled by default, enabled when FRM is loaded
-    parentLayout->addWidget(_armorAnimationControls);
-}
+// setupCompactArmorAnimationControls() removed - animation controls now handled by ObjectPreviewWidget instances
 
 void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     // Compact dual preview for inventory/ground using ObjectPreviewWidget
@@ -572,19 +509,12 @@ void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
     maleLayout->setContentsMargins(0, 0, 0, 0);
     maleLayout->setSpacing(2);
     
-    _armorMalePreviewLabel = new QLabel();
-    _armorMalePreviewLabel->setFixedSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE);
-    _armorMalePreviewLabel->setAlignment(Qt::AlignCenter);
-    _armorMalePreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
-    _armorMalePreviewLabel->setText("Male");
-    _armorMalePreviewLabel->setScaledContents(false); // Preserve aspect ratio
+    _armorMalePreviewWidget = new ObjectPreviewWidget(this, 
+        ObjectPreviewWidget::ShowAnimationControls, // Enable animation controls, no FID field
+        QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
+    _armorMalePreviewWidget->setTitle("Male");
     
-    QLabel* maleLabel = new QLabel("Male");
-    maleLabel->setAlignment(Qt::AlignCenter);
-    maleLabel->setStyleSheet("QLabel { font-size: 10px; }");
-    
-    maleLayout->addWidget(_armorMalePreviewLabel);
-    maleLayout->addWidget(maleLabel);
+    maleLayout->addWidget(_armorMalePreviewWidget);
     
     // Female preview (small)
     QWidget* femaleWidget = new QWidget();
@@ -592,28 +522,18 @@ void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
     femaleLayout->setContentsMargins(0, 0, 0, 0);
     femaleLayout->setSpacing(2);
     
-    _armorFemalePreviewLabel = new QLabel();
-    _armorFemalePreviewLabel->setFixedSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE);
-    _armorFemalePreviewLabel->setAlignment(Qt::AlignCenter);
-    _armorFemalePreviewLabel->setStyleSheet("QLabel { border: 1px solid #cbd5e0; background-color: #f7fafc; }");
-    _armorFemalePreviewLabel->setText("Female");
-    _armorFemalePreviewLabel->setScaledContents(false); // Preserve aspect ratio
+    _armorFemalePreviewWidget = new ObjectPreviewWidget(this, 
+        ObjectPreviewWidget::ShowAnimationControls, // Enable animation controls, no FID field
+        QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
+    _armorFemalePreviewWidget->setTitle("Female");
     
-    QLabel* femaleLabel = new QLabel("Female");
-    femaleLabel->setAlignment(Qt::AlignCenter);
-    femaleLabel->setStyleSheet("QLabel { font-size: 10px; }");
-    
-    femaleLayout->addWidget(_armorFemalePreviewLabel);
-    femaleLayout->addWidget(femaleLabel);
+    femaleLayout->addWidget(_armorFemalePreviewWidget);
     
     previewsLayout->addWidget(maleWidget);
     previewsLayout->addWidget(femaleWidget);
     
     // Add previews to main layout
     armorGroupLayout->addWidget(previewsWidget);
-    
-    // Add compact armor animation controls
-    setupCompactArmorAnimationControls(armorGroupLayout);
     
     parentLayout->addWidget(armorGroup);
 }
@@ -1317,53 +1237,7 @@ void ProEditorDialog::setupAnimationControls() {
     _animationControls->setEnabled(false);
 }
 
-void ProEditorDialog::setupArmorAnimationControls() {
-    // Armor animation controls
-    _armorAnimationControls = new QWidget();
-    _armorAnimationLayout = new QHBoxLayout(_armorAnimationControls);
-    _armorAnimationLayout->setContentsMargins(0, 0, 0, 0);
-    
-    // Direction selection
-    _armorDirectionCombo = new QComboBox();
-    _armorDirectionCombo->addItems({"NE", "E", "SE", "SW", "W", "NW"});
-    _armorDirectionCombo->setToolTip("Select armor animation direction");
-    _armorAnimationLayout->addWidget(new QLabel("Direction:"));
-    _armorAnimationLayout->addWidget(_armorDirectionCombo);
-    
-    _armorAnimationLayout->addSpacing(LAYOUT_SPACING);
-    
-    // Play/pause button
-    _armorPlayPauseButton = new QPushButton("▶");
-    _armorPlayPauseButton->setMaximumWidth(30);
-    _armorPlayPauseButton->setToolTip("Play/Pause armor animation");
-    _armorAnimationLayout->addWidget(_armorPlayPauseButton);
-    
-    // Frame slider
-    _armorFrameSlider = new QSlider(Qt::Horizontal);
-    _armorFrameSlider->setMinimum(0);
-    _armorFrameSlider->setMaximum(0);
-    _armorFrameSlider->setToolTip("Select armor animation frame");
-    _armorAnimationLayout->addWidget(_armorFrameSlider);
-    
-    // Frame label
-    _armorFrameLabel = new QLabel("0/0");
-    _armorFrameLabel->setMinimumWidth(40);
-    _armorAnimationLayout->addWidget(_armorFrameLabel);
-    
-    // Setup armor animation timer
-    _armorAnimationTimer = new QTimer(this);
-    _armorAnimationTimer->setSingleShot(false);
-    _armorAnimationTimer->setInterval(200); // 5 FPS default
-    
-    // Connect signals
-    connect(_armorPlayPauseButton, &QPushButton::clicked, this, &ProEditorDialog::onArmorPlayPauseClicked);
-    connect(_armorFrameSlider, &QSlider::valueChanged, this, &ProEditorDialog::onArmorFrameChanged);
-    connect(_armorDirectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onArmorDirectionChanged);
-    connect(_armorAnimationTimer, &QTimer::timeout, this, &ProEditorDialog::onArmorAnimationTick);
-    
-    // Initially disable controls
-    _armorAnimationControls->setEnabled(false);
-}
+// setupArmorAnimationControls() removed - animation controls now handled by ObjectPreviewWidget instances
 
 
 void ProEditorDialog::loadProData() {
@@ -1518,8 +1392,8 @@ void ProEditorDialog::loadArmorData() {
         _armorFemaleFIDLabel->setText(getFrmFilename(_armorFemaleFID));
     }
     
-    // Load armor animation frames and update preview
-    loadArmorAnimationFrames();
+    // Update armor preview (animation frames handled by ObjectPreviewWidget)
+    updateArmorPreview();
 }
 
 void ProEditorDialog::loadContainerData() {
@@ -2418,13 +2292,12 @@ void ProEditorDialog::updatePreview() {
         }
     }
     
-    // Stop armor animation
-    if (_armorAnimationTimer && _armorAnimationTimer->isActive()) {
-        _armorAnimationTimer->stop();
-        _armorIsAnimating = false;
-        if (_armorPlayPauseButton) {
-            _armorPlayPauseButton->setText("▶");
-        }
+    // Stop armor animation (now handled by ObjectPreviewWidget instances)
+    if (_armorMalePreviewWidget) {
+        _armorMalePreviewWidget->stopAnimation();
+    }
+    if (_armorFemalePreviewWidget) {
+        _armorFemalePreviewWidget->stopAnimation();
     }
     
     // Check if we're using dual preview system (for items)
@@ -2434,7 +2307,7 @@ void ProEditorDialog::updatePreview() {
         updateGroundPreview();
         
         // Update armor preview if this is an armor item
-        if (_pro->itemType() == Pro::ITEM_TYPE::ARMOR && _armorMalePreviewLabel && _armorFemalePreviewLabel) {
+        if (_pro->itemType() == Pro::ITEM_TYPE::ARMOR && _armorMalePreviewWidget && _armorFemalePreviewWidget) {
             updateArmorPreview();
         }
         
@@ -2592,81 +2465,45 @@ void ProEditorDialog::updateGroundPreview() {
 }
 
 void ProEditorDialog::updateArmorPreview() {
-    if (!_armorMalePreviewLabel || !_armorFemalePreviewLabel) {
+    if (!_armorMalePreviewWidget || !_armorFemalePreviewWidget) {
         return;
     }
     
     // Update male armor preview
     if (_armorMaleFID <= 0) {
-        _armorMalePreviewLabel->clear();
-        _armorMalePreviewLabel->setText("No male armor FRM");
+        _armorMalePreviewWidget->clear();
     } else {
-        // Use cached frame if available, otherwise fall back to static thumbnail
-        if (_armorCurrentFrame < static_cast<int>(_armorMaleFrameCache.size()) && 
-            !_armorMaleFrameCache[_armorCurrentFrame].isNull()) {
-            QPixmap scaledPixmap = _armorMaleFrameCache[_armorCurrentFrame].scaled(_armorMalePreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            _armorMalePreviewLabel->setPixmap(scaledPixmap);
-        } else {
-            // Fall back to static thumbnail generation
-            try {
-                auto& resourceManager = ResourceManager::getInstance();
-                std::string maleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorMaleFID));
-                
-                if (maleFrmPath.empty()) {
-                    _armorMalePreviewLabel->clear();
-                    _armorMalePreviewLabel->setText("Invalid male armor FID");
-                } else {
-                    QPixmap maleThumbnail = createFrmThumbnail(maleFrmPath, QSize(120, 120));
-                    if (!maleThumbnail.isNull()) {
-                        QPixmap scaledPixmap = maleThumbnail.scaled(_armorMalePreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                        _armorMalePreviewLabel->setPixmap(scaledPixmap);
-                    } else {
-                        _armorMalePreviewLabel->clear();
-                        _armorMalePreviewLabel->setText("Failed to load male armor FRM");
-                    }
-                }
-            } catch (const std::exception& e) {
-                spdlog::error("ProEditorDialog::updateArmorPreview() - male armor exception: {}", e.what());
-                _armorMalePreviewLabel->clear();
-                _armorMalePreviewLabel->setText("Error loading male armor FRM");
+        try {
+            auto& resourceManager = ResourceManager::getInstance();
+            std::string maleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorMaleFID));
+            
+            if (!maleFrmPath.empty()) {
+                _armorMalePreviewWidget->setFrmPath(QString::fromStdString(maleFrmPath));
+            } else {
+                _armorMalePreviewWidget->clear();
             }
+        } catch (const std::exception& e) {
+            spdlog::error("ProEditorDialog::updateArmorPreview() - male armor exception: {}", e.what());
+            _armorMalePreviewWidget->clear();
         }
     }
     
     // Update female armor preview
     if (_armorFemaleFID <= 0) {
-        _armorFemalePreviewLabel->clear();
-        _armorFemalePreviewLabel->setText("No female armor FRM");
+        _armorFemalePreviewWidget->clear();
     } else {
-        // Use cached frame if available, otherwise fall back to static thumbnail
-        if (_armorCurrentFrame < static_cast<int>(_armorFemaleFrameCache.size()) && 
-            !_armorFemaleFrameCache[_armorCurrentFrame].isNull()) {
-            QPixmap scaledPixmap = _armorFemaleFrameCache[_armorCurrentFrame].scaled(_armorFemalePreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            _armorFemalePreviewLabel->setPixmap(scaledPixmap);
-        } else {
-            // Fall back to static thumbnail generation
-            try {
-                auto& resourceManager = ResourceManager::getInstance();
-                std::string femaleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorFemaleFID));
-                
-                if (femaleFrmPath.empty()) {
-                    _armorFemalePreviewLabel->clear();
-                    _armorFemalePreviewLabel->setText("Invalid female armor FID");
-                } else {
-                    QPixmap femaleThumbnail = createFrmThumbnail(femaleFrmPath, QSize(120, 120));
-                    if (!femaleThumbnail.isNull()) {
-                        QPixmap scaledPixmap = femaleThumbnail.scaled(_armorFemalePreviewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                        _armorFemalePreviewLabel->setPixmap(scaledPixmap);
-                    } else {
-                        _armorFemalePreviewLabel->clear();
-                        _armorFemalePreviewLabel->setText("Failed to load female armor FRM");
-                    }
-                }
-            } catch (const std::exception& e) {
-                spdlog::error("ProEditorDialog::updateArmorPreview() - female armor exception: {}", e.what());
-                _armorFemalePreviewLabel->clear();
-                _armorFemalePreviewLabel->setText("Error loading female armor FRM");
+        try {
+            auto& resourceManager = ResourceManager::getInstance();
+            std::string femaleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorFemaleFID));
+            
+            if (!femaleFrmPath.empty()) {
+                _armorFemalePreviewWidget->setFrmPath(QString::fromStdString(femaleFrmPath));
+            } else {
+                _armorFemalePreviewWidget->clear();
             }
+        } catch (const std::exception& e) {
+            spdlog::error("ProEditorDialog::updateArmorPreview() - female armor exception: {}", e.what());
+            _armorFemalePreviewWidget->clear();
         }
     }
 }
@@ -2760,12 +2597,12 @@ void ProEditorDialog::onInventoryFidSelectorClicked() {
 
 void ProEditorDialog::onArmorMaleFidSelectorClicked() {
     openFrmSelectorForLabel(_armorMaleFIDLabel, &_armorMaleFID, 7); // Inventory type for armor
-    loadArmorAnimationFrames(); // Reload animation frames after FID selection
+    updateArmorPreview(); // Update armor preview after FID selection
 }
 
 void ProEditorDialog::onArmorFemaleFidSelectorClicked() {
     openFrmSelectorForLabel(_armorFemaleFIDLabel, &_armorFemaleFID, 7); // Inventory type for armor
-    loadArmorAnimationFrames(); // Reload animation frames after FID selection
+    updateArmorPreview(); // Update armor preview after FID selection
 }
 
 void ProEditorDialog::openFrmSelector(QSpinBox* targetField, uint32_t objectType) {
@@ -3431,50 +3268,6 @@ void ProEditorDialog::onAnimationTick() {
     }
 }
 
-void ProEditorDialog::onArmorPlayPauseClicked() {
-    if (_armorTotalFrames <= 1) {
-        return; // Nothing to animate
-    }
-    
-    if (_armorIsAnimating) {
-        // Pause
-        _armorAnimationTimer->stop();
-        _armorIsAnimating = false;
-        _armorPlayPauseButton->setText("▶");
-    } else {
-        // Play
-        _armorAnimationTimer->start();
-        _armorIsAnimating = true;
-        _armorPlayPauseButton->setText("⏸");
-    }
-}
-
-void ProEditorDialog::onArmorFrameChanged(int frame) {
-    if (frame != _armorCurrentFrame) {
-        _armorCurrentFrame = frame;
-        _armorFrameLabel->setText(QString("%1/%2").arg(frame + 1).arg(_armorTotalFrames));
-        
-        // Update both armor previews with new frame
-        updateArmorPreview();
-    }
-}
-
-void ProEditorDialog::onArmorDirectionChanged(int direction) {
-    if (direction != _armorCurrentDirection) {
-        _armorCurrentDirection = direction;
-        
-        // Reload frames for new direction
-        loadArmorAnimationFrames();
-    }
-}
-
-void ProEditorDialog::onArmorAnimationTick() {
-    if (_armorTotalFrames > 1) {
-        int nextFrame = (_armorCurrentFrame + 1) % _armorTotalFrames;
-        _armorFrameSlider->setValue(nextFrame);
-    }
-}
-
 void ProEditorDialog::loadAnimationFrames() {
     _frameCache.clear();
     
@@ -3568,118 +3361,6 @@ void ProEditorDialog::loadAnimationFrames() {
         _animationControls->setEnabled(false);
     }
 }
-
-void ProEditorDialog::loadArmorAnimationFrames() {
-    _armorMaleFrameCache.clear();
-    _armorFemaleFrameCache.clear();
-    
-    // Check if armor animation controls are initialized - return early if not
-    if (!_armorFrameSlider || !_armorFrameLabel || !_armorDirectionCombo || !_armorAnimationControls) {
-        // Armor animation controls not initialized yet, skip loading frames
-        return;
-    }
-    
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::ARMOR) {
-        _armorAnimationControls->setEnabled(false);
-        return;
-    }
-    
-    try {
-        auto& resourceManager = ResourceManager::getInstance();
-        
-        // Load palette
-        const Pal* palette = resourceManager.loadResource<Pal>("color.pal");
-        if (!palette) {
-            _armorAnimationControls->setEnabled(false);
-            return;
-        }
-        
-        // Load male armor frames
-        std::vector<QPixmap> maleFrames;
-        int maleTotalFrames = 0;
-        int maleTotalDirections = 0;
-        
-        if (_armorMaleFID > 0) {
-            std::string maleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorMaleFID));
-            if (!maleFrmPath.empty()) {
-                const auto* maleFrm = resourceManager.loadResource<Frm>(maleFrmPath);
-                if (maleFrm) {
-                    const auto& directions = maleFrm->directions();
-                    maleTotalDirections = static_cast<int>(directions.size());
-                    
-                    if (_armorCurrentDirection < maleTotalDirections) {
-                        const auto& direction = directions[_armorCurrentDirection];
-                        const auto& frames = direction.frames();
-                        maleTotalFrames = static_cast<int>(frames.size());
-                        
-                        for (const auto& frame : frames) {
-                            QPixmap framePixmap = createFrameThumbnail(frame, palette, QSize(150, 150));
-                            maleFrames.push_back(framePixmap);
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Load female armor frames
-        std::vector<QPixmap> femaleFrames;
-        int femaleTotalFrames = 0;
-        int femaleTotalDirections = 0;
-        
-        if (_armorFemaleFID > 0) {
-            std::string femaleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorFemaleFID));
-            if (!femaleFrmPath.empty()) {
-                const auto* femaleFrm = resourceManager.loadResource<Frm>(femaleFrmPath);
-                if (femaleFrm) {
-                    const auto& directions = femaleFrm->directions();
-                    femaleTotalDirections = static_cast<int>(directions.size());
-                    
-                    if (_armorCurrentDirection < femaleTotalDirections) {
-                        const auto& direction = directions[_armorCurrentDirection];
-                        const auto& frames = direction.frames();
-                        femaleTotalFrames = static_cast<int>(frames.size());
-                        
-                        for (const auto& frame : frames) {
-                            QPixmap framePixmap = createFrameThumbnail(frame, palette, QSize(150, 150));
-                            femaleFrames.push_back(framePixmap);
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Use the maximum frame count and direction count from both armors
-        _armorTotalFrames = std::max(maleTotalFrames, femaleTotalFrames);
-        _armorTotalDirections = std::max(maleTotalDirections, femaleTotalDirections);
-        
-        // Store frame caches
-        _armorMaleFrameCache = std::move(maleFrames);
-        _armorFemaleFrameCache = std::move(femaleFrames);
-        
-        // Update UI controls
-        _armorFrameSlider->setMaximum(std::max(0, _armorTotalFrames - 1));
-        _armorFrameSlider->setValue(0);
-        _armorFrameLabel->setText(QString("1/%1").arg(_armorTotalFrames));
-        
-        // Enable/disable direction combo based on available directions
-        _armorDirectionCombo->setEnabled(_armorTotalDirections > 1);
-        
-        // Enable animation controls if there are multiple frames or directions
-        bool shouldEnableAnimation = (_armorTotalFrames > 1 || _armorTotalDirections > 1);
-        _armorAnimationControls->setEnabled(shouldEnableAnimation);
-        
-        // Reset frame counter and update preview
-        _armorCurrentFrame = 0;
-        updateArmorPreview();
-        
-    } catch (const std::exception& e) {
-        spdlog::warn("ProEditorDialog: Exception loading armor animation frames: {}", e.what());
-        if (_armorAnimationControls) {
-            _armorAnimationControls->setEnabled(false);
-        }
-    }
-}
-
 
 void ProEditorDialog::onExtendedFlagChanged() {
     uint32_t flags = 0;

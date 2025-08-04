@@ -83,14 +83,11 @@ private:
     QLabel* _previewLabel;
     QLabel* _titleLabel;
     QWidget* _fidWidget;
-    QLabel* _fidLabel;
-    QPushButton* _fidSelectorButton;
+    QPushButton* _fidButton;  // Combined label + selector button
     
     // Animation controls
     QWidget* _animationControls;
     QPushButton* _playPauseButton;
-    QSlider* _frameSlider;
-    QLabel* _frameLabel;
     QComboBox* _directionCombo;
     QTimer* _animationTimer;
     
