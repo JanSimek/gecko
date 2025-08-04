@@ -11,6 +11,7 @@
 #include <QTimer>
 #include <QApplication>
 #include <QStyle>
+#include <QResizeEvent>
 #include <spdlog/spdlog.h>
 
 #include "../../format/frm/Frm.h"
@@ -27,9 +28,9 @@ ObjectPreviewWidget::ObjectPreviewWidget(QWidget* parent, PreviewOptions options
     , _titleLabel(nullptr)
     , _fidWidget(nullptr)
     , _fidButton(nullptr)
-    , _animationControls(nullptr)
     , _playPauseButton(nullptr)
-    , _directionCombo(nullptr)
+    , _rotateButton(nullptr)
+    , _editButton(nullptr)
     , _animationTimer(nullptr)
     , _currentFrame(0)
     , _currentDirection(0)
@@ -123,48 +124,97 @@ void ObjectPreviewWidget::setupUI() {
         mainLayout->addWidget(_fidWidget);
     }
     
-    // Animation controls (optional)
+    // Animation control overlays (optional)
     if (_options & ShowAnimationControls) {
-        _animationControls = new QWidget();
-        QHBoxLayout* animationLayout = new QHBoxLayout(_animationControls);
-        animationLayout->setContentsMargins(0, 0, 0, 0);
+        // Create play/stop button overlay positioned on the preview label
+        _playPauseButton = new QPushButton(this);
         
-        // Direction selection
-        _directionCombo = new QComboBox();
-        _directionCombo->addItems({"NE", "E", "SE", "SW", "W", "NW"});
-        _directionCombo->setToolTip("Select animation direction");
-        _directionCombo->setMaximumWidth(80); // Increased from 50 to 80 for better readability
-        animationLayout->addWidget(new QLabel("Direction:"));
-        animationLayout->addWidget(_directionCombo);
+        _playPauseButton->setIcon(QIcon(":/icons/actions/play.svg"));
         
-        animationLayout->addSpacing(10);
-        
-        // Play/stop button
-        _playPauseButton = new QPushButton("▶");
-        _playPauseButton->setMaximumWidth(30);
         _playPauseButton->setToolTip("Play/Stop animation");
-        animationLayout->addWidget(_playPauseButton);
-        
-        mainLayout->addWidget(_animationControls);
+        _playPauseButton->setFixedSize(24, 24);
+        _playPauseButton->setStyleSheet(
+            "QPushButton {"
+            "  background-color: rgba(255, 255, 255, 180);"
+            "  border: 1px solid rgba(0, 0, 0, 100);"
+            "  border-radius: 12px;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: rgba(255, 255, 255, 220);"
+            "  border-color: rgba(0, 0, 0, 150);"
+            "}"
+            "QPushButton:pressed {"
+            "  background-color: rgba(255, 255, 255, 255);"
+            "}"
+        );
+        _playPauseButton->setIconSize(QSize(18, 18));
+        _playPauseButton->hide(); // Initially hidden until preview is loaded
         
         // Setup animation timer
         _animationTimer = new QTimer(this);
         _animationTimer->setSingleShot(false);
         _animationTimer->setInterval(ANIMATION_TIMER_INTERVAL);
         
+        // Create rotate button overlay positioned on the preview label
+        _rotateButton = new QPushButton(this);
+        
+        _rotateButton->setIcon(QIcon(":/icons/actions/rotate.svg"));
+        
+        _rotateButton->setToolTip("Rotate object direction");
+        _rotateButton->setFixedSize(24, 24);
+        _rotateButton->setStyleSheet(
+            "QPushButton {"
+            "  background-color: rgba(255, 255, 255, 180);"
+            "  border: 1px solid rgba(0, 0, 0, 100);"
+            "  border-radius: 12px;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: rgba(255, 255, 255, 220);"
+            "  border-color: rgba(0, 0, 0, 150);"
+            "}"
+            "QPushButton:pressed {"
+            "  background-color: rgba(255, 255, 255, 255);"
+            "}"
+        );
+        _rotateButton->setIconSize(QSize(18, 18));
+        _rotateButton->hide(); // Initially hidden until preview is loaded
+        
+        // Create edit button overlay positioned on the preview label
+        _editButton = new QPushButton(this);
+        _editButton->setIcon(QIcon(":/icons/actions/edit.svg"));
+        _editButton->setToolTip("Change FRM file");
+        _editButton->setFixedSize(24, 24);
+        _editButton->setStyleSheet(
+            "QPushButton {"
+            "  background-color: rgba(255, 255, 255, 180);"
+            "  border: 1px solid rgba(0, 0, 0, 100);"
+            "  border-radius: 12px;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: rgba(255, 255, 255, 220);"
+            "  border-color: rgba(0, 0, 0, 150);"
+            "}"
+            "QPushButton:pressed {"
+            "  background-color: rgba(255, 255, 255, 255);"
+            "}"
+        );
+        _editButton->setIconSize(QSize(18, 18));
+        _editButton->setVisible(true); // Always visible
+        
         // Connect signals
         if (_playPauseButton) {
             connect(_playPauseButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onPlayPauseClicked);
         }
-        if (_directionCombo) {
-            connect(_directionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ObjectPreviewWidget::onDirectionChanged);
+        if (_rotateButton) {
+            connect(_rotateButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onRotateClicked);
+        }
+        if (_editButton) {
+            connect(_editButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onFidSelectorClicked);
         }
         if (_animationTimer) {
             connect(_animationTimer, &QTimer::timeout, this, &ObjectPreviewWidget::onAnimationTick);
         }
         
-        // Initially disable controls
-        _animationControls->setEnabled(false);
     }
     
     mainLayout->addStretch();
@@ -183,6 +233,15 @@ void ObjectPreviewWidget::setFrmPath(const QString& frmPath) {
             _fidButton->setText(frmPath.split('/').last());
         } else {
             _fidButton->setText("No FRM");
+        }
+    }
+    
+    // Update tooltip with filename
+    if (_previewLabel) {
+        if (!frmPath.isEmpty()) {
+            _previewLabel->setToolTip(QString("FRM: %1").arg(frmPath));
+        } else {
+            _previewLabel->setToolTip("No FRM loaded");
         }
     }
     
@@ -215,11 +274,12 @@ void ObjectPreviewWidget::clear() {
         _fidButton->setText("No FRM");
     }
     
-    // Frame controls removed for compact design
-    
-    if (_animationControls) {
-        _animationControls->setEnabled(false);
+    // Hide rotate button when no FRM is loaded
+    if (_rotateButton) {
+        _rotateButton->hide();
     }
+    
+    // Animation controls removed - using overlay buttons instead
 }
 
 void ObjectPreviewWidget::updatePreview() {
@@ -227,9 +287,7 @@ void ObjectPreviewWidget::updatePreview() {
     
     if (_currentFrmPath.isEmpty()) {
         _previewLabel->setText("No FRM loaded");
-        if (_animationControls) {
-            _animationControls->setEnabled(false);
-        }
+        // Animation controls removed - using overlay buttons instead
         return;
     }
     
@@ -262,15 +320,24 @@ void ObjectPreviewWidget::updatePreview() {
         }
         
         // Load animation frames if animation controls are present
-        if (_animationControls) {
+        if (_options & ShowAnimationControls) {
             loadAnimationFrames();
-            // Enable animation controls if we have frames
-            _animationControls->setEnabled(_totalFrames > 0);
+            // Show overlay buttons based on available content
+            if (_rotateButton) {
+                _rotateButton->setVisible(_totalDirections > 1);
+            }
+            if (_playPauseButton) {
+                _playPauseButton->setVisible(_totalFrames > 1);
+            }
+            // Position the overlay buttons (including always-visible edit button)
+            positionOverlayButtons();
         }
     } else {
         _previewLabel->setText("Failed to load FRM");
-        if (_animationControls) {
-            _animationControls->setEnabled(false);
+        // Animation controls removed - using overlay buttons instead
+        // Hide rotate button when FRM loading fails
+        if (_rotateButton) {
+            _rotateButton->hide();
         }
     }
 }
@@ -280,7 +347,7 @@ void ObjectPreviewWidget::stopAnimation() {
         _animationTimer->stop();
         _isAnimating = false;
         if (_playPauseButton) {
-            _playPauseButton->setText("▶");
+            _playPauseButton->setIcon(QIcon(":/icons/actions/play.svg"));
         }
         // Reset to first frame when stopping
         _currentFrame = 0;
@@ -293,14 +360,14 @@ void ObjectPreviewWidget::onPlayPauseClicked() {
         // Stop animation and reset to first frame
         _animationTimer->stop();
         _isAnimating = false;
-        _playPauseButton->setText("▶");
+        _playPauseButton->setIcon(QIcon(":/icons/actions/play.svg"));
         _currentFrame = 0;
         onFrameChanged(0); // Reset to first frame
     } else {
         if (_totalFrames > 1) {
             _animationTimer->start();
             _isAnimating = true;
-            _playPauseButton->setText("⏹"); // Stop button (not pause)
+            _playPauseButton->setIcon(QIcon(":/icons/actions/stop.svg"));
         }
     }
 }
@@ -335,14 +402,15 @@ void ObjectPreviewWidget::onFrameChanged(int frame) {
     }
 }
 
-void ObjectPreviewWidget::onDirectionChanged(int direction) {
-    _currentDirection = direction;
+void ObjectPreviewWidget::onRotateClicked() {
+    // Cycle through directions: 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 0
+    _currentDirection = (_currentDirection + 1) % DIRECTIONS_COUNT;
     
     // Stop animation when changing direction
     if (_isAnimating) {
         _animationTimer->stop();
         _isAnimating = false;
-        _playPauseButton->setText("▶");
+        _playPauseButton->setIcon(QIcon(":/icons/actions/play.svg"));
     }
     
     // Reload frames for new direction
@@ -483,6 +551,50 @@ QPixmap ObjectPreviewWidget::createFrmThumbnail(const std::string& frmPath, cons
     }
 }
 
+void ObjectPreviewWidget::positionOverlayButtons() {
+    if (!_previewLabel) {
+        return;
+    }
+    
+    QRect previewRect = _previewLabel->geometry();
+    
+    // Position rotate button in top-right corner
+    if (_rotateButton) {
+        QPoint topRight = previewRect.topRight();
+        topRight.setX(topRight.x() - _rotateButton->width() - 4); // 4px margin from edge
+        topRight.setY(topRight.y() + 4); // 4px margin from top
+        _rotateButton->move(topRight);
+        _rotateButton->raise(); // Ensure it's on top
+    }
+    
+    // Position play button next to rotate button (top-right area)
+    if (_playPauseButton) {
+        QPoint topRight = previewRect.topRight();
+        topRight.setX(topRight.x() - _playPauseButton->width() - 4); // 4px margin from edge
+        topRight.setY(topRight.y() + 4 + (_rotateButton ? _rotateButton->height() + 4 : 0)); // Below rotate button with 4px gap
+        _playPauseButton->move(topRight);
+        _playPauseButton->raise(); // Ensure it's on top
+    }
+    
+    // Position edit button in top-left corner for balance
+    if (_editButton) {
+        QPoint topLeft = previewRect.topLeft();
+        topLeft.setX(topLeft.x() + 4); // 4px margin from left edge
+        topLeft.setY(topLeft.y() + 4); // 4px margin from top
+        _editButton->move(topLeft);
+        _editButton->raise(); // Ensure it's on top
+    }
+}
+
+void ObjectPreviewWidget::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    
+    // Reposition overlay buttons when widget is resized
+    if ((_rotateButton && _rotateButton->isVisible()) || (_playPauseButton && _playPauseButton->isVisible()) || (_editButton && _editButton->isVisible())) {
+        positionOverlayButtons();
+    }
+}
+
 void ObjectPreviewWidget::setTitle(const QString& title) {
     _title = title;
     if (_titleLabel) {
@@ -504,8 +616,19 @@ void ObjectPreviewWidget::setPreviewSize(const QSize& size) {
 }
 
 void ObjectPreviewWidget::setShowAnimationControls(bool show) {
-    if (_animationControls) {
-        _animationControls->setVisible(show);
+    // Update the options flag
+    if (show) {
+        _options |= ShowAnimationControls;
+    } else {
+        _options &= ~ShowAnimationControls;
+    }
+    
+    // Show/hide overlay buttons
+    if (_rotateButton) {
+        _rotateButton->setVisible(show && _totalDirections > 1);
+    }
+    if (_playPauseButton) {
+        _playPauseButton->setVisible(show && _totalFrames > 1);
     }
 }
 

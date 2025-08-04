@@ -314,16 +314,16 @@ void ProEditorDialog::setupUI() {
     QVBoxLayout* leftInfoLayout = new QVBoxLayout(leftInfoPanel);
     leftInfoLayout->setContentsMargins(8, 8, 8, 8);
     leftInfoLayout->setSpacing(6);
-    
-    // Setup compact preview at top
-    setupCompactPreview(leftInfoLayout);
-    
+
     // Name (bold)
     _nameLabel = new QLabel("Loading...");
     _nameLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; color: #2c5282; padding: 4px 0; }");
     _nameLabel->setWordWrap(true);
     _nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     leftInfoLayout->addWidget(_nameLabel);
+
+    // Setup compact preview at top
+    setupCompactPreview(leftInfoLayout);
     
     // Description (compact)
     _descriptionLabel = new QTextEdit("Loading...");

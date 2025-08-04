@@ -13,6 +13,8 @@
         <file alias="actions/map-pin.svg">icons/tabler/actions/map-pin.svg</file>
         <file alias="actions/target-arrow.svg">icons/tabler/actions/target-arrow.svg</file>
         <file alias="actions/play.svg">icons/tabler/actions/player-play.svg</file>
+        <file alias="actions/stop.svg">icons/tabler/actions/player-stop.svg</file>
+        <file alias="actions/edit.svg">icons/tabler/actions/pencil.svg</file>
         
         <!-- Edit Menu Actions -->
         <file alias="actions/select-all.svg">icons/tabler/actions/select-all.svg</file>

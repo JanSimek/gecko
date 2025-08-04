@@ -34,7 +34,7 @@ public:
         ShowAnimationControls = 0x01,
         ShowFidField = 0x02,
         ShowGroupBox = 0x04,
-        Default = ShowAnimationControls | ShowFidField | ShowGroupBox
+        Default = ShowAnimationControls | ShowGroupBox
     };
     Q_DECLARE_FLAGS(PreviewOptions, PreviewOption)
     
@@ -70,13 +70,14 @@ signals:
 public slots:
     void onPlayPauseClicked();
     void onFrameChanged(int frame);
-    void onDirectionChanged(int direction);
+    void onRotateClicked();
     void onAnimationTick();
     void onFidSelectorClicked();
     
 private:
     void setupUI();
     void loadAnimationFrames();
+    void positionOverlayButtons();
     QPixmap createFrmThumbnail(const std::string& frmPath, const QSize& targetSize = QSize(250, 250));
     
     // UI Components
@@ -85,10 +86,10 @@ private:
     QWidget* _fidWidget;
     QPushButton* _fidButton;  // Combined label + selector button
     
-    // Animation controls
-    QWidget* _animationControls;
+    // Animation controls (overlays)
     QPushButton* _playPauseButton;
-    QComboBox* _directionCombo;
+    QPushButton* _rotateButton;
+    QPushButton* _editButton;
     QTimer* _animationTimer;
     
     // Animation state
@@ -114,6 +115,9 @@ private:
     static constexpr int PREVIEW_MIN_WIDTH = 150;
     static constexpr int ANIMATION_TIMER_INTERVAL = 200; // 5 FPS
     static constexpr int DIRECTIONS_COUNT = 6;
+    
+protected:
+    void resizeEvent(QResizeEvent* event) override;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(ObjectPreviewWidget::PreviewOptions)
