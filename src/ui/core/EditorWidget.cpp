@@ -1299,18 +1299,29 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
         return;
     }
 
+    // Convert hex coordinates (200x200 grid) to tile coordinates (100x100 grid)
+    int hexX = hexIndex % HexagonGrid::GRID_WIDTH;  // 0-199
+    int hexY = hexIndex / HexagonGrid::GRID_WIDTH;  // 0-199
+    int tileX = hexX / 2;  // 0-99
+    int tileY = hexY / 2;  // 0-99
+    int tileIndex = tileY * MAP_WIDTH + tileX; // Convert to tile index
+    
     // Get tiles for current elevation
     const auto& elevationTiles = _map->getMapFile().tiles[_currentElevation];
-    if (hexIndex >= static_cast<int>(elevationTiles.size())) {
+    if (tileIndex >= static_cast<int>(elevationTiles.size())) {
+        spdlog::warn("EditorWidget::updateTileSprite: Tile index {} out of bounds (hex {})", tileIndex, hexIndex);
         return;
     }
 
-    // Get the tile data
-    const auto& tile = elevationTiles[hexIndex];
-    int tileIndex = isRoof ? tile.getRoof() : tile.getFloor();
+    // Get the tile data using the converted tile index
+    const auto& tile = elevationTiles[tileIndex];
+    int tileID = isRoof ? tile.getRoof() : tile.getFloor();
 
-    // Skip if tile is empty
-    if (tileIndex == Map::EMPTY_TILE) {
+    // Handle empty tiles by setting transparent color
+    if (tileID == Map::EMPTY_TILE) {
+        auto& sprites = isRoof ? _roofSprites : _floorSprites;
+        sprites[tileIndex].setColor(isRoof ? geck::TileColors::transparent() : sf::Color::White);
+        spdlog::debug("EditorWidget::updateTileSprite: Set tile {} to empty [roof: {}]", tileIndex, isRoof);
         return;
     }
 
@@ -1321,22 +1332,25 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
     try {
         auto& resourceManager = ResourceManager::getInstance();
         const auto* tileList = resourceManager.getResource<Lst, std::string>("art/tiles/tiles.lst");
-        if (!tileList || tileIndex >= static_cast<int>(tileList->list().size())) {
+        if (!tileList || tileID >= static_cast<int>(tileList->list().size())) {
             return;
         }
 
-        const std::string tileName = tileList->list()[tileIndex];
+        const std::string tileName = tileList->list()[tileID];
         std::string tilePath = "art/tiles/" + tileName;
         const auto& texture = resourceManager.texture(tilePath);
 
-        // Update the sprite
-        sprites[hexIndex].setTexture(texture);
+        // Update the sprite using tile index for array access
+        sprites[tileIndex].setTexture(texture);
+        // Reset sprite color to ensure visibility (in case it was previously transparent)
+        sprites[tileIndex].setColor(sf::Color::White);
 
-        // Calculate position using utility function (eliminates duplicate code)
-        auto screenPos = indexToScreenPosition(hexIndex, isRoof);
-        sprites[hexIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
+        // Calculate position using tile index for screen positioning (same as initial loading)
+        auto screenPos = indexToScreenPosition(tileIndex, isRoof);
+        sprites[tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
 
-        spdlog::debug("EditorWidget::updateTileSprite: Updated sprite for hex {} ({})", hexIndex, tileName);
+        spdlog::debug("EditorWidget::updateTileSprite: Updated sprite for hex {} -> tile {} ({}) [roof: {}]", 
+                      hexIndex, tileIndex, tileName, isRoof);
     } catch (const std::exception& e) {
         spdlog::warn("EditorWidget::updateTileSprite: Failed to update tile sprite: {}", e.what());
     }

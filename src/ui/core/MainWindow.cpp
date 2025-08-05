@@ -901,10 +901,10 @@ void MainWindow::connectToEditorWidget() {
 
         // Connect tile selection to enable tile placement mode
         connect(_tilePalettePanel, &TilePalettePanel::tileSelected,
-            [this](int tileIndex) {
+            [this](int tileIndex, bool isRoof) {
                 if (tileIndex >= 0) {
-                    // Default to floor for single placement and area fill (roof/floor detection is automatic for replace mode)
-                    _currentEditorWidget->setTilePlacementMode(true, tileIndex, false);
+                    // Use the roof state from the tile palette
+                    _currentEditorWidget->setTilePlacementMode(true, tileIndex, isRoof);
                     // Update toolbar to show tile painting mode
                     updateModeDisplay("Mode: Tile painting", ":/icons/actions/paint.svg");
                 } else {

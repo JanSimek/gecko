@@ -4,6 +4,7 @@
 #include "../common/BasePaletteWidget.h"
 #include <QSpinBox>
 #include <QPushButton>
+#include <QRadioButton>
 #include <vector>
 #include <memory>
 
@@ -68,13 +69,17 @@ public:
     bool hasSelectedTile() const { return _selectedTileIndex >= 0; }
     void deselectTile();
 
+    // Roof/Floor mode
+    bool isRoofMode() const { return _isRoofMode; }
+    void setRoofMode(bool isRoof);
+
     // Placement modes 
     PlacementMode getPlacementMode() const { return _placementMode; }
     void setPlacementMode(PlacementMode mode);
 
 
 signals:
-    void tileSelected(int tileIndex);
+    void tileSelected(int tileIndex, bool isRoof);
     void placementModeChanged(PlacementMode mode);
     void placeTileAtPosition(int tileIndex, int position, bool isRoof);
     void fillAreaWithTile(int tileIndex, const QRect& area, bool isRoof);
@@ -112,6 +117,8 @@ private:
     // Placement mode info
     QGroupBox* _modeGroup = nullptr;
     QLabel* _placementModeLabel = nullptr;
+    QRadioButton* _floorModeButton = nullptr;
+    QRadioButton* _roofModeButton = nullptr;
 
     QGroupBox* _filterGroup = nullptr;
     QLineEdit* _searchLineEdit = nullptr;
@@ -135,6 +142,7 @@ private:
 
     // State
     int _selectedTileIndex = -1;
+    bool _isRoofMode = false; // Default to floor mode
     PlacementMode _placementMode = PlacementMode::UNIFIED_PLACEMENT;
     int _tilesPerRow = 8;
     int _previousColumnsPerRow = -1; // Cache to avoid unnecessary grid rebuilds

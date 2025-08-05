@@ -60,12 +60,39 @@ void TilePalettePanel::setupModeControls() {
     _modeGroup = new QGroupBox("Tile Painting", this);
     auto* modeLayout = new QVBoxLayout(_modeGroup);
 
+    // Floor/Roof mode selection
+    auto* layerModeLayout = new QHBoxLayout();
+    layerModeLayout->addWidget(new QLabel("Layer:", this));
+    
+    _floorModeButton = new QRadioButton("Floor", this);
+    _roofModeButton = new QRadioButton("Roof", this);
+    _floorModeButton->setChecked(true); // Default to floor mode
+    
+    layerModeLayout->addWidget(_floorModeButton);
+    layerModeLayout->addWidget(_roofModeButton);
+    layerModeLayout->addStretch();
+    
+    modeLayout->addLayout(layerModeLayout);
+
     _placementModeLabel = new QLabel(this);
     _placementModeLabel->setText("Select a tile to paint:\n• Single click: Place one tile\n• Click and drag: Fill area with tiles\n• Auto-replace selected tiles\n• Escape or click selected tile to deselect");
     _placementModeLabel->setStyleSheet("color: #666; font-size: 11px;");
     _placementModeLabel->setWordWrap(true);
 
     modeLayout->addWidget(_placementModeLabel);
+
+    // Connect radio button signals
+    connect(_floorModeButton, &QRadioButton::toggled, this, [this](bool checked) {
+        if (checked) {
+            setRoofMode(false);
+        }
+    });
+    
+    connect(_roofModeButton, &QRadioButton::toggled, this, [this](bool checked) {
+        if (checked) {
+            setRoofMode(true);
+        }
+    });
 
     _mainLayout->addWidget(_modeGroup);
 }
@@ -352,7 +379,7 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
         _selectedTileIndex = -1;
 
         // Disable tile placement mode
-        emit tileSelected(-1); // -1 signals no tile selected
+        emit tileSelected(-1, _isRoofMode); // -1 signals no tile selected
         return;
     }
 
@@ -378,7 +405,7 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
     }
     
     // Enable tile placement mode for painting individual tiles
-    emit tileSelected(tileIndex);
+    emit tileSelected(tileIndex, _isRoofMode);
 }
 
 void TilePalettePanel::clearTileSelection() {
@@ -391,7 +418,22 @@ void TilePalettePanel::deselectTile() {
     if (_selectedTileIndex >= 0) {
         clearTileSelection();
         _selectedTileIndex = -1;
-        emit tileSelected(-1); // -1 signals no tile selected
+        emit tileSelected(-1, _isRoofMode); // -1 signals no tile selected
+    }
+}
+
+void TilePalettePanel::setRoofMode(bool isRoof) {
+    if (_isRoofMode != isRoof) {
+        _isRoofMode = isRoof;
+        
+        // Update radio button states
+        _floorModeButton->setChecked(!isRoof);
+        _roofModeButton->setChecked(isRoof);
+        
+        // If a tile is currently selected, re-emit the signal with new roof state
+        if (_selectedTileIndex >= 0) {
+            emit tileSelected(_selectedTileIndex, _isRoofMode);
+        }
     }
 }
 
