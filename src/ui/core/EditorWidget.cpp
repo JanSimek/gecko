@@ -4,6 +4,7 @@
 #include "../rendering/RenderingEngine.h"
 #include "../dragdrop/DragDropManager.h"
 #include "../tiles/TilePlacementManager.h"
+#include "../tools/ExitGridPlacementManager.h"
 #include "../viewport/ViewportController.h"
 #include "../panels/ObjectPalettePanel.h"
 #include "../panels/TilePalettePanel.h"
@@ -79,6 +80,7 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
     _inputHandler = std::make_unique<InputHandler>(this);
     _dragDropManager = std::make_unique<DragDropManager>(this);
     _tilePlacementManager = std::make_unique<TilePlacementManager>(this);
+    _exitGridPlacementManager = std::make_unique<ExitGridPlacementManager>(this);
     _viewportController = std::make_unique<ViewportController>(&_hexgrid);
     setupInputCallbacks();
 
@@ -975,6 +977,10 @@ void EditorWidget::setupInputCallbacks() {
         spdlog::info("Tile placement mode cancelled");
     };
     
+    callbacks.onExitGridPlacement = [this](sf::Vector2f worldPos) {
+        _exitGridPlacementManager->handleExitGridPlacement(worldPos);
+    };
+    
     // Hover
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
         _currentHoverHex = _viewportController->updateHoverHex(worldPos);
@@ -1160,6 +1166,24 @@ void EditorWidget::cycleSelectionMode() {
     spdlog::info("Selection mode changed to: {}", selectionModeToString(_currentSelectionMode));
 }
 
+void EditorWidget::setSelectionMode(SelectionMode mode) {
+    if (_currentSelectionMode == mode) {
+        return; // No change needed
+    }
+    
+    _currentSelectionMode = mode;
+    
+    // Update InputHandler with new selection mode
+    if (_inputHandler) {
+        _inputHandler->setSelectionMode(_currentSelectionMode);
+    }
+
+    // Clear current selection when mode changes
+    _selectionManager->clearSelection();
+    
+    spdlog::info("Selection mode set to: {}", selectionModeToString(_currentSelectionMode));
+}
+
 void EditorWidget::toggleScrollBlockerRectangleMode() {
     if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
         // Switch back to ALL mode
@@ -1248,8 +1272,26 @@ void EditorWidget::setTilePlacementReplaceMode(bool enabled) {
     _tilePlacementManager->setTilePlacementReplaceMode(enabled);
 }
 
+void EditorWidget::setExitGridPlacementMode(bool enabled) {
+    _exitGridPlacementManager->setExitGridPlacementMode(enabled);
+    // Update InputHandler with new exit grid placement state
+    if (_inputHandler) {
+        _inputHandler->setExitGridPlacementMode(enabled);
+    }
+}
+
 bool EditorWidget::isTilePlacementMode() const {
     return _tilePlacementManager->isTilePlacementMode();
+}
+
+void EditorWidget::refreshObjects() {
+    // Clear existing objects
+    _objects.clear();
+    
+    // Reload objects from the current map
+    loadObjectSprites();
+    
+    spdlog::debug("Refreshed objects for current elevation");
 }
 
 void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {

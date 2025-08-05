@@ -69,6 +69,10 @@ MapObject& Object::getMapObject() {
     return *_mapObject; //.get();
 }
 
+std::shared_ptr<MapObject> Object::getMapObjectPtr() const noexcept {
+    return _mapObject;
+}
+
 bool Object::hasMapObject() const noexcept {
     return _mapObject != nullptr;
 }

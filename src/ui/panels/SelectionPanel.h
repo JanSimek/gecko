@@ -34,6 +34,7 @@ signals:
     void requestObjectHighlight(std::shared_ptr<Object> object);
     void statusMessage(const QString& message);
     void requestProEditor(std::shared_ptr<Object> object);
+    void requestExitGridEditor(std::shared_ptr<Object> object);
 
 public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);
@@ -44,6 +45,7 @@ public slots:
 private slots:
     void onChangeFrmClicked();
     void onEditProClicked();
+    void onEditExitGridClicked();
 
 private:
     void setupUI();
@@ -76,6 +78,7 @@ private:
     QLineEdit* _objectFrmPathEdit;
     QPushButton* _changeFrmButton;
     QPushButton* _editProButton;
+    QPushButton* _editExitGridButton;
 
     // Tile panel widgets
     QWidget* _tilePanelWidget;

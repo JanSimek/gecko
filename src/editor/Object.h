@@ -44,6 +44,7 @@ public:
 
     [[nodiscard]] MapObject& getMapObject();
     [[nodiscard]] bool hasMapObject() const noexcept;
+    [[nodiscard]] std::shared_ptr<MapObject> getMapObjectPtr() const noexcept;
     void setMapObject(std::shared_ptr<MapObject> newMapObject);
 
     void setSprite(sf::Sprite sprite);

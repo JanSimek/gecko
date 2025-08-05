@@ -62,6 +62,7 @@ public:
         std::function<void(sf::Vector2f worldPos)> onPlayerPositionSelect;
         std::function<void(sf::FloatRect area)> onScrollBlockerRectangle;
         std::function<void()> onTilePlacementCancel;
+        std::function<void(sf::Vector2f worldPos)> onExitGridPlacement;
         
         // Hover
         std::function<void(sf::Vector2f worldPos)> onMouseMove;
@@ -96,11 +97,13 @@ public:
     bool isDragging() const { return _isDragging; }
     bool isInPlayerPositionMode() const { return _playerPositionMode; }
     bool isInTilePlacementMode() const { return _tilePlacementMode; }
+    bool isInExitGridPlacementMode() const { return _exitGridPlacementMode; }
     
     /**
      * @brief Mode setters
      */
     void setPlayerPositionMode(bool enabled) { _playerPositionMode = enabled; }
+    void setExitGridPlacementMode(bool enabled) { _exitGridPlacementMode = enabled; }
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool replaceMode = false);
     void setSelectionMode(SelectionMode mode) { _selectionMode = mode; }
 
@@ -143,6 +146,7 @@ private:
     bool _playerPositionMode = false;
     bool _tilePlacementMode = false;
     bool _tilePlacementReplaceMode = false;
+    bool _exitGridPlacementMode = false;
     int _tilePlacementIndex = -1;
     bool _tilePlacementIsRoof = false;
 };

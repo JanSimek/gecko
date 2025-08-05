@@ -10,6 +10,7 @@
 #include <QStatusBar>
 #include <QLabel>
 #include <QSettings>
+#include <QMenu>
 #include <memory>
 #include <filesystem>
 
@@ -177,7 +178,8 @@ private:
     QAction* _fileBrowserPanelAction;
     
     // Toolbar actions
-    QAction* _modeAction;
+    QAction* _selectionModeAction;
+    QMenu* _selectionModeMenu;
 
     // Elevation menu actions
     QAction* _elevation1Action;

@@ -293,12 +293,9 @@ void RenderingEngine::renderExitGridsWithSprite(sf::RenderWindow* window,
     // Find objects for current elevation
     auto elevationIt = allObjects.find(renderData.currentElevation);
     if (elevationIt == allObjects.end()) {
-        spdlog::debug("No objects found on elevation {}", renderData.currentElevation);
         return; // No objects on this elevation
     }
     
-    spdlog::debug("Checking {} objects on elevation {} for exit grid markers", 
-                  elevationIt->second.size(), renderData.currentElevation);
     
     int exitGridCount = 0;
     // Iterate through all objects on current elevation
@@ -308,7 +305,6 @@ void RenderingEngine::renderExitGridsWithSprite(sf::RenderWindow* window,
         }
 
         exitGridCount++;
-        spdlog::debug("Found exit grid marker at position {}", mapObject->position);
 
         // Get hex position from MapObject
         int hexPosition = mapObject->position;
@@ -335,11 +331,7 @@ void RenderingEngine::renderExitGridsWithSprite(sf::RenderWindow* window,
         
         // Draw the exit grid marker
         window->draw(exitGridSprite);
-        spdlog::debug("Rendered exit grid marker at world position ({}, {})", 
-                      hexCenter.x(), hexCenter.y());
     }
-    
-    spdlog::debug("Total exit grid markers found and processed: {}", exitGridCount);
 }
 
 } // namespace geck

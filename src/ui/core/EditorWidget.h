@@ -29,6 +29,7 @@ class RenderingEngine;
 class InputHandler;
 class DragDropManager;
 class TilePlacementManager;
+class ExitGridPlacementManager;
 class ViewportController;
 
 class SFMLWidget;
@@ -60,6 +61,8 @@ public:
 
     // Qt6 toolbar actions
     void cycleSelectionMode();
+    void setSelectionMode(SelectionMode mode);
+    SelectionMode getCurrentSelectionMode() const { return _currentSelectionMode; }
     void rotateSelectedObject();
     void changeElevation(int elevation);
     void toggleScrollBlockerRectangleMode();
@@ -89,6 +92,12 @@ public:
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
     void setTilePlacementAreaFill(bool enabled);
     void setTilePlacementReplaceMode(bool enabled);
+    
+    // Exit grid placement mode control (delegated to ExitGridPlacementManager)
+    void setExitGridPlacementMode(bool enabled);
+    
+    // Object refresh methods
+    void refreshObjects();
     void selectAll();
     void clearSelection();
     bool isTilePlacementMode() const;
@@ -109,6 +118,7 @@ public:
     // Access to internal components for extracted managers
     selection::SelectionManager* getSelectionManager() const { return _selectionManager.get(); }
     TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
+    ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
     ViewportController* getViewportController() const { return _viewportController.get(); }
     int& getCurrentHoverHex() { return _currentHoverHex; }
 
@@ -226,6 +236,7 @@ private:
     std::unique_ptr<RenderingEngine> _renderingEngine;
     std::unique_ptr<DragDropManager> _dragDropManager;
     std::unique_ptr<TilePlacementManager> _tilePlacementManager;
+    std::unique_ptr<ExitGridPlacementManager> _exitGridPlacementManager;
     std::unique_ptr<ViewportController> _viewportController;
 
     // Game/Editor State

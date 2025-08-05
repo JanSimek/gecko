@@ -73,6 +73,8 @@ set(GECK_SOURCES
     ui/dialogs/ProEditorDialog.cpp
     ui/dialogs/MessageSelectorDialog.h
     ui/dialogs/MessageSelectorDialog.cpp
+    ui/dialogs/ExitGridPropertiesDialog.h
+    ui/dialogs/ExitGridPropertiesDialog.cpp
 
     # Qt6 UI Widgets
     ui/widgets/SFMLWidget.h
@@ -102,6 +104,8 @@ set(GECK_SOURCES
     ui/dragdrop/DragDropManager.cpp
     ui/tiles/TilePlacementManager.h
     ui/tiles/TilePlacementManager.cpp
+    ui/tools/ExitGridPlacementManager.h
+    ui/tools/ExitGridPlacementManager.cpp
     ui/viewport/ViewportController.h
     ui/viewport/ViewportController.cpp
 

@@ -57,6 +57,14 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             _tilePlacementIsRoof = isShiftPressed();
             return;
         }
+        
+        // Handle exit grid placement mode
+        if (_exitGridPlacementMode) {
+            if (_callbacks.onExitGridPlacement) {
+                _callbacks.onExitGridPlacement(worldPos);
+            }
+            return;
+        }
 
         // Check for object dragging
         SelectionModifier modifier = getSelectionModifier();
@@ -102,6 +110,10 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
                 _callbacks.onTilePlacementCancel();
             }
             spdlog::info("Tile placement mode cancelled with right-click");
+        } else if (_exitGridPlacementMode) {
+            // Cancel exit grid placement
+            _exitGridPlacementMode = false;
+            spdlog::info("Exit grid placement mode cancelled with right-click");
         } else {
             // Start panning
             _currentAction = EditorAction::PANNING;

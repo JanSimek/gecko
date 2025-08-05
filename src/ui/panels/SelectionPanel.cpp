@@ -35,6 +35,7 @@ SelectionPanel::SelectionPanel(QWidget* parent)
     , _objectFrmPathEdit(nullptr)
     , _changeFrmButton(nullptr)
     , _editProButton(nullptr)
+    , _editExitGridButton(nullptr)
     , _tilePanelWidget(nullptr)
     , _tileInfoGroup(nullptr)
     , _tilePreviewLabel(nullptr)
@@ -145,6 +146,13 @@ void SelectionPanel::setupUI() {
     _editProButton->setEnabled(false);
     connect(_editProButton, &QPushButton::clicked, this, &SelectionPanel::onEditProClicked);
     objectFormLayout->addRow("", _editProButton);
+    
+    // Edit Exit Grid button
+    _editExitGridButton = new QPushButton("Edit Exit Grid...");
+    _editExitGridButton->setEnabled(false);
+    _editExitGridButton->setVisible(false); // Hidden by default
+    connect(_editExitGridButton, &QPushButton::clicked, this, &SelectionPanel::onEditExitGridClicked);
+    objectFormLayout->addRow("", _editExitGridButton);
 
     objectLayout->addWidget(_objectInfoGroup);
     objectLayout->addStretch();
@@ -338,6 +346,15 @@ void SelectionPanel::updateObjectInfo() {
             
             // Enable the edit PRO button
             _editProButton->setEnabled(true);
+            
+            // Show/hide and enable exit grid button based on object type
+            if (selectedMapObject.isExitGridMarker()) {
+                _editExitGridButton->setVisible(true);
+                _editExitGridButton->setEnabled(true);
+            } else {
+                _editExitGridButton->setVisible(false);
+                _editExitGridButton->setEnabled(false);
+            }
 
             // Convert SFML sprite to QPixmap for display
             const auto& sprite = _selectedObject.value()->getSprite();
@@ -480,6 +497,8 @@ void geck::SelectionPanel::clearObjectInfo() {
     
     _changeFrmButton->setEnabled(false);
     _editProButton->setEnabled(false);
+    _editExitGridButton->setEnabled(false);
+    _editExitGridButton->setVisible(false);
 
     _objectSpriteLabel->clear();
     _objectSpriteLabel->setText("No object selected");
@@ -735,6 +754,15 @@ void SelectionPanel::onEditProClicked() {
     
     // Emit signal to request PRO editor for the selected object
     emit requestProEditor(_selectedObject.value());
+}
+
+void SelectionPanel::onEditExitGridClicked() {
+    if (!_selectedObject || !_selectedObject.value()) {
+        return;
+    }
+    
+    // Emit signal to request exit grid editor for the selected object
+    emit requestExitGridEditor(_selectedObject.value());
 }
 
 } // namespace geck

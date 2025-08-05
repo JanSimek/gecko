@@ -10,6 +10,7 @@
 #include "../panels/ObjectPalettePanel.h"
 #include "../panels/FileBrowserPanel.h"
 #include "../tiles/TilePlacementManager.h"
+#include "../tools/ExitGridPlacementManager.h"
 #include "../dialogs/SettingsDialog.h"
 #include "../dialogs/ProEditorDialog.h"
 #include "../../state/loader/MapLoader.h"
@@ -40,6 +41,7 @@
 #include <QKeyEvent>
 #include <QAction>
 #include <QActionGroup>
+#include <QMenu>
 #include <QIcon>
 #include <QDesktopServices>
 #include <QUrl>
@@ -445,40 +447,63 @@ void MainWindow::setupToolBar() {
 
     _mainToolBar->addSeparator();
 
-    // Selection mode action - start with "All" mode
-    _modeAction = _mainToolBar->addAction(QIcon(":/icons/actions/select.svg"), "Mode: All");
-    _modeAction->setStatusTip("Toggle selection mode (Objects/Floor/Roof/All)");
-    connect(_modeAction, &QAction::triggered, this, &MainWindow::selectionModeRequested);
-
-    // Update selection mode button text when mode changes
-    connect(this, &MainWindow::selectionModeRequested, [this]() {
-        // Check if we're in tile painting mode first
-        if (_currentEditorWidget && 
-            _currentEditorWidget->getTilePlacementManager() && 
-            _currentEditorWidget->getTilePlacementManager()->isTilePlacementMode()) {
-            
-            // Exit tile painting mode (same behavior as ESC key)
-            _currentEditorWidget->getTilePlacementManager()->resetState();
-            if (_tilePalettePanel) {
-                _tilePalettePanel->deselectTile();
-            }
-            // Mode display will be updated by the tile deselection callback
-            return;
+    // Selection mode action with dropdown menu  
+    _selectionModeAction = _mainToolBar->addAction(QIcon(":/icons/actions/select.svg"), "All");
+    _selectionModeAction->setToolTip("Select the current selection mode");
+    
+    // Create dropdown menu with all selection modes
+    _selectionModeMenu = new QMenu(this);
+    for (int i = 0; i < static_cast<int>(SelectionMode::NUM_SELECTION_TYPES); ++i) {
+        SelectionMode mode = static_cast<SelectionMode>(i);
+        QAction* action = _selectionModeMenu->addAction(selectionModeToString(mode));
+        action->setData(static_cast<int>(mode));
+        action->setCheckable(true);
+        
+        // Set "All" mode as checked by default
+        if (mode == SelectionMode::ALL) {
+            action->setChecked(true);
         }
         
-        // Normal mode cycling behavior
-        static SelectionMode currentMode = SelectionMode::ALL;
-        currentMode = static_cast<SelectionMode>((static_cast<int>(currentMode) + 1) % static_cast<int>(SelectionMode::NUM_SELECTION_TYPES));
-
-        QString modeText = QString("Mode: %1").arg(selectionModeToString(currentMode));
-        _modeAction->setText(modeText);
-        _modeAction->setIcon(QIcon(":/icons/actions/select.svg"));
+        // Connect each menu action to update editor widget
+        connect(action, &QAction::triggered, this, [this, mode]() {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->setSelectionMode(mode);
+                // Update action text to show current mode
+                _selectionModeAction->setText(selectionModeToString(mode));
+                
+                // Update checkmarks in menu
+                for (QAction* menuAction : _selectionModeMenu->actions()) {
+                    menuAction->setChecked(menuAction->data().toInt() == static_cast<int>(mode));
+                }
+            }
+        });
+    }
+    
+    // Connect the main action to show the dropdown menu
+    connect(_selectionModeAction, &QAction::triggered, this, [this]() {
+        // Get the toolbar button widget for this action to position the menu correctly
+        QWidget* actionWidget = _mainToolBar->widgetForAction(_selectionModeAction);
+        if (actionWidget) {
+            // Position menu below the button
+            QPoint menuPos = actionWidget->mapToGlobal(QPoint(0, actionWidget->height()));
+            _selectionModeMenu->exec(menuPos);
+        }
     });
 
     _mainToolBar->addSeparator();
 
     // Rotate action
     QAction* rotateAction = _mainToolBar->addAction(QIcon(":/icons/actions/rotate.svg"), "Rotate");
+    
+    // Exit grid placement tool
+    QAction* exitGridAction = _mainToolBar->addAction(QIcon(":/icons/actions/exitgrid.svg"), "Exit Grid");
+    exitGridAction->setStatusTip("Place exit grids on the map");
+    exitGridAction->setCheckable(true);
+    connect(exitGridAction, &QAction::triggered, this, [this](bool checked) {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->setExitGridPlacementMode(checked);
+        }
+    });
     rotateAction->setShortcut(QKeySequence("R"));
     rotateAction->setStatusTip("Rotate selected object");
     connect(rotateAction, &QAction::triggered, this, &MainWindow::rotateObjectRequested);
@@ -625,9 +650,10 @@ void MainWindow::updateHexIndexDisplay(int hexIndex) {
 }
 
 void MainWindow::updateModeDisplay(const QString& modeText, const QString& iconPath) {
-    if (_modeAction) {
-        _modeAction->setText(modeText);
-        _modeAction->setIcon(QIcon(iconPath));
+    // Update action text and icon for special modes like tile painting
+    if (_selectionModeAction) {
+        _selectionModeAction->setText(modeText);
+        _selectionModeAction->setIcon(QIcon(iconPath));
     }
 }
 
@@ -794,9 +820,7 @@ void MainWindow::connectToEditorWidget() {
     });
 
     // Connect toolbar actions
-    connect(this, &MainWindow::selectionModeRequested, [this]() {
-        _currentEditorWidget->cycleSelectionMode();
-    });
+    // Note: Selection mode is now handled directly by the combo box
     connect(this, &MainWindow::rotateObjectRequested, [this]() {
         _currentEditorWidget->rotateSelectedObject();
     });
@@ -816,6 +840,18 @@ void MainWindow::connectToEditorWidget() {
         connect(_selectionPanel, &SelectionPanel::requestProEditor, [this](std::shared_ptr<Object> object) {
             if (object && object->hasMapObject()) {
                 openProEditorForSelectedObject();
+            }
+        });
+        
+        connect(_selectionPanel, &SelectionPanel::requestExitGridEditor, [this](std::shared_ptr<Object> object) {
+            if (object && object->hasMapObject()) {
+                auto* exitGridManager = _currentEditorWidget->getExitGridPlacementManager();
+                if (exitGridManager) {
+                    auto mapObjectPtr = object->getMapObjectPtr();
+                    if (mapObjectPtr && mapObjectPtr->isExitGridMarker()) {
+                        exitGridManager->editExitGridProperties(mapObjectPtr);
+                    }
+                }
             }
         });
         
@@ -976,8 +1012,19 @@ void MainWindow::syncMenuStateToEditorWidget() {
     _currentEditorWidget->setShowLightOverlays(_showLightOverlaysAction->isChecked());
     _currentEditorWidget->setShowExitGrids(_showExitGridsAction->isChecked());
     
-    spdlog::debug("Synced menu state to EditorWidget: exit grids={}", 
-                  _showExitGridsAction->isChecked());
+    // Sync selection mode from action to EditorWidget (defaults to ALL mode)
+    if (_currentEditorWidget) {
+        _currentEditorWidget->setSelectionMode(SelectionMode::ALL);
+        if (_selectionModeAction) {
+            _selectionModeAction->setText("All");
+        }
+        // Update checkmarks in menu to show ALL mode is selected
+        if (_selectionModeMenu) {
+            for (QAction* menuAction : _selectionModeMenu->actions()) {
+                menuAction->setChecked(menuAction->data().toInt() == static_cast<int>(SelectionMode::ALL));
+            }
+        }
+    }
 }
 
 void MainWindow::updateMapInfo(Map* map) {
