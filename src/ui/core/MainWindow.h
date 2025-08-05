@@ -80,6 +80,7 @@ signals:
     void showWallBlockersToggled(bool enabled);
     void showHexGridToggled(bool enabled);
     void showLightOverlaysToggled(bool enabled);
+    void showExitGridsToggled(bool enabled);
     void elevationChanged(int elevation);
     void selectionModeRequested();
     void rotateObjectRequested();
@@ -112,6 +113,7 @@ private:
     void connectMenuSignals();
     void updatePanelMenuActions();
     void updateElevationMenu(Map* map);
+    void syncMenuStateToEditorWidget();
     
     // Text file handling
     bool isTextFile(const QString& filePath) const;
@@ -181,6 +183,17 @@ private:
     QAction* _elevation1Action;
     QAction* _elevation2Action;
     QAction* _elevation3Action;
+
+    // View menu actions for visibility toggles
+    QAction* _showObjectsAction;
+    QAction* _showCrittersAction;
+    QAction* _showWallsAction;
+    QAction* _showRoofsAction;
+    QAction* _showScrollBlockersAction;
+    QAction* _showWallBlockersAction;
+    QAction* _showHexGridAction;
+    QAction* _showLightOverlaysAction;
+    QAction* _showExitGridsAction;
 
     bool _isRunning;
 };

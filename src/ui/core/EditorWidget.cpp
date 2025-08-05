@@ -1069,6 +1069,7 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
     visibility.showWallBlockers = _showWallBlockers;
     visibility.showHexGrid = _showHexGrid;
     visibility.showLightOverlays = _showLightOverlays;
+    visibility.showExitGrids = _showExitGrids;
     
     // Prepare render data
     RenderingEngine::RenderData renderData;
@@ -1090,6 +1091,7 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
     renderData.playerPositionSprite = &_playerPositionSprite;
     renderData.currentHoverHex = _currentHoverHex;
     renderData.map = _map.get();
+    renderData.currentElevation = _currentElevation;
     
     // Delegate rendering to the engine
     _renderingEngine->render(window, _viewportController->getView(), renderData, visibility);

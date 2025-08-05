@@ -116,6 +116,9 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
 
     // Connect signals
     connectToEditorWidget();
+    
+    // Sync current menu state to the new EditorWidget
+    syncMenuStateToEditorWidget();
 
     // Update map info panel
     if (_currentEditorWidget->getMap()) {
@@ -252,45 +255,52 @@ void MainWindow::setupMenuBar() {
     // View Menu
     _viewMenu = _menuBar->addMenu("&View");
 
-    QAction* showObjectsAction = _viewMenu->addAction("Show &Objects");
-    showObjectsAction->setCheckable(true);
-    showObjectsAction->setChecked(UI::DEFAULT_SHOW_OBJECTS);
-    connect(showObjectsAction, &QAction::toggled, this, &MainWindow::showObjectsToggled);
+    _showObjectsAction = _viewMenu->addAction("Show &Objects");
+    _showObjectsAction->setCheckable(true);
+    _showObjectsAction->setChecked(UI::DEFAULT_SHOW_OBJECTS);
+    connect(_showObjectsAction, &QAction::toggled, this, &MainWindow::showObjectsToggled);
 
-    QAction* showCrittersAction = _viewMenu->addAction("Show &Critters");
-    showCrittersAction->setCheckable(true);
-    showCrittersAction->setChecked(UI::DEFAULT_SHOW_CRITTERS);
-    connect(showCrittersAction, &QAction::toggled, this, &MainWindow::showCrittersToggled);
+    _showCrittersAction = _viewMenu->addAction("Show &Critters");
+    _showCrittersAction->setCheckable(true);
+    _showCrittersAction->setChecked(UI::DEFAULT_SHOW_CRITTERS);
+    connect(_showCrittersAction, &QAction::toggled, this, &MainWindow::showCrittersToggled);
 
-    QAction* showWallsAction = _viewMenu->addAction("Show &Walls");
-    showWallsAction->setCheckable(true);
-    showWallsAction->setChecked(UI::DEFAULT_SHOW_WALLS);
-    connect(showWallsAction, &QAction::toggled, this, &MainWindow::showWallsToggled);
+    _showWallsAction = _viewMenu->addAction("Show &Walls");
+    _showWallsAction->setCheckable(true);
+    _showWallsAction->setChecked(UI::DEFAULT_SHOW_WALLS);
+    connect(_showWallsAction, &QAction::toggled, this, &MainWindow::showWallsToggled);
 
-    QAction* showRoofsAction = _viewMenu->addAction("Show &Roofs");
-    showRoofsAction->setCheckable(true);
-    showRoofsAction->setChecked(UI::DEFAULT_SHOW_ROOF);
-    connect(showRoofsAction, &QAction::toggled, this, &MainWindow::showRoofsToggled);
+    _showRoofsAction = _viewMenu->addAction("Show &Roofs");
+    _showRoofsAction->setCheckable(true);
+    _showRoofsAction->setChecked(UI::DEFAULT_SHOW_ROOF);
+    connect(_showRoofsAction, &QAction::toggled, this, &MainWindow::showRoofsToggled);
 
-    QAction* showScrollBlkAction = _viewMenu->addAction("Show Scroll &Blockers");
-    showScrollBlkAction->setCheckable(true);
-    showScrollBlkAction->setChecked(UI::DEFAULT_SHOW_SCROLL_BLK);
-    connect(showScrollBlkAction, &QAction::toggled, this, &MainWindow::showScrollBlockersToggled);
+    _showScrollBlockersAction = _viewMenu->addAction("Show Scroll &Blockers");
+    _showScrollBlockersAction->setCheckable(true);
+    _showScrollBlockersAction->setChecked(UI::DEFAULT_SHOW_SCROLL_BLK);
+    connect(_showScrollBlockersAction, &QAction::toggled, this, &MainWindow::showScrollBlockersToggled);
 
-    QAction* showWallBlkAction = _viewMenu->addAction("Show &Wall Blockers");
-    showWallBlkAction->setCheckable(true);
-    showWallBlkAction->setChecked(UI::DEFAULT_SHOW_WALL_BLK);
-    connect(showWallBlkAction, &QAction::toggled, this, &MainWindow::showWallBlockersToggled);
+    _showWallBlockersAction = _viewMenu->addAction("Show &Wall Blockers");
+    _showWallBlockersAction->setCheckable(true);
+    _showWallBlockersAction->setChecked(UI::DEFAULT_SHOW_WALL_BLK);
+    connect(_showWallBlockersAction, &QAction::toggled, this, &MainWindow::showWallBlockersToggled);
 
-    QAction* showHexGridAction = _viewMenu->addAction("Show &Hex Grid");
-    showHexGridAction->setCheckable(true);
-    showHexGridAction->setChecked(UI::DEFAULT_SHOW_HEX_GRID);
-    connect(showHexGridAction, &QAction::toggled, this, &MainWindow::showHexGridToggled);
+    _showHexGridAction = _viewMenu->addAction("Show &Hex Grid");
+    _showHexGridAction->setCheckable(true);
+    _showHexGridAction->setChecked(UI::DEFAULT_SHOW_HEX_GRID);
+    connect(_showHexGridAction, &QAction::toggled, this, &MainWindow::showHexGridToggled);
 
-    QAction* showLightOverlaysAction = _viewMenu->addAction("Show &Light Overlays");
-    showLightOverlaysAction->setCheckable(true);
-    showLightOverlaysAction->setChecked(false);
-    connect(showLightOverlaysAction, &QAction::toggled, this, &MainWindow::showLightOverlaysToggled);
+    _showLightOverlaysAction = _viewMenu->addAction("Show &Light Overlays");
+    _showLightOverlaysAction->setCheckable(true);
+    _showLightOverlaysAction->setChecked(false);
+    connect(_showLightOverlaysAction, &QAction::toggled, this, &MainWindow::showLightOverlaysToggled);
+
+    _showExitGridsAction = _viewMenu->addAction("Show &Exit Grids");
+    _showExitGridsAction->setCheckable(true);
+    _showExitGridsAction->setChecked(false);
+    _showExitGridsAction->setShortcut(QKeySequence("Ctrl+E"));
+    _showExitGridsAction->setStatusTip("Show exit grid markers");
+    connect(_showExitGridsAction, &QAction::toggled, this, &MainWindow::showExitGridsToggled);
 
     _viewMenu->addSeparator();
 
@@ -774,6 +784,10 @@ void MainWindow::connectToEditorWidget() {
         _currentEditorWidget->setShowLightOverlays(enabled);
     });
 
+    connect(this, &MainWindow::showExitGridsToggled, [this](bool enabled) {
+        _currentEditorWidget->setShowExitGrids(enabled);
+    });
+
     // Connect elevation changes
     connect(this, &MainWindow::elevationChanged, [this](int elevation) {
         _currentEditorWidget->changeElevation(elevation);
@@ -944,6 +958,26 @@ void MainWindow::connectToEditorWidget() {
     }
 
     spdlog::info("Qt6 menu connected to EditorWidget");
+}
+
+void MainWindow::syncMenuStateToEditorWidget() {
+    if (!_currentEditorWidget) {
+        return;
+    }
+
+    // Sync all visibility toggle states from menu to EditorWidget
+    _currentEditorWidget->setShowObjects(_showObjectsAction->isChecked());
+    _currentEditorWidget->setShowCritters(_showCrittersAction->isChecked());
+    _currentEditorWidget->setShowWalls(_showWallsAction->isChecked());
+    _currentEditorWidget->setShowRoof(_showRoofsAction->isChecked());
+    _currentEditorWidget->setShowScrollBlk(_showScrollBlockersAction->isChecked());
+    _currentEditorWidget->setShowWallBlockers(_showWallBlockersAction->isChecked());
+    _currentEditorWidget->setShowHexGrid(_showHexGridAction->isChecked());
+    _currentEditorWidget->setShowLightOverlays(_showLightOverlaysAction->isChecked());
+    _currentEditorWidget->setShowExitGrids(_showExitGridsAction->isChecked());
+    
+    spdlog::debug("Synced menu state to EditorWidget: exit grids={}", 
+                  _showExitGridsAction->isChecked());
 }
 
 void MainWindow::updateMapInfo(Map* map) {

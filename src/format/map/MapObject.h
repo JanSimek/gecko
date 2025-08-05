@@ -133,6 +133,16 @@ public:
         // This would correspond to PID 0x00000000 | 140 = 140
         return (pro_pid & 0xFF000000) == 0x00000000 && (pro_pid & 0x00FFFFFF) == 140;
     }
+    
+    // Check if object is an exit grid (MISC object with PID 16-23)
+    bool isExitGridMarker() const {
+        // Exit grids are MISC objects with PIDs 16-23
+        // MISC objects have PID format: 0x05000000 | index
+        // This matches the legacy F2 Mapper implementation: misc_ID && (nID >= 16 && nID <= 23)
+        uint32_t objectType = (pro_pid & 0xFF000000) >> 24;
+        uint32_t objectIndex = pro_pid & 0x00FFFFFF;
+        return (objectType == 0x05) && (objectIndex >= 16) && (objectIndex <= 23);
+    }
 };
 
 } // namespace geck

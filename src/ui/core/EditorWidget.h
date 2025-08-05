@@ -54,6 +54,7 @@ public:
     void setShowWallBlockers(bool show) { _showWallBlockers = show; }
     void setShowHexGrid(bool show) { _showHexGrid = show; }
     void setShowLightOverlays(bool show);
+    void setShowExitGrids(bool show) { _showExitGrids = show; }
 
     Map* getMap() const { return _map.get(); }
 
@@ -256,6 +257,7 @@ private:
     bool _showWallBlockers = UI::DEFAULT_SHOW_WALL_BLK;
     bool _showHexGrid = UI::DEFAULT_SHOW_HEX_GRID;
     bool _showLightOverlays = false;  // Toggle for showing light overlays
+    bool _showExitGrids = false;      // Toggle for showing exit grid markers
 
     const sf::Texture& createBlankTexture();
     const sf::Texture& createHexTexture();

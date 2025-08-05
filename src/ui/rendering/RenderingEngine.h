@@ -33,6 +33,7 @@ public:
         bool showWallBlockers = true;
         bool showHexGrid = false;
         bool showLightOverlays = false;
+        bool showExitGrids = false;
     };
 
     /**
@@ -65,6 +66,7 @@ public:
         
         // Map data
         const Map* map = nullptr;
+        int currentElevation = 0;
     };
 
     explicit RenderingEngine();
@@ -129,6 +131,23 @@ private:
      */
     void renderHexHighlights(sf::RenderWindow* window,
                             const RenderData& renderData);
+
+    /**
+     * @brief Render exit grid markers
+     */
+    void renderExitGrids(sf::RenderWindow* window,
+                        const sf::View& view,
+                        const RenderData& renderData,
+                        const Map* map);
+
+    /**
+     * @brief Helper method to render exit grids with a loaded sprite
+     */
+    void renderExitGridsWithSprite(sf::RenderWindow* window,
+                                  const sf::View& view,
+                                  const RenderData& renderData,
+                                  const Map* map,
+                                  sf::Sprite& exitGridSprite);
 
     /**
      * @brief Check if a hex is within the visible viewport

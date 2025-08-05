@@ -38,6 +38,7 @@ void ResourceInitializer::loadEssentialTextures() {
         resourceManager.insertTexture(ResourcePaths::Frm::SCROLL_BLOCKER);
         resourceManager.insertTexture(ResourcePaths::Frm::WALL_BLOCK);
         resourceManager.insertTexture(ResourcePaths::Frm::WALL_BLOCK_FULL);
+        resourceManager.insertTexture(ResourcePaths::Frm::EXIT_GRID);
         
         spdlog::info("ResourceInitializer: Loaded all essential textures");
     } catch (const std::exception& e) {

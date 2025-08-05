@@ -5,6 +5,9 @@
 #include "../../format/map/MapObject.h"
 #include "../../util/Constants.h"
 #include "../../util/ColorUtils.h"
+#include "../../util/ResourceManager.h"
+#include "../../util/ResourcePaths.h"
+#include "../../util/Coordinates.h"
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -49,7 +52,12 @@ void RenderingEngine::render(sf::RenderWindow* window,
     // Layer 6: Selection visuals
     renderSelectionVisuals(window, renderData);
 
-    // Layer 7: Hex highlights and markers
+    // Layer 7: Exit grids (if enabled)
+    if (visibility.showExitGrids && renderData.map) {
+        renderExitGrids(window, view, renderData, renderData.map);
+    }
+
+    // Layer 8: Hex highlights and markers
     renderHexHighlights(window, renderData);
 }
 
@@ -254,6 +262,84 @@ void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangl
         rectangle.setFillColor(ColorUtils::createSelectionFillColor());
         rectangle.setOutlineColor(ColorUtils::createSelectionOutlineColor());
     }
+}
+
+void RenderingEngine::renderExitGrids(sf::RenderWindow* window,
+                                     const sf::View& view,
+                                     const RenderData& renderData,
+                                     const Map* map) {
+    if (!window || !map || !renderData.hexGrid) {
+        return;
+    }
+
+    // Load exitgrid.frm texture
+    ResourceManager& resourceManager = ResourceManager::getInstance();
+    const sf::Texture& exitGridTexture = resourceManager.texture(ResourcePaths::Frm::EXIT_GRID);
+    sf::Sprite exitGridSprite(exitGridTexture);
+    
+    // Render exit grids with the loaded sprite
+    renderExitGridsWithSprite(window, view, renderData, map, exitGridSprite);
+}
+
+void RenderingEngine::renderExitGridsWithSprite(sf::RenderWindow* window,
+                                               const sf::View& view,
+                                               const RenderData& renderData,
+                                               const Map* map,
+                                               sf::Sprite& exitGridSprite) {
+
+    // Get all objects from the map
+    const auto& allObjects = map->objects();
+    
+    // Find objects for current elevation
+    auto elevationIt = allObjects.find(renderData.currentElevation);
+    if (elevationIt == allObjects.end()) {
+        spdlog::debug("No objects found on elevation {}", renderData.currentElevation);
+        return; // No objects on this elevation
+    }
+    
+    spdlog::debug("Checking {} objects on elevation {} for exit grid markers", 
+                  elevationIt->second.size(), renderData.currentElevation);
+    
+    int exitGridCount = 0;
+    // Iterate through all objects on current elevation
+    for (const auto& mapObject : elevationIt->second) {
+        if (!mapObject || !mapObject->isExitGridMarker()) {
+            continue;
+        }
+
+        exitGridCount++;
+        spdlog::debug("Found exit grid marker at position {}", mapObject->position);
+
+        // Get hex position from MapObject
+        int hexPosition = mapObject->position;
+        if (hexPosition < 0 || hexPosition >= HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT) {
+            continue;
+        }
+
+        // Convert hex position to world coordinates using getHexByPosition
+        auto hexOptional = renderData.hexGrid->getHexByPosition(hexPosition);
+        if (!hexOptional.has_value()) {
+            continue;
+        }
+        
+        const Hex& hex = hexOptional.value().get();
+        WorldCoords hexCenter(hex.x(), hex.y());
+
+        // Check if hex is visible in viewport
+        if (!isHexVisible(hexCenter.x(), hexCenter.y(), view)) {
+            continue;
+        }
+
+        // Position the exit grid sprite at the hex center
+        exitGridSprite.setPosition(hexCenter.toVector());
+        
+        // Draw the exit grid marker
+        window->draw(exitGridSprite);
+        spdlog::debug("Rendered exit grid marker at world position ({}, {})", 
+                      hexCenter.x(), hexCenter.y());
+    }
+    
+    spdlog::debug("Total exit grid markers found and processed: {}", exitGridCount);
 }
 
 } // namespace geck
