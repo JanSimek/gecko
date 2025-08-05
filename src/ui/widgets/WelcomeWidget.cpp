@@ -6,7 +6,11 @@
 #include <QSvgRenderer>
 #include <QPainter>
 #include <QCoreApplication>
+#include <QFont>
 #include <spdlog/spdlog.h>
+
+#include "../../Application.h"
+#include "version.h"
 
 namespace geck {
 
@@ -14,13 +18,14 @@ WelcomeWidget::WelcomeWidget(QWidget* parent)
     : QWidget(parent)
     , _layout(nullptr)
     , _imageLabel(nullptr)
+    , _versionLabel(nullptr)
 {
     setupUI();
 }
 
 void WelcomeWidget::setupUI() {
     _layout = new QVBoxLayout(this);
-    _layout->setContentsMargins(0, 0, 0, 0);
+    _layout->setContentsMargins(0, 0, 10, 0);
     _layout->setSpacing(0);
     
     // Create label for the Vault Boy image
@@ -29,55 +34,22 @@ void WelcomeWidget::setupUI() {
     // Make background fully transparent
     _imageLabel->setStyleSheet("QLabel { background-color: transparent; }");
     
-    // Try to load and display the Vault Boy SVG
-    // Try multiple possible paths since working directory may vary
-    QStringList possiblePaths = {
-        ":/icons/welcome/vault-boy.svg",                    // Qt resource system (preferred)
-        "resources/images/vault-boy.svg",                    // From build directory
-        "../resources/images/vault-boy.svg",                // From src directory
-        "../../resources/images/vault-boy.svg",             // From deeper subdirectory
-        // macOS app bundle paths
-        QCoreApplication::applicationDirPath() + "/../Resources/resources/images/vault-boy.svg",
-        QCoreApplication::applicationDirPath() + "/resources/images/vault-boy.svg"
-    };
+    // Load Vault Boy SVG using application's resource path method
+    std::filesystem::path svgPath = Application::getResourcesPath() / "images" / "vault-boy.svg";
+    QString svgPathStr = QString::fromStdString(svgPath.string());
     
     QSvgRenderer svgRenderer;
-    bool loaded = false;
-    QString usedPath;
-    
-    for (const QString& path : possiblePaths) {
-        spdlog::debug("Trying to load Vault Boy SVG from: {}", path.toStdString());
-        if (svgRenderer.load(path)) {
-            loaded = true;
-            usedPath = path;
-            break;
-        }
-    }
-    
-    if (loaded) {
-        spdlog::info("Successfully loaded Vault Boy SVG from: {}", usedPath.toStdString());
+    if (svgRenderer.load(svgPathStr)) {
         renderSvgToLabel(svgRenderer);
-    } else {
-        spdlog::warn("Failed to load Vault Boy SVG from any of the attempted paths");
-        // Fallback to a styled text message
-        _imageLabel->setText("Welcome to GECK Map Editor\n\nUse File > New Map or File > Open Map to get started");
-        _imageLabel->setWordWrap(true);
-        _imageLabel->setStyleSheet(
-            "QLabel { "
-            "color: #555; "
-            "font-size: 18px; "
-            "font-weight: bold; "
-            "background-color: #f8f8f8; "
-            "padding: 40px; "
-            "border-radius: 10px; "
-            "border: 2px solid #ddd; "
-            "}"
-        );
     }
-    
-    // Add stretching to center the image vertically and horizontally
+    createVersionLabel();
+
+    // Add stretching to center the content vertically and horizontally
     _layout->addStretch();
     _layout->addWidget(_imageLabel, 0, Qt::AlignCenter);
+    if (_versionLabel) {
+        _layout->addWidget(_versionLabel, 0, Qt::AlignCenter);
+    }
     _layout->addStretch();
 }
 
@@ -103,6 +75,27 @@ void WelcomeWidget::renderSvgToLabel(QSvgRenderer& svgRenderer) {
     // Remove size constraints to allow proper centering
     _imageLabel->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
     _imageLabel->setMinimumSize(0, 0);
+}
+
+void WelcomeWidget::createVersionLabel() {
+    _versionLabel = new QLabel();
+    _versionLabel->setText(QString("Welcome to %1 v%2")
+                          .arg(geck::version::name)
+                          .arg(geck::version::string));
+    _versionLabel->setAlignment(Qt::AlignCenter);
+    
+    // Set monospace bold font
+    QFont font("Monaco, Consolas, 'Courier New', monospace");
+    font.setBold(true);
+    font.setPointSize(12);
+    _versionLabel->setFont(font);
+    
+    // Style the label
+    _versionLabel->setStyleSheet(
+        "QLabel { "
+        "background-color: transparent; "
+        "}"
+    );
 }
 
 } // namespace geck

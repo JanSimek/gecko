@@ -24,8 +24,10 @@ public:
     ~Application();
 
     bool isRunning() const;
-
     void run();
+
+    // Platform-aware resource path resolution
+    static std::filesystem::path getResourcesPath();
 
 private:
     void initUI();

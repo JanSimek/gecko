@@ -13,6 +13,7 @@
 #include "../tools/ExitGridPlacementManager.h"
 #include "../dialogs/SettingsDialog.h"
 #include "../dialogs/ProEditorDialog.h"
+#include "../dialogs/AboutDialog.h"
 #include "../../state/loader/MapLoader.h"
 #include "../../selection/SelectionState.h"
 #include "../../util/Types.h"
@@ -416,6 +417,12 @@ void MainWindow::setupMenuBar() {
     _elevation3Action->setDisabled(true);
     elevationGroup->addAction(_elevation3Action);
     connect(_elevation3Action, &QAction::triggered, [this]() { elevationChanged(ELEVATION_3); });
+    
+    // Help Menu
+    _helpMenu = _menuBar->addMenu("&Help");
+    QAction* aboutAction = _helpMenu->addAction("&About Gecko...");
+    aboutAction->setStatusTip("Show information about the application");
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::showAbout);
 }
 
 void MainWindow::setupToolBar() {
@@ -1456,6 +1463,11 @@ void MainWindow::showPreferences() {
     
     // Ensure file browser panel is visible after closing preferences
     showFileBrowserPanel();
+}
+
+void MainWindow::showAbout() {
+    AboutDialog dialog(this);
+    dialog.exec();
 }
 
 void MainWindow::onPlayGame() {

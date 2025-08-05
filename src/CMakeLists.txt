@@ -75,6 +75,8 @@ set(GECK_SOURCES
     ui/dialogs/MessageSelectorDialog.cpp
     ui/dialogs/ExitGridPropertiesDialog.h
     ui/dialogs/ExitGridPropertiesDialog.cpp
+    ui/dialogs/AboutDialog.h
+    ui/dialogs/AboutDialog.cpp
 
     # Qt6 UI Widgets
     ui/widgets/SFMLWidget.h
@@ -297,7 +299,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-        "${CMAKE_SOURCE_DIR}/vendor/vfspp/include")
+        "${CMAKE_SOURCE_DIR}/vendor/vfspp/include"
+        "${CMAKE_BINARY_DIR}/generated")
 
 # copy shared external libraries to the build directory for Windows builds
 if(WIN32)

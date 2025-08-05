@@ -2,7 +2,7 @@
 
 project(
     gecko
-    VERSION 0.1
+    VERSION 1.0.0
     DESCRIPTION "Map editor for Fallout 2"
     LANGUAGES CXX
 )
@@ -19,6 +19,15 @@ endif()
 
 include(FetchContent)
 include(GNUInstallDirs)
+
+##################################################
+# Version configuration
+##################################################
+configure_file(
+    "${CMAKE_SOURCE_DIR}/src/version.h.in"
+    "${CMAKE_BINARY_DIR}/generated/version.h"
+    @ONLY
+)
 
 ##################################################
 # Options

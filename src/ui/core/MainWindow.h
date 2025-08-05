@@ -98,6 +98,7 @@ private slots:
     void updateHexIndexDisplay(int hexIndex);
     void updateModeDisplay(const QString& modeText, const QString& iconPath);
     void showPreferences();
+    void showAbout();
     void onPlayGame();
 
 public slots:
@@ -147,6 +148,7 @@ private:
     QMenu* _viewMenu;
     QMenu* _panelsMenu;
     QMenu* _elevationMenu;
+    QMenu* _helpMenu;
 
     // Toolbar
     QToolBar* _mainToolBar;

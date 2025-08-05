@@ -24,9 +24,11 @@ public:
 private:
     void setupUI();
     void renderSvgToLabel(QSvgRenderer& svgRenderer);
+    void createVersionLabel();
     
     QVBoxLayout* _layout;
     QLabel* _imageLabel;
+    QLabel* _versionLabel;
 };
 
 } // namespace geck
