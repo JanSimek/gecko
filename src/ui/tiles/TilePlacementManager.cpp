@@ -5,6 +5,7 @@
 #include "../../selection/SelectionManager.h"
 #include "../../editor/HexagonGrid.h"
 #include "../../util/Constants.h"
+#include "../../util/TileUtils.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 
@@ -29,17 +30,12 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
     
     int hexIndex = _editor->getViewportController()->worldPosToHexIndex(adjustedWorldPos);
     if (hexIndex < 0) {
-        spdlog::debug("TilePlacementManager::placeTileAtPosition: No hex found at worldPos ({:.1f}, {:.1f}) adjusted({:.1f}, {:.1f}) [roof: {}]",
-            worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, isRoof);
+        spdlog::debug("TilePlacementManager::placeTileAtPosition: No valid position found");
         return;
     }
     
-    // Convert hex coordinates (200x200 grid) to tile coordinates (100x100 grid)
-    int hexX = hexIndex % HexagonGrid::GRID_WIDTH;  // 0-199
-    int hexY = hexIndex / HexagonGrid::GRID_WIDTH;  // 0-199
-    int tileX = hexX / 2;  // 0-99
-    int tileY = hexY / 2;  // 0-99
-    int tileIndex_pos = tileY * MAP_WIDTH + tileX; // Convert to tile index
+    // Convert hex index to tile index using utility function
+    int tileIndex_pos = hexIndexToTileIndex(hexIndex);
     
     // Validate tile bounds
     if (tileIndex_pos >= TILES_PER_ELEVATION) {
@@ -64,16 +60,11 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
     }
 
     // Efficiently update just this tile's sprite using hex index for positioning
-    updateTileSprite(hexIndex, isRoof);
+    _editor->updateTileSprite(hexIndex, isRoof);
 
-    spdlog::debug("TilePlacementManager::placeTileAtPosition: Placed tile {} at tile position {} (roof: {})",
-        tileIndex, tileIndex_pos, isRoof);
 }
 
 void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof) {
-    spdlog::info("TilePlacementManager::fillAreaWithTile called with tile {} area ({:.1f},{:.1f},{:.1f},{:.1f}) roof: {}", 
-        tileIndex, area.position.x, area.position.y, area.size.x, area.size.y, isRoof);
-    
     if (!_editor->getMap()) {
         spdlog::warn("TilePlacementManager::fillAreaWithTile: No map loaded");
         return;
@@ -90,7 +81,6 @@ void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& 
     auto& mapFile = _editor->getMapFile();
     auto& elevationTiles = mapFile.tiles[_editor->getCurrentElevation()];
 
-    int tilesPlaced = 0;
     for (int tileIdx : tilesToFill) {
         if (tileIdx >= 0 && tileIdx < static_cast<int>(elevationTiles.size())) {
             if (isRoof) {
@@ -100,20 +90,13 @@ void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& 
             }
 
             // Convert tile index to hex index for sprite update
-            int tileX = tileIdx % MAP_WIDTH;        // 0-99
-            int tileY = tileIdx / MAP_WIDTH;        // 0-99
-            int hexX = tileX * 2;                   // 0-198
-            int hexY = tileY * 2;                   // 0-198  
-            int hexIndex = hexY * HexagonGrid::GRID_WIDTH + hexX;
+            int hexIndex = tileIndexToHexIndex(tileIdx);
             
             // Efficiently update this tile's sprite using hex index
-            updateTileSprite(hexIndex, isRoof);
-            tilesPlaced++;
+            _editor->updateTileSprite(hexIndex, isRoof);
         }
     }
 
-    spdlog::info("TilePlacementManager::fillAreaWithTile: Filled {} tiles with tile {} (roof: {})",
-        tilesPlaced, tileIndex, isRoof);
 }
 
 void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
@@ -136,22 +119,15 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
     auto& mapFile = _editor->getMapFile();
     auto& elevationTiles = mapFile.tiles[_editor->getCurrentElevation()];
 
-    int tilesReplaced = 0;
-
     // Replace floor tiles
     for (int tileIdx : floorTileIndices) {
         if (tileIdx >= 0 && tileIdx < static_cast<int>(elevationTiles.size())) {
             elevationTiles[tileIdx].setFloor(newTileIndex);
             
             // Convert tile index to hex index for sprite update
-            int tileX = tileIdx % MAP_WIDTH;        // 0-99
-            int tileY = tileIdx / MAP_WIDTH;        // 0-99
-            int hexX = tileX * 2;                   // 0-198
-            int hexY = tileY * 2;                   // 0-198  
-            int hexIndex = hexY * HexagonGrid::GRID_WIDTH + hexX;
+            int hexIndex = tileIndexToHexIndex(tileIdx);
             
-            updateTileSprite(hexIndex, false); // false = floor tile
-            tilesReplaced++;
+            _editor->updateTileSprite(hexIndex, false); // false = floor tile
         }
     }
 
@@ -161,26 +137,18 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
             elevationTiles[tileIdx].setRoof(newTileIndex);
             
             // Convert tile index to hex index for sprite update
-            int tileX = tileIdx % MAP_WIDTH;        // 0-99
-            int tileY = tileIdx / MAP_WIDTH;        // 0-99
-            int hexX = tileX * 2;                   // 0-198
-            int hexY = tileY * 2;                   // 0-198  
-            int hexIndex = hexY * HexagonGrid::GRID_WIDTH + hexX;
+            int hexIndex = tileIndexToHexIndex(tileIdx);
             
-            updateTileSprite(hexIndex, true); // true = roof tile
-            tilesReplaced++;
+            _editor->updateTileSprite(hexIndex, true); // true = roof tile
         }
     }
 
-    spdlog::info("TilePlacementManager::replaceSelectedTiles: Replaced {} tiles with tile {} ({} floor, {} roof)",
-        tilesReplaced, newTileIndex, floorTileIndices.size(), roofTileIndices.size());
 }
 
 void TilePlacementManager::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof) {
     _tilePlacementMode = enabled;
     _tilePlacementIndex = tileIndex;
     _tilePlacementIsRoof = isRoof;
-
 }
 
 void TilePlacementManager::setTilePlacementAreaFill(bool enabled) {
@@ -191,7 +159,7 @@ void TilePlacementManager::setTilePlacementReplaceMode(bool enabled) {
     _tilePlacementReplaceMode = enabled;
 }
 
-void TilePlacementManager::handleTilePlacement(sf::Vector2f worldPos, bool isRoof) {
+void TilePlacementManager::handleTilePlacement(sf::Vector2f worldPos, bool /*isRoof*/) {
     if (_tilePlacementMode && _tilePlacementIndex >= 0) {
         // Check if there are already selected tiles - if so, replace them instead of placing new tile
         if (_editor->getSelectionManager()->hasSelection()) {
@@ -204,7 +172,7 @@ void TilePlacementManager::handleTilePlacement(sf::Vector2f worldPos, bool isRoo
     }
 }
 
-void TilePlacementManager::handleTileAreaFill(sf::Vector2f startPos, sf::Vector2f endPos, bool isRoof) {
+void TilePlacementManager::handleTileAreaFill(sf::Vector2f startPos, sf::Vector2f endPos, bool /*isRoof*/) {
     if (_tilePlacementMode && _tilePlacementIndex >= 0) {
         // Check if there are already selected tiles - if so, replace them instead of area fill
         if (_editor->getSelectionManager()->hasSelection()) {
@@ -230,10 +198,5 @@ void TilePlacementManager::resetState() {
     _tilePlacementIndex = -1;
     _tilePlacementIsRoof = false;
 }
-
-void TilePlacementManager::updateTileSprite(int hexIndex, bool isRoof) {
-    _editor->updateTileSprite(hexIndex, isRoof);
-}
-
 
 } // namespace geck

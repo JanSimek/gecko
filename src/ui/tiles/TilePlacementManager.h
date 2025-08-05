@@ -50,8 +50,6 @@ public:
     void resetState();
 
 private:
-    // Helper methods
-    void updateTileSprite(int hexIndex, bool isRoof);
     
     EditorWidget* _editor;
 

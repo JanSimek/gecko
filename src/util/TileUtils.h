@@ -3,6 +3,7 @@
 #include <tuple>
 #include <SFML/Graphics.hpp>
 #include "Constants.h"
+#include "../editor/HexagonGrid.h"
 
 namespace geck {
 
@@ -109,6 +110,40 @@ inline ScreenPosition coordinatesToScreenPosition(const TileCoordinates& coords,
  */
 inline ScreenPosition indexToScreenPosition(int tileIndex, bool isRoof = false) {
     return coordinatesToScreenPosition(indexToCoordinates(tileIndex), isRoof);
+}
+
+/**
+ * @brief Convert tile index to hex index for sprite operations
+ *
+ * Tiles use a 100x100 grid (10,000 positions) while hexes use a 200x200 grid (40,000 positions).
+ * Each tile corresponds to a 2x2 block of hexes, so we multiply coordinates by 2.
+ *
+ * @param tileIndex Linear tile index (0-9999)
+ * @return Corresponding hex index for the top-left hex of the tile (0-39999)
+ */
+inline int tileIndexToHexIndex(int tileIndex) {
+    int tileX = tileIndex % MAP_WIDTH;        // 0-99
+    int tileY = tileIndex / MAP_WIDTH;        // 0-99
+    int hexX = tileX * 2;                     // 0-198
+    int hexY = tileY * 2;                     // 0-198  
+    return hexY * HexagonGrid::GRID_WIDTH + hexX;
+}
+
+/**
+ * @brief Convert hex index to tile index for data operations
+ *
+ * Converts from hex coordinates (200x200) to tile coordinates (100x100) by dividing by 2.
+ * This gives the tile that contains the specified hex.
+ *
+ * @param hexIndex Linear hex index (0-39999)
+ * @return Corresponding tile index (0-9999)
+ */
+inline int hexIndexToTileIndex(int hexIndex) {
+    int hexX = hexIndex % HexagonGrid::GRID_WIDTH;  // 0-199
+    int hexY = hexIndex / HexagonGrid::GRID_WIDTH;  // 0-199
+    int tileX = hexX / 2;  // 0-99
+    int tileY = hexY / 2;  // 0-99
+    return tileY * MAP_WIDTH + tileX;
 }
 
 /**
