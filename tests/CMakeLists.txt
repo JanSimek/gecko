@@ -5,6 +5,10 @@ add_executable(general_tests
     general/test_reading_pro_drug.cpp
     general/test_tile_utils.cpp
     general/test_reader_factory.cpp
+    general/test_selection_system.cpp
+    
+    # Selection system sources (needed for linking)
+    ../src/selection/SelectionState.cpp
 )
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests
@@ -17,6 +21,10 @@ target_link_libraries(general_tests PRIVATE
     spdlog::spdlog_header_only
     vault
     SFML::System SFML::Graphics
+)
+
+target_include_directories(general_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
 )
 
 target_link_libraries(performance_tests PRIVATE

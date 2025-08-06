@@ -23,7 +23,7 @@ TEST_CASE("Parse .pro drug file", "[pro]") {
     REQUIRE(pro_file->commonItemData.inventoryFID == 0x700002b);
     REQUIRE(pro_file->commonItemData.soundId == 48); // ASCII '0'
 
-    REQUIRE(geck::Pro::hasFlag(pro_file->commonItemData.flagsExt, geck::Pro::ObjectFlags::OBJECT_FLAT));
+    REQUIRE(geck::Pro::hasFlag(pro_file->header.flags, geck::Pro::ObjectFlags::OBJECT_FLAT));
 
     // TODO: check other flags
 
