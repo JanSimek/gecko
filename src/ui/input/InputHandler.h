@@ -4,6 +4,7 @@
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Graphics/View.hpp>
 #include <functional>
+#include <spdlog/spdlog.h>
 #include "../../util/Types.h"
 
 namespace geck {
@@ -63,6 +64,9 @@ public:
         std::function<void(sf::FloatRect area)> onScrollBlockerRectangle;
         std::function<void()> onTilePlacementCancel;
         std::function<void(sf::Vector2f worldPos)> onExitGridPlacement;
+        std::function<void(sf::Vector2f worldPos)> onMarkExitsSelection;
+        std::function<void(sf::Vector2f startPos, sf::Vector2f endPos)> onMarkExitsAreaSelection;
+        std::function<void(sf::Vector2f startPos, sf::Vector2f currentPos)> onMarkExitsPreview;
         
         // Hover
         std::function<void(sf::Vector2f worldPos)> onMouseMove;
@@ -70,6 +74,9 @@ public:
         // Keyboard
         std::function<void()> onEscape;
         std::function<void()> onDeleteObjects;
+        
+        // Mode cancellation
+        std::function<void()> onMarkExitsModeCancelled;
     };
 
     explicit InputHandler(EditorWidget* editor);
@@ -98,12 +105,16 @@ public:
     bool isInPlayerPositionMode() const { return _playerPositionMode; }
     bool isInTilePlacementMode() const { return _tilePlacementMode; }
     bool isInExitGridPlacementMode() const { return _exitGridPlacementMode; }
+    bool isInMarkExitsMode() const { return _markExitsMode; }
     
     /**
      * @brief Mode setters
      */
     void setPlayerPositionMode(bool enabled) { _playerPositionMode = enabled; }
     void setExitGridPlacementMode(bool enabled) { _exitGridPlacementMode = enabled; }
+    void setMarkExitsMode(bool enabled) { 
+        _markExitsMode = enabled; 
+    }
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool replaceMode = false);
     void setSelectionMode(SelectionMode mode) { _selectionMode = mode; }
 
@@ -147,6 +158,7 @@ private:
     bool _tilePlacementMode = false;
     bool _tilePlacementReplaceMode = false;
     bool _exitGridPlacementMode = false;
+    bool _markExitsMode = false;
     int _tilePlacementIndex = -1;
     bool _tilePlacementIsRoof = false;
 };

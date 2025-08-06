@@ -56,8 +56,6 @@ void ViewportController::setZoomLevel(float zoom) {
     
     // Apply zoom to view
     _view.zoom(_zoomLevel / _view.getSize().x * 800.0f);
-    
-    spdlog::debug("ViewportController: Set zoom level to {:.2f}", _zoomLevel);
 }
 
 int ViewportController::updateHoverHex(sf::Vector2f worldPos) {

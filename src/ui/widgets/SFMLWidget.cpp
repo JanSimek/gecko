@@ -107,56 +107,18 @@ void SFMLWidget::resizeEvent(QResizeEvent* event) {
 }
 
 void SFMLWidget::mousePressEvent(QMouseEvent* event) {
-    // Forward Qt mouse events to SFML
-    if (_renderWindow && _editorWidget) {
-        // Create SFML mouse button pressed event
-        sf::Mouse::Button button = sf::Mouse::Button::Left;
-        switch (event->button()) {
-            case Qt::LeftButton:
-                button = sf::Mouse::Button::Left;
-                break;
-            case Qt::RightButton:
-                button = sf::Mouse::Button::Right;
-                break;
-            case Qt::MiddleButton:
-                button = sf::Mouse::Button::Middle;
-                break;
-            default:
-                button = sf::Mouse::Button::Left;
-                break;
-        }
-        sf::Vector2i position{ static_cast<int>(event->position().x()), static_cast<int>(event->position().y()) };
-        sf::Event sfmlEvent = sf::Event::MouseButtonPressed{ button, position };
-        _editorWidget->handleEvent(sfmlEvent);
-    }
-
+    // Note: SFML handles mouse events through its own polling loop via handleSFMLEvent()
+    // Forwarding Qt mouse events here causes duplicate event processing
+    // Let SFML handle all mouse events to avoid duplicates
+    
     QWidget::mousePressEvent(event);
 }
 
 void SFMLWidget::mouseReleaseEvent(QMouseEvent* event) {
-    // Forward Qt mouse events to SFML
-    if (_renderWindow && _editorWidget) {
-        // Create SFML mouse button released event
-        sf::Mouse::Button button = sf::Mouse::Button::Left;
-        switch (event->button()) {
-            case Qt::LeftButton:
-                button = sf::Mouse::Button::Left;
-                break;
-            case Qt::RightButton:
-                button = sf::Mouse::Button::Right;
-                break;
-            case Qt::MiddleButton:
-                button = sf::Mouse::Button::Middle;
-                break;
-            default:
-                button = sf::Mouse::Button::Left;
-                break;
-        }
-        sf::Vector2i position{ static_cast<int>(event->position().x()), static_cast<int>(event->position().y()) };
-        sf::Event sfmlEvent = sf::Event::MouseButtonReleased{ button, position };
-        _editorWidget->handleEvent(sfmlEvent);
-    }
-
+    // Note: SFML handles mouse events through its own polling loop via handleSFMLEvent()
+    // Forwarding Qt mouse events here causes duplicate event processing
+    // Let SFML handle all mouse events to avoid duplicates
+    
     QWidget::mouseReleaseEvent(event);
 }
 

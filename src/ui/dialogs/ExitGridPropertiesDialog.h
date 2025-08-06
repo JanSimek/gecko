@@ -10,6 +10,7 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QCheckBox>
 
 namespace geck {
 
@@ -40,10 +41,13 @@ public:
     ExitGridProperties getProperties() const;
     void setProperties(const ExitGridProperties& properties);
 
+public slots:
+    void accept() override;
+
 private slots:
-    void onAccept();
     void onPositionChanged();
     void validateInput();
+    void onExitToWorldmapToggled(bool checked);
 
 private:
     void setupUI();
@@ -59,6 +63,7 @@ private:
     QDialogButtonBox* _buttonBox;
 
     // Input fields
+    QCheckBox* _exitToWorldmapCheckBox;
     QSpinBox* _mapIdSpinBox;
     QSpinBox* _positionSpinBox;
     QComboBox* _elevationComboBox;

@@ -188,6 +188,11 @@ namespace TileColors {
     inline sf::Color transparent() {
         return sf::Color(255, 255, 255, 0);
     }
+    
+    // Exit grid highlight colors (bright magenta for better contrast against green)
+    inline sf::Color exitGridHighlight() {
+        return sf::Color(255, 0, 255, 180); // Bright magenta with alpha
+    }
 }
 
 /**

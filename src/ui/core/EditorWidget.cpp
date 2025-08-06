@@ -981,6 +981,18 @@ void EditorWidget::setupInputCallbacks() {
         _exitGridPlacementManager->handleExitGridPlacement(worldPos);
     };
     
+    callbacks.onMarkExitsSelection = [this](sf::Vector2f worldPos) {
+        _exitGridPlacementManager->handleMarkExitsSelection(worldPos);
+    };
+    
+    callbacks.onMarkExitsAreaSelection = [this](sf::Vector2f startPos, sf::Vector2f endPos) {
+        _exitGridPlacementManager->selectExitGridsInArea(startPos, endPos);
+    };
+    
+    callbacks.onMarkExitsPreview = [this](sf::Vector2f startPos, sf::Vector2f currentPos) {
+        updateMarkExitsPreview(startPos, currentPos);
+    };
+    
     // Hover
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
         _currentHoverHex = _viewportController->updateHoverHex(worldPos);
@@ -1001,6 +1013,13 @@ void EditorWidget::setupInputCallbacks() {
     callbacks.onDeleteObjects = [this]() {
         // Handle delete key to remove selected objects
         deleteSelectedObjects();
+    };
+    
+    callbacks.onMarkExitsModeCancelled = [this]() {
+        // Notify MainWindow to deselect the toolbar button
+        if (_mainWindow) {
+            _mainWindow->deselectMarkExitsMode();
+        }
     };
     
     _inputHandler->setCallbacks(callbacks);
@@ -1274,9 +1293,13 @@ void EditorWidget::setTilePlacementReplaceMode(bool enabled) {
 
 void EditorWidget::setExitGridPlacementMode(bool enabled) {
     _exitGridPlacementManager->setExitGridPlacementMode(enabled);
-    // Update InputHandler with new exit grid placement state
+}
+
+void EditorWidget::setMarkExitsMode(bool enabled) {
+    _exitGridPlacementManager->setMarkExitsMode(enabled);
+    // Update InputHandler with new mark exits mode state
     if (_inputHandler) {
-        _inputHandler->setExitGridPlacementMode(enabled);
+        _inputHandler->setMarkExitsMode(enabled);
     }
 }
 
@@ -1660,6 +1683,41 @@ void EditorWidget::clearDragPreview() {
     // Clear the preview arrays
     _previewTiles.clear();
     _previewObjects.clear();
+}
+
+void EditorWidget::updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos) {
+    // Clear previous preview
+    clearDragPreview();
+    
+    // Create selection area
+    float left = std::min(startWorldPos.x, currentWorldPos.x);
+    float top = std::min(startWorldPos.y, currentWorldPos.y);
+    float width = std::abs(currentWorldPos.x - startWorldPos.x);
+    float height = std::abs(currentWorldPos.y - startWorldPos.y);
+    sf::FloatRect selectionArea({ left, top }, { width, height });
+    
+    // Update the visual selection rectangle
+    _selectionRectangle.setPosition({ left, top });
+    _selectionRectangle.setSize({ width, height });
+    
+    // Find and highlight only exit grid objects
+    for (auto& object : _objects) {
+        if (!object || !object->getMapObjectPtr() || !object->getMapObjectPtr()->isExitGridMarker()) {
+            continue;
+        }
+        
+        // Get object sprite bounds
+        const auto& sprite = object->getSprite();
+        auto objectBounds = sprite.getGlobalBounds();
+        
+        // Check if object intersects with selection area
+        auto intersection = selectionArea.findIntersection(objectBounds);
+        if (intersection.has_value()) {
+            _previewObjects.push_back(object);
+            // Use bright magenta highlight for better contrast against green exit grids
+            object->getSprite().setColor(geck::TileColors::exitGridHighlight());
+        }
+    }
 }
 
 const sf::Texture& EditorWidget::createHexTexture() {

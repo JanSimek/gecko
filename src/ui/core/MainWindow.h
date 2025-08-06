@@ -104,6 +104,7 @@ private slots:
 public slots:
     void showStatusMessage(const QString& message);
     void clearStatusMessage();
+    void deselectMarkExitsMode();
 
 private:
     void setupUI();
@@ -152,6 +153,7 @@ private:
 
     // Toolbar
     QToolBar* _mainToolBar;
+    QAction* _markExitsAction;
 
     // Status bar
     QStatusBar* _statusBar;

@@ -60,10 +60,16 @@ void ExitGridPropertiesDialog::setupFormLayout() {
     _formLayout = new QFormLayout();
     _formLayout->setSpacing(DEFAULT_SPACING);
 
+    // Exit to worldmap checkbox
+    _exitToWorldmapCheckBox = new QCheckBox("Exit to worldmap", this);
+    _exitToWorldmapCheckBox->setToolTip("When checked, exit leads to worldmap instead of specific map");
+    connect(_exitToWorldmapCheckBox, &QCheckBox::toggled, this, &ExitGridPropertiesDialog::onExitToWorldmapToggled);
+    _formLayout->addRow(_exitToWorldmapCheckBox);
+
     // Map ID input
     _mapIdSpinBox = new QSpinBox(this);
-    _mapIdSpinBox->setRange(0, 999999); // Large range for map IDs
-    _mapIdSpinBox->setToolTip("Destination map ID (0-999999)");
+    _mapIdSpinBox->setRange(-1, 999999); // Allow -1 for worldmap exits
+    _mapIdSpinBox->setToolTip("Destination map ID (-1 = worldmap, 0-999999 = specific map)");
     _formLayout->addRow("Destination Map ID:", _mapIdSpinBox);
 
     // Position input (hex coordinate)
@@ -105,7 +111,8 @@ void ExitGridPropertiesDialog::setupFormLayout() {
 void ExitGridPropertiesDialog::setupButtonBox() {
     _buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     
-    connect(_buttonBox, &QDialogButtonBox::accepted, this, &ExitGridPropertiesDialog::onAccept);
+    // Use standard Qt dialog connections
+    connect(_buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(_buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 }
 
@@ -117,6 +124,10 @@ void ExitGridPropertiesDialog::initializeDefaults() {
 }
 
 void ExitGridPropertiesDialog::updateUI() {
+    // Check if this is a worldmap exit (map ID = -1 or UINT32_MAX)
+    bool isWorldmapExit = (_properties.exitMap == static_cast<uint32_t>(-1));
+    _exitToWorldmapCheckBox->setChecked(isWorldmapExit);
+    
     _mapIdSpinBox->setValue(static_cast<int>(_properties.exitMap));
     _positionSpinBox->setValue(static_cast<int>(_properties.exitPosition));
     
@@ -136,6 +147,10 @@ void ExitGridPropertiesDialog::updateUI() {
         }
     }
     
+    // Trigger the worldmap toggle to set the correct enabled state
+    onExitToWorldmapToggled(isWorldmapExit);
+    
+    // Ensure validation is run to enable/disable OK button properly
     validateInput();
 }
 
@@ -153,10 +168,13 @@ void ExitGridPropertiesDialog::setProperties(const ExitGridProperties& propertie
     updateUI();
 }
 
-void ExitGridPropertiesDialog::onAccept() {
+void ExitGridPropertiesDialog::accept() {
     if (isValidInput()) {
         _properties = getProperties();
-        accept();
+        QDialog::accept();
+    } else {
+        // Show validation error to user
+        validateInput();
     }
 }
 
@@ -196,6 +214,24 @@ bool ExitGridPropertiesDialog::isValidInput() const {
     }
     
     return true;
+}
+
+void ExitGridPropertiesDialog::onExitToWorldmapToggled(bool checked) {
+    // When checked, disable all controls and set default values
+    _mapIdSpinBox->setEnabled(!checked);
+    _positionSpinBox->setEnabled(!checked);
+    _elevationComboBox->setEnabled(!checked);
+    _orientationComboBox->setEnabled(!checked);
+    
+    if (checked) {
+        // Set worldmap exit values
+        _mapIdSpinBox->setValue(-1);
+        _positionSpinBox->setValue(0);
+        _elevationComboBox->setCurrentIndex(0); // Ground level
+        _orientationComboBox->setCurrentIndex(0); // North
+    }
+    
+    validateInput();
 }
 
 } // namespace geck

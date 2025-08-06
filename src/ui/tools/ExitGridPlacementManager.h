@@ -31,9 +31,11 @@ public:
 
     // Exit grid placement mode control
     void setExitGridPlacementMode(bool enabled);
+    void setMarkExitsMode(bool enabled);
     
     // State queries
     bool isExitGridPlacementMode() const { return _exitGridPlacementMode; }
+    bool isMarkExitsMode() const { return _markExitsMode; }
 
     // Callback interface for triggering exit grid placement from input events
     void handleExitGridPlacement(sf::Vector2f worldPos);
@@ -43,6 +45,10 @@ public:
     
     // Check if selected objects contain exit grids and edit them
     bool editSelectedExitGrids();
+    
+    // Mark exits mode - select and edit exit grids
+    void handleMarkExitsSelection(sf::Vector2f worldPos);
+    void selectExitGridsInArea(sf::Vector2f startPos, sf::Vector2f endPos);
 
 private:
     // Create exit grid MISC object with properties
@@ -58,6 +64,7 @@ private:
     
     // State
     bool _exitGridPlacementMode = false;
+    bool _markExitsMode = false;
 };
 
 } // namespace geck

@@ -95,6 +95,7 @@ public:
     
     // Exit grid placement mode control (delegated to ExitGridPlacementManager)
     void setExitGridPlacementMode(bool enabled);
+    void setMarkExitsMode(bool enabled);
     
     // Object refresh methods
     void refreshObjects();
@@ -210,6 +211,7 @@ private:
     void clearAllVisualSelections();
     void clearDragPreview();
     void updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
+    void updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
 
 

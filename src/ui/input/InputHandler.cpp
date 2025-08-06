@@ -65,6 +65,9 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             }
             return;
         }
+        
+        // Note: Mark exits mode is handled in mouse release, not here
+        // This allows drag selection to work properly
 
         // Check for object dragging
         SelectionModifier modifier = getSelectionModifier();
@@ -78,26 +81,34 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
                 _isDragging = false;
             }
         } else {
-            // Determine if we should start drag selection or immediate selection
-            bool canDragSelect = !hasModifiers && 
-                (_selectionMode == SelectionMode::ALL || 
-                 _selectionMode == SelectionMode::FLOOR_TILES || 
-                 _selectionMode == SelectionMode::ROOF_TILES || 
-                 _selectionMode == SelectionMode::ROOF_TILES_ALL || 
-                 _selectionMode == SelectionMode::OBJECTS || 
-                 _selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE);
-
-            if (canDragSelect) {
+            // Handle mark exits mode separately - it only does exit grid selection
+            if (_markExitsMode) {
                 _currentAction = EditorAction::DRAG_SELECTING;
                 _dragStartWorldPos = worldPos;
                 _isDragging = false;
                 _immediateSelectionPerformed = false;
             } else {
-                // Immediate selection with modifier
-                if (_callbacks.onSelectionClick) {
-                    _callbacks.onSelectionClick(worldPos, modifier);
+                // Determine if we should start drag selection or immediate selection
+                bool canDragSelect = !hasModifiers && 
+                    (_selectionMode == SelectionMode::ALL || 
+                     _selectionMode == SelectionMode::FLOOR_TILES || 
+                     _selectionMode == SelectionMode::ROOF_TILES || 
+                     _selectionMode == SelectionMode::ROOF_TILES_ALL || 
+                     _selectionMode == SelectionMode::OBJECTS || 
+                     _selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE);
+
+                if (canDragSelect) {
+                    _currentAction = EditorAction::DRAG_SELECTING;
+                    _dragStartWorldPos = worldPos;
+                    _isDragging = false;
+                    _immediateSelectionPerformed = false;
+                } else {
+                    // Immediate selection with modifier
+                    if (_callbacks.onSelectionClick) {
+                        _callbacks.onSelectionClick(worldPos, modifier);
+                    }
+                    _immediateSelectionPerformed = true;
                 }
-                _immediateSelectionPerformed = true;
             }
         }
     } else if (event.button == sf::Mouse::Button::Right) {
@@ -114,6 +125,13 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             // Cancel exit grid placement
             _exitGridPlacementMode = false;
             spdlog::info("Exit grid placement mode cancelled with right-click");
+        } else if (_markExitsMode) {
+            // Cancel mark exits mode
+            _markExitsMode = false;
+            if (_callbacks.onMarkExitsModeCancelled) {
+                _callbacks.onMarkExitsModeCancelled();
+            }
+            spdlog::info("Mark exits mode cancelled with right-click");
         } else {
             // Start panning
             _currentAction = EditorAction::PANNING;
@@ -147,7 +165,10 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
 
             case EditorAction::DRAG_SELECTING:
                 if (_isDragging) {
-                    if (_selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE && 
+                    if (_markExitsMode && _callbacks.onMarkExitsAreaSelection) {
+                        // Handle mark exits area selection
+                        _callbacks.onMarkExitsAreaSelection(_dragStartWorldPos, worldPos);
+                    } else if (_selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE && 
                         _callbacks.onScrollBlockerRectangle) {
                         // Handle scroll blocker rectangle
                         float left = std::min(_dragStartWorldPos.x, worldPos.x);
@@ -162,7 +183,12 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
                     }
                 } else if (!_immediateSelectionPerformed && _callbacks.onSelectionClick) {
                     // Click selection (no drag occurred)
-                    _callbacks.onSelectionClick(worldPos, SelectionModifier::NONE);
+                    if (_markExitsMode && _callbacks.onMarkExitsSelection) {
+                        // Handle mark exits single selection
+                        _callbacks.onMarkExitsSelection(worldPos);
+                    } else {
+                        _callbacks.onSelectionClick(worldPos, SelectionModifier::NONE);
+                    }
                 }
                 break;
 
@@ -219,8 +245,14 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
                 }
             }
             // Update drag selection preview
-            if (_isDragging && _callbacks.onDragSelectionPreview) {
-                _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos);
+            if (_isDragging) {
+                if (_markExitsMode && _callbacks.onMarkExitsPreview) {
+                    // Mark Exits mode: show rectangle and highlight exit grids only
+                    _callbacks.onMarkExitsPreview(_dragStartWorldPos, worldPos);
+                } else if (_callbacks.onDragSelectionPreview) {
+                    // Regular mode: show rectangle and highlight tiles/objects
+                    _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos);
+                }
             }
             break;
             

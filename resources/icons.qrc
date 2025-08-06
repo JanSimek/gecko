@@ -15,6 +15,7 @@
         <file alias="actions/play.svg">icons/tabler/actions/player-play.svg</file>
         <file alias="actions/stop.svg">icons/tabler/actions/player-stop.svg</file>
         <file alias="actions/edit.svg">icons/tabler/actions/pencil.svg</file>
+        <file alias="actions/door-exit.svg">icons/door-exit.svg</file>
         
         <!-- Edit Menu Actions -->
         <file alias="actions/select-all.svg">icons/tabler/actions/select-all.svg</file>

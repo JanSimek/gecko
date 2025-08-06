@@ -1,11 +1,15 @@
 #include "ExitGridPlacementManager.h"
 #include "../core/EditorWidget.h"
+#include "../core/MainWindow.h"
+#include "../widgets/SFMLWidget.h"
 #include "../viewport/ViewportController.h"
 #include "../../format/map/Map.h"
 #include "../../format/map/MapObject.h"
 #include "../../util/Coordinates.h"
 #include "../../util/Constants.h"
+#include "../../util/TileUtils.h"
 #include "../../editor/HexagonGrid.h"
+#include "../../selection/SelectionState.h"
 
 #include <QApplication>
 #include <QMessageBox>
@@ -24,6 +28,16 @@ void ExitGridPlacementManager::setExitGridPlacementMode(bool enabled) {
         spdlog::debug("Exit grid placement mode enabled");
     } else {
         spdlog::debug("Exit grid placement mode disabled");
+    }
+}
+
+void ExitGridPlacementManager::setMarkExitsMode(bool enabled) {
+    _markExitsMode = enabled;
+    
+    if (enabled) {
+        spdlog::debug("Mark exits mode enabled");
+    } else {
+        spdlog::debug("Mark exits mode disabled");
     }
 }
 
@@ -87,7 +101,6 @@ void ExitGridPlacementManager::editExitGridProperties(std::shared_ptr<MapObject>
     currentProperties.exitPosition = exitGrid->exit_position;
     currentProperties.exitElevation = exitGrid->exit_elevation;
     currentProperties.exitOrientation = exitGrid->exit_orientation;
-    
 
     // Show properties dialog
     ExitGridPropertiesDialog::ExitGridProperties newProperties;
@@ -177,30 +190,26 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
 }
 
 bool ExitGridPlacementManager::showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing) {
-    ExitGridPropertiesDialog* dialog;
+    ExitGridPropertiesDialog dialog(existing ? *existing : ExitGridPropertiesDialog::ExitGridProperties{}, _editor);
     
-    if (existing) {
-        // Use constructor that takes properties directly
-        dialog = new ExitGridPropertiesDialog(*existing, _editor);
-    } else {
-        // For new exit grids, use default constructor and initialize defaults
-        dialog = new ExitGridPropertiesDialog(_editor);
+    if (!existing) {
+        // Initialize defaults for new exit grids
         ExitGridPropertiesDialog::ExitGridProperties defaults;
         defaults.exitMap = 0;
         defaults.exitPosition = 0;
         defaults.exitElevation = 0;
         defaults.exitOrientation = 0;
-        dialog->setProperties(defaults);
+        dialog.setProperties(defaults);
     }
     
-    bool result = false;
-    if (dialog->exec() == QDialog::Accepted) {
-        properties = dialog->getProperties();
-        result = true;
+    // Simple dialog execution without additional modal settings
+    int result = dialog.exec();
+    if (result == QDialog::Accepted) {
+        properties = dialog.getProperties();
+        return true;
     }
     
-    delete dialog;
-    return result;
+    return false;
 }
 
 uint32_t ExitGridPlacementManager::getAvailableExitGridPID() const {
@@ -212,6 +221,7 @@ uint32_t ExitGridPlacementManager::getAvailableExitGridPID() const {
 
 void ExitGridPlacementManager::resetState() {
     _exitGridPlacementMode = false;
+    _markExitsMode = false;
 }
 
 bool ExitGridPlacementManager::editSelectedExitGrids() {
@@ -253,5 +263,169 @@ bool ExitGridPlacementManager::editSelectedExitGrids() {
     
     return false;
 }
+
+void ExitGridPlacementManager::handleMarkExitsSelection(sf::Vector2f worldPos) {
+    if (!_markExitsMode || !_editor) {
+        return;
+    }
+    
+    // Find exit grids at the clicked position
+    auto objects = _editor->getObjectsAtPosition(worldPos);
+    std::vector<std::shared_ptr<Object>> exitGrids;
+    
+    for (auto& object : objects) {
+        if (object && object->getMapObjectPtr() && object->getMapObjectPtr()->isExitGridMarker()) {
+            exitGrids.push_back(object);
+        }
+    }
+    
+    if (!exitGrids.empty()) {
+        
+        // Clear current selection for visual feedback  
+        auto* selectionManager = _editor->getSelectionManager();
+        if (selectionManager) {
+            selectionManager->clearSelection();
+        }
+        
+        // Also clear any drag selection preview
+        _editor->clearSelection();
+        
+        // Highlight the selected exit grids BEFORE opening the dialog
+        for (auto& exitGrid : exitGrids) {
+            exitGrid->getSprite().setColor(geck::TileColors::exitGridHighlight());
+        }
+        
+        // Force an immediate SFML render to show the highlight before dialog opens
+        if (auto* sfmlWidget = _editor->getSFMLWidget()) {
+            sfmlWidget->updateAndRender();
+        }
+        QApplication::processEvents();
+        
+        // Open properties dialog directly with the first exit grid found
+        auto firstExitGrid = exitGrids[0];
+        auto mapObjectPtr = firstExitGrid->getMapObjectPtr();
+        if (mapObjectPtr) {
+            editExitGridProperties(mapObjectPtr);
+            
+            // After dialog closes, clear the highlighting
+            // Note: refreshObjects() might recreate objects, so we need to find them again
+            auto objectsAfterRefresh = _editor->getObjectsAtPosition(worldPos);
+            for (auto& object : objectsAfterRefresh) {
+                if (object && object->getMapObjectPtr() && object->getMapObjectPtr()->isExitGridMarker()) {
+                    object->getSprite().setColor(geck::TileColors::white());
+                }
+            }
+            
+            if (selectionManager) {
+                selectionManager->clearSelection();
+            }
+            _editor->clearSelection();
+        }
+    } else {
+        // Clear selection and provide user feedback
+        auto* selectionManager = _editor->getSelectionManager();
+        if (selectionManager) {
+            selectionManager->clearSelection();
+        }
+        
+        // Show status message to inform user
+        if (_editor->getMainWindow()) {
+            _editor->getMainWindow()->showStatusMessage("No exit grids found at this position");
+        }
+    }
+}
+
+void ExitGridPlacementManager::selectExitGridsInArea(sf::Vector2f startPos, sf::Vector2f endPos) {
+    if (!_markExitsMode || !_editor) {
+        return;
+    }
+    
+    // Create a rectangle from the two points
+    sf::FloatRect selectionArea;
+    selectionArea.position.x = std::min(startPos.x, endPos.x);
+    selectionArea.position.y = std::min(startPos.y, endPos.y);
+    selectionArea.size.x = std::abs(endPos.x - startPos.x);
+    selectionArea.size.y = std::abs(endPos.y - startPos.y);
+    
+    // Find all exit grids in the area
+    std::vector<std::shared_ptr<Object>> exitGridsInArea;
+    const auto& objects = _editor->getObjects();
+    
+    for (auto& object : objects) {
+        if (!object || !object->getMapObjectPtr() || !object->getMapObjectPtr()->isExitGridMarker()) {
+            continue;
+        }
+        
+        // Get object position
+        const auto& sprite = object->getSprite();
+        auto objectBounds = sprite.getGlobalBounds();
+        
+        // Check if object intersects with selection area
+        auto intersection = selectionArea.findIntersection(objectBounds);
+        if (intersection.has_value()) {
+            exitGridsInArea.push_back(object);
+        }
+    }
+    
+    if (!exitGridsInArea.empty()) {
+        
+        // Clear current selection for visual feedback  
+        auto* selectionManager = _editor->getSelectionManager();
+        if (selectionManager) {
+            selectionManager->clearSelection();
+        }
+        
+        // Also clear any drag selection preview
+        _editor->clearSelection();
+        
+        // Show properties dialog for editing ALL exit grids
+        ExitGridPropertiesDialog::ExitGridProperties newProperties;
+        
+        // Use the first exit grid's properties as defaults
+        auto firstMapObject = exitGridsInArea[0]->getMapObjectPtr();
+        if (firstMapObject) {
+            ExitGridPropertiesDialog::ExitGridProperties currentProperties;
+            currentProperties.exitMap = firstMapObject->exit_map;
+            currentProperties.exitPosition = firstMapObject->exit_position;
+            currentProperties.exitElevation = firstMapObject->exit_elevation;
+            currentProperties.exitOrientation = firstMapObject->exit_orientation;
+            
+            if (showPropertiesDialog(newProperties, &currentProperties)) {
+                // Update ALL exit grids with the new properties
+                for (auto& exitGridObject : exitGridsInArea) {
+                    auto mapObjectPtr = exitGridObject->getMapObjectPtr();
+                    if (mapObjectPtr) {
+                        mapObjectPtr->exit_map = newProperties.exitMap;
+                        mapObjectPtr->exit_position = newProperties.exitPosition;
+                        mapObjectPtr->exit_elevation = newProperties.exitElevation;
+                        mapObjectPtr->exit_orientation = newProperties.exitOrientation;
+                    }
+                }
+                
+                // Refresh objects to show updated properties
+                _editor->refreshObjects();
+            }
+            
+            // Clear selection highlights after dialog is closed
+            auto* selectionManager = _editor->getSelectionManager();
+            if (selectionManager) {
+                selectionManager->clearSelection();
+            }
+            _editor->clearSelection();
+        }
+    } else {
+        // Clear selection and provide user feedback
+        auto* selectionManager = _editor->getSelectionManager();
+        if (selectionManager) {
+            selectionManager->clearSelection();
+        }
+        
+        // Show status message to inform user
+        if (_editor->getMainWindow()) {
+            _editor->getMainWindow()->showStatusMessage("No exit grids found in selected area");
+        }
+    }
+}
+
 
 } // namespace geck

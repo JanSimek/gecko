@@ -502,13 +502,13 @@ void MainWindow::setupToolBar() {
     // Rotate action
     QAction* rotateAction = _mainToolBar->addAction(QIcon(":/icons/actions/rotate.svg"), "Rotate");
     
-    // Exit grid placement tool
-    QAction* exitGridAction = _mainToolBar->addAction(QIcon(":/icons/actions/exitgrid.svg"), "Exit Grid");
-    exitGridAction->setStatusTip("Place exit grids on the map");
-    exitGridAction->setCheckable(true);
-    connect(exitGridAction, &QAction::triggered, this, [this](bool checked) {
+    // Mark exits tool
+    _markExitsAction = _mainToolBar->addAction(QIcon(":/icons/actions/door-exit.svg"), "Mark Exits");
+    _markExitsAction->setStatusTip("Select exit grids to edit their properties");
+    _markExitsAction->setCheckable(true);
+    connect(_markExitsAction, &QAction::triggered, this, [this](bool checked) {
         if (_currentEditorWidget) {
-            _currentEditorWidget->setExitGridPlacementMode(checked);
+            _currentEditorWidget->setMarkExitsMode(checked);
         }
     });
     rotateAction->setShortcut(QKeySequence("R"));
@@ -1695,6 +1695,12 @@ void MainWindow::showStatusMessage(const QString& message) {
 void MainWindow::clearStatusMessage() {
     if (_statusLabel) {
         _statusLabel->setText("Ready");
+    }
+}
+
+void MainWindow::deselectMarkExitsMode() {
+    if (_markExitsAction) {
+        _markExitsAction->setChecked(false);
     }
 }
 
