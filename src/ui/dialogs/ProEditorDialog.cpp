@@ -53,45 +53,17 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _totalFrames(0)
     , _totalDirections(0)
     , _isAnimating(false)
-    // Armor animation state now managed by ObjectPreviewWidget instances
+    // Common fields now handled by ProCommonFieldsWidget
+    , _commonFieldsWidget(nullptr)
     , _nameLabel(nullptr)
+    , _descriptionEdit(nullptr)
     , _editMessageButton(nullptr)
-    , _descriptionLabel(nullptr)
-    , _fidSelectorButton(nullptr)
-    , _inventoryFIDSelectorButton(nullptr)
     , _armorMaleFIDSelectorButton(nullptr)
     , _armorFemaleFIDSelectorButton(nullptr)
-    , _inventoryFIDLabel(nullptr)
     , _armorMaleFIDLabel(nullptr)
     , _armorFemaleFIDLabel(nullptr)
     , _critterHeadFIDLabel(nullptr)
     , _critterHeadFIDSelectorButton(nullptr)
-    , _extendedFlagsGroup(nullptr)
-    , _animationPrimaryEdit(nullptr)
-    , _animationSecondaryEdit(nullptr)
-    , _bigGunCheck(nullptr)
-    , _twoHandedCheck(nullptr)
-    , _canUseCheck(nullptr)
-    , _canUseOnCheck(nullptr)
-    , _generalFlagCheck(nullptr)
-    , _interactionFlagCheck(nullptr)
-    , _itemHiddenCheck(nullptr)
-    , _lightFlag1Check(nullptr)
-    , _lightFlag2Check(nullptr)
-    , _lightFlag3Check(nullptr)
-    , _lightFlag4Check(nullptr)
-    , _hiddenCheck(nullptr)
-    , _noSaveCheck(nullptr)
-    , _lightingCheck(nullptr)
-    , _noRemoveCheck(nullptr)
-    , _queuedCheck(nullptr)
-    , _leftHandCheck(nullptr)
-    , _rightHandCheck(nullptr)
-    , _wornCheck(nullptr)
-    , _seenCheck(nullptr)
-    , _sidEdit(nullptr)
-    , _materialIdEdit(nullptr)
-    , _containerSizeEdit(nullptr)
     , _weaponAnimationCombo(nullptr)
     , _weaponDamageMinEdit(nullptr)
     , _weaponDamageMaxEdit(nullptr)
@@ -111,8 +83,7 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _weaponSoundIdEdit(nullptr)
     , _weaponEnergyWeaponCheck(nullptr)
     , _weaponAIPriorityLabel(nullptr)
-    , _armorAIPriorityLabel(nullptr)
-    , _fidLabel(nullptr) {
+    , _armorAIPriorityLabel(nullptr) {
     
     
     setWindowTitle("PRO Editor");
@@ -122,7 +93,7 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     
     
     // Initialize data structures with defaults
-    memset(&_commonData, 0, sizeof(_commonData));
+    // _commonData now handled by ProCommonFieldsWidget
     memset(&_armorData, 0, sizeof(_armorData));
     memset(&_containerData, 0, sizeof(_containerData));
     memset(&_drugData, 0, sizeof(_drugData));
@@ -263,29 +234,7 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     // Key elements
     _keyIdEdit = nullptr;
     
-    // Extended flags and common elements
-    _extendedFlagsGroup = nullptr;
-    _animationPrimaryEdit = nullptr;
-    _animationSecondaryEdit = nullptr;
-    _bigGunCheck = nullptr;
-    _twoHandedCheck = nullptr;
-    _canUseCheck = nullptr;
-    _canUseOnCheck = nullptr;
-    _generalFlagCheck = nullptr;
-    _interactionFlagCheck = nullptr;
-    _itemHiddenCheck = nullptr;
-    _lightFlag1Check = nullptr;
-    _lightFlag2Check = nullptr;
-    _lightFlag3Check = nullptr;
-    _lightFlag4Check = nullptr;
-    _sidEdit = nullptr;
-    _materialIdEdit = nullptr;
-    _containerSizeEdit = nullptr;
-    _weightEdit = nullptr;
-    _basePriceEdit = nullptr;
-    _inventoryFIDLabel = nullptr;
-    _inventoryFIDSelectorButton = nullptr;
-    _soundIdEdit = nullptr;
+    // Extended flags and common elements now handled by ProCommonFieldsWidget
     
     // Load stat and perk names from MSG files BEFORE setting up UI (needed for drug fields)
     loadStatAndPerkNames();
@@ -321,59 +270,35 @@ void ProEditorDialog::setupUI() {
     leftInfoLayout->setContentsMargins(8, 8, 8, 8);
     leftInfoLayout->setSpacing(6);
 
-    // Name (bold) with edit button
-    QWidget* nameWidget = new QWidget();
-    QHBoxLayout* nameLayout = new QHBoxLayout(nameWidget);
-    nameLayout->setContentsMargins(0, 0, 0, 0);
-    nameLayout->setSpacing(4);
-    
-    _nameLabel = new QLabel("Loading...");
-    _nameLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; color: #2c5282; padding: 4px 0; }");
+    // Name above preview (without prefix)
+    _nameLabel = new QLabel(this);
+    _nameLabel->setAlignment(Qt::AlignCenter);
     _nameLabel->setWordWrap(true);
-    _nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    nameLayout->addWidget(_nameLabel);
-    
-    nameLayout->addStretch(); // Push edit button to the right
-    
-    // Add pencil icon button for message selection
-    _editMessageButton = new QPushButton();
-    _editMessageButton->setIcon(QIcon(":/icons/actions/edit.svg"));
-    _editMessageButton->setToolTip("Select message from MSG file");
-    _editMessageButton->setFixedSize(24, 24);
-    _editMessageButton->setStyleSheet(
-        "QPushButton {"
-        "  border: 1px solid #d0d0d0;"
-        "  border-radius: 3px;"
-        "  background-color: #f8f9fa;"
-        "}"
-        "QPushButton:hover {"
-        "  background-color: #e9ecef;"
-        "  border-color: #999;"
-        "}"
-        "QPushButton:pressed {"
-        "  background-color: #dee2e6;"
-        "}"
-    );
-    nameLayout->addWidget(_editMessageButton);
-    
-    leftInfoLayout->addWidget(nameWidget);
-    
-    connect(_editMessageButton, &QPushButton::clicked, this, &ProEditorDialog::onEditMessageClicked);
+    _nameLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; padding: 4px; }");
+    leftInfoLayout->addWidget(_nameLabel);
 
     // Setup compact preview at top
     setupCompactPreview(leftInfoLayout);
     
-    // Description (compact)
-    _descriptionLabel = new QTextEdit("Loading...");
-    _descriptionLabel->setStyleSheet("QTextEdit { background-color: #f7fafc; border: 1px solid #e2e8f0; font-size: 12px; }");
-    _descriptionLabel->setReadOnly(true);
-    _descriptionLabel->setFixedHeight(60);
-    _descriptionLabel->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    _descriptionLabel->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    leftInfoLayout->addWidget(_descriptionLabel);
+    // Description under preview (without prefix)
+    _descriptionEdit = new QTextEdit(this);
+    _descriptionEdit->setMaximumHeight(80);
+    _descriptionEdit->setReadOnly(true);
+    _descriptionEdit->setStyleSheet("QTextEdit { background-color: #f9f9f9; border: 1px solid #ccc; }");
+    leftInfoLayout->addWidget(_descriptionEdit);
     
-    // Common fields section
-    setupLeftPanelCommonFields(leftInfoLayout);
+    // Edit message button
+    _editMessageButton = new QPushButton("Edit Message...", this);
+    _editMessageButton->setMaximumWidth(120);
+    connect(_editMessageButton, &QPushButton::clicked, this, &ProEditorDialog::onEditMessageClicked);
+    leftInfoLayout->addWidget(_editMessageButton);
+    
+    // Common fields section - using ProCommonFieldsWidget
+    _commonFieldsWidget = new ProCommonFieldsWidget(this);
+    leftInfoLayout->addWidget(_commonFieldsWidget);
+    
+    // Connect ProCommonFieldsWidget signals
+    connect(_commonFieldsWidget, &ProCommonFieldsWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
     
     leftInfoLayout->addStretch(); // Push everything to top
     
@@ -592,140 +517,7 @@ void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
     parentLayout->addWidget(armorGroup);
 }
 
-void ProEditorDialog::setupLeftPanelCommonFields(QVBoxLayout* parentLayout) {
-    // === COMMON FIELDS IN LEFT PANEL ===
-    QGroupBox* commonGroup = new QGroupBox("Properties");
-    QFormLayout* commonLayout = new QFormLayout(commonGroup);
-    commonLayout->setContentsMargins(8, 8, 8, 8);
-    commonLayout->setSpacing(4);
-    
-    // PID (read-only display)
-    QLabel* pidLabel = new QLabel(QString::number(_pro->header.PID));
-    pidLabel->setStyleSheet("QLabel { background-color: #f7fafc; padding: 2px 4px; border: 1px solid #e2e8f0; font-family: monospace; }");
-    pidLabel->setToolTip("Prototype ID (read-only)");
-    commonLayout->addRow("PID:", pidLabel);
-    
-    
-    // Light properties (compact)
-    _lightDistanceEdit = createSpinBox(0, MAX_LIGHT_DISTANCE, "Distance that light from this object reaches (0 = no light)");
-    _lightDistanceEdit->setValue(_pro->header.light_distance);
-    commonLayout->addRow("Light Dist:", _lightDistanceEdit);
-    
-    _lightIntensityEdit = createSpinBox(0, MAX_LIGHT_INTENSITY, "Brightness of the light (higher values = brighter)");
-    _lightIntensityEdit->setValue(_pro->header.light_intensity);
-    commonLayout->addRow("Light Int:", _lightIntensityEdit);
-    
-    parentLayout->addWidget(commonGroup);
-    
-    // === OBJECT FLAGS (COMPACT) ===
-    QGroupBox* flagsGroup = new QGroupBox("Object Flags");
-    QVBoxLayout* flagsLayout = new QVBoxLayout(flagsGroup);
-    flagsLayout->setContentsMargins(8, 8, 8, 8);
-    flagsLayout->setSpacing(2);
-    
-    // NOTE: Hex flags field removed - using user-friendly checkboxes only
-    
-    // Complete flags as checkboxes (organized in compact layout)
-    uint32_t flags = _pro->header.flags;
-    
-    // Basic rendering flags
-    _flatCheck = new QCheckBox("Flat");
-    _flatCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_FLAT));
-    _flatCheck->setToolTip("Rendered first, just after tiles");
-    connect(_flatCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    
-    _noBlockCheck = new QCheckBox("No Block");
-    _noBlockCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK));
-    _noBlockCheck->setToolTip("Doesn't block the tile");
-    connect(_noBlockCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    
-    _multiHexCheck = new QCheckBox("Multi-Hex");
-    _multiHexCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_MULTIHEX));
-    _multiHexCheck->setToolTip("Object spans multiple hexes");
-    connect(_multiHexCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    
-    _noHighlightCheck = new QCheckBox("No Highlight");
-    _noHighlightCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_HIGHLIGHT));
-    _noHighlightCheck->setToolTip("Doesn't highlight border; used for containers");
-    connect(_noHighlightCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    
-    // Transparency flags
-    _transRedCheck = new QCheckBox("Trans Red");
-    _transRedCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_RED));
-    _transRedCheck->setToolTip("Red transparency effect");
-    connect(_transRedCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    
-    _transNoneCheck = new QCheckBox("Opaque");
-    _transNoneCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_NONE));
-    _transNoneCheck->setToolTip("Opaque - not the default value");
-    connect(_transNoneCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    
-    _transWallCheck = new QCheckBox("Trans Wall");
-    _transWallCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_WALL));
-    _transWallCheck->setToolTip("Wall transparency effect");
-    connect(_transWallCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    
-    _transGlassCheck = new QCheckBox("Trans Glass");
-    _transGlassCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_GLASS));
-    _transGlassCheck->setToolTip("Glass transparency effect");
-    connect(_transGlassCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    
-    _transSteamCheck = new QCheckBox("Trans Steam");
-    _transSteamCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_STEAM));
-    _transSteamCheck->setToolTip("Steam transparency effect");
-    connect(_transSteamCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    
-    _transEnergyCheck = new QCheckBox("Trans Energy");
-    _transEnergyCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_ENERGY));
-    _transEnergyCheck->setToolTip("Energy transparency effect");
-    connect(_transEnergyCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    
-    // Advanced flags
-    _wallTransEndCheck = new QCheckBox("Wall Trans End");
-    _wallTransEndCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_WALL_TRANS_END));
-    _wallTransEndCheck->setToolTip("Changes transparency egg logic");
-    connect(_wallTransEndCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    
-    _lightThruCheck = new QCheckBox("Light Thru");
-    _lightThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_LIGHT_THRU));
-    _lightThruCheck->setToolTip("Light passes through this object");
-    connect(_lightThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    
-    _shootThruCheck = new QCheckBox("Shoot Thru");
-    _shootThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_SHOOT_THRU));
-    _shootThruCheck->setToolTip("Projectiles pass through this object");
-    connect(_shootThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    
-    // Compact checkbox layout (3 columns for better organization)
-    QWidget* checkboxWidget = new QWidget();
-    QGridLayout* checkboxLayout = new QGridLayout(checkboxWidget);
-    checkboxLayout->setContentsMargins(0, 0, 0, 0);
-    checkboxLayout->setSpacing(2);
-    
-    // Column 1: Basic rendering
-    checkboxLayout->addWidget(_flatCheck, 0, 0);
-    checkboxLayout->addWidget(_noBlockCheck, 1, 0);
-    checkboxLayout->addWidget(_multiHexCheck, 2, 0);
-    checkboxLayout->addWidget(_noHighlightCheck, 3, 0);
-    
-    // Column 2: Transparency
-    checkboxLayout->addWidget(_transRedCheck, 0, 1);
-    checkboxLayout->addWidget(_transNoneCheck, 1, 1);
-    checkboxLayout->addWidget(_transWallCheck, 2, 1);
-    checkboxLayout->addWidget(_transGlassCheck, 3, 1);
-    
-    // Column 3: Advanced
-    checkboxLayout->addWidget(_transSteamCheck, 0, 2);
-    checkboxLayout->addWidget(_transEnergyCheck, 1, 2);
-    checkboxLayout->addWidget(_wallTransEndCheck, 2, 2);
-    checkboxLayout->addWidget(_lightThruCheck, 3, 2);
-    
-    // Shoot thru spans all columns at bottom
-    checkboxLayout->addWidget(_shootThruCheck, 4, 0, 1, 3);
-    
-    flagsLayout->addWidget(checkboxWidget);
-    parentLayout->addWidget(flagsGroup);
-}
+// setupLeftPanelCommonFields method removed - now handled by ProCommonFieldsWidget
 
 void ProEditorDialog::setupTabContent() {
     // No longer setup common fields here - they're in left panel
@@ -733,10 +525,7 @@ void ProEditorDialog::setupTabContent() {
     updateTabVisibility();
 }
 
-void ProEditorDialog::setupCommonFields() {
-    // This method is now obsolete - common fields are handled in setupLeftPanelCommonFields()
-    // Left for compatibility with existing code structure
-}
+// setupCommonFields method removed - now handled by ProCommonFieldsWidget
 
 void ProEditorDialog::setupTabs() {
     _tabWidget = new QTabWidget(this);
@@ -746,495 +535,31 @@ void ProEditorDialog::setupTabs() {
 
 void ProEditorDialog::setupCommonTab() {
     _commonTab = new QWidget();
-    QFormLayout* layout = new QFormLayout(_commonTab);
+    QVBoxLayout* layout = new QVBoxLayout(_commonTab);
     
-    // PID (read-only display)
-    QLabel* pidLabel = new QLabel(QString::number(_pro->header.PID));
-    pidLabel->setStyleSheet("QLabel { background-color: #f0f0f0; padding: 2px; border: 1px solid #ccc; }");
-    layout->addRow("PID:", pidLabel);
+    // Simple message noting that common fields are now in the left panel
+    QLabel* noteLabel = new QLabel("Common fields (PID, FID, flags, lighting, etc.) are now displayed in the left panel for easier access while editing type-specific properties.");
+    noteLabel->setWordWrap(true);
+    noteLabel->setStyleSheet("QLabel { color: #666; font-style: italic; padding: 20px; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9; }");
+    layout->addWidget(noteLabel);
     
-    // Name and Description are now handled in setupUI() with the edit button
-    
-    _descriptionLabel = new QTextEdit("Loading...");
-    _descriptionLabel->setStyleSheet("QTextEdit { background-color: #f0f8ff; padding: 4px; border: 1px solid #add8e6; font-size: 12px; }");
-    _descriptionLabel->setReadOnly(true);
-    _descriptionLabel->setMinimumHeight(30);
-    _descriptionLabel->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    _descriptionLabel->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    _descriptionLabel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
-    layout->addRow("Description:", _descriptionLabel);
-    
-    
-    // FID (Frame Resource Manager) - shows which FRM file this object uses
-    _fidLabel = new QLabel("Loading...");
-    _fidLabel->setToolTip("FRM filename for object appearance");
-    _fidLabel->setStyleSheet("QLabel { border: 1px solid #e2e8f0; padding: 2px 4px; background-color: white; }");
-    layout->addRow("FRM File:", _fidLabel);
-    
-    // Light Distance
-    _lightDistanceEdit = createSpinBox(0, MAX_LIGHT_DISTANCE, "Distance that light from this object reaches (0 = no light)");
-    _lightDistanceEdit->setValue(_pro->header.light_distance);
-    layout->addRow("Light Distance:", _lightDistanceEdit);
-    
-    // Light Intensity
-    _lightIntensityEdit = createSpinBox(0, MAX_LIGHT_INTENSITY, "Brightness of the light (higher values = brighter)");
-    _lightIntensityEdit->setValue(_pro->header.light_intensity);
-    layout->addRow("Light Intensity:", _lightIntensityEdit);
-    
-    // Object Flags (organized checkboxes instead of hex)
-    setupObjectFlagsGroup(layout);
-    
-    // Extended Flags (not for TILE and MISC types)
-    if (_pro->type() != Pro::OBJECT_TYPE::TILE && _pro->type() != Pro::OBJECT_TYPE::MISC) {
-        setupExtendedFlagsGroup(layout);
-    }
-    
-    
-    // Script ID (not for TILE and MISC types)
-    if (_pro->type() == Pro::OBJECT_TYPE::ITEM || _pro->type() == Pro::OBJECT_TYPE::CRITTER || 
-        _pro->type() == Pro::OBJECT_TYPE::SCENERY || _pro->type() == Pro::OBJECT_TYPE::WALL) {
-        _sidEdit = createSpinBox(0, 999999, "Script ID - links to associated script file");
-        _sidEdit->setValue(_pro->commonItemData.SID);
-        layout->addRow("Script ID:", _sidEdit);
-    }
-    
-    // Add item-specific common fields (only for items)
-    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        // Material ID
-        _materialIdEdit = createMaterialComboBox("Material type - determines material properties");
-        _materialIdEdit->setCurrentIndex(_pro->commonItemData.materialId);
-        connect(_materialIdEdit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
-        layout->addRow("Material:", _materialIdEdit);
-        
-        // Container Size
-        _containerSizeEdit = new QSpinBox();
-        _containerSizeEdit->setRange(0, MAX_CONTAINER_SIZE);
-        _containerSizeEdit->setValue(_pro->commonItemData.containerSize);
-        _containerSizeEdit->setToolTip("Container size - volume capacity for containers");
-        connect(_containerSizeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        layout->addRow("Container Size:", _containerSizeEdit);
-        // Weight
-        _weightEdit = new QSpinBox();
-        _weightEdit->setRange(0, MAX_WEIGHT);
-        _weightEdit->setValue(_pro->commonItemData.weight);
-        _weightEdit->setToolTip("Weight in pounds - affects carry capacity");
-        connect(_weightEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        layout->addRow("Weight:", _weightEdit);
-        
-        // Base Price
-        _basePriceEdit = new QSpinBox();
-        _basePriceEdit->setRange(0, MAX_PRICE);
-        _basePriceEdit->setValue(_pro->commonItemData.basePrice);
-        _basePriceEdit->setToolTip("Base price in caps for trading");
-        connect(_basePriceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        layout->addRow("Base Price:", _basePriceEdit);
-        
-        // Sound ID
-        _soundIdEdit = new QSpinBox();
-        _soundIdEdit->setRange(0, MAX_SOUND_ID);
-        _soundIdEdit->setValue(_pro->commonItemData.soundId);
-        _soundIdEdit->setToolTip("Sound effect ID when using/manipulating the item");
-        connect(_soundIdEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        layout->addRow("Sound ID:", _soundIdEdit);
-    }
-    
-    // Add wall-specific fields (only for walls)
-    if (_pro->type() == Pro::OBJECT_TYPE::WALL) {
-        _wallMaterialIdEdit = createMaterialComboBox("Material type - determines wall material properties and interactions");
-        _wallMaterialIdEdit->setCurrentIndex(_pro->wallData.materialId);
-        connect(_wallMaterialIdEdit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
-        layout->addRow("Material:", _wallMaterialIdEdit);
-    }
-    
-    // Add tile-specific fields (only for tiles)
-    if (_pro->type() == Pro::OBJECT_TYPE::TILE) {
-        _tileMaterialIdEdit = createMaterialComboBox("Material type - determines tile material properties and interactions");
-        _tileMaterialIdEdit->setCurrentIndex(_pro->tileData.materialId);
-        connect(_tileMaterialIdEdit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
-        layout->addRow("Material:", _tileMaterialIdEdit);
-    }
+    layout->addStretch();
     
     _tabWidget->addTab(_commonTab, "Common");
 }
 
-void ProEditorDialog::setupExtendedFlagsGroup(QFormLayout* layout) {
-    _extendedFlagsGroup = new QGroupBox("Extended Flags");
-    QVBoxLayout* flagsLayout = new QVBoxLayout(_extendedFlagsGroup);
-    
-    // Determine which type-specific flags to show
-    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        switch (_pro->itemType()) {
-            case Pro::ITEM_TYPE::WEAPON:
-                setupWeaponExtendedFlags(flagsLayout);
-                break;
-            case Pro::ITEM_TYPE::CONTAINER:
-                setupContainerExtendedFlags(flagsLayout);
-                break;
-            default:
-                setupItemExtendedFlags(flagsLayout);
-                break;
-        }
-    } else {
-        setupOtherExtendedFlags(flagsLayout);
-    }
-    
-    layout->addRow("Extended Flags:", _extendedFlagsGroup);
-}
+// setupExtendedFlagsGroup method removed - now handled by ProCommonFieldsWidget
 
-void ProEditorDialog::setupWeaponExtendedFlags(QVBoxLayout* layout) {
-    // Animation flags group
-    QGroupBox* animGroup = new QGroupBox("Animation");
-    QFormLayout* animLayout = new QFormLayout(animGroup);
-    
-    _animationPrimaryEdit = new QSpinBox();
-    _animationPrimaryEdit->setRange(0, MAX_ANIMATION_CODE);
-    _animationPrimaryEdit->setValue(Pro::getAnimationPrimary(_pro->commonItemData.flagsExt));
-    _animationPrimaryEdit->setToolTip("Primary attack animation index (0-15)");
-    connect(_animationPrimaryEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onExtendedFlagChanged);
-    animLayout->addRow("Primary Anim:", _animationPrimaryEdit);
-    
-    _animationSecondaryEdit = new QSpinBox();
-    _animationSecondaryEdit->setRange(0, MAX_ANIMATION_CODE);
-    _animationSecondaryEdit->setValue(Pro::getAnimationSecondary(_pro->commonItemData.flagsExt));
-    _animationSecondaryEdit->setToolTip("Secondary attack animation index (0-15)");
-    connect(_animationSecondaryEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onExtendedFlagChanged);
-    animLayout->addRow("Secondary Anim:", _animationSecondaryEdit);
-    
-    layout->addWidget(animGroup);
-    
-    // Weapon behavior flags
-    QGroupBox* behaviorGroup = new QGroupBox("Weapon Behavior");
-    QVBoxLayout* behaviorLayout = new QVBoxLayout(behaviorGroup);
-    
-    _bigGunCheck = new QCheckBox("Big Gun");
-    _bigGunCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::BIG_GUN));
-    _bigGunCheck->setToolTip("Forces weapon to use Big Guns skill instead of Small Guns");
-    connect(_bigGunCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    behaviorLayout->addWidget(_bigGunCheck);
-    
-    _twoHandedCheck = new QCheckBox("Two-Handed");
-    _twoHandedCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::TWO_HANDED));
-    _twoHandedCheck->setToolTip("Weapon requires both hands, prevents dual-wielding");
-    connect(_twoHandedCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    behaviorLayout->addWidget(_twoHandedCheck);
-    
-    _itemHiddenCheck = new QCheckBox("Hidden Item");
-    _itemHiddenCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::ITEM_HIDDEN));
-    _itemHiddenCheck->setToolTip("Item is integral part of owner, cannot be dropped (creature weapons)");
-    connect(_itemHiddenCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    behaviorLayout->addWidget(_itemHiddenCheck);
-    
-    layout->addWidget(behaviorGroup);
-}
+// setupWeaponExtendedFlags method removed - now handled by ProCommonFieldsWidget
 
-void ProEditorDialog::setupContainerExtendedFlags(QVBoxLayout* layout) {
-    // Action flags group for containers
-    QGroupBox* actionGroup = new QGroupBox("Container Actions");
-    QVBoxLayout* actionLayout = new QVBoxLayout(actionGroup);
-    
-    _canUseCheck = new QCheckBox("Can Use");
-    _canUseCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE));
-    _canUseCheck->setToolTip("Container can be 'used' (automatically set for containers)");
-    connect(_canUseCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    actionLayout->addWidget(_canUseCheck);
-    
-    _canUseOnCheck = new QCheckBox("Can Use On");
-    _canUseOnCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE_ON));
-    _canUseOnCheck->setToolTip("Container can be 'used on' target");
-    connect(_canUseOnCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    actionLayout->addWidget(_canUseOnCheck);
-    
-    _interactionFlagCheck = new QCheckBox("Interaction Flag");
-    _interactionFlagCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::INTERACTION_FLAG));
-    _interactionFlagCheck->setToolTip("Related to item interactions");
-    connect(_interactionFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    actionLayout->addWidget(_interactionFlagCheck);
-    
-    layout->addWidget(actionGroup);
-}
+// setupContainerExtendedFlags method removed - now handled by ProCommonFieldsWidget
 
-void ProEditorDialog::setupItemExtendedFlags(QVBoxLayout* layout) {
-    // General item flags (for armor, drugs, ammo, misc, keys)
-    QGroupBox* generalGroup = new QGroupBox("Item Actions");
-    QVBoxLayout* generalLayout = new QVBoxLayout(generalGroup);
-    
-    _canUseCheck = new QCheckBox("Can Use");
-    _canUseCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE));
-    _canUseCheck->setToolTip("Item can be 'used'");
-    connect(_canUseCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    generalLayout->addWidget(_canUseCheck);
-    
-    _canUseOnCheck = new QCheckBox("Can Use On");
-    _canUseOnCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE_ON));
-    _canUseOnCheck->setToolTip("Item can be 'used on' target (automatically set for drugs)");
-    connect(_canUseOnCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    generalLayout->addWidget(_canUseOnCheck);
-    
-    _generalFlagCheck = new QCheckBox("General Flag");
-    _generalFlagCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::GENERAL_FLAG));
-    _generalFlagCheck->setToolTip("General purpose flag");
-    connect(_generalFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    generalLayout->addWidget(_generalFlagCheck);
-    
-    layout->addWidget(generalGroup);
-}
+// setupItemExtendedFlags method removed - now handled by ProCommonFieldsWidget
+// setupOtherExtendedFlags method removed - now handled by ProCommonFieldsWidget  
+// addStandardItemFlags method removed - now handled by ProCommonFieldsWidget
+// setupObjectFlagsGroup method removed - now handled by ProCommonFieldsWidget
 
-void ProEditorDialog::setupOtherExtendedFlags(QVBoxLayout* layout) {
-    // For critters, scenery, walls - show general flags
-    _generalFlagCheck = new QCheckBox("General Flag");
-    _generalFlagCheck->setChecked(_pro->type() == Pro::OBJECT_TYPE::ITEM ? 
-        Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::GENERAL_FLAG) :
-        Pro::hasFlag(_pro->header.flags, Pro::ExtendedItemFlags::GENERAL_FLAG));
-    _generalFlagCheck->setToolTip("General purpose flag (scenery/walls/tiles)");
-    connect(_generalFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    layout->addWidget(_generalFlagCheck);
-    
-    // Light flags for objects that can have light
-    if (_pro->type() != Pro::OBJECT_TYPE::TILE) {
-        QGroupBox* lightGroup = new QGroupBox("Light Flags");
-        QVBoxLayout* lightLayout = new QVBoxLayout(lightGroup);
-        
-        uint32_t flagsToCheck = _pro->type() == Pro::OBJECT_TYPE::ITEM ? 
-            _pro->commonItemData.flagsExt : _pro->header.flags;
-        
-        _lightFlag1Check = new QCheckBox("OBJECT_WALL_TRANS_END");
-        _lightFlag1Check->setChecked(Pro::hasFlag(flagsToCheck, Pro::ObjectFlags::OBJECT_WALL_TRANS_END));
-        _lightFlag1Check->setToolTip("OBJECT_WALL_TRANS_END");
-        connect(_lightFlag1Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-        lightLayout->addWidget(_lightFlag1Check);
-        
-        _lightFlag2Check = new QCheckBox("OBJECT_LIGHT_THRU");
-        _lightFlag2Check->setChecked(Pro::hasFlag(flagsToCheck, Pro::ObjectFlags::OBJECT_LIGHT_THRU));
-        _lightFlag2Check->setToolTip("OBJECT_LIGHT_THRU");
-        connect(_lightFlag2Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-        lightLayout->addWidget(_lightFlag2Check);
-        
-        _lightFlag3Check = new QCheckBox("OBJECT_SEEN");
-        _lightFlag3Check->setChecked(Pro::hasFlag(flagsToCheck, Pro::ObjectFlags::OBJECT_SEEN));
-        _lightFlag3Check->setToolTip("OBJECT_SEEN");
-        connect(_lightFlag3Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-        lightLayout->addWidget(_lightFlag3Check);
-        
-        _lightFlag4Check = new QCheckBox("OBJECT_SHOOT_THRU");
-        _lightFlag4Check->setChecked(Pro::hasFlag(flagsToCheck, Pro::ObjectFlags::OBJECT_SHOOT_THRU));
-        _lightFlag4Check->setToolTip("OBJECT_SHOOT_THRU");
-        connect(_lightFlag4Check, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-        lightLayout->addWidget(_lightFlag4Check);
-        
-        layout->addWidget(lightGroup);
-    }
-}
-
-void ProEditorDialog::addStandardItemFlags(QVBoxLayout* parentLayout) {
-    // Standard ExtendedItemFlags group for all item types
-    QGroupBox* itemFlagsGroup = new QGroupBox("Item Flags");
-    QVBoxLayout* itemFlagsLayout = new QVBoxLayout(itemFlagsGroup);
-    
-    _canUseCheck = new QCheckBox("Can Use");
-    _canUseCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE));
-    _canUseCheck->setToolTip("Item can be 'used' (right-click action)");
-    connect(_canUseCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    itemFlagsLayout->addWidget(_canUseCheck);
-    
-    _canUseOnCheck = new QCheckBox("Can Use On");
-    _canUseOnCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::CAN_USE_ON));
-    _canUseOnCheck->setToolTip("Item can be 'used on' target (drag and drop on target)");
-    connect(_canUseOnCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    itemFlagsLayout->addWidget(_canUseOnCheck);
-    
-    _generalFlagCheck = new QCheckBox("General Flag");
-    _generalFlagCheck->setChecked(Pro::hasFlag(_pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::GENERAL_FLAG));
-    _generalFlagCheck->setToolTip("General purpose flag for special behaviors");
-    connect(_generalFlagCheck, &QCheckBox::toggled, this, &ProEditorDialog::onExtendedFlagChanged);
-    itemFlagsLayout->addWidget(_generalFlagCheck);
-    
-    parentLayout->addWidget(itemFlagsGroup);
-}
-
-void ProEditorDialog::setupObjectFlagsGroup(QFormLayout* layout) {
-    QGroupBox* objectFlagsGroup = new QGroupBox("Object Flags");
-    QVBoxLayout* flagsLayout = new QVBoxLayout(objectFlagsGroup);
-    
-    uint32_t flags = _pro->header.flags;
-    
-    // Rendering flags group
-    QGroupBox* renderingGroup = new QGroupBox("Rendering");
-    QVBoxLayout* renderingLayout = new QVBoxLayout(renderingGroup);
-    
-    _flatCheck = new QCheckBox("Flat");
-    _flatCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_FLAT));
-    _flatCheck->setToolTip("Rendered first, just after tiles");
-    connect(_flatCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    renderingLayout->addWidget(_flatCheck);
-    
-    _noBlockCheck = new QCheckBox("No Block");
-    _noBlockCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK));
-    _noBlockCheck->setToolTip("Doesn't block the tile");
-    connect(_noBlockCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    renderingLayout->addWidget(_noBlockCheck);
-    
-    _multiHexCheck = new QCheckBox("Multi-Hex");
-    _multiHexCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_MULTIHEX));
-    _multiHexCheck->setToolTip("Object occupies multiple hexes");
-    connect(_multiHexCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    renderingLayout->addWidget(_multiHexCheck);
-    
-    _noHighlightCheck = new QCheckBox("No Highlight");
-    _noHighlightCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_HIGHLIGHT));
-    _noHighlightCheck->setToolTip("Doesn't highlight border; used for containers");
-    connect(_noHighlightCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    renderingLayout->addWidget(_noHighlightCheck);
-    
-    flagsLayout->addWidget(renderingGroup);
-    
-    // Transparency flags group (mutually exclusive)
-    QGroupBox* transparencyGroup = new QGroupBox("Transparency (Mutually Exclusive)");
-    QVBoxLayout* transparencyLayout = new QVBoxLayout(transparencyGroup);
-    
-    _transNoneCheck = new QCheckBox("Opaque (TransNone)");
-    _transNoneCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_NONE));
-    _transNoneCheck->setToolTip("Opaque - not the default value");
-    connect(_transNoneCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    transparencyLayout->addWidget(_transNoneCheck);
-    
-    _transRedCheck = new QCheckBox("Red Transparency");
-    _transRedCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_RED));
-    _transRedCheck->setToolTip("Red transparency effect");
-    connect(_transRedCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    transparencyLayout->addWidget(_transRedCheck);
-    
-    _transWallCheck = new QCheckBox("Wall Transparency");
-    _transWallCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_WALL));
-    _transWallCheck->setToolTip("Wall transparency effect");
-    connect(_transWallCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    transparencyLayout->addWidget(_transWallCheck);
-    
-    _transGlassCheck = new QCheckBox("Glass Transparency");
-    _transGlassCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_GLASS));
-    _transGlassCheck->setToolTip("Glass transparency effect");
-    connect(_transGlassCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    transparencyLayout->addWidget(_transGlassCheck);
-    
-    _transSteamCheck = new QCheckBox("Steam Transparency");
-    _transSteamCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_STEAM));
-    _transSteamCheck->setToolTip("Steam transparency effect");
-    connect(_transSteamCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    transparencyLayout->addWidget(_transSteamCheck);
-    
-    _transEnergyCheck = new QCheckBox("Energy Transparency");
-    _transEnergyCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_ENERGY));
-    _transEnergyCheck->setToolTip("Energy transparency effect");
-    connect(_transEnergyCheck, &QCheckBox::toggled, this, &ProEditorDialog::onTransparencyFlagChanged);
-    transparencyLayout->addWidget(_transEnergyCheck);
-    
-    flagsLayout->addWidget(transparencyGroup);
-    
-    // Interaction flags group
-    QGroupBox* interactionGroup = new QGroupBox("Interaction");
-    QVBoxLayout* interactionLayout = new QVBoxLayout(interactionGroup);
-    
-    _wallTransEndCheck = new QCheckBox("Wall Trans End");
-    _wallTransEndCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_WALL_TRANS_END));
-    _wallTransEndCheck->setToolTip("Changes transparency egg logic");
-    connect(_wallTransEndCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    interactionLayout->addWidget(_wallTransEndCheck);
-    
-    _lightThruCheck = new QCheckBox("Light Thru");
-    _lightThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_LIGHT_THRU));
-    _lightThruCheck->setToolTip("Light passes through");
-    connect(_lightThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    interactionLayout->addWidget(_lightThruCheck);
-    
-    _shootThruCheck = new QCheckBox("Shoot Thru");
-    _shootThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_SHOOT_THRU));
-    _shootThruCheck->setToolTip("Projectiles pass through");
-    connect(_shootThruCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    interactionLayout->addWidget(_shootThruCheck);
-    
-    flagsLayout->addWidget(interactionGroup);
-    
-    // System flags group
-    QGroupBox* systemGroup = new QGroupBox("System Flags");
-    QVBoxLayout* systemLayout = new QVBoxLayout(systemGroup);
-    
-    _hiddenCheck = new QCheckBox("Hidden");
-    _hiddenCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_HIDDEN));
-    _hiddenCheck->setToolTip("Object is hidden from view");
-    connect(_hiddenCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    systemLayout->addWidget(_hiddenCheck);
-    
-    _noSaveCheck = new QCheckBox("No Save");
-    _noSaveCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_SAVE));
-    _noSaveCheck->setToolTip("Should not be saved to savegame file");
-    connect(_noSaveCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    systemLayout->addWidget(_noSaveCheck);
-    
-    _noRemoveCheck = new QCheckBox("No Remove");
-    _noRemoveCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_REMOVE));
-    _noRemoveCheck->setToolTip("Should not be removed from game world");
-    connect(_noRemoveCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    systemLayout->addWidget(_noRemoveCheck);
-    
-    _queuedCheck = new QCheckBox("Queued");
-    _queuedCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_QUEUED));
-    _queuedCheck->setToolTip("Set if there was/is any event for the object");
-    connect(_queuedCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    systemLayout->addWidget(_queuedCheck);
-    
-    _seenCheck = new QCheckBox("Seen");
-    _seenCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_SEEN));
-    _seenCheck->setToolTip("Has been seen by the player");
-    connect(_seenCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    systemLayout->addWidget(_seenCheck);
-    
-    flagsLayout->addWidget(systemGroup);
-    
-    // Lighting group
-    QGroupBox* lightingGroup = new QGroupBox("Lighting");
-    QVBoxLayout* lightingLayout = new QVBoxLayout(lightingGroup);
-    
-    _lightingCheck = new QCheckBox("Has Lighting");
-    _lightingCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_LIGHTING));
-    _lightingCheck->setToolTip("Object has lighting properties");
-    connect(_lightingCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    lightingLayout->addWidget(_lightingCheck);
-    
-    flagsLayout->addWidget(lightingGroup);
-    
-    // Equipment flags group
-    QGroupBox* equipmentGroup = new QGroupBox("Equipment State");
-    QVBoxLayout* equipmentLayout = new QVBoxLayout(equipmentGroup);
-    
-    _leftHandCheck = new QCheckBox("In Left Hand");
-    _leftHandCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_IN_LEFT_HAND));
-    _leftHandCheck->setToolTip("Object is in left hand");
-    connect(_leftHandCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    equipmentLayout->addWidget(_leftHandCheck);
-    
-    _rightHandCheck = new QCheckBox("In Right Hand");
-    _rightHandCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_IN_RIGHT_HAND));
-    _rightHandCheck->setToolTip("Object is in right hand");
-    connect(_rightHandCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    equipmentLayout->addWidget(_rightHandCheck);
-    
-    _wornCheck = new QCheckBox("Worn");
-    _wornCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_WORN));
-    _wornCheck->setToolTip("Object is being worn");
-    connect(_wornCheck, &QCheckBox::toggled, this, &ProEditorDialog::onObjectFlagChanged);
-    equipmentLayout->addWidget(_wornCheck);
-    
-    flagsLayout->addWidget(equipmentGroup);
-    
-    layout->addRow("Object Flags:", objectFlagsGroup);
-}
-
-
-
-
-
-
-
-
+// All obsolete flag setup methods have been removed and replaced with ProCommonFieldsWidget
 
 void ProEditorDialog::setupAnimationControls() {
     // Animation controls
@@ -1290,67 +615,20 @@ void ProEditorDialog::setupAnimationControls() {
 void ProEditorDialog::loadProData() {
     
     try {
-        // Load common data from PRO header
-        _commonData.PID = _pro->header.PID;
-        _commonData.message_id = _pro->header.message_id;
-        _commonData.FID = _pro->header.FID;
-        _commonData.light_distance = _pro->header.light_distance;
-        _commonData.light_intensity = _pro->header.light_intensity;
-        _commonData.flags = _pro->header.flags;
-        
-        
-        // Load extended data
-        _commonData.flagsExt = _pro->commonItemData.flagsExt;
-        _commonData.SID = _pro->commonItemData.SID;
-        _commonData.materialId = _pro->commonItemData.materialId;
-        _commonData.containerSize = _pro->commonItemData.containerSize;
-        _commonData.weight = _pro->commonItemData.weight;
-        _commonData.basePrice = _pro->commonItemData.basePrice;
-        _commonData.inventoryFID = _pro->commonItemData.inventoryFID;
-        _commonData.soundId = _pro->commonItemData.soundId;
+        // Load common data into ProCommonFieldsWidget
+        if (_commonFieldsWidget) {
+            _commonFieldsWidget->loadFromPro(_pro);
+            // Set item fields visibility based on object type
+            bool isItem = (_pro->type() == Pro::OBJECT_TYPE::ITEM);
+            _commonFieldsWidget->setItemFieldsVisible(isItem);
+        }
         
     } catch (const std::exception& e) {
-        spdlog::error("ProEditorDialog::loadProData() - exception loading header/extended data: {}", e.what());
+        spdlog::error("ProEditorDialog::loadProData() - exception loading common data: {}", e.what());
         throw;
     }
     
-    try {
-        // Update common UI controls
-        
-        
-        // Always set _mainFID from PRO data (needed for compact preview)
-        _mainFID = _commonData.FID;
-        if (_fidLabel) {
-            try {
-                _fidLabel->setText(getFrmFilename(_mainFID));
-            } catch (const std::exception& e) {
-                spdlog::error("ProEditorDialog: Error setting FID label text: {}", e.what());
-                if (_fidLabel) {
-                    _fidLabel->setText("Error loading FRM");
-                }
-            }
-        }
-        
-        if (_lightDistanceEdit) {
-            _lightDistanceEdit->setValue(_commonData.light_distance);
-        }
-        
-        if (_lightIntensityEdit) {
-            _lightIntensityEdit->setValue(_commonData.light_intensity);
-        }
-        
-        // Always set _inventoryFID from PRO data (needed for compact preview)
-        _inventoryFID = _commonData.inventoryFID;
-        if (_inventoryFIDLabel) {
-            _inventoryFIDLabel->setText(getFrmFilename(_inventoryFID));
-        }
-        
-        // Update flag checkboxes based on loaded flags
-        loadObjectFlags(_commonData.flags);
-    } catch (const std::exception& e) {
-        spdlog::error("ProEditorDialog::loadProData() - exception updating UI controls: {}", e.what());
-        throw;
-    }
+    // Note: Common UI controls are now handled by ProCommonFieldsWidget
     
     // Load type-specific data based on object type
     
@@ -1637,34 +915,9 @@ void ProEditorDialog::loadKeyData() {
 }
 
 void ProEditorDialog::saveProData() {
-    // Save common data back to PRO header
-    // Message ID is now handled by the message selector dialog
-    _pro->header.FID = _mainFID;
-    _pro->header.light_distance = _lightDistanceEdit->value();
-    _pro->header.light_intensity = _lightIntensityEdit->value();
-    // Flags are updated real-time via checkbox signal handlers
-    
-    // Extended flags are updated real-time via signal handlers
-    if (_sidEdit) {
-        _pro->commonItemData.SID = _sidEdit->value();
-    }
-    if (_materialIdEdit) {
-        _pro->commonItemData.materialId = _materialIdEdit->currentIndex();
-    }
-    if (_containerSizeEdit) {
-        _pro->commonItemData.containerSize = _containerSizeEdit->value();
-    }
-    if (_weightEdit) {
-        _pro->commonItemData.weight = _weightEdit->value();
-    }
-    if (_basePriceEdit) {
-        _pro->commonItemData.basePrice = _basePriceEdit->value();
-    }
-    if (_inventoryFIDLabel) {
-        _pro->commonItemData.inventoryFID = _inventoryFID;
-    }
-    if (_soundIdEdit) {
-        _pro->commonItemData.soundId = _soundIdEdit->value();
+    // Save common data using ProCommonFieldsWidget
+    if (_commonFieldsWidget) {
+        _commonFieldsWidget->saveToPro(_pro);
     }
     
     // Save type-specific data based on object type
@@ -1931,11 +1184,11 @@ void ProEditorDialog::setupCritterFields() {
     headFidLayout->addWidget(_critterHeadFIDSelectorButton);
     critterLayout->addRow("Head FID:", headFidWidget);
     
-    _critterAIPacketEdit = createSpinBox(0, MAX_AI_PACKET, "AI packet number for critter behavior");
+    _critterAIPacketEdit = createSpinBox(0, INT_MAX, "AI packet number for critter behavior");
     connectSpinBox(_critterAIPacketEdit);
     critterLayout->addRow("AI Packet:", _critterAIPacketEdit);
     
-    _critterTeamNumberEdit = createSpinBox(0, MAX_TEAM_NUMBER, "Team number for faction identification");
+    _critterTeamNumberEdit = createSpinBox(0, INT_MAX, "Team number for faction identification");
     connectSpinBox(_critterTeamNumberEdit);
     critterLayout->addRow("Team Number:", _critterTeamNumberEdit);
     
@@ -2033,25 +1286,25 @@ void ProEditorDialog::setupCritterFields() {
     combatLayout->setSpacing(4);
     
     _critterMaxHitPointsEdit = new QSpinBox();
-    _critterMaxHitPointsEdit->setRange(1, MAX_CRITTER_HIT_POINTS);
+    _critterMaxHitPointsEdit->setRange(1, INT_MAX);
     _critterMaxHitPointsEdit->setToolTip("Maximum hit points");
     connect(_critterMaxHitPointsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     combatLayout->addRow("Max HP:", _critterMaxHitPointsEdit);
     
     _critterActionPointsEdit = new QSpinBox();
-    _critterActionPointsEdit->setRange(1, MAX_ACTION_POINTS);
+    _critterActionPointsEdit->setRange(1, INT_MAX);
     _critterActionPointsEdit->setToolTip("Action points per turn");
     connect(_critterActionPointsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     combatLayout->addRow("Action Points:", _critterActionPointsEdit);
     
     _critterArmorClassEdit = new QSpinBox();
-    _critterArmorClassEdit->setRange(0, MAX_ARMOR_CLASS);
+    _critterArmorClassEdit->setRange(0, INT_MAX);
     _critterArmorClassEdit->setToolTip("Base armor class");
     connect(_critterArmorClassEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     combatLayout->addRow("Armor Class:", _critterArmorClassEdit);
     
     _critterMeleeDamageEdit = new QSpinBox();
-    _critterMeleeDamageEdit->setRange(0, MAX_MELEE_DAMAGE);
+    _critterMeleeDamageEdit->setRange(0, INT_MAX);
     _critterMeleeDamageEdit->setToolTip("Melee damage bonus");
     connect(_critterMeleeDamageEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     combatLayout->addRow("Melee Damage:", _critterMeleeDamageEdit);
@@ -2067,37 +1320,37 @@ void ProEditorDialog::setupCritterFields() {
     advancedLayout->setSpacing(4);
     
     _critterCarryWeightMaxEdit = new QSpinBox();
-    _critterCarryWeightMaxEdit->setRange(0, MAX_CARRY_WEIGHT);
+    _critterCarryWeightMaxEdit->setRange(0, INT_MAX);
     _critterCarryWeightMaxEdit->setToolTip("Maximum carry weight");
     connect(_critterCarryWeightMaxEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Carry Weight:", _critterCarryWeightMaxEdit);
     
     _critterSequenceEdit = new QSpinBox();
-    _critterSequenceEdit->setRange(0, MAX_SEQUENCE);
+    _critterSequenceEdit->setRange(0, INT_MAX);
     _critterSequenceEdit->setToolTip("Initiative sequence bonus");
     connect(_critterSequenceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Sequence:", _critterSequenceEdit);
     
     _critterHealingRateEdit = new QSpinBox();
-    _critterHealingRateEdit->setRange(0, MAX_HEALING_RATE);
+    _critterHealingRateEdit->setRange(0, INT_MAX);
     _critterHealingRateEdit->setToolTip("Healing rate bonus");
     connect(_critterHealingRateEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Healing Rate:", _critterHealingRateEdit);
     
     _critterCriticalChanceEdit = new QSpinBox();
-    _critterCriticalChanceEdit->setRange(0, MAX_CRITICAL_CHANCE);
+    _critterCriticalChanceEdit->setRange(0, INT_MAX);
     _critterCriticalChanceEdit->setToolTip("Critical hit chance bonus");
     connect(_critterCriticalChanceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Critical Chance:", _critterCriticalChanceEdit);
     
     _critterBetterCriticalsEdit = new QSpinBox();
-    _critterBetterCriticalsEdit->setRange(0, MAX_BETTER_CRITICALS);
+    _critterBetterCriticalsEdit->setRange(0, INT_MAX);
     _critterBetterCriticalsEdit->setToolTip("Better criticals bonus");
     connect(_critterBetterCriticalsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Better Criticals:", _critterBetterCriticalsEdit);
     
     _critterAgeEdit = new QSpinBox();
-    _critterAgeEdit->setRange(0, MAX_AGE);
+    _critterAgeEdit->setRange(MIN_AGE, MAX_AGE);
     _critterAgeEdit->setToolTip("Critter age");
     connect(_critterAgeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Age:", _critterAgeEdit);
@@ -2115,19 +1368,19 @@ void ProEditorDialog::setupCritterFields() {
     advancedLayout->addRow("Body Type:", _critterBodyTypeCombo);
     
     _critterExperienceEdit = new QSpinBox();
-    _critterExperienceEdit->setRange(0, MAX_EXPERIENCE);
+    _critterExperienceEdit->setRange(0, INT_MAX);
     _critterExperienceEdit->setToolTip("Experience points for killing this critter");
     connect(_critterExperienceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Experience:", _critterExperienceEdit);
     
     _critterKillTypeEdit = new QSpinBox();
-    _critterKillTypeEdit->setRange(0, MAX_KILL_TYPE);
+    _critterKillTypeEdit->setRange(0, INT_MAX);
     _critterKillTypeEdit->setToolTip("Kill type for karma tracking");
     connect(_critterKillTypeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Kill Type:", _critterKillTypeEdit);
     
     _critterDamageTypeEdit = new QSpinBox();
-    _critterDamageTypeEdit->setRange(0, MAX_DAMAGE_TYPE);
+    _critterDamageTypeEdit->setRange(0, INT_MAX);
     _critterDamageTypeEdit->setToolTip("Default damage type");
     connect(_critterDamageTypeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Damage Type:", _critterDamageTypeEdit);
@@ -2162,7 +1415,7 @@ void ProEditorDialog::setupCritterFields() {
         
         // Damage threshold
         _critterDamageThresholdEdits[i] = new QSpinBox();
-        _critterDamageThresholdEdits[i]->setRange(0, MAX_DAMAGE_THRESHOLD);
+        _critterDamageThresholdEdits[i]->setRange(0, INT_MAX);
         _critterDamageThresholdEdits[i]->setToolTip(QString("%1 damage threshold").arg(damageTypes[i]));
         _critterDamageThresholdEdits[i]->setFixedWidth(60);
         connect(_critterDamageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
@@ -2170,7 +1423,7 @@ void ProEditorDialog::setupCritterFields() {
         
         // Damage resistance
         _critterDamageResistEdits[i] = new QSpinBox();
-        _critterDamageResistEdits[i]->setRange(0, MAX_DAMAGE_RESISTANCE);
+        _critterDamageResistEdits[i]->setRange(0, INT_MAX);
         _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes[i]));
         _critterDamageResistEdits[i]->setFixedWidth(60);
         connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
@@ -2192,7 +1445,7 @@ void ProEditorDialog::setupCritterFields() {
         
         // Damage resistance
         _critterDamageResistEdits[i] = new QSpinBox();
-        _critterDamageResistEdits[i]->setRange(0, MAX_DAMAGE_RESISTANCE);
+        _critterDamageResistEdits[i]->setRange(0, INT_MAX);
         _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes[i]));
         _critterDamageResistEdits[i]->setFixedWidth(60);
         connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
@@ -2279,11 +1532,11 @@ void ProEditorDialog::setupSceneryFields() {
     elevatorLayout->setContentsMargins(8, 8, 8, 8);
     elevatorLayout->setSpacing(4);
     
-    _elevatorTypeEdit = createSpinBox(0, MAX_ELEVATOR_VALUE, "Elevator type");
+    _elevatorTypeEdit = createSpinBox(0, INT_MAX, "Elevator type");
     connectSpinBox(_elevatorTypeEdit);
     elevatorLayout->addRow("Type:", _elevatorTypeEdit);
     
-    _elevatorLevelEdit = createSpinBox(0, MAX_ELEVATOR_VALUE, "Elevator level");
+    _elevatorLevelEdit = createSpinBox(0, INT_MAX, "Elevator level");
     connectSpinBox(_elevatorLevelEdit);
     elevatorLayout->addRow("Level:", _elevatorLevelEdit);
     
@@ -2383,10 +1636,7 @@ void ProEditorDialog::updatePreview() {
 
 int32_t ProEditorDialog::getPreviewFid() {
     
-    // Check if basic widgets are initialized
-    if (!_fidLabel) {
-        return 0;
-    }
+    // FID label is now handled by ProCommonFieldsWidget
     
     // Check if PRO is valid
     if (!_pro) {
@@ -2396,8 +1646,8 @@ int32_t ProEditorDialog::getPreviewFid() {
     // Items use dual preview system, not single preview, so they don't need getPreviewFid()
     
     // For items without dual preview, prefer inventory FID over world FID for preview
-    if (_pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryFIDLabel) {
-        int32_t inventoryFid = _inventoryFID;
+    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
+        int32_t inventoryFid = _pro->commonItemData.inventoryFID;
         if (inventoryFid > 0) {
             return inventoryFid;
         }
@@ -2417,7 +1667,7 @@ int32_t ProEditorDialog::getPreviewFid() {
     }
     
     // Fall back to main FID
-    return _mainFID;
+    return _pro->header.FID;
 }
 
 int32_t ProEditorDialog::getInventoryFid() {
@@ -2429,7 +1679,7 @@ int32_t ProEditorDialog::getInventoryFid() {
     
     // For items, return inventory FID only if set, don't fallback to main FID
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        int32_t inventoryFid = _inventoryFID;
+        int32_t inventoryFid = _pro->commonItemData.inventoryFID;
         // Return the inventory FID as-is, even if 0 or -1 (let caller handle "no image" case)
         return inventoryFid;
     }
@@ -2446,7 +1696,7 @@ int32_t ProEditorDialog::getGroundFid() {
     
     // For items, return main FID (ground view)
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        int32_t groundFid = _mainFID;
+        int32_t groundFid = _pro->header.FID;
         return groundFid;
     }
     
@@ -2613,10 +1863,7 @@ void ProEditorDialog::onAccept() {
 void ProEditorDialog::onFieldChanged() {
     QWidget* sender = qobject_cast<QWidget*>(QObject::sender());
     if (sender) {
-        // Update preview if ground FID field changed
-        if (sender == _fidLabel) {
-            updatePreview();
-        }
+        // Preview updates are now handled by ProCommonFieldsWidget signals
         
         // Update AI priority displays when relevant fields change
         updateAIPriorityDisplays();
@@ -2639,7 +1886,8 @@ void ProEditorDialog::onCheckBoxChanged() {
 }
 
 void ProEditorDialog::onFidSelectorClicked() {
-    openFrmSelectorForLabel(_fidLabel, &_mainFID, 0); // Items type
+    // FID selection is now handled by ProCommonFieldsWidget
+    // This method is kept for compatibility but does nothing
 }
 
 void ProEditorDialog::onEditMessageClicked() {
@@ -2659,8 +1907,10 @@ void ProEditorDialog::onEditMessageClicked() {
                 // Update the message ID in the PRO header
                 _pro->header.message_id = selectedMessageId;
                 
-                // Refresh the name and description display
-                loadNameAndDescription();
+                // Update the message ID in the widget and refresh name/description
+                if (_commonFieldsWidget) {
+                    _commonFieldsWidget->loadFromPro(_pro);
+                }
                 
                 // Update window title with new object name
                 updateWindowTitle();
@@ -2677,7 +1927,8 @@ void ProEditorDialog::onEditMessageClicked() {
 }
 
 void ProEditorDialog::onInventoryFidSelectorClicked() {
-    openFrmSelectorForLabel(_inventoryFIDLabel, &_inventoryFID, 7); // Inventory type
+    // Inventory FID selection is now handled by ProCommonFieldsWidget
+    // This method is kept for compatibility but does nothing
 }
 
 void ProEditorDialog::onArmorMaleFidSelectorClicked() {
@@ -3240,7 +2491,7 @@ QPixmap ProEditorDialog::createFrameThumbnail(const Frame& frame, const Pal* pal
 }
 
 void ProEditorDialog::loadNameAndDescription() {
-    if (!_nameLabel || !_descriptionLabel) {
+    if (!_pro || !_nameLabel || !_descriptionEdit) {
         return;
     }
     
@@ -3248,7 +2499,7 @@ void ProEditorDialog::loadNameAndDescription() {
         const auto* msgFile = ProHelper::msgFile(_pro->type());
         if (!msgFile) {
             _nameLabel->setText("MSG file not found");
-            _descriptionLabel->setPlainText(QString("Could not load MSG file for %1").arg(QString::fromStdString(_pro->typeToString())));
+            _descriptionEdit->setText("Could not load MSG file for " + QString::fromStdString(_pro->typeToString()));
             spdlog::warn("ProEditorDialog::loadNameAndDescription() - MSG file not found for {}", _pro->typeToString());
             return;
         }
@@ -3261,11 +2512,7 @@ void ProEditorDialog::loadNameAndDescription() {
             const auto& nameMessage = const_cast<Msg*>(msgFile)->message(messageId);
             name = nameMessage.text;
         } catch (const std::exception& e) {
-            name = QString("No name (ID: %1)").arg(messageId).toStdString();
-        }
-        
-        if (name.empty()) {
-            name = QString("No name (ID: %1)").arg(messageId).toStdString();
+            name = "No name (ID: " + std::to_string(messageId) + ")";
         }
         
         // Get description (message at messageId + 1)
@@ -3274,29 +2521,17 @@ void ProEditorDialog::loadNameAndDescription() {
             const auto& descMessage = const_cast<Msg*>(msgFile)->message(messageId + 1);
             description = descMessage.text;
         } catch (const std::exception& e) {
-            description = QString("No description (ID: %1)").arg(messageId + 1).toStdString();
+            description = "No description available (ID: " + std::to_string(messageId + 1) + ")";
         }
         
-        if (description.empty()) {
-            description = QString("No description (ID: %1)").arg(messageId + 1).toStdString();
-        }
-        
-        
-        // Update labels
+        // Update UI
         _nameLabel->setText(QString::fromStdString(name));
-        _descriptionLabel->setPlainText(QString::fromStdString(description));
-        
-        // Auto-resize the description text area to fit content
-        QTextDocument* doc = _descriptionLabel->document();
-        doc->setTextWidth(_descriptionLabel->viewport()->width());
-        int docHeight = doc->size().height() + 15; // Add some padding
-        int clampedHeight = std::max(30, std::min(docHeight, 120)); // Clamp between min and max
-        _descriptionLabel->setFixedHeight(clampedHeight);
+        _descriptionEdit->setText(QString::fromStdString(description));
         
     } catch (const std::exception& e) {
-        spdlog::error("ProEditorDialog::loadNameAndDescription() - exception: {}", e.what());
         _nameLabel->setText("Error loading name");
-        _descriptionLabel->setPlainText(QString("Error: %1").arg(e.what()));
+        _descriptionEdit->setText(QString("Error: %1").arg(e.what()));
+        spdlog::error("ProEditorDialog::loadNameAndDescription() - Exception: {}", e.what());
     }
 }
 
@@ -3304,12 +2539,11 @@ void ProEditorDialog::updateWindowTitle() {
     QString objectName = "Unknown";
     QString objectType = "Object";
     
-    // Get object name from the name label if available
-    if (_nameLabel && !_nameLabel->text().isEmpty() && 
-        _nameLabel->text() != "Loading..." && 
-        _nameLabel->text() != "MSG file not found" && 
-        _nameLabel->text() != "Error loading name") {
+    // Get object name from name label or fallback
+    if (_nameLabel && !_nameLabel->text().isEmpty()) {
         objectName = _nameLabel->text();
+    } else {
+        objectName = QString("Object %1").arg(_pro->header.PID, 8, 16, QChar('0')).toUpper();
     }
     
     // Get object type based on PRO type
@@ -3527,55 +2761,8 @@ void ProEditorDialog::loadAnimationFrames() {
 }
 
 void ProEditorDialog::onExtendedFlagChanged() {
-    uint32_t flags = 0;
-    
-    // Rebuild flags from individual controls
-    flags |= Pro::setAnimationPrimary(flags, _animationPrimaryEdit ? _animationPrimaryEdit->value() : 0);
-    flags |= Pro::setAnimationSecondary(flags, _animationSecondaryEdit ? _animationSecondaryEdit->value() : 0);
-    
-    if (_bigGunCheck && _bigGunCheck->isChecked()) {
-        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::BIG_GUN);
-    }
-    if (_twoHandedCheck && _twoHandedCheck->isChecked()) {
-        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::TWO_HANDED);
-    }
-    if (_canUseCheck && _canUseCheck->isChecked()) {
-        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::CAN_USE);
-    }
-    if (_canUseOnCheck && _canUseOnCheck->isChecked()) {
-        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::CAN_USE_ON);
-    }
-    if (_generalFlagCheck && _generalFlagCheck->isChecked()) {
-        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::GENERAL_FLAG);
-    }
-    if (_interactionFlagCheck && _interactionFlagCheck->isChecked()) {
-        flags = Pro::setFlag(flags, Pro::ExtendedItemFlags::INTERACTION_FLAG);
-    }
-    if (_itemHiddenCheck && _itemHiddenCheck->isChecked()) {
-        flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_HIDDEN);
-    }
-    if (_lightFlag1Check && _lightFlag1Check->isChecked()) {
-        flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_WALL_TRANS_END);
-    }
-    if (_lightFlag2Check && _lightFlag2Check->isChecked()) {
-        flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_LIGHT_THRU);
-    }
-    if (_lightFlag3Check && _lightFlag3Check->isChecked()) {
-        flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_SEEN);
-    }
-    if (_lightFlag4Check && _lightFlag4Check->isChecked()) {
-        flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_SHOOT_THRU);
-    }
-    
-    
-    // Store in pro data (different location based on object type)
-    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        _pro->commonItemData.flagsExt = flags;
-    } else {
-        // For critters, scenery, walls - store in header flags
-        _pro->header.flags = (_pro->header.flags & 0x0FFFFFFF) | (flags & 0xF0000000); // Keep lower bits, update upper bits
-    }
-    
+    // Extended flags are now handled by ProCommonFieldsWidget
+    // This method is kept for compatibility but does nothing
 }
 
 
@@ -3659,104 +2846,18 @@ void ProEditorDialog::updateAIPriorityDisplays() {
 }
 
 void ProEditorDialog::onObjectFlagChanged() {
-    // Calculate combined flags value from all checkboxes
-    uint32_t flags = 0;
-    
-    // System flags
-    if (_hiddenCheck && _hiddenCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_HIDDEN);
-    if (_noSaveCheck && _noSaveCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_NO_SAVE);
-    if (_noRemoveCheck && _noRemoveCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_NO_REMOVE);
-    if (_queuedCheck && _queuedCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_QUEUED);
-    if (_seenCheck && _seenCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_SEEN);
-    
-    // Rendering flags
-    if (_flatCheck && _flatCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_FLAT);
-    if (_noBlockCheck && _noBlockCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK);
-    if (_multiHexCheck && _multiHexCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_MULTIHEX);
-    if (_noHighlightCheck && _noHighlightCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_NO_HIGHLIGHT);
-    
-    // Lighting flags
-    if (_lightingCheck && _lightingCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_LIGHTING);
-    
-    // Transparency flags (keep existing transparency values)
-    flags |= (_pro->header.flags & 0x000FC000); // Preserve transparency bits
-    
-    // Interaction flags
-    if (_wallTransEndCheck && _wallTransEndCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_WALL_TRANS_END);
-    if (_lightThruCheck && _lightThruCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_LIGHT_THRU);
-    if (_shootThruCheck && _shootThruCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_SHOOT_THRU);
-    
-    // Equipment state flags
-    if (_leftHandCheck && _leftHandCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_IN_LEFT_HAND);
-    if (_rightHandCheck && _rightHandCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_IN_RIGHT_HAND);
-    if (_wornCheck && _wornCheck->isChecked()) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_WORN);
-    
-    // Update the PRO data
-    _pro->header.flags = flags;
+    // Object flags are now handled by ProCommonFieldsWidget
+    // This method is kept for compatibility but does nothing
 }
 
 void ProEditorDialog::onTransparencyFlagChanged() {
-    // Handle mutually exclusive transparency flags
-    QCheckBox* sender = qobject_cast<QCheckBox*>(QObject::sender());
-    if (!sender || !sender->isChecked()) return;
-    
-    // Uncheck all other transparency flags when one is selected
-    if (sender != _transNoneCheck && _transNoneCheck) _transNoneCheck->setChecked(false);
-    if (sender != _transRedCheck && _transRedCheck) _transRedCheck->setChecked(false);
-    if (sender != _transWallCheck && _transWallCheck) _transWallCheck->setChecked(false);
-    if (sender != _transGlassCheck && _transGlassCheck) _transGlassCheck->setChecked(false);
-    if (sender != _transSteamCheck && _transSteamCheck) _transSteamCheck->setChecked(false);
-    if (sender != _transEnergyCheck && _transEnergyCheck) _transEnergyCheck->setChecked(false);
-    
-    // Calculate combined flags value
-    uint32_t flags = _pro->header.flags & ~0x000FC000; // Clear transparency bits
-    
-    // Add the selected transparency flag
-    if (sender == _transNoneCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_NONE);
-    else if (sender == _transRedCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_RED);
-    else if (sender == _transWallCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_WALL);
-    else if (sender == _transGlassCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_GLASS);
-    else if (sender == _transSteamCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_STEAM);
-    else if (sender == _transEnergyCheck) flags = Pro::setFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_ENERGY);
-    
-    // Update the PRO data
-    _pro->header.flags = flags;
+    // Transparency flags are now handled by ProCommonFieldsWidget
+    // This method is kept for compatibility but does nothing
 }
 
 void ProEditorDialog::loadObjectFlags(uint32_t flags) {
-    // Load system flags
-    if (_hiddenCheck) _hiddenCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_HIDDEN));
-    if (_noSaveCheck) _noSaveCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_SAVE));
-    if (_noRemoveCheck) _noRemoveCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_REMOVE));
-    if (_queuedCheck) _queuedCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_QUEUED));
-    if (_seenCheck) _seenCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_SEEN));
-    
-    // Load rendering flags
-    if (_flatCheck) _flatCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_FLAT));
-    if (_noBlockCheck) _noBlockCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK));
-    if (_multiHexCheck) _multiHexCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_MULTIHEX));
-    if (_noHighlightCheck) _noHighlightCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_HIGHLIGHT));
-    
-    // Load lighting flags
-    if (_lightingCheck) _lightingCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_LIGHTING));
-    
-    // Load transparency flags (mutually exclusive)
-    if (_transNoneCheck) _transNoneCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_NONE));
-    if (_transRedCheck) _transRedCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_RED));
-    if (_transWallCheck) _transWallCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_WALL));
-    if (_transGlassCheck) _transGlassCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_GLASS));
-    if (_transSteamCheck) _transSteamCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_STEAM));
-    if (_transEnergyCheck) _transEnergyCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_TRANS_ENERGY));
-    
-    // Load interaction flags
-    if (_wallTransEndCheck) _wallTransEndCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_WALL_TRANS_END));
-    if (_lightThruCheck) _lightThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_LIGHT_THRU));
-    if (_shootThruCheck) _shootThruCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_SHOOT_THRU));
-    
-    // Load equipment state flags
-    if (_leftHandCheck) _leftHandCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_IN_LEFT_HAND));
-    if (_rightHandCheck) _rightHandCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_IN_RIGHT_HAND));
-    if (_wornCheck) _wornCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_WORN));
+    // Object flags loading is now handled by ProCommonFieldsWidget
+    // This method is kept for compatibility but does nothing
 }
 
 const QStringList ProEditorDialog::getMaterialNames() {
@@ -3835,9 +2936,9 @@ void ProEditorDialog::onObjectFidChangeRequested() {
             // Items use object type 0
             objectTypeFilter = 0;
             if (senderWidget == _inventoryPreviewWidget) {
-                initialFid = static_cast<uint32_t>(_inventoryFID > 0 ? _inventoryFID : _mainFID);
+                initialFid = static_cast<uint32_t>(_pro->commonItemData.inventoryFID > 0 ? _pro->commonItemData.inventoryFID : _pro->header.FID);
             } else if (senderWidget == _groundPreviewWidget) {
-                initialFid = static_cast<uint32_t>(_mainFID);
+                initialFid = static_cast<uint32_t>(_pro->header.FID);
             }
         } else {
             initialFid = static_cast<uint32_t>(_pro->header.FID);
@@ -3852,11 +2953,11 @@ void ProEditorDialog::onObjectFidChangeRequested() {
                 // Update appropriate FID storage based on sender widget and PRO type
                 if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
                     if (senderWidget == _inventoryPreviewWidget) {
-                        _inventoryFID = static_cast<int32_t>(selectedFrmPid);
+                        // Update inventory FID in PRO data directly
                         _pro->commonItemData.inventoryFID = static_cast<int32_t>(selectedFrmPid);
                         updateInventoryPreview();
                     } else if (senderWidget == _groundPreviewWidget) {
-                        _mainFID = static_cast<int32_t>(selectedFrmPid);
+                        // Update main FID in PRO data directly
                         _pro->header.FID = static_cast<int32_t>(selectedFrmPid);
                         updateGroundPreview();
                     }
@@ -3965,7 +3066,7 @@ void ProEditorDialog::setupArmorFields() {
     _rightFieldsLayout->addWidget(miscGroup);
     
     // Add standard item flags
-    addStandardItemFlags(_rightFieldsLayout);
+    // Standard item flags are now handled by ProCommonFieldsWidget
     
     // Add stretch to push content to top
     _leftFieldsLayout->addStretch();
@@ -4083,21 +3184,21 @@ void ProEditorDialog::setupDrugFields() {
         
         // Immediate effect value (column 2)
         _drugStatAmountEdits[i] = new QSpinBox();
-        _drugStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
+        _drugStatAmountEdits[i]->setRange(INT_MIN, INT_MAX);
         _drugStatAmountEdits[i]->setToolTip(QString("Immediate effect amount for stat %1").arg(i + 1));
         connect(_drugStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         effectsGridLayout->addWidget(_drugStatAmountEdits[i], row, 2);
         
         // Mid-time effect value (column 3)
         _drugFirstStatAmountEdits[i] = new QSpinBox();
-        _drugFirstStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
+        _drugFirstStatAmountEdits[i]->setRange(INT_MIN, INT_MAX);
         _drugFirstStatAmountEdits[i]->setToolTip(QString("Mid-time effect amount for stat %1").arg(i + 1));
         connect(_drugFirstStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         effectsGridLayout->addWidget(_drugFirstStatAmountEdits[i], row, 3);
         
         // Long-time effect value (column 4)
         _drugSecondStatAmountEdits[i] = new QSpinBox();
-        _drugSecondStatAmountEdits[i]->setRange(-MAX_DRUG_STAT_MODIFIER, MAX_DRUG_STAT_MODIFIER);
+        _drugSecondStatAmountEdits[i]->setRange(INT_MIN, INT_MAX);
         _drugSecondStatAmountEdits[i]->setToolTip(QString("Long-time effect amount for stat %1").arg(i + 1));
         connect(_drugSecondStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         effectsGridLayout->addWidget(_drugSecondStatAmountEdits[i], row, 4);
@@ -4116,16 +3217,14 @@ void ProEditorDialog::setupDrugFields() {
     
     // Mid-time delay
     _drugFirstDelayEdit = new QSpinBox();
-    _drugFirstDelayEdit->setRange(0, MAX_DRUG_DELAY);
-    _drugFirstDelayEdit->setSuffix(" min");
+    _drugFirstDelayEdit->setRange(0, INT_MAX);
     _drugFirstDelayEdit->setToolTip("Delay in game minutes before mid-time effect");
     connect(_drugFirstDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     timingLayout->addRow("Mid-time Delay:", _drugFirstDelayEdit);
     
     // Long-time delay
     _drugSecondDelayEdit = new QSpinBox();
-    _drugSecondDelayEdit->setRange(0, MAX_DRUG_DELAY);
-    _drugSecondDelayEdit->setSuffix(" min");
+    _drugSecondDelayEdit->setRange(0, INT_MAX);
     _drugSecondDelayEdit->setToolTip("Delay in game minutes before long-time effect");
     connect(_drugSecondDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     timingLayout->addRow("Long-time Delay:", _drugSecondDelayEdit);
@@ -4142,7 +3241,7 @@ void ProEditorDialog::setupDrugFields() {
     addictionLayout->setSpacing(4);
     
     _drugAddictionChanceEdit = new QSpinBox();
-    _drugAddictionChanceEdit->setRange(0, MAX_ADDICTION_CHANCE);
+    _drugAddictionChanceEdit->setRange(0, INT_MAX);
     _drugAddictionChanceEdit->setSuffix("%");
     _drugAddictionChanceEdit->setToolTip("Percentage chance of addiction");
     connect(_drugAddictionChanceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
@@ -4162,8 +3261,7 @@ void ProEditorDialog::setupDrugFields() {
     
     // Addiction onset
     _drugAddictionDelayEdit = new QSpinBox();
-    _drugAddictionDelayEdit->setRange(0, MAX_DRUG_DELAY);
-    _drugAddictionDelayEdit->setSuffix(" min");
+    _drugAddictionDelayEdit->setRange(0, INT_MAX);
     _drugAddictionDelayEdit->setToolTip("Delay in game minutes before addiction effect is applied");
     connect(_drugAddictionDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     addictionLayout->addRow("Onset:", _drugAddictionDelayEdit);
@@ -4171,7 +3269,7 @@ void ProEditorDialog::setupDrugFields() {
     _leftFieldsLayout->addWidget(addictionGroup);
     
     // Add standard item flags
-    addStandardItemFlags(_leftFieldsLayout);
+    // Standard item flags are now handled by ProCommonFieldsWidget
     
     // Add stretch to push content to top (only left panel used for drugs)
     _leftFieldsLayout->addStretch();
@@ -4312,7 +3410,7 @@ void ProEditorDialog::setupAmmoFields() {
     _leftFieldsLayout->addWidget(placeholder);
     
     // Add standard item flags
-    addStandardItemFlags(_leftFieldsLayout);
+    // Standard item flags are now handled by ProCommonFieldsWidget
     
     _leftFieldsLayout->addStretch();
     _rightFieldsLayout->addStretch();
@@ -4324,7 +3422,7 @@ void ProEditorDialog::setupMiscItemFields() {
     _leftFieldsLayout->addWidget(placeholder);
     
     // Add standard item flags
-    addStandardItemFlags(_leftFieldsLayout);
+    // Standard item flags are now handled by ProCommonFieldsWidget
     
     _leftFieldsLayout->addStretch();
     _rightFieldsLayout->addStretch();
@@ -4345,7 +3443,7 @@ void ProEditorDialog::setupKeyFields() {
     _leftFieldsLayout->addWidget(keyGroup);
     
     // Add standard item flags
-    addStandardItemFlags(_leftFieldsLayout);
+    // Standard item flags are now handled by ProCommonFieldsWidget
     
     // Add stretch to push content to top
     _leftFieldsLayout->addStretch();

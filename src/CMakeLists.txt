@@ -95,6 +95,8 @@ set(GECK_SOURCES
     ui/widgets/ObjectPreviewWidget.cpp
     ui/widgets/WelcomeWidget.h
     ui/widgets/WelcomeWidget.cpp
+    ui/widgets/ProCommonFieldsWidget.h
+    ui/widgets/ProCommonFieldsWidget.cpp
 
     # Qt6 UI Constants
     ui/UIConstants.h

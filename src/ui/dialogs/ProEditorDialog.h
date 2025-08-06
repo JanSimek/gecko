@@ -23,11 +23,13 @@
 #include <QButtonGroup>
 #include <memory>
 #include <unordered_map>
+#include <climits>
 
 #include "../../format/pro/Pro.h"
 #include "../../format/msg/Msg.h"
 #include "../../util/ResourceManager.h"
 #include "../widgets/ObjectPreviewWidget.h"
+#include "../widgets/ProCommonFieldsWidget.h"
 
 namespace geck {
 
@@ -61,71 +63,20 @@ public:
     static constexpr int ANIMATION_TIMER_INTERVAL = 200; // 5 FPS
     static constexpr int LAYOUT_SPACING = 10;
     
-    // Game Constants
-    static constexpr int MAX_SPECIAL_STAT = 10;
+    // Game Constants (Documented Engine Limits Only)
+    static constexpr int MAX_SPECIAL_STAT = 10;        // Wiki: Primary/Secondary Stats "1-10"
     static constexpr int MIN_SPECIAL_STAT = 1;
-    static constexpr int MAX_WEAPON_RANGE = 50;
-    static constexpr int MAX_ACTION_POINTS = 20;
-    static constexpr int MAX_WEAPON_AP = 10;
-    static constexpr int MAX_WEAPON_AP_WARNING = 12;
-    static constexpr int MAX_WEAPON_AP_SECONDARY_WARNING = 15;
-    static constexpr int MAX_BURST_ROUNDS = 50;
-    static constexpr int MAX_ARMOR_CLASS = 90;
-    static constexpr int MAX_ARMOR_CLASS_WARNING = 50;
-    static constexpr int MAX_SEQUENCE = 50;
-    static constexpr int MAX_HEALING_RATE = 50;
-    static constexpr int MAX_CRITICAL_CHANCE = 100;
-    static constexpr int MAX_BETTER_CRITICALS = 100;
-    static constexpr int MAX_SKILL_PERCENT = 300;
-    static constexpr int MAX_DAMAGE_RESIST_PERCENT = 100;
-    static constexpr int MAX_CRITTER_HIT_POINTS = 9999;
-    static constexpr int MAX_CRITTER_HIT_POINTS_WARNING = 999;
-    static constexpr int MAX_DAMAGE_THRESHOLD = 200;
-    static constexpr int MAX_DAMAGE_RESISTANCE = 999;
-    static constexpr int MAX_GENERAL_DAMAGE = 999;
-    static constexpr int MAX_MELEE_DAMAGE = 999;
-    static constexpr int MAX_CARRY_WEIGHT = 99999;
-    static constexpr int MAX_EXPERIENCE = 99999;
-    static constexpr int MAX_DAMAGE_TYPE = 10;
-    static constexpr int MAX_KILL_TYPE = 999;
-    static constexpr int MAX_AI_PACKET = 999;
-    static constexpr int MAX_TEAM_NUMBER = 999;
-    static constexpr int MAX_AGE = 999;
-    static constexpr int MAX_LIGHT_DISTANCE = 999;
-    static constexpr int MAX_LIGHT_INTENSITY = 999;
-    static constexpr int MAX_ELEVATOR_VALUE = 999;
-    static constexpr int MAX_SOUND_ID = 255;
-    static constexpr int MAX_FLAGS_HEX = 0xFFFFFF;
-    static constexpr int MAX_CONTAINER_SIZE = 999999;
-    static constexpr int MAX_WEIGHT = 999999;
-    static constexpr int MAX_PRICE = 999999;
-    static constexpr int MAX_PRICE_WARNING = 100000;
-    static constexpr int MAX_WEIGHT_WARNING = 1000;
-    static constexpr int MAX_KEY_ID = 999999;
-    static constexpr int MAX_CHARGES = 999;
-    static constexpr int MAX_AMMO_QUANTITY = 999;
-    static constexpr int MAX_AMMO_CAPACITY = 999;
-    static constexpr int MAX_DRUG_STAT_MODIFIER = 999;
-    static constexpr int MAX_DRUG_DELAY = 999;
-    static constexpr int MAX_DAMAGE_MOD = 100;
-    static constexpr int MAX_DAMAGE_MULT = 10;
-    static constexpr int MAX_ADDICTION_CHANCE = 100;
-    static constexpr int MAX_ANIMATION_CODE = 15;
+    static constexpr int MAX_SKILL_PERCENT = 300;      // Wiki: Skills "0-300"
+    static constexpr int MAX_AGE = 99;                 // Wiki: Age "1-99"
+    static constexpr int MIN_AGE = 1;
+    static constexpr int MAX_LIGHT_RADIUS = 8;         // Wiki: Light radius "0..8 (hexes)"
+    static constexpr int MAX_LIGHT_INTENSITY = 65536;  // Wiki: Light intensity "0..65536"
+    static constexpr int MAX_SOUND_ID = 255;           // 8-bit field limit
     
-    // Bonus/Modifier Constants
-    static constexpr int BONUS_SPECIAL_STAT_RANGE = 10;
-    static constexpr int BONUS_HIT_POINTS_RANGE = 999;
-    static constexpr int BONUS_ACTION_POINTS_RANGE = 20;
-    static constexpr int BONUS_ARMOR_CLASS_RANGE = 50;
-    static constexpr int BONUS_MELEE_DAMAGE_RANGE = 50;
-    static constexpr int BONUS_CARRY_WEIGHT_RANGE = 999;
-    static constexpr int BONUS_SEQUENCE_RANGE = 20;
-    static constexpr int BONUS_HEALING_RATE_RANGE = 10;
-    static constexpr int BONUS_CRITICAL_RANGE = 50;
-    static constexpr int BONUS_DAMAGE_THRESHOLD_RANGE = 200;
-    static constexpr int BONUS_DAMAGE_RESIST_RANGE = 100;
-    static constexpr int BONUS_AGE_RANGE = 999;
-    static constexpr int BONUS_GENDER_MIN = -1;
+    // Gender Constants (Wiki documented)
+    static constexpr int GENDER_MALE = 0;              // Wiki: "0-male, 1-female"
+    static constexpr int GENDER_FEMALE = 1;
+    static constexpr int BONUS_GENDER_MIN = -1;        // For bonus calculations
     static constexpr int BONUS_GENDER_MAX = 1;
     
     // Array Size Constants
@@ -169,13 +120,12 @@ private:
     void setupUI();
     void setupTabs();
     void setupTabContent();
-    void setupCommonFields();
+    // setupCommonFields and setupLeftPanelCommonFields removed - now handled by ProCommonFieldsWidget
     void setupCompactPreview(QVBoxLayout* parentLayout);
     void setupCompactAnimationControls(QVBoxLayout* parentLayout);
     void setupCompactArmorAnimationControls(QVBoxLayout* parentLayout);
     void setupDualPreviewCompact(QVBoxLayout* parentLayout);
     void setupArmorPreviewCompact(QVBoxLayout* parentLayout);
-    void setupLeftPanelCommonFields(QVBoxLayout* parentLayout);
     void setupItemFields();
     void setupArmorFields();
     void setupContainerFields();
@@ -271,23 +221,7 @@ private:
     // FID to FRM filename conversion
     QString getFrmFilename(int32_t fid);
     
-    // Extended PRO data structures
-    struct CommonData {
-        int32_t PID;
-        uint32_t message_id;
-        int32_t FID;
-        uint32_t light_distance;
-        uint32_t light_intensity;
-        uint32_t flags;
-        uint32_t flagsExt;
-        uint32_t SID;
-        uint32_t materialId;
-        uint32_t containerSize;
-        uint32_t weight;
-        uint32_t basePrice;
-        int32_t inventoryFID;
-        uint8_t soundId;
-    };
+    // Note: CommonData is now handled by ProCommonFieldsWidget
     
     struct ArmorData {
         uint32_t armorClass;
@@ -488,65 +422,16 @@ private:
     // Tabs
     QWidget* _commonTab;
     
-    // Common tab controls
+    // Common fields widget (replaces individual common field controls)
+    ProCommonFieldsWidget* _commonFieldsWidget;
+    
+    // Name and description widgets (positioned around previews)
     QLabel* _nameLabel;
+    QTextEdit* _descriptionEdit;
     QPushButton* _editMessageButton;
-    QTextEdit* _descriptionLabel;
-    QSpinBox* _pidEdit;
-    QLabel* _fidLabel;
-    QPushButton* _fidSelectorButton;
-    QSpinBox* _lightDistanceEdit;
-    QSpinBox* _lightIntensityEdit;
     
-    // Basic object flag checkboxes
-    QCheckBox* _flatCheck;           // 0x00000008 - Flat (rendered first, just after tiles)
-    QCheckBox* _noBlockCheck;        // 0x00000010 - NoBlock (doesn't block the tile)
-    QCheckBox* _multiHexCheck;       // 0x00000800 - MultiHex
-    QCheckBox* _noHighlightCheck;    // 0x00001000 - No Highlight (doesn't highlight border; used for containers)
-    QCheckBox* _transRedCheck;       // 0x00004000 - TransRed
-    QCheckBox* _transNoneCheck;      // 0x00008000 - TransNone (opaque)
-    QCheckBox* _transWallCheck;      // 0x00010000 - TransWall  
-    QCheckBox* _transGlassCheck;     // 0x00020000 - TransGlass
-    QCheckBox* _transSteamCheck;     // 0x00040000 - TransSteam
-    QCheckBox* _transEnergyCheck;    // 0x00080000 - TransEnergy
-    QCheckBox* _wallTransEndCheck;   // 0x10000000 - WallTransEnd (changes transparency egg logic)
-    QCheckBox* _lightThruCheck;      // 0x20000000 - LightThru
-    QCheckBox* _shootThruCheck;      // 0x80000000 - ShootThru
-    
-    // Missing ObjectFlags checkboxes
-    QCheckBox* _hiddenCheck;         // 0x00000001 - Object is hidden from view
-    QCheckBox* _noSaveCheck;         // 0x00000004 - Should not be saved to savegame file
-    QCheckBox* _lightingCheck;       // 0x00000020 - Has lighting
-    QCheckBox* _noRemoveCheck;       // 0x00000400 - Should not be removed from game world
-    QCheckBox* _queuedCheck;         // 0x00002000 - Set if there was/is any event for the object
-    QCheckBox* _leftHandCheck;       // 0x01000000 - In left hand
-    QCheckBox* _rightHandCheck;      // 0x02000000 - In right hand
-    QCheckBox* _wornCheck;           // 0x04000000 - Being worn
-    QCheckBox* _seenCheck;           // 0x40000000 - Has been seen
-    
-    // Extended flags controls - organized by category
-    QGroupBox* _extendedFlagsGroup;
-    QSpinBox* _animationPrimaryEdit;
-    QSpinBox* _animationSecondaryEdit;
-    QCheckBox* _bigGunCheck;
-    QCheckBox* _twoHandedCheck;
-    QCheckBox* _canUseCheck;
-    QCheckBox* _canUseOnCheck;
-    QCheckBox* _generalFlagCheck;
-    QCheckBox* _interactionFlagCheck;
-    QCheckBox* _itemHiddenCheck;
-    QCheckBox* _lightFlag1Check;
-    QCheckBox* _lightFlag2Check;
-    QCheckBox* _lightFlag3Check;
-    QCheckBox* _lightFlag4Check;
-    QSpinBox* _sidEdit;
-    QComboBox* _materialIdEdit;
-    QSpinBox* _containerSizeEdit;
-    QSpinBox* _weightEdit;
-    QSpinBox* _basePriceEdit;
-    QLabel* _inventoryFIDLabel;
-    QPushButton* _inventoryFIDSelectorButton;
-    QSpinBox* _soundIdEdit;
+    // Note: Common object flags, extended flags, and item-specific fields
+    // are now handled by ProCommonFieldsWidget
     
     // Armor tab controls
     QSpinBox* _armorClassEdit;
@@ -691,11 +576,9 @@ private:
     
     // Data
     std::shared_ptr<Pro> _pro;
-    CommonData _commonData;
+    // Note: Common data and main/inventory FIDs are now handled by ProCommonFieldsWidget
     
-    // Internal FID storage (since labels only display text)
-    int32_t _mainFID = 0;           // Ground/main FID
-    int32_t _inventoryFID = 0;
+    // Internal FID storage for type-specific fields
     int32_t _armorMaleFID = 0;
     int32_t _armorFemaleFID = 0;
     int32_t _critterHeadFID = 0;
