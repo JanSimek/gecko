@@ -141,6 +141,20 @@ private:
     void setupMiscFields();
     void setupAnimationControls();
     void setupCommonTab();
+    void setupTypeSpecificTabs();
+    void setupItemTabs();
+    void setupArmorTab();
+    void setupContainerTab();
+    void setupDrugTab();
+    void setupWeaponTab();
+    void setupAmmoTab();
+    void setupMiscItemTab();
+    void setupKeyTab();
+    void setupCritterTab();
+    void setupSceneryTab();
+    void setupWallTab();
+    void setupTileTab();
+    void setupMiscTab();
     void setupObjectFlagsGroup(QFormLayout* layout);
     void setupExtendedFlagsGroup(QFormLayout* layout);
     void setupWeaponExtendedFlags(QVBoxLayout* layout);
@@ -184,6 +198,7 @@ private:
     int32_t getPreviewFid();
     int32_t getInventoryFid();
     int32_t getGroundFid();
+    void updateFilenameLabel();
     void openFrmSelector(QSpinBox* targetField, uint32_t objectType);
     void openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidStorage, uint32_t objectType);
     void loadAnimationFrames();
@@ -375,7 +390,7 @@ private:
     QTabWidget* _tabWidget;
     QDialogButtonBox* _buttonBox;
     
-    // Field column layouts
+    // Temporary layout pointers for tab content (used during setup)
     QVBoxLayout* _leftFieldsLayout;
     QVBoxLayout* _rightFieldsLayout;
     
@@ -425,10 +440,12 @@ private:
     // Common fields widget (replaces individual common field controls)
     ProCommonFieldsWidget* _commonFieldsWidget;
     
-    // Name and description widgets (positioned around previews)
+    // Left panel widgets (name, preview, description, PID)
     QLabel* _nameLabel;
     QTextEdit* _descriptionEdit;
     QPushButton* _editMessageButton;
+    QSpinBox* _pidEdit;
+    QLineEdit* _filenameEdit;
     
     // Note: Common object flags, extended flags, and item-specific fields
     // are now handled by ProCommonFieldsWidget

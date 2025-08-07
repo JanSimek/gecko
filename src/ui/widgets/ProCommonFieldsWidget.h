@@ -113,14 +113,13 @@ private:
     
     // UI Components
     QVBoxLayout* _mainLayout;
-    QGroupBox* _basicFieldsGroup;
+    // QGroupBox* _basicFieldsGroup;  // Commented out - not used (PID moved to main dialog)
     QGroupBox* _lightingGroup;
     QGroupBox* _objectFlagsGroup;
     QGroupBox* _extendedFlagsGroup;
     QGroupBox* _itemFieldsGroup;  // Only visible for items
     
-    // Basic Fields
-    QSpinBox* _pidEdit;
+    // Basic Fields (PID moved to main dialog)
     
     // Lighting Fields
     QSpinBox* _lightRadiusEdit;
@@ -151,8 +150,7 @@ private:
     QSpinBox* _containerSizeEdit;    // Container/inventory size
     QSpinBox* _weightEdit;           // Weight (pounds * 16)
     QSpinBox* _basePriceEdit;        // Base price in caps
-    QLabel* _inventoryFidLabel;      // Inventory icon FID
-    QPushButton* _inventoryFidButton;
+    QLabel* _inventoryFidLabel;      // Inventory icon FID (read-only)
     QSpinBox* _soundIdEdit;          // Sound effect ID
     
     // Data storage

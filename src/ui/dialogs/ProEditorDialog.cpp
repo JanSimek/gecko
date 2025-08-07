@@ -58,6 +58,8 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _nameLabel(nullptr)
     , _descriptionEdit(nullptr)
     , _editMessageButton(nullptr)
+    , _pidEdit(nullptr)
+    , _filenameEdit(nullptr)
     , _armorMaleFIDSelectorButton(nullptr)
     , _armorFemaleFIDSelectorButton(nullptr)
     , _armorMaleFIDLabel(nullptr)
@@ -247,6 +249,9 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     // Load name and description from MSG files
     loadNameAndDescription();
     
+    // Update filename label with PRO file path
+    updateFilenameLabel();
+    
     // Update window title with object name and type
     updateWindowTitle();
     
@@ -265,17 +270,30 @@ void ProEditorDialog::setupUI() {
     
     // === LEFT PANEL: Image + Name + Description + Common Fields ===
     QWidget* leftInfoPanel = new QWidget();
-    leftInfoPanel->setFixedWidth(320);  // Fixed width for consistent layout
+    leftInfoPanel->setFixedWidth(288);  // 10% smaller than previous 320px
     QVBoxLayout* leftInfoLayout = new QVBoxLayout(leftInfoPanel);
     leftInfoLayout->setContentsMargins(8, 8, 8, 8);
-    leftInfoLayout->setSpacing(6);
+    leftInfoLayout->setSpacing(3);  // Reduced from 6 to minimize space between elements
 
-    // Name above preview (without prefix)
+    // Name with edit button above preview
+    auto nameLayout = new QHBoxLayout();
+    nameLayout->setSpacing(4);
+    
     _nameLabel = new QLabel(this);
     _nameLabel->setAlignment(Qt::AlignCenter);
     _nameLabel->setWordWrap(true);
     _nameLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; padding: 4px; }");
-    leftInfoLayout->addWidget(_nameLabel);
+    nameLayout->addWidget(_nameLabel, 1);  // Take most of the space
+    
+    // Small edit button next to name
+    _editMessageButton = new QPushButton("...", this);
+    _editMessageButton->setMaximumWidth(24);
+    _editMessageButton->setMaximumHeight(24);
+    _editMessageButton->setToolTip("Edit object name and description");
+    connect(_editMessageButton, &QPushButton::clicked, this, &ProEditorDialog::onEditMessageClicked);
+    nameLayout->addWidget(_editMessageButton, 0);  // Fixed size
+    
+    leftInfoLayout->addLayout(nameLayout);
 
     // Setup compact preview at top
     setupCompactPreview(leftInfoLayout);
@@ -287,53 +305,42 @@ void ProEditorDialog::setupUI() {
     _descriptionEdit->setStyleSheet("QTextEdit { background-color: #f9f9f9; border: 1px solid #ccc; }");
     leftInfoLayout->addWidget(_descriptionEdit);
     
-    // Edit message button
-    _editMessageButton = new QPushButton("Edit Message...", this);
-    _editMessageButton->setMaximumWidth(120);
-    connect(_editMessageButton, &QPushButton::clicked, this, &ProEditorDialog::onEditMessageClicked);
-    leftInfoLayout->addWidget(_editMessageButton);
+    // PID field (Object Type & ID)
+    auto pidLayout = new QHBoxLayout();
+    pidLayout->addWidget(new QLabel("PID (hex):", this));
+    _pidEdit = new QSpinBox(this);
+    _pidEdit->setRange(0, 0x5FFFFFF);  // 24-bit object ID limit
+    _pidEdit->setDisplayIntegerBase(16);
+    _pidEdit->setToolTip("Object ID and Type (combined 32-bit value)");
+    _pidEdit->setButtonSymbols(QAbstractSpinBox::NoButtons);  // Remove up/down arrows
+    _pidEdit->setMinimumWidth(120);  // Set consistent width
+    connect(_pidEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    pidLayout->addWidget(_pidEdit);
+    leftInfoLayout->addLayout(pidLayout);
     
-    // Common fields section - using ProCommonFieldsWidget
-    _commonFieldsWidget = new ProCommonFieldsWidget(this);
-    leftInfoLayout->addWidget(_commonFieldsWidget);
-    
-    // Connect ProCommonFieldsWidget signals
-    connect(_commonFieldsWidget, &ProCommonFieldsWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
+    // Filename field (non-editable, like PID field)
+    auto filenameLayout = new QHBoxLayout();
+    filenameLayout->addWidget(new QLabel("PID (filename):", this));
+    _filenameEdit = new QLineEdit(this);
+    _filenameEdit->setReadOnly(true);
+    _filenameEdit->setToolTip("PRO filename derived from PID");
+    _filenameEdit->setStyleSheet("QLineEdit { background-color: #f9f9f9; }");
+    _filenameEdit->setMinimumWidth(120);  // Match PID field width
+    filenameLayout->addWidget(_filenameEdit);
+    leftInfoLayout->addLayout(filenameLayout);
     
     leftInfoLayout->addStretch(); // Push everything to top
     
-    // === RIGHT PANEL: Two-Column Type-Specific Fields ===
-    QWidget* rightFieldsPanel = new QWidget();
-    QHBoxLayout* rightMainLayout = new QHBoxLayout(rightFieldsPanel);
-    rightMainLayout->setContentsMargins(8, 8, 8, 8);
-    rightMainLayout->setSpacing(12);
-    
-    // Column 1: Left side of type-specific fields
-    QWidget* rightColumn1 = new QWidget();
-    QVBoxLayout* rightColumn1Layout = new QVBoxLayout(rightColumn1);
-    rightColumn1Layout->setContentsMargins(0, 0, 0, 0);
-    rightColumn1Layout->setSpacing(8);
-    
-    // Column 2: Right side of type-specific fields  
-    QWidget* rightColumn2 = new QWidget();
-    QVBoxLayout* rightColumn2Layout = new QVBoxLayout(rightColumn2);
-    rightColumn2Layout->setContentsMargins(0, 0, 0, 0);
-    rightColumn2Layout->setSpacing(8);
-    
-    // Add both columns to right panel with equal width
-    rightMainLayout->addWidget(rightColumn1, 1);
-    rightMainLayout->addWidget(rightColumn2, 1);
-    
-    // Store references for type-specific field setup
-    _leftFieldsLayout = rightColumn1Layout;
-    _rightFieldsLayout = rightColumn2Layout;
+    // === RIGHT PANEL: Tabbed Interface ===
+    _tabWidget = new QTabWidget(this);
+    _tabWidget->setContentsMargins(8, 8, 8, 8);
     
     // Add main panels to content layout
     _contentLayout->addWidget(leftInfoPanel, 0); // Fixed width
-    _contentLayout->addWidget(rightFieldsPanel, 1); // Flexible width
+    _contentLayout->addWidget(_tabWidget, 1); // Flexible width
     
-    // Setup type-specific content in the right columns
-    setupTabContent();
+    // Setup tabbed content
+    setupTabs();
     
     // Button box
     _buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -349,10 +356,12 @@ void ProEditorDialog::setupUI() {
 void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
     // Create compact preview group
     QWidget* previewGroup = new QWidget();
+    previewGroup->setContentsMargins(0, 0, 0, 0);  // Remove widget margins
 
     QVBoxLayout* previewLayout = new QVBoxLayout(previewGroup);
     previewLayout->setContentsMargins(0, 0, 0, 0);
-    previewLayout->setSpacing(4);
+    previewLayout->setSpacing(0);  // Minimize spacing within preview group
+    previewLayout->setAlignment(Qt::AlignCenter);  // Center the preview content
 
     // Check if we need specialized previews for items
     bool hasSpecializedPreview = (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM);
@@ -520,32 +529,367 @@ void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
 // setupLeftPanelCommonFields method removed - now handled by ProCommonFieldsWidget
 
 void ProEditorDialog::setupTabContent() {
-    // No longer setup common fields here - they're in left panel
-    // Only setup type-specific fields in right columns
-    updateTabVisibility();
+    // This method is now obsolete - tabs are set up in setupTabs()
 }
 
 // setupCommonFields method removed - now handled by ProCommonFieldsWidget
 
 void ProEditorDialog::setupTabs() {
-    _tabWidget = new QTabWidget(this);
-    
+    // Common tab first (always visible)
     setupCommonTab();
+    
+    // Type-specific tabs based on PRO type
+    setupTypeSpecificTabs();
 }
 
 void ProEditorDialog::setupCommonTab() {
     _commonTab = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(_commonTab);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
     
-    // Simple message noting that common fields are now in the left panel
-    QLabel* noteLabel = new QLabel("Common fields (PID, FID, flags, lighting, etc.) are now displayed in the left panel for easier access while editing type-specific properties.");
-    noteLabel->setWordWrap(true);
-    noteLabel->setStyleSheet("QLabel { color: #666; font-style: italic; padding: 20px; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9; }");
-    layout->addWidget(noteLabel);
+    // Common fields widget with all common PRO fields
+    _commonFieldsWidget = new ProCommonFieldsWidget(this);
+    layout->addWidget(_commonFieldsWidget);
+    
+    // Connect ProCommonFieldsWidget signals
+    connect(_commonFieldsWidget, &ProCommonFieldsWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
     
     layout->addStretch();
     
     _tabWidget->addTab(_commonTab, "Common");
+}
+
+void ProEditorDialog::setupTypeSpecificTabs() {
+    if (!_pro) return;
+    
+    // Add type-specific tabs based on PRO type
+    Pro::OBJECT_TYPE type = _pro->type();
+    
+    switch (type) {
+        case Pro::OBJECT_TYPE::ITEM:
+            setupItemTabs();
+            break;
+        case Pro::OBJECT_TYPE::CRITTER:
+            setupCritterTab();
+            break;
+        case Pro::OBJECT_TYPE::SCENERY:
+            setupSceneryTab();
+            break;
+        case Pro::OBJECT_TYPE::WALL:
+            setupWallTab();
+            break;
+        case Pro::OBJECT_TYPE::TILE:
+            setupTileTab();
+            break;
+        case Pro::OBJECT_TYPE::MISC:
+            setupMiscTab();
+            break;
+    }
+}
+
+void ProEditorDialog::setupItemTabs() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM) return;
+    
+    // Add tabs based on item subtype
+    Pro::ITEM_TYPE itemType = _pro->itemType();
+    
+    switch (itemType) {
+        case Pro::ITEM_TYPE::ARMOR:
+            setupArmorTab();
+            break;
+        case Pro::ITEM_TYPE::CONTAINER:
+            setupContainerTab();
+            break;
+        case Pro::ITEM_TYPE::DRUG:
+            setupDrugTab();
+            break;
+        case Pro::ITEM_TYPE::WEAPON:
+            setupWeaponTab();
+            break;
+        case Pro::ITEM_TYPE::AMMO:
+            setupAmmoTab();
+            break;
+        case Pro::ITEM_TYPE::MISC:
+            setupMiscItemTab();
+            break;
+        case Pro::ITEM_TYPE::KEY:
+            setupKeyTab();
+            break;
+    }
+}
+
+void ProEditorDialog::setupCritterTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::CRITTER) return;
+    
+    QWidget* critterTab = new QWidget();
+    QVBoxLayout* mainLayout = new QVBoxLayout(critterTab);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(6);
+    
+    // Create two-column layout
+    QHBoxLayout* columnsLayout = new QHBoxLayout();
+    columnsLayout->setSpacing(12);
+    
+    QWidget* leftColumn = new QWidget();
+    QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
+    leftLayout->setSpacing(8);
+    
+    QWidget* rightColumn = new QWidget();
+    QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+    rightLayout->setSpacing(8);
+    
+    columnsLayout->addWidget(leftColumn, 1);
+    columnsLayout->addWidget(rightColumn, 1);
+    mainLayout->addLayout(columnsLayout);
+    
+    // Set temporary layout pointers for setupCritterFields
+    _leftFieldsLayout = leftLayout;
+    _rightFieldsLayout = rightLayout;
+    
+    // Use existing critter fields setup
+    setupCritterFields();
+    
+    _tabWidget->addTab(critterTab, "Critter");
+}
+
+void ProEditorDialog::setupSceneryTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::SCENERY) return;
+    
+    QWidget* sceneryTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(sceneryTab);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+    
+    // Set temporary layout pointers for setupSceneryFields
+    _leftFieldsLayout = layout;
+    _rightFieldsLayout = nullptr;
+    
+    // Use existing scenery fields setup
+    setupSceneryFields();
+    
+    _tabWidget->addTab(sceneryTab, "Scenery");
+}
+
+void ProEditorDialog::setupWallTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::WALL) return;
+    
+    QWidget* wallTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(wallTab);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+    
+    // Set temporary layout pointers for setupWallFields
+    _leftFieldsLayout = layout;
+    _rightFieldsLayout = nullptr;
+    
+    // Use existing wall fields setup
+    setupWallFields();
+    
+    _tabWidget->addTab(wallTab, "Wall");
+}
+
+void ProEditorDialog::setupTileTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::TILE) return;
+    
+    QWidget* tileTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(tileTab);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+    
+    // Set temporary layout pointers for setupTileFields
+    _leftFieldsLayout = layout;
+    _rightFieldsLayout = nullptr;
+    
+    // Use existing tile fields setup
+    setupTileFields();
+    
+    _tabWidget->addTab(tileTab, "Tile");
+}
+
+void ProEditorDialog::setupMiscTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::MISC) return;
+    
+    QWidget* miscTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(miscTab);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+    
+    // Set temporary layout pointers for setupMiscFields
+    _leftFieldsLayout = layout;
+    _rightFieldsLayout = nullptr;
+    
+    // Use existing misc fields setup
+    setupMiscFields();
+    
+    _tabWidget->addTab(miscTab, "Misc");
+}
+
+void ProEditorDialog::setupArmorTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::ARMOR) return;
+    
+    QWidget* armorTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(armorTab);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+    
+    // Create two-column layout for armor
+    QHBoxLayout* columnsLayout = new QHBoxLayout();
+    columnsLayout->setSpacing(12);
+    
+    QWidget* leftColumn = new QWidget();
+    QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
+    leftLayout->setSpacing(8);
+    
+    QWidget* rightColumn = new QWidget();
+    QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+    rightLayout->setSpacing(8);
+    
+    columnsLayout->addWidget(leftColumn, 1);
+    columnsLayout->addWidget(rightColumn, 1);
+    layout->addLayout(columnsLayout);
+    
+    // Set temporary layout pointers for setupArmorFields
+    _leftFieldsLayout = leftLayout;
+    _rightFieldsLayout = rightLayout;
+    
+    // Use existing armor fields setup
+    setupArmorFields();
+    
+    _tabWidget->addTab(armorTab, "Armor");
+}
+
+void ProEditorDialog::setupContainerTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::CONTAINER) return;
+    
+    QWidget* containerTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(containerTab);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+    
+    // Set temporary layout pointers for setupContainerFields
+    _leftFieldsLayout = layout;
+    _rightFieldsLayout = nullptr;
+    
+    // Use existing container fields setup
+    setupContainerFields();
+    
+    _tabWidget->addTab(containerTab, "Container");
+}
+
+void ProEditorDialog::setupDrugTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::DRUG) return;
+    
+    QWidget* drugTab = new QWidget();
+    QVBoxLayout* mainLayout = new QVBoxLayout(drugTab);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(6);
+    
+    // Drug tab uses single column
+    QVBoxLayout* leftLayout = mainLayout;
+    
+    // Set temporary layout pointers for setupDrugFields
+    _leftFieldsLayout = leftLayout;
+    _rightFieldsLayout = nullptr;  // Drug tab doesn't use right column
+    
+    // Use existing drug fields setup
+    setupDrugFields();
+    
+    _tabWidget->addTab(drugTab, "Drug");
+}
+
+void ProEditorDialog::setupWeaponTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::WEAPON) return;
+    
+    QWidget* weaponTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(weaponTab);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+    
+    // Create two-column layout for weapon
+    QHBoxLayout* columnsLayout = new QHBoxLayout();
+    columnsLayout->setSpacing(12);
+    
+    QWidget* leftColumn = new QWidget();
+    QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
+    leftLayout->setSpacing(8);
+    
+    QWidget* rightColumn = new QWidget();
+    QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+    rightLayout->setSpacing(8);
+    
+    columnsLayout->addWidget(leftColumn, 1);
+    columnsLayout->addWidget(rightColumn, 1);
+    layout->addLayout(columnsLayout);
+    
+    // Set temporary layout pointers for setupWeaponFields
+    _leftFieldsLayout = leftLayout;
+    _rightFieldsLayout = rightLayout;
+    
+    // Use existing weapon fields setup
+    setupWeaponFields();
+    
+    _tabWidget->addTab(weaponTab, "Weapon");
+}
+
+void ProEditorDialog::setupAmmoTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::AMMO) return;
+    
+    QWidget* ammoTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(ammoTab);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+    
+    // Set temporary layout pointers for setupAmmoFields
+    _leftFieldsLayout = layout;
+    _rightFieldsLayout = nullptr;
+    
+    // Use existing ammo fields setup
+    setupAmmoFields();
+    
+    _tabWidget->addTab(ammoTab, "Ammo");
+}
+
+void ProEditorDialog::setupMiscItemTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::MISC) return;
+    
+    QWidget* miscItemTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(miscItemTab);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+    
+    // Set temporary layout pointers for setupMiscItemFields
+    _leftFieldsLayout = layout;
+    _rightFieldsLayout = nullptr;
+    
+    // Use existing misc item fields setup
+    setupMiscItemFields();
+    
+    _tabWidget->addTab(miscItemTab, "Misc Item");
+}
+
+void ProEditorDialog::setupKeyTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::KEY) return;
+    
+    QWidget* keyTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(keyTab);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+    
+    // Set temporary layout pointers for setupKeyFields
+    _leftFieldsLayout = layout;
+    _rightFieldsLayout = nullptr;
+    
+    // Use existing key fields setup
+    setupKeyFields();
+    
+    _tabWidget->addTab(keyTab, "Key");
 }
 
 // setupExtendedFlagsGroup method removed - now handled by ProCommonFieldsWidget
@@ -615,6 +959,11 @@ void ProEditorDialog::setupAnimationControls() {
 void ProEditorDialog::loadProData() {
     
     try {
+        // Load PID into left panel
+        if (_pidEdit) {
+            _pidEdit->setValue(_pro->header.PID);
+        }
+        
         // Load common data into ProCommonFieldsWidget
         if (_commonFieldsWidget) {
             _commonFieldsWidget->loadFromPro(_pro);
@@ -915,6 +1264,11 @@ void ProEditorDialog::loadKeyData() {
 }
 
 void ProEditorDialog::saveProData() {
+    // Save PID from left panel
+    if (_pidEdit) {
+        _pro->header.PID = _pidEdit->value();
+    }
+    
     // Save common data using ProCommonFieldsWidget
     if (_commonFieldsWidget) {
         _commonFieldsWidget->saveToPro(_pro);
@@ -1070,32 +1424,7 @@ void ProEditorDialog::saveKeyData() {
 }
 
 void ProEditorDialog::updateTabVisibility() {
-    if (!_pro) return;
-    
-    // Add type-specific fields to the two columns
-    Pro::OBJECT_TYPE type = _pro->type();
-    
-    // Add type-specific fields based on PRO type
-    switch (type) {
-        case Pro::OBJECT_TYPE::ITEM:
-            setupItemFields();
-            break;
-        case Pro::OBJECT_TYPE::CRITTER:
-            setupCritterFields();
-            break;
-        case Pro::OBJECT_TYPE::SCENERY:
-            setupSceneryFields();
-            break;
-        case Pro::OBJECT_TYPE::WALL:
-            setupWallFields();
-            break;
-        case Pro::OBJECT_TYPE::TILE:
-            setupTileFields();
-            break;
-        case Pro::OBJECT_TYPE::MISC:
-            setupMiscFields();
-            break;
-    }
+    // This method is now obsolete - tab visibility is handled by setupTypeSpecificTabs()
 }
 
 void ProEditorDialog::setupItemFields() {
@@ -1140,21 +1469,7 @@ void ProEditorDialog::setupItemFields() {
 }
 
 void ProEditorDialog::setupCritterFields() {
-    // Show the right column for critter tab (ensure both columns are visible)
-    QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
-    if (rightColumn2) {
-        rightColumn2->show();
-    }
-    
-    // Clear any existing widgets in the right panels
-    while (QLayoutItem* item = _leftFieldsLayout->takeAt(0)) {
-        if (item->widget()) item->widget()->deleteLater();
-        delete item;
-    }
-    while (QLayoutItem* item = _rightFieldsLayout->takeAt(0)) {
-        if (item->widget()) item->widget()->deleteLater();
-        delete item;
-    }
+    // _leftFieldsLayout and _rightFieldsLayout should be set by the calling tab method
     
     // === COLUMN 1: Critter-Specific Properties and SPECIAL Stats ===
     
@@ -3552,6 +3867,31 @@ void ProEditorDialog::onCritterFlagChanged() {
     // Also update the numeric display if it exists
     if (_critterFlagsEdit) {
         _critterFlagsEdit->setValue(static_cast<int>(flags));
+    }
+}
+
+void ProEditorDialog::updateFilenameLabel() {
+    if (!_pro || !_filenameEdit) {
+        return;
+    }
+    
+    try {
+        // Get the PRO filename using ProHelper
+        std::string proPath = ProHelper::basePath(_pro->header.PID);
+        
+        // Extract just the filename from the path
+        size_t lastSlash = proPath.find_last_of('/');
+        std::string filename;
+        if (lastSlash != std::string::npos) {
+            filename = proPath.substr(lastSlash + 1);
+        } else {
+            filename = proPath;
+        }
+        
+        _filenameEdit->setText(QString::fromStdString(filename));
+    } catch (const std::exception& e) {
+        _filenameEdit->setText("(Unknown)");
+        spdlog::warn("ProEditorDialog::updateFilenameLabel() - Error: {}", e.what());
     }
 }
 

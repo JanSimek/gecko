@@ -8,8 +8,7 @@ namespace geck {
 
 ProCommonFieldsWidget::ProCommonFieldsWidget(QWidget* parent)
     : QWidget(parent)
-    , _mainLayout(nullptr)
-    , _basicFieldsGroup(nullptr)
+    , _mainLayout(nullptr)    // , _basicFieldsGroup(nullptr)  // Commented out - not used
     , _lightingGroup(nullptr)
     , _objectFlagsGroup(nullptr)
     , _extendedFlagsGroup(nullptr)
@@ -22,13 +21,7 @@ void ProCommonFieldsWidget::setupUI() {
     _mainLayout = new QVBoxLayout(this);
     _mainLayout->setSpacing(10);
     _mainLayout->setContentsMargins(6, 6, 6, 6);
-    
-    // Basic Fields Group
-    _basicFieldsGroup = new QGroupBox("Basic Properties", this);
-    auto basicLayout = new QFormLayout(_basicFieldsGroup);
-    setupBasicFields(basicLayout);
-    _mainLayout->addWidget(_basicFieldsGroup);
-    
+
     // Lighting Group
     _lightingGroup = new QGroupBox("Lighting", this);
     auto lightingLayout = new QFormLayout(_lightingGroup);
@@ -41,8 +34,8 @@ void ProCommonFieldsWidget::setupUI() {
     setupObjectFlags(flagsLayout);
     _mainLayout->addWidget(_objectFlagsGroup);
     
-    // Extended Flags Group
-    _extendedFlagsGroup = new QGroupBox("Extended Properties", this);
+    // Extended Flags Group (simplified to show only Animation Control)
+    _extendedFlagsGroup = new QGroupBox("Animation Control", this);
     auto extFlagsLayout = new QFormLayout(_extendedFlagsGroup);
     setupExtendedFlags(extFlagsLayout);
     _mainLayout->addWidget(_extendedFlagsGroup);
@@ -58,11 +51,8 @@ void ProCommonFieldsWidget::setupUI() {
 }
 
 void ProCommonFieldsWidget::setupBasicFields(QFormLayout* layout) {
-    // PID (Object Type & ID) - keep this as it's still needed
-    _pidEdit = createSpinBox(0, MAX_PID_VALUE, "Object ID and Type (combined 32-bit value)");
-    _pidEdit->setDisplayIntegerBase(16);
-    connectSpinBox(_pidEdit);
-    layout->addRow("PID (hex):", _pidEdit);
+    // PID removed - it's now in the left panel of the main dialog
+    // This group is currently empty but preserved for future basic fields
 }
 
 void ProCommonFieldsWidget::setupLightingFields(QFormLayout* layout) {
@@ -145,19 +135,14 @@ void ProCommonFieldsWidget::setupObjectFlags(QFormLayout* layout) {
 }
 
 void ProCommonFieldsWidget::setupExtendedFlags(QFormLayout* layout) {
-    // Animation control (lower 8 bits of flags)
-    auto animGroup = new QGroupBox("Animation Control", this);
-    auto animLayout = new QFormLayout(animGroup);
-    
+    // Animation control fields (directly in the main group, no nested group)
     _animationPrimaryEdit = createSpinBox(0, 15, "Primary attack animation index (0-15)");
     connectSpinBox(_animationPrimaryEdit);
-    animLayout->addRow("Primary Animation:", _animationPrimaryEdit);
+    layout->addRow("Primary Animation:", _animationPrimaryEdit);
     
     _animationSecondaryEdit = createSpinBox(0, 15, "Secondary attack animation index (0-15)");
     connectSpinBox(_animationSecondaryEdit);
-    animLayout->addRow("Secondary Animation:", _animationSecondaryEdit);
-    
-    layout->addRow(animGroup);
+    layout->addRow("Secondary Animation:", _animationSecondaryEdit);
 }
 
 void ProCommonFieldsWidget::setupItemFields(QFormLayout* layout) {
@@ -186,18 +171,10 @@ void ProCommonFieldsWidget::setupItemFields(QFormLayout* layout) {
     connectSpinBox(_basePriceEdit);
     layout->addRow("Base Price:", _basePriceEdit);
     
-    // Inventory FID
+    // Inventory FID (read-only display, button removed)
     _inventoryFidLabel = new QLabel("(None)", this);
     _inventoryFidLabel->setStyleSheet("QLabel { border: 1px solid #ccc; padding: 4px; background-color: #f9f9f9; }");
-    
-    _inventoryFidButton = new QPushButton("Select...", this);
-    _inventoryFidButton->setMaximumWidth(80);
-    // TODO: Connect inventory FID selector
-    
-    auto invFidLayout = new QHBoxLayout();
-    invFidLayout->addWidget(_inventoryFidLabel, 1);
-    invFidLayout->addWidget(_inventoryFidButton, 0);
-    layout->addRow("Inventory FID:", invFidLayout);
+    layout->addRow("Inventory FID:", _inventoryFidLabel);
     
     // Sound ID
     _soundIdEdit = createSpinBox(0, MAX_SOUND_ID, "Sound effect ID (0-255)");
@@ -213,8 +190,7 @@ void ProCommonFieldsWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     
     _pro = pro;
     
-    // Load basic fields
-    _pidEdit->setValue(pro->header.PID);
+    // Basic fields (PID now handled by main dialog)
     
     // Load lighting
     _lightRadiusEdit->setValue(pro->header.light_distance);
@@ -243,8 +219,7 @@ void ProCommonFieldsWidget::saveToPro(std::shared_ptr<Pro>& pro) {
         return;
     }
     
-    // Save basic fields
-    pro->header.PID = _pidEdit->value();
+    // Basic fields (PID now handled by main dialog)
     
     // Save lighting
     pro->header.light_distance = _lightRadiusEdit->value();
@@ -272,11 +247,13 @@ void ProCommonFieldsWidget::setItemFieldsVisible(bool isItem) {
 }
 
 int32_t ProCommonFieldsWidget::getPID() const {
-    return _pidEdit->value();
+    // PID is now handled by the main dialog, not this widget
+    return 0;  // Return default value
 }
 
 void ProCommonFieldsWidget::setPID(int32_t pid) {
-    _pidEdit->setValue(pid);
+    // PID is now handled by the main dialog, not this widget
+    // This method is kept for interface compatibility but does nothing
 }
 
 void ProCommonFieldsWidget::loadObjectFlags(uint32_t flags) {
