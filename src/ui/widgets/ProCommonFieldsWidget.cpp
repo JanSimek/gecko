@@ -2,6 +2,8 @@
 #include "../../util/ResourceManager.h"
 #include "../../util/ProHelper.h"
 #include <QApplication>
+#include <QFrame>
+#include <QLabel>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -19,35 +21,62 @@ ProCommonFieldsWidget::ProCommonFieldsWidget(QWidget* parent)
 
 void ProCommonFieldsWidget::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setSpacing(10);
-    _mainLayout->setContentsMargins(6, 6, 6, 6);
+    _mainLayout->setSpacing(8);
+    _mainLayout->setContentsMargins(4, 4, 4, 4);
 
-    // Lighting Group
-    _lightingGroup = new QGroupBox("Lighting", this);
-    auto lightingLayout = new QFormLayout(_lightingGroup);
-    setupLightingFields(lightingLayout);
-    _mainLayout->addWidget(_lightingGroup);
+    // Create two-column layout for better organization (following F2_ProtoManager pattern)
+    QHBoxLayout* columnsLayout = new QHBoxLayout();
+    columnsLayout->setSpacing(8);
+    
+    // === LEFT COLUMN ===
+    QVBoxLayout* leftColumn = new QVBoxLayout();
+    leftColumn->setSpacing(6);
+    
+    // Item Properties Group (for items only)
+    _itemFieldsGroup = new QGroupBox("Item Properties", this);
+    _itemFieldsGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
+    auto itemLayout = new QFormLayout(_itemFieldsGroup);
+    itemLayout->setContentsMargins(8, 12, 8, 8);
+    setupItemFields(itemLayout);
+    leftColumn->addWidget(_itemFieldsGroup);
+    _itemFieldsGroup->setVisible(false);
     
     // Object Flags Group
     _objectFlagsGroup = new QGroupBox("Object Flags", this);
+    _objectFlagsGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
     auto flagsLayout = new QFormLayout(_objectFlagsGroup);
+    flagsLayout->setContentsMargins(8, 12, 8, 8);
     setupObjectFlags(flagsLayout);
-    _mainLayout->addWidget(_objectFlagsGroup);
+    leftColumn->addWidget(_objectFlagsGroup);
     
-    // Extended Flags Group (simplified to show only Animation Control)
+    leftColumn->addStretch();
+    
+    // === RIGHT COLUMN ===
+    QVBoxLayout* rightColumn = new QVBoxLayout();
+    rightColumn->setSpacing(6);
+    
+    // Lighting & Transparency Group
+    _lightingGroup = new QGroupBox("Lighting & Transparency", this);
+    _lightingGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
+    auto lightingLayout = new QFormLayout(_lightingGroup);
+    lightingLayout->setContentsMargins(8, 12, 8, 8);
+    setupLightingFields(lightingLayout);
+    rightColumn->addWidget(_lightingGroup);
+    
+    // Animation Control Group
     _extendedFlagsGroup = new QGroupBox("Animation Control", this);
+    _extendedFlagsGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
     auto extFlagsLayout = new QFormLayout(_extendedFlagsGroup);
+    extFlagsLayout->setContentsMargins(8, 12, 8, 8);
     setupExtendedFlags(extFlagsLayout);
-    _mainLayout->addWidget(_extendedFlagsGroup);
+    rightColumn->addWidget(_extendedFlagsGroup);
     
-    // Item-specific Fields Group (initially hidden)
-    _itemFieldsGroup = new QGroupBox("Item Properties", this);
-    auto itemLayout = new QFormLayout(_itemFieldsGroup);
-    setupItemFields(itemLayout);
-    _mainLayout->addWidget(_itemFieldsGroup);
-    _itemFieldsGroup->setVisible(false);
+    rightColumn->addStretch();
     
-    _mainLayout->addStretch();
+    // Add columns to main layout
+    columnsLayout->addLayout(leftColumn, 1);
+    columnsLayout->addLayout(rightColumn, 1);
+    _mainLayout->addLayout(columnsLayout);
 }
 
 void ProCommonFieldsWidget::setupBasicFields(QFormLayout* layout) {
@@ -56,6 +85,12 @@ void ProCommonFieldsWidget::setupBasicFields(QFormLayout* layout) {
 }
 
 void ProCommonFieldsWidget::setupLightingFields(QFormLayout* layout) {
+    // Lighting controls
+    _lightingCheck = new QCheckBox("Has Lighting", this);
+    _lightingCheck->setToolTip("Object provides lighting effects");
+    connectCheckBox(_lightingCheck);
+    layout->addRow(_lightingCheck);
+    
     _lightRadiusEdit = createSpinBox(0, MAX_LIGHT_RADIUS, "Light radius in hexes (0-8)");
     connectSpinBox(_lightRadiusEdit);
     layout->addRow("Radius (hexes):", _lightRadiusEdit);
@@ -63,72 +98,71 @@ void ProCommonFieldsWidget::setupLightingFields(QFormLayout* layout) {
     _lightIntensityEdit = createSpinBox(0, MAX_LIGHT_INTENSITY, "Light intensity (0-65536, interpreted as 0-100%)");
     connectSpinBox(_lightIntensityEdit);
     layout->addRow("Intensity:", _lightIntensityEdit);
+    
+    // Add separator
+    auto separator = new QFrame();
+    separator->setFrameShape(QFrame::HLine);
+    separator->setFrameShadow(QFrame::Sunken);
+    layout->addRow(separator);
+    
+    // Transparency options
+    auto transLabel = new QLabel("<b>Transparency Type:</b>");
+    layout->addRow(transLabel);
+    
+    _transNoneCheck = new QCheckBox("Opaque", this);
+    connectCheckBox(_transNoneCheck);
+    layout->addRow(_transNoneCheck);
+    
+    _transWallCheck = new QCheckBox("Wall", this);
+    connectCheckBox(_transWallCheck);
+    layout->addRow(_transWallCheck);
+    
+    _transGlassCheck = new QCheckBox("Glass", this);
+    connectCheckBox(_transGlassCheck);
+    layout->addRow(_transGlassCheck);
+    
+    _transRedCheck = new QCheckBox("Red", this);
+    connectCheckBox(_transRedCheck);
+    layout->addRow(_transRedCheck);
+    
+    _transSteamCheck = new QCheckBox("Steam", this);
+    connectCheckBox(_transSteamCheck);
+    layout->addRow(_transSteamCheck);
+    
+    _transEnergyCheck = new QCheckBox("Energy", this);
+    connectCheckBox(_transEnergyCheck);
+    layout->addRow(_transEnergyCheck);
 }
 
 void ProCommonFieldsWidget::setupObjectFlags(QFormLayout* layout) {
-    // Core rendering flags
-    _flatCheck = new QCheckBox("Flat (render with tiles)", this);
+    // Core behavior flags
+    _flatCheck = new QCheckBox("Flat", this);
     _flatCheck->setToolTip("Object is rendered flat with tiles (no height)");
     connectCheckBox(_flatCheck);
     layout->addRow(_flatCheck);
     
-    _noBlockCheck = new QCheckBox("No Block (allow movement)", this);
+    _noBlockCheck = new QCheckBox("No Block", this);
     _noBlockCheck->setToolTip("Does not block character movement");
     connectCheckBox(_noBlockCheck);
     layout->addRow(_noBlockCheck);
     
-    _lightingCheck = new QCheckBox("Has lighting", this);
-    _lightingCheck->setToolTip("Object provides lighting effects");
-    connectCheckBox(_lightingCheck);
-    layout->addRow(_lightingCheck);
-    
-    _multiHexCheck = new QCheckBox("Multi-hex (large object)", this);
+    _multiHexCheck = new QCheckBox("Multi-hex", this);
     _multiHexCheck->setToolTip("Object occupies multiple hexes");
     connectCheckBox(_multiHexCheck);
     layout->addRow(_multiHexCheck);
     
-    _noHighlightCheck = new QCheckBox("No highlight", this);
+    _noHighlightCheck = new QCheckBox("No Highlight", this);
     _noHighlightCheck->setToolTip("Cannot be highlighted by mouse cursor");
     connectCheckBox(_noHighlightCheck);
     layout->addRow(_noHighlightCheck);
     
-    // Transparency flags in a sub-group
-    auto transGroup = new QGroupBox("Transparency", this);
-    auto transLayout = new QVBoxLayout(transGroup);
-    
-    _transRedCheck = new QCheckBox("Red transparency", this);
-    connectCheckBox(_transRedCheck);
-    transLayout->addWidget(_transRedCheck);
-    
-    _transNoneCheck = new QCheckBox("Opaque (no transparency)", this);
-    connectCheckBox(_transNoneCheck);
-    transLayout->addWidget(_transNoneCheck);
-    
-    _transWallCheck = new QCheckBox("Wall transparency", this);
-    connectCheckBox(_transWallCheck);
-    transLayout->addWidget(_transWallCheck);
-    
-    _transGlassCheck = new QCheckBox("Glass transparency", this);
-    connectCheckBox(_transGlassCheck);
-    transLayout->addWidget(_transGlassCheck);
-    
-    _transSteamCheck = new QCheckBox("Steam transparency", this);
-    connectCheckBox(_transSteamCheck);
-    transLayout->addWidget(_transSteamCheck);
-    
-    _transEnergyCheck = new QCheckBox("Energy transparency", this);
-    connectCheckBox(_transEnergyCheck);
-    transLayout->addWidget(_transEnergyCheck);
-    
-    layout->addRow(transGroup);
-    
-    // Special flags
-    _lightThruCheck = new QCheckBox("Light passes through", this);
+    // Pass-through flags
+    _lightThruCheck = new QCheckBox("Light Through", this);
     _lightThruCheck->setToolTip("Light can pass through this object");
     connectCheckBox(_lightThruCheck);
     layout->addRow(_lightThruCheck);
     
-    _shootThruCheck = new QCheckBox("Can shoot through", this);
+    _shootThruCheck = new QCheckBox("Shoot Through", this);
     _shootThruCheck->setToolTip("Projectiles can pass through this object");
     connectCheckBox(_shootThruCheck);
     layout->addRow(_shootThruCheck);
@@ -170,11 +204,6 @@ void ProCommonFieldsWidget::setupItemFields(QFormLayout* layout) {
     _basePriceEdit = createSpinBox(0, INT_MAX, "Base price in bottle caps");
     connectSpinBox(_basePriceEdit);
     layout->addRow("Base Price:", _basePriceEdit);
-    
-    // Inventory FID (read-only display, button removed)
-    _inventoryFidLabel = new QLabel("(None)", this);
-    _inventoryFidLabel->setStyleSheet("QLabel { border: 1px solid #ccc; padding: 4px; background-color: #f9f9f9; }");
-    layout->addRow("Inventory FID:", _inventoryFidLabel);
     
     // Sound ID
     _soundIdEdit = createSpinBox(0, MAX_SOUND_ID, "Sound effect ID (0-255)");

@@ -150,7 +150,6 @@ private:
     QSpinBox* _containerSizeEdit;    // Container/inventory size
     QSpinBox* _weightEdit;           // Weight (pounds * 16)
     QSpinBox* _basePriceEdit;        // Base price in caps
-    QLabel* _inventoryFidLabel;      // Inventory icon FID (read-only)
     QSpinBox* _soundIdEdit;          // Sound effect ID
     
     // Data storage

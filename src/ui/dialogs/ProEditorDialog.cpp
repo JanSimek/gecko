@@ -260,6 +260,10 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     QTimer::singleShot(0, this, &ProEditorDialog::updatePreview);
     // Update AI priority displays
     updateAIPriorityDisplays();
+    
+    // Set dialog to size to its contents only
+    setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+    adjustSize();
 }
 
 void ProEditorDialog::setupUI() {
@@ -273,7 +277,7 @@ void ProEditorDialog::setupUI() {
     leftInfoPanel->setFixedWidth(288);  // 10% smaller than previous 320px
     QVBoxLayout* leftInfoLayout = new QVBoxLayout(leftInfoPanel);
     leftInfoLayout->setContentsMargins(8, 8, 8, 8);
-    leftInfoLayout->setSpacing(3);  // Reduced from 6 to minimize space between elements
+    leftInfoLayout->setSpacing(0);  // Remove all space between elements
 
     // Name with edit button above preview
     auto nameLayout = new QHBoxLayout();
@@ -283,7 +287,7 @@ void ProEditorDialog::setupUI() {
     _nameLabel->setAlignment(Qt::AlignCenter);
     _nameLabel->setWordWrap(true);
     _nameLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; padding: 4px; }");
-    nameLayout->addWidget(_nameLabel, 1);  // Take most of the space
+    nameLayout->addWidget(_nameLabel);  // Take most of the space
     
     // Small edit button next to name
     _editMessageButton = new QPushButton("...", this);
@@ -291,7 +295,7 @@ void ProEditorDialog::setupUI() {
     _editMessageButton->setMaximumHeight(24);
     _editMessageButton->setToolTip("Edit object name and description");
     connect(_editMessageButton, &QPushButton::clicked, this, &ProEditorDialog::onEditMessageClicked);
-    nameLayout->addWidget(_editMessageButton, 0);  // Fixed size
+    nameLayout->addWidget(_editMessageButton);  // Fixed size
     
     leftInfoLayout->addLayout(nameLayout);
 
@@ -300,9 +304,10 @@ void ProEditorDialog::setupUI() {
     
     // Description under preview (without prefix)
     _descriptionEdit = new QTextEdit(this);
-    _descriptionEdit->setMaximumHeight(80);
+    _descriptionEdit->setFixedHeight(80);
     _descriptionEdit->setReadOnly(true);
-    _descriptionEdit->setStyleSheet("QTextEdit { background-color: #f9f9f9; border: 1px solid #ccc; }");
+    _descriptionEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    _descriptionEdit->setStyleSheet("QTextEdit { background-color: #f9f9f9; border: 1px solid #ccc; margin: 0px; padding: 2px; }");
     leftInfoLayout->addWidget(_descriptionEdit);
     
     // PID field (Object Type & ID)
@@ -329,7 +334,7 @@ void ProEditorDialog::setupUI() {
     filenameLayout->addWidget(_filenameEdit);
     leftInfoLayout->addLayout(filenameLayout);
     
-    leftInfoLayout->addStretch(); // Push everything to top
+    leftInfoLayout->addStretch(); // Push widgets to top while dialog size policy keeps it compact
     
     // === RIGHT PANEL: Tabbed Interface ===
     _tabWidget = new QTabWidget(this);
@@ -357,6 +362,7 @@ void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
     // Create compact preview group
     QWidget* previewGroup = new QWidget();
     previewGroup->setContentsMargins(0, 0, 0, 0);  // Remove widget margins
+    previewGroup->setStyleSheet("QWidget { margin: 0px; padding: 0px; border: none; }");
 
     QVBoxLayout* previewLayout = new QVBoxLayout(previewGroup);
     previewLayout->setContentsMargins(0, 0, 0, 0);
@@ -439,22 +445,21 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
 void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     // Compact dual preview for inventory/ground using ObjectPreviewWidget
     QWidget* dualWidget = new QWidget();
+    dualWidget->setStyleSheet("QWidget { margin: 0px; padding: 0px; border: none; }");
     QHBoxLayout* dualLayout = new QHBoxLayout(dualWidget);
     dualLayout->setContentsMargins(0, 0, 0, 0);
     dualLayout->setSpacing(4);
     dualLayout->setAlignment(Qt::AlignCenter);
     
-    // Inventory preview - no animation controls, just title below image
+    // Inventory preview - no animation controls, no title for compact layout
     _inventoryPreviewWidget = new ObjectPreviewWidget(this, 
         ObjectPreviewWidget::PreviewOptions(), 
         QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
-    _inventoryPreviewWidget->setTitle("Inventory");
     
-    // Ground preview - no animation controls, just title below image  
+    // Ground preview - no animation controls, no title for compact layout
     _groundPreviewWidget = new ObjectPreviewWidget(this,
         ObjectPreviewWidget::PreviewOptions(),
         QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
-    _groundPreviewWidget->setTitle("Ground");
     
     // Connect signals for inventory preview
     connect(_inventoryPreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
@@ -555,7 +560,7 @@ void ProEditorDialog::setupCommonTab() {
     // Connect ProCommonFieldsWidget signals
     connect(_commonFieldsWidget, &ProCommonFieldsWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
     
-    layout->addStretch();
+    // Remove stretch to allow dialog to size to contents
     
     _tabWidget->addTab(_commonTab, "Common");
 }
@@ -1437,9 +1442,11 @@ void ProEditorDialog::setupItemFields() {
         if (item->widget()) item->widget()->deleteLater();
         delete item;
     }
-    while (QLayoutItem* item = _rightFieldsLayout->takeAt(0)) {
-        if (item->widget()) item->widget()->deleteLater();
-        delete item;
+    if (_rightFieldsLayout) {
+        while (QLayoutItem* item = _rightFieldsLayout->takeAt(0)) {
+            if (item->widget()) item->widget()->deleteLater();
+            delete item;
+        }
     }
     
     // Setup type-specific fields based on item subtype
@@ -1700,7 +1707,9 @@ void ProEditorDialog::setupCritterFields() {
     connect(_critterDamageTypeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     advancedLayout->addRow("Damage Type:", _critterDamageTypeEdit);
     
-    _rightFieldsLayout->addWidget(advancedGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(advancedGroup);
+    }
     
     // Damage Protection (unified resistance and threshold)
     QGroupBox* damageProtectionGroup = new QGroupBox("Damage Protection");
@@ -1767,11 +1776,15 @@ void ProEditorDialog::setupCritterFields() {
         damageProtectionLayout->addWidget(_critterDamageResistEdits[i], i + 1, 2);
     }
     
-    _rightFieldsLayout->addWidget(damageProtectionGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(damageProtectionGroup);
+    }
     
     // Add stretch to push everything to top
     _leftFieldsLayout->addStretch();
-    _rightFieldsLayout->addStretch();
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addStretch();
+    }
 }
 
 void ProEditorDialog::setupSceneryFields() {
@@ -1780,9 +1793,11 @@ void ProEditorDialog::setupSceneryFields() {
         if (item->widget()) item->widget()->deleteLater();
         delete item;
     }
-    while (QLayoutItem* item = _rightFieldsLayout->takeAt(0)) {
-        if (item->widget()) item->widget()->deleteLater();
-        delete item;
+    if (_rightFieldsLayout) {
+        while (QLayoutItem* item = _rightFieldsLayout->takeAt(0)) {
+            if (item->widget()) item->widget()->deleteLater();
+            delete item;
+        }
     }
     
     // === COLUMN 1: Basic Scenery Properties ===
@@ -1823,7 +1838,9 @@ void ProEditorDialog::setupSceneryFields() {
     connectSpinBox(_doorUnknownEdit);
     doorLayout->addRow("Unknown Field:", _doorUnknownEdit);
     
-    _rightFieldsLayout->addWidget(doorGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(doorGroup);
+    }
     
     // Stairs Properties
     QGroupBox* stairsGroup = new QGroupBox("Stairs Properties");
@@ -1839,7 +1856,9 @@ void ProEditorDialog::setupSceneryFields() {
     connectSpinBox(_stairsDestElevationEdit);
     stairsLayout->addRow("Dest Elevation:", _stairsDestElevationEdit);
     
-    _rightFieldsLayout->addWidget(stairsGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(stairsGroup);
+    }
     
     // Elevator Properties (these will be shown/hidden based on scenery type)
     QGroupBox* elevatorGroup = new QGroupBox("Elevator Properties");
@@ -1855,7 +1874,9 @@ void ProEditorDialog::setupSceneryFields() {
     connectSpinBox(_elevatorLevelEdit);
     elevatorLayout->addRow("Level:", _elevatorLevelEdit);
     
-    _rightFieldsLayout->addWidget(elevatorGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(elevatorGroup);
+    }
     
     // Ladder Properties
     QGroupBox* ladderGroup = new QGroupBox("Ladder Properties");
@@ -1867,7 +1888,9 @@ void ProEditorDialog::setupSceneryFields() {
     connectSpinBox(_ladderDestTileElevationEdit);
     ladderLayout->addRow("Dest Tile+Elev:", _ladderDestTileElevationEdit);
     
-    _rightFieldsLayout->addWidget(ladderGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(ladderGroup);
+    }
     
     // Generic Properties
     QGroupBox* genericGroup = new QGroupBox("Generic Properties");
@@ -1879,11 +1902,15 @@ void ProEditorDialog::setupSceneryFields() {
     connectSpinBox(_genericUnknownEdit);
     genericLayout->addRow("Unknown Field:", _genericUnknownEdit);
     
-    _rightFieldsLayout->addWidget(genericGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(genericGroup);
+    }
     
     // Add stretch to push content to top
     _leftFieldsLayout->addStretch();
-    _rightFieldsLayout->addStretch();
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addStretch();
+    }
 }
 
 void ProEditorDialog::setupWallFields() {
@@ -3303,26 +3330,33 @@ void ProEditorDialog::onObjectFidChanged(int32_t newFid) {
 
 void ProEditorDialog::setupArmorFields() {
     // Show the right column for armor tab (ensure both columns are visible)
-    QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
-    if (rightColumn2) {
-        rightColumn2->show();
+    if (_rightFieldsLayout) {
+        QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
+        if (rightColumn2) {
+            rightColumn2->show();
+        }
     }
     
     // === COLUMN 1: Armor Class and Damage Resistance ===
     
-    // Armor Class
-    QGroupBox* acGroup = createStandardGroupBox("Armor Class");
-    QFormLayout* acLayout = static_cast<QFormLayout*>(acGroup->layout());
+    // Protection Values (following F2_ProtoManager pattern)
+    QGroupBox* acGroup = new QGroupBox("Protection Values");
+    acGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
+    QFormLayout* acLayout = new QFormLayout(acGroup);
+    acLayout->setContentsMargins(8, 12, 8, 8);
+    acLayout->setSpacing(4);
     
     _armorClassEdit = createSpinBox(0, 999, "Armor Class - higher values provide better protection");
-    acLayout->addRow("AC:", _armorClassEdit);
+    connectSpinBox(_armorClassEdit);
+    acLayout->addRow("Armor Class:", _armorClassEdit);
     
     _leftFieldsLayout->addWidget(acGroup);
     
     // Damage Resistance
-    QGroupBox* resistGroup = new QGroupBox("Damage Resistance");
+    QGroupBox* resistGroup = new QGroupBox("Damage Resistance (%)");
+    resistGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
     QGridLayout* resistLayout = new QGridLayout(resistGroup);
-    resistLayout->setContentsMargins(8, 8, 8, 8);
+    resistLayout->setContentsMargins(8, 12, 8, 8);
     resistLayout->setSpacing(4);
     
     const QStringList damageTypes = {"Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion"};
@@ -3348,8 +3382,9 @@ void ProEditorDialog::setupArmorFields() {
     
     // Damage Threshold
     QGroupBox* thresholdGroup = new QGroupBox("Damage Threshold");
+    thresholdGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
     QGridLayout* thresholdLayout = new QGridLayout(thresholdGroup);
-    thresholdLayout->setContentsMargins(8, 8, 8, 8);
+    thresholdLayout->setContentsMargins(8, 12, 8, 8);
     thresholdLayout->setSpacing(4);
     
     thresholdLayout->addWidget(new QLabel("Type"), 0, 0);
@@ -3363,7 +3398,9 @@ void ProEditorDialog::setupArmorFields() {
         thresholdLayout->addWidget(_damageThresholdEdits[i], i + 1, 1);
     }
     
-    _rightFieldsLayout->addWidget(thresholdGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(thresholdGroup);
+    }
     
     // Misc Properties
     QGroupBox* miscGroup = createStandardGroupBox("Misc Properties");
@@ -3378,21 +3415,27 @@ void ProEditorDialog::setupArmorFields() {
     _armorAIPriorityLabel->setToolTip("AI Priority = AC + all DT values + all DR values (used by AI to select best armor)");
     miscLayout->addRow("AI Priority:", _armorAIPriorityLabel);
     
-    _rightFieldsLayout->addWidget(miscGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(miscGroup);
+    }
     
     // Add standard item flags
     // Standard item flags are now handled by ProCommonFieldsWidget
     
     // Add stretch to push content to top
     _leftFieldsLayout->addStretch();
-    _rightFieldsLayout->addStretch();
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addStretch();
+    }
 }
 
 void ProEditorDialog::setupContainerFields() {
     // Show the right column for container tab (ensure both columns are visible)
-    QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
-    if (rightColumn2) {
-        rightColumn2->show();
+    if (_rightFieldsLayout) {
+        QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
+        if (rightColumn2) {
+            rightColumn2->show();
+        }
     }
     
     // === COLUMN 1: Container Properties ===
@@ -3419,18 +3462,24 @@ void ProEditorDialog::setupContainerFields() {
         flagsLayout->addWidget(_containerFlagChecks[i]);
     }
     
-    _rightFieldsLayout->addWidget(flagsGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(flagsGroup);
+    }
     
     // Add stretch to push content to top
     _leftFieldsLayout->addStretch();
-    _rightFieldsLayout->addStretch();
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addStretch();
+    }
 }
 
 void ProEditorDialog::setupDrugFields() {
     // Hide the right column for drug tab to extend left column to full width
-    QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
-    if (rightColumn2) {
-        rightColumn2->hide();
+    if (_rightFieldsLayout) {
+        QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
+        if (rightColumn2) {
+            rightColumn2->hide();
+        }
     }
     
     
@@ -3443,10 +3492,11 @@ void ProEditorDialog::setupDrugFields() {
     
     // === LEFT PANEL: Stat Effects ===
     
-    // Stat Effects with column headers
-    QGroupBox* effectsGroup = new QGroupBox("Stat Effects");
+    // Stat Effects with column headers (following F2_ProtoManager pattern)
+    QGroupBox* effectsGroup = new QGroupBox("Modify Stats");
+    effectsGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
     QGridLayout* effectsGridLayout = new QGridLayout(effectsGroup);
-    effectsGridLayout->setContentsMargins(8, 8, 8, 8);
+    effectsGridLayout->setContentsMargins(8, 12, 8, 8);
     effectsGridLayout->setSpacing(6);
     
     // Header row (row 0)
@@ -3549,10 +3599,11 @@ void ProEditorDialog::setupDrugFields() {
     // Add some spacing between timing and addiction
     _leftFieldsLayout->addSpacing(10);
     
-    // Addiction Settings
+    // Addiction Settings (following F2_ProtoManager pattern)
     QGroupBox* addictionGroup = new QGroupBox("Addiction");
+    addictionGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
     QFormLayout* addictionLayout = new QFormLayout(addictionGroup);
-    addictionLayout->setContentsMargins(8, 8, 8, 8);
+    addictionLayout->setContentsMargins(8, 12, 8, 8);
     addictionLayout->setSpacing(4);
     
     _drugAddictionChanceEdit = new QSpinBox();
@@ -3592,17 +3643,20 @@ void ProEditorDialog::setupDrugFields() {
 
 void ProEditorDialog::setupWeaponFields() {
     // Show the right column for weapon tab (ensure both columns are visible)
-    QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
-    if (rightColumn2) {
-        rightColumn2->show();
+    if (_rightFieldsLayout) {
+        QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
+        if (rightColumn2) {
+            rightColumn2->show();
+        }
     }
     
-    // === COLUMN 1: Basic Weapon Properties ===
+    // === COLUMN 1: Damage & Attack ===
     
-    // Basic Properties
-    QGroupBox* basicGroup = new QGroupBox("Basic Properties");
+    // Weapon Parameters (following F2_ProtoManager pattern)
+    QGroupBox* basicGroup = new QGroupBox("Weapon Parameters");
+    basicGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
     QFormLayout* basicLayout = new QFormLayout(basicGroup);
-    basicLayout->setContentsMargins(8, 8, 8, 8);
+    basicLayout->setContentsMargins(8, 12, 8, 8);
     basicLayout->setSpacing(4);
     
     _weaponAnimationCombo = createComboBox({"None", "Knife", "Club", "Hammer", "Spear", "Pistol", "SMG", "Rifle", "Big Gun", "Minigun", "Rocket Launcher"}, "Weapon animation type");
@@ -3623,10 +3677,11 @@ void ProEditorDialog::setupWeaponFields() {
     
     _leftFieldsLayout->addWidget(basicGroup);
     
-    // Range and Action Points
-    QGroupBox* rangeGroup = new QGroupBox("Range & Action Points");
+    // Attack Cost & Range
+    QGroupBox* rangeGroup = new QGroupBox("AP Cost & Range");
+    rangeGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
     QFormLayout* rangeLayout = new QFormLayout(rangeGroup);
-    rangeLayout->setContentsMargins(8, 8, 8, 8);
+    rangeLayout->setContentsMargins(8, 12, 8, 8);
     rangeLayout->setSpacing(4);
     
     _weaponRangePrimaryEdit = createSpinBox(0, 999, "Primary attack range");
@@ -3649,10 +3704,11 @@ void ProEditorDialog::setupWeaponFields() {
     
     // === COLUMN 2: Advanced Properties ===
     
-    // Requirements and Projectile
-    QGroupBox* reqGroup = new QGroupBox("Requirements & Projectile");
+    // Requirements & Special
+    QGroupBox* reqGroup = new QGroupBox("Requirements & Special");
+    reqGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
     QFormLayout* reqLayout = new QFormLayout(reqGroup);
-    reqLayout->setContentsMargins(8, 8, 8, 8);
+    reqLayout->setContentsMargins(8, 12, 8, 8);
     reqLayout->setSpacing(4);
     
     _weaponMinStrengthEdit = createSpinBox(0, 10, "Minimum strength required");
@@ -3671,7 +3727,9 @@ void ProEditorDialog::setupWeaponFields() {
     connectComboBox(_weaponPerkCombo);
     reqLayout->addRow("Perk:", _weaponPerkCombo);
     
-    _rightFieldsLayout->addWidget(reqGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(reqGroup);
+    }
     
     // Ammo and Special
     QGroupBox* ammoGroup = new QGroupBox("Ammo & Special");
@@ -3699,7 +3757,9 @@ void ProEditorDialog::setupWeaponFields() {
     connectSpinBox(_weaponSoundIdEdit);
     ammoLayout->addRow("Sound ID:", _weaponSoundIdEdit);
     
-    _rightFieldsLayout->addWidget(ammoGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(ammoGroup);
+    }
     
     // Weapon Flags
     QGroupBox* flagsGroup = new QGroupBox("Weapon Flags");
@@ -3712,11 +3772,15 @@ void ProEditorDialog::setupWeaponFields() {
     connectCheckBox(_weaponEnergyWeaponCheck);
     flagsLayout->addWidget(_weaponEnergyWeaponCheck);
     
-    _rightFieldsLayout->addWidget(flagsGroup);
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(flagsGroup);
+    }
     
     // Add stretch to push content to top
     _leftFieldsLayout->addStretch();
-    _rightFieldsLayout->addStretch();
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addStretch();
+    }
 }
 
 void ProEditorDialog::setupAmmoFields() {
@@ -3728,7 +3792,9 @@ void ProEditorDialog::setupAmmoFields() {
     // Standard item flags are now handled by ProCommonFieldsWidget
     
     _leftFieldsLayout->addStretch();
-    _rightFieldsLayout->addStretch();
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addStretch();
+    }
 }
 
 void ProEditorDialog::setupMiscItemFields() {
@@ -3740,7 +3806,9 @@ void ProEditorDialog::setupMiscItemFields() {
     // Standard item flags are now handled by ProCommonFieldsWidget
     
     _leftFieldsLayout->addStretch();
-    _rightFieldsLayout->addStretch();
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addStretch();
+    }
 }
 
 void ProEditorDialog::setupKeyFields() {
@@ -3762,7 +3830,9 @@ void ProEditorDialog::setupKeyFields() {
     
     // Add stretch to push content to top
     _leftFieldsLayout->addStretch();
-    _rightFieldsLayout->addStretch();
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addStretch();
+    }
 }
 
 void ProEditorDialog::loadStatAndPerkNames() {

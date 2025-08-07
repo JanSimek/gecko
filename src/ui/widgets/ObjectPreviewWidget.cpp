@@ -48,7 +48,7 @@ ObjectPreviewWidget::ObjectPreviewWidget(QWidget* parent, PreviewOptions options
 void ObjectPreviewWidget::setupUI() {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(2);
+    mainLayout->setSpacing(0);
     
     // Preview image label
     _previewLabel = new QLabel();
@@ -63,7 +63,7 @@ void ObjectPreviewWidget::setupUI() {
         _previewLabel->setMaximumHeight(PREVIEW_MAX_HEIGHT);
         _previewLabel->setMinimumWidth(PREVIEW_MIN_WIDTH);
     }
-    
+
     _previewLabel->setScaledContents(false);
     _previewLabel->setStyleSheet("QLabel { border: 1px solid gray; background-color: #f0f0f0; }");
     _previewLabel->setText("No FRM loaded");
@@ -72,7 +72,7 @@ void ObjectPreviewWidget::setupUI() {
     // Title label below image (like armor preview)
     _titleLabel = new QLabel();
     _titleLabel->setAlignment(Qt::AlignCenter);
-    _titleLabel->setStyleSheet("QLabel { font-size: 10px; }");
+    _titleLabel->setStyleSheet("QLabel { font-size: 10px; margin: 0px; padding: 0px; }");
     _titleLabel->hide(); // Initially hidden until title is set
     mainLayout->addWidget(_titleLabel);
     
