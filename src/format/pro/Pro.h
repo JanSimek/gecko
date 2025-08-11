@@ -101,7 +101,7 @@ public:
         CRITTER_NO_AGE = 0x100,        // Does not age
         CRITTER_NO_HEAL = 0x200,       // Cannot heal
         CRITTER_INVULNERABLE = 0x400,  // Cannot be damaged
-        CRITTER_FLAT = 0x800,          // Flat critter
+        CRITTER_NO_FLATTEN = 0x800,    // Doesn't flatten on death (leaves no dead body)
         CRITTER_SPECIAL_DEATH = 0x1000, // Special death animation
         CRITTER_LONG_LIMBS = 0x2000,   // Has long limbs
         CRITTER_NO_KNOCKBACK = 0x4000, // Cannot be knocked back

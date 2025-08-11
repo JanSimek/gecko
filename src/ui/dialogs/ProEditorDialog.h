@@ -151,6 +151,9 @@ private:
     void setupMiscItemTab();
     void setupKeyTab();
     void setupCritterTab();
+    void setupCritterStatsTab(QTabWidget* parentTabs);
+    void setupCritterDefenceTab(QTabWidget* parentTabs);
+    void setupCritterGeneralTab(QTabWidget* parentTabs);
     void setupSceneryTab();
     void setupWallTab();
     void setupTileTab();
@@ -527,7 +530,7 @@ private:
     QCheckBox* _critterNoAgeCheck;
     QCheckBox* _critterNoHealCheck;
     QCheckBox* _critterInvulnerableCheck;
-    QCheckBox* _critterFlatCheck;
+    QCheckBox* _critterNoFlattenCheck;
     QCheckBox* _critterSpecialDeathCheck;
     QCheckBox* _critterLongLimbsCheck;
     QCheckBox* _critterNoKnockbackCheck;

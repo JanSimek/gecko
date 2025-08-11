@@ -164,7 +164,7 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     _critterNoAgeCheck = nullptr;
     _critterNoHealCheck = nullptr;
     _critterInvulnerableCheck = nullptr;
-    _critterFlatCheck = nullptr;
+    _critterNoFlattenCheck = nullptr;
     _critterSpecialDeathCheck = nullptr;
     _critterLongLimbsCheck = nullptr;
     _critterNoKnockbackCheck = nullptr;
@@ -627,8 +627,264 @@ void ProEditorDialog::setupItemTabs() {
 void ProEditorDialog::setupCritterTab() {
     if (!_pro || _pro->type() != Pro::OBJECT_TYPE::CRITTER) return;
     
+    // Create main critter tab with nested tabs
     QWidget* critterTab = new QWidget();
     QVBoxLayout* mainLayout = new QVBoxLayout(critterTab);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(6);
+    
+    // Create sub-tab widget for critter sections
+    QTabWidget* critterSubTabs = new QTabWidget();
+    critterSubTabs->setTabPosition(QTabWidget::North);
+    
+    // Create the three sub-tabs
+    setupCritterStatsTab(critterSubTabs);
+    setupCritterDefenceTab(critterSubTabs);
+    setupCritterGeneralTab(critterSubTabs);
+    
+    mainLayout->addWidget(critterSubTabs);
+    _tabWidget->addTab(critterTab, "Critter");
+}
+
+void ProEditorDialog::setupCritterStatsTab(QTabWidget* parentTabs) {
+    QWidget* statsTab = new QWidget();
+    QVBoxLayout* mainLayout = new QVBoxLayout(statsTab);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(6);
+    
+    // Create two-column layout for SPECIAL and Skills
+    QHBoxLayout* topLayout = new QHBoxLayout();
+    topLayout->setSpacing(12);
+    
+    // === LEFT COLUMN: SPECIAL Stats ===
+    QGroupBox* specialGroup = new QGroupBox("SPECIAL Stats");
+    QGridLayout* specialLayout = new QGridLayout(specialGroup);
+    specialLayout->setContentsMargins(8, 8, 8, 8);
+    specialLayout->setSpacing(4);
+    
+    const char* specialNames[] = {"STR", "PER", "END", "CHR", "INT", "AGL", "LCK"};
+    for (int i = 0; i < 7; ++i) {
+        _critterSpecialStatEdits[i] = new QSpinBox();
+        _critterSpecialStatEdits[i]->setRange(MIN_SPECIAL_STAT, MAX_SPECIAL_STAT);
+        _critterSpecialStatEdits[i]->setToolTip(QString("Base %1 stat").arg(specialNames[i]));
+        connect(_critterSpecialStatEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        
+        QLabel* label = new QLabel(specialNames[i]);
+        label->setFixedWidth(30);
+        specialLayout->addWidget(label, i / 4, (i % 4) * 2);
+        specialLayout->addWidget(_critterSpecialStatEdits[i], i / 4, (i % 4) * 2 + 1);
+    }
+    
+    // === RIGHT COLUMN: Skills ===
+    QGroupBox* skillsGroup = new QGroupBox("Skills");
+    QGridLayout* skillsLayout = new QGridLayout(skillsGroup);
+    skillsLayout->setContentsMargins(8, 8, 8, 8);
+    skillsLayout->setSpacing(4);
+    
+    // Headers
+    QLabel* skillHeader = new QLabel("Skill");
+    skillHeader->setStyleSheet("font-weight: bold;");
+    skillsLayout->addWidget(skillHeader, 0, 0);
+    
+    QLabel* valueHeader = new QLabel("Value (%)");
+    valueHeader->setStyleSheet("font-weight: bold;");
+    valueHeader->setAlignment(Qt::AlignCenter);
+    skillsLayout->addWidget(valueHeader, 0, 1);
+    
+    QLabel* skillHeader2 = new QLabel("Skill");
+    skillHeader2->setStyleSheet("font-weight: bold;");
+    skillsLayout->addWidget(skillHeader2, 0, 2);
+    
+    QLabel* valueHeader2 = new QLabel("Value (%)");
+    valueHeader2->setStyleSheet("font-weight: bold;");
+    valueHeader2->setAlignment(Qt::AlignCenter);
+    skillsLayout->addWidget(valueHeader2, 0, 3);
+    
+    QLabel* skillHeader3 = new QLabel("Skill");
+    skillHeader3->setStyleSheet("font-weight: bold;");
+    skillsLayout->addWidget(skillHeader3, 0, 4);
+    
+    QLabel* valueHeader3 = new QLabel("Value (%)");
+    valueHeader3->setStyleSheet("font-weight: bold;");
+    valueHeader3->setAlignment(Qt::AlignCenter);
+    skillsLayout->addWidget(valueHeader3, 0, 5);
+    
+    // Skill names based on F2_ProtoManager reference
+    const char* skillNames[] = {
+        "Small Guns", "Big Guns", "Energy Weapons", "Unarmed", "Melee Weapons", "Throwing",
+        "First Aid", "Doctor", "Sneak", "Lockpick", "Steal", "Traps",
+        "Science", "Repair", "Speech", "Barter", "Gambling", "Outdoorsman"
+    };
+    
+    // Create skill controls in 3 columns (6 skills per column)
+    for (int i = 0; i < 18; ++i) {
+        int column = i / 6;  // 0, 1, or 2
+        int row = (i % 6) + 1;  // 1-6
+        
+        // Skill name label
+        QLabel* skillLabel = new QLabel(QString(skillNames[i]) + ":");
+        skillLabel->setFixedWidth(90);
+        skillsLayout->addWidget(skillLabel, row, column * 2);
+        
+        // Skill value spinbox
+        _critterSkillEdits[i] = new QSpinBox();
+        _critterSkillEdits[i]->setRange(0, MAX_SKILL_PERCENT);  // 0-300%
+        _critterSkillEdits[i]->setToolTip(QString("%1 skill percentage").arg(skillNames[i]));
+        _critterSkillEdits[i]->setFixedWidth(60);
+        connect(_critterSkillEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        skillsLayout->addWidget(_critterSkillEdits[i], row, column * 2 + 1);
+    }
+    
+    topLayout->addWidget(specialGroup);
+    topLayout->addWidget(skillsGroup, 1); // Give skills more space
+    mainLayout->addLayout(topLayout);
+    
+    // === BOTTOM: Derived Combat Stats ===
+    QGroupBox* combatGroup = new QGroupBox("Combat Stats");
+    QFormLayout* combatLayout = new QFormLayout(combatGroup);
+    combatLayout->setContentsMargins(8, 8, 8, 8);
+    combatLayout->setSpacing(4);
+    
+    _critterMaxHitPointsEdit = new QSpinBox();
+    _critterMaxHitPointsEdit->setRange(1, INT_MAX);
+    _critterMaxHitPointsEdit->setToolTip("Maximum hit points");
+    connect(_critterMaxHitPointsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Max HP:", _critterMaxHitPointsEdit);
+    
+    _critterActionPointsEdit = new QSpinBox();
+    _critterActionPointsEdit->setRange(1, INT_MAX);
+    _critterActionPointsEdit->setToolTip("Action points per turn");
+    connect(_critterActionPointsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Action Points:", _critterActionPointsEdit);
+    
+    _critterArmorClassEdit = new QSpinBox();
+    _critterArmorClassEdit->setRange(0, INT_MAX);
+    _critterArmorClassEdit->setToolTip("Base armor class");
+    connect(_critterArmorClassEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Armor Class:", _critterArmorClassEdit);
+    
+    _critterMeleeDamageEdit = new QSpinBox();
+    _critterMeleeDamageEdit->setRange(0, INT_MAX);
+    _critterMeleeDamageEdit->setToolTip("Melee damage bonus");
+    connect(_critterMeleeDamageEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Melee Damage:", _critterMeleeDamageEdit);
+    
+    _critterCarryWeightMaxEdit = new QSpinBox();
+    _critterCarryWeightMaxEdit->setRange(0, INT_MAX);
+    _critterCarryWeightMaxEdit->setToolTip("Maximum carry weight");
+    connect(_critterCarryWeightMaxEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Carry Weight:", _critterCarryWeightMaxEdit);
+    
+    _critterSequenceEdit = new QSpinBox();
+    _critterSequenceEdit->setRange(0, INT_MAX);
+    _critterSequenceEdit->setToolTip("Initiative sequence bonus");
+    connect(_critterSequenceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Sequence:", _critterSequenceEdit);
+    
+    _critterHealingRateEdit = new QSpinBox();
+    _critterHealingRateEdit->setRange(0, INT_MAX);
+    _critterHealingRateEdit->setToolTip("Healing rate bonus");
+    connect(_critterHealingRateEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Healing Rate:", _critterHealingRateEdit);
+    
+    _critterCriticalChanceEdit = new QSpinBox();
+    _critterCriticalChanceEdit->setRange(0, INT_MAX);
+    _critterCriticalChanceEdit->setToolTip("Critical hit chance bonus");
+    connect(_critterCriticalChanceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Critical Chance:", _critterCriticalChanceEdit);
+    
+    _critterBetterCriticalsEdit = new QSpinBox();
+    _critterBetterCriticalsEdit->setRange(0, INT_MAX);
+    _critterBetterCriticalsEdit->setToolTip("Better criticals bonus");
+    connect(_critterBetterCriticalsEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    combatLayout->addRow("Better Criticals:", _critterBetterCriticalsEdit);
+    
+    mainLayout->addWidget(combatGroup);
+    mainLayout->addStretch(); // Push content to top
+    
+    parentTabs->addTab(statsTab, "Stats");
+}
+
+void ProEditorDialog::setupCritterDefenceTab(QTabWidget* parentTabs) {
+    QWidget* defenceTab = new QWidget();
+    QVBoxLayout* mainLayout = new QVBoxLayout(defenceTab);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(6);
+    
+    // Damage Protection (unified resistance and threshold)
+    QGroupBox* damageProtectionGroup = new QGroupBox("Damage Protection");
+    QGridLayout* damageProtectionLayout = new QGridLayout(damageProtectionGroup);
+    damageProtectionLayout->setContentsMargins(8, 8, 8, 8);
+    damageProtectionLayout->setSpacing(2);
+    
+    // Headers
+    QLabel* thresholdHeader = new QLabel("Threshold");
+    thresholdHeader->setStyleSheet("font-weight: bold;");
+    thresholdHeader->setAlignment(Qt::AlignCenter);
+    damageProtectionLayout->addWidget(thresholdHeader, 0, 1);
+    
+    QLabel* resistanceHeader = new QLabel("Resistance");
+    resistanceHeader->setStyleSheet("font-weight: bold;");
+    resistanceHeader->setAlignment(Qt::AlignCenter);
+    damageProtectionLayout->addWidget(resistanceHeader, 0, 2);
+    
+    const char* damageTypes[] = {"Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion", "Radiation", "Poison"};
+    
+    // First 7 damage types (threshold + resistance)
+    for (int i = 0; i < 7; ++i) {
+        // Damage type label
+        QLabel* typeLabel = new QLabel(QString(damageTypes[i]) + ":");
+        typeLabel->setFixedWidth(60);
+        damageProtectionLayout->addWidget(typeLabel, i + 1, 0);
+        
+        // Damage threshold
+        _critterDamageThresholdEdits[i] = new QSpinBox();
+        _critterDamageThresholdEdits[i]->setRange(0, INT_MAX);
+        _critterDamageThresholdEdits[i]->setToolTip(QString("%1 damage threshold").arg(damageTypes[i]));
+        _critterDamageThresholdEdits[i]->setFixedWidth(60);
+        connect(_critterDamageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        damageProtectionLayout->addWidget(_critterDamageThresholdEdits[i], i + 1, 1);
+        
+        // Damage resistance
+        _critterDamageResistEdits[i] = new QSpinBox();
+        _critterDamageResistEdits[i]->setRange(0, INT_MAX);
+        _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes[i]));
+        _critterDamageResistEdits[i]->setFixedWidth(60);
+        connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        damageProtectionLayout->addWidget(_critterDamageResistEdits[i], i + 1, 2);
+    }
+    
+    // Last 2 damage types (Radiation and Poison - resistance only)
+    for (int i = 7; i < 9; ++i) {
+        QLabel* typeLabel = new QLabel(QString(damageTypes[i]) + ":");
+        typeLabel->setFixedWidth(60);
+        damageProtectionLayout->addWidget(typeLabel, i + 1, 0);
+        
+        // No threshold for Radiation and Poison, add placeholder
+        QLabel* placeholder = new QLabel("—");
+        placeholder->setAlignment(Qt::AlignCenter);
+        placeholder->setStyleSheet("color: gray;");
+        placeholder->setFixedWidth(60);
+        damageProtectionLayout->addWidget(placeholder, i + 1, 1);
+        
+        // Damage resistance
+        _critterDamageResistEdits[i] = new QSpinBox();
+        _critterDamageResistEdits[i]->setRange(0, INT_MAX);
+        _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes[i]));
+        _critterDamageResistEdits[i]->setFixedWidth(60);
+        connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        damageProtectionLayout->addWidget(_critterDamageResistEdits[i], i + 1, 2);
+    }
+    
+    mainLayout->addWidget(damageProtectionGroup);
+    mainLayout->addStretch(); // Push content to top
+    
+    parentTabs->addTab(defenceTab, "Defence");
+}
+
+void ProEditorDialog::setupCritterGeneralTab(QTabWidget* parentTabs) {
+    QWidget* generalTab = new QWidget();
+    QVBoxLayout* mainLayout = new QVBoxLayout(generalTab);
     mainLayout->setContentsMargins(8, 8, 8, 8);
     mainLayout->setSpacing(6);
     
@@ -636,28 +892,169 @@ void ProEditorDialog::setupCritterTab() {
     QHBoxLayout* columnsLayout = new QHBoxLayout();
     columnsLayout->setSpacing(12);
     
+    // === LEFT COLUMN ===
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
     leftLayout->setSpacing(8);
     
+    // Critter Properties
+    QGroupBox* critterGroup = new QGroupBox("Critter Properties");
+    QFormLayout* critterLayout = new QFormLayout(critterGroup);
+    critterLayout->setContentsMargins(8, 8, 8, 8);
+    critterLayout->setSpacing(4);
+    
+    // Head FID with selector button
+    QWidget* headFidWidget = new QWidget();
+    QHBoxLayout* headFidLayout = new QHBoxLayout(headFidWidget);
+    headFidLayout->setContentsMargins(0, 0, 0, 0);
+    headFidLayout->setSpacing(4);
+    
+    _critterHeadFIDLabel = new QLabel("No FRM");
+    _critterHeadFIDLabel->setToolTip("FRM filename for critter head appearance");
+    _critterHeadFIDLabel->setStyleSheet("QLabel { border: 1px solid #e2e8f0; padding: 2px 4px; background-color: white; }");
+    
+    _critterHeadFIDSelectorButton = new QPushButton("...");
+    _critterHeadFIDSelectorButton->setMaximumWidth(24);
+    _critterHeadFIDSelectorButton->setMaximumHeight(22);
+    _critterHeadFIDSelectorButton->setToolTip("Browse FRM files for critter head");
+    connect(_critterHeadFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onCritterHeadFidSelectorClicked);
+    
+    headFidLayout->addWidget(_critterHeadFIDLabel, 1);
+    headFidLayout->addWidget(_critterHeadFIDSelectorButton);
+    critterLayout->addRow("Head FID:", headFidWidget);
+    
+    _critterAIPacketEdit = createSpinBox(0, INT_MAX, "AI packet number for critter behavior");
+    connectSpinBox(_critterAIPacketEdit);
+    critterLayout->addRow("AI Packet:", _critterAIPacketEdit);
+    
+    _critterTeamNumberEdit = createSpinBox(0, INT_MAX, "Team number for faction identification");
+    connectSpinBox(_critterTeamNumberEdit);
+    critterLayout->addRow("Team Number:", _critterTeamNumberEdit);
+    
+    leftLayout->addWidget(critterGroup);
+    
+    // === RIGHT COLUMN ===
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
     rightLayout->setSpacing(8);
     
-    columnsLayout->addWidget(leftColumn, 1);
-    columnsLayout->addWidget(rightColumn, 1);
+    // Character Information
+    QGroupBox* charGroup = new QGroupBox("Character Information");
+    QFormLayout* charLayout = new QFormLayout(charGroup);
+    charLayout->setContentsMargins(8, 8, 8, 8);
+    charLayout->setSpacing(4);
+    
+    _critterAgeEdit = new QSpinBox();
+    _critterAgeEdit->setRange(MIN_AGE, MAX_AGE);
+    _critterAgeEdit->setToolTip("Critter age");
+    connect(_critterAgeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    charLayout->addRow("Age:", _critterAgeEdit);
+    
+    _critterGenderCombo = new QComboBox();
+    _critterGenderCombo->addItems({"Male", "Female"});
+    _critterGenderCombo->setToolTip("Critter gender");
+    connect(_critterGenderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
+    charLayout->addRow("Gender:", _critterGenderCombo);
+    
+    _critterBodyTypeCombo = new QComboBox();
+    _critterBodyTypeCombo->addItems({"Biped", "Quadruped", "Robotic"});
+    _critterBodyTypeCombo->setToolTip("Body type for animations");
+    connect(_critterBodyTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
+    charLayout->addRow("Body Type:", _critterBodyTypeCombo);
+    
+    _critterExperienceEdit = new QSpinBox();
+    _critterExperienceEdit->setRange(0, INT_MAX);
+    _critterExperienceEdit->setToolTip("Experience points for killing this critter");
+    connect(_critterExperienceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    charLayout->addRow("Experience:", _critterExperienceEdit);
+    
+    _critterKillTypeEdit = new QSpinBox();
+    _critterKillTypeEdit->setRange(0, INT_MAX);
+    _critterKillTypeEdit->setToolTip("Kill type for karma tracking");
+    connect(_critterKillTypeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    charLayout->addRow("Kill Type:", _critterKillTypeEdit);
+    
+    _critterDamageTypeEdit = new QSpinBox();
+    _critterDamageTypeEdit->setRange(0, INT_MAX);
+    _critterDamageTypeEdit->setToolTip("Default damage type");
+    connect(_critterDamageTypeEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+    charLayout->addRow("Damage Type:", _critterDamageTypeEdit);
+    
+    rightLayout->addWidget(charGroup);
+    
+    columnsLayout->addWidget(leftColumn);
+    columnsLayout->addWidget(rightColumn);
     mainLayout->addLayout(columnsLayout);
     
-    // Set temporary layout pointers for setupCritterFields
-    _leftFieldsLayout = leftLayout;
-    _rightFieldsLayout = rightLayout;
+    // === BOTTOM: Critter Flags ===
+    QGroupBox* critterFlagsGroup = new QGroupBox("Critter Flags");
+    QGridLayout* critterFlagsLayout = new QGridLayout(critterFlagsGroup);
+    critterFlagsLayout->setContentsMargins(8, 8, 8, 8);
+    critterFlagsLayout->setSpacing(4);
     
-    // Use existing critter fields setup
-    setupCritterFields();
+    // Column 1 (left)
+    _critterBarterCheck = new QCheckBox("Can Barter");
+    _critterBarterCheck->setToolTip("Can barter with this critter");
+    connect(_critterBarterCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterBarterCheck, 0, 0);
     
-    _tabWidget->addTab(critterTab, "Critter");
+    _critterNoStealCheck = new QCheckBox("No Steal");
+    _critterNoStealCheck->setToolTip("Cannot steal from this critter");
+    connect(_critterNoStealCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoStealCheck, 1, 0);
+    
+    _critterNoDropCheck = new QCheckBox("No Drop");
+    _critterNoDropCheck->setToolTip("Cannot drop items");
+    connect(_critterNoDropCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoDropCheck, 2, 0);
+    
+    _critterNoLimbsCheck = new QCheckBox("No Limbs");
+    _critterNoLimbsCheck->setToolTip("No limb damage");
+    connect(_critterNoLimbsCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoLimbsCheck, 3, 0);
+    
+    _critterNoAgeCheck = new QCheckBox("No Age");
+    _critterNoAgeCheck->setToolTip("Does not age");
+    connect(_critterNoAgeCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoAgeCheck, 4, 0);
+    
+    _critterNoHealCheck = new QCheckBox("No Heal");
+    _critterNoHealCheck->setToolTip("Cannot heal");
+    connect(_critterNoHealCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoHealCheck, 5, 0);
+    
+    // Column 2 (right)
+    _critterInvulnerableCheck = new QCheckBox("Invulnerable");
+    _critterInvulnerableCheck->setToolTip("Cannot be damaged");
+    connect(_critterInvulnerableCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterInvulnerableCheck, 0, 1);
+    
+    _critterNoFlattenCheck = new QCheckBox("No Flatten");
+    _critterNoFlattenCheck->setToolTip("Doesn't flatten on death (leaves no dead body)");
+    connect(_critterNoFlattenCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoFlattenCheck, 1, 1);
+    
+    _critterSpecialDeathCheck = new QCheckBox("Special Death");
+    _critterSpecialDeathCheck->setToolTip("Special death animation");
+    connect(_critterSpecialDeathCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterSpecialDeathCheck, 2, 1);
+    
+    _critterLongLimbsCheck = new QCheckBox("Long Limbs");
+    _critterLongLimbsCheck->setToolTip("Has long limbs");
+    connect(_critterLongLimbsCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterLongLimbsCheck, 3, 1);
+    
+    _critterNoKnockbackCheck = new QCheckBox("No Knockback");
+    _critterNoKnockbackCheck->setToolTip("Cannot be knocked back");
+    connect(_critterNoKnockbackCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoKnockbackCheck, 4, 1);
+    
+    mainLayout->addWidget(critterFlagsGroup);
+    mainLayout->addStretch(); // Push content to top
+    
+    parentTabs->addTab(generalTab, "General");
 }
 
 void ProEditorDialog::setupSceneryTab() {
@@ -1559,10 +1956,10 @@ void ProEditorDialog::setupCritterFields() {
     connect(_critterInvulnerableCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
     critterFlagsLayout->addWidget(_critterInvulnerableCheck, 0, 1);
     
-    _critterFlatCheck = new QCheckBox("Flat");
-    _critterFlatCheck->setToolTip("Flat critter");
-    connect(_critterFlatCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
-    critterFlagsLayout->addWidget(_critterFlatCheck, 1, 1);
+    _critterNoFlattenCheck = new QCheckBox("No Flatten");
+    _critterNoFlattenCheck->setToolTip("Doesn't flatten on death (leaves no dead body)");
+    connect(_critterNoFlattenCheck, &QCheckBox::toggled, this, &ProEditorDialog::onCritterFlagChanged);
+    critterFlagsLayout->addWidget(_critterNoFlattenCheck, 1, 1);
     
     _critterSpecialDeathCheck = new QCheckBox("Special Death");
     _critterSpecialDeathCheck->setToolTip("Special death animation");
@@ -1778,6 +2175,70 @@ void ProEditorDialog::setupCritterFields() {
     
     if (_rightFieldsLayout) {
         _rightFieldsLayout->addWidget(damageProtectionGroup);
+    }
+    
+    // Skills Section (18 skills)
+    QGroupBox* skillsGroup = new QGroupBox("Skills");
+    QGridLayout* skillsLayout = new QGridLayout(skillsGroup);
+    skillsLayout->setContentsMargins(8, 8, 8, 8);
+    skillsLayout->setSpacing(4);
+    
+    // Headers
+    QLabel* skillHeader = new QLabel("Skill");
+    skillHeader->setStyleSheet("font-weight: bold;");
+    skillsLayout->addWidget(skillHeader, 0, 0);
+    
+    QLabel* valueHeader = new QLabel("Value (%)");
+    valueHeader->setStyleSheet("font-weight: bold;");
+    valueHeader->setAlignment(Qt::AlignCenter);
+    skillsLayout->addWidget(valueHeader, 0, 1);
+    
+    QLabel* skillHeader2 = new QLabel("Skill");
+    skillHeader2->setStyleSheet("font-weight: bold;");
+    skillsLayout->addWidget(skillHeader2, 0, 2);
+    
+    QLabel* valueHeader2 = new QLabel("Value (%)");
+    valueHeader2->setStyleSheet("font-weight: bold;");
+    valueHeader2->setAlignment(Qt::AlignCenter);
+    skillsLayout->addWidget(valueHeader2, 0, 3);
+    
+    QLabel* skillHeader3 = new QLabel("Skill");
+    skillHeader3->setStyleSheet("font-weight: bold;");
+    skillsLayout->addWidget(skillHeader3, 0, 4);
+    
+    QLabel* valueHeader3 = new QLabel("Value (%)");
+    valueHeader3->setStyleSheet("font-weight: bold;");
+    valueHeader3->setAlignment(Qt::AlignCenter);
+    skillsLayout->addWidget(valueHeader3, 0, 5);
+    
+    // Skill names based on F2_ProtoManager reference
+    const char* skillNames[] = {
+        "Small Guns", "Big Guns", "Energy Weapons", "Unarmed", "Melee Weapons", "Throwing",
+        "First Aid", "Doctor", "Sneak", "Lockpick", "Steal", "Traps",
+        "Science", "Repair", "Speech", "Barter", "Gambling", "Outdoorsman"
+    };
+    
+    // Create skill controls in 3 columns (6 skills per column)
+    for (int i = 0; i < 18; ++i) {
+        int column = i / 6;  // 0, 1, or 2
+        int row = (i % 6) + 1;  // 1-6
+        
+        // Skill name label
+        QLabel* skillLabel = new QLabel(QString(skillNames[i]) + ":");
+        skillLabel->setFixedWidth(90);
+        skillsLayout->addWidget(skillLabel, row, column * 2);
+        
+        // Skill value spinbox
+        _critterSkillEdits[i] = new QSpinBox();
+        _critterSkillEdits[i]->setRange(0, MAX_SKILL_PERCENT);  // 0-300%
+        _critterSkillEdits[i]->setToolTip(QString("%1 skill percentage").arg(skillNames[i]));
+        _critterSkillEdits[i]->setFixedWidth(60);
+        connect(_critterSkillEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
+        skillsLayout->addWidget(_critterSkillEdits[i], row, column * 2 + 1);
+    }
+    
+    if (_rightFieldsLayout) {
+        _rightFieldsLayout->addWidget(skillsGroup);
     }
     
     // Add stretch to push everything to top
@@ -2431,7 +2892,7 @@ void ProEditorDialog::loadCritterData() {
     if (_critterNoAgeCheck) _critterNoAgeCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_NO_AGE));
     if (_critterNoHealCheck) _critterNoHealCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_NO_HEAL));
     if (_critterInvulnerableCheck) _critterInvulnerableCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_INVULNERABLE));
-    if (_critterFlatCheck) _critterFlatCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_FLAT));
+    if (_critterNoFlattenCheck) _critterNoFlattenCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_NO_FLATTEN));
     if (_critterSpecialDeathCheck) _critterSpecialDeathCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_SPECIAL_DEATH));
     if (_critterLongLimbsCheck) _critterLongLimbsCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_LONG_LIMBS));
     if (_critterNoKnockbackCheck) _critterNoKnockbackCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_NO_KNOCKBACK));
@@ -2568,7 +3029,7 @@ void ProEditorDialog::saveCritterData() {
         if (_critterNoAgeCheck && _critterNoAgeCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_AGE);
         if (_critterNoHealCheck && _critterNoHealCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_HEAL);
         if (_critterInvulnerableCheck && _critterInvulnerableCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_INVULNERABLE);
-        if (_critterFlatCheck && _critterFlatCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_FLAT);
+        if (_critterNoFlattenCheck && _critterNoFlattenCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_FLATTEN);
         if (_critterSpecialDeathCheck && _critterSpecialDeathCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_SPECIAL_DEATH);
         if (_critterLongLimbsCheck && _critterLongLimbsCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_LONG_LIMBS);
         if (_critterNoKnockbackCheck && _critterNoKnockbackCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_KNOCKBACK);
@@ -3352,54 +3813,66 @@ void ProEditorDialog::setupArmorFields() {
     
     _leftFieldsLayout->addWidget(acGroup);
     
-    // Damage Resistance
-    QGroupBox* resistGroup = new QGroupBox("Damage Resistance (%)");
-    resistGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
-    QGridLayout* resistLayout = new QGridLayout(resistGroup);
-    resistLayout->setContentsMargins(8, 12, 8, 8);
-    resistLayout->setSpacing(4);
+    // Defence State (unified Threshold and Resistance table)
+    QGroupBox* defenceGroup = new QGroupBox("Defence State");
+    defenceGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
+    QGridLayout* defenceLayout = new QGridLayout(defenceGroup);
+    defenceLayout->setContentsMargins(8, 12, 8, 8);
+    defenceLayout->setSpacing(2);
+    defenceLayout->setHorizontalSpacing(2);
     
-    const QStringList damageTypes = {"Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion"};
+    const QStringList damageTypes = {"Normal", "Laser", "Fire", "Plasma", "Energy", "EMP", "Explode"};
     
-    resistLayout->addWidget(new QLabel("Type"), 0, 0);
-    resistLayout->addWidget(new QLabel("Resist %"), 0, 1);
+    // Headers
+    QLabel* thresholdHeader = new QLabel("Threshold");
+    thresholdHeader->setFont(QFont("Microsoft Sans Serif", 9));
+    thresholdHeader->setAlignment(Qt::AlignCenter);
+    defenceLayout->addWidget(thresholdHeader, 0, 1);
     
+    QLabel* resistanceHeader = new QLabel("Resistance");
+    resistanceHeader->setFont(QFont("Microsoft Sans Serif", 9));
+    resistanceHeader->setAlignment(Qt::AlignCenter);
+    defenceLayout->addWidget(resistanceHeader, 0, 3);
+    
+    // Create the unified table for each damage type
     for (int i = 0; i < 7; ++i) {
-        resistLayout->addWidget(new QLabel(damageTypes[i]), i + 1, 0);
+        // Damage type label (column 0)
+        QLabel* typeLabel = new QLabel(damageTypes[i]);
+        typeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        typeLabel->setFixedSize(50, 19);
+        defenceLayout->addWidget(typeLabel, i + 1, 0);
         
+        // Threshold input (column 1)
+        _damageThresholdEdits[i] = createSpinBox(0, 999, QString("Damage threshold against %1 damage").arg(damageTypes[i]));
+        _damageThresholdEdits[i]->setFixedWidth(40);
+        connectSpinBox(_damageThresholdEdits[i]);
+        defenceLayout->addWidget(_damageThresholdEdits[i], i + 1, 1);
+        
+        // Separator "/" (column 2)
+        QLabel* separator = new QLabel("/");
+        separator->setAlignment(Qt::AlignCenter);
+        separator->setEnabled(false);
+        defenceLayout->addWidget(separator, i + 1, 2);
+        
+        // Resistance input (column 3)
         _damageResistEdits[i] = createSpinBox(0, 100, QString("Damage resistance against %1 damage").arg(damageTypes[i]));
-        _damageResistEdits[i]->setSuffix("%");
+        _damageResistEdits[i]->setFixedWidth(40);
         connectSpinBox(_damageResistEdits[i]);
-        resistLayout->addWidget(_damageResistEdits[i], i + 1, 1);
+        defenceLayout->addWidget(_damageResistEdits[i], i + 1, 3);
+        
+        // "%" label (column 4)
+        QLabel* percentLabel = new QLabel("%");
+        percentLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        defenceLayout->addWidget(percentLabel, i + 1, 4);
     }
     
-    _leftFieldsLayout->addWidget(resistGroup);
+    _leftFieldsLayout->addWidget(defenceGroup);
+    
+    // === COLUMN 2: Armor Views and Misc Properties ===
     
     // Armor Views (Male/Female armor preview with animation controls)
-    setupArmorPreviewCompact(_leftFieldsLayout);
-    
-    // === COLUMN 2: Damage Threshold and Misc Properties ===
-    
-    // Damage Threshold
-    QGroupBox* thresholdGroup = new QGroupBox("Damage Threshold");
-    thresholdGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
-    QGridLayout* thresholdLayout = new QGridLayout(thresholdGroup);
-    thresholdLayout->setContentsMargins(8, 12, 8, 8);
-    thresholdLayout->setSpacing(4);
-    
-    thresholdLayout->addWidget(new QLabel("Type"), 0, 0);
-    thresholdLayout->addWidget(new QLabel("Threshold"), 0, 1);
-    
-    for (int i = 0; i < 7; ++i) {
-        thresholdLayout->addWidget(new QLabel(damageTypes[i]), i + 1, 0);
-        
-        _damageThresholdEdits[i] = createSpinBox(0, 999, QString("Damage threshold against %1 damage").arg(damageTypes[i]));
-        connectSpinBox(_damageThresholdEdits[i]);
-        thresholdLayout->addWidget(_damageThresholdEdits[i], i + 1, 1);
-    }
-    
     if (_rightFieldsLayout) {
-        _rightFieldsLayout->addWidget(thresholdGroup);
+        setupArmorPreviewCompact(_rightFieldsLayout);
     }
     
     // Misc Properties
@@ -3926,7 +4399,7 @@ void ProEditorDialog::onCritterFlagChanged() {
     if (_critterNoAgeCheck && _critterNoAgeCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_AGE);
     if (_critterNoHealCheck && _critterNoHealCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_HEAL);
     if (_critterInvulnerableCheck && _critterInvulnerableCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_INVULNERABLE);
-    if (_critterFlatCheck && _critterFlatCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_FLAT);
+    if (_critterNoFlattenCheck && _critterNoFlattenCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_FLATTEN);
     if (_critterSpecialDeathCheck && _critterSpecialDeathCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_SPECIAL_DEATH);
     if (_critterLongLimbsCheck && _critterLongLimbsCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_LONG_LIMBS);
     if (_critterNoKnockbackCheck && _critterNoKnockbackCheck->isChecked()) flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_KNOCKBACK);
