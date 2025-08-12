@@ -604,7 +604,8 @@ void ProEditorDialog::setupItemTabs() {
             setupArmorTab();
             break;
         case Pro::ITEM_TYPE::CONTAINER:
-            setupContainerTab();
+        case Pro::ITEM_TYPE::KEY:
+            setupContainerKeyTab();
             break;
         case Pro::ITEM_TYPE::DRUG:
             setupDrugTab();
@@ -613,13 +614,8 @@ void ProEditorDialog::setupItemTabs() {
             setupWeaponTab();
             break;
         case Pro::ITEM_TYPE::AMMO:
-            setupAmmoTab();
-            break;
         case Pro::ITEM_TYPE::MISC:
-            setupMiscItemTab();
-            break;
-        case Pro::ITEM_TYPE::KEY:
-            setupKeyTab();
+            setupAmmoMiscTab();
             break;
     }
 }
@@ -1165,24 +1161,6 @@ void ProEditorDialog::setupArmorTab() {
     _tabWidget->addTab(armorTab, "Armor");
 }
 
-void ProEditorDialog::setupContainerTab() {
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::CONTAINER) return;
-    
-    QWidget* containerTab = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(containerTab);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
-    
-    // Set temporary layout pointers for setupContainerFields
-    _leftFieldsLayout = layout;
-    _rightFieldsLayout = nullptr;
-    
-    // Use existing container fields setup
-    setupContainerFields();
-    
-    _tabWidget->addTab(containerTab, "Container");
-}
-
 void ProEditorDialog::setupDrugTab() {
     if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::DRUG) return;
     
@@ -1240,58 +1218,52 @@ void ProEditorDialog::setupWeaponTab() {
     _tabWidget->addTab(weaponTab, "Weapon");
 }
 
-void ProEditorDialog::setupAmmoTab() {
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::AMMO) return;
+void ProEditorDialog::setupAmmoMiscTab() {
+    Pro::ITEM_TYPE itemType = _pro->itemType();
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || 
+        (itemType != Pro::ITEM_TYPE::AMMO && itemType != Pro::ITEM_TYPE::MISC)) return;
     
-    QWidget* ammoTab = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(ammoTab);
+    QWidget* ammoMiscTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(ammoMiscTab);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(6);
     
-    // Set temporary layout pointers for setupAmmoFields
+    // Set temporary layout pointers
     _leftFieldsLayout = layout;
     _rightFieldsLayout = nullptr;
     
-    // Use existing ammo fields setup
-    setupAmmoFields();
+    // Use existing fields setup based on item type
+    if (itemType == Pro::ITEM_TYPE::AMMO) {
+        setupAmmoFields();
+    } else if (itemType == Pro::ITEM_TYPE::MISC) {
+        setupMiscItemFields();
+    }
     
-    _tabWidget->addTab(ammoTab, "Ammo");
+    _tabWidget->addTab(ammoMiscTab, "Ammo/Misc");
 }
 
-void ProEditorDialog::setupMiscItemTab() {
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::MISC) return;
+void ProEditorDialog::setupContainerKeyTab() {
+    Pro::ITEM_TYPE itemType = _pro->itemType();
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || 
+        (itemType != Pro::ITEM_TYPE::CONTAINER && itemType != Pro::ITEM_TYPE::KEY)) return;
     
-    QWidget* miscItemTab = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(miscItemTab);
+    QWidget* commonTab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(commonTab);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(6);
     
-    // Set temporary layout pointers for setupMiscItemFields
+    // Set temporary layout pointers for setupCommonFields
     _leftFieldsLayout = layout;
     _rightFieldsLayout = nullptr;
     
-    // Use existing misc item fields setup
-    setupMiscItemFields();
+    // Use existing fields setup based on item type
+    if (itemType == Pro::ITEM_TYPE::CONTAINER) {
+        setupContainerFields();
+    } else if (itemType == Pro::ITEM_TYPE::KEY) {
+        setupKeyFields();
+    }
     
-    _tabWidget->addTab(miscItemTab, "Misc Item");
-}
-
-void ProEditorDialog::setupKeyTab() {
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::KEY) return;
-    
-    QWidget* keyTab = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(keyTab);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
-    
-    // Set temporary layout pointers for setupKeyFields
-    _leftFieldsLayout = layout;
-    _rightFieldsLayout = nullptr;
-    
-    // Use existing key fields setup
-    setupKeyFields();
-    
-    _tabWidget->addTab(keyTab, "Key");
+    _tabWidget->addTab(commonTab, "Common");
 }
 
 // setupExtendedFlagsGroup method removed - now handled by ProCommonFieldsWidget
@@ -4125,8 +4097,8 @@ void ProEditorDialog::setupWeaponFields() {
     
     // === COLUMN 1: Damage & Attack ===
     
-    // Weapon Parameters (following F2_ProtoManager pattern)
-    QGroupBox* basicGroup = new QGroupBox("Weapon Parameters");
+    // Weapon Param (matching F2_ProtoManager naming)
+    QGroupBox* basicGroup = new QGroupBox("Weapon Param");
     basicGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
     QFormLayout* basicLayout = new QFormLayout(basicGroup);
     basicLayout->setContentsMargins(8, 12, 8, 8);
@@ -4150,8 +4122,25 @@ void ProEditorDialog::setupWeaponFields() {
     
     _leftFieldsLayout->addWidget(basicGroup);
     
-    // Attack Cost & Range
-    QGroupBox* rangeGroup = new QGroupBox("AP Cost & Range");
+    // AP Cost Attack (separate from Range, matching F2)
+    QGroupBox* apGroup = new QGroupBox("AP Cost Attack");
+    apGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
+    QFormLayout* apLayout = new QFormLayout(apGroup);
+    apLayout->setContentsMargins(8, 12, 8, 8);
+    apLayout->setSpacing(4);
+    
+    _weaponAPPrimaryEdit = createSpinBox(0, 99, "Action points for primary attack");
+    connectSpinBox(_weaponAPPrimaryEdit);
+    apLayout->addRow("AP Primary:", _weaponAPPrimaryEdit);
+    
+    _weaponAPSecondaryEdit = createSpinBox(0, 99, "Action points for secondary attack");
+    connectSpinBox(_weaponAPSecondaryEdit);
+    apLayout->addRow("AP Secondary:", _weaponAPSecondaryEdit);
+    
+    _leftFieldsLayout->addWidget(apGroup);
+    
+    // Range Attack (separate groupbox, matching F2)
+    QGroupBox* rangeGroup = new QGroupBox("Range Attack");
     rangeGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
     QFormLayout* rangeLayout = new QFormLayout(rangeGroup);
     rangeLayout->setContentsMargins(8, 12, 8, 8);
@@ -4164,14 +4153,6 @@ void ProEditorDialog::setupWeaponFields() {
     _weaponRangeSecondaryEdit = createSpinBox(0, 999, "Secondary attack range");
     connectSpinBox(_weaponRangeSecondaryEdit);
     rangeLayout->addRow("Range Secondary:", _weaponRangeSecondaryEdit);
-    
-    _weaponAPPrimaryEdit = createSpinBox(0, 99, "Action points for primary attack");
-    connectSpinBox(_weaponAPPrimaryEdit);
-    rangeLayout->addRow("AP Primary:", _weaponAPPrimaryEdit);
-    
-    _weaponAPSecondaryEdit = createSpinBox(0, 99, "Action points for secondary attack");
-    connectSpinBox(_weaponAPSecondaryEdit);
-    rangeLayout->addRow("AP Secondary:", _weaponAPSecondaryEdit);
     
     _leftFieldsLayout->addWidget(rangeGroup);
     

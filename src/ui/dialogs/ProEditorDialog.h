@@ -144,12 +144,10 @@ private:
     void setupTypeSpecificTabs();
     void setupItemTabs();
     void setupArmorTab();
-    void setupContainerTab();
     void setupDrugTab();
     void setupWeaponTab();
-    void setupAmmoTab();
-    void setupMiscItemTab();
-    void setupKeyTab();
+    void setupAmmoMiscTab();
+    void setupContainerKeyTab();
     void setupCritterTab();
     void setupCritterStatsTab(QTabWidget* parentTabs);
     void setupCritterDefenceTab(QTabWidget* parentTabs);
