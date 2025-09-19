@@ -13,7 +13,6 @@
 #include "format/IFile.h"
 #include "FileParser.h"
 #include "ReaderExceptions.h"
-#include "../util/Factory.h"
 
 namespace geck {
 
@@ -172,6 +171,7 @@ template<> std::unique_ptr<FileParser<Lst>> ReaderFactory::createReader<Lst>(For
 // Template implementations for generic createReader
 template<typename T>
 inline std::unique_ptr<FileParser<T>> ReaderFactory::createReader(Format format) {
+    (void)format; // Suppress unused parameter warning
     static_assert(sizeof(T) == 0, "Unsupported type for ReaderFactory::createReader. Add explicit specialization.");
     return nullptr;
 }

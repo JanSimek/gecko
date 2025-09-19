@@ -29,8 +29,7 @@ Application::Application(int argc, char** argv)
     _qtApp->setApplicationName(geck::version::name);
     _qtApp->setApplicationDisplayName(geck::version::name);
     _qtApp->setApplicationVersion(geck::version::string);
-    
-    // Set application icon using platform-aware resource path
+
     std::filesystem::path iconPath = getResourcesPath() / "icon.png";
     QIcon appIcon(QString::fromStdString(iconPath.string()));
     _qtApp->setWindowIcon(appIcon);
@@ -48,11 +47,9 @@ Application::Application(int argc, char** argv)
 void Application::loadMap(const std::filesystem::path& mapPath) {
     if (mapPath.empty()) {
         spdlog::info("No map file specified, starting with empty editor");
-        // Don't show file dialog automatically - user can use File > Open or File Browser
         return;
     }
 
-    // Create loading dialog for map loading
     auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
     loadingWidget->setWindowTitle("Loading Map");
 
@@ -100,11 +97,9 @@ std::string Application::processCommandLineArgs() {
         spdlog::set_level(spdlog::level::debug);
     }
 
-    // Check if settings file exists first (for first-run detection)
     auto& settings = Settings::getInstance();
     bool isFirstRun = !settings.exists();
-    
-    // Load settings if they exist
+
     if (!isFirstRun) {
         settings.load();
     }
@@ -119,16 +114,6 @@ std::string Application::processCommandLineArgs() {
     }
     
     // Data paths will be loaded after settings dialog in checkFirstRun()
-
-    // TODO: this dialog will be available in the configuration screen to append path to data paths
-    /*
-    auto dir = QtDialogs::selectFolder("Select Fallout 2 \"data\" directory which contains maps", resources_path.string());
-    if (!dir.empty()) {
-        spdlog::info("User selected data directory: {}", dir);
-        ResourceManager::getInstance().addDataPath(dir);
-    }
-    */
-
     return parser.isSet(mapOption) ? parser.value(mapOption).toStdString() : "";
 }
 

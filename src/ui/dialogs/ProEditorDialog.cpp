@@ -55,6 +55,13 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _isAnimating(false)
     // Common fields now handled by ProCommonFieldsWidget
     , _commonFieldsWidget(nullptr)
+    // Type-specific widgets (refactored)
+    , _wallWidget(nullptr)
+    , _tileWidget(nullptr)
+    , _armorWidget(nullptr)
+    , _weaponWidget(nullptr)
+    , _drugWidget(nullptr)
+    , _containerKeyWidget(nullptr)
     , _nameLabel(nullptr)
     , _descriptionEdit(nullptr)
     , _editMessageButton(nullptr)
@@ -1074,37 +1081,23 @@ void ProEditorDialog::setupSceneryTab() {
 void ProEditorDialog::setupWallTab() {
     if (!_pro || _pro->type() != Pro::OBJECT_TYPE::WALL) return;
     
-    QWidget* wallTab = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(wallTab);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    // Use the new ProWallWidget
+    _wallWidget = new ProWallWidget();
+    connect(_wallWidget, &ProWallWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
+    _wallWidget->loadFromPro(_pro);
     
-    // Set temporary layout pointers for setupWallFields
-    _leftFieldsLayout = layout;
-    _rightFieldsLayout = nullptr;
-    
-    // Use existing wall fields setup
-    setupWallFields();
-    
-    _tabWidget->addTab(wallTab, "Wall");
+    _tabWidget->addTab(_wallWidget, _wallWidget->getTabLabel());
 }
 
 void ProEditorDialog::setupTileTab() {
     if (!_pro || _pro->type() != Pro::OBJECT_TYPE::TILE) return;
     
-    QWidget* tileTab = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(tileTab);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    // Use the new ProTileWidget
+    _tileWidget = new ProTileWidget();
+    connect(_tileWidget, &ProTileWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
+    _tileWidget->loadFromPro(_pro);
     
-    // Set temporary layout pointers for setupTileFields
-    _leftFieldsLayout = layout;
-    _rightFieldsLayout = nullptr;
-    
-    // Use existing tile fields setup
-    setupTileFields();
-    
-    _tabWidget->addTab(tileTab, "Tile");
+    _tabWidget->addTab(_tileWidget, _tileWidget->getTabLabel());
 }
 
 void ProEditorDialog::setupMiscTab() {
@@ -1128,94 +1121,46 @@ void ProEditorDialog::setupMiscTab() {
 void ProEditorDialog::setupArmorTab() {
     if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::ARMOR) return;
     
-    QWidget* armorTab = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(armorTab);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    // Use the new ProArmorWidget
+    _armorWidget = new ProArmorWidget();
+    connect(_armorWidget, &ProArmorWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
     
-    // Create two-column layout for armor
-    QHBoxLayout* columnsLayout = new QHBoxLayout();
-    columnsLayout->setSpacing(12);
+    // Connect FID selector signals
+    connect(_armorWidget, &ProArmorWidget::armorMaleFidRequested, 
+            this, &ProEditorDialog::onArmorMaleFidSelectorClicked);
+    connect(_armorWidget, &ProArmorWidget::armorFemaleFidRequested, 
+            this, &ProEditorDialog::onArmorFemaleFidSelectorClicked);
     
-    QWidget* leftColumn = new QWidget();
-    QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
-    leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(8);
+    _armorWidget->loadFromPro(_pro);
     
-    QWidget* rightColumn = new QWidget();
-    QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
-    rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(8);
-    
-    columnsLayout->addWidget(leftColumn, 1);
-    columnsLayout->addWidget(rightColumn, 1);
-    layout->addLayout(columnsLayout);
-    
-    // Set temporary layout pointers for setupArmorFields
-    _leftFieldsLayout = leftLayout;
-    _rightFieldsLayout = rightLayout;
-    
-    // Use existing armor fields setup
-    setupArmorFields();
-    
-    _tabWidget->addTab(armorTab, "Armor");
+    _tabWidget->addTab(_armorWidget, _armorWidget->getTabLabel());
 }
 
 void ProEditorDialog::setupDrugTab() {
     if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::DRUG) return;
     
-    QWidget* drugTab = new QWidget();
-    QVBoxLayout* mainLayout = new QVBoxLayout(drugTab);
-    mainLayout->setContentsMargins(8, 8, 8, 8);
-    mainLayout->setSpacing(6);
+    // Use the new ProDrugWidget
+    _drugWidget = new ProDrugWidget();
+    connect(_drugWidget, &ProDrugWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
     
-    // Drug tab uses single column
-    QVBoxLayout* leftLayout = mainLayout;
+    // Set stat and perk names from MSG files
+    _drugWidget->setStatNames(_statNames);
+    _drugWidget->setPerkNames(_perkNames);
     
-    // Set temporary layout pointers for setupDrugFields
-    _leftFieldsLayout = leftLayout;
-    _rightFieldsLayout = nullptr;  // Drug tab doesn't use right column
+    _drugWidget->loadFromPro(_pro);
     
-    // Use existing drug fields setup
-    setupDrugFields();
-    
-    _tabWidget->addTab(drugTab, "Drug");
+    _tabWidget->addTab(_drugWidget, _drugWidget->getTabLabel());
 }
 
 void ProEditorDialog::setupWeaponTab() {
     if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || _pro->itemType() != Pro::ITEM_TYPE::WEAPON) return;
     
-    QWidget* weaponTab = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(weaponTab);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    // Use the new ProWeaponWidget
+    _weaponWidget = new ProWeaponWidget();
+    connect(_weaponWidget, &ProWeaponWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
+    _weaponWidget->loadFromPro(_pro);
     
-    // Create two-column layout for weapon
-    QHBoxLayout* columnsLayout = new QHBoxLayout();
-    columnsLayout->setSpacing(12);
-    
-    QWidget* leftColumn = new QWidget();
-    QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
-    leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(8);
-    
-    QWidget* rightColumn = new QWidget();
-    QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
-    rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(8);
-    
-    columnsLayout->addWidget(leftColumn, 1);
-    columnsLayout->addWidget(rightColumn, 1);
-    layout->addLayout(columnsLayout);
-    
-    // Set temporary layout pointers for setupWeaponFields
-    _leftFieldsLayout = leftLayout;
-    _rightFieldsLayout = rightLayout;
-    
-    // Use existing weapon fields setup
-    setupWeaponFields();
-    
-    _tabWidget->addTab(weaponTab, "Weapon");
+    _tabWidget->addTab(_weaponWidget, _weaponWidget->getTabLabel());
 }
 
 void ProEditorDialog::setupAmmoMiscTab() {
@@ -1247,23 +1192,12 @@ void ProEditorDialog::setupContainerKeyTab() {
     if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || 
         (itemType != Pro::ITEM_TYPE::CONTAINER && itemType != Pro::ITEM_TYPE::KEY)) return;
     
-    QWidget* commonTab = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(commonTab);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    // Use the new ProContainerKeyWidget
+    _containerKeyWidget = new ProContainerKeyWidget();
+    connect(_containerKeyWidget, &ProContainerKeyWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
+    _containerKeyWidget->loadFromPro(_pro);
     
-    // Set temporary layout pointers for setupCommonFields
-    _leftFieldsLayout = layout;
-    _rightFieldsLayout = nullptr;
-    
-    // Use existing fields setup based on item type
-    if (itemType == Pro::ITEM_TYPE::CONTAINER) {
-        setupContainerFields();
-    } else if (itemType == Pro::ITEM_TYPE::KEY) {
-        setupKeyFields();
-    }
-    
-    _tabWidget->addTab(commonTab, "Common");
+    _tabWidget->addTab(_containerKeyWidget, _containerKeyWidget->getTabLabel());
 }
 
 // setupExtendedFlagsGroup method removed - now handled by ProCommonFieldsWidget
@@ -1698,84 +1632,27 @@ void ProEditorDialog::saveProData() {
 }
 
 void ProEditorDialog::saveArmorData() {
-    _pro->armorData.armorClass = _armorClassEdit->value();
-    
-    for (int i = 0; i < 7; ++i) {
-        _pro->armorData.damageResist[i] = _damageResistEdits[i]->value();
-        _pro->armorData.damageThreshold[i] = _damageThresholdEdits[i]->value();
+    // Delegate to the widget
+    if (_armorWidget) {
+        _armorWidget->saveToPro(_pro);
     }
-    
-    _pro->armorData.perk = _armorPerkCombo->currentIndex();
-    _pro->armorData.armorMaleFID = _armorMaleFID;
-    _pro->armorData.armorFemaleFID = _armorFemaleFID;
 }
 
 void ProEditorDialog::saveContainerData() {
-    _pro->containerData.maxSize = _containerMaxSizeEdit->value();
-    
-    // Save container flags (bit flags)
-    uint32_t flags = 0;
-    for (int i = 0; i < 5; ++i) {
-        if (_containerFlagChecks[i]->isChecked()) {
-            flags |= (1 << i);
-        }
+    if (_containerKeyWidget) {
+        _containerKeyWidget->saveToPro(_pro);
     }
-    _pro->containerData.flags = flags;
 }
 
 void ProEditorDialog::saveDrugData() {
-    // Save stat selections (index 0 = "None" maps to 0xFFFF)
-    _pro->drugData.stat0 = _drugStatCombos[0]->currentIndex() == 0 ? 0xFFFF : _drugStatCombos[0]->currentIndex() - 1;
-    _pro->drugData.stat1 = _drugStatCombos[1]->currentIndex() == 0 ? 0xFFFF : _drugStatCombos[1]->currentIndex() - 1;
-    _pro->drugData.stat2 = _drugStatCombos[2]->currentIndex() == 0 ? 0xFFFF : _drugStatCombos[2]->currentIndex() - 1;
-    
-    // Save immediate effect amounts
-    _pro->drugData.amount0 = _drugStatAmountEdits[0]->value();
-    _pro->drugData.amount1 = _drugStatAmountEdits[1]->value();
-    _pro->drugData.amount2 = _drugStatAmountEdits[2]->value();
-    
-    // Save first delayed effect
-    _pro->drugData.duration1 = _drugFirstDelayEdit->value();
-    _pro->drugData.amount0_1 = _drugFirstStatAmountEdits[0]->value();
-    _pro->drugData.amount1_1 = _drugFirstStatAmountEdits[1]->value();
-    _pro->drugData.amount2_1 = _drugFirstStatAmountEdits[2]->value();
-    
-    // Save second delayed effect
-    _pro->drugData.duration2 = _drugSecondDelayEdit->value();
-    _pro->drugData.amount0_2 = _drugSecondStatAmountEdits[0]->value();
-    _pro->drugData.amount1_2 = _drugSecondStatAmountEdits[1]->value();
-    _pro->drugData.amount2_2 = _drugSecondStatAmountEdits[2]->value();
-    
-    // Save addiction data
-    _pro->drugData.addictionRate = _drugAddictionChanceEdit->value();
-    _pro->drugData.addictionEffect = _drugAddictionPerkCombo->currentIndex();
-    _pro->drugData.addictionOnset = _drugAddictionDelayEdit->value();
+    if (_drugWidget) {
+        _drugWidget->saveToPro(_pro);
+    }
 }
 
 void ProEditorDialog::saveWeaponData() {
-    _pro->weaponData.animationCode = _weaponAnimationCombo->currentIndex();
-    _pro->weaponData.damageMin = _weaponDamageMinEdit->value();
-    _pro->weaponData.damageMax = _weaponDamageMaxEdit->value();
-    _pro->weaponData.damageType = _weaponDamageTypeCombo->currentIndex();
-    _pro->weaponData.rangePrimary = _weaponRangePrimaryEdit->value();
-    _pro->weaponData.rangeSecondary = _weaponRangeSecondaryEdit->value();
-    _pro->weaponData.projectilePID = _weaponProjectilePIDEdit->value();
-    _pro->weaponData.minimumStrength = _weaponMinStrengthEdit->value();
-    _pro->weaponData.actionCostPrimary = _weaponAPPrimaryEdit->value();
-    _pro->weaponData.actionCostSecondary = _weaponAPSecondaryEdit->value();
-    _pro->weaponData.criticalFail = _weaponCriticalFailEdit->value();
-    _pro->weaponData.perk = _weaponPerkCombo->currentIndex();
-    _pro->weaponData.burstRounds = _weaponBurstRoundsEdit->value();
-    _pro->weaponData.ammoType = _weaponAmmoTypeCombo->currentIndex();
-    _pro->weaponData.ammoPID = _weaponAmmoPIDEdit->value();
-    _pro->weaponData.ammoCapacity = _weaponAmmoCapacityEdit->value();
-    _pro->weaponData.soundId = _weaponSoundIdEdit->value();
-    
-    // Save weapon flags
-    if (_weaponEnergyWeaponCheck->isChecked()) {
-        _pro->weaponData.weaponFlags = Pro::setFlag(_pro->weaponData.weaponFlags, Pro::WEAPON_FLAGS::ENERGY_WEAPON);
-    } else {
-        _pro->weaponData.weaponFlags = Pro::clearFlag(_pro->weaponData.weaponFlags, Pro::WEAPON_FLAGS::ENERGY_WEAPON);
+    if (_weaponWidget) {
+        _weaponWidget->saveToPro(_pro);
     }
 }
 
@@ -1794,7 +1671,9 @@ void ProEditorDialog::saveMiscData() {
 }
 
 void ProEditorDialog::saveKeyData() {
-    _pro->keyData.keyId = _keyIdEdit->value();
+    if (_containerKeyWidget) {
+        _containerKeyWidget->saveToPro(_pro);
+    }
 }
 
 void ProEditorDialog::updateTabVisibility() {
@@ -3149,14 +3028,16 @@ void ProEditorDialog::loadTileData() {
 }
 
 void ProEditorDialog::saveWallData() {
-    if (_wallMaterialIdEdit) {
-        _pro->wallData.materialId = static_cast<uint32_t>(_wallMaterialIdEdit->currentIndex());
+    // Delegate to the widget
+    if (_wallWidget) {
+        _wallWidget->saveToPro(_pro);
     }
 }
 
 void ProEditorDialog::saveTileData() {
-    if (_tileMaterialIdEdit) {
-        _pro->tileData.materialId = static_cast<uint32_t>(_tileMaterialIdEdit->currentIndex());
+    // Delegate to the widget
+    if (_tileWidget) {
+        _tileWidget->saveToPro(_pro);
     }
 }
 

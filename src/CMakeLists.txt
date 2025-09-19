@@ -35,7 +35,6 @@ set(GECK_SOURCES
     util/Exceptions.h
     util/Coordinates.h
     util/Coordinates.cpp
-    util/Factory.h
     util/EventBus.h
     util/SpatialIndex.h
     util/SpatialIndex.cpp
@@ -71,6 +70,8 @@ set(GECK_SOURCES
     ui/dialogs/SettingsDialog.cpp
     ui/dialogs/ProEditorDialog.h
     ui/dialogs/ProEditorDialog.cpp
+    ui/dialogs/InventoryViewerDialog.h
+    ui/dialogs/InventoryViewerDialog.cpp
     ui/dialogs/MessageSelectorDialog.h
     ui/dialogs/MessageSelectorDialog.cpp
     ui/dialogs/ExitGridPropertiesDialog.h
@@ -97,6 +98,22 @@ set(GECK_SOURCES
     ui/widgets/WelcomeWidget.cpp
     ui/widgets/ProCommonFieldsWidget.h
     ui/widgets/ProCommonFieldsWidget.cpp
+    
+    # PRO Tab Widgets
+    ui/widgets/pro/ProTabWidget.h
+    ui/widgets/pro/ProTabWidget.cpp
+    ui/widgets/pro/ProWallWidget.h
+    ui/widgets/pro/ProWallWidget.cpp
+    ui/widgets/pro/ProTileWidget.h
+    ui/widgets/pro/ProTileWidget.cpp
+    ui/widgets/pro/ProArmorWidget.h
+    ui/widgets/pro/ProArmorWidget.cpp
+    ui/widgets/pro/ProWeaponWidget.h
+    ui/widgets/pro/ProWeaponWidget.cpp
+    ui/widgets/pro/ProDrugWidget.h
+    ui/widgets/pro/ProDrugWidget.cpp
+    ui/widgets/pro/ProContainerKeyWidget.h
+    ui/widgets/pro/ProContainerKeyWidget.cpp
 
     # Qt6 UI Constants
     ui/UIConstants.h

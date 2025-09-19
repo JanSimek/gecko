@@ -26,10 +26,17 @@
 #include <climits>
 
 #include "../../format/pro/Pro.h"
+#include "../../format/pro/ProDataModels.h"
 #include "../../format/msg/Msg.h"
 #include "../../util/ResourceManager.h"
 #include "../widgets/ObjectPreviewWidget.h"
 #include "../widgets/ProCommonFieldsWidget.h"
+#include "../widgets/pro/ProWallWidget.h"
+#include "../widgets/pro/ProTileWidget.h"
+#include "../widgets/pro/ProArmorWidget.h"
+#include "../widgets/pro/ProWeaponWidget.h"
+#include "../widgets/pro/ProDrugWidget.h"
+#include "../widgets/pro/ProContainerKeyWidget.h"
 
 namespace geck {
 
@@ -238,152 +245,7 @@ private:
     QString getFrmFilename(int32_t fid);
     
     // Note: CommonData is now handled by ProCommonFieldsWidget
-    
-    struct ArmorData {
-        uint32_t armorClass;
-        uint32_t damageResist[7];     // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
-        uint32_t damageThreshold[7];
-        uint32_t perk;
-        int32_t armorMaleFID;
-        int32_t armorFemaleFID;
-    };
-    
-    struct ContainerData {
-        uint32_t maxSize;
-        uint32_t flags;  // Use, UseOn, Look, Talk, Pickup flags
-    };
-    
-    struct DrugData {
-        uint32_t stat0;                // Stat ID for immediate effect (0-14)
-        uint32_t stat1;                // Stat ID for immediate effect (0-14)
-        uint32_t stat2;                // Stat ID for immediate effect (0-14)
-        int32_t amount0;              // Modifier for stat0 (signed)
-        int32_t amount1;              // Modifier for stat1 (signed)
-        int32_t amount2;              // Modifier for stat2 (signed)
-        uint32_t duration1;           // Delay before first effect (game minutes)
-        int32_t amount0_1;            // First delayed effect for stat0
-        int32_t amount1_1;            // First delayed effect for stat1
-        int32_t amount2_1;            // First delayed effect for stat2
-        uint32_t duration2;           // Delay before second effect (game minutes)
-        int32_t amount0_2;            // Second delayed effect for stat0
-        int32_t amount1_2;            // Second delayed effect for stat1
-        int32_t amount2_2;            // Second delayed effect for stat2
-        uint32_t addictionRate;       // Addiction chance (percentage)
-        uint32_t addictionEffect;     // Addiction perk ID
-        uint32_t addictionOnset;      // Delay before addiction effect (game minutes)
-    };
-    
-    struct WeaponData {
-        uint32_t animationCode;
-        uint32_t damageMin, damageMax;
-        uint32_t damageType;
-        uint32_t rangePrimary, rangeSecondary;
-        int32_t projectilePID;
-        uint32_t minimumStrength;
-        uint32_t actionCostPrimary, actionCostSecondary;
-        uint32_t criticalFail;
-        uint32_t perk;
-        uint32_t burstRounds;
-        uint32_t ammoType;
-        int32_t ammoPID;
-        uint32_t ammoCapacity;
-        uint8_t soundId;
-    };
-    
-    struct AmmoData {
-        uint32_t caliber;
-        uint32_t quantity;
-        int32_t damageModifier;
-        int32_t damageResistModifier;
-        int32_t damageMultiplier;
-        int32_t damageTypeModifier;
-    };
-    
-    struct MiscData {
-        uint32_t powerType;
-        uint32_t charges;
-    };
-    
-    struct KeyData {
-        uint32_t keyId;
-    };
-    
-    struct CritterData {
-        uint32_t headFID;
-        uint32_t aiPacket;
-        uint32_t teamNumber;
-        uint32_t flags;
-        // SPECIAL stats (7 stats: STR, PER, END, CHR, INT, AGL, LCK)
-        uint32_t specialStats[7];
-        uint32_t maxHitPoints;
-        uint32_t actionPoints;
-        uint32_t armorClass;
-        uint32_t unused;
-        uint32_t meleeDamage;
-        uint32_t carryWeightMax;
-        uint32_t sequence;
-        uint32_t healingRate;
-        uint32_t criticalChance;
-        uint32_t betterCriticals;
-        // Damage threshold (7 damage types)
-        uint32_t damageThreshold[7];
-        // Damage resist (9 damage types)
-        uint32_t damageResist[9];
-        uint32_t age;
-        uint32_t gender;
-        // Bonus SPECIAL stats (7 stats)
-        uint32_t bonusSpecialStats[7];
-        uint32_t bonusHealthPoints;
-        uint32_t bonusActionPoints;
-        uint32_t bonusArmorClass;
-        uint32_t bonusUnused;
-        uint32_t bonusMeleeDamage;
-        uint32_t bonusCarryWeight;
-        uint32_t bonusSequence;
-        uint32_t bonusHealingRate;
-        uint32_t bonusCriticalChance;
-        uint32_t bonusBetterCriticals;
-        // Bonus damage threshold (8 values)
-        uint32_t bonusDamageThreshold[8];
-        // Bonus damage resistance (8 values)
-        uint32_t bonusDamageResistance[8];
-        uint32_t bonusAge;
-        uint32_t bonusGender;
-        // Skills (18 different skills)
-        uint32_t skills[18];
-        uint32_t bodyType;
-        uint32_t experienceForKill;
-        uint32_t killType;
-        uint32_t damageType; // Optional field
-    };
-    
-    struct SceneryData {
-        uint32_t materialId;
-        uint8_t soundId;
-        // Door-specific data
-        struct {
-            uint32_t walkThroughFlag;
-            uint32_t unknownField;
-        } doorData;
-        // Stairs-specific data
-        struct {
-            uint32_t destTile;
-            uint32_t destElevation;
-        } stairsData;
-        // Elevator-specific data
-        struct {
-            uint32_t elevatorType;
-            uint32_t elevatorLevel;
-        } elevatorData;
-        // Ladder-specific data
-        struct {
-            uint32_t destTileAndElevation;
-        } ladderData;
-        // Generic-specific data
-        struct {
-            uint32_t unknownField;
-        } genericData;
-    };
+    // Data structures have been moved to ProDataModels.h
 
     // UI Components
     QVBoxLayout* _mainLayout;
@@ -440,6 +302,14 @@ private:
     
     // Common fields widget (replaces individual common field controls)
     ProCommonFieldsWidget* _commonFieldsWidget;
+    
+    // Type-specific tab widgets (refactored)
+    ProWallWidget* _wallWidget;
+    ProTileWidget* _tileWidget;
+    ProArmorWidget* _armorWidget;
+    ProWeaponWidget* _weaponWidget;
+    ProDrugWidget* _drugWidget;
+    ProContainerKeyWidget* _containerKeyWidget;
     
     // Left panel widgets (name, preview, description, PID)
     QLabel* _nameLabel;
@@ -571,11 +441,9 @@ private:
     // Scenery tab controls
     QComboBox* _sceneryMaterialIdEdit;
     
-    // Wall tab controls
-    QComboBox* _wallMaterialIdEdit;
+    // Wall tab controls - moved to ProWallWidget
     
-    // Tile tab controls
-    QComboBox* _tileMaterialIdEdit;
+    // Tile tab controls - moved to ProTileWidget
     QSpinBox* _scenerySoundIdEdit;
     QComboBox* _sceneryTypeCombo;
     // Door controls
@@ -600,15 +468,15 @@ private:
     int32_t _armorMaleFID = 0;
     int32_t _armorFemaleFID = 0;
     int32_t _critterHeadFID = 0;
-    ArmorData _armorData;
-    ContainerData _containerData;
-    DrugData _drugData;
-    WeaponData _weaponData;
-    AmmoData _ammoData;
-    MiscData _miscData;
-    KeyData _keyData;
-    CritterData _critterData;
-    SceneryData _sceneryData;
+    ProArmorData _armorData;
+    ProContainerData _containerData;
+    ProDrugData _drugData;
+    ProWeaponData _weaponData;
+    ProAmmoData _ammoData;
+    ProMiscData _miscData;
+    ProKeyData _keyData;
+    ProCritterData _critterData;
+    ProSceneryData _sceneryData;
     
     // MSG files for stat and perk names
     Msg* _statMsg = nullptr;

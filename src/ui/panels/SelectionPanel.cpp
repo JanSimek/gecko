@@ -36,6 +36,7 @@ SelectionPanel::SelectionPanel(QWidget* parent)
     , _changeFrmButton(nullptr)
     , _editProButton(nullptr)
     , _editExitGridButton(nullptr)
+    , _viewInventoryButton(nullptr)
     , _tilePanelWidget(nullptr)
     , _tileInfoGroup(nullptr)
     , _tilePreviewLabel(nullptr)
@@ -153,6 +154,13 @@ void SelectionPanel::setupUI() {
     _editExitGridButton->setVisible(false); // Hidden by default
     connect(_editExitGridButton, &QPushButton::clicked, this, &SelectionPanel::onEditExitGridClicked);
     objectFormLayout->addRow("", _editExitGridButton);
+    
+    // View Inventory button
+    _viewInventoryButton = new QPushButton("View Inventory...");
+    _viewInventoryButton->setEnabled(false);
+    _viewInventoryButton->setVisible(false); // Hidden by default
+    connect(_viewInventoryButton, &QPushButton::clicked, this, &SelectionPanel::onViewInventoryClicked);
+    objectFormLayout->addRow("", _viewInventoryButton);
 
     objectLayout->addWidget(_objectInfoGroup);
     objectLayout->addStretch();
@@ -355,6 +363,15 @@ void SelectionPanel::updateObjectInfo() {
                 _editExitGridButton->setVisible(false);
                 _editExitGridButton->setEnabled(false);
             }
+            
+            // Show/hide and enable inventory button based on inventory contents
+            if (selectedMapObject.objects_in_inventory > 0) {
+                _viewInventoryButton->setVisible(true);
+                _viewInventoryButton->setEnabled(true);
+            } else {
+                _viewInventoryButton->setVisible(false);
+                _viewInventoryButton->setEnabled(false);
+            }
 
             // Convert SFML sprite to QPixmap for display
             const auto& sprite = _selectedObject.value()->getSprite();
@@ -499,6 +516,8 @@ void geck::SelectionPanel::clearObjectInfo() {
     _editProButton->setEnabled(false);
     _editExitGridButton->setEnabled(false);
     _editExitGridButton->setVisible(false);
+    _viewInventoryButton->setEnabled(false);
+    _viewInventoryButton->setVisible(false);
 
     _objectSpriteLabel->clear();
     _objectSpriteLabel->setText("No object selected");
@@ -763,6 +782,18 @@ void SelectionPanel::onEditExitGridClicked() {
     
     // Emit signal to request exit grid editor for the selected object
     emit requestExitGridEditor(_selectedObject.value());
+}
+
+void SelectionPanel::onViewInventoryClicked() {
+    if (!_selectedObject || !_selectedObject.value()) {
+        spdlog::warn("SelectionPanel::onViewInventoryClicked: No object selected");
+        return;
+    }
+    
+    spdlog::debug("SelectionPanel::onViewInventoryClicked: Emitting requestInventoryViewer signal");
+    
+    // Emit signal to request inventory viewer for the selected object
+    emit requestInventoryViewer(_selectedObject.value());
 }
 
 } // namespace geck

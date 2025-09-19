@@ -35,6 +35,7 @@ signals:
     void statusMessage(const QString& message);
     void requestProEditor(std::shared_ptr<Object> object);
     void requestExitGridEditor(std::shared_ptr<Object> object);
+    void requestInventoryViewer(std::shared_ptr<Object> object);
 
 public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);
@@ -46,6 +47,7 @@ private slots:
     void onChangeFrmClicked();
     void onEditProClicked();
     void onEditExitGridClicked();
+    void onViewInventoryClicked();
 
 private:
     void setupUI();
@@ -79,6 +81,7 @@ private:
     QPushButton* _changeFrmButton;
     QPushButton* _editProButton;
     QPushButton* _editExitGridButton;
+    QPushButton* _viewInventoryButton;
 
     // Tile panel widgets
     QWidget* _tilePanelWidget;

@@ -14,6 +14,7 @@
 #include "../dialogs/SettingsDialog.h"
 #include "../dialogs/ProEditorDialog.h"
 #include "../dialogs/AboutDialog.h"
+#include "../dialogs/InventoryViewerDialog.h"
 #include "../../state/loader/MapLoader.h"
 #include "../../selection/SelectionState.h"
 #include "../../util/Types.h"
@@ -859,6 +860,24 @@ void MainWindow::connectToEditorWidget() {
                         exitGridManager->editExitGridProperties(mapObjectPtr);
                     }
                 }
+            }
+        });
+        
+        connect(_selectionPanel, &SelectionPanel::requestInventoryViewer, this, [this](std::shared_ptr<Object> object) {
+            spdlog::debug("MainWindow: Received requestInventoryViewer signal");
+            if (object && object->hasMapObject()) {
+                auto mapObjectPtr = object->getMapObjectPtr();
+                if (mapObjectPtr && mapObjectPtr->objects_in_inventory > 0) {
+                    spdlog::debug("MainWindow: Opening InventoryViewerDialog for object with {} inventory items", 
+                                 mapObjectPtr->objects_in_inventory);
+                    InventoryViewerDialog dialog(object, this);
+                    dialog.exec();
+                    spdlog::debug("MainWindow: InventoryViewerDialog closed");
+                } else {
+                    spdlog::warn("MainWindow: Object has no inventory items");
+                }
+            } else {
+                spdlog::warn("MainWindow: Invalid object or no MapObject");
             }
         });
         

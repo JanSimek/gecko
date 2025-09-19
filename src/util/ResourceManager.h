@@ -19,6 +19,7 @@
 #include "reader/FileParser.h"
 #include "reader/dat/DatReader.h"
 #include "reader/ReaderFactory.h"
+#include "reader/ReaderExceptions.h"
 
 namespace geck {
 
@@ -67,7 +68,7 @@ public:
                 vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::createNormalizedFileInfo(vfsPath), vfspp::IFile::FileMode::Read);
 
                 if (!file || !file->IsOpened()) {
-                    throw ResourceException("Failed to open file from VFS", vfsPath);
+                    throw IOException("Failed to open file from VFS", vfsPath);
                 }
 
                 // Read file data from VFS into memory
@@ -79,7 +80,7 @@ public:
                 _resources[pathKey] = std::move(resource);
                 
             } catch (const std::exception& e) {
-                throw ResourceException("Failed to load resource: " + std::string(e.what()), path);
+                throw IOException("Failed to load resource: " + std::string(e.what()), path);
             }
         }
 
