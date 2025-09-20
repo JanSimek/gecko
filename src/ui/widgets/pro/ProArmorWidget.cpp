@@ -4,6 +4,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QFont>
+#include "util/ResourceManager.h"
 
 namespace geck {
 
@@ -11,11 +12,9 @@ ProArmorWidget::ProArmorWidget(QWidget* parent)
     : ProTabWidget(parent)
     , _armorClassEdit(nullptr)
     , _armorPerkCombo(nullptr)
-    , _armorMaleFIDLabel(nullptr)
-    , _armorMaleFIDSelectorButton(nullptr)
-    , _armorFemaleFIDLabel(nullptr)
-    , _armorFemaleFIDSelectorButton(nullptr)
     , _armorAIPriorityLabel(nullptr)
+    , _armorMalePreviewWidget(nullptr)
+    , _armorFemalePreviewWidget(nullptr)
     , _armorMaleFID(0)
     , _armorFemaleFID(0) {
     
@@ -121,39 +120,35 @@ void ProArmorWidget::setupUI() {
     leftLayout->addStretch();
     
     // === RIGHT COLUMN: Armor Views and Misc Properties ===
-    
-    // Armor Views
+
+    // Armor Views with previews
     QGroupBox* viewsGroup = new QGroupBox("Armor Views");
     viewsGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
-    QFormLayout* viewsLayout = createStandardFormLayout();
-    
-    // Male armor FID
-    QHBoxLayout* maleFidLayout = new QHBoxLayout();
-    _armorMaleFIDLabel = new QLabel("None");
-    _armorMaleFIDLabel->setMinimumWidth(100);
-    _armorMaleFIDSelectorButton = new QPushButton("...");
-    _armorMaleFIDSelectorButton->setMaximumWidth(30);
-    connect(_armorMaleFIDSelectorButton, &QPushButton::clicked, 
-            this, &ProArmorWidget::armorMaleFidRequested);
-    maleFidLayout->addWidget(_armorMaleFIDLabel);
-    maleFidLayout->addWidget(_armorMaleFIDSelectorButton);
-    maleFidLayout->addStretch();
-    viewsLayout->addRow("Male:", maleFidLayout);
-    
-    // Female armor FID
-    QHBoxLayout* femaleFidLayout = new QHBoxLayout();
-    _armorFemaleFIDLabel = new QLabel("None");
-    _armorFemaleFIDLabel->setMinimumWidth(100);
-    _armorFemaleFIDSelectorButton = new QPushButton("...");
-    _armorFemaleFIDSelectorButton->setMaximumWidth(30);
-    connect(_armorFemaleFIDSelectorButton, &QPushButton::clicked, 
-            this, &ProArmorWidget::armorFemaleFidRequested);
-    femaleFidLayout->addWidget(_armorFemaleFIDLabel);
-    femaleFidLayout->addWidget(_armorFemaleFIDSelectorButton);
-    femaleFidLayout->addStretch();
-    viewsLayout->addRow("Female:", femaleFidLayout);
-    
-    viewsGroup->setLayout(viewsLayout);
+    QVBoxLayout* viewsLayout = new QVBoxLayout(viewsGroup);
+    viewsLayout->setContentsMargins(8, 12, 8, 8);
+    viewsLayout->setSpacing(8);
+
+    // Horizontal layout for male/female previews
+    QHBoxLayout* previewsLayout = new QHBoxLayout();
+    previewsLayout->setContentsMargins(0, 0, 0, 0);
+    previewsLayout->setSpacing(8);
+
+    // Male preview
+    _armorMalePreviewWidget = new ObjectPreviewWidget(this,
+        ObjectPreviewWidget::ShowAnimationControls,
+        QSize(120, 120));
+    _armorMalePreviewWidget->setTitle("Male");
+
+    // Female preview
+    _armorFemalePreviewWidget = new ObjectPreviewWidget(this,
+        ObjectPreviewWidget::ShowAnimationControls,
+        QSize(120, 120));
+    _armorFemalePreviewWidget->setTitle("Female");
+
+    previewsLayout->addWidget(_armorMalePreviewWidget);
+    previewsLayout->addWidget(_armorFemalePreviewWidget);
+    viewsLayout->addLayout(previewsLayout);
+
     rightLayout->addWidget(viewsGroup);
     
     // Misc Properties
@@ -208,15 +203,10 @@ void ProArmorWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
         _armorPerkCombo->setCurrentIndex(static_cast<int>(_armorData.perk));
     }
     
-    // Update FID labels
-    if (_armorMaleFIDLabel) {
-        _armorMaleFIDLabel->setText(QString("0x%1").arg(_armorMaleFID, 6, 16, QChar('0')));
-    }
-    if (_armorFemaleFIDLabel) {
-        _armorFemaleFIDLabel->setText(QString("0x%1").arg(_armorFemaleFID, 6, 16, QChar('0')));
-    }
-    
+    // FID labels removed - previews show the armor directly
+
     updateAIPriority();
+    updateArmorPreviews();
 }
 
 void ProArmorWidget::saveToPro(std::shared_ptr<Pro>& pro) {
@@ -264,6 +254,48 @@ void ProArmorWidget::updateAIPriority() {
     }
 }
 
+void ProArmorWidget::updateArmorPreviews() {
+    // Update male armor preview
+    if (_armorMalePreviewWidget) {
+        if (_armorMaleFID <= 0) {
+            _armorMalePreviewWidget->clear();
+        } else {
+            try {
+                auto& resourceManager = ResourceManager::getInstance();
+                std::string maleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorMaleFID));
+
+                if (!maleFrmPath.empty()) {
+                    _armorMalePreviewWidget->setFrmPath(QString::fromStdString(maleFrmPath));
+                } else {
+                    _armorMalePreviewWidget->clear();
+                }
+            } catch (const std::exception& e) {
+                _armorMalePreviewWidget->clear();
+            }
+        }
+    }
+
+    // Update female armor preview
+    if (_armorFemalePreviewWidget) {
+        if (_armorFemaleFID <= 0) {
+            _armorFemalePreviewWidget->clear();
+        } else {
+            try {
+                auto& resourceManager = ResourceManager::getInstance();
+                std::string femaleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorFemaleFID));
+
+                if (!femaleFrmPath.empty()) {
+                    _armorFemalePreviewWidget->setFrmPath(QString::fromStdString(femaleFrmPath));
+                } else {
+                    _armorFemalePreviewWidget->clear();
+                }
+            } catch (const std::exception& e) {
+                _armorFemalePreviewWidget->clear();
+            }
+        }
+    }
+}
+
 int ProArmorWidget::calculateAIPriority() const {
     int priority = 0;
     
@@ -287,6 +319,16 @@ int ProArmorWidget::calculateAIPriority() const {
     }
     
     return priority;
+}
+
+void ProArmorWidget::setArmorMaleFID(int32_t fid) {
+    _armorMaleFID = fid;
+    updateArmorPreviews();
+}
+
+void ProArmorWidget::setArmorFemaleFID(int32_t fid) {
+    _armorFemaleFID = fid;
+    updateArmorPreviews();
 }
 
 } // namespace geck

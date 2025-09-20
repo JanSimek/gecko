@@ -87,7 +87,7 @@ void WelcomeWidget::createVersionLabel() {
     // Set monospace bold font
     QFont font("Monaco, Consolas, 'Courier New', monospace");
     font.setBold(true);
-    font.setPointSize(12);
+    font.setPointSize(14);
     _versionLabel->setFont(font);
     
     // Style the label

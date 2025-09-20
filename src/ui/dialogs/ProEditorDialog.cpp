@@ -1125,12 +1125,6 @@ void ProEditorDialog::setupArmorTab() {
     _armorWidget = new ProArmorWidget();
     connect(_armorWidget, &ProArmorWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
     
-    // Connect FID selector signals
-    connect(_armorWidget, &ProArmorWidget::armorMaleFidRequested, 
-            this, &ProEditorDialog::onArmorMaleFidSelectorClicked);
-    connect(_armorWidget, &ProArmorWidget::armorFemaleFidRequested, 
-            this, &ProEditorDialog::onArmorFemaleFidSelectorClicked);
-    
     _armorWidget->loadFromPro(_pro);
     
     _tabWidget->addTab(_armorWidget, _armorWidget->getTabLabel());
@@ -2585,15 +2579,6 @@ void ProEditorDialog::onInventoryFidSelectorClicked() {
     // This method is kept for compatibility but does nothing
 }
 
-void ProEditorDialog::onArmorMaleFidSelectorClicked() {
-    openFrmSelectorForLabel(_armorMaleFIDLabel, &_armorMaleFID, 7); // Inventory type for armor
-    updateArmorPreview(); // Update armor preview after FID selection
-}
-
-void ProEditorDialog::onArmorFemaleFidSelectorClicked() {
-    openFrmSelectorForLabel(_armorFemaleFIDLabel, &_armorFemaleFID, 7); // Inventory type for armor
-    updateArmorPreview(); // Update armor preview after FID selection
-}
 
 void ProEditorDialog::openFrmSelector(QSpinBox* targetField, uint32_t objectType) {
     if (!targetField) return;

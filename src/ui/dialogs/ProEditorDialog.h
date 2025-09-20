@@ -108,8 +108,6 @@ private slots:
     void onFidSelectorClicked();
     void onEditMessageClicked();
     void onInventoryFidSelectorClicked();
-    void onArmorMaleFidSelectorClicked();
-    void onArmorFemaleFidSelectorClicked();
     void onCritterHeadFidSelectorClicked();
     void onCritterFlagChanged();
     void onObjectFidChangeRequested();

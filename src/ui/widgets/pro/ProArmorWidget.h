@@ -2,6 +2,7 @@
 
 #include "ProTabWidget.h"
 #include <QPushButton>
+#include "../ObjectPreviewWidget.h"
 
 namespace geck {
 
@@ -28,13 +29,16 @@ public:
     bool canHandle(const std::shared_ptr<Pro>& pro) const override;
     QString getTabLabel() const override;
 
+    // Armor FID management
+    void setArmorMaleFID(int32_t fid);
+    void setArmorFemaleFID(int32_t fid);
+
 signals:
-    void armorMaleFidRequested();
-    void armorFemaleFidRequested();
 
 private:
     void setupUI();
     void updateAIPriority();
+    void updateArmorPreviews();
     int calculateAIPriority() const;
     
     // UI controls
@@ -42,11 +46,11 @@ private:
     QSpinBox* _damageResistEdits[7];
     QSpinBox* _damageThresholdEdits[7];
     QComboBox* _armorPerkCombo;
-    QLabel* _armorMaleFIDLabel;
-    QPushButton* _armorMaleFIDSelectorButton;
-    QLabel* _armorFemaleFIDLabel;
-    QPushButton* _armorFemaleFIDSelectorButton;
     QLabel* _armorAIPriorityLabel;
+
+    // Preview widgets
+    ObjectPreviewWidget* _armorMalePreviewWidget;
+    ObjectPreviewWidget* _armorFemalePreviewWidget;
     
     // Data
     ProArmorData _armorData;
