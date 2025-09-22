@@ -1,7 +1,7 @@
 #pragma once
 
 #include <SFML/Window/Event.hpp>
-#include <SFML/Graphics/RenderWindow.hpp>
+#include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Graphics/View.hpp>
 #include <functional>
 #include <spdlog/spdlog.h>
@@ -88,8 +88,8 @@ public:
      * @param window The render window for coordinate conversion
      * @param view The current view for world coordinate mapping
      */
-    void handleEvent(const sf::Event& event, 
-                    sf::RenderWindow* window,
+    void handleEvent(const sf::Event& event,
+                    sf::RenderTarget& target,
                     const sf::View& view);
 
     /**
@@ -120,23 +120,22 @@ public:
 
 private:
     // Event handlers
-    void handleMousePressed(const sf::Event::MouseButtonPressed& event, 
-                           sf::RenderWindow* window,
+    void handleMousePressed(const sf::Event::MouseButtonPressed& event,
+                           sf::RenderTarget& target,
                            const sf::View& view);
     void handleMouseReleased(const sf::Event::MouseButtonReleased& event,
-                            sf::RenderWindow* window,
+                            sf::RenderTarget& target,
                             const sf::View& view);
     void handleMouseMoved(const sf::Event::MouseMoved& event,
-                         sf::RenderWindow* window,
+                         sf::RenderTarget& target,
                          const sf::View& view);
     void handleMouseWheelScrolled(const sf::Event::MouseWheelScrolled& event);
     void handleKeyPressed(const sf::Event::KeyPressed& event);
     void handleKeyReleased(const sf::Event::KeyReleased& event);
-    void handleWindowResized(const sf::Event::Resized& event, sf::RenderWindow* window);
 
     // Helper methods
     SelectionModifier getSelectionModifier() const;
-    sf::Vector2f pixelToWorld(sf::Vector2i pixelPos, sf::RenderWindow* window, const sf::View& view);
+    sf::Vector2f pixelToWorld(sf::Vector2i pixelPos, sf::RenderTarget& target, const sf::View& view);
     bool isShiftPressed() const;
 
     // State

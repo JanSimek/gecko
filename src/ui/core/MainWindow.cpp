@@ -14,7 +14,6 @@
 #include "../dialogs/SettingsDialog.h"
 #include "../dialogs/ProEditorDialog.h"
 #include "../dialogs/AboutDialog.h"
-#include "../dialogs/InventoryViewerDialog.h"
 #include "../../state/loader/MapLoader.h"
 #include "../../selection/SelectionState.h"
 #include "../../util/Types.h"
@@ -45,6 +44,7 @@
 #include <QActionGroup>
 #include <QMenu>
 #include <QIcon>
+#include <QSignalBlocker>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QTemporaryFile>
@@ -94,6 +94,10 @@ MainWindow::MainWindow(QWidget* parent)
     // Restore dock widget state from previous session
     restoreDockWidgetState();
 
+    // Capture the restored visibility and hide panels until a map is loaded
+    snapshotPanelVisibility();
+    hidePanelsForNoMap();
+
     // Update panel menu actions to reflect actual visibility after restoration
     QTimer::singleShot(200, this, &MainWindow::updatePanelMenuActions);
 
@@ -124,13 +128,15 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     // Sync current menu state to the new EditorWidget
     syncMenuStateToEditorWidget();
 
-    // Update map info panel
     if (_currentEditorWidget->getMap()) {
         updateMapInfo(_currentEditorWidget->getMap());
-        
-        // Show all panels when a map is loaded
-        showAllPanels();
+        restorePanelVisibilitySnapshot();
+    } else {
+        snapshotPanelVisibility();
+        hidePanelsForNoMap();
     }
+
+    QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
 }
 
 
@@ -138,7 +144,7 @@ void MainWindow::setupUI() {
     // Create central stacked widget to hold loading and editor widgets
     _centralStack = new QStackedWidget(this);
     setCentralWidget(_centralStack);
-    
+
     // Create and add welcome widget (shown when no map is loaded)
     _welcomeWidget = new WelcomeWidget(this);
     _centralStack->addWidget(_welcomeWidget);
@@ -150,9 +156,6 @@ void MainWindow::setupUI() {
     setupPanelsMenu();
     setupStatusBar();
     connectMenuSignals();
-    
-    // Initially hide all panels except file browser (no map loaded)
-    hideNonEssentialPanels();
 }
 
 void MainWindow::connectMenuSignals() {
@@ -608,26 +611,23 @@ void MainWindow::setupDockWidgets() {
     tabifyDockWidget(_tilePaletteDock, _objectPaletteDock);
     tabifyDockWidget(_objectPaletteDock, _fileBrowserDock);
 
-    // Set minimum sizes for dock widgets to enable proper resizing
-    _mapInfoDock->setMinimumSize(250, 200);
-    _selectionDock->setMinimumSize(250, 200);
-    _tilePaletteDock->setMinimumSize(300, 400);
-    _objectPaletteDock->setMinimumSize(300, 400);
-    _fileBrowserDock->setMinimumSize(250, 300);
+    // Set minimum sizes for dock widgets - very small values for maximum flexibility
+    _mapInfoDock->setMinimumSize(100, 50);
+    _selectionDock->setMinimumSize(100, 50);
+    _tilePaletteDock->setMinimumSize(100, 100);
+    _objectPaletteDock->setMinimumSize(100, 100);
+    _fileBrowserDock->setMinimumSize(100, 100);
 
-    // Use resizeDocks to set initial dock widget sizes after layout is established
-    QTimer::singleShot(0, this, [this]() {
-        // Resize docks after the event loop processes the initial layout
-        QList<QDockWidget*> rightDocks = { _mapInfoDock, _selectionDock };
-        QList<int> rightSizes = { 300, 400 }; // Map info smaller, selection larger
-        resizeDocks(rightDocks, rightSizes, Qt::Vertical);
+    // Set maximum sizes to allow expansion
+    _mapInfoDock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+    _selectionDock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+    _tilePaletteDock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+    _objectPaletteDock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+    _fileBrowserDock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
 
-        QList<QDockWidget*> leftDocks = { _tilePaletteDock }; // Only resize the container dock
-        QList<int> leftSizes = { 350 };                       // Give adequate width for tile palette
-        resizeDocks(leftDocks, leftSizes, Qt::Horizontal);
-
-        spdlog::debug("Applied initial dock widget sizes");
-    });
+    // Let Qt handle initial dock sizing automatically for better resize flexibility
+    // Fixed resizeDocks() calls can interfere with user resize operations
+    spdlog::debug("Dock widget setup completed with flexible sizing and state monitoring");
 
     // Set panels above the SFML widget to prevent redrawing issues
     // This is achieved by using QDockWidget's floating and layering features
@@ -692,6 +692,8 @@ void MainWindow::updateAndRender() {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+    _suppressPanelPreferenceUpdates = true;
+    _suppressPanelSnapshotUpdates = true;
     stopGameLoop();
     event->accept();
 }
@@ -842,6 +844,24 @@ void MainWindow::connectToEditorWidget() {
         _selectionPanel->setMap(_currentEditorWidget->getMap());
 
         connect(_currentEditorWidget, &EditorWidget::selectionChanged, _selectionPanel, &SelectionPanel::handleSelectionChanged);
+
+        // Connect selection changes to inventory panel for real-time updates
+        connect(_currentEditorWidget, &EditorWidget::selectionChanged, this, [this](const geck::selection::SelectionState& selectionState) {
+            auto selectedObjects = selectionState.getObjects();
+
+            if (selectedObjects.size() == 1) {
+                auto object = selectedObjects.front();
+                if (object && object->hasMapObject()) {
+                    auto mapObjectPtr = object->getMapObjectPtr();
+                    if (mapObjectPtr && (mapObjectPtr->objects_in_inventory > 0 || !mapObjectPtr->inventory.empty())) {
+                        // Object has inventory - update panel
+                        return;
+                    }
+                }
+            }
+
+            // No inventory object selected - clear panel
+        });
         connect(_selectionPanel, &SelectionPanel::objectFrmChanged, _currentEditorWidget, &EditorWidget::onObjectFrmChanged);
         connect(_selectionPanel, &SelectionPanel::objectFrmPathChanged, _currentEditorWidget, &EditorWidget::onObjectFrmPathChanged);
         connect(_selectionPanel, &SelectionPanel::statusMessage, this, &MainWindow::showStatusMessage);
@@ -863,23 +883,6 @@ void MainWindow::connectToEditorWidget() {
             }
         });
         
-        connect(_selectionPanel, &SelectionPanel::requestInventoryViewer, this, [this](std::shared_ptr<Object> object) {
-            spdlog::debug("MainWindow: Received requestInventoryViewer signal");
-            if (object && object->hasMapObject()) {
-                auto mapObjectPtr = object->getMapObjectPtr();
-                if (mapObjectPtr && mapObjectPtr->objects_in_inventory > 0) {
-                    spdlog::debug("MainWindow: Opening InventoryViewerDialog for object with {} inventory items", 
-                                 mapObjectPtr->objects_in_inventory);
-                    InventoryViewerDialog dialog(object, this);
-                    dialog.exec();
-                    spdlog::debug("MainWindow: InventoryViewerDialog closed");
-                } else {
-                    spdlog::warn("MainWindow: Object has no inventory items");
-                }
-            } else {
-                spdlog::warn("MainWindow: Invalid object or no MapObject");
-            }
-        });
         
         // Connect highlight request signal
         connect(_selectionPanel, &SelectionPanel::requestObjectHighlight, 
@@ -1156,13 +1159,20 @@ void MainWindow::setupPanelsMenu() {
     _mapInfoPanelAction->setCheckable(true);
     _mapInfoPanelAction->setChecked(true);
     connect(_mapInfoPanelAction, &QAction::toggled, [this](bool visible) {
+        if (_suppressPanelPreferenceUpdates) {
+            return;
+        }
         spdlog::debug("Map Info Panel action toggled: {}", visible);
         if (visible) {
             _mapInfoDock->show();
-            _mapInfoDock->raise();
+            if (!_mapInfoDock->isFloating() && dockWidgetArea(_mapInfoDock) != Qt::NoDockWidgetArea) {
+                _mapInfoDock->raise();
+            }
         } else {
             _mapInfoDock->hide();
         }
+        snapshotPanelVisibility();
+        persistPanelPreference(_mapInfoDock, visible);
     });
 
     // Selection Panel
@@ -1170,13 +1180,20 @@ void MainWindow::setupPanelsMenu() {
     _selectionPanelAction->setCheckable(true);
     _selectionPanelAction->setChecked(true);
     connect(_selectionPanelAction, &QAction::toggled, [this](bool visible) {
+        if (_suppressPanelPreferenceUpdates) {
+            return;
+        }
         spdlog::debug("Selection Panel action toggled: {}", visible);
         if (visible) {
             _selectionDock->show();
-            _selectionDock->raise();
+            if (!_selectionDock->isFloating() && dockWidgetArea(_selectionDock) != Qt::NoDockWidgetArea) {
+                _selectionDock->raise();
+            }
         } else {
             _selectionDock->hide();
         }
+        snapshotPanelVisibility();
+        persistPanelPreference(_selectionDock, visible);
     });
 
     // Tile Palette Panel
@@ -1184,13 +1201,20 @@ void MainWindow::setupPanelsMenu() {
     _tilePalettePanelAction->setCheckable(true);
     _tilePalettePanelAction->setChecked(true);
     connect(_tilePalettePanelAction, &QAction::toggled, [this](bool visible) {
+        if (_suppressPanelPreferenceUpdates) {
+            return;
+        }
         spdlog::debug("Tile Palette Panel action toggled: {}", visible);
         if (visible) {
             _tilePaletteDock->show();
-            _tilePaletteDock->raise(); // Important: brings the tab to the front when tabified
+            if (!_tilePaletteDock->isFloating() && dockWidgetArea(_tilePaletteDock) != Qt::NoDockWidgetArea) {
+                _tilePaletteDock->raise();
+            }
         } else {
             _tilePaletteDock->hide();
         }
+        snapshotPanelVisibility();
+        persistPanelPreference(_tilePaletteDock, visible);
     });
 
     // Object Palette Panel
@@ -1198,13 +1222,20 @@ void MainWindow::setupPanelsMenu() {
     _objectPalettePanelAction->setCheckable(true);
     _objectPalettePanelAction->setChecked(true);
     connect(_objectPalettePanelAction, &QAction::toggled, [this](bool visible) {
+        if (_suppressPanelPreferenceUpdates) {
+            return;
+        }
         spdlog::debug("Object Palette Panel action toggled: {}", visible);
         if (visible) {
             _objectPaletteDock->show();
-            _objectPaletteDock->raise();
+            if (!_objectPaletteDock->isFloating() && dockWidgetArea(_objectPaletteDock) != Qt::NoDockWidgetArea) {
+                _objectPaletteDock->raise();
+            }
         } else {
             _objectPaletteDock->hide();
         }
+        snapshotPanelVisibility();
+        persistPanelPreference(_objectPaletteDock, visible);
     });
 
     // File Browser Panel
@@ -1212,61 +1243,91 @@ void MainWindow::setupPanelsMenu() {
     _fileBrowserPanelAction->setCheckable(true);
     _fileBrowserPanelAction->setChecked(true);
     connect(_fileBrowserPanelAction, &QAction::toggled, [this](bool visible) {
+        if (_suppressPanelPreferenceUpdates) {
+            return;
+        }
         spdlog::debug("File Browser Panel action toggled: {}", visible);
         if (visible) {
             _fileBrowserDock->show();
-            _fileBrowserDock->raise();
+            if (!_fileBrowserDock->isFloating() && dockWidgetArea(_fileBrowserDock) != Qt::NoDockWidgetArea) {
+                _fileBrowserDock->raise();
+            }
         } else {
             _fileBrowserDock->hide();
         }
+        snapshotPanelVisibility();
+        persistPanelPreference(_fileBrowserDock, visible);
     });
+
+    // Inventory Panel functionality integrated into Selection Panel
 
     // Connect dock widget visibility changes back to menu actions
     connect(_mapInfoDock, &QDockWidget::visibilityChanged, [this](bool visible) {
         spdlog::debug("Map Info Dock visibility changed: {}", visible);
-        if (_mapInfoPanelAction && _mapInfoPanelAction->isChecked() != visible) {
-            _mapInfoPanelAction->setChecked(visible);
+        const bool dockVisible = _mapInfoDock->toggleViewAction()->isChecked();
+        if (_mapInfoPanelAction && _mapInfoPanelAction->isChecked() != dockVisible) {
+            QSignalBlocker blocker(*_mapInfoPanelAction);
+            _mapInfoPanelAction->setChecked(dockVisible);
+        }
+        if (!_suppressPanelPreferenceUpdates) {
+            snapshotPanelVisibility();
+            persistPanelPreference(_mapInfoDock, dockVisible);
         }
     });
 
     connect(_selectionDock, &QDockWidget::visibilityChanged, [this](bool visible) {
         spdlog::debug("Selection Dock visibility changed: {}", visible);
-        if (_selectionPanelAction && _selectionPanelAction->isChecked() != visible) {
-            _selectionPanelAction->setChecked(visible);
+        const bool dockVisible = _selectionDock->toggleViewAction()->isChecked();
+        if (_selectionPanelAction && _selectionPanelAction->isChecked() != dockVisible) {
+            QSignalBlocker blocker(*_selectionPanelAction);
+            _selectionPanelAction->setChecked(dockVisible);
+        }
+        if (!_suppressPanelPreferenceUpdates) {
+            snapshotPanelVisibility();
+            persistPanelPreference(_selectionDock, dockVisible);
         }
     });
 
     connect(_tilePaletteDock, &QDockWidget::visibilityChanged, [this](bool visible) {
         spdlog::debug("Tile Palette Dock visibility changed: {}", visible);
-        // For tabified dock widgets, we need to check if this dock is actually the current tab
-        // Don't auto-uncheck the action when the dock becomes non-visible due to tab switching
-        if (visible && _tilePalettePanelAction && !_tilePalettePanelAction->isChecked()) {
-            _tilePalettePanelAction->setChecked(true);
+        const bool dockVisible = _tilePaletteDock->toggleViewAction()->isChecked();
+        if (_tilePalettePanelAction && _tilePalettePanelAction->isChecked() != dockVisible) {
+            QSignalBlocker blocker(*_tilePalettePanelAction);
+            _tilePalettePanelAction->setChecked(dockVisible);
+        }
+        if (!_suppressPanelPreferenceUpdates) {
+            snapshotPanelVisibility();
+            persistPanelPreference(_tilePaletteDock, dockVisible);
         }
     });
 
     connect(_objectPaletteDock, &QDockWidget::visibilityChanged, [this](bool visible) {
         spdlog::debug("Object Palette Dock visibility changed: {}", visible);
-        // For tabified dock widgets, we need to check if this dock is actually the current tab
-        // Don't auto-uncheck the action when the dock becomes non-visible due to tab switching
-        if (visible && _objectPalettePanelAction && !_objectPalettePanelAction->isChecked()) {
-            _objectPalettePanelAction->setChecked(true);
+        const bool dockVisible = _objectPaletteDock->toggleViewAction()->isChecked();
+        if (_objectPalettePanelAction && _objectPalettePanelAction->isChecked() != dockVisible) {
+            QSignalBlocker blocker(*_objectPalettePanelAction);
+            _objectPalettePanelAction->setChecked(dockVisible);
+        }
+        if (!_suppressPanelPreferenceUpdates) {
+            snapshotPanelVisibility();
+            persistPanelPreference(_objectPaletteDock, dockVisible);
         }
     });
 
     connect(_fileBrowserDock, &QDockWidget::visibilityChanged, [this](bool visible) {
         spdlog::debug("File Browser Dock visibility changed: {}", visible);
-        // For tabified dock widgets, we need to check if this dock is actually the current tab
-        // Don't auto-uncheck the action when the dock becomes non-visible due to tab switching
-        if (visible && _fileBrowserPanelAction && !_fileBrowserPanelAction->isChecked()) {
-            _fileBrowserPanelAction->setChecked(true);
+        const bool dockVisible = _fileBrowserDock->toggleViewAction()->isChecked();
+        if (_fileBrowserPanelAction && _fileBrowserPanelAction->isChecked() != dockVisible) {
+            QSignalBlocker blocker(*_fileBrowserPanelAction);
+            _fileBrowserPanelAction->setChecked(dockVisible);
+        }
+        if (!_suppressPanelPreferenceUpdates) {
+            snapshotPanelVisibility();
+            persistPanelPreference(_fileBrowserDock, dockVisible);
         }
     });
-
-    spdlog::info("Panel management menu configured with bidirectional synchronization");
 }
 
-// Dock widget state management methods
 void MainWindow::saveDockWidgetState() {
     auto& settings = Settings::getInstance();
     settings.setDockState(saveState());
@@ -1380,16 +1441,131 @@ void MainWindow::restoreDefaultLayout() {
     spdlog::debug("Restored default dock widget layout");
 }
 
+void MainWindow::setDockVisibility(QDockWidget* dock, QAction* action, bool visible) {
+    if (!dock) {
+        return;
+    }
+
+    const bool previousPreferenceSuppression = _suppressPanelPreferenceUpdates;
+    _suppressPanelPreferenceUpdates = true;
+
+    if (action) {
+        QSignalBlocker blocker(*action);
+        action->setChecked(visible);
+    }
+
+    dock->setVisible(visible);
+
+    _suppressPanelPreferenceUpdates = previousPreferenceSuppression;
+}
+
+void MainWindow::persistPanelPreference(QDockWidget* dock, bool visible) {
+    if (_suppressPanelPreferenceUpdates || !dock) {
+        return;
+    }
+
+    // For tabified docks, visibilityChanged(false) can fire when the dock just loses focus.
+    // Treat only truly hidden docks (isHidden == true) as user intent to hide.
+    if (!visible && !dock->isHidden()) {
+        return;
+    }
+
+    const bool isShown = !dock->isHidden();
+
+    auto& settings = Settings::getInstance();
+    const QString dockName = dock->objectName();
+    if (dockName.isEmpty()) {
+        return;
+    }
+
+    auto preference = settings.getPanelVisibilityPreference(dockName);
+    if (!preference.has_value() || preference.value() != isShown) {
+        settings.setPanelVisibilityPreference(dockName, isShown);
+        settings.save();
+    }
+}
+
+void MainWindow::snapshotPanelVisibility() {
+    if (_suppressPanelSnapshotUpdates) {
+        return;
+    }
+
+    auto isPanelEnabled = [](QAction* action, QDockWidget* dock) {
+        if (action) {
+            return action->isChecked();
+        }
+        return dock && dock->isVisible();
+    };
+
+    _panelVisibilitySnapshot[_mapInfoDock] = isPanelEnabled(_mapInfoPanelAction, _mapInfoDock);
+    _panelVisibilitySnapshot[_selectionDock] = isPanelEnabled(_selectionPanelAction, _selectionDock);
+    _panelVisibilitySnapshot[_tilePaletteDock] = isPanelEnabled(_tilePalettePanelAction, _tilePaletteDock);
+    _panelVisibilitySnapshot[_objectPaletteDock] = isPanelEnabled(_objectPalettePanelAction, _objectPaletteDock);
+    _panelVisibilitySnapshot[_fileBrowserDock] = isPanelEnabled(_fileBrowserPanelAction, _fileBrowserDock);
+}
+
+void MainWindow::restorePanelVisibilitySnapshot() {
+    if (_panelVisibilitySnapshot.empty()) {
+        snapshotPanelVisibility();
+    }
+
+    auto& settings = Settings::getInstance();
+
+    auto applySnapshot = [&](QDockWidget* dock, QAction* action) {
+        if (!dock) {
+            return;
+        }
+        const auto it = _panelVisibilitySnapshot.find(dock);
+        bool visible = (it != _panelVisibilitySnapshot.end()) ? it->second : !dock->isHidden();
+
+        if (auto preference = settings.getPanelVisibilityPreference(dock->objectName()); preference.has_value()) {
+            visible = preference.value();
+        }
+        setDockVisibility(dock, action, visible);
+    };
+
+    applySnapshot(_mapInfoDock, _mapInfoPanelAction);
+    applySnapshot(_selectionDock, _selectionPanelAction);
+    applySnapshot(_tilePaletteDock, _tilePalettePanelAction);
+    applySnapshot(_objectPaletteDock, _objectPalettePanelAction);
+    applySnapshot(_fileBrowserDock, _fileBrowserPanelAction);
+
+    updatePanelMenuActions();
+    snapshotPanelVisibility();
+}
+
+void MainWindow::hidePanelsForNoMap() {
+    const bool previousSuppression = _suppressPanelSnapshotUpdates;
+    const bool previousPreferenceSuppression = _suppressPanelPreferenceUpdates;
+    _suppressPanelSnapshotUpdates = true;
+    _suppressPanelPreferenceUpdates = true;
+
+    setDockVisibility(_mapInfoDock, _mapInfoPanelAction, false);
+    setDockVisibility(_selectionDock, _selectionPanelAction, false);
+    setDockVisibility(_tilePaletteDock, _tilePalettePanelAction, false);
+    setDockVisibility(_objectPaletteDock, _objectPalettePanelAction, false);
+    setDockVisibility(_fileBrowserDock, _fileBrowserPanelAction, true);
+
+    if (_fileBrowserDock) {
+        _fileBrowserDock->raise();
+    }
+
+    _suppressPanelSnapshotUpdates = previousSuppression;
+    _suppressPanelPreferenceUpdates = previousPreferenceSuppression;
+}
+
 void MainWindow::updatePanelMenuActions() {
     spdlog::debug("Updating panel menu actions to reflect actual visibility states");
 
     if (_mapInfoPanelAction) {
-        bool visible = _mapInfoDock->isVisible();
+        const bool visible = !_mapInfoDock->isHidden();
+        QSignalBlocker blocker(*_mapInfoPanelAction);
         _mapInfoPanelAction->setChecked(visible);
         spdlog::debug("Map Info Panel: visible={}, hidden={}", visible, _mapInfoDock->isHidden());
     }
     if (_selectionPanelAction) {
-        bool visible = _selectionDock->isVisible();
+        const bool visible = !_selectionDock->isHidden();
+        QSignalBlocker blocker(*_selectionPanelAction);
         _selectionPanelAction->setChecked(visible);
         spdlog::debug("Selection Panel: visible={}, hidden={}", visible, _selectionDock->isHidden());
     }
@@ -1397,19 +1573,22 @@ void MainWindow::updatePanelMenuActions() {
     // For tabified dock widgets, a dock widget can be not hidden but not visible (when another tab is active)
     // We should check the dock widget is available to the user (not hidden), regardless of whether it's the active tab
     if (_tilePalettePanelAction) {
-        bool available = !_tilePaletteDock->isHidden();
+        const bool available = !_tilePaletteDock->isHidden();
+        QSignalBlocker blocker(*_tilePalettePanelAction);
         _tilePalettePanelAction->setChecked(available);
         spdlog::debug("Tile Palette Panel: visible={}, hidden={}, available={}",
             _tilePaletteDock->isVisible(), _tilePaletteDock->isHidden(), available);
     }
     if (_objectPalettePanelAction) {
-        bool available = !_objectPaletteDock->isHidden();
+        const bool available = !_objectPaletteDock->isHidden();
+        QSignalBlocker blocker(*_objectPalettePanelAction);
         _objectPalettePanelAction->setChecked(available);
         spdlog::debug("Object Palette Panel: visible={}, hidden={}, available={}",
             _objectPaletteDock->isVisible(), _objectPaletteDock->isHidden(), available);
     }
     if (_fileBrowserPanelAction) {
-        bool available = !_fileBrowserDock->isHidden();
+        const bool available = !_fileBrowserDock->isHidden();
+        QSignalBlocker blocker(*_fileBrowserPanelAction);
         _fileBrowserPanelAction->setChecked(available);
         spdlog::debug("File Browser Panel: visible={}, hidden={}, available={}",
             _fileBrowserDock->isVisible(), _fileBrowserDock->isHidden(), available);
@@ -1418,35 +1597,10 @@ void MainWindow::updatePanelMenuActions() {
     spdlog::debug("Panel menu action sync completed");
 }
 
-void MainWindow::showAllPanels() {
-    spdlog::debug("Showing all panels (map loaded)");
-    
-    // Show all dock widgets
-    _mapInfoDock->show();
-    _selectionDock->show();
-    _tilePaletteDock->show();
-    _objectPaletteDock->show();
-    _fileBrowserDock->show();
-    
-    // Update menu actions to reflect visibility
-    QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
-}
-
 void MainWindow::hideNonEssentialPanels() {
     spdlog::debug("Hiding non-essential panels (no map loaded)");
-    
-    // Hide all panels except file browser
-    _mapInfoDock->hide();
-    _selectionDock->hide();
-    _tilePaletteDock->hide();
-    _objectPaletteDock->hide();
-    
-    // Keep file browser visible - it's essential for loading maps
-    _fileBrowserDock->show();
-    _fileBrowserDock->raise();
-    
-    // Update menu actions to reflect visibility
-    QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
+    snapshotPanelVisibility();
+    hidePanelsForNoMap();
 }
 
 void MainWindow::refreshFileBrowser() {
@@ -1464,6 +1618,8 @@ void MainWindow::showFileBrowserPanel() {
     // Make the file browser tab active within the tabbed dock area
     // Since file browser is tabified with tile and object palettes, we need to ensure it's the active tab
     _fileBrowserDock->widget()->setFocus();
+
+    snapshotPanelVisibility();
     
     spdlog::debug("File browser panel shown and raised");
 }

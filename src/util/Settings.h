@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QByteArray>
 #include <filesystem>
+#include <optional>
 #include <vector>
 
 namespace geck {
@@ -44,6 +45,10 @@ public:
     
     QByteArray getDockState() const;
     void setDockState(const QByteArray& state);
+    
+    // Panel visibility preferences
+    std::optional<bool> getPanelVisibilityPreference(const QString& panelName) const;
+    void setPanelVisibilityPreference(const QString& panelName, bool visible);
     
     // Window state (normal/maximized)
     bool getWindowMaximized() const;
@@ -121,6 +126,7 @@ private:
     QByteArray _dockState;
     bool _windowMaximized = true; // Default to maximized
     QMap<QString, QByteArray> _floatingDockGeometries;
+    QMap<QString, bool> _panelVisibilityPreferences;
     QString _version;
     
     // Text editor configuration

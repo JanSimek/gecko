@@ -11,33 +11,29 @@ InputHandler::InputHandler(EditorWidget* editor)
     : _editor(editor) {
 }
 
-void InputHandler::handleEvent(const sf::Event& event, 
-                              sf::RenderWindow* window,
+void InputHandler::handleEvent(const sf::Event& event,
+                              sf::RenderTarget& target,
                               const sf::View& view) {
-    if (!window) return;
-
     // Dispatch to specific event handlers
     if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>()) {
-        handleMousePressed(*mousePressed, window, view);
+        handleMousePressed(*mousePressed, target, view);
     } else if (const auto* mouseReleased = event.getIf<sf::Event::MouseButtonReleased>()) {
-        handleMouseReleased(*mouseReleased, window, view);
+        handleMouseReleased(*mouseReleased, target, view);
     } else if (const auto* mouseMoved = event.getIf<sf::Event::MouseMoved>()) {
-        handleMouseMoved(*mouseMoved, window, view);
+        handleMouseMoved(*mouseMoved, target, view);
     } else if (const auto* mouseWheelScrolled = event.getIf<sf::Event::MouseWheelScrolled>()) {
         handleMouseWheelScrolled(*mouseWheelScrolled);
     } else if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>()) {
         handleKeyPressed(*keyPressed);
     } else if (const auto* keyReleased = event.getIf<sf::Event::KeyReleased>()) {
         handleKeyReleased(*keyReleased);
-    } else if (const auto* resized = event.getIf<sf::Event::Resized>()) {
-        handleWindowResized(*resized, window);
     }
 }
 
 void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event,
-                                     sf::RenderWindow* window,
+                                     sf::RenderTarget& target,
                                      const sf::View& view) {
-    sf::Vector2f worldPos = pixelToWorld(event.position, window, view);
+    sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
 
     if (event.button == sf::Mouse::Button::Left) {
         // Handle player position selection mode
@@ -142,9 +138,9 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
 }
 
 void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& event,
-                                      sf::RenderWindow* window,
+                                      sf::RenderTarget& target,
                                       const sf::View& view) {
-    sf::Vector2f worldPos = pixelToWorld(event.position, window, view);
+    sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
 
     if (event.button == sf::Mouse::Button::Left) {
         // Don't process during player position mode
@@ -214,9 +210,9 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
 }
 
 void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
-                                   sf::RenderWindow* window,
+                                   sf::RenderTarget& target,
                                    const sf::View& view) {
-    sf::Vector2f worldPos = pixelToWorld(event.position, window, view);
+    sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
 
     // Always update hover position
     if (_callbacks.onMouseMove) {
@@ -313,19 +309,6 @@ void InputHandler::handleKeyReleased(const sf::Event::KeyReleased& event) {
     // Currently no key release handling needed
 }
 
-void InputHandler::handleWindowResized(const sf::Event::Resized& event, sf::RenderWindow* window) {
-    if (!window || !_editor) return;
-    
-    // Keep view size fixed to maintain consistent coordinate system
-    // SFML will handle letterboxing/pillarboxing automatically
-    sf::View view = window->getView();
-    view.setSize({ View::DEFAULT_WIDTH, View::DEFAULT_HEIGHT });
-    window->setView(view);
-    
-    spdlog::debug("InputHandler::handleWindowResized - Maintained fixed view size {:.1f}x{:.1f} (window: {}x{})", 
-                 View::DEFAULT_WIDTH, View::DEFAULT_HEIGHT, event.size.x, event.size.y);
-}
-
 void InputHandler::setTilePlacementMode(bool enabled, int tileIndex, bool replaceMode) {
     _tilePlacementMode = enabled;
     _tilePlacementIndex = tileIndex;
@@ -346,10 +329,10 @@ InputHandler::SelectionModifier InputHandler::getSelectionModifier() const {
     return SelectionModifier::NONE;
 }
 
-sf::Vector2f InputHandler::pixelToWorld(sf::Vector2i pixelPos, 
-                                       sf::RenderWindow* window, 
+sf::Vector2f InputHandler::pixelToWorld(sf::Vector2i pixelPos,
+                                       sf::RenderTarget& target,
                                        const sf::View& view) {
-    return window->mapPixelToCoords(pixelPos, view);
+    return target.mapPixelToCoords(pixelPos, view);
 }
 
 bool InputHandler::isShiftPressed() const {

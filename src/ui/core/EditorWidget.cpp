@@ -177,14 +177,27 @@ void EditorWidget::initializeSelectionSystem() {
 void EditorWidget::setupUI() {
     _layout = new QVBoxLayout(this);
     _layout->setContentsMargins(0, 0, 0, 0);
+    _layout->setSpacing(0);
+
+    // Container ensures dock splitter handles stay accessible when using the native SFML widget
+    auto* renderingContainer = new QWidget(this);
+    renderingContainer->setObjectName("sfmlRenderingContainer");
+    renderingContainer->setContentsMargins(0, 0, 0, 0);
+    renderingContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
+    auto* containerLayout = new QVBoxLayout(renderingContainer);
+    containerLayout->setContentsMargins(0, 0, 0, 0);
+    containerLayout->setSpacing(0);
 
     // Create the SFML widget that will handle rendering
-    _sfmlWidget = new SFMLWidget(this);
+    _sfmlWidget = new SFMLWidget(renderingContainer);
 
     // Set this EditorWidget as the delegate for SFML event handling
     _sfmlWidget->setEditorWidget(this);
+    _sfmlWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    _layout->addWidget(_sfmlWidget, 1); // Stretch factor 1 - take all available space
+    containerLayout->addWidget(_sfmlWidget);
+    _layout->addWidget(renderingContainer, 1);
 
     setLayout(_layout);
 }
@@ -193,10 +206,10 @@ void EditorWidget::init() {
     // Only load sprites if we have a map
     if (_map) {
         loadSprites();
-        
+
         // Show error summary if there were loading issues
         showLoadingErrorsSummary();
-        
+
         // Initialize spatial index for O(1) area selection performance
         if (_selectionManager) {
             _selectionManager->initializeSpatialIndex();
@@ -650,15 +663,6 @@ void EditorWidget::loadSprites() {
     // Clear previous loading errors
     _lastLoadErrors.clear();
 
-    if (_sfmlWidget && _sfmlWidget->getRenderWindow() && _map) {
-        std::string title = _map->filename();
-        if (title.empty()) {
-            title = "Untitled Map";
-        }
-        title += " - Gecko";
-        _sfmlWidget->getRenderWindow()->setTitle(title);
-    }
-
     _objects.clear();
     _wallBlockerOverlays.clear();
 
@@ -859,8 +863,10 @@ void EditorWidget::handleEvent(const sf::Event& event) {
     }
     
     // Delegate all other event handling to InputHandler
-    if (_inputHandler) {
-        _inputHandler->handleEvent(event, _sfmlWidget->getRenderWindow(), _viewportController->getView());
+    if (_inputHandler && _sfmlWidget) {
+        if (auto* target = _sfmlWidget->getRenderTarget()) {
+            _inputHandler->handleEvent(event, *target, _viewportController->getView());
+        }
     }
 }
 
@@ -1074,16 +1080,14 @@ void EditorWidget::update([[maybe_unused]] const float dt) {
     // This is called by the SFMLWidget's update loop
 }
 
-void EditorWidget::render([[maybe_unused]] const float dt) {
+void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float dt) {
     // Render the game here
     // This is called by the SFMLWidget's render loop
 
-    if (!_sfmlWidget || !_sfmlWidget->getRenderWindow() || !_renderingEngine) {
+    if (!_renderingEngine) {
         return;
     }
 
-    auto* window = _sfmlWidget->getRenderWindow();
-    
     // Prepare visibility settings
     RenderingEngine::VisibilitySettings visibility;
     visibility.showObjects = _showObjects;
@@ -1119,7 +1123,7 @@ void EditorWidget::render([[maybe_unused]] const float dt) {
     renderData.currentElevation = _currentElevation;
     
     // Delegate rendering to the engine
-    _renderingEngine->render(window, _viewportController->getView(), renderData, visibility);
+    _renderingEngine->render(target, _viewportController->getView(), renderData, visibility);
 }
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
@@ -2123,12 +2127,6 @@ void EditorWidget::onObjectFrmPathChanged(std::shared_ptr<Object> object, const 
                      position.x, position.y, textureRect.position.x, textureRect.position.y, textureRect.size.x, textureRect.size.y);
         spdlog::debug("EditorWidget::onObjectFrmPathChanged - AFTER: current texture ptr: {}, size: {}x{}", 
                      static_cast<const void*>(&currentTexture), currentTexture.getSize().x, currentTexture.getSize().y);
-        
-        // Force a frame update/redraw to ensure the visual change is applied
-        if (_sfmlWidget && _sfmlWidget->getRenderWindow()) {
-            _sfmlWidget->getRenderWindow()->display();
-            spdlog::debug("EditorWidget::onObjectFrmPathChanged - forced SFML window display() call");
-        }
         
         spdlog::info("EditorWidget::onObjectFrmPathChanged - updated object visual to FRM path: {}", newFrmPath);
         

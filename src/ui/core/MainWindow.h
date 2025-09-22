@@ -13,16 +13,13 @@
 #include <QMenu>
 #include <memory>
 #include <filesystem>
+#include <unordered_map>
+#include <SFML/Window/Event.hpp>
 
 QT_BEGIN_NAMESPACE
 class QVBoxLayout;
 class QHBoxLayout;
 QT_END_NAMESPACE
-
-namespace sf {
-class RenderWindow;
-class Event;
-}
 
 namespace geck {
 
@@ -54,7 +51,6 @@ public:
     void connectToEditorWidget();
     
     // Panel visibility management
-    void showAllPanels();
     void hideNonEssentialPanels();
     void refreshFileBrowser();
     void showFileBrowserPanel();
@@ -117,6 +113,11 @@ private:
     void updatePanelMenuActions();
     void updateElevationMenu(Map* map);
     void syncMenuStateToEditorWidget();
+    void snapshotPanelVisibility();
+    void restorePanelVisibilitySnapshot();
+    void hidePanelsForNoMap();
+    void setDockVisibility(QDockWidget* dock, QAction* action, bool visible);
+    void persistPanelPreference(QDockWidget* dock, bool visible);
     
     // Text file handling
     bool isTextFile(const QString& filePath) const;
@@ -166,6 +167,9 @@ private:
     QDockWidget* _tilePaletteDock;
     QDockWidget* _objectPaletteDock;
     QDockWidget* _fileBrowserDock;
+    std::unordered_map<QDockWidget*, bool> _panelVisibilitySnapshot;
+    bool _suppressPanelSnapshotUpdates = false;
+    bool _suppressPanelPreferenceUpdates = false;
 
     // Panel widgets
     SelectionPanel* _selectionPanel;

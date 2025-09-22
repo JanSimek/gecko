@@ -10,6 +10,9 @@
 #include <QScrollArea>
 #include <QStackedWidget>
 #include <QPushButton>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
+#include <QStyledItemDelegate>
 #include <memory>
 
 #include "../../editor/Object.h"
@@ -28,6 +31,9 @@ public:
 
     void setMap(Map* map);
 
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+
 signals:
     void objectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
     void objectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
@@ -35,7 +41,6 @@ signals:
     void statusMessage(const QString& message);
     void requestProEditor(std::shared_ptr<Object> object);
     void requestExitGridEditor(std::shared_ptr<Object> object);
-    void requestInventoryViewer(std::shared_ptr<Object> object);
 
 public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);
@@ -47,7 +52,9 @@ private slots:
     void onChangeFrmClicked();
     void onEditProClicked();
     void onEditExitGridClicked();
-    void onViewInventoryClicked();
+    void onAddInventoryClicked();
+    void onRemoveInventoryClicked();
+    void onInventoryItemChanged(QTreeWidgetItem* item, int column);
 
 private:
     void setupUI();
@@ -58,6 +65,17 @@ private:
     void loadTilePreview(class Lst* tilesList, uint16_t tileId);
     void showObjectPanel();
     void showTilePanel();
+
+    // Inventory methods
+    void setupInventorySection();
+    void updateInventorySection();
+    void populateInventoryTree();
+    QPixmap getItemIconWithQuantity(uint32_t pid, int amount) const;
+    QPixmap addQuantityOverlay(const QPixmap& baseIcon, int amount) const;
+    QString getItemName(uint32_t pid) const;
+    QString getItemTypeName(uint32_t pid) const;
+    QPixmap getItemIcon(uint32_t pid) const;
+    QPixmap createPlaceholderIcon() const;
 
     QVBoxLayout* _mainLayout;
     QScrollArea* _scrollArea;
@@ -81,7 +99,12 @@ private:
     QPushButton* _changeFrmButton;
     QPushButton* _editProButton;
     QPushButton* _editExitGridButton;
-    QPushButton* _viewInventoryButton;
+
+    // Inventory section (appears when object has inventory)
+    QGroupBox* _inventoryGroup;
+    QTreeWidget* _inventoryTree;
+    QPushButton* _addInventoryButton;
+    QPushButton* _removeInventoryButton;
 
     // Tile panel widgets
     QWidget* _tilePanelWidget;
@@ -96,6 +119,24 @@ private:
     QLineEdit* _tileTypeEdit;
     QSpinBox* _tileIdSpin;
     QLineEdit* _tileNameEdit;
+
+    // Inventory tree columns
+    enum InventoryColumns {
+        COLUMN_ICON = 0,
+        COLUMN_NAME = 1,
+        COLUMN_TYPE = 2,
+        COLUMN_AMOUNT = 3,
+        COLUMN_COUNT
+    };
+
+    // Visual styling constants
+    static const QColor HIGHLIGHT_COLOR;
+    static const int ICON_SIZE;
+    static const int MAX_QUANTITY_DISPLAY;
+
+    // Custom delegate for editable amount column
+    class AmountDelegate;
+    AmountDelegate* _amountDelegate;
 
     // Current selection state
     std::optional<std::shared_ptr<Object>> _selectedObject;

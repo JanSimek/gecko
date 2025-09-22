@@ -106,7 +106,7 @@ public:
     // SFML rendering interface (called by SFMLWidget)
     void handleEvent(const sf::Event& event);
     void update(const float dt);
-    void render(const float dt);
+    void render(sf::RenderTarget& target, float dt);
     void init();
 
     // Access to SFML widget for main window

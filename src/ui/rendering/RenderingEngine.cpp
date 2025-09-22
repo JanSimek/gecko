@@ -14,61 +14,57 @@ namespace geck {
 
 RenderingEngine::RenderingEngine() = default;
 
-void RenderingEngine::render(sf::RenderWindow* window, 
+void RenderingEngine::render(sf::RenderTarget& target,
                             const sf::View& view,
                             const RenderData& renderData,
                             const VisibilitySettings& visibility) {
-    if (!window) {
-        return;
-    }
-
-    window->setView(view);
+    target.setView(view);
 
     // Layer 1: Floor tiles (always rendered)
     if (renderData.floorSprites) {
-        renderFloorTiles(window, *renderData.floorSprites);
+        renderFloorTiles(target, *renderData.floorSprites);
     }
 
     // Layer 2: Hex grid overlay (if enabled)
     if (visibility.showHexGrid) {
-        renderHexGrid(window, view, renderData);
+        renderHexGrid(target, view, renderData);
     }
 
     // Layer 3: Objects (with visibility filtering)
     if (visibility.showObjects) {
-        renderObjects(window, renderData, visibility);
+        renderObjects(target, renderData, visibility);
     }
 
     // Layer 4: Drag preview object
     if (renderData.isDraggingFromPalette && 
         renderData.dragPreviewObject && 
         *renderData.dragPreviewObject) {
-        window->draw((*renderData.dragPreviewObject)->getSprite());
+        target.draw((*renderData.dragPreviewObject)->getSprite());
     }
 
     // Layer 5: Roof tiles (if enabled)
-    renderRoofTiles(window, renderData, visibility.showRoof);
+    renderRoofTiles(target, renderData, visibility.showRoof);
 
     // Layer 6: Selection visuals
-    renderSelectionVisuals(window, renderData);
+    renderSelectionVisuals(target, renderData);
 
     // Layer 7: Exit grids (if enabled)
     if (visibility.showExitGrids && renderData.map) {
-        renderExitGrids(window, view, renderData, renderData.map);
+        renderExitGrids(target, view, renderData, renderData.map);
     }
 
     // Layer 8: Hex highlights and markers
-    renderHexHighlights(window, renderData);
+    renderHexHighlights(target, renderData);
 }
 
-void RenderingEngine::renderFloorTiles(sf::RenderWindow* window, 
+void RenderingEngine::renderFloorTiles(sf::RenderTarget& target,
                                       const std::vector<sf::Sprite>& floorSprites) {
     for (const auto& floor : floorSprites) {
-        window->draw(floor);
+        target.draw(floor);
     }
 }
 
-void RenderingEngine::renderHexGrid(sf::RenderWindow* window,
+void RenderingEngine::renderHexGrid(sf::RenderTarget& target,
                                    const sf::View& view,
                                    const RenderData& renderData) {
     if (!renderData.hexGrid || !renderData.hexSprite) {
@@ -109,13 +105,13 @@ void RenderingEngine::renderHexGrid(sf::RenderWindow* window,
                 // Create a mutable copy for positioning
                 sf::Sprite hexSprite = *renderData.hexSprite;
                 hexSprite.setPosition({ spriteX, spriteY });
-                window->draw(hexSprite);
+                target.draw(hexSprite);
             }
         }
     }
 }
 
-void RenderingEngine::renderObjects(sf::RenderWindow* window,
+void RenderingEngine::renderObjects(sf::RenderTarget& target,
                                    const RenderData& renderData,
                                    const VisibilitySettings& visibility) {
     if (!renderData.objects) {
@@ -133,23 +129,23 @@ void RenderingEngine::renderObjects(sf::RenderWindow* window,
             continue;
         }
         
-        window->draw(object->getSprite());
+        target.draw(object->getSprite());
         
         // Draw light overlay if enabled and object has light
         if (visibility.showLightOverlays && object->hasLight()) {
-            window->draw(object->getLightOverlay());
+            target.draw(object->getLightOverlay());
         }
     }
     
     // Render wall blocker overlays on top of regular objects
     if (visibility.showWallBlockers && renderData.wallBlockerOverlays) {
         for (const auto& overlay : *renderData.wallBlockerOverlays) {
-            window->draw(overlay);
+            target.draw(overlay);
         }
     }
 }
 
-void RenderingEngine::renderRoofTiles(sf::RenderWindow* window,
+void RenderingEngine::renderRoofTiles(sf::RenderTarget& target,
                                      const RenderData& renderData,
                                      bool showRoof) {
     if (!showRoof) {
@@ -159,24 +155,24 @@ void RenderingEngine::renderRoofTiles(sf::RenderWindow* window,
     // First draw background sprites for selected roof tiles
     if (renderData.selectedRoofTileBackgroundSprites) {
         for (const auto& backgroundSprite : *renderData.selectedRoofTileBackgroundSprites) {
-            window->draw(backgroundSprite);
+            target.draw(backgroundSprite);
         }
     }
 
     // Then draw the roof sprites on top
     if (renderData.roofSprites) {
         for (const auto& roof : *renderData.roofSprites) {
-            window->draw(roof);
+            target.draw(roof);
         }
     }
 }
 
-void RenderingEngine::renderSelectionVisuals(sf::RenderWindow* window,
+void RenderingEngine::renderSelectionVisuals(sf::RenderTarget& target,
                                             const RenderData& renderData) {
     // Render selected hex sprites
     if (renderData.selectedHexSprites) {
         for (const auto& hexSprite : *renderData.selectedHexSprites) {
-            window->draw(hexSprite);
+            target.draw(hexSprite);
         }
     }
 
@@ -185,11 +181,11 @@ void RenderingEngine::renderSelectionVisuals(sf::RenderWindow* window,
         // Create a mutable copy to apply colors
         sf::RectangleShape rectangle = *renderData.selectionRectangle;
         applySelectionRectangleColors(rectangle, renderData.currentSelectionMode);
-        window->draw(rectangle);
+        target.draw(rectangle);
     }
 }
 
-void RenderingEngine::renderHexHighlights(sf::RenderWindow* window,
+void RenderingEngine::renderHexHighlights(sf::RenderTarget& target,
                                          const RenderData& renderData) {
     if (!renderData.hexGrid) {
         return;
@@ -206,7 +202,7 @@ void RenderingEngine::renderHexHighlights(sf::RenderWindow* window,
                 // Create a mutable copy for positioning
                 sf::Sprite highlightSprite = *renderData.hexHighlightSprite;
                 highlightSprite.setPosition({ spriteX, spriteY });
-                window->draw(highlightSprite);
+                target.draw(highlightSprite);
                 break;
             }
         }
@@ -226,7 +222,7 @@ void RenderingEngine::renderHexHighlights(sf::RenderWindow* window,
                     // Create a mutable copy for positioning
                     sf::Sprite playerSprite = *renderData.playerPositionSprite;
                     playerSprite.setPosition({ spriteX, spriteY });
-                    window->draw(playerSprite);
+                    target.draw(playerSprite);
                     break;
                 }
             }
@@ -264,11 +260,11 @@ void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangl
     }
 }
 
-void RenderingEngine::renderExitGrids(sf::RenderWindow* window,
+void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
                                      const sf::View& view,
                                      const RenderData& renderData,
                                      const Map* map) {
-    if (!window || !map || !renderData.hexGrid) {
+    if (!map || !renderData.hexGrid) {
         return;
     }
 
@@ -278,10 +274,10 @@ void RenderingEngine::renderExitGrids(sf::RenderWindow* window,
     sf::Sprite exitGridSprite(exitGridTexture);
     
     // Render exit grids with the loaded sprite
-    renderExitGridsWithSprite(window, view, renderData, map, exitGridSprite);
+    renderExitGridsWithSprite(target, view, renderData, map, exitGridSprite);
 }
 
-void RenderingEngine::renderExitGridsWithSprite(sf::RenderWindow* window,
+void RenderingEngine::renderExitGridsWithSprite(sf::RenderTarget& target,
                                                const sf::View& view,
                                                const RenderData& renderData,
                                                const Map* map,
@@ -330,7 +326,7 @@ void RenderingEngine::renderExitGridsWithSprite(sf::RenderWindow* window,
         exitGridSprite.setPosition(hexCenter.toVector());
         
         // Draw the exit grid marker
-        window->draw(exitGridSprite);
+        target.draw(exitGridSprite);
     }
 }
 

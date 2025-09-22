@@ -79,7 +79,7 @@ public:
      * @param renderData All data needed for rendering
      * @param visibility Current visibility settings
      */
-    void render(sf::RenderWindow* window, 
+    void render(sf::RenderTarget& target,
                 const sf::View& view,
                 const RenderData& renderData,
                 const VisibilitySettings& visibility);
@@ -96,46 +96,46 @@ private:
     /**
      * @brief Render floor tile sprites
      */
-    void renderFloorTiles(sf::RenderWindow* window, 
+    void renderFloorTiles(sf::RenderTarget& target,
                          const std::vector<sf::Sprite>& floorSprites);
 
     /**
      * @brief Render the hex grid overlay
      */
-    void renderHexGrid(sf::RenderWindow* window,
+    void renderHexGrid(sf::RenderTarget& target,
                       const sf::View& view,
                       const RenderData& renderData);
 
     /**
      * @brief Render all objects with visibility filtering
      */
-    void renderObjects(sf::RenderWindow* window,
+    void renderObjects(sf::RenderTarget& target,
                       const RenderData& renderData,
                       const VisibilitySettings& visibility);
 
     /**
      * @brief Render roof tiles and their selection backgrounds
      */
-    void renderRoofTiles(sf::RenderWindow* window,
+    void renderRoofTiles(sf::RenderTarget& target,
                         const RenderData& renderData,
                         bool showRoof);
 
     /**
      * @brief Render selection-related visuals
      */
-    void renderSelectionVisuals(sf::RenderWindow* window,
+    void renderSelectionVisuals(sf::RenderTarget& target,
                                const RenderData& renderData);
 
     /**
      * @brief Render hex highlights and markers
      */
-    void renderHexHighlights(sf::RenderWindow* window,
+    void renderHexHighlights(sf::RenderTarget& target,
                             const RenderData& renderData);
 
     /**
      * @brief Render exit grid markers
      */
-    void renderExitGrids(sf::RenderWindow* window,
+    void renderExitGrids(sf::RenderTarget& target,
                         const sf::View& view,
                         const RenderData& renderData,
                         const Map* map);
@@ -143,7 +143,7 @@ private:
     /**
      * @brief Helper method to render exit grids with a loaded sprite
      */
-    void renderExitGridsWithSprite(sf::RenderWindow* window,
+    void renderExitGridsWithSprite(sf::RenderTarget& target,
                                   const sf::View& view,
                                   const RenderData& renderData,
                                   const Map* map,

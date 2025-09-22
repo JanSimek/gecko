@@ -1,13 +1,16 @@
 #include "SFMLWidget.h"
 #include "../core/EditorWidget.h"
 
-#include <QShowEvent>
 #include <QPaintEvent>
 #include <QResizeEvent>
 #include <QMouseEvent>
 #include <QWheelEvent>
+#include <QPainter>
+#include <QCoreApplication>
+#include <algorithm>
+#include <type_traits>
 #include <spdlog/spdlog.h>
-#include <cstdint>
+#include <SFML/Graphics/Image.hpp>
 
 #ifdef Q_WS_X11
 #include <Qt/qx11info_x11.h>
@@ -18,169 +21,178 @@ namespace geck {
 
 SFMLWidget::SFMLWidget(QWidget* parent)
     : QWidget(parent)
-    , _renderWindow(nullptr)
-    , _editorWidget(nullptr)
-    , _initialized(false) {
+    , _renderTexture(std::make_unique<sf::RenderTexture>())
+    , _editorWidget(nullptr) {
 
-    // Set widget attributes for SFML rendering
-    setAttribute(Qt::WA_PaintOnScreen);
-    setAttribute(Qt::WA_OpaquePaintEvent);
-    setAttribute(Qt::WA_NoSystemBackground);
+    this->setAttribute(Qt::WA_NoSystemBackground);
+    this->setAttribute(Qt::WA_DontCreateNativeAncestors);
 
     // Enable mouse tracking
-    setMouseTracking(true);
-    setFocusPolicy(Qt::StrongFocus);
+    this->setMouseTracking(true);
+    this->setFocusPolicy(Qt::StrongFocus);
 
     // Enable drag and drop
-    setAcceptDrops(true);
+    this->setAcceptDrops(true);
 
     // Set size policy to expand and fill available space
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }
 
-SFMLWidget::~SFMLWidget() {
-    if (_renderWindow) {
-        _renderWindow.reset();
-    }
-}
+SFMLWidget::~SFMLWidget() = default;
 
 void SFMLWidget::setEditorWidget(EditorWidget* editorWidget) {
     _editorWidget = editorWidget;
 }
 
-void SFMLWidget::showEvent(QShowEvent* event) {
-    if (!_initialized) {
-        // Create SFML render window using the widget's window handle
-        sf::WindowHandle handle = reinterpret_cast<sf::WindowHandle>(static_cast<uintptr_t>(winId()));
-        _renderWindow = std::make_unique<sf::RenderWindow>(handle);
-
-        if (_renderWindow) {
-            // Configure for pixel-perfect rendering (matching Fallout 2 style)
-            _renderWindow->setVerticalSyncEnabled(true);
-            
-            // Disable smoothing for pixel-perfect rendering
-            sf::View defaultView = _renderWindow->getDefaultView();
-            _renderWindow->setView(defaultView);
-            
-            _initialized = true;
-            spdlog::info("SFML render window created successfully with pixel-perfect settings");
-        } else {
-            spdlog::error("Failed to create SFML render window");
-        }
+sf::RenderTexture* SFMLWidget::getRenderTarget() {
+    if (!ensureRenderTexture(this->size())) {
+        return nullptr;
     }
-
-    QWidget::showEvent(event);
+    return _renderTexture.get();
 }
 
 void SFMLWidget::paintEvent(QPaintEvent* event) {
-    // Do nothing - SFML handles the rendering
-    Q_UNUSED(event)
+    QWidget::paintEvent(event);
+
+    QPainter painter(this);
+    painter.fillRect(rect(), Qt::black);
+
+    if (!_frameImage.isNull()) {
+        painter.drawImage(rect(), _frameImage);
+    }
 }
 
 void SFMLWidget::resizeEvent(QResizeEvent* event) {
-    if (_renderWindow) {
-        // For embedded SFML windows, we MUST explicitly resize the render window
-        // SFML only handles automatic resizing for standalone windows
-        sf::Vector2u newSize(event->size().width(), event->size().height());
-        _renderWindow->setSize(newSize);
+    _needsResize = true;
 
-        spdlog::debug("SFMLWidget resize: {}x{}, widget geometry: ({}, {}, {}x{})",
-            newSize.x, newSize.y,
-            geometry().x(), geometry().y(),
-            geometry().width(), geometry().height());
-
-        // Don't set view size here - let EditorWidget handle view management
-        // This prevents conflicting view configurations
-
-        // Convert resize event to SFML event and forward to state machine
+    if (_editorWidget) {
         sf::Event sfmlEvent = sf::Event::Resized{
             { static_cast<unsigned int>(event->size().width()),
-                static_cast<unsigned int>(event->size().height()) }
+              static_cast<unsigned int>(event->size().height()) }
         };
-
-        if (_editorWidget) {
-            _editorWidget->handleEvent(sfmlEvent);
-        }
+        _editorWidget->handleEvent(sfmlEvent);
     }
 
     QWidget::resizeEvent(event);
 }
 
 void SFMLWidget::mousePressEvent(QMouseEvent* event) {
-    // Note: SFML handles mouse events through its own polling loop via handleSFMLEvent()
-    // Forwarding Qt mouse events here causes duplicate event processing
-    // Let SFML handle all mouse events to avoid duplicates
-    
+    if (event && _editorWidget) {
+        handleSFMLEvent(createMouseEvent(event, true));
+    }
     QWidget::mousePressEvent(event);
 }
 
 void SFMLWidget::mouseReleaseEvent(QMouseEvent* event) {
-    // Note: SFML handles mouse events through its own polling loop via handleSFMLEvent()
-    // Forwarding Qt mouse events here causes duplicate event processing
-    // Let SFML handle all mouse events to avoid duplicates
-    
+    if (event && _editorWidget) {
+        handleSFMLEvent(createMouseEvent(event, false));
+    }
     QWidget::mouseReleaseEvent(event);
 }
 
 void SFMLWidget::mouseMoveEvent(QMouseEvent* event) {
-    // Forward Qt mouse events to SFML since Qt correctly handles the full widget area
-    if (_renderWindow && _editorWidget) {
-        sf::Event sfmlEvent = sf::Event::MouseMoved{
-            { event->pos().x(), event->pos().y() }
-        };
-        _editorWidget->handleEvent(sfmlEvent);
+    if (event && _editorWidget) {
+        handleSFMLEvent(sf::Event::MouseMoved{ { event->pos().x(), event->pos().y() } });
     }
 
     QWidget::mouseMoveEvent(event);
 }
 
 void SFMLWidget::wheelEvent(QWheelEvent* event) {
-    sf::Event sfmlEvent{ sf::Event::MouseWheelScrolled{ sf::Mouse::Wheel::Vertical, 0.0f, sf::Vector2i{ 0, 0 } } };
-    convertQtWheelEventToSFML(event, sfmlEvent);
-    handleSFMLEvent(sfmlEvent);
+    if (event && _editorWidget) {
+        handleSFMLEvent(createWheelEvent(event));
+    }
 
     QWidget::wheelEvent(event);
 }
 
-QPaintEngine* SFMLWidget::paintEngine() const {
-    // Disable Qt's painting system
-    return nullptr;
+void SFMLWidget::keyPressEvent(QKeyEvent* event) {
+    if (event && _editorWidget && !event->isAutoRepeat()) {
+        const auto key = convertQtKeyToSf(event->key());
+        if (key != sf::Keyboard::Key::Unknown) {
+            handleSFMLEvent(sf::Event::KeyPressed{ key });
+        }
+    }
+
+    QWidget::keyPressEvent(event);
+}
+
+void SFMLWidget::keyReleaseEvent(QKeyEvent* event) {
+    if (event && _editorWidget && !event->isAutoRepeat()) {
+        const auto key = convertQtKeyToSf(event->key());
+        if (key != sf::Keyboard::Key::Unknown) {
+            handleSFMLEvent(sf::Event::KeyReleased{ key });
+        }
+    }
+
+    QWidget::keyReleaseEvent(event);
 }
 
 void SFMLWidget::updateAndRender() {
-    if (!_renderWindow || !_initialized) {
+    if (!_editorWidget) {
         return;
     }
 
-    // Calculate delta time
+    const QSize currentSize = size();
+    if (currentSize.width() <= 0 || currentSize.height() <= 0) {
+        return;
+    }
+
+    if (!ensureRenderTexture(currentSize)) {
+        return;
+    }
+
     float deltaTime = _deltaClock.restart().asSeconds();
 
-    // Process SFML events (SFML 3 style)
-    while (const std::optional event = _renderWindow->pollEvent()) {
-        handleSFMLEvent(*event);
+    _editorWidget->update(deltaTime);
+
+    _renderTexture->clear(sf::Color::Black);
+    _editorWidget->render(*_renderTexture, deltaTime);
+    _renderTexture->display();
+
+    sf::Image image = _renderTexture->getTexture().copyToImage();
+    _frameImage = QImage(image.getPixelsPtr(),
+                         static_cast<int>(image.getSize().x),
+                         static_cast<int>(image.getSize().y),
+                         QImage::Format_RGBA8888).copy();
+
+    update();
+}
+
+bool SFMLWidget::ensureRenderTexture(const QSize& size) {
+    if (!_renderTexture) {
+        _renderTexture = std::make_unique<sf::RenderTexture>();
+        _needsResize = true;
     }
 
-    // Update and render current state
-    if (_editorWidget) {
-        _editorWidget->update(deltaTime);
+    const unsigned int targetWidth = static_cast<unsigned int>(std::max(1, size.width()));
+    const unsigned int targetHeight = static_cast<unsigned int>(std::max(1, size.height()));
 
-        _renderWindow->clear(sf::Color::Black);
-        _editorWidget->render(deltaTime);
-        _renderWindow->display();
+    if (_needsResize ||
+        _renderTexture->getSize().x != targetWidth ||
+        _renderTexture->getSize().y != targetHeight) {
+        if (!_renderTexture->resize(sf::Vector2u{targetWidth, targetHeight})) {
+            spdlog::error("SFMLWidget: Failed to resize render texture {}x{}", targetWidth, targetHeight);
+            return false;
+        }
+
+        _renderTexture->setSmooth(false);
+        const sf::FloatRect viewRect(sf::Vector2f{0.f, 0.f},
+                                     sf::Vector2f{static_cast<float>(targetWidth), static_cast<float>(targetHeight)});
+        _renderTexture->setView(sf::View(viewRect));
+        _needsResize = false;
     }
+
+    return true;
 }
 
 void SFMLWidget::handleSFMLEvent(const sf::Event& event) {
     if (_editorWidget) {
-        // Skip mouse movement events - we handle those through Qt for proper coordinate handling
-        if (event.is<sf::Event::MouseMoved>()) {
-            return;
-        }
         _editorWidget->handleEvent(event);
     }
 }
 
-void SFMLWidget::convertQtMouseEventToSFML(QMouseEvent* qtEvent, sf::Event& sfmlEvent, bool isPressed) {
+sf::Event SFMLWidget::createMouseEvent(QMouseEvent* qtEvent, bool isPressed) const {
     // Convert mouse button
     sf::Mouse::Button button = sf::Mouse::Button::Left;
     switch (qtEvent->button()) {
@@ -201,18 +213,85 @@ void SFMLWidget::convertQtMouseEventToSFML(QMouseEvent* qtEvent, sf::Event& sfml
     // Create the appropriate SFML 3 event
     sf::Vector2i position{ static_cast<int>(qtEvent->position().x()), static_cast<int>(qtEvent->position().y()) };
     if (isPressed) {
-        sfmlEvent = sf::Event::MouseButtonPressed{ button, position };
-    } else {
-        sfmlEvent = sf::Event::MouseButtonReleased{ button, position };
+        return sf::Event::MouseButtonPressed{ button, position };
     }
+    return sf::Event::MouseButtonReleased{ button, position };
 }
 
-void SFMLWidget::convertQtWheelEventToSFML(QWheelEvent* qtEvent, sf::Event& sfmlEvent) {
-    sfmlEvent = sf::Event::MouseWheelScrolled{
+sf::Event SFMLWidget::createWheelEvent(QWheelEvent* qtEvent) const {
+    return sf::Event::MouseWheelScrolled{
         sf::Mouse::Wheel::Vertical,
-        qtEvent->angleDelta().y() / 120.0f, // Convert to wheel steps
-        sf::Vector2i{ static_cast<int>(qtEvent->position().x()), static_cast<int>(qtEvent->position().y()) }
+        qtEvent->angleDelta().y() / 120.0f,
+        { static_cast<int>(qtEvent->position().x()), static_cast<int>(qtEvent->position().y()) }
     };
+}
+
+sf::Vector2f SFMLWidget::mapToWorld(const QPointF& pos) const {
+    if (_needsResize) {
+        const_cast<SFMLWidget*>(this)->ensureRenderTexture(size());
+    }
+    if (_renderTexture && _renderTexture->getSize().x > 0 && _renderTexture->getSize().y > 0) {
+        return _renderTexture->mapPixelToCoords(sf::Vector2i(static_cast<int>(pos.x()), static_cast<int>(pos.y())));
+    }
+    return {static_cast<float>(pos.x()), static_cast<float>(pos.y())};
+}
+
+sf::Keyboard::Key SFMLWidget::convertQtKeyToSf(int qtKey) const {
+    using sf::Keyboard::Key;
+
+    const auto toKey = [](Key base, int offset) {
+        using Underlying = std::underlying_type_t<Key>;
+        return static_cast<Key>(static_cast<Underlying>(base) + offset);
+    };
+
+    if (qtKey >= Qt::Key_A && qtKey <= Qt::Key_Z) {
+        return toKey(Key::A, qtKey - Qt::Key_A);
+    }
+
+    if (qtKey >= Qt::Key_0 && qtKey <= Qt::Key_9) {
+        return toKey(Key::Num0, qtKey - Qt::Key_0);
+    }
+
+    switch (qtKey) {
+        case Qt::Key_Escape: return Key::Escape;
+        case Qt::Key_Tab: return Key::Tab;
+        case Qt::Key_Backspace: return Key::Backspace;
+        case Qt::Key_Return:
+        case Qt::Key_Enter: return Key::Enter;
+        case Qt::Key_Space: return Key::Space;
+        case Qt::Key_Left: return Key::Left;
+        case Qt::Key_Right: return Key::Right;
+        case Qt::Key_Up: return Key::Up;
+        case Qt::Key_Down: return Key::Down;
+        case Qt::Key_PageUp: return Key::PageUp;
+        case Qt::Key_PageDown: return Key::PageDown;
+        case Qt::Key_Home: return Key::Home;
+        case Qt::Key_End: return Key::End;
+        case Qt::Key_Delete: return Key::Delete;
+        case Qt::Key_Insert: return Key::Insert;
+        case Qt::Key_F1: return Key::F1;
+        case Qt::Key_F2: return Key::F2;
+        case Qt::Key_F3: return Key::F3;
+        case Qt::Key_F4: return Key::F4;
+        case Qt::Key_F5: return Key::F5;
+        case Qt::Key_F6: return Key::F6;
+        case Qt::Key_F7: return Key::F7;
+        case Qt::Key_F8: return Key::F8;
+        case Qt::Key_F9: return Key::F9;
+        case Qt::Key_F10: return Key::F10;
+        case Qt::Key_F11: return Key::F11;
+        case Qt::Key_F12: return Key::F12;
+        case Qt::Key_Shift: return Key::LShift;
+        case Qt::Key_Control: return Key::LControl;
+        case Qt::Key_Alt: return Key::LAlt;
+        case Qt::Key_Meta:
+        case Qt::Key_Super_L:
+        case Qt::Key_Super_R:
+        case Qt::Key_Menu:
+            return Key::LSystem;
+        default:
+            return Key::Unknown;
+    }
 }
 
 void SFMLWidget::dragEnterEvent(QDragEnterEvent* event) {
@@ -226,49 +305,64 @@ void SFMLWidget::dragEnterEvent(QDragEnterEvent* event) {
             int categoryInt = parts[1].toInt();
             
             // Convert Qt coordinates to SFML world coordinates
-            sf::Vector2f worldPos;
-            if (_renderWindow) {
-                sf::Vector2i windowPos(event->position().x(), event->position().y());
-                worldPos = _renderWindow->mapPixelToCoords(windowPos);
-            }
+            sf::Vector2f worldPos = mapToWorld(event->position());
             
             // Start drag preview in editor
             _editorWidget->startDragPreview(objectIndex, categoryInt, worldPos);
         }
-        
+
         event->acceptProposedAction();
     } else {
-        event->ignore();
+        QWidget* target = parentWidget();
+        while (target && !event->isAccepted()) {
+            QCoreApplication::sendEvent(target, event);
+            target = target->parentWidget();
+        }
+        if (!event->isAccepted()) {
+            event->ignore();
+        }
     }
 }
 
 void SFMLWidget::dragMoveEvent(QDragMoveEvent* event) {
     if (event->mimeData()->hasFormat("application/x-geck-object")) {
         // Update drag preview position
-        if (_editorWidget && _renderWindow) {
-            sf::Vector2i windowPos(event->position().x(), event->position().y());
-            sf::Vector2f worldPos = _renderWindow->mapPixelToCoords(windowPos);
+        if (_editorWidget) {
+            sf::Vector2f worldPos = mapToWorld(event->position());
             _editorWidget->updateDragPreview(worldPos);
         }
-        
+
         event->acceptProposedAction();
     } else {
-        event->ignore();
+        QWidget* target = parentWidget();
+        while (target && !event->isAccepted()) {
+            QCoreApplication::sendEvent(target, event);
+            target = target->parentWidget();
+        }
+        if (!event->isAccepted()) {
+            event->ignore();
+        }
     }
 }
 
 void SFMLWidget::dropEvent(QDropEvent* event) {
     if (event->mimeData()->hasFormat("application/x-geck-object")) {
         // Finish the drag preview and place the object
-        if (_editorWidget && _renderWindow) {
-            sf::Vector2i windowPos(event->position().x(), event->position().y());
-            sf::Vector2f worldPos = _renderWindow->mapPixelToCoords(windowPos);
+        if (_editorWidget) {
+            sf::Vector2f worldPos = mapToWorld(event->position());
             _editorWidget->finishDragPreview(worldPos);
         }
-        
+
         event->acceptProposedAction();
     } else {
-        event->ignore();
+        QWidget* target = parentWidget();
+        while (target && !event->isAccepted()) {
+            QCoreApplication::sendEvent(target, event);
+            target = target->parentWidget();
+        }
+        if (!event->isAccepted()) {
+            event->ignore();
+        }
     }
 }
 

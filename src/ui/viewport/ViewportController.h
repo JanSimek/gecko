@@ -107,6 +107,7 @@ public:
 private:
     const HexagonGrid* _hexGrid;
     sf::View _view;
+    sf::Vector2u _windowSize{800u, 600u};
     
     // Zoom level tracking and limits
     float _zoomLevel = 1.0f;

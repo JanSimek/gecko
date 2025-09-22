@@ -3,6 +3,7 @@
 #include <QHeaderView>
 #include <QApplication>
 #include <QMessageBox>
+#include <QSize>
 #include <spdlog/spdlog.h>
 #include <filesystem>
 
@@ -47,7 +48,18 @@ MapInfoPanel::MapInfoPanel(QWidget* parent)
     , _map(nullptr)
     , _mapScriptName("no script") {
 
+    setMinimumSize(0, 0);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
     setupUI();
+}
+
+QSize MapInfoPanel::sizeHint() const {
+    return QSize(340, 250);
+}
+
+QSize MapInfoPanel::minimumSizeHint() const {
+    return QSize(200, 100);
 }
 
 void MapInfoPanel::setupUI() {
@@ -57,10 +69,14 @@ void MapInfoPanel::setupUI() {
     // Create scroll area for content
     _scrollArea = new QScrollArea(this);
     _scrollArea->setWidgetResizable(true);
+    _scrollArea->setMinimumSize(0, 0);
+    _scrollArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     _scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
     _contentWidget = new QWidget();
+    _contentWidget->setMinimumSize(0, 0);
+    _contentWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     _contentLayout = new QVBoxLayout(_contentWidget);
     _contentLayout->setContentsMargins(5, 5, 5, 5);
 

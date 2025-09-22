@@ -51,11 +51,21 @@ void ViewportController::zoomView(float direction) {
 }
 
 void ViewportController::setZoomLevel(float zoom) {
-    // Clamp zoom level to valid range
-    _zoomLevel = std::clamp(zoom, MIN_ZOOM, MAX_ZOOM);
-    
-    // Apply zoom to view
-    _view.zoom(_zoomLevel / _view.getSize().x * 800.0f);
+    const float clamped = std::clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+    if (std::abs(clamped - _zoomLevel) < 0.0001f) {
+        return;
+    }
+
+    const sf::Vector2f center = _view.getCenter();
+    _zoomLevel = clamped;
+
+    const float width = static_cast<float>(_windowSize.x) / _zoomLevel;
+    const float height = static_cast<float>(_windowSize.y) / _zoomLevel;
+
+    _view.setSize({width, height});
+    if (center != sf::Vector2f()) {
+        _view.setCenter(center);
+    }
 }
 
 int ViewportController::updateHoverHex(sf::Vector2f worldPos) {
@@ -138,36 +148,22 @@ void ViewportController::updateViewForWindowSize(sf::Vector2u windowSize) {
         spdlog::warn("ViewportController: Invalid window size {}x{}", windowSize.x, windowSize.y);
         return;
     }
-    
-    // Use full viewport (no black bars)
-    sf::FloatRect viewport({0, 0}, {1, 1});
-    _view.setViewport(viewport);
-    
-    // Scale view size to match window aspect ratio while maintaining proportional scaling
-    // Base reference size is 800x600
-    float baseWidth = 800.0f;
-    float baseHeight = 600.0f;
-    float baseAspect = baseWidth / baseHeight;
-    
-    // Calculate window aspect ratio
-    float windowAspect = static_cast<float>(windowSize.x) / static_cast<float>(windowSize.y);
-    
-    float viewWidth, viewHeight;
-    
-    if (windowAspect > baseAspect) {
-        // Window is wider - scale to match window width, adjust height proportionally
-        viewHeight = baseHeight;
-        viewWidth = viewHeight * windowAspect;
-    } else {
-        // Window is taller or same aspect - scale to match window height, adjust width proportionally  
-        viewWidth = baseWidth;
-        viewHeight = viewWidth / windowAspect;
+
+    _windowSize = windowSize;
+
+    const sf::Vector2f center = _view.getCenter();
+
+    const float width = static_cast<float>(_windowSize.x) / _zoomLevel;
+    const float height = static_cast<float>(_windowSize.y) / _zoomLevel;
+
+    _view.setViewport(sf::FloatRect({0.f, 0.f}, {1.f, 1.f}));
+    _view.setSize({width, height});
+    if (center != sf::Vector2f()) {
+        _view.setCenter(center);
     }
-    
-    _view.setSize(sf::Vector2f(viewWidth, viewHeight));
-    
-    spdlog::debug("ViewportController: Updated view for {}x{} window - view size: {:.1f}x{:.1f} (aspect: {:.3f})",
-                  windowSize.x, windowSize.y, viewWidth, viewHeight, windowAspect);
+
+    spdlog::debug("ViewportController: Resize {}x{} -> view {:.1f}x{:.1f} (zoom {:.2f})",
+                  windowSize.x, windowSize.y, width, height, _zoomLevel);
 }
 
 std::optional<HexPosition> ViewportController::worldPosToHexPosition(const WorldCoords& worldPos) const {

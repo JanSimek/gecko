@@ -33,6 +33,9 @@ public:
     void setMap(Map* map);
     void setPlayerPosition(int hexPosition);
 
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+
 signals:
     void playerPositionChanged(int position);
     void playerElevationChanged(int elevation);

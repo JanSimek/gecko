@@ -5,6 +5,11 @@
 #include <QPixmap>
 #include <QApplication>
 #include <QTimer>
+#include <QPainter>
+#include <QHeaderView>
+#include <QMessageBox>
+#include <QInputDialog>
+#include <QSpinBox>
 #include <spdlog/spdlog.h>
 #include <cmath>
 
@@ -13,8 +18,58 @@
 #include "../../util/ResourceManager.h"
 #include "../../util/ProHelper.h"
 #include "../../format/map/MapObject.h"
+#include "../../format/pro/Pro.h"
+#include "../../format/msg/Msg.h"
+#include "../../format/frm/Frm.h"
 
 namespace geck {
+
+// Custom delegate for editing amount column with spinbox
+class SelectionPanel::AmountDelegate : public QStyledItemDelegate {
+public:
+    AmountDelegate(QObject* parent = nullptr) : QStyledItemDelegate(parent) {}
+
+    QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
+        Q_UNUSED(option)
+        Q_UNUSED(index)
+
+        QSpinBox* editor = new QSpinBox(parent);
+        editor->setRange(1, 999999);
+        editor->setSingleStep(1);
+        return editor;
+    }
+
+    void setEditorData(QWidget* editor, const QModelIndex& index) const override {
+        int value = index.model()->data(index, Qt::EditRole).toInt();
+        QSpinBox* spinBox = static_cast<QSpinBox*>(editor);
+        spinBox->setValue(value);
+    }
+
+    void setModelData(QWidget* editor, QAbstractItemModel* model, const QModelIndex& index) const override {
+        QSpinBox* spinBox = static_cast<QSpinBox*>(editor);
+        spinBox->interpretText();
+        int value = spinBox->value();
+        model->setData(index, value, Qt::EditRole);
+    }
+
+    void updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
+        Q_UNUSED(index)
+        editor->setGeometry(option.rect);
+    }
+};
+
+// Static constants
+const QColor SelectionPanel::HIGHLIGHT_COLOR = QColor(0, 255, 0, 100); // Semi-transparent green
+const int SelectionPanel::ICON_SIZE = 96; // Larger icons than the separate panel
+const int SelectionPanel::MAX_QUANTITY_DISPLAY = 99;
+
+QSize SelectionPanel::sizeHint() const {
+    return QSize(360, 250);
+}
+
+QSize SelectionPanel::minimumSizeHint() const {
+    return QSize(200, 100);
+}
 
 SelectionPanel::SelectionPanel(QWidget* parent)
     : QWidget(parent)
@@ -36,7 +91,10 @@ SelectionPanel::SelectionPanel(QWidget* parent)
     , _changeFrmButton(nullptr)
     , _editProButton(nullptr)
     , _editExitGridButton(nullptr)
-    , _viewInventoryButton(nullptr)
+    , _inventoryGroup(nullptr)
+    , _inventoryTree(nullptr)
+    , _addInventoryButton(nullptr)
+    , _removeInventoryButton(nullptr)
     , _tilePanelWidget(nullptr)
     , _tileInfoGroup(nullptr)
     , _tilePreviewLabel(nullptr)
@@ -55,6 +113,12 @@ SelectionPanel::SelectionPanel(QWidget* parent)
     , _hasTileSelection(false)
     , _map(nullptr) {
 
+    // Initialize amount delegate for editable inventory amounts
+    _amountDelegate = new AmountDelegate(this);
+
+    setMinimumSize(0, 0);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
     setupUI();
 }
 
@@ -65,10 +129,13 @@ void SelectionPanel::setupUI() {
     // Create scroll area for content
     _scrollArea = new QScrollArea(this);
     _scrollArea->setWidgetResizable(true);
+    _scrollArea->setMinimumSize(0, 0);
+    _scrollArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     _scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
     _contentWidget = new QWidget();
+    _contentWidget->setMinimumSize(0, 0);
+    _contentWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     _contentLayout = new QVBoxLayout(_contentWidget);
     _contentLayout->setContentsMargins(5, 5, 5, 5);
 
@@ -155,14 +222,13 @@ void SelectionPanel::setupUI() {
     connect(_editExitGridButton, &QPushButton::clicked, this, &SelectionPanel::onEditExitGridClicked);
     objectFormLayout->addRow("", _editExitGridButton);
     
-    // View Inventory button
-    _viewInventoryButton = new QPushButton("View Inventory...");
-    _viewInventoryButton->setEnabled(false);
-    _viewInventoryButton->setVisible(false); // Hidden by default
-    connect(_viewInventoryButton, &QPushButton::clicked, this, &SelectionPanel::onViewInventoryClicked);
-    objectFormLayout->addRow("", _viewInventoryButton);
 
     objectLayout->addWidget(_objectInfoGroup);
+
+    // Setup inventory section (initially hidden)
+    setupInventorySection();
+    objectLayout->addWidget(_inventoryGroup);
+
     objectLayout->addStretch();
 
     // Setup Tile Panel
@@ -364,14 +430,6 @@ void SelectionPanel::updateObjectInfo() {
                 _editExitGridButton->setEnabled(false);
             }
             
-            // Show/hide and enable inventory button based on inventory contents
-            if (selectedMapObject.objects_in_inventory > 0) {
-                _viewInventoryButton->setVisible(true);
-                _viewInventoryButton->setEnabled(true);
-            } else {
-                _viewInventoryButton->setVisible(false);
-                _viewInventoryButton->setEnabled(false);
-            }
 
             // Convert SFML sprite to QPixmap for display
             const auto& sprite = _selectedObject.value()->getSprite();
@@ -415,6 +473,9 @@ void SelectionPanel::updateObjectInfo() {
         spdlog::error("Error updating object info: {}", e.what());
         clearObjectInfo();
     }
+
+    // Update inventory section
+    updateInventorySection();
 }
 
 void geck::SelectionPanel::updateTileInfo() {
@@ -516,12 +577,13 @@ void geck::SelectionPanel::clearObjectInfo() {
     _editProButton->setEnabled(false);
     _editExitGridButton->setEnabled(false);
     _editExitGridButton->setVisible(false);
-    _viewInventoryButton->setEnabled(false);
-    _viewInventoryButton->setVisible(false);
 
     _objectSpriteLabel->clear();
     _objectSpriteLabel->setText("No object selected");
     _objectInfoGroup->setTitle("Object Information");
+
+    // Hide inventory section when no object is selected
+    _inventoryGroup->setVisible(false);
 }
 
 void geck::SelectionPanel::clearTileInfo() {
@@ -784,16 +846,432 @@ void SelectionPanel::onEditExitGridClicked() {
     emit requestExitGridEditor(_selectedObject.value());
 }
 
-void SelectionPanel::onViewInventoryClicked() {
-    if (!_selectedObject || !_selectedObject.value()) {
-        spdlog::warn("SelectionPanel::onViewInventoryClicked: No object selected");
+
+void SelectionPanel::onAddInventoryClicked() {
+    // TODO: Implement add inventory item functionality
+    spdlog::debug("SelectionPanel::onAddInventoryClicked: Add inventory functionality not yet implemented");
+}
+
+void SelectionPanel::onRemoveInventoryClicked() {
+    QTreeWidgetItem* currentItem = _inventoryTree->currentItem();
+    if (!currentItem) {
         return;
     }
-    
-    spdlog::debug("SelectionPanel::onViewInventoryClicked: Emitting requestInventoryViewer signal");
-    
-    // Emit signal to request inventory viewer for the selected object
-    emit requestInventoryViewer(_selectedObject.value());
+
+    // TODO: Implement remove inventory item functionality
+    // For now, just remove from tree widget
+    delete currentItem;
+    spdlog::debug("SelectionPanel::onRemoveInventoryClicked: Remove inventory functionality partially implemented");
+}
+
+void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
+    if (!item || column != COLUMN_AMOUNT) {
+        return;
+    }
+
+    // TODO: Implement inventory item amount change functionality
+    bool ok;
+    int newAmount = item->text(COLUMN_AMOUNT).toInt(&ok);
+    if (ok && newAmount >= 0) {
+        // Update the underlying data
+        uint32_t pid = item->data(COLUMN_ICON, Qt::UserRole).toUInt();
+        spdlog::debug("SelectionPanel::onInventoryItemChanged: Changing amount for PID {} to {}", pid, newAmount);
+
+        // Update the icon with new quantity overlay
+        QPixmap iconWithQuantity = getItemIconWithQuantity(pid, newAmount);
+        spdlog::debug("SelectionPanel::onInventoryItemChanged: Updating icon for PID {} with size {}x{}",
+                     pid, iconWithQuantity.width(), iconWithQuantity.height());
+
+        // Create QIcon explicitly with the correct size to avoid scaling issues
+        QIcon icon;
+        icon.addPixmap(iconWithQuantity, QIcon::Normal, QIcon::Off);
+        item->setIcon(COLUMN_ICON, icon);
+
+        // Set explicit size hint to ensure proper icon display
+        item->setSizeHint(COLUMN_ICON, QSize(ICON_SIZE, ICON_SIZE));
+    } else {
+        // Revert to previous value if invalid
+        // TODO: Get actual amount from underlying data
+        item->setText(COLUMN_AMOUNT, "1");
+    }
+}
+
+void SelectionPanel::setupInventorySection() {
+    _inventoryGroup = new QGroupBox("Inventory");
+    _inventoryGroup->setVisible(false); // Hidden by default
+
+    QVBoxLayout* inventoryLayout = new QVBoxLayout(_inventoryGroup);
+
+    // Create inventory tree widget
+    _inventoryTree = new QTreeWidget();
+    _inventoryTree->setHeaderLabels({"", "Name", "Type", "Amount"});
+    _inventoryTree->setColumnWidth(COLUMN_ICON, ICON_SIZE + 20);
+    _inventoryTree->setColumnWidth(COLUMN_NAME, 150);
+    _inventoryTree->setColumnWidth(COLUMN_TYPE, 100);
+    _inventoryTree->setColumnWidth(COLUMN_AMOUNT, 80);
+    _inventoryTree->setRootIsDecorated(false);
+    _inventoryTree->setAlternatingRowColors(true);
+    _inventoryTree->setSelectionMode(QAbstractItemView::SingleSelection);
+    _inventoryTree->setMinimumHeight(300);
+    _inventoryTree->setIconSize(QSize(ICON_SIZE, ICON_SIZE));
+
+    // Set uniform item heights for larger icons
+    _inventoryTree->setUniformRowHeights(true);
+
+    // Set custom delegate for amount column editing
+    _inventoryTree->setItemDelegateForColumn(COLUMN_AMOUNT, _amountDelegate);
+
+    connect(_inventoryTree, &QTreeWidget::itemChanged, this, &SelectionPanel::onInventoryItemChanged);
+
+    inventoryLayout->addWidget(_inventoryTree);
+
+    // Button layout
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+
+    _addInventoryButton = new QPushButton("Add Item");
+    _removeInventoryButton = new QPushButton("Remove");
+    _removeInventoryButton->setEnabled(false);
+
+    connect(_addInventoryButton, &QPushButton::clicked, this, &SelectionPanel::onAddInventoryClicked);
+    connect(_removeInventoryButton, &QPushButton::clicked, this, &SelectionPanel::onRemoveInventoryClicked);
+
+    buttonLayout->addWidget(_addInventoryButton);
+    buttonLayout->addWidget(_removeInventoryButton);
+    buttonLayout->addStretch();
+
+    inventoryLayout->addLayout(buttonLayout);
+}
+
+void SelectionPanel::updateInventorySection() {
+    if (!_selectedObject || !_selectedObject.value()) {
+        _inventoryGroup->setVisible(false);
+        return;
+    }
+
+    auto object = _selectedObject.value();
+    auto mapObject = object->getMapObjectPtr();
+
+    if (!mapObject) {
+        _inventoryGroup->setVisible(false);
+        return;
+    }
+
+    // Check if object has inventory capability by loading Pro file
+    try {
+        auto pro = ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(mapObject->pro_pid));
+        if (pro) {
+            bool hasInventory = (pro->type() == Pro::OBJECT_TYPE::ITEM &&
+                               pro->itemType() == Pro::ITEM_TYPE::CONTAINER) ||
+                              pro->type() == Pro::OBJECT_TYPE::CRITTER;
+
+            _inventoryGroup->setVisible(hasInventory);
+
+            if (hasInventory) {
+                populateInventoryTree();
+            }
+        } else {
+            _inventoryGroup->setVisible(false);
+        }
+    } catch (const std::exception& e) {
+        spdlog::warn("Failed to load pro file for inventory check: {}", e.what());
+        _inventoryGroup->setVisible(false);
+    }
+}
+
+void SelectionPanel::populateInventoryTree() {
+    spdlog::debug("SelectionPanel::populateInventoryTree: Starting to populate inventory tree");
+    _inventoryTree->clear();
+
+    if (!_selectedObject || !_selectedObject.value()) {
+        spdlog::debug("SelectionPanel::populateInventoryTree: No selected object");
+        return;
+    }
+
+    auto object = _selectedObject.value();
+    auto mapObject = object->getMapObjectPtr();
+
+    if (!mapObject) {
+        spdlog::debug("SelectionPanel::populateInventoryTree: No map object");
+        return;
+    }
+
+    spdlog::debug("SelectionPanel::populateInventoryTree: Found {} inventory items", mapObject->inventory.size());
+    // Populate tree with inventory items using the MapObject's inventory vector
+    for (const auto& inventoryItem : mapObject->inventory) {
+        if (!inventoryItem) continue;
+
+        spdlog::debug("SelectionPanel::populateInventoryTree: Processing inventory item with PID {}, amount {}",
+                     inventoryItem->pro_pid, inventoryItem->amount);
+        QTreeWidgetItem* item = new QTreeWidgetItem(_inventoryTree);
+
+        // Set all text data first
+        item->setText(COLUMN_NAME, getItemName(inventoryItem->pro_pid));
+        item->setText(COLUMN_TYPE, getItemTypeName(inventoryItem->pro_pid));
+        item->setText(COLUMN_AMOUNT, QString::number(inventoryItem->amount));
+
+        // Store PID in item data for reference
+        item->setData(COLUMN_ICON, Qt::UserRole, inventoryItem->pro_pid);
+
+        // Make amount column editable
+        item->setFlags(item->flags() | Qt::ItemIsEditable);
+
+        // Set explicit size hint to ensure proper icon display
+        item->setSizeHint(COLUMN_ICON, QSize(ICON_SIZE, ICON_SIZE));
+
+        // Set icon with quantity overlay AFTER all other data is set
+        QPixmap iconWithQuantity = getItemIconWithQuantity(inventoryItem->pro_pid, inventoryItem->amount);
+        spdlog::debug("SelectionPanel::populateInventoryTree: Setting icon for PID {} with size {}x{}",
+                     inventoryItem->pro_pid, iconWithQuantity.width(), iconWithQuantity.height());
+
+        // Create QIcon explicitly with the correct size to avoid scaling issues
+        QIcon icon;
+        icon.addPixmap(iconWithQuantity, QIcon::Normal, QIcon::Off);
+        item->setIcon(COLUMN_ICON, icon);
+
+        // Force tree widget to recognize the icon change
+        _inventoryTree->updateGeometry();
+    }
+
+    // Enable/disable remove button based on selection
+    connect(_inventoryTree, &QTreeWidget::itemSelectionChanged, [this]() {
+        _removeInventoryButton->setEnabled(_inventoryTree->currentItem() != nullptr);
+    });
+
+    // Force tree widget to refresh display to ensure icons appear properly
+    _inventoryTree->update();
+    _inventoryTree->repaint();
+    spdlog::debug("SelectionPanel::populateInventoryTree: Completed with {} items, forcing tree refresh", _inventoryTree->topLevelItemCount());
+}
+
+QPixmap SelectionPanel::getItemIconWithQuantity(uint32_t pid, int amount) const {
+    QPixmap baseIcon = getItemIcon(pid);
+
+    if (amount <= 1) {
+        return baseIcon;
+    }
+
+    return addQuantityOverlay(baseIcon, amount);
+}
+
+QPixmap SelectionPanel::addQuantityOverlay(const QPixmap& baseIcon, int amount) const {
+    if (amount <= 1) {
+        return baseIcon;
+    }
+
+    // Create result with consistent size
+    QPixmap result(ICON_SIZE, ICON_SIZE);
+    result.fill(Qt::transparent);
+
+    QPainter painter(&result);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+
+    // Draw the base icon (should already be properly sized from getItemIcon)
+    if (baseIcon.size() != QSize(ICON_SIZE, ICON_SIZE)) {
+        // Only scale if the base icon is not the expected size
+        QPixmap scaledIcon = baseIcon.scaled(ICON_SIZE, ICON_SIZE, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        int x = (ICON_SIZE - scaledIcon.width()) / 2;
+        int y = (ICON_SIZE - scaledIcon.height()) / 2;
+        painter.drawPixmap(x, y, scaledIcon);
+    } else {
+        // Draw the icon directly since it's already the correct size
+        painter.drawPixmap(0, 0, baseIcon);
+    }
+
+    // Draw quantity text overlay in bottom-right corner
+    QString quantityText;
+    if (amount > MAX_QUANTITY_DISPLAY) {
+        quantityText = QString("%1k").arg(amount / 1000);
+    } else {
+        quantityText = QString::number(amount);
+    }
+
+    QFont font = painter.font();
+    font.setBold(true);
+    font.setPointSize(10);
+    painter.setFont(font);
+
+    QFontMetrics fm(font);
+    QRect textRect = fm.boundingRect(quantityText);
+
+    // Position in bottom-right corner with padding
+    int textX = ICON_SIZE - textRect.width() - 4;
+    int textY = ICON_SIZE - 4;
+
+    // Draw text outline (black)
+    QPen outlinePen(Qt::black, 2);
+    painter.setPen(outlinePen);
+    for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -1; dy <= 1; dy++) {
+            if (dx != 0 || dy != 0) {
+                painter.drawText(textX + dx, textY + dy, quantityText);
+            }
+        }
+    }
+
+    // Draw main text (bright green)
+    QPen textPen(QColor(50, 255, 50));
+    painter.setPen(textPen);
+    painter.drawText(textX, textY, quantityText);
+
+    return result;
+}
+
+QString SelectionPanel::getItemName(uint32_t pid) const {
+    try {
+        auto pro = ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(pid));
+        if (pro) {
+            // Get object name from message file
+            auto msg = ProHelper::msgFile(pro->type());
+            if (msg) {
+                try {
+                    return QString::fromStdString(msg->message(pro->header.message_id).text);
+                } catch (const std::exception& e) {
+                    spdlog::warn("Failed to get message for ID {}: {}", pro->header.message_id, e.what());
+                }
+            }
+        }
+        return QString("Unknown Item (%1)").arg(pid);
+    } catch (const std::exception& e) {
+        spdlog::warn("Failed to get item name for PID {}: {}", pid, e.what());
+        return QString("Unknown Item (%1)").arg(pid);
+    }
+}
+
+QString SelectionPanel::getItemTypeName(uint32_t pid) const {
+    try {
+        auto pro = ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(pid));
+        if (pro) {
+            switch (pro->type()) {
+                case Pro::OBJECT_TYPE::ITEM:
+                    switch (pro->itemType()) {
+                        case Pro::ITEM_TYPE::ARMOR: return "Armor";
+                        case Pro::ITEM_TYPE::CONTAINER: return "Container";
+                        case Pro::ITEM_TYPE::DRUG: return "Drug";
+                        case Pro::ITEM_TYPE::WEAPON: return "Weapon";
+                        case Pro::ITEM_TYPE::AMMO: return "Ammo";
+                        case Pro::ITEM_TYPE::MISC: return "Misc";
+                        case Pro::ITEM_TYPE::KEY: return "Key";
+                        default: return "Item";
+                    }
+                case Pro::OBJECT_TYPE::CRITTER: return "Critter";
+                case Pro::OBJECT_TYPE::SCENERY: return "Scenery";
+                case Pro::OBJECT_TYPE::WALL: return "Wall";
+                case Pro::OBJECT_TYPE::TILE: return "Tile";
+                case Pro::OBJECT_TYPE::MISC: return "Misc";
+                default: return "Unknown";
+            }
+        }
+        return "Unknown";
+    } catch (const std::exception& e) {
+        spdlog::warn("Failed to get item type for PID {}: {}", pid, e.what());
+        return "Unknown";
+    }
+}
+
+QPixmap SelectionPanel::getItemIcon(uint32_t pid) const {
+    try {
+        spdlog::debug("SelectionPanel::getItemIcon: Loading icon for PID {}", pid);
+        auto& resourceManager = ResourceManager::getInstance();
+
+        // Load the Pro file to get the FID
+        auto pro = resourceManager.loadResource<Pro>(ProHelper::basePath(pid));
+        if (!pro) {
+            spdlog::warn("Failed to load pro file for PID {} - returning placeholder", pid);
+            return createPlaceholderIcon();
+        }
+        spdlog::debug("SelectionPanel::getItemIcon: Successfully loaded PRO for PID {}, FID: {}", pid, pro->header.FID);
+
+        // Get FRM path from the FID
+        // Use inventory FID instead of ground FID for inventory display
+        uint32_t fid = pro->commonItemData.inventoryFID != 0 ? pro->commonItemData.inventoryFID : pro->header.FID;
+        std::string frmPath = resourceManager.FIDtoFrmName(fid);
+        spdlog::debug("SelectionPanel::getItemIcon: Using inventory FID {} for PID {}, FRM path: '{}'", fid, pid, frmPath);
+
+        if (frmPath.empty()) {
+            spdlog::warn("Empty FRM path for PID {} - returning placeholder", pid);
+            return createPlaceholderIcon();
+        }
+
+        // Load FRM from ResourceManager
+        auto frm = resourceManager.loadResource<Frm>(frmPath);
+        if (!frm) {
+            spdlog::warn("Failed to load FRM for path '{}' - returning placeholder", frmPath);
+            return createPlaceholderIcon();
+        }
+        spdlog::debug("SelectionPanel::getItemIcon: Successfully loaded FRM for path '{}'", frmPath);
+
+        // Get the first frame (direction 0, frame 0)
+        const auto& directions = frm->directions();
+        if (directions.empty() || directions[0].frames().empty()) {
+            spdlog::warn("FRM has no frames for PID {}", pid);
+            return createPlaceholderIcon();
+        }
+
+        const auto& frame = directions[0].frames()[0];
+
+        // Load texture from ResourceManager
+        const sf::Texture& texture = resourceManager.texture(frmPath);
+
+        // Convert SFML texture to QPixmap and extract the first frame
+        sf::Image image = texture.copyToImage();
+
+        // Extract just the first frame based on frame dimensions
+        QImage fullImage(reinterpret_cast<const uchar*>(image.getPixelsPtr()),
+                        image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
+
+        // Extract the first frame (assuming frames are laid out horizontally)
+        QImage frameImage = fullImage.copy(0, 0, frame.width(), frame.height());
+
+        // Convert to pixmap and create properly sized final icon
+        QPixmap framePixmap = QPixmap::fromImage(frameImage);
+
+        // Always create icon at exact ICON_SIZE to ensure consistency
+        QPixmap finalIcon(ICON_SIZE, ICON_SIZE);
+        finalIcon.fill(Qt::transparent);
+
+        QPainter painter(&finalIcon);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+
+        // Scale and center the frame in the fixed-size icon
+        QPixmap scaledPixmap = framePixmap.scaled(ICON_SIZE, ICON_SIZE,
+                                                  Qt::KeepAspectRatio,
+                                                  Qt::SmoothTransformation);
+        int x = (ICON_SIZE - scaledPixmap.width()) / 2;
+        int y = (ICON_SIZE - scaledPixmap.height()) / 2;
+        painter.drawPixmap(x, y, scaledPixmap);
+
+        spdlog::debug("SelectionPanel::getItemIcon: Successfully created icon for PID {}", pid);
+        return finalIcon;
+
+    } catch (const std::exception& e) {
+        spdlog::warn("Failed to load icon for PID {}: {} - returning placeholder", pid, e.what());
+        return createPlaceholderIcon();
+    }
+}
+
+QPixmap SelectionPanel::createPlaceholderIcon() const {
+    spdlog::debug("SelectionPanel::createPlaceholderIcon: Creating {}x{} placeholder icon", ICON_SIZE, ICON_SIZE);
+    // Create consistently sized placeholder icon
+    QPixmap placeholder(ICON_SIZE, ICON_SIZE);
+    placeholder.fill(Qt::lightGray);
+
+    QPainter painter(&placeholder);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(Qt::darkGray, 2));
+    painter.drawRect(1, 1, ICON_SIZE-3, ICON_SIZE-3);
+
+    // Draw question mark
+    QFont font = painter.font();
+    font.setPointSize(ICON_SIZE / 4);
+    font.setBold(true);
+    painter.setFont(font);
+    painter.setPen(Qt::black);
+    painter.drawText(placeholder.rect(), Qt::AlignCenter, "?");
+
+    return placeholder;
 }
 
 } // namespace geck
+#include <QSize>
