@@ -10,6 +10,7 @@
 #include <QMessageBox>
 #include <QInputDialog>
 #include <QSpinBox>
+#include <QEnterEvent>
 #include <spdlog/spdlog.h>
 #include <cmath>
 
@@ -57,6 +58,69 @@ public:
         editor->setGeometry(option.rect);
     }
 };
+
+// Implementation of HoverSpriteLabel
+HoverSpriteLabel::HoverSpriteLabel(QWidget* parent) : QLabel(parent) {
+    setMouseTracking(true);
+    setupEditButton();
+}
+
+void HoverSpriteLabel::setupEditButton() {
+    _editButton = new QPushButton(this);
+    _editButton->setIcon(QIcon(":/icons/actions/edit.svg"));
+    _editButton->setToolTip("Change FRM file");
+    _editButton->setFixedSize(24, 24);
+    _editButton->setStyleSheet(
+        "QPushButton {"
+        "  background-color: rgba(255, 255, 255, 180);"
+        "  border: 1px solid rgba(0, 0, 0, 100);"
+        "  border-radius: 12px;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: rgba(255, 255, 255, 220);"
+        "  border-color: rgba(0, 0, 0, 150);"
+        "}"
+        "QPushButton:pressed {"
+        "  background-color: rgba(255, 255, 255, 255);"
+        "}"
+    );
+    _editButton->setIconSize(QSize(18, 18));
+    _editButton->setVisible(false); // Hidden by default
+    _editButton->raise();
+}
+
+void HoverSpriteLabel::enterEvent(QEnterEvent* event) {
+    Q_UNUSED(event)
+    if (_editButton) {
+        _editButton->setVisible(true);
+        positionEditButton();
+    }
+}
+
+void HoverSpriteLabel::leaveEvent(QEvent* event) {
+    Q_UNUSED(event)
+    if (_editButton) {
+        _editButton->setVisible(false);
+    }
+}
+
+void HoverSpriteLabel::resizeEvent(QResizeEvent* event) {
+    QLabel::resizeEvent(event);
+    if (_editButton && _editButton->isVisible()) {
+        positionEditButton();
+    }
+}
+
+void HoverSpriteLabel::positionEditButton() {
+    if (!_editButton) return;
+
+    // Position in top-left corner with small margin
+    QPoint topLeft = rect().topLeft();
+    topLeft.setX(topLeft.x() + 4);
+    topLeft.setY(topLeft.y() + 4);
+    _editButton->move(topLeft);
+    _editButton->raise();
+}
 
 // Static constants
 const QColor SelectionPanel::HIGHLIGHT_COLOR = QColor(0, 255, 0, 100); // Semi-transparent green
@@ -107,6 +171,7 @@ SelectionPanel::SelectionPanel(QWidget* parent)
     , _tileTypeEdit(nullptr)
     , _tileIdSpin(nullptr)
     , _tileNameEdit(nullptr)
+    , _hoverSpriteLabel(nullptr)
     , _selectedTileIndex(-1)
     , _selectedElevation(-1)
     , _isRoofSelected(false)
@@ -147,19 +212,42 @@ void SelectionPanel::setupUI() {
     QVBoxLayout* objectLayout = new QVBoxLayout(_objectPanelWidget);
 
     _objectInfoGroup = new QGroupBox("Object Information");
-    QFormLayout* objectFormLayout = new QFormLayout(_objectInfoGroup);
 
-    // Object sprite display
-    _objectSpriteLabel = new QLabel("No object selected");
-    _objectSpriteLabel->setAlignment(Qt::AlignCenter);
-    _objectSpriteLabel->setMinimumHeight(128);
-    _objectSpriteLabel->setMinimumWidth(128);
-    _objectSpriteLabel->setMaximumHeight(128);
-    _objectSpriteLabel->setMaximumWidth(128);
-    _objectSpriteLabel->setScaledContents(false);
-    _objectSpriteLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    _objectSpriteLabel->setStyleSheet("border: 1px solid gray; background-color: #f0f0f0;");
-    objectFormLayout->addRow("Sprite:", _objectSpriteLabel);
+    // Create main horizontal layout for object info
+    QHBoxLayout* objectInfoMainLayout = new QHBoxLayout(_objectInfoGroup);
+
+    // Left side: sprite and button container
+    QVBoxLayout* leftSideLayout = new QVBoxLayout();
+
+    // Create hover sprite label
+    _hoverSpriteLabel = new HoverSpriteLabel();
+    _hoverSpriteLabel->setText("No object selected");
+    _hoverSpriteLabel->setAlignment(Qt::AlignCenter);
+    _hoverSpriteLabel->setMinimumHeight(128);
+    _hoverSpriteLabel->setMinimumWidth(128);
+    _hoverSpriteLabel->setMaximumHeight(128);
+    _hoverSpriteLabel->setMaximumWidth(128);
+    _hoverSpriteLabel->setScaledContents(false);
+    _hoverSpriteLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    _hoverSpriteLabel->setStyleSheet("border: 1px solid gray; background-color: #f0f0f0;");
+
+    // Connect the edit button signal
+    connect(_hoverSpriteLabel->editButton(), &QPushButton::clicked, this, &SelectionPanel::onChangeFrmClicked);
+
+    leftSideLayout->addWidget(_hoverSpriteLabel);
+
+    // Edit PRO button below the sprite
+    _editProButton = new QPushButton("Edit PRO...");
+    _editProButton->setEnabled(false);
+    connect(_editProButton, &QPushButton::clicked, this, &SelectionPanel::onEditProClicked);
+    leftSideLayout->addWidget(_editProButton);
+    leftSideLayout->addStretch(); // Push everything to top
+
+    // Right side: object properties form
+    QFormLayout* objectFormLayout = new QFormLayout();
+
+    // Keep the old _objectSpriteLabel as null since we're using _hoverSpriteLabel now
+    _objectSpriteLabel = nullptr;
 
     // Object properties
     _objectNameEdit = new QLineEdit();
@@ -202,18 +290,9 @@ void SelectionPanel::setupUI() {
     _objectFrmPathEdit->setReadOnly(true);
     _objectFrmPathEdit->setPlaceholderText("FRM path");
     objectFormLayout->addRow("FRM Path:", _objectFrmPathEdit);
-    
-    // Change FRM button
-    _changeFrmButton = new QPushButton("Change FRM...");
-    _changeFrmButton->setEnabled(false);
-    connect(_changeFrmButton, &QPushButton::clicked, this, &SelectionPanel::onChangeFrmClicked);
-    objectFormLayout->addRow("", _changeFrmButton);
-    
-    // Edit PRO button
-    _editProButton = new QPushButton("Edit PRO...");
-    _editProButton->setEnabled(false);
-    connect(_editProButton, &QPushButton::clicked, this, &SelectionPanel::onEditProClicked);
-    objectFormLayout->addRow("", _editProButton);
+
+    // Change FRM button is now the hover edit icon on the sprite
+    _changeFrmButton = nullptr;
     
     // Edit Exit Grid button
     _editExitGridButton = new QPushButton("Edit Exit Grid...");
@@ -221,7 +300,10 @@ void SelectionPanel::setupUI() {
     _editExitGridButton->setVisible(false); // Hidden by default
     connect(_editExitGridButton, &QPushButton::clicked, this, &SelectionPanel::onEditExitGridClicked);
     objectFormLayout->addRow("", _editExitGridButton);
-    
+
+    // Complete the object info group layout
+    objectInfoMainLayout->addLayout(leftSideLayout);
+    objectInfoMainLayout->addLayout(objectFormLayout, 1); // Form takes more space
 
     objectLayout->addWidget(_objectInfoGroup);
 
@@ -415,8 +497,8 @@ void SelectionPanel::updateObjectInfo() {
             std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(activeFrmPid);
             _objectFrmPathEdit->setText(QString::fromStdString(frmPath));
             
-            // Enable the change FRM button
-            _changeFrmButton->setEnabled(true);
+            // Enable the change FRM button (edit icon)
+            _hoverSpriteLabel->editButton()->setEnabled(true);
             
             // Enable the edit PRO button
             _editProButton->setEnabled(true);
@@ -458,10 +540,10 @@ void SelectionPanel::updateObjectInfo() {
                     pixmap = pixmap.scaled(maxSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
                 }
 
-                _objectSpriteLabel->setPixmap(pixmap);
-                _objectSpriteLabel->setText("");
+                _hoverSpriteLabel->setPixmap(pixmap);
+                _hoverSpriteLabel->setText("");
             } else {
-                _objectSpriteLabel->setText("Failed to convert sprite");
+                _hoverSpriteLabel->setText("Failed to convert sprite");
             }
 
             _objectInfoGroup->setTitle("Object Information");
@@ -573,13 +655,13 @@ void geck::SelectionPanel::clearObjectInfo() {
     _objectFrmPathEdit->clear();
     _objectFrmPathEdit->setPlaceholderText("FRM path");
     
-    _changeFrmButton->setEnabled(false);
+    _hoverSpriteLabel->editButton()->setEnabled(false);
     _editProButton->setEnabled(false);
     _editExitGridButton->setEnabled(false);
     _editExitGridButton->setVisible(false);
 
-    _objectSpriteLabel->clear();
-    _objectSpriteLabel->setText("No object selected");
+    _hoverSpriteLabel->clear();
+    _hoverSpriteLabel->setText("No object selected");
     _objectInfoGroup->setTitle("Object Information");
 
     // Hide inventory section when no object is selected
@@ -896,6 +978,89 @@ void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
     }
 }
 
+void SelectionPanel::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+
+    // Check if we should switch to horizontal layout
+    bool shouldUseHorizontal = (width() >= HORIZONTAL_LAYOUT_MIN_WIDTH &&
+                                _inventoryGroup && _inventoryGroup->isVisible());
+
+    if (shouldUseHorizontal != _isHorizontalLayout) {
+        switchLayout(shouldUseHorizontal);
+    }
+}
+
+void SelectionPanel::switchLayout(bool horizontal) {
+    if (!_objectInfoGroup || !_inventoryGroup) {
+        return;
+    }
+
+    if (horizontal) {
+        applyHorizontalLayout();
+    } else {
+        applyVerticalLayout();
+    }
+
+    _isHorizontalLayout = horizontal;
+}
+
+void SelectionPanel::applyHorizontalLayout() {
+    // Create a new horizontal container if it doesn't exist
+    QWidget* newContainer = new QWidget();
+    QHBoxLayout* hLayout = new QHBoxLayout(newContainer);
+    hLayout->setContentsMargins(0, 0, 0, 0);
+    hLayout->setSpacing(10);
+
+    // Create left side for object info
+    QWidget* leftSide = new QWidget();
+    QVBoxLayout* leftLayout = new QVBoxLayout(leftSide);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
+    leftLayout->addWidget(_objectInfoGroup);
+    leftLayout->addStretch();
+
+    // Add widgets to horizontal layout
+    hLayout->addWidget(leftSide, 1);  // Object info takes 1 part
+    hLayout->addWidget(_inventoryGroup, 1);  // Inventory takes 1 part (50/50 split)
+
+    // Replace the content in object panel
+    QLayout* oldLayout = _objectPanelWidget->layout();
+    if (oldLayout) {
+        // Remove widgets from old layout without deleting them
+        oldLayout->removeWidget(_objectInfoGroup);
+        oldLayout->removeWidget(_inventoryGroup);
+        delete oldLayout;
+    }
+
+    // Set the new layout
+    QVBoxLayout* wrapperLayout = new QVBoxLayout(_objectPanelWidget);
+    wrapperLayout->setContentsMargins(0, 0, 0, 0);
+    wrapperLayout->addWidget(newContainer);
+}
+
+void SelectionPanel::applyVerticalLayout() {
+    // Remove widgets from any current layout
+    if (_objectPanelWidget->layout()) {
+        QLayout* currentLayout = _objectPanelWidget->layout();
+
+        // Find and remove widgets
+        for (int i = currentLayout->count() - 1; i >= 0; --i) {
+            QLayoutItem* item = currentLayout->itemAt(i);
+            if (item && item->widget()) {
+                item->widget()->setParent(nullptr);
+            }
+        }
+
+        delete currentLayout;
+    }
+
+    // Create standard vertical layout
+    QVBoxLayout* vLayout = new QVBoxLayout(_objectPanelWidget);
+    vLayout->setContentsMargins(0, 0, 0, 0);
+    vLayout->addWidget(_objectInfoGroup);
+    vLayout->addWidget(_inventoryGroup);
+    vLayout->addStretch();
+}
+
 void SelectionPanel::setupInventorySection() {
     _inventoryGroup = new QGroupBox("Inventory");
     _inventoryGroup->setVisible(false); // Hidden by default
@@ -943,8 +1108,14 @@ void SelectionPanel::setupInventorySection() {
 }
 
 void SelectionPanel::updateInventorySection() {
+    bool wasVisible = _inventoryGroup->isVisible();
+
     if (!_selectedObject || !_selectedObject.value()) {
         _inventoryGroup->setVisible(false);
+        // Check if layout needs updating after visibility change
+        if (wasVisible) {
+            resizeEvent(nullptr);
+        }
         return;
     }
 
@@ -953,6 +1124,9 @@ void SelectionPanel::updateInventorySection() {
 
     if (!mapObject) {
         _inventoryGroup->setVisible(false);
+        if (wasVisible) {
+            resizeEvent(nullptr);
+        }
         return;
     }
 
@@ -966,15 +1140,26 @@ void SelectionPanel::updateInventorySection() {
 
             _inventoryGroup->setVisible(hasInventory);
 
+            // Check if layout needs updating after visibility change
+            if (wasVisible != hasInventory) {
+                resizeEvent(nullptr);
+            }
+
             if (hasInventory) {
                 populateInventoryTree();
             }
         } else {
             _inventoryGroup->setVisible(false);
+            if (wasVisible) {
+                resizeEvent(nullptr);
+            }
         }
     } catch (const std::exception& e) {
         spdlog::warn("Failed to load pro file for inventory check: {}", e.what());
         _inventoryGroup->setVisible(false);
+        if (wasVisible) {
+            resizeEvent(nullptr);
+        }
     }
 }
 

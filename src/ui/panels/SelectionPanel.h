@@ -13,6 +13,8 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QStyledItemDelegate>
+#include <QResizeEvent>
+#include <QEnterEvent>
 #include <memory>
 
 #include "../../editor/Object.h"
@@ -22,6 +24,24 @@
 namespace geck {
 
 class Map;
+
+// Custom hover-enabled sprite label for FRM previews
+class HoverSpriteLabel : public QLabel {
+    Q_OBJECT
+public:
+    HoverSpriteLabel(QWidget* parent = nullptr);
+    QPushButton* editButton() const { return _editButton; }
+
+protected:
+    void enterEvent(QEnterEvent* event) override;
+    void leaveEvent(QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+
+private:
+    void setupEditButton();
+    void positionEditButton();
+    QPushButton* _editButton = nullptr;
+};
 
 class SelectionPanel : public QWidget {
     Q_OBJECT
@@ -33,6 +53,9 @@ public:
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
 
 signals:
     void objectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
@@ -76,6 +99,11 @@ private:
     QString getItemTypeName(uint32_t pid) const;
     QPixmap getItemIcon(uint32_t pid) const;
     QPixmap createPlaceholderIcon() const;
+
+    // Layout management
+    void switchLayout(bool horizontal);
+    void applyHorizontalLayout();
+    void applyVerticalLayout();
 
     QVBoxLayout* _mainLayout;
     QScrollArea* _scrollArea;
@@ -138,6 +166,9 @@ private:
     class AmountDelegate;
     AmountDelegate* _amountDelegate;
 
+    // Hover sprite label instance
+    HoverSpriteLabel* _hoverSpriteLabel;
+
     // Current selection state
     std::optional<std::shared_ptr<Object>> _selectedObject;
     int _selectedTileIndex;
@@ -145,6 +176,10 @@ private:
     bool _isRoofSelected;
     bool _hasTileSelection;
     Map* _map;
+
+    // Layout management
+    static constexpr int HORIZONTAL_LAYOUT_MIN_WIDTH = 650;
+    bool _isHorizontalLayout = false;
 };
 
 } // namespace geck
