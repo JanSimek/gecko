@@ -13,6 +13,7 @@ env:
   VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-cache,readwrite"
   VCPKG_FEATURE_FLAGS: "binarycaching"
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+  DEPENDENCY_CACHE_VERSION: v1
 
 permissions:
   contents: read
@@ -76,7 +77,8 @@ jobs:
             
           - os: macos-latest
             install_deps: |
-              brew install zlib
+              brew update
+              brew install qt@6 zlib
               # Build SFML 3 from source
               git clone --depth 1 --branch 3.0.0 https://github.com/SFML/SFML.git
               cd SFML
@@ -129,24 +131,14 @@ jobs:
           /usr/local/Cellar
           /opt/homebrew/Cellar
           C:/vcpkg
-        key: ${{ runner.os }}-deps-${{ hashFiles('**/CMakeLists.txt') }}
+        key: ${{ runner.os }}-${{ matrix.build_type }}-deps-${{ env.DEPENDENCY_CACHE_VERSION }}
         restore-keys: |
+          ${{ runner.os }}-${{ matrix.build_type }}-deps-
           ${{ runner.os }}-deps-
 
     - name: Install dependencies
       shell: bash
       run: ${{ matrix.install_deps }}
-
-    - name: Install Qt 6 on macOS
-      if: runner.os == 'macOS'
-      uses: jurplel/install-qt-action@v3
-      with:
-        version: 6.7.2
-        host: mac
-        target: desktop
-        arch: clang_64
-        modules: qtsvg
-        cache: true
 
     - name: Configure CMake
       shell: bash
@@ -163,6 +155,8 @@ jobs:
           # Set library paths for CMake test discovery on Linux/macOS
           # On macOS, use the environment variables set by the Qt setup step
           if [[ "${{ runner.os }}" == "macOS" ]]; then
+            export CMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6:/usr/local/opt/qt@6:$CMAKE_PREFIX_PATH"
+            export PATH="/opt/homebrew/opt/qt@6/bin:/usr/local/opt/qt@6/bin:$PATH"
             echo "Using DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
             echo "Using LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
           else
@@ -185,6 +179,8 @@ jobs:
         if [[ "${{ runner.os }}" != "Windows" ]]; then
           # Set library paths for Linux/macOS
           if [[ "${{ runner.os }}" == "macOS" ]]; then
+            export CMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6:/usr/local/opt/qt@6:$CMAKE_PREFIX_PATH"
+            export PATH="/opt/homebrew/opt/qt@6/bin:/usr/local/opt/qt@6/bin:$PATH"
             echo "Using DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
             echo "Using LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
           else
