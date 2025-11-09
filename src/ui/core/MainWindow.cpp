@@ -2130,13 +2130,13 @@ void MainWindow::launchGameViaSteam(const std::string& appId) {
     QProcess* steamProcess = new QProcess(this);
     
     connect(steamProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-        [steamProcess](int exitCode, QProcess::ExitStatus exitStatus) {
+        [steamProcess](int exitCode, [[maybe_unused]] QProcess::ExitStatus exitStatus) {
             spdlog::info("Steam launch finished with exit code: {}", exitCode);
             steamProcess->deleteLater();
         });
     
     connect(steamProcess, &QProcess::errorOccurred,
-        [this, steamProcess, appId](QProcess::ProcessError error) {
+        [this, steamProcess, appId]([[maybe_unused]] QProcess::ProcessError error) {
             QString errorMsg = QString("Failed to launch Fallout 2 via Steam (App ID: %1).\n\n"
                                      "Please ensure Steam is installed and Fallout 2 is available in your Steam library.")
                                      .arg(QString::fromStdString(appId));

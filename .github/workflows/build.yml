@@ -10,7 +10,7 @@ env:
   CMAKE_VERSION: 3.31.4
   BUILD_TYPE: Release
   BUILD_DIR: ${{ github.workspace }}/build
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-cache,readwrite"
   VCPKG_FEATURE_FLAGS: "binarycaching"
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
 
@@ -141,7 +141,7 @@ jobs:
       if: runner.os == 'macOS'
       uses: jurplel/install-qt-action@v3
       with:
-        version: 6.7.3
+        version: 6.7.2
         host: mac
         target: desktop
         arch: clang_64

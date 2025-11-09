@@ -399,8 +399,7 @@ void EditorWidget::loadObjectSprites() {
         if (!frm) {
             spdlog::debug("FRM '{}' not in cache, attempting on-demand loading", frm_name);
             try {
-                ResourceManager::getInstance().loadResource<Frm>(frm_name);
-                frm = ResourceManager::getInstance().getResource<Frm>(frm_name);
+                frm = ResourceManager::getInstance().loadResource<Frm>(frm_name);
                 if (!frm) {
                     spdlog::error("Failed to load FRM resource '{}' for object at position {} - resource still null after loading", frm_name, object->position);
                     _lastLoadErrors.failedFrmNames.insert(frm_name);
@@ -1053,8 +1052,7 @@ void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderH
             std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(scrollBlockerObject->frm_pid);
             auto frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
             if (!frm) {
-                ResourceManager::getInstance().loadResource<Frm>(frmPath);
-                frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
+                frm = ResourceManager::getInstance().loadResource<Frm>(frmPath);
             }
             
             if (frm) {
@@ -1725,7 +1723,8 @@ void EditorWidget::updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector
 }
 
 const sf::Texture& EditorWidget::createHexTexture() {
-    ResourceManager::getInstance().loadResource<Frm>(ResourcePaths::Frm::HEX_GRID);
+    [[maybe_unused]] auto* hexFrm =
+        ResourceManager::getInstance().loadResource<Frm>(ResourcePaths::Frm::HEX_GRID);
     return ResourceManager::getInstance().texture(ResourcePaths::Frm::HEX_GRID);
 }
 
