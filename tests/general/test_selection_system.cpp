@@ -18,7 +18,7 @@ using namespace geck::selection;
 // Helper functions for testing
 namespace TestHelpers {
     // Helper to create mock object for selection testing
-    std::shared_ptr<Object> createMockObject(int hexPosition) {
+    std::shared_ptr<Object> createMockObject([[maybe_unused]] int hexPosition) {
         // For now, we'll simulate this without creating actual Object instances
         // In a full implementation, this would create a proper test object
         // This is a placeholder that represents an object at a given hex position
@@ -736,7 +736,7 @@ public:
     }
     
     // Mock tile detection methods (existing methods)
-    std::optional<int> getTileAtPosition(sf::Vector2f worldPos, bool isRoof) {
+    std::optional<int> getTileAtPosition(sf::Vector2f worldPos, [[maybe_unused]] bool isRoof) {
         // Simple mock: convert world position to tile index for testing
         // In real implementation, this would do complex hit detection
         
@@ -1505,7 +1505,7 @@ TEST_CASE("Regression prevention for known issues", "[regression_prevention]") {
         state.addItem({SelectionType::ROOF_TILE, 200});
         state.addItem({SelectionType::HEX, 1500});
         
-        int initialCount = state.count();
+        auto initialCount = state.count();
         REQUIRE(initialCount == 3);
         
         // Start and cancel area selection - shouldn't corrupt state

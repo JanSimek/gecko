@@ -10,6 +10,9 @@ env:
   CMAKE_VERSION: 3.31.4
   BUILD_TYPE: Release
   BUILD_DIR: ${{ github.workspace }}/build
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_FEATURE_FLAGS: "binarycaching"
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
 
 jobs:
   build:
@@ -124,107 +127,13 @@ jobs:
       shell: bash
       run: ${{ matrix.install_deps }}
 
-    - name: Setup Qt6 on macOS
+    - name: Install Qt 6 on macOS
       if: runner.os == 'macOS'
-      shell: bash
-      run: |
-        echo "=== Setting up Qt6 on macOS ==="
-        
-        # Install Qt6 and required dependencies
-        brew install qt@6 double-conversion libb2 md4c dbus
-    
-        # Get Homebrew prefix and paths
-        HOMEBREW_PREFIX=$(brew --prefix)
-        if brew --prefix qt@6 >/dev/null 2>&1; then
-          QT6_PATH=$(brew --prefix qt@6)
-        else
-          QT6_PATH=$(brew --prefix qt)
-        fi
-        LIBB2_PATH=$(brew --prefix libb2)
-        MD4C_PATH=$(brew --prefix md4c)
-        DBUS_PATH=$(brew --prefix dbus)
-        
-        echo "Homebrew prefix: $HOMEBREW_PREFIX"
-        echo "Qt6 installed at: $QT6_PATH"
-        echo "libb2 installed at: $LIBB2_PATH"
-        echo "md4c installed at: $MD4C_PATH"
-        echo "dbus installed at: $DBUS_PATH"
-    
-        # Set up library paths for Qt tools and dependencies
-        export PATH="$QT6_PATH/bin:$PATH"
-        echo "PATH=$PATH" >> $GITHUB_ENV
-        export DYLD_LIBRARY_PATH="$QT6_PATH/lib:$LIBB2_PATH/lib:$MD4C_PATH/lib:$DBUS_PATH/lib:$HOMEBREW_PREFIX/lib:$DYLD_LIBRARY_PATH"
-        export LD_LIBRARY_PATH="$QT6_PATH/lib:$LIBB2_PATH/lib:$MD4C_PATH/lib:$DBUS_PATH/lib:$HOMEBREW_PREFIX/lib:$LD_LIBRARY_PATH"
-        echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
-        echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> $GITHUB_ENV
-        
-        # Export CMake path hints
-        QT6_CONFIG_FILE=$(find "$QT6_PATH/lib/cmake" -name Qt6Config.cmake -print -quit)
-        if [[ -z "$QT6_CONFIG_FILE" ]]; then
-          echo "❌ Qt6Config.cmake not found under $QT6_PATH/lib/cmake"
-          find "$QT6_PATH" -name Qt6Config.cmake
-          exit 1
-        fi
-    
-        QT6_CMAKE_DIR=$(dirname "$QT6_CONFIG_FILE")
-        export CMAKE_PREFIX_PATH="$QT6_PATH/lib/cmake:$CMAKE_PREFIX_PATH"
-        export Qt6_DIR="$QT6_CMAKE_DIR"
-        echo "CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH" >> $GITHUB_ENV
-        echo "Qt6_DIR=$Qt6_DIR" >> $GITHUB_ENV
-        
-        # Verify libb2 is available
-        echo "Checking for libb2 library..."
-        # Look for libb2 libraries (versioned or unversioned)
-        LIBB2_FOUND=false
-        for lib in "$LIBB2_PATH/lib/libb2.dylib" "$LIBB2_PATH/lib/libb2.1.dylib" "$LIBB2_PATH/lib/libb2.*.dylib"; do
-          if [[ -f "$lib" ]]; then
-            echo "✅ libb2 library found: $lib"
-            LIBB2_FOUND=true
-            break
-          fi
-        done
-        
-        if [[ "$LIBB2_FOUND" == "false" ]]; then
-          echo "❌ libb2 library not found in expected locations"
-          echo "Contents of $LIBB2_PATH/lib/:"
-          ls -la "$LIBB2_PATH/lib/" | grep -i libb2 || echo "No libb2 files found"
-          echo "Searching for libb2 libraries system-wide..."
-          find "$HOMEBREW_PREFIX" -name "*libb2*" 2>/dev/null || echo "No libb2 libraries found"
-          exit 1
-        fi
-        
-        # Verify md4c is available
-        echo "Checking for md4c library..."
-        # Look for md4c libraries (versioned or unversioned)
-        MD4C_FOUND=false
-        for lib in "$MD4C_PATH/lib/libmd4c.dylib" "$MD4C_PATH/lib/libmd4c.0.dylib" "$MD4C_PATH/lib/libmd4c.*.dylib"; do
-          if [[ -f "$lib" ]]; then
-            echo "✅ md4c library found: $lib"
-            MD4C_FOUND=true
-            break
-          fi
-        done
-        
-        if [[ "$MD4C_FOUND" == "false" ]]; then
-          echo "❌ md4c library not found in expected locations"
-          echo "Contents of $MD4C_PATH/lib/:"
-          ls -la "$MD4C_PATH/lib/" | grep -i md4c || echo "No md4c files found"
-          echo "Searching for md4c libraries system-wide..."
-          find "$HOMEBREW_PREFIX" -name "*md4c*" 2>/dev/null || echo "No md4c libraries found"
-          exit 1
-        fi
-        
-        # Test that Qt tools can find libb2 and md4c with the exported paths
-        echo "Testing Qt uic tool with library paths..."
-        echo "Current DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
-        if DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH" "$QT6_PATH/share/qt/libexec/uic" -h > /dev/null 2>&1; then
-          echo "✅ Qt uic tool can load with all required libraries"
-        else
-          echo "❌ Qt uic tool failed to load"
-          echo "Trying to diagnose..."
-          DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH" otool -L "$QT6_PATH/share/qt/libexec/uic" | grep -i -E "(libb2|md4c)" || true
-          exit 1
-        fi
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: 6.7.3
+        modules: qtbase qtsvg
+        cache: true
 
     - name: Configure CMake
       shell: bash
