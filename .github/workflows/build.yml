@@ -26,7 +26,7 @@ jobs:
               sudo apt-get update
               # Install Qt6 packages (correct names for Ubuntu)
               sudo apt-get install -y \
-                qt6-base-dev qt6-base-dev-tools \
+                qt6-base-dev qt6-base-dev-tools qt6-svg-dev \
                 libgl1-mesa-dev \
                 libxrandr-dev \
                 libxcursor-dev \
@@ -65,7 +65,7 @@ jobs:
           - os: windows-latest
             install_deps: |
               # Use vcpkg for dependencies
-              vcpkg install qtbase:x64-windows qttools:x64-windows sfml:x64-windows spdlog:x64-windows zlib:x64-windows
+              vcpkg install qtbase:x64-windows qttools:x64-windows qtsvg:x64-windows sfml:x64-windows spdlog:x64-windows zlib:x64-windows
             cmake_extra_args: -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
             
           - os: macos-latest
@@ -237,7 +237,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DGECK_BUILD_TESTS=ON \
             -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" \
-            -DGECK_AUTO_TEST=OFF \
             ${{ matrix.cmake_extra_args }} \
             -S "${{ github.workspace }}"
         else
@@ -254,7 +253,6 @@ jobs:
           cmake -B "${{ env.BUILD_DIR }}" \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DGECK_BUILD_TESTS=ON \
-            -DGECK_AUTO_TEST=OFF \
             -DSPDLOG_FMT_EXTERNAL=OFF \
             -DCMAKE_CXX_FLAGS="-Wno-error" \
             ${{ matrix.cmake_extra_args }} \
@@ -366,4 +364,3 @@ jobs:
           ${{ env.BUILD_DIR }}/benchmark_results.json
           ${{ env.BUILD_DIR }}/benchmark_report.md
         retention-days: 30
-

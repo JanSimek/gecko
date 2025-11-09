@@ -351,13 +351,3 @@ else()
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
     )
 endif()
-
-# Optionally run tests automatically after build
-if(GECK_AUTO_TEST)
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/post-build-test.sh
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        COMMENT "Running automatic post-build tests..."
-        VERBATIM
-    )
-endif()

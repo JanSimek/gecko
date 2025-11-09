@@ -35,7 +35,6 @@ configure_file(
 option(GECK_USE_SYSTEM_LIBS "Use system libraries when available" ON)
 option(GECK_BUILD_TESTS "Build tests" ON)
 option(GECK_ENABLE_SANITIZERS "Enable sanitizer builds for debugging" OFF)
-option(GECK_AUTO_TEST "Automatically run tests after build" ON)
 
 ##################################################
 # Dependencies
@@ -151,9 +150,9 @@ message("${PROJECT_NAME} ${PROJECT_VERSION}
          cxxflags | ${CMAKE_CXX_FLAGS}
         build dir | ${CMAKE_BINARY_DIR}
    install prefix | ${CMAKE_INSTALL_PREFIX}
-   system libs    | ${GECK_USE_SYSTEM_LIBS}
-   build tests    | ${GECK_BUILD_TESTS}
-   Qt6 version    | ${Qt6_VERSION}
+      system libs | ${GECK_USE_SYSTEM_LIBS}
+      build tests | ${GECK_BUILD_TESTS}
+      Qt6 version | ${Qt6_VERSION}
 ")
 
 ##################################################
@@ -182,54 +181,3 @@ if(UNIX AND NOT APPLE)
                 DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps)
     endforeach()
 endif()
-
-##################################################
-# Post-Build Testing Framework
-##################################################
-
-# Add custom target for post-build testing
-add_custom_target(post-build-test
-    COMMAND ${CMAKE_SOURCE_DIR}/scripts/post-build-test.sh
-    DEPENDS ${PROJECT_NAME}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Running post-build stability tests..."
-    VERBATIM
-)
-
-# Add crash detection utilities
-add_custom_target(crash-check
-    COMMAND ${CMAKE_SOURCE_DIR}/scripts/crash-detector.sh find 1
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Checking for recent crashes..."
-    VERBATIM
-)
-
-# Add sanitizer build target
-if(NOT MSVC)
-    add_custom_target(build-with-sanitizers
-        COMMAND ${CMAKE_COMMAND} -DGECK_ENABLE_SANITIZERS=ON -B ${CMAKE_BINARY_DIR}/sanitizer-build -S ${CMAKE_SOURCE_DIR}
-        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}/sanitizer-build
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        COMMENT "Building with sanitizers enabled..."
-        VERBATIM
-    )
-endif()
-
-# Auto-test will be configured in src/CMakeLists.txt where the target is defined
-
-# Add convenience targets
-add_custom_target(test-all
-    DEPENDS post-build-test crash-check
-    COMMENT "Running all stability tests..."
-)
-
-message(STATUS "")
-message(STATUS "Testing Targets Available:")
-message(STATUS "  post-build-test     | Run comprehensive stability tests")
-message(STATUS "  crash-check        | Check for recent crashes")
-message(STATUS "  test-all           | Run all tests")
-if(NOT MSVC)
-    message(STATUS "  build-with-sanitizers | Build with AddressSanitizer/UBSan")
-endif()
-message(STATUS "  auto-test enabled  | ${GECK_AUTO_TEST}")
-message(STATUS "")
