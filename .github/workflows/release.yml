@@ -16,6 +16,9 @@ env:
   BUILD_TYPE: Release
   BUILD_DIR: ${{ github.workspace }}/build
 
+permissions:
+  contents: write
+
 jobs:
   create-release:
     name: Create Release
@@ -152,8 +155,11 @@ jobs:
           libgbm-dev \
           libfreetype6-dev \
           zlib1g-dev \
-          linuxdeploy \
           patchelf
+        # Install linuxdeploy
+        wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+        chmod +x linuxdeploy-x86_64.AppImage
+        sudo mv linuxdeploy-x86_64.AppImage /usr/local/bin/linuxdeploy
         # Install linuxdeploy-plugin-qt
         wget https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
         chmod +x linuxdeploy-plugin-qt-x86_64.AppImage
@@ -383,29 +389,52 @@ jobs:
           ${{ matrix.config.package_cmd }}
         fi
 
-    - name: Upload Release Assets
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: |
-          gecko-windows-installer.exe
-          gecko-windows.zip
-          gecko-macos.dmg
-          gecko-macos.zip
-          gecko-linux.AppImage
-        asset_name: ${{ matrix.config.artifact }}
-        asset_content_type: application/octet-stream
+    - name: Collect release files
+      shell: bash
+      run: |
+        mkdir -p release
+        shopt -s nullglob
+        for file in gecko-*; do
+          if [[ -f "$file" ]]; then
+            mv "$file" release/
+          fi
+        done
+        ls -al release
 
-    - name: Upload build artifacts
+    - name: Upload release artifacts
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.config.artifact }}-${{ needs.create-release.outputs.version }}
-        path: |
-          gecko-windows-installer.exe
-          gecko-windows.zip
-          gecko-macos.dmg
-          gecko-macos.zip
-          gecko-linux.AppImage
+        path: release/
+        if-no-files-found: error
         retention-days: 90
+
+  publish-release-assets:
+    name: Publish Release Assets
+    runs-on: ubuntu-latest
+    needs:
+      - create-release
+      - build-release
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-bundles
+      - name: List downloaded assets
+        run: |
+          find release-bundles -type f -print
+      - name: Upload assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.create-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find release-bundles -type f -print)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No release assets found to upload" >&2
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            echo "Uploading ${file}"
+            gh release upload "$RELEASE_TAG" "$file" --clobber
+          done

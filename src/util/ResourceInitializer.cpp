@@ -3,6 +3,8 @@
 #include "ResourcePaths.h"
 #include "../format/lst/Lst.h"
 #include <spdlog/spdlog.h>
+#include <filesystem>
+#include <stdexcept>
 
 namespace geck {
 
@@ -12,14 +14,21 @@ void ResourceInitializer::loadEssentialLstFiles() {
     try {
         // Load all LST files needed for FID to FRM name resolution
         // These correspond to the frmTypeDescription array in ResourceManager::FIDtoFrmName
-        resourceManager.loadResource<Lst>(ResourcePaths::Lst::ITEMS);
-        resourceManager.loadResource<Lst>(ResourcePaths::Lst::CRITTERS);
-        resourceManager.loadResource<Lst>(ResourcePaths::Lst::SCENERY);
-        resourceManager.loadResource<Lst>(ResourcePaths::Lst::WALLS);
-        resourceManager.loadResource<Lst>(ResourcePaths::Lst::TILES);
-        resourceManager.loadResource<Lst>(ResourcePaths::Lst::MISC);
-        resourceManager.loadResource<Lst>(ResourcePaths::Lst::INTERFACE);
-        resourceManager.loadResource<Lst>(ResourcePaths::Lst::INVENTORY);
+        const auto loadLst = [&](const std::filesystem::path& path) {
+            [[maybe_unused]] auto* lst = resourceManager.loadResource<Lst>(path);
+            if (!lst) {
+                throw std::runtime_error("Failed to load essential LST: " + path.string());
+            }
+        };
+
+        loadLst(ResourcePaths::Lst::ITEMS);
+        loadLst(ResourcePaths::Lst::CRITTERS);
+        loadLst(ResourcePaths::Lst::SCENERY);
+        loadLst(ResourcePaths::Lst::WALLS);
+        loadLst(ResourcePaths::Lst::TILES);
+        loadLst(ResourcePaths::Lst::MISC);
+        loadLst(ResourcePaths::Lst::INTERFACE);
+        loadLst(ResourcePaths::Lst::INVENTORY);
         
         spdlog::info("ResourceInitializer: Loaded all essential LST files");
     } catch (const std::exception& e) {

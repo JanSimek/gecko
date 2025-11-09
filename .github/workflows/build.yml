@@ -14,6 +14,9 @@ env:
   VCPKG_FEATURE_FLAGS: "binarycaching"
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: ${{ matrix.os }} - ${{ matrix.build_type }}
@@ -121,6 +124,7 @@ jobs:
         path: |
           ~/vcpkg
           ~/.cache/vcpkg
+          ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
           ~/Library/Caches/Homebrew
           /usr/local/Cellar
           /opt/homebrew/Cellar
@@ -140,7 +144,7 @@ jobs:
         version: 6.7.3
         host: mac
         target: desktop
-        arch: mac_arm64
+        arch: clang_64
         modules: qtsvg
         cache: true
 
@@ -243,18 +247,6 @@ jobs:
           echo "Performance test executable not found, skipping benchmarks"
           exit 0
         fi
-        
-        # Download performance tracking script
-        curl -sL https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/scripts/track_performance.py -o track_performance.py
-        
-        # Analyze results
-        python3 track_performance.py benchmark_results.xml --json-output benchmark_results.json --markdown-output benchmark_report.md || true
-        
-        # Display summary
-        if [[ -f benchmark_report.md ]]; then
-          echo "=== Performance Benchmark Results ==="
-          cat benchmark_report.md
-        fi
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -282,6 +274,4 @@ jobs:
         name: benchmark-results-${{ matrix.os }}
         path: |
           ${{ env.BUILD_DIR }}/benchmark_results.xml
-          ${{ env.BUILD_DIR }}/benchmark_results.json
-          ${{ env.BUILD_DIR }}/benchmark_report.md
         retention-days: 30
