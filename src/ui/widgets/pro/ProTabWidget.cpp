@@ -79,18 +79,18 @@ void ProTabWidget::connectCheckBox(QCheckBox* checkBox) {
     connect(checkBox, &QCheckBox::toggled, this, &ProTabWidget::onFieldChanged);
 }
 
-void ProTabWidget::loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* data, int count) {
+void ProTabWidget::loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* values, int count) {
     for (int i = 0; i < count; ++i) {
-        if (widgets[i]) {
-            widgets[i]->setValue(static_cast<int>(data[i]));
+        if (widgets[i] && values) {
+            widgets[i]->setValue(static_cast<int>(values[i]));
         }
     }
 }
 
-void ProTabWidget::saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* data, int count) {
+void ProTabWidget::saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* values, int count) {
     for (int i = 0; i < count; ++i) {
-        if (widgets[i]) {
-            data[i] = static_cast<uint32_t>(widgets[i]->value());
+        if (widgets[i] && values) {
+            values[i] = static_cast<uint32_t>(widgets[i]->value());
         }
     }
 }

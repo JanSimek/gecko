@@ -2677,18 +2677,18 @@ QHBoxLayout* ProEditorDialog::createTwoColumnLayout(QWidget* parent) {
 }
 
 // Widget array helper methods (DRY principle)
-void ProEditorDialog::loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* data, int count) {
+void ProEditorDialog::loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* arrayValues, int count) {
     for (int i = 0; i < count; ++i) {
-        if (widgets[i]) {
-            widgets[i]->setValue(static_cast<int>(data[i]));
+        if (widgets[i] && arrayValues) {
+            widgets[i]->setValue(static_cast<int>(arrayValues[i]));
         }
     }
 }
 
-void ProEditorDialog::saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* data, int count) {
+void ProEditorDialog::saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* arrayValues, int count) {
     for (int i = 0; i < count; ++i) {
-        if (widgets[i]) {
-            data[i] = static_cast<uint32_t>(widgets[i]->value());
+        if (widgets[i] && arrayValues) {
+            arrayValues[i] = static_cast<uint32_t>(widgets[i]->value());
         }
     }
 }

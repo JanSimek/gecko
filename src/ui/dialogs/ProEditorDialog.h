@@ -232,8 +232,8 @@ private:
     QHBoxLayout* createTwoColumnLayout(QWidget* parent);
     
     // Widget array helper methods (DRY principle)
-    void loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* data, int count);
-    void saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* data, int count);
+    void loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* arrayValues, int count);
+    void saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* arrayValues, int count);
     QSpinBox** createConnectedSpinBoxArray(int count, int min, int max, const QStringList& tooltips);
     
     // Material names mapping

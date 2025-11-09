@@ -1405,11 +1405,13 @@ QString FileBrowserPanel::loadProNameFromFile(const QString& filePath) const {
             const auto& nameMessage = const_cast<Msg*>(msgFile)->message(messageId);
             QString name = QString::fromStdString(nameMessage.text);
             return name.isEmpty() ? QString("No name (ID: %1)").arg(messageId) : name;
-        } catch (const std::exception& e) {
+        } catch ([[maybe_unused]] const std::exception& e) {
+            spdlog::warn("Failed to resolve PRO name for message {}: {}", messageId, e.what());
             return QString("No name (ID: %1)").arg(messageId);
         }
         
-    } catch (const std::exception& e) {
+    } catch ([[maybe_unused]] const std::exception& e) {
+        spdlog::error("Failed to read PRO metadata for '{}': {}", filePath.toStdString(), e.what());
         return QString("Error: %1").arg(e.what());
     }
 }

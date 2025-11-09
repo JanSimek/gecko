@@ -131,12 +131,12 @@ protected:
     /**
      * @brief Load integer array data into spin box widgets
      */
-    void loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* data, int count);
+    void loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* values, int count);
     
     /**
      * @brief Save spin box widget values to integer array
      */
-    void saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* data, int count);
+    void saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* values, int count);
     
     /**
      * @brief Get material type names
