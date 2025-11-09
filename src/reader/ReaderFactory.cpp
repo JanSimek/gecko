@@ -293,7 +293,7 @@ ReaderFactory::Format ReaderFactory::detectByContent(const std::vector<uint8_t>&
     return Format::UNKNOWN;
 }
 
-double ReaderFactory::calculateConfidence(Format format, const std::vector<uint8_t>& data) {
+double ReaderFactory::calculateConfidence(Format format, [[maybe_unused]] const std::vector<uint8_t>& data) {
     // This is a simplified confidence calculation
     // In a more sophisticated implementation, this would analyze the data
     return (format != Format::UNKNOWN) ? 0.8 : 0.0;

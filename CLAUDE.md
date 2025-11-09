@@ -1,6 +1,60 @@
-# Claude Development Notes
+# CLAUDE.md
 
-This file contains important notes and context for Claude to maintain consistency across sessions.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+**Gecko** is a modern cross-platform Fallout 2 map editor written in C++20. It uses Qt6 for the UI framework and SFML for 2D game rendering, supporting vanilla Fallout 2 and original Mapper file formats.
+
+## Build Commands
+
+### Standard Build
+```bash
+# Configure (from project root)
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+# Build
+cmake --build build --config Release
+
+# Or with make (from build directory)
+make -j4
+```
+
+### Testing
+```bash
+# Run all tests
+ctest --test-dir build --output-on-failure
+
+# Run specific test categories
+ctest --test-dir build -L general      # Core logic tests
+ctest --test-dir build -L performance  # Performance benchmarks
+ctest --test-dir build -L qt           # UI tests
+```
+
+### Code Formatting
+```bash
+# Format all source files (uses clang-format with WebKit style)
+./format.sh
+```
+
+## Architecture Overview
+
+### Two-Library Structure
+- **gecko** (executable): UI and editor functionality
+- **vault** (static library): File format handling and I/O operations
+
+### Key Components
+- `src/format/`: File format parsers (DAT, FRM, MAP, PRO, MSG, PAL)
+- `src/ui/`: Qt6 interface components (dialogs, panels, widgets)
+- `src/editor/`: Core editing logic (Object, HexagonGrid, Hex)
+- `src/selection/`: Selection management system
+- `src/util/`: Utilities (ResourceManager, Settings, Coordinates)
+- `src/vfs/`: Virtual file system for game archives
+
+### Resource Management
+- Singleton `ResourceManager` with VFS integration
+- Texture caching and FRM-to-sprite conversion
+- DAT archive support via vfspp library
 
 ## Map Format References
 
@@ -131,5 +185,32 @@ object->setMapObject(mapObject);  // Critical for selection system!
 
 ---
 
-*Last updated: 2025-01-23*
+## Code Style
+
+### Naming Conventions
+- Classes: PascalCase (`LoadingWidget`)
+- Functions: camelCase (`loadMap`)
+- Constants: SCREAMING_SNAKE (`TILES_PER_ELEVATION`)
+- Private members: `_memberName`
+
+### C++ Standards
+- C++20 required
+- RAII and smart pointers throughout
+- `std::filesystem::path` for cross-platform file handling
+
+## Development Setup
+
+### Essential Setup
+1. Copy `master.dat` and `critter.dat` from Fallout 2 to `resources/`
+2. Use Release builds for performance (Debug builds are slow for map loading)
+3. Run `./format.sh` before committing
+
+### CMake Options
+- `GECK_USE_SYSTEM_LIBS=ON`: Use system libraries when available
+- `GECK_BUILD_TESTS=ON`: Build tests (default)
+- `GECK_ENABLE_SANITIZERS=OFF`: Enable sanitizers for debugging
+
+---
+
+*Last updated: 2025-01-09*
 *This file should be updated whenever significant architectural decisions or fixes are made.*

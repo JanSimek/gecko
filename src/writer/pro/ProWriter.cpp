@@ -412,7 +412,7 @@ void ProWriter::writeTileData(const Pro& pro) {
     spdlog::debug("ProWriter: Tile data written - materialId: {}", pro.tileData.materialId);
 }
 
-void ProWriter::writeMiscData(const Pro& pro) {
+void ProWriter::writeMiscData([[maybe_unused]] const Pro& pro) {
     auto& utils = getBinaryUtils();
     
     // Write basic misc object data

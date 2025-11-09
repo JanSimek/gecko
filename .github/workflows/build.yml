@@ -115,6 +115,7 @@ jobs:
           ~/Library/Caches/Homebrew
           /usr/local/Cellar
           /opt/homebrew/Cellar
+          C:/vcpkg
         key: ${{ runner.os }}-deps-${{ hashFiles('**/CMakeLists.txt') }}
         restore-keys: |
           ${{ runner.os }}-deps-
@@ -132,16 +133,13 @@ jobs:
         # Install Qt6 and required dependencies
         brew install qt@6 double-conversion libb2 md4c dbus
     
-        # Link Qt6 (since it's keg-only and not linked by default)
-        brew link qt@6 --force --overwrite
-        brew link double-conversion --force
-        brew link libb2 --force
-        brew link md4c --force
-        brew link dbus --force
-    
         # Get Homebrew prefix and paths
         HOMEBREW_PREFIX=$(brew --prefix)
-        QT6_PATH=$(brew --prefix qt@6)
+        if brew --prefix qt@6 >/dev/null 2>&1; then
+          QT6_PATH=$(brew --prefix qt@6)
+        else
+          QT6_PATH=$(brew --prefix qt)
+        fi
         LIBB2_PATH=$(brew --prefix libb2)
         MD4C_PATH=$(brew --prefix md4c)
         DBUS_PATH=$(brew --prefix dbus)
@@ -152,27 +150,27 @@ jobs:
         echo "md4c installed at: $MD4C_PATH"
         echo "dbus installed at: $DBUS_PATH"
     
-        # Set up library paths for Qt tools to find libb2, md4c, and dbus
-        export DYLD_LIBRARY_PATH="$LIBB2_PATH/lib:$MD4C_PATH/lib:$DBUS_PATH/lib:$HOMEBREW_PREFIX/lib:$DYLD_LIBRARY_PATH"
-        export LD_LIBRARY_PATH="$LIBB2_PATH/lib:$MD4C_PATH/lib:$DBUS_PATH/lib:$HOMEBREW_PREFIX/lib:$LD_LIBRARY_PATH"
+        # Set up library paths for Qt tools and dependencies
+        export PATH="$QT6_PATH/bin:$PATH"
+        echo "PATH=$PATH" >> $GITHUB_ENV
+        export DYLD_LIBRARY_PATH="$QT6_PATH/lib:$LIBB2_PATH/lib:$MD4C_PATH/lib:$DBUS_PATH/lib:$HOMEBREW_PREFIX/lib:$DYLD_LIBRARY_PATH"
+        export LD_LIBRARY_PATH="$QT6_PATH/lib:$LIBB2_PATH/lib:$MD4C_PATH/lib:$DBUS_PATH/lib:$HOMEBREW_PREFIX/lib:$LD_LIBRARY_PATH"
         echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
         echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> $GITHUB_ENV
         
         # Export CMake path hints
-        export CMAKE_PREFIX_PATH="$QT6_PATH/lib/cmake:$CMAKE_PREFIX_PATH"
-        export Qt6_DIR="$QT6_PATH/lib/cmake/Qt6"
-        echo "CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH" >> $GITHUB_ENV
-        echo "Qt6_DIR=$Qt6_DIR" >> $GITHUB_ENV
-    
-        # Confirm existence
-        echo "Looking for Qt6Config.cmake in $QT6_PATH/lib/cmake/Qt6"
-        if [[ -f "$QT6_PATH/lib/cmake/Qt6/Qt6Config.cmake" ]]; then
-          echo "✅ Qt6Config.cmake found"
-        else
-          echo "❌ Qt6Config.cmake not found"
+        QT6_CONFIG_FILE=$(find "$QT6_PATH/lib/cmake" -name Qt6Config.cmake -print -quit)
+        if [[ -z "$QT6_CONFIG_FILE" ]]; then
+          echo "❌ Qt6Config.cmake not found under $QT6_PATH/lib/cmake"
           find "$QT6_PATH" -name Qt6Config.cmake
           exit 1
         fi
+    
+        QT6_CMAKE_DIR=$(dirname "$QT6_CONFIG_FILE")
+        export CMAKE_PREFIX_PATH="$QT6_PATH/lib/cmake:$CMAKE_PREFIX_PATH"
+        export Qt6_DIR="$QT6_CMAKE_DIR"
+        echo "CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH" >> $GITHUB_ENV
+        echo "Qt6_DIR=$Qt6_DIR" >> $GITHUB_ENV
         
         # Verify libb2 is available
         echo "Checking for libb2 library..."
@@ -272,7 +270,12 @@ jobs:
             export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
           fi
         fi
-        cmake --build "${{ env.BUILD_DIR }}" --config ${{ matrix.build_type }} --parallel
+        
+        PARALLEL_ARGS="--parallel"
+        if [[ "${{ runner.os }}" == "Linux" ]]; then
+          PARALLEL_ARGS="--parallel 4"
+        fi
+        cmake --build "${{ env.BUILD_DIR }}" --config ${{ matrix.build_type }} ${PARALLEL_ARGS}
 
     - name: Run Unit Tests
       shell: bash
