@@ -73,7 +73,8 @@ jobs:
           - os: windows-latest
             install_deps: |
               # Setup vcpkg if not cached
-              if [ ! -d "$VCPKG_ROOT" ]; then
+              if [ ! -f "$VCPKG_ROOT/vcpkg.exe" ]; then
+                rm -rf "$VCPKG_ROOT"
                 git clone https://github.com/Microsoft/vcpkg.git "$VCPKG_ROOT"
                 cd "$VCPKG_ROOT"
                 ./bootstrap-vcpkg.bat -disableMetrics
@@ -201,13 +202,16 @@ jobs:
           # On macOS, use the environment variables set by the Qt setup step
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             # Find Qt6 installation directory
-            if [ -d "/opt/homebrew/opt/qt@6" ]; then
-              QT_PREFIX="/opt/homebrew/opt/qt@6"
-            elif [ -d "/usr/local/opt/qt@6" ]; then
-              QT_PREFIX="/usr/local/opt/qt@6"
-            else
-              echo "Error: Qt6 not found in expected locations"
-              exit 1
+            QT_PREFIX="$(brew --prefix qt@6 2>/dev/null || true)"
+            if [ -z "$QT_PREFIX" ] || [ ! -d "$QT_PREFIX" ]; then
+              if [ -d "/opt/homebrew/opt/qt@6" ]; then
+                QT_PREFIX="/opt/homebrew/opt/qt@6"
+              elif [ -d "/usr/local/opt/qt@6" ]; then
+                QT_PREFIX="/usr/local/opt/qt@6"
+              else
+                echo "Error: Qt6 not found in expected locations"
+                exit 1
+              fi
             fi
             
             # Set Qt6_DIR explicitly to the CMake config location
