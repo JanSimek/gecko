@@ -11,7 +11,7 @@ env:
   BUILD_TYPE: Release
   BUILD_DIR: ${{ github.workspace }}/build
   VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-cache,readwrite"
-  VCPKG_FEATURE_FLAGS: "binarycaching"
+  VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
   DEPENDENCY_CACHE_VERSION: v2
   VCPKG_ROOT: ${{ github.workspace }}/vcpkg
@@ -85,7 +85,7 @@ jobs:
               # Update vcpkg to ensure we have latest port files
               cd "$VCPKG_ROOT" && git pull && cd ..
               # Install dependencies using manifest mode (will use binary cache if available)
-              "$VCPKG_ROOT/vcpkg.exe" install --triplet=x64-windows --x-manifest-root="${{ github.workspace }}" --x-install-root="$VCPKG_ROOT/installed"
+              "$VCPKG_ROOT/vcpkg.exe" install --triplet=x64-windows --feature-flags=manifests --x-manifest-root="${{ github.workspace }}" --x-install-root="$VCPKG_ROOT/installed"
             cmake_extra_args: -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows
             
           - os: macos-latest
@@ -186,6 +186,62 @@ jobs:
       shell: bash
       run: ${{ matrix.install_deps }}
 
+    - name: Configure Qt environment (macOS)
+      if: matrix.os == 'macos-latest'
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        detect_qt_prefix() {
+          local prefix=""
+          if command -v brew >/dev/null 2>&1; then
+            for formula in qt@6 qt; do
+              prefix="$(brew --prefix "$formula" 2>/dev/null || true)"
+              if [[ -n "$prefix" && -d "$prefix" ]]; then
+                echo "$prefix"
+                return 0
+              fi
+            done
+          fi
+          
+          for candidate in /opt/homebrew/opt/qt@6 /usr/local/opt/qt@6 /opt/homebrew/opt/qt /usr/local/opt/qt; do
+            if [[ -d "$candidate" ]]; then
+              echo "$candidate"
+              return 0
+            fi
+          done
+          
+          return 1
+        }
+        
+        QT_PREFIX="$(detect_qt_prefix || true)"
+        if [[ -z "${QT_PREFIX:-}" ]]; then
+          echo "Error: Qt6 not found in expected Homebrew locations"
+          exit 1
+        fi
+        
+        Qt6_DIR="${QT_PREFIX}/lib/cmake/Qt6"
+        if [[ ! -f "${Qt6_DIR}/Qt6Config.cmake" ]]; then
+          echo "Warning: Qt6Config.cmake not found at ${Qt6_DIR}"
+        fi
+        
+        echo "Detected Qt prefix: ${QT_PREFIX}"
+        {
+          echo "QT_PREFIX=${QT_PREFIX}"
+          echo "Qt6_DIR=${Qt6_DIR}"
+          if [[ -n "${CMAKE_PREFIX_PATH:-}" ]]; then
+            echo "CMAKE_PREFIX_PATH=${QT_PREFIX}:${CMAKE_PREFIX_PATH}"
+          else
+            echo "CMAKE_PREFIX_PATH=${QT_PREFIX}"
+          fi
+          echo "PATH=${QT_PREFIX}/bin:${PATH}"
+          if [[ -n "${DYLD_LIBRARY_PATH:-}" ]]; then
+            echo "DYLD_LIBRARY_PATH=${QT_PREFIX}/lib:${DYLD_LIBRARY_PATH}"
+          else
+            echo "DYLD_LIBRARY_PATH=${QT_PREFIX}/lib"
+          fi
+        } >> "$GITHUB_ENV"
+
     - name: Configure CMake
       shell: bash
       run: |
@@ -199,38 +255,14 @@ jobs:
             -S "${{ github.workspace }}"
         else
           # Set library paths for CMake test discovery on Linux/macOS
-          # On macOS, use the environment variables set by the Qt setup step
+          # On macOS, rely on the Qt environment prepared in previous step
           if [[ "${{ runner.os }}" == "macOS" ]]; then
-            # Find Qt6 installation directory
-            QT_PREFIX="$(brew --prefix qt@6 2>/dev/null || true)"
-            if [ -z "$QT_PREFIX" ] || [ ! -d "$QT_PREFIX" ]; then
-              if [ -d "/opt/homebrew/opt/qt@6" ]; then
-                QT_PREFIX="/opt/homebrew/opt/qt@6"
-              elif [ -d "/usr/local/opt/qt@6" ]; then
-                QT_PREFIX="/usr/local/opt/qt@6"
-              else
-                echo "Error: Qt6 not found in expected locations"
-                exit 1
-              fi
+            if [[ -z "${Qt6_DIR:-}" ]] || [[ ! -d "${Qt6_DIR}" ]]; then
+              echo "Error: Qt6_DIR is not set or does not exist"
+              exit 1
             fi
-            
-            # Set Qt6_DIR explicitly to the CMake config location
-            export Qt6_DIR="${QT_PREFIX}/lib/cmake/Qt6"
-            export CMAKE_PREFIX_PATH="${QT_PREFIX}:$CMAKE_PREFIX_PATH"
-            export PATH="${QT_PREFIX}/bin:$PATH"
-            
             echo "Using Qt6_DIR: $Qt6_DIR"
-            echo "Using CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
-            
-            # Verify Qt6Config.cmake exists
-            if [ ! -f "${Qt6_DIR}/Qt6Config.cmake" ]; then
-              echo "Warning: Qt6Config.cmake not found at ${Qt6_DIR}"
-              # Try alternate location
-              if [ -f "${QT_PREFIX}/lib/cmake/Qt6/Qt6Config.cmake" ]; then
-                export Qt6_DIR="${QT_PREFIX}/lib/cmake/Qt6"
-                echo "Found Qt6Config.cmake at ${Qt6_DIR}"
-              fi
-            fi
+            echo "Using CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH:-}"
           else
             export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
             export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
@@ -254,10 +286,13 @@ jobs:
         if [[ "${{ runner.os }}" != "Windows" ]]; then
           # Set library paths for Linux/macOS
           if [[ "${{ runner.os }}" == "macOS" ]]; then
-            export CMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6:/usr/local/opt/qt@6:$CMAKE_PREFIX_PATH"
-            export PATH="/opt/homebrew/opt/qt@6/bin:/usr/local/opt/qt@6/bin:$PATH"
+            if [[ -z "${QT_PREFIX:-}" ]]; then
+              echo "Error: QT_PREFIX not set for macOS build step"
+              exit 1
+            fi
+            export DYLD_LIBRARY_PATH="${QT_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}"
             echo "Using DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
-            echo "Using LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+            echo "Using CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH:-}"
           else
             export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
             export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
@@ -280,8 +315,13 @@ jobs:
         else
           # Set library paths for Linux and macOS
           if [[ "${{ runner.os }}" == "macOS" ]]; then
+            if [[ -z "${QT_PREFIX:-}" ]]; then
+              echo "Error: QT_PREFIX not set for macOS test step"
+              exit 1
+            fi
+            export DYLD_LIBRARY_PATH="${QT_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}"
             echo "Using DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
-            echo "Using LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+            echo "Using CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH:-}"
           else
             export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
             export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
@@ -302,8 +342,13 @@ jobs:
       run: |
         # Set library paths
         if [[ "${{ runner.os }}" == "macOS" ]]; then
+          if [[ -z "${QT_PREFIX:-}" ]]; then
+            echo "Error: QT_PREFIX not set for macOS benchmark step"
+            exit 1
+          fi
+          export DYLD_LIBRARY_PATH="${QT_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}"
           echo "Using DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
-          echo "Using LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+          echo "Using CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH:-}"
         else
           export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
           export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
