@@ -3054,7 +3054,7 @@ QPixmap ProEditorDialog::createFrmThumbnail(const std::string& frmPath, const QS
                 try {
                     palette = resourceManager.loadResource<Pal>("color.pal");
                 } catch (const std::exception& e) {
-                    spdlog::warn("ProEditorDialog: Could not load color.pal for {}, falling back to placeholder", frmPath);
+                    spdlog::warn("ProEditorDialog: Could not load color.pal for {} ({})", frmPath, e.what());
                     return thumbnail; // Return empty thumbnail without palette
                 }
                 
@@ -3154,6 +3154,10 @@ void ProEditorDialog::loadNameAndDescription() {
             name = nameMessage.text;
         } catch (const std::exception& e) {
             name = "No name (ID: " + std::to_string(messageId) + ")";
+            spdlog::warn("ProEditorDialog::loadNameAndDescription() - Missing name {} for type {} ({})",
+                messageId,
+                _pro->typeToString(),
+                e.what());
         }
         
         // Get description (message at messageId + 1)
@@ -3163,6 +3167,10 @@ void ProEditorDialog::loadNameAndDescription() {
             description = descMessage.text;
         } catch (const std::exception& e) {
             description = "No description available (ID: " + std::to_string(messageId + 1) + ")";
+            spdlog::warn("ProEditorDialog::loadNameAndDescription() - Missing description {} for type {} ({})",
+                messageId + 1,
+                _pro->typeToString(),
+                e.what());
         }
         
         // Update UI
@@ -3497,6 +3505,7 @@ void ProEditorDialog::onTransparencyFlagChanged() {
 }
 
 void ProEditorDialog::loadObjectFlags(uint32_t flags) {
+    Q_UNUSED(flags);
     // Object flags loading is now handled by ProCommonFieldsWidget
     // This method is kept for compatibility but does nothing
 }

@@ -159,16 +159,24 @@ jobs:
             export PATH="/opt/homebrew/opt/qt@6/bin:/usr/local/opt/qt@6/bin:$PATH"
             echo "Using DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
             echo "Using LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+            echo "Using CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
+            echo "Using Qt6_DIR: $Qt6_DIR"
           else
             export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
             export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
           fi
           
-          cmake -B "${{ env.BUILD_DIR }}" \
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DGECK_BUILD_TESTS=ON \
-            -DSPDLOG_FMT_EXTERNAL=OFF \
-            -DCMAKE_CXX_FLAGS="-Wno-error" \
+          # Add CMAKE_PREFIX_PATH for macOS to help find Qt6
+          CMAKE_ARGS="-DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DGECK_BUILD_TESTS=ON -DSPDLOG_FMT_EXTERNAL=OFF -DCMAKE_CXX_FLAGS=\"-Wno-error\""
+          if [[ "${{ runner.os }}" == "macOS" ]] && [[ -n "$CMAKE_PREFIX_PATH" ]]; then
+            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_PREFIX_PATH=\"$CMAKE_PREFIX_PATH\""
+          fi
+          if [[ "${{ runner.os }}" == "macOS" ]] && [[ -n "$Qt6_DIR" ]]; then
+            CMAKE_ARGS="$CMAKE_ARGS -DQt6_DIR=\"$Qt6_DIR\""
+          fi
+          
+          eval cmake -B "${{ env.BUILD_DIR }}" \
+            $CMAKE_ARGS \
             ${{ matrix.cmake_extra_args }} \
             -S "${{ github.workspace }}"
         fi
