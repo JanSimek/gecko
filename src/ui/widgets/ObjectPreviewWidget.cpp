@@ -476,8 +476,8 @@ void ObjectPreviewWidget::loadAnimationFrames() {
         }
         
         const auto& direction = frm->directions()[_currentDirection];
-        _totalFrames = direction.frames().size();
-        _totalDirections = frm->directions().size();
+        _totalFrames = static_cast<int>(direction.frames().size());
+        _totalDirections = static_cast<int>(frm->directions().size());
         
         // Cache all frames for this direction
         _frameCache.reserve(_totalFrames);
@@ -510,7 +510,7 @@ void ObjectPreviewWidget::loadAnimationFrames() {
     }
 }
 
-QPixmap ObjectPreviewWidget::createFrmThumbnail(const std::string& frmPath, const QSize& targetSize) {
+QPixmap ObjectPreviewWidget::createFrmThumbnail(const std::string& frmPath, [[maybe_unused]] const QSize& targetSize) {
     try {
         auto& resourceManager = ResourceManager::getInstance();
         auto frm = resourceManager.loadResource<Frm>(frmPath);

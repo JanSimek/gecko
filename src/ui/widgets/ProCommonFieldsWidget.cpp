@@ -79,7 +79,7 @@ void ProCommonFieldsWidget::setupUI() {
     _mainLayout->addLayout(columnsLayout);
 }
 
-void ProCommonFieldsWidget::setupBasicFields(QFormLayout* layout) {
+void ProCommonFieldsWidget::setupBasicFields([[maybe_unused]] QFormLayout* layout) {
     // PID removed - it's now in the left panel of the main dialog
     // This group is currently empty but preserved for future basic fields
 }
@@ -280,7 +280,7 @@ int32_t ProCommonFieldsWidget::getPID() const {
     return 0;  // Return default value
 }
 
-void ProCommonFieldsWidget::setPID(int32_t pid) {
+void ProCommonFieldsWidget::setPID([[maybe_unused]] int32_t pid) {
     // PID is now handled by the main dialog, not this widget
     // This method is kept for interface compatibility but does nothing
 }

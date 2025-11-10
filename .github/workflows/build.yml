@@ -13,7 +13,8 @@ env:
   VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-cache,readwrite"
   VCPKG_FEATURE_FLAGS: "binarycaching"
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
-  DEPENDENCY_CACHE_VERSION: v1
+  DEPENDENCY_CACHE_VERSION: v2
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
 
 permissions:
   contents: read
@@ -71,9 +72,18 @@ jobs:
             
           - os: windows-latest
             install_deps: |
-              # Use vcpkg for dependencies
-              vcpkg install qtbase:x64-windows qttools:x64-windows qtsvg:x64-windows sfml:x64-windows spdlog:x64-windows zlib:x64-windows
-            cmake_extra_args: -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+              # Setup vcpkg if not cached
+              if [ ! -d "$VCPKG_ROOT" ]; then
+                git clone https://github.com/Microsoft/vcpkg.git "$VCPKG_ROOT"
+                "${VCPKG_ROOT}/bootstrap-vcpkg.bat" -disableMetrics
+              else
+                echo "Using cached vcpkg installation"
+              fi
+              # Update vcpkg to ensure we have latest port files
+              cd "$VCPKG_ROOT" && git pull && cd -
+              # Install dependencies using manifest mode (will use binary cache if available)
+              "${VCPKG_ROOT}/vcpkg" install --triplet=x64-windows --x-manifest-root="${{ github.workspace }}" --x-install-root="${VCPKG_ROOT}/installed"
+            cmake_extra_args: -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows
             
           - os: macos-latest
             install_deps: |
@@ -99,11 +109,12 @@ jobs:
       with:
         submodules: recursive
     
-    - name: Prepare vcpkg binary cache (Windows)
+    - name: Prepare vcpkg directories (Windows)
       if: matrix.os == 'windows-latest'
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\.vcpkg-cache" | Out-Null
+        New-Item -ItemType Directory -Force -Path "$env:VCPKG_ROOT" -ErrorAction SilentlyContinue | Out-Null
 
     - name: Fix vfspp CMake version requirement
       shell: bash
@@ -120,22 +131,54 @@ jobs:
       with:
         cmakeVersion: ${{ env.CMAKE_VERSION }}
 
-    - name: Cache dependencies
+    - name: Cache vcpkg (Windows)
+      if: matrix.os == 'windows-latest'
       uses: actions/cache@v4
       with:
         path: |
-          ~/vcpkg
-          ~/.cache/vcpkg
+          ${{ env.VCPKG_ROOT }}
           ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          !${{ env.VCPKG_ROOT }}/buildtrees
+          !${{ env.VCPKG_ROOT }}/packages
+          !${{ env.VCPKG_ROOT }}/downloads
+        key: ${{ runner.os }}-vcpkg-${{ matrix.build_type }}-${{ hashFiles('**/vcpkg.json', '**/vcpkg-configuration.json') }}-${{ env.DEPENDENCY_CACHE_VERSION }}
+        restore-keys: |
+          ${{ runner.os }}-vcpkg-${{ matrix.build_type }}-
+          ${{ runner.os }}-vcpkg-
+
+    - name: Cache Homebrew (macOS)
+      if: matrix.os == 'macos-latest'
+      uses: actions/cache@v4
+      with:
+        path: |
           ~/Library/Caches/Homebrew
           /usr/local/Cellar
           /opt/homebrew/Cellar
-          C:/vcpkg
-        key: ${{ runner.os }}-${{ matrix.build_type }}-deps-${{ env.DEPENDENCY_CACHE_VERSION }}
+          /usr/local/lib
+        key: ${{ runner.os }}-homebrew-${{ matrix.build_type }}-${{ env.DEPENDENCY_CACHE_VERSION }}
         restore-keys: |
-          ${{ runner.os }}-${{ matrix.build_type }}-deps-
+          ${{ runner.os }}-homebrew-${{ matrix.build_type }}-
+          ${{ runner.os }}-homebrew-
+
+    - name: Cache Linux dependencies
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/cache@v4
+      with:
+        path: |
+          /usr/local
+          ~/.cache
+        key: ${{ runner.os }}-deps-${{ matrix.build_type }}-${{ env.DEPENDENCY_CACHE_VERSION }}
+        restore-keys: |
+          ${{ runner.os }}-deps-${{ matrix.build_type }}-
           ${{ runner.os }}-deps-
 
+    - name: Setup vcpkg environment (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: bash
+      run: |
+        echo "VCPKG_BINARY_SOURCES=clear;files,${{ github.workspace }}/.vcpkg-cache,readwrite" >> $GITHUB_ENV
+        echo "VCPKG_DEFAULT_BINARY_CACHE=${{ github.workspace }}/.vcpkg-cache" >> $GITHUB_ENV
+        
     - name: Install dependencies
       shell: bash
       run: ${{ matrix.install_deps }}
@@ -155,12 +198,33 @@ jobs:
           # Set library paths for CMake test discovery on Linux/macOS
           # On macOS, use the environment variables set by the Qt setup step
           if [[ "${{ runner.os }}" == "macOS" ]]; then
-            export CMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6:/usr/local/opt/qt@6:$CMAKE_PREFIX_PATH"
-            export PATH="/opt/homebrew/opt/qt@6/bin:/usr/local/opt/qt@6/bin:$PATH"
-            echo "Using DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
-            echo "Using LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
-            echo "Using CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
+            # Find Qt6 installation directory
+            if [ -d "/opt/homebrew/opt/qt@6" ]; then
+              QT_PREFIX="/opt/homebrew/opt/qt@6"
+            elif [ -d "/usr/local/opt/qt@6" ]; then
+              QT_PREFIX="/usr/local/opt/qt@6"
+            else
+              echo "Error: Qt6 not found in expected locations"
+              exit 1
+            fi
+            
+            # Set Qt6_DIR explicitly to the CMake config location
+            export Qt6_DIR="${QT_PREFIX}/lib/cmake/Qt6"
+            export CMAKE_PREFIX_PATH="${QT_PREFIX}:$CMAKE_PREFIX_PATH"
+            export PATH="${QT_PREFIX}/bin:$PATH"
+            
             echo "Using Qt6_DIR: $Qt6_DIR"
+            echo "Using CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
+            
+            # Verify Qt6Config.cmake exists
+            if [ ! -f "${Qt6_DIR}/Qt6Config.cmake" ]; then
+              echo "Warning: Qt6Config.cmake not found at ${Qt6_DIR}"
+              # Try alternate location
+              if [ -f "${QT_PREFIX}/lib/cmake/Qt6/Qt6Config.cmake" ]; then
+                export Qt6_DIR="${QT_PREFIX}/lib/cmake/Qt6"
+                echo "Found Qt6Config.cmake at ${Qt6_DIR}"
+              fi
+            fi
           else
             export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
             export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
@@ -168,14 +232,11 @@ jobs:
           
           # Add CMAKE_PREFIX_PATH for macOS to help find Qt6
           CMAKE_ARGS="-DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DGECK_BUILD_TESTS=ON -DSPDLOG_FMT_EXTERNAL=OFF -DCMAKE_CXX_FLAGS=\"-Wno-error\""
-          if [[ "${{ runner.os }}" == "macOS" ]] && [[ -n "$CMAKE_PREFIX_PATH" ]]; then
-            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_PREFIX_PATH=\"$CMAKE_PREFIX_PATH\""
-          fi
-          if [[ "${{ runner.os }}" == "macOS" ]] && [[ -n "$Qt6_DIR" ]]; then
-            CMAKE_ARGS="$CMAKE_ARGS -DQt6_DIR=\"$Qt6_DIR\""
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_PREFIX_PATH=\"$CMAKE_PREFIX_PATH\" -DQt6_DIR=\"$Qt6_DIR\""
           fi
           
-          eval cmake -B "${{ env.BUILD_DIR }}" \
+          cmake -B "${{ env.BUILD_DIR }}" \
             $CMAKE_ARGS \
             ${{ matrix.cmake_extra_args }} \
             -S "${{ github.workspace }}"

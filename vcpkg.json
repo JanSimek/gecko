@@ -1,0 +1,31 @@
+{
+  "name": "gecko",
+  "version": "1.0.0",
+  "dependencies": [
+    {
+      "name": "qtbase",
+      "platform": "windows"
+    },
+    {
+      "name": "qttools",
+      "platform": "windows"
+    },
+    {
+      "name": "qtsvg",
+      "platform": "windows"
+    },
+    {
+      "name": "sfml",
+      "version>=": "3.0.0",
+      "platform": "windows"
+    },
+    {
+      "name": "spdlog",
+      "platform": "windows"
+    },
+    {
+      "name": "zlib",
+      "platform": "windows"
+    }
+  ]
+}
