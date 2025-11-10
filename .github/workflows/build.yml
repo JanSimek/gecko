@@ -13,6 +13,7 @@ env:
   VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-cache,readwrite"
   VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+  VCPKG_MANIFEST_MODE: "ON"
   DEPENDENCY_CACHE_VERSION: v2
   VCPKG_ROOT: ${{ github.workspace }}/vcpkg
 
@@ -85,7 +86,13 @@ jobs:
               # Update vcpkg to ensure we have latest port files
               cd "$VCPKG_ROOT" && git pull && cd ..
               # Install dependencies using manifest mode (will use binary cache if available)
-              "$VCPKG_ROOT/vcpkg.exe" install --triplet=x64-windows --feature-flags=manifests --x-manifest-root="${{ github.workspace }}" --x-install-root="$VCPKG_ROOT/installed"
+              export VCPKG_MANIFEST_MODE=ON
+              "$VCPKG_ROOT/vcpkg.exe" install \
+                --triplet x64-windows \
+                --host-triplet x64-windows \
+                --x-manifest-root="${{ github.workspace }}" \
+                --x-install-root="$VCPKG_ROOT/installed" \
+                --clean-after-build
             cmake_extra_args: -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows
             
           - os: macos-latest
@@ -191,8 +198,7 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        
-        detect_qt_prefix() {
+        find_qt_prefix() {
           local prefix=""
           if command -v brew >/dev/null 2>&1; then
             for formula in qt@6 qt; do
@@ -201,30 +207,40 @@ jobs:
                 echo "$prefix"
                 return 0
               fi
+              prefix="$(brew --cellar "$formula" 2>/dev/null || true)"
+              if [[ -n "$prefix" && -d "$prefix" ]]; then
+                local version=""
+                version="$(brew list --versions "$formula" 2>/dev/null | awk 'NF{print $2; exit}')"
+                if [[ -n "$version" && -d "$prefix/$version" ]]; then
+                  echo "$prefix/$version"
+                  return 0
+                fi
+              fi
             done
           fi
-          
           for candidate in /opt/homebrew/opt/qt@6 /usr/local/opt/qt@6 /opt/homebrew/opt/qt /usr/local/opt/qt; do
             if [[ -d "$candidate" ]]; then
               echo "$candidate"
               return 0
             fi
           done
-          
           return 1
         }
-        
-        QT_PREFIX="$(detect_qt_prefix || true)"
+
+        QT_PREFIX="$(find_qt_prefix || true)"
         if [[ -z "${QT_PREFIX:-}" ]]; then
           echo "Error: Qt6 not found in expected Homebrew locations"
+          brew --cellar qt 2>/dev/null || true
+          brew list --versions qt 2>/dev/null || true
           exit 1
         fi
-        
+
         Qt6_DIR="${QT_PREFIX}/lib/cmake/Qt6"
         if [[ ! -f "${Qt6_DIR}/Qt6Config.cmake" ]]; then
           echo "Warning: Qt6Config.cmake not found at ${Qt6_DIR}"
+          ls "${QT_PREFIX}/lib/cmake" || true
         fi
-        
+
         echo "Detected Qt prefix: ${QT_PREFIX}"
         {
           echo "QT_PREFIX=${QT_PREFIX}"
@@ -241,6 +257,7 @@ jobs:
             echo "DYLD_LIBRARY_PATH=${QT_PREFIX}/lib"
           fi
         } >> "$GITHUB_ENV"
+        echo "${QT_PREFIX}/bin" >> "$GITHUB_PATH"
 
     - name: Configure CMake
       shell: bash
