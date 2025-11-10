@@ -3,15 +3,15 @@
   "version": "1.0.0",
   "dependencies": [
     {
-      "name": "qtbase",
+      "name": "qt6-base",
       "platform": "windows"
     },
     {
-      "name": "qttools",
+      "name": "qt6-tools",
       "platform": "windows"
     },
     {
-      "name": "qtsvg",
+      "name": "qt6-svg",
       "platform": "windows"
     },
     {

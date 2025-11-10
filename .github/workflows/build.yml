@@ -75,14 +75,16 @@ jobs:
               # Setup vcpkg if not cached
               if [ ! -d "$VCPKG_ROOT" ]; then
                 git clone https://github.com/Microsoft/vcpkg.git "$VCPKG_ROOT"
-                "${VCPKG_ROOT}/bootstrap-vcpkg.bat" -disableMetrics
+                cd "$VCPKG_ROOT"
+                ./bootstrap-vcpkg.bat -disableMetrics
+                cd ..
               else
                 echo "Using cached vcpkg installation"
               fi
               # Update vcpkg to ensure we have latest port files
-              cd "$VCPKG_ROOT" && git pull && cd -
+              cd "$VCPKG_ROOT" && git pull && cd ..
               # Install dependencies using manifest mode (will use binary cache if available)
-              "${VCPKG_ROOT}/vcpkg" install --triplet=x64-windows --x-manifest-root="${{ github.workspace }}" --x-install-root="${VCPKG_ROOT}/installed"
+              "$VCPKG_ROOT/vcpkg.exe" install --triplet=x64-windows --x-manifest-root="${{ github.workspace }}" --x-install-root="$VCPKG_ROOT/installed"
             cmake_extra_args: -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows
             
           - os: macos-latest
