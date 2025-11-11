@@ -10,11 +10,11 @@ on:
 env:
   CMAKE_VERSION: 3.31.4
   BUILD_TYPE: Release
-  QT_VERSION: 6.8.1
+  QT_VERSION: 6.5.3
 
 jobs:
   build-linux:
-    name: Linux - Qt 6.8.1
+    name: Linux - Qt 6.5.3
     runs-on: ubuntu-latest
 
     steps:
@@ -32,7 +32,7 @@ jobs:
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
-        aqtversion: '==3.3.*'
+        aqtversion: '==3.3.0'
         version: ${{ env.QT_VERSION }}
         host: 'linux'
         target: 'desktop'
@@ -92,7 +92,7 @@ jobs:
       run: ctest --test-dir build --output-on-failure --parallel
 
   build-macos:
-    name: macOS - Qt 6.8.1 - ${{ matrix.arch }}
+    name: macOS - Qt 6.5.3 - ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -120,7 +120,7 @@ jobs:
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
-        aqtversion: '==3.3.*'
+        aqtversion: '==3.3.0'
         version: ${{ env.QT_VERSION }}
         host: 'mac'
         target: 'desktop'
@@ -166,7 +166,7 @@ jobs:
       run: ctest --test-dir build --output-on-failure --parallel
 
   build-windows:
-    name: Windows - Qt 6.8.1
+    name: Windows - Qt 6.5.3
     runs-on: windows-latest
 
     steps:
@@ -184,11 +184,11 @@ jobs:
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
-        aqtversion: '==3.3.*'
+        aqtversion: '==3.3.0'
         version: ${{ env.QT_VERSION }}
         host: 'windows'
         target: 'desktop'
-        arch: 'win64_msvc2022_64'
+        arch: 'win64_msvc2019_64'
         cache: true
         modules: 'qtsvg'
 
