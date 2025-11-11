@@ -10,11 +10,11 @@ on:
 env:
   CMAKE_VERSION: 3.31.4
   BUILD_TYPE: Release
-  QT_VERSION: 6.5.3
+  QT_VERSION: 6.8.3
 
 jobs:
   build-linux:
-    name: Linux - Qt 6.5.3
+    name: Linux
     runs-on: ubuntu-latest
 
     steps:
@@ -36,9 +36,8 @@ jobs:
         version: ${{ env.QT_VERSION }}
         host: 'linux'
         target: 'desktop'
-        arch: 'gcc_64'
+        arch: 'linux_gcc_64'
         cache: true
-        modules: 'qtsvg'
 
     - name: Install system dependencies
       run: |
@@ -92,7 +91,7 @@ jobs:
       run: ctest --test-dir build --output-on-failure --parallel
 
   build-macos:
-    name: macOS - Qt 6.5.3 - ${{ matrix.arch }}
+    name: macOS - ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -126,7 +125,6 @@ jobs:
         target: 'desktop'
         arch: ${{ matrix.qt_arch }}
         cache: true
-        modules: 'qtsvg'
 
     - name: Cache SFML
       id: cache-sfml
@@ -166,7 +164,7 @@ jobs:
       run: ctest --test-dir build --output-on-failure --parallel
 
   build-windows:
-    name: Windows - Qt 6.5.3
+    name: Windows
     runs-on: windows-latest
 
     steps:
@@ -188,9 +186,8 @@ jobs:
         version: ${{ env.QT_VERSION }}
         host: 'windows'
         target: 'desktop'
-        arch: 'win64_msvc2019_64'
+        arch: 'win64_msvc2022_64'
         cache: true
-        modules: 'qtsvg'
 
     - name: Cache SFML
       id: cache-sfml
@@ -229,19 +226,3 @@ jobs:
 
     - name: Run tests
       run: ctest --test-dir build --output-on-failure --parallel -C ${{ env.BUILD_TYPE }}
-
-  build-summary:
-    name: Build Summary
-    runs-on: ubuntu-latest
-    needs: [build-linux, build-macos, build-windows]
-    if: always()
-    steps:
-      - name: Check build status
-        run: |
-          if [ "${{ needs.build-linux.result }}" != "success" ] || \
-             [ "${{ needs.build-macos.result }}" != "success" ] || \
-             [ "${{ needs.build-windows.result }}" != "success" ]; then
-            echo "One or more builds failed"
-            exit 1
-          fi
-          echo "All builds succeeded!"
