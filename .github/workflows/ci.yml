@@ -1,0 +1,247 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, develop, feature/* ]
+  pull_request:
+    branches: [ master, develop ]
+  workflow_dispatch:
+
+env:
+  CMAKE_VERSION: 3.31.4
+  BUILD_TYPE: Release
+  QT_VERSION: 6.8.1
+
+jobs:
+  build-linux:
+    name: Linux - Qt 6.8.1
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Install CMake
+      uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: ${{ env.CMAKE_VERSION }}
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        aqtversion: '==3.3.*'
+        version: ${{ env.QT_VERSION }}
+        host: 'linux'
+        target: 'desktop'
+        arch: 'gcc_64'
+        cache: true
+        modules: 'qtsvg'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libgl1-mesa-dev \
+          libxrandr-dev \
+          libxcursor-dev \
+          libudev-dev \
+          libfreetype6-dev \
+          zlib1g-dev \
+          libxinerama-dev \
+          libxi-dev \
+          ninja-build
+
+    - name: Cache SFML
+      id: cache-sfml
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/sfml-install
+        key: ${{ runner.os }}-sfml-3.0.1
+
+    - name: Build and install SFML 3
+      if: steps.cache-sfml.outputs.cache-hit != 'true'
+      run: |
+        git clone --depth 1 --branch 3.0.1 https://github.com/SFML/SFML.git
+        cd SFML
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=ON \
+          -DSFML_BUILD_AUDIO=OFF \
+          -DSFML_BUILD_NETWORK=OFF \
+          -DCMAKE_INSTALL_PREFIX=${{ runner.temp }}/sfml-install
+        cmake --build build --config Release
+        cmake --install build
+        cd ..
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DGECK_BUILD_TESTS=ON \
+          -DGECK_USE_SYSTEM_LIBS=ON \
+          -DQt6_DIR=$Qt6_DIR \
+          -DCMAKE_PREFIX_PATH=${{ runner.temp }}/sfml-install
+
+    - name: Build
+      run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+
+    - name: Run tests
+      run: ctest --test-dir build --output-on-failure --parallel
+
+  build-macos:
+    name: macOS - Qt 6.8.1 - ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+            arch: 'x86_64'
+            qt_arch: 'clang_64'
+          - os: macos-latest
+            arch: 'arm64'
+            qt_arch: 'clang_arm64'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Install CMake
+      uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: ${{ env.CMAKE_VERSION }}
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        aqtversion: '==3.3.*'
+        version: ${{ env.QT_VERSION }}
+        host: 'mac'
+        target: 'desktop'
+        arch: ${{ matrix.qt_arch }}
+        cache: true
+        modules: 'qtsvg'
+
+    - name: Cache SFML
+      id: cache-sfml
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/sfml-install
+        key: ${{ runner.os }}-${{ matrix.arch }}-sfml-3.0.1
+
+    - name: Build and install SFML 3
+      if: steps.cache-sfml.outputs.cache-hit != 'true'
+      run: |
+        git clone --depth 1 --branch 3.0.1 https://github.com/SFML/SFML.git
+        cd SFML
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=ON \
+          -DSFML_BUILD_AUDIO=OFF \
+          -DSFML_BUILD_NETWORK=OFF \
+          -DCMAKE_INSTALL_PREFIX=${{ runner.temp }}/sfml-install
+        cmake --build build --config Release
+        cmake --install build
+        cd ..
+
+    - name: Configure CMake
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DGECK_BUILD_TESTS=ON \
+          -DGECK_USE_SYSTEM_LIBS=ON \
+          -DQt6_DIR=$Qt6_DIR \
+          -DCMAKE_PREFIX_PATH=${{ runner.temp }}/sfml-install
+
+    - name: Build
+      run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+
+    - name: Run tests
+      run: ctest --test-dir build --output-on-failure --parallel
+
+  build-windows:
+    name: Windows - Qt 6.8.1
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Install CMake
+      uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: ${{ env.CMAKE_VERSION }}
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        aqtversion: '==3.3.*'
+        version: ${{ env.QT_VERSION }}
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_msvc2022_64'
+        cache: true
+        modules: 'qtsvg'
+
+    - name: Cache SFML
+      id: cache-sfml
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/sfml-install
+        key: ${{ runner.os }}-sfml-3.0.1
+
+    - name: Build and install SFML 3
+      if: steps.cache-sfml.outputs.cache-hit != 'true'
+      shell: cmd
+      run: |
+        git clone --depth 1 --branch 3.0.1 https://github.com/SFML/SFML.git
+        cd SFML
+        cmake -B build -DCMAKE_BUILD_TYPE=Release ^
+          -DBUILD_SHARED_LIBS=ON ^
+          -DSFML_BUILD_AUDIO=OFF ^
+          -DSFML_BUILD_NETWORK=OFF ^
+          -DCMAKE_INSTALL_PREFIX=${{ runner.temp }}/sfml-install
+        cmake --build build --config Release
+        cmake --install build --config Release
+        cd ..
+
+    - name: Configure CMake
+      shell: cmd
+      run: |
+        cmake -B build ^
+          -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
+          -DGECK_BUILD_TESTS=ON ^
+          -DGECK_USE_SYSTEM_LIBS=ON ^
+          -DQt6_DIR=%Qt6_DIR% ^
+          -DCMAKE_PREFIX_PATH=${{ runner.temp }}/sfml-install
+
+    - name: Build
+      run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+
+    - name: Run tests
+      run: ctest --test-dir build --output-on-failure --parallel -C ${{ env.BUILD_TYPE }}
+
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-macos, build-windows]
+    if: always()
+    steps:
+      - name: Check build status
+        run: |
+          if [ "${{ needs.build-linux.result }}" != "success" ] || \
+             [ "${{ needs.build-macos.result }}" != "success" ] || \
+             [ "${{ needs.build-windows.result }}" != "success" ]; then
+            echo "One or more builds failed"
+            exit 1
+          fi
+          echo "All builds succeeded!"
