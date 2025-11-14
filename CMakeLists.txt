@@ -70,7 +70,16 @@ if(NOT SFML_FOUND)
     )
     set(SFML_BUILD_AUDIO FALSE CACHE BOOL "Build audio module")
     set(SFML_BUILD_NETWORK FALSE CACHE BOOL "Build network module")
+    # Disable warnings for third-party library
+    if(MSVC)
+        set(CMAKE_CXX_FLAGS_OLD "${CMAKE_CXX_FLAGS}")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /w")
+    else()
+        set(CMAKE_CXX_FLAGS_OLD "${CMAKE_CXX_FLAGS}")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+    endif()
     FetchContent_MakeAvailable(SFML)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_OLD}")
 endif()
 
 # ZLIB - use FetchContent as fallback if not found
@@ -89,8 +98,8 @@ if(NOT ZLIB_FOUND)
     if(NOT TARGET ZLIB::ZLIB)
         add_library(ZLIB::ZLIB ALIAS zlibstatic)
     endif()
-    # Set up include directories for the target
-    target_include_directories(zlibstatic INTERFACE 
+    # Set up include directories as SYSTEM to suppress warnings
+    target_include_directories(zlibstatic SYSTEM INTERFACE 
         ${zlib_SOURCE_DIR}
         ${zlib_BINARY_DIR}
     )
@@ -115,6 +124,14 @@ if(NOT spdlog_FOUND)
     set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "Build examples")
     set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "Build tests")
     FetchContent_MakeAvailable(spdlog)
+endif()
+
+# Mark spdlog as system headers to suppress warnings
+if(TARGET spdlog::spdlog_header_only)
+    get_target_property(SPDLOG_INCLUDE_DIRS spdlog::spdlog_header_only INTERFACE_INCLUDE_DIRECTORIES)
+    set_target_properties(spdlog::spdlog_header_only PROPERTIES
+        INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${SPDLOG_INCLUDE_DIRS}"
+    )
 endif()
 
 # VFSPP - Virtual File System library (local submodule)
