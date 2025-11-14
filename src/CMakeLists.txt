@@ -304,9 +304,10 @@ target_include_directories(vault PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_link_libraries(vault PRIVATE
-    spdlog::spdlog_header_only
+target_link_libraries(vault PUBLIC
     ZLIB::ZLIB
+PRIVATE
+    spdlog::spdlog_header_only
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

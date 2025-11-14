@@ -86,7 +86,14 @@ if(NOT ZLIB_FOUND)
     set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "Build zlib examples")
     FetchContent_MakeAvailable(zlib)
     # Create ZLIB::ZLIB target for compatibility
-    add_library(ZLIB::ZLIB ALIAS zlibstatic)
+    if(NOT TARGET ZLIB::ZLIB)
+        add_library(ZLIB::ZLIB ALIAS zlibstatic)
+    endif()
+    # Set up include directories for the target
+    target_include_directories(zlibstatic INTERFACE 
+        ${zlib_SOURCE_DIR}
+        ${zlib_BINARY_DIR}
+    )
     set(ZLIB_FOUND TRUE)
     set(ZLIB_LIBRARIES zlibstatic)
     set(ZLIB_INCLUDE_DIRS ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
