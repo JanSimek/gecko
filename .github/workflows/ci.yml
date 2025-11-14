@@ -88,7 +88,9 @@ jobs:
       run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
 
     - name: Run tests
-      run: ctest --test-dir build --output-on-failure --parallel
+      run: |
+        export LD_LIBRARY_PATH=${{ runner.temp }}/sfml-install/lib:$LD_LIBRARY_PATH
+        ctest --test-dir build --output-on-failure --parallel
 
   build-macos:
     name: macOS - ${{ matrix.arch }}
@@ -97,12 +99,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13
-            arch: 'x86_64'
-            qt_arch: 'clang_64'
           - os: macos-latest
-            arch: 'arm64'
-            qt_arch: 'clang_arm64'
+            arch: 'arm64' # 'x86_64'
+            qt_arch: 'clang_64'
 
     steps:
     - name: Checkout repository
@@ -161,7 +160,9 @@ jobs:
       run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
 
     - name: Run tests
-      run: ctest --test-dir build --output-on-failure --parallel
+      run: |
+        export DYLD_LIBRARY_PATH=${{ runner.temp }}/sfml-install/lib:$DYLD_LIBRARY_PATH
+        ctest --test-dir build --output-on-failure --parallel
 
   build-windows:
     name: Windows
@@ -225,4 +226,7 @@ jobs:
       run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
 
     - name: Run tests
-      run: ctest --test-dir build --output-on-failure --parallel -C ${{ env.BUILD_TYPE }}
+      shell: cmd
+      run: |
+        set PATH=${{ runner.temp }}\sfml-install\bin;%PATH%
+        ctest --test-dir build --output-on-failure --parallel -C ${{ env.BUILD_TYPE }}

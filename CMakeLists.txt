@@ -73,8 +73,24 @@ if(NOT SFML_FOUND)
     FetchContent_MakeAvailable(SFML)
 endif()
 
-# ZLIB
-find_package(ZLIB REQUIRED)
+# ZLIB - use FetchContent as fallback if not found
+find_package(ZLIB QUIET)
+if(NOT ZLIB_FOUND)
+    message(STATUS "Using FetchContent for ZLIB")
+    FetchContent_Declare(
+        zlib
+        GIT_REPOSITORY https://github.com/madler/zlib.git
+        GIT_TAG v1.3.1
+        GIT_SHALLOW TRUE
+    )
+    set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "Build zlib examples")
+    FetchContent_MakeAvailable(zlib)
+    # Create ZLIB::ZLIB target for compatibility
+    add_library(ZLIB::ZLIB ALIAS zlibstatic)
+    set(ZLIB_FOUND TRUE)
+    set(ZLIB_LIBRARIES zlibstatic)
+    set(ZLIB_INCLUDE_DIRS ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
+endif()
 
 # spdlog - prefer system package
 if(GECK_USE_SYSTEM_LIBS)
