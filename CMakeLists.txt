@@ -154,7 +154,7 @@ if(NOT spdlog_FOUND)
     set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "Build examples")
     set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "Build tests")
     FetchContent_MakeAvailable(spdlog)
-    geck_disable_target_warnings(spdlog spdlog_header_only)
+    # Note: spdlog creates namespace targets, we'll handle warnings via system includes
 endif()
 
 # Wrap spdlog target to treat headers as system includes

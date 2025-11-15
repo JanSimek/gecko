@@ -269,7 +269,7 @@ void ProArmorWidget::updateArmorPreviews() {
                 } else {
                     _armorMalePreviewWidget->clear();
                 }
-            } catch (const std::exception& e) {
+            } catch (const std::exception&) {
                 _armorMalePreviewWidget->clear();
             }
         }
@@ -289,7 +289,7 @@ void ProArmorWidget::updateArmorPreviews() {
                 } else {
                     _armorFemalePreviewWidget->clear();
                 }
-            } catch (const std::exception& e) {
+            } catch (const std::exception&) {
                 _armorFemalePreviewWidget->clear();
             }
         }
