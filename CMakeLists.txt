@@ -43,6 +43,43 @@ option(GECK_BUILD_TESTS "Build tests" ON)
 option(GECK_ENABLE_SANITIZERS "Enable sanitizer builds for debugging" OFF)
 
 ##################################################
+# Helper Functions
+##################################################
+function(geck_disable_target_warnings)
+    foreach(_target IN LISTS ARGN)
+        if(NOT TARGET ${_target})
+            continue()
+        endif()
+
+        get_property(_is_alias TARGET ${_target} PROPERTY ALIASED_TARGET SET)
+        if(_is_alias)
+            get_property(_resolved TARGET ${_target} PROPERTY ALIASED_TARGET)
+        else()
+            set(_resolved ${_target})
+        endif()
+
+        if(NOT _resolved)
+            continue()
+        endif()
+
+        get_target_property(_target_type ${_resolved} TYPE)
+        if(NOT _target_type)
+            continue()
+        endif()
+
+        if(_target_type MATCHES "INTERFACE")
+            continue()
+        endif()
+
+        if(MSVC)
+            target_compile_options(${_resolved} PRIVATE /w)
+        else()
+            target_compile_options(${_resolved} PRIVATE -w)
+        endif()
+    endforeach()
+endfunction()
+
+##################################################
 # Dependencies
 ##################################################
 
@@ -70,16 +107,8 @@ if(NOT SFML_FOUND)
     )
     set(SFML_BUILD_AUDIO FALSE CACHE BOOL "Build audio module")
     set(SFML_BUILD_NETWORK FALSE CACHE BOOL "Build network module")
-    # Disable warnings for third-party library
-    if(MSVC)
-        set(CMAKE_CXX_FLAGS_OLD "${CMAKE_CXX_FLAGS}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /w")
-    else()
-        set(CMAKE_CXX_FLAGS_OLD "${CMAKE_CXX_FLAGS}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
-    endif()
     FetchContent_MakeAvailable(SFML)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_OLD}")
+    geck_disable_target_warnings(sfml-system sfml-window sfml-graphics sfml-network sfml-audio sfml-main)
 endif()
 
 # ZLIB - use FetchContent as fallback if not found
@@ -94,6 +123,7 @@ if(NOT ZLIB_FOUND)
     )
     set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "Build zlib examples")
     FetchContent_MakeAvailable(zlib)
+    geck_disable_target_warnings(zlibstatic zlib)
     # Create ZLIB::ZLIB target for compatibility
     if(NOT TARGET ZLIB::ZLIB)
         add_library(ZLIB::ZLIB ALIAS zlibstatic)
@@ -124,14 +154,26 @@ if(NOT spdlog_FOUND)
     set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "Build examples")
     set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "Build tests")
     FetchContent_MakeAvailable(spdlog)
+    geck_disable_target_warnings(spdlog spdlog_header_only)
 endif()
 
-# Mark spdlog as system headers to suppress warnings
+# Wrap spdlog target to treat headers as system includes
+set(GECKO_SPDLOG_TARGET "")
 if(TARGET spdlog::spdlog_header_only)
-    get_target_property(SPDLOG_INCLUDE_DIRS spdlog::spdlog_header_only INTERFACE_INCLUDE_DIRECTORIES)
-    set_target_properties(spdlog::spdlog_header_only PROPERTIES
-        INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${SPDLOG_INCLUDE_DIRS}"
+    set(GECKO_SPDLOG_TARGET spdlog::spdlog_header_only)
+elseif(TARGET spdlog::spdlog)
+    set(GECKO_SPDLOG_TARGET spdlog::spdlog)
+endif()
+
+if(GECKO_SPDLOG_TARGET)
+    add_library(gecko_spdlog INTERFACE)
+    target_link_libraries(gecko_spdlog INTERFACE ${GECKO_SPDLOG_TARGET})
+    target_include_directories(gecko_spdlog SYSTEM INTERFACE
+        $<TARGET_PROPERTY:${GECKO_SPDLOG_TARGET},INTERFACE_INCLUDE_DIRECTORIES>
     )
+    add_library(gecko::spdlog ALIAS gecko_spdlog)
+else()
+    message(FATAL_ERROR "spdlog target was not created")
 endif()
 
 # VFSPP - Virtual File System library (local submodule)
@@ -157,6 +199,7 @@ if(GECK_BUILD_TESTS)
             GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(Catch2)
+    geck_disable_target_warnings(Catch2 Catch2WithMain)
 endif()
 
 ##################################################

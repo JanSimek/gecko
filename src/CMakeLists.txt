@@ -307,7 +307,7 @@ target_include_directories(vault PUBLIC
 target_link_libraries(vault PUBLIC
     ZLIB::ZLIB
 PRIVATE
-    spdlog::spdlog_header_only
+    gecko::spdlog
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -315,7 +315,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
     Qt6::Widgets
     Qt6::Svg
-    spdlog::spdlog_header_only
+    gecko::spdlog
     vfspp
     vault
 )

@@ -18,7 +18,7 @@ add_executable(performance_tests
 
 target_link_libraries(general_tests PRIVATE
     Catch2::Catch2WithMain
-    spdlog::spdlog_header_only
+    gecko::spdlog
     vault
     SFML::System SFML::Graphics
 )
@@ -29,7 +29,7 @@ target_include_directories(general_tests PRIVATE
 
 target_link_libraries(performance_tests PRIVATE
     Catch2::Catch2WithMain
-    spdlog::spdlog_header_only
+    gecko::spdlog
     vault
     SFML::System SFML::Graphics
 )
@@ -79,4 +79,3 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:performance_tests>/data
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data ${CMAKE_CURRENT_BINARY_DIR}/data
 )
-
