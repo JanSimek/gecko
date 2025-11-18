@@ -407,10 +407,7 @@ void ExitGridPlacementManager::selectExitGridsInArea(sf::Vector2f startPos, sf::
             }
             
             // Clear selection highlights after dialog is closed
-            auto* selectionManager = _editor->getSelectionManager();
-            if (selectionManager) {
-                selectionManager->clearSelection();
-            }
+            selectionManager->clearSelection();
             _editor->clearSelection();
         }
     } else {

@@ -305,7 +305,7 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
     }
 }
 
-void InputHandler::handleKeyReleased(const sf::Event::KeyReleased& event) {
+void InputHandler::handleKeyReleased(const sf::Event::KeyReleased&) {
     // Currently no key release handling needed
 }
 

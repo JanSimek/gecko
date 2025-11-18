@@ -254,8 +254,9 @@ void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vec
                 auto frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
                 if (!frm) {
                     // Try loading the FRM if not in cache
-                    ResourceManager::getInstance().loadResource<Frm>(frmPath);
-                    frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
+                    if (ResourceManager::getInstance().loadResource<Frm>(frmPath)) {
+                        frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
+                    }
                 }
                 
                 if (frm) {
