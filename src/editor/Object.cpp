@@ -160,7 +160,8 @@ int Object::height() const {
 void Object::setDirection(ObjectDirection direction) {
     _direction = static_cast<int>(direction);
 
-    // FIXME: ??? one scrblk on arcaves.map
+    // Validate direction index to prevent out-of-bounds access
+    // Note: arcaves.map has one scrblk object with invalid direction that triggers this
     if (_frm->directions().size() <= static_cast<size_t>(_direction) || _direction < 0) {
         spdlog::error("Object has orientation index {} but the FRM has only [{}] orientations", _direction, _frm->directions().size());
         _direction = 0;

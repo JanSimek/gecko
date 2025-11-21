@@ -109,7 +109,7 @@ void MapLoader::loadFromVFS() {
             _percentDone = 5;
             
             for (const auto& lst_path : requiredLstFiles) {
-                resourceManager.loadResource<Lst>(lst_path);
+                [[maybe_unused]] auto* lstResource = resourceManager.loadResource<Lst>(lst_path);
             }
             
             _percentDone = 10;
@@ -233,7 +233,7 @@ void MapLoader::loadFromFilesystem() {
         _percentDone = 5;
         
         for (const auto& lst_path : requiredLstFiles) {
-            ResourceManager::getInstance().loadResource<Lst>(lst_path);
+            [[maybe_unused]] auto* lstResource = ResourceManager::getInstance().loadResource<Lst>(lst_path);
         }
         
         _percentDone = 10;

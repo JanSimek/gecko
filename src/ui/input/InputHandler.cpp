@@ -76,36 +76,36 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
                 _currentAction = EditorAction::OBJECT_MOVING;
                 _isDragging = false;
             }
-        } else {
-            // Handle mark exits mode separately - it only does exit grid selection
-            if (_markExitsMode) {
-                _currentAction = EditorAction::DRAG_SELECTING;
-                _dragStartWorldPos = worldPos;
-                _isDragging = false;
-                _immediateSelectionPerformed = false;
-            } else {
-                // Determine if we should start drag selection or immediate selection
-                bool canDragSelect = !hasModifiers && 
-                    (_selectionMode == SelectionMode::ALL || 
-                     _selectionMode == SelectionMode::FLOOR_TILES || 
-                     _selectionMode == SelectionMode::ROOF_TILES || 
-                     _selectionMode == SelectionMode::ROOF_TILES_ALL || 
-                     _selectionMode == SelectionMode::OBJECTS || 
-                     _selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE);
+            return;
+        }
+        // Handle mark exits mode separately - it only does exit grid selection
+        if (_markExitsMode) {
+            _currentAction = EditorAction::DRAG_SELECTING;
+            _dragStartWorldPos = worldPos;
+            _isDragging = false;
+            _immediateSelectionPerformed = false;
+            return;
+        }
+        // Determine if we should start drag selection or immediate selection
+        bool canDragSelect = !hasModifiers && 
+            (_selectionMode == SelectionMode::ALL || 
+             _selectionMode == SelectionMode::FLOOR_TILES || 
+             _selectionMode == SelectionMode::ROOF_TILES || 
+             _selectionMode == SelectionMode::ROOF_TILES_ALL || 
+             _selectionMode == SelectionMode::OBJECTS || 
+             _selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE);
 
-                if (canDragSelect) {
-                    _currentAction = EditorAction::DRAG_SELECTING;
-                    _dragStartWorldPos = worldPos;
-                    _isDragging = false;
-                    _immediateSelectionPerformed = false;
-                } else {
-                    // Immediate selection with modifier
-                    if (_callbacks.onSelectionClick) {
-                        _callbacks.onSelectionClick(worldPos, modifier);
-                    }
-                    _immediateSelectionPerformed = true;
-                }
+        if (canDragSelect) {
+            _currentAction = EditorAction::DRAG_SELECTING;
+            _dragStartWorldPos = worldPos;
+            _isDragging = false;
+            _immediateSelectionPerformed = false;
+        } else {
+            // Immediate selection with modifier
+            if (_callbacks.onSelectionClick) {
+                _callbacks.onSelectionClick(worldPos, modifier);
             }
+            _immediateSelectionPerformed = true;
         }
     } else if (event.button == sf::Mouse::Button::Right) {
         // Handle right-click

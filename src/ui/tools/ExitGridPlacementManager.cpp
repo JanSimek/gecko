@@ -23,22 +23,12 @@ ExitGridPlacementManager::ExitGridPlacementManager(EditorWidget* editor)
 
 void ExitGridPlacementManager::setExitGridPlacementMode(bool enabled) {
     _exitGridPlacementMode = enabled;
-    
-    if (enabled) {
-        spdlog::debug("Exit grid placement mode enabled");
-    } else {
-        spdlog::debug("Exit grid placement mode disabled");
-    }
+    spdlog::debug("Exit grid placement mode {}", enabled ? "enabled" : "disabled");
 }
 
 void ExitGridPlacementManager::setMarkExitsMode(bool enabled) {
     _markExitsMode = enabled;
-    
-    if (enabled) {
-        spdlog::debug("Mark exits mode enabled");
-    } else {
-        spdlog::debug("Mark exits mode disabled");
-    }
+    spdlog::debug("Mark exits mode {}", enabled ? "enabled" : "disabled");
 }
 
 void ExitGridPlacementManager::handleExitGridPlacement(sf::Vector2f worldPos) {

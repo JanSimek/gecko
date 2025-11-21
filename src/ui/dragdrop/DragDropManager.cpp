@@ -174,16 +174,16 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
                 _draggedObjects[i]->setHexPosition(newHex);
                 
                 spdlog::debug("DragDropManager: Moved object from hex {} to hex {}", originalHexPosition, newHexPosition);
-            } else {
-                // Invalid position, restore original
-                _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);
-                spdlog::warn("DragDropManager: Invalid drop position hex {}, restored original position", newHexPosition);
+                continue;
             }
-        } else {
-            // Invalid original position, restore original sprite position
+            // Invalid position, restore original
             _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);
-            spdlog::warn("DragDropManager: Invalid original hex position {}, restored original position", originalHexPosition);
+            spdlog::warn("DragDropManager: Invalid drop position hex {}, restored original position", newHexPosition);
+            continue;
         }
+        // Invalid original position, restore original sprite position
+        _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);
+        spdlog::warn("DragDropManager: Invalid original hex position {}, restored original position", originalHexPosition);
     }
     
     // Clean up drag state
@@ -270,21 +270,19 @@ void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vec
                     spriteRef.setColor(sf::Color(255, 255, 255, 180));
                     
                     spdlog::debug("DragDropManager: Created drag preview for object {}", objectIndex);
-                } else {
-                    spdlog::warn("DragDropManager: Failed to load FRM for drag preview");
-                    cancelDragPreview();
                     return;
                 }
+                spdlog::warn("DragDropManager: Failed to load FRM for drag preview");
+                cancelDragPreview();
+                return;
             } catch (const std::exception& e) {
                 spdlog::warn("DragDropManager: Failed to load FRM {}: {}", _previewObjectInfo->frmPath.toStdString(), e.what());
                 cancelDragPreview();
                 return;
             }
-        } else {
-            spdlog::warn("DragDropManager: No ObjectInfo available for drag preview");
-            cancelDragPreview();
-            return;
         }
+        spdlog::warn("DragDropManager: No ObjectInfo available for drag preview");
+        cancelDragPreview();
         
         // Position the preview object initially
         updateDragPreview(worldPos);
