@@ -9,13 +9,16 @@ on:
 
 env:
   CMAKE_VERSION: 3.31.4
-  BUILD_TYPE: Release
   QT_VERSION: 6.8.3
 
 jobs:
   build-linux:
-    name: Linux
+    name: Linux - ${{ matrix.build_type }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
 
     steps:
     - name: Checkout repository
@@ -78,14 +81,14 @@ jobs:
     - name: Configure CMake
       run: |
         cmake -B build -G Ninja \
-          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DGECK_BUILD_TESTS=ON \
           -DGECK_USE_SYSTEM_LIBS=ON \
           -DQt6_DIR=$Qt6_DIR \
           -DCMAKE_PREFIX_PATH=${{ runner.temp }}/sfml-install
 
     - name: Build
-      run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+      run: cmake --build build --config ${{ matrix.build_type }} --parallel
 
     - name: Run tests
       run: |
@@ -93,15 +96,13 @@ jobs:
         ctest --test-dir build --output-on-failure --parallel
 
   build-macos:
-    name: macOS - ${{ matrix.arch }}
-    runs-on: ${{ matrix.os }}
+    name: macOS - ${{ matrix.build_type }}
+    runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-latest
-            arch: 'arm64' # 'x86_64'
-            qt_arch: 'clang_64'
+        build_type: [Release, Debug]
+        qt_arch: ['clang_64']
 
     steps:
     - name: Checkout repository
@@ -130,7 +131,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/sfml-install
-        key: ${{ runner.os }}-${{ matrix.arch }}-sfml-3.0.1
+        key: ${{ runner.os }}-sfml-3.0.1
 
     - name: Build and install SFML 3
       if: steps.cache-sfml.outputs.cache-hit != 'true'
@@ -150,14 +151,14 @@ jobs:
     - name: Configure CMake
       run: |
         cmake -B build \
-          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DGECK_BUILD_TESTS=ON \
           -DGECK_USE_SYSTEM_LIBS=ON \
           -DQt6_DIR=$Qt6_DIR \
           -DCMAKE_PREFIX_PATH=${{ runner.temp }}/sfml-install
 
     - name: Build
-      run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+      run: cmake --build build --config ${{ matrix.build_type }} --parallel
 
     - name: Run tests
       run: |
@@ -165,8 +166,12 @@ jobs:
         ctest --test-dir build --output-on-failure --parallel
 
   build-windows:
-    name: Windows
+    name: Windows - ${{ matrix.build_type }}
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
 
     steps:
     - name: Checkout repository
@@ -216,17 +221,17 @@ jobs:
       shell: cmd
       run: |
         cmake -B build ^
-          -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} ^
           -DGECK_BUILD_TESTS=ON ^
           -DGECK_USE_SYSTEM_LIBS=ON ^
           -DQt6_DIR=%Qt6_DIR% ^
           -DCMAKE_PREFIX_PATH=${{ runner.temp }}/sfml-install
 
     - name: Build
-      run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+      run: cmake --build build --config ${{ matrix.build_type }} --parallel
 
     - name: Run tests
       shell: cmd
       run: |
         set PATH=${{ runner.temp }}\sfml-install\bin;%PATH%
-        ctest --test-dir build --output-on-failure --parallel -C ${{ env.BUILD_TYPE }}
+        ctest --test-dir build --output-on-failure --parallel -C ${{ matrix.build_type }}
