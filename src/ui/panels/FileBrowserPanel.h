@@ -17,6 +17,7 @@
 #include <QAction>
 #include <QThread>
 #include <QProgressBar>
+#include <QPalette>
 #include <vector>
 #include <memory>
 #include <unordered_set>

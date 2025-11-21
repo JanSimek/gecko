@@ -42,9 +42,10 @@ bool Settings::exists() const {
 
 void Settings::load() {
     QString filePath = getSettingsFilePath();
+    spdlog::debug("Loading settings from configuration path: {}", filePath.toStdString());
     
     if (!QFile::exists(filePath)) {
-        spdlog::info("Settings file not found, using defaults: {}", filePath.toStdString());
+        spdlog::info("Settings file not found in {}, using defaults", filePath.toStdString());
         return;
     }
     
@@ -381,21 +382,20 @@ void Settings::setCustomEditorPath(const QString& path) {
     _customEditorPath = path;
 }
 
-// Validation
 bool Settings::validateDataPath(const std::filesystem::path& path) const {
     if (!std::filesystem::exists(path)) {
         return false;
     }
     
     if (std::filesystem::is_directory(path)) {
-        // Check for common Fallout 2 files
-        return std::filesystem::exists(path / "master.dat") || 
-               std::filesystem::exists(path / "critter.dat") ||
-               std::filesystem::exists(path / "maps");
-    } else if (path.extension() == ".dat") {
-        return std::filesystem::is_regular_file(path);
+        return true;
     }
-    
+
+    const bool isDatFile = path.extension() == ".dat" && std::filesystem::is_regular_file(path);
+    if (isDatFile) {
+        return true;
+    }
+
     return false;
 }
 

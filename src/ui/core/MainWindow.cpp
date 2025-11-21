@@ -28,6 +28,7 @@
 #include "../../format/pro/Pro.h"
 #include "../../writer/map/MapWriter.h"
 #include "../../editor/Object.h"
+#include "../IconHelper.h"
 
 #include <fstream>
 
@@ -51,6 +52,7 @@
 #include <QStandardPaths>
 #include <QProcess>
 #include <QDir>
+#include <QStringList>
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 
@@ -210,31 +212,31 @@ void MainWindow::setupMenuBar() {
     // File Menu
     _fileMenu = _menuBar->addMenu("&File");
 
-    QAction* newAction = _fileMenu->addAction(QIcon(":/icons/actions/new.svg"), "&New Map");
+    QAction* newAction = _fileMenu->addAction(createIcon(":/icons/actions/new.svg"), "&New Map");
     newAction->setShortcut(QKeySequence::New);
     newAction->setStatusTip("Create a new map");
     connect(newAction, &QAction::triggered, this, &MainWindow::newMapRequested);
 
-    QAction* openAction = _fileMenu->addAction(QIcon(":/icons/actions/open.svg"), "&Open Map");
+    QAction* openAction = _fileMenu->addAction(createIcon(":/icons/actions/open.svg"), "&Open Map");
     openAction->setShortcut(QKeySequence::Open);
     openAction->setStatusTip("Open an existing map");
     connect(openAction, &QAction::triggered, this, &MainWindow::openMapRequested);
 
-    QAction* saveAction = _fileMenu->addAction(QIcon(":/icons/actions/save.svg"), "&Save Map");
+    QAction* saveAction = _fileMenu->addAction(createIcon(":/icons/actions/save.svg"), "&Save Map");
     saveAction->setShortcut(QKeySequence::Save);
     saveAction->setStatusTip("Save current map");
     connect(saveAction, &QAction::triggered, this, &MainWindow::saveMapRequested);
 
     _fileMenu->addSeparator();
     
-    QAction* preferencesAction = _fileMenu->addAction(QIcon(":/icons/actions/settings.svg"), "&Preferences...");
+    QAction* preferencesAction = _fileMenu->addAction(createIcon(":/icons/actions/settings.svg"), "&Preferences...");
     preferencesAction->setShortcut(QKeySequence::Preferences);
     preferencesAction->setStatusTip("Open application preferences");
     connect(preferencesAction, &QAction::triggered, this, &MainWindow::showPreferences);
 
     _fileMenu->addSeparator();
 
-    QAction* quitAction = _fileMenu->addAction(QIcon(":/icons/actions/quit.svg"), "&Quit");
+    QAction* quitAction = _fileMenu->addAction(createIcon(":/icons/actions/quit.svg"), "&Quit");
     quitAction->setShortcut(QKeySequence::Quit);
     quitAction->setStatusTip("Exit the application");
     connect(quitAction, &QAction::triggered, this, &QWidget::close);
@@ -242,19 +244,19 @@ void MainWindow::setupMenuBar() {
     // Edit Menu
     _editMenu = _menuBar->addMenu("&Edit");
 
-    QAction* selectAllAction = _editMenu->addAction(QIcon(":/icons/actions/select-all.svg"), "Select &All");
+    QAction* selectAllAction = _editMenu->addAction(createIcon(":/icons/actions/select-all.svg"), "Select &All");
     selectAllAction->setShortcut(QKeySequence("Ctrl+A"));
     selectAllAction->setStatusTip("Select all items of current type");
     connect(selectAllAction, &QAction::triggered, this, &MainWindow::selectAllRequested);
 
-    QAction* deselectAllAction = _editMenu->addAction(QIcon(":/icons/actions/deselect.svg"), "&Deselect All");
+    QAction* deselectAllAction = _editMenu->addAction(createIcon(":/icons/actions/deselect.svg"), "&Deselect All");
     deselectAllAction->setShortcut(QKeySequence("Ctrl+D"));
     deselectAllAction->setStatusTip("Clear all selections");
     connect(deselectAllAction, &QAction::triggered, this, &MainWindow::deselectAllRequested);
 
     _editMenu->addSeparator();
 
-    QAction* scrollBlockerRectangleAction = _editMenu->addAction(QIcon(":/icons/actions/scroll-blocker.svg"), "Scroll &Blocker Rectangle");
+    QAction* scrollBlockerRectangleAction = _editMenu->addAction(createIcon(":/icons/actions/scroll-blocker.svg"), "Scroll &Blocker Rectangle");
     scrollBlockerRectangleAction->setShortcut(QKeySequence("B"));
     scrollBlockerRectangleAction->setStatusTip("Draw rectangle and place scroll blockers on borders");
     connect(scrollBlockerRectangleAction, &QAction::triggered, this, &MainWindow::toggleScrollBlockerRectangleMode);
@@ -435,23 +437,23 @@ void MainWindow::setupToolBar() {
     _mainToolBar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
 
     // File operations
-    QAction* newAction = _mainToolBar->addAction(QIcon(":/icons/actions/new.svg"), "New");
+    QAction* newAction = _mainToolBar->addAction(createIcon(":/icons/actions/new.svg"), "New");
     newAction->setStatusTip("Create a new map");
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &MainWindow::newMapRequested);
 
-    QAction* openAction = _mainToolBar->addAction(QIcon(":/icons/actions/open.svg"), "Open");
+    QAction* openAction = _mainToolBar->addAction(createIcon(":/icons/actions/open.svg"), "Open");
     openAction->setStatusTip("Open an existing map");
     openAction->setShortcut(QKeySequence::Open);
     connect(openAction, &QAction::triggered, this, &MainWindow::openMapRequested);
 
-    QAction* saveAction = _mainToolBar->addAction(QIcon(":/icons/actions/save.svg"), "Save");
+    QAction* saveAction = _mainToolBar->addAction(createIcon(":/icons/actions/save.svg"), "Save");
     saveAction->setStatusTip("Save the current map");
     saveAction->setShortcut(QKeySequence::Save);
     connect(saveAction, &QAction::triggered, this, &MainWindow::saveMapRequested);
 
     // Play game action
-    QAction* playAction = _mainToolBar->addAction(QIcon(":/icons/actions/play.svg"), "Play");
+    QAction* playAction = _mainToolBar->addAction(createIcon(":/icons/actions/play.svg"), "Play");
     playAction->setStatusTip("Save and play the current map in Fallout 2");
     playAction->setShortcut(QKeySequence("F5"));
     connect(playAction, &QAction::triggered, this, &MainWindow::onPlayGame);
@@ -459,7 +461,7 @@ void MainWindow::setupToolBar() {
     _mainToolBar->addSeparator();
 
     // Selection mode action with dropdown menu  
-    _selectionModeAction = _mainToolBar->addAction(QIcon(":/icons/actions/select.svg"), "All");
+    _selectionModeAction = _mainToolBar->addAction(createIcon(":/icons/actions/select.svg"), "All");
     _selectionModeAction->setToolTip("Select the current selection mode");
     
     // Create dropdown menu with all selection modes
@@ -504,10 +506,10 @@ void MainWindow::setupToolBar() {
     _mainToolBar->addSeparator();
 
     // Rotate action
-    QAction* rotateAction = _mainToolBar->addAction(QIcon(":/icons/actions/rotate.svg"), "Rotate");
+    QAction* rotateAction = _mainToolBar->addAction(createIcon(":/icons/actions/rotate.svg"), "Rotate");
     
     // Mark exits tool
-    _markExitsAction = _mainToolBar->addAction(QIcon(":/icons/actions/door-exit.svg"), "Mark Exits");
+    _markExitsAction = _mainToolBar->addAction(createIcon(":/icons/actions/door-exit.svg"), "Mark Exits");
     _markExitsAction->setStatusTip("Select exit grids to edit their properties");
     _markExitsAction->setCheckable(true);
     connect(_markExitsAction, &QAction::triggered, this, [this](bool checked) {

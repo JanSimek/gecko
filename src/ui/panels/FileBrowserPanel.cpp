@@ -7,6 +7,7 @@
 #include "../../reader/ReaderFactory.h"
 #include "../../format/pro/Pro.h"
 #include "../../format/msg/Msg.h"
+#include "../IconHelper.h"
 
 #include <QFileInfo>
 #include <QDir>
@@ -18,11 +19,9 @@
 #include <QStyle>
 #include <QMessageBox>
 #include <QFile>
-#include <QIcon>
 #include <QProgressBar>
 #include <QThread>
 #include <QMetaObject>
-#include <QApplication>
 #include <QRegularExpression>
 #include <spdlog/spdlog.h>
 #include <algorithm>
@@ -173,7 +172,7 @@ FileTreeItem::FileTreeItem(const QString& name, ItemType type)
 
     // Set different icons for files and directories
     if (type == Directory) {
-        setIcon(QIcon(":/icons/filetypes/folder.svg"));
+        setIcon(createIcon(":/icons/filetypes/folder.svg"));
     } else {
         setIcon(getFileIcon(name));
     }
@@ -201,10 +200,10 @@ QIcon FileTreeItem::getFileIcon(const QString& fileName) {
     };
     
     if (iconMap.contains(suffix)) {
-        return QIcon(iconMap[suffix]);
+        return createIcon(iconMap[suffix]);
     }
     
-    return QIcon(":/icons/filetypes/default.svg");
+    return createIcon(":/icons/filetypes/default.svg");
 }
 
 bool FileBrowserPanel::isTextFile(const QString& filePath) const {
@@ -340,7 +339,7 @@ void FileBrowserPanel::setupFilterControls() {
     typeLayout->addWidget(_fileTypeComboBox, 1);
 
     _refreshButton = new QPushButton("Refresh", this);
-    _refreshButton->setIcon(QIcon(":/icons/ui/refresh.svg"));
+    _refreshButton->setIcon(createIcon(":/icons/ui/refresh.svg"));
     connect(_refreshButton, &QPushButton::clicked, this, &FileBrowserPanel::onRefreshClicked);
     typeLayout->addWidget(_refreshButton);
 
@@ -999,24 +998,24 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
     
     if (filePath.endsWith(".map", Qt::CaseInsensitive)) {
         openAction = contextMenu.addAction("Open Map");
-        openAction->setIcon(QIcon(":/icons/filetypes/map.svg"));
+        openAction->setIcon(createIcon(":/icons/filetypes/map.svg"));
     } else if (filePath.endsWith(".pro", Qt::CaseInsensitive)) {
         editProAction = contextMenu.addAction("Edit PRO");
-        editProAction->setIcon(QIcon(":/icons/actions/settings.svg"));
+        editProAction->setIcon(createIcon(":/icons/actions/settings.svg"));
         contextMenu.addSeparator();
         openAction = contextMenu.addAction("Open");
-        openAction->setIcon(QIcon(":/icons/actions/open.svg"));
+        openAction->setIcon(createIcon(":/icons/actions/open.svg"));
     } else if (isTextFile(filePath)) {
         openAction = contextMenu.addAction("Open with System Editor");
-        openAction->setIcon(QIcon(":/icons/filetypes/text.svg"));
+        openAction->setIcon(createIcon(":/icons/filetypes/text.svg"));
     } else {
         openAction = contextMenu.addAction("Open");
-        openAction->setIcon(QIcon(":/icons/actions/open.svg"));
+        openAction->setIcon(createIcon(":/icons/actions/open.svg"));
     }
     
     // Add Export action
     QAction* exportAction = contextMenu.addAction("Export");
-    exportAction->setIcon(QIcon(":/icons/actions/save.svg"));
+    exportAction->setIcon(createIcon(":/icons/actions/save.svg"));
     
     // Execute menu and handle selected action
     QAction* selectedAction = contextMenu.exec(_treeView->viewport()->mapToGlobal(pos));

@@ -10,6 +10,7 @@
 #include <spdlog/spdlog.h>
 
 #include "../../Application.h"
+#include "../IconHelper.h"
 #include "version.h"
 
 namespace geck {
@@ -38,8 +39,10 @@ void WelcomeWidget::setupUI() {
     std::filesystem::path svgPath = Application::getResourcesPath() / "images" / "vault-boy.svg";
     QString svgPathStr = QString::fromStdString(svgPath.string());
     
-    QSvgRenderer svgRenderer;
-    if (svgRenderer.load(svgPathStr)) {
+    // Use the centralized helper to load themed SVG
+    QByteArray svgData = loadThemedSvg(svgPathStr);
+    if (!svgData.isEmpty()) {
+        QSvgRenderer svgRenderer(svgData);
         renderSvgToLabel(svgRenderer);
     }
     createVersionLabel();
