@@ -222,6 +222,8 @@ endif()
 
 if(MSVC)
     add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
+    # Suppress deprecation warning for stdext::checked_array_iterator in debug builds
+    add_compile_definitions(_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING)
 endif()
 
 # Targets
