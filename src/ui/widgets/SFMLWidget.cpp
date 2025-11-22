@@ -295,9 +295,15 @@ sf::Keyboard::Key SFMLWidget::convertQtKeyToSf(int qtKey) const {
 }
 
 void SFMLWidget::dragEnterEvent(QDragEnterEvent* event) {
-    if (event->mimeData()->hasFormat("application/x-geck-object")) {
+    const QMimeData* mimeData = event->mimeData();
+    if (!mimeData) {
+        event->ignore();
+        return;
+    }
+    
+    if (mimeData->hasFormat("application/x-geck-object")) {
         // Extract object data and start drag preview
-        QByteArray objectData = event->mimeData()->data("application/x-geck-object");
+        QByteArray objectData = mimeData->data("application/x-geck-object");
         QStringList parts = QString::fromUtf8(objectData).split(',');
         
         if (parts.size() == 2 && _editorWidget) {
@@ -313,19 +319,18 @@ void SFMLWidget::dragEnterEvent(QDragEnterEvent* event) {
 
         event->acceptProposedAction();
     } else {
-        QWidget* target = parentWidget();
-        while (target && !event->isAccepted()) {
-            QCoreApplication::sendEvent(target, event);
-            target = target->parentWidget();
-        }
-        if (!event->isAccepted()) {
-            event->ignore();
-        }
+        event->ignore();
     }
 }
 
 void SFMLWidget::dragMoveEvent(QDragMoveEvent* event) {
-    if (event->mimeData()->hasFormat("application/x-geck-object")) {
+    const QMimeData* mimeData = event->mimeData();
+    if (!mimeData) {
+        event->ignore();
+        return;
+    }
+    
+    if (mimeData->hasFormat("application/x-geck-object")) {
         // Update drag preview position
         if (_editorWidget) {
             sf::Vector2f worldPos = mapToWorld(event->position());
@@ -334,19 +339,26 @@ void SFMLWidget::dragMoveEvent(QDragMoveEvent* event) {
 
         event->acceptProposedAction();
     } else {
-        QWidget* target = parentWidget();
-        while (target && !event->isAccepted()) {
-            QCoreApplication::sendEvent(target, event);
-            target = target->parentWidget();
-        }
-        if (!event->isAccepted()) {
-            event->ignore();
-        }
+        event->ignore();
     }
 }
 
+void SFMLWidget::dragLeaveEvent(QDragLeaveEvent* event) {
+    // Clean up drag preview when drag leaves the widget
+    if (_editorWidget) {
+        _editorWidget->cancelDragPreview();
+    }
+    event->accept();
+}
+
 void SFMLWidget::dropEvent(QDropEvent* event) {
-    if (event->mimeData()->hasFormat("application/x-geck-object")) {
+    const QMimeData* mimeData = event->mimeData();
+    if (!mimeData) {
+        event->ignore();
+        return;
+    }
+    
+    if (mimeData->hasFormat("application/x-geck-object")) {
         // Finish the drag preview and place the object
         if (_editorWidget) {
             sf::Vector2f worldPos = mapToWorld(event->position());
@@ -355,14 +367,8 @@ void SFMLWidget::dropEvent(QDropEvent* event) {
 
         event->acceptProposedAction();
     } else {
-        QWidget* target = parentWidget();
-        while (target && !event->isAccepted()) {
-            QCoreApplication::sendEvent(target, event);
-            target = target->parentWidget();
-        }
-        if (!event->isAccepted()) {
-            event->ignore();
-        }
+        // Propagate to parent if not handled
+        event->ignore();
     }
 }
 

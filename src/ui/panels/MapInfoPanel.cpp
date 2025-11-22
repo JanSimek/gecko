@@ -14,6 +14,7 @@
 #include "../../util/ResourceManager.h"
 #include "../../util/ResourcePaths.h"
 #include "../../util/Coordinates.h"
+#include "../IconHelper.h"
 
 namespace geck {
 
@@ -108,11 +109,11 @@ void MapInfoPanel::setupUI() {
     _playerPositionSpin = new QSpinBox();
     _playerPositionSpin->setRange(0, HexPosition::MAX_VALUE);  // Max hex position
     _setPositionButton = new QPushButton();
-    _setPositionButton->setIcon(QIcon(":/icons/actions/map-pin.svg"));
+    _setPositionButton->setIcon(createIcon(":/icons/actions/map-pin.svg"));
     _setPositionButton->setMaximumWidth(30);
     _setPositionButton->setToolTip("Click to select position on map");
     _centerViewButton = new QPushButton();
-    _centerViewButton->setIcon(QIcon(":/icons/actions/target-arrow.svg"));
+    _centerViewButton->setIcon(createIcon(":/icons/actions/target-arrow.svg"));
     _centerViewButton->setMaximumWidth(30);
     _centerViewButton->setToolTip("Center view on player position");
     positionLayout->addWidget(_playerPositionSpin);

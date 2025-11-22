@@ -18,6 +18,7 @@
 #include "../../format/frm/Frame.h"
 #include "../../format/pal/Pal.h"
 #include "../../util/ResourceManager.h"
+#include "../IconHelper.h"
 #include "../../reader/ReaderFactory.h"
 
 namespace geck {
@@ -130,7 +131,7 @@ void ObjectPreviewWidget::setupUI() {
         // Create play/stop button overlay positioned on the preview label
         _playPauseButton = new QPushButton(this);
         
-        _playPauseButton->setIcon(QIcon(":/icons/actions/play.svg"));
+        _playPauseButton->setIcon(createIcon(":/icons/actions/play.svg"));
         
         _playPauseButton->setToolTip("Play/Stop animation");
         _playPauseButton->setFixedSize(24, 24);
@@ -159,7 +160,7 @@ void ObjectPreviewWidget::setupUI() {
         // Create rotate button overlay positioned on the preview label
         _rotateButton = new QPushButton(this);
         
-        _rotateButton->setIcon(QIcon(":/icons/actions/rotate.svg"));
+        _rotateButton->setIcon(createIcon(":/icons/actions/rotate.svg"));
         
         _rotateButton->setToolTip("Rotate object direction");
         _rotateButton->setFixedSize(24, 24);
@@ -194,7 +195,7 @@ void ObjectPreviewWidget::setupUI() {
     
     // Always create edit button (independent of animation controls)
     _editButton = new QPushButton(this);
-    _editButton->setIcon(QIcon(":/icons/actions/edit.svg"));
+    _editButton->setIcon(createIcon(":/icons/actions/edit.svg"));
     _editButton->setToolTip("Change FRM file");
     _editButton->setFixedSize(24, 24);
     _editButton->setStyleSheet(
@@ -358,7 +359,7 @@ void ObjectPreviewWidget::stopAnimation() {
         _animationTimer->stop();
         _isAnimating = false;
         if (_playPauseButton) {
-            _playPauseButton->setIcon(QIcon(":/icons/actions/play.svg"));
+            _playPauseButton->setIcon(createIcon(":/icons/actions/play.svg"));
         }
         // Reset to first frame when stopping
         _currentFrame = 0;
@@ -371,14 +372,14 @@ void ObjectPreviewWidget::onPlayPauseClicked() {
         // Stop animation and reset to first frame
         _animationTimer->stop();
         _isAnimating = false;
-        _playPauseButton->setIcon(QIcon(":/icons/actions/play.svg"));
+        _playPauseButton->setIcon(createIcon(":/icons/actions/play.svg"));
         _currentFrame = 0;
         onFrameChanged(0); // Reset to first frame
     } else {
         if (_totalFrames > 1) {
             _animationTimer->start();
             _isAnimating = true;
-            _playPauseButton->setIcon(QIcon(":/icons/actions/stop.svg"));
+            _playPauseButton->setIcon(createIcon(":/icons/actions/stop.svg"));
         }
     }
 }
@@ -421,7 +422,7 @@ void ObjectPreviewWidget::onRotateClicked() {
     if (_isAnimating) {
         _animationTimer->stop();
         _isAnimating = false;
-        _playPauseButton->setIcon(QIcon(":/icons/actions/play.svg"));
+        _playPauseButton->setIcon(createIcon(":/icons/actions/play.svg"));
     }
     
     // Reload frames for new direction

@@ -114,7 +114,7 @@ std::string CritterFrmResolver::getAnimationTypeName(const std::string& frmFilen
         return it->second;
     }
     
-    return "Animation " + suffixKey;
+    return std::string("Animation ") + suffixKey;
 }
 
 bool CritterFrmResolver::matchesCritterBase(const std::string& baseName, const std::string& frmFilename) {

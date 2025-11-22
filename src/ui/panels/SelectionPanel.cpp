@@ -18,6 +18,7 @@
 #include "../../format/lst/Lst.h"
 #include "../../util/ResourceManager.h"
 #include "../../util/ProHelper.h"
+#include "../IconHelper.h"
 #include "../../format/map/MapObject.h"
 #include "../../format/pro/Pro.h"
 #include "../../format/msg/Msg.h"
@@ -67,7 +68,7 @@ HoverSpriteLabel::HoverSpriteLabel(QWidget* parent) : QLabel(parent) {
 
 void HoverSpriteLabel::setupEditButton() {
     _editButton = new QPushButton(this);
-    _editButton->setIcon(QIcon(":/icons/actions/edit.svg"));
+    _editButton->setIcon(createIcon(":/icons/actions/edit.svg"));
     _editButton->setToolTip("Change FRM file");
     _editButton->setFixedSize(24, 24);
     _editButton->setStyleSheet(
