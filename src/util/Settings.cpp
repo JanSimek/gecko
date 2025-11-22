@@ -140,11 +140,6 @@ QJsonObject Settings::toJson() const {
         gameLocation["dataDirectory"] = QString::fromStdString(_gameDataDirectory.string());
     }
     
-    // Backward compatibility
-    if (!_gameLocation.empty()) {
-        gameLocation["legacyPath"] = QString::fromStdString(_gameLocation.string());
-    }
-    
     json["gameLocation"] = gameLocation;
     
     return json;
@@ -203,66 +198,30 @@ void Settings::fromJson(const QJsonObject& json) {
     }
     
     // Game location configuration
-    if (json.contains("gameLocation")) {
-        QJsonValue gameLocationValue = json["gameLocation"];
+    if (json.contains("gameLocation") && json["gameLocation"].isObject()) {
+        QJsonObject gameLocation = json["gameLocation"].toObject();
         
-        if (gameLocationValue.isString()) {
-            // Backward compatibility - old format
-            QString gameLocationStr = gameLocationValue.toString();
-            if (!gameLocationStr.isEmpty()) {
-                _gameLocation = std::filesystem::path(gameLocationStr.toStdString());
-                _executableGameLocation = _gameLocation; // Default to executable type
+        QString installationType = gameLocation["installationType"].toString("executable");
+        _gameInstallationType = (installationType == "steam") ? GameInstallationType::STEAM : GameInstallationType::EXECUTABLE;
+        
+        if (gameLocation.contains("steamAppId")) {
+            QString steamAppId = gameLocation["steamAppId"].toString();
+            if (!steamAppId.isEmpty()) {
+                _steamAppId = steamAppId.toStdString();
             }
-        } else if (gameLocationValue.isObject()) {
-            // New format
-            QJsonObject gameLocation = gameLocationValue.toObject();
-            
-            QString installationType = gameLocation["installationType"].toString("executable");
-            _gameInstallationType = (installationType == "steam") ? GameInstallationType::STEAM : GameInstallationType::EXECUTABLE;
-            
-            if (gameLocation.contains("steamAppId")) {
-                QString steamAppId = gameLocation["steamAppId"].toString();
-                if (!steamAppId.isEmpty()) {
-                    _steamAppId = steamAppId.toStdString();
-                }
+        }
+        
+        if (gameLocation.contains("executablePath")) {
+            QString executablePath = gameLocation["executablePath"].toString();
+            if (!executablePath.isEmpty()) {
+                _executableGameLocation = std::filesystem::path(executablePath.toStdString());
             }
-            
-            // Legacy support for steamPath (convert to default app ID)
-            if (gameLocation.contains("steamPath")) {
-                QString steamPath = gameLocation["steamPath"].toString();
-                if (!steamPath.isEmpty() && _steamAppId.empty()) {
-                    _steamAppId = "38410"; // Default Fallout 2 Steam App ID
-                }
-            }
-            
-            if (gameLocation.contains("executablePath")) {
-                QString executablePath = gameLocation["executablePath"].toString();
-                if (!executablePath.isEmpty()) {
-                    _executableGameLocation = std::filesystem::path(executablePath.toStdString());
-                }
-            }
-            
-            if (gameLocation.contains("dataDirectory")) {
-                QString dataDirectory = gameLocation["dataDirectory"].toString();
-                if (!dataDirectory.isEmpty()) {
-                    _gameDataDirectory = std::filesystem::path(dataDirectory.toStdString());
-                }
-            }
-            
-            // Backward compatibility
-            if (gameLocation.contains("legacyPath")) {
-                QString legacyPath = gameLocation["legacyPath"].toString();
-                if (!legacyPath.isEmpty()) {
-                    _gameLocation = std::filesystem::path(legacyPath.toStdString());
-                    // If no specific paths are set, use legacy path for current type
-                    if (_steamAppId.empty() && _executableGameLocation.empty()) {
-                        if (_gameInstallationType == GameInstallationType::STEAM) {
-                            _steamAppId = "38410"; // Default Steam App ID
-                        } else {
-                            _executableGameLocation = _gameLocation;
-                        }
-                    }
-                }
+        }
+        
+        if (gameLocation.contains("dataDirectory")) {
+            QString dataDirectory = gameLocation["dataDirectory"].toString();
+            if (!dataDirectory.isEmpty()) {
+                _gameDataDirectory = std::filesystem::path(dataDirectory.toStdString());
             }
         }
     }
@@ -589,15 +548,6 @@ std::filesystem::path Settings::getGameLocation() const {
     }
 }
 
-void Settings::setGameLocation(const std::filesystem::path& location) {
-    _gameLocation = location; // Keep for backward compatibility
-    if (_gameInstallationType == GameInstallationType::EXECUTABLE) {
-        _executableGameLocation = location;
-    }
-    // For Steam installations, we don't store paths - only the App ID matters
-    spdlog::info("Game location set to: {}", location.string());
-}
-
 Settings::GameInstallationType Settings::getGameInstallationType() const {
     return _gameInstallationType;
 }
@@ -635,42 +585,67 @@ void Settings::setGameDataDirectory(const std::filesystem::path& location) {
 }
 
 bool Settings::isGameLocationValid() const {
-    if (_gameLocation.empty()) {
+    if (_gameInstallationType == GameInstallationType::STEAM) {
+        return !_steamAppId.empty();
+    }
+    
+    if (_executableGameLocation.empty()) {
         return false;
     }
     
-    // Check if directory exists
-    if (!std::filesystem::exists(_gameLocation) || !std::filesystem::is_directory(_gameLocation)) {
+    if (!std::filesystem::exists(_executableGameLocation)) {
         return false;
     }
     
-    // Check for essential Fallout 2 files/directories
-    std::filesystem::path dataDir = _gameLocation / "data";
+    std::filesystem::path dataRoot = _gameDataDirectory.empty() ? _executableGameLocation : _gameDataDirectory;
+    if (!std::filesystem::exists(dataRoot) || !std::filesystem::is_directory(dataRoot)) {
+        return false;
+    }
+    
+    std::filesystem::path dataDir = dataRoot / "data";
     
 #ifdef __APPLE__
     // macOS: Check for .app bundles or Steam installation
-    std::filesystem::path fallout2App = _gameLocation / "Fallout 2.app";
-    std::filesystem::path fallout2App2 = _gameLocation / "fallout2.app";
+    std::filesystem::path fallout2App = _executableGameLocation / "Fallout 2.app";
+    std::filesystem::path fallout2App2 = _executableGameLocation / "fallout2.app";
+    std::filesystem::path fallout2CEApp = _executableGameLocation / "fallout2-ce.app";
     
     // Also check global locations
     std::filesystem::path globalApp1 = "/Applications/Fallout 2.app";
     std::filesystem::path globalApp2 = "/Applications/fallout2.app";
+    std::filesystem::path globalAppCE = "/Applications/fallout2-ce.app";
     
     bool hasDataDir = std::filesystem::exists(dataDir) && std::filesystem::is_directory(dataDir);
     bool hasApp = std::filesystem::exists(fallout2App) || std::filesystem::exists(fallout2App2) ||
-                  std::filesystem::exists(globalApp1) || std::filesystem::exists(globalApp2);
+                  std::filesystem::exists(fallout2CEApp) ||
+                  std::filesystem::exists(globalApp1) || std::filesystem::exists(globalApp2) ||
+                  std::filesystem::exists(globalAppCE);
     
     return hasDataDir || hasApp;
 #else
     // Windows/Linux: Check for executable files
-    std::filesystem::path executable = _gameLocation / "fallout2.exe";
-    std::filesystem::path executable2 = _gameLocation / "Fallout2.exe";
-    std::filesystem::path executable3 = _gameLocation / "fallout2";
-    std::filesystem::path executable4 = _gameLocation / "Fallout2";
+    std::vector<std::string> executables = {
+        "fallout2.exe",
+        "Fallout2.exe",
+        "fallout2HR.exe",
+        "f2_res.exe",
+        "fallout2",
+        "Fallout2",
+        "fallout2-ce.exe",
+        "Fallout2-ce.exe",
+        "fallout2-ce",
+        "Fallout2-ce"
+    };
     
     bool hasDataDir = std::filesystem::exists(dataDir) && std::filesystem::is_directory(dataDir);
-    bool hasExecutable = std::filesystem::exists(executable) || std::filesystem::exists(executable2) ||
-                        std::filesystem::exists(executable3) || std::filesystem::exists(executable4);
+    bool hasExecutable = false;
+    
+    for (const auto& exeName : executables) {
+        if (std::filesystem::exists(_executableGameLocation / exeName)) {
+            hasExecutable = true;
+            break;
+        }
+    }
     
     return hasDataDir && hasExecutable;
 #endif
@@ -682,7 +657,9 @@ void Settings::autoDetectGameLocation() {
     if (!installations.empty()) {
         // Get parent directory of data folder (the game installation directory)
         std::filesystem::path gameDir = installations[0].parent_path();
-        setGameLocation(gameDir);
+        _gameInstallationType = GameInstallationType::EXECUTABLE;
+        _executableGameLocation = gameDir;
+        _gameDataDirectory = gameDir;
         spdlog::info("Auto-detected game location: {}", gameDir.string());
     } else {
         spdlog::warn("No Fallout 2 installations detected");

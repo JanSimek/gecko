@@ -2053,7 +2053,11 @@ void MainWindow::launchGame(const std::filesystem::path& gameLocation) {
         "fallout2HR.exe",
         "f2_res.exe",
         "fallout2",     // Linux executable
-        "Fallout2"      // Linux executable
+        "Fallout2",     // Linux executable
+        "fallout2-ce.exe",
+        "Fallout2-ce.exe",
+        "fallout2-ce",
+        "Fallout2-ce"
     };
     
     std::filesystem::path gameExecutable;
@@ -2068,7 +2072,7 @@ void MainWindow::launchGame(const std::filesystem::path& gameLocation) {
     if (gameExecutable.empty()) {
         QtDialogs::showError(this, "Game Executable Not Found",
             "Could not find Fallout 2 executable in the game directory.\n\n"
-            "Looked for: fallout2.exe, Fallout2.exe, fallout2HR.exe, f2_res.exe, fallout2, Fallout2");
+            "Looked for: fallout2.exe, Fallout2.exe, fallout2HR.exe, f2_res.exe, fallout2, Fallout2, fallout2-ce.exe, Fallout2-ce.exe, fallout2-ce, Fallout2-ce");
         return;
     }
     

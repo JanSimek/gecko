@@ -272,6 +272,7 @@ void GameLocationWidget::onBrowseExecutable() {
         if (!selectedFiles.isEmpty()) {
             QString gameDir = selectedFiles.first();
             _executableLocationEdit->setText(gameDir);
+            validateGameLocation(gameDir, false);
             emit configurationChanged();
         }
     }
@@ -279,6 +280,7 @@ void GameLocationWidget::onBrowseExecutable() {
     QString gameDir = QFileDialog::getExistingDirectory(this, "Select Fallout 2 Executable Directory", startPath);
     if (!gameDir.isEmpty()) {
         _executableLocationEdit->setText(gameDir);
+        validateGameLocation(gameDir, false);
         emit configurationChanged();
     }
 #endif
@@ -346,7 +348,15 @@ void GameLocationWidget::onAutoDetect() {
         setStatusMessage(QString("Auto-detected installations: %1").arg(statusMessages), "success");
         emit configurationChanged();
     } else {
-        setStatusMessage("No Fallout 2 game installations detected automatically.", "warning");
+        setStatusMessage("No Fallout 2 game installations detected automatically. Please select the directory manually.", "warning");
+        onBrowseExecutable();
+
+        const QString manualSelection = _executableLocationEdit->text().trimmed();
+        if (!manualSelection.isEmpty()) {
+            _executableRadio->setChecked(true);
+            validateGameLocation(manualSelection, false);
+            emit configurationChanged();
+        }
     }
 }
 
@@ -367,7 +377,9 @@ void GameLocationWidget::validateGameLocation(const QString& gameDir, bool isSte
         bool hasExecutable = std::filesystem::exists(gamePath / "fallout2.exe") || 
                            std::filesystem::exists(gamePath / "Fallout2.exe") ||
                            std::filesystem::exists(gamePath / "fallout2") ||
-                           std::filesystem::exists(gamePath / "Fallout2.app");
+                           std::filesystem::exists(gamePath / "Fallout2.app") ||
+                           std::filesystem::exists(gamePath / "fallout2-ce") ||
+                           std::filesystem::exists(gamePath / "fallout2-ce.app");
         
         if (hasDataDir || hasExecutable) {
             setStatusMessage(isSteam ? "Valid Steam Fallout 2 installation directory selected." : 
@@ -382,7 +394,11 @@ void GameLocationWidget::validateGameLocation(const QString& gameDir, bool isSte
     bool hasExecutable = std::filesystem::exists(gamePath / "fallout2.exe") || 
                        std::filesystem::exists(gamePath / "Fallout2.exe") ||
                        std::filesystem::exists(gamePath / "fallout2") ||
-                       std::filesystem::exists(gamePath / "Fallout2");
+                       std::filesystem::exists(gamePath / "Fallout2") ||
+                       std::filesystem::exists(gamePath / "fallout2-ce.exe") ||
+                       std::filesystem::exists(gamePath / "Fallout2-ce.exe") ||
+                       std::filesystem::exists(gamePath / "fallout2-ce") ||
+                       std::filesystem::exists(gamePath / "Fallout2-ce");
     
     if (hasDataDir && hasExecutable) {
         setStatusMessage(isSteam ? "Valid Steam Fallout 2 installation directory selected." : 

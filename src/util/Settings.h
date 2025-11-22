@@ -79,7 +79,6 @@ public:
     };
     
     std::filesystem::path getGameLocation() const;
-    void setGameLocation(const std::filesystem::path& location);
     bool isGameLocationValid() const;
     void autoDetectGameLocation();
     
@@ -138,7 +137,6 @@ private:
     std::string _steamAppId = "38410"; // Default Fallout 2 Steam App ID
     std::filesystem::path _executableGameLocation;
     std::filesystem::path _gameDataDirectory;
-    std::filesystem::path _gameLocation; // Keep for backward compatibility
     
     // Constants
     static constexpr const char* SETTINGS_VERSION = "1.0";
