@@ -91,6 +91,12 @@ MainWindow::MainWindow(QWidget* parent)
     setWindowTitle("Gecko - Fallout 2 Map Editor");
     setMinimumSize(1024, 768);
 
+    setDockOptions(QMainWindow::AllowTabbedDocks | QMainWindow::AllowNestedDocks | QMainWindow::AnimatedDocks);
+    setDockNestingEnabled(true);
+    
+    // Enable proper focus handling for dock widgets
+    setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
+
     setupUI();
 
     // Restore dock widget state from previous session
@@ -1265,6 +1271,10 @@ void MainWindow::setupPanelsMenu() {
 
     // Connect dock widget visibility changes back to menu actions
     connect(_mapInfoDock, &QDockWidget::visibilityChanged, [this](bool visible) {
+        // On Linux a tab change emits visibilityChanged(false) without hiding the dock; ignore that case
+        if (!visible && !_mapInfoDock->isHidden()) {
+            return;
+        }
         spdlog::debug("Map Info Dock visibility changed: {}", visible);
         const bool dockVisible = _mapInfoDock->toggleViewAction()->isChecked();
         if (_mapInfoPanelAction && _mapInfoPanelAction->isChecked() != dockVisible) {
@@ -1278,6 +1288,9 @@ void MainWindow::setupPanelsMenu() {
     });
 
     connect(_selectionDock, &QDockWidget::visibilityChanged, [this](bool visible) {
+        if (!visible && !_selectionDock->isHidden()) {
+            return;
+        }
         spdlog::debug("Selection Dock visibility changed: {}", visible);
         const bool dockVisible = _selectionDock->toggleViewAction()->isChecked();
         if (_selectionPanelAction && _selectionPanelAction->isChecked() != dockVisible) {
@@ -1291,6 +1304,9 @@ void MainWindow::setupPanelsMenu() {
     });
 
     connect(_tilePaletteDock, &QDockWidget::visibilityChanged, [this](bool visible) {
+        if (!visible && !_tilePaletteDock->isHidden()) {
+            return;
+        }
         spdlog::debug("Tile Palette Dock visibility changed: {}", visible);
         const bool dockVisible = _tilePaletteDock->toggleViewAction()->isChecked();
         if (_tilePalettePanelAction && _tilePalettePanelAction->isChecked() != dockVisible) {
@@ -1304,6 +1320,9 @@ void MainWindow::setupPanelsMenu() {
     });
 
     connect(_objectPaletteDock, &QDockWidget::visibilityChanged, [this](bool visible) {
+        if (!visible && !_objectPaletteDock->isHidden()) {
+            return;
+        }
         spdlog::debug("Object Palette Dock visibility changed: {}", visible);
         const bool dockVisible = _objectPaletteDock->toggleViewAction()->isChecked();
         if (_objectPalettePanelAction && _objectPalettePanelAction->isChecked() != dockVisible) {
@@ -1317,6 +1336,9 @@ void MainWindow::setupPanelsMenu() {
     });
 
     connect(_fileBrowserDock, &QDockWidget::visibilityChanged, [this](bool visible) {
+        if (!visible && !_fileBrowserDock->isHidden()) {
+            return;
+        }
         spdlog::debug("File Browser Dock visibility changed: {}", visible);
         const bool dockVisible = _fileBrowserDock->toggleViewAction()->isChecked();
         if (_fileBrowserPanelAction && _fileBrowserPanelAction->isChecked() != dockVisible) {
