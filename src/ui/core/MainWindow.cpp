@@ -1981,130 +1981,14 @@ bool MainWindow::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const
     }
 }
 
-void MainWindow::launchGame(const std::filesystem::path& gameLocation) {
-#ifdef __APPLE__
-    std::filesystem::path gameApp;
+void MainWindow::launchGame(const std::filesystem::path& executablePath) {
+    spdlog::info("Launching game executable: {}", executablePath.string());
     
-    // Check if the gameLocation itself is a .app bundle
-    if (gameLocation.extension() == ".app" && std::filesystem::exists(gameLocation)) {
-        gameApp = gameLocation;
-        spdlog::info("Using configured .app bundle: {}", gameApp.string());
-    } else {
-        // Look for .app bundles inside the gameLocation directory
-        std::vector<std::string> possibleApps = {
-            "Fallout 2.app",
-            "fallout2.app"
-        };
-        
-        for (const auto& appName : possibleApps) {
-            std::filesystem::path candidate = gameLocation / appName;
-            if (std::filesystem::exists(candidate)) {
-                gameApp = candidate;
-                spdlog::info("Found .app bundle in directory: {}", gameApp.string());
-                break;
-            }
-        }
-    }
-    
-    if (gameApp.empty()) {
-        // Try launching via Steam if no .app found
-        QProcess* steamProcess = new QProcess(this);
-        connect(steamProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            [steamProcess](int exitCode, QProcess::ExitStatus exitStatus) {
-                spdlog::info("Steam launch finished with exit code: {}", exitCode);
-                steamProcess->deleteLater();
-            });
-        
-        connect(steamProcess, &QProcess::errorOccurred,
-            [this, steamProcess](QProcess::ProcessError error) {
-                QtDialogs::showError(this, "Game Launch Error",
-                    "Could not find Fallout 2.app and failed to launch via Steam.\n\n"
-                    "Please ensure Fallout 2 is installed through Steam or as a .app bundle.");
-                spdlog::error("Failed to launch game via Steam");
-                steamProcess->deleteLater();
-            });
-        
-        spdlog::info("Attempting to launch Fallout 2 via Steam");
-        steamProcess->start("open", QStringList() << "steam://run/38410"); // Fallout 2 Steam App ID
-        showStatusMessage("Launching Fallout 2 via Steam...");
-        return;
-    }
-    
-    spdlog::info("Launching game app: {}", gameApp.string());
-    
-    // Launch the app using 'open' command on macOS
+    // Create and configure the game process
     QProcess* gameProcess = new QProcess(this);
     
-    connect(gameProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-        [gameProcess](int exitCode, QProcess::ExitStatus exitStatus) {
-            if (exitStatus == QProcess::CrashExit) {
-                spdlog::warn("Game process crashed with exit code: {}", exitCode);
-            } else {
-                spdlog::info("Game process finished with exit code: {}", exitCode);
-            }
-            gameProcess->deleteLater();
-        });
-    
-    connect(gameProcess, &QProcess::errorOccurred,
-        [this, gameProcess](QProcess::ProcessError error) {
-            QString errorMsg;
-            switch (error) {
-                case QProcess::FailedToStart:
-                    errorMsg = "Failed to start the game process";
-                    break;
-                case QProcess::Crashed:
-                    errorMsg = "Game process crashed";
-                    break;
-                default:
-                    errorMsg = "Unknown error occurred while running the game";
-                    break;
-            }
-            QtDialogs::showError(this, "Game Launch Error", errorMsg);
-            spdlog::error("Game process error: {}", errorMsg.toStdString());
-            gameProcess->deleteLater();
-        });
-    
-    // Use 'open' command to launch the .app bundle
-    gameProcess->start("open", QStringList() << QString::fromStdString(gameApp.string()));
-    
-#else
-    // Windows/Linux: Look for executable files
-    std::vector<std::string> possibleExes = {
-        "fallout2.exe",
-        "Fallout2.exe",
-        "fallout2HR.exe",
-        "f2_res.exe",
-        "fallout2",     // Linux executable
-        "Fallout2",     // Linux executable
-        "fallout2-ce.exe",
-        "Fallout2-ce.exe",
-        "fallout2-ce",
-        "Fallout2-ce"
-    };
-    
-    std::filesystem::path gameExecutable;
-    for (const auto& exeName : possibleExes) {
-        std::filesystem::path candidate = gameLocation / exeName;
-        if (std::filesystem::exists(candidate)) {
-            gameExecutable = candidate;
-            break;
-        }
-    }
-    
-    if (gameExecutable.empty()) {
-        QtDialogs::showError(this, "Game Executable Not Found",
-            "Could not find Fallout 2 executable in the game directory.\n\n"
-            "Looked for: fallout2.exe, Fallout2.exe, fallout2HR.exe, f2_res.exe, fallout2, Fallout2, fallout2-ce.exe, Fallout2-ce.exe, fallout2-ce, Fallout2-ce");
-        return;
-    }
-    
-    spdlog::info("Launching game: {}", gameExecutable.string());
-    
-    // Launch the game using QProcess
-    QProcess* gameProcess = new QProcess(this);
-    
-    // Set working directory to game location
-    gameProcess->setWorkingDirectory(QString::fromStdString(gameLocation.string()));
+    // Set working directory to the executable's directory
+    gameProcess->setWorkingDirectory(QString::fromStdString(executablePath.parent_path().string()));
     
     // Connect to handle process events
     connect(gameProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
@@ -2136,10 +2020,12 @@ void MainWindow::launchGame(const std::filesystem::path& gameLocation) {
             gameProcess->deleteLater();
         });
     
-    // Start the game process
-    gameProcess->start(QString::fromStdString(gameExecutable.string()));
-    
-#endif
+    // Launch the executable (use 'open' on macOS for .app bundles)
+    if (executablePath.extension() == ".app") {
+        gameProcess->start("open", QStringList() << QString::fromStdString(executablePath.string()));
+    } else {
+        gameProcess->start(QString::fromStdString(executablePath.string()));
+    }
     
     if (!gameProcess->waitForStarted(5000)) {
         QtDialogs::showError(this, "Game Launch Failed", 

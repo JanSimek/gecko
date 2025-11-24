@@ -97,12 +97,12 @@ void GameLocationWidget::setupUI() {
     _executableLayout->setContentsMargins(INDENT_MARGIN, 0, 0, 0);
     
     _executableLocationEdit = new QLineEdit();
-    _executableLocationEdit->setPlaceholderText("Path to Fallout 2 executable installation...");
+    _executableLocationEdit->setPlaceholderText("Path to Fallout 2 executable (e.g., fallout2.exe)...");
     _executableLayout->addWidget(_executableLocationEdit);
     
     _browseExecutableButton = new QPushButton("Browse...");
-    _browseExecutableButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirOpenIcon));
-    _browseExecutableButton->setToolTip("Browse for Fallout 2 executable installation directory");
+    _browseExecutableButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+    _browseExecutableButton->setToolTip("Browse for Fallout 2 executable file");
     _executableLayout->addWidget(_browseExecutableButton);
     
     _layout->addLayout(_executableLayout);
@@ -257,30 +257,61 @@ void GameLocationWidget::onBrowseExecutable() {
         currentPath;
     
 #ifdef __APPLE__
-    // For executable, allow both .app bundles and directories
-    QFileDialog dialog(this, "Select Fallout 2 Executable", startPath);
-    dialog.setFileMode(QFileDialog::AnyFile);
-    dialog.setOption(QFileDialog::ShowDirsOnly, false);
-    dialog.setOption(QFileDialog::DontUseNativeDialog, false);
-    dialog.setNameFilter("Applications (*.app);;All Files and Directories (*)");
+    // For executable, allow both .app bundles and executables
+    QString selectedFile = QFileDialog::getOpenFileName(this, 
+        "Select Fallout 2 Executable", 
+        startPath,
+        "Applications (*.app);;All Files (*)");
     
-    // Custom filter to accept both .app bundles and directories
-    dialog.setFilter(QDir::AllDirs | QDir::NoDotAndDotDot | QDir::AllEntries);
-    
-    if (dialog.exec() == QDialog::Accepted) {
-        QStringList selectedFiles = dialog.selectedFiles();
-        if (!selectedFiles.isEmpty()) {
-            QString gameDir = selectedFiles.first();
-            _executableLocationEdit->setText(gameDir);
-            validateGameLocation(gameDir, false);
-            emit configurationChanged();
+    if (!selectedFile.isEmpty()) {
+        _executableLocationEdit->setText(selectedFile);
+        
+        // Auto-set data directory if empty
+        if (_dataDirectoryEdit->text().trimmed().isEmpty()) {
+            QFileInfo fileInfo(selectedFile);
+            QString parentDir;
+            if (selectedFile.endsWith(".app")) {
+                // For .app bundles, use the parent directory
+                // TODO: perhaps use Contents/Resources if it is GOG installation
+                parentDir = fileInfo.dir().absolutePath();
+            } else {
+                // For regular executables, use the executable's directory
+                parentDir = fileInfo.dir().absolutePath();
+            }
+            _dataDirectoryEdit->setText(parentDir);
+            spdlog::info("Auto-set data directory to: {}", parentDir.toStdString());
         }
+        
+        validateGameLocation(selectedFile, false);
+        emit configurationChanged();
     }
 #else
-    QString gameDir = QFileDialog::getExistingDirectory(this, "Select Fallout 2 Executable Directory", startPath);
-    if (!gameDir.isEmpty()) {
-        _executableLocationEdit->setText(gameDir);
-        validateGameLocation(gameDir, false);
+    QString filters;
+#ifdef _WIN32
+    // Windows: Default to fallout2.exe pattern but allow all executables
+    filters = "Fallout 2 Executable (fallout2.exe fallout2-ce.exe);;All Executables (*.exe)";
+#else
+    // Linux: Show all files by default (no restrictive filters)
+    filters = "All Files (*)";
+#endif
+    
+    QString selectedFile = QFileDialog::getOpenFileName(this, 
+        "Select Fallout 2 Executable", 
+        startPath,
+        filters);
+    
+    if (!selectedFile.isEmpty()) {
+        _executableLocationEdit->setText(selectedFile);
+        
+        // Auto-set data directory if empty
+        if (_dataDirectoryEdit->text().trimmed().isEmpty()) {
+            QFileInfo fileInfo(selectedFile);
+            QString parentDir = fileInfo.dir().absolutePath();
+            _dataDirectoryEdit->setText(parentDir);
+            spdlog::info("Auto-set data directory to: {}", parentDir.toStdString());
+        }
+        
+        validateGameLocation(selectedFile, false);
         emit configurationChanged();
     }
 #endif
@@ -360,53 +391,54 @@ void GameLocationWidget::onAutoDetect() {
     }
 }
 
-void GameLocationWidget::validateGameLocation(const QString& gameDir, bool isSteam) {
-    std::filesystem::path gamePath(gameDir.toStdString());
+void GameLocationWidget::validateGameLocation(const QString& gamePath, bool isSteam) {
+    std::filesystem::path path(gamePath.toStdString());
     
-#ifdef __APPLE__
-    if (isSteam && gameDir.endsWith(".app")) {
-        // For .app bundles on macOS, just check if it exists
-        if (std::filesystem::exists(gamePath)) {
-            setStatusMessage("Valid macOS Fallout 2 application selected.", "success");
-        } else {
-            setStatusMessage("Warning: Selected application does not exist.", "error");
-        }
-    } else {
-        // Check for data directory and executable files
-        bool hasDataDir = std::filesystem::exists(gamePath / "data");
-        bool hasExecutable = std::filesystem::exists(gamePath / "fallout2.exe") || 
-                           std::filesystem::exists(gamePath / "Fallout2.exe") ||
-                           std::filesystem::exists(gamePath / "fallout2") ||
-                           std::filesystem::exists(gamePath / "Fallout2.app") ||
-                           std::filesystem::exists(gamePath / "fallout2-ce") ||
-                           std::filesystem::exists(gamePath / "fallout2-ce.app");
+    // Check if the path is an executable file or a directory
+    bool isFile = std::filesystem::is_regular_file(path);
+    bool isDirectory = std::filesystem::is_directory(path);
+    
+    if (isFile) {
+        // User selected an executable file
+        QString fileName = QString::fromStdString(path.filename().string()).toLower();
+        bool isValidExecutable = fileName.contains("fallout2") || 
+                                fileName.contains("fallout 2") ||
+                                fileName.endsWith(".app");
         
-        if (hasDataDir || hasExecutable) {
+        if (isValidExecutable) {
+            setStatusMessage("Valid Fallout 2 executable selected.", "success");
+            
+            // Check if data directory has required files
+            std::filesystem::path dataDir(_dataDirectoryEdit->text().toStdString());
+            if (!dataDir.empty() && std::filesystem::exists(dataDir / "data")) {
+                setStatusMessage("Valid Fallout 2 executable and data directory selected.", "success");
+            } else if (!dataDir.empty()) {
+                setStatusMessage("Executable selected. Warning: Data directory may not contain game files.", "warning");
+            }
+        } else {
+            setStatusMessage("Warning: Selected file may not be a valid Fallout 2 executable.", "warning");
+        }
+    } else if (isDirectory) {
+        // User selected a directory (legacy behavior for compatibility)
+        bool hasDataDir = std::filesystem::exists(path / "data");
+        bool hasExecutable = std::filesystem::exists(path / "fallout2.exe") || 
+                           std::filesystem::exists(path / "Fallout2.exe") ||
+                           std::filesystem::exists(path / "fallout2") ||
+                           std::filesystem::exists(path / "Fallout2") ||
+                           std::filesystem::exists(path / "fallout2-ce.exe") ||
+                           std::filesystem::exists(path / "Fallout2-ce.exe") ||
+                           std::filesystem::exists(path / "fallout2-ce") ||
+                           std::filesystem::exists(path / "Fallout2-ce");
+        
+        if (hasDataDir && hasExecutable) {
             setStatusMessage(isSteam ? "Valid Steam Fallout 2 installation directory selected." : 
-                                      "Valid Fallout 2 executable installation directory selected.", "success");
+                                      "Valid Fallout 2 installation directory selected.", "success");
         } else {
             setStatusMessage("Warning: Selected directory may not be a valid Fallout 2 installation.", "warning");
         }
-    }
-#else
-    // Windows/Linux validation
-    bool hasDataDir = std::filesystem::exists(gamePath / "data");
-    bool hasExecutable = std::filesystem::exists(gamePath / "fallout2.exe") || 
-                       std::filesystem::exists(gamePath / "Fallout2.exe") ||
-                       std::filesystem::exists(gamePath / "fallout2") ||
-                       std::filesystem::exists(gamePath / "Fallout2") ||
-                       std::filesystem::exists(gamePath / "fallout2-ce.exe") ||
-                       std::filesystem::exists(gamePath / "Fallout2-ce.exe") ||
-                       std::filesystem::exists(gamePath / "fallout2-ce") ||
-                       std::filesystem::exists(gamePath / "Fallout2-ce");
-    
-    if (hasDataDir && hasExecutable) {
-        setStatusMessage(isSteam ? "Valid Steam Fallout 2 installation directory selected." : 
-                                  "Valid Fallout 2 executable installation directory selected.", "success");
     } else {
-        setStatusMessage("Warning: Selected directory may not be a valid Fallout 2 installation.", "warning");
+        setStatusMessage("Warning: Selected path does not exist.", "error");
     }
-#endif
 }
 
 } // namespace geck

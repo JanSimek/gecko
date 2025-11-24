@@ -544,7 +544,12 @@ std::filesystem::path Settings::getGameLocation() const {
         return std::filesystem::path{}; // Empty path for Steam
     } else {
         // Return the data directory for map copying and ddraw.ini modification
-        return _gameDataDirectory.empty() ? _executableGameLocation : _gameDataDirectory;
+        if (!_gameDataDirectory.empty()) {
+            return _gameDataDirectory;
+        }
+        
+        // Use executable's parent directory as the data directory
+        return _executableGameLocation.parent_path();
     }
 }
 
@@ -597,58 +602,16 @@ bool Settings::isGameLocationValid() const {
         return false;
     }
     
-    std::filesystem::path dataRoot = _gameDataDirectory.empty() ? _executableGameLocation : _gameDataDirectory;
+    // Get the data directory (executable should be a file, use its parent directory as fallback)
+    std::filesystem::path dataRoot = _gameDataDirectory.empty() ? _executableGameLocation.parent_path() : _gameDataDirectory;
+    
     if (!std::filesystem::exists(dataRoot) || !std::filesystem::is_directory(dataRoot)) {
         return false;
     }
     
+    // Check if data/maps directory exists (required for map copying)
     std::filesystem::path dataDir = dataRoot / "data";
-    
-#ifdef __APPLE__
-    // macOS: Check for .app bundles or Steam installation
-    std::filesystem::path fallout2App = _executableGameLocation / "Fallout 2.app";
-    std::filesystem::path fallout2App2 = _executableGameLocation / "fallout2.app";
-    std::filesystem::path fallout2CEApp = _executableGameLocation / "fallout2-ce.app";
-    
-    // Also check global locations
-    std::filesystem::path globalApp1 = "/Applications/Fallout 2.app";
-    std::filesystem::path globalApp2 = "/Applications/fallout2.app";
-    std::filesystem::path globalAppCE = "/Applications/fallout2-ce.app";
-    
-    bool hasDataDir = std::filesystem::exists(dataDir) && std::filesystem::is_directory(dataDir);
-    bool hasApp = std::filesystem::exists(fallout2App) || std::filesystem::exists(fallout2App2) ||
-                  std::filesystem::exists(fallout2CEApp) ||
-                  std::filesystem::exists(globalApp1) || std::filesystem::exists(globalApp2) ||
-                  std::filesystem::exists(globalAppCE);
-    
-    return hasDataDir || hasApp;
-#else
-    // Windows/Linux: Check for executable files
-    std::vector<std::string> executables = {
-        "fallout2.exe",
-        "Fallout2.exe",
-        "fallout2HR.exe",
-        "f2_res.exe",
-        "fallout2",
-        "Fallout2",
-        "fallout2-ce.exe",
-        "Fallout2-ce.exe",
-        "fallout2-ce",
-        "Fallout2-ce"
-    };
-    
-    bool hasDataDir = std::filesystem::exists(dataDir) && std::filesystem::is_directory(dataDir);
-    bool hasExecutable = false;
-    
-    for (const auto& exeName : executables) {
-        if (std::filesystem::exists(_executableGameLocation / exeName)) {
-            hasExecutable = true;
-            break;
-        }
-    }
-    
-    return hasDataDir && hasExecutable;
-#endif
+    return std::filesystem::exists(dataDir) && std::filesystem::is_directory(dataDir);
 }
 
 void Settings::autoDetectGameLocation() {
