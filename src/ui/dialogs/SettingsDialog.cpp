@@ -4,6 +4,9 @@
 #include "../widgets/TextEditorWidget.h"
 #include "../UIConstants.h"
 #include "../../util/Settings.h"
+#include "../../util/ResourceManager.h"
+#include "../../state/loader/DataPathLoader.h"
+#include "../widgets/LoadingWidget.h"
 
 #include <QApplication>
 #include <QStyle>
@@ -160,6 +163,7 @@ void SettingsDialog::saveSettings() {
     
     // Save data paths
     auto dataPaths = _dataPathsWidget->getDataPaths();
+    bool pathsHaveChanged = dataPaths != _originalDataPaths;
     settings.setDataPaths(dataPaths);
     
     // Save text editor settings
@@ -178,11 +182,34 @@ void SettingsDialog::saveSettings() {
     
     settings.save();
     
+    // If data paths changed, reload the ResourceManager
+    if (pathsHaveChanged) {
+        spdlog::info("Data paths changed, reloading ResourceManager...");
+        
+        // Emit signal that data paths changed
+        emit dataPathsChanged();
+        
+        // Clear the ResourceManager
+        auto& resourceManager = ResourceManager::getInstance();
+        resourceManager.clearAllDataPaths();
+        
+        // Reload data paths with a loading dialog
+        auto loadingWidget = std::make_unique<LoadingWidget>(this);
+        loadingWidget->setWindowTitle("Reloading Game Data");
+        loadingWidget->addLoader(std::make_unique<DataPathLoader>(dataPaths));
+        loadingWidget->exec();
+        
+        spdlog::info("ResourceManager reloaded with new data paths");
+    }
+    
     _originalDataPaths = dataPaths;
     _hasChanges = false;
     
     setMainStatus("Settings saved successfully", "success");
     spdlog::info("Settings saved from preferences dialog");
+    
+    // Notify that settings have been saved
+    Q_EMIT settingsSaved();
 }
 
 void SettingsDialog::updateUI() {

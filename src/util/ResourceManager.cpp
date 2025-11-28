@@ -47,6 +47,19 @@ void ResourceManager::cleanup() {
     spdlog::info("ResourceManager cleanup completed");
 }
 
+void ResourceManager::clearAllDataPaths() {
+    spdlog::info("Clearing all data paths from ResourceManager...");
+    
+    // Clear all cached resources
+    _textures.clear();
+    _resources.clear();
+    
+    // Create a new VFS instance to clear all mounted file systems
+    _vfs = std::make_shared<vfspp::VirtualFileSystem>();
+    
+    spdlog::info("All data paths cleared from ResourceManager");
+}
+
 void ResourceManager::storeTexture(std::string_view name, std::unique_ptr<sf::Texture> texture) {
     _textures.try_emplace(std::string{name}, std::move(texture));
 }

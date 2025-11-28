@@ -1648,8 +1648,50 @@ void MainWindow::showFileBrowserPanel() {
     spdlog::debug("File browser panel shown and raised");
 }
 
+void MainWindow::closeCurrentMap() {
+    if (!_currentEditorWidget) {
+        return;
+    }
+    
+    spdlog::info("Closing current map due to data path changes");
+    
+    // Stop the game loop
+    stopGameLoop();
+    
+    // Remove the current editor widget from the stack
+    _centralStack->removeWidget(_currentEditorWidget);
+    
+    // Delete the editor widget
+    _currentEditorWidget->deleteLater();
+    _currentEditorWidget = nullptr;
+    
+    // Show the welcome widget
+    _centralStack->setCurrentWidget(_welcomeWidget);
+    
+    // Hide panels that are only relevant when a map is loaded
+    hidePanelsForNoMap();
+    
+    spdlog::debug("Current map closed successfully");
+}
+
+bool MainWindow::hasActiveMap() const {
+    return _currentEditorWidget != nullptr;
+}
+
 void MainWindow::showPreferences() {
     SettingsDialog dialog(this);
+    
+    connect(&dialog, &SettingsDialog::dataPathsChanged, this, [this]() {
+        // Close the current map since it may be using assets from removed paths
+        if (hasActiveMap()) {
+            closeCurrentMap();
+        }
+    });
+    
+    connect(&dialog, &SettingsDialog::settingsSaved, this, [this]() {
+        refreshFileBrowser();
+    });
+    
     int result = dialog.exec();
     
     if (result == QDialog::Accepted) {

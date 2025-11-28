@@ -226,4 +226,14 @@ std::filesystem::path Application::getResourcesPath() {
 #endif
 }
 
+bool Application::isDefaultResourcesPath(const std::filesystem::path& path) {
+    try {
+        std::filesystem::path defaultPath = getResourcesPath();
+        return std::filesystem::equivalent(path, defaultPath);
+    } catch (const std::filesystem::filesystem_error&) {
+        // If we can't compare paths (e.g., one doesn't exist), compare strings
+        return path == getResourcesPath();
+    }
+}
+
 } // namespace geck

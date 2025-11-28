@@ -48,6 +48,9 @@ public:
     [[nodiscard]] T* getResource(const Key& filepath);
 
     void cleanup();
+    
+    // Clear all VFS mounts and caches, preparing for reload
+    void clearAllDataPaths();
 
     // Store a custom texture in the resource manager
     void storeTexture(std::string_view name, std::unique_ptr<sf::Texture> texture);

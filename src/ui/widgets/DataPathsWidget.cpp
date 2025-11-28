@@ -1,5 +1,6 @@
 #include "DataPathsWidget.h"
 #include "../../util/Settings.h"
+#include "../../Application.h"
 
 #include <QApplication>
 #include <QStyle>
@@ -125,27 +126,40 @@ void DataPathsWidget::addPathToList(const std::filesystem::path& path) {
     
     // Check if path already exists in list
     for (int i = 0; i < _pathsList->count(); ++i) {
-        if (_pathsList->item(i)->text() == pathStr) {
+        QListWidgetItem* existingItem = _pathsList->item(i);
+        if (existingItem && existingItem->text() == pathStr) {
             return; // Path already exists
         }
     }
+    
+    bool isDefaultPath = Application::isDefaultResourcesPath(path);
     
     QListWidgetItem* item = new QListWidgetItem(pathStr);
     
     // Set icon based on path type and validity
     auto& settings = Settings::getInstance();
     if (settings.validateDataPath(path)) {
-        if (std::filesystem::is_directory(path)) {
+        if (isDefaultPath) {
+            item->setToolTip("Built-in resources path (cannot be removed)");
+            // Use disabled color from the palette
+            QPalette palette = QApplication::palette();
+            item->setForeground(palette.color(QPalette::Disabled, QPalette::Text));
+            item->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+        } else if (std::filesystem::is_directory(path)) {
+            item->setToolTip("Valid Fallout 2 data path");
             item->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
         } else {
             item->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileIcon));
+            item->setToolTip("Valid Fallout 2 data path");
         }
-        item->setToolTip("Valid Fallout 2 data path");
     } else {
         item->setIcon(QApplication::style()->standardIcon(QStyle::SP_MessageBoxWarning));
         item->setToolTip("Invalid or missing path");
         item->setForeground(QColor(Qt::red));
     }
+    
+    // Store whether this is a protected path in the item data
+    item->setData(Qt::UserRole, isDefaultPath);
     
     _pathsList->addItem(item);
 }
@@ -194,12 +208,25 @@ void DataPathsWidget::setStatusMessage(const QString& message, const QString& st
 }
 
 void DataPathsWidget::updateButtonStates() {
-    _removeButton->setEnabled(_pathsList->currentItem() != nullptr);
+    QListWidgetItem* currentItem = _pathsList->currentItem();
+    if (currentItem) {
+        bool isProtected = currentItem->data(Qt::UserRole).toBool();
+        _removeButton->setEnabled(!isProtected);
+    } else {
+        _removeButton->setEnabled(false);
+    }
 }
 
 void DataPathsWidget::removeSelectedPath() {
     QListWidgetItem* item = _pathsList->currentItem();
     if (item) {
+        bool isProtected = item->data(Qt::UserRole).toBool();
+        if (isProtected) {
+            QMessageBox::warning(this, "Cannot Remove Path", 
+                "The built-in resources path cannot be removed as it contains essential game assets.");
+            return;
+        }
+        
         delete _pathsList->takeItem(_pathsList->row(item));
         emit dataPathsChanged();
         validatePaths();
@@ -273,6 +300,14 @@ void DataPathsWidget::onSelectionChanged() {
 
 void DataPathsWidget::onItemDoubleClicked(QListWidgetItem* item) {
     if (item) {
+        // Check if this is a protected path
+        bool isProtected = item->data(Qt::UserRole).toBool();
+        if (isProtected) {
+            QMessageBox::information(this, "Cannot Edit Path", 
+                "The built-in resources path cannot be modified as it contains essential game assets.");
+            return;
+        }
+        
         QString currentPath = item->text();
         QString newPath = QFileDialog::getExistingDirectory(this, 
             "Select Fallout 2 Data Directory", currentPath);

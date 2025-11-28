@@ -28,6 +28,7 @@ public:
 
     // Platform-aware resource path resolution
     static std::filesystem::path getResourcesPath();
+    static bool isDefaultResourcesPath(const std::filesystem::path& path);
 
 private:
     void initUI();

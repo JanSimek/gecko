@@ -34,6 +34,10 @@ public:
     explicit SettingsDialog(QWidget* parent = nullptr);
     ~SettingsDialog() = default;
 
+signals:
+    void settingsSaved();
+    void dataPathsChanged();
+
 private slots:
     void onWidgetChanged();
     void onAccept();

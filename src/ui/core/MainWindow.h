@@ -55,6 +55,10 @@ public:
     void refreshFileBrowser();
     void showFileBrowserPanel();
     
+    // Map management
+    void closeCurrentMap();
+    bool hasActiveMap() const;
+    
     // Access to palette panels for drag and drop and tile deselection
     ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
     TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
