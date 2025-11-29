@@ -29,8 +29,7 @@
 #include <fstream>
 #include <filesystem>
 #include <util/ProHelper.h>
-#include <vfspp/VirtualFileSystem.hpp>
-#include <vfspp/NativeFileSystem.hpp>
+#include "../../vfs/VfsppNativeFileSystem.h"
 #include "../../vfs/Dat2FileSystem.hpp"
 
 namespace geck {

@@ -1,15 +1,5 @@
 #include "ResourceManager.h"
 
-// Prevent Windows API macros from interfering with method names
-#ifdef _WIN32
-#ifdef CreateFile
-#undef CreateFile
-#endif
-#ifdef CopyFile
-#undef CopyFile
-#endif
-#endif
-
 #include "Constants.h"
 #include "ResourcePaths.h"
 #include "Exceptions.h"
@@ -20,7 +10,7 @@
 #include <regex>
 #include <spdlog/spdlog.h>
 
-#include <vfspp/NativeFileSystem.hpp>
+#include "vfs/VfsppNativeFileSystem.h"
 #include "vfs/Dat2FileSystem.hpp"
 
 

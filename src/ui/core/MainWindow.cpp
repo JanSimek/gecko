@@ -30,18 +30,7 @@
 #include "../../editor/Object.h"
 #include "../IconHelper.h"
 
-// Prevent Windows API macros from clashing with vfspp names
-#ifdef _WIN32
-#ifdef CreateFile
-#undef CreateFile
-#endif
-#ifdef CopyFile
-#undef CopyFile
-#endif
-#endif
-
-#include <vfspp/VirtualFileSystem.hpp>
-#include <vfspp/NativeFileSystem.hpp>
+#include "../../vfs/VfsppNativeFileSystem.h"
 
 #include <fstream>
 
