@@ -22,10 +22,10 @@ namespace constants {
     constexpr int STEAM_APPID_WIDTH = 100;
     
     // Dialog sizes
-    constexpr int SETTINGS_MIN_WIDTH = 700;
-    constexpr int SETTINGS_MIN_HEIGHT = 500;
-    constexpr int SETTINGS_DEFAULT_WIDTH = 800;
-    constexpr int SETTINGS_DEFAULT_HEIGHT = 650;
+    constexpr int SETTINGS_MIN_WIDTH = 780;
+    constexpr int SETTINGS_MIN_HEIGHT = 620;
+    constexpr int SETTINGS_DEFAULT_WIDTH = 900;
+    constexpr int SETTINGS_DEFAULT_HEIGHT = 750;
 }
 
 namespace styles {

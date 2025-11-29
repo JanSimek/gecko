@@ -29,6 +29,8 @@
 #include "../../writer/map/MapWriter.h"
 #include "../../editor/Object.h"
 #include "../IconHelper.h"
+#include <vfspp/VirtualFileSystem.hpp>
+#include <vfspp/NativeFileSystem.hpp>
 
 #include <fstream>
 
@@ -582,7 +584,7 @@ void MainWindow::setupDockWidgets() {
     addDockWidget(Qt::LeftDockWidgetArea, _objectPaletteDock);
 
     // File Browser dock
-    _fileBrowserDock = new QDockWidget("File Browser", this);
+    _fileBrowserDock = new QDockWidget("Virtual File System Browser", this);
     _fileBrowserDock->setObjectName("FileBrowserDock"); // Unique name for state persistence
     _fileBrowserDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
     _fileBrowserDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
@@ -1247,7 +1249,7 @@ void MainWindow::setupPanelsMenu() {
     });
 
     // File Browser Panel
-    _fileBrowserPanelAction = _panelsMenu->addAction("&File Browser");
+    _fileBrowserPanelAction = _panelsMenu->addAction("&Virtual File System Browser");
     _fileBrowserPanelAction->setCheckable(true);
     _fileBrowserPanelAction->setChecked(true);
     connect(_fileBrowserPanelAction, &QAction::toggled, [this](bool visible) {
@@ -1688,8 +1690,10 @@ void MainWindow::showPreferences() {
         }
     });
     
-    connect(&dialog, &SettingsDialog::settingsSaved, this, [this]() {
-        refreshFileBrowser();
+    connect(&dialog, &SettingsDialog::settingsSaved, this, [this](bool dataPathsChanged) {
+        if (dataPathsChanged) {
+            refreshFileBrowser();
+        }
     });
     
     int result = dialog.exec();
@@ -1843,18 +1847,7 @@ void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
             return;
         }
         
-        // Read file data
-        size_t fileSize = vfsFile->Size();
-        std::vector<uint8_t> buffer(fileSize);
-        size_t bytesRead = vfsFile->Read(buffer.data(), fileSize);
-        
-        if (bytesRead != fileSize) {
-            QtDialogs::showError(this, "Error", 
-                QString("Failed to read complete file: %1").arg(vfsFilePath));
-            return;
-        }
-        
-        // Create temporary file with same extension
+        // Create temporary file with same extension (if needed)
         QFileInfo fileInfo(vfsFilePath);
         QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
         QString tempFileName = QString("%1_XXXXXX.%2")
@@ -1862,62 +1855,97 @@ void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
             .arg(fileInfo.suffix());
         QString tempFilePath = tempDir + "/" + tempFileName;
         
-        QTemporaryFile tempFile(tempFilePath);
-        tempFile.setAutoRemove(false); // Keep file for editor to open
+        QString targetFilePath;
+        bool usedTemporaryFile = false;
         
-        if (!tempFile.open()) {
-            QtDialogs::showError(this, "Error", 
-                QString("Failed to create temporary file for: %1").arg(vfsFilePath));
-            return;
+        // Try the original path from the browser first
+        QFileInfo requestedPathInfo(vfsFilePath);
+        if (requestedPathInfo.exists() && requestedPathInfo.isReadable() && requestedPathInfo.isFile()) {
+            targetFilePath = requestedPathInfo.absoluteFilePath();
+            spdlog::info("MainWindow: Opening native file directly at {}", targetFilePath.toStdString());
+        } else {
+            // Fall back to VFS absolute path (may point to native files depending on mount)
+            QString vfsAbsolutePath = QString::fromStdString(vfsFile->GetFileInfo().AbsolutePath());
+            while (vfsAbsolutePath.startsWith("//")) {
+                vfsAbsolutePath.remove(0, 1);
+            }
+            
+            QFileInfo vfsInfo(vfsAbsolutePath);
+            if (vfsInfo.exists() && vfsInfo.isReadable() && vfsInfo.isFile()) {
+                targetFilePath = vfsInfo.absoluteFilePath();
+                spdlog::info("MainWindow: Opening native file via VFS absolute path {}", targetFilePath.toStdString());
+            } else {
+                // Read file data into a temp file (for DAT-backed content)
+                size_t fileSize = vfsFile->Size();
+                std::vector<uint8_t> buffer(fileSize);
+                size_t bytesRead = vfsFile->Read(buffer.data(), fileSize);
+                
+                if (bytesRead != fileSize) {
+                    QtDialogs::showError(this, "Error", 
+                        QString("Failed to read complete file: %1").arg(vfsFilePath));
+                    return;
+                }
+                
+                QTemporaryFile tempFile(tempFilePath);
+                tempFile.setAutoRemove(false); // Keep file for editor to open
+                
+                if (!tempFile.open()) {
+                    QtDialogs::showError(this, "Error", 
+                        QString("Failed to create temporary file for: %1").arg(vfsFilePath));
+                    return;
+                }
+                
+                // Write data to temporary file
+                tempFile.write(reinterpret_cast<const char*>(buffer.data()), fileSize);
+                tempFile.close();
+                
+                // Get the actual temporary file path
+                targetFilePath = tempFile.fileName();
+                usedTemporaryFile = true;
+            }
         }
         
-        // Write data to temporary file
-        tempFile.write(reinterpret_cast<const char*>(buffer.data()), fileSize);
-        tempFile.close();
-        
-        // Get the actual temporary file path
-        QString actualTempPath = tempFile.fileName();
-        
+        if (targetFilePath.isEmpty()) {
+            QtDialogs::showError(this, "Error", 
+                QString("Failed to resolve path for: %1").arg(vfsFilePath));
+            return;
+        }
+
         bool opened = false;
+        bool customAttempted = false;
         
         if (editorMode == Settings::TextEditorMode::CUSTOM && !customEditorPath.isEmpty()) {
-            // Validate custom editor exists
-            if (!QFile::exists(customEditorPath)) {
-                QtDialogs::showError(this, "Editor Not Found", 
-                    QString("Custom editor not found: %1\n\nFalling back to system default editor.").arg(customEditorPath));
-                spdlog::warn("Custom editor not found: {}, falling back to system default", customEditorPath.toStdString());
-                // Fall through to system default
+            customAttempted = true;
+            QStringList arguments;
+            arguments << targetFilePath;
+            
+            opened = QProcess::startDetached(customEditorPath, arguments);
+            
+            if (opened) {
+                spdlog::info("MainWindow: Successfully opened file with custom editor: {} -> {}", 
+                            customEditorPath.toStdString(), targetFilePath.toStdString());
             } else {
-                // Use custom editor with QProcess
-                QStringList arguments;
-                arguments << actualTempPath;
-                
-                opened = QProcess::startDetached(customEditorPath, arguments);
-                
-                if (!opened) {
-                    QtDialogs::showError(this, "Error", 
-                        QString("Failed to start custom editor: %1\n\nFalling back to system default editor.").arg(customEditorPath));
-                    spdlog::warn("Failed to start custom editor: {}, falling back to system default", customEditorPath.toStdString());
-                    // Fall through to system default
-                } else {
-                    spdlog::info("MainWindow: Successfully opened file with custom editor: {} -> {}", 
-                                customEditorPath.toStdString(), actualTempPath.toStdString());
-                }
+                spdlog::warn("MainWindow: Failed to start custom editor: {}", customEditorPath.toStdString());
             }
         }
         
         // Use system default editor if custom failed or not configured
         if (!opened) {
-            QUrl fileUrl = QUrl::fromLocalFile(actualTempPath);
+            QUrl fileUrl = QUrl::fromLocalFile(targetFilePath);
             opened = QDesktopServices::openUrl(fileUrl);
             
             if (!opened) {
-                QtDialogs::showError(this, "Error", 
-                    QString("Failed to open file with any editor.\nTemporary file: %1").arg(actualTempPath));
+                QString errorText = customAttempted
+                    ? QString("Failed to open file with custom editor (%1) or system default.").arg(customEditorPath)
+                    : QString("Failed to open file with system default editor.");
+                QtDialogs::showError(this, "Error", errorText);
+                
                 // Clean up the temp file if opening failed
-                QFile::remove(actualTempPath);
+                if (usedTemporaryFile) {
+                    QFile::remove(targetFilePath);
+                }
             } else {
-                spdlog::info("MainWindow: Successfully opened file with system default editor: {}", actualTempPath.toStdString());
+                spdlog::info("MainWindow: Successfully opened file with system default editor: {}", targetFilePath.toStdString());
             }
         }
         

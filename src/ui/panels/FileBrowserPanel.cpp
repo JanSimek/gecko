@@ -2,6 +2,7 @@
 #include "../../util/ResourceManager.h"
 #include "../../util/QtDialogs.h"
 #include "../../util/PathUtils.h"
+#include "../../util/Settings.h"
 #include "../dialogs/ProEditorDialog.h"
 #include "../../reader/pro/ProReader.h"
 #include "../../reader/ReaderFactory.h"
@@ -29,6 +30,8 @@
 #include <filesystem>
 #include <util/ProHelper.h>
 #include <vfspp/VirtualFileSystem.hpp>
+#include <vfspp/NativeFileSystem.hpp>
+#include "../../vfs/Dat2FileSystem.hpp"
 
 namespace geck {
 
@@ -52,15 +55,20 @@ bool FileBrowserProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& s
     // Get the filename from column 0 (Name column)
     QString fileName = sourceModel.data(Qt::DisplayRole).toString();
     
-    // Get the PRO name from column 3 (PRO Name column)
-    QModelIndex proNameIndex = this->sourceModel()->index(sourceRow, 3, sourceParent);
+    // Get the PRO name from column 4 (PRO Name column)
+    QModelIndex proNameIndex = this->sourceModel()->index(sourceRow, 4, sourceParent);
     QString proName = proNameIndex.isValid() ? proNameIndex.data(Qt::DisplayRole).toString() : QString();
     
-    // Check if either filename or PRO name matches the filter
+    // Get the source from column 2 (Source column)
+    QModelIndex sourceIndex = this->sourceModel()->index(sourceRow, 2, sourceParent);
+    QString sourceName = sourceIndex.isValid() ? sourceIndex.data(Qt::DisplayRole).toString() : QString();
+    
+    // Check if filename, PRO name, or source matches the filter
     bool fileNameMatches = fileName.contains(filterRegularExpression());
     bool proNameMatches = !proName.isEmpty() && proName.contains(filterRegularExpression());
+    bool sourceMatches = !sourceName.isEmpty() && sourceName.contains(filterRegularExpression());
     
-    return fileNameMatches || proNameMatches;
+    return fileNameMatches || proNameMatches || sourceMatches;
 }
 
 bool FileBrowserProxyModel::lessThan(const QModelIndex& left, const QModelIndex& right) const {
@@ -354,7 +362,7 @@ void FileBrowserPanel::setupTreeView() {
     _proxyModel = new FileBrowserProxyModel(this);
 
     // Set up model headers
-    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path" << "PRO Name");
+    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
 
     // Configure proxy model
     _proxyModel->setSourceModel(_treeModel);
@@ -376,8 +384,10 @@ void FileBrowserPanel::setupTreeView() {
     header->setSectionResizeMode(0, QHeaderView::Interactive);     // Name column user-resizable
     header->resizeSection(0, 300);                                 // Start with wider default for long filenames
     header->resizeSection(1, 80);                                  // Type column fixed width
-    header->setSectionResizeMode(2, QHeaderView::Interactive);     // Path column user-resizable when visible
-    header->setSectionResizeMode(3, QHeaderView::Interactive);     // PRO Name column user-resizable
+    header->resizeSection(2, 110);                                 // Source column reasonable default
+    header->setSectionResizeMode(2, QHeaderView::Interactive);     // Source column user-resizable
+    header->setSectionResizeMode(3, QHeaderView::Interactive);     // Path column user-resizable when visible
+    header->setSectionResizeMode(4, QHeaderView::Interactive);     // PRO Name column user-resizable
 
     // Apply default column visibility BEFORE setting up context menu
     applyDefaultColumnVisibility();
@@ -424,10 +434,11 @@ void FileBrowserPanel::loadFiles() {
     _fileTypes.clear();
     _pendingFiles.clear();
     _currentChunkIndex = 0;
+    _nativeDirectoriesForSources = getNativeDirectoryPaths();
 
     // Clear existing tree
     _treeModel->clear();
-    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path" << "PRO Name");
+    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
     
     // Reapply column visibility after clearing
     applyDefaultColumnVisibility();
@@ -537,7 +548,7 @@ void FileBrowserPanel::updateFileTypeComboBox() {
 
 void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
     _treeModel->clear();
-    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path" << "PRO Name");
+    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
     
     // Reapply column visibility after clearing
     applyDefaultColumnVisibility();
@@ -568,18 +579,23 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
     }
 
     // Build tree structure
+    const auto nativeDirectories = _nativeDirectoriesForSources.empty() ? getNativeDirectoryPaths() : _nativeDirectoriesForSources;
+
     for (const auto& file : filteredFiles) {
         QString qFile = QString::fromStdString(file);
+        
+        // Use normalized path for tree structure, but keep original for file operations
+        QString normalizedPath = normalizeDisplayPath(qFile);
 
-        // Split path into components
-        QStringList pathComponents = qFile.split('/', Qt::SkipEmptyParts);
+        // Split normalized path into components
+        QStringList pathComponents = normalizedPath.split('/', Qt::SkipEmptyParts);
         if (pathComponents.isEmpty())
             continue;
 
         FileTreeItem* currentParent = rootItem;
         QString currentPath = "";
 
-        // Create directory structure
+        // Create directory structure using normalized path
         for (int i = 0; i < pathComponents.size() - 1; ++i) {
             currentPath += "/" + pathComponents[i];
             currentParent = findOrCreateDirectory(currentParent, pathComponents[i]);
@@ -588,13 +604,16 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
         // Add file
         QString fileName = pathComponents.last();
         FileTreeItem* fileItem = new FileTreeItem(fileName, FileTreeItem::File);
-        fileItem->setFilePath(qFile);
+        fileItem->setFilePath(qFile);  // Keep original path for file operations
 
         QString extension = getFileExtension(fileName);
         QStandardItem* typeItem = new QStandardItem(extension);
         typeItem->setEditable(false);
 
-        QStandardItem* pathItem = new QStandardItem(qFile);
+        QStandardItem* sourceItem = new QStandardItem(getFileSource(qFile, nativeDirectories));
+        sourceItem->setEditable(false);
+
+        QStandardItem* pathItem = new QStandardItem(normalizeDisplayPath(qFile));
         pathItem->setEditable(false);
         
         // Add PRO name for .pro files
@@ -602,7 +621,7 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
         QStandardItem* proNameItem = new QStandardItem(proName);
         proNameItem->setEditable(false);
 
-        currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << pathItem << proNameItem);
+        currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << sourceItem << pathItem << proNameItem);
     }
 
     // Expand first level directories
@@ -633,12 +652,14 @@ FileTreeItem* FileBrowserPanel::findOrCreateDirectory(FileTreeItem* parent, cons
     FileTreeItem* dirItem = new FileTreeItem(dirName, FileTreeItem::Directory);
     QStandardItem* typeItem = new QStandardItem("Directory");
     typeItem->setEditable(false);
+    QStandardItem* sourceItem = new QStandardItem("");
+    sourceItem->setEditable(false);
     QStandardItem* pathItem = new QStandardItem("");
     pathItem->setEditable(false);
     QStandardItem* proNameItem = new QStandardItem("");
     proNameItem->setEditable(false);
 
-    parent->appendRow(QList<QStandardItem*>() << dirItem << typeItem << pathItem << proNameItem);
+    parent->appendRow(QList<QStandardItem*>() << dirItem << typeItem << sourceItem << pathItem << proNameItem);
     return dirItem;
 }
 
@@ -782,7 +803,7 @@ void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
 
     if (treeItem && treeItem->getType() == FileTreeItem::File) {
         QString filePath = treeItem->getFilePath();
-        spdlog::debug("FileBrowserPanel: File double-clicked: {}", filePath.toStdString());
+        spdlog::info("FileBrowserPanel: File double-clicked with path: '{}'", filePath.toStdString());
         
         // Handle PRO files specially - open the PRO editor directly
         if (filePath.endsWith(".pro", Qt::CaseInsensitive)) {
@@ -867,7 +888,7 @@ void FileBrowserPanel::startProgressiveTreeBuild(const std::vector<std::string>&
 
     // Clear existing tree
     _treeModel->clear();
-    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Path" << "PRO Name");
+    _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
     
     // Reapply column visibility after clearing
     applyDefaultColumnVisibility();
@@ -907,6 +928,7 @@ void FileBrowserPanel::processNextChunk() {
     }
 
     FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
+    const auto nativeDirectories = _nativeDirectoriesForSources.empty() ? getNativeDirectoryPaths() : _nativeDirectoriesForSources;
     
     // Process next chunk
     size_t endIndex = std::min(_currentChunkIndex + CHUNK_SIZE, _pendingFiles.size());
@@ -918,16 +940,19 @@ void FileBrowserPanel::processNextChunk() {
         
         const auto& file = _pendingFiles[i];
         QString qFile = QString::fromStdString(file);
+        
+        // Use normalized path for tree structure, but keep original for file operations
+        QString normalizedPath = normalizeDisplayPath(qFile);
 
-        // Split path into components
-        QStringList pathComponents = qFile.split('/', Qt::SkipEmptyParts);
+        // Split normalized path into components
+        QStringList pathComponents = normalizedPath.split('/', Qt::SkipEmptyParts);
         if (pathComponents.isEmpty())
             continue;
 
         FileTreeItem* currentParent = rootItem;
         QString currentPath = "";
 
-        // Create directory structure
+        // Create directory structure using normalized path
         for (int j = 0; j < pathComponents.size() - 1; ++j) {
             currentPath += "/" + pathComponents[j];
             currentParent = findOrCreateDirectory(currentParent, pathComponents[j]);
@@ -936,13 +961,23 @@ void FileBrowserPanel::processNextChunk() {
         // Add file
         QString fileName = pathComponents.last();
         FileTreeItem* fileItem = new FileTreeItem(fileName, FileTreeItem::File);
-        fileItem->setFilePath(qFile);
+        fileItem->setFilePath(qFile);  // Keep original path for file operations
+        
+        // Debug file path storage
+        static int debugFileCount = 0;
+        if (debugFileCount < 3) {
+            spdlog::info("File item created - Display: '{}' | Stored path: '{}'", normalizedPath.toStdString(), qFile.toStdString());
+            debugFileCount++;
+        }
 
         QString extension = getFileExtension(fileName);
         QStandardItem* typeItem = new QStandardItem(extension);
         typeItem->setEditable(false);
 
-        QStandardItem* pathItem = new QStandardItem(qFile);
+        QStandardItem* sourceItem = new QStandardItem(getFileSource(qFile, nativeDirectories));
+        sourceItem->setEditable(false);
+
+        QStandardItem* pathItem = new QStandardItem(normalizeDisplayPath(qFile));
         pathItem->setEditable(false);
         
         // Add PRO name for .pro files
@@ -950,7 +985,7 @@ void FileBrowserPanel::processNextChunk() {
         QStandardItem* proNameItem = new QStandardItem(proName);
         proNameItem->setEditable(false);
 
-        currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << pathItem << proNameItem);
+        currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << sourceItem << pathItem << proNameItem);
     }
 
     // Update progress
@@ -1316,7 +1351,7 @@ void FileBrowserPanel::showHeaderContextMenu(const QPoint& pos) {
     QHeaderView* header = _treeView->header();
     QMenu contextMenu(this);
     
-    QStringList columnNames = {"Name", "Type", "Path", "PRO Name"};
+    QStringList columnNames = {"Name", "Type", "Source", "Path", "PRO Name"};
     
     for (int i = 0; i < columnNames.size(); ++i) {
         QAction* action = contextMenu.addAction(columnNames[i]);
@@ -1347,7 +1382,7 @@ void FileBrowserPanel::toggleColumnVisibility(int column) {
 
 void FileBrowserPanel::applyDefaultColumnVisibility() {
     // Apply default column visibility
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         _treeView->setColumnHidden(i, !DEFAULT_COLUMN_VISIBILITY[i]);
     }
 }
@@ -1413,6 +1448,144 @@ QString FileBrowserPanel::loadProNameFromFile(const QString& filePath) const {
         spdlog::error("Failed to read PRO metadata for '{}': {}", filePath.toStdString(), e.what());
         return QString("Error: %1").arg(e.what());
     }
+}
+
+std::vector<std::filesystem::path> FileBrowserPanel::getNativeDirectoryPaths() const {
+    std::vector<std::filesystem::path> nativeDirectories;
+    
+    auto& settings = Settings::getInstance();
+    auto dataPaths = settings.getDataPaths();
+    
+    for (const auto& path : dataPaths) {
+        if (std::filesystem::exists(path) && std::filesystem::is_directory(path)) {
+            nativeDirectories.push_back(path);
+        }
+    }
+    
+    return nativeDirectories;
+}
+
+QString FileBrowserPanel::getFileSource(const QString& filePath) const {
+    return getFileSource(filePath, getNativeDirectoryPaths());
+}
+
+QString FileBrowserPanel::getFileSource(const QString& filePath, const std::vector<std::filesystem::path>& nativeDirectories) const {
+    std::string normalizedPath = std::filesystem::path(filePath.toStdString()).generic_string();
+    while (normalizedPath.size() > 1 && normalizedPath[0] == '/' && normalizedPath[1] == '/') {
+        normalizedPath.erase(0, 1);
+    }
+    if (!normalizedPath.empty() && normalizedPath.front() != '/') {
+        normalizedPath.insert(normalizedPath.begin(), '/');
+    }
+    
+    // Try to resolve source via VFS, honoring filesystem priority
+    auto& resourceManager = ResourceManager::getInstance();
+    auto vfs = resourceManager.getVFS();
+    if (vfs) {
+        const auto& fileSystems = vfs->GetFilesystems("/");
+        std::string relativePath = normalizedPath;
+        if (!relativePath.empty() && relativePath.front() == '/') {
+            relativePath.erase(0, 1);
+        }
+        
+        for (auto it = fileSystems.rbegin(); it != fileSystems.rend(); ++it) {
+            const auto& fs = *it;
+            if (!fs || !fs->IsInitialized()) {
+                continue;
+            }
+            
+            vfspp::FileInfo fsFileInfo(fs->BasePath(), relativePath, false);
+            if (!fs->IsFileExists(fsFileInfo)) {
+                continue;
+            }
+            
+            if (auto datFs = std::dynamic_pointer_cast<geck::GeckDat2FileSystem>(fs)) {
+                std::filesystem::path datPath(datFs->getDatPath());
+                QString datName = QString::fromStdString(datPath.filename().string());
+                if (datName.isEmpty()) {
+                    datName = QString::fromStdString(datPath.generic_string());
+                }
+                return QString("DAT (%1)").arg(datName);
+            }
+            
+            if (auto nativeFs = std::dynamic_pointer_cast<vfspp::NativeFileSystem>(fs)) {
+                std::filesystem::path base(nativeFs->BasePath());
+                QString label = QString::fromStdString(base.filename().string());
+                if (label.isEmpty()) {
+                    label = QString::fromStdString(base.generic_string());
+                }
+                return QString("Native (%1)").arg(label);
+            }
+            
+            return QStringLiteral("VFS");
+        }
+    }
+    
+    // Fallback to directory heuristic if VFS lookup failed
+    for (const auto& nativeDir : nativeDirectories) {
+        std::string nativeDirStr = nativeDir.generic_string();
+        if (!nativeDirStr.empty() && nativeDirStr.back() != '/') {
+            nativeDirStr.push_back('/');
+        }
+        
+        if (normalizedPath.rfind(nativeDirStr, 0) == 0) {
+            std::string label = nativeDir.filename().string();
+            if (label.empty()) {
+                label = nativeDirStr;
+                if (!label.empty() && label.back() == '/') {
+                    label.pop_back();
+                }
+            }
+            return QString("Native (%1)").arg(QString::fromStdString(label));
+        }
+    }
+    
+    // If the path doesn't live under a native directory and VFS lookup failed, assume DAT
+    return QStringLiteral("DAT");
+}
+
+QString FileBrowserPanel::normalizeDisplayPath(const QString& fullPath) const {
+    // Get all native directory paths
+    auto nativeDirectories = getNativeDirectoryPaths();
+    
+    std::string fullPathStr = fullPath.toStdString();
+    
+    // Check if the file path starts with any native directory path
+    // Note: VFS returns paths like "//home/user/path/file.txt" or "/home/user/path/file.txt"
+    // so we need to handle both cases
+    for (const auto& nativeDir : nativeDirectories) {
+        std::string nativeDirStr = nativeDir.string();
+        
+        // Normalize the native directory path
+        if (!nativeDirStr.empty() && nativeDirStr.back() != '/') {
+            nativeDirStr += '/';
+        }
+        
+        // Check for exact match with native directory
+        size_t pos = fullPathStr.find(nativeDirStr);
+        if (pos != std::string::npos) {
+            // Strip everything up to and including the native directory path
+            std::string relativePath = fullPathStr.substr(pos + nativeDirStr.length());
+            QString result = QString::fromStdString(relativePath);
+            
+            // Debug only for problematic cases
+            static int debugCount = 0;
+            if (debugCount < 3) {
+                spdlog::info("Path normalization: '{}' -> '{}' (will be shown in Path column)", fullPathStr, result.toStdString());
+                debugCount++;
+            }
+            
+            return result;
+        }
+    }
+    
+    // If not from a native directory (e.g., DAT file), just strip leading slashes
+    QString result = fullPath;
+    while (result.startsWith('/')) {
+        result = result.mid(1);
+    }
+    
+    return result;
 }
 
 } // namespace geck

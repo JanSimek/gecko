@@ -13,6 +13,8 @@
 #include <QHeaderView>
 #include <QTimer>
 #include <QStandardItem>
+#include <filesystem>
+#include <vector>
 #include <QMenu>
 #include <QAction>
 #include <QThread>
@@ -151,6 +153,8 @@ private:
     QString getFileIcon(const QString& extension) const;
     void updateFileCount();
     void updateFileTypeComboBox();
+    QString getFileSource(const QString& filePath) const;
+    QString getFileSource(const QString& filePath, const std::vector<std::filesystem::path>& nativeDirectories) const;
     void exportFile(const QString& filePath);
     void openProEditor(const QString& filePath);
     void resizeNameColumnToContent();
@@ -166,6 +170,10 @@ private:
     // PRO name loading
     QString getProName(const QString& filePath) const;
     QString loadProNameFromFile(const QString& filePath) const;
+    
+    // Path normalization for display
+    std::vector<std::filesystem::path> getNativeDirectoryPaths() const;
+    QString normalizeDisplayPath(const QString& fullPath) const;
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
@@ -192,6 +200,7 @@ private:
     // Data
     std::vector<std::string> _allFiles;
     std::unordered_set<std::string> _fileTypes;
+    std::vector<std::filesystem::path> _nativeDirectoriesForSources;
 
     // State
     QString _currentSearchFilter;
@@ -205,7 +214,7 @@ private:
     bool _isLoading = false;
     
     // Column visibility default state - used only for initialization
-    static constexpr bool DEFAULT_COLUMN_VISIBILITY[4] = {true, false, false, true}; // Name, Type, Path, PRO Name
+    static constexpr bool DEFAULT_COLUMN_VISIBILITY[5] = {true, false, true, false, true}; // Name, Type, Source, Path, PRO Name
     
     // PRO name caching
     mutable std::unordered_map<std::string, QString> _proNameCache;

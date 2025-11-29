@@ -53,6 +53,7 @@ private:
     void addPathToList(const std::filesystem::path& path);
     void removeSelectedPath();
     void updateButtonStates();
+    void moveSelectedPath(int offset);
     
     // UI Components
     QVBoxLayout* _layout;
@@ -61,9 +62,10 @@ private:
     QHBoxLayout* _controlLayout;
     QPushButton* _addButton;
     QPushButton* _removeButton;
+    QPushButton* _moveUpButton;
+    QPushButton* _moveDownButton;
     QPushButton* _autoDetectButton;
     QProgressBar* _progressBar;
-    QLabel* _statusLabel;
 };
 
 } // namespace geck

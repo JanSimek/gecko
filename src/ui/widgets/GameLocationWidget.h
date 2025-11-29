@@ -90,7 +90,6 @@ private:
     QHBoxLayout* _controlLayout;
     QPushButton* _autoDetectButton;
     QProgressBar* _progressBar;
-    QLabel* _statusLabel;
 };
 
 } // namespace geck

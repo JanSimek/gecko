@@ -38,6 +38,11 @@ public:
     {
     }
     
+    const std::string& getDatPath() const
+    {
+        return m_DatPath;
+    }
+    
     ~GeckDat2FileSystem()
     {
         Shutdown();

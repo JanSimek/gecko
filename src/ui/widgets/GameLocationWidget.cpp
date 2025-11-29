@@ -15,11 +15,6 @@ namespace geck {
 namespace {
     constexpr const char* HELP_STYLE = "QLabel { color: gray; font-size: 11px; margin-bottom: 8px; }";
     constexpr const char* LABEL_STYLE = "QLabel { color: gray; font-size: 11px; }";
-    constexpr const char* STATUS_NORMAL = "QLabel { color: gray; font-size: 11px; }";
-    constexpr const char* STATUS_WARNING = "QLabel { color: orange; font-size: 11px; }";
-    constexpr const char* STATUS_ERROR = "QLabel { color: red; font-size: 11px; }";
-    constexpr const char* STATUS_SUCCESS = "QLabel { color: green; font-size: 11px; }";
-    constexpr const char* STATUS_INFO = "QLabel { color: blue; font-size: 11px; }";
     constexpr int STEAM_APPID_WIDTH = 100;
     constexpr int INDENT_MARGIN = 20;
     constexpr const char* DEFAULT_STEAM_APPID = "38410";
@@ -44,8 +39,7 @@ GameLocationWidget::GameLocationWidget(QWidget* parent)
     , _browseDataDirectoryButton(nullptr)
     , _controlLayout(nullptr)
     , _autoDetectButton(nullptr)
-    , _progressBar(nullptr)
-    , _statusLabel(nullptr) {
+    , _progressBar(nullptr) {
     
     setupUI();
     setupConnections();
@@ -143,11 +137,6 @@ void GameLocationWidget::setupUI() {
     _progressBar->setVisible(false);
     _layout->addWidget(_progressBar);
     
-    // Status label
-    _statusLabel = new QLabel("Ready");
-    _statusLabel->setStyleSheet(STATUS_NORMAL);
-    _layout->addWidget(_statusLabel);
-    
     // Update initial control states
     updateControlStates();
 }
@@ -204,20 +193,6 @@ void GameLocationWidget::setDataDirectory(const std::filesystem::path& location)
 }
 
 void GameLocationWidget::setStatusMessage(const QString& message, const QString& styleClass) {
-    _statusLabel->setText(message);
-    
-    if (styleClass == "warning") {
-        _statusLabel->setStyleSheet(STATUS_WARNING);
-    } else if (styleClass == "error") {
-        _statusLabel->setStyleSheet(STATUS_ERROR);
-    } else if (styleClass == "success") {
-        _statusLabel->setStyleSheet(STATUS_SUCCESS);
-    } else if (styleClass == "info") {
-        _statusLabel->setStyleSheet(STATUS_INFO);
-    } else {
-        _statusLabel->setStyleSheet(STATUS_NORMAL);
-    }
-    
     emit statusChanged(message, styleClass);
 }
 

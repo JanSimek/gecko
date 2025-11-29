@@ -35,7 +35,7 @@ public:
     ~SettingsDialog() = default;
 
 signals:
-    void settingsSaved();
+    void settingsSaved(bool dataPathsChanged);
     void dataPathsChanged();
 
 private slots:

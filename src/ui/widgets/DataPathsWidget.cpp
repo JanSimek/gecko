@@ -15,11 +15,6 @@ namespace geck {
 namespace {
     constexpr int LIST_MAX_HEIGHT = 100;
     constexpr const char* HELP_STYLE = "QLabel { color: gray; font-size: 11px; margin-bottom: 8px; }";
-    constexpr const char* STATUS_NORMAL = "QLabel { color: gray; font-size: 11px; }";
-    constexpr const char* STATUS_WARNING = "QLabel { color: orange; font-size: 11px; }";
-    constexpr const char* STATUS_ERROR = "QLabel { color: red; font-size: 11px; }";
-    constexpr const char* STATUS_SUCCESS = "QLabel { color: green; font-size: 11px; }";
-    constexpr const char* STATUS_INFO = "QLabel { color: blue; font-size: 11px; }";
 }
 
 DataPathsWidget::DataPathsWidget(QWidget* parent)
@@ -30,9 +25,10 @@ DataPathsWidget::DataPathsWidget(QWidget* parent)
     , _controlLayout(nullptr)
     , _addButton(nullptr)
     , _removeButton(nullptr)
+    , _moveUpButton(nullptr)
+    , _moveDownButton(nullptr)
     , _autoDetectButton(nullptr)
-    , _progressBar(nullptr)
-    , _statusLabel(nullptr) {
+    , _progressBar(nullptr) {
     
     setupUI();
     setupConnections();
@@ -43,7 +39,8 @@ void DataPathsWidget::setupUI() {
     
     // Help text
     _helpLabel = new QLabel(
-        "Add paths to Fallout 2 data directories or .dat files. These will be searched for game resources."
+        "Add paths to Fallout 2 data directories or .dat files. These will be searched for game resources.\n"
+        "Sources are applied in list order: later entries override earlier ones when files have the same path."
     );
     _helpLabel->setWordWrap(true);
     _helpLabel->setStyleSheet(HELP_STYLE);
@@ -68,6 +65,16 @@ void DataPathsWidget::setupUI() {
     _removeButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogCancelButton));
     _removeButton->setEnabled(false);
     _controlLayout->addWidget(_removeButton);
+
+    _moveUpButton = new QPushButton("Move Up");
+    _moveUpButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ArrowUp));
+    _moveUpButton->setEnabled(false);
+    _controlLayout->addWidget(_moveUpButton);
+    
+    _moveDownButton = new QPushButton("Move Down");
+    _moveDownButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ArrowDown));
+    _moveDownButton->setEnabled(false);
+    _controlLayout->addWidget(_moveDownButton);
     
     _controlLayout->addStretch();
     
@@ -82,16 +89,13 @@ void DataPathsWidget::setupUI() {
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);
     _layout->addWidget(_progressBar);
-    
-    // Status label
-    _statusLabel = new QLabel("Ready");
-    _statusLabel->setStyleSheet(STATUS_NORMAL);
-    _layout->addWidget(_statusLabel);
 }
 
 void DataPathsWidget::setupConnections() {
     connect(_addButton, &QPushButton::clicked, this, &DataPathsWidget::onAddPath);
     connect(_removeButton, &QPushButton::clicked, this, &DataPathsWidget::onRemovePath);
+    connect(_moveUpButton, &QPushButton::clicked, [this]() { moveSelectedPath(-1); });
+    connect(_moveDownButton, &QPushButton::clicked, [this]() { moveSelectedPath(1); });
     connect(_autoDetectButton, &QPushButton::clicked, this, &DataPathsWidget::onAutoDetect);
     connect(_pathsList, &QListWidget::itemSelectionChanged, this, &DataPathsWidget::onSelectionChanged);
     connect(_pathsList, &QListWidget::itemDoubleClicked, this, &DataPathsWidget::onItemDoubleClicked);
@@ -162,6 +166,7 @@ void DataPathsWidget::addPathToList(const std::filesystem::path& path) {
     item->setData(Qt::UserRole, isDefaultPath);
     
     _pathsList->addItem(item);
+    _pathsList->setCurrentItem(item);
 }
 
 void DataPathsWidget::validatePaths() {
@@ -190,20 +195,6 @@ void DataPathsWidget::validatePaths() {
 }
 
 void DataPathsWidget::setStatusMessage(const QString& message, const QString& styleClass) {
-    _statusLabel->setText(message);
-    
-    if (styleClass == "warning") {
-        _statusLabel->setStyleSheet(STATUS_WARNING);
-    } else if (styleClass == "error") {
-        _statusLabel->setStyleSheet(STATUS_ERROR);
-    } else if (styleClass == "success") {
-        _statusLabel->setStyleSheet(STATUS_SUCCESS);
-    } else if (styleClass == "info") {
-        _statusLabel->setStyleSheet(STATUS_INFO);
-    } else {
-        _statusLabel->setStyleSheet(STATUS_NORMAL);
-    }
-    
     emit statusChanged(message, styleClass);
 }
 
@@ -212,8 +203,14 @@ void DataPathsWidget::updateButtonStates() {
     if (currentItem) {
         bool isProtected = currentItem->data(Qt::UserRole).toBool();
         _removeButton->setEnabled(!isProtected);
+        
+        int currentRow = _pathsList->row(currentItem);
+        _moveUpButton->setEnabled(currentRow > 0);
+        _moveDownButton->setEnabled(currentRow < _pathsList->count() - 1);
     } else {
         _removeButton->setEnabled(false);
+        _moveUpButton->setEnabled(false);
+        _moveDownButton->setEnabled(false);
     }
 }
 
@@ -295,6 +292,27 @@ void DataPathsWidget::onAutoDetect() {
 }
 
 void DataPathsWidget::onSelectionChanged() {
+    updateButtonStates();
+}
+
+void DataPathsWidget::moveSelectedPath(int offset) {
+    QListWidgetItem* currentItem = _pathsList->currentItem();
+    if (!currentItem) {
+        return;
+    }
+    
+    int currentRow = _pathsList->row(currentItem);
+    int targetRow = currentRow + offset;
+    if (targetRow < 0 || targetRow >= _pathsList->count()) {
+        return;
+    }
+    
+    QListWidgetItem* takenItem = _pathsList->takeItem(currentRow);
+    _pathsList->insertItem(targetRow, takenItem);
+    _pathsList->setCurrentItem(takenItem);
+    
+    emit dataPathsChanged();
+    validatePaths();
     updateButtonStates();
 }
 

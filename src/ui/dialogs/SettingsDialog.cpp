@@ -209,7 +209,7 @@ void SettingsDialog::saveSettings() {
     spdlog::info("Settings saved from preferences dialog");
     
     // Notify that settings have been saved
-    Q_EMIT settingsSaved();
+    Q_EMIT settingsSaved(pathsHaveChanged);
 }
 
 void SettingsDialog::updateUI() {
