@@ -43,8 +43,7 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
         return;
     }
 
-    auto& mapFile = _editor->getMapFile();
-    auto& elevationTiles = mapFile.tiles[_editor->getCurrentElevation()];
+    auto& elevationTiles = _editor->ensureElevationTiles(_editor->getCurrentElevation());
 
     if (tileIndex_pos >= static_cast<int>(elevationTiles.size())) {
         spdlog::warn("TilePlacementManager::placeTileAtPosition: Tile index {} out of bounds", 
@@ -53,15 +52,18 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
     }
 
     // Place the tile
+    uint16_t before = isRoof ? elevationTiles[tileIndex_pos].getRoof() : elevationTiles[tileIndex_pos].getFloor();
     if (isRoof) {
         elevationTiles[tileIndex_pos].setRoof(tileIndex);
     } else {
         elevationTiles[tileIndex_pos].setFloor(tileIndex);
     }
+    uint16_t after = isRoof ? elevationTiles[tileIndex_pos].getRoof() : elevationTiles[tileIndex_pos].getFloor();
 
     // Efficiently update just this tile's sprite using hex index for positioning
     _editor->updateTileSprite(hexIndex, isRoof);
-
+    
+    _editor->registerTileEdit("Place Tile", { { _editor->getCurrentElevation(), tileIndex_pos, isRoof, before, after } });
 }
 
 void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof) {
@@ -78,16 +80,21 @@ void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& 
         return;
     }
 
-    auto& mapFile = _editor->getMapFile();
-    auto& elevationTiles = mapFile.tiles[_editor->getCurrentElevation()];
+    auto& elevationTiles = _editor->ensureElevationTiles(_editor->getCurrentElevation());
+
+    std::vector<EditorWidget::TileChange> changes;
+    changes.reserve(tilesToFill.size());
 
     for (int tileIdx : tilesToFill) {
         if (tileIdx >= 0 && tileIdx < static_cast<int>(elevationTiles.size())) {
+            uint16_t before = isRoof ? elevationTiles[tileIdx].getRoof() : elevationTiles[tileIdx].getFloor();
             if (isRoof) {
                 elevationTiles[tileIdx].setRoof(tileIndex);
             } else {
                 elevationTiles[tileIdx].setFloor(tileIndex);
             }
+            uint16_t after = isRoof ? elevationTiles[tileIdx].getRoof() : elevationTiles[tileIdx].getFloor();
+            changes.push_back({ _editor->getCurrentElevation(), tileIdx, isRoof, before, after });
 
             // Convert tile index to hex index for sprite update
             int hexIndex = tileIndexToHexIndex(tileIdx);
@@ -97,6 +104,9 @@ void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& 
         }
     }
 
+    if (!changes.empty()) {
+        _editor->registerTileEdit("Fill Tiles", changes);
+    }
 }
 
 void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
@@ -116,13 +126,18 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
         return;
     }
 
-    auto& mapFile = _editor->getMapFile();
-    auto& elevationTiles = mapFile.tiles[_editor->getCurrentElevation()];
+    auto& elevationTiles = _editor->ensureElevationTiles(_editor->getCurrentElevation());
+
+    std::vector<EditorWidget::TileChange> changes;
+    changes.reserve(floorTileIndices.size() + roofTileIndices.size());
 
     // Replace floor tiles
     for (int tileIdx : floorTileIndices) {
         if (tileIdx >= 0 && tileIdx < static_cast<int>(elevationTiles.size())) {
+            uint16_t before = elevationTiles[tileIdx].getFloor();
             elevationTiles[tileIdx].setFloor(newTileIndex);
+            uint16_t after = elevationTiles[tileIdx].getFloor();
+            changes.push_back({ _editor->getCurrentElevation(), tileIdx, false, before, after });
             
             // Convert tile index to hex index for sprite update
             int hexIndex = tileIndexToHexIndex(tileIdx);
@@ -134,7 +149,10 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
     // Replace roof tiles
     for (int tileIdx : roofTileIndices) {
         if (tileIdx >= 0 && tileIdx < static_cast<int>(elevationTiles.size())) {
+            uint16_t before = elevationTiles[tileIdx].getRoof();
             elevationTiles[tileIdx].setRoof(newTileIndex);
+            uint16_t after = elevationTiles[tileIdx].getRoof();
+            changes.push_back({ _editor->getCurrentElevation(), tileIdx, true, before, after });
             
             // Convert tile index to hex index for sprite update
             int hexIndex = tileIndexToHexIndex(tileIdx);
@@ -143,6 +161,9 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
         }
     }
 
+    if (!changes.empty()) {
+        _editor->registerTileEdit("Replace Tiles", changes);
+    }
 }
 
 void TilePlacementManager::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof) {

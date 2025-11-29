@@ -118,6 +118,8 @@ private:
     void updateElevationMenu(Map* map);
     void syncMenuStateToEditorWidget();
     void snapshotPanelVisibility();
+    void updateUndoRedoActions();
+    QIcon themedIcon(const QString& iconPath) const;
     void restorePanelVisibilitySnapshot();
     void hidePanelsForNoMap();
     void setDockVisibility(QDockWidget* dock, QAction* action, bool visible);
@@ -159,6 +161,8 @@ private:
     // Toolbar
     QToolBar* _mainToolBar;
     QAction* _markExitsAction;
+    QAction* _undoAction = nullptr;
+    QAction* _redoAction = nullptr;
 
     // Status bar
     QStatusBar* _statusBar;

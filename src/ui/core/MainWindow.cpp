@@ -29,6 +29,17 @@
 #include "../../writer/map/MapWriter.h"
 #include "../../editor/Object.h"
 #include "../IconHelper.h"
+
+// Prevent Windows API macros from clashing with vfspp names
+#ifdef _WIN32
+#ifdef CreateFile
+#undef CreateFile
+#endif
+#ifdef CopyFile
+#undef CopyFile
+#endif
+#endif
+
 #include <vfspp/VirtualFileSystem.hpp>
 #include <vfspp/NativeFileSystem.hpp>
 
@@ -122,6 +133,11 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
+    if (_currentEditorWidget) {
+        _centralStack->removeWidget(_currentEditorWidget);
+        _currentEditorWidget->deleteLater();
+    }
+
     _currentEditorWidget = editorWidget.release();
     _centralStack->addWidget(_currentEditorWidget);
     _centralStack->setCurrentWidget(_currentEditorWidget);
@@ -134,6 +150,7 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
 
     // Connect signals
     connectToEditorWidget();
+    connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, &MainWindow::updateUndoRedoActions);
     
     // Sync current menu state to the new EditorWidget
     syncMenuStateToEditorWidget();
@@ -147,6 +164,7 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     }
 
     QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
+    updateUndoRedoActions();
 }
 
 
@@ -212,6 +230,8 @@ void MainWindow::connectMenuSignals() {
             _selectionPanel->clearSelection();
         }
     });
+    
+    updateUndoRedoActions();
 }
 
 void MainWindow::setupMenuBar() {
@@ -268,6 +288,30 @@ void MainWindow::setupMenuBar() {
     scrollBlockerRectangleAction->setShortcut(QKeySequence("B"));
     scrollBlockerRectangleAction->setStatusTip("Draw rectangle and place scroll blockers on borders");
     connect(scrollBlockerRectangleAction, &QAction::triggered, this, &MainWindow::toggleScrollBlockerRectangleMode);
+    
+    _editMenu->addSeparator();
+    
+    _undoAction = _editMenu->addAction("&Undo");
+    _undoAction->setShortcut(QKeySequence::Undo);
+    _undoAction->setStatusTip("Undo last edit");
+    connect(_undoAction, &QAction::triggered, [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->undoLastEdit();
+            updateUndoRedoActions();
+        }
+    });
+    
+    _redoAction = _editMenu->addAction("&Redo");
+    _redoAction->setShortcut(QKeySequence::Redo);
+    _redoAction->setStatusTip("Redo last edit");
+    connect(_redoAction, &QAction::triggered, [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->redoLastEdit();
+            updateUndoRedoActions();
+        }
+    });
+    
+    updateUndoRedoActions();
 
     // View Menu
     _viewMenu = _menuBar->addMenu("&View");
@@ -466,7 +510,7 @@ void MainWindow::setupToolBar() {
     playAction->setShortcut(QKeySequence("F5"));
     connect(playAction, &QAction::triggered, this, &MainWindow::onPlayGame);
 
-    _mainToolBar->addSeparator();
+    _mainToolBar->addSeparator(); // Separate play from selection controls
 
     // Selection mode action with dropdown menu  
     _selectionModeAction = _mainToolBar->addAction(createIcon(":/icons/actions/select.svg"), "All");
@@ -671,8 +715,9 @@ void MainWindow::updateModeDisplay(const QString& modeText, const QString& iconP
     // Update action text and icon for special modes like tile painting
     if (_selectionModeAction) {
         _selectionModeAction->setText(modeText);
-        _selectionModeAction->setIcon(QIcon(iconPath));
+        _selectionModeAction->setIcon(themedIcon(iconPath));
     }
+    updateUndoRedoActions();
 }
 
 void MainWindow::startGameLoop() {
@@ -1050,6 +1095,7 @@ void MainWindow::syncMenuStateToEditorWidget() {
     _currentEditorWidget->setShowHexGrid(_showHexGridAction->isChecked());
     _currentEditorWidget->setShowLightOverlays(_showLightOverlaysAction->isChecked());
     _currentEditorWidget->setShowExitGrids(_showExitGridsAction->isChecked());
+    updateUndoRedoActions();
     
     // Sync selection mode from action to EditorWidget (defaults to ALL mode)
     if (_currentEditorWidget) {
@@ -1596,6 +1642,8 @@ void MainWindow::updatePanelMenuActions() {
         spdlog::debug("Selection Panel: visible={}, hidden={}", visible, _selectionDock->isHidden());
     }
 
+    updateUndoRedoActions();
+
     // For tabified dock widgets, a dock widget can be not hidden but not visible (when another tab is active)
     // We should check the dock widget is available to the user (not hidden), regardless of whether it's the active tab
     if (_tilePalettePanelAction) {
@@ -1623,6 +1671,38 @@ void MainWindow::updatePanelMenuActions() {
     spdlog::debug("Panel menu action sync completed");
 }
 
+void MainWindow::updateUndoRedoActions() {
+    if (!_undoAction || !_redoAction) {
+        return;
+    }
+    if (_currentEditorWidget) {
+        const auto& stack = _currentEditorWidget->getUndoStack();
+        bool canUndo = stack.canUndo();
+        bool canRedo = stack.canRedo();
+        std::string undoLabel = stack.lastUndoLabel();
+        std::string redoLabel = stack.lastRedoLabel();
+        _undoAction->setEnabled(canUndo);
+        _redoAction->setEnabled(canRedo);
+        _undoAction->setText(undoLabel.empty() ? "&Undo" : QString("Undo %1").arg(QString::fromStdString(undoLabel)));
+        _redoAction->setText(redoLabel.empty() ? "&Redo" : QString("Redo %1").arg(QString::fromStdString(redoLabel)));
+    } else {
+        _undoAction->setEnabled(false);
+        _redoAction->setEnabled(false);
+        _undoAction->setText("&Undo");
+        _redoAction->setText("&Redo");
+    }
+}
+
+QIcon MainWindow::themedIcon(const QString& iconPath) const {
+    QIcon baseIcon(iconPath);
+    QPixmap pixmap = baseIcon.pixmap(24, 24);
+    QPainter painter(&pixmap);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(pixmap.rect(), palette().color(QPalette::WindowText));
+    painter.end();
+    return QIcon(pixmap);
+}
+
 void MainWindow::hideNonEssentialPanels() {
     spdlog::debug("Hiding non-essential panels (no map loaded)");
     snapshotPanelVisibility();
@@ -1634,6 +1714,7 @@ void MainWindow::refreshFileBrowser() {
         spdlog::debug("Refreshing file browser after data loading");
         _fileBrowserPanel->refreshFileList();
     }
+    updateUndoRedoActions();
 }
 
 void MainWindow::showFileBrowserPanel() {
@@ -1674,6 +1755,7 @@ void MainWindow::closeCurrentMap() {
     hidePanelsForNoMap();
     
     spdlog::debug("Current map closed successfully");
+    updateUndoRedoActions();
 }
 
 bool MainWindow::hasActiveMap() const {

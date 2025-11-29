@@ -144,6 +144,8 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
     const auto* hexGrid = _editor->getHexagonGrid();
     
     // Move each object by the relative offset to maintain spacing
+    std::vector<std::pair<int, int>> movedObjects; // originalHex -> newHex
+    movedObjects.reserve(_draggedObjects.size());
     for (size_t i = 0; i < _draggedObjects.size(); ++i) {
         auto& mapObject = _draggedObjects[i]->getMapObject();
         int originalHexPosition = mapObject.position;
@@ -166,14 +168,7 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
                          snappedPos.x, snappedPos.y, newHexPosition);
             
             if (newHexPosition >= 0 && newHexPosition < static_cast<int>(hexGrid->grid().size())) {
-                // Update MapObject with new hex position
-                mapObject.position = newHexPosition;
-                
-                // Update visual position to match hex grid
-                const auto& newHex = hexGrid->grid()[newHexPosition];
-                _draggedObjects[i]->setHexPosition(newHex);
-                
-                spdlog::debug("DragDropManager: Moved object from hex {} to hex {}", originalHexPosition, newHexPosition);
+                movedObjects.push_back({originalHexPosition, newHexPosition});
                 continue;
             }
             // Invalid position, restore original
@@ -184,6 +179,10 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
         // Invalid original position, restore original sprite position
         _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);
         spdlog::warn("DragDropManager: Invalid original hex position {}, restored original position", originalHexPosition);
+    }
+    
+    if (!movedObjects.empty()) {
+        _editor->registerObjectMove(_draggedObjects, movedObjects);
     }
     
     // Clean up drag state

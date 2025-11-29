@@ -9,6 +9,7 @@
 #include <set>
 #include <vector>
 #include <utility>
+#include <functional>
 
 #include <QWidget>
 #include <QVBoxLayout>
@@ -21,6 +22,7 @@
 #include "../../selection/SelectionManager.h"
 #include "../../util/Constants.h"
 #include "../../util/EventBus.h"
+#include "../../util/UndoStack.h"
 
 namespace geck {
 
@@ -37,6 +39,8 @@ struct ObjectInfo;
 
 class EditorWidget : public QWidget {
     Q_OBJECT
+
+    friend class TilePlacementManager;
 
 public:
     EditorWidget(std::unique_ptr<Map> map, QWidget* parent = nullptr);
@@ -87,6 +91,7 @@ public:
 
     // Efficient tile update
     void updateTileSprite(int hexIndex, bool isRoof);
+    void updateTileSprite(int hexIndex, bool isRoof, int elevation);
 
     // Tile placement mode control (delegated to TilePlacementManager)
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
@@ -122,6 +127,7 @@ public:
     ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
     ViewportController* getViewportController() const { return _viewportController.get(); }
     int& getCurrentHoverHex() { return _currentHoverHex; }
+    void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
 
     // Methods for SelectionManager (moved from private)
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
@@ -149,6 +155,12 @@ public:
     // Helper methods for extracted managers (made public)  
     void clearDragSelectionPreview();
 
+    // Ensure tile storage exists for an elevation
+    std::vector<Tile>& ensureElevationTiles(int elevation);
+    void registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
+    void registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
+    void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
+
 signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
@@ -156,6 +168,7 @@ signals:
     void playerPositionSelected(int hexPosition);
     void statusMessageRequested(const QString& message);
     void statusMessageClearRequested();
+    void undoStackChanged();
 
 public slots:
     void onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
@@ -163,10 +176,29 @@ public slots:
     
     // Sprite loading methods (public for MainWindow access)
     void loadTileSprites();
+    
+    // Undo/redo
+    bool undoLastEdit();
+    bool redoLastEdit();
+    const UndoStack& getUndoStack() const { return _undoStack; }
 
 private:
+    struct TileChange {
+        int elevation;
+        int tileIndex;
+        bool isRoof;
+        uint16_t before;
+        uint16_t after;
+    };
+
     // Object management
     void deleteSelectedObjects();
+    void registerTileEdit(const QString& description, const std::vector<TileChange>& changes);
+    void applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState);
+    void registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
+    void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
+    void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
+    void pushCommand(UndoCommand cmd);
     // Error tracking for sprite loading
     struct LoadingErrors {
         size_t objectsSkipped = 0;
@@ -311,6 +343,9 @@ private:
     
     // Player position selection state
     bool _playerPositionSelectionMode = false;
+    
+    // Undo/redo
+    UndoStack _undoStack{100};
 };
 
 } // namespace geck

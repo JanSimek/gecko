@@ -575,14 +575,8 @@ std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, boo
 }
 
 std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, [[maybe_unused]] int elevation) const {
-    // TODO: check if this works at all
-    // Use spatial index for O(1) performance if available
-    if (_spatialIndex) {
-        // This method includes empty tiles, so we return all spatial results without filtering
-        return _spatialIndex->getTilesInArea(area, roof);
-    }
-
-    // Fallback to linear search
+    // Include all tiles intersecting the area, even if currently empty.
+    // We intentionally skip the spatial index here because it only tracks placed tiles.
     std::vector<int> result;
     result.reserve(1000); // Reserve space for typical selection
 
@@ -591,6 +585,14 @@ std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatR
 
     for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
         sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
+        
+        // If the sprite has no bounds (empty tile), synthesize bounds from tile index using the same positioning as sprites
+        if (tileBounds.size.x == 0 || tileBounds.size.y == 0) {
+            auto screenPos = indexToScreenPosition(i, roof);
+            tileBounds = sf::FloatRect(
+                sf::Vector2f(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y)),
+                sf::Vector2f(static_cast<float>(TILE_WIDTH), static_cast<float>(TILE_HEIGHT)));
+        }
 
         if (area.findIntersection(tileBounds)) {
             result.push_back(i); // Include all tiles, regardless of content

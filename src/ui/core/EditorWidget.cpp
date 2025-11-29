@@ -17,6 +17,7 @@
 #include <limits>
 #include <cstdlib>
 #include <set>
+#include <unordered_map>
 
 #include "../../util/Constants.h"
 #include "../../util/ResourcePaths.h"
@@ -88,8 +89,276 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
     _viewportController->centerViewOnMap();
 }
 
+void EditorWidget::pushCommand(UndoCommand cmd) {
+    _undoStack.push(std::move(cmd));
+    emit undoStackChanged();
+}
+
+void EditorWidget::applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState) {
+    if (!_map) {
+        return;
+    }
+    
+    // Group changes by elevation for efficient batch processing
+    std::unordered_map<int, std::vector<const TileChange*>> changesByElevation;
+    for (const auto& change : changes) {
+        changesByElevation[change.elevation].push_back(&change);
+    }
+    
+    // Apply all changes first, then update sprites in batch
+    for (const auto& [elevation, elevChanges] : changesByElevation) {
+        auto& elevationTiles = ensureElevationTiles(elevation);
+        
+        // Apply all tile changes for this elevation
+        for (const auto* change : elevChanges) {
+            if (change->tileIndex < 0 || change->tileIndex >= static_cast<int>(elevationTiles.size())) {
+                continue;
+            }
+            
+            uint16_t value = applyAfterState ? change->after : change->before;
+            if (change->isRoof) {
+                elevationTiles[change->tileIndex].setRoof(value);
+            } else {
+                elevationTiles[change->tileIndex].setFloor(value);
+            }
+        }
+        
+        // Now update all sprites for this elevation if it's the current one
+        if (elevation == _currentElevation) {
+            for (const auto* change : elevChanges) {
+                if (change->tileIndex >= 0 && change->tileIndex < static_cast<int>(elevationTiles.size())) {
+                    int hexIndex = tileIndexToHexIndex(change->tileIndex);
+                    updateTileSprite(hexIndex, change->isRoof, elevation);
+                }
+            }
+        }
+    }
+}
+
+void EditorWidget::registerTileEdit(const QString& description, const std::vector<TileChange>& changes) {
+    if (changes.empty()) {
+        return;
+    }
+    
+    UndoCommand cmd;
+    cmd.description = description.toStdString();
+    cmd.undo = [this, changes]() {
+        applyTileChanges(changes, false);
+    };
+    cmd.redo = [this, changes]() {
+        applyTileChanges(changes, true);
+    };
+    pushCommand(std::move(cmd));
+}
+
+void EditorWidget::addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
+    if (!mapObject || !object || !_map) {
+        spdlog::warn("addPlacedObject: Invalid parameters - mapObject:{} object:{} map:{}", 
+                    mapObject != nullptr, object != nullptr, _map != nullptr);
+        return;
+    }
+    if (mapObject->elevation < 0 || mapObject->elevation >= 3) {
+        spdlog::error("addPlacedObject: Invalid elevation {}", mapObject->elevation);
+        return;
+    }
+    auto& mapFile = _map->getMapFile();
+    mapFile.map_objects[mapObject->elevation].push_back(mapObject);
+    _objects.push_back(object);
+    createWallBlockerOverlay(mapObject, static_cast<int>(mapObject->position));
+    refreshObjects();
+}
+
+void EditorWidget::removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
+    if (!mapObject || !_map) {
+        spdlog::warn("removePlacedObject: Invalid parameters - mapObject:{} map:{}", 
+                    mapObject != nullptr, _map != nullptr);
+        return;
+    }
+    if (mapObject->elevation < 0 || mapObject->elevation >= 3) {
+        spdlog::error("removePlacedObject: Invalid elevation {}", mapObject->elevation);
+        return;
+    }
+    auto& mapFile = _map->getMapFile();
+    auto& elevationObjects = mapFile.map_objects[mapObject->elevation];
+    elevationObjects.erase(std::remove(elevationObjects.begin(), elevationObjects.end(), mapObject), elevationObjects.end());
+    if (object) {
+        _objects.erase(std::remove(_objects.begin(), _objects.end(), object), _objects.end());
+    }
+    refreshObjects();
+}
+
+void EditorWidget::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
+    if (!mapObject || !object) {
+        spdlog::warn("registerObjectPlacement: Invalid parameters - mapObject:{} object:{}", 
+                    mapObject != nullptr, object != nullptr);
+        return;
+    }
+    
+    UndoCommand cmd;
+    cmd.description = "Place Object";
+    cmd.redo = [this, mapObject, object]() {
+        if (mapObject && object) {
+            addPlacedObject(mapObject, object);
+        }
+    };
+    cmd.undo = [this, mapObject, object]() {
+        if (mapObject && object) {
+            removePlacedObject(mapObject, object);
+        }
+    };
+
+    cmd.redo(); // Apply immediately - object was just created
+    pushCommand(std::move(cmd));
+}
+
+void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects,
+    const std::vector<std::pair<int, int>>& moves) {
+    if (objects.empty() || moves.empty() || objects.size() != moves.size()) {
+        spdlog::warn("registerObjectMove: Invalid input - objects:{} moves:{}", objects.size(), moves.size());
+        return;
+    }
+    
+    UndoCommand cmd;
+    cmd.description = "Move Objects";
+    cmd.undo = [this, objects, moves]() {
+        const auto* hexGrid = _hexgrid.grid().data() ? &_hexgrid : nullptr;
+        if (!hexGrid) {
+            spdlog::error("registerObjectMove undo: hex grid not available");
+            return;
+        }
+        for (size_t i = 0; i < objects.size() && i < moves.size(); ++i) {
+            auto object = objects[i];
+            if (!object || !object->hasMapObject()) continue;
+            auto& mapObj = object->getMapObject();
+            mapObj.position = moves[i].first;
+            if (moves[i].first >= 0 && moves[i].first < static_cast<int>(_hexgrid.grid().size())) {
+                object->setHexPosition(_hexgrid.grid()[moves[i].first]);
+            } else {
+                spdlog::warn("registerObjectMove undo: Invalid hex position {}", moves[i].first);
+            }
+        }
+        refreshObjects();
+    };
+    cmd.redo = [this, objects, moves]() {
+        const auto* hexGrid = _hexgrid.grid().data() ? &_hexgrid : nullptr;
+        if (!hexGrid) {
+            spdlog::error("registerObjectMove redo: hex grid not available");
+            return;
+        }
+        for (size_t i = 0; i < objects.size() && i < moves.size(); ++i) {
+            auto object = objects[i];
+            if (!object || !object->hasMapObject()) continue;
+            auto& mapObj = object->getMapObject();
+            mapObj.position = moves[i].second;
+            if (moves[i].second >= 0 && moves[i].second < static_cast<int>(_hexgrid.grid().size())) {
+                object->setHexPosition(_hexgrid.grid()[moves[i].second]);
+            } else {
+                spdlog::warn("registerObjectMove redo: Invalid hex position {}", moves[i].second);
+            }
+        }
+        refreshObjects();
+    };
+    
+    // Apply redo immediately - objects have already been moved visually
+    cmd.redo();
+    pushCommand(std::move(cmd));
+}
+
+void EditorWidget::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs) {
+    if (objects.empty() || beforeDirs.size() != objects.size() || afterDirs.size() != objects.size()) {
+        spdlog::warn("registerObjectRotation: Invalid input sizes - objects:{} before:{} after:{}", 
+                    objects.size(), beforeDirs.size(), afterDirs.size());
+        return;
+    }
+    
+    UndoCommand cmd;
+    cmd.description = "Rotate Objects";
+    cmd.undo = [objects, beforeDirs]() {
+        for (size_t i = 0; i < objects.size() && i < beforeDirs.size(); ++i) {
+            if (!objects[i]) continue;
+            if (beforeDirs[i] < 0 || beforeDirs[i] > 5) {
+                spdlog::warn("registerObjectRotation undo: Invalid direction {}", beforeDirs[i]);
+                continue;
+            }
+            objects[i]->setDirection(static_cast<ObjectDirection>(beforeDirs[i]));
+        }
+    };
+    cmd.redo = [objects, afterDirs]() {
+        for (size_t i = 0; i < objects.size() && i < afterDirs.size(); ++i) {
+            if (!objects[i]) continue;
+            if (afterDirs[i] < 0 || afterDirs[i] > 5) {
+                spdlog::warn("registerObjectRotation redo: Invalid direction {}", afterDirs[i]);
+                continue;
+            }
+            objects[i]->setDirection(static_cast<ObjectDirection>(afterDirs[i]));
+        }
+    };
+    
+    // Note: No immediate redo needed - rotation already applied visually
+    pushCommand(std::move(cmd));
+}
+
+void EditorWidget::applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath) {
+    if (!object) {
+        spdlog::warn("applyFrmToObject: null object provided");
+        return;
+    }
+    if (frmPath.empty()) {
+        spdlog::warn("applyFrmToObject: empty FRM path provided");
+        return;
+    }
+    try {
+        auto& resourceManager = ResourceManager::getInstance();
+        const auto& texture = resourceManager.texture(frmPath);
+        sf::Sprite sprite(texture);
+        sprite.setPosition(object->getSprite().getPosition());
+        object->setSprite(std::move(sprite));
+        if (object->hasMapObject()) {
+            object->getMapObject().frm_pid = frmPid;
+            object->setDirection(static_cast<ObjectDirection>(object->getMapObject().direction));
+        }
+    } catch (const std::exception& e) {
+        spdlog::error("EditorWidget::applyFrmToObject - failed to apply FRM {}: {}", frmPath, e.what());
+    }
+}
+
+void EditorWidget::registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath) {
+    if (!object) {
+        return;
+    }
+    if (newFrmPath.empty()) {
+        spdlog::warn("registerObjectFrmChange: new FRM path empty, ignoring");
+        return;
+    }
+    
+    UndoCommand cmd;
+    cmd.description = "Change Object FRM";
+    cmd.undo = [this, object, oldFrmPid, oldFrmPath]() {
+        applyFrmToObject(object, oldFrmPid, oldFrmPath);
+    };
+    cmd.redo = [this, object, newFrmPid, newFrmPath]() {
+        applyFrmToObject(object, newFrmPid, newFrmPath);
+    };
+    
+    // Apply redo immediately - FRM change needs to be applied
+    cmd.redo();
+    pushCommand(std::move(cmd));
+}
+
 EditorWidget::~EditorWidget() {
     // Qt will handle cleanup of child widgets automatically
+}
+
+bool EditorWidget::undoLastEdit() {
+    bool result = _undoStack.undo();
+    emit undoStackChanged();
+    return result;
+}
+
+bool EditorWidget::redoLastEdit() {
+    bool result = _undoStack.redo();
+    emit undoStackChanged();
+    return result;
 }
 
 void EditorWidget::initializeSelectionSystem() {
@@ -1235,10 +1504,22 @@ void EditorWidget::rotateSelectedObject() {
     auto objects = selection.getObjects();
 
     if (!objects.empty()) {
-        std::ranges::for_each(objects, [](auto& object) {
+        std::vector<std::shared_ptr<Object>> validObjects;
+        std::vector<int> beforeDirs;
+        std::vector<int> afterDirs;
+        validObjects.reserve(objects.size());
+        beforeDirs.reserve(objects.size());
+        afterDirs.reserve(objects.size());
+        
+        for (auto& object : objects) {
+            if (!object) continue;
+            validObjects.push_back(object);
+            beforeDirs.push_back(static_cast<int>(object->getMapObject().direction));
             object->rotate();
+            afterDirs.push_back(static_cast<int>(object->getMapObject().direction));
             spdlog::debug("Rotated object to direction {}", object->getMapObject().direction);
-        });
+        }
+        registerObjectRotation(validObjects, beforeDirs, afterDirs);
         spdlog::info("Rotated {} selected object(s)", objects.size());
     } else {
         spdlog::debug("No objects selected for rotation");
@@ -1320,6 +1601,10 @@ void EditorWidget::refreshObjects() {
 }
 
 void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
+    updateTileSprite(hexIndex, isRoof, _currentElevation);
+}
+
+void EditorWidget::updateTileSprite(int hexIndex, bool isRoof, int elevation) {
     if (!_map || !isValidHexPosition(hexIndex)) {
         return;
     }
@@ -1331,8 +1616,8 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
     int tileY = hexY / 2;  // 0-99
     int tileIndex = tileY * MAP_WIDTH + tileX; // Convert to tile index
     
-    // Get tiles for current elevation
-    const auto& elevationTiles = _map->getMapFile().tiles[_currentElevation];
+    // Get tiles for requested elevation (ensures full size)
+    const auto& elevationTiles = ensureElevationTiles(elevation);
     if (tileIndex >= static_cast<int>(elevationTiles.size())) {
         spdlog::warn("EditorWidget::updateTileSprite: Tile index {} out of bounds (hex {})", tileIndex, hexIndex);
         return;
@@ -1345,7 +1630,11 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
     // Handle empty tiles by setting transparent color
     if (tileID == Map::EMPTY_TILE) {
         auto& sprites = isRoof ? _roofSprites : _floorSprites;
-        sprites[tileIndex].setColor(isRoof ? geck::TileColors::transparent() : sf::Color::White);
+        const auto& blankTexture = createBlankTexture();
+        sprites[tileIndex].setTexture(blankTexture);
+        sprites[tileIndex].setColor(geck::TileColors::transparent());
+        auto screenPos = indexToScreenPosition(tileIndex, isRoof);
+        sprites[tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
         spdlog::debug("EditorWidget::updateTileSprite: Set tile {} to empty [roof: {}]", tileIndex, isRoof);
         return;
     }
@@ -1374,8 +1663,8 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
         auto screenPos = indexToScreenPosition(tileIndex, isRoof);
         sprites[tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
 
-        spdlog::debug("EditorWidget::updateTileSprite: Updated sprite for hex {} -> tile {} ({}) [roof: {}]", 
-                      hexIndex, tileIndex, tileName, isRoof);
+        spdlog::debug("EditorWidget::updateTileSprite: Updated sprite for hex {} -> tile {} ({}) [roof: {}], elevation {}", 
+                      hexIndex, tileIndex, tileName, isRoof, elevation);
     } catch (const std::exception& e) {
         spdlog::warn("EditorWidget::updateTileSprite: Failed to update tile sprite: {}", e.what());
     }
@@ -1687,6 +1976,15 @@ void EditorWidget::clearDragPreview() {
     _previewObjects.clear();
 }
 
+std::vector<Tile>& EditorWidget::ensureElevationTiles(int elevation) {
+    auto& mapFile = _map->getMapFile();
+    auto& tilesVec = mapFile.tiles[elevation];
+    if (tilesVec.size() < Map::TILES_PER_ELEVATION) {
+        tilesVec.resize(Map::TILES_PER_ELEVATION, Tile(Map::EMPTY_TILE, Map::EMPTY_TILE));
+    }
+    return tilesVec;
+}
+
 void EditorWidget::updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos) {
     // Clear previous preview
     clearDragPreview();
@@ -1738,7 +2036,21 @@ const sf::Texture& EditorWidget::createBlankTexture() {
     static std::string blankTextureName = "__blank_texture__";
 
     try {
-        return ResourceManager::getInstance().texture(blankTextureName);
+        auto& resourceManager = ResourceManager::getInstance();
+        if (resourceManager.exists(blankTextureName)) {
+            return resourceManager.texture(blankTextureName);
+        }
+        
+        // Create blank texture and store it in ResourceManager
+        sf::Image blankImage{ sf::Vector2u{ 1, 1 }, sf::Color::Transparent };
+
+        auto texture = std::make_unique<sf::Texture>();
+        [[maybe_unused]] bool loadSuccess = texture->loadFromImage(blankImage);
+
+        // Store in ResourceManager's texture cache using the new method
+        resourceManager.storeTexture(blankTextureName, std::move(texture));
+
+        return resourceManager.texture(blankTextureName);
     } catch (const std::exception&) {
         // Create blank texture and store it in ResourceManager
         auto& resourceManager = ResourceManager::getInstance();
@@ -1808,10 +2120,6 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     mapObject->unknown10 = 0;
     mapObject->unknown11 = 0;
 
-    // Add to map for saving (both MapFile and Map's objects collection)
-    auto& mapFile = _map->getMapFile();
-    mapFile.map_objects[_currentElevation].push_back(mapObject);
-    
     // Create visual Object for immediate display
     try {
         // Try to load FRM for the object if we have ObjectInfo
@@ -1845,14 +2153,10 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
             object->setHexPosition(hex);
         }
         
-        // Add to objects list for immediate display
-        _objects.push_back(object);
-        
-        // Create wall blocker overlay if the object blocks movement
-        createWallBlockerOverlay(mapObject, hexPosition);
-        
         spdlog::info("EditorWidget: Successfully placed object at hex {} (pro_pid: {})", 
                     hexPosition, mapObject->pro_pid);
+
+        registerObjectPlacement(mapObject, object);
             
     } catch (const std::exception& e) {
         spdlog::warn("EditorWidget: Failed to create visual object for placed item: {}", e.what());
@@ -2026,26 +2330,16 @@ void EditorWidget::onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t n
         // Get the new FRM path from the FRM PID
         auto& resourceManager = ResourceManager::getInstance();
         std::string newFrmPath = resourceManager.FIDtoFrmName(newFrmPid);
+        uint32_t oldFrmPid = object->hasMapObject() ? object->getMapObject().frm_pid : 0;
+        std::string oldFrmPath = resourceManager.FIDtoFrmName(oldFrmPid);
         
         if (newFrmPath.empty()) {
             spdlog::error("EditorWidget::onObjectFrmChanged - could not resolve FRM path for PID {}", newFrmPid);
             return;
         }
 
-        // Load the new FRM texture
-        const auto& newTexture = resourceManager.texture(newFrmPath);
-        
-        // Create new sprite with the updated texture
-        sf::Sprite newSprite(newTexture);
-        object->setSprite(std::move(newSprite));
-        
-        // Set the direction to update texture rectangle (use current direction)
-        auto& mapObject = object->getMapObject();
-        object->setDirection(static_cast<ObjectDirection>(mapObject.direction));
-        
-        spdlog::info("EditorWidget::onObjectFrmChanged - updated object visual to FRM PID {} ({})", 
-                    newFrmPid, newFrmPath);
-        
+        registerObjectFrmChange(object, oldFrmPid, oldFrmPath, newFrmPid, newFrmPath);
+        spdlog::info("EditorWidget::onObjectFrmChanged - updated object visual to FRM PID {} ({})", newFrmPid, newFrmPath);
     } catch (const std::exception& e) {
         spdlog::error("EditorWidget::onObjectFrmChanged - failed to update object FRM: {}", e.what());
     }
@@ -2064,69 +2358,10 @@ void EditorWidget::onObjectFrmPathChanged(std::shared_ptr<Object> object, const 
 
     try {
         auto& resourceManager = ResourceManager::getInstance();
+        uint32_t oldFrmPid = object->hasMapObject() ? object->getMapObject().frm_pid : 0;
+        std::string oldFrmPath = resourceManager.FIDtoFrmName(oldFrmPid);
         
-        // Load the new FRM data (not just texture)
-        auto newFrm = resourceManager.loadResource<Frm>(newFrmPath);
-        if (!newFrm) {
-            spdlog::error("EditorWidget::onObjectFrmPathChanged - failed to load FRM data for: {}", newFrmPath);
-            return;
-        }
-        
-        // Load the new FRM texture 
-        const auto& newTexture = resourceManager.texture(newFrmPath);
-        
-        // Debug: Check object state before FRM change
-        sf::Vector2f oldPosition = object->getSprite().getPosition();
-        const auto& oldTexture = object->getSprite().getTexture();
-        spdlog::info("EditorWidget::onObjectFrmPathChanged - CHANGING FRM FROM existing to: {}", newFrmPath);
-        spdlog::debug("EditorWidget::onObjectFrmPathChanged - BEFORE: object position: ({}, {})", 
-                     oldPosition.x, oldPosition.y);
-        spdlog::debug("EditorWidget::onObjectFrmPathChanged - OLD texture ptr: {}, NEW texture ptr: {}", 
-                     static_cast<const void*>(&oldTexture), static_cast<const void*>(&newTexture));
-        spdlog::debug("EditorWidget::onObjectFrmPathChanged - OLD texture size: {}x{}, NEW texture size: {}x{}", 
-                     oldTexture.getSize().x, oldTexture.getSize().y, newTexture.getSize().x, newTexture.getSize().y);
-                     
-        // Additional check: Are the textures actually different?
-        bool texturesAreDifferent = (&oldTexture != &newTexture);
-        spdlog::info("EditorWidget::onObjectFrmPathChanged - Textures are different: {}", texturesAreDifferent);
-        
-        // Create new sprite with the updated texture
-        sf::Sprite newSprite(newTexture);
-        // IMPORTANT: Preserve the original position
-        newSprite.setPosition(oldPosition);
-        object->setSprite(std::move(newSprite));
-        
-        // Update the FRM data in the object (this is crucial!)
-        object->setFrm(newFrm);
-        
-        // Validate that the object still has its MapObject association
-        if (!object->hasMapObject()) {
-            spdlog::error("EditorWidget::onObjectFrmPathChanged - Object lost MapObject association during FRM change!");
-            return;
-        }
-        
-        // Set the direction to update texture rectangle (use current direction)
-        auto& mapObject = object->getMapObject();
-        object->setDirection(static_cast<ObjectDirection>(mapObject.direction));
-        
-        // Note: MapObject's frm_pid is updated by SelectionPanel for persistence
-        
-        // Final validation: Ensure the object is still properly configured
-        const auto& currentSpriteTexture = object->getSprite().getTexture();
-        if (currentSpriteTexture.getSize().x == 0 || currentSpriteTexture.getSize().y == 0) {
-            spdlog::error("EditorWidget::onObjectFrmPathChanged - Object sprite has invalid texture after FRM change!");
-            return;
-        }
-        
-        // Debug: Check object state after FRM change
-        sf::Vector2f position = object->getSprite().getPosition();
-        sf::IntRect textureRect = object->getSprite().getTextureRect();
-        const auto& currentTexture = object->getSprite().getTexture();
-        spdlog::debug("EditorWidget::onObjectFrmPathChanged - AFTER: object position: ({}, {}), textureRect: ({}, {}, {}, {})", 
-                     position.x, position.y, textureRect.position.x, textureRect.position.y, textureRect.size.x, textureRect.size.y);
-        spdlog::debug("EditorWidget::onObjectFrmPathChanged - AFTER: current texture ptr: {}, size: {}x{}", 
-                     static_cast<const void*>(&currentTexture), currentTexture.getSize().x, currentTexture.getSize().y);
-        
+        registerObjectFrmChange(object, oldFrmPid, oldFrmPath, oldFrmPid, newFrmPath);
         spdlog::info("EditorWidget::onObjectFrmPathChanged - updated object visual to FRM path: {}", newFrmPath);
         
     } catch (const std::exception& e) {
@@ -2150,40 +2385,42 @@ void EditorWidget::deleteSelectedObjects() {
     
     spdlog::info("EditorWidget::deleteSelectedObjects - Deleting {} selected objects", selectedObjects.size());
     
-    // Remove objects from map and clear from visual objects
-    int deletedCount = 0;
+    std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> removedObjects;
     for (const auto& object : selectedObjects) {
-        if (!object) continue;
+        if (!object || !object->hasMapObject()) continue;
         
         try {
-            // Remove from map objects
-            uint32_t elevation = object->getMapObject().elevation;
-            // Access mapFile directly to modify objects
-            auto& mapFile = _map->getMapFile();
-            auto& elevationObjects = mapFile.map_objects[elevation];
-            
-            // Find and remove the object from the map
-            auto it = std::find_if(elevationObjects.begin(), elevationObjects.end(),
-                [&object](const std::shared_ptr<MapObject>& mapObj) {
-                    return mapObj.get() == &object->getMapObject();
-                });
-                
-            if (it != elevationObjects.end()) {
-                elevationObjects.erase(it);
-                deletedCount++;
-                spdlog::debug("EditorWidget::deleteSelectedObjects - Removed object at elevation {}", elevation);
+            // CRITICAL FIX: Use the actual shared_ptr instead of creating one with no-op deleter
+            auto mapObjPtr = object->getMapObjectPtr();
+            if (!mapObjPtr) {
+                spdlog::warn("EditorWidget::deleteSelectedObjects - Object has null MapObject shared_ptr");
+                continue;
             }
-            
-            // Remove from visual objects list
-            auto visualIt = std::find(_objects.begin(), _objects.end(), object);
-            if (visualIt != _objects.end()) {
-                _objects.erase(visualIt);
-                spdlog::debug("EditorWidget::deleteSelectedObjects - Removed from visual objects");
-            }
-            
+            removedObjects.push_back({ mapObjPtr, object });
+            removePlacedObject(mapObjPtr, object);
         } catch (const std::exception& e) {
             spdlog::error("EditorWidget::deleteSelectedObjects - Error deleting object: {}", e.what());
         }
+    }
+    
+    if (!removedObjects.empty()) {
+        UndoCommand cmd;
+        cmd.description = "Delete Objects";
+        cmd.undo = [this, removedObjects]() {
+            for (const auto& pair : removedObjects) {
+                if (pair.first && pair.second) {
+                    addPlacedObject(pair.first, pair.second);
+                }
+            }
+        };
+        cmd.redo = [this, removedObjects]() {
+            for (const auto& pair : removedObjects) {
+                if (pair.first && pair.second) {
+                    removePlacedObject(pair.first, pair.second);
+                }
+            }
+        };
+        pushCommand(std::move(cmd));
     }
     
     // Clear selection
@@ -2198,7 +2435,7 @@ void EditorWidget::deleteSelectedObjects() {
         0  // After deletion, selection is cleared
     });
     
-    spdlog::info("EditorWidget::deleteSelectedObjects - Successfully deleted {} objects", deletedCount);
+    spdlog::info("EditorWidget::deleteSelectedObjects - Successfully deleted {} objects", removedObjects.size());
 }
 
 } // namespace geck

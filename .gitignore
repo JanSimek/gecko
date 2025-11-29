@@ -33,7 +33,7 @@
 
 CMakeLists.txt.user
 #CMakeSettings.json
-build/
+build*/
 reference/
 .vs/
 
