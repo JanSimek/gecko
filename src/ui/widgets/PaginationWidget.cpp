@@ -34,8 +34,8 @@ PaginationWidget::PaginationWidget(QWidget* parent)
     _pageSpinBox->setMaximum(1);
     _pageSpinBox->setValue(1);
     _pageSpinBox->setMaximumWidth(60);
-    connect(_pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), 
-            this, &PaginationWidget::onPageSpinBoxChanged);
+    connect(_pageSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+        this, &PaginationWidget::onPageSpinBoxChanged);
     _layout->addWidget(_pageSpinBox);
 
     _pageInfoLabel = new QLabel("of 1", this);
@@ -80,7 +80,7 @@ void PaginationWidget::setTotalPages(int totalPages) {
 
     _totalPages = totalPages;
     _pageSpinBox->setMaximum(_totalPages);
-    
+
     // Adjust current page if it's now out of range
     if (_currentPage > _totalPages) {
         setCurrentPage(_totalPages);
@@ -171,7 +171,7 @@ void PaginationWidget::updateControls() {
     _prevButton->setEnabled(_currentPage > 1 && _totalPages > 1);
     _nextButton->setEnabled(_currentPage < _totalPages && _totalPages > 1);
     _lastButton->setEnabled(_currentPage < _totalPages && _totalPages > 1);
-    
+
     // Update spin box state
     _pageSpinBox->setEnabled(_totalPages > 1);
 }

@@ -15,7 +15,7 @@ namespace geck {
 
 /**
  * @brief Widget for managing Fallout 2 data paths
- * 
+ *
  * Provides UI for adding, removing, and auto-detecting Fallout 2 data paths.
  * Handles validation and visual feedback for path entries.
  */
@@ -29,10 +29,10 @@ public:
     // Data access
     std::vector<std::filesystem::path> getDataPaths() const;
     void setDataPaths(const std::vector<std::filesystem::path>& paths);
-    
+
     // Validation
     void validatePaths();
-    
+
     // Status updates
     void setStatusMessage(const QString& message, const QString& styleClass = "normal");
 
@@ -54,7 +54,7 @@ private:
     void removeSelectedPath();
     void updateButtonStates();
     void moveSelectedPath(int offset);
-    
+
     // UI Components
     QVBoxLayout* _layout;
     QLabel* _helpLabel;

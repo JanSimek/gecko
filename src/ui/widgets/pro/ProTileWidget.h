@@ -6,7 +6,7 @@ namespace geck {
 
 /**
  * @brief Widget for editing Tile type PRO files
- * 
+ *
  * Tiles are simple PRO types, containing only a material ID
  * field after the common header, similar to walls.
  */
@@ -25,10 +25,10 @@ public:
 
 private:
     void setupUI();
-    
+
     // UI controls
     QComboBox* _materialIdCombo;
-    
+
     // Data
     ProTileData _tileData;
 };

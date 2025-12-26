@@ -25,18 +25,18 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
     // Adjust world position for roof offset if placing roof tiles
     sf::Vector2f adjustedWorldPos = worldPos;
     if (isRoof) {
-        adjustedWorldPos.y += ROOF_OFFSET;  // Roof tiles are visually offset upward
+        adjustedWorldPos.y += ROOF_OFFSET; // Roof tiles are visually offset upward
     }
-    
+
     int hexIndex = _editor->getViewportController()->worldPosToHexIndex(adjustedWorldPos);
     if (hexIndex < 0) {
         spdlog::debug("TilePlacementManager::placeTileAtPosition: No valid position found");
         return;
     }
-    
+
     // Convert hex index to tile index using utility function
     int tileIndex_pos = hexIndexToTileIndex(hexIndex);
-    
+
     // Validate tile bounds
     if (tileIndex_pos >= TILES_PER_ELEVATION) {
         spdlog::debug("TilePlacementManager::placeTileAtPosition: Tile index {} out of bounds", tileIndex_pos);
@@ -46,7 +46,7 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
     auto& elevationTiles = _editor->ensureElevationTiles(_editor->getCurrentElevation());
 
     if (tileIndex_pos >= static_cast<int>(elevationTiles.size())) {
-        spdlog::warn("TilePlacementManager::placeTileAtPosition: Tile index {} out of bounds", 
+        spdlog::warn("TilePlacementManager::placeTileAtPosition: Tile index {} out of bounds",
             tileIndex_pos);
         return;
     }
@@ -62,7 +62,7 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
 
     // Efficiently update just this tile's sprite using hex index for positioning
     _editor->updateTileSprite(hexIndex, isRoof);
-    
+
     _editor->registerTileEdit("Place Tile", { { _editor->getCurrentElevation(), tileIndex_pos, isRoof, before, after } });
 }
 
@@ -98,7 +98,7 @@ void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& 
 
             // Convert tile index to hex index for sprite update
             int hexIndex = tileIndexToHexIndex(tileIdx);
-            
+
             // Efficiently update this tile's sprite using hex index
             _editor->updateTileSprite(hexIndex, isRoof);
         }
@@ -138,10 +138,10 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
             elevationTiles[tileIdx].setFloor(newTileIndex);
             uint16_t after = elevationTiles[tileIdx].getFloor();
             changes.push_back({ _editor->getCurrentElevation(), tileIdx, false, before, after });
-            
+
             // Convert tile index to hex index for sprite update
             int hexIndex = tileIndexToHexIndex(tileIdx);
-            
+
             _editor->updateTileSprite(hexIndex, false); // false = floor tile
         }
     }
@@ -153,10 +153,10 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
             elevationTiles[tileIdx].setRoof(newTileIndex);
             uint16_t after = elevationTiles[tileIdx].getRoof();
             changes.push_back({ _editor->getCurrentElevation(), tileIdx, true, before, after });
-            
+
             // Convert tile index to hex index for sprite update
             int hexIndex = tileIndexToHexIndex(tileIdx);
-            
+
             _editor->updateTileSprite(hexIndex, true); // true = roof tile
         }
     }
@@ -204,7 +204,7 @@ void TilePlacementManager::handleTileAreaFill(sf::Vector2f startPos, sf::Vector2
             float top = std::min(startPos.y, endPos.y);
             float width = std::abs(endPos.x - startPos.x);
             float height = std::abs(endPos.y - startPos.y);
-            sf::FloatRect fillArea({left, top}, {width, height});
+            sf::FloatRect fillArea({ left, top }, { width, height });
             fillAreaWithTile(_tilePlacementIndex, fillArea, _tilePlacementIsRoof);
         }
     } else {

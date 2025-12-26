@@ -31,7 +31,7 @@ public:
             _stream = StreamBuffer(data);
             this->_path = filename;
             _binaryUtils = std::make_unique<BinaryUtils>(_stream, _path);
-            
+
             spdlog::debug("Opening file from data: {}", filename.string());
             return read();
         } catch (const std::exception& e) {
@@ -51,7 +51,7 @@ public:
             _stream = StreamBuffer(stream, _endianness);
             this->_path = path;
             _binaryUtils = std::make_unique<BinaryUtils>(_stream, _path);
-            
+
             spdlog::debug("Opening file: {}", path.string());
             return read();
         } catch (const FileReaderException&) {
@@ -66,11 +66,11 @@ public:
     void setPreserveAllData(bool preserve) { _preserveAllData = preserve; }
     bool getPreserveAllData() const { return _preserveAllData; }
 
-    BinaryUtils& getBinaryUtils() { 
+    BinaryUtils& getBinaryUtils() {
         if (!_binaryUtils) {
             throw std::runtime_error("BinaryUtils not initialized - call openFile first");
         }
-        return *_binaryUtils; 
+        return *_binaryUtils;
     }
 
     inline uint32_t read_u8() {
@@ -128,7 +128,6 @@ protected:
             throw ParseException("Attempt to read beyond end of file", _path, _stream.position());
         }
     }
-
 };
 
 } // namespace geck

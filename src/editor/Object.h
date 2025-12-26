@@ -61,7 +61,7 @@ public:
     void select();
     void unselect();
     [[nodiscard]] bool isSelected() const noexcept;
-    
+
     // Light overlay methods
     void setShowLightOverlay(bool show);
     [[nodiscard]] bool isShowingLightOverlay() const noexcept { return _showLightOverlay; }

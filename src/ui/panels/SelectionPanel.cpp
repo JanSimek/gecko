@@ -1,5 +1,6 @@
 #include "SelectionPanel.h"
 #include "../dialogs/FrmSelectorDialog.h"
+#include "../theme/ThemeManager.h"
 
 #include <QFormLayout>
 #include <QPixmap>
@@ -29,7 +30,8 @@ namespace geck {
 // Custom delegate for editing amount column with spinbox
 class SelectionPanel::AmountDelegate : public QStyledItemDelegate {
 public:
-    AmountDelegate(QObject* parent = nullptr) : QStyledItemDelegate(parent) {}
+    AmountDelegate(QObject* parent = nullptr)
+        : QStyledItemDelegate(parent) { }
 
     QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
         Q_UNUSED(option)
@@ -61,7 +63,8 @@ public:
 };
 
 // Implementation of HoverSpriteLabel
-HoverSpriteLabel::HoverSpriteLabel(QWidget* parent) : QLabel(parent) {
+HoverSpriteLabel::HoverSpriteLabel(QWidget* parent)
+    : QLabel(parent) {
     setMouseTracking(true);
     setupEditButton();
 }
@@ -71,20 +74,7 @@ void HoverSpriteLabel::setupEditButton() {
     _editButton->setIcon(createIcon(":/icons/actions/edit.svg"));
     _editButton->setToolTip("Change FRM file");
     _editButton->setFixedSize(24, 24);
-    _editButton->setStyleSheet(
-        "QPushButton {"
-        "  background-color: rgba(255, 255, 255, 180);"
-        "  border: 1px solid rgba(0, 0, 0, 100);"
-        "  border-radius: 12px;"
-        "}"
-        "QPushButton:hover {"
-        "  background-color: rgba(255, 255, 255, 220);"
-        "  border-color: rgba(0, 0, 0, 150);"
-        "}"
-        "QPushButton:pressed {"
-        "  background-color: rgba(255, 255, 255, 255);"
-        "}"
-    );
+    _editButton->setStyleSheet(ui::theme::styles::overlayButton());
     _editButton->setIconSize(QSize(18, 18));
     _editButton->setVisible(false); // Hidden by default
     _editButton->raise();
@@ -113,7 +103,8 @@ void HoverSpriteLabel::resizeEvent(QResizeEvent* event) {
 }
 
 void HoverSpriteLabel::positionEditButton() {
-    if (!_editButton) return;
+    if (!_editButton)
+        return;
 
     // Position in top-left corner with small margin
     QPoint topLeft = rect().topLeft();
@@ -124,7 +115,6 @@ void HoverSpriteLabel::positionEditButton() {
 }
 
 // Static constants
-const QColor SelectionPanel::HIGHLIGHT_COLOR = QColor(0, 255, 0, 100); // Semi-transparent green
 const int SelectionPanel::ICON_SIZE = 96; // Larger icons than the separate panel
 const int SelectionPanel::MAX_QUANTITY_DISPLAY = 99;
 
@@ -230,7 +220,7 @@ void SelectionPanel::setupUI() {
     _hoverSpriteLabel->setMaximumWidth(128);
     _hoverSpriteLabel->setScaledContents(false);
     _hoverSpriteLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    _hoverSpriteLabel->setStyleSheet("border: 1px solid gray; background-color: #f0f0f0;");
+    _hoverSpriteLabel->setStyleSheet(ui::theme::styles::previewArea());
 
     // Connect the edit button signal
     connect(_hoverSpriteLabel->editButton(), &QPushButton::clicked, this, &SelectionPanel::onChangeFrmClicked);
@@ -278,14 +268,14 @@ void SelectionPanel::setupUI() {
     _objectProtoPidSpin->setReadOnly(true);
     _objectProtoPidSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
     objectFormLayout->addRow("Proto PID:", _objectProtoPidSpin);
-    
+
     // FRM PID field
     _objectFrmPidSpin = new QSpinBox();
     _objectFrmPidSpin->setRange(0, INT_MAX);
     _objectFrmPidSpin->setReadOnly(true);
     _objectFrmPidSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
     objectFormLayout->addRow("FRM PID:", _objectFrmPidSpin);
-    
+
     // FRM Path display
     _objectFrmPathEdit = new QLineEdit();
     _objectFrmPathEdit->setReadOnly(true);
@@ -294,7 +284,7 @@ void SelectionPanel::setupUI() {
 
     // Change FRM button is now the hover edit icon on the sprite
     _changeFrmButton = nullptr;
-    
+
     // Edit Exit Grid button
     _editExitGridButton = new QPushButton("Edit Exit Grid...");
     _editExitGridButton->setEnabled(false);
@@ -330,7 +320,7 @@ void SelectionPanel::setupUI() {
     _tilePreviewLabel->setMaximumWidth(128);
     _tilePreviewLabel->setScaledContents(false);
     _tilePreviewLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    _tilePreviewLabel->setStyleSheet("border: 1px solid gray; background-color: #f0f0f0;");
+    _tilePreviewLabel->setStyleSheet(ui::theme::styles::previewArea());
     tileFormLayout->addRow("Preview:", _tilePreviewLabel);
 
     // Tile type (Floor/Roof)
@@ -489,21 +479,21 @@ void SelectionPanel::updateObjectInfo() {
             _objectMessageIdSpin->setValue(static_cast<int>(pro->header.message_id));
             _objectPositionSpin->setValue(selectedMapObject.position);
             _objectProtoPidSpin->setValue(static_cast<int>(selectedMapObject.pro_pid));
-            
+
             // Update FRM information
             _objectFrmPidSpin->setValue(static_cast<int>(selectedMapObject.frm_pid));
-            
+
             // Determine which FRM is actually being used
             uint32_t activeFrmPid = selectedMapObject.frm_pid != 0 ? selectedMapObject.frm_pid : pro->header.FID;
             std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(activeFrmPid);
             _objectFrmPathEdit->setText(QString::fromStdString(frmPath));
-            
+
             // Enable the change FRM button (edit icon)
             _hoverSpriteLabel->editButton()->setEnabled(true);
-            
+
             // Enable the edit PRO button
             _editProButton->setEnabled(true);
-            
+
             // Show/hide and enable exit grid button based on object type
             if (selectedMapObject.isExitGridMarker()) {
                 _editExitGridButton->setVisible(true);
@@ -512,7 +502,6 @@ void SelectionPanel::updateObjectInfo() {
                 _editExitGridButton->setVisible(false);
                 _editExitGridButton->setEnabled(false);
             }
-            
 
             // Convert SFML sprite to QPixmap for display
             const auto& sprite = _selectedObject.value()->getSprite();
@@ -570,14 +559,14 @@ void geck::SelectionPanel::updateTileInfo() {
     try {
         // Get the actual tile data from the map
         auto& mapFile = _map->getMapFile();
-        
+
         // Check if the selected elevation exists in the map data
         if (mapFile.tiles.find(_selectedElevation) == mapFile.tiles.end()) {
             spdlog::warn("SelectionPanel::updateTileInfo: Selected elevation {} does not exist in map data", _selectedElevation);
             clearTileInfo();
             return;
         }
-        
+
         auto& tile = mapFile.tiles.at(_selectedElevation).at(_selectedTileIndex);
 
         // Calculate hex coordinates from tile index
@@ -652,10 +641,10 @@ void geck::SelectionPanel::clearObjectInfo() {
     _objectPositionSpin->setValue(0);
     _objectProtoPidSpin->setValue(0);
     _objectFrmPidSpin->setValue(0);
-    
+
     _objectFrmPathEdit->clear();
     _objectFrmPathEdit->setPlaceholderText("FRM path");
-    
+
     _hoverSpriteLabel->editButton()->setEnabled(false);
     _editProButton->setEnabled(false);
     _editExitGridButton->setEnabled(false);
@@ -799,23 +788,23 @@ void SelectionPanel::onChangeFrmClicked() {
     }
 
     auto& mapObject = _selectedObject.value()->getMapObject();
-    
+
     // Create and show FRM selector dialog
     FrmSelectorDialog dialog(this);
-    
+
     // Set the current FRM PID as initial selection
     uint32_t currentFrmPid = mapObject.frm_pid != 0 ? mapObject.frm_pid : mapObject.pro_pid;
     dialog.setInitialFrmPid(currentFrmPid);
-    
+
     // Set object type filter - extract type from current FRM PID
     uint32_t objectType = (currentFrmPid >> 24) & 0xFF;
     dialog.setObjectTypeFilter(objectType);
     spdlog::info("SelectionPanel: Filtering FRM dialog by object type: {}", objectType);
-    
+
     if (dialog.exec() == QDialog::Accepted) {
         uint32_t newFrmPid = dialog.getSelectedFrmPid();
         std::string newFrmPath = dialog.getSelectedFrmPath();
-        
+
         if (!newFrmPath.empty()) {
             // Validate that the FRM file actually exists before attempting the change
             try {
@@ -829,33 +818,33 @@ void SelectionPanel::onChangeFrmClicked() {
                 spdlog::error("SelectionPanel: Failed to validate FRM file {}: {} - aborting change", newFrmPath, e.what());
                 return;
             }
-            
+
             // Always update the visual representation using the path first
             emit objectFrmPathChanged(_selectedObject.value(), newFrmPath);
-            
+
             // Try to update MapObject's frm_pid if we have a valid derived FID
             if (newFrmPid != 0) {
                 // Check if this is a custom FID (has 0xFF in high byte of baseId)
                 bool isCustomFid = ((newFrmPid & 0x00FF0000) == 0x00FF0000);
-                
+
                 if (newFrmPid != currentFrmPid) {
                     if (isCustomFid) {
                         // Custom FID - visual will work in editor but may not persist in game
                         spdlog::warn("SelectionPanel: Using custom FID 0x{:08X} for non-LST FRM - may not work in game", newFrmPid);
-                        
+
                         // For custom FIDs, we'll update the visual but keep original frm_pid for game compatibility
                         // This allows the editor to show the new FRM while maintaining game compatibility
                         spdlog::info("SelectionPanel: Keeping original frm_pid {} for game compatibility, visual uses custom FRM", currentFrmPid);
-                        
+
                         // Show warning to user
                         emit statusMessage(QString("Warning: Custom FRM may not display correctly in game"));
                     } else {
                         // Valid LST-based FID, safe to update
                         mapObject.frm_pid = newFrmPid;
-                        spdlog::info("SelectionPanel: Updated MapObject frm_pid from {} to {} for persistent save", 
-                                    currentFrmPid, newFrmPid);
+                        spdlog::info("SelectionPanel: Updated MapObject frm_pid from {} to {} for persistent save",
+                            currentFrmPid, newFrmPid);
                     }
-                    
+
                     // Refresh the object info display to show updated FRM PID
                     updateObjectInfo();
                 } else {
@@ -865,38 +854,38 @@ void SelectionPanel::onChangeFrmClicked() {
                 }
             } else {
                 // For paths that don't have reliable FIDs, we need to be more careful
-                spdlog::warn("SelectionPanel: Could not derive reliable FID for path: {} - using alternative approach", 
-                            newFrmPath);
-                
+                spdlog::warn("SelectionPanel: Could not derive reliable FID for path: {} - using alternative approach",
+                    newFrmPath);
+
                 // IMPORTANT: The FRM might be valid but just not in the LST file
                 // In this case, we should still try to use it by keeping the visual change
                 // but warning the user about potential game compatibility issues
-                
+
                 // Extract just the filename for analysis
                 size_t lastSlash = newFrmPath.find_last_of('/');
                 std::string filename = (lastSlash != std::string::npos) ? newFrmPath.substr(lastSlash + 1) : newFrmPath;
-                
+
                 // For critters, we have a special case - many FRMs work in-game even if not in LST
                 if ((currentFrmPid >> 24) == 1) { // Critter type
                     // Try to find a similar base in the LST file
                     // For example, "hanpwraa.frm" might work if "hapowr" is in the LST
-                    
+
                     // Keep the visual change but warn about compatibility
                     spdlog::warn("SelectionPanel: FRM '{}' not found in critters.lst - change may not persist in game", filename);
                     spdlog::info("SelectionPanel: Keeping original FRM PID ({}) for game compatibility", currentFrmPid);
-                    
+
                     // Show warning to user
                     emit statusMessage(QString("Warning: FRM '%1' may not display correctly in game - not found in critters.lst")
-                                     .arg(QString::fromStdString(filename)));
+                            .arg(QString::fromStdString(filename)));
                 }
-                
+
                 // Update the FRM path display
                 _objectFrmPathEdit->setText(QString::fromStdString(newFrmPath));
                 updateObjectInfo();
             }
-            
+
             spdlog::info("SelectionPanel: Changed object FRM visual to path: {}", newFrmPath);
-            
+
             // Ensure the object remains selected and highlighted after FRM change
             if (_selectedObject.has_value() && _selectedObject.value()) {
                 // Use a single-shot timer to delay the highlight request
@@ -915,7 +904,7 @@ void SelectionPanel::onEditProClicked() {
     if (!_selectedObject || !_selectedObject.value()) {
         return;
     }
-    
+
     // Emit signal to request PRO editor for the selected object
     emit requestProEditor(_selectedObject.value());
 }
@@ -924,11 +913,10 @@ void SelectionPanel::onEditExitGridClicked() {
     if (!_selectedObject || !_selectedObject.value()) {
         return;
     }
-    
+
     // Emit signal to request exit grid editor for the selected object
     emit requestExitGridEditor(_selectedObject.value());
 }
-
 
 void SelectionPanel::onAddInventoryClicked() {
     // TODO: Implement add inventory item functionality
@@ -963,7 +951,7 @@ void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
         // Update the icon with new quantity overlay
         QPixmap iconWithQuantity = getItemIconWithQuantity(pid, newAmount);
         spdlog::debug("SelectionPanel::onInventoryItemChanged: Updating icon for PID {} with size {}x{}",
-                     pid, iconWithQuantity.width(), iconWithQuantity.height());
+            pid, iconWithQuantity.width(), iconWithQuantity.height());
 
         // Create QIcon explicitly with the correct size to avoid scaling issues
         QIcon icon;
@@ -983,8 +971,7 @@ void SelectionPanel::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
 
     // Check if we should switch to horizontal layout
-    bool shouldUseHorizontal = (width() >= HORIZONTAL_LAYOUT_MIN_WIDTH &&
-                                _inventoryGroup && _inventoryGroup->isVisible());
+    bool shouldUseHorizontal = (width() >= HORIZONTAL_LAYOUT_MIN_WIDTH && _inventoryGroup && _inventoryGroup->isVisible());
 
     if (shouldUseHorizontal != _isHorizontalLayout) {
         switchLayout(shouldUseHorizontal);
@@ -1020,8 +1007,8 @@ void SelectionPanel::applyHorizontalLayout() {
     leftLayout->addStretch();
 
     // Add widgets to horizontal layout
-    hLayout->addWidget(leftSide, 1);  // Object info takes 1 part
-    hLayout->addWidget(_inventoryGroup, 1);  // Inventory takes 1 part (50/50 split)
+    hLayout->addWidget(leftSide, 1);        // Object info takes 1 part
+    hLayout->addWidget(_inventoryGroup, 1); // Inventory takes 1 part (50/50 split)
 
     // Replace the content in object panel
     QLayout* oldLayout = _objectPanelWidget->layout();
@@ -1070,7 +1057,7 @@ void SelectionPanel::setupInventorySection() {
 
     // Create inventory tree widget
     _inventoryTree = new QTreeWidget();
-    _inventoryTree->setHeaderLabels({"", "Name", "Type", "Amount"});
+    _inventoryTree->setHeaderLabels({ "", "Name", "Type", "Amount" });
     _inventoryTree->setColumnWidth(COLUMN_ICON, ICON_SIZE + 20);
     _inventoryTree->setColumnWidth(COLUMN_NAME, 150);
     _inventoryTree->setColumnWidth(COLUMN_TYPE, 100);
@@ -1135,9 +1122,7 @@ void SelectionPanel::updateInventorySection() {
     try {
         auto pro = ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(mapObject->pro_pid));
         if (pro) {
-            bool hasInventory = (pro->type() == Pro::OBJECT_TYPE::ITEM &&
-                               pro->itemType() == Pro::ITEM_TYPE::CONTAINER) ||
-                              pro->type() == Pro::OBJECT_TYPE::CRITTER;
+            bool hasInventory = (pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::CONTAINER) || pro->type() == Pro::OBJECT_TYPE::CRITTER;
 
             _inventoryGroup->setVisible(hasInventory);
 
@@ -1184,10 +1169,11 @@ void SelectionPanel::populateInventoryTree() {
     spdlog::debug("SelectionPanel::populateInventoryTree: Found {} inventory items", mapObject->inventory.size());
     // Populate tree with inventory items using the MapObject's inventory vector
     for (const auto& inventoryItem : mapObject->inventory) {
-        if (!inventoryItem) continue;
+        if (!inventoryItem)
+            continue;
 
         spdlog::debug("SelectionPanel::populateInventoryTree: Processing inventory item with PID {}, amount {}",
-                     inventoryItem->pro_pid, inventoryItem->amount);
+            inventoryItem->pro_pid, inventoryItem->amount);
         QTreeWidgetItem* item = new QTreeWidgetItem(_inventoryTree);
 
         // Set all text data first
@@ -1207,7 +1193,7 @@ void SelectionPanel::populateInventoryTree() {
         // Set icon with quantity overlay AFTER all other data is set
         QPixmap iconWithQuantity = getItemIconWithQuantity(inventoryItem->pro_pid, inventoryItem->amount);
         spdlog::debug("SelectionPanel::populateInventoryTree: Setting icon for PID {} with size {}x{}",
-                     inventoryItem->pro_pid, iconWithQuantity.width(), iconWithQuantity.height());
+            inventoryItem->pro_pid, iconWithQuantity.width(), iconWithQuantity.height());
 
         // Create QIcon explicitly with the correct size to avoid scaling issues
         QIcon icon;
@@ -1285,7 +1271,7 @@ QPixmap SelectionPanel::addQuantityOverlay(const QPixmap& baseIcon, int amount) 
     int textY = ICON_SIZE - 4;
 
     // Draw text outline (black)
-    QPen outlinePen(Qt::black, 2);
+    QPen outlinePen(ui::theme::colors::textDark(), 2);
     painter.setPen(outlinePen);
     for (int dx = -1; dx <= 1; dx++) {
         for (int dy = -1; dy <= 1; dy++) {
@@ -1296,7 +1282,7 @@ QPixmap SelectionPanel::addQuantityOverlay(const QPixmap& baseIcon, int amount) 
     }
 
     // Draw main text (bright green)
-    QPen textPen(QColor(50, 255, 50));
+    QPen textPen(ui::theme::colors::quantityText());
     painter.setPen(textPen);
     painter.drawText(textX, textY, quantityText);
 
@@ -1331,21 +1317,35 @@ QString SelectionPanel::getItemTypeName(uint32_t pid) const {
             switch (pro->type()) {
                 case Pro::OBJECT_TYPE::ITEM:
                     switch (pro->itemType()) {
-                        case Pro::ITEM_TYPE::ARMOR: return "Armor";
-                        case Pro::ITEM_TYPE::CONTAINER: return "Container";
-                        case Pro::ITEM_TYPE::DRUG: return "Drug";
-                        case Pro::ITEM_TYPE::WEAPON: return "Weapon";
-                        case Pro::ITEM_TYPE::AMMO: return "Ammo";
-                        case Pro::ITEM_TYPE::MISC: return "Misc";
-                        case Pro::ITEM_TYPE::KEY: return "Key";
-                        default: return "Item";
+                        case Pro::ITEM_TYPE::ARMOR:
+                            return "Armor";
+                        case Pro::ITEM_TYPE::CONTAINER:
+                            return "Container";
+                        case Pro::ITEM_TYPE::DRUG:
+                            return "Drug";
+                        case Pro::ITEM_TYPE::WEAPON:
+                            return "Weapon";
+                        case Pro::ITEM_TYPE::AMMO:
+                            return "Ammo";
+                        case Pro::ITEM_TYPE::MISC:
+                            return "Misc";
+                        case Pro::ITEM_TYPE::KEY:
+                            return "Key";
+                        default:
+                            return "Item";
                     }
-                case Pro::OBJECT_TYPE::CRITTER: return "Critter";
-                case Pro::OBJECT_TYPE::SCENERY: return "Scenery";
-                case Pro::OBJECT_TYPE::WALL: return "Wall";
-                case Pro::OBJECT_TYPE::TILE: return "Tile";
-                case Pro::OBJECT_TYPE::MISC: return "Misc";
-                default: return "Unknown";
+                case Pro::OBJECT_TYPE::CRITTER:
+                    return "Critter";
+                case Pro::OBJECT_TYPE::SCENERY:
+                    return "Scenery";
+                case Pro::OBJECT_TYPE::WALL:
+                    return "Wall";
+                case Pro::OBJECT_TYPE::TILE:
+                    return "Tile";
+                case Pro::OBJECT_TYPE::MISC:
+                    return "Misc";
+                default:
+                    return "Unknown";
             }
         }
         return "Unknown";
@@ -1404,7 +1404,7 @@ QPixmap SelectionPanel::getItemIcon(uint32_t pid) const {
 
         // Extract just the first frame based on frame dimensions
         QImage fullImage(reinterpret_cast<const uchar*>(image.getPixelsPtr()),
-                        image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
+            image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
 
         // Extract the first frame (assuming frames are laid out horizontally)
         QImage frameImage = fullImage.copy(0, 0, frame.width(), frame.height());
@@ -1422,8 +1422,8 @@ QPixmap SelectionPanel::getItemIcon(uint32_t pid) const {
 
         // Scale and center the frame in the fixed-size icon
         QPixmap scaledPixmap = framePixmap.scaled(ICON_SIZE, ICON_SIZE,
-                                                  Qt::KeepAspectRatio,
-                                                  Qt::SmoothTransformation);
+            Qt::KeepAspectRatio,
+            Qt::SmoothTransformation);
         int x = (ICON_SIZE - scaledPixmap.width()) / 2;
         int y = (ICON_SIZE - scaledPixmap.height()) / 2;
         painter.drawPixmap(x, y, scaledPixmap);
@@ -1446,14 +1446,14 @@ QPixmap SelectionPanel::createPlaceholderIcon() const {
     QPainter painter(&placeholder);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(QPen(Qt::darkGray, 2));
-    painter.drawRect(1, 1, ICON_SIZE-3, ICON_SIZE-3);
+    painter.drawRect(1, 1, ICON_SIZE - 3, ICON_SIZE - 3);
 
     // Draw question mark
     QFont font = painter.font();
     font.setPointSize(ICON_SIZE / 4);
     font.setBold(true);
     painter.setFont(font);
-    painter.setPen(Qt::black);
+    painter.setPen(ui::theme::colors::textDark());
     painter.drawText(placeholder.rect(), Qt::AlignCenter, "?");
 
     return placeholder;

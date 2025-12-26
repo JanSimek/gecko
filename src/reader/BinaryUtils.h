@@ -16,22 +16,23 @@ namespace geck {
 class BinaryUtils {
 public:
     explicit BinaryUtils(StreamBuffer& stream, const std::filesystem::path& filePath)
-        : _stream(stream), _filePath(filePath) {}
+        : _stream(stream)
+        , _filePath(filePath) { }
 
-    template<typename T>
+    template <typename T>
     std::vector<T> readArray(size_t count) {
         std::vector<T> result;
         result.reserve(count);
-        
+
         for (size_t i = 0; i < count; ++i) {
             result.push_back(readValue<T>());
         }
-        
+
         spdlog::trace("Read array of {} elements (type size: {})", count, sizeof(T));
         return result;
     }
 
-    template<size_t N>
+    template <size_t N>
     std::array<uint32_t, N> readFixedArray() {
         std::array<uint32_t, N> result;
         for (size_t i = 0; i < N; ++i) {
@@ -44,13 +45,13 @@ public:
     std::string readFixedString(size_t length) {
         validatePosition(length);
         std::string result = _stream.readString(length);
-        
+
         // Remove null terminators and trim
         auto nullPos = result.find('\0');
         if (nullPos != std::string::npos) {
             result = result.substr(0, nullPos);
         }
-        
+
         spdlog::trace("Read fixed string of length {}: '{}'", length, result);
         return result;
     }
@@ -58,28 +59,28 @@ public:
     std::string readNullTerminatedString() {
         std::string result;
         char c;
-        
+
         while (true) {
             validatePosition(1);
             c = static_cast<char>(_stream.uint8());
-            
+
             if (c == '\0') {
                 break;
             }
             result += c;
         }
-        
+
         spdlog::trace("Read null-terminated string: '{}'", result);
         return result;
     }
 
     void skipWithLog(size_t bytes, const std::string& description) {
         validatePosition(bytes);
-        
+
         for (size_t i = 0; i < bytes; ++i) {
             _stream.uint8();
         }
-        
+
         ReaderDiagnostics::trackRead(bytes, "skip: " + description);
         spdlog::debug("Skipped {} bytes: {}", bytes, description);
     }
@@ -104,11 +105,10 @@ public:
         return static_cast<int32_t>(readBE32());
     }
 
-    template<typename T>
+    template <typename T>
     void skipArray(size_t count, const std::string& description = "") {
         size_t totalBytes = count * sizeof(T);
-        skipWithLog(totalBytes, description.empty() ? 
-            "Array of " + std::to_string(count) + " elements" : description);
+        skipWithLog(totalBytes, description.empty() ? "Array of " + std::to_string(count) + " elements" : description);
     }
 
     struct Position {
@@ -118,7 +118,7 @@ public:
     };
 
     Position getPosition() const {
-        return {_stream.position(), _stream.size()};
+        return { _stream.position(), _stream.size() };
     }
 
     size_t bytesRemaining() const {
@@ -143,7 +143,7 @@ private:
         }
     }
 
-    template<typename T>
+    template <typename T>
     T readValue() {
         if constexpr (sizeof(T) == 1) {
             return static_cast<T>(readU8());
@@ -158,7 +158,7 @@ private:
 };
 
 // Helper class for structured field reading with optional preservation
-template<typename T>
+template <typename T>
 class StructuredReader {
 private:
     BinaryUtils& _utils;
@@ -168,13 +168,15 @@ private:
 
 public:
     StructuredReader(BinaryUtils& utils, T* object, bool preserveAll = false)
-        : _utils(utils), _object(object), _preserveAll(preserveAll) {}
+        : _utils(utils)
+        , _object(object)
+        , _preserveAll(preserveAll) { }
 
-    template<typename FieldType>
-    StructuredReader& readField(FieldType T::*field, const std::string& name = "") {
+    template <typename FieldType>
+    StructuredReader& readField(FieldType T::* field, const std::string& name = "") {
         auto value = _utils.readValue<FieldType>();
         _object->*field = value;
-        
+
         if (!name.empty()) {
             spdlog::trace("Read field '{}': {}", name, value);
         }

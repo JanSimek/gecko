@@ -14,7 +14,7 @@ class Msg;
 
 /**
  * @brief Dialog for selecting messages from MSG files
- * 
+ *
  * Displays all available messages from a MSG file and allows
  * the user to select one. Shows message ID and text content.
  */
@@ -35,11 +35,11 @@ private slots:
 private:
     void setupUI();
     void populateMessages();
-    
+
     const Msg* _msgFile;
     int _currentMessageId;
     int _selectedMessageId;
-    
+
     // UI Components
     QVBoxLayout* _mainLayout;
     QLabel* _titleLabel;

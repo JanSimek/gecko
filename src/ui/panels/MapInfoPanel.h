@@ -62,6 +62,7 @@ private:
     void clearMapInfo();
     void updateMapScriptsDisplay();
     void updateElevationCheckboxStates();
+    void setElevationCheckboxesBlocked(bool blocked);
 
     QVBoxLayout* _mainLayout;
     QScrollArea* _scrollArea;
@@ -72,7 +73,7 @@ private:
     QGroupBox* _mapHeaderGroup;
     QLineEdit* _filenameEdit;
     QCheckBox* _elevation1Check;
-    QCheckBox* _elevation2Check; 
+    QCheckBox* _elevation2Check;
     QCheckBox* _elevation3Check;
     QSpinBox* _playerPositionSpin;
     QPushButton* _setPositionButton;

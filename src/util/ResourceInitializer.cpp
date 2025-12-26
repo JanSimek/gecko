@@ -10,7 +10,7 @@ namespace geck {
 
 void ResourceInitializer::loadEssentialLstFiles() {
     auto& resourceManager = ResourceManager::getInstance();
-    
+
     try {
         // Load all LST files needed for FID to FRM name resolution
         // These correspond to the frmTypeDescription array in ResourceManager::FIDtoFrmName
@@ -29,7 +29,7 @@ void ResourceInitializer::loadEssentialLstFiles() {
         loadLst(ResourcePaths::Lst::MISC);
         loadLst(ResourcePaths::Lst::INTERFACE);
         loadLst(ResourcePaths::Lst::INVENTORY);
-        
+
         spdlog::info("ResourceInitializer: Loaded all essential LST files");
     } catch (const std::exception& e) {
         spdlog::error("ResourceInitializer: Failed to load essential LST files: {}", e.what());
@@ -39,7 +39,7 @@ void ResourceInitializer::loadEssentialLstFiles() {
 
 void ResourceInitializer::loadEssentialTextures() {
     auto& resourceManager = ResourceManager::getInstance();
-    
+
     try {
         // Load essential textures for map display and object visualization
         resourceManager.insertTexture(ResourcePaths::Frm::BLANK_TILE);
@@ -48,7 +48,7 @@ void ResourceInitializer::loadEssentialTextures() {
         resourceManager.insertTexture(ResourcePaths::Frm::WALL_BLOCK);
         resourceManager.insertTexture(ResourcePaths::Frm::WALL_BLOCK_FULL);
         resourceManager.insertTexture(ResourcePaths::Frm::EXIT_GRID);
-        
+
         spdlog::info("ResourceInitializer: Loaded all essential textures");
     } catch (const std::exception& e) {
         spdlog::error("ResourceInitializer: Failed to load essential textures: {}", e.what());
@@ -60,7 +60,7 @@ void ResourceInitializer::loadEssentialResources() {
     try {
         loadEssentialTextures();
         loadEssentialLstFiles();
-        
+
         spdlog::info("ResourceInitializer: Loaded all essential resources");
     } catch (const std::exception& e) {
         spdlog::error("ResourceInitializer: Failed to load essential resources: {}", e.what());

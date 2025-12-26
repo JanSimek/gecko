@@ -5,6 +5,7 @@
 #include "../../util/Constants.h"
 #include "../../util/ColorUtils.h"
 #include "../common/BaseWidget.h"
+#include "../theme/ThemeManager.h"
 #include "../../selection/SelectionManager.h"
 
 #include <QPainter>
@@ -49,12 +50,11 @@ void TilePalettePanel::setupUI() {
 
     // Status label
     _statusLabel = new QLabel("No tiles loaded", this);
-    _statusLabel->setStyleSheet("color: gray; font-style: italic;");
+    _statusLabel->setStyleSheet(ui::theme::styles::italicSecondaryText());
     _mainLayout->addWidget(_statusLabel);
 
     _mainLayout->addStretch(); // Push everything to top
 }
-
 
 void TilePalettePanel::setupModeControls() {
     _modeGroup = new QGroupBox("Tile Painting", this);
@@ -63,20 +63,20 @@ void TilePalettePanel::setupModeControls() {
     // Floor/Roof mode selection
     auto* layerModeLayout = new QHBoxLayout();
     layerModeLayout->addWidget(new QLabel("Layer:", this));
-    
+
     _floorModeButton = new QRadioButton("Floor", this);
     _roofModeButton = new QRadioButton("Roof", this);
     _floorModeButton->setChecked(true); // Default to floor mode
-    
+
     layerModeLayout->addWidget(_floorModeButton);
     layerModeLayout->addWidget(_roofModeButton);
     layerModeLayout->addStretch();
-    
+
     modeLayout->addLayout(layerModeLayout);
 
     _placementModeLabel = new QLabel(this);
     _placementModeLabel->setText("Select a tile to paint:\n• Single click: Place one tile\n• Click and drag: Fill area with tiles\n• Auto-replace selected tiles\n• Escape or click selected tile to deselect");
-    _placementModeLabel->setStyleSheet("color: #666; font-size: 11px;");
+    _placementModeLabel->setStyleSheet(ui::theme::styles::smallLabel());
     _placementModeLabel->setWordWrap(true);
 
     modeLayout->addWidget(_placementModeLabel);
@@ -87,7 +87,7 @@ void TilePalettePanel::setupModeControls() {
             setRoofMode(false);
         }
     });
-    
+
     connect(_roofModeButton, &QRadioButton::toggled, this, [this](bool checked) {
         if (checked) {
             setRoofMode(true);
@@ -200,7 +200,7 @@ void TilePalettePanel::updateTileGrid() {
     if (!_tileList) {
         return;
     }
-    
+
     // Recalculate optimal columns based on current panel width
     int newColumnsPerRow = calculateOptimalColumnsPerRow();
     if (newColumnsPerRow != _tilesPerRow) {
@@ -223,7 +223,7 @@ void TilePalettePanel::updateTileGrid() {
 
     // Calculate pagination for filtered tiles
     calculatePagination();
-    
+
     // Skip to the current page within filtered results
     int filteredIndex = 0;
     int targetStartIndex = _currentPage * TILES_PER_PAGE;
@@ -248,7 +248,7 @@ void TilePalettePanel::updateTileGrid() {
                 continue; // Skip tiles that don't match search
             }
         }
-        
+
         // Check if this filtered tile is in the current page range
         if (filteredIndex < targetStartIndex) {
             filteredIndex++;
@@ -288,11 +288,11 @@ void TilePalettePanel::updateTileGrid() {
 
                 // Draw tile index and filename
                 QPainter painter(&tilePixmap);
-                painter.setPen(Qt::white);
-                painter.setFont(QFont("Arial", 8));
+                painter.setPen(ui::theme::colors::textLight());
+                painter.setFont(ui::theme::fonts::compact());
                 painter.drawText(QRect(0, 0, TileWidget::TILE_SIZE, TileWidget::TILE_SIZE / 2),
                     Qt::AlignCenter, QString::number(i));
-                painter.setFont(QFont("Arial", 6));
+                painter.setFont(ui::theme::fonts::tiny());
                 painter.drawText(QRect(0, TileWidget::TILE_SIZE / 2, TileWidget::TILE_SIZE, TileWidget::TILE_SIZE / 2),
                     Qt::AlignCenter, QString::fromStdString(tileName).left(8));
             }
@@ -318,7 +318,7 @@ void TilePalettePanel::updateTileGrid() {
         } catch (const std::exception& e) {
             spdlog::warn("TilePalettePanel: Failed to load tile {}: {}", tileName, e.what());
         }
-        
+
         filteredIndex++; // Move to next filtered tile
     }
 
@@ -346,7 +346,7 @@ void TilePalettePanel::updateTileGrid() {
         statusText = "No tiles to display";
     }
     _statusLabel->setText(statusText);
-    
+
     updatePaginationControls();
 
     spdlog::info("TilePalettePanel: Loaded {} tile widgets", tilesLoaded);
@@ -355,7 +355,7 @@ void TilePalettePanel::updateTileGrid() {
 void TilePalettePanel::filterTiles() {
     _filterStart = _startTileSpinBox->value();
     _filterEnd = _endTileSpinBox->value();
-    
+
     // Reset to first page when filter changes
     _currentPage = 0;
     calculatePagination();
@@ -364,7 +364,7 @@ void TilePalettePanel::filterTiles() {
 
 void TilePalettePanel::onSearchTextChanged(const QString& text) {
     _searchText = text.trimmed();
-    
+
     // Reset to first page when search changes
     _currentPage = 0;
     calculatePagination();
@@ -390,7 +390,7 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
     _selectedTileIndex = tileIndex;
 
     // Update visual selection
-    auto it = std::ranges::find_if(_tileWidgets, 
+    auto it = std::ranges::find_if(_tileWidgets,
         [tileIndex](const auto& widget) { return widget->getTileIndex() == tileIndex; });
     if (it != _tileWidgets.end()) {
         (*it)->setSelected(true);
@@ -403,7 +403,7 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
         // Clear the existing selection first
         _selectionManager->clearSelection();
     }
-    
+
     // Enable tile placement mode for painting individual tiles
     emit tileSelected(tileIndex, _isRoofMode);
 }
@@ -425,11 +425,11 @@ void TilePalettePanel::deselectTile() {
 void TilePalettePanel::setRoofMode(bool isRoof) {
     if (_isRoofMode != isRoof) {
         _isRoofMode = isRoof;
-        
+
         // Update radio button states
         _floorModeButton->setChecked(!isRoof);
         _roofModeButton->setChecked(isRoof);
-        
+
         // If a tile is currently selected, re-emit the signal with new roof state
         if (_selectedTileIndex >= 0) {
             emit tileSelected(_selectedTileIndex, _isRoofMode);
@@ -454,26 +454,25 @@ void TilePalettePanel::setPlacementMode(PlacementMode mode) {
     }
 }
 
-
-
 void TilePalettePanel::calculatePagination() {
     if (!_tileList) {
         _totalPages = 0;
         _totalFilteredTiles = 0;
         return;
     }
-    
+
     const auto& tiles = _tileList->list();
     int startIndex = _filterStart;
     int endIndex = (_filterEnd >= 0) ? std::min(_filterEnd, static_cast<int>(tiles.size()) - 1)
                                      : static_cast<int>(tiles.size()) - 1;
-    
+
     // Count tiles that match current filters
     int filteredCount = 0;
     for (int i = startIndex; i <= endIndex && i < static_cast<int>(tiles.size()); ++i) {
         // Skip reserved tiles
-        if (i < 2) continue;
-        
+        if (i < 2)
+            continue;
+
         // Apply search filter if set
         if (!_searchText.isEmpty()) {
             const std::string& tileName = tiles[i];
@@ -484,17 +483,17 @@ void TilePalettePanel::calculatePagination() {
         }
         filteredCount++;
     }
-    
+
     _totalFilteredTiles = filteredCount;
     _totalPages = (filteredCount + TILES_PER_PAGE - 1) / TILES_PER_PAGE; // Ceiling division
-    
+
     // Ensure current page is valid
     if (_currentPage >= _totalPages) {
         _currentPage = std::max(0, _totalPages - 1);
     }
-    
-    spdlog::debug("Pagination calculated: {} filtered tiles, {} pages, current page {}", 
-                  _totalFilteredTiles, _totalPages, _currentPage + 1);
+
+    spdlog::debug("Pagination calculated: {} filtered tiles, {} pages, current page {}",
+        _totalFilteredTiles, _totalPages, _currentPage + 1);
 }
 
 void TilePalettePanel::updatePaginationControls() {
@@ -502,15 +501,14 @@ void TilePalettePanel::updatePaginationControls() {
         _paginationGroup->hide();
         return;
     }
-    
+
     _paginationGroup->show();
-    
+
     // Update shared pagination widget
     _paginationWidget->setTotalPages(_totalPages);
     _paginationWidget->setCurrentPage(_currentPage + 1); // Convert to 1-based
     _paginationWidget->setEnabled(_totalPages > 1);
 }
-
 
 void TilePalettePanel::onPaginationPageChanged(int page) {
     int newPage = page - 1; // Convert from 1-based to 0-based
@@ -524,45 +522,45 @@ int TilePalettePanel::calculateOptimalColumnsPerRow() const {
     if (!_scrollArea || !_scrollArea->viewport()) {
         return DEFAULT_TILES_PER_ROW;
     }
-    
+
     // Get available width from the scroll area viewport
     int availableWidth = _scrollArea->viewport()->width();
-    
+
     // Calculate space needed per tile (widget size + margins)
     int itemWidth = TileWidget::TILE_SIZE + 4; // Tile size + margin
-    
+
     // Get spacing and margins from the grid layout
     int spacing = _tileGridLayout ? _tileGridLayout->spacing() : 2;
     int leftMargin = _tileGridLayout ? _tileGridLayout->contentsMargins().left() : 4;
     int rightMargin = _tileGridLayout ? _tileGridLayout->contentsMargins().right() : 4;
-    
+
     // Calculate effective width available for tiles
     int effectiveWidth = availableWidth - leftMargin - rightMargin;
-    
+
     // Calculate how many tiles can fit per row
     // Each tile needs itemWidth + spacing, except the last one doesn't need spacing
     int columns = 1; // At least 1 column
     if (effectiveWidth >= itemWidth) {
         columns = (effectiveWidth + spacing) / (itemWidth + spacing);
     }
-    
+
     // Apply reasonable bounds
     columns = std::max(1, std::min(columns, MAX_TILES_PER_ROW));
-    
+
     return columns;
 }
 
 void TilePalettePanel::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
-    
+
     // Calculate optimal columns for the new size
     int newColumnsPerRow = calculateOptimalColumnsPerRow();
-    
+
     // Only update if the column count actually changed to avoid unnecessary rebuilds
     if (newColumnsPerRow != _previousColumnsPerRow) {
         _tilesPerRow = newColumnsPerRow;
         _previousColumnsPerRow = newColumnsPerRow;
-        
+
         // Trigger grid update only if we have tiles loaded
         if (!_tileWidgets.empty()) {
             updateTileGrid();

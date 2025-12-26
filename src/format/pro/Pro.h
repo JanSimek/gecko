@@ -13,7 +13,7 @@ private:
 
 public:
     Pro(std::filesystem::path path);
-    
+
     void initializeDataStructures();
 
     enum class OBJECT_TYPE : uint32_t {
@@ -45,25 +45,25 @@ public:
     };
 
     // PRO file format constants
-    static constexpr int SPECIAL_STATS_COUNT = 7;        // STR, PER, END, CHR, INT, AGL, LCK
-    static constexpr int DAMAGE_TYPES_ARMOR = 7;         // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
-    static constexpr int DAMAGE_TYPES_CRITTER = 9;       // Includes Radiation and Poison
-    static constexpr int SKILLS_COUNT = 18;              // All Fallout 2 skills
-    static constexpr int BONUS_DAMAGE_ARRAYS = 8;        // Extended arrays for critter bonuses
-    static constexpr int FIELD_SIZE_BYTES = 4;           // Standard 32-bit field size
-    
+    static constexpr int SPECIAL_STATS_COUNT = 7;  // STR, PER, END, CHR, INT, AGL, LCK
+    static constexpr int DAMAGE_TYPES_ARMOR = 7;   // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
+    static constexpr int DAMAGE_TYPES_CRITTER = 9; // Includes Radiation and Poison
+    static constexpr int SKILLS_COUNT = 18;        // All Fallout 2 skills
+    static constexpr int BONUS_DAMAGE_ARRAYS = 8;  // Extended arrays for critter bonuses
+    static constexpr int FIELD_SIZE_BYTES = 4;     // Standard 32-bit field size
+
     // Weapon flag constants
     enum class WEAPON_FLAGS : uint32_t {
-        ENERGY_WEAPON = 0x00000001  // Forces weapon to use Energy Weapons skill (sfall 4.2/3.8.20)
+        ENERGY_WEAPON = 0x00000001 // Forces weapon to use Energy Weapons skill (sfall 4.2/3.8.20)
     };
-    
+
     // Object Flags - from Fallout 2 CE obj_types.h
     enum class ObjectFlags : uint32_t {
         // Animation control flags (low 8 bits)
-        ANIMATION_PRIMARY_MASK      = 0x0000000F,  // Primary attack animation index (bits 0-3)
-        ANIMATION_SECONDARY_MASK    = 0x000000F0,  // Secondary attack animation index (bits 4-7)
+        ANIMATION_PRIMARY_MASK = 0x0000000F,   // Primary attack animation index (bits 0-3)
+        ANIMATION_SECONDARY_MASK = 0x000000F0, // Secondary attack animation index (bits 4-7)
 
-        OBJECT_HIDDEN = 0x01,                // Object is hidden from view
+        OBJECT_HIDDEN = 0x01,               // Object is hidden from view
         OBJECT_NO_SAVE = 0x04,              // Specifies that the object should not be saved to the savegame file
         OBJECT_FLAT = 0x08,                 // Flat object (no height)
         OBJECT_NO_BLOCK = 0x10,             // Does not block movement
@@ -85,79 +85,79 @@ public:
         OBJECT_LIGHT_THRU = 0x20000000,     // Light passes through
         OBJECT_SEEN = 0x40000000,           // Has been seen
         OBJECT_SHOOT_THRU = 0x80000000,     // Can shoot through
-        
+
         // Composite flags
         OBJECT_IN_ANY_HAND = OBJECT_IN_LEFT_HAND | OBJECT_IN_RIGHT_HAND,
         OBJECT_EQUIPPED = OBJECT_IN_ANY_HAND | OBJECT_WORN,
         OBJECT_OPEN_DOOR = OBJECT_SHOOT_THRU | OBJECT_LIGHT_THRU | OBJECT_NO_BLOCK,
     };
-    
+
     // Critter Flags - from Fallout 2 CE obj_types.h
     enum class CritterFlags : uint32_t {
-        CRITTER_BARTER = 0x02,         // Can barter with
-        CRITTER_NO_STEAL = 0x20,       // Cannot steal from
-        CRITTER_NO_DROP = 0x40,        // Cannot drop items
-        CRITTER_NO_LIMBS = 0x80,       // No limb damage
-        CRITTER_NO_AGE = 0x100,        // Does not age
-        CRITTER_NO_HEAL = 0x200,       // Cannot heal
-        CRITTER_INVULNERABLE = 0x400,  // Cannot be damaged
-        CRITTER_NO_FLATTEN = 0x800,    // Doesn't flatten on death (leaves no dead body)
+        CRITTER_BARTER = 0x02,          // Can barter with
+        CRITTER_NO_STEAL = 0x20,        // Cannot steal from
+        CRITTER_NO_DROP = 0x40,         // Cannot drop items
+        CRITTER_NO_LIMBS = 0x80,        // No limb damage
+        CRITTER_NO_AGE = 0x100,         // Does not age
+        CRITTER_NO_HEAL = 0x200,        // Cannot heal
+        CRITTER_INVULNERABLE = 0x400,   // Cannot be damaged
+        CRITTER_NO_FLATTEN = 0x800,     // Doesn't flatten on death (leaves no dead body)
         CRITTER_SPECIAL_DEATH = 0x1000, // Special death animation
-        CRITTER_LONG_LIMBS = 0x2000,   // Has long limbs
-        CRITTER_NO_KNOCKBACK = 0x4000, // Cannot be knocked back
+        CRITTER_LONG_LIMBS = 0x2000,    // Has long limbs
+        CRITTER_NO_KNOCKBACK = 0x4000,  // Cannot be knocked back
     };
-    
+
     // Extended Item Flags
     enum class ExtendedItemFlags : uint32_t {
-        
+
         // Weapon behavior flags
-        BIG_GUN                     = 0x00000100,  // Forces weapon to use Big Guns skill instead of Small Guns
-        TWO_HANDED                  = 0x00000200,  // Weapon requires both hands, prevents dual-wielding
-        
+        BIG_GUN = 0x00000100,    // Forces weapon to use Big Guns skill instead of Small Guns
+        TWO_HANDED = 0x00000200, // Weapon requires both hands, prevents dual-wielding
+
         // Action/interaction flags
-        CAN_USE                     = 0x00000800,  // Item can be "used" (containers get this automatically)
-        CAN_USE_ON                  = 0x00001000,  // Item can be "used on" target (drugs get this automatically)
-        GENERAL_FLAG                = 0x00002000,  // General purpose flag (scenery/walls/tiles)
-        INTERACTION_FLAG            = 0x00008000,  // Related to item interactions
-        
+        CAN_USE = 0x00000800,          // Item can be "used" (containers get this automatically)
+        CAN_USE_ON = 0x00001000,       // Item can be "used on" target (drugs get this automatically)
+        GENERAL_FLAG = 0x00002000,     // General purpose flag (scenery/walls/tiles)
+        INTERACTION_FLAG = 0x00008000, // Related to item interactions
+
         // Special item flags
         // This flag is used on weapons to indicate that's an natural (integral)
         // part of it's owner, for example Claw, or Robot's Rocket Launcher. Items
         // with this flag on do count toward total weight and cannot be dropped.
-        ITEM_HIDDEN                 = 0x08000000,  // Item is integral part of owner, cannot be dropped (creature weapons)
+        ITEM_HIDDEN = 0x08000000, // Item is integral part of owner, cannot be dropped (creature weapons)
     };
 
     // Extended flags helper functions
     static constexpr uint32_t getAnimationPrimary(uint32_t flags) {
         return flags & static_cast<uint32_t>(ObjectFlags::ANIMATION_PRIMARY_MASK);
     }
-    
+
     static constexpr uint32_t getAnimationSecondary(uint32_t flags) {
         return (flags & static_cast<uint32_t>(ObjectFlags::ANIMATION_SECONDARY_MASK)) >> 4;
     }
-    
+
     static constexpr uint32_t setAnimationPrimary(uint32_t flags, uint32_t animation) {
         return (flags & ~static_cast<uint32_t>(ObjectFlags::ANIMATION_PRIMARY_MASK)) | (animation & 0xF);
     }
-    
+
     static constexpr uint32_t setAnimationSecondary(uint32_t flags, uint32_t animation) {
         return (flags & ~static_cast<uint32_t>(ObjectFlags::ANIMATION_SECONDARY_MASK)) | ((animation & 0xF) << 4);
     }
-    
+
     // Helper function to check if a flag is set
-    template<typename FlagEnum>
+    template <typename FlagEnum>
     static constexpr bool hasFlag(uint32_t flags, FlagEnum flag) {
         return (flags & static_cast<uint32_t>(flag)) != 0;
     }
-    
+
     // Helper function to set a flag
-    template<typename FlagEnum>
+    template <typename FlagEnum>
     static constexpr uint32_t setFlag(uint32_t flags, FlagEnum flag) {
         return flags | static_cast<uint32_t>(flag);
     }
-    
+
     // Helper function to clear a flag
-    template<typename FlagEnum>
+    template <typename FlagEnum>
     static constexpr uint32_t clearFlag(uint32_t flags, FlagEnum flag) {
         return flags & ~static_cast<uint32_t>(flag);
     }
@@ -185,7 +185,7 @@ public:
 
     struct ArmorData {
         uint32_t armorClass;
-        uint32_t damageResist[DAMAGE_TYPES_ARMOR];     // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
+        uint32_t damageResist[DAMAGE_TYPES_ARMOR]; // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
         uint32_t damageThreshold[DAMAGE_TYPES_ARMOR];
         uint32_t perk;
         int32_t armorMaleFID;
@@ -194,30 +194,30 @@ public:
 
     struct ContainerData {
         uint32_t maxSize;
-        uint32_t flags;  // Use, UseOn, Look, Talk, Pickup flags
+        uint32_t flags; // Use, UseOn, Look, Talk, Pickup flags
     } containerData;
 
     struct DrugData {
-        uint32_t stat0;                // Stat ID for immediate effect (0-14)
-        uint32_t stat1;                // Stat ID for immediate effect (0-14)
-        uint32_t stat2;                // Stat ID for immediate effect (0-14)
+        uint32_t stat0; // Stat ID for immediate effect (0-14)
+        uint32_t stat1; // Stat ID for immediate effect (0-14)
+        uint32_t stat2; // Stat ID for immediate effect (0-14)
         // instant effects
-        int32_t amount0;              // Modifier for stat0 (signed)
-        int32_t amount1;              // Modifier for stat1 (signed)
-        int32_t amount2;              // Modifier for stat2 (signed)
+        int32_t amount0; // Modifier for stat0 (signed)
+        int32_t amount1; // Modifier for stat1 (signed)
+        int32_t amount2; // Modifier for stat2 (signed)
         // mid-delayed effects
-        uint32_t duration1;           // Delay before first effect (game minutes)
-        int32_t amount0_1;            // First delayed effect for stat0
-        int32_t amount1_1;            // First delayed effect for stat1
-        int32_t amount2_1;            // First delayed effect for stat2
+        uint32_t duration1; // Delay before first effect (game minutes)
+        int32_t amount0_1;  // First delayed effect for stat0
+        int32_t amount1_1;  // First delayed effect for stat1
+        int32_t amount2_1;  // First delayed effect for stat2
         // long-delayed effects
-        uint32_t duration2;           // Delay before second effect (game minutes)
-        int32_t amount0_2;            // Second delayed effect for stat0
-        int32_t amount1_2;            // Second delayed effect for stat1
-        int32_t amount2_2;            // Second delayed effect for stat2
-        uint32_t addictionRate;       // Addiction chance (percentage)
-        uint32_t addictionEffect;     // Addiction perk ID
-        uint32_t addictionOnset;      // Delay before addiction effect (game minutes)
+        uint32_t duration2;       // Delay before second effect (game minutes)
+        int32_t amount0_2;        // Second delayed effect for stat0
+        int32_t amount1_2;        // Second delayed effect for stat1
+        int32_t amount2_2;        // Second delayed effect for stat2
+        uint32_t addictionRate;   // Addiction chance (percentage)
+        uint32_t addictionEffect; // Addiction perk ID
+        uint32_t addictionOnset;  // Delay before addiction effect (game minutes)
     } drugData;
 
     struct WeaponData {
@@ -235,7 +235,7 @@ public:
         int32_t ammoPID;
         uint32_t ammoCapacity;
         uint8_t soundId;
-        uint32_t weaponFlags;    // Extended weapon flags (energy weapon flag, etc.)
+        uint32_t weaponFlags; // Extended weapon flags (energy weapon flag, etc.)
     } weaponData;
 
     struct AmmoData {
@@ -348,7 +348,7 @@ public:
     ITEM_TYPE itemType() const;
 
     const std::string typeToString() const;
-    
+
     // Allow updating the file path for save operations
     void setPath(const std::filesystem::path& newPath) {
         _path = newPath;

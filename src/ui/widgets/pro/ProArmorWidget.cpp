@@ -5,6 +5,7 @@
 #include <QHBoxLayout>
 #include <QFont>
 #include "util/ResourceManager.h"
+#include "../../theme/ThemeManager.h"
 
 namespace geck {
 
@@ -17,13 +18,13 @@ ProArmorWidget::ProArmorWidget(QWidget* parent)
     , _armorFemalePreviewWidget(nullptr)
     , _armorMaleFID(0)
     , _armorFemaleFID(0) {
-    
+
     // Initialize arrays
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
         _damageResistEdits[i] = nullptr;
         _damageThresholdEdits[i] = nullptr;
     }
-    
+
     setupUI();
 }
 
@@ -31,55 +32,55 @@ void ProArmorWidget::setupUI() {
     // Create two-column layout
     QHBoxLayout* columnsLayout = new QHBoxLayout();
     columnsLayout->setSpacing(12);
-    
+
     // Left column
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
     leftLayout->setSpacing(8);
-    
+
     // Right column
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
     rightLayout->setSpacing(8);
-    
+
     // === LEFT COLUMN: Protection Values ===
-    
+
     // Armor Class
     QGroupBox* acGroup = new QGroupBox("Protection Values");
-    acGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
+    acGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* acLayout = createStandardFormLayout();
-    
+
     _armorClassEdit = createSpinBox(0, 999, "Armor Class - higher values provide better protection");
-    connect(_armorClassEdit, QOverload<int>::of(&QSpinBox::valueChanged), 
-            this, &ProArmorWidget::updateAIPriority);
+    connect(_armorClassEdit, QOverload<int>::of(&QSpinBox::valueChanged),
+        this, &ProArmorWidget::updateAIPriority);
     acLayout->addRow("Armor Class:", _armorClassEdit);
-    
+
     acGroup->setLayout(acLayout);
     leftLayout->addWidget(acGroup);
-    
+
     // Defence State (unified Threshold and Resistance table)
     QGroupBox* defenceGroup = new QGroupBox("Defence State");
-    defenceGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
+    defenceGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QGridLayout* defenceLayout = new QGridLayout(defenceGroup);
     defenceLayout->setContentsMargins(8, 12, 8, 8);
     defenceLayout->setSpacing(2);
     defenceLayout->setHorizontalSpacing(2);
-    
-    const QStringList damageTypes = {"Normal", "Laser", "Fire", "Plasma", "Energy", "EMP", "Explode"};
-    
+
+    const QStringList damageTypes = { "Normal", "Laser", "Fire", "Plasma", "Energy", "EMP", "Explode" };
+
     // Headers
     QLabel* thresholdHeader = new QLabel("Threshold");
-    thresholdHeader->setFont(QFont("Microsoft Sans Serif", 9));
+    thresholdHeader->setFont(ui::theme::fonts::standard());
     thresholdHeader->setAlignment(Qt::AlignCenter);
     defenceLayout->addWidget(thresholdHeader, 0, 1);
-    
+
     QLabel* resistanceHeader = new QLabel("Resistance");
-    resistanceHeader->setFont(QFont("Microsoft Sans Serif", 9));
+    resistanceHeader->setFont(ui::theme::fonts::standard());
     resistanceHeader->setAlignment(Qt::AlignCenter);
     defenceLayout->addWidget(resistanceHeader, 0, 3);
-    
+
     // Create the unified table for each damage type
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
         // Damage type label
@@ -87,43 +88,43 @@ void ProArmorWidget::setupUI() {
         typeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         typeLabel->setFixedSize(50, 19);
         defenceLayout->addWidget(typeLabel, i + 1, 0);
-        
+
         // Threshold input
-        _damageThresholdEdits[i] = createSpinBox(0, 999, 
+        _damageThresholdEdits[i] = createSpinBox(0, 999,
             QString("Damage threshold against %1 damage").arg(damageTypes[i]));
         _damageThresholdEdits[i]->setFixedWidth(40);
-        connect(_damageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), 
-                this, &ProArmorWidget::updateAIPriority);
+        connect(_damageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &ProArmorWidget::updateAIPriority);
         defenceLayout->addWidget(_damageThresholdEdits[i], i + 1, 1);
-        
+
         // Separator "/"
         QLabel* separator = new QLabel("/");
         separator->setAlignment(Qt::AlignCenter);
         separator->setEnabled(false);
         defenceLayout->addWidget(separator, i + 1, 2);
-        
+
         // Resistance input
-        _damageResistEdits[i] = createSpinBox(0, 100, 
+        _damageResistEdits[i] = createSpinBox(0, 100,
             QString("Damage resistance against %1 damage").arg(damageTypes[i]));
         _damageResistEdits[i]->setFixedWidth(40);
-        connect(_damageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), 
-                this, &ProArmorWidget::updateAIPriority);
+        connect(_damageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &ProArmorWidget::updateAIPriority);
         defenceLayout->addWidget(_damageResistEdits[i], i + 1, 3);
-        
+
         // "%" label
         QLabel* percentLabel = new QLabel("%");
         percentLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         defenceLayout->addWidget(percentLabel, i + 1, 4);
     }
-    
+
     leftLayout->addWidget(defenceGroup);
     leftLayout->addStretch();
-    
+
     // === RIGHT COLUMN: Armor Views and Misc Properties ===
 
     // Armor Views with previews
     QGroupBox* viewsGroup = new QGroupBox("Armor Views");
-    viewsGroup->setStyleSheet("QGroupBox { font-weight: bold; }");
+    viewsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QVBoxLayout* viewsLayout = new QVBoxLayout(viewsGroup);
     viewsLayout->setContentsMargins(8, 12, 8, 8);
     viewsLayout->setSpacing(8);
@@ -150,25 +151,25 @@ void ProArmorWidget::setupUI() {
     viewsLayout->addLayout(previewsLayout);
 
     rightLayout->addWidget(viewsGroup);
-    
+
     // Misc Properties
     QGroupBox* miscGroup = createStandardGroupBox("Misc Properties");
     QFormLayout* miscLayout = createStandardFormLayout();
     static_cast<QVBoxLayout*>(miscGroup->layout())->addLayout(miscLayout);
-    
-    _armorPerkCombo = createComboBox({"None", "PowerArmor", "CombatArmor", "Other"}, 
-                                     "Special perk associated with this armor");
+
+    _armorPerkCombo = createComboBox({ "None", "PowerArmor", "CombatArmor", "Other" },
+        "Special perk associated with this armor");
     miscLayout->addRow("Perk:", _armorPerkCombo);
-    
+
     // AI Priority display
     _armorAIPriorityLabel = new QLabel("0");
-    _armorAIPriorityLabel->setStyleSheet("font-weight: bold; color: #0066CC;");
+    _armorAIPriorityLabel->setStyleSheet(ui::theme::styles::emphasisLabel());
     _armorAIPriorityLabel->setToolTip("AI Priority = AC + all DT values + all DR values (used by AI to select best armor)");
     miscLayout->addRow("AI Priority:", _armorAIPriorityLabel);
-    
+
     rightLayout->addWidget(miscGroup);
     rightLayout->addStretch();
-    
+
     // Add columns to main layout
     columnsLayout->addWidget(leftColumn, 1);
     columnsLayout->addWidget(rightColumn, 1);
@@ -176,8 +177,9 @@ void ProArmorWidget::setupUI() {
 }
 
 void ProArmorWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
-    if (!pro || !canHandle(pro)) return;
-    
+    if (!pro || !canHandle(pro))
+        return;
+
     // Load armor data - copy fields individually
     _armorData.armorClass = pro->armorData.armorClass;
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
@@ -189,20 +191,18 @@ void ProArmorWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     _armorData.armorFemaleFID = pro->armorData.armorFemaleFID;
     _armorMaleFID = pro->armorData.armorMaleFID;
     _armorFemaleFID = pro->armorData.armorFemaleFID;
-    
+
     // Update UI
     if (_armorClassEdit) {
         _armorClassEdit->setValue(static_cast<int>(_armorData.armorClass));
     }
-    
+
     // Load damage thresholds and resistances
     loadIntArrayToWidgets(_damageThresholdEdits, _armorData.damageThreshold, DAMAGE_TYPES_COUNT);
     loadIntArrayToWidgets(_damageResistEdits, _armorData.damageResist, DAMAGE_TYPES_COUNT);
-    
-    if (_armorPerkCombo) {
-        _armorPerkCombo->setCurrentIndex(static_cast<int>(_armorData.perk));
-    }
-    
+
+    setComboIndex(_armorPerkCombo, static_cast<int>(_armorData.perk));
+
     // FID labels removed - previews show the armor directly
 
     updateAIPriority();
@@ -210,24 +210,23 @@ void ProArmorWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
 }
 
 void ProArmorWidget::saveToPro(std::shared_ptr<Pro>& pro) {
-    if (!pro || !canHandle(pro)) return;
-    
+    if (!pro || !canHandle(pro))
+        return;
+
     // Update data from UI
     if (_armorClassEdit) {
         _armorData.armorClass = static_cast<uint32_t>(_armorClassEdit->value());
     }
-    
+
     // Save damage thresholds and resistances
     saveWidgetsToIntArray(_damageThresholdEdits, _armorData.damageThreshold, DAMAGE_TYPES_COUNT);
     saveWidgetsToIntArray(_damageResistEdits, _armorData.damageResist, DAMAGE_TYPES_COUNT);
-    
-    if (_armorPerkCombo) {
-        _armorData.perk = static_cast<uint32_t>(_armorPerkCombo->currentIndex());
-    }
-    
+
+    _armorData.perk = static_cast<uint32_t>(getComboIndex(_armorPerkCombo));
+
     _armorData.armorMaleFID = _armorMaleFID;
     _armorData.armorFemaleFID = _armorFemaleFID;
-    
+
     // Save to PRO - copy fields individually
     pro->armorData.armorClass = _armorData.armorClass;
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
@@ -240,8 +239,7 @@ void ProArmorWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProArmorWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::ITEM && 
-           pro->itemType() == Pro::ITEM_TYPE::ARMOR;
+    return pro && pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::ARMOR;
 }
 
 QString ProArmorWidget::getTabLabel() const {
@@ -298,26 +296,26 @@ void ProArmorWidget::updateArmorPreviews() {
 
 int ProArmorWidget::calculateAIPriority() const {
     int priority = 0;
-    
+
     // Add armor class
     if (_armorClassEdit) {
         priority += _armorClassEdit->value();
     }
-    
+
     // Add all damage thresholds
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
         if (_damageThresholdEdits[i]) {
             priority += _damageThresholdEdits[i]->value();
         }
     }
-    
+
     // Add all damage resistances
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
         if (_damageResistEdits[i]) {
             priority += _damageResistEdits[i]->value();
         }
     }
-    
+
     return priority;
 }
 

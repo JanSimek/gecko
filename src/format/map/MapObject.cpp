@@ -38,15 +38,15 @@ bool MapObject::blocksMovement() const {
         spdlog::debug("No PRO data available for object PID {}, assuming non-blocking", pro_pid);
         return false;
     }
-    
+
     // Check if object has NoBlock flag (0x00000010)
     // Objects WITHOUT this flag block movement
     const uint32_t NO_BLOCK_FLAG = 0x00000010;
     bool hasNoBlockFlag = (pro->header.flags & NO_BLOCK_FLAG) != 0;
-    
-    spdlog::debug("Object PID {} has flags 0x{:08X}, NoBlock flag: {}, blocks movement: {}", 
-                 pro_pid, pro->header.flags, hasNoBlockFlag, !hasNoBlockFlag);
-    
+
+    spdlog::debug("Object PID {} has flags 0x{:08X}, NoBlock flag: {}, blocks movement: {}",
+        pro_pid, pro->header.flags, hasNoBlockFlag, !hasNoBlockFlag);
+
     return !hasNoBlockFlag;
 }
 

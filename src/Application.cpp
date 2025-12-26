@@ -37,7 +37,7 @@ Application::Application(int argc, char** argv)
     const std::string finalMapPath = processCommandLineArgs();
 
     initUI();
-    
+
     // Check for first run and show settings dialog if needed
     checkFirstRun();
 
@@ -103,16 +103,16 @@ std::string Application::processCommandLineArgs() {
     if (!isFirstRun) {
         settings.load();
     }
-    
+
     // For first run, we'll add the default path but won't load it yet
     if (settings.getDataPaths().empty()) {
         QString dataPath = parser.value(dataOption);
         spdlog::info("No data paths in settings, will use command line default: {}", dataPath.toStdString());
-        
+
         // Add to settings but don't save or load yet
         settings.addDataPath(dataPath.toStdString());
     }
-    
+
     // Data paths will be loaded after settings dialog in checkFirstRun()
     return parser.isSet(mapOption) ? parser.value(mapOption).toStdString() : "";
 }
@@ -128,7 +128,7 @@ Application::~Application() {
 
 void Application::initUI() {
     _mainWindow = std::make_unique<MainWindow>();
-    
+
     // Check if this is first run or if user prefers maximized
     auto& settings = Settings::getInstance();
     if (!settings.exists() || settings.getWindowMaximized()) {
@@ -153,14 +153,14 @@ void Application::checkFirstRun() {
     auto& settings = Settings::getInstance();
     if (!settings.exists()) {
         spdlog::info("First run detected, showing settings dialog");
-        
+
         SettingsDialog dialog(_mainWindow.get());
         int result = dialog.exec();
-        
+
         // Always save settings after first run, even if cancelled
         // This ensures we have at least the default data path from command line
         settings.save();
-        
+
         if (result == QDialog::Accepted) {
             spdlog::info("Settings dialog accepted, configuration saved");
             loadDataPaths();
@@ -178,14 +178,14 @@ void Application::checkFirstRun() {
 void Application::loadDataPaths() {
     auto& settings = Settings::getInstance();
     auto dataPaths = settings.getDataPaths();
-    
+
     if (dataPaths.empty()) {
         spdlog::warn("No data paths configured, application may not function properly");
         return;
     }
-    
+
     spdlog::info("Loading {} data paths with progress dialog", dataPaths.size());
-    
+
     // Load Fallout 2 game data files (DAT files, directories) even when no map is loaded
     // This is essential because:
     // 1. ResourceManager needs access to game assets (textures, sprites, sounds)
@@ -195,16 +195,16 @@ void Application::loadDataPaths() {
     auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
     loadingWidget->setWindowTitle("Loading Game Data");
     loadingWidget->addLoader(std::make_unique<DataPathLoader>(dataPaths));
-    
+
     // Show modal loading dialog - this appears even without a map loaded
     loadingWidget->exec();
-    
+
     // After data loading completes, refresh the file browser so it shows the loaded files
     if (_mainWindow) {
         _mainWindow->refreshFileBrowser();
         _mainWindow->showFileBrowserPanel();
     }
-    
+
     spdlog::info("Data paths loaded successfully");
 }
 

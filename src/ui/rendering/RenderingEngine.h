@@ -14,7 +14,7 @@ class Map;
 
 /**
  * @brief Handles all rendering operations for the editor
- * 
+ *
  * This class encapsulates all rendering logic that was previously
  * in EditorWidget, providing a clean separation of concerns between
  * UI management and rendering operations.
@@ -47,23 +47,23 @@ public:
         const std::vector<sf::Sprite>* wallBlockerOverlays = nullptr;
         const std::vector<sf::Sprite>* selectedRoofTileBackgroundSprites = nullptr;
         const std::vector<sf::Sprite>* selectedHexSprites = nullptr;
-        
+
         // Drag preview
         const std::shared_ptr<Object>* dragPreviewObject = nullptr;
         bool isDraggingFromPalette = false;
-        
+
         // Selection rectangle
         const sf::RectangleShape* selectionRectangle = nullptr;
         bool isDragSelecting = false;
         SelectionMode currentSelectionMode = SelectionMode::ALL;
-        
+
         // Hex grid data
         const HexagonGrid* hexGrid = nullptr;
         const sf::Sprite* hexSprite = nullptr;
         const sf::Sprite* hexHighlightSprite = nullptr;
         const sf::Sprite* playerPositionSprite = nullptr;
         int currentHoverHex = -1;
-        
+
         // Map data
         const Map* map = nullptr;
         int currentElevation = 0;
@@ -80,80 +80,80 @@ public:
      * @param visibility Current visibility settings
      */
     void render(sf::RenderTarget& target,
-                const sf::View& view,
-                const RenderData& renderData,
-                const VisibilitySettings& visibility);
+        const sf::View& view,
+        const RenderData& renderData,
+        const VisibilitySettings& visibility);
 
     /**
      * @brief Set colors for selection rectangle based on mode
      * @param rectangle The selection rectangle to update
      * @param selectionMode Current selection mode
      */
-    static void applySelectionRectangleColors(sf::RectangleShape& rectangle, 
-                                             SelectionMode selectionMode);
+    static void applySelectionRectangleColors(sf::RectangleShape& rectangle,
+        SelectionMode selectionMode);
 
 private:
     /**
      * @brief Render floor tile sprites
      */
     void renderFloorTiles(sf::RenderTarget& target,
-                         const std::vector<sf::Sprite>& floorSprites);
+        const std::vector<sf::Sprite>& floorSprites);
 
     /**
      * @brief Render the hex grid overlay
      */
     void renderHexGrid(sf::RenderTarget& target,
-                      const sf::View& view,
-                      const RenderData& renderData);
+        const sf::View& view,
+        const RenderData& renderData);
 
     /**
      * @brief Render all objects with visibility filtering
      */
     void renderObjects(sf::RenderTarget& target,
-                      const RenderData& renderData,
-                      const VisibilitySettings& visibility);
+        const RenderData& renderData,
+        const VisibilitySettings& visibility);
 
     /**
      * @brief Render roof tiles and their selection backgrounds
      */
     void renderRoofTiles(sf::RenderTarget& target,
-                        const RenderData& renderData,
-                        bool showRoof);
+        const RenderData& renderData,
+        bool showRoof);
 
     /**
      * @brief Render selection-related visuals
      */
     void renderSelectionVisuals(sf::RenderTarget& target,
-                               const RenderData& renderData);
+        const RenderData& renderData);
 
     /**
      * @brief Render hex highlights and markers
      */
     void renderHexHighlights(sf::RenderTarget& target,
-                            const RenderData& renderData);
+        const RenderData& renderData);
 
     /**
      * @brief Render exit grid markers
      */
     void renderExitGrids(sf::RenderTarget& target,
-                        const sf::View& view,
-                        const RenderData& renderData,
-                        const Map* map);
+        const sf::View& view,
+        const RenderData& renderData,
+        const Map* map);
 
     /**
      * @brief Helper method to render exit grids with a loaded sprite
      */
     void renderExitGridsWithSprite(sf::RenderTarget& target,
-                                  const sf::View& view,
-                                  const RenderData& renderData,
-                                  const Map* map,
-                                  sf::Sprite& exitGridSprite);
+        const sf::View& view,
+        const RenderData& renderData,
+        const Map* map,
+        sf::Sprite& exitGridSprite);
 
     /**
      * @brief Check if a hex is within the visible viewport
      */
-    bool isHexVisible(int hexWorldX, int hexWorldY, 
-                     const sf::View& view) const;
+    bool isHexVisible(int hexWorldX, int hexWorldY,
+        const sf::View& view) const;
 };
 
 } // namespace geck

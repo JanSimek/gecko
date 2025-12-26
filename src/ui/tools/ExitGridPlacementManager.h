@@ -32,7 +32,7 @@ public:
     // Exit grid placement mode control
     void setExitGridPlacementMode(bool enabled);
     void setMarkExitsMode(bool enabled);
-    
+
     // State queries
     bool isExitGridPlacementMode() const { return _exitGridPlacementMode; }
     bool isMarkExitsMode() const { return _markExitsMode; }
@@ -42,10 +42,10 @@ public:
 
     // Reset all exit grid placement state
     void resetState();
-    
+
     // Check if selected objects contain exit grids and edit them
     bool editSelectedExitGrids();
-    
+
     // Mark exits mode - select and edit exit grids
     void handleMarkExitsSelection(sf::Vector2f worldPos);
     void selectExitGridsInArea(sf::Vector2f startPos, sf::Vector2f endPos);
@@ -53,15 +53,15 @@ public:
 private:
     // Create exit grid MISC object with properties
     std::shared_ptr<MapObject> createExitGridObject(int hexPosition, const ExitGridPropertiesDialog::ExitGridProperties& properties);
-    
+
     // Show properties dialog and handle result
     bool showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing = nullptr);
-    
+
     // Find available exit grid PID (16-23)
     uint32_t getAvailableExitGridPID() const;
 
     EditorWidget* _editor;
-    
+
     // State
     bool _exitGridPlacementMode = false;
     bool _markExitsMode = false;

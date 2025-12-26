@@ -15,9 +15,9 @@ namespace geck {
 RenderingEngine::RenderingEngine() = default;
 
 void RenderingEngine::render(sf::RenderTarget& target,
-                            const sf::View& view,
-                            const RenderData& renderData,
-                            const VisibilitySettings& visibility) {
+    const sf::View& view,
+    const RenderData& renderData,
+    const VisibilitySettings& visibility) {
     target.setView(view);
 
     // Layer 1: Floor tiles (always rendered)
@@ -36,9 +36,7 @@ void RenderingEngine::render(sf::RenderTarget& target,
     }
 
     // Layer 4: Drag preview object
-    if (renderData.isDraggingFromPalette && 
-        renderData.dragPreviewObject && 
-        *renderData.dragPreviewObject) {
+    if (renderData.isDraggingFromPalette && renderData.dragPreviewObject && *renderData.dragPreviewObject) {
         target.draw((*renderData.dragPreviewObject)->getSprite());
     }
 
@@ -58,15 +56,15 @@ void RenderingEngine::render(sf::RenderTarget& target,
 }
 
 void RenderingEngine::renderFloorTiles(sf::RenderTarget& target,
-                                      const std::vector<sf::Sprite>& floorSprites) {
+    const std::vector<sf::Sprite>& floorSprites) {
     for (const auto& floor : floorSprites) {
         target.draw(floor);
     }
 }
 
 void RenderingEngine::renderHexGrid(sf::RenderTarget& target,
-                                   const sf::View& view,
-                                   const RenderData& renderData) {
+    const sf::View& view,
+    const RenderData& renderData) {
     if (!renderData.hexGrid || !renderData.hexSprite) {
         return;
     }
@@ -112,8 +110,8 @@ void RenderingEngine::renderHexGrid(sf::RenderTarget& target,
 }
 
 void RenderingEngine::renderObjects(sf::RenderTarget& target,
-                                   const RenderData& renderData,
-                                   const VisibilitySettings& visibility) {
+    const RenderData& renderData,
+    const VisibilitySettings& visibility) {
     if (!renderData.objects) {
         return;
     }
@@ -123,20 +121,20 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
         if (!visibility.showWalls && object->getMapObject().isWallObject()) {
             continue;
         }
-        
+
         // Filter scroll blockers based on show scroll blockers setting
         if (!visibility.showScrollBlockers && object->getMapObject().isScrollBlocker()) {
             continue;
         }
-        
+
         target.draw(object->getSprite());
-        
+
         // Draw light overlay if enabled and object has light
         if (visibility.showLightOverlays && object->hasLight()) {
             target.draw(object->getLightOverlay());
         }
     }
-    
+
     // Render wall blocker overlays on top of regular objects
     if (visibility.showWallBlockers && renderData.wallBlockerOverlays) {
         for (const auto& overlay : *renderData.wallBlockerOverlays) {
@@ -146,8 +144,8 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
 }
 
 void RenderingEngine::renderRoofTiles(sf::RenderTarget& target,
-                                     const RenderData& renderData,
-                                     bool showRoof) {
+    const RenderData& renderData,
+    bool showRoof) {
     if (!showRoof) {
         return;
     }
@@ -168,7 +166,7 @@ void RenderingEngine::renderRoofTiles(sf::RenderTarget& target,
 }
 
 void RenderingEngine::renderSelectionVisuals(sf::RenderTarget& target,
-                                            const RenderData& renderData) {
+    const RenderData& renderData) {
     // Render selected hex sprites
     if (renderData.selectedHexSprites) {
         for (const auto& hexSprite : *renderData.selectedHexSprites) {
@@ -186,7 +184,7 @@ void RenderingEngine::renderSelectionVisuals(sf::RenderTarget& target,
 }
 
 void RenderingEngine::renderHexHighlights(sf::RenderTarget& target,
-                                         const RenderData& renderData) {
+    const RenderData& renderData) {
     if (!renderData.hexGrid) {
         return;
     }
@@ -207,7 +205,7 @@ void RenderingEngine::renderHexHighlights(sf::RenderTarget& target,
             }
         }
     }
-    
+
     // Render player default position marker
     if (renderData.map && renderData.playerPositionSprite) {
         // Cast away const to access non-const getMapFile() - this is safe as we're only reading
@@ -230,28 +228,27 @@ void RenderingEngine::renderHexHighlights(sf::RenderTarget& target,
     }
 }
 
-bool RenderingEngine::isHexVisible(int hexWorldX, int hexWorldY, 
-                                  const sf::View& view) const {
+bool RenderingEngine::isHexVisible(int hexWorldX, int hexWorldY,
+    const sf::View& view) const {
     sf::Vector2f viewCenter = view.getCenter();
     sf::Vector2f viewSize = view.getSize();
-    
+
     int worldX = static_cast<int>(viewCenter.x - viewSize.x / 2);
     int worldY = static_cast<int>(viewCenter.y - viewSize.y / 2);
     int viewWidth = static_cast<int>(viewSize.x);
     int viewHeight = static_cast<int>(viewSize.y);
-    
-    return (hexWorldX + Hex::HEX_WIDTH * 2 > worldX && hexWorldX < worldX + viewWidth) && 
-           (hexWorldY + Hex::HEX_HEIGHT + 4 > worldY && hexWorldY < worldY + viewHeight);
+
+    return (hexWorldX + Hex::HEX_WIDTH * 2 > worldX && hexWorldX < worldX + viewWidth) && (hexWorldY + Hex::HEX_HEIGHT + 4 > worldY && hexWorldY < worldY + viewHeight);
 }
 
-void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangle, 
-                                                   SelectionMode selectionMode) {
+void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangle,
+    SelectionMode selectionMode) {
     if (selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
         // Green colors for scroll blocker rectangle mode
-        rectangle.setFillColor(sf::Color(SelectionColors::SCROLL_BLOCKER_R, 
-                                       SelectionColors::SCROLL_BLOCKER_G, 
-                                       SelectionColors::SCROLL_BLOCKER_B, 
-                                       SelectionColors::SCROLL_BLOCKER_FILL_ALPHA));
+        rectangle.setFillColor(sf::Color(SelectionColors::SCROLL_BLOCKER_R,
+            SelectionColors::SCROLL_BLOCKER_G,
+            SelectionColors::SCROLL_BLOCKER_B,
+            SelectionColors::SCROLL_BLOCKER_FILL_ALPHA));
         rectangle.setOutlineColor(sf::Color(0, 200, 0, SelectionColors::SCROLL_BLOCKER_OUTLINE_ALPHA));
     } else {
         // Default blue colors for normal selection
@@ -261,9 +258,9 @@ void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangl
 }
 
 void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
-                                     const sf::View& view,
-                                     const RenderData& renderData,
-                                     const Map* map) {
+    const sf::View& view,
+    const RenderData& renderData,
+    const Map* map) {
     if (!map || !renderData.hexGrid) {
         return;
     }
@@ -272,27 +269,26 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
     ResourceManager& resourceManager = ResourceManager::getInstance();
     const sf::Texture& exitGridTexture = resourceManager.texture(ResourcePaths::Frm::EXIT_GRID);
     sf::Sprite exitGridSprite(exitGridTexture);
-    
+
     // Render exit grids with the loaded sprite
     renderExitGridsWithSprite(target, view, renderData, map, exitGridSprite);
 }
 
 void RenderingEngine::renderExitGridsWithSprite(sf::RenderTarget& target,
-                                               const sf::View& view,
-                                               const RenderData& renderData,
-                                               const Map* map,
-                                               sf::Sprite& exitGridSprite) {
+    const sf::View& view,
+    const RenderData& renderData,
+    const Map* map,
+    sf::Sprite& exitGridSprite) {
 
     // Get all objects from the map
     const auto& allObjects = map->objects();
-    
+
     // Find objects for current elevation
     auto elevationIt = allObjects.find(renderData.currentElevation);
     if (elevationIt == allObjects.end()) {
         return; // No objects on this elevation
     }
-    
-    
+
     int exitGridCount = 0;
     // Iterate through all objects on current elevation
     for (const auto& mapObject : elevationIt->second) {
@@ -313,7 +309,7 @@ void RenderingEngine::renderExitGridsWithSprite(sf::RenderTarget& target,
         if (!hexOptional.has_value()) {
             continue;
         }
-        
+
         const Hex& hex = hexOptional.value().get();
         WorldCoords hexCenter(hex.x(), hex.y());
 
@@ -324,7 +320,7 @@ void RenderingEngine::renderExitGridsWithSprite(sf::RenderTarget& target,
 
         // Position the exit grid sprite at the hex center
         exitGridSprite.setPosition(hexCenter.toVector());
-        
+
         // Draw the exit grid marker
         target.draw(exitGridSprite);
     }

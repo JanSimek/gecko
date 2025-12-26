@@ -20,23 +20,23 @@ Object::Object(const Frm* frm)
     , _direction(0)
     , _selected(false)
     , _showLightOverlay(false) {
-    
+
     // Validate FRM has at least one direction
     if (!frm) {
         spdlog::error("Object constructor: FRM pointer is null");
         throw SpriteException("Cannot create Object with null FRM");
     }
-    
+
     if (frm->directions().empty()) {
-        spdlog::error("Object constructor: FRM '{}' has no directions (size: {})", 
-                     frm->filename(), frm->directions().size());
+        spdlog::error("Object constructor: FRM '{}' has no directions (size: {})",
+            frm->filename(), frm->directions().size());
         throw SpriteException("FRM has no directions", frm->filename());
     }
-    
+
     // Validate first direction has at least one frame
     if (frm->directions().at(0).frames().empty()) {
-        spdlog::error("Object constructor: FRM '{}' direction 0 has no frames (size: {})", 
-                     frm->filename(), frm->directions().at(0).frames().size());
+        spdlog::error("Object constructor: FRM '{}' direction 0 has no frames (size: {})",
+            frm->filename(), frm->directions().at(0).frames().size());
         throw SpriteException("FRM direction has no frames", frm->filename());
     }
 
@@ -84,7 +84,7 @@ void Object::setMapObject(std::shared_ptr<MapObject> newMapObject) {
 void Object::setSprite(sf::Sprite sprite) {
     bool wasSelected = _selected;
     _sprite = sprite;
-    
+
     // Preserve selection state by re-applying selection color if the object was selected
     if (wasSelected) {
         _sprite.setColor(geck::ColorUtils::createObjectSelectionColor());
@@ -104,19 +104,19 @@ void Object::setFrm(const Frm* frm) {
         spdlog::error("Object::setFrm - FRM pointer is null");
         return;
     }
-    
+
     if (frm->directions().empty()) {
         spdlog::error("Object::setFrm - FRM '{}' has no directions", frm->filename());
         return;
     }
-    
+
     if (frm->directions()[0].frames().empty()) {
         spdlog::error("Object::setFrm - FRM '{}' direction 0 has no frames", frm->filename());
         return;
     }
-    
+
     _frm = frm;
-    
+
     // Reset direction to 0 and update texture rectangle
     _direction = 0;
     setDirection(ObjectDirection(_direction));
@@ -127,14 +127,13 @@ void Object::setHexPosition(const Hex& hex) {
     // center on the hex
     WorldCoords position(
         hex.x() - (width() / 2) + shiftX(),
-        hex.y() - height() + shiftY()
-    );
+        hex.y() - height() + shiftY());
 
     _sprite.setPosition(position.toVector());
     if (_mapObject != nullptr) {
         _mapObject->position = hex.position();
     }
-    
+
     // Update light overlay position if needed
     if (_showLightOverlay && hasLight()) {
         updateLightOverlay();
@@ -207,7 +206,7 @@ bool Object::isSelected() const noexcept {
 
 void Object::initializeLightOverlay() {
     // Initialize the light overlay circle
-    _lightOverlay.setFillColor(sf::Color(255, 255, 100, 30)); // Light yellow, semi-transparent
+    _lightOverlay.setFillColor(sf::Color(255, 255, 100, 30));    // Light yellow, semi-transparent
     _lightOverlay.setOutlineColor(sf::Color(255, 255, 150, 80)); // Brighter yellow outline
     _lightOverlay.setOutlineThickness(1.0f);
     _lightOverlay.setPointCount(6); // Hexagonal shape to match the grid
@@ -224,23 +223,22 @@ void Object::updateLightOverlay() {
     if (!_mapObject || !_mapObject->isLightSource()) {
         return;
     }
-    
+
     // Calculate radius based on light_radius property
     // Each hex is approximately 32 pixels wide in standard zoom
     float hexWidth = 32.0f;
     float radius = _mapObject->light_radius * hexWidth / 2.0f;
-    
+
     _lightOverlay.setRadius(radius);
     _lightOverlay.setOrigin(sf::Vector2f(radius, radius));
-    
+
     // Position the overlay at the object's center
     auto spritePos = _sprite.getPosition();
     auto spriteBounds = _sprite.getLocalBounds();
     _lightOverlay.setPosition(sf::Vector2f(
         spritePos.x + spriteBounds.size.x / 2.0f,
-        spritePos.y + spriteBounds.size.y / 2.0f
-    ));
-    
+        spritePos.y + spriteBounds.size.y / 2.0f));
+
     // Adjust opacity based on light intensity
     auto color = _lightOverlay.getFillColor();
     // Map intensity (0-65535) to alpha (30-100)

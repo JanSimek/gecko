@@ -6,10 +6,10 @@ namespace geck {
 
 /**
  * @brief Data models for PRO file type-specific data
- * 
+ *
  * These structures represent the various data sections that appear
  * after the common header in PRO files, depending on the object type.
- * 
+ *
  * Extracted from ProEditorDialog to follow Single Responsibility Principle
  * and enable reuse across different UI components.
  */
@@ -17,7 +17,7 @@ namespace geck {
 // Item Type: Armor
 struct ProArmorData {
     uint32_t armorClass;
-    uint32_t damageResist[7];     // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
+    uint32_t damageResist[7]; // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
     uint32_t damageThreshold[7];
     uint32_t perk;
     int32_t armorMaleFID;
@@ -27,28 +27,28 @@ struct ProArmorData {
 // Item Type: Container
 struct ProContainerData {
     uint32_t maxSize;
-    uint32_t flags;  // Use, UseOn, Look, Talk, Pickup flags
+    uint32_t flags; // Use, UseOn, Look, Talk, Pickup flags
 };
 
 // Item Type: Drug
 struct ProDrugData {
-    uint32_t stat0;                // Stat ID for immediate effect (0-14)
-    uint32_t stat1;                // Stat ID for immediate effect (0-14)
-    uint32_t stat2;                // Stat ID for immediate effect (0-14)
-    int32_t amount0;               // Modifier for stat0 (signed)
-    int32_t amount1;               // Modifier for stat1 (signed)
-    int32_t amount2;               // Modifier for stat2 (signed)
-    uint32_t duration1;            // Delay before first effect (game minutes)
-    int32_t amount0_1;             // First delayed effect for stat0
-    int32_t amount1_1;             // First delayed effect for stat1
-    int32_t amount2_1;             // First delayed effect for stat2
-    uint32_t duration2;            // Delay before second effect (game minutes)
-    int32_t amount0_2;             // Second delayed effect for stat0
-    int32_t amount1_2;             // Second delayed effect for stat1
-    int32_t amount2_2;             // Second delayed effect for stat2
-    uint32_t addictionRate;        // Addiction chance (percentage)
-    uint32_t addictionEffect;      // Addiction perk ID
-    uint32_t addictionOnset;       // Delay before addiction effect (game minutes)
+    uint32_t stat0;           // Stat ID for immediate effect (0-14)
+    uint32_t stat1;           // Stat ID for immediate effect (0-14)
+    uint32_t stat2;           // Stat ID for immediate effect (0-14)
+    int32_t amount0;          // Modifier for stat0 (signed)
+    int32_t amount1;          // Modifier for stat1 (signed)
+    int32_t amount2;          // Modifier for stat2 (signed)
+    uint32_t duration1;       // Delay before first effect (game minutes)
+    int32_t amount0_1;        // First delayed effect for stat0
+    int32_t amount1_1;        // First delayed effect for stat1
+    int32_t amount2_1;        // First delayed effect for stat2
+    uint32_t duration2;       // Delay before second effect (game minutes)
+    int32_t amount0_2;        // Second delayed effect for stat0
+    int32_t amount1_2;        // Second delayed effect for stat1
+    int32_t amount2_2;        // Second delayed effect for stat2
+    uint32_t addictionRate;   // Addiction chance (percentage)
+    uint32_t addictionEffect; // Addiction perk ID
+    uint32_t addictionOnset;  // Delay before addiction effect (game minutes)
 };
 
 // Item Type: Weapon
@@ -144,7 +144,7 @@ struct ProCritterData {
 struct ProSceneryData {
     uint32_t materialId;
     uint8_t soundId;
-    
+
     // Scenery subtype-specific data
     union {
         // Door-specific data
@@ -152,24 +152,24 @@ struct ProSceneryData {
             uint32_t walkThroughFlag;
             uint32_t unknownField;
         } doorData;
-        
+
         // Stairs-specific data
         struct {
             uint32_t destTile;
             uint32_t destElevation;
         } stairsData;
-        
+
         // Elevator-specific data
         struct {
             uint32_t elevatorType;
             uint32_t elevatorLevel;
         } elevatorData;
-        
+
         // Ladder-specific data
         struct {
             uint32_t destTileAndElevation;
         } ladderData;
-        
+
         // Generic-specific data
         struct {
             uint32_t unknownField;

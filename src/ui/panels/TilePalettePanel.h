@@ -55,7 +55,6 @@ public:
         // Note: SINGLE_PLACEMENT and AREA_FILL merged into unified system
     };
 
-
     explicit TilePalettePanel(QWidget* parent = nullptr);
     ~TilePalettePanel() = default;
 
@@ -73,10 +72,9 @@ public:
     bool isRoofMode() const { return _isRoofMode; }
     void setRoofMode(bool isRoof);
 
-    // Placement modes 
+    // Placement modes
     PlacementMode getPlacementMode() const { return _placementMode; }
     void setPlacementMode(PlacementMode mode);
-
 
 signals:
     void tileSelected(int tileIndex, bool isRoof);

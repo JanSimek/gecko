@@ -2,6 +2,7 @@
 
 #include "BaseWidget.h"
 #include "../widgets/PaginationWidget.h"
+#include "../theme/ThemeManager.h"
 #include <QGroupBox>
 #include <QScrollArea>
 #include <QLineEdit>
@@ -11,7 +12,7 @@ namespace geck {
 
 /**
  * @brief Base class for panel widgets
- * 
+ *
  * Provides common functionality for panels like ObjectPalettePanel
  * and TilePalettePanel, following DRY principle.
  */
@@ -21,7 +22,7 @@ class BasePanel : public BaseWidget {
 public:
     explicit BasePanel(const QString& title, QWidget* parent = nullptr)
         : BaseWidget(parent)
-        , _panelTitle(title) {}
+        , _panelTitle(title) { }
 
     virtual ~BasePanel() = default;
 
@@ -33,23 +34,38 @@ protected:
     virtual void setupUI() = 0;
 
     /**
+     * @brief Creates a standard main layout for panels
+     * @return The created layout
+     */
+    [[nodiscard]] QVBoxLayout* createMainLayout() {
+        _mainLayout = new QVBoxLayout(this);
+        _mainLayout->setSpacing(ui::theme::spacing::NORMAL);
+        _mainLayout->setContentsMargins(
+            ui::theme::spacing::MARGIN_NORMAL,
+            ui::theme::spacing::MARGIN_NORMAL,
+            ui::theme::spacing::MARGIN_NORMAL,
+            ui::theme::spacing::MARGIN_NORMAL);
+        return _mainLayout;
+    }
+
+    /**
      * @brief Creates standard search controls
      * @return The created search line edit
      */
     [[nodiscard]] QLineEdit* createSearchControls(const QString& placeholder = "Search...") {
         auto* searchGroup = new QGroupBox("Search", this);
         auto* searchLayout = new QVBoxLayout(searchGroup);
-        
+
         _searchLineEdit = new QLineEdit(this);
         _searchLineEdit->setPlaceholderText(placeholder);
         _searchLineEdit->setClearButtonEnabled(true);
-        
+
         searchLayout->addWidget(_searchLineEdit);
-        
+
         if (_mainLayout) {
             _mainLayout->addWidget(searchGroup);
         }
-        
+
         return _searchLineEdit;
     }
 
@@ -61,11 +77,11 @@ protected:
     [[nodiscard]] PaginationWidget* createPaginationControls(int itemsPerPage) {
         _paginationWidget = new PaginationWidget(this);
         _itemsPerPage = itemsPerPage; // Store for derived classes to use
-        
+
         if (_mainLayout) {
             _mainLayout->addWidget(_paginationWidget);
         }
-        
+
         return _paginationWidget;
     }
 
@@ -78,31 +94,32 @@ protected:
         _scrollArea->setWidgetResizable(true);
         _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         _scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-        
+
         _scrollContent = new QWidget();
         _gridLayout = new QGridLayout(_scrollContent);
-        _gridLayout->setSpacing(4);
-        
+        _gridLayout->setSpacing(ui::theme::spacing::TIGHT);
+
         _scrollArea->setWidget(_scrollContent);
-        
+
         if (_mainLayout) {
             _mainLayout->addWidget(_scrollArea, 1); // Stretch factor 1
         }
-        
+
         return _scrollArea;
     }
 
     /**
      * @brief Updates grid columns based on widget width
      * @param widgetSize Size of individual widgets
-     * @param spacing Spacing between widgets
+     * @param spacing Spacing between widgets (defaults to NORMAL)
      */
-    void updateGridColumns(int widgetSize, int spacing = 8) {
-        if (!_scrollArea || !_gridLayout) return;
-        
+    void updateGridColumns(int widgetSize, int spacing = ui::theme::spacing::NORMAL) {
+        if (!_scrollArea || !_gridLayout)
+            return;
+
         const int availableWidth = _scrollArea->viewport()->width();
         const int effectiveWidgetSize = widgetSize + spacing;
-        
+
         _gridColumns = std::max(1, availableWidth / effectiveWidgetSize);
     }
 
@@ -113,7 +130,7 @@ protected:
     QScrollArea* _scrollArea = nullptr;
     QWidget* _scrollContent = nullptr;
     QGridLayout* _gridLayout = nullptr;
-    
+
     QString _panelTitle;
     int _gridColumns = 4;
     int _currentPage = 0;

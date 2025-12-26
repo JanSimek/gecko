@@ -10,7 +10,7 @@ namespace geck {
 
 /**
  * @brief Reusable pagination widget for panels that display paged content
- * 
+ *
  * This widget provides a consistent pagination interface with:
  * - Previous/Next buttons
  * - Page number spin box

@@ -14,7 +14,7 @@ std::unique_ptr<Dat> DatReader::read() {
     try {
         // Use format validation
         FormatValidator::validateDatFile(getBinaryUtils(), _path);
-        
+
         auto& utils = getBinaryUtils();
         spdlog::debug("Reading DAT file: {}", _path.string());
 
@@ -66,7 +66,7 @@ std::unique_ptr<Dat> DatReader::read() {
             entry->setOffset(data_offset);
 
             dat->addEntry(filename, std::move(entry));
-            
+
             if (i % 1000 == 0) {
                 auto pos = utils.getPosition();
                 spdlog::trace("Read {} entries ({:.1f}% complete)", i, pos.percentage());

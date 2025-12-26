@@ -6,7 +6,7 @@ namespace geck {
 
 /**
  * @brief Widget for editing Wall type PRO files
- * 
+ *
  * Walls are the simplest PRO type, containing only a material ID
  * field after the common header. This makes it an ideal starting
  * point for the refactoring.
@@ -26,10 +26,10 @@ public:
 
 private:
     void setupUI();
-    
+
     // UI controls
     QComboBox* _materialIdCombo;
-    
+
     // Data
     ProWallData _wallData;
 };

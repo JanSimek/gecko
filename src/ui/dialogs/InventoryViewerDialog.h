@@ -20,7 +20,7 @@ class Object;
 
 /**
  * @brief Dialog for viewing and managing object inventories
- * 
+ *
  * Displays inventory contents in a tree view with item details:
  * - Item icon, name, type, amount, and PID
  * - Preview panel showing selected item sprite
@@ -46,22 +46,22 @@ private:
     void updateItemPreview(QTreeWidgetItem* item);
     void updateStatusLabel();
     void clearPreview();
-    
+
     // Helper methods for item management
     QString getItemName(uint32_t pid) const;
     QString getItemTypeName(uint32_t pid) const;
     QPixmap getItemIcon(uint32_t pid) const;
-    
+
     // UI Components
     QVBoxLayout* _mainLayout;
     QSplitter* _splitter;
-    
+
     // Left panel - Inventory list
     QWidget* _leftPanel;
     QVBoxLayout* _leftLayout;
     QTreeWidget* _inventoryTree;
     QLabel* _statusLabel;
-    
+
     // Right panel - Item preview and actions
     QWidget* _rightPanel;
     QVBoxLayout* _rightLayout;
@@ -72,7 +72,7 @@ private:
     QLabel* _previewTypeLabel;
     QLabel* _previewAmountLabel;
     QLabel* _previewPidLabel;
-    
+
     // Action buttons
     QWidget* _buttonPanel;
     QHBoxLayout* _buttonLayout;
@@ -80,11 +80,11 @@ private:
     QPushButton* _removeButton;
     QPushButton* _editButton;
     QPushButton* _closeButton;
-    
+
     // Data
     std::shared_ptr<Object> _object;
     std::shared_ptr<MapObject> _mapObject;
-    
+
     // Tree widget columns
     enum InventoryColumns {
         COLUMN_ICON = 0,

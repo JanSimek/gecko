@@ -63,19 +63,22 @@ QGroupBox* ProTabWidget::createStandardGroupBox(const QString& title) {
 }
 
 void ProTabWidget::connectSpinBox(QSpinBox* spinBox) {
-    if (!spinBox) return;
-    connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), 
-            this, &ProTabWidget::onFieldChanged);
+    if (!spinBox)
+        return;
+    connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+        this, &ProTabWidget::onFieldChanged);
 }
 
 void ProTabWidget::connectComboBox(QComboBox* comboBox) {
-    if (!comboBox) return;
-    connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), 
-            this, &ProTabWidget::onFieldChanged);
+    if (!comboBox)
+        return;
+    connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        this, &ProTabWidget::onFieldChanged);
 }
 
 void ProTabWidget::connectCheckBox(QCheckBox* checkBox) {
-    if (!checkBox) return;
+    if (!checkBox)
+        return;
     connect(checkBox, &QCheckBox::toggled, this, &ProTabWidget::onFieldChanged);
 }
 
@@ -93,6 +96,20 @@ void ProTabWidget::saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* values, i
             values[i] = static_cast<uint32_t>(widgets[i]->value());
         }
     }
+}
+
+void ProTabWidget::setComboIndex(QComboBox* combo, int index) {
+    if (combo)
+        combo->setCurrentIndex(index);
+}
+
+int ProTabWidget::getComboIndex(QComboBox* combo, int defaultValue) {
+    return combo ? combo->currentIndex() : defaultValue;
+}
+
+void ProTabWidget::setComboIndexSafe(QComboBox* combo, uint32_t index) {
+    if (combo && index < static_cast<uint32_t>(combo->count()))
+        combo->setCurrentIndex(static_cast<int>(index));
 }
 
 QStringList ProTabWidget::getMaterialNames() {

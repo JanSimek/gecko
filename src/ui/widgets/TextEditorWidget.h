@@ -14,7 +14,7 @@ namespace geck {
 
 /**
  * @brief Widget for managing text editor configuration
- * 
+ *
  * Provides UI for choosing between system default or custom text editor
  * for opening text files from the file browser.
  */
@@ -28,7 +28,7 @@ public:
     // Data access
     Settings::TextEditorMode getEditorMode() const;
     void setEditorMode(Settings::TextEditorMode mode);
-    
+
     QString getCustomEditorPath() const;
     void setCustomEditorPath(const QString& path);
 
@@ -46,7 +46,7 @@ private:
     void setupUI();
     void setupConnections();
     void updateControlStates();
-    
+
     // UI Components
     QVBoxLayout* _layout;
     QLabel* _helpLabel;

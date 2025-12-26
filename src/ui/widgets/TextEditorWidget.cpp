@@ -1,4 +1,5 @@
 #include "TextEditorWidget.h"
+#include "../UIConstants.h"
 
 #include <QApplication>
 #include <QStyle>
@@ -8,11 +9,7 @@
 
 namespace geck {
 
-// Constants for styling and configuration
-namespace {
-    constexpr const char* HELP_STYLE = "QLabel { color: gray; font-size: 11px; margin-bottom: 8px; }";
-    constexpr int INDENT_MARGIN = 20;
-}
+using namespace ui::constants;
 
 TextEditorWidget::TextEditorWidget(QWidget* parent)
     : QGroupBox("Text Editor", parent)
@@ -23,46 +20,45 @@ TextEditorWidget::TextEditorWidget(QWidget* parent)
     , _customEditorLayout(nullptr)
     , _customEditorPathEdit(nullptr)
     , _browseEditorButton(nullptr) {
-    
+
     setupUI();
     setupConnections();
 }
 
 void TextEditorWidget::setupUI() {
     _layout = new QVBoxLayout(this);
-    
+
     // Help text
     _helpLabel = new QLabel(
-        "Choose how to open text files (txt, gam, lst, ini, etc.) from the file browser."
-    );
+        "Choose how to open text files (txt, gam, lst, ini, etc.) from the file browser.");
     _helpLabel->setWordWrap(true);
-    _helpLabel->setStyleSheet(HELP_STYLE);
+    _helpLabel->setStyleSheet(ui::theme::styles::helpText());
     _layout->addWidget(_helpLabel);
-    
+
     // Radio buttons
     _systemEditorRadio = new QRadioButton("Use default system editor");
     _systemEditorRadio->setChecked(true); // Default selection
     _layout->addWidget(_systemEditorRadio);
-    
+
     _customEditorRadio = new QRadioButton("Use custom editor:");
     _layout->addWidget(_customEditorRadio);
-    
+
     // Custom editor path layout
     _customEditorLayout = new QHBoxLayout();
     _customEditorLayout->setContentsMargins(INDENT_MARGIN, 0, 0, 0); // Indent under radio button
-    
+
     _customEditorPathEdit = new QLineEdit();
     _customEditorPathEdit->setPlaceholderText("Path to editor executable...");
     _customEditorPathEdit->setEnabled(false);
     _customEditorLayout->addWidget(_customEditorPathEdit);
-    
+
     _browseEditorButton = new QPushButton("Browse...");
     _browseEditorButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogOpenButton));
     _browseEditorButton->setEnabled(false);
     _customEditorLayout->addWidget(_browseEditorButton);
-    
+
     _layout->addLayout(_customEditorLayout);
-    
+
     // Update initial control states
     updateControlStates();
 }
@@ -97,7 +93,7 @@ void TextEditorWidget::setCustomEditorPath(const QString& path) {
 
 void TextEditorWidget::updateControlStates() {
     bool customSelected = _customEditorRadio->isChecked();
-    
+
     // Enable/disable custom editor controls
     _customEditorPathEdit->setEnabled(customSelected);
     _browseEditorButton->setEnabled(customSelected);
@@ -116,17 +112,15 @@ void TextEditorWidget::onCustomEditorPathChanged() {
 
 void TextEditorWidget::onBrowseEditor() {
     QString currentPath = _customEditorPathEdit->text();
-    
+
     // Default to the current path or home directory
-    QString startPath = currentPath.isEmpty() ? 
-        QStandardPaths::writableLocation(QStandardPaths::HomeLocation) : 
-        QFileInfo(currentPath).absolutePath();
-    
+    QString startPath = currentPath.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::HomeLocation) : QFileInfo(currentPath).absolutePath();
+
     QString editorPath = QFileDialog::getOpenFileName(this,
         "Select Text Editor Executable",
         startPath,
         "Executable Files (*.exe *.app *);;All Files (*)");
-    
+
     if (!editorPath.isEmpty()) {
         _customEditorPathEdit->setText(editorPath);
         emit customEditorPathChanged();

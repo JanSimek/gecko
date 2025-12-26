@@ -13,29 +13,29 @@ std::unique_ptr<geck::Frm> geck::FrmReader::read() {
     try {
         // Use format validation
         FormatValidator::validateFrmFile(getBinaryUtils(), _path);
-        
+
         auto& utils = getBinaryUtils();
         spdlog::debug("Reading FRM file: {}", _path.string());
 
         auto frm = std::make_unique<Frm>(_path);
-        
+
         uint32_t version = utils.readBE32();
         frm->setVersion(version);
-        
+
         uint16_t fps = utils.readBE16();
         frm->setFps(fps);
-        
+
         frm->setActionFrame(utils.readBE16());
         frm->setFramesPerDirection(utils.readBE16());
-        
-        spdlog::trace("FRM header: version={}, fps={}, frames_per_dir={}", 
-                     version, fps, frm->framesPerDirection());
+
+        spdlog::trace("FRM header: version={}, fps={}, frames_per_dir={}",
+            version, fps, frm->framesPerDirection());
 
         // Read direction data arrays
         std::array<uint16_t, Frm::DIRECTIONS> shiftX;
         std::array<uint16_t, Frm::DIRECTIONS> shiftY;
         std::array<uint32_t, Frm::DIRECTIONS> dataOffset;
-        
+
         for (unsigned int i = 0; i != Frm::DIRECTIONS; ++i)
             shiftX[i] = utils.readBE16();
         for (unsigned int i = 0; i != Frm::DIRECTIONS; ++i)
@@ -58,21 +58,21 @@ std::unique_ptr<geck::Frm> geck::FrmReader::read() {
             direction.setShiftY(shiftY[i]);
 
             directions.emplace_back(direction);
-            spdlog::trace("Direction {}: offset={}, shiftX={}, shiftY={}", 
-                         i, dataOffset[i], shiftX[i], shiftY[i]);
+            spdlog::trace("Direction {}: offset={}, shiftX={}, shiftY={}",
+                i, dataOffset[i], shiftX[i], shiftY[i]);
         }
 
         uint32_t size_of_frame_data = utils.readBE32();
         spdlog::trace("FRM frame data size: {} bytes", size_of_frame_data);
 
         auto data_start = utils.getPosition().current;
-        
+
         // Validate frame data size
         if (data_start + size_of_frame_data > utils.getPosition().total) {
             throw ParseException(
-                ErrorMessages::frmFileError(_path, 
-                    "Frame data size (" + std::to_string(size_of_frame_data) + 
-                    ") extends beyond file end"), _path);
+                ErrorMessages::frmFileError(_path,
+                    "Frame data size (" + std::to_string(size_of_frame_data) + ") extends beyond file end"),
+                _path);
         }
 
         // Process each direction's frame data
@@ -80,7 +80,7 @@ std::unique_ptr<geck::Frm> geck::FrmReader::read() {
             // Jump to frames data at frames area
             size_t frame_data_offset = data_start + direction.dataOffset();
             utils.setPosition(frame_data_offset);
-            
+
             spdlog::trace("Processing direction at offset {}", frame_data_offset);
 
             // Read all frames for this direction
@@ -95,7 +95,7 @@ std::unique_ptr<geck::Frm> geck::FrmReader::read() {
                 uint32_t pixel_count = utils.readBE32();
                 if (pixel_count != static_cast<uint32_t>(width) * static_cast<uint32_t>(height)) {
                     spdlog::warn("FRM frame {}: pixel count mismatch - header says {}, expected {}",
-                               i, pixel_count, width * height);
+                        i, pixel_count, width * height);
                 }
 
                 frame.setOffsetX(utils.readBE16());
@@ -107,18 +107,18 @@ std::unique_ptr<geck::Frm> geck::FrmReader::read() {
                 _stream.read(frame.data(), pixel_data_size);
 
                 frames.emplace_back(frame);
-                spdlog::trace("Read frame {}: {}x{}, offset=({},{}), {} pixels", 
-                            i, width, height, frame.offsetX(), frame.offsetY(), pixel_data_size);
+                spdlog::trace("Read frame {}: {}x{}, offset=({},{}), {} pixels",
+                    i, width, height, frame.offsetX(), frame.offsetY(), pixel_data_size);
             }
             direction.setFrames(frames);
         }
 
         frm->setDirections(directions);
-        
-        spdlog::debug("Successfully read FRM file with {} directions, {} frames per direction", 
-                     directions.size(), frm->framesPerDirection());
+
+        spdlog::debug("Successfully read FRM file with {} directions, {} frames per direction",
+            directions.size(), frm->framesPerDirection());
         return frm;
-        
+
     } catch (const FileReaderException&) {
         throw;
     } catch (const std::exception& e) {

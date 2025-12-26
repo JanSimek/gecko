@@ -19,7 +19,7 @@ public:
     void init() override;
     bool isDone() override;
     void onDone() override;
-    
+
     bool hasError() const { return _hasError; }
     const std::string& errorMessage() const { return _errorMessage; }
 
@@ -36,7 +36,7 @@ private:
     int _elevation;
     bool _forceFilesystem;
     std::function<void(std::unique_ptr<Map>)> _onLoadCallback;
-    
+
     // Error handling
     std::string _errorMessage;
     bool _hasError = false;

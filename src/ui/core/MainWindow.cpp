@@ -95,7 +95,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     setDockOptions(QMainWindow::AllowTabbedDocks | QMainWindow::AllowNestedDocks | QMainWindow::AnimatedDocks);
     setDockNestingEnabled(true);
-    
+
     // Enable proper focus handling for dock widgets
     setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 
@@ -140,7 +140,7 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     // Connect signals
     connectToEditorWidget();
     connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, &MainWindow::updateUndoRedoActions);
-    
+
     // Sync current menu state to the new EditorWidget
     syncMenuStateToEditorWidget();
 
@@ -155,7 +155,6 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
     updateUndoRedoActions();
 }
-
 
 void MainWindow::setupUI() {
     // Create central stacked widget to hold loading and editor widgets
@@ -219,7 +218,7 @@ void MainWindow::connectMenuSignals() {
             _selectionPanel->clearSelection();
         }
     });
-    
+
     updateUndoRedoActions();
 }
 
@@ -245,7 +244,7 @@ void MainWindow::setupMenuBar() {
     connect(saveAction, &QAction::triggered, this, &MainWindow::saveMapRequested);
 
     _fileMenu->addSeparator();
-    
+
     QAction* preferencesAction = _fileMenu->addAction(createIcon(":/icons/actions/settings.svg"), "&Preferences...");
     preferencesAction->setShortcut(QKeySequence::Preferences);
     preferencesAction->setStatusTip("Open application preferences");
@@ -277,9 +276,9 @@ void MainWindow::setupMenuBar() {
     scrollBlockerRectangleAction->setShortcut(QKeySequence("B"));
     scrollBlockerRectangleAction->setStatusTip("Draw rectangle and place scroll blockers on borders");
     connect(scrollBlockerRectangleAction, &QAction::triggered, this, &MainWindow::toggleScrollBlockerRectangleMode);
-    
+
     _editMenu->addSeparator();
-    
+
     _undoAction = _editMenu->addAction("&Undo");
     _undoAction->setShortcut(QKeySequence::Undo);
     _undoAction->setStatusTip("Undo last edit");
@@ -289,7 +288,7 @@ void MainWindow::setupMenuBar() {
             updateUndoRedoActions();
         }
     });
-    
+
     _redoAction = _editMenu->addAction("&Redo");
     _redoAction->setShortcut(QKeySequence::Redo);
     _redoAction->setStatusTip("Redo last edit");
@@ -299,7 +298,7 @@ void MainWindow::setupMenuBar() {
             updateUndoRedoActions();
         }
     });
-    
+
     updateUndoRedoActions();
 
     // View Menu
@@ -464,7 +463,7 @@ void MainWindow::setupMenuBar() {
     _elevation3Action->setDisabled(true);
     elevationGroup->addAction(_elevation3Action);
     connect(_elevation3Action, &QAction::triggered, [this]() { elevationChanged(ELEVATION_3); });
-    
+
     // Help Menu
     _helpMenu = _menuBar->addMenu("&Help");
     QAction* aboutAction = _helpMenu->addAction("&About Gecko...");
@@ -501,10 +500,10 @@ void MainWindow::setupToolBar() {
 
     _mainToolBar->addSeparator(); // Separate play from selection controls
 
-    // Selection mode action with dropdown menu  
+    // Selection mode action with dropdown menu
     _selectionModeAction = _mainToolBar->addAction(createIcon(":/icons/actions/select.svg"), "All");
     _selectionModeAction->setToolTip("Select the current selection mode");
-    
+
     // Create dropdown menu with all selection modes
     _selectionModeMenu = new QMenu(this);
     for (int i = 0; i < static_cast<int>(SelectionMode::NUM_SELECTION_TYPES); ++i) {
@@ -512,19 +511,19 @@ void MainWindow::setupToolBar() {
         QAction* action = _selectionModeMenu->addAction(selectionModeToString(mode));
         action->setData(static_cast<int>(mode));
         action->setCheckable(true);
-        
+
         // Set "All" mode as checked by default
         if (mode == SelectionMode::ALL) {
             action->setChecked(true);
         }
-        
+
         // Connect each menu action to update editor widget
         connect(action, &QAction::triggered, this, [this, mode]() {
             if (_currentEditorWidget) {
                 _currentEditorWidget->setSelectionMode(mode);
                 // Update action text to show current mode
                 _selectionModeAction->setText(selectionModeToString(mode));
-                
+
                 // Update checkmarks in menu
                 for (QAction* menuAction : _selectionModeMenu->actions()) {
                     menuAction->setChecked(menuAction->data().toInt() == static_cast<int>(mode));
@@ -532,7 +531,7 @@ void MainWindow::setupToolBar() {
             }
         });
     }
-    
+
     // Connect the main action to show the dropdown menu
     connect(_selectionModeAction, &QAction::triggered, this, [this]() {
         // Get the toolbar button widget for this action to position the menu correctly
@@ -548,7 +547,7 @@ void MainWindow::setupToolBar() {
 
     // Rotate action
     QAction* rotateAction = _mainToolBar->addAction(createIcon(":/icons/actions/rotate.svg"), "Rotate");
-    
+
     // Mark exits tool
     _markExitsAction = _mainToolBar->addAction(createIcon(":/icons/actions/door-exit.svg"), "Mark Exits");
     _markExitsAction->setStatusTip("Select exit grids to edit their properties");
@@ -626,23 +625,23 @@ void MainWindow::setupDockWidgets() {
     _fileBrowserPanel = new FileBrowserPanel();
     _fileBrowserPanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     _fileBrowserDock->setWidget(_fileBrowserPanel);
-    
+
     // Connect file browser signals
     connect(_fileBrowserPanel, &FileBrowserPanel::fileDoubleClicked, this, [this](const QString& filePath) {
         // Check if it's a map file
         if (filePath.endsWith(".map", Qt::CaseInsensitive)) {
             spdlog::info("MainWindow: Opening map from file browser: {}", filePath.toStdString());
-            
+
             // File browser always uses VFS loading (forceFilesystem = false)
             handleMapLoadRequest(filePath.toStdString(), false);
         } else if (isTextFile(filePath)) {
             spdlog::info("MainWindow: Opening text file from file browser: {}", filePath.toStdString());
-            
+
             // Open text files with configured editor
             openTextFileWithEditor(filePath);
         } else {
             spdlog::debug("MainWindow: Unsupported file type double-clicked: {}", filePath.toStdString());
-            QtDialogs::showInfo(this, "File Type Not Supported", 
+            QtDialogs::showInfo(this, "File Type Not Supported",
                 QString("File type not supported for opening: %1\n\nYou can export the file using the right-click context menu.").arg(filePath));
         }
     });
@@ -751,7 +750,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
             return;
         }
     }
-    
+
     if (_currentEditorWidget) {
         SFMLWidget* sfmlWidget = _currentEditorWidget->getSFMLWidget();
         if (sfmlWidget) {
@@ -914,7 +913,7 @@ void MainWindow::connectToEditorWidget() {
                 openProEditorForSelectedObject();
             }
         });
-        
+
         connect(_selectionPanel, &SelectionPanel::requestExitGridEditor, [this](std::shared_ptr<Object> object) {
             if (object && object->hasMapObject()) {
                 auto* exitGridManager = _currentEditorWidget->getExitGridPlacementManager();
@@ -926,40 +925,39 @@ void MainWindow::connectToEditorWidget() {
                 }
             }
         });
-        
-        
+
         // Connect highlight request signal
-        connect(_selectionPanel, &SelectionPanel::requestObjectHighlight, 
-                [this](std::shared_ptr<Object> object) {
-                    if (_currentEditorWidget && object) {
-                        // Get current selection state
-                        auto* selectionManager = _currentEditorWidget->getSelectionManager();
-                        auto& selectionState = selectionManager->getMutableSelection();
-                        
-                        // Check if object is already selected
-                        selection::SelectedItem item;
-                        item.type = selection::SelectionType::OBJECT;
-                        item.data = object;
-                        
-                        if (!selectionState.hasItem(item)) {
-                            // Object not selected, add it
-                            selectionState.addItem(item);
-                        }
-                        
-                        // Always notify the rendering system to refresh highlight
-                        _currentEditorWidget->selectionChanged(selectionState, _currentEditorWidget->getCurrentElevation());
-                        
-                        // Force a complete render update to ensure highlighting is visible
-                        if (_currentEditorWidget->getSFMLWidget()) {
-                            _currentEditorWidget->getSFMLWidget()->update();
-                            _currentEditorWidget->getSFMLWidget()->repaint();
-                        }
+        connect(_selectionPanel, &SelectionPanel::requestObjectHighlight,
+            [this](std::shared_ptr<Object> object) {
+                if (_currentEditorWidget && object) {
+                    // Get current selection state
+                    auto* selectionManager = _currentEditorWidget->getSelectionManager();
+                    auto& selectionState = selectionManager->getMutableSelection();
+
+                    // Check if object is already selected
+                    selection::SelectedItem item;
+                    item.type = selection::SelectionType::OBJECT;
+                    item.data = object;
+
+                    if (!selectionState.hasItem(item)) {
+                        // Object not selected, add it
+                        selectionState.addItem(item);
                     }
-                });
-        
+
+                    // Always notify the rendering system to refresh highlight
+                    _currentEditorWidget->selectionChanged(selectionState, _currentEditorWidget->getCurrentElevation());
+
+                    // Force a complete render update to ensure highlighting is visible
+                    if (_currentEditorWidget->getSFMLWidget()) {
+                        _currentEditorWidget->getSFMLWidget()->update();
+                        _currentEditorWidget->getSFMLWidget()->repaint();
+                    }
+                }
+            });
+
         spdlog::info("Connected EditorWidget selection signals to unified SelectionPanel");
     }
-    
+
     // Connect status message signals
     connect(_currentEditorWidget, &EditorWidget::statusMessageRequested, this, &MainWindow::showStatusMessage);
     connect(_currentEditorWidget, &EditorWidget::statusMessageClearRequested, this, &MainWindow::clearStatusMessage);
@@ -968,7 +966,7 @@ void MainWindow::connectToEditorWidget() {
     if (_tilePalettePanel) {
         // Set the map reference for the tile palette panel
         _tilePalettePanel->setMap(_currentEditorWidget->getMap());
-        
+
         // Set the selection manager reference for tile replacement detection
         _tilePalettePanel->setSelectionManager(_currentEditorWidget->getSelectionManager());
 
@@ -1015,55 +1013,55 @@ void MainWindow::connectToEditorWidget() {
     connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, [this](const std::string& mapPath) {
         handleMapLoadRequest(mapPath, true); // Force filesystem for File menu
     });
-    
+
     // Connect player position selection
     if (_mapInfoPanel) {
-        connect(_mapInfoPanel, &MapInfoPanel::selectPlayerPositionRequested, 
-                _currentEditorWidget, &EditorWidget::enterPlayerPositionSelectionMode);
+        connect(_mapInfoPanel, &MapInfoPanel::selectPlayerPositionRequested,
+            _currentEditorWidget, &EditorWidget::enterPlayerPositionSelectionMode);
         connect(_mapInfoPanel, &MapInfoPanel::centerViewOnPlayerPositionRequested,
-                _currentEditorWidget, &EditorWidget::centerViewOnPlayerPosition);
-        
+            _currentEditorWidget, &EditorWidget::centerViewOnPlayerPosition);
+
         // Connect elevation added/removed signals to update elevation menu
         connect(_mapInfoPanel, &MapInfoPanel::elevationAdded,
-                this, [this](int elevation) {
-                    updateElevationMenu(_currentEditorWidget->getMap());
-                    
-                    // If the added elevation is the current one, reload sprites
-                    if (_currentEditorWidget->getCurrentElevation() == elevation) {
-                        _currentEditorWidget->loadTileSprites();
-                        spdlog::info("MainWindow: Reloaded sprites for newly added elevation {}", elevation);
-                    }
-                });
+            this, [this](int elevation) {
+                updateElevationMenu(_currentEditorWidget->getMap());
+
+                // If the added elevation is the current one, reload sprites
+                if (_currentEditorWidget->getCurrentElevation() == elevation) {
+                    _currentEditorWidget->loadTileSprites();
+                    spdlog::info("MainWindow: Reloaded sprites for newly added elevation {}", elevation);
+                }
+            });
         connect(_mapInfoPanel, &MapInfoPanel::elevationRemoved,
-                this, [this](int elevation) {
-                    updateElevationMenu(_currentEditorWidget->getMap());
-                    
-                    // If the removed elevation was the current one, switch to an available elevation
-                    if (_currentEditorWidget->getCurrentElevation() == elevation) {
-                        // Find first available elevation and switch to it
-                        auto* map = _currentEditorWidget->getMap();
-                        if (map) {
-                            uint32_t flags = map->getMapFile().header.flags;
-                            if ((flags & 0x2) == 0) { // Elevation 1 available
-                                elevationChanged(ELEVATION_1);
-                            } else if ((flags & 0x4) == 0) { // Elevation 2 available  
-                                elevationChanged(ELEVATION_2);
-                            } else if ((flags & 0x8) == 0) { // Elevation 3 available
-                                elevationChanged(ELEVATION_3);
-                            }
+            this, [this](int elevation) {
+                updateElevationMenu(_currentEditorWidget->getMap());
+
+                // If the removed elevation was the current one, switch to an available elevation
+                if (_currentEditorWidget->getCurrentElevation() == elevation) {
+                    // Find first available elevation and switch to it
+                    auto* map = _currentEditorWidget->getMap();
+                    if (map) {
+                        uint32_t flags = map->getMapFile().header.flags;
+                        if ((flags & 0x2) == 0) { // Elevation 1 available
+                            elevationChanged(ELEVATION_1);
+                        } else if ((flags & 0x4) == 0) { // Elevation 2 available
+                            elevationChanged(ELEVATION_2);
+                        } else if ((flags & 0x8) == 0) { // Elevation 3 available
+                            elevationChanged(ELEVATION_3);
                         }
-                        spdlog::info("MainWindow: Switched away from removed elevation {}", elevation);
                     }
-                });
-        
-        connect(_currentEditorWidget, &EditorWidget::playerPositionSelected, 
-                this, [this](int hexPosition) {
-                    if (_mapInfoPanel) {
-                        // Update the MapInfo panel with the selected position
-                        // The panel will update the underlying map data
-                        _mapInfoPanel->setPlayerPosition(hexPosition);
-                    }
-                });
+                    spdlog::info("MainWindow: Switched away from removed elevation {}", elevation);
+                }
+            });
+
+        connect(_currentEditorWidget, &EditorWidget::playerPositionSelected,
+            this, [this](int hexPosition) {
+                if (_mapInfoPanel) {
+                    // Update the MapInfo panel with the selected position
+                    // The panel will update the underlying map data
+                    _mapInfoPanel->setPlayerPosition(hexPosition);
+                }
+            });
     }
 
     spdlog::info("Qt6 menu connected to EditorWidget");
@@ -1085,7 +1083,7 @@ void MainWindow::syncMenuStateToEditorWidget() {
     _currentEditorWidget->setShowLightOverlays(_showLightOverlaysAction->isChecked());
     _currentEditorWidget->setShowExitGrids(_showExitGridsAction->isChecked());
     updateUndoRedoActions();
-    
+
     // Sync selection mode from action to EditorWidget (defaults to ALL mode)
     if (_currentEditorWidget) {
         _currentEditorWidget->setSelectionMode(SelectionMode::ALL);
@@ -1170,8 +1168,8 @@ void MainWindow::updateElevationMenu(Map* map) {
         _elevation3Action->setChecked(true);
     }
 
-    spdlog::debug("Updated elevation menu: E1={}, E2={}, E3={}", 
-                  hasElevation1, hasElevation2, hasElevation3);
+    spdlog::debug("Updated elevation menu: E1={}, E2={}, E3={}",
+        hasElevation1, hasElevation2, hasElevation3);
 }
 
 void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem) {
@@ -1194,7 +1192,7 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFile
 
     // Show modal loading dialog
     loadingWidget->exec();
-    
+
     spdlog::info("Map loading completed from MainWindow");
 }
 
@@ -1424,7 +1422,7 @@ void MainWindow::restoreDockWidgetState() {
     if (!geometry.isEmpty()) {
         restoreGeometry(geometry);
     }
-    
+
     // Restore window state (maximized/normal)
     if (settings.getWindowMaximized()) {
         setWindowState(Qt::WindowMaximized);
@@ -1710,13 +1708,13 @@ void MainWindow::showFileBrowserPanel() {
     // Show and raise the dock widget containing the file browser
     _fileBrowserDock->show();
     _fileBrowserDock->raise();
-    
+
     // Make the file browser tab active within the tabbed dock area
     // Since file browser is tabified with tile and object palettes, we need to ensure it's the active tab
     _fileBrowserDock->widget()->setFocus();
 
     snapshotPanelVisibility();
-    
+
     spdlog::debug("File browser panel shown and raised");
 }
 
@@ -1724,25 +1722,25 @@ void MainWindow::closeCurrentMap() {
     if (!_currentEditorWidget) {
         return;
     }
-    
+
     spdlog::info("Closing current map due to data path changes");
-    
+
     // Stop the game loop
     stopGameLoop();
-    
+
     // Remove the current editor widget from the stack
     _centralStack->removeWidget(_currentEditorWidget);
-    
+
     // Delete the editor widget
     _currentEditorWidget->deleteLater();
     _currentEditorWidget = nullptr;
-    
+
     // Show the welcome widget
     _centralStack->setCurrentWidget(_welcomeWidget);
-    
+
     // Hide panels that are only relevant when a map is loaded
     hidePanelsForNoMap();
-    
+
     spdlog::debug("Current map closed successfully");
     updateUndoRedoActions();
 }
@@ -1753,22 +1751,22 @@ bool MainWindow::hasActiveMap() const {
 
 void MainWindow::showPreferences() {
     SettingsDialog dialog(this);
-    
+
     connect(&dialog, &SettingsDialog::dataPathsChanged, this, [this]() {
         // Close the current map since it may be using assets from removed paths
         if (hasActiveMap()) {
             closeCurrentMap();
         }
     });
-    
+
     connect(&dialog, &SettingsDialog::settingsSaved, this, [this](bool dataPathsChanged) {
         if (dataPathsChanged) {
             refreshFileBrowser();
         }
     });
-    
+
     int result = dialog.exec();
-    
+
     if (result == QDialog::Accepted) {
         // Settings were saved, we might need to reload resources if data paths changed
         spdlog::info("Settings dialog closed with changes");
@@ -1776,7 +1774,7 @@ void MainWindow::showPreferences() {
     } else {
         spdlog::info("Settings dialog cancelled");
     }
-    
+
     // Ensure file browser panel is visible after closing preferences
     showFileBrowserPanel();
 }
@@ -1788,7 +1786,7 @@ void MainWindow::showAbout() {
 
 void MainWindow::onPlayGame() {
     auto& settings = Settings::getInstance();
-    
+
     // Check if game location is configured and valid
     if (!settings.isGameLocationValid()) {
         QtDialogs::showWarning(this, "Game Location Not Configured",
@@ -1796,23 +1794,23 @@ void MainWindow::onPlayGame() {
             "Please set up the game location in Preferences (File > Preferences > Game Location).");
         return;
     }
-    
+
     // Check if a map is currently loaded
     if (!_currentEditorWidget) {
         QtDialogs::showWarning(this, "No Map Loaded",
             "No map is currently loaded. Please open or create a map before playing.");
         return;
     }
-    
+
     // Get the current map
     const auto& mapFile = _currentEditorWidget->getMapFile();
     std::string mapFilename = _currentEditorWidget->getMap()->filename();
-    
+
     // Ensure the filename has .map extension
     if (!mapFilename.ends_with(".map")) {
         mapFilename += ".map";
     }
-    
+
     // Handle different installation types
     if (settings.getGameInstallationType() == Settings::GameInstallationType::STEAM) {
         // For Steam installations, we don't need to copy the map file
@@ -1820,59 +1818,59 @@ void MainWindow::onPlayGame() {
         launchGameViaSteam(settings.getSteamAppId());
         return;
     }
-    
+
     // Get game data directory for map copying and ddraw.ini modification
     std::filesystem::path gameDataDir = settings.getGameLocation(); // Returns data directory for executable installs
     if (gameDataDir.empty()) {
-        QtDialogs::showError(this, "Play Failed", 
+        QtDialogs::showError(this, "Play Failed",
             "No game data directory configured. Please set the game data directory in Preferences.");
         return;
     }
-    
+
     // Get executable location for launching
     std::filesystem::path executableLocation = settings.getExecutableGameLocation();
     if (executableLocation.empty()) {
-        QtDialogs::showError(this, "Play Failed", 
+        QtDialogs::showError(this, "Play Failed",
             "No game executable configured. Please set the game executable in Preferences.");
         return;
     }
-    
+
     std::filesystem::path mapsDir = gameDataDir / "data" / "maps";
     std::filesystem::path mapDestination = mapsDir / mapFilename;
-    
+
     showStatusMessage(QString("Playing map: %1").arg(QString::fromStdString(mapFilename)));
-    
+
     try {
         // 1. Save the current map to the game directory
         if (!std::filesystem::exists(mapsDir)) {
             std::filesystem::create_directories(mapsDir);
         }
-        
+
         MapWriter mapWriter{ [](int32_t PID) {
             return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(PID));
         } };
         mapWriter.openFile(mapDestination.string());
-        
+
         if (!mapWriter.write(mapFile)) {
-            QtDialogs::showError(this, "Save Failed", 
+            QtDialogs::showError(this, "Save Failed",
                 QString("Failed to save map to game directory: %1").arg(QString::fromStdString(mapDestination.string())));
             return;
         }
-        
+
         spdlog::info("Saved map to game directory: {} ({} bytes)", mapDestination.string(), mapWriter.getBytesWritten());
-        
+
         // 2. Modify ddraw.ini
         std::filesystem::path ddrawIniPath = gameDataDir / "ddraw.ini";
         if (!modifyDdrawIni(ddrawIniPath, mapFilename)) {
             QtDialogs::showWarning(this, "Configuration Warning",
                 "Map saved successfully, but failed to modify ddraw.ini. You may need to manually set the starting map.");
         }
-        
+
         // 3. Launch the game
         launchGame(executableLocation);
-        
+
     } catch (const std::exception& e) {
-        QtDialogs::showError(this, "Play Failed", 
+        QtDialogs::showError(this, "Play Failed",
             QString("Failed to play map: %1").arg(e.what()));
         spdlog::error("Failed to play map: {}", e.what());
     }
@@ -1892,43 +1890,43 @@ void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
         auto& settings = Settings::getInstance();
         auto editorMode = settings.getTextEditorMode();
         QString customEditorPath = settings.getCustomEditorPath();
-        
-        spdlog::info("MainWindow: Opening text file with {} editor: {}", 
-                    (editorMode == Settings::TextEditorMode::CUSTOM) ? "custom" : "system", 
-                    vfsFilePath.toStdString());
-        
+
+        spdlog::info("MainWindow: Opening text file with {} editor: {}",
+            (editorMode == Settings::TextEditorMode::CUSTOM) ? "custom" : "system",
+            vfsFilePath.toStdString());
+
         // Get file from VFS
         auto& resourceManager = ResourceManager::getInstance();
         auto vfs = resourceManager.getVFS();
-        
+
         if (!vfs) {
             QtDialogs::showError(this, "Error", "Virtual file system not available");
             return;
         }
-        
+
         // Prepare VFS path (needs leading slash)
         std::filesystem::path vfsPath = "/" / std::filesystem::path(vfsFilePath.toStdString());
         vfspp::FileInfo vfsFileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
-        
+
         // Open file in VFS
         vfspp::IFilePtr vfsFile = vfs->OpenFile(vfsFileInfo, vfspp::IFile::FileMode::Read);
         if (!vfsFile) {
-            QtDialogs::showError(this, "Error", 
+            QtDialogs::showError(this, "Error",
                 QString("Failed to open file: %1").arg(vfsFilePath));
             return;
         }
-        
+
         // Create temporary file with same extension (if needed)
         QFileInfo fileInfo(vfsFilePath);
         QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
         QString tempFileName = QString("%1_XXXXXX.%2")
-            .arg(fileInfo.baseName())
-            .arg(fileInfo.suffix());
+                                   .arg(fileInfo.baseName())
+                                   .arg(fileInfo.suffix());
         QString tempFilePath = tempDir + "/" + tempFileName;
-        
+
         QString targetFilePath;
         bool usedTemporaryFile = false;
-        
+
         // Try the original path from the browser first
         QFileInfo requestedPathInfo(vfsFilePath);
         if (requestedPathInfo.exists() && requestedPathInfo.isReadable() && requestedPathInfo.isFile()) {
@@ -1940,7 +1938,7 @@ void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
             while (vfsAbsolutePath.startsWith("//")) {
                 vfsAbsolutePath.remove(0, 1);
             }
-            
+
             QFileInfo vfsInfo(vfsAbsolutePath);
             if (vfsInfo.exists() && vfsInfo.isReadable() && vfsInfo.isFile()) {
                 targetFilePath = vfsInfo.absoluteFilePath();
@@ -1950,67 +1948,67 @@ void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
                 size_t fileSize = vfsFile->Size();
                 std::vector<uint8_t> buffer(fileSize);
                 size_t bytesRead = vfsFile->Read(buffer.data(), fileSize);
-                
+
                 if (bytesRead != fileSize) {
-                    QtDialogs::showError(this, "Error", 
+                    QtDialogs::showError(this, "Error",
                         QString("Failed to read complete file: %1").arg(vfsFilePath));
                     return;
                 }
-                
+
                 QTemporaryFile tempFile(tempFilePath);
                 tempFile.setAutoRemove(false); // Keep file for editor to open
-                
+
                 if (!tempFile.open()) {
-                    QtDialogs::showError(this, "Error", 
+                    QtDialogs::showError(this, "Error",
                         QString("Failed to create temporary file for: %1").arg(vfsFilePath));
                     return;
                 }
-                
+
                 // Write data to temporary file
                 tempFile.write(reinterpret_cast<const char*>(buffer.data()), fileSize);
                 tempFile.close();
-                
+
                 // Get the actual temporary file path
                 targetFilePath = tempFile.fileName();
                 usedTemporaryFile = true;
             }
         }
-        
+
         if (targetFilePath.isEmpty()) {
-            QtDialogs::showError(this, "Error", 
+            QtDialogs::showError(this, "Error",
                 QString("Failed to resolve path for: %1").arg(vfsFilePath));
             return;
         }
 
         bool opened = false;
         bool customAttempted = false;
-        
+
         if (editorMode == Settings::TextEditorMode::CUSTOM && !customEditorPath.isEmpty()) {
             customAttempted = true;
             QStringList arguments;
             arguments << targetFilePath;
-            
+
             opened = QProcess::startDetached(customEditorPath, arguments);
-            
+
             if (opened) {
-                spdlog::info("MainWindow: Successfully opened file with custom editor: {} -> {}", 
-                            customEditorPath.toStdString(), targetFilePath.toStdString());
+                spdlog::info("MainWindow: Successfully opened file with custom editor: {} -> {}",
+                    customEditorPath.toStdString(), targetFilePath.toStdString());
             } else {
                 spdlog::warn("MainWindow: Failed to start custom editor: {}", customEditorPath.toStdString());
             }
         }
-        
+
         // Use system default editor if custom failed or not configured
         if (!opened) {
             QUrl fileUrl = QUrl::fromLocalFile(targetFilePath);
             opened = QDesktopServices::openUrl(fileUrl);
-            
+
             if (!opened) {
                 QString errorText = customAttempted
                     ? QString("Failed to open file with custom editor (%1) or system default.").arg(customEditorPath)
                     : QString("Failed to open file with system default editor.");
                 QtDialogs::showError(this, "Error", errorText);
-                
+
                 // Clean up the temp file if opening failed
                 if (usedTemporaryFile) {
                     QFile::remove(targetFilePath);
@@ -2019,9 +2017,9 @@ void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
                 spdlog::info("MainWindow: Successfully opened file with system default editor: {}", targetFilePath.toStdString());
             }
         }
-        
+
     } catch (const std::exception& e) {
-        QtDialogs::showError(this, "Error", 
+        QtDialogs::showError(this, "Error",
             QString("Failed to open text file: %1").arg(e.what()));
     }
 }
@@ -2050,7 +2048,7 @@ bool MainWindow::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const
         bool foundMiscSection = false;
         bool foundStartingMap = false;
         std::string miscSection;
-        
+
         // Read existing file if it exists
         if (std::filesystem::exists(ddrawIniPath)) {
             std::ifstream file(ddrawIniPath);
@@ -2058,10 +2056,10 @@ bool MainWindow::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const
                 spdlog::error("Failed to open ddraw.ini for reading: {}", ddrawIniPath.string());
                 return false;
             }
-            
+
             std::string line;
             std::string currentSection;
-            
+
             while (std::getline(file, line)) {
                 // Check for section headers
                 if (line.starts_with("[") && line.ends_with("]")) {
@@ -2070,25 +2068,24 @@ bool MainWindow::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const
                         foundMiscSection = true;
                     }
                 }
-                
+
                 // Check for StartingMap in Misc section
-                if (foundMiscSection && currentSection == "[Misc]" && 
-                    (line.starts_with("StartingMap=") || line.starts_with(";StartingMap="))) {
+                if (foundMiscSection && currentSection == "[Misc]" && (line.starts_with("StartingMap=") || line.starts_with(";StartingMap="))) {
                     foundStartingMap = true;
                     line = "StartingMap=" + mapFilename;
                 }
-                
+
                 content += line + "\n";
             }
             file.close();
         }
-        
+
         // If no [Misc] section found, add it
         if (!foundMiscSection) {
             content += "\n[Misc]\n";
             foundMiscSection = true;
         }
-        
+
         // If no StartingMap found in [Misc] section, add it
         if (!foundStartingMap && foundMiscSection) {
             // Find the [Misc] section and add StartingMap after it
@@ -2102,20 +2099,20 @@ bool MainWindow::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const
                 }
             }
         }
-        
+
         // Write the modified content back
         std::ofstream outFile(ddrawIniPath);
         if (!outFile.is_open()) {
             spdlog::error("Failed to open ddraw.ini for writing: {}", ddrawIniPath.string());
             return false;
         }
-        
+
         outFile << content;
         outFile.close();
-        
+
         spdlog::info("Modified {}: set StartingMap to {}", ddrawIniPath.string(), mapFilename);
         return true;
-        
+
     } catch (const std::exception& e) {
         spdlog::error("Failed to modify {}: {}", ddrawIniPath.string(), e.what());
         return false;
@@ -2124,13 +2121,13 @@ bool MainWindow::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const
 
 void MainWindow::launchGame(const std::filesystem::path& executablePath) {
     spdlog::info("Launching game executable: {}", executablePath.string());
-    
+
     // Create and configure the game process
     QProcess* gameProcess = new QProcess(this);
-    
+
     // Set working directory to the executable's directory
     gameProcess->setWorkingDirectory(QString::fromStdString(executablePath.parent_path().string()));
-    
+
     // Connect to handle process events
     connect(gameProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
         [gameProcess](int exitCode, QProcess::ExitStatus exitStatus) {
@@ -2141,7 +2138,7 @@ void MainWindow::launchGame(const std::filesystem::path& executablePath) {
             }
             gameProcess->deleteLater();
         });
-    
+
     connect(gameProcess, &QProcess::errorOccurred,
         [this, gameProcess](QProcess::ProcessError error) {
             QString errorMsg;
@@ -2160,48 +2157,48 @@ void MainWindow::launchGame(const std::filesystem::path& executablePath) {
             spdlog::error("Game process error: {}", errorMsg.toStdString());
             gameProcess->deleteLater();
         });
-    
+
     // Launch the executable (use 'open' on macOS for .app bundles)
     if (executablePath.extension() == ".app") {
         gameProcess->start("open", QStringList() << QString::fromStdString(executablePath.string()));
     } else {
         gameProcess->start(QString::fromStdString(executablePath.string()));
     }
-    
+
     if (!gameProcess->waitForStarted(5000)) {
-        QtDialogs::showError(this, "Game Launch Failed", 
+        QtDialogs::showError(this, "Game Launch Failed",
             "Failed to start the game within 5 seconds.");
         gameProcess->deleteLater();
         return;
     }
-    
+
     showStatusMessage("Game launched successfully!");
     spdlog::info("Game launched successfully");
 }
 
 void MainWindow::launchGameViaSteam(const std::string& appId) {
     spdlog::info("Launching Fallout 2 via Steam with App ID: {}", appId);
-    
+
     QProcess* steamProcess = new QProcess(this);
-    
+
     connect(steamProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
         [steamProcess](int exitCode, [[maybe_unused]] QProcess::ExitStatus exitStatus) {
             spdlog::info("Steam launch finished with exit code: {}", exitCode);
             steamProcess->deleteLater();
         });
-    
+
     connect(steamProcess, &QProcess::errorOccurred,
         [this, steamProcess, appId]([[maybe_unused]] QProcess::ProcessError error) {
             QString errorMsg = QString("Failed to launch Fallout 2 via Steam (App ID: %1).\n\n"
-                                     "Please ensure Steam is installed and Fallout 2 is available in your Steam library.")
-                                     .arg(QString::fromStdString(appId));
+                                       "Please ensure Steam is installed and Fallout 2 is available in your Steam library.")
+                                   .arg(QString::fromStdString(appId));
             QtDialogs::showError(this, "Steam Launch Error", errorMsg);
             spdlog::error("Failed to launch game via Steam: App ID {}", appId);
             steamProcess->deleteLater();
         });
-    
+
     QString steamUrl = QString("steam://run/%1").arg(QString::fromStdString(appId));
-    
+
 #ifdef __APPLE__
     steamProcess->start("open", QStringList() << steamUrl);
 #elif defined(_WIN32)
@@ -2210,7 +2207,7 @@ void MainWindow::launchGameViaSteam(const std::string& appId) {
     // Linux - try xdg-open first, then steam directly
     steamProcess->start("xdg-open", QStringList() << steamUrl);
 #endif
-    
+
     showStatusMessage(QString("Launching Fallout 2 via Steam (App ID: %1)...").arg(QString::fromStdString(appId)));
 }
 
@@ -2218,18 +2215,18 @@ bool MainWindow::openProEditorForSelectedObject() {
     if (!_currentEditorWidget) {
         return false;
     }
-    
+
     auto* selectionManager = _currentEditorWidget->getSelectionManager();
     if (!selectionManager) {
         return false;
     }
-    
+
     const auto& selectionState = selectionManager->getCurrentSelection();
     if (selectionState.isEmpty()) {
         spdlog::debug("MainWindow::openProEditorForSelectedObject() - no selection");
         return false;
     }
-    
+
     // Find the first selected object
     for (const auto& item : selectionState.items) {
         if (item.isObject()) {
@@ -2237,55 +2234,55 @@ bool MainWindow::openProEditorForSelectedObject() {
             if (!selectedObject) {
                 continue;
             }
-            
+
             // Get the MapObject which contains the PID
             if (!selectedObject->hasMapObject()) {
                 spdlog::debug("MainWindow::openProEditorForSelectedObject() - selected object has no MapObject");
                 continue;
             }
-            
+
             auto& mapObject = selectedObject->getMapObject();
-            
+
             // Get the PRO file path based on PID
             try {
                 std::string proFileName = ProHelper::basePath(mapObject.pro_pid);
                 spdlog::debug("MainWindow::openProEditorForSelectedObject() - opening PRO: {}", proFileName);
-                
+
                 // Use the same approach as FileBrowserPanel to open PRO editor
                 auto& resourceManager = ResourceManager::getInstance();
                 auto vfs = resourceManager.getVFS();
-                
+
                 if (!vfs) {
                     spdlog::error("MainWindow::openProEditorForSelectedObject() - VFS not available");
                     return false;
                 }
-                
+
                 // Create path in VFS format
                 std::filesystem::path vfsPath = std::filesystem::path("/") / proFileName;
                 auto fileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
-                
+
                 vfspp::IFilePtr file = vfs->OpenFile(fileInfo, vfspp::IFile::FileMode::Read);
                 if (!file || !file->IsOpened()) {
                     spdlog::error("MainWindow::openProEditorForSelectedObject() - could not open PRO file: {}", proFileName);
                     return false;
                 }
-                
+
                 // Read PRO file data
                 std::vector<uint8_t> buffer(file->Size());
                 size_t bytesRead = file->Read(buffer, file->Size());
-                
+
                 if (bytesRead != file->Size()) {
                     spdlog::error("MainWindow::openProEditorForSelectedObject() - failed to read PRO file completely");
                     return false;
                 }
-                
+
                 // Create temporary file
                 auto tempPath = std::filesystem::temp_directory_path() / ("temp_" + std::filesystem::path(proFileName).filename().string());
-                
+
                 std::ofstream tempFile(tempPath, std::ios::binary);
                 tempFile.write(reinterpret_cast<const char*>(buffer.data()), bytesRead);
                 tempFile.close();
-                
+
                 // Load PRO file
                 auto pro = ReaderFactory::readFile<Pro>(tempPath);
                 if (!pro) {
@@ -2293,23 +2290,23 @@ bool MainWindow::openProEditorForSelectedObject() {
                     std::filesystem::remove(tempPath);
                     return false;
                 }
-                
+
                 // Create and show PRO editor dialog
                 ProEditorDialog dialog(std::move(pro), this);
                 dialog.exec();
-                
+
                 // Clean up temp file
                 std::filesystem::remove(tempPath);
-                
+
                 return true;
-                
+
             } catch (const std::exception& e) {
                 spdlog::error("MainWindow::openProEditorForSelectedObject() - exception: {}", e.what());
                 return false;
             }
         }
     }
-    
+
     spdlog::debug("MainWindow::openProEditorForSelectedObject() - no object selected");
     return false;
 }

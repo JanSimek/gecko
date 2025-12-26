@@ -16,7 +16,7 @@ namespace geck {
 
 /**
  * @brief Widget for managing game location configuration
- * 
+ *
  * Provides UI for configuring Steam vs Executable installations,
  * including separate paths for executables and game data directories.
  */
@@ -30,16 +30,16 @@ public:
     // Data access
     Settings::GameInstallationType getInstallationType() const;
     void setInstallationType(Settings::GameInstallationType type);
-    
+
     std::string getSteamAppId() const;
     void setSteamAppId(const std::string& appId);
-    
+
     std::filesystem::path getExecutableLocation() const;
     void setExecutableLocation(const std::filesystem::path& location);
-    
+
     std::filesystem::path getDataDirectory() const;
     void setDataDirectory(const std::filesystem::path& location);
-    
+
     // Status updates
     void setStatusMessage(const QString& message, const QString& styleClass = "normal");
 
@@ -62,30 +62,30 @@ private:
     void setupConnections();
     void updateControlStates();
     void validateGameLocation(const QString& gameDir, bool isSteam);
-    
+
     // UI Components
     QVBoxLayout* _layout;
     QLabel* _helpLabel;
-    
+
     // Steam installation
     QRadioButton* _steamRadio;
     QHBoxLayout* _steamLayout;
     QLabel* _steamAppIdLabel;
     QLineEdit* _steamAppIdEdit;
     QLabel* _steamHelpLabel;
-    
+
     // Executable installation
     QRadioButton* _executableRadio;
     QHBoxLayout* _executableLayout;
     QLineEdit* _executableLocationEdit;
     QPushButton* _browseExecutableButton;
-    
+
     // Game data directory
     QLabel* _dataDirectoryLabel;
     QHBoxLayout* _dataDirectoryLayout;
     QLineEdit* _dataDirectoryEdit;
     QPushButton* _browseDataDirectoryButton;
-    
+
     // Controls
     QHBoxLayout* _controlLayout;
     QPushButton* _autoDetectButton;

@@ -49,21 +49,21 @@ public:
     void stopGameLoop();
 
     void connectToEditorWidget();
-    
+
     // Panel visibility management
     void hideNonEssentialPanels();
     void refreshFileBrowser();
     void showFileBrowserPanel();
-    
+
     // Map management
     void closeCurrentMap();
     bool hasActiveMap() const;
-    
+
     // Access to palette panels for drag and drop and tile deselection
     ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
     TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
     FileBrowserPanel* getFileBrowserPanel() const { return _fileBrowserPanel; }
-    
+
     // PRO editor functionality
     bool openProEditorForSelectedObject();
 
@@ -124,7 +124,7 @@ private:
     void hidePanelsForNoMap();
     void setDockVisibility(QDockWidget* dock, QAction* action, bool visible);
     void persistPanelPreference(QDockWidget* dock, bool visible);
-    
+
     // Text file handling
     bool isTextFile(const QString& filePath) const;
     void openTextFileWithEditor(const QString& vfsFilePath);
@@ -136,7 +136,7 @@ private:
     void restoreDefaultLayout();
 
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
-    
+
     // Play game helper methods
     bool modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const std::string& mapFilename);
     void launchGame(const std::filesystem::path& gameLocation);
@@ -192,7 +192,7 @@ private:
     QAction* _tilePalettePanelAction;
     QAction* _objectPalettePanelAction;
     QAction* _fileBrowserPanelAction;
-    
+
     // Toolbar actions
     QAction* _selectionModeAction;
     QMenu* _selectionModeMenu;

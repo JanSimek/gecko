@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../theme/ThemeManager.h"
+
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPaintEvent>
@@ -12,7 +14,7 @@ namespace geck {
 
 /**
  * @brief Base class for palette widgets (tiles and objects)
- * 
+ *
  * Provides common functionality for selectable palette items,
  * eliminating duplication between TileWidget and ObjectWidget.
  */
@@ -62,7 +64,7 @@ protected:
             return;
         }
 
-        if ((event->pos() - _dragStartPosition).manhattanLength() 
+        if ((event->pos() - _dragStartPosition).manhattanLength()
             < QApplication::startDragDistance()) {
             QLabel::mouseMoveEvent(event);
             return;
@@ -76,7 +78,7 @@ protected:
 
         if (_selected) {
             QPainter painter(this);
-            painter.setPen(QPen(QColor(0x4A, 0x90, 0xE2), 3));
+            painter.setPen(QPen(ui::theme::colors::primary(), 3));
             painter.drawRect(rect().adjusted(1, 1, -1, -1));
         }
     }

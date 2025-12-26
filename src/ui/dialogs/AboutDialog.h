@@ -10,7 +10,7 @@ namespace geck {
 
 /**
  * @brief About dialog showing application information
- * 
+ *
  * Displays application name, version, description, and icon
  * in a standard About dialog format.
  */
@@ -25,12 +25,12 @@ private:
     void setupUI();
     void createContent();
     void createButtons();
-    
+
     QVBoxLayout* _mainLayout;
     QHBoxLayout* _contentLayout;
     QVBoxLayout* _textLayout;
     QHBoxLayout* _buttonLayout;
-    
+
     QLabel* _iconLabel;
     QLabel* _titleLabel;
     QLabel* _descriptionLabel;

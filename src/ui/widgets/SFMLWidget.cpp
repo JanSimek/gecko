@@ -1,5 +1,6 @@
 #include "SFMLWidget.h"
 #include "../core/EditorWidget.h"
+#include "../dragdrop/MimeTypes.h"
 
 #include <QPaintEvent>
 #include <QResizeEvent>
@@ -68,7 +69,7 @@ void SFMLWidget::resizeEvent(QResizeEvent* event) {
     if (_editorWidget) {
         sf::Event sfmlEvent = sf::Event::Resized{
             { static_cast<unsigned int>(event->size().width()),
-              static_cast<unsigned int>(event->size().height()) }
+                static_cast<unsigned int>(event->size().height()) }
         };
         _editorWidget->handleEvent(sfmlEvent);
     }
@@ -152,9 +153,10 @@ void SFMLWidget::updateAndRender() {
 
     sf::Image image = _renderTexture->getTexture().copyToImage();
     _frameImage = QImage(image.getPixelsPtr(),
-                         static_cast<int>(image.getSize().x),
-                         static_cast<int>(image.getSize().y),
-                         QImage::Format_RGBA8888).copy();
+        static_cast<int>(image.getSize().x),
+        static_cast<int>(image.getSize().y),
+        QImage::Format_RGBA8888)
+                      .copy();
 
     update();
 }
@@ -168,17 +170,15 @@ bool SFMLWidget::ensureRenderTexture(const QSize& size) {
     const unsigned int targetWidth = static_cast<unsigned int>(std::max(1, size.width()));
     const unsigned int targetHeight = static_cast<unsigned int>(std::max(1, size.height()));
 
-    if (_needsResize ||
-        _renderTexture->getSize().x != targetWidth ||
-        _renderTexture->getSize().y != targetHeight) {
-        if (!_renderTexture->resize(sf::Vector2u{targetWidth, targetHeight})) {
+    if (_needsResize || _renderTexture->getSize().x != targetWidth || _renderTexture->getSize().y != targetHeight) {
+        if (!_renderTexture->resize(sf::Vector2u{ targetWidth, targetHeight })) {
             spdlog::error("SFMLWidget: Failed to resize render texture {}x{}", targetWidth, targetHeight);
             return false;
         }
 
         _renderTexture->setSmooth(false);
-        const sf::FloatRect viewRect(sf::Vector2f{0.f, 0.f},
-                                     sf::Vector2f{static_cast<float>(targetWidth), static_cast<float>(targetHeight)});
+        const sf::FloatRect viewRect(sf::Vector2f{ 0.f, 0.f },
+            sf::Vector2f{ static_cast<float>(targetWidth), static_cast<float>(targetHeight) });
         _renderTexture->setView(sf::View(viewRect));
         _needsResize = false;
     }
@@ -233,7 +233,7 @@ sf::Vector2f SFMLWidget::mapToWorld(const QPointF& pos) const {
     if (_renderTexture && _renderTexture->getSize().x > 0 && _renderTexture->getSize().y > 0) {
         return _renderTexture->mapPixelToCoords(sf::Vector2i(static_cast<int>(pos.x()), static_cast<int>(pos.y())));
     }
-    return {static_cast<float>(pos.x()), static_cast<float>(pos.y())};
+    return { static_cast<float>(pos.x()), static_cast<float>(pos.y()) };
 }
 
 sf::Keyboard::Key SFMLWidget::convertQtKeyToSf(int qtKey) const {
@@ -253,37 +253,67 @@ sf::Keyboard::Key SFMLWidget::convertQtKeyToSf(int qtKey) const {
     }
 
     switch (qtKey) {
-        case Qt::Key_Escape: return Key::Escape;
-        case Qt::Key_Tab: return Key::Tab;
-        case Qt::Key_Backspace: return Key::Backspace;
+        case Qt::Key_Escape:
+            return Key::Escape;
+        case Qt::Key_Tab:
+            return Key::Tab;
+        case Qt::Key_Backspace:
+            return Key::Backspace;
         case Qt::Key_Return:
-        case Qt::Key_Enter: return Key::Enter;
-        case Qt::Key_Space: return Key::Space;
-        case Qt::Key_Left: return Key::Left;
-        case Qt::Key_Right: return Key::Right;
-        case Qt::Key_Up: return Key::Up;
-        case Qt::Key_Down: return Key::Down;
-        case Qt::Key_PageUp: return Key::PageUp;
-        case Qt::Key_PageDown: return Key::PageDown;
-        case Qt::Key_Home: return Key::Home;
-        case Qt::Key_End: return Key::End;
-        case Qt::Key_Delete: return Key::Delete;
-        case Qt::Key_Insert: return Key::Insert;
-        case Qt::Key_F1: return Key::F1;
-        case Qt::Key_F2: return Key::F2;
-        case Qt::Key_F3: return Key::F3;
-        case Qt::Key_F4: return Key::F4;
-        case Qt::Key_F5: return Key::F5;
-        case Qt::Key_F6: return Key::F6;
-        case Qt::Key_F7: return Key::F7;
-        case Qt::Key_F8: return Key::F8;
-        case Qt::Key_F9: return Key::F9;
-        case Qt::Key_F10: return Key::F10;
-        case Qt::Key_F11: return Key::F11;
-        case Qt::Key_F12: return Key::F12;
-        case Qt::Key_Shift: return Key::LShift;
-        case Qt::Key_Control: return Key::LControl;
-        case Qt::Key_Alt: return Key::LAlt;
+        case Qt::Key_Enter:
+            return Key::Enter;
+        case Qt::Key_Space:
+            return Key::Space;
+        case Qt::Key_Left:
+            return Key::Left;
+        case Qt::Key_Right:
+            return Key::Right;
+        case Qt::Key_Up:
+            return Key::Up;
+        case Qt::Key_Down:
+            return Key::Down;
+        case Qt::Key_PageUp:
+            return Key::PageUp;
+        case Qt::Key_PageDown:
+            return Key::PageDown;
+        case Qt::Key_Home:
+            return Key::Home;
+        case Qt::Key_End:
+            return Key::End;
+        case Qt::Key_Delete:
+            return Key::Delete;
+        case Qt::Key_Insert:
+            return Key::Insert;
+        case Qt::Key_F1:
+            return Key::F1;
+        case Qt::Key_F2:
+            return Key::F2;
+        case Qt::Key_F3:
+            return Key::F3;
+        case Qt::Key_F4:
+            return Key::F4;
+        case Qt::Key_F5:
+            return Key::F5;
+        case Qt::Key_F6:
+            return Key::F6;
+        case Qt::Key_F7:
+            return Key::F7;
+        case Qt::Key_F8:
+            return Key::F8;
+        case Qt::Key_F9:
+            return Key::F9;
+        case Qt::Key_F10:
+            return Key::F10;
+        case Qt::Key_F11:
+            return Key::F11;
+        case Qt::Key_F12:
+            return Key::F12;
+        case Qt::Key_Shift:
+            return Key::LShift;
+        case Qt::Key_Control:
+            return Key::LControl;
+        case Qt::Key_Alt:
+            return Key::LAlt;
         case Qt::Key_Meta:
         case Qt::Key_Super_L:
         case Qt::Key_Super_R:
@@ -300,19 +330,19 @@ void SFMLWidget::dragEnterEvent(QDragEnterEvent* event) {
         event->ignore();
         return;
     }
-    
-    if (mimeData->hasFormat("application/x-geck-object")) {
+
+    if (mimeData->hasFormat(ui::mime::GECK_OBJECT)) {
         // Extract object data and start drag preview
-        QByteArray objectData = mimeData->data("application/x-geck-object");
+        QByteArray objectData = mimeData->data(ui::mime::GECK_OBJECT);
         QStringList parts = QString::fromUtf8(objectData).split(',');
-        
+
         if (parts.size() == 2 && _editorWidget) {
             int objectIndex = parts[0].toInt();
             int categoryInt = parts[1].toInt();
-            
+
             // Convert Qt coordinates to SFML world coordinates
             sf::Vector2f worldPos = mapToWorld(event->position());
-            
+
             // Start drag preview in editor
             _editorWidget->startDragPreview(objectIndex, categoryInt, worldPos);
         }
@@ -329,8 +359,8 @@ void SFMLWidget::dragMoveEvent(QDragMoveEvent* event) {
         event->ignore();
         return;
     }
-    
-    if (mimeData->hasFormat("application/x-geck-object")) {
+
+    if (mimeData->hasFormat(ui::mime::GECK_OBJECT)) {
         // Update drag preview position
         if (_editorWidget) {
             sf::Vector2f worldPos = mapToWorld(event->position());
@@ -357,8 +387,8 @@ void SFMLWidget::dropEvent(QDropEvent* event) {
         event->ignore();
         return;
     }
-    
-    if (mimeData->hasFormat("application/x-geck-object")) {
+
+    if (mimeData->hasFormat(ui::mime::GECK_OBJECT)) {
         // Finish the drag preview and place the object
         if (_editorWidget) {
             sf::Vector2f worldPos = mapToWorld(event->position());

@@ -16,7 +16,7 @@ namespace geck {
 
 /**
  * @brief Properties dialog for exit grid configuration
- * 
+ *
  * Provides UI for setting the 4 essential exit grid properties:
  * - Destination map ID
  * - Player spawn position (hex coordinate)
@@ -28,10 +28,10 @@ class ExitGridPropertiesDialog : public QDialog {
 
 public:
     struct ExitGridProperties {
-        uint32_t exitMap = 0;           // Destination map ID
-        uint32_t exitPosition = 0;      // Player spawn position (0-39999)
-        uint32_t exitElevation = 0;     // Destination elevation (0-2)
-        uint32_t exitOrientation = 0;   // Player direction (0-5)
+        uint32_t exitMap = 0;         // Destination map ID
+        uint32_t exitPosition = 0;    // Player spawn position (0-39999)
+        uint32_t exitElevation = 0;   // Destination elevation (0-2)
+        uint32_t exitOrientation = 0; // Player direction (0-5)
     };
 
     explicit ExitGridPropertiesDialog(QWidget* parent = nullptr);
@@ -68,7 +68,7 @@ private:
     QSpinBox* _positionSpinBox;
     QComboBox* _elevationComboBox;
     QComboBox* _orientationComboBox;
-    
+
     // Status
     QLabel* _statusLabel;
 

@@ -6,7 +6,7 @@ namespace geck {
 
 /**
  * @brief Widget for editing Weapon type PRO files
- * 
+ *
  * Handles weapon-specific fields including:
  * - Animation, damage (min/max), damage type
  * - AP costs and ranges for primary/secondary attacks
@@ -31,7 +31,7 @@ private:
     void setupUI();
     void updateAIPriority();
     int calculateAIPriority() const;
-    
+
     // UI controls - Column 1: Damage & Attack
     QComboBox* _weaponAnimationCombo;
     QSpinBox* _weaponDamageMinEdit;
@@ -41,7 +41,7 @@ private:
     QSpinBox* _weaponAPSecondaryEdit;
     QSpinBox* _weaponRangePrimaryEdit;
     QSpinBox* _weaponRangeSecondaryEdit;
-    
+
     // UI controls - Column 2: Advanced Properties
     QSpinBox* _weaponMinStrengthEdit;
     QSpinBox* _weaponProjectilePIDEdit;
@@ -54,7 +54,7 @@ private:
     QSpinBox* _weaponSoundIdEdit;
     QCheckBox* _weaponEnergyWeaponCheck;
     QLabel* _weaponAIPriorityLabel;
-    
+
     // Data
     ProWeaponData _weaponData;
 };

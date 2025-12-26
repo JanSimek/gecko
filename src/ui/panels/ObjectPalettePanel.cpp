@@ -8,6 +8,8 @@
 #include "../../util/Constants.h"
 #include "../../util/ColorUtils.h"
 #include "../common/BaseWidget.h"
+#include "../dragdrop/MimeTypes.h"
+#include "../theme/ThemeManager.h"
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -30,7 +32,7 @@ ObjectWidget::ObjectWidget(int objectIndex, const ObjectInfo* objectInfo, const 
     setPixmap(centeredPixmap);
 
     setupCommonProperties(OBJECT_SIZE);
-    setStyleSheet("border: 1px solid gray; background-color: white;");
+    setStyleSheet(ui::theme::styles::normalWidget());
 
     // Add tooltip with object information
     if (objectInfo) {
@@ -67,7 +69,7 @@ void ObjectWidget::mouseMoveEvent(QMouseEvent* event) {
 
     // Set MIME data with object information
     mimeData->setText(QString("geck/object"));
-    mimeData->setData("application/x-geck-object", 
+    mimeData->setData(ui::mime::GECK_OBJECT,
         QByteArray::number(getIndex()) + "," + QByteArray::number(static_cast<int>(_category)));
 
     // Use the object's pixmap as drag pixmap
@@ -114,7 +116,7 @@ void ObjectPalettePanel::setupUI() {
 
     // Status label
     _statusLabel = new QLabel("No objects loaded", this);
-    _statusLabel->setStyleSheet("color: gray; font-style: italic;");
+    _statusLabel->setStyleSheet(ui::theme::styles::italicSecondaryText());
     _mainLayout->addWidget(_statusLabel);
 
     _mainLayout->addStretch(); // Push everything to top
@@ -318,7 +320,7 @@ void ObjectPalettePanel::updateObjectGrid() {
         _objectsPerRow = newColumnsPerRow;
         _previousColumnsPerRow = newColumnsPerRow;
     }
-    
+
     // Clear existing widgets
     _objectWidgets.clear();
     QLayoutItem* item;
@@ -453,7 +455,7 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
                     const auto& frames = firstDirection.frames();
                     if (!frames.empty()) {
                         const auto& firstFrame = frames[0];
-                        
+
                         // Load palette for color conversion (required)
                         const Pal* palette = nullptr;
                         try {
@@ -463,7 +465,7 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
                             spdlog::warn("ObjectPalettePanel: Could not load color.pal for {}, falling back to placeholder", objectInfo->frmPath.toStdString());
                             // Fall through to placeholder generation since we need the palette
                         }
-                        
+
                         if (!palette) {
                             // Without palette, we cannot generate proper colors, use placeholder
                             spdlog::debug("ObjectPalettePanel: No palette available for {}", objectInfo->frmPath.toStdString());
@@ -471,7 +473,7 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
                         } else {
                             // Convert single frame to thumbnail
                             thumbnail = createFrameThumbnail(firstFrame, palette);
-                            
+
                             spdlog::debug("ObjectPalettePanel: Created single-frame thumbnail for {} ({}x{})",
                                 objectInfo->frmPath.toStdString(), firstFrame.width(), firstFrame.height());
 
@@ -498,23 +500,23 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
 
     switch (category) {
         case ObjectCategory::ITEMS:
-            categoryColor = QColor(100, 150, 255); // Blue
+            categoryColor = ui::theme::colors::categoryItems();
             categoryText = "ITEM";
             break;
         case ObjectCategory::SCENERY:
-            categoryColor = QColor(100, 255, 100); // Green
+            categoryColor = ui::theme::colors::categoryScenery();
             categoryText = "SCEN";
             break;
         case ObjectCategory::CRITTERS:
-            categoryColor = QColor(255, 150, 100); // Orange
+            categoryColor = ui::theme::colors::categoryCritters();
             categoryText = "CRIT";
             break;
         case ObjectCategory::WALLS:
-            categoryColor = QColor(150, 150, 150); // Gray
+            categoryColor = ui::theme::colors::categoryWalls();
             categoryText = "WALL";
             break;
         case ObjectCategory::MISC:
-            categoryColor = QColor(255, 100, 255); // Magenta
+            categoryColor = ui::theme::colors::categoryMisc();
             categoryText = "MISC";
             break;
     }
@@ -523,15 +525,15 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
 
     // Draw object information
     QPainter painter(&thumbnail);
-    painter.setPen(Qt::black);
-    painter.setFont(QFont("Arial", 8, QFont::Bold));
+    painter.setPen(ui::theme::colors::textDark());
+    painter.setFont(ui::theme::fonts::compactBold());
 
     // Draw category type at top
     painter.drawText(QRect(0, 2, ObjectWidget::OBJECT_SIZE, 12),
         Qt::AlignCenter, categoryText);
 
     // Draw object filename or display name
-    painter.setFont(QFont("Arial", 6));
+    painter.setFont(ui::theme::fonts::tiny());
     QString displayText;
     if (objectInfo) {
         // Use the more readable display name if available
@@ -657,8 +659,7 @@ void ObjectPalettePanel::calculatePagination() {
     for (const auto& objectInfo : *objectList) {
         // Apply search filter if set
         if (!_searchText.isEmpty()) {
-            if (!objectInfo->displayName.contains(_searchText, Qt::CaseInsensitive) && 
-                !objectInfo->proFileName.contains(_searchText, Qt::CaseInsensitive)) {
+            if (!objectInfo->displayName.contains(_searchText, Qt::CaseInsensitive) && !objectInfo->proFileName.contains(_searchText, Qt::CaseInsensitive)) {
                 continue; // Skip objects that don't match search
             }
         }
@@ -690,7 +691,6 @@ void ObjectPalettePanel::updatePaginationControls() {
     _paginationWidget->setEnabled(_totalPages > 1);
 }
 
-
 void ObjectPalettePanel::onPaginationPageChanged(int page) {
     int newPage = page - 1; // Convert from 1-based to 0-based
     if (newPage != _currentPage && newPage >= 0 && newPage < _totalPages) {
@@ -706,7 +706,7 @@ QPixmap ObjectPalettePanel::createFrameThumbnail(const Frame& frame, const Pal* 
     // Get frame dimensions
     uint16_t frameWidth = frame.width();
     uint16_t frameHeight = frame.height();
-    
+
     if (frameWidth == 0 || frameHeight == 0) {
         spdlog::debug("ObjectPalettePanel: Frame has zero dimensions");
         return thumbnail;
@@ -718,17 +718,17 @@ QPixmap ObjectPalettePanel::createFrameThumbnail(const Frame& frame, const Pal* 
         spdlog::debug("ObjectPalettePanel: Failed to get RGBA data from frame");
         return thumbnail;
     }
-    
+
     QImage frameImage(rgbaData, frameWidth, frameHeight, QImage::Format_RGBA8888);
     frameImage = frameImage.copy(); // Make a copy since rgbaData might be temporary
 
     // Scale frame to fit thumbnail size while preserving aspect ratio (like F2 Dims)
     QPixmap framePixmap = QPixmap::fromImage(frameImage);
-    
+
     // Calculate scaling like F2 Dims does
     int newWidth = frameWidth;
     int newHeight = frameHeight;
-    
+
     // Constrain to thumbnail size
     if (newWidth > ObjectWidget::OBJECT_SIZE) {
         newWidth = ObjectWidget::OBJECT_SIZE;
@@ -736,32 +736,32 @@ QPixmap ObjectPalettePanel::createFrameThumbnail(const Frame& frame, const Pal* 
     if (newHeight > ObjectWidget::OBJECT_SIZE) {
         newHeight = ObjectWidget::OBJECT_SIZE;
     }
-    
+
     // Preserve aspect ratio
     double aspectRatioX = static_cast<double>(frameWidth) / newWidth;
     double aspectRatioY = static_cast<double>(frameHeight) / newHeight;
     double aspectRatio = qMax(aspectRatioX, aspectRatioY);
-    
+
     if (aspectRatio > 1.001) { // Avoid division by very small numbers
         newWidth = static_cast<int>(frameWidth / aspectRatio);
         newHeight = static_cast<int>(frameHeight / aspectRatio);
     }
-    
+
     // Scale the frame
     QPixmap scaledFrame = framePixmap.scaled(newWidth, newHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    
+
     // Center the scaled frame in the thumbnail
     QPainter painter(&thumbnail);
     int x = (ObjectWidget::OBJECT_SIZE - scaledFrame.width()) / 2;
     int y = (ObjectWidget::OBJECT_SIZE - scaledFrame.height()) / 2;
     painter.drawPixmap(x, y, scaledFrame);
-    
+
     return thumbnail;
 }
 
 const ObjectInfo* ObjectPalettePanel::getObjectInfo(int objectIndex, ObjectCategory category) const {
     const std::vector<std::unique_ptr<ObjectInfo>>* categoryList = nullptr;
-    
+
     switch (category) {
         case ObjectCategory::ITEMS:
             categoryList = &_itemsList;
@@ -779,11 +779,11 @@ const ObjectInfo* ObjectPalettePanel::getObjectInfo(int objectIndex, ObjectCateg
             categoryList = &_miscList;
             break;
     }
-    
+
     if (!categoryList || objectIndex < 0 || objectIndex >= static_cast<int>(categoryList->size())) {
         return nullptr;
     }
-    
+
     return (*categoryList)[objectIndex].get();
 }
 
@@ -791,45 +791,45 @@ int ObjectPalettePanel::calculateOptimalColumnsPerRow() const {
     if (!_scrollArea || !_scrollArea->viewport()) {
         return DEFAULT_OBJECTS_PER_ROW;
     }
-    
+
     // Get available width from the scroll area viewport
     int availableWidth = _scrollArea->viewport()->width();
-    
+
     // Calculate space needed per object (widget size + margins)
     int itemWidth = ObjectWidget::OBJECT_SIZE + 4; // Object size + margin
-    
+
     // Get spacing and margins from the grid layout
     int spacing = _objectGridLayout ? _objectGridLayout->spacing() : 2;
     int leftMargin = _objectGridLayout ? _objectGridLayout->contentsMargins().left() : 4;
     int rightMargin = _objectGridLayout ? _objectGridLayout->contentsMargins().right() : 4;
-    
+
     // Calculate effective width available for objects
     int effectiveWidth = availableWidth - leftMargin - rightMargin;
-    
+
     // Calculate how many objects can fit per row
     // Each object needs itemWidth + spacing, except the last one doesn't need spacing
     int columns = 1; // At least 1 column
     if (effectiveWidth >= itemWidth) {
         columns = (effectiveWidth + spacing) / (itemWidth + spacing);
     }
-    
+
     // Apply reasonable bounds
     columns = std::max(1, std::min(columns, MAX_OBJECTS_PER_ROW));
-    
+
     return columns;
 }
 
 void ObjectPalettePanel::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
-    
+
     // Calculate optimal columns for the new size
     int newColumnsPerRow = calculateOptimalColumnsPerRow();
-    
+
     // Only update if the column count actually changed to avoid unnecessary rebuilds
     if (newColumnsPerRow != _previousColumnsPerRow) {
         _objectsPerRow = newColumnsPerRow;
         _previousColumnsPerRow = newColumnsPerRow;
-        
+
         // Trigger grid update only if we have objects loaded
         if (!_objectWidgets.empty()) {
             updateObjectGrid();

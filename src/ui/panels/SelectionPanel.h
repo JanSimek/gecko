@@ -158,7 +158,6 @@ private:
     };
 
     // Visual styling constants
-    static const QColor HIGHLIGHT_COLOR;
     static const int ICON_SIZE;
     static const int MAX_QUANTITY_DISPLAY;
 

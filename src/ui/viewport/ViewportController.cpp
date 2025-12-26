@@ -16,12 +16,12 @@ ViewportController::ViewportController(const HexagonGrid* hexGrid)
 void ViewportController::initialize(sf::Vector2u windowSize) {
     // Initialize with proper aspect ratio management
     updateViewForWindowSize(windowSize);
-    
+
     // Center the view on the map initially
     centerViewOnMap();
-    
-    spdlog::debug("ViewportController: Initialized with window size {}x{}", 
-                  windowSize.x, windowSize.y);
+
+    spdlog::debug("ViewportController: Initialized with window size {}x{}",
+        windowSize.x, windowSize.y);
 }
 
 void ViewportController::centerViewOnMap() {
@@ -38,7 +38,7 @@ void ViewportController::centerViewOnMap() {
 
 void ViewportController::zoomView(float direction) {
     float newZoom = _zoomLevel;
-    
+
     if (direction > 0) {
         // Zoom in
         newZoom *= (1.0f + ZOOM_STEP);
@@ -46,7 +46,7 @@ void ViewportController::zoomView(float direction) {
         // Zoom out
         newZoom *= (1.0f - ZOOM_STEP);
     }
-    
+
     setZoomLevel(newZoom);
 }
 
@@ -62,7 +62,7 @@ void ViewportController::setZoomLevel(float zoom) {
     const float width = static_cast<float>(_windowSize.x) / _zoomLevel;
     const float height = static_cast<float>(_windowSize.y) / _zoomLevel;
 
-    _view.setSize({width, height});
+    _view.setSize({ width, height });
     if (center != sf::Vector2f()) {
         _view.setCenter(center);
     }
@@ -76,26 +76,26 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
     if (!_hexGrid) {
         return -1;
     }
-    
+
     // Use improved hex grid position lookup with better accuracy
     uint32_t hexPosition = _hexGrid->positionAt(static_cast<uint32_t>(worldPos.x), static_cast<uint32_t>(worldPos.y));
-    
+
     if (hexPosition == Hex::HEX_OUT_OF_MAP) {
         spdlog::debug("ViewportController::worldPosToHexIndex: world({:.1f}, {:.1f}) -> out of map",
-                      worldPos.x, worldPos.y);
+            worldPos.x, worldPos.y);
         return -1;
     }
-    
+
     // Find the hex index from position
     const auto& hexGrid = _hexGrid->grid();
     for (int i = 0; i < static_cast<int>(hexGrid.size()); ++i) {
         if (hexGrid[i].position() == hexPosition) {
             spdlog::trace("ViewportController::worldPosToHexIndex: world({:.1f}, {:.1f}) -> hex({})",
-                          worldPos.x, worldPos.y, i);
+                worldPos.x, worldPos.y, i);
             return i;
         }
     }
-    
+
     return -1;
 }
 
@@ -104,42 +104,41 @@ int ViewportController::worldPosToTileIndex(sf::Vector2f worldPos, bool isRoof) 
     // Adjust world position for roof offset if selecting roof tiles
     sf::Vector2f adjustedWorldPos = worldPos;
     if (isRoof) {
-        adjustedWorldPos.y += ROOF_OFFSET;  // Roof tiles are visually offset upward
+        adjustedWorldPos.y += ROOF_OFFSET; // Roof tiles are visually offset upward
     }
-    
+
     int hexIndex = worldPosToHexIndex(adjustedWorldPos);
     if (hexIndex < 0) {
         spdlog::debug("ViewportController::worldPosToTileIndex: No hex found at world({:.1f}, {:.1f}) adjusted({:.1f}, {:.1f}) [roof: {}]",
-                      worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, isRoof);
+            worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, isRoof);
         return -1;
     }
-    
+
     // Convert hex coordinates to tile coordinates
-    int hexX = hexIndex % HexagonGrid::GRID_WIDTH;  // 0-199
-    int hexY = hexIndex / HexagonGrid::GRID_WIDTH;  // 0-199
-    int tileX = hexX / 2;  // 0-99
-    int tileY = hexY / 2;  // 0-99
+    int hexX = hexIndex % HexagonGrid::GRID_WIDTH; // 0-199
+    int hexY = hexIndex / HexagonGrid::GRID_WIDTH; // 0-199
+    int tileX = hexX / 2;                          // 0-99
+    int tileY = hexY / 2;                          // 0-99
     int tileIndex = tileY * MAP_WIDTH + tileX;
-    
+
     spdlog::debug("ViewportController::worldPosToTileIndex: world({:.1f}, {:.1f}) adjusted({:.1f}, {:.1f}) -> hex({}) -> tile({}) [roof: {}]",
-                  worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, hexIndex, tileIndex, isRoof);
-    
+        worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, hexIndex, tileIndex, isRoof);
+
     return tileIndex;
 }
-
 
 sf::Vector2f ViewportController::snapToHexGrid(sf::Vector2f worldPos) const {
     if (!_hexGrid) {
         return worldPos;
     }
-    
+
     // Find closest hex and return its center position
     int hexIndex = worldPosToHexIndex(worldPos);
     if (hexIndex >= 0 && hexIndex < static_cast<int>(_hexGrid->grid().size())) {
         const auto& hex = _hexGrid->grid()[hexIndex];
         return sf::Vector2f(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
     }
-    
+
     return worldPos; // Return original position if no valid hex found
 }
 
@@ -156,14 +155,14 @@ void ViewportController::updateViewForWindowSize(sf::Vector2u windowSize) {
     const float width = static_cast<float>(_windowSize.x) / _zoomLevel;
     const float height = static_cast<float>(_windowSize.y) / _zoomLevel;
 
-    _view.setViewport(sf::FloatRect({0.f, 0.f}, {1.f, 1.f}));
-    _view.setSize({width, height});
+    _view.setViewport(sf::FloatRect({ 0.f, 0.f }, { 1.f, 1.f }));
+    _view.setSize({ width, height });
     if (center != sf::Vector2f()) {
         _view.setCenter(center);
     }
 
     spdlog::debug("ViewportController: Resize {}x{} -> view {:.1f}x{:.1f} (zoom {:.2f})",
-                  windowSize.x, windowSize.y, width, height, _zoomLevel);
+        windowSize.x, windowSize.y, width, height, _zoomLevel);
 }
 
 std::optional<HexPosition> ViewportController::worldPosToHexPosition(const WorldCoords& worldPos) const {

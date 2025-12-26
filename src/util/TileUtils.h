@@ -27,10 +27,12 @@ struct TileCoordinates {
         , y(initY) { }
 
     // Support for structured bindings
-    template<std::size_t I>
+    template <std::size_t I>
     [[nodiscard]] constexpr auto get() const noexcept {
-        if constexpr (I == 0) return x;
-        else if constexpr (I == 1) return y;
+        if constexpr (I == 0)
+            return x;
+        else if constexpr (I == 1)
+            return y;
     }
 };
 
@@ -47,10 +49,12 @@ struct ScreenPosition {
         , y(posY) { }
 
     // Support for structured bindings
-    template<std::size_t I>
+    template <std::size_t I>
     [[nodiscard]] constexpr auto get() const noexcept {
-        if constexpr (I == 0) return x;
-        else if constexpr (I == 1) return y;
+        if constexpr (I == 0)
+            return x;
+        else if constexpr (I == 1)
+            return y;
     }
 };
 
@@ -122,10 +126,10 @@ inline ScreenPosition indexToScreenPosition(int tileIndex, bool isRoof = false) 
  * @return Corresponding hex index for the top-left hex of the tile (0-39999)
  */
 inline int tileIndexToHexIndex(int tileIndex) {
-    int tileX = tileIndex % MAP_WIDTH;        // 0-99
-    int tileY = tileIndex / MAP_WIDTH;        // 0-99
-    int hexX = tileX * 2;                     // 0-198
-    int hexY = tileY * 2;                     // 0-198  
+    int tileX = tileIndex % MAP_WIDTH; // 0-99
+    int tileY = tileIndex / MAP_WIDTH; // 0-99
+    int hexX = tileX * 2;              // 0-198
+    int hexY = tileY * 2;              // 0-198
     return hexY * HexagonGrid::GRID_WIDTH + hexX;
 }
 
@@ -139,10 +143,10 @@ inline int tileIndexToHexIndex(int tileIndex) {
  * @return Corresponding tile index (0-9999)
  */
 inline int hexIndexToTileIndex(int hexIndex) {
-    int hexX = hexIndex % HexagonGrid::GRID_WIDTH;  // 0-199
-    int hexY = hexIndex / HexagonGrid::GRID_WIDTH;  // 0-199
-    int tileX = hexX / 2;  // 0-99
-    int tileY = hexY / 2;  // 0-99
+    int hexX = hexIndex % HexagonGrid::GRID_WIDTH; // 0-199
+    int hexY = hexIndex / HexagonGrid::GRID_WIDTH; // 0-199
+    int tileX = hexX / 2;                          // 0-99
+    int tileY = hexY / 2;                          // 0-99
     return tileY * MAP_WIDTH + tileX;
 }
 
@@ -188,7 +192,7 @@ namespace TileColors {
     inline sf::Color transparent() {
         return sf::Color(255, 255, 255, 0);
     }
-    
+
     // Exit grid highlight colors (bright magenta for better contrast against green)
     inline sf::Color exitGridHighlight() {
         return sf::Color(255, 0, 255, 180); // Bright magenta with alpha
@@ -217,14 +221,28 @@ inline void removePreviewHighlight(sf::Sprite& sprite) {
 
 // Structured binding support for TileCoordinates
 namespace std {
-    template<> struct tuple_size<geck::TileCoordinates> : integral_constant<size_t, 2> {};
-    template<> struct tuple_element<0, geck::TileCoordinates> { using type = unsigned int; };
-    template<> struct tuple_element<1, geck::TileCoordinates> { using type = unsigned int; };
+template <>
+struct tuple_size<geck::TileCoordinates> : integral_constant<size_t, 2> { };
+template <>
+struct tuple_element<0, geck::TileCoordinates> {
+    using type = unsigned int;
+};
+template <>
+struct tuple_element<1, geck::TileCoordinates> {
+    using type = unsigned int;
+};
 }
 
 // Structured binding support for ScreenPosition
 namespace std {
-    template<> struct tuple_size<geck::ScreenPosition> : integral_constant<size_t, 2> {};
-    template<> struct tuple_element<0, geck::ScreenPosition> { using type = unsigned int; };
-    template<> struct tuple_element<1, geck::ScreenPosition> { using type = unsigned int; };
+template <>
+struct tuple_size<geck::ScreenPosition> : integral_constant<size_t, 2> { };
+template <>
+struct tuple_element<0, geck::ScreenPosition> {
+    using type = unsigned int;
+};
+template <>
+struct tuple_element<1, geck::ScreenPosition> {
+    using type = unsigned int;
+};
 }

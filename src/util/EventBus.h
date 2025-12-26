@@ -33,7 +33,9 @@ struct ObjectSelectedEvent {
 };
 
 struct SelectionChangedEvent {
-    enum class Type { Added, Removed, Cleared };
+    enum class Type { Added,
+        Removed,
+        Cleared };
     Type type;
     int itemCount;
 };
@@ -55,13 +57,18 @@ struct ViewportChangedEvent {
 };
 
 struct PlacementModeChangedEvent {
-    enum class Mode { None, Tile, Object };
+    enum class Mode { None,
+        Tile,
+        Object };
     Mode mode;
     int selectedIndex;
 };
 
 struct DragDropEvent {
-    enum class Type { Started, Moving, Completed, Cancelled };
+    enum class Type { Started,
+        Moving,
+        Completed,
+        Cancelled };
     Type type;
     WorldCoords position;
     std::variant<TileIndex, int> data; // TileIndex or object index
@@ -77,7 +84,8 @@ struct PlayerOrientationChangedEvent {
 };
 
 struct ElevationChangedEvent {
-    enum class Type { Added, Removed };
+    enum class Type { Added,
+        Removed };
     Type type;
     int elevation;
 };
@@ -87,7 +95,8 @@ struct MapScriptChangedEvent {
 };
 
 struct MapPropertiesChangedEvent {
-    enum class Property { Darkness, Timestamp };
+    enum class Property { Darkness,
+        Timestamp };
     Property property;
     int value;
 };
@@ -108,12 +117,11 @@ using UIEvent = std::variant<
     PlayerOrientationChangedEvent,
     ElevationChangedEvent,
     MapScriptChangedEvent,
-    MapPropertiesChangedEvent
->;
+    MapPropertiesChangedEvent>;
 
 /**
  * @brief Event bus for decoupled communication
- * 
+ *
  * Replaces mixed Qt signals/slots and custom callbacks with
  * a unified system following KISS principle.
  */
@@ -137,17 +145,17 @@ public:
      * @param handler Function to call when event is published
      * @return Subscription ID for later unsubscription
      */
-    template<typename EventType>
+    template <typename EventType>
     [[nodiscard]] SubscriptionId subscribe(std::function<void(const EventType&)> handler) {
         std::lock_guard<std::mutex> lock(_mutex);
-        
+
         auto id = _nextId++;
         auto wrapper = [handler](const UIEvent& event) {
             if (auto* specificEvent = std::get_if<EventType>(&event)) {
                 handler(*specificEvent);
             }
         };
-        
+
         _handlers[std::type_index(typeid(EventType))].emplace_back(id, wrapper);
         return id;
     }
@@ -159,7 +167,7 @@ public:
      */
     [[nodiscard]] SubscriptionId subscribeAll(EventHandler handler) {
         std::lock_guard<std::mutex> lock(_mutex);
-        
+
         auto id = _nextId++;
         _universalHandlers.emplace_back(id, handler);
         return id;
@@ -171,22 +179,20 @@ public:
      */
     void unsubscribe(SubscriptionId id) {
         std::lock_guard<std::mutex> lock(_mutex);
-        
+
         // Remove from type-specific handlers
         for (auto& [type, handlers] : _handlers) {
             handlers.erase(
                 std::remove_if(handlers.begin(), handlers.end(),
                     [id](const auto& pair) { return pair.first == id; }),
-                handlers.end()
-            );
+                handlers.end());
         }
-        
+
         // Remove from universal handlers
         _universalHandlers.erase(
             std::remove_if(_universalHandlers.begin(), _universalHandlers.end(),
                 [id](const auto& pair) { return pair.first == id; }),
-            _universalHandlers.end()
-        );
+            _universalHandlers.end());
     }
 
     /**
@@ -195,18 +201,19 @@ public:
      */
     void publish(const UIEvent& event) {
         std::lock_guard<std::mutex> lock(_mutex);
-        
+
         // Call type-specific handlers
-        auto typeIndex = std::visit([](const auto& e) { 
-            return std::type_index(typeid(e)); 
-        }, event);
-        
+        auto typeIndex = std::visit([](const auto& e) {
+            return std::type_index(typeid(e));
+        },
+            event);
+
         if (auto it = _handlers.find(typeIndex); it != _handlers.end()) {
             for (const auto& [id, handler] : it->second) {
                 handler(event);
             }
         }
-        
+
         // Call universal handlers
         for (const auto& [id, handler] : _universalHandlers) {
             handler(event);
@@ -218,7 +225,7 @@ public:
      * @tparam EventType The event type
      * @param event The event to publish
      */
-    template<typename EventType>
+    template <typename EventType>
     void publish(const EventType& event) {
         publish(UIEvent(event));
     }
@@ -235,10 +242,10 @@ public:
 private:
     mutable std::mutex _mutex;
     SubscriptionId _nextId = 1;
-    
+
     // Type-specific handlers
     std::unordered_map<std::type_index, std::vector<std::pair<SubscriptionId, EventHandler>>> _handlers;
-    
+
     // Universal handlers that receive all events
     std::vector<std::pair<SubscriptionId, EventHandler>> _universalHandlers;
 
@@ -252,19 +259,21 @@ private:
  */
 class EventSubscription {
 public:
-    EventSubscription(EventBus::SubscriptionId id) : _id(id) {}
-    
+    EventSubscription(EventBus::SubscriptionId id)
+        : _id(id) { }
+
     ~EventSubscription() {
         if (_id != 0) {
             EventBus::getInstance().unsubscribe(_id);
         }
     }
-    
+
     // Move only
-    EventSubscription(EventSubscription&& other) noexcept : _id(other._id) {
+    EventSubscription(EventSubscription&& other) noexcept
+        : _id(other._id) {
         other._id = 0;
     }
-    
+
     EventSubscription& operator=(EventSubscription&& other) noexcept {
         if (this != &other) {
             if (_id != 0) {
@@ -275,7 +284,7 @@ public:
         }
         return *this;
     }
-    
+
     // No copy
     EventSubscription(const EventSubscription&) = delete;
     EventSubscription& operator=(const EventSubscription&) = delete;

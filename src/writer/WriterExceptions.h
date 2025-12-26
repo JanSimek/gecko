@@ -15,7 +15,8 @@ private:
 
 public:
     explicit FileWriterException(const std::string& message, const std::filesystem::path& filePath = "")
-        : std::runtime_error(message), _filePath(filePath) {}
+        : std::runtime_error(message)
+        , _filePath(filePath) { }
 
     const std::filesystem::path& filePath() const noexcept {
         return _filePath;
@@ -28,7 +29,8 @@ public:
 class WriteException : public FileWriterException {
 public:
     explicit WriteException(const std::string& message, const std::filesystem::path& filePath, size_t bytesWritten = 0)
-        : FileWriterException("Write error: " + message, filePath), _bytesWritten(bytesWritten) {}
+        : FileWriterException("Write error: " + message, filePath)
+        , _bytesWritten(bytesWritten) { }
 
     size_t bytesWritten() const noexcept {
         return _bytesWritten;
@@ -44,7 +46,7 @@ private:
 class FormatWriteException : public FileWriterException {
 public:
     explicit FormatWriteException(const std::string& message, const std::filesystem::path& filePath)
-        : FileWriterException("Format error: " + message, filePath) {}
+        : FileWriterException("Format error: " + message, filePath) { }
 };
 
 /**
@@ -56,7 +58,8 @@ private:
 
 public:
     explicit ValidationException(const std::string& message, const std::filesystem::path& filePath, const std::string& field = "")
-        : FileWriterException("Validation error: " + message, filePath), _field(field) {}
+        : FileWriterException("Validation error: " + message, filePath)
+        , _field(field) { }
 
     const std::string& field() const noexcept {
         return _field;
@@ -72,11 +75,11 @@ private:
     size_t _bytesAvailable;
 
 public:
-    explicit DiskSpaceException(const std::string& message, const std::filesystem::path& filePath, 
-                              size_t bytesRequested = 0, size_t bytesAvailable = 0)
+    explicit DiskSpaceException(const std::string& message, const std::filesystem::path& filePath,
+        size_t bytesRequested = 0, size_t bytesAvailable = 0)
         : FileWriterException("Disk space error: " + message, filePath)
         , _bytesRequested(bytesRequested)
-        , _bytesAvailable(bytesAvailable) {}
+        , _bytesAvailable(bytesAvailable) { }
 
     size_t bytesRequested() const noexcept {
         return _bytesRequested;
@@ -93,7 +96,7 @@ public:
 class FileExistsException : public FileWriterException {
 public:
     explicit FileExistsException(const std::filesystem::path& filePath)
-        : FileWriterException("File already exists", filePath) {}
+        : FileWriterException("File already exists", filePath) { }
 };
 
 /**
@@ -102,7 +105,7 @@ public:
 class PermissionException : public FileWriterException {
 public:
     explicit PermissionException(const std::string& message, const std::filesystem::path& filePath)
-        : FileWriterException("Permission error: " + message, filePath) {}
+        : FileWriterException("Permission error: " + message, filePath) { }
 };
 
 /**
@@ -114,7 +117,8 @@ private:
 
 public:
     explicit CorruptDataException(const std::string& message, const std::filesystem::path& filePath, const std::string& dataType = "")
-        : FileWriterException("Data corruption error: " + message, filePath), _dataType(dataType) {}
+        : FileWriterException("Data corruption error: " + message, filePath)
+        , _dataType(dataType) { }
 
     const std::string& dataType() const noexcept {
         return _dataType;

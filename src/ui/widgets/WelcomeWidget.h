@@ -10,7 +10,7 @@ namespace geck {
 
 /**
  * @brief Welcome screen widget shown when no map is loaded
- * 
+ *
  * Displays the Vault Boy image in the center of the editing area
  * when no map is currently loaded in the editor.
  */
@@ -25,7 +25,7 @@ private:
     void setupUI();
     void renderSvgToLabel(QSvgRenderer& svgRenderer);
     void createVersionLabel();
-    
+
     QVBoxLayout* _layout;
     QLabel* _imageLabel;
     QLabel* _versionLabel;

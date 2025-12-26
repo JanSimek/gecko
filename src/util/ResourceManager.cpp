@@ -13,7 +13,6 @@
 #include "vfs/VfsppNativeFileSystem.h"
 #include "vfs/Dat2FileSystem.hpp"
 
-
 #include "format/frm/Direction.h"
 #include "format/frm/Frame.h"
 #include "format/lst/Lst.h"
@@ -39,23 +38,23 @@ void ResourceManager::cleanup() {
 
 void ResourceManager::clearAllDataPaths() {
     spdlog::info("Clearing all data paths from ResourceManager...");
-    
+
     // Clear all cached resources
     _textures.clear();
     _resources.clear();
-    
+
     // Create a new VFS instance to clear all mounted file systems
     _vfs = std::make_shared<vfspp::VirtualFileSystem>();
-    
+
     spdlog::info("All data paths cleared from ResourceManager");
 }
 
 void ResourceManager::storeTexture(std::string_view name, std::unique_ptr<sf::Texture> texture) {
-    _textures.try_emplace(std::string{name}, std::move(texture));
+    _textures.try_emplace(std::string{ name }, std::move(texture));
 }
 
 bool ResourceManager::exists(std::string_view filename) const {
-    const std::string filenameStr{filename};
+    const std::string filenameStr{ filename };
     return _textures.contains(filenameStr) || _resources.contains(filenameStr);
 }
 
@@ -63,20 +62,20 @@ bool ResourceManager::fileExistsInVFS(const std::filesystem::path& filepath) con
     if (!_vfs) {
         return false;
     }
-    
+
     // vfspp needs leading slash for root-relative paths
     // Note: The VFS layer uses forward slashes internally for cross-platform consistency
     // This matches the format used in DAT archives (e.g., "/art/tiles/tile.frm")
     std::filesystem::path vfsPath = "/" / filepath;
     vfspp::FileInfo fileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
-    
+
     // Try to open file in read mode to check if it exists
     vfspp::IFilePtr file = _vfs->OpenFile(fileInfo, vfspp::IFile::FileMode::Read);
     return file != nullptr;
 }
 
 void ResourceManager::insertTexture(std::string_view filename) {
-    const std::string filenameStr{filename};
+    const std::string filenameStr{ filename };
     // Check if texture is already in cache
     if (_textures.contains(filenameStr)) {
         return;
@@ -101,9 +100,9 @@ void ResourceManager::insertTexture(std::string_view filename) {
 }
 
 const sf::Texture& ResourceManager::texture(std::string_view filename) {
-    const std::string filenameStr{filename};
+    const std::string filenameStr{ filename };
     const auto found = _textures.find(filenameStr);
-    
+
     if (found != _textures.end()) {
         return *found->second;
     }
@@ -114,7 +113,7 @@ const sf::Texture& ResourceManager::texture(std::string_view filename) {
         // Try on-demand loading if FRM resource not found
         try {
             insertTexture(filename);
-            
+
             frm = getResource<Frm>(filenameStr);
             if (frm == nullptr) {
                 // Check if texture was created directly (for non-FRM files)
@@ -126,36 +125,36 @@ const sf::Texture& ResourceManager::texture(std::string_view filename) {
                 throw ResourceException("Texture does not exist", filenameStr);
             }
         } catch (const std::exception& e) {
-                spdlog::error("ResourceManager: On-demand texture loading failed for {}: {}", filename, e.what());
-                throw ResourceException("Texture loading failed", filenameStr);
-            }
+            spdlog::error("ResourceManager: On-demand texture loading failed for {}: {}", filename, e.what());
+            throw ResourceException("Texture loading failed", filenameStr);
         }
+    }
 
-        auto texture = std::make_unique<sf::Texture>();
-        
-        // Load palette for FRM texture creation
-        auto pal = loadResource<Pal>(ResourcePaths::Pal::COLOR); // TODO: custom pal
-        if (!pal) {
-            throw ResourceException("Failed to load color palette for texture", filenameStr);
-        }
+    auto texture = std::make_unique<sf::Texture>();
 
-        // Create image from FRM and load it into texture
-        try {
-            const sf::Image image = imageFromFrm(frm, pal);
-            if (!texture->loadFromImage(image)) {
-                throw SpriteException("Failed to load texture from FRM image", filenameStr);
-            }
-        } catch (const std::exception& e) {
-            throw SpriteException("Failed to create texture from FRM: " + std::string(e.what()), filenameStr);
-        }
+    // Load palette for FRM texture creation
+    auto pal = loadResource<Pal>(ResourcePaths::Pal::COLOR); // TODO: custom pal
+    if (!pal) {
+        throw ResourceException("Failed to load color palette for texture", filenameStr);
+    }
 
-        // Store texture in cache using try_emplace
-        const auto [iter, inserted] = _textures.try_emplace(filenameStr, std::move(texture));
-        if (inserted) {
-            return *iter->second;
-        } else {
-            throw ResourceException("Failed to cache texture", filenameStr);
+    // Create image from FRM and load it into texture
+    try {
+        const sf::Image image = imageFromFrm(frm, pal);
+        if (!texture->loadFromImage(image)) {
+            throw SpriteException("Failed to load texture from FRM image", filenameStr);
         }
+    } catch (const std::exception& e) {
+        throw SpriteException("Failed to create texture from FRM: " + std::string(e.what()), filenameStr);
+    }
+
+    // Store texture in cache using try_emplace
+    const auto [iter, inserted] = _textures.try_emplace(filenameStr, std::move(texture));
+    if (inserted) {
+        return *iter->second;
+    } else {
+        throw ResourceException("Failed to cache texture", filenameStr);
+    }
 }
 
 void ResourceManager::addDataPath(const std::filesystem::path& path) {
@@ -212,7 +211,6 @@ T* ResourceManager::getResource(const Key& id) {
 
 const sf::Image ResourceManager::imageFromFrm(Frm* frm, Pal* pal) {
 
-
     auto colors = pal->palette();
 
     // find maximum width and height
@@ -266,9 +264,8 @@ const sf::Image ResourceManager::imageFromFrm(Frm* frm, Pal* pal) {
 }
 std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
 
-    auto baseId = FID & FileFormat::BASE_ID_MASK; 
+    auto baseId = FID & FileFormat::BASE_ID_MASK;
     auto type = static_cast<Frm::FRM_TYPE>(FID >> FileFormat::TYPE_MASK_SHIFT);
-    
 
     if (type == Frm::FRM_TYPE::CRITTER) {
         baseId = FID & FileFormat::CRITTER_ID_MASK;
@@ -316,9 +313,9 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
 
     // Try to get the LST resource, loading on-demand if not available
     Lst* lst = getResource<Lst>(typeArtDescription.lstFilePath);
-    
+
     if (!lst) {
-        
+
         // Try to load LST file on-demand
         try {
             lst = loadResource<Lst>(typeArtDescription.lstFilePath);
@@ -326,7 +323,7 @@ std::string ResourceManager::FIDtoFrmName(unsigned int FID) {
             spdlog::error("ResourceManager: Failed to load LST file {} on-demand: {}", typeArtDescription.lstFilePath, loadError.what());
             throw std::runtime_error("Failed to load LST file " + typeArtDescription.lstFilePath + ": " + loadError.what());
         }
-        
+
         if (!lst) {
             throw std::runtime_error("Failed to load LST resource on-demand: " + typeArtDescription.lstFilePath);
         }

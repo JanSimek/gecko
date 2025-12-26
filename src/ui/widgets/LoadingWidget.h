@@ -20,7 +20,7 @@ public:
 
     void addLoader(std::unique_ptr<Loader> loader);
     void start();
-    
+
     // Override exec() to auto-start loading
     int exec() override;
 

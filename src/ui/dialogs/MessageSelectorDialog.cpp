@@ -22,12 +22,12 @@ MessageSelectorDialog::MessageSelectorDialog(const Msg* msgFile, int currentMess
     , _buttonLayout(nullptr)
     , _okButton(nullptr)
     , _cancelButton(nullptr) {
-    
+
     setWindowTitle("Select Message");
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setModal(true);
     resize(500, 400);
-    
+
     setupUI();
     populateMessages();
 }
@@ -40,36 +40,36 @@ void MessageSelectorDialog::setupUI() {
     _mainLayout = new QVBoxLayout(this);
     _mainLayout->setContentsMargins(8, 8, 8, 8);
     _mainLayout->setSpacing(8);
-    
+
     // Title label
     _titleLabel = new QLabel("Select a message from the list:");
     _titleLabel->setStyleSheet("QLabel { font-weight: bold; margin-bottom: 4px; }");
     _mainLayout->addWidget(_titleLabel);
-    
+
     // Message list
     _messageList = new QListWidget(this);
     _messageList->setAlternatingRowColors(true);
     _messageList->setSelectionMode(QAbstractItemView::SingleSelection);
     _messageList->setSortingEnabled(true);
     _mainLayout->addWidget(_messageList);
-    
+
     connect(_messageList, &QListWidget::itemSelectionChanged, this, &MessageSelectorDialog::onSelectionChanged);
     connect(_messageList, &QListWidget::itemDoubleClicked, this, &MessageSelectorDialog::onItemDoubleClicked);
-    
+
     // Button layout
     _buttonLayout = new QHBoxLayout();
     _buttonLayout->addStretch();
-    
+
     _okButton = new QPushButton("OK", this);
     _okButton->setEnabled(false); // Disabled until selection is made
     _okButton->setDefault(true);
     connect(_okButton, &QPushButton::clicked, this, &QDialog::accept);
     _buttonLayout->addWidget(_okButton);
-    
+
     _cancelButton = new QPushButton("Cancel", this);
     connect(_cancelButton, &QPushButton::clicked, this, &QDialog::reject);
     _buttonLayout->addWidget(_cancelButton);
-    
+
     _mainLayout->addLayout(_buttonLayout);
 }
 
@@ -78,35 +78,35 @@ void MessageSelectorDialog::populateMessages() {
         spdlog::error("MessageSelectorDialog: MSG file is null");
         return;
     }
-    
+
     try {
         const auto& messages = _msgFile->getMessages();
-        
+
         QListWidgetItem* currentItem = nullptr;
-        
+
         for (const auto& [id, message] : messages) {
             // Create display text: "ID: 123 - Message text..."
             QString displayText = QString("ID: %1 - %2")
-                .arg(id)
-                .arg(QString::fromStdString(message.text));
-            
+                                      .arg(id)
+                                      .arg(QString::fromStdString(message.text));
+
             // Truncate very long messages for display
             if (displayText.length() > 120) {
                 displayText = displayText.left(117) + "...";
             }
-            
+
             QListWidgetItem* item = new QListWidgetItem(displayText);
-            item->setData(Qt::UserRole, id); // Store the message ID
+            item->setData(Qt::UserRole, id);                        // Store the message ID
             item->setToolTip(QString::fromStdString(message.text)); // Full text as tooltip
-            
+
             _messageList->addItem(item);
-            
+
             // Remember the current message item for selection
             if (id == _currentMessageId) {
                 currentItem = item;
             }
         }
-        
+
         // Select and scroll to current message if found
         if (currentItem) {
             _messageList->setCurrentItem(currentItem);
@@ -114,12 +114,12 @@ void MessageSelectorDialog::populateMessages() {
             _selectedMessageId = _currentMessageId;
             _okButton->setEnabled(true);
         }
-        
+
         spdlog::debug("MessageSelectorDialog: Populated {} messages, current ID: {}", messages.size(), _currentMessageId);
-        
+
     } catch (const std::exception& e) {
         spdlog::error("MessageSelectorDialog: Error populating messages: {}", e.what());
-        
+
         // Add error item
         QListWidgetItem* errorItem = new QListWidgetItem("Error: Could not load messages");
         errorItem->setData(Qt::UserRole, -1);

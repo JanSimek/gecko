@@ -13,12 +13,12 @@ namespace geck {
  * - OBJECTS: Only allow selection of objects
  */
 enum class SelectionMode : int {
-    ALL,            ///< Select any element type (mixed selection allowed)
-    FLOOR_TILES,    ///< Select only floor tiles
-    ROOF_TILES,     ///< Select only roof tiles (with textures)
-    ROOF_TILES_ALL, ///< Select all roof tiles including empty ones
-    OBJECTS,        ///< Select only objects
-    HEXES,          ///< Select only hexes (for wall blocker placement)
+    ALL,                      ///< Select any element type (mixed selection allowed)
+    FLOOR_TILES,              ///< Select only floor tiles
+    ROOF_TILES,               ///< Select only roof tiles (with textures)
+    ROOF_TILES_ALL,           ///< Select all roof tiles including empty ones
+    OBJECTS,                  ///< Select only objects
+    HEXES,                    ///< Select only hexes (for wall blocker placement)
     SCROLL_BLOCKER_RECTANGLE, ///< Draw rectangle and place scroll blockers on borders
 
     NUM_SELECTION_TYPES ///< Total number of selection modes (for cycling)

@@ -16,7 +16,7 @@ DataPathLoader::~DataPathLoader() {
 }
 
 void DataPathLoader::init() {
-    _thread = std::thread{&DataPathLoader::load, this};
+    _thread = std::thread{ &DataPathLoader::load, this };
 }
 
 void DataPathLoader::load() {
@@ -36,15 +36,15 @@ void DataPathLoader::load() {
     for (const auto& path : _dataPaths) {
         // Update progress
         setProgress("Loading: " + path.filename().string());
-        
+
         try {
             spdlog::info("DataPathLoader: Loading data path: {}", path.string());
             resourceManager.addDataPath(path);
-            
+
             // Update percentage
             _currentPathIndex++;
             _percentDone = static_cast<int>((_currentPathIndex * 100) / _dataPaths.size());
-            
+
         } catch (const std::exception& e) {
             spdlog::error("DataPathLoader: Failed to load data path {}: {}", path.string(), e.what());
             _errorMessage = "Failed to load data path: " + path.string() + "\nError: " + e.what();

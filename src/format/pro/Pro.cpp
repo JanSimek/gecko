@@ -3,14 +3,15 @@
 
 namespace geck {
 
-Pro::Pro(std::filesystem::path path) : IFile(path) {
+Pro::Pro(std::filesystem::path path)
+    : IFile(path) {
     initializeDataStructures();
 }
 
 void Pro::initializeDataStructures() {
     // Initialize header
     memset(&header, 0, sizeof(header));
-    
+
     // Initialize all data structures to zero
     memset(&commonItemData, 0, sizeof(commonItemData));
     memset(&armorData, 0, sizeof(armorData));
@@ -20,7 +21,7 @@ void Pro::initializeDataStructures() {
     memset(&ammoData, 0, sizeof(ammoData));
     memset(&miscData, 0, sizeof(miscData));
     memset(&keyData, 0, sizeof(keyData));
-    
+
     _objectSubtypeId = 0;
 }
 

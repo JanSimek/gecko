@@ -1,6 +1,7 @@
 #include "DataPathsWidget.h"
 #include "../../util/Settings.h"
 #include "../../Application.h"
+#include "../UIConstants.h"
 
 #include <QApplication>
 #include <QStyle>
@@ -11,11 +12,7 @@
 
 namespace geck {
 
-// Constants for styling and configuration
-namespace {
-    constexpr int LIST_MAX_HEIGHT = 100;
-    constexpr const char* HELP_STYLE = "QLabel { color: gray; font-size: 11px; margin-bottom: 8px; }";
-}
+using namespace ui::constants;
 
 DataPathsWidget::DataPathsWidget(QWidget* parent)
     : QGroupBox("Fallout 2 Data Paths", parent)
@@ -29,23 +26,22 @@ DataPathsWidget::DataPathsWidget(QWidget* parent)
     , _moveDownButton(nullptr)
     , _autoDetectButton(nullptr)
     , _progressBar(nullptr) {
-    
+
     setupUI();
     setupConnections();
 }
 
 void DataPathsWidget::setupUI() {
     _layout = new QVBoxLayout(this);
-    
+
     // Help text
     _helpLabel = new QLabel(
         "Add paths to Fallout 2 data directories or .dat files. These will be searched for game resources.\n"
-        "Sources are applied in list order: later entries override earlier ones when files have the same path."
-    );
+        "Sources are applied in list order: later entries override earlier ones when files have the same path.");
     _helpLabel->setWordWrap(true);
-    _helpLabel->setStyleSheet(HELP_STYLE);
+    _helpLabel->setStyleSheet(ui::theme::styles::helpText());
     _layout->addWidget(_helpLabel);
-    
+
     // Paths list
     _pathsList = new QListWidget();
     _pathsList->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -53,14 +49,14 @@ void DataPathsWidget::setupUI() {
     _pathsList->setMaximumHeight(LIST_MAX_HEIGHT);
     _pathsList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     _layout->addWidget(_pathsList);
-    
+
     // Control buttons
     _controlLayout = new QHBoxLayout();
-    
+
     _addButton = new QPushButton("Add Path...");
     _addButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogOpenButton));
     _controlLayout->addWidget(_addButton);
-    
+
     _removeButton = new QPushButton("Remove");
     _removeButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogCancelButton));
     _removeButton->setEnabled(false);
@@ -70,21 +66,21 @@ void DataPathsWidget::setupUI() {
     _moveUpButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ArrowUp));
     _moveUpButton->setEnabled(false);
     _controlLayout->addWidget(_moveUpButton);
-    
+
     _moveDownButton = new QPushButton("Move Down");
     _moveDownButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ArrowDown));
     _moveDownButton->setEnabled(false);
     _controlLayout->addWidget(_moveDownButton);
-    
+
     _controlLayout->addStretch();
-    
+
     _autoDetectButton = new QPushButton("Auto-Detect");
     _autoDetectButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ComputerIcon));
     _autoDetectButton->setToolTip("Automatically detect Fallout 2 installations");
     _controlLayout->addWidget(_autoDetectButton);
-    
+
     _layout->addLayout(_controlLayout);
-    
+
     // Progress bar (initially hidden)
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);
@@ -103,31 +99,31 @@ void DataPathsWidget::setupConnections() {
 
 std::vector<std::filesystem::path> DataPathsWidget::getDataPaths() const {
     std::vector<std::filesystem::path> paths;
-    
+
     for (int i = 0; i < _pathsList->count(); ++i) {
         QListWidgetItem* item = _pathsList->item(i);
         if (item) {
             paths.emplace_back(item->text().toStdString());
         }
     }
-    
+
     return paths;
 }
 
 void DataPathsWidget::setDataPaths(const std::vector<std::filesystem::path>& paths) {
     _pathsList->clear();
-    
+
     for (const auto& path : paths) {
         addPathToList(path);
     }
-    
+
     validatePaths();
     updateButtonStates();
 }
 
 void DataPathsWidget::addPathToList(const std::filesystem::path& path) {
     QString pathStr = QString::fromStdString(path.string());
-    
+
     // Check if path already exists in list
     for (int i = 0; i < _pathsList->count(); ++i) {
         QListWidgetItem* existingItem = _pathsList->item(i);
@@ -135,11 +131,11 @@ void DataPathsWidget::addPathToList(const std::filesystem::path& path) {
             return; // Path already exists
         }
     }
-    
+
     bool isDefaultPath = Application::isDefaultResourcesPath(path);
-    
+
     QListWidgetItem* item = new QListWidgetItem(pathStr);
-    
+
     // Set icon based on path type and validity
     auto& settings = Settings::getInstance();
     if (settings.validateDataPath(path)) {
@@ -159,12 +155,12 @@ void DataPathsWidget::addPathToList(const std::filesystem::path& path) {
     } else {
         item->setIcon(QApplication::style()->standardIcon(QStyle::SP_MessageBoxWarning));
         item->setToolTip("Invalid or missing path");
-        item->setForeground(QColor(Qt::red));
+        item->setForeground(ui::theme::colors::invalidPath());
     }
-    
+
     // Store whether this is a protected path in the item data
     item->setData(Qt::UserRole, isDefaultPath);
-    
+
     _pathsList->addItem(item);
     _pathsList->setCurrentItem(item);
 }
@@ -172,19 +168,19 @@ void DataPathsWidget::addPathToList(const std::filesystem::path& path) {
 void DataPathsWidget::validatePaths() {
     auto& settings = Settings::getInstance();
     auto dataPaths = getDataPaths();
-    
+
     if (dataPaths.empty()) {
         setStatusMessage("Warning: No data paths configured. Game resources will not be available.", "warning");
         return;
     }
-    
+
     int validPaths = 0;
     for (const auto& path : dataPaths) {
         if (settings.validateDataPath(path)) {
             validPaths++;
         }
     }
-    
+
     if (validPaths == 0) {
         setStatusMessage("Warning: No valid data paths found. Check that paths exist and contain Fallout 2 data.", "error");
     } else if (validPaths < static_cast<int>(dataPaths.size())) {
@@ -203,7 +199,7 @@ void DataPathsWidget::updateButtonStates() {
     if (currentItem) {
         bool isProtected = currentItem->data(Qt::UserRole).toBool();
         _removeButton->setEnabled(!isProtected);
-        
+
         int currentRow = _pathsList->row(currentItem);
         _moveUpButton->setEnabled(currentRow > 0);
         _moveDownButton->setEnabled(currentRow < _pathsList->count() - 1);
@@ -219,11 +215,11 @@ void DataPathsWidget::removeSelectedPath() {
     if (item) {
         bool isProtected = item->data(Qt::UserRole).toBool();
         if (isProtected) {
-            QMessageBox::warning(this, "Cannot Remove Path", 
+            QMessageBox::warning(this, "Cannot Remove Path",
                 "The built-in resources path cannot be removed as it contains essential game assets.");
             return;
         }
-        
+
         delete _pathsList->takeItem(_pathsList->row(item));
         emit dataPathsChanged();
         validatePaths();
@@ -232,10 +228,10 @@ void DataPathsWidget::removeSelectedPath() {
 }
 
 void DataPathsWidget::onAddPath() {
-    QString path = QFileDialog::getExistingDirectory(this, 
-        "Select Fallout 2 Data Directory", 
+    QString path = QFileDialog::getExistingDirectory(this,
+        "Select Fallout 2 Data Directory",
         QStandardPaths::writableLocation(QStandardPaths::HomeLocation));
-    
+
     if (!path.isEmpty()) {
         addPathToList(std::filesystem::path(path.toStdString()));
         emit dataPathsChanged();
@@ -253,14 +249,14 @@ void DataPathsWidget::onAutoDetect() {
     _progressBar->setVisible(true);
     _progressBar->setRange(0, 0); // Indeterminate progress
     setStatusMessage("Detecting Fallout 2 installations...", "normal");
-    
+
     QApplication::processEvents(); // Update UI
-    
+
     auto detectedPaths = Settings::detectFallout2Installations();
-    
+
     _progressBar->setVisible(false);
     _autoDetectButton->setEnabled(true);
-    
+
     int addedPaths = 0;
     for (const auto& path : detectedPaths) {
         // Check if path is already in the list
@@ -271,13 +267,13 @@ void DataPathsWidget::onAutoDetect() {
                 break;
             }
         }
-        
+
         if (!exists) {
             addPathToList(path);
             addedPaths++;
         }
     }
-    
+
     if (addedPaths > 0) {
         emit dataPathsChanged();
         setStatusMessage(QString("Auto-detection complete. Added %1 new path(s).").arg(addedPaths), "success");
@@ -286,7 +282,7 @@ void DataPathsWidget::onAutoDetect() {
     } else {
         setStatusMessage("Auto-detection complete. All detected paths were already configured.", "info");
     }
-    
+
     validatePaths();
     updateButtonStates();
 }
@@ -300,17 +296,17 @@ void DataPathsWidget::moveSelectedPath(int offset) {
     if (!currentItem) {
         return;
     }
-    
+
     int currentRow = _pathsList->row(currentItem);
     int targetRow = currentRow + offset;
     if (targetRow < 0 || targetRow >= _pathsList->count()) {
         return;
     }
-    
+
     QListWidgetItem* takenItem = _pathsList->takeItem(currentRow);
     _pathsList->insertItem(targetRow, takenItem);
     _pathsList->setCurrentItem(takenItem);
-    
+
     emit dataPathsChanged();
     validatePaths();
     updateButtonStates();
@@ -321,13 +317,13 @@ void DataPathsWidget::onItemDoubleClicked(QListWidgetItem* item) {
         // Check if this is a protected path
         bool isProtected = item->data(Qt::UserRole).toBool();
         if (isProtected) {
-            QMessageBox::information(this, "Cannot Edit Path", 
+            QMessageBox::information(this, "Cannot Edit Path",
                 "The built-in resources path cannot be modified as it contains essential game assets.");
             return;
         }
-        
+
         QString currentPath = item->text();
-        QString newPath = QFileDialog::getExistingDirectory(this, 
+        QString newPath = QFileDialog::getExistingDirectory(this,
             "Select Fallout 2 Data Directory", currentPath);
         if (!newPath.isEmpty() && newPath != currentPath) {
             item->setText(newPath);

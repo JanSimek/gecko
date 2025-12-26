@@ -36,8 +36,8 @@ class FileLoaderWorker : public QObject {
 
 public:
     explicit FileLoaderWorker(QObject* parent = nullptr);
-    
-    std::atomic<bool> _shouldStop{false};
+
+    std::atomic<bool> _shouldStop{ false };
 
 public slots:
     void loadFiles();
@@ -81,7 +81,7 @@ public:
     QString getFilePath() const { return _filePath; }
     void setFileSize(qint64 size) { _fileSize = size; }
     qint64 getFileSize() const { return _fileSize; }
-    
+
     static QIcon getFileIcon(const QString& fileName);
 
 private:
@@ -160,17 +160,17 @@ private:
     void resizeNameColumnToContent();
     bool isTextFile(const QString& filePath) const;
     void expandFilteredItems();
-    
+
     // Column visibility management
     void setupHeaderContextMenu();
     void showHeaderContextMenu(const QPoint& pos);
     void toggleColumnVisibility(int column);
     void applyDefaultColumnVisibility();
-    
+
     // PRO name loading
     QString getProName(const QString& filePath) const;
     QString loadProNameFromFile(const QString& filePath) const;
-    
+
     // Path normalization for display
     std::vector<std::filesystem::path> getNativeDirectoryPaths() const;
     QString normalizeDisplayPath(const QString& fullPath) const;
@@ -205,22 +205,22 @@ private:
     // State
     QString _currentSearchFilter;
     QString _currentFileTypeFilter;
-    
+
     // Progressive building state
     std::vector<std::string> _pendingFiles;
     size_t _currentChunkIndex = 0;
     QTimer* _chunkTimer = nullptr;
     QTimer* _searchTimer = nullptr;
     bool _isLoading = false;
-    
+
     // Column visibility default state - used only for initialization
-    static constexpr bool DEFAULT_COLUMN_VISIBILITY[5] = {true, false, true, false, true}; // Name, Type, Source, Path, PRO Name
-    
+    static constexpr bool DEFAULT_COLUMN_VISIBILITY[5] = { true, false, true, false, true }; // Name, Type, Source, Path, PRO Name
+
     // PRO name caching
     mutable std::unordered_map<std::string, QString> _proNameCache;
 
     // Constants
-    static constexpr int CHUNK_SIZE = 50; // Files processed per chunk (small for better UI responsiveness)
+    static constexpr int CHUNK_SIZE = 50;    // Files processed per chunk (small for better UI responsiveness)
     static constexpr int CHUNK_DELAY_MS = 0; // No delay, use Qt event queue instead
 };
 

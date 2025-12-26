@@ -11,7 +11,7 @@ namespace geck {
 
 /**
  * @brief Manages viewport operations like zooming, panning, and coordinate conversions
- * 
+ *
  * This class handles all viewport-related functionality that was previously
  * embedded in EditorWidget, providing a clean separation of concerns for
  * camera/view management operations.
@@ -26,7 +26,7 @@ public:
      * @param windowSize The size of the SFML window
      */
     void initialize(sf::Vector2u windowSize);
-    
+
     /**
      * @brief Update viewport for window resize with aspect ratio preservation
      * @param windowSize New window size
@@ -107,8 +107,8 @@ public:
 private:
     const HexagonGrid* _hexGrid;
     sf::View _view;
-    sf::Vector2u _windowSize{800u, 600u};
-    
+    sf::Vector2u _windowSize{ 800u, 600u };
+
     // Zoom level tracking and limits
     float _zoomLevel = 1.0f;
     static constexpr float MIN_ZOOM = 0.1f;   // Can zoom out to 10% of original size

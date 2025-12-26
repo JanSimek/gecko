@@ -48,7 +48,7 @@ public:
     [[nodiscard]] T* getResource(const Key& filepath);
 
     void cleanup();
-    
+
     // Clear all VFS mounts and caches, preparing for reload
     void clearAllDataPaths();
 
@@ -60,7 +60,7 @@ public:
         static_assert(std::is_base_of<IFile, Resource>::value, "Resource must derive from IFile");
 
         const std::string pathKey = path.string();
-        
+
         // Check if already loaded
         auto existingIter = _resources.find(pathKey);
         if (existingIter == _resources.end()) {
@@ -81,7 +81,7 @@ public:
                 auto resource = ReaderFactory::readFileFromMemory<Resource>(data, pathKey);
 
                 _resources[pathKey] = std::move(resource);
-                
+
             } catch (const std::exception& e) {
                 throw IOException("Failed to load resource: " + std::string(e.what()), path);
             }
@@ -116,13 +116,13 @@ public:
      * @return Vector of matching file paths
      */
     std::vector<std::string> listFilesByPattern(const std::string& pattern) const;
-    
+
     /**
      * @brief Get access to the virtual file system
      * @return Shared pointer to the VFS
      */
     vfspp::VirtualFileSystemPtr getVFS() const { return _vfs; }
-    
+
     // Cache management methods
     void clearTextureCache(const std::string& filename);
 };

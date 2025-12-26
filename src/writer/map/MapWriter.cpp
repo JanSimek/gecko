@@ -21,7 +21,7 @@ bool MapWriter::write(const Map::MapFile& map) {
         // Write map header
         utils.writeWithLog(map.header.version, "map version");
         utils.writeFixedString(map.header.filename, Map::FILENAME_LENGTH);
-        
+
         utils.writeWithLog(map.header.player_default_position, "player default position");
         utils.writeWithLog(map.header.player_default_elevation, "player default elevation");
         utils.writeWithLog(map.header.player_default_orientation, "player default orientation");
@@ -128,7 +128,7 @@ bool MapWriter::write(const Map::MapFile& map) {
         utils.flush();
         spdlog::info("Successfully wrote map file: {} ({} bytes)", getPath().filename().string(), getBytesWritten());
         return true;
-        
+
     } catch (const FileWriterException& e) {
         spdlog::error("Failed to write map file {}: {}", getPath().string(), e.what());
         return false;
@@ -140,7 +140,7 @@ bool MapWriter::write(const Map::MapFile& map) {
 
 void MapWriter::writeScript(const MapScript& script) {
     auto& utils = getBinaryUtils();
-    
+
     utils.writeBE32(script.pid);
     utils.writeBE32(script.next_script);
 
@@ -158,7 +158,7 @@ void MapWriter::writeScript(const MapScript& script) {
         case MapScript::ScriptType::CRITTER:
             break;
         default:
-            throw ValidationException("Unknown script PID type", getPath(), 
+            throw ValidationException("Unknown script PID type", getPath(),
                 "script PID " + std::to_string((script.pid & 0xFF000000) >> 24));
     }
 
@@ -238,7 +238,7 @@ void MapWriter::writeObject(const MapObject& object) {
                     // No additional data for these item types
                     break;
                 default:
-                    throw ValidationException("Unknown item subtype", getPath(), 
+                    throw ValidationException("Unknown item subtype", getPath(),
                         "item subtype " + std::to_string(subtype_id));
             }
         } break;
@@ -284,7 +284,7 @@ void MapWriter::writeObject(const MapObject& object) {
                     // No additional data for generic scenery
                     break;
                 default:
-                    throw ValidationException("Unknown scenery subtype", getPath(), 
+                    throw ValidationException("Unknown scenery subtype", getPath(),
                         "scenery subtype " + std::to_string(subtype_id));
             }
         } break;
@@ -315,7 +315,7 @@ void MapWriter::writeObject(const MapObject& object) {
             }
             break;
         default:
-            throw ValidationException("Unknown object type", getPath(), 
+            throw ValidationException("Unknown object type", getPath(),
                 "object type " + std::to_string(objectTypeId));
     }
 

@@ -43,7 +43,7 @@ void MapLoader::load() {
 
     setStatus("Loading map " + _mapPath.filename().string());
     _percentDone = 0;
-    
+
     // Dispatch to appropriate loading method based on source context
     if (_forceFilesystem) {
         spdlog::info("MapLoader: Force filesystem loading requested");
@@ -54,14 +54,13 @@ void MapLoader::load() {
     }
 }
 
-
 void MapLoader::loadFromVFS() {
     spdlog::info("MapLoader: Loading map from VFS: {}", _mapPath.string());
-    
+
     try {
         auto& resourceManager = ResourceManager::getInstance();
         auto vfs = resourceManager.getVFS();
-        
+
         if (!vfs) {
             spdlog::error("MapLoader: VFS not available for map loading");
             _errorMessage = "Virtual file system not available";
@@ -69,7 +68,7 @@ void MapLoader::loadFromVFS() {
             done = true;
             return;
         }
-        
+
         // Validate and load required LST files (same as filesystem loading)
         const std::vector<std::string> requiredLstFiles = {
             std::string(ResourcePaths::Lst::ITEMS),
@@ -81,21 +80,21 @@ void MapLoader::loadFromVFS() {
             std::string(ResourcePaths::Lst::INTERFACE),
             std::string(ResourcePaths::Lst::INVENTORY)
         };
-        
+
         std::vector<std::string> missingFiles;
         for (const auto& lstPath : requiredLstFiles) {
             if (!resourceManager.fileExistsInVFS(lstPath)) {
                 missingFiles.push_back(lstPath);
             }
         }
-        
+
         if (!missingFiles.empty()) {
             std::string errorMessage = "Cannot load map: Missing required LST files:\n\n";
             for (const auto& missingFile : missingFiles) {
                 errorMessage += "• " + missingFile + "\n";
             }
             errorMessage += "\nPlease ensure all Fallout 2 game files are properly installed and DAT archives are loaded.";
-            
+
             _errorMessage = errorMessage;
             _hasError = true;
             done = true;
@@ -107,27 +106,28 @@ void MapLoader::loadFromVFS() {
         try {
             setProgress("Loading resource lists");
             _percentDone = 5;
-            
+
             for (const auto& lst_path : requiredLstFiles) {
                 [[maybe_unused]] auto* lstResource = resourceManager.loadResource<Lst>(lst_path);
             }
-            
+
             _percentDone = 10;
         } catch (const std::exception& e) {
             _errorMessage = QString("Failed to load required resource files:\n%1\n\nPlease ensure all game data files are properly configured.")
-                .arg(e.what()).toStdString();
+                                .arg(e.what())
+                                .toStdString();
             _hasError = true;
             done = true;
             spdlog::error("Failed to load LST files for VFS map: {}", e.what());
             return;
         }
-        
+
         setProgress("Parsing map file from VFS");
         _percentDone = 15;
-        
+
         // Let VFS handle path resolution - it knows which files are mounted
         vfspp::FileInfo vfsFileInfo = PathUtils::createNormalizedFileInfo(_mapPath);
-        
+
         // Open file in VFS
         vfspp::IFilePtr vfsFile = vfs->OpenFile(vfsFileInfo, vfspp::IFile::FileMode::Read);
         if (!vfsFile) {
@@ -137,30 +137,30 @@ void MapLoader::loadFromVFS() {
             done = true;
             return;
         }
-        
+
         // Read file data into memory
         size_t fileSize = vfsFile->Size();
         std::vector<uint8_t> buffer(fileSize);
         size_t bytesRead = vfsFile->Read(buffer.data(), fileSize);
-        
+
         if (bytesRead != fileSize) {
-            spdlog::error("MapLoader: Failed to read complete map file from VFS: {} (read {} of {} bytes)", 
-                         _mapPath.string(), bytesRead, fileSize);
+            spdlog::error("MapLoader: Failed to read complete map file from VFS: {} (read {} of {} bytes)",
+                _mapPath.string(), bytesRead, fileSize);
             _errorMessage = "Failed to read complete map file from VFS";
             _hasError = true;
             done = true;
             return;
         }
-        
+
         // Create MapReader and load from memory buffer
         auto proLoadCallback = [&](uint32_t PID) {
             return resourceManager.loadResource<Pro>(ProHelper::basePath(PID));
         };
         MapReader mapReader(proLoadCallback);
-        
+
         // Load map directly from data buffer
         _map = mapReader.openFile(_mapPath.string(), buffer);
-        
+
         if (!_map) {
             spdlog::error("MapLoader: Failed to parse map data from VFS: {}", _mapPath.string());
             _errorMessage = "Failed to parse map file: " + _mapPath.string();
@@ -168,18 +168,18 @@ void MapLoader::loadFromVFS() {
             done = true;
             return;
         }
-        
+
         _percentDone = 20;
         spdlog::info("MapLoader: Successfully loaded map from VFS: {}", _mapPath.string());
-        
+
         // Load additional resources (textures, etc.) - reuse existing code
         loadMapResources();
-        
+
         // Mark loading as complete (only if loadMapResources didn't set error)
         if (!_hasError) {
             done = true;
         }
-        
+
     } catch (const std::exception& e) {
         spdlog::error("MapLoader: Failed to load map from VFS: {}", e.what());
         _errorMessage = "Failed to load map file:\n" + _mapPath.string() + "\n\nError: " + e.what();
@@ -203,23 +203,23 @@ void MapLoader::loadFromFilesystem() {
         std::string(ResourcePaths::Lst::INTERFACE),
         std::string(ResourcePaths::Lst::INVENTORY)
     };
-    
+
     std::vector<std::string> missingFiles;
     auto& resourceManager = ResourceManager::getInstance();
-    
+
     for (const auto& lstPath : requiredLstFiles) {
         if (!resourceManager.fileExistsInVFS(lstPath)) {
             missingFiles.push_back(lstPath);
         }
     }
-    
+
     if (!missingFiles.empty()) {
         std::string errorMessage = "Cannot load map: Missing required LST files:\n\n";
         for (const auto& missingFile : missingFiles) {
             errorMessage += "• " + missingFile + "\n";
         }
         errorMessage += "\nPlease ensure all Fallout 2 game files are properly installed and DAT archives are loaded.";
-        
+
         _errorMessage = errorMessage;
         _hasError = true;
         done = true;
@@ -231,15 +231,16 @@ void MapLoader::loadFromFilesystem() {
     try {
         setProgress("Loading resource lists");
         _percentDone = 5;
-        
+
         for (const auto& lst_path : requiredLstFiles) {
             [[maybe_unused]] auto* lstResource = ResourceManager::getInstance().loadResource<Lst>(lst_path);
         }
-        
+
         _percentDone = 10;
     } catch (const std::exception& e) {
         _errorMessage = QString("Failed to load required resource files:\n%1\n\nPlease ensure all game data files are properly configured.")
-            .arg(e.what()).toStdString();
+                            .arg(e.what())
+                            .toStdString();
         _hasError = true;
         done = true;
         spdlog::error("Failed to load LST files: {}", e.what());
@@ -258,7 +259,8 @@ void MapLoader::loadFromFilesystem() {
         _map = map_reader.openFile(_mapPath);
     } catch (const std::exception& e) {
         _errorMessage = QString("Failed to parse map file:\n%1\n\nPlease ensure all game data files are properly configured.")
-            .arg(e.what()).toStdString();
+                            .arg(e.what())
+                            .toStdString();
         _hasError = true;
         done = true;
         spdlog::error("Failed to parse map: {}", e.what());
@@ -267,17 +269,17 @@ void MapLoader::loadFromFilesystem() {
 
     _percentDone = 20;
     spdlog::info("MapLoader: Successfully loaded map from filesystem: {}", _mapPath.string());
-    
+
     // Load additional resources (textures, etc.)
     loadMapResources();
-    
+
     spdlog::info("Map loader finished after {:.3} seconds", stopwatch_total);
     done = true;
 }
 
 void MapLoader::loadMapResources() {
     spdlog::stopwatch stopwatch_chunk;
-    
+
     if (_elevation == INVALID_ELEVATION) {
         uint32_t default_elevation = _map->getMapFile().header.player_default_elevation;
         spdlog::info("Using default map elevation {}", default_elevation);
@@ -290,7 +292,8 @@ void MapLoader::loadMapResources() {
         lst = ResourceManager::getInstance().loadResource<Lst>(ResourcePaths::Lst::TILES);
     } catch (const std::exception& e) {
         _errorMessage = QString("Failed to load tiles list file:\n%1\n\nPlease ensure all game data files are properly configured.")
-            .arg(e.what()).toStdString();
+                            .arg(e.what())
+                            .toStdString();
         _hasError = true;
         done = true;
         spdlog::error("Failed to load tiles.lst: {}", e.what());
@@ -304,7 +307,7 @@ void MapLoader::loadMapResources() {
     for (const auto& tile : lst->list()) {
         setProgress("Loading map tile texture " + std::to_string(tile_number) + " of " + std::to_string(tiles_total));
         ResourceManager::getInstance().insertTexture("art/tiles/" + tile);
-        
+
         // Calculate progress: 20% base + (current/total * 40%)
         int tileProgress = static_cast<int>((tile_number * 40) / tiles_total);
         _percentDone = 20 + tileProgress;
@@ -329,7 +332,7 @@ void MapLoader::loadMapResources() {
 
         const std::string frmName = ResourceManager::getInstance().FIDtoFrmName(object->frm_pid);
         ResourceManager::getInstance().insertTexture(frmName);
-        
+
         // Calculate progress: 60% base + (current/total * 35%)
         int objectProgress = static_cast<int>((objectNumber * 35) / std::max(objectsTotal, size_t(1)));
         _percentDone = 60 + objectProgress;
@@ -344,7 +347,7 @@ void MapLoader::loadMapResources() {
     ResourceManager::getInstance().insertTexture(ResourcePaths::Frm::SCROLL_BLOCKER);
 
     spdlog::info("... objects and resources loaded in {:.3} seconds", stopwatch_chunk);
-    
+
     // Mark as complete
     _percentDone = 100;
     setProgress("Map loading complete");

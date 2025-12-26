@@ -11,7 +11,7 @@
 // Network byte order functions
 #ifdef _WIN32
 #ifndef NOMINMAX
-#define NOMINMAX  // sfml conflict
+#define NOMINMAX // sfml conflict
 #endif
 #pragma comment(lib, "ws2_32.lib") // Winsock
 #include <winsock.h>
@@ -53,7 +53,8 @@ private:
 
 public:
     explicit BinaryWriteUtils(std::ofstream& stream, const std::filesystem::path& filePath = "")
-        : _stream(stream), _filePath(filePath) {}
+        : _stream(stream)
+        , _filePath(filePath) { }
 
     // Endianness conversion functions
     static uint16_t hostToBE16(uint16_t value) {
@@ -147,12 +148,12 @@ public:
         if (str.length() > length) {
             throw ValidationException("String too long for fixed field", _filePath, "string");
         }
-        
+
         _stream.write(str.c_str(), str.length());
         if (!_stream.good()) {
             throw WriteException("Failed to write string data", _filePath, _bytesWritten);
         }
-        
+
         // Pad with null bytes
         size_t padding = length - str.length();
         for (size_t i = 0; i < padding; ++i) {
@@ -161,7 +162,7 @@ public:
         if (!_stream.good()) {
             throw WriteException("Failed to write string padding", _filePath, _bytesWritten);
         }
-        
+
         updatePosition(length);
         spdlog::trace("Wrote fixed string: '{}' ({} bytes) at position {}", str, length, _position - length);
     }
@@ -182,27 +183,27 @@ public:
     }
 
     // Array operations
-    template<typename T>
+    template <typename T>
     void writeArray(const std::vector<T>& data) {
         static_assert(std::is_trivially_copyable_v<T>, "Type must be trivially copyable for binary writing");
-        
+
         checkStreamState();
         if (data.empty()) {
             spdlog::trace("Wrote empty array at position {}", _position);
             return;
         }
-        
+
         _stream.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(T));
         if (!_stream.good()) {
             throw WriteException("Failed to write array data", _filePath, _bytesWritten);
         }
-        
+
         size_t bytesToWrite = data.size() * sizeof(T);
         updatePosition(bytesToWrite);
         spdlog::trace("Wrote array: {} elements ({} bytes) at position {}", data.size(), bytesToWrite, _position - bytesToWrite);
     }
 
-    template<typename T>
+    template <typename T>
     void writeBEArray(const std::vector<T>& data) {
         for (const T& item : data) {
             if constexpr (sizeof(T) == 2) {
@@ -231,8 +232,9 @@ public:
     }
 
     void alignTo(size_t alignment) {
-        if (alignment == 0) return;
-        
+        if (alignment == 0)
+            return;
+
         size_t remainder = _position % alignment;
         if (remainder != 0) {
             size_t padding = alignment - remainder;
@@ -246,7 +248,7 @@ public:
         if (data == nullptr && size > 0) {
             throw ValidationException("Cannot write null data", _filePath);
         }
-        
+
         _stream.write(reinterpret_cast<const char*>(data), size);
         if (!_stream.good()) {
             throw WriteException("Failed to write raw data", _filePath, _bytesWritten);

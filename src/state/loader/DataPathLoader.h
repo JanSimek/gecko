@@ -9,7 +9,7 @@ namespace geck {
 
 /**
  * @brief Loader for data paths (directories and DAT files)
- * 
+ *
  * Shows progress while loading multiple data paths into the ResourceManager.
  * Useful for initial application loading after configuration.
  */
@@ -25,10 +25,10 @@ public:
 
 private:
     std::vector<std::filesystem::path> _dataPaths;
-    std::atomic<bool> _done{false};
-    bool _hasError{false};
+    std::atomic<bool> _done{ false };
+    bool _hasError{ false };
     std::string _errorMessage;
-    size_t _currentPathIndex{0};
+    size_t _currentPathIndex{ 0 };
 };
 
 } // namespace geck

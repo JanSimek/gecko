@@ -585,7 +585,7 @@ std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatR
 
     for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
         sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
-        
+
         // If the sprite has no bounds (empty tile), synthesize bounds from tile index using the same positioning as sprites
         if (tileBounds.size.x == 0 || tileBounds.size.y == 0) {
             auto screenPos = indexToScreenPosition(i, roof);
@@ -959,7 +959,7 @@ bool SelectionManager::moveTile(int sourceTileIndex, sf::Vector2f offset, bool i
 std::vector<int> SelectionManager::getHexesInArea(const sf::FloatRect& area) const {
     std::vector<int> result;
     result.reserve(1000); // Reserve space for typical selection
-    
+
     // Convert area bounds to hex grid coordinates and iterate through potential hexes
     for (int hexIndex = 0; hexIndex < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT); ++hexIndex) {
         // Convert hex index to world position and check if it's in the selection area
@@ -967,7 +967,7 @@ std::vector<int> SelectionManager::getHexesInArea(const sf::FloatRect& area) con
         if (hexGrid && hexIndex < static_cast<int>(hexGrid->grid().size())) {
             const auto& hex = hexGrid->grid().at(hexIndex);
             sf::Vector2f hexPos(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
-            
+
             // Check if hex center is within selection area
             // Using a small hex-sized bounds for better selection feel
             sf::FloatRect hexBounds(sf::Vector2f(hexPos.x - 16, hexPos.y - 8), sf::Vector2f(32, 16));
@@ -976,7 +976,7 @@ std::vector<int> SelectionManager::getHexesInArea(const sf::FloatRect& area) con
             }
         }
     }
-    
+
     return result;
 }
 

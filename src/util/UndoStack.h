@@ -15,7 +15,7 @@ struct UndoCommand {
 class UndoStack {
 public:
     explicit UndoStack(size_t maxCommands = 100)
-        : _maxCommands(maxCommands) {}
+        : _maxCommands(maxCommands) { }
 
     bool canUndo() const { return !_undo.empty(); }
     bool canRedo() const { return !_redo.empty(); }
@@ -34,7 +34,8 @@ public:
     }
 
     bool undo() {
-        if (_undo.empty()) return false;
+        if (_undo.empty())
+            return false;
         auto cmd = std::move(_undo.back());
         _undo.pop_back();
         cmd.undo();
@@ -43,7 +44,8 @@ public:
     }
 
     bool redo() {
-        if (_redo.empty()) return false;
+        if (_redo.empty())
+            return false;
         auto cmd = std::move(_redo.back());
         _redo.pop_back();
         cmd.redo();

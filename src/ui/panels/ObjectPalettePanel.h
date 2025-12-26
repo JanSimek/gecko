@@ -95,7 +95,7 @@ public:
     int getSelectedObjectIndex() const { return _selectedObjectIndex; }
     ObjectCategory getCurrentCategory() const { return _currentCategory; }
     bool hasSelectedObject() const { return _selectedObjectIndex >= 0; }
-    
+
     // Access to object info for drag and drop
     const ObjectInfo* getObjectInfo(int objectIndex, ObjectCategory category) const;
 

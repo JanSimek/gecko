@@ -5,6 +5,7 @@
 #include "../../util/ResourceManager.h"
 #include "../../format/pro/Pro.h"
 #include "../../format/msg/Msg.h"
+#include "../theme/ThemeManager.h"
 
 #include <QApplication>
 #include <QHeaderView>
@@ -16,7 +17,6 @@
 namespace geck {
 
 // Static constants
-const QColor InventoryPanel::HIGHLIGHT_COLOR = QColor(0, 255, 0, 100); // Semi-transparent green
 const int InventoryPanel::ICON_SIZE = 64;
 const int InventoryPanel::MAX_QUANTITY_DISPLAY = 99;
 
@@ -68,7 +68,7 @@ void InventoryPanel::setupUI() {
     _inventoryTree = new QTreeWidget();
     _inventoryTree->setColumnCount(COLUMN_COUNT);
 
-    QStringList headers = {"Icon", "Name", "Type", "Amount", "PID"};
+    QStringList headers = { "Icon", "Name", "Type", "Amount", "PID" };
     _inventoryTree->setHeaderLabels(headers);
 
     // Configure columns
@@ -89,15 +89,15 @@ void InventoryPanel::setupUI() {
 
     // Connect signals
     connect(_inventoryTree, &QTreeWidget::itemSelectionChanged,
-            this, &InventoryPanel::onItemSelectionChanged);
+        this, &InventoryPanel::onItemSelectionChanged);
     connect(_inventoryTree, &QTreeWidget::itemDoubleClicked,
-            this, &InventoryPanel::onItemDoubleClicked);
+        this, &InventoryPanel::onItemDoubleClicked);
 
     _leftLayout->addWidget(_inventoryTree);
 
     // Status label
     _statusLabel = new QLabel("No inventory object selected");
-    _statusLabel->setStyleSheet("color: #666; font-size: 11px; padding: 2px;");
+    _statusLabel->setStyleSheet(ui::theme::styles::smallLabel());
     _leftLayout->addWidget(_statusLabel);
 
     // === RIGHT PANEL: Preview and Actions ===
@@ -119,7 +119,7 @@ void InventoryPanel::setupUI() {
     _previewLabel->setMaximumSize(120, 120);
     _previewLabel->setScaledContents(false);
     _previewLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    _previewLabel->setStyleSheet("border: 1px solid gray; background-color: #f0f0f0;");
+    _previewLabel->setStyleSheet(ui::theme::styles::previewArea());
     _previewFormLayout->addRow("Sprite:", _previewLabel);
 
     // Item details
@@ -169,7 +169,7 @@ void InventoryPanel::setupUI() {
     // Add panels to splitter
     _splitter->addWidget(_leftPanel);
     _splitter->addWidget(_rightPanel);
-    _splitter->setSizes({300, 200}); // 60/40 split
+    _splitter->setSizes({ 300, 200 }); // 60/40 split
     _mainLayout->addWidget(_splitter);
 
     // Initial state - no object selected
@@ -202,7 +202,7 @@ void InventoryPanel::setCurrentObject(std::shared_ptr<Object> object) {
     }
 
     spdlog::debug("InventoryPanel: Setting up for object with {} inventory items",
-                 _mapObject->objects_in_inventory);
+        _mapObject->objects_in_inventory);
 
     // Enable inventory management
     _addButton->setEnabled(true);
@@ -240,7 +240,8 @@ void InventoryPanel::populateInventoryTree() {
 
     for (size_t i = 0; i < _mapObject->inventory.size(); ++i) {
         const auto& item = _mapObject->inventory[i];
-        if (!item) continue;
+        if (!item)
+            continue;
 
         QTreeWidgetItem* treeItem = new QTreeWidgetItem(_inventoryTree);
 
@@ -291,9 +292,7 @@ QPixmap InventoryPanel::addQuantityOverlay(const QPixmap& baseIcon, int amount) 
     QPainter painter(&result);
 
     // Prepare quantity text
-    QString quantityText = (amount <= MAX_QUANTITY_DISPLAY) ?
-                          QString("x%1").arg(amount) :
-                          QString("x%1+").arg(MAX_QUANTITY_DISPLAY);
+    QString quantityText = (amount <= MAX_QUANTITY_DISPLAY) ? QString("x%1").arg(amount) : QString("x%1+").arg(MAX_QUANTITY_DISPLAY);
 
     // Set up font and pen - make it bold and visible
     QFont font = painter.font();
@@ -302,7 +301,7 @@ QPixmap InventoryPanel::addQuantityOverlay(const QPixmap& baseIcon, int amount) 
     painter.setFont(font);
 
     // Draw text with outline for better visibility
-    QPen outlinePen(Qt::black, 2);
+    QPen outlinePen(ui::theme::colors::textDark(), 2);
     QPen textPen(Qt::green);
 
     // Calculate text position (bottom-left corner with padding)
@@ -311,10 +310,10 @@ QPixmap InventoryPanel::addQuantityOverlay(const QPixmap& baseIcon, int amount) 
 
     // Draw text outline
     painter.setPen(outlinePen);
-    painter.drawText(x-1, y-1, quantityText);
-    painter.drawText(x+1, y-1, quantityText);
-    painter.drawText(x-1, y+1, quantityText);
-    painter.drawText(x+1, y+1, quantityText);
+    painter.drawText(x - 1, y - 1, quantityText);
+    painter.drawText(x + 1, y - 1, quantityText);
+    painter.drawText(x - 1, y + 1, quantityText);
+    painter.drawText(x + 1, y + 1, quantityText);
 
     // Draw main text
     painter.setPen(textPen);
@@ -340,8 +339,8 @@ void InventoryPanel::onItemSelectionChanged() {
     highlightSelectedItem(item);
 
     // Enable context buttons
-    _removeButton->setEnabled(true);  // Enable remove for selected item
-    _editButton->setEnabled(false);   // Still disabled for future enhancement
+    _removeButton->setEnabled(true); // Enable remove for selected item
+    _editButton->setEnabled(false);  // Still disabled for future enhancement
 }
 
 void InventoryPanel::highlightSelectedItem(QTreeWidgetItem* item) {
@@ -351,7 +350,7 @@ void InventoryPanel::highlightSelectedItem(QTreeWidgetItem* item) {
     // Set custom background color for enhanced visual feedback
     if (item) {
         for (int col = 0; col < COLUMN_COUNT; ++col) {
-            item->setBackground(col, QBrush(HIGHLIGHT_COLOR));
+            item->setBackground(col, QBrush(ui::theme::colors::selectionHighlight()));
         }
     }
 }
@@ -416,8 +415,8 @@ void InventoryPanel::updateStatusLabel() {
     }
 
     QString statusText = QString("%1 item%2")
-        .arg(_mapObject->objects_in_inventory)
-        .arg(_mapObject->objects_in_inventory != 1 ? "s" : "");
+                             .arg(_mapObject->objects_in_inventory)
+                             .arg(_mapObject->objects_in_inventory != 1 ? "s" : "");
 
     if (_mapObject->max_inventory_size > 0) {
         statusText += QString(" (max %1)").arg(_mapObject->max_inventory_size);
@@ -454,13 +453,20 @@ QString InventoryPanel::getItemTypeName(uint32_t pid) const {
     uint32_t objectType = (pid & 0xFF000000) >> 24;
 
     switch (objectType) {
-        case 0: return "Item";
-        case 1: return "Critter";
-        case 2: return "Scenery";
-        case 3: return "Wall";
-        case 4: return "Tile";
-        case 5: return "Misc";
-        default: return "Unknown";
+        case 0:
+            return "Item";
+        case 1:
+            return "Critter";
+        case 2:
+            return "Scenery";
+        case 3:
+            return "Wall";
+        case 4:
+            return "Tile";
+        case 5:
+            return "Misc";
+        default:
+            return "Unknown";
     }
 }
 
@@ -611,8 +617,8 @@ void InventoryPanel::onRemoveItemClicked() {
 
     // Confirm removal
     int result = QMessageBox::question(this, "Remove Item",
-                                      QString("Remove %1 x %2 from inventory?").arg(amount).arg(itemName),
-                                      QMessageBox::Yes | QMessageBox::No);
+        QString("Remove %1 x %2 from inventory?").arg(amount).arg(itemName),
+        QMessageBox::Yes | QMessageBox::No);
 
     if (result != QMessageBox::Yes) {
         return;
@@ -646,7 +652,7 @@ void InventoryPanel::onRemoveItemClicked() {
 void InventoryPanel::onEditItemClicked() {
     // Future enhancement: Open PRO editor for selected item
     QMessageBox::information(this, "Not Implemented",
-                            "Edit item functionality will be implemented in a future version.");
+        "Edit item functionality will be implemented in a future version.");
 }
 
 void InventoryPanel::onItemDoubleClicked(QTreeWidgetItem* item, int column) {

@@ -1,6 +1,7 @@
 #include "LoadingWidget.h"
 #include "../../state/loader/Loader.h"
 #include "../../util/Constants.h"
+#include "../theme/ThemeManager.h"
 
 #include <QVBoxLayout>
 #include <QLabel>
@@ -26,12 +27,12 @@ LoadingWidget::LoadingWidget(QWidget* parent)
     setWindowTitle("Loading");
     setWindowFlags(Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
     setFixedSize(400, 150);
-    
+
     setupUI();
 
     // Connect timer to update progress
     connect(_updateTimer, &QTimer::timeout, this, &LoadingWidget::updateProgress);
-    
+
     // Auto-close when loading completes
     connect(this, &LoadingWidget::loadingComplete, this, &QDialog::accept);
 }
@@ -61,7 +62,7 @@ void LoadingWidget::setupUI() {
     statusFont.setPointSize(11);
     _statusLabel->setFont(statusFont);
     _statusLabel->setAlignment(Qt::AlignCenter);
-    _statusLabel->setStyleSheet("QLabel { color: #666; }");
+    _statusLabel->setStyleSheet(ui::theme::styles::smallLabel());
 
     // Progress bar
     _progressBar = new QProgressBar(this);
@@ -69,20 +70,9 @@ void LoadingWidget::setupUI() {
     _progressBar->setMaximum(100);
     _progressBar->setValue(0);
     _progressBar->setTextVisible(true);
-    
+
     // Style the progress bar for better visibility
-    _progressBar->setStyleSheet(R"(
-        QProgressBar {
-            border: 1px solid #ccc;
-            border-radius: 3px;
-            text-align: center;
-            height: 20px;
-        }
-        QProgressBar::chunk {
-            background-color: #4CAF50;
-            border-radius: 2px;
-        }
-    )");
+    _progressBar->setStyleSheet(ui::theme::styles::progressBarStyle());
 
     // Add widgets to layout
     _layout->addWidget(_titleLabel);
@@ -130,7 +120,7 @@ void LoadingWidget::updateProgress() {
 
     for (size_t i = 0; i < _loaders.size(); ++i) {
         auto& loader = _loaders[i];
-        
+
         if (!loader->isDone()) {
             allDone = false;
             activeLoaders++;
@@ -141,12 +131,12 @@ void LoadingWidget::updateProgress() {
             // Get actual progress percentage from loader
             int loaderProgress = loader->percentDone();
             totalProgress += loaderProgress;
-            
+
             // Update progress bar with actual percentage
             if (activeLoaders == 1) {
                 _progressBar->setValue(loaderProgress);
             }
-            
+
             // Only show status from first active loader
             if (activeLoaders == 1) {
                 std::string progressStr = loader->progress();
@@ -177,7 +167,7 @@ void LoadingWidget::updateProgress() {
         _progressBar->setValue(100);
         _statusLabel->setText("Complete");
         spdlog::info("LoadingWidget completed all loaders");
-        
+
         // Emit signal after a short delay to show completion
         QTimer::singleShot(200, this, [this]() {
             emit loadingComplete();
@@ -188,7 +178,7 @@ void LoadingWidget::updateProgress() {
 int LoadingWidget::exec() {
     // Auto-start loading when exec() is called
     start();
-    
+
     // Call parent exec() for modal behavior
     return QDialog::exec();
 }

@@ -70,7 +70,7 @@ public:
     void rotateSelectedObject();
     void changeElevation(int elevation);
     void toggleScrollBlockerRectangleMode();
-    
+
     // Player position selection
     void enterPlayerPositionSelectionMode();
     void centerViewOnPlayerPosition();
@@ -82,7 +82,7 @@ public:
 
     // Object placement functionality
     void placeObjectAtPosition(sf::Vector2f worldPos);
-    
+
     // Drag preview functionality (for palette drag and drop) - now delegated to DragDropManager
     void startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos);
     void updateDragPreview(sf::Vector2f worldPos);
@@ -97,11 +97,11 @@ public:
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
     void setTilePlacementAreaFill(bool enabled);
     void setTilePlacementReplaceMode(bool enabled);
-    
+
     // Exit grid placement mode control (delegated to ExitGridPlacementManager)
     void setExitGridPlacementMode(bool enabled);
     void setMarkExitsMode(bool enabled);
-    
+
     // Object refresh methods
     void refreshObjects();
     void selectAll();
@@ -116,11 +116,11 @@ public:
 
     // Access to SFML widget for main window
     SFMLWidget* getSFMLWidget() const { return _sfmlWidget; }
-    
+
     // Set main window reference for accessing palette panels
     void setMainWindow(class MainWindow* mainWindow) { _mainWindow = mainWindow; }
     class MainWindow* getMainWindow() const { return _mainWindow; }
-    
+
     // Access to internal components for extracted managers
     selection::SelectionManager* getSelectionManager() const { return _selectionManager.get(); }
     TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
@@ -152,7 +152,7 @@ public:
     // Access to hex grid for SelectionManager
     const HexagonGrid* getHexagonGrid() const { return &_hexgrid; }
 
-    // Helper methods for extracted managers (made public)  
+    // Helper methods for extracted managers (made public)
     void clearDragSelectionPreview();
 
     // Ensure tile storage exists for an elevation
@@ -173,10 +173,10 @@ signals:
 public slots:
     void onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
     void onObjectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
-    
+
     // Sprite loading methods (public for MainWindow access)
     void loadTileSprites();
-    
+
     // Undo/redo
     bool undoLastEdit();
     bool redoLastEdit();
@@ -204,18 +204,18 @@ private:
         size_t objectsSkipped = 0;
         std::set<std::string> failedFrmNames;
         std::vector<std::pair<std::string, int>> failedObjects; // FRM name, position
-        
+
         void clear() {
             objectsSkipped = 0;
             failedFrmNames.clear();
             failedObjects.clear();
         }
-        
+
         bool hasErrors() const {
             return objectsSkipped > 0;
         }
     };
-    
+
     void setupUI();
     void initializeSelectionSystem();
 
@@ -246,25 +246,22 @@ private:
     void updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
 
-
-    
     // Wall blocker overlay management
     void createWallBlockerOverlay(const std::shared_ptr<MapObject>& mapObject, int hexPosition);
-    
+
     // Scroll blocker rectangle functionality
     std::vector<int> calculateRectangleBorderHexes(sf::FloatRect rectangle);
     std::shared_ptr<MapObject> createScrollBlockerObject(int hexPosition);
     void createScrollBlockersFromHexes(const std::vector<int>& borderHexes);
-    
+
     // Input system setup
     void setupInputCallbacks();
-
 
     // UI Components
     QVBoxLayout* _layout;
     SFMLWidget* _sfmlWidget;
     class MainWindow* _mainWindow;
-    
+
     // Input, rendering, drag/drop, tile placement, and viewport systems
     std::unique_ptr<InputHandler> _inputHandler;
     std::unique_ptr<RenderingEngine> _renderingEngine;
@@ -283,13 +280,12 @@ private:
     std::vector<sf::Sprite> _roofSprites;
 
     std::vector<std::shared_ptr<Object>> _objects;
-    
+
     // Wall blocker overlay sprites (rendered on top of regular objects)
     std::vector<sf::Sprite> _wallBlockerOverlays;
-    
+
     // Error tracking for last sprite loading operation
     LoadingErrors _lastLoadErrors;
-
 
     int _currentElevation = 0;
     std::unique_ptr<Map> _map;
@@ -301,8 +297,8 @@ private:
     bool _showScrollBlk = UI::DEFAULT_SHOW_SCROLL_BLK;
     bool _showWallBlockers = UI::DEFAULT_SHOW_WALL_BLK;
     bool _showHexGrid = UI::DEFAULT_SHOW_HEX_GRID;
-    bool _showLightOverlays = false;  // Toggle for showing light overlays
-    bool _showExitGrids = false;      // Toggle for showing exit grid markers
+    bool _showLightOverlays = false; // Toggle for showing light overlays
+    bool _showExitGrids = false;     // Toggle for showing exit grid markers
 
     const sf::Texture& createBlankTexture();
     const sf::Texture& createHexTexture();
@@ -321,16 +317,16 @@ private:
 
     // Drag preview state (for palette drag and drop)
     bool _isDraggingFromPalette = false;
-    std::shared_ptr<Object> _dragPreviewObject;           // Preview object being dragged from palette
-    int _previewObjectIndex = -1;                         // Index of object in palette
-    int _previewObjectCategory = 0;                       // Category of preview object (as int)
-    const ObjectInfo* _previewObjectInfo = nullptr;      // Object info from palette
+    std::shared_ptr<Object> _dragPreviewObject;     // Preview object being dragged from palette
+    int _previewObjectIndex = -1;                   // Index of object in palette
+    int _previewObjectCategory = 0;                 // Category of preview object (as int)
+    const ObjectInfo* _previewObjectInfo = nullptr; // Object info from palette
 
     // Hex grid visualization
-    sf::Sprite _hexSprite;          // Hex grid sprite from HEX.frm
-    sf::Sprite _hexHighlightSprite; // Red highlight sprite for mouse hover
+    sf::Sprite _hexSprite;            // Hex grid sprite from HEX.frm
+    sf::Sprite _hexHighlightSprite;   // Red highlight sprite for mouse hover
     sf::Sprite _playerPositionSprite; // Blue marker sprite for player default position
-    int _currentHoverHex = -1;      // Current hex index under mouse cursor
+    int _currentHoverHex = -1;        // Current hex index under mouse cursor
 
     // Selection management
     std::unique_ptr<selection::SelectionManager> _selectionManager;
@@ -340,12 +336,12 @@ private:
 
     // Selected hex sprites for visual feedback
     std::vector<sf::Sprite> _selectedHexSprites;
-    
+
     // Player position selection state
     bool _playerPositionSelectionMode = false;
-    
+
     // Undo/redo
-    UndoStack _undoStack{100};
+    UndoStack _undoStack{ 100 };
 };
 
 } // namespace geck

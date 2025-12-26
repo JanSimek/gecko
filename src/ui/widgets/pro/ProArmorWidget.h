@@ -8,7 +8,7 @@ namespace geck {
 
 /**
  * @brief Widget for editing Armor type PRO files
- * 
+ *
  * Handles armor-specific fields including:
  * - Armor Class
  * - Damage Threshold and Resistance for 7 damage types
@@ -40,7 +40,7 @@ private:
     void updateAIPriority();
     void updateArmorPreviews();
     int calculateAIPriority() const;
-    
+
     // UI controls
     QSpinBox* _armorClassEdit;
     QSpinBox* _damageResistEdits[7];
@@ -51,12 +51,12 @@ private:
     // Preview widgets
     ObjectPreviewWidget* _armorMalePreviewWidget;
     ObjectPreviewWidget* _armorFemalePreviewWidget;
-    
+
     // Data
     ProArmorData _armorData;
     int32_t _armorMaleFID;
     int32_t _armorFemaleFID;
-    
+
     // Constants
     static constexpr int DAMAGE_TYPES_COUNT = 7;
 };

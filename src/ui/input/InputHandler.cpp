@@ -12,8 +12,8 @@ InputHandler::InputHandler(EditorWidget* editor)
 }
 
 void InputHandler::handleEvent(const sf::Event& event,
-                              sf::RenderTarget& target,
-                              const sf::View& view) {
+    sf::RenderTarget& target,
+    const sf::View& view) {
     // Dispatch to specific event handlers
     if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>()) {
         handleMousePressed(*mousePressed, target, view);
@@ -31,8 +31,8 @@ void InputHandler::handleEvent(const sf::Event& event,
 }
 
 void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event,
-                                     sf::RenderTarget& target,
-                                     const sf::View& view) {
+    sf::RenderTarget& target,
+    const sf::View& view) {
     sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
 
     if (event.button == sf::Mouse::Button::Left) {
@@ -53,7 +53,7 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             _tilePlacementIsRoof = isShiftPressed();
             return;
         }
-        
+
         // Handle exit grid placement mode
         if (_exitGridPlacementMode) {
             if (_callbacks.onExitGridPlacement) {
@@ -61,15 +61,14 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             }
             return;
         }
-        
+
         // Note: Mark exits mode is handled in mouse release, not here
         // This allows drag selection to work properly
 
         // Check for object dragging
         SelectionModifier modifier = getSelectionModifier();
         bool hasModifiers = (modifier != SelectionModifier::NONE);
-        bool canDragObject = !hasModifiers && _callbacks.canStartObjectDrag && 
-                            _callbacks.canStartObjectDrag(worldPos);
+        bool canDragObject = !hasModifiers && _callbacks.canStartObjectDrag && _callbacks.canStartObjectDrag(worldPos);
 
         if (canDragObject && _callbacks.onObjectDragStart) {
             if (_callbacks.onObjectDragStart(worldPos)) {
@@ -87,13 +86,7 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             return;
         }
         // Determine if we should start drag selection or immediate selection
-        bool canDragSelect = !hasModifiers && 
-            (_selectionMode == SelectionMode::ALL || 
-             _selectionMode == SelectionMode::FLOOR_TILES || 
-             _selectionMode == SelectionMode::ROOF_TILES || 
-             _selectionMode == SelectionMode::ROOF_TILES_ALL || 
-             _selectionMode == SelectionMode::OBJECTS || 
-             _selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE);
+        bool canDragSelect = !hasModifiers && (_selectionMode == SelectionMode::ALL || _selectionMode == SelectionMode::FLOOR_TILES || _selectionMode == SelectionMode::ROOF_TILES || _selectionMode == SelectionMode::ROOF_TILES_ALL || _selectionMode == SelectionMode::OBJECTS || _selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE);
 
         if (canDragSelect) {
             _currentAction = EditorAction::DRAG_SELECTING;
@@ -138,8 +131,8 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
 }
 
 void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& event,
-                                      sf::RenderTarget& target,
-                                      const sf::View& view) {
+    sf::RenderTarget& target,
+    const sf::View& view) {
     sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
 
     if (event.button == sf::Mouse::Button::Left) {
@@ -164,14 +157,13 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
                     if (_markExitsMode && _callbacks.onMarkExitsAreaSelection) {
                         // Handle mark exits area selection
                         _callbacks.onMarkExitsAreaSelection(_dragStartWorldPos, worldPos);
-                    } else if (_selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE && 
-                        _callbacks.onScrollBlockerRectangle) {
+                    } else if (_selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE && _callbacks.onScrollBlockerRectangle) {
                         // Handle scroll blocker rectangle
                         float left = std::min(_dragStartWorldPos.x, worldPos.x);
                         float top = std::min(_dragStartWorldPos.y, worldPos.y);
                         float width = std::abs(worldPos.x - _dragStartWorldPos.x);
                         float height = std::abs(worldPos.y - _dragStartWorldPos.y);
-                        sf::FloatRect area({left, top}, {width, height});
+                        sf::FloatRect area({ left, top }, { width, height });
                         _callbacks.onScrollBlockerRectangle(area);
                     } else if (_callbacks.onDragSelection) {
                         // Normal drag selection
@@ -210,8 +202,8 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
 }
 
 void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
-                                   sf::RenderTarget& target,
-                                   const sf::View& view) {
+    sf::RenderTarget& target,
+    const sf::View& view) {
     sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
 
     // Always update hover position
@@ -224,8 +216,8 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
             // Calculate pan delta
             sf::Vector2i delta = event.position - _mouseLastPos;
             if (_callbacks.onPan) {
-                _callbacks.onPan(sf::Vector2f(static_cast<float>(-delta.x), 
-                                            static_cast<float>(-delta.y)));
+                _callbacks.onPan(sf::Vector2f(static_cast<float>(-delta.x),
+                    static_cast<float>(-delta.y)));
             }
             _mouseLastPos = event.position;
             break;
@@ -251,7 +243,7 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
                 }
             }
             break;
-            
+
         case EditorAction::TILE_PLACING:
             // Start dragging after minimum movement
             if (!_isDragging) {
@@ -316,28 +308,24 @@ void InputHandler::setTilePlacementMode(bool enabled, int tileIndex, bool replac
 }
 
 InputHandler::SelectionModifier InputHandler::getSelectionModifier() const {
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || 
-        sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl)) {
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl)) {
         return SelectionModifier::TOGGLE;
-    } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LAlt) || 
-               sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RAlt)) {
+    } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LAlt) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RAlt)) {
         return SelectionModifier::ADD;
-    } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || 
-               sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift)) {
+    } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift)) {
         return SelectionModifier::RANGE;
     }
     return SelectionModifier::NONE;
 }
 
 sf::Vector2f InputHandler::pixelToWorld(sf::Vector2i pixelPos,
-                                       sf::RenderTarget& target,
-                                       const sf::View& view) {
+    sf::RenderTarget& target,
+    const sf::View& view) {
     return target.mapPixelToCoords(pixelPos, view);
 }
 
 bool InputHandler::isShiftPressed() const {
-    return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || 
-           sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
+    return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
 }
 
 } // namespace geck

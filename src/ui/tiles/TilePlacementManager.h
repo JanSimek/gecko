@@ -8,7 +8,9 @@ namespace geck {
 // Forward declarations
 class EditorWidget;
 class Map;
-namespace selection { class SelectionManager; }
+namespace selection {
+    class SelectionManager;
+}
 
 /**
  * @brief Manages tile placement operations for the map editor
@@ -33,12 +35,12 @@ public:
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
     void setTilePlacementAreaFill(bool enabled);
     void setTilePlacementReplaceMode(bool enabled);
-    
+
     // State queries
     bool isTilePlacementMode() const { return _tilePlacementMode; }
     bool isTilePlacementAreaFill() const { return _tilePlacementAreaFill; }
     bool isTilePlacementReplaceMode() const { return _tilePlacementReplaceMode; }
-    
+
     int getTilePlacementIndex() const { return _tilePlacementIndex; }
     bool getTilePlacementIsRoof() const { return _tilePlacementIsRoof; }
 
@@ -50,7 +52,6 @@ public:
     void resetState();
 
 private:
-    
     EditorWidget* _editor;
 
     // Tile placement state
