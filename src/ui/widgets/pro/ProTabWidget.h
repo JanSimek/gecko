@@ -158,6 +158,35 @@ protected:
      */
     static QStringList getMaterialNames();
 
+    /**
+     * @brief Create and configure an array of spinboxes
+     * @param array Pointer to array of QSpinBox pointers
+     * @param count Number of spinboxes to create
+     * @param min Minimum value
+     * @param max Maximum value
+     * @param tooltipTemplate Template for tooltips ("%1" replaced with label)
+     * @param labels Optional labels to use in tooltip instead of index
+     */
+    void createSpinBoxArray(QSpinBox** array, int count,
+        int min, int max,
+        const QString& tooltipTemplate = QString(),
+        const QStringList& labels = QStringList());
+
+    /**
+     * @brief Create a spinbox array with fixed width
+     * @param array Pointer to array of QSpinBox pointers
+     * @param count Number of spinboxes to create
+     * @param min Minimum value
+     * @param max Maximum value
+     * @param fixedWidth Fixed width for each spinbox
+     * @param tooltipTemplate Template for tooltips
+     * @param labels Optional labels for tooltips
+     */
+    void createCompactSpinBoxArray(QSpinBox** array, int count,
+        int min, int max, int fixedWidth,
+        const QString& tooltipTemplate = QString(),
+        const QStringList& labels = QStringList());
+
 protected slots:
     void onFieldChanged();
 

@@ -304,47 +304,47 @@ void MainWindow::setupMenuBar() {
     // View Menu
     _viewMenu = _menuBar->addMenu("&View");
 
-    _showObjectsAction = _viewMenu->addAction("Show &Objects");
+    _showObjectsAction = _viewMenu->addAction(createIcon(":/icons/actions/view-objects.svg"), "Show &Objects");
     _showObjectsAction->setCheckable(true);
     _showObjectsAction->setChecked(UI::DEFAULT_SHOW_OBJECTS);
     connect(_showObjectsAction, &QAction::toggled, this, &MainWindow::showObjectsToggled);
 
-    _showCrittersAction = _viewMenu->addAction("Show &Critters");
+    _showCrittersAction = _viewMenu->addAction(createIcon(":/icons/actions/view-critters.svg"), "Show &Critters");
     _showCrittersAction->setCheckable(true);
     _showCrittersAction->setChecked(UI::DEFAULT_SHOW_CRITTERS);
     connect(_showCrittersAction, &QAction::toggled, this, &MainWindow::showCrittersToggled);
 
-    _showWallsAction = _viewMenu->addAction("Show &Walls");
+    _showWallsAction = _viewMenu->addAction(createIcon(":/icons/actions/view-walls.svg"), "Show &Walls");
     _showWallsAction->setCheckable(true);
     _showWallsAction->setChecked(UI::DEFAULT_SHOW_WALLS);
     connect(_showWallsAction, &QAction::toggled, this, &MainWindow::showWallsToggled);
 
-    _showRoofsAction = _viewMenu->addAction("Show &Roofs");
+    _showRoofsAction = _viewMenu->addAction(createIcon(":/icons/actions/view-roofs.svg"), "Show &Roofs");
     _showRoofsAction->setCheckable(true);
     _showRoofsAction->setChecked(UI::DEFAULT_SHOW_ROOF);
     connect(_showRoofsAction, &QAction::toggled, this, &MainWindow::showRoofsToggled);
 
-    _showScrollBlockersAction = _viewMenu->addAction("Show Scroll &Blockers");
+    _showScrollBlockersAction = _viewMenu->addAction(createIcon(":/icons/actions/view-scroll-blockers.svg"), "Show Scroll &Blockers");
     _showScrollBlockersAction->setCheckable(true);
     _showScrollBlockersAction->setChecked(UI::DEFAULT_SHOW_SCROLL_BLK);
     connect(_showScrollBlockersAction, &QAction::toggled, this, &MainWindow::showScrollBlockersToggled);
 
-    _showWallBlockersAction = _viewMenu->addAction("Show &Wall Blockers");
+    _showWallBlockersAction = _viewMenu->addAction(createIcon(":/icons/actions/view-wall-blockers.svg"), "Show &Wall Blockers");
     _showWallBlockersAction->setCheckable(true);
     _showWallBlockersAction->setChecked(UI::DEFAULT_SHOW_WALL_BLK);
     connect(_showWallBlockersAction, &QAction::toggled, this, &MainWindow::showWallBlockersToggled);
 
-    _showHexGridAction = _viewMenu->addAction("Show &Hex Grid");
+    _showHexGridAction = _viewMenu->addAction(createIcon(":/icons/actions/view-grid.svg"), "Show &Hex Grid");
     _showHexGridAction->setCheckable(true);
     _showHexGridAction->setChecked(UI::DEFAULT_SHOW_HEX_GRID);
     connect(_showHexGridAction, &QAction::toggled, this, &MainWindow::showHexGridToggled);
 
-    _showLightOverlaysAction = _viewMenu->addAction("Show &Light Overlays");
+    _showLightOverlaysAction = _viewMenu->addAction(createIcon(":/icons/actions/view-light.svg"), "Show &Light Overlays");
     _showLightOverlaysAction->setCheckable(true);
     _showLightOverlaysAction->setChecked(false);
     connect(_showLightOverlaysAction, &QAction::toggled, this, &MainWindow::showLightOverlaysToggled);
 
-    _showExitGridsAction = _viewMenu->addAction("Show &Exit Grids");
+    _showExitGridsAction = _viewMenu->addAction(createIcon(":/icons/actions/view-exits.svg"), "Show &Exit Grids");
     _showExitGridsAction->setCheckable(true);
     _showExitGridsAction->setChecked(false);
     _showExitGridsAction->setShortcut(QKeySequence("Ctrl+E"));
@@ -560,6 +560,19 @@ void MainWindow::setupToolBar() {
     rotateAction->setShortcut(QKeySequence("R"));
     rotateAction->setStatusTip("Rotate selected object");
     connect(rotateAction, &QAction::triggered, this, &MainWindow::rotateObjectRequested);
+
+    _mainToolBar->addSeparator();
+
+    // Layer visibility toggles (reuse View menu actions)
+    _mainToolBar->addAction(_showObjectsAction);
+    _mainToolBar->addAction(_showCrittersAction);
+    _mainToolBar->addAction(_showWallsAction);
+    _mainToolBar->addAction(_showRoofsAction);
+    _mainToolBar->addAction(_showHexGridAction);
+    _mainToolBar->addAction(_showScrollBlockersAction);
+    _mainToolBar->addAction(_showWallBlockersAction);
+    _mainToolBar->addAction(_showLightOverlaysAction);
+    _mainToolBar->addAction(_showExitGridsAction);
 }
 
 void MainWindow::setupDockWidgets() {

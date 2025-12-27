@@ -6,6 +6,7 @@
 #include <QFont>
 #include "util/ResourceManager.h"
 #include "../../theme/ThemeManager.h"
+#include "../../GameEnums.h"
 
 namespace geck {
 
@@ -68,7 +69,7 @@ void ProArmorWidget::setupUI() {
     defenceLayout->setSpacing(2);
     defenceLayout->setHorizontalSpacing(2);
 
-    const QStringList damageTypes = { "Normal", "Laser", "Fire", "Plasma", "Energy", "EMP", "Explode" };
+    const QStringList damageTypes = game::enums::damageTypes7();
 
     // Headers
     QLabel* thresholdHeader = new QLabel("Threshold");

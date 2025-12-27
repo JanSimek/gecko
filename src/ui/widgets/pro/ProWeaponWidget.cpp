@@ -3,6 +3,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include "../../theme/ThemeManager.h"
+#include "../../GameEnums.h"
 
 namespace geck {
 
@@ -55,9 +56,7 @@ void ProWeaponWidget::setupUI() {
     basicGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* basicLayout = createStandardFormLayout();
 
-    _weaponAnimationCombo = createComboBox({ "None", "Knife", "Club", "Hammer", "Spear", "Pistol",
-                                               "SMG", "Rifle", "Big Gun", "Minigun", "Rocket Launcher" },
-        "Weapon animation type");
+    _weaponAnimationCombo = createComboBox(game::enums::weaponAnimations(), "Weapon animation type");
     connect(_weaponAnimationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, &ProWeaponWidget::updateAIPriority);
     basicLayout->addRow("Animation:", _weaponAnimationCombo);
@@ -72,7 +71,7 @@ void ProWeaponWidget::setupUI() {
         this, &ProWeaponWidget::updateAIPriority);
     basicLayout->addRow("Max Damage:", _weaponDamageMaxEdit);
 
-    _weaponDamageTypeCombo = createComboBox({ "Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion" }, "Damage type");
+    _weaponDamageTypeCombo = createComboBox(game::enums::damageTypes7(), "Damage type");
     basicLayout->addRow("Damage Type:", _weaponDamageTypeCombo);
 
     basicGroup->setLayout(basicLayout);

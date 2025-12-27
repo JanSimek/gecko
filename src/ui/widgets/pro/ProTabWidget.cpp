@@ -1,4 +1,5 @@
 #include "ProTabWidget.h"
+#include "../../GameEnums.h"
 
 namespace geck {
 
@@ -113,16 +114,37 @@ void ProTabWidget::setComboIndexSafe(QComboBox* combo, uint32_t index) {
 }
 
 QStringList ProTabWidget::getMaterialNames() {
-    return QStringList{
-        "Glass",
-        "Metal",
-        "Plastic",
-        "Wood",
-        "Dirt",
-        "Stone",
-        "Cement",
-        "Leather"
-    };
+    return game::enums::materialTypes();
+}
+
+void ProTabWidget::createSpinBoxArray(QSpinBox** array, int count,
+    int min, int max,
+    const QString& tooltipTemplate,
+    const QStringList& labels) {
+    for (int i = 0; i < count; ++i) {
+        QString tooltip;
+        if (!tooltipTemplate.isEmpty()) {
+            if (!labels.isEmpty() && i < labels.size()) {
+                tooltip = tooltipTemplate.arg(labels[i]);
+            } else {
+                tooltip = tooltipTemplate.arg(i);
+            }
+        }
+        array[i] = createSpinBox(min, max, tooltip);
+    }
+}
+
+void ProTabWidget::createCompactSpinBoxArray(QSpinBox** array, int count,
+    int min, int max, int fixedWidth,
+    const QString& tooltipTemplate,
+    const QStringList& labels) {
+    createSpinBoxArray(array, count, min, max, tooltipTemplate, labels);
+
+    for (int i = 0; i < count; ++i) {
+        if (array[i]) {
+            array[i]->setFixedWidth(fixedWidth);
+        }
+    }
 }
 
 void ProTabWidget::onFieldChanged() {

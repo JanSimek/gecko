@@ -1,6 +1,7 @@
 #include "ProEditorDialog.h"
 #include "MessageSelectorDialog.h"
 #include "../theme/ThemeManager.h"
+#include "../GameEnums.h"
 
 #include <QApplication>
 #include <QMessageBox>
@@ -427,7 +428,7 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
     _directionCombo = new QComboBox();
     _directionCombo->setMaximumWidth(DIRECTION_COMBO_MAX_WIDTH); // Slightly wider for compass strings
     _directionCombo->setToolTip("Animation direction");
-    _directionCombo->addItems({ "NE", "E", "SE", "SW", "W", "NW" }); // Fallout 2 uses 6 directions
+    _directionCombo->addItems(game::enums::orientationsShort()); // Fallout 2 uses 6 directions
     connect(_directionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onDirectionChanged);
 
     animLayout->addWidget(_playPauseButton);
@@ -831,19 +832,19 @@ void ProEditorDialog::setupCritterDefenceTab(QTabWidget* parentTabs) {
     resistanceHeader->setAlignment(Qt::AlignCenter);
     damageProtectionLayout->addWidget(resistanceHeader, 0, 2);
 
-    const char* damageTypes[] = { "Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion", "Radiation", "Poison" };
+    const QStringList damageTypes = game::enums::damageTypes9();
 
     // First 7 damage types (threshold + resistance)
     for (int i = 0; i < 7; ++i) {
         // Damage type label
-        QLabel* typeLabel = new QLabel(QString(damageTypes[i]) + ":");
+        QLabel* typeLabel = new QLabel(damageTypes.at(i) + ":");
         typeLabel->setFixedWidth(60);
         damageProtectionLayout->addWidget(typeLabel, i + 1, 0);
 
         // Damage threshold
         _critterDamageThresholdEdits[i] = new QSpinBox();
         _critterDamageThresholdEdits[i]->setRange(0, INT_MAX);
-        _critterDamageThresholdEdits[i]->setToolTip(QString("%1 damage threshold").arg(damageTypes[i]));
+        _critterDamageThresholdEdits[i]->setToolTip(QString("%1 damage threshold").arg(damageTypes.at(i)));
         _critterDamageThresholdEdits[i]->setFixedWidth(60);
         connect(_critterDamageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageThresholdEdits[i], i + 1, 1);
@@ -851,7 +852,7 @@ void ProEditorDialog::setupCritterDefenceTab(QTabWidget* parentTabs) {
         // Damage resistance
         _critterDamageResistEdits[i] = new QSpinBox();
         _critterDamageResistEdits[i]->setRange(0, INT_MAX);
-        _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes[i]));
+        _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes.at(i)));
         _critterDamageResistEdits[i]->setFixedWidth(60);
         connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageResistEdits[i], i + 1, 2);
@@ -859,7 +860,7 @@ void ProEditorDialog::setupCritterDefenceTab(QTabWidget* parentTabs) {
 
     // Last 2 damage types (Radiation and Poison - resistance only)
     for (int i = 7; i < 9; ++i) {
-        QLabel* typeLabel = new QLabel(QString(damageTypes[i]) + ":");
+        QLabel* typeLabel = new QLabel(damageTypes.at(i) + ":");
         typeLabel->setFixedWidth(60);
         damageProtectionLayout->addWidget(typeLabel, i + 1, 0);
 
@@ -873,7 +874,7 @@ void ProEditorDialog::setupCritterDefenceTab(QTabWidget* parentTabs) {
         // Damage resistance
         _critterDamageResistEdits[i] = new QSpinBox();
         _critterDamageResistEdits[i]->setRange(0, INT_MAX);
-        _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes[i]));
+        _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes.at(i)));
         _critterDamageResistEdits[i]->setFixedWidth(60);
         connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageResistEdits[i], i + 1, 2);
@@ -1222,7 +1223,7 @@ void ProEditorDialog::setupAnimationControls() {
 
     // Direction selection
     _directionCombo = new QComboBox();
-    _directionCombo->addItems({ "NE", "E", "SE", "SW", "W", "NW" });
+    _directionCombo->addItems(game::enums::orientationsShort());
     _directionCombo->setToolTip("Select animation direction");
     _animationLayout->addWidget(new QLabel("Direction:"));
     _animationLayout->addWidget(_directionCombo);
@@ -1977,19 +1978,19 @@ void ProEditorDialog::setupCritterFields() {
     resistanceHeader->setAlignment(Qt::AlignCenter);
     damageProtectionLayout->addWidget(resistanceHeader, 0, 2);
 
-    const char* damageTypes[] = { "Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion", "Radiation", "Poison" };
+    const QStringList damageTypes = game::enums::damageTypes9();
 
     // First 7 damage types (threshold + resistance)
     for (int i = 0; i < 7; ++i) {
         // Damage type label
-        QLabel* typeLabel = new QLabel(QString(damageTypes[i]) + ":");
+        QLabel* typeLabel = new QLabel(damageTypes.at(i) + ":");
         typeLabel->setFixedWidth(60);
         damageProtectionLayout->addWidget(typeLabel, i + 1, 0);
 
         // Damage threshold
         _critterDamageThresholdEdits[i] = new QSpinBox();
         _critterDamageThresholdEdits[i]->setRange(0, INT_MAX);
-        _critterDamageThresholdEdits[i]->setToolTip(QString("%1 damage threshold").arg(damageTypes[i]));
+        _critterDamageThresholdEdits[i]->setToolTip(QString("%1 damage threshold").arg(damageTypes.at(i)));
         _critterDamageThresholdEdits[i]->setFixedWidth(60);
         connect(_critterDamageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageThresholdEdits[i], i + 1, 1);
@@ -1997,7 +1998,7 @@ void ProEditorDialog::setupCritterFields() {
         // Damage resistance
         _critterDamageResistEdits[i] = new QSpinBox();
         _critterDamageResistEdits[i]->setRange(0, INT_MAX);
-        _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes[i]));
+        _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes.at(i)));
         _critterDamageResistEdits[i]->setFixedWidth(60);
         connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageResistEdits[i], i + 1, 2);
@@ -2005,7 +2006,7 @@ void ProEditorDialog::setupCritterFields() {
 
     // Last 2 damage types (Radiation and Poison - resistance only)
     for (int i = 7; i < 9; ++i) {
-        QLabel* typeLabel = new QLabel(QString(damageTypes[i]) + ":");
+        QLabel* typeLabel = new QLabel(damageTypes.at(i) + ":");
         typeLabel->setFixedWidth(60);
         damageProtectionLayout->addWidget(typeLabel, i + 1, 0);
 
@@ -2019,7 +2020,7 @@ void ProEditorDialog::setupCritterFields() {
         // Damage resistance
         _critterDamageResistEdits[i] = new QSpinBox();
         _critterDamageResistEdits[i]->setRange(0, INT_MAX);
-        _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes[i]));
+        _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes.at(i)));
         _critterDamageResistEdits[i]->setFixedWidth(60);
         connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageResistEdits[i], i + 1, 2);
@@ -3758,7 +3759,7 @@ void ProEditorDialog::setupArmorFields() {
     defenceLayout->setSpacing(2);
     defenceLayout->setHorizontalSpacing(2);
 
-    const QStringList damageTypes = { "Normal", "Laser", "Fire", "Plasma", "Energy", "EMP", "Explode" };
+    const QStringList damageTypes = game::enums::damageTypes7();
 
     // Headers
     QLabel* thresholdHeader = new QLabel("Threshold");
@@ -3780,7 +3781,7 @@ void ProEditorDialog::setupArmorFields() {
         defenceLayout->addWidget(typeLabel, i + 1, 0);
 
         // Threshold input (column 1)
-        _damageThresholdEdits[i] = createSpinBox(0, 999, QString("Damage threshold against %1 damage").arg(damageTypes[i]));
+        _damageThresholdEdits[i] = createSpinBox(0, 999, QString("Damage threshold against %1 damage").arg(damageTypes.at(i)));
         _damageThresholdEdits[i]->setFixedWidth(40);
         connectSpinBox(_damageThresholdEdits[i]);
         defenceLayout->addWidget(_damageThresholdEdits[i], i + 1, 1);
@@ -3792,7 +3793,7 @@ void ProEditorDialog::setupArmorFields() {
         defenceLayout->addWidget(separator, i + 1, 2);
 
         // Resistance input (column 3)
-        _damageResistEdits[i] = createSpinBox(0, 100, QString("Damage resistance against %1 damage").arg(damageTypes[i]));
+        _damageResistEdits[i] = createSpinBox(0, 100, QString("Damage resistance against %1 damage").arg(damageTypes.at(i)));
         _damageResistEdits[i]->setFixedWidth(40);
         connectSpinBox(_damageResistEdits[i]);
         defenceLayout->addWidget(_damageResistEdits[i], i + 1, 3);
@@ -4068,7 +4069,7 @@ void ProEditorDialog::setupWeaponFields() {
     basicLayout->setContentsMargins(8, 12, 8, 8);
     basicLayout->setSpacing(4);
 
-    _weaponAnimationCombo = createComboBox({ "None", "Knife", "Club", "Hammer", "Spear", "Pistol", "SMG", "Rifle", "Big Gun", "Minigun", "Rocket Launcher" }, "Weapon animation type");
+    _weaponAnimationCombo = createComboBox(game::enums::weaponAnimations(), "Weapon animation type");
     connectComboBox(_weaponAnimationCombo);
     basicLayout->addRow("Animation:", _weaponAnimationCombo);
 
@@ -4080,7 +4081,7 @@ void ProEditorDialog::setupWeaponFields() {
     connectSpinBox(_weaponDamageMaxEdit);
     basicLayout->addRow("Max Damage:", _weaponDamageMaxEdit);
 
-    _weaponDamageTypeCombo = createComboBox({ "Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion" }, "Damage type");
+    _weaponDamageTypeCombo = createComboBox(game::enums::damageTypes7(), "Damage type");
     connectComboBox(_weaponDamageTypeCombo);
     basicLayout->addRow("Damage Type:", _weaponDamageTypeCombo);
 

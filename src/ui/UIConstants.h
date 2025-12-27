@@ -34,6 +34,28 @@ namespace ui {
         constexpr int BUTTON_MIN_WIDTH = 80;
         constexpr int STEAM_APPID_WIDTH = 100;
 
+        /**
+         * @brief Widget size constants for consistent UI elements
+         */
+        namespace sizes {
+            // Button sizes
+            constexpr int ICON_BUTTON = 24;
+            constexpr int ICON_BUTTON_SMALL = 20;
+
+            // Field sizes
+            constexpr int SPINBOX_COMPACT = 40;
+            constexpr int FIELD_MIN_WIDTH = 120;
+
+            // Label sizes
+            constexpr int LABEL_MIN_WIDTH = 40;
+            constexpr int LABEL_STANDARD = 80;
+
+            // Preview sizes
+            constexpr int PREVIEW_SMALL = 80;
+            constexpr int PREVIEW_MEDIUM = 120;
+            constexpr int PREVIEW_LARGE = 200;
+        }
+
         // Dialog sizes
         constexpr int SETTINGS_MIN_WIDTH = 780;
         constexpr int SETTINGS_MIN_HEIGHT = 620;

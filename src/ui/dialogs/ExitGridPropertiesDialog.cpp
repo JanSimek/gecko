@@ -1,6 +1,7 @@
 #include "ExitGridPropertiesDialog.h"
 #include "../UIConstants.h"
 #include "../theme/ThemeManager.h"
+#include "../GameEnums.h"
 #include "../../util/Constants.h"
 #include "../../editor/HexagonGrid.h"
 
@@ -83,9 +84,10 @@ void ExitGridPropertiesDialog::setupFormLayout() {
 
     // Elevation combo box
     _elevationComboBox = new QComboBox(this);
-    _elevationComboBox->addItem("Ground Level (0)", 0);
-    _elevationComboBox->addItem("1st Floor (1)", 1);
-    _elevationComboBox->addItem("2nd Floor (2)", 2);
+    const QStringList elevs = game::enums::elevations();
+    for (int i = 0; i < elevs.size(); ++i) {
+        _elevationComboBox->addItem(elevs.at(i), i);
+    }
     _elevationComboBox->setToolTip("Destination map elevation level");
     _formLayout->addRow("Elevation:", _elevationComboBox);
 

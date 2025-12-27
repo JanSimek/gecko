@@ -28,7 +28,10 @@
         <file alias="actions/view-walls.svg">icons/tabler/actions/wall.svg</file>
         <file alias="actions/view-roofs.svg">icons/tabler/actions/home-2.svg</file>
         <file alias="actions/view-grid.svg">icons/tabler/actions/grid-dots.svg</file>
+        <file alias="actions/view-scroll-blockers.svg">icons/tabler/actions/border-all.svg</file>
+        <file alias="actions/view-wall-blockers.svg">icons/tabler/actions/barrier-block.svg</file>
         <file alias="actions/view-light.svg">icons/tabler/actions/brightness.svg</file>
+        <file alias="actions/view-exits.svg">icons/door-exit.svg</file>
         
         <!-- File Types -->
         <file alias="filetypes/map.svg">icons/tabler/filetypes/map-2.svg</file>

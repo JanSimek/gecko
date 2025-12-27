@@ -1,5 +1,6 @@
 #include "MapInfoPanel.h"
 #include "../theme/ThemeManager.h"
+#include "../GameEnums.h"
 
 #include <QHeaderView>
 #include <QApplication>
@@ -127,7 +128,7 @@ void MapInfoPanel::setupUI() {
     headerLayout->addRow("Player default elevation:", _playerElevationSpin);
 
     _playerOrientationCombo = new QComboBox();
-    _playerOrientationCombo->addItems({ "North-East", "East", "South-East", "South-West", "West", "North-West" });
+    _playerOrientationCombo->addItems(game::enums::orientations());
     headerLayout->addRow("Player default orientation:", _playerOrientationCombo);
 
     _globalVarsSpin = new QSpinBox();
