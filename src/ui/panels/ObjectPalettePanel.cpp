@@ -83,7 +83,7 @@ void ObjectWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 ObjectPalettePanel::ObjectPalettePanel(QWidget* parent)
-    : QWidget(parent) {
+    : GridPalettePanel("Objects", parent) {
     setupUI();
     spdlog::info("ObjectPalettePanel: Created object palette panel");
 }
@@ -156,18 +156,9 @@ void ObjectPalettePanel::setupSearchControls() {
 }
 
 void ObjectPalettePanel::setupObjectGrid() {
-    _scrollArea = new QScrollArea(this);
-    _scrollArea->setWidgetResizable(true);
-    _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); // Never show horizontal scrollbar
-    _scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
-    _objectGridWidget = new QWidget();
-    _objectGridLayout = new QGridLayout(_objectGridWidget);
-    _objectGridLayout->setSpacing(ui::constants::SPACING_GRID);
-    _objectGridLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
-
-    _scrollArea->setWidget(_objectGridWidget);
-    _mainLayout->addWidget(_scrollArea, 1); // Take remaining space
+    // Use base class grid setup
+    setupGridArea();
+    _mainLayout->addWidget(scrollArea(), 1); // Take remaining space
 }
 
 void ObjectPalettePanel::setupPaginationControls() {
@@ -177,7 +168,8 @@ void ObjectPalettePanel::setupPaginationControls() {
     // Shared pagination widget with all controls
     _paginationWidget = new PaginationWidget(this);
     _paginationWidget->setShowFirstLastButtons(true);
-    connect(_paginationWidget, &PaginationWidget::pageChanged, this, &ObjectPalettePanel::onPaginationPageChanged);
+    connect(_paginationWidget, &PaginationWidget::pageChanged,
+            this, &ObjectPalettePanel::onGridPaginationPageChanged);
     paginationLayout->addWidget(_paginationWidget);
 
     _mainLayout->addWidget(_paginationGroup);
@@ -315,20 +307,16 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
 }
 
 void ObjectPalettePanel::updateObjectGrid() {
-    // Recalculate optimal columns based on current panel width
-    int newColumnsPerRow = calculateOptimalColumnsPerRow();
+    // Recalculate optimal columns based on current panel width using base class method
+    int newColumnsPerRow = calculateOptimalColumnsPerRow(ObjectWidget::OBJECT_SIZE);
     if (newColumnsPerRow != _objectsPerRow) {
         _objectsPerRow = newColumnsPerRow;
         _previousColumnsPerRow = newColumnsPerRow;
     }
 
-    // Clear existing widgets
+    // Clear existing widgets using base class method
     _objectWidgets.clear();
-    QLayoutItem* item;
-    while ((item = _objectGridLayout->takeAt(0)) != nullptr) {
-        delete item->widget();
-        delete item;
-    }
+    clearGridWidgets();
 
     // Get objects for current category
     const std::vector<std::unique_ptr<ObjectInfo>>* objectList = nullptr;
@@ -363,8 +351,8 @@ void ObjectPalettePanel::updateObjectGrid() {
     int col = 0;
     int objectsLoaded = 0;
     int filteredIndex = 0;
-    int targetStartIndex = _currentPage * OBJECTS_PER_PAGE;
-    int targetEndIndex = targetStartIndex + OBJECTS_PER_PAGE - 1;
+    int targetStartIndex = getPageStartIndex();
+    int targetEndIndex = getPageEndIndex();
 
     for (int i = 0; i < static_cast<int>(objectList->size()); ++i) {
         const auto& objectInfo = (*objectList)[i];
@@ -394,7 +382,7 @@ void ObjectPalettePanel::updateObjectGrid() {
             connect(objectWidget.get(), &ObjectWidget::objectClicked, this, &ObjectPalettePanel::onObjectClicked);
 
             // Add to grid
-            _objectGridLayout->addWidget(objectWidget.get(), row, col);
+            gridLayout()->addWidget(objectWidget.get(), row, col);
             _objectWidgets.push_back(std::move(objectWidget));
 
             col++;
@@ -415,21 +403,23 @@ void ObjectPalettePanel::updateObjectGrid() {
     QString statusText;
     if (!_searchText.isEmpty()) {
         statusText = QString("Page %1/%2: Found %3 objects matching '%4' in %5 (showing %6)")
-                         .arg(_currentPage + 1)
-                         .arg(_totalPages)
-                         .arg(_totalFilteredObjects)
+                         .arg(currentPage() + 1)
+                         .arg(totalPages())
+                         .arg(totalFilteredItems())
                          .arg(_searchText)
                          .arg(getCategoryDisplayName(_currentCategory))
                          .arg(objectsLoaded);
     } else {
         statusText = QString("Page %1/%2: %3 total %4 objects (showing %5)")
-                         .arg(_currentPage + 1)
-                         .arg(_totalPages)
-                         .arg(_totalFilteredObjects)
+                         .arg(currentPage() + 1)
+                         .arg(totalPages())
+                         .arg(totalFilteredItems())
                          .arg(getCategoryDisplayName(_currentCategory))
                          .arg(objectsLoaded);
     }
     _statusLabel->setText(statusText);
+
+    GridPalettePanel::updatePaginationControls();
 
     spdlog::info("ObjectPalettePanel: Loaded {} object widgets for category {}",
         objectsLoaded, getCategoryDisplayName(_currentCategory).toStdString());
@@ -648,10 +638,8 @@ void ObjectPalettePanel::calculatePagination() {
     }
 
     if (!objectList || objectList->empty()) {
-        _totalFilteredObjects = 0;
-        _totalPages = 0;
-        _currentPage = 0;
-        updatePaginationControls();
+        updatePaginationState(0);
+        GridPalettePanel::updatePaginationControls();
         return;
     }
 
@@ -667,37 +655,8 @@ void ObjectPalettePanel::calculatePagination() {
         filteredCount++;
     }
 
-    _totalFilteredObjects = filteredCount;
-    _totalPages = (filteredCount + OBJECTS_PER_PAGE - 1) / OBJECTS_PER_PAGE; // Ceiling division
-
-    // Ensure current page is valid
-    if (_currentPage >= _totalPages) {
-        _currentPage = std::max(0, _totalPages - 1);
-    }
-
-    updatePaginationControls();
-}
-
-void ObjectPalettePanel::updatePaginationControls() {
-    if (_totalPages <= 1) {
-        _paginationGroup->hide(); // Hide pagination if not needed
-        return;
-    }
-
-    _paginationGroup->show();
-
-    // Update shared pagination widget
-    _paginationWidget->setTotalPages(_totalPages);
-    _paginationWidget->setCurrentPage(_currentPage + 1); // Convert to 1-based
-    _paginationWidget->setEnabled(_totalPages > 1);
-}
-
-void ObjectPalettePanel::onPaginationPageChanged(int page) {
-    int newPage = page - 1; // Convert from 1-based to 0-based
-    if (newPage != _currentPage && newPage >= 0 && newPage < _totalPages) {
-        _currentPage = newPage;
-        updateObjectGrid();
-    }
+    // Use base class pagination update
+    updatePaginationState(filteredCount);
 }
 
 QPixmap ObjectPalettePanel::createFrameThumbnail(const Frame& frame, const Pal* palette) {
@@ -788,43 +747,11 @@ const ObjectInfo* ObjectPalettePanel::getObjectInfo(int objectIndex, ObjectCateg
     return (*categoryList)[objectIndex].get();
 }
 
-int ObjectPalettePanel::calculateOptimalColumnsPerRow() const {
-    if (!_scrollArea || !_scrollArea->viewport()) {
-        return DEFAULT_OBJECTS_PER_ROW;
-    }
-
-    // Get available width from the scroll area viewport
-    int availableWidth = _scrollArea->viewport()->width();
-
-    // Calculate space needed per object (widget size + margins)
-    int itemWidth = ObjectWidget::OBJECT_SIZE + 4; // Object size + margin
-
-    // Get spacing and margins from the grid layout
-    int spacing = _objectGridLayout ? _objectGridLayout->spacing() : 2;
-    int leftMargin = _objectGridLayout ? _objectGridLayout->contentsMargins().left() : 4;
-    int rightMargin = _objectGridLayout ? _objectGridLayout->contentsMargins().right() : 4;
-
-    // Calculate effective width available for objects
-    int effectiveWidth = availableWidth - leftMargin - rightMargin;
-
-    // Calculate how many objects can fit per row
-    // Each object needs itemWidth + spacing, except the last one doesn't need spacing
-    int columns = 1; // At least 1 column
-    if (effectiveWidth >= itemWidth) {
-        columns = (effectiveWidth + spacing) / (itemWidth + spacing);
-    }
-
-    // Apply reasonable bounds
-    columns = std::max(1, std::min(columns, MAX_OBJECTS_PER_ROW));
-
-    return columns;
-}
-
 void ObjectPalettePanel::resizeEvent(QResizeEvent* event) {
-    QWidget::resizeEvent(event);
+    GridPalettePanel::resizeEvent(event);
 
-    // Calculate optimal columns for the new size
-    int newColumnsPerRow = calculateOptimalColumnsPerRow();
+    // Calculate optimal columns for the new size using base class method
+    int newColumnsPerRow = calculateOptimalColumnsPerRow(ObjectWidget::OBJECT_SIZE);
 
     // Only update if the column count actually changed to avoid unnecessary rebuilds
     if (newColumnsPerRow != _previousColumnsPerRow) {

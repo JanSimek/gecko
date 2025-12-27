@@ -114,6 +114,23 @@ namespace ui {
             constexpr int PID = 80;            // PID column
         }
 
+        /**
+         * @brief Palette panel constants (tiles, objects)
+         */
+        namespace palette {
+            constexpr int ITEMS_PER_PAGE = 200;
+            constexpr int MAX_ITEMS_PER_ROW = 20;
+            constexpr int DEFAULT_TILES_PER_ROW = 8;
+            constexpr int DEFAULT_OBJECTS_PER_ROW = 6;
+        }
+
+        /**
+         * @brief SFML-related constants
+         */
+        namespace sfml {
+            constexpr uint8_t DRAG_PREVIEW_ALPHA = 180;
+        }
+
         // Group box margins
         constexpr int GROUP_MARGIN = 8;              // Standard horizontal margin
         constexpr int GROUP_MARGIN_VERTICAL = 12;    // Vertical margin with title padding

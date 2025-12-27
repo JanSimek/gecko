@@ -1,6 +1,7 @@
 #include "DragDropManager.h"
 #include "../core/EditorWidget.h"
 #include "../viewport/ViewportController.h"
+#include "../UIConstants.h"
 #include "../../editor/Object.h"
 #include "../../editor/HexagonGrid.h"
 #include "../../util/ResourceManager.h"
@@ -267,7 +268,7 @@ void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vec
                     _dragPreviewObject->setDirection(ObjectDirection(0)); // Single frame for preview
                     // Set semi-transparent color on the sprite
                     auto& spriteRef = _dragPreviewObject->getSprite();
-                    spriteRef.setColor(sf::Color(255, 255, 255, 180));
+                    spriteRef.setColor(sf::Color(255, 255, 255, ui::constants::sfml::DRAG_PREVIEW_ALPHA));
 
                     spdlog::debug("DragDropManager: Created drag preview for object {}", objectIndex);
                     return;

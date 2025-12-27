@@ -115,16 +115,12 @@ private slots:
     void onFrameChanged(int frame);
     void onDirectionChanged(int direction);
     void onAnimationTick();
-    void onExtendedFlagChanged();
     void onObjectFlagChanged();
     void onTransparencyFlagChanged();
-    void onPreviewViewChanged();
 
 private:
     void setupUI();
     void setupTabs();
-    void setupTabContent();
-    // setupCommonFields and setupLeftPanelCommonFields removed - now handled by ProCommonFieldsWidget
     void setupCompactPreview(QVBoxLayout* parentLayout);
     void setupCompactAnimationControls(QVBoxLayout* parentLayout);
     void setupCompactArmorAnimationControls(QVBoxLayout* parentLayout);
@@ -140,8 +136,6 @@ private:
     void setupKeyFields();
     void setupCritterFields();
     void setupSceneryFields();
-    void setupWallFields();
-    void setupTileFields();
     void setupMiscFields();
     void setupAnimationControls();
     void setupCommonTab();
@@ -195,7 +189,6 @@ private:
     void saveWallData();
     void saveTileData();
 
-    void updateTabVisibility();
     void updatePreview();
     void updateInventoryPreview();
     void updateGroundPreview();

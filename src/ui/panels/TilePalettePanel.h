@@ -1,7 +1,8 @@
 #pragma once
 
-#include "../common/BasePanel.h"
+#include "../common/GridPalettePanel.h"
 #include "../common/BasePaletteWidget.h"
+#include "../UIConstants.h"
 #include <QSpinBox>
 #include <QPushButton>
 #include <QRadioButton>
@@ -46,7 +47,7 @@ public:
  * - Area fill mode with selection box
  * - Replace selected tiles mode
  */
-class TilePalettePanel : public BasePanel {
+class TilePalettePanel : public GridPalettePanel {
     Q_OBJECT
 
 public:
@@ -88,13 +89,17 @@ public slots:
     void onPlacementModeChanged();
 
 private slots:
-    void updateTileGrid();
     void filterTiles();
     void onSearchTextChanged(const QString& text) override;
-    void onPaginationPageChanged(int page);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
+
+    // GridPalettePanel overrides
+    int getDefaultColumnsPerRow() const override {
+        return ui::constants::palette::DEFAULT_TILES_PER_ROW;
+    }
+    void updateGrid() override { updateTileGrid(); }
 
 private:
     void setupUI() override;
@@ -102,12 +107,11 @@ private:
     void setupTileGrid();
     void setupFilterControls();
     void setupPaginationControls();
-    void updatePaginationControls();
-    void calculatePagination();
 
+    void updateTileGrid();
     void clearTileSelection();
     void updateTileDisplay();
-    int calculateOptimalColumnsPerRow() const;
+    void calculatePagination();
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
@@ -125,10 +129,7 @@ private:
     QPushButton* _showAllButton = nullptr;
 
     // Target controls removed - tiles are replaced based on what's actually selected
-
-    QScrollArea* _scrollArea = nullptr;
-    QWidget* _tileGridWidget = nullptr;
-    QGridLayout* _tileGridLayout = nullptr;
+    // Note: _scrollArea, _gridWidget, _gridLayout are inherited from GridPalettePanel
 
     QLabel* _statusLabel = nullptr;
 
@@ -143,24 +144,12 @@ private:
     bool _isRoofMode = false; // Default to floor mode
     PlacementMode _placementMode = PlacementMode::UNIFIED_PLACEMENT;
     int _tilesPerRow = 8;
-    int _previousColumnsPerRow = -1; // Cache to avoid unnecessary grid rebuilds
     int _filterStart = 0;
     int _filterEnd = -1;      // -1 means show all
     QString _searchText = ""; // Current search filter text
 
-    // Pagination controls
-    QGroupBox* _paginationGroup = nullptr;
-    PaginationWidget* _paginationWidget = nullptr;
-
-    // Pagination state
-    int _currentPage = 0;
-    int _totalPages = 0;
-    int _totalFilteredTiles = 0;
-
-    // Constants
-    static constexpr int TILES_PER_PAGE = 200; // Tiles to load per page
-    static constexpr int DEFAULT_TILES_PER_ROW = 8;
-    static constexpr int MAX_TILES_PER_ROW = 20; // Reasonable maximum for very wide panels
+    // Note: _paginationGroup, _paginationWidget, _currentPage, _totalPages,
+    // _totalFilteredItems, _previousColumnsPerRow are inherited from GridPalettePanel
 };
 
 } // namespace geck

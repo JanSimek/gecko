@@ -1,7 +1,8 @@
 #pragma once
 
-#include "../common/BasePanel.h"
+#include "../common/GridPalettePanel.h"
 #include "../common/BasePaletteWidget.h"
+#include "../UIConstants.h"
 #include <QTabWidget>
 #include <QDrag>
 #include <QMimeData>
@@ -80,7 +81,7 @@ private:
  * - Search functionality within categories
  * - Single object placement mode
  */
-class ObjectPalettePanel : public QWidget {
+class ObjectPalettePanel : public GridPalettePanel {
     Q_OBJECT
 
 public:
@@ -106,21 +107,23 @@ signals:
 public slots:
     void onObjectClicked(int objectIndex);
     void onCategoryChanged(int tabIndex);
-    void onSearchTextChanged(const QString& text);
-
-    // Pagination navigation
-    void onPaginationPageChanged(int page);
+    void onSearchTextChanged(const QString& text) override;
 
 private slots:
     void updateObjectGrid();
     void calculatePagination();
-    void updatePaginationControls();
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
 
+    // GridPalettePanel overrides
+    int getDefaultColumnsPerRow() const override {
+        return ui::constants::palette::DEFAULT_OBJECTS_PER_ROW;
+    }
+    void updateGrid() override { updateObjectGrid(); }
+
 private:
-    void setupUI();
+    void setupUI() override;
     void setupCategoryTabs();
     void setupSearchControls();
     void setupObjectGrid();
@@ -133,7 +136,6 @@ private:
     QString getCategoryDisplayName(ObjectCategory category) const;
 
     void clearObjectSelection();
-    int calculateOptimalColumnsPerRow() const;
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
@@ -143,16 +145,10 @@ private:
 
     // Search controls
     QGroupBox* _searchGroup = nullptr;
-    QLineEdit* _searchLineEdit = nullptr;
 
-    // Pagination controls
-    QGroupBox* _paginationGroup = nullptr;
-    PaginationWidget* _paginationWidget = nullptr;
-
-    // Object grid for current category
-    QScrollArea* _scrollArea = nullptr;
-    QWidget* _objectGridWidget = nullptr;
-    QGridLayout* _objectGridLayout = nullptr;
+    // Note: _scrollArea, _gridWidget, _gridLayout, _paginationGroup, _paginationWidget,
+    // _currentPage, _totalPages, _totalFilteredItems, _previousColumnsPerRow
+    // are inherited from GridPalettePanel
 
     QLabel* _statusLabel = nullptr;
 
@@ -165,12 +161,6 @@ private:
     ObjectCategory _currentCategory = ObjectCategory::ITEMS;
     QString _searchText = ""; // Current search filter text
     int _objectsPerRow = 6;
-    int _previousColumnsPerRow = -1; // Cache to avoid unnecessary grid rebuilds
-
-    // Pagination state
-    int _currentPage = 0;
-    int _totalPages = 0;
-    int _totalFilteredObjects = 0;
 
     // Object lists for each category
     std::vector<std::unique_ptr<ObjectInfo>> _itemsList;
@@ -179,10 +169,6 @@ private:
     std::vector<std::unique_ptr<ObjectInfo>> _wallsList;
     std::vector<std::unique_ptr<ObjectInfo>> _miscList;
 
-    // Constants
-    static constexpr int OBJECTS_PER_PAGE = 200; // Objects to load per page
-    static constexpr int DEFAULT_OBJECTS_PER_ROW = 6;
-    static constexpr int MAX_OBJECTS_PER_ROW = 20; // Reasonable maximum for very wide panels
 };
 
 } // namespace geck

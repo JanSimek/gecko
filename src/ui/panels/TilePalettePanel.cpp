@@ -34,7 +34,7 @@ TileWidget::TileWidget(int tileIndex, const QPixmap& pixmap, QWidget* parent)
 }
 
 TilePalettePanel::TilePalettePanel(QWidget* parent)
-    : BasePanel("Tiles", parent) {
+    : GridPalettePanel("Tiles", parent) {
     setupUI();
     setMinimumWidth(ui::constants::sizes::WIDTH_PANEL_MIN);
 }
@@ -152,18 +152,9 @@ void TilePalettePanel::setupFilterControls() {
 }
 
 void TilePalettePanel::setupTileGrid() {
-    _scrollArea = new QScrollArea(this);
-    _scrollArea->setWidgetResizable(true);
-    _scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); // Never show horizontal scrollbar
-    _scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
-    _tileGridWidget = new QWidget();
-    _tileGridLayout = new QGridLayout(_tileGridWidget);
-    _tileGridLayout->setSpacing(ui::constants::SPACING_GRID);
-    _tileGridLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
-
-    _scrollArea->setWidget(_tileGridWidget);
-    _mainLayout->addWidget(_scrollArea, 1); // Take remaining space
+    // Use base class grid setup
+    setupGridArea();
+    _mainLayout->addWidget(scrollArea(), 1); // Take remaining space
 }
 
 void TilePalettePanel::setupPaginationControls() {
@@ -173,7 +164,8 @@ void TilePalettePanel::setupPaginationControls() {
     // Shared pagination widget with all controls
     _paginationWidget = new PaginationWidget(this);
     _paginationWidget->setShowFirstLastButtons(true);
-    connect(_paginationWidget, &PaginationWidget::pageChanged, this, &TilePalettePanel::onPaginationPageChanged);
+    connect(_paginationWidget, &PaginationWidget::pageChanged,
+            this, &TilePalettePanel::onGridPaginationPageChanged);
     paginationLayout->addWidget(_paginationWidget);
 
     _mainLayout->addWidget(_paginationGroup);
@@ -203,19 +195,15 @@ void TilePalettePanel::updateTileGrid() {
     }
 
     // Recalculate optimal columns based on current panel width
-    int newColumnsPerRow = calculateOptimalColumnsPerRow();
+    int newColumnsPerRow = calculateOptimalColumnsPerRow(TileWidget::TILE_SIZE);
     if (newColumnsPerRow != _tilesPerRow) {
         _tilesPerRow = newColumnsPerRow;
         _previousColumnsPerRow = newColumnsPerRow;
     }
 
-    // Clear existing tiles
+    // Clear existing tiles using base class method
     _tileWidgets.clear();
-    QLayoutItem* item;
-    while ((item = _tileGridLayout->takeAt(0)) != nullptr) {
-        delete item->widget();
-        delete item;
-    }
+    clearGridWidgets();
 
     const auto& tiles = _tileList->list();
     int startIndex = _filterStart;
@@ -227,8 +215,8 @@ void TilePalettePanel::updateTileGrid() {
 
     // Skip to the current page within filtered results
     int filteredIndex = 0;
-    int targetStartIndex = _currentPage * TILES_PER_PAGE;
-    int targetEndIndex = targetStartIndex + TILES_PER_PAGE - 1;
+    int targetStartIndex = getPageStartIndex();
+    int targetEndIndex = getPageEndIndex();
 
     int row = 0;
     int col = 0;
@@ -298,7 +286,7 @@ void TilePalettePanel::updateTileGrid() {
                     Qt::AlignCenter, QString::fromStdString(tileName).left(8));
             }
 
-            auto tileWidget = std::make_unique<TileWidget>(i, tilePixmap, _tileGridWidget);
+            auto tileWidget = std::make_unique<TileWidget>(i, tilePixmap, gridWidget());
 
             // Add tooltip with tile information (like in original implementation)
             tileWidget->setToolTip(QString("Tile #%1\nFile: %2").arg(i).arg(QString::fromStdString(tileName)));
@@ -306,7 +294,7 @@ void TilePalettePanel::updateTileGrid() {
             connect(tileWidget.get(), &TileWidget::tileClicked,
                 this, &TilePalettePanel::onTileClicked);
 
-            _tileGridLayout->addWidget(tileWidget.get(), row, col);
+            gridLayout()->addWidget(tileWidget.get(), row, col);
             _tileWidgets.push_back(std::move(tileWidget));
 
             col++;
@@ -325,20 +313,20 @@ void TilePalettePanel::updateTileGrid() {
 
     // Update status with pagination info
     QString statusText;
-    if (_totalPages > 0) {
+    if (totalPages() > 0) {
         if (!_searchText.isEmpty()) {
             statusText = QString("Page %1 of %2 - Found %3 tiles matching '%4' (showing %5 tiles)")
-                             .arg(_currentPage + 1)
-                             .arg(_totalPages)
-                             .arg(_totalFilteredTiles)
+                             .arg(currentPage() + 1)
+                             .arg(totalPages())
+                             .arg(totalFilteredItems())
                              .arg(_searchText)
                              .arg(tilesLoaded);
         } else {
             int rangeStart = targetStartIndex + 1; // Convert to 1-based
-            int rangeEnd = std::min(targetStartIndex + tilesLoaded, _totalFilteredTiles);
+            int rangeEnd = std::min(targetStartIndex + tilesLoaded, totalFilteredItems());
             statusText = QString("Page %1 of %2 - Showing %3 tiles (tiles %4-%5)")
-                             .arg(_currentPage + 1)
-                             .arg(_totalPages)
+                             .arg(currentPage() + 1)
+                             .arg(totalPages())
                              .arg(tilesLoaded)
                              .arg(rangeStart)
                              .arg(rangeEnd);
@@ -348,7 +336,7 @@ void TilePalettePanel::updateTileGrid() {
     }
     _statusLabel->setText(statusText);
 
-    updatePaginationControls();
+    GridPalettePanel::updatePaginationControls();
 
     spdlog::info("TilePalettePanel: Loaded {} tile widgets", tilesLoaded);
 }
@@ -359,7 +347,6 @@ void TilePalettePanel::filterTiles() {
 
     // Reset to first page when filter changes
     _currentPage = 0;
-    calculatePagination();
     updateTileGrid();
 }
 
@@ -368,7 +355,6 @@ void TilePalettePanel::onSearchTextChanged(const QString& text) {
 
     // Reset to first page when search changes
     _currentPage = 0;
-    calculatePagination();
     updateTileGrid();
 }
 
@@ -457,8 +443,7 @@ void TilePalettePanel::setPlacementMode(PlacementMode mode) {
 
 void TilePalettePanel::calculatePagination() {
     if (!_tileList) {
-        _totalPages = 0;
-        _totalFilteredTiles = 0;
+        updatePaginationState(0);
         return;
     }
 
@@ -485,77 +470,15 @@ void TilePalettePanel::calculatePagination() {
         filteredCount++;
     }
 
-    _totalFilteredTiles = filteredCount;
-    _totalPages = (filteredCount + TILES_PER_PAGE - 1) / TILES_PER_PAGE; // Ceiling division
-
-    // Ensure current page is valid
-    if (_currentPage >= _totalPages) {
-        _currentPage = std::max(0, _totalPages - 1);
-    }
-
-    spdlog::debug("Pagination calculated: {} filtered tiles, {} pages, current page {}",
-        _totalFilteredTiles, _totalPages, _currentPage + 1);
-}
-
-void TilePalettePanel::updatePaginationControls() {
-    if (_totalPages <= 1) {
-        _paginationGroup->hide();
-        return;
-    }
-
-    _paginationGroup->show();
-
-    // Update shared pagination widget
-    _paginationWidget->setTotalPages(_totalPages);
-    _paginationWidget->setCurrentPage(_currentPage + 1); // Convert to 1-based
-    _paginationWidget->setEnabled(_totalPages > 1);
-}
-
-void TilePalettePanel::onPaginationPageChanged(int page) {
-    int newPage = page - 1; // Convert from 1-based to 0-based
-    if (newPage != _currentPage && newPage >= 0 && newPage < _totalPages) {
-        _currentPage = newPage;
-        updateTileGrid();
-    }
-}
-
-int TilePalettePanel::calculateOptimalColumnsPerRow() const {
-    if (!_scrollArea || !_scrollArea->viewport()) {
-        return DEFAULT_TILES_PER_ROW;
-    }
-
-    // Get available width from the scroll area viewport
-    int availableWidth = _scrollArea->viewport()->width();
-
-    // Calculate space needed per tile (widget size + margins)
-    int itemWidth = TileWidget::TILE_SIZE + 4; // Tile size + margin
-
-    // Get spacing and margins from the grid layout
-    int spacing = _tileGridLayout ? _tileGridLayout->spacing() : 2;
-    int leftMargin = _tileGridLayout ? _tileGridLayout->contentsMargins().left() : 4;
-    int rightMargin = _tileGridLayout ? _tileGridLayout->contentsMargins().right() : 4;
-
-    // Calculate effective width available for tiles
-    int effectiveWidth = availableWidth - leftMargin - rightMargin;
-
-    // Calculate how many tiles can fit per row
-    // Each tile needs itemWidth + spacing, except the last one doesn't need spacing
-    int columns = 1; // At least 1 column
-    if (effectiveWidth >= itemWidth) {
-        columns = (effectiveWidth + spacing) / (itemWidth + spacing);
-    }
-
-    // Apply reasonable bounds
-    columns = std::max(1, std::min(columns, MAX_TILES_PER_ROW));
-
-    return columns;
+    // Use base class pagination update
+    updatePaginationState(filteredCount);
 }
 
 void TilePalettePanel::resizeEvent(QResizeEvent* event) {
-    QWidget::resizeEvent(event);
+    GridPalettePanel::resizeEvent(event);
 
-    // Calculate optimal columns for the new size
-    int newColumnsPerRow = calculateOptimalColumnsPerRow();
+    // Calculate optimal columns for the new size using base class method
+    int newColumnsPerRow = calculateOptimalColumnsPerRow(TileWidget::TILE_SIZE);
 
     // Only update if the column count actually changed to avoid unnecessary rebuilds
     if (newColumnsPerRow != _previousColumnsPerRow) {

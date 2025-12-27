@@ -262,7 +262,6 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     // Update window title with object name and type
     updateWindowTitle();
 
-    // NOTE: updateTabVisibility() is already called from setupUI() -> setupTabContent()
     // Call updatePreview after a brief delay to ensure all widgets are fully initialized
     QTimer::singleShot(0, this, &ProEditorDialog::updatePreview);
     // Update AI priority displays
@@ -446,8 +445,6 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
     parentLayout->addWidget(_animationControls);
 }
 
-// setupCompactArmorAnimationControls() removed - animation controls now handled by ObjectPreviewWidget instances
-
 void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     // Compact dual preview for inventory/ground using ObjectPreviewWidget
     QWidget* dualWidget = new QWidget();
@@ -536,14 +533,6 @@ void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
 
     parentLayout->addWidget(armorGroup);
 }
-
-// setupLeftPanelCommonFields method removed - now handled by ProCommonFieldsWidget
-
-void ProEditorDialog::setupTabContent() {
-    // This method is now obsolete - tabs are set up in setupTabs()
-}
-
-// setupCommonFields method removed - now handled by ProCommonFieldsWidget
 
 void ProEditorDialog::setupTabs() {
     // Common tab first (always visible)
@@ -1203,19 +1192,6 @@ void ProEditorDialog::setupContainerKeyTab() {
     _tabWidget->addTab(_containerKeyWidget, _containerKeyWidget->getTabLabel());
 }
 
-// setupExtendedFlagsGroup method removed - now handled by ProCommonFieldsWidget
-
-// setupWeaponExtendedFlags method removed - now handled by ProCommonFieldsWidget
-
-// setupContainerExtendedFlags method removed - now handled by ProCommonFieldsWidget
-
-// setupItemExtendedFlags method removed - now handled by ProCommonFieldsWidget
-// setupOtherExtendedFlags method removed - now handled by ProCommonFieldsWidget
-// addStandardItemFlags method removed - now handled by ProCommonFieldsWidget
-// setupObjectFlagsGroup method removed - now handled by ProCommonFieldsWidget
-
-// All obsolete flag setup methods have been removed and replaced with ProCommonFieldsWidget
-
 void ProEditorDialog::setupAnimationControls() {
     // Animation controls
     _animationControls = new QWidget();
@@ -1263,8 +1239,6 @@ void ProEditorDialog::setupAnimationControls() {
     // Initially disable controls
     _animationControls->setEnabled(false);
 }
-
-// setupArmorAnimationControls() removed - animation controls now handled by ObjectPreviewWidget instances
 
 void ProEditorDialog::loadProData() {
 
@@ -1674,10 +1648,6 @@ void ProEditorDialog::saveKeyData() {
     if (_containerKeyWidget) {
         _containerKeyWidget->saveToPro(_pro);
     }
-}
-
-void ProEditorDialog::updateTabVisibility() {
-    // This method is now obsolete - tab visibility is handled by setupTypeSpecificTabs()
 }
 
 void ProEditorDialog::setupItemFields() {
@@ -2228,14 +2198,6 @@ void ProEditorDialog::setupSceneryFields() {
     if (_rightFieldsLayout) {
         _rightFieldsLayout->addStretch();
     }
-}
-
-void ProEditorDialog::setupWallFields() {
-    // TODO: Implement wall-specific fields
-}
-
-void ProEditorDialog::setupTileFields() {
-    // TODO: Implement tile-specific fields
 }
 
 void ProEditorDialog::setupMiscFields() {
@@ -3504,17 +3466,6 @@ void ProEditorDialog::loadAnimationFrames() {
         spdlog::warn("ProEditorDialog: Exception loading animation frames: {}", e.what());
         _animationControls->setEnabled(false);
     }
-}
-
-void ProEditorDialog::onExtendedFlagChanged() {
-    // Extended flags are now handled by ProCommonFieldsWidget
-    // This method is kept for compatibility but does nothing
-}
-
-// Copy button methods removed - functionality deemed unnecessary
-
-void ProEditorDialog::onPreviewViewChanged() {
-    // No longer used - items use static dual preview without animation controls
 }
 
 int ProEditorDialog::calculateArmorAIPriority() {

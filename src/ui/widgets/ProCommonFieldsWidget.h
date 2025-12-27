@@ -87,11 +87,9 @@ signals:
 private slots:
     void onFieldChanged();
     void onObjectFlagChanged();
-    void onExtendedFlagChanged();
 
 private:
     void setupUI();
-    void setupBasicFields(QFormLayout* layout);
     void setupLightingFields(QFormLayout* layout);
     void setupObjectFlags(QFormLayout* layout);
     void setupExtendedFlags(QFormLayout* layout);

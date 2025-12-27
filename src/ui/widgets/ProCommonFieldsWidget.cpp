@@ -81,11 +81,6 @@ void ProCommonFieldsWidget::setupUI() {
     _mainLayout->addLayout(columnsLayout);
 }
 
-void ProCommonFieldsWidget::setupBasicFields([[maybe_unused]] QFormLayout* layout) {
-    // PID removed - it's now in the left panel of the main dialog
-    // This group is currently empty but preserved for future basic fields
-}
-
 void ProCommonFieldsWidget::setupLightingFields(QFormLayout* layout) {
     // Lighting controls
     _lightingCheck = new QCheckBox("Has Lighting", this);
@@ -394,10 +389,6 @@ void ProCommonFieldsWidget::onFieldChanged() {
 }
 
 void ProCommonFieldsWidget::onObjectFlagChanged() {
-    emit fieldChanged();
-}
-
-void ProCommonFieldsWidget::onExtendedFlagChanged() {
     emit fieldChanged();
 }
 
