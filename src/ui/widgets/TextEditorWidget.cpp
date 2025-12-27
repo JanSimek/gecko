@@ -45,7 +45,7 @@ void TextEditorWidget::setupUI() {
 
     // Custom editor path layout
     _customEditorLayout = new QHBoxLayout();
-    _customEditorLayout->setContentsMargins(INDENT_MARGIN, 0, 0, 0); // Indent under radio button
+    _customEditorLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0); // Indent under radio button
 
     _customEditorPathEdit = new QLineEdit();
     _customEditorPathEdit->setPlaceholderText("Path to editor executable...");

@@ -8,6 +8,7 @@
 #include "version.h"
 #include "../../Application.h"
 #include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 
 namespace geck {
 
@@ -27,11 +28,12 @@ AboutDialog::AboutDialog(QWidget* parent)
 void AboutDialog::setupUI() {
     setWindowTitle("About");
     setModal(true);
-    setFixedSize(400, 200);
+    setFixedSize(ui::constants::dialog_sizes::ABOUT_WIDTH, ui::constants::dialog_sizes::ABOUT_HEIGHT);
 
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(20, 20, 20, 20);
-    _mainLayout->setSpacing(15);
+    _mainLayout->setContentsMargins(ui::constants::DIALOG_PADDING, ui::constants::DIALOG_PADDING,
+        ui::constants::DIALOG_PADDING, ui::constants::DIALOG_PADDING);
+    _mainLayout->setSpacing(ui::constants::SPACING_DIALOG);
 
     createContent();
     createButtons();
@@ -39,11 +41,11 @@ void AboutDialog::setupUI() {
 
 void AboutDialog::createContent() {
     _contentLayout = new QHBoxLayout();
-    _contentLayout->setSpacing(15);
+    _contentLayout->setSpacing(ui::constants::SPACING_DIALOG);
 
     // Create icon label
     _iconLabel = new QLabel();
-    _iconLabel->setFixedSize(64, 64);
+    _iconLabel->setFixedSize(ui::constants::sizes::ICON_SIZE_LARGE, ui::constants::sizes::ICON_SIZE_LARGE);
     _iconLabel->setScaledContents(true);
 
     // Load application icon
@@ -61,7 +63,7 @@ void AboutDialog::createContent() {
 
     // Create text layout
     _textLayout = new QVBoxLayout();
-    _textLayout->setSpacing(8);
+    _textLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Title label
     _titleLabel = new QLabel();
@@ -98,7 +100,7 @@ void AboutDialog::createButtons() {
 
     _okButton = new QPushButton("OK");
     _okButton->setDefault(true);
-    _okButton->setMinimumWidth(80);
+    _okButton->setMinimumWidth(ui::constants::BUTTON_MIN_WIDTH);
 
     connect(_okButton, &QPushButton::clicked, this, &QDialog::accept);
 

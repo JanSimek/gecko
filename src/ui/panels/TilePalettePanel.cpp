@@ -6,6 +6,7 @@
 #include "../../util/ColorUtils.h"
 #include "../common/BaseWidget.h"
 #include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 #include "../../selection/SelectionManager.h"
 
 #include <QPainter>
@@ -35,13 +36,13 @@ TileWidget::TileWidget(int tileIndex, const QPixmap& pixmap, QWidget* parent)
 TilePalettePanel::TilePalettePanel(QWidget* parent)
     : BasePanel("Tiles", parent) {
     setupUI();
-    setMinimumWidth(300);
+    setMinimumWidth(ui::constants::sizes::WIDTH_PANEL_MIN);
 }
 
 void TilePalettePanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setSpacing(8);
-    _mainLayout->setContentsMargins(8, 8, 8, 8);
+    _mainLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    _mainLayout->setContentsMargins(ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN);
 
     setupModeControls();
     setupFilterControls();
@@ -158,8 +159,8 @@ void TilePalettePanel::setupTileGrid() {
 
     _tileGridWidget = new QWidget();
     _tileGridLayout = new QGridLayout(_tileGridWidget);
-    _tileGridLayout->setSpacing(2);
-    _tileGridLayout->setContentsMargins(4, 4, 4, 4);
+    _tileGridLayout->setSpacing(ui::constants::SPACING_GRID);
+    _tileGridLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
 
     _scrollArea->setWidget(_tileGridWidget);
     _mainLayout->addWidget(_scrollArea, 1); // Take remaining space

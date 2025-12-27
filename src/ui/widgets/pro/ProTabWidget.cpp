@@ -1,12 +1,13 @@
 #include "ProTabWidget.h"
 #include "../../GameEnums.h"
+#include "../../UIConstants.h"
 
 namespace geck {
 
 ProTabWidget::ProTabWidget(QWidget* parent)
     : QWidget(parent)
     , _mainLayout(new QVBoxLayout(this)) {
-    _mainLayout->setContentsMargins(GROUP_MARGINS, GROUP_MARGINS, GROUP_MARGINS, GROUP_MARGINS);
+    _mainLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     _mainLayout->setSpacing(FORM_SPACING);
 }
 
@@ -58,7 +59,7 @@ QFormLayout* ProTabWidget::createStandardFormLayout() {
 QGroupBox* ProTabWidget::createStandardGroupBox(const QString& title) {
     QGroupBox* groupBox = new QGroupBox(title);
     QVBoxLayout* layout = new QVBoxLayout(groupBox);
-    layout->setContentsMargins(GROUP_MARGINS, GROUP_MARGINS, GROUP_MARGINS, GROUP_MARGINS);
+    layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     layout->setSpacing(FORM_SPACING);
     return groupBox;
 }

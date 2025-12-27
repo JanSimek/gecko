@@ -11,6 +11,8 @@
 
 #include "../../Application.h"
 #include "../IconHelper.h"
+#include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 #include "version.h"
 
 namespace geck {
@@ -32,7 +34,7 @@ void WelcomeWidget::setupUI() {
     _imageLabel = new QLabel();
     _imageLabel->setAlignment(Qt::AlignCenter);
     // Make background fully transparent
-    _imageLabel->setStyleSheet("QLabel { background-color: transparent; }");
+    _imageLabel->setStyleSheet(ui::theme::styles::transparentWidget());
 
     // Load Vault Boy SVG using application's resource path method
     std::filesystem::path svgPath = Application::getResourcesPath() / "images" / "vault-boy.svg";
@@ -89,7 +91,7 @@ void WelcomeWidget::createVersionLabel() {
     // Set monospace bold font
     QFont font("Monaco, Consolas, 'Courier New', monospace");
     font.setBold(true);
-    font.setPointSize(14);
+    font.setPointSize(ui::constants::fonts::SIZE_TITLE);
     _versionLabel->setFont(font);
 
     // Style the label

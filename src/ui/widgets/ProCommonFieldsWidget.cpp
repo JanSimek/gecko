@@ -2,6 +2,8 @@
 #include "../../util/ResourceManager.h"
 #include "../../util/ProHelper.h"
 #include "../theme/ThemeManager.h"
+#include "../GameEnums.h"
+#include "../UIConstants.h"
 #include <QApplication>
 #include <QFrame>
 #include <QLabel>
@@ -21,22 +23,22 @@ ProCommonFieldsWidget::ProCommonFieldsWidget(QWidget* parent)
 
 void ProCommonFieldsWidget::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setSpacing(8);
-    _mainLayout->setContentsMargins(4, 4, 4, 4);
+    _mainLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
 
     // Create two-column layout for better organization (following F2_ProtoManager pattern)
     QHBoxLayout* columnsLayout = new QHBoxLayout();
-    columnsLayout->setSpacing(8);
+    columnsLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // === LEFT COLUMN ===
     QVBoxLayout* leftColumn = new QVBoxLayout();
-    leftColumn->setSpacing(6);
+    leftColumn->setSpacing(ui::constants::SPACING_FORM);
 
     // Item Properties Group (for items only)
     _itemFieldsGroup = new QGroupBox("Item Properties", this);
     _itemFieldsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     auto itemLayout = new QFormLayout(_itemFieldsGroup);
-    itemLayout->setContentsMargins(8, 12, 8, 8);
+    itemLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     setupItemFields(itemLayout);
     leftColumn->addWidget(_itemFieldsGroup);
     _itemFieldsGroup->setVisible(false);
@@ -45,7 +47,7 @@ void ProCommonFieldsWidget::setupUI() {
     _objectFlagsGroup = new QGroupBox("Object Flags", this);
     _objectFlagsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     auto flagsLayout = new QFormLayout(_objectFlagsGroup);
-    flagsLayout->setContentsMargins(8, 12, 8, 8);
+    flagsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     setupObjectFlags(flagsLayout);
     leftColumn->addWidget(_objectFlagsGroup);
 
@@ -53,13 +55,13 @@ void ProCommonFieldsWidget::setupUI() {
 
     // === RIGHT COLUMN ===
     QVBoxLayout* rightColumn = new QVBoxLayout();
-    rightColumn->setSpacing(6);
+    rightColumn->setSpacing(ui::constants::SPACING_FORM);
 
     // Lighting & Transparency Group
     _lightingGroup = new QGroupBox("Lighting & Transparency", this);
     _lightingGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     auto lightingLayout = new QFormLayout(_lightingGroup);
-    lightingLayout->setContentsMargins(8, 12, 8, 8);
+    lightingLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     setupLightingFields(lightingLayout);
     rightColumn->addWidget(_lightingGroup);
 
@@ -67,7 +69,7 @@ void ProCommonFieldsWidget::setupUI() {
     _extendedFlagsGroup = new QGroupBox("Animation Control", this);
     _extendedFlagsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     auto extFlagsLayout = new QFormLayout(_extendedFlagsGroup);
-    extFlagsLayout->setContentsMargins(8, 12, 8, 8);
+    extFlagsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     setupExtendedFlags(extFlagsLayout);
     rightColumn->addWidget(_extendedFlagsGroup);
 
@@ -364,7 +366,7 @@ QSpinBox* ProCommonFieldsWidget::createHexSpinBox(int max, const QString& toolti
 
 QComboBox* ProCommonFieldsWidget::createMaterialComboBox(const QString& tooltip) {
     auto comboBox = new QComboBox(this);
-    comboBox->addItems(getMaterialNames());
+    comboBox->addItems(game::enums::materialTypes());
     if (!tooltip.isEmpty()) {
         comboBox->setToolTip(tooltip);
     }
@@ -397,20 +399,6 @@ void ProCommonFieldsWidget::onObjectFlagChanged() {
 
 void ProCommonFieldsWidget::onExtendedFlagChanged() {
     emit fieldChanged();
-}
-
-// Material names from F2 Mapper reference
-const QStringList ProCommonFieldsWidget::getMaterialNames() {
-    return {
-        "Glass",   // 0
-        "Metal",   // 1
-        "Plastic", // 2
-        "Wood",    // 3
-        "Dirt",    // 4
-        "Stone",   // 5
-        "Cement",  // 6
-        "Leather"  // 7
-    };
 }
 
 } // namespace geck

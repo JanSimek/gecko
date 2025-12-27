@@ -67,7 +67,6 @@ public:
     static constexpr int BUTTON_MAX_WIDTH = 24;
     static constexpr int BUTTON_MAX_HEIGHT = 20;
     static constexpr int DIRECTION_COMBO_MAX_WIDTH = 50;
-    static constexpr int ANIMATION_TIMER_INTERVAL = 200; // 5 FPS
     static constexpr int LAYOUT_SPACING = 10;
 
     // Game Constants (Documented Engine Limits Only)
@@ -235,9 +234,6 @@ private:
     void loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* arrayValues, int count);
     void saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* arrayValues, int count);
     QSpinBox** createConnectedSpinBoxArray(int count, int min, int max, const QStringList& tooltips);
-
-    // Material names mapping
-    static const QStringList getMaterialNames();
 
     // FID to FRM filename conversion
     QString getFrmFilename(int32_t fid);

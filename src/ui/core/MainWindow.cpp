@@ -14,6 +14,7 @@
 #include "../dialogs/SettingsDialog.h"
 #include "../dialogs/ProEditorDialog.h"
 #include "../dialogs/AboutDialog.h"
+#include "../UIConstants.h"
 #include "../../state/loader/MapLoader.h"
 #include "../../selection/SelectionState.h"
 #include "../../util/Types.h"
@@ -29,6 +30,7 @@
 #include "../../writer/map/MapWriter.h"
 #include "../../editor/Object.h"
 #include "../IconHelper.h"
+#include "../GameEnums.h"
 
 #include "../../vfs/VfsppNativeFileSystem.h"
 
@@ -91,7 +93,7 @@ MainWindow::MainWindow(QWidget* parent)
     , _isRunning(false) {
 
     setWindowTitle("Gecko - Fallout 2 Map Editor");
-    setMinimumSize(1024, 768);
+    setMinimumSize(ui::constants::dialog_sizes::MAIN_WINDOW_MIN_WIDTH, ui::constants::dialog_sizes::MAIN_WINDOW_MIN_HEIGHT);
 
     setDockOptions(QMainWindow::AllowTabbedDocks | QMainWindow::AllowNestedDocks | QMainWindow::AnimatedDocks);
     setDockNestingEnabled(true);
@@ -667,11 +669,11 @@ void MainWindow::setupDockWidgets() {
     tabifyDockWidget(_objectPaletteDock, _fileBrowserDock);
 
     // Set minimum sizes for dock widgets - very small values for maximum flexibility
-    _mapInfoDock->setMinimumSize(100, 50);
-    _selectionDock->setMinimumSize(100, 50);
-    _tilePaletteDock->setMinimumSize(100, 100);
-    _objectPaletteDock->setMinimumSize(100, 100);
-    _fileBrowserDock->setMinimumSize(100, 100);
+    _mapInfoDock->setMinimumSize(ui::constants::dock::MIN_WIDTH, ui::constants::dock::MIN_HEIGHT_SMALL);
+    _selectionDock->setMinimumSize(ui::constants::dock::MIN_WIDTH, ui::constants::dock::MIN_HEIGHT_SMALL);
+    _tilePaletteDock->setMinimumSize(ui::constants::dock::MIN_WIDTH, ui::constants::dock::MIN_HEIGHT_LARGE);
+    _objectPaletteDock->setMinimumSize(ui::constants::dock::MIN_WIDTH, ui::constants::dock::MIN_HEIGHT_LARGE);
+    _fileBrowserDock->setMinimumSize(ui::constants::dock::MIN_WIDTH, ui::constants::dock::MIN_HEIGHT_LARGE);
 
     // Set maximum sizes to allow expansion
     _mapInfoDock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
@@ -695,12 +697,12 @@ void MainWindow::setupStatusBar() {
 
     // Create main status label for messages
     _statusLabel = new QLabel("Ready");
-    _statusLabel->setMinimumWidth(200);
+    _statusLabel->setMinimumWidth(ui::constants::sizes::WIDTH_STATUS_LABEL);
     _statusBar->addWidget(_statusLabel, 1); // Stretch to take available space
 
     // Create hex index label
     _hexIndexLabel = new QLabel("Hex: N/A");
-    _hexIndexLabel->setMinimumWidth(80);
+    _hexIndexLabel->setMinimumWidth(ui::constants::sizes::WIDTH_HEX_LABEL);
     _statusBar->addPermanentWidget(_hexIndexLabel);
 }
 
@@ -1890,11 +1892,8 @@ void MainWindow::onPlayGame() {
 }
 
 bool MainWindow::isTextFile(const QString& filePath) const {
-    static const QStringList textExtensions = {
-        "cfg", "txt", "gam", "msg", "lst", "int", "ssl", "ini"
-    };
     QString suffix = QFileInfo(filePath).suffix().toLower();
-    return textExtensions.contains(suffix);
+    return game::enums::textFileExtensions().contains(suffix);
 }
 
 void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {

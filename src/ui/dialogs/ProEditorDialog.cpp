@@ -2,6 +2,7 @@
 #include "MessageSelectorDialog.h"
 #include "../theme/ThemeManager.h"
 #include "../GameEnums.h"
+#include "../UIConstants.h"
 
 #include <QApplication>
 #include <QMessageBox>
@@ -99,7 +100,7 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     setWindowTitle("PRO Editor");
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setModal(true);
-    resize(950, 650); // True 3-column layout with preview
+    resize(ui::constants::dialog_sizes::PRO_EDITOR_WIDTH, ui::constants::dialog_sizes::PRO_EDITOR_HEIGHT);
 
     // Initialize data structures with defaults
     // _commonData now handled by ProCommonFieldsWidget
@@ -280,25 +281,25 @@ void ProEditorDialog::setupUI() {
 
     // === LEFT PANEL: Image + Name + Description + Common Fields ===
     QWidget* leftInfoPanel = new QWidget();
-    leftInfoPanel->setFixedWidth(288); // 10% smaller than previous 320px
+    leftInfoPanel->setFixedWidth(ui::constants::sizes::WIDTH_INFO_PANEL); // 10% smaller than previous 320px
     QVBoxLayout* leftInfoLayout = new QVBoxLayout(leftInfoPanel);
-    leftInfoLayout->setContentsMargins(8, 8, 8, 8);
+    leftInfoLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     leftInfoLayout->setSpacing(0); // Remove all space between elements
 
     // Name with edit button above preview
     auto nameLayout = new QHBoxLayout();
-    nameLayout->setSpacing(4);
+    nameLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _nameLabel = new QLabel(this);
     _nameLabel->setAlignment(Qt::AlignCenter);
     _nameLabel->setWordWrap(true);
-    _nameLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; padding: 4px; }");
+    _nameLabel->setStyleSheet(ui::theme::styles::titleLabel());
     nameLayout->addWidget(_nameLabel); // Take most of the space
 
     // Small edit button next to name
     _editMessageButton = new QPushButton("...", this);
-    _editMessageButton->setMaximumWidth(24);
-    _editMessageButton->setMaximumHeight(24);
+    _editMessageButton->setMaximumWidth(ui::constants::sizes::ICON_BUTTON);
+    _editMessageButton->setMaximumHeight(ui::constants::sizes::ICON_BUTTON);
     _editMessageButton->setToolTip("Edit object name and description");
     connect(_editMessageButton, &QPushButton::clicked, this, &ProEditorDialog::onEditMessageClicked);
     nameLayout->addWidget(_editMessageButton); // Fixed size
@@ -310,7 +311,7 @@ void ProEditorDialog::setupUI() {
 
     // Description under preview (without prefix)
     _descriptionEdit = new QTextEdit(this);
-    _descriptionEdit->setFixedHeight(80);
+    _descriptionEdit->setFixedHeight(ui::constants::sizes::HEIGHT_DESCRIPTION);
     _descriptionEdit->setReadOnly(true);
     _descriptionEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     _descriptionEdit->setStyleSheet(ui::theme::styles::textAreaReadOnly());
@@ -324,7 +325,7 @@ void ProEditorDialog::setupUI() {
     _pidEdit->setDisplayIntegerBase(16);
     _pidEdit->setToolTip("Object ID and Type (combined 32-bit value)");
     _pidEdit->setButtonSymbols(QAbstractSpinBox::NoButtons); // Remove up/down arrows
-    _pidEdit->setMinimumWidth(120);                          // Set consistent width
+    _pidEdit->setMinimumWidth(ui::constants::sizes::WIDTH_PID_FIELD_MIN);  // Set consistent width
     connect(_pidEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
     pidLayout->addWidget(_pidEdit);
     leftInfoLayout->addLayout(pidLayout);
@@ -336,7 +337,7 @@ void ProEditorDialog::setupUI() {
     _filenameEdit->setReadOnly(true);
     _filenameEdit->setToolTip("PRO filename derived from PID");
     _filenameEdit->setStyleSheet(ui::theme::styles::readOnlyInput());
-    _filenameEdit->setMinimumWidth(120); // Match PID field width
+    _filenameEdit->setMinimumWidth(ui::constants::sizes::WIDTH_PID_FIELD_MIN); // Match PID field width
     filenameLayout->addWidget(_filenameEdit);
     leftInfoLayout->addLayout(filenameLayout);
 
@@ -344,7 +345,7 @@ void ProEditorDialog::setupUI() {
 
     // === RIGHT PANEL: Tabbed Interface ===
     _tabWidget = new QTabWidget(this);
-    _tabWidget->setContentsMargins(8, 8, 8, 8);
+    _tabWidget->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
 
     // Add main panels to content layout
     _contentLayout->addWidget(leftInfoPanel, 0); // Fixed width
@@ -367,7 +368,7 @@ void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
     // Create compact preview group
     QWidget* previewGroup = new QWidget();
     previewGroup->setContentsMargins(0, 0, 0, 0); // Remove widget margins
-    previewGroup->setStyleSheet("QWidget { margin: 0px; padding: 0px; border: none; }");
+    previewGroup->setStyleSheet(ui::theme::styles::compactWidget());
 
     QVBoxLayout* previewLayout = new QVBoxLayout(previewGroup);
     previewLayout->setContentsMargins(0, 0, 0, 0);
@@ -403,7 +404,7 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
     _animationControls = new QWidget();
     QHBoxLayout* animLayout = new QHBoxLayout(_animationControls);
     animLayout->setContentsMargins(0, 0, 0, 0);
-    animLayout->setSpacing(4);
+    animLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Play/Pause button (small)
     _playPauseButton = new QPushButton("▶");
@@ -421,7 +422,7 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
 
     // Frame label (small)
     _frameLabel = new QLabel("0/0");
-    _frameLabel->setFixedWidth(30);
+    _frameLabel->setFixedWidth(ui::constants::sizes::LABEL_FRAME);
     _frameLabel->setStyleSheet("QLabel { font-size: 10px; }");
 
     // Direction combo (compact)
@@ -438,7 +439,7 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
 
     // Animation timer
     _animationTimer = new QTimer(this);
-    _animationTimer->setInterval(ANIMATION_TIMER_INTERVAL); // 5 FPS
+    _animationTimer->setInterval(ui::constants::ANIMATION_TIMER_INTERVAL); // 5 FPS
     connect(_animationTimer, &QTimer::timeout, this, &ProEditorDialog::onAnimationTick);
 
     _animationControls->setVisible(false); // Hidden by default, shown when FRM is loaded
@@ -450,10 +451,10 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
 void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     // Compact dual preview for inventory/ground using ObjectPreviewWidget
     QWidget* dualWidget = new QWidget();
-    dualWidget->setStyleSheet("QWidget { margin: 0px; padding: 0px; border: none; }");
+    dualWidget->setStyleSheet(ui::theme::styles::compactWidget());
     QHBoxLayout* dualLayout = new QHBoxLayout(dualWidget);
     dualLayout->setContentsMargins(0, 0, 0, 0);
-    dualLayout->setSpacing(4);
+    dualLayout->setSpacing(ui::constants::SPACING_TIGHT);
     dualLayout->setAlignment(Qt::AlignCenter);
 
     // Inventory preview - no animation controls, no title for compact layout
@@ -484,20 +485,20 @@ void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
     // Compact armor preview for male/female with animation controls
     QGroupBox* armorGroup = new QGroupBox("Armor Views");
     QVBoxLayout* armorGroupLayout = new QVBoxLayout(armorGroup);
-    armorGroupLayout->setContentsMargins(4, 4, 4, 4);
-    armorGroupLayout->setSpacing(4);
+    armorGroupLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
+    armorGroupLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Horizontal layout for male/female previews
     QWidget* previewsWidget = new QWidget();
     QHBoxLayout* previewsLayout = new QHBoxLayout(previewsWidget);
     previewsLayout->setContentsMargins(0, 0, 0, 0);
-    previewsLayout->setSpacing(4);
+    previewsLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Male preview (small)
     QWidget* maleWidget = new QWidget();
     QVBoxLayout* maleLayout = new QVBoxLayout(maleWidget);
     maleLayout->setContentsMargins(0, 0, 0, 0);
-    maleLayout->setSpacing(2);
+    maleLayout->setSpacing(ui::constants::SPACING_GRID);
 
     _armorMalePreviewWidget = new ObjectPreviewWidget(this,
         ObjectPreviewWidget::ShowAnimationControls, // Enable animation controls, no FID field
@@ -510,7 +511,7 @@ void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
     QWidget* femaleWidget = new QWidget();
     QVBoxLayout* femaleLayout = new QVBoxLayout(femaleWidget);
     femaleLayout->setContentsMargins(0, 0, 0, 0);
-    femaleLayout->setSpacing(2);
+    femaleLayout->setSpacing(ui::constants::SPACING_GRID);
 
     _armorFemalePreviewWidget = new ObjectPreviewWidget(this,
         ObjectPreviewWidget::ShowAnimationControls, // Enable animation controls, no FID field
@@ -555,8 +556,8 @@ void ProEditorDialog::setupTabs() {
 void ProEditorDialog::setupCommonTab() {
     _commonTab = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(_commonTab);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    layout->setSpacing(ui::constants::SPACING_FORM);
 
     // Common fields widget with all common PRO fields
     _commonFieldsWidget = new ProCommonFieldsWidget(this);
@@ -634,8 +635,8 @@ void ProEditorDialog::setupCritterTab() {
     // Create main critter tab with nested tabs
     QWidget* critterTab = new QWidget();
     QVBoxLayout* mainLayout = new QVBoxLayout(critterTab);
-    mainLayout->setContentsMargins(8, 8, 8, 8);
-    mainLayout->setSpacing(6);
+    mainLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    mainLayout->setSpacing(ui::constants::SPACING_FORM);
 
     // Create sub-tab widget for critter sections
     QTabWidget* critterSubTabs = new QTabWidget();
@@ -653,18 +654,18 @@ void ProEditorDialog::setupCritterTab() {
 void ProEditorDialog::setupCritterStatsTab(QTabWidget* parentTabs) {
     QWidget* statsTab = new QWidget();
     QVBoxLayout* mainLayout = new QVBoxLayout(statsTab);
-    mainLayout->setContentsMargins(8, 8, 8, 8);
-    mainLayout->setSpacing(6);
+    mainLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    mainLayout->setSpacing(ui::constants::SPACING_FORM);
 
     // Create two-column layout for SPECIAL and Skills
     QHBoxLayout* topLayout = new QHBoxLayout();
-    topLayout->setSpacing(12);
+    topLayout->setSpacing(ui::constants::SPACING_COLUMNS);
 
     // === LEFT COLUMN: SPECIAL Stats ===
     QGroupBox* specialGroup = new QGroupBox("SPECIAL Stats");
     QGridLayout* specialLayout = new QGridLayout(specialGroup);
-    specialLayout->setContentsMargins(8, 8, 8, 8);
-    specialLayout->setSpacing(4);
+    specialLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    specialLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     const char* specialNames[] = { "STR", "PER", "END", "CHR", "INT", "AGL", "LCK" };
     for (int i = 0; i < 7; ++i) {
@@ -674,7 +675,7 @@ void ProEditorDialog::setupCritterStatsTab(QTabWidget* parentTabs) {
         connect(_critterSpecialStatEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
 
         QLabel* label = new QLabel(specialNames[i]);
-        label->setFixedWidth(30);
+        label->setFixedWidth(ui::constants::sizes::LABEL_FRAME);
         specialLayout->addWidget(label, i / 4, (i % 4) * 2);
         specialLayout->addWidget(_critterSpecialStatEdits[i], i / 4, (i % 4) * 2 + 1);
     }
@@ -682,8 +683,8 @@ void ProEditorDialog::setupCritterStatsTab(QTabWidget* parentTabs) {
     // === RIGHT COLUMN: Skills ===
     QGroupBox* skillsGroup = new QGroupBox("Skills");
     QGridLayout* skillsLayout = new QGridLayout(skillsGroup);
-    skillsLayout->setContentsMargins(8, 8, 8, 8);
-    skillsLayout->setSpacing(4);
+    skillsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    skillsLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Headers
     QLabel* skillHeader = new QLabel("Skill");
@@ -727,14 +728,14 @@ void ProEditorDialog::setupCritterStatsTab(QTabWidget* parentTabs) {
 
         // Skill name label
         QLabel* skillLabel = new QLabel(QString(skillNames[i]) + ":");
-        skillLabel->setFixedWidth(90);
+        skillLabel->setFixedWidth(ui::constants::sizes::WIDTH_LABEL_SKILL);
         skillsLayout->addWidget(skillLabel, row, column * 2);
 
         // Skill value spinbox
         _critterSkillEdits[i] = new QSpinBox();
         _critterSkillEdits[i]->setRange(0, MAX_SKILL_PERCENT); // 0-300%
         _critterSkillEdits[i]->setToolTip(QString("%1 skill percentage").arg(skillNames[i]));
-        _critterSkillEdits[i]->setFixedWidth(60);
+        _critterSkillEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         connect(_critterSkillEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         skillsLayout->addWidget(_critterSkillEdits[i], row, column * 2 + 1);
     }
@@ -746,8 +747,8 @@ void ProEditorDialog::setupCritterStatsTab(QTabWidget* parentTabs) {
     // === BOTTOM: Derived Combat Stats ===
     QGroupBox* combatGroup = new QGroupBox("Combat Stats");
     QFormLayout* combatLayout = new QFormLayout(combatGroup);
-    combatLayout->setContentsMargins(8, 8, 8, 8);
-    combatLayout->setSpacing(4);
+    combatLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    combatLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _critterMaxHitPointsEdit = new QSpinBox();
     _critterMaxHitPointsEdit->setRange(1, INT_MAX);
@@ -812,14 +813,14 @@ void ProEditorDialog::setupCritterStatsTab(QTabWidget* parentTabs) {
 void ProEditorDialog::setupCritterDefenceTab(QTabWidget* parentTabs) {
     QWidget* defenceTab = new QWidget();
     QVBoxLayout* mainLayout = new QVBoxLayout(defenceTab);
-    mainLayout->setContentsMargins(8, 8, 8, 8);
-    mainLayout->setSpacing(6);
+    mainLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    mainLayout->setSpacing(ui::constants::SPACING_FORM);
 
     // Damage Protection (unified resistance and threshold)
     QGroupBox* damageProtectionGroup = new QGroupBox("Damage Protection");
     QGridLayout* damageProtectionLayout = new QGridLayout(damageProtectionGroup);
-    damageProtectionLayout->setContentsMargins(8, 8, 8, 8);
-    damageProtectionLayout->setSpacing(2);
+    damageProtectionLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    damageProtectionLayout->setSpacing(ui::constants::SPACING_GRID);
 
     // Headers
     QLabel* thresholdHeader = new QLabel("Threshold");
@@ -838,14 +839,14 @@ void ProEditorDialog::setupCritterDefenceTab(QTabWidget* parentTabs) {
     for (int i = 0; i < 7; ++i) {
         // Damage type label
         QLabel* typeLabel = new QLabel(damageTypes.at(i) + ":");
-        typeLabel->setFixedWidth(60);
+        typeLabel->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         damageProtectionLayout->addWidget(typeLabel, i + 1, 0);
 
         // Damage threshold
         _critterDamageThresholdEdits[i] = new QSpinBox();
         _critterDamageThresholdEdits[i]->setRange(0, INT_MAX);
         _critterDamageThresholdEdits[i]->setToolTip(QString("%1 damage threshold").arg(damageTypes.at(i)));
-        _critterDamageThresholdEdits[i]->setFixedWidth(60);
+        _critterDamageThresholdEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         connect(_critterDamageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageThresholdEdits[i], i + 1, 1);
 
@@ -853,7 +854,7 @@ void ProEditorDialog::setupCritterDefenceTab(QTabWidget* parentTabs) {
         _critterDamageResistEdits[i] = new QSpinBox();
         _critterDamageResistEdits[i]->setRange(0, INT_MAX);
         _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes.at(i)));
-        _critterDamageResistEdits[i]->setFixedWidth(60);
+        _critterDamageResistEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageResistEdits[i], i + 1, 2);
     }
@@ -861,21 +862,21 @@ void ProEditorDialog::setupCritterDefenceTab(QTabWidget* parentTabs) {
     // Last 2 damage types (Radiation and Poison - resistance only)
     for (int i = 7; i < 9; ++i) {
         QLabel* typeLabel = new QLabel(damageTypes.at(i) + ":");
-        typeLabel->setFixedWidth(60);
+        typeLabel->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         damageProtectionLayout->addWidget(typeLabel, i + 1, 0);
 
         // No threshold for Radiation and Poison, add placeholder
         QLabel* placeholder = new QLabel("—");
         placeholder->setAlignment(Qt::AlignCenter);
         placeholder->setStyleSheet(ui::theme::styles::placeholderText());
-        placeholder->setFixedWidth(60);
+        placeholder->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         damageProtectionLayout->addWidget(placeholder, i + 1, 1);
 
         // Damage resistance
         _critterDamageResistEdits[i] = new QSpinBox();
         _critterDamageResistEdits[i]->setRange(0, INT_MAX);
         _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes.at(i)));
-        _critterDamageResistEdits[i]->setFixedWidth(60);
+        _critterDamageResistEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageResistEdits[i], i + 1, 2);
     }
@@ -889,38 +890,38 @@ void ProEditorDialog::setupCritterDefenceTab(QTabWidget* parentTabs) {
 void ProEditorDialog::setupCritterGeneralTab(QTabWidget* parentTabs) {
     QWidget* generalTab = new QWidget();
     QVBoxLayout* mainLayout = new QVBoxLayout(generalTab);
-    mainLayout->setContentsMargins(8, 8, 8, 8);
-    mainLayout->setSpacing(6);
+    mainLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    mainLayout->setSpacing(ui::constants::SPACING_FORM);
 
     // Create two-column layout
     QHBoxLayout* columnsLayout = new QHBoxLayout();
-    columnsLayout->setSpacing(12);
+    columnsLayout->setSpacing(ui::constants::SPACING_COLUMNS);
 
     // === LEFT COLUMN ===
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(8);
+    leftLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Critter Properties
     QGroupBox* critterGroup = new QGroupBox("Critter Properties");
     QFormLayout* critterLayout = new QFormLayout(critterGroup);
-    critterLayout->setContentsMargins(8, 8, 8, 8);
-    critterLayout->setSpacing(4);
+    critterLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    critterLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Head FID with selector button
     QWidget* headFidWidget = new QWidget();
     QHBoxLayout* headFidLayout = new QHBoxLayout(headFidWidget);
     headFidLayout->setContentsMargins(0, 0, 0, 0);
-    headFidLayout->setSpacing(4);
+    headFidLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _critterHeadFIDLabel = new QLabel("No FRM");
     _critterHeadFIDLabel->setToolTip("FRM filename for critter head appearance");
     _critterHeadFIDLabel->setStyleSheet(ui::theme::styles::borderedLabel());
 
     _critterHeadFIDSelectorButton = new QPushButton("...");
-    _critterHeadFIDSelectorButton->setMaximumWidth(24);
-    _critterHeadFIDSelectorButton->setMaximumHeight(22);
+    _critterHeadFIDSelectorButton->setMaximumWidth(ui::constants::sizes::ICON_BUTTON);
+    _critterHeadFIDSelectorButton->setMaximumHeight(ui::constants::sizes::ICON_BUTTON_HEIGHT);
     _critterHeadFIDSelectorButton->setToolTip("Browse FRM files for critter head");
     connect(_critterHeadFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onCritterHeadFidSelectorClicked);
 
@@ -942,13 +943,13 @@ void ProEditorDialog::setupCritterGeneralTab(QTabWidget* parentTabs) {
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(8);
+    rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Character Information
     QGroupBox* charGroup = new QGroupBox("Character Information");
     QFormLayout* charLayout = new QFormLayout(charGroup);
-    charLayout->setContentsMargins(8, 8, 8, 8);
-    charLayout->setSpacing(4);
+    charLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    charLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _critterAgeEdit = new QSpinBox();
     _critterAgeEdit->setRange(MIN_AGE, MAX_AGE);
@@ -957,13 +958,13 @@ void ProEditorDialog::setupCritterGeneralTab(QTabWidget* parentTabs) {
     charLayout->addRow("Age:", _critterAgeEdit);
 
     _critterGenderCombo = new QComboBox();
-    _critterGenderCombo->addItems({ "Male", "Female" });
+    _critterGenderCombo->addItems(game::enums::critterGenders());
     _critterGenderCombo->setToolTip("Critter gender");
     connect(_critterGenderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
     charLayout->addRow("Gender:", _critterGenderCombo);
 
     _critterBodyTypeCombo = new QComboBox();
-    _critterBodyTypeCombo->addItems({ "Biped", "Quadruped", "Robotic" });
+    _critterBodyTypeCombo->addItems(game::enums::critterBodyTypes());
     _critterBodyTypeCombo->setToolTip("Body type for animations");
     connect(_critterBodyTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
     charLayout->addRow("Body Type:", _critterBodyTypeCombo);
@@ -995,8 +996,8 @@ void ProEditorDialog::setupCritterGeneralTab(QTabWidget* parentTabs) {
     // === BOTTOM: Critter Flags ===
     QGroupBox* critterFlagsGroup = new QGroupBox("Critter Flags");
     QGridLayout* critterFlagsLayout = new QGridLayout(critterFlagsGroup);
-    critterFlagsLayout->setContentsMargins(8, 8, 8, 8);
-    critterFlagsLayout->setSpacing(4);
+    critterFlagsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    critterFlagsLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Column 1 (left)
     _critterBarterCheck = new QCheckBox("Can Barter");
@@ -1067,8 +1068,8 @@ void ProEditorDialog::setupSceneryTab() {
 
     QWidget* sceneryTab = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(sceneryTab);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    layout->setSpacing(ui::constants::SPACING_FORM);
 
     // Set temporary layout pointers for setupSceneryFields
     _leftFieldsLayout = layout;
@@ -1110,8 +1111,8 @@ void ProEditorDialog::setupMiscTab() {
 
     QWidget* miscTab = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(miscTab);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    layout->setSpacing(ui::constants::SPACING_FORM);
 
     // Set temporary layout pointers for setupMiscFields
     _leftFieldsLayout = layout;
@@ -1172,8 +1173,8 @@ void ProEditorDialog::setupAmmoMiscTab() {
 
     QWidget* ammoMiscTab = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(ammoMiscTab);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    layout->setSpacing(ui::constants::SPACING_FORM);
 
     // Set temporary layout pointers
     _leftFieldsLayout = layout;
@@ -1232,7 +1233,7 @@ void ProEditorDialog::setupAnimationControls() {
 
     // Play/pause button
     _playPauseButton = new QPushButton("▶");
-    _playPauseButton->setMaximumWidth(30);
+    _playPauseButton->setMaximumWidth(ui::constants::sizes::WIDTH_PLAY_BUTTON);
     _playPauseButton->setToolTip("Play/Pause animation");
     _animationLayout->addWidget(_playPauseButton);
 
@@ -1245,13 +1246,13 @@ void ProEditorDialog::setupAnimationControls() {
 
     // Frame label
     _frameLabel = new QLabel("0/0");
-    _frameLabel->setMinimumWidth(40);
+    _frameLabel->setMinimumWidth(ui::constants::sizes::LABEL_FRAME_WIDE);
     _animationLayout->addWidget(_frameLabel);
 
     // Setup animation timer
     _animationTimer = new QTimer(this);
     _animationTimer->setSingleShot(false);
-    _animationTimer->setInterval(ANIMATION_TIMER_INTERVAL); // 5 FPS default
+    _animationTimer->setInterval(ui::constants::ANIMATION_TIMER_INTERVAL); // 5 FPS default
 
     // Connect signals
     connect(_playPauseButton, &QPushButton::clicked, this, &ProEditorDialog::onPlayPauseClicked);
@@ -1733,22 +1734,22 @@ void ProEditorDialog::setupCritterFields() {
     // Critter-Specific Properties (not shown in left panel)
     QGroupBox* critterGroup = new QGroupBox("Critter Properties");
     QFormLayout* critterLayout = new QFormLayout(critterGroup);
-    critterLayout->setContentsMargins(8, 8, 8, 8);
-    critterLayout->setSpacing(4);
+    critterLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    critterLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Head FID with selector button
     QWidget* headFidWidget = new QWidget();
     QHBoxLayout* headFidLayout = new QHBoxLayout(headFidWidget);
     headFidLayout->setContentsMargins(0, 0, 0, 0);
-    headFidLayout->setSpacing(4);
+    headFidLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _critterHeadFIDLabel = new QLabel("No FRM");
     _critterHeadFIDLabel->setToolTip("FRM filename for critter head appearance");
     _critterHeadFIDLabel->setStyleSheet(ui::theme::styles::borderedLabel());
 
     _critterHeadFIDSelectorButton = new QPushButton("...");
-    _critterHeadFIDSelectorButton->setMaximumWidth(24);
-    _critterHeadFIDSelectorButton->setMaximumHeight(22);
+    _critterHeadFIDSelectorButton->setMaximumWidth(ui::constants::sizes::ICON_BUTTON);
+    _critterHeadFIDSelectorButton->setMaximumHeight(ui::constants::sizes::ICON_BUTTON_HEIGHT);
     _critterHeadFIDSelectorButton->setToolTip("Browse FRM files for critter head");
     connect(_critterHeadFIDSelectorButton, &QPushButton::clicked, this, &ProEditorDialog::onCritterHeadFidSelectorClicked);
 
@@ -1769,8 +1770,8 @@ void ProEditorDialog::setupCritterFields() {
     // Critter Flags Group (two-column layout)
     QGroupBox* critterFlagsGroup = new QGroupBox("Critter Flags");
     QGridLayout* critterFlagsLayout = new QGridLayout(critterFlagsGroup);
-    critterFlagsLayout->setContentsMargins(8, 8, 8, 8);
-    critterFlagsLayout->setSpacing(4);
+    critterFlagsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    critterFlagsLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Column 1 (left)
     _critterBarterCheck = new QCheckBox("Can Barter");
@@ -1834,8 +1835,8 @@ void ProEditorDialog::setupCritterFields() {
     // SPECIAL Stats (compact)
     QGroupBox* specialGroup = new QGroupBox("SPECIAL Stats");
     QGridLayout* specialLayout = new QGridLayout(specialGroup);
-    specialLayout->setContentsMargins(8, 8, 8, 8);
-    specialLayout->setSpacing(4);
+    specialLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    specialLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     const char* specialNames[] = { "STR", "PER", "END", "CHR", "INT", "AGL", "LCK" };
     for (int i = 0; i < 7; ++i) {
@@ -1845,7 +1846,7 @@ void ProEditorDialog::setupCritterFields() {
         connect(_critterSpecialStatEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
 
         QLabel* label = new QLabel(specialNames[i]);
-        label->setFixedWidth(30);
+        label->setFixedWidth(ui::constants::sizes::LABEL_FRAME);
         specialLayout->addWidget(label, i / 4, (i % 4) * 2);
         specialLayout->addWidget(_critterSpecialStatEdits[i], i / 4, (i % 4) * 2 + 1);
     }
@@ -1854,8 +1855,8 @@ void ProEditorDialog::setupCritterFields() {
     // Primary Combat Stats
     QGroupBox* combatGroup = new QGroupBox("Combat Stats");
     QFormLayout* combatLayout = new QFormLayout(combatGroup);
-    combatLayout->setContentsMargins(8, 8, 8, 8);
-    combatLayout->setSpacing(4);
+    combatLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    combatLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _critterMaxHitPointsEdit = new QSpinBox();
     _critterMaxHitPointsEdit->setRange(1, INT_MAX);
@@ -1888,8 +1889,8 @@ void ProEditorDialog::setupCritterFields() {
     // Advanced Stats & Characteristics
     QGroupBox* advancedGroup = new QGroupBox("Advanced Stats");
     QFormLayout* advancedLayout = new QFormLayout(advancedGroup);
-    advancedLayout->setContentsMargins(8, 8, 8, 8);
-    advancedLayout->setSpacing(4);
+    advancedLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    advancedLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _critterCarryWeightMaxEdit = new QSpinBox();
     _critterCarryWeightMaxEdit->setRange(0, INT_MAX);
@@ -1928,13 +1929,13 @@ void ProEditorDialog::setupCritterFields() {
     advancedLayout->addRow("Age:", _critterAgeEdit);
 
     _critterGenderCombo = new QComboBox();
-    _critterGenderCombo->addItems({ "Male", "Female" });
+    _critterGenderCombo->addItems(game::enums::critterGenders());
     _critterGenderCombo->setToolTip("Critter gender");
     connect(_critterGenderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
     advancedLayout->addRow("Gender:", _critterGenderCombo);
 
     _critterBodyTypeCombo = new QComboBox();
-    _critterBodyTypeCombo->addItems({ "Biped", "Quadruped", "Robotic" });
+    _critterBodyTypeCombo->addItems(game::enums::critterBodyTypes());
     _critterBodyTypeCombo->setToolTip("Body type for animations");
     connect(_critterBodyTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
     advancedLayout->addRow("Body Type:", _critterBodyTypeCombo);
@@ -1964,8 +1965,8 @@ void ProEditorDialog::setupCritterFields() {
     // Damage Protection (unified resistance and threshold)
     QGroupBox* damageProtectionGroup = new QGroupBox("Damage Protection");
     QGridLayout* damageProtectionLayout = new QGridLayout(damageProtectionGroup);
-    damageProtectionLayout->setContentsMargins(8, 8, 8, 8);
-    damageProtectionLayout->setSpacing(2);
+    damageProtectionLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    damageProtectionLayout->setSpacing(ui::constants::SPACING_GRID);
 
     // Headers
     QLabel* thresholdHeader = new QLabel("Threshold");
@@ -1984,14 +1985,14 @@ void ProEditorDialog::setupCritterFields() {
     for (int i = 0; i < 7; ++i) {
         // Damage type label
         QLabel* typeLabel = new QLabel(damageTypes.at(i) + ":");
-        typeLabel->setFixedWidth(60);
+        typeLabel->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         damageProtectionLayout->addWidget(typeLabel, i + 1, 0);
 
         // Damage threshold
         _critterDamageThresholdEdits[i] = new QSpinBox();
         _critterDamageThresholdEdits[i]->setRange(0, INT_MAX);
         _critterDamageThresholdEdits[i]->setToolTip(QString("%1 damage threshold").arg(damageTypes.at(i)));
-        _critterDamageThresholdEdits[i]->setFixedWidth(60);
+        _critterDamageThresholdEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         connect(_critterDamageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageThresholdEdits[i], i + 1, 1);
 
@@ -1999,7 +2000,7 @@ void ProEditorDialog::setupCritterFields() {
         _critterDamageResistEdits[i] = new QSpinBox();
         _critterDamageResistEdits[i]->setRange(0, INT_MAX);
         _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes.at(i)));
-        _critterDamageResistEdits[i]->setFixedWidth(60);
+        _critterDamageResistEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageResistEdits[i], i + 1, 2);
     }
@@ -2007,21 +2008,21 @@ void ProEditorDialog::setupCritterFields() {
     // Last 2 damage types (Radiation and Poison - resistance only)
     for (int i = 7; i < 9; ++i) {
         QLabel* typeLabel = new QLabel(damageTypes.at(i) + ":");
-        typeLabel->setFixedWidth(60);
+        typeLabel->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         damageProtectionLayout->addWidget(typeLabel, i + 1, 0);
 
         // No threshold for Radiation and Poison, add placeholder
         QLabel* placeholder = new QLabel("—");
         placeholder->setAlignment(Qt::AlignCenter);
         placeholder->setStyleSheet(ui::theme::styles::placeholderText());
-        placeholder->setFixedWidth(60);
+        placeholder->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         damageProtectionLayout->addWidget(placeholder, i + 1, 1);
 
         // Damage resistance
         _critterDamageResistEdits[i] = new QSpinBox();
         _critterDamageResistEdits[i]->setRange(0, INT_MAX);
         _critterDamageResistEdits[i]->setToolTip(QString("%1 damage resistance").arg(damageTypes.at(i)));
-        _critterDamageResistEdits[i]->setFixedWidth(60);
+        _critterDamageResistEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         connect(_critterDamageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         damageProtectionLayout->addWidget(_critterDamageResistEdits[i], i + 1, 2);
     }
@@ -2033,8 +2034,8 @@ void ProEditorDialog::setupCritterFields() {
     // Skills Section (18 skills)
     QGroupBox* skillsGroup = new QGroupBox("Skills");
     QGridLayout* skillsLayout = new QGridLayout(skillsGroup);
-    skillsLayout->setContentsMargins(8, 8, 8, 8);
-    skillsLayout->setSpacing(4);
+    skillsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    skillsLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Headers
     QLabel* skillHeader = new QLabel("Skill");
@@ -2078,14 +2079,14 @@ void ProEditorDialog::setupCritterFields() {
 
         // Skill name label
         QLabel* skillLabel = new QLabel(QString(skillNames[i]) + ":");
-        skillLabel->setFixedWidth(90);
+        skillLabel->setFixedWidth(ui::constants::sizes::WIDTH_LABEL_SKILL);
         skillsLayout->addWidget(skillLabel, row, column * 2);
 
         // Skill value spinbox
         _critterSkillEdits[i] = new QSpinBox();
         _critterSkillEdits[i]->setRange(0, MAX_SKILL_PERCENT); // 0-300%
         _critterSkillEdits[i]->setToolTip(QString("%1 skill percentage").arg(skillNames[i]));
-        _critterSkillEdits[i]->setFixedWidth(60);
+        _critterSkillEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_MEDIUM);
         connect(_critterSkillEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
         skillsLayout->addWidget(_critterSkillEdits[i], row, column * 2 + 1);
     }
@@ -2120,8 +2121,8 @@ void ProEditorDialog::setupSceneryFields() {
 
     QGroupBox* basicGroup = new QGroupBox("Basic Properties");
     QFormLayout* basicLayout = new QFormLayout(basicGroup);
-    basicLayout->setContentsMargins(8, 8, 8, 8);
-    basicLayout->setSpacing(4);
+    basicLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    basicLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _sceneryMaterialIdEdit = createMaterialComboBox("Material type for scenery");
     connectComboBox(_sceneryMaterialIdEdit);
@@ -2131,7 +2132,7 @@ void ProEditorDialog::setupSceneryFields() {
     connectSpinBox(_scenerySoundIdEdit);
     basicLayout->addRow("Sound ID:", _scenerySoundIdEdit);
 
-    _sceneryTypeCombo = createComboBox({ "Door", "Stairs", "Elevator", "Ladder Bottom", "Ladder Top", "Generic" }, "Scenery subtype");
+    _sceneryTypeCombo = createComboBox(game::enums::sceneryTypes(), "Scenery subtype");
     connectComboBox(_sceneryTypeCombo);
     basicLayout->addRow("Type:", _sceneryTypeCombo);
 
@@ -2142,8 +2143,8 @@ void ProEditorDialog::setupSceneryFields() {
     // Door Properties
     QGroupBox* doorGroup = new QGroupBox("Door Properties");
     QFormLayout* doorLayout = new QFormLayout(doorGroup);
-    doorLayout->setContentsMargins(8, 8, 8, 8);
-    doorLayout->setSpacing(4);
+    doorLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    doorLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _doorWalkThroughCheck = new QCheckBox("Walk Through");
     _doorWalkThroughCheck->setToolTip("Allow walking through the door");
@@ -2161,8 +2162,8 @@ void ProEditorDialog::setupSceneryFields() {
     // Stairs Properties
     QGroupBox* stairsGroup = new QGroupBox("Stairs Properties");
     QFormLayout* stairsLayout = new QFormLayout(stairsGroup);
-    stairsLayout->setContentsMargins(8, 8, 8, 8);
-    stairsLayout->setSpacing(4);
+    stairsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    stairsLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _stairsDestTileEdit = createSpinBox(0, 39999, "Destination tile number");
     connectSpinBox(_stairsDestTileEdit);
@@ -2179,8 +2180,8 @@ void ProEditorDialog::setupSceneryFields() {
     // Elevator Properties (these will be shown/hidden based on scenery type)
     QGroupBox* elevatorGroup = new QGroupBox("Elevator Properties");
     QFormLayout* elevatorLayout = new QFormLayout(elevatorGroup);
-    elevatorLayout->setContentsMargins(8, 8, 8, 8);
-    elevatorLayout->setSpacing(4);
+    elevatorLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    elevatorLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _elevatorTypeEdit = createSpinBox(0, INT_MAX, "Elevator type");
     connectSpinBox(_elevatorTypeEdit);
@@ -2197,8 +2198,8 @@ void ProEditorDialog::setupSceneryFields() {
     // Ladder Properties
     QGroupBox* ladderGroup = new QGroupBox("Ladder Properties");
     QFormLayout* ladderLayout = new QFormLayout(ladderGroup);
-    ladderLayout->setContentsMargins(8, 8, 8, 8);
-    ladderLayout->setSpacing(4);
+    ladderLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    ladderLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _ladderDestTileElevationEdit = createSpinBox(0, 0xFFFFFFFF, "Destination tile and elevation combined");
     connectSpinBox(_ladderDestTileElevationEdit);
@@ -2211,8 +2212,8 @@ void ProEditorDialog::setupSceneryFields() {
     // Generic Properties
     QGroupBox* genericGroup = new QGroupBox("Generic Properties");
     QFormLayout* genericLayout = new QFormLayout(genericGroup);
-    genericLayout->setContentsMargins(8, 8, 8, 8);
-    genericLayout->setSpacing(4);
+    genericLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    genericLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _genericUnknownEdit = createSpinBox(0, 0xFFFFFFFF, "Generic unknown field");
     connectSpinBox(_genericUnknownEdit);
@@ -2666,8 +2667,8 @@ void ProEditorDialog::connectCheckBox(QCheckBox* checkBox) {
 
 QFormLayout* ProEditorDialog::createStandardFormLayout(QWidget* parent) {
     QFormLayout* layout = new QFormLayout(parent);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(4);
+    layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    layout->setSpacing(ui::constants::SPACING_TIGHT);
     return layout;
 }
 
@@ -2679,8 +2680,8 @@ QGroupBox* ProEditorDialog::createStandardGroupBox(const QString& title) {
 
 QHBoxLayout* ProEditorDialog::createTwoColumnLayout(QWidget* parent) {
     QHBoxLayout* layout = new QHBoxLayout(parent);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(4);
+    layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    layout->setSpacing(ui::constants::SPACING_TIGHT);
     return layout;
 }
 
@@ -3601,22 +3602,9 @@ void ProEditorDialog::loadObjectFlags(uint32_t flags) {
     // This method is kept for compatibility but does nothing
 }
 
-const QStringList ProEditorDialog::getMaterialNames() {
-    return QStringList{
-        "Glass",   // 0
-        "Metal",   // 1
-        "Plastic", // 2
-        "Wood",    // 3
-        "Dirt",    // 4
-        "Stone",   // 5
-        "Cement",  // 6
-        "Leather"  // 7
-    };
-}
-
 QComboBox* ProEditorDialog::createMaterialComboBox(const QString& tooltip) {
     QComboBox* comboBox = new QComboBox();
-    comboBox->addItems(getMaterialNames());
+    comboBox->addItems(game::enums::materialTypes());
     if (!tooltip.isEmpty()) {
         comboBox->setToolTip(tooltip);
     }
@@ -3742,8 +3730,8 @@ void ProEditorDialog::setupArmorFields() {
     QGroupBox* acGroup = new QGroupBox("Protection Values");
     acGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* acLayout = new QFormLayout(acGroup);
-    acLayout->setContentsMargins(8, 12, 8, 8);
-    acLayout->setSpacing(4);
+    acLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    acLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _armorClassEdit = createSpinBox(0, 999, "Armor Class - higher values provide better protection");
     connectSpinBox(_armorClassEdit);
@@ -3755,9 +3743,9 @@ void ProEditorDialog::setupArmorFields() {
     QGroupBox* defenceGroup = new QGroupBox("Defence State");
     defenceGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QGridLayout* defenceLayout = new QGridLayout(defenceGroup);
-    defenceLayout->setContentsMargins(8, 12, 8, 8);
-    defenceLayout->setSpacing(2);
-    defenceLayout->setHorizontalSpacing(2);
+    defenceLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    defenceLayout->setSpacing(ui::constants::SPACING_GRID);
+    defenceLayout->setHorizontalSpacing(ui::constants::SPACING_GRID);
 
     const QStringList damageTypes = game::enums::damageTypes7();
 
@@ -3777,12 +3765,12 @@ void ProEditorDialog::setupArmorFields() {
         // Damage type label (column 0)
         QLabel* typeLabel = new QLabel(damageTypes[i]);
         typeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        typeLabel->setFixedSize(50, 19);
+        typeLabel->setFixedSize(ui::constants::sizes::WIDTH_TYPE_LABEL, ui::constants::sizes::HEIGHT_TYPE_LABEL);
         defenceLayout->addWidget(typeLabel, i + 1, 0);
 
         // Threshold input (column 1)
         _damageThresholdEdits[i] = createSpinBox(0, 999, QString("Damage threshold against %1 damage").arg(damageTypes.at(i)));
-        _damageThresholdEdits[i]->setFixedWidth(40);
+        _damageThresholdEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_SMALL);
         connectSpinBox(_damageThresholdEdits[i]);
         defenceLayout->addWidget(_damageThresholdEdits[i], i + 1, 1);
 
@@ -3794,7 +3782,7 @@ void ProEditorDialog::setupArmorFields() {
 
         // Resistance input (column 3)
         _damageResistEdits[i] = createSpinBox(0, 100, QString("Damage resistance against %1 damage").arg(damageTypes.at(i)));
-        _damageResistEdits[i]->setFixedWidth(40);
+        _damageResistEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_SMALL);
         connectSpinBox(_damageResistEdits[i]);
         defenceLayout->addWidget(_damageResistEdits[i], i + 1, 3);
 
@@ -3817,7 +3805,7 @@ void ProEditorDialog::setupArmorFields() {
     QGroupBox* miscGroup = createStandardGroupBox("Misc Properties");
     QFormLayout* miscLayout = static_cast<QFormLayout*>(miscGroup->layout());
 
-    _armorPerkCombo = createComboBox({ "None", "PowerArmor", "CombatArmor", "Other" }, "Special perk associated with this armor");
+    _armorPerkCombo = createComboBox(game::enums::armorPerks(), "Special perk associated with this armor");
     miscLayout->addRow("Perk:", _armorPerkCombo);
 
     // AI Priority display
@@ -3863,10 +3851,10 @@ void ProEditorDialog::setupContainerFields() {
 
     QGroupBox* flagsGroup = new QGroupBox("Container Flags");
     QVBoxLayout* flagsLayout = new QVBoxLayout(flagsGroup);
-    flagsLayout->setContentsMargins(8, 8, 8, 8);
-    flagsLayout->setSpacing(4);
+    flagsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    flagsLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
-    const QStringList flagNames = { "Use", "Use On", "Look", "Talk", "Pickup" };
+    const QStringList flagNames = game::enums::containerFlags();
     for (int i = 0; i < 5; ++i) {
         _containerFlagChecks[i] = new QCheckBox(flagNames[i]);
         connectCheckBox(_containerFlagChecks[i]);
@@ -3906,8 +3894,8 @@ void ProEditorDialog::setupDrugFields() {
     QGroupBox* effectsGroup = new QGroupBox("Modify Stats");
     effectsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QGridLayout* effectsGridLayout = new QGridLayout(effectsGroup);
-    effectsGridLayout->setContentsMargins(8, 12, 8, 8);
-    effectsGridLayout->setSpacing(6);
+    effectsGridLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    effectsGridLayout->setSpacing(ui::constants::SPACING_FORM);
 
     // Header row (row 0)
     effectsGridLayout->addWidget(new QLabel(""), 0, 0); // Empty space for stat labels
@@ -3982,13 +3970,13 @@ void ProEditorDialog::setupDrugFields() {
     _leftFieldsLayout->addWidget(effectsGroup);
 
     // Add some spacing between stat effects and timing
-    _leftFieldsLayout->addSpacing(10);
+    _leftFieldsLayout->addSpacing(ui::constants::SPACING_WIDE);
 
     // Effect Timing (moved from right panel to under Stat Effects)
     QGroupBox* timingGroup = new QGroupBox("Effect Timing");
     QFormLayout* timingLayout = new QFormLayout(timingGroup);
-    timingLayout->setContentsMargins(8, 8, 8, 8);
-    timingLayout->setSpacing(4);
+    timingLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    timingLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Mid-time delay
     _drugFirstDelayEdit = new QSpinBox();
@@ -4007,14 +3995,14 @@ void ProEditorDialog::setupDrugFields() {
     _leftFieldsLayout->addWidget(timingGroup);
 
     // Add some spacing between timing and addiction
-    _leftFieldsLayout->addSpacing(10);
+    _leftFieldsLayout->addSpacing(ui::constants::SPACING_WIDE);
 
     // Addiction Settings (following F2_ProtoManager pattern)
     QGroupBox* addictionGroup = new QGroupBox("Addiction");
     addictionGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* addictionLayout = new QFormLayout(addictionGroup);
-    addictionLayout->setContentsMargins(8, 12, 8, 8);
-    addictionLayout->setSpacing(4);
+    addictionLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    addictionLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _drugAddictionChanceEdit = new QSpinBox();
     _drugAddictionChanceEdit->setRange(0, INT_MAX);
@@ -4066,8 +4054,8 @@ void ProEditorDialog::setupWeaponFields() {
     QGroupBox* basicGroup = new QGroupBox("Weapon Param");
     basicGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* basicLayout = new QFormLayout(basicGroup);
-    basicLayout->setContentsMargins(8, 12, 8, 8);
-    basicLayout->setSpacing(4);
+    basicLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    basicLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _weaponAnimationCombo = createComboBox(game::enums::weaponAnimations(), "Weapon animation type");
     connectComboBox(_weaponAnimationCombo);
@@ -4091,8 +4079,8 @@ void ProEditorDialog::setupWeaponFields() {
     QGroupBox* apGroup = new QGroupBox("AP Cost Attack");
     apGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* apLayout = new QFormLayout(apGroup);
-    apLayout->setContentsMargins(8, 12, 8, 8);
-    apLayout->setSpacing(4);
+    apLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    apLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _weaponAPPrimaryEdit = createSpinBox(0, 99, "Action points for primary attack");
     connectSpinBox(_weaponAPPrimaryEdit);
@@ -4108,8 +4096,8 @@ void ProEditorDialog::setupWeaponFields() {
     QGroupBox* rangeGroup = new QGroupBox("Range Attack");
     rangeGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* rangeLayout = new QFormLayout(rangeGroup);
-    rangeLayout->setContentsMargins(8, 12, 8, 8);
-    rangeLayout->setSpacing(4);
+    rangeLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    rangeLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _weaponRangePrimaryEdit = createSpinBox(0, 999, "Primary attack range");
     connectSpinBox(_weaponRangePrimaryEdit);
@@ -4127,8 +4115,8 @@ void ProEditorDialog::setupWeaponFields() {
     QGroupBox* reqGroup = new QGroupBox("Requirements & Special");
     reqGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* reqLayout = new QFormLayout(reqGroup);
-    reqLayout->setContentsMargins(8, 12, 8, 8);
-    reqLayout->setSpacing(4);
+    reqLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    reqLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _weaponMinStrengthEdit = createSpinBox(0, 10, "Minimum strength required");
     connectSpinBox(_weaponMinStrengthEdit);
@@ -4142,7 +4130,7 @@ void ProEditorDialog::setupWeaponFields() {
     connectSpinBox(_weaponCriticalFailEdit);
     reqLayout->addRow("Critical Fail:", _weaponCriticalFailEdit);
 
-    _weaponPerkCombo = createComboBox({ "None", "Fast Shot", "Long Range", "Accurate", "Penetrate", "Knockback", "Knockdown", "Flame", "Other" }, "Weapon perk");
+    _weaponPerkCombo = createComboBox(game::enums::weaponPerks(), "Weapon perk");
     connectComboBox(_weaponPerkCombo);
     reqLayout->addRow("Perk:", _weaponPerkCombo);
 
@@ -4153,10 +4141,10 @@ void ProEditorDialog::setupWeaponFields() {
     // Ammo and Special
     QGroupBox* ammoGroup = new QGroupBox("Ammo & Special");
     QFormLayout* ammoLayout = new QFormLayout(ammoGroup);
-    ammoLayout->setContentsMargins(8, 8, 8, 8);
-    ammoLayout->setSpacing(4);
+    ammoLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    ammoLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
-    _weaponAmmoTypeCombo = createComboBox({ "None", "Small Energy Cell", "Micro Fusion Cell", "2mm EC", ".223 FMJ", "5mm JHP", "5mm AP", ".45 Caliber", "10mm JHP", "10mm AP", "14mm AP", "Flame Fuel", "Flamethrower Fuel Mk. II", "Rocket", "Explosive Rocket", "BB's", "Small Energy Cell", "Micro Fusion Cell" }, "Ammo type");
+    _weaponAmmoTypeCombo = createComboBox(game::enums::ammoCaliberTypes(), "Ammo type");
     connectComboBox(_weaponAmmoTypeCombo);
     ammoLayout->addRow("Ammo Type:", _weaponAmmoTypeCombo);
 
@@ -4183,8 +4171,8 @@ void ProEditorDialog::setupWeaponFields() {
     // Weapon Flags
     QGroupBox* flagsGroup = new QGroupBox("Weapon Flags");
     QVBoxLayout* flagsLayout = new QVBoxLayout(flagsGroup);
-    flagsLayout->setContentsMargins(8, 8, 8, 8);
-    flagsLayout->setSpacing(4);
+    flagsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    flagsLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _weaponEnergyWeaponCheck = new QCheckBox("Energy Weapon");
     _weaponEnergyWeaponCheck->setToolTip("Mark as energy weapon (sfall extension)");
@@ -4235,8 +4223,8 @@ void ProEditorDialog::setupKeyFields() {
 
     QGroupBox* keyGroup = new QGroupBox("Key Properties");
     QFormLayout* keyLayout = new QFormLayout(keyGroup);
-    keyLayout->setContentsMargins(8, 8, 8, 8);
-    keyLayout->setSpacing(4);
+    keyLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    keyLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _keyIdEdit = createSpinBox(0, 999999, "Unique key identifier");
     connectSpinBox(_keyIdEdit);

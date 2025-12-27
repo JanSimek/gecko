@@ -10,6 +10,7 @@
 #include "../common/BaseWidget.h"
 #include "../dragdrop/MimeTypes.h"
 #include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -106,8 +107,8 @@ ObjectPalettePanel::~ObjectPalettePanel() {
 
 void ObjectPalettePanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setSpacing(4);
-    _mainLayout->setContentsMargins(4, 4, 4, 4);
+    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
 
     setupCategoryTabs();
     setupSearchControls();
@@ -162,8 +163,8 @@ void ObjectPalettePanel::setupObjectGrid() {
 
     _objectGridWidget = new QWidget();
     _objectGridLayout = new QGridLayout(_objectGridWidget);
-    _objectGridLayout->setSpacing(2);
-    _objectGridLayout->setContentsMargins(4, 4, 4, 4);
+    _objectGridLayout->setSpacing(ui::constants::SPACING_GRID);
+    _objectGridLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
 
     _scrollArea->setWidget(_objectGridWidget);
     _mainLayout->addWidget(_scrollArea, 1); // Take remaining space

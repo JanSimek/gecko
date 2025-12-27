@@ -1,5 +1,7 @@
 #include "ProContainerKeyWidget.h"
 #include "../../theme/ThemeManager.h"
+#include "../../GameEnums.h"
+#include "../../UIConstants.h"
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -37,13 +39,13 @@ void ProContainerKeyWidget::setupContainerUI() {
 
     // Create two-column layout for container
     QHBoxLayout* columnsLayout = new QHBoxLayout();
-    columnsLayout->setSpacing(12);
+    columnsLayout->setSpacing(ui::constants::SPACING_COLUMNS);
 
     // Left column - Container Properties
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(8);
+    leftLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     QGroupBox* containerGroup = createStandardGroupBox("Container Properties");
     QFormLayout* containerLayout = createStandardFormLayout();
@@ -59,15 +61,15 @@ void ProContainerKeyWidget::setupContainerUI() {
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(8);
+    rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     QGroupBox* flagsGroup = new QGroupBox("Container Flags");
     flagsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QVBoxLayout* flagsLayout = new QVBoxLayout(flagsGroup);
-    flagsLayout->setContentsMargins(8, 12, 8, 8);
-    flagsLayout->setSpacing(4);
+    flagsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    flagsLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
-    const QStringList flagNames = { "Use", "Use On", "Look", "Talk", "Pickup" };
+    const QStringList flagNames = game::enums::containerFlags();
     for (int i = 0; i < NUM_CONTAINER_FLAGS; ++i) {
         _containerFlagChecks[i] = new QCheckBox(flagNames[i]);
         _containerFlagChecks[i]->setToolTip(QString("Container flag: %1").arg(flagNames[i]));

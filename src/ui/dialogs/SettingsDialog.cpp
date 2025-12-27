@@ -39,8 +39,8 @@ SettingsDialog::SettingsDialog(QWidget* parent)
 
     setWindowTitle("Preferences");
     setModal(true);
-    setMinimumSize(SETTINGS_MIN_WIDTH, SETTINGS_MIN_HEIGHT);
-    resize(SETTINGS_DEFAULT_WIDTH, SETTINGS_DEFAULT_HEIGHT);
+    setMinimumSize(dialog_sizes::SETTINGS_MIN_WIDTH, dialog_sizes::SETTINGS_MIN_HEIGHT);
+    resize(dialog_sizes::SETTINGS_DEFAULT_WIDTH, dialog_sizes::SETTINGS_DEFAULT_HEIGHT);
 
     setupUI();
     loadSettings();
@@ -49,8 +49,8 @@ SettingsDialog::SettingsDialog(QWidget* parent)
 
 void SettingsDialog::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(DEFAULT_MARGIN, DEFAULT_MARGIN, DEFAULT_MARGIN, DEFAULT_MARGIN);
-    _mainLayout->setSpacing(DEFAULT_SPACING);
+    _mainLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
+    _mainLayout->setSpacing(SPACING_LOOSE);
 
     setupTabs();
 
@@ -80,8 +80,8 @@ void SettingsDialog::setupTabs() {
 void SettingsDialog::setupGeneralTab() {
     _generalTab = new QWidget();
     _generalTabLayout = new QVBoxLayout(_generalTab);
-    _generalTabLayout->setContentsMargins(DEFAULT_MARGIN, DEFAULT_MARGIN, DEFAULT_MARGIN, DEFAULT_MARGIN);
-    _generalTabLayout->setSpacing(DEFAULT_SPACING);
+    _generalTabLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
+    _generalTabLayout->setSpacing(SPACING_LOOSE);
 
     // Create and add widget instances
     _dataPathsWidget = new DataPathsWidget();
@@ -104,8 +104,8 @@ void SettingsDialog::setupGeneralTab() {
 void SettingsDialog::setupEditorTab() {
     _editorTab = new QWidget();
     _editorTabLayout = new QVBoxLayout(_editorTab);
-    _editorTabLayout->setContentsMargins(DEFAULT_MARGIN, DEFAULT_MARGIN, DEFAULT_MARGIN, DEFAULT_MARGIN);
-    _editorTabLayout->setSpacing(DEFAULT_SPACING);
+    _editorTabLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
+    _editorTabLayout->setSpacing(SPACING_LOOSE);
 
     // Create and add text editor widget
     _textEditorWidget = new TextEditorWidget();

@@ -1,5 +1,7 @@
 #include "MessageSelectorDialog.h"
 #include "../../format/msg/Msg.h"
+#include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 
 #include <QListWidget>
 #include <QPushButton>
@@ -26,7 +28,7 @@ MessageSelectorDialog::MessageSelectorDialog(const Msg* msgFile, int currentMess
     setWindowTitle("Select Message");
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setModal(true);
-    resize(500, 400);
+    resize(ui::constants::dialog_sizes::MEDIUM_WIDTH, ui::constants::dialog_sizes::MEDIUM_HEIGHT);
 
     setupUI();
     populateMessages();
@@ -38,12 +40,12 @@ int MessageSelectorDialog::getSelectedMessageId() const {
 
 void MessageSelectorDialog::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(8, 8, 8, 8);
-    _mainLayout->setSpacing(8);
+    _mainLayout->setContentsMargins(ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN);
+    _mainLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Title label
     _titleLabel = new QLabel("Select a message from the list:");
-    _titleLabel->setStyleSheet("QLabel { font-weight: bold; margin-bottom: 4px; }");
+    _titleLabel->setStyleSheet(ui::theme::styles::boldLabelWithMargin());
     _mainLayout->addWidget(_titleLabel);
 
     // Message list

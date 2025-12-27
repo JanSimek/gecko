@@ -60,20 +60,64 @@ inline QStringList weaponAnimations() {
 }
 
 /**
- * @brief Ammo caliber types
+ * @brief Ammo caliber types (19 types from proto.msg)
+ * FIXME: read directly from proto.msg?
  */
 inline QStringList ammoCaliberTypes() {
-    return { "None", ".223", ".44 Magnum", "Flamethrower Fuel",
-        "14mm", "2mm EC", "4.7mm Caseless", "9mm",
-        "7.62mm", "Batteries", "Micro Fusion Cell",
-        "Rocket", "Shotgun Shells", "Small Energy Cell", "HN Needler" };
+    return { "None", ".223 FMJ", "5mm JHP", "5mm AP", "10mm JHP", "10mm AP",
+        ".44 Magnum JHP", ".44 Magnum FMJ", "14mm AP", "12 ga. Shotgun",
+        "7.62mm", "9mm", "BB's", "Energy Cell", "Micro Fusion Cell",
+        "Small Energy Cell", "Flamethrower Fuel", "Rocket", "Plasma" };
 }
 
-// Constants for array sizing
-constexpr int DAMAGE_TYPES_BASIC = 7;
-constexpr int DAMAGE_TYPES_EXTENDED = 9;
-constexpr int MATERIAL_TYPES = 8;
-constexpr int ORIENTATIONS = 6;
-constexpr int ELEVATIONS = 3;
+/**
+ * @brief Weapon perks
+ */
+inline QStringList weaponPerks() {
+    return { "None", "Fast Shot", "Long Range", "Accurate", "Penetrate",
+        "Knockback", "Knockdown", "Flame", "Other" };
+}
+
+/**
+ * @brief Armor perks
+ */
+inline QStringList armorPerks() {
+    return { "None", "PowerArmor", "CombatArmor", "Other" };
+}
+
+/**
+ * @brief Container action flags
+ */
+inline QStringList containerFlags() {
+    return { "Use", "Use On", "Look", "Talk", "Pickup" };
+}
+
+/**
+ * @brief Critter genders
+ */
+inline QStringList critterGenders() {
+    return { "Male", "Female" };
+}
+
+/**
+ * @brief Critter body types
+ */
+inline QStringList critterBodyTypes() {
+    return { "Biped", "Quadruped", "Robotic" };
+}
+
+/**
+ * @brief Scenery subtypes
+ */
+inline QStringList sceneryTypes() {
+    return { "Door", "Stairs", "Elevator", "Ladder Bottom", "Ladder Top", "Generic" };
+}
+
+/**
+ * @brief Text file extensions (for syntax highlighting)
+ */
+inline QStringList textFileExtensions() {
+    return { "cfg", "txt", "gam", "msg", "lst", "int", "ssl", "ini" };
+}
 
 } // namespace geck::game::enums

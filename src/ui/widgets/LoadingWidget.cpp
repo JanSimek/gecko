@@ -2,6 +2,7 @@
 #include "../../state/loader/Loader.h"
 #include "../../util/Constants.h"
 #include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 
 #include <QVBoxLayout>
 #include <QLabel>
@@ -26,7 +27,7 @@ LoadingWidget::LoadingWidget(QWidget* parent)
     setModal(true);
     setWindowTitle("Loading");
     setWindowFlags(Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
-    setFixedSize(400, 150);
+    setFixedSize(ui::constants::dialog_sizes::LOADING_WIDTH, ui::constants::dialog_sizes::LOADING_HEIGHT);
 
     setupUI();
 
@@ -45,22 +46,18 @@ LoadingWidget::~LoadingWidget() {
 
 void LoadingWidget::setupUI() {
     _layout = new QVBoxLayout(this);
-    _layout->setContentsMargins(20, 20, 20, 20);
-    _layout->setSpacing(10);
+    _layout->setContentsMargins(ui::constants::DIALOG_PADDING, ui::constants::DIALOG_PADDING,
+        ui::constants::DIALOG_PADDING, ui::constants::DIALOG_PADDING);
+    _layout->setSpacing(ui::constants::SPACING_WIDE);
 
     // Title label
     _titleLabel = new QLabel("Loading", this);
-    QFont titleFont = font();
-    titleFont.setPointSize(16);
-    titleFont.setWeight(QFont::DemiBold);
-    _titleLabel->setFont(titleFont);
+    _titleLabel->setFont(ui::theme::fonts::largeTitle());
     _titleLabel->setAlignment(Qt::AlignCenter);
 
     // Status label
     _statusLabel = new QLabel("Initializing...", this);
-    QFont statusFont = font();
-    statusFont.setPointSize(11);
-    _statusLabel->setFont(statusFont);
+    _statusLabel->setFont(ui::theme::fonts::statusText());
     _statusLabel->setAlignment(Qt::AlignCenter);
     _statusLabel->setStyleSheet(ui::theme::styles::smallLabel());
 
@@ -77,7 +74,7 @@ void LoadingWidget::setupUI() {
     // Add widgets to layout
     _layout->addWidget(_titleLabel);
     _layout->addWidget(_statusLabel);
-    _layout->addSpacing(10);
+    _layout->addSpacing(ui::constants::SPACING_WIDE);
     _layout->addWidget(_progressBar);
     _layout->addStretch();
 

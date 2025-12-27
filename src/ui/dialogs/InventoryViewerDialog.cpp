@@ -6,6 +6,7 @@
 #include "../../format/pro/Pro.h"
 #include "../../format/msg/Msg.h"
 #include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 
 #include <QApplication>
 #include <QHeaderView>
@@ -69,11 +70,11 @@ void InventoryViewerDialog::setupUI() {
     setWindowTitle("Inventory Viewer");
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setModal(true);
-    resize(800, 600);
+    resize(ui::constants::dialog_sizes::LARGE_WIDTH, ui::constants::dialog_sizes::LARGE_HEIGHT);
 
     _mainLayout = new QVBoxLayout(this);
     _mainLayout->setContentsMargins(8, 8, 8, 4); // Reduce bottom margin
-    _mainLayout->setSpacing(4);                  // Reduce spacing between splitter and buttons
+    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);                  // Reduce spacing between splitter and buttons
 
     // Create splitter for left/right panels
     _splitter = new QSplitter(Qt::Horizontal);
@@ -82,7 +83,7 @@ void InventoryViewerDialog::setupUI() {
     _leftPanel = new QWidget();
     _leftLayout = new QVBoxLayout(_leftPanel);
     _leftLayout->setContentsMargins(0, 0, 0, 0);
-    _leftLayout->setSpacing(4);
+    _leftLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Inventory tree widget
     _inventoryTree = new QTreeWidget();
@@ -92,14 +93,14 @@ void InventoryViewerDialog::setupUI() {
     _inventoryTree->setHeaderLabels(headers);
 
     // Configure columns
-    _inventoryTree->setColumnWidth(COLUMN_ICON, 80);
-    _inventoryTree->setColumnWidth(COLUMN_NAME, 200);
-    _inventoryTree->setColumnWidth(COLUMN_TYPE, 120);
-    _inventoryTree->setColumnWidth(COLUMN_AMOUNT, 80);
-    _inventoryTree->setColumnWidth(COLUMN_PID, 80);
+    _inventoryTree->setColumnWidth(COLUMN_ICON, ui::constants::column_widths::ICON);
+    _inventoryTree->setColumnWidth(COLUMN_NAME, ui::constants::column_widths::NAME_WIDE);
+    _inventoryTree->setColumnWidth(COLUMN_TYPE, ui::constants::column_widths::TYPE_WIDE);
+    _inventoryTree->setColumnWidth(COLUMN_AMOUNT, ui::constants::column_widths::AMOUNT_WIDE);
+    _inventoryTree->setColumnWidth(COLUMN_PID, ui::constants::column_widths::PID);
 
     // Set uniform row height to accommodate larger icons
-    _inventoryTree->setIconSize(QSize(64, 64));
+    _inventoryTree->setIconSize(QSize(ui::constants::sizes::ICON_SIZE_LARGE, ui::constants::sizes::ICON_SIZE_LARGE));
     _inventoryTree->header()->setDefaultSectionSize(70); // Minimum height for rows
 
     _inventoryTree->setSortingEnabled(false);
@@ -124,19 +125,19 @@ void InventoryViewerDialog::setupUI() {
     _rightPanel = new QWidget();
     _rightLayout = new QVBoxLayout(_rightPanel);
     _rightLayout->setContentsMargins(0, 0, 0, 0);
-    _rightLayout->setSpacing(8);
+    _rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Preview group
     _previewGroup = new QGroupBox("Item Preview");
     _previewFormLayout = new QFormLayout(_previewGroup);
-    _previewFormLayout->setContentsMargins(8, 12, 8, 8);
-    _previewFormLayout->setSpacing(6);
+    _previewFormLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    _previewFormLayout->setSpacing(ui::constants::SPACING_FORM);
 
     // Item sprite preview
     _previewLabel = new QLabel("No item selected");
     _previewLabel->setAlignment(Qt::AlignCenter);
-    _previewLabel->setMinimumSize(120, 120);
-    _previewLabel->setMaximumSize(120, 120);
+    _previewLabel->setMinimumSize(ui::constants::sizes::PREVIEW_TILE, ui::constants::sizes::PREVIEW_TILE);
+    _previewLabel->setMaximumSize(ui::constants::sizes::PREVIEW_TILE, ui::constants::sizes::PREVIEW_TILE);
     _previewLabel->setScaledContents(false);
     _previewLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     _previewLabel->setStyleSheet(ui::theme::styles::previewArea());
@@ -168,7 +169,7 @@ void InventoryViewerDialog::setupUI() {
     _buttonPanel = new QWidget();
     _buttonLayout = new QHBoxLayout(_buttonPanel);
     _buttonLayout->setContentsMargins(0, 4, 0, 0); // Minimal margins - small top margin only
-    _buttonLayout->setSpacing(8);
+    _buttonLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Action buttons
     _addButton = new QPushButton("Add Item...");

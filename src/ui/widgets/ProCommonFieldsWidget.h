@@ -153,9 +153,6 @@ private:
 
     // Data storage
     std::shared_ptr<Pro> _pro;
-
-    // Material names mapping (from reference implementation)
-    static const QStringList getMaterialNames();
 };
 
 } // namespace geck

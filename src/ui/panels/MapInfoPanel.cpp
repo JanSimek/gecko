@@ -1,6 +1,7 @@
 #include "MapInfoPanel.h"
 #include "../theme/ThemeManager.h"
 #include "../GameEnums.h"
+#include "../UIConstants.h"
 
 #include <QHeaderView>
 #include <QApplication>
@@ -58,16 +59,16 @@ MapInfoPanel::MapInfoPanel(QWidget* parent)
 }
 
 QSize MapInfoPanel::sizeHint() const {
-    return QSize(340, 250);
+    return QSize(ui::constants::sizes::PANEL_PREFERRED_WIDTH, ui::constants::sizes::PANEL_PREFERRED_HEIGHT);
 }
 
 QSize MapInfoPanel::minimumSizeHint() const {
-    return QSize(200, 100);
+    return QSize(ui::constants::sizes::PANEL_MIN_SIZE_WIDTH, ui::constants::sizes::PANEL_MIN_SIZE_HEIGHT);
 }
 
 void MapInfoPanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(5, 5, 5, 5);
+    _mainLayout->setContentsMargins(ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN);
 
     // Create scroll area for content
     _scrollArea = new QScrollArea(this);
@@ -81,7 +82,7 @@ void MapInfoPanel::setupUI() {
     _contentWidget->setMinimumSize(0, 0);
     _contentWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     _contentLayout = new QVBoxLayout(_contentWidget);
-    _contentLayout->setContentsMargins(5, 5, 5, 5);
+    _contentLayout->setContentsMargins(ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN);
 
     // Map header group
     _mapHeaderGroup = new QGroupBox("Map Header");
@@ -112,11 +113,11 @@ void MapInfoPanel::setupUI() {
     _playerPositionSpin->setRange(0, HexPosition::MAX_VALUE); // Max hex position
     _setPositionButton = new QPushButton();
     _setPositionButton->setIcon(createIcon(":/icons/actions/map-pin.svg"));
-    _setPositionButton->setMaximumWidth(30);
+    _setPositionButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _setPositionButton->setToolTip("Click to select position on map");
     _centerViewButton = new QPushButton();
     _centerViewButton->setIcon(createIcon(":/icons/actions/target-arrow.svg"));
-    _centerViewButton->setMaximumWidth(30);
+    _centerViewButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _centerViewButton->setToolTip("Center view on player position");
     positionLayout->addWidget(_playerPositionSpin);
     positionLayout->addWidget(_setPositionButton);

@@ -86,6 +86,20 @@ namespace ui {
 
             // Standard UI font (cross-platform friendly)
             inline QFont standard() { return QFont("Segoe UI", 9); }
+
+            // Size-specific fonts for UI elements
+            inline QFont small() { return QFont("Segoe UI", 10); }
+            inline QFont title() { return QFont("Segoe UI", 14, QFont::Bold); }
+            inline QFont largeTitle() { return QFont("Segoe UI", 16, QFont::DemiBold); }
+            inline QFont statusText() { return QFont("Segoe UI", 11); }
+
+            // Monospace for code/data display
+            inline QFont monospace() { return QFont("Monaco, Consolas, 'Courier New', monospace", 10); }
+            inline QFont monospaceBold() {
+                QFont f("Monaco, Consolas, 'Courier New', monospace", 14);
+                f.setBold(true);
+                return f;
+            }
         }
 
         /**
@@ -307,6 +321,32 @@ namespace ui {
             inline QString italicSecondaryText() {
                 return QString("QLabel { color: %1; font-style: italic; }")
                     .arg(colors::TEXT_SECONDARY);
+            }
+
+            // Compact label (small, no margin/padding for tight layouts)
+            inline QString compactLabel() {
+                return QString("QLabel { font-size: 10px; margin: 0px; padding: 0px; }");
+            }
+
+            // Title/header label (bold, larger)
+            inline QString titleLabel() {
+                return QString("QLabel { font-weight: bold; font-size: 14px; padding: 4px; }");
+            }
+
+            // Compact widget (no margin/padding/border)
+            inline QString compactWidget() {
+                return QString("QWidget { margin: 0px; padding: 0px; border: none; }");
+            }
+
+            // Transparent background widget
+            inline QString transparentWidget() {
+                return QString("QLabel { background-color: transparent; }");
+            }
+
+            // Bold label with bottom margin (dialog titles)
+            inline QString boldLabelWithMargin() {
+                return QString("QLabel { font-weight: bold; margin-bottom: %1px; }")
+                    .arg(spacing::MARGIN_TIGHT);
             }
         }
 

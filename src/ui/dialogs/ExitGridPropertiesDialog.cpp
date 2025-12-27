@@ -28,7 +28,7 @@ ExitGridPropertiesDialog::ExitGridPropertiesDialog(QWidget* parent)
     setWindowTitle("Exit Grid Properties");
     setModal(true);
     setMinimumSize(350, 250);
-    resize(400, 300);
+    resize(ui::constants::dialog_sizes::SMALL_WIDTH, ui::constants::dialog_sizes::SMALL_HEIGHT);
 
     setupUI();
 }
@@ -40,8 +40,8 @@ ExitGridPropertiesDialog::ExitGridPropertiesDialog(const ExitGridProperties& pro
 
 void ExitGridPropertiesDialog::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(DEFAULT_MARGIN, DEFAULT_MARGIN, DEFAULT_MARGIN, DEFAULT_MARGIN);
-    _mainLayout->setSpacing(DEFAULT_SPACING);
+    _mainLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
+    _mainLayout->setSpacing(SPACING_LOOSE);
 
     setupFormLayout();
     setupButtonBox();
@@ -60,7 +60,7 @@ void ExitGridPropertiesDialog::setupUI() {
 
 void ExitGridPropertiesDialog::setupFormLayout() {
     _formLayout = new QFormLayout();
-    _formLayout->setSpacing(DEFAULT_SPACING);
+    _formLayout->setSpacing(SPACING_LOOSE);
 
     // Exit to worldmap checkbox
     _exitToWorldmapCheckBox = new QCheckBox("Exit to worldmap", this);

@@ -10,6 +10,8 @@
 #include <memory>
 #include <vector>
 
+#include "../UIConstants.h"
+
 class QGroupBox;
 
 namespace geck {
@@ -114,7 +116,6 @@ private:
     static constexpr int PREVIEW_MIN_HEIGHT = 150;
     static constexpr int PREVIEW_MAX_HEIGHT = 175;
     static constexpr int PREVIEW_MIN_WIDTH = 150;
-    static constexpr int ANIMATION_TIMER_INTERVAL = 200; // 5 FPS
     static constexpr int DIRECTIONS_COUNT = 6;
 
 protected:

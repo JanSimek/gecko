@@ -20,6 +20,7 @@
 #include "../../util/ResourceManager.h"
 #include "../IconHelper.h"
 #include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 #include "../../reader/ReaderFactory.h"
 
 namespace geck {
@@ -73,7 +74,7 @@ void ObjectPreviewWidget::setupUI() {
     // Title label below image (like armor preview)
     _titleLabel = new QLabel();
     _titleLabel->setAlignment(Qt::AlignCenter);
-    _titleLabel->setStyleSheet("QLabel { font-size: 10px; margin: 0px; padding: 0px; }");
+    _titleLabel->setStyleSheet(ui::theme::styles::compactLabel());
     _titleLabel->hide(); // Initially hidden until title is set
     mainLayout->addWidget(_titleLabel);
 
@@ -120,15 +121,15 @@ void ObjectPreviewWidget::setupUI() {
         _playPauseButton->setIcon(createIcon(":/icons/actions/play.svg"));
 
         _playPauseButton->setToolTip("Play/Stop animation");
-        _playPauseButton->setFixedSize(24, 24);
+        _playPauseButton->setFixedSize(ui::constants::sizes::ICON_BUTTON, ui::constants::sizes::ICON_BUTTON);
         _playPauseButton->setStyleSheet(ui::theme::styles::overlayButton());
-        _playPauseButton->setIconSize(QSize(18, 18));
+        _playPauseButton->setIconSize(QSize(ui::constants::sizes::ICON_SIZE_SMALL, ui::constants::sizes::ICON_SIZE_SMALL));
         _playPauseButton->hide(); // Initially hidden until preview is loaded
 
         // Setup animation timer
         _animationTimer = new QTimer(this);
         _animationTimer->setSingleShot(false);
-        _animationTimer->setInterval(ANIMATION_TIMER_INTERVAL);
+        _animationTimer->setInterval(ui::constants::ANIMATION_TIMER_INTERVAL);
 
         // Create rotate button overlay positioned on the preview label
         _rotateButton = new QPushButton(this);
@@ -136,9 +137,9 @@ void ObjectPreviewWidget::setupUI() {
         _rotateButton->setIcon(createIcon(":/icons/actions/rotate.svg"));
 
         _rotateButton->setToolTip("Rotate object direction");
-        _rotateButton->setFixedSize(24, 24);
+        _rotateButton->setFixedSize(ui::constants::sizes::ICON_BUTTON, ui::constants::sizes::ICON_BUTTON);
         _rotateButton->setStyleSheet(ui::theme::styles::overlayButton());
-        _rotateButton->setIconSize(QSize(18, 18));
+        _rotateButton->setIconSize(QSize(ui::constants::sizes::ICON_SIZE_SMALL, ui::constants::sizes::ICON_SIZE_SMALL));
         _rotateButton->hide(); // Initially hidden until preview is loaded
 
         // Connect animation control signals
@@ -157,9 +158,9 @@ void ObjectPreviewWidget::setupUI() {
     _editButton = new QPushButton(this);
     _editButton->setIcon(createIcon(":/icons/actions/edit.svg"));
     _editButton->setToolTip("Change FRM file");
-    _editButton->setFixedSize(24, 24);
+    _editButton->setFixedSize(ui::constants::sizes::ICON_BUTTON, ui::constants::sizes::ICON_BUTTON);
     _editButton->setStyleSheet(ui::theme::styles::overlayButton());
-    _editButton->setIconSize(QSize(18, 18));
+    _editButton->setIconSize(QSize(ui::constants::sizes::ICON_SIZE_SMALL, ui::constants::sizes::ICON_SIZE_SMALL));
     _editButton->setVisible(true); // Always visible
 
     // Connect edit button signal

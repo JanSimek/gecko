@@ -5,11 +5,13 @@
 #include "../../util/Settings.h"
 #include "../dialogs/ProEditorDialog.h"
 #include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 #include "../../reader/pro/ProReader.h"
 #include "../../reader/ReaderFactory.h"
 #include "../../format/pro/Pro.h"
 #include "../../format/msg/Msg.h"
 #include "../IconHelper.h"
+#include "../GameEnums.h"
 
 #include <QFileInfo>
 #include <QDir>
@@ -215,11 +217,8 @@ QIcon FileTreeItem::getFileIcon(const QString& fileName) {
 }
 
 bool FileBrowserPanel::isTextFile(const QString& filePath) const {
-    static const QStringList textExtensions = {
-        "cfg", "txt", "gam", "msg", "lst", "int", "ssl", "ini"
-    };
     QString suffix = QFileInfo(filePath).suffix().toLower();
-    return textExtensions.contains(suffix);
+    return game::enums::textFileExtensions().contains(suffix);
 }
 
 // FileBrowserPanel implementation
@@ -310,8 +309,8 @@ FileBrowserPanel::~FileBrowserPanel() {
 
 void FileBrowserPanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(4, 4, 4, 4);
-    _mainLayout->setSpacing(4);
+    _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
+    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     setupFilterControls();
     setupTreeView();
@@ -416,7 +415,7 @@ void FileBrowserPanel::setupStatusBar() {
     statusLayout->addWidget(_statusLabel, 1);
 
     _progressBar = new QProgressBar(this);
-    _progressBar->setMaximumHeight(16);
+    _progressBar->setMaximumHeight(ui::constants::sizes::HEIGHT_PROGRESS_BAR);
     _progressBar->setVisible(false);
     statusLayout->addWidget(_progressBar);
 

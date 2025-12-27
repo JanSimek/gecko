@@ -1,5 +1,6 @@
 #include "ProDrugWidget.h"
 #include "../../theme/ThemeManager.h"
+#include "../../UIConstants.h"
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -36,8 +37,8 @@ void ProDrugWidget::setupUI() {
     QGroupBox* effectsGroup = new QGroupBox("Modify Stats");
     effectsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QGridLayout* effectsGridLayout = new QGridLayout(effectsGroup);
-    effectsGridLayout->setContentsMargins(8, 12, 8, 8);
-    effectsGridLayout->setSpacing(6);
+    effectsGridLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    effectsGridLayout->setSpacing(ui::constants::SPACING_FORM);
 
     // Header row (row 0)
     effectsGridLayout->addWidget(new QLabel(""), 0, 0); // Empty space for stat labels
@@ -97,7 +98,7 @@ void ProDrugWidget::setupUI() {
     _mainLayout->addWidget(effectsGroup);
 
     // Add some spacing
-    _mainLayout->addSpacing(10);
+    _mainLayout->addSpacing(ui::constants::SPACING_WIDE);
 
     // === Effect Timing Group ===
     QGroupBox* timingGroup = new QGroupBox("Effect Timing");
@@ -114,7 +115,7 @@ void ProDrugWidget::setupUI() {
     _mainLayout->addWidget(timingGroup);
 
     // Add some spacing
-    _mainLayout->addSpacing(10);
+    _mainLayout->addSpacing(ui::constants::SPACING_WIDE);
 
     // === Addiction Group ===
     QGroupBox* addictionGroup = new QGroupBox("Addiction");

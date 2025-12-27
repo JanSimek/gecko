@@ -1,6 +1,7 @@
 #include "SelectionPanel.h"
 #include "../dialogs/FrmSelectorDialog.h"
 #include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 
 #include <QFormLayout>
 #include <QPixmap>
@@ -73,9 +74,9 @@ void HoverSpriteLabel::setupEditButton() {
     _editButton = new QPushButton(this);
     _editButton->setIcon(createIcon(":/icons/actions/edit.svg"));
     _editButton->setToolTip("Change FRM file");
-    _editButton->setFixedSize(24, 24);
+    _editButton->setFixedSize(ui::constants::sizes::ICON_BUTTON, ui::constants::sizes::ICON_BUTTON);
     _editButton->setStyleSheet(ui::theme::styles::overlayButton());
-    _editButton->setIconSize(QSize(18, 18));
+    _editButton->setIconSize(QSize(ui::constants::sizes::ICON_SIZE_SMALL, ui::constants::sizes::ICON_SIZE_SMALL));
     _editButton->setVisible(false); // Hidden by default
     _editButton->raise();
 }
@@ -119,11 +120,11 @@ const int SelectionPanel::ICON_SIZE = 96; // Larger icons than the separate pane
 const int SelectionPanel::MAX_QUANTITY_DISPLAY = 99;
 
 QSize SelectionPanel::sizeHint() const {
-    return QSize(360, 250);
+    return QSize(ui::constants::sizes::PANEL_PREFERRED_WIDTH, ui::constants::sizes::PANEL_PREFERRED_HEIGHT);
 }
 
 QSize SelectionPanel::minimumSizeHint() const {
-    return QSize(200, 100);
+    return QSize(ui::constants::sizes::PANEL_MIN_SIZE_WIDTH, ui::constants::sizes::PANEL_MIN_SIZE_HEIGHT);
 }
 
 SelectionPanel::SelectionPanel(QWidget* parent)
@@ -180,7 +181,7 @@ SelectionPanel::SelectionPanel(QWidget* parent)
 
 void SelectionPanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(5, 5, 5, 5);
+    _mainLayout->setContentsMargins(ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN);
 
     // Create scroll area for content
     _scrollArea = new QScrollArea(this);
@@ -193,7 +194,7 @@ void SelectionPanel::setupUI() {
     _contentWidget->setMinimumSize(0, 0);
     _contentWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     _contentLayout = new QVBoxLayout(_contentWidget);
-    _contentLayout->setContentsMargins(5, 5, 5, 5);
+    _contentLayout->setContentsMargins(ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN);
 
     // Create stacked widget to switch between object and tile panels
     _stackedWidget = new QStackedWidget();
@@ -214,10 +215,10 @@ void SelectionPanel::setupUI() {
     _hoverSpriteLabel = new HoverSpriteLabel();
     _hoverSpriteLabel->setText("No object selected");
     _hoverSpriteLabel->setAlignment(Qt::AlignCenter);
-    _hoverSpriteLabel->setMinimumHeight(128);
-    _hoverSpriteLabel->setMinimumWidth(128);
-    _hoverSpriteLabel->setMaximumHeight(128);
-    _hoverSpriteLabel->setMaximumWidth(128);
+    _hoverSpriteLabel->setMinimumHeight(ui::constants::sizes::PREVIEW_MEDIUM);
+    _hoverSpriteLabel->setMinimumWidth(ui::constants::sizes::PREVIEW_MEDIUM);
+    _hoverSpriteLabel->setMaximumHeight(ui::constants::sizes::PREVIEW_MEDIUM);
+    _hoverSpriteLabel->setMaximumWidth(ui::constants::sizes::PREVIEW_MEDIUM);
     _hoverSpriteLabel->setScaledContents(false);
     _hoverSpriteLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     _hoverSpriteLabel->setStyleSheet(ui::theme::styles::previewArea());
@@ -314,10 +315,10 @@ void SelectionPanel::setupUI() {
     // Tile preview display
     _tilePreviewLabel = new QLabel("No tile selected");
     _tilePreviewLabel->setAlignment(Qt::AlignCenter);
-    _tilePreviewLabel->setMinimumHeight(96);
-    _tilePreviewLabel->setMinimumWidth(128);
-    _tilePreviewLabel->setMaximumHeight(96);
-    _tilePreviewLabel->setMaximumWidth(128);
+    _tilePreviewLabel->setMinimumHeight(ui::constants::sizes::PREVIEW_TILE_HEIGHT);
+    _tilePreviewLabel->setMinimumWidth(ui::constants::sizes::PREVIEW_MEDIUM);
+    _tilePreviewLabel->setMaximumHeight(ui::constants::sizes::PREVIEW_TILE_HEIGHT);
+    _tilePreviewLabel->setMaximumWidth(ui::constants::sizes::PREVIEW_MEDIUM);
     _tilePreviewLabel->setScaledContents(false);
     _tilePreviewLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     _tilePreviewLabel->setStyleSheet(ui::theme::styles::previewArea());
@@ -997,7 +998,7 @@ void SelectionPanel::applyHorizontalLayout() {
     QWidget* newContainer = new QWidget();
     QHBoxLayout* hLayout = new QHBoxLayout(newContainer);
     hLayout->setContentsMargins(0, 0, 0, 0);
-    hLayout->setSpacing(10);
+    hLayout->setSpacing(ui::constants::SPACING_WIDE);
 
     // Create left side for object info
     QWidget* leftSide = new QWidget();
@@ -1059,13 +1060,13 @@ void SelectionPanel::setupInventorySection() {
     _inventoryTree = new QTreeWidget();
     _inventoryTree->setHeaderLabels({ "", "Name", "Type", "Amount" });
     _inventoryTree->setColumnWidth(COLUMN_ICON, ICON_SIZE + 20);
-    _inventoryTree->setColumnWidth(COLUMN_NAME, 150);
-    _inventoryTree->setColumnWidth(COLUMN_TYPE, 100);
-    _inventoryTree->setColumnWidth(COLUMN_AMOUNT, 80);
+    _inventoryTree->setColumnWidth(COLUMN_NAME, ui::constants::column_widths::NAME_SHORT);
+    _inventoryTree->setColumnWidth(COLUMN_TYPE, ui::constants::column_widths::TYPE);
+    _inventoryTree->setColumnWidth(COLUMN_AMOUNT, ui::constants::column_widths::AMOUNT_WIDE);
     _inventoryTree->setRootIsDecorated(false);
     _inventoryTree->setAlternatingRowColors(true);
     _inventoryTree->setSelectionMode(QAbstractItemView::SingleSelection);
-    _inventoryTree->setMinimumHeight(300);
+    _inventoryTree->setMinimumHeight(ui::constants::sizes::PANEL_MIN_HEIGHT);
     _inventoryTree->setIconSize(QSize(ICON_SIZE, ICON_SIZE));
 
     // Set uniform item heights for larger icons
@@ -1258,9 +1259,8 @@ QPixmap SelectionPanel::addQuantityOverlay(const QPixmap& baseIcon, int amount) 
         quantityText = QString::number(amount);
     }
 
-    QFont font = painter.font();
+    QFont font = ui::theme::fonts::small();
     font.setBold(true);
-    font.setPointSize(10);
     painter.setFont(font);
 
     QFontMetrics fm(font);

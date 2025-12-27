@@ -1,5 +1,6 @@
 #include "FrmSelectorDialog.h"
 #include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 
 #include <QApplication>
 #include <QPixmap>
@@ -44,7 +45,7 @@ FrmSelectorDialog::FrmSelectorDialog(QWidget* parent)
 void FrmSelectorDialog::setupUI() {
     setWindowTitle("Select FRM File");
     setModal(true);
-    resize(800, 600);
+    resize(ui::constants::dialog_sizes::LARGE_WIDTH, ui::constants::dialog_sizes::LARGE_HEIGHT);
 
     _mainLayout = new QVBoxLayout(this);
 
@@ -78,8 +79,8 @@ void FrmSelectorDialog::setupUI() {
 
     _previewLabel = new QLabel("No FRM selected");
     _previewLabel->setAlignment(Qt::AlignCenter);
-    _previewLabel->setMinimumHeight(200);
-    _previewLabel->setMinimumWidth(200);
+    _previewLabel->setMinimumHeight(ui::constants::sizes::PREVIEW_LARGE);
+    _previewLabel->setMinimumWidth(ui::constants::sizes::PREVIEW_LARGE);
     _previewLabel->setScaledContents(false);
     _previewLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     _previewLabel->setStyleSheet(ui::theme::styles::previewArea());

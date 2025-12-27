@@ -7,6 +7,7 @@
 #include "util/ResourceManager.h"
 #include "../../theme/ThemeManager.h"
 #include "../../GameEnums.h"
+#include "../../UIConstants.h"
 
 namespace geck {
 
@@ -32,19 +33,19 @@ ProArmorWidget::ProArmorWidget(QWidget* parent)
 void ProArmorWidget::setupUI() {
     // Create two-column layout
     QHBoxLayout* columnsLayout = new QHBoxLayout();
-    columnsLayout->setSpacing(12);
+    columnsLayout->setSpacing(ui::constants::SPACING_COLUMNS);
 
     // Left column
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(8);
+    leftLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Right column
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(8);
+    rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // === LEFT COLUMN: Protection Values ===
 
@@ -65,9 +66,9 @@ void ProArmorWidget::setupUI() {
     QGroupBox* defenceGroup = new QGroupBox("Defence State");
     defenceGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QGridLayout* defenceLayout = new QGridLayout(defenceGroup);
-    defenceLayout->setContentsMargins(8, 12, 8, 8);
-    defenceLayout->setSpacing(2);
-    defenceLayout->setHorizontalSpacing(2);
+    defenceLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    defenceLayout->setSpacing(ui::constants::SPACING_GRID);
+    defenceLayout->setHorizontalSpacing(ui::constants::SPACING_GRID);
 
     const QStringList damageTypes = game::enums::damageTypes7();
 
@@ -87,13 +88,13 @@ void ProArmorWidget::setupUI() {
         // Damage type label
         QLabel* typeLabel = new QLabel(damageTypes[i]);
         typeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        typeLabel->setFixedSize(50, 19);
+        typeLabel->setFixedSize(ui::constants::sizes::WIDTH_TYPE_LABEL, ui::constants::sizes::HEIGHT_TYPE_LABEL);
         defenceLayout->addWidget(typeLabel, i + 1, 0);
 
         // Threshold input
         _damageThresholdEdits[i] = createSpinBox(0, 999,
             QString("Damage threshold against %1 damage").arg(damageTypes[i]));
-        _damageThresholdEdits[i]->setFixedWidth(40);
+        _damageThresholdEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_SMALL);
         connect(_damageThresholdEdits[i], QOverload<int>::of(&QSpinBox::valueChanged),
             this, &ProArmorWidget::updateAIPriority);
         defenceLayout->addWidget(_damageThresholdEdits[i], i + 1, 1);
@@ -107,7 +108,7 @@ void ProArmorWidget::setupUI() {
         // Resistance input
         _damageResistEdits[i] = createSpinBox(0, 100,
             QString("Damage resistance against %1 damage").arg(damageTypes[i]));
-        _damageResistEdits[i]->setFixedWidth(40);
+        _damageResistEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_SMALL);
         connect(_damageResistEdits[i], QOverload<int>::of(&QSpinBox::valueChanged),
             this, &ProArmorWidget::updateAIPriority);
         defenceLayout->addWidget(_damageResistEdits[i], i + 1, 3);
@@ -127,13 +128,13 @@ void ProArmorWidget::setupUI() {
     QGroupBox* viewsGroup = new QGroupBox("Armor Views");
     viewsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QVBoxLayout* viewsLayout = new QVBoxLayout(viewsGroup);
-    viewsLayout->setContentsMargins(8, 12, 8, 8);
-    viewsLayout->setSpacing(8);
+    viewsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    viewsLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Horizontal layout for male/female previews
     QHBoxLayout* previewsLayout = new QHBoxLayout();
     previewsLayout->setContentsMargins(0, 0, 0, 0);
-    previewsLayout->setSpacing(8);
+    previewsLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Male preview
     _armorMalePreviewWidget = new ObjectPreviewWidget(this,
@@ -158,7 +159,7 @@ void ProArmorWidget::setupUI() {
     QFormLayout* miscLayout = createStandardFormLayout();
     static_cast<QVBoxLayout*>(miscGroup->layout())->addLayout(miscLayout);
 
-    _armorPerkCombo = createComboBox({ "None", "PowerArmor", "CombatArmor", "Other" },
+    _armorPerkCombo = createComboBox(game::enums::armorPerks(),
         "Special perk associated with this armor");
     miscLayout->addRow("Perk:", _armorPerkCombo);
 

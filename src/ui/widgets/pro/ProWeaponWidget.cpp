@@ -4,6 +4,7 @@
 #include <QHBoxLayout>
 #include "../../theme/ThemeManager.h"
 #include "../../GameEnums.h"
+#include "../../UIConstants.h"
 
 namespace geck {
 
@@ -35,19 +36,19 @@ ProWeaponWidget::ProWeaponWidget(QWidget* parent)
 void ProWeaponWidget::setupUI() {
     // Create two-column layout
     QHBoxLayout* columnsLayout = new QHBoxLayout();
-    columnsLayout->setSpacing(12);
+    columnsLayout->setSpacing(ui::constants::SPACING_COLUMNS);
 
     // Left column
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(8);
+    leftLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Right column
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(8);
+    rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // === LEFT COLUMN: Damage & Attack ===
 
@@ -122,7 +123,7 @@ void ProWeaponWidget::setupUI() {
     _weaponCriticalFailEdit = createSpinBox(0, 100, "Critical failure chance");
     reqLayout->addRow("Critical Fail:", _weaponCriticalFailEdit);
 
-    _weaponPerkCombo = createComboBox({ "None", "Penetrate", "Knockback", "Knockdown", "Other" },
+    _weaponPerkCombo = createComboBox(game::enums::weaponPerks(),
         "Special perk associated with weapon");
     reqLayout->addRow("Perk:", _weaponPerkCombo);
 
@@ -137,10 +138,7 @@ void ProWeaponWidget::setupUI() {
     _weaponBurstRoundsEdit = createSpinBox(0, 99, "Number of rounds per burst");
     ammoLayout->addRow("Burst Rounds:", _weaponBurstRoundsEdit);
 
-    _weaponAmmoTypeCombo = createComboBox({ "None", ".223 FMJ", "5mm JHP", "5mm AP", "10mm JHP", "10mm AP",
-                                              ".44 Magnum JHP", ".44 Magnum FMJ", "14mm AP", "12 ga. Shotgun",
-                                              "7.62mm", "9mm", "BB's", "Energy Cell", "Micro Fusion Cell",
-                                              "Small Energy Cell", "Flamethrower Fuel", "Rocket", "Plasma" },
+    _weaponAmmoTypeCombo = createComboBox(game::enums::ammoCaliberTypes(),
         "Ammunition type");
     ammoLayout->addRow("Ammo Type:", _weaponAmmoTypeCombo);
 

@@ -56,7 +56,7 @@ void GameLocationWidget::setupUI() {
 
     // Steam App ID input
     _steamLayout = new QHBoxLayout();
-    _steamLayout->setContentsMargins(INDENT_MARGIN, 0, 0, 0);
+    _steamLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0);
 
     _steamAppIdLabel = new QLabel("Steam App ID:");
     _steamLayout->addWidget(_steamAppIdLabel);
@@ -81,7 +81,7 @@ void GameLocationWidget::setupUI() {
 
     // Executable location input
     _executableLayout = new QHBoxLayout();
-    _executableLayout->setContentsMargins(INDENT_MARGIN, 0, 0, 0);
+    _executableLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0);
 
     _executableLocationEdit = new QLineEdit();
     _executableLocationEdit->setPlaceholderText("Path to Fallout 2 executable (e.g., fallout2.exe)...");
@@ -96,12 +96,12 @@ void GameLocationWidget::setupUI() {
 
     // Game data directory (for executable installs)
     _dataDirectoryLabel = new QLabel("Game Data Directory:");
-    _dataDirectoryLabel->setContentsMargins(INDENT_MARGIN, 8, 0, 0);
+    _dataDirectoryLabel->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 8, 0, 0);
     _dataDirectoryLabel->setStyleSheet(ui::theme::styles::smallLabel());
     _layout->addWidget(_dataDirectoryLabel);
 
     _dataDirectoryLayout = new QHBoxLayout();
-    _dataDirectoryLayout->setContentsMargins(INDENT_MARGIN, 0, 0, 0);
+    _dataDirectoryLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0);
 
     _dataDirectoryEdit = new QLineEdit();
     _dataDirectoryEdit->setPlaceholderText("Path to game directory containing ddraw.ini...");

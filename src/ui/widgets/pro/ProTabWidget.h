@@ -197,7 +197,6 @@ protected:
     // Common constants
     static constexpr int LAYOUT_SPACING = 10;
     static constexpr int FORM_SPACING = 6;
-    static constexpr int GROUP_MARGINS = 8;
 };
 
 } // namespace geck

@@ -6,6 +6,7 @@
 #include "../../format/pro/Pro.h"
 #include "../../format/msg/Msg.h"
 #include "../theme/ThemeManager.h"
+#include "../UIConstants.h"
 
 #include <QApplication>
 #include <QHeaderView>
@@ -52,8 +53,8 @@ InventoryPanel::InventoryPanel(QWidget* parent)
 
 void InventoryPanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(4, 4, 4, 4);
-    _mainLayout->setSpacing(4);
+    _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
+    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Create splitter for left/right panels
     _splitter = new QSplitter(Qt::Horizontal);
@@ -62,7 +63,7 @@ void InventoryPanel::setupUI() {
     _leftPanel = new QWidget();
     _leftLayout = new QVBoxLayout(_leftPanel);
     _leftLayout->setContentsMargins(0, 0, 0, 0);
-    _leftLayout->setSpacing(4);
+    _leftLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     // Inventory tree widget
     _inventoryTree = new QTreeWidget();
@@ -72,11 +73,11 @@ void InventoryPanel::setupUI() {
     _inventoryTree->setHeaderLabels(headers);
 
     // Configure columns
-    _inventoryTree->setColumnWidth(COLUMN_ICON, 80);
-    _inventoryTree->setColumnWidth(COLUMN_NAME, 180);
-    _inventoryTree->setColumnWidth(COLUMN_TYPE, 100);
-    _inventoryTree->setColumnWidth(COLUMN_AMOUNT, 60);
-    _inventoryTree->setColumnWidth(COLUMN_PID, 80);
+    _inventoryTree->setColumnWidth(COLUMN_ICON, ui::constants::column_widths::ICON);
+    _inventoryTree->setColumnWidth(COLUMN_NAME, ui::constants::column_widths::NAME_MEDIUM);
+    _inventoryTree->setColumnWidth(COLUMN_TYPE, ui::constants::column_widths::TYPE);
+    _inventoryTree->setColumnWidth(COLUMN_AMOUNT, ui::constants::column_widths::AMOUNT);
+    _inventoryTree->setColumnWidth(COLUMN_PID, ui::constants::column_widths::PID);
 
     // Set icon size and row height
     _inventoryTree->setIconSize(QSize(ICON_SIZE, ICON_SIZE));
@@ -104,13 +105,13 @@ void InventoryPanel::setupUI() {
     _rightPanel = new QWidget();
     _rightLayout = new QVBoxLayout(_rightPanel);
     _rightLayout->setContentsMargins(0, 0, 0, 0);
-    _rightLayout->setSpacing(8);
+    _rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Preview group
     _previewGroup = new QGroupBox("Item Preview");
     _previewFormLayout = new QFormLayout(_previewGroup);
-    _previewFormLayout->setContentsMargins(8, 12, 8, 8);
-    _previewFormLayout->setSpacing(6);
+    _previewFormLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
+    _previewFormLayout->setSpacing(ui::constants::SPACING_FORM);
 
     // Item sprite preview
     _previewLabel = new QLabel("No item selected");
@@ -141,7 +142,7 @@ void InventoryPanel::setupUI() {
     _buttonPanel = new QWidget();
     _buttonLayout = new QVBoxLayout(_buttonPanel);
     _buttonLayout->setContentsMargins(0, 0, 0, 0);
-    _buttonLayout->setSpacing(4);
+    _buttonLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _addButton = new QPushButton("Add Item...");
     _addButton->setEnabled(false); // Disabled until inventory object is selected
@@ -295,8 +296,7 @@ QPixmap InventoryPanel::addQuantityOverlay(const QPixmap& baseIcon, int amount) 
     QString quantityText = (amount <= MAX_QUANTITY_DISPLAY) ? QString("x%1").arg(amount) : QString("x%1+").arg(MAX_QUANTITY_DISPLAY);
 
     // Set up font and pen - make it bold and visible
-    QFont font = painter.font();
-    font.setPointSize(10);
+    QFont font = ui::theme::fonts::small();
     font.setBold(true);
     painter.setFont(font);
 

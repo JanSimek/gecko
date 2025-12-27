@@ -1,4 +1,5 @@
 #include "PaginationWidget.h"
+#include "../UIConstants.h"
 #include <QHBoxLayout>
 
 namespace geck {
@@ -15,14 +16,14 @@ PaginationWidget::PaginationWidget(QWidget* parent)
 
     // First page button
     _firstButton = new QPushButton("|◀", this);
-    _firstButton->setMaximumWidth(30);
+    _firstButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _firstButton->setToolTip("Go to first page");
     connect(_firstButton, &QPushButton::clicked, this, &PaginationWidget::onFirstButtonClicked);
     _layout->addWidget(_firstButton);
 
     // Previous button
     _prevButton = new QPushButton("◀", this);
-    _prevButton->setMaximumWidth(30);
+    _prevButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _prevButton->setToolTip("Previous page");
     connect(_prevButton, &QPushButton::clicked, this, &PaginationWidget::onPrevButtonClicked);
     _layout->addWidget(_prevButton);
@@ -43,14 +44,14 @@ PaginationWidget::PaginationWidget(QWidget* parent)
 
     // Next button
     _nextButton = new QPushButton("▶", this);
-    _nextButton->setMaximumWidth(30);
+    _nextButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _nextButton->setToolTip("Next page");
     connect(_nextButton, &QPushButton::clicked, this, &PaginationWidget::onNextButtonClicked);
     _layout->addWidget(_nextButton);
 
     // Last page button
     _lastButton = new QPushButton("▶|", this);
-    _lastButton->setMaximumWidth(30);
+    _lastButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _lastButton->setToolTip("Go to last page");
     connect(_lastButton, &QPushButton::clicked, this, &PaginationWidget::onLastButtonClicked);
     _layout->addWidget(_lastButton);
