@@ -203,8 +203,8 @@ T* ResourceManager::getResource(const Key& id) {
         return resource;
     }
 
-    // TODO: load on-demand
-    spdlog::error("Resource {} not found in resource cache", id);
+    // Resource not in cache - caller may load it on-demand
+    spdlog::debug("Resource {} not found in resource cache", id);
 
     return nullptr;
 }

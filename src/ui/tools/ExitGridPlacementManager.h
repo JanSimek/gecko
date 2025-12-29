@@ -57,9 +57,6 @@ private:
     // Show properties dialog and handle result
     bool showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing = nullptr);
 
-    // Find available exit grid PID (16-23)
-    uint32_t getAvailableExitGridPID() const;
-
     EditorWidget* _editor;
 
     // State

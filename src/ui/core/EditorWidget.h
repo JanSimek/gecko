@@ -161,6 +161,20 @@ public:
     void registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
 
+    // Exit grid undo support
+    struct ExitGridState {
+        uint32_t exitMap;
+        uint32_t exitPosition;
+        uint32_t exitElevation;
+        uint32_t exitOrientation;
+        uint32_t frmPid;
+        uint32_t proPid;
+    };
+    void registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation);
+    void registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
+                              const std::vector<ExitGridState>& beforeStates,
+                              const std::vector<ExitGridState>& afterStates);
+
 signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
@@ -199,6 +213,7 @@ private:
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void pushCommand(UndoCommand cmd);
+
     // Error tracking for sprite loading
     struct LoadingErrors {
         size_t objectsSkipped = 0;

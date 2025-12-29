@@ -130,6 +130,25 @@ namespace WallBlockers {
     constexpr uint32_t GENERIC_PROTO_ID = 24; ///< Proto 24 - Generic small object
 }
 
+// Exit Grid constants
+namespace ExitGrid {
+    // Destination map IDs for special exits
+    constexpr uint32_t TOWN_MAP_EXIT = 0xFFFFFFFF;  ///< -1: Opens town map view
+    constexpr uint32_t WORLD_MAP_EXIT = 0xFFFFFFFE; ///< -2: Opens world map view
+
+    // Proto PIDs for exit grids (MISC type 0x05, indices 16-23)
+    constexpr uint32_t FIRST_EXIT_GRID_PID = 0x05000010; ///< First exit grid proto (index 16)
+    constexpr uint32_t LAST_EXIT_GRID_PID = 0x05000017;  ///< Last exit grid proto (index 23)
+
+    // Map-to-map exit grid
+    constexpr uint32_t MAP_EXIT_PRO_PID = 0x05000013; ///< Proto for map exit (index 19)
+    constexpr uint32_t MAP_EXIT_FRM_PID = 0x05000014; ///< FRM for map exit (index 20) -> exitgrd4.frm
+
+    // World map exit grid
+    constexpr uint32_t WORLD_EXIT_PRO_PID = 0x05000012; ///< Proto for worldmap exit (index 18)
+    constexpr uint32_t WORLD_EXIT_FRM_PID = 0x05000023; ///< FRM for worldmap exit (index 35) -> ext2grd3.frm
+}
+
 // Map defaults
 namespace MapDefaults {
     constexpr uint32_t PLAYER_DEFAULT_POSITION = 19896; ///< Center of map (hex 99,99 area)

@@ -157,7 +157,7 @@ void EditorWidget::addPlacedObject(const std::shared_ptr<MapObject>& mapObject, 
             mapObject != nullptr, object != nullptr, _map != nullptr);
         return;
     }
-    if (mapObject->elevation < 0 || mapObject->elevation >= 3) {
+    if (mapObject->elevation >= 3) {
         spdlog::error("addPlacedObject: Invalid elevation {}", mapObject->elevation);
         return;
     }
@@ -174,7 +174,7 @@ void EditorWidget::removePlacedObject(const std::shared_ptr<MapObject>& mapObjec
             mapObject != nullptr, _map != nullptr);
         return;
     }
-    if (mapObject->elevation < 0 || mapObject->elevation >= 3) {
+    if (mapObject->elevation >= 3) {
         spdlog::error("removePlacedObject: Invalid elevation {}", mapObject->elevation);
         return;
     }
@@ -346,6 +346,84 @@ void EditorWidget::registerObjectFrmChange(const std::shared_ptr<Object>& object
 
     // Apply redo immediately - FRM change needs to be applied
     cmd.redo();
+    pushCommand(std::move(cmd));
+}
+
+void EditorWidget::registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation) {
+    if (exitGrids.empty()) {
+        return;
+    }
+
+    UndoCommand cmd;
+    cmd.description = exitGrids.size() == 1 ? "Place Exit Grid" : "Place Exit Grids";
+
+    cmd.undo = [this, exitGrids, elevation]() {
+        if (!_map) return;
+        auto& mapFile = _map->getMapFile();
+        if (mapFile.map_objects.find(elevation) == mapFile.map_objects.end()) return;
+
+        auto& elevationObjects = mapFile.map_objects[elevation];
+        for (const auto& exitGrid : exitGrids) {
+            elevationObjects.erase(
+                std::remove(elevationObjects.begin(), elevationObjects.end(), exitGrid),
+                elevationObjects.end());
+        }
+        refreshObjects();
+    };
+
+    cmd.redo = [this, exitGrids, elevation]() {
+        if (!_map) return;
+        auto& mapFile = _map->getMapFile();
+
+        for (const auto& exitGrid : exitGrids) {
+            mapFile.map_objects[elevation].push_back(exitGrid);
+        }
+        refreshObjects();
+    };
+
+    // Apply redo immediately - exit grid was just created
+    cmd.redo();
+    pushCommand(std::move(cmd));
+}
+
+void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
+                                        const std::vector<ExitGridState>& beforeStates,
+                                        const std::vector<ExitGridState>& afterStates) {
+    if (exitGrids.empty() || exitGrids.size() != beforeStates.size() || exitGrids.size() != afterStates.size()) {
+        spdlog::warn("registerExitGridEdit: Invalid input sizes - grids:{} before:{} after:{}",
+            exitGrids.size(), beforeStates.size(), afterStates.size());
+        return;
+    }
+
+    UndoCommand cmd;
+    cmd.description = exitGrids.size() == 1 ? "Edit Exit Grid" : "Edit Exit Grids";
+
+    cmd.undo = [this, exitGrids, beforeStates]() {
+        for (size_t i = 0; i < exitGrids.size(); ++i) {
+            if (!exitGrids[i]) continue;
+            exitGrids[i]->exit_map = beforeStates[i].exitMap;
+            exitGrids[i]->exit_position = beforeStates[i].exitPosition;
+            exitGrids[i]->exit_elevation = beforeStates[i].exitElevation;
+            exitGrids[i]->exit_orientation = beforeStates[i].exitOrientation;
+            exitGrids[i]->frm_pid = beforeStates[i].frmPid;
+            exitGrids[i]->pro_pid = beforeStates[i].proPid;
+        }
+        refreshObjects();
+    };
+
+    cmd.redo = [this, exitGrids, afterStates]() {
+        for (size_t i = 0; i < exitGrids.size(); ++i) {
+            if (!exitGrids[i]) continue;
+            exitGrids[i]->exit_map = afterStates[i].exitMap;
+            exitGrids[i]->exit_position = afterStates[i].exitPosition;
+            exitGrids[i]->exit_elevation = afterStates[i].exitElevation;
+            exitGrids[i]->exit_orientation = afterStates[i].exitOrientation;
+            exitGrids[i]->frm_pid = afterStates[i].frmPid;
+            exitGrids[i]->pro_pid = afterStates[i].proPid;
+        }
+        refreshObjects();
+    };
+
     pushCommand(std::move(cmd));
 }
 

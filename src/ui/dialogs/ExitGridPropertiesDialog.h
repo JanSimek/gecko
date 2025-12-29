@@ -48,13 +48,14 @@ private slots:
     void onPositionChanged();
     void validateInput();
     void onExitToWorldmapToggled(bool checked);
+    void onTownMapToggled(bool checked);
 
 private:
     void setupUI();
     void setupFormLayout();
     void setupButtonBox();
-    void initializeDefaults();
     void updateUI();
+    void updateMapControlsEnabled();
     bool isValidInput() const;
 
     // UI Components
@@ -64,6 +65,7 @@ private:
 
     // Input fields
     QCheckBox* _exitToWorldmapCheckBox;
+    QCheckBox* _townMapCheckBox;
     QSpinBox* _mapIdSpinBox;
     QSpinBox* _positionSpinBox;
     QComboBox* _elevationComboBox;

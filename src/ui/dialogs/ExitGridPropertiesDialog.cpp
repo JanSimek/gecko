@@ -62,16 +62,22 @@ void ExitGridPropertiesDialog::setupFormLayout() {
     _formLayout = new QFormLayout();
     _formLayout->setSpacing(SPACING_LOOSE);
 
-    // Exit to worldmap checkbox
-    _exitToWorldmapCheckBox = new QCheckBox("Exit to worldmap", this);
-    _exitToWorldmapCheckBox->setToolTip("When checked, exit leads to worldmap instead of specific map");
+    // World map exit checkbox (-2)
+    _exitToWorldmapCheckBox = new QCheckBox("Exit to world map", this);
+    _exitToWorldmapCheckBox->setToolTip("Exit leads to world map (map ID -2)");
     connect(_exitToWorldmapCheckBox, &QCheckBox::toggled, this, &ExitGridPropertiesDialog::onExitToWorldmapToggled);
     _formLayout->addRow(_exitToWorldmapCheckBox);
 
+    // Town map exit checkbox (-1) - mutually exclusive with world map
+    _townMapCheckBox = new QCheckBox("Exit to town map", this);
+    _townMapCheckBox->setToolTip("Exit leads to town map (map ID -1)");
+    connect(_townMapCheckBox, &QCheckBox::toggled, this, &ExitGridPropertiesDialog::onTownMapToggled);
+    _formLayout->addRow(_townMapCheckBox);
+
     // Map ID input
     _mapIdSpinBox = new QSpinBox(this);
-    _mapIdSpinBox->setRange(-1, 999999); // Allow -1 for worldmap exits
-    _mapIdSpinBox->setToolTip("Destination map ID (-1 = worldmap, 0-999999 = specific map)");
+    _mapIdSpinBox->setRange(-2, 999999); // Allow -2 for worldmap exits
+    _mapIdSpinBox->setToolTip("Destination map ID (-2 = worldmap, 0-999999 = specific map)");
     _formLayout->addRow("Destination Map ID:", _mapIdSpinBox);
 
     // Position input (hex coordinate)
@@ -119,19 +125,25 @@ void ExitGridPropertiesDialog::setupButtonBox() {
     connect(_buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 }
 
-void ExitGridPropertiesDialog::initializeDefaults() {
-    _properties.exitMap = 0;
-    _properties.exitPosition = 0;
-    _properties.exitElevation = 0;
-    _properties.exitOrientation = 0;
-}
-
 void ExitGridPropertiesDialog::updateUI() {
-    // Check if this is a worldmap exit (map ID = -1 or UINT32_MAX)
-    bool isWorldmapExit = (_properties.exitMap == static_cast<uint32_t>(-1));
-    _exitToWorldmapCheckBox->setChecked(isWorldmapExit);
+    // Engine treats: -1 (TOWN_MAP_EXIT) = town map, -2 (WORLD_MAP_EXIT) = world map
+    bool isTownMap = (_properties.exitMap == ExitGrid::TOWN_MAP_EXIT);
+    bool isWorldMap = (_properties.exitMap == ExitGrid::WORLD_MAP_EXIT);
 
-    _mapIdSpinBox->setValue(static_cast<int>(_properties.exitMap));
+    spdlog::debug("ExitGridPropertiesDialog::updateUI - exitMap={} (0x{:08X}), isWorldMap={}, isTownMap={}",
+        _properties.exitMap, _properties.exitMap, isWorldMap, isTownMap);
+
+    // Block signals to prevent cascading updates while setting initial values
+    _exitToWorldmapCheckBox->blockSignals(true);
+    _townMapCheckBox->blockSignals(true);
+
+    _exitToWorldmapCheckBox->setChecked(isWorldMap);
+    _townMapCheckBox->setChecked(isTownMap);
+
+    _exitToWorldmapCheckBox->blockSignals(false);
+    _townMapCheckBox->blockSignals(false);
+
+    _mapIdSpinBox->setValue(isTownMap ? -1 : (isWorldMap ? -2 : static_cast<int>(_properties.exitMap)));
     _positionSpinBox->setValue(static_cast<int>(_properties.exitPosition));
 
     // Set elevation combo box
@@ -150,8 +162,8 @@ void ExitGridPropertiesDialog::updateUI() {
         }
     }
 
-    // Trigger the worldmap toggle to set the correct enabled state
-    onExitToWorldmapToggled(isWorldmapExit);
+    // Update enabled state of map-specific controls
+    updateMapControlsEnabled();
 
     // Ensure validation is run to enable/disable OK button properly
     validateInput();
@@ -220,21 +232,58 @@ bool ExitGridPropertiesDialog::isValidInput() const {
 }
 
 void ExitGridPropertiesDialog::onExitToWorldmapToggled(bool checked) {
-    // When checked, disable all controls and set default values
-    _mapIdSpinBox->setEnabled(!checked);
-    _positionSpinBox->setEnabled(!checked);
-    _elevationComboBox->setEnabled(!checked);
-    _orientationComboBox->setEnabled(!checked);
-
     if (checked) {
-        // Set worldmap exit values
+        // Uncheck town map (mutually exclusive)
+        _townMapCheckBox->blockSignals(true);
+        _townMapCheckBox->setChecked(false);
+        _townMapCheckBox->blockSignals(false);
+
+        // Set world map exit values
+        _mapIdSpinBox->setValue(-2);
+        _positionSpinBox->setValue(0);
+        _elevationComboBox->setCurrentIndex(0);   // Ground level
+        _orientationComboBox->setCurrentIndex(0); // North
+    } else {
+        // Reset to specific map exit - set map ID to 0 if it was a world/town map value
+        if (_mapIdSpinBox->value() < 0) {
+            _mapIdSpinBox->setValue(0);
+        }
+    }
+
+    updateMapControlsEnabled();
+    validateInput();
+}
+
+void ExitGridPropertiesDialog::onTownMapToggled(bool checked) {
+    if (checked) {
+        // Uncheck world map (mutually exclusive)
+        _exitToWorldmapCheckBox->blockSignals(true);
+        _exitToWorldmapCheckBox->setChecked(false);
+        _exitToWorldmapCheckBox->blockSignals(false);
+
+        // Set town map exit values
         _mapIdSpinBox->setValue(-1);
         _positionSpinBox->setValue(0);
         _elevationComboBox->setCurrentIndex(0);   // Ground level
         _orientationComboBox->setCurrentIndex(0); // North
+    } else {
+        // Reset to specific map exit - set map ID to 0 if it was a world/town map value
+        if (_mapIdSpinBox->value() < 0) {
+            _mapIdSpinBox->setValue(0);
+        }
     }
 
+    updateMapControlsEnabled();
     validateInput();
+}
+
+void ExitGridPropertiesDialog::updateMapControlsEnabled() {
+    // Disable map-specific controls when either world map or town map is checked
+    bool isSpecificMapExit = !_exitToWorldmapCheckBox->isChecked() && !_townMapCheckBox->isChecked();
+    _mapIdSpinBox->setEnabled(isSpecificMapExit);
+    _positionSpinBox->setEnabled(isSpecificMapExit);
+    _elevationComboBox->setEnabled(isSpecificMapExit);
+    _orientationComboBox->setEnabled(isSpecificMapExit);
 }
 
 } // namespace geck

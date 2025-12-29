@@ -129,6 +129,9 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
         _currentEditorWidget->deleteLater();
     }
 
+    // Reset toolbar toggle states when switching maps
+    deselectMarkExitsMode();
+
     _currentEditorWidget = editorWidget.release();
     _centralStack->addWidget(_currentEditorWidget);
     _centralStack->setCurrentWidget(_currentEditorWidget);

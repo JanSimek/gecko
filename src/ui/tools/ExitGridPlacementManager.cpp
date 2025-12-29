@@ -67,15 +67,10 @@ void ExitGridPlacementManager::placeExitGridAtPosition(sf::Vector2f worldPos) {
         return;
     }
 
-    // Add to map
-    auto& mapFile = _editor->getMap()->getMapFile();
     int currentElevation = _editor->getCurrentElevation();
 
-    // Add to the appropriate elevation level in the map
-    mapFile.map_objects[currentElevation].push_back(exitGridObject);
-
-    // Refresh objects in editor to show the new exit grid
-    _editor->refreshObjects();
+    // Register undo action and add to map (redo is called immediately)
+    _editor->registerExitGridCreation({exitGridObject}, currentElevation);
 
     spdlog::info("Placed exit grid at hex position {} (elevation {})", hexPosition, currentElevation);
 }
@@ -85,7 +80,16 @@ void ExitGridPlacementManager::editExitGridProperties(std::shared_ptr<MapObject>
         return;
     }
 
-    // Extract current properties
+    // Capture before state for undo
+    EditorWidget::ExitGridState beforeState;
+    beforeState.exitMap = exitGrid->exit_map;
+    beforeState.exitPosition = exitGrid->exit_position;
+    beforeState.exitElevation = exitGrid->exit_elevation;
+    beforeState.exitOrientation = exitGrid->exit_orientation;
+    beforeState.frmPid = exitGrid->frm_pid;
+    beforeState.proPid = exitGrid->pro_pid;
+
+    // Extract current properties for dialog
     ExitGridPropertiesDialog::ExitGridProperties currentProperties;
     currentProperties.exitMap = exitGrid->exit_map;
     currentProperties.exitPosition = exitGrid->exit_position;
@@ -105,12 +109,35 @@ void ExitGridPlacementManager::editExitGridProperties(std::shared_ptr<MapObject>
     exitGrid->exit_elevation = newProperties.exitElevation;
     exitGrid->exit_orientation = newProperties.exitOrientation;
 
-    // Refresh objects in editor to show updated properties
+    // Update PIDs based on exit type (world/town map vs specific map)
+    bool isWorldmapExit = (newProperties.exitMap == ExitGrid::WORLD_MAP_EXIT ||
+                           newProperties.exitMap == ExitGrid::TOWN_MAP_EXIT);
+    if (isWorldmapExit) {
+        exitGrid->pro_pid = ExitGrid::WORLD_EXIT_PRO_PID;
+        exitGrid->frm_pid = ExitGrid::WORLD_EXIT_FRM_PID;
+    } else {
+        exitGrid->pro_pid = ExitGrid::MAP_EXIT_PRO_PID;
+        exitGrid->frm_pid = ExitGrid::MAP_EXIT_FRM_PID;
+    }
+
+    // Capture after state for undo
+    EditorWidget::ExitGridState afterState;
+    afterState.exitMap = exitGrid->exit_map;
+    afterState.exitPosition = exitGrid->exit_position;
+    afterState.exitElevation = exitGrid->exit_elevation;
+    afterState.exitOrientation = exitGrid->exit_orientation;
+    afterState.frmPid = exitGrid->frm_pid;
+    afterState.proPid = exitGrid->pro_pid;
+
+    // Register undo action (changes already applied, so don't call redo)
+    _editor->registerExitGridEdit({exitGrid}, {beforeState}, {afterState});
+
+    // Refresh objects in editor to show updated properties and FRM
+    // FIXME: Changing exit grid FRM may cause visual position offset due to different FRM shift values
     _editor->refreshObjects();
 
-    spdlog::info("Updated exit grid properties: map={}, pos={}, elev={}, orient={}",
-        newProperties.exitMap, newProperties.exitPosition,
-        newProperties.exitElevation, newProperties.exitOrientation);
+    spdlog::info("Updated exit grid: map={}, frm_pid=0x{:08X}",
+        newProperties.exitMap, exitGrid->frm_pid);
 }
 
 std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int hexPosition, const ExitGridPropertiesDialog::ExitGridProperties& properties) {
@@ -126,14 +153,20 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
     exitGrid->frame_number = 0;
     exitGrid->direction = 0;
 
-    // Exit grids don't have a visual FRM in the game - they're invisible
-    // The FRM PID can be 0 or a placeholder
-    exitGrid->frm_pid = 0x01000000; // Use a default misc FRM
+    // Set exit grid PIDs based on exit type
+    // World/town map exit: Uses WORLD_EXIT_PRO_PID/WORLD_EXIT_FRM_PID
+    // Map exit: Uses MAP_EXIT_PRO_PID/MAP_EXIT_FRM_PID
+    bool isWorldmapExit = (properties.exitMap == ExitGrid::WORLD_MAP_EXIT ||
+                           properties.exitMap == ExitGrid::TOWN_MAP_EXIT);
+    if (isWorldmapExit) {
+        exitGrid->pro_pid = ExitGrid::WORLD_EXIT_PRO_PID;
+        exitGrid->frm_pid = ExitGrid::WORLD_EXIT_FRM_PID;
+    } else {
+        exitGrid->pro_pid = ExitGrid::MAP_EXIT_PRO_PID;
+        exitGrid->frm_pid = ExitGrid::MAP_EXIT_FRM_PID;
+    }
     exitGrid->flags = 0;
     exitGrid->elevation = _editor->getCurrentElevation();
-
-    // Set exit grid PID (MISC type with index 16-23)
-    exitGrid->pro_pid = getAvailableExitGridPID();
 
     exitGrid->critter_index = -1;
     exitGrid->light_radius = 0;
@@ -200,13 +233,6 @@ bool ExitGridPlacementManager::showPropertiesDialog(ExitGridPropertiesDialog::Ex
     }
 
     return false;
-}
-
-uint32_t ExitGridPlacementManager::getAvailableExitGridPID() const {
-    // Exit grids use MISC type (0x05) with indices 16-23
-    // For now, just use the first one (16)
-    // TODO: Could check existing objects to find first available slot
-    return 0x05000010; // MISC type | index 16
 }
 
 void ExitGridPlacementManager::resetState() {
@@ -381,18 +407,58 @@ void ExitGridPlacementManager::selectExitGridsInArea(sf::Vector2f startPos, sf::
             currentProperties.exitOrientation = firstMapObject->exit_orientation;
 
             if (showPropertiesDialog(newProperties, &currentProperties)) {
-                // Update ALL exit grids with the new properties
+                // Capture before states for undo
+                std::vector<std::shared_ptr<MapObject>> mapObjects;
+                std::vector<EditorWidget::ExitGridState> beforeStates;
                 for (auto& exitGridObject : exitGridsInArea) {
                     auto mapObjectPtr = exitGridObject->getMapObjectPtr();
                     if (mapObjectPtr) {
-                        mapObjectPtr->exit_map = newProperties.exitMap;
-                        mapObjectPtr->exit_position = newProperties.exitPosition;
-                        mapObjectPtr->exit_elevation = newProperties.exitElevation;
-                        mapObjectPtr->exit_orientation = newProperties.exitOrientation;
+                        mapObjects.push_back(mapObjectPtr);
+                        EditorWidget::ExitGridState beforeState;
+                        beforeState.exitMap = mapObjectPtr->exit_map;
+                        beforeState.exitPosition = mapObjectPtr->exit_position;
+                        beforeState.exitElevation = mapObjectPtr->exit_elevation;
+                        beforeState.exitOrientation = mapObjectPtr->exit_orientation;
+                        beforeState.frmPid = mapObjectPtr->frm_pid;
+                        beforeState.proPid = mapObjectPtr->pro_pid;
+                        beforeStates.push_back(beforeState);
                     }
                 }
 
+                // Determine PIDs based on exit type
+                bool isWorldmapExit = (newProperties.exitMap == ExitGrid::WORLD_MAP_EXIT ||
+                                       newProperties.exitMap == ExitGrid::TOWN_MAP_EXIT);
+                uint32_t newProPid = isWorldmapExit ? ExitGrid::WORLD_EXIT_PRO_PID : ExitGrid::MAP_EXIT_PRO_PID;
+                uint32_t newFrmPid = isWorldmapExit ? ExitGrid::WORLD_EXIT_FRM_PID : ExitGrid::MAP_EXIT_FRM_PID;
+
+                // Update ALL exit grids with the new properties
+                std::vector<EditorWidget::ExitGridState> afterStates;
+                for (auto& mapObjectPtr : mapObjects) {
+                    mapObjectPtr->exit_map = newProperties.exitMap;
+                    mapObjectPtr->exit_position = newProperties.exitPosition;
+                    mapObjectPtr->exit_elevation = newProperties.exitElevation;
+                    mapObjectPtr->exit_orientation = newProperties.exitOrientation;
+                    mapObjectPtr->pro_pid = newProPid;
+                    mapObjectPtr->frm_pid = newFrmPid;
+
+                    EditorWidget::ExitGridState afterState;
+                    afterState.exitMap = mapObjectPtr->exit_map;
+                    afterState.exitPosition = mapObjectPtr->exit_position;
+                    afterState.exitElevation = mapObjectPtr->exit_elevation;
+                    afterState.exitOrientation = mapObjectPtr->exit_orientation;
+                    afterState.frmPid = mapObjectPtr->frm_pid;
+                    afterState.proPid = mapObjectPtr->pro_pid;
+                    afterStates.push_back(afterState);
+                }
+
+                // Register undo action
+                _editor->registerExitGridEdit(mapObjects, beforeStates, afterStates);
+
+                spdlog::info("Updated {} exit grids: map={}, frm_pid=0x{:08X}",
+                    exitGridsInArea.size(), newProperties.exitMap, newFrmPid);
+
                 // Refresh objects to show updated properties
+                // FIXME: Changing exit grid FRM may cause visual position offset due to different FRM shift values
                 _editor->refreshObjects();
             }
 
@@ -401,15 +467,67 @@ void ExitGridPlacementManager::selectExitGridsInArea(sf::Vector2f startPos, sf::
             _editor->clearSelection();
         }
     } else {
-        // Clear selection and provide user feedback
+        // No existing exit grids - create new ones in the selected area
         auto* selectionManager = _editor->getSelectionManager();
         if (selectionManager) {
             selectionManager->clearSelection();
         }
+        _editor->clearSelection();
 
-        // Show status message to inform user
-        if (_editor->getMainWindow()) {
-            _editor->getMainWindow()->showStatusMessage("No exit grids found in selected area");
+        // Get all hexes in the selected area
+        std::vector<int> hexesInArea;
+        auto* hexGrid = _editor->getHexagonGrid();
+        if (hexGrid) {
+            for (int hexIndex = 0; hexIndex < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT); ++hexIndex) {
+                if (hexIndex < static_cast<int>(hexGrid->grid().size())) {
+                    const auto& hex = hexGrid->grid().at(hexIndex);
+                    sf::Vector2f hexPos(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
+
+                    // Check if hex center is within selection area
+                    sf::FloatRect hexBounds(sf::Vector2f(hexPos.x - 16, hexPos.y - 8), sf::Vector2f(32, 16));
+                    if (selectionArea.findIntersection(hexBounds)) {
+                        hexesInArea.push_back(hexIndex);
+                    }
+                }
+            }
+        }
+
+        if (hexesInArea.empty()) {
+            if (_editor->getMainWindow()) {
+                _editor->getMainWindow()->showStatusMessage("No hexes found in selected area");
+            }
+            return;
+        }
+
+        // Show properties dialog for new exit grids
+        ExitGridPropertiesDialog::ExitGridProperties newProperties;
+        if (!showPropertiesDialog(newProperties)) {
+            // User cancelled
+            return;
+        }
+
+        // Create exit grid objects for all hexes in the area
+        int currentElevation = _editor->getCurrentElevation();
+        std::vector<std::shared_ptr<MapObject>> createdExitGrids;
+
+        for (int hexPosition : hexesInArea) {
+            auto exitGrid = createExitGridObject(hexPosition, newProperties);
+            if (exitGrid) {
+                createdExitGrids.push_back(exitGrid);
+            }
+        }
+
+        if (!createdExitGrids.empty()) {
+            // Register undo action and add to map (redo is called immediately)
+            _editor->registerExitGridCreation(createdExitGrids, currentElevation);
+
+            spdlog::info("Created {} exit grids in selected area (elevation {})",
+                createdExitGrids.size(), currentElevation);
+
+            if (_editor->getMainWindow()) {
+                _editor->getMainWindow()->showStatusMessage(
+                    QString("Created %1 exit grids").arg(createdExitGrids.size()));
+            }
         }
     }
 }
