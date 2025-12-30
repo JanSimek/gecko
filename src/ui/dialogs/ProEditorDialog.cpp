@@ -24,6 +24,7 @@
 #include "FrmSelectorDialog.h"
 
 #include <util/ProHelper.h>
+#include <util/FrmThumbnailGenerator.h>
 
 namespace geck {
 
@@ -3091,111 +3092,6 @@ void ProEditorDialog::saveTileData() {
     }
 }
 
-QPixmap ProEditorDialog::createFrmThumbnail(const std::string& frmPath, const QSize& targetSize) {
-
-    QPixmap thumbnail(targetSize);
-    thumbnail.fill(Qt::transparent);
-
-    try {
-        auto& resourceManager = ResourceManager::getInstance();
-
-        // Load the FRM object directly (not the texture)
-        const auto* frm = resourceManager.loadResource<Frm>(frmPath);
-        if (!frm) {
-            return thumbnail;
-        }
-
-        // Get the first direction and first frame for preview
-        const auto& directions = frm->directions();
-        if (!directions.empty()) {
-            const auto& firstDirection = directions[0];
-            const auto& frames = firstDirection.frames();
-
-            if (!frames.empty()) {
-                const auto& firstFrame = frames[0];
-
-                // Load default palette for color conversion
-                const Pal* palette = nullptr;
-                try {
-                    palette = resourceManager.loadResource<Pal>("color.pal");
-                } catch (const std::exception& e) {
-                    spdlog::warn("ProEditorDialog: Could not load color.pal for {} ({})", frmPath, e.what());
-                    return thumbnail; // Return empty thumbnail without palette
-                }
-
-                if (palette) {
-                    // Convert single frame to thumbnail
-                    thumbnail = createFrameThumbnail(firstFrame, palette, targetSize);
-                    return thumbnail;
-                }
-            } else {
-            }
-        } else {
-        }
-    } catch (const std::exception& e) {
-        spdlog::warn("ProEditorDialog: Exception creating thumbnail for {}: {}", frmPath, e.what());
-    }
-
-    return thumbnail; // Return empty/transparent thumbnail on failure
-}
-
-QPixmap ProEditorDialog::createFrameThumbnail(const Frame& frame, const Pal* palette, const QSize& targetSize) {
-    QPixmap thumbnail(targetSize);
-    thumbnail.fill(Qt::transparent);
-
-    // Get frame dimensions
-    uint16_t frameWidth = frame.width();
-    uint16_t frameHeight = frame.height();
-
-    if (frameWidth == 0 || frameHeight == 0) {
-        return thumbnail;
-    }
-
-    // Always use RGBA data with palette - no fallback to grayscale
-    uint8_t* rgbaData = const_cast<Frame&>(frame).rgba(const_cast<Pal*>(palette));
-    if (!rgbaData) {
-        return thumbnail;
-    }
-
-    QImage frameImage(rgbaData, frameWidth, frameHeight, QImage::Format_RGBA8888);
-    frameImage = frameImage.copy(); // Make a copy since rgbaData might be temporary
-
-    // Scale frame to fit thumbnail size while preserving aspect ratio
-    QPixmap framePixmap = QPixmap::fromImage(frameImage);
-
-    // Calculate optimal scaling with maximum 2x original size
-    constexpr double MAX_SCALE = 2.0;
-
-    // Calculate scaling factors to fit target size
-    double scaleX = static_cast<double>(targetSize.width()) / frameWidth;
-    double scaleY = static_cast<double>(targetSize.height()) / frameHeight;
-    double scale = qMin(scaleX, scaleY);
-
-    // Limit scale to maximum 2x original size for crisp display
-    scale = qMin(scale, MAX_SCALE);
-
-    // Calculate final size
-    int scaledWidth = static_cast<int>(frameWidth * scale);
-    int scaledHeight = static_cast<int>(frameHeight * scale);
-
-    // Use high-quality scaling directly from QImage to QPixmap
-    QImage scaledImage = frameImage.scaled(scaledWidth, scaledHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    QPixmap scaledFrame = QPixmap::fromImage(scaledImage);
-
-    // Center the scaled frame in the thumbnail with enhanced rendering
-    QPainter painter(&thumbnail);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-
-    int x = (targetSize.width() - scaledFrame.width()) / 2;
-    int y = (targetSize.height() - scaledFrame.height()) / 2;
-
-    painter.drawPixmap(x, y, scaledFrame);
-    painter.end();
-
-    return thumbnail;
-}
-
 void ProEditorDialog::loadNameAndDescription() {
     if (!_pro || !_nameLabel || !_descriptionEdit) {
         return;
@@ -3425,7 +3321,7 @@ void ProEditorDialog::loadAnimationFrames() {
         QSize frameTargetSize(200, 200); // Fixed size for crisp animation frames
 
         for (const auto& frame : frames) {
-            QPixmap thumbnail = createFrameThumbnail(frame, palette, frameTargetSize);
+            QPixmap thumbnail = FrmThumbnailGenerator::fromFrame(frame, palette, frameTargetSize);
             _frameCache.push_back(thumbnail);
         }
 

@@ -31,6 +31,9 @@ set(GECK_SOURCES
     util/CritterFrmResolver.h
     util/CritterFrmResolver.cpp
 
+    util/FrmThumbnailGenerator.h
+    util/FrmThumbnailGenerator.cpp
+
     util/Types.h
     util/Exceptions.h
     util/Coordinates.h

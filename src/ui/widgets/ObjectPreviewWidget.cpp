@@ -18,6 +18,7 @@
 #include "../../format/frm/Frame.h"
 #include "../../format/pal/Pal.h"
 #include "../../util/ResourceManager.h"
+#include "../../util/FrmThumbnailGenerator.h"
 #include "../IconHelper.h"
 #include "../theme/ThemeManager.h"
 #include "../UIConstants.h"
@@ -251,7 +252,7 @@ void ObjectPreviewWidget::updatePreview() {
     }
 
     // Create thumbnail for preview
-    QPixmap thumbnail = createFrmThumbnail(_currentFrmPath.toStdString());
+    QPixmap thumbnail = FrmThumbnailGenerator::fromFrmPath(_currentFrmPath.toStdString(), QSize(250, 250));
 
     if (!thumbnail.isNull()) {
         // Scale proportionally to fit within widget bounds while preserving aspect ratio
@@ -456,58 +457,6 @@ void ObjectPreviewWidget::loadAnimationFrames() {
         spdlog::error("Error loading animation frames: {}", e.what());
         _frameCache.clear();
         _totalFrames = 0;
-    }
-}
-
-QPixmap ObjectPreviewWidget::createFrmThumbnail(const std::string& frmPath, [[maybe_unused]] const QSize& targetSize) {
-    try {
-        auto& resourceManager = ResourceManager::getInstance();
-        auto frm = resourceManager.loadResource<Frm>(frmPath);
-        if (!frm) {
-            spdlog::error("Failed to load FRM: {}", frmPath);
-            return QPixmap();
-        }
-
-        // Get palette
-        auto pal = resourceManager.loadResource<Pal>("color.pal");
-        if (!pal) {
-            spdlog::error("Failed to load palette");
-            return QPixmap();
-        }
-
-        // Get first frame of first direction
-        if (frm->directions().empty() || frm->directions()[0].frames().empty()) {
-            spdlog::error("FRM has no frames");
-            return QPixmap();
-        }
-
-        const auto& frame = frm->directions()[0].frames()[0];
-
-        // Get frame dimensions
-        uint16_t frameWidth = frame.width();
-        uint16_t frameHeight = frame.height();
-
-        if (frameWidth == 0 || frameHeight == 0) {
-            spdlog::error("Frame has zero dimensions");
-            return QPixmap();
-        }
-
-        // Use Frame's built-in RGBA conversion (like ObjectPalettePanel)
-        uint8_t* rgbaData = const_cast<Frame&>(frame).rgba(const_cast<Pal*>(pal));
-        if (!rgbaData) {
-            spdlog::error("Failed to get RGBA data from frame");
-            return QPixmap();
-        }
-
-        QImage frameImage(rgbaData, frameWidth, frameHeight, QImage::Format_RGBA8888);
-        frameImage = frameImage.copy(); // Make a copy since rgbaData might be temporary
-
-        // Return unscaled frame (like animation frames) - scaling will be done by caller
-        return QPixmap::fromImage(frameImage);
-
-    } catch (const std::exception& e) {
-        spdlog::error("Error creating FRM thumbnail: {}", e.what());
-        return QPixmap();
     }
 }
 

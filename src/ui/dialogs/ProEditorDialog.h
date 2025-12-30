@@ -202,10 +202,6 @@ private:
     void loadAnimationFrames();
     void updateWindowTitle();
 
-    // FRM thumbnail generation (based on ObjectPalettePanel approach)
-    QPixmap createFrmThumbnail(const std::string& frmPath, const QSize& targetSize = QSize(250, 250));
-    QPixmap createFrameThumbnail(const class Frame& frame, const class Pal* palette, const QSize& targetSize = QSize(250, 250));
-
     // MSG file loading for name and description
     void loadNameAndDescription();
 

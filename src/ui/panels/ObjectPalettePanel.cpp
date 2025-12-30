@@ -7,6 +7,7 @@
 #include "../../util/ResourceManager.h"
 #include "../../util/Constants.h"
 #include "../../util/ColorUtils.h"
+#include "../../util/FrmThumbnailGenerator.h"
 #include "../common/BaseWidget.h"
 #include "../dragdrop/MimeTypes.h"
 #include "../theme/ThemeManager.h"
@@ -463,7 +464,9 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
                             // Fall through to placeholder generation
                         } else {
                             // Convert single frame to thumbnail
-                            thumbnail = createFrameThumbnail(firstFrame, palette);
+                            thumbnail = FrmThumbnailGenerator::fromFrame(
+                                firstFrame, palette,
+                                QSize(ObjectWidget::OBJECT_SIZE, ObjectWidget::OBJECT_SIZE));
 
                             spdlog::debug("ObjectPalettePanel: Created single-frame thumbnail for {} ({}x{})",
                                 objectInfo->frmPath.toStdString(), firstFrame.width(), firstFrame.height());
@@ -657,66 +660,6 @@ void ObjectPalettePanel::calculatePagination() {
 
     // Use base class pagination update
     updatePaginationState(filteredCount);
-}
-
-QPixmap ObjectPalettePanel::createFrameThumbnail(const Frame& frame, const Pal* palette) {
-    QPixmap thumbnail(ObjectWidget::OBJECT_SIZE, ObjectWidget::OBJECT_SIZE);
-    thumbnail.fill(Qt::transparent);
-
-    // Get frame dimensions
-    uint16_t frameWidth = frame.width();
-    uint16_t frameHeight = frame.height();
-
-    if (frameWidth == 0 || frameHeight == 0) {
-        spdlog::debug("ObjectPalettePanel: Frame has zero dimensions");
-        return thumbnail;
-    }
-
-    // Always use RGBA data with palette - no fallback to grayscale
-    uint8_t* rgbaData = const_cast<Frame&>(frame).rgba(const_cast<Pal*>(palette));
-    if (!rgbaData) {
-        spdlog::debug("ObjectPalettePanel: Failed to get RGBA data from frame");
-        return thumbnail;
-    }
-
-    QImage frameImage(rgbaData, frameWidth, frameHeight, QImage::Format_RGBA8888);
-    frameImage = frameImage.copy(); // Make a copy since rgbaData might be temporary
-
-    // Scale frame to fit thumbnail size while preserving aspect ratio (like F2 Dims)
-    QPixmap framePixmap = QPixmap::fromImage(frameImage);
-
-    // Calculate scaling like F2 Dims does
-    int newWidth = frameWidth;
-    int newHeight = frameHeight;
-
-    // Constrain to thumbnail size
-    if (newWidth > ObjectWidget::OBJECT_SIZE) {
-        newWidth = ObjectWidget::OBJECT_SIZE;
-    }
-    if (newHeight > ObjectWidget::OBJECT_SIZE) {
-        newHeight = ObjectWidget::OBJECT_SIZE;
-    }
-
-    // Preserve aspect ratio
-    double aspectRatioX = static_cast<double>(frameWidth) / newWidth;
-    double aspectRatioY = static_cast<double>(frameHeight) / newHeight;
-    double aspectRatio = qMax(aspectRatioX, aspectRatioY);
-
-    if (aspectRatio > 1.001) { // Avoid division by very small numbers
-        newWidth = static_cast<int>(frameWidth / aspectRatio);
-        newHeight = static_cast<int>(frameHeight / aspectRatio);
-    }
-
-    // Scale the frame
-    QPixmap scaledFrame = framePixmap.scaled(newWidth, newHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-    // Center the scaled frame in the thumbnail
-    QPainter painter(&thumbnail);
-    int x = (ObjectWidget::OBJECT_SIZE - scaledFrame.width()) / 2;
-    int y = (ObjectWidget::OBJECT_SIZE - scaledFrame.height()) / 2;
-    painter.drawPixmap(x, y, scaledFrame);
-
-    return thumbnail;
 }
 
 const ObjectInfo* ObjectPalettePanel::getObjectInfo(int objectIndex, ObjectCategory category) const {

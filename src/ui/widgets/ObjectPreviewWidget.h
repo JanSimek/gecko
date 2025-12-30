@@ -80,7 +80,6 @@ private:
     void setupUI();
     void loadAnimationFrames();
     void positionOverlayButtons();
-    QPixmap createFrmThumbnail(const std::string& frmPath, const QSize& targetSize = QSize(250, 250));
 
     // UI Components
     QLabel* _previewLabel;

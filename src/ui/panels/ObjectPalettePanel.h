@@ -131,7 +131,6 @@ private:
 
     void loadCategoryObjects(ObjectCategory category);
     QPixmap createObjectThumbnail(const ObjectInfo* objectInfo, ObjectCategory category);
-    QPixmap createFrameThumbnail(const class Frame& frame, const class Pal* palette = nullptr);
     QString getCategoryPath(ObjectCategory category) const;
     QString getCategoryDisplayName(ObjectCategory category) const;
 
