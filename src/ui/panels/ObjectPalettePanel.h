@@ -8,6 +8,7 @@
 #include <QMimeData>
 #include <vector>
 #include <memory>
+#include <unordered_map>
 
 namespace geck {
 
@@ -26,6 +27,18 @@ enum class ObjectCategory {
     WALLS,    // Wall segments and structural elements
     MISC      // Miscellaneous objects
 };
+
+} // namespace geck
+
+// Hash function for ObjectCategory to use in unordered_map
+template<>
+struct std::hash<geck::ObjectCategory> {
+    std::size_t operator()(geck::ObjectCategory c) const noexcept {
+        return static_cast<std::size_t>(c);
+    }
+};
+
+namespace geck {
 
 /**
  * @brief Information about a loaded object for the palette
@@ -134,6 +147,9 @@ private:
     QString getCategoryPath(ObjectCategory category) const;
     QString getCategoryDisplayName(ObjectCategory category) const;
 
+    std::vector<std::unique_ptr<ObjectInfo>>& getObjectList(ObjectCategory category);
+    const std::vector<std::unique_ptr<ObjectInfo>>& getObjectList(ObjectCategory category) const;
+
     void clearObjectSelection();
 
     // UI Components
@@ -161,12 +177,8 @@ private:
     QString _searchText = ""; // Current search filter text
     int _objectsPerRow = 6;
 
-    // Object lists for each category
-    std::vector<std::unique_ptr<ObjectInfo>> _itemsList;
-    std::vector<std::unique_ptr<ObjectInfo>> _sceneryList;
-    std::vector<std::unique_ptr<ObjectInfo>> _crittersList;
-    std::vector<std::unique_ptr<ObjectInfo>> _wallsList;
-    std::vector<std::unique_ptr<ObjectInfo>> _miscList;
+    // Object lists by category
+    std::unordered_map<ObjectCategory, std::vector<std::unique_ptr<ObjectInfo>>> _objectsByCategory;
 
 };
 

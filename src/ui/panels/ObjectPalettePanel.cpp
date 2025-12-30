@@ -90,20 +90,26 @@ ObjectPalettePanel::ObjectPalettePanel(QWidget* parent)
 }
 
 ObjectPalettePanel::~ObjectPalettePanel() {
-    // Clear all object lists - now safe since we use raw pointers to Pro objects
     // The ResourceManager manages Pro object lifetime, not us
     spdlog::debug("ObjectPalettePanel: Clearing object lists before destruction");
 
-    _itemsList.clear();
-    _sceneryList.clear();
-    _crittersList.clear();
-    _wallsList.clear();
-    _miscList.clear();
-
-    // Clear widget references
+    _objectsByCategory.clear();
     _objectWidgets.clear();
 
     spdlog::debug("ObjectPalettePanel: Destructor completed");
+}
+
+std::vector<std::unique_ptr<ObjectInfo>>& ObjectPalettePanel::getObjectList(ObjectCategory category) {
+    return _objectsByCategory[category];
+}
+
+const std::vector<std::unique_ptr<ObjectInfo>>& ObjectPalettePanel::getObjectList(ObjectCategory category) const {
+    static const std::vector<std::unique_ptr<ObjectInfo>> empty;
+    auto it = _objectsByCategory.find(category);
+    if (it != _objectsByCategory.end()) {
+        return it->second;
+    }
+    return empty;
 }
 
 void ObjectPalettePanel::setupUI() {
@@ -193,31 +199,8 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
         static_cast<int>(category), lstPath.toStdString());
 
     // Get target list for this category
-    std::vector<std::unique_ptr<ObjectInfo>>* targetList = nullptr;
-
-    switch (category) {
-        case ObjectCategory::ITEMS:
-            targetList = &_itemsList;
-            break;
-        case ObjectCategory::SCENERY:
-            targetList = &_sceneryList;
-            break;
-        case ObjectCategory::CRITTERS:
-            targetList = &_crittersList;
-            break;
-        case ObjectCategory::WALLS:
-            targetList = &_wallsList;
-            break;
-        case ObjectCategory::MISC:
-            targetList = &_miscList;
-            break;
-    }
-
-    if (!targetList) {
-        return;
-    }
-
-    targetList->clear();
+    auto& targetList = getObjectList(category);
+    targetList.clear();
 
     try {
         // Load LST file for this category
@@ -275,7 +258,7 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
                     objectInfo->frmPath = "";
                 }
 
-                targetList->push_back(std::move(objectInfo));
+                targetList.push_back(std::move(objectInfo));
                 loadedCount++;
 
             } catch (const std::exception& e) {
@@ -299,11 +282,11 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
                 QString("%1_fallback_%2.pro").arg(categoryName.toLower()).arg(i), i);
             objectInfo->displayName = QString("Fallback %1 Object %2").arg(categoryName).arg(i);
             objectInfo->frmPath = "";
-            targetList->push_back(std::move(objectInfo));
+            targetList.push_back(std::move(objectInfo));
         }
 
         spdlog::info("ObjectPalettePanel: Created {} fallback objects for category {}",
-            targetList->size(), categoryName.toStdString());
+            targetList.size(), categoryName.toStdString());
     }
 }
 
@@ -320,27 +303,9 @@ void ObjectPalettePanel::updateObjectGrid() {
     clearGridWidgets();
 
     // Get objects for current category
-    const std::vector<std::unique_ptr<ObjectInfo>>* objectList = nullptr;
+    const auto& objectList = getObjectList(_currentCategory);
 
-    switch (_currentCategory) {
-        case ObjectCategory::ITEMS:
-            objectList = &_itemsList;
-            break;
-        case ObjectCategory::SCENERY:
-            objectList = &_sceneryList;
-            break;
-        case ObjectCategory::CRITTERS:
-            objectList = &_crittersList;
-            break;
-        case ObjectCategory::WALLS:
-            objectList = &_wallsList;
-            break;
-        case ObjectCategory::MISC:
-            objectList = &_miscList;
-            break;
-    }
-
-    if (!objectList || objectList->empty()) {
+    if (objectList.empty()) {
         _statusLabel->setText("No objects available for this category");
         return;
     }
@@ -355,8 +320,8 @@ void ObjectPalettePanel::updateObjectGrid() {
     int targetStartIndex = getPageStartIndex();
     int targetEndIndex = getPageEndIndex();
 
-    for (int i = 0; i < static_cast<int>(objectList->size()); ++i) {
-        const auto& objectInfo = (*objectList)[i];
+    for (int i = 0; i < static_cast<int>(objectList.size()); ++i) {
+        const auto& objectInfo = objectList[i];
 
         // Apply search filter if set
         if (!_searchText.isEmpty()) {
@@ -620,27 +585,9 @@ void ObjectPalettePanel::clearObjectSelection() {
 
 void ObjectPalettePanel::calculatePagination() {
     // Get objects for current category
-    const std::vector<std::unique_ptr<ObjectInfo>>* objectList = nullptr;
+    const auto& objectList = getObjectList(_currentCategory);
 
-    switch (_currentCategory) {
-        case ObjectCategory::ITEMS:
-            objectList = &_itemsList;
-            break;
-        case ObjectCategory::SCENERY:
-            objectList = &_sceneryList;
-            break;
-        case ObjectCategory::CRITTERS:
-            objectList = &_crittersList;
-            break;
-        case ObjectCategory::WALLS:
-            objectList = &_wallsList;
-            break;
-        case ObjectCategory::MISC:
-            objectList = &_miscList;
-            break;
-    }
-
-    if (!objectList || objectList->empty()) {
+    if (objectList.empty()) {
         updatePaginationState(0);
         GridPalettePanel::updatePaginationControls();
         return;
@@ -648,7 +595,7 @@ void ObjectPalettePanel::calculatePagination() {
 
     // Count objects that match current filters
     int filteredCount = 0;
-    for (const auto& objectInfo : *objectList) {
+    for (const auto& objectInfo : objectList) {
         // Apply search filter if set
         if (!_searchText.isEmpty()) {
             if (!objectInfo->displayName.contains(_searchText, Qt::CaseInsensitive) && !objectInfo->proFileName.contains(_searchText, Qt::CaseInsensitive)) {
@@ -663,31 +610,13 @@ void ObjectPalettePanel::calculatePagination() {
 }
 
 const ObjectInfo* ObjectPalettePanel::getObjectInfo(int objectIndex, ObjectCategory category) const {
-    const std::vector<std::unique_ptr<ObjectInfo>>* categoryList = nullptr;
+    const auto& categoryList = getObjectList(category);
 
-    switch (category) {
-        case ObjectCategory::ITEMS:
-            categoryList = &_itemsList;
-            break;
-        case ObjectCategory::SCENERY:
-            categoryList = &_sceneryList;
-            break;
-        case ObjectCategory::CRITTERS:
-            categoryList = &_crittersList;
-            break;
-        case ObjectCategory::WALLS:
-            categoryList = &_wallsList;
-            break;
-        case ObjectCategory::MISC:
-            categoryList = &_miscList;
-            break;
-    }
-
-    if (!categoryList || objectIndex < 0 || objectIndex >= static_cast<int>(categoryList->size())) {
+    if (objectIndex < 0 || objectIndex >= static_cast<int>(categoryList.size())) {
         return nullptr;
     }
 
-    return (*categoryList)[objectIndex].get();
+    return categoryList[objectIndex].get();
 }
 
 void ObjectPalettePanel::resizeEvent(QResizeEvent* event) {
