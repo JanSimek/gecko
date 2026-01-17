@@ -51,12 +51,7 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _frameSlider(nullptr)
     , _frameLabel(nullptr)
     , _directionCombo(nullptr)
-    , _animationTimer(nullptr)
-    , _currentFrame(0)
-    , _currentDirection(0)
-    , _totalFrames(0)
-    , _totalDirections(0)
-    , _isAnimating(false)
+    , _animationController(nullptr)
     // Common fields now handled by ProCommonFieldsWidget
     , _commonFieldsWidget(nullptr)
     // Type-specific widgets (refactored)
@@ -401,6 +396,10 @@ void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
 }
 
 void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
+    if (!_animationController) {
+        _animationController = new AnimationController(this);
+    }
+
     _animationControls = new QWidget();
     QHBoxLayout* animLayout = new QHBoxLayout(_animationControls);
     animLayout->setContentsMargins(0, 0, 0, 0);
@@ -418,7 +417,7 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
     _frameSlider->setMaximum(0);
     _frameSlider->setValue(0);
     _frameSlider->setToolTip("Animation frame");
-    connect(_frameSlider, &QSlider::valueChanged, this, &ProEditorDialog::onFrameChanged);
+    connect(_frameSlider, &QSlider::valueChanged, this, &ProEditorDialog::onFrameSliderChanged);
 
     // Frame label (small)
     _frameLabel = new QLabel("0/0");
@@ -437,10 +436,12 @@ void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
     animLayout->addWidget(_frameLabel);
     animLayout->addWidget(_directionCombo);
 
-    // Animation timer
-    _animationTimer = new QTimer(this);
-    _animationTimer->setInterval(ui::constants::ANIMATION_TIMER_INTERVAL); // 5 FPS
-    connect(_animationTimer, &QTimer::timeout, this, &ProEditorDialog::onAnimationTick);
+    // Connect animation controller signals
+    connect(_animationController, &AnimationController::frameChanged, this, &ProEditorDialog::onAnimationFrameChanged);
+    connect(_animationController, &AnimationController::playStateChanged, this, [this](bool playing) {
+        _playPauseButton->setText(playing ? "⏸" : "▶");
+        _playPauseButton->setToolTip(playing ? "Pause animation" : "Play animation");
+    });
 
     _animationControls->setVisible(false); // Hidden by default, shown when FRM is loaded
     parentLayout->addWidget(_animationControls);
@@ -1194,6 +1195,9 @@ void ProEditorDialog::setupContainerKeyTab() {
 }
 
 void ProEditorDialog::setupAnimationControls() {
+    // Create animation controller
+    _animationController = new AnimationController(this);
+
     // Animation controls
     _animationControls = new QWidget();
     _animationLayout = new QHBoxLayout(_animationControls);
@@ -1226,16 +1230,17 @@ void ProEditorDialog::setupAnimationControls() {
     _frameLabel->setMinimumWidth(ui::constants::sizes::LABEL_FRAME_WIDE);
     _animationLayout->addWidget(_frameLabel);
 
-    // Setup animation timer
-    _animationTimer = new QTimer(this);
-    _animationTimer->setSingleShot(false);
-    _animationTimer->setInterval(ui::constants::ANIMATION_TIMER_INTERVAL); // 5 FPS default
-
-    // Connect signals
+    // Connect UI signals
     connect(_playPauseButton, &QPushButton::clicked, this, &ProEditorDialog::onPlayPauseClicked);
-    connect(_frameSlider, &QSlider::valueChanged, this, &ProEditorDialog::onFrameChanged);
+    connect(_frameSlider, &QSlider::valueChanged, this, &ProEditorDialog::onFrameSliderChanged);
     connect(_directionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onDirectionChanged);
-    connect(_animationTimer, &QTimer::timeout, this, &ProEditorDialog::onAnimationTick);
+
+    // Connect animation controller signals
+    connect(_animationController, &AnimationController::frameChanged, this, &ProEditorDialog::onAnimationFrameChanged);
+    connect(_animationController, &AnimationController::playStateChanged, this, [this](bool playing) {
+        _playPauseButton->setText(playing ? "⏸" : "▶");
+        _playPauseButton->setToolTip(playing ? "Pause animation" : "Play animation");
+    });
 
     // Initially disable controls
     _animationControls->setEnabled(false);
@@ -2208,12 +2213,8 @@ void ProEditorDialog::setupMiscFields() {
 void ProEditorDialog::updatePreview() {
 
     // Stop current animations
-    if (_animationTimer && _animationTimer->isActive()) {
-        _animationTimer->stop();
-        _isAnimating = false;
-        if (_playPauseButton) {
-            _playPauseButton->setText("▶");
-        }
+    if (_animationController) {
+        _animationController->stop();
     }
 
     // Stop armor animation (now handled by ObjectPreviewWidget instances)
@@ -3224,57 +3225,48 @@ void ProEditorDialog::updateWindowTitle() {
 }
 
 void ProEditorDialog::onPlayPauseClicked() {
-    if (_totalFrames <= 1) {
+    if (!_animationController->hasMultipleFrames()) {
         return; // Nothing to animate
     }
 
-    if (_isAnimating) {
-        _animationTimer->stop();
-        _playPauseButton->setText("▶");
-        _playPauseButton->setToolTip("Play animation");
-        _isAnimating = false;
+    if (_animationController->isPlaying()) {
+        _animationController->pause();
     } else {
-        _animationTimer->start();
-        _playPauseButton->setText("⏸");
-        _playPauseButton->setToolTip("Pause animation");
-        _isAnimating = true;
+        _animationController->play();
     }
 }
 
-void ProEditorDialog::onFrameChanged(int frame) {
-    if (frame != _currentFrame) {
-        _currentFrame = frame;
-        _frameLabel->setText(QString("%1/%2").arg(frame + 1).arg(_totalFrames));
+void ProEditorDialog::onFrameSliderChanged(int frame) {
+    // User manually moved the slider - update controller
+    _animationController->setFrame(frame);
+}
 
-        // Update preview with new frame
-        if (frame < _frameCache.size() && !_frameCache[frame].isNull()) {
-            // Items use static dual preview, not animation frames
-            if (_previewLabel) {
-                // Single preview mode for critters and scenery
-                _previewLabel->setPixmap(_frameCache[frame]);
-            }
-        }
+void ProEditorDialog::onAnimationFrameChanged(int frame) {
+    // Controller changed frame - update UI
+    _frameLabel->setText(QString("%1/%2").arg(frame + 1).arg(_animationController->totalFrames()));
+
+    // Update slider without triggering valueChanged (block signals)
+    _frameSlider->blockSignals(true);
+    _frameSlider->setValue(frame);
+    _frameSlider->blockSignals(false);
+
+    // Update preview with new frame
+    const QPixmap& pixmap = _animationController->frame(frame);
+    if (!pixmap.isNull() && _previewLabel) {
+        _previewLabel->setPixmap(pixmap);
     }
 }
 
 void ProEditorDialog::onDirectionChanged(int direction) {
-    if (direction != _currentDirection) {
-        _currentDirection = direction;
-
+    if (direction != _animationController->currentDirection()) {
+        _animationController->setDirection(direction);
         // Reload frames for new direction
         loadAnimationFrames();
     }
 }
 
-void ProEditorDialog::onAnimationTick() {
-    if (_totalFrames > 1) {
-        int nextFrame = (_currentFrame + 1) % _totalFrames;
-        _frameSlider->setValue(nextFrame);
-    }
-}
-
 void ProEditorDialog::loadAnimationFrames() {
-    _frameCache.clear();
+    _animationController->clearFrames();
 
     if (!_pro) {
         return;
@@ -3300,15 +3292,16 @@ void ProEditorDialog::loadAnimationFrames() {
         }
 
         const auto& directions = frm->directions();
-        if (directions.empty() || _currentDirection >= static_cast<int>(directions.size())) {
+        int currentDirection = _animationController->currentDirection();
+        if (directions.empty() || currentDirection >= static_cast<int>(directions.size())) {
             return;
         }
 
-        const auto& direction = directions[_currentDirection];
+        const auto& direction = directions[currentDirection];
         const auto& frames = direction.frames();
 
-        _totalFrames = static_cast<int>(frames.size());
-        _totalDirections = static_cast<int>(directions.size());
+        int totalDirections = static_cast<int>(directions.size());
+        _animationController->setTotalDirections(totalDirections);
 
         // Load palette
         const Pal* palette = resourceManager.loadResource<Pal>("color.pal");
@@ -3317,21 +3310,26 @@ void ProEditorDialog::loadAnimationFrames() {
         }
 
         // Generate thumbnails for all frames using fixed target size for better quality
-        _frameCache.reserve(_totalFrames);
+        std::vector<QPixmap> frameCache;
+        frameCache.reserve(frames.size());
         QSize frameTargetSize(200, 200); // Fixed size for crisp animation frames
 
         for (const auto& frame : frames) {
             QPixmap thumbnail = FrmThumbnailGenerator::fromFrame(frame, palette, frameTargetSize);
-            _frameCache.push_back(thumbnail);
+            frameCache.push_back(thumbnail);
         }
 
+        // Load frames into controller
+        _animationController->loadFrames(std::move(frameCache));
+
         // Update UI
-        _frameSlider->setMaximum(_totalFrames - 1);
+        int totalFrames = _animationController->totalFrames();
+        _frameSlider->setMaximum(totalFrames > 0 ? totalFrames - 1 : 0);
         _frameSlider->setValue(0);
-        _frameLabel->setText(QString("1/%1").arg(_totalFrames));
+        _frameLabel->setText(QString("1/%1").arg(totalFrames));
 
         // Enable/disable direction combo based on available directions
-        _directionCombo->setEnabled(_totalDirections > 1);
+        _directionCombo->setEnabled(totalDirections > 1);
 
         // Enable animation controls only for critters and scenery with multiple frames
         // Items never animate (they have static single-frame FRMs)
@@ -3339,10 +3337,10 @@ void ProEditorDialog::loadAnimationFrames() {
         if (_pro) {
             if (_pro->type() == Pro::OBJECT_TYPE::CRITTER) {
                 // Critters can have animations
-                shouldEnableAnimation = (_totalFrames > 1 || _totalDirections > 1);
+                shouldEnableAnimation = (totalFrames > 1 || totalDirections > 1);
             } else if (_pro->type() == Pro::OBJECT_TYPE::SCENERY) {
                 // Some scenery can have animations (doors, etc.)
-                shouldEnableAnimation = (_totalFrames > 1 || _totalDirections > 1);
+                shouldEnableAnimation = (totalFrames > 1 || totalDirections > 1);
             }
             // Items, walls, tiles, misc never animate
         }
@@ -3350,12 +3348,9 @@ void ProEditorDialog::loadAnimationFrames() {
         _animationControls->setVisible(shouldEnableAnimation); // Show controls when animation is available
 
         // Show the first frame in the appropriate preview label
-        if (!_frameCache.empty() && !_frameCache[0].isNull()) {
-            // Items use static dual preview, not animation frames
-            if (_previewLabel) {
-                // Single preview mode for critters and scenery
-                _previewLabel->setPixmap(_frameCache[0]);
-            }
+        const QPixmap& firstFrame = _animationController->frame(0);
+        if (!firstFrame.isNull() && _previewLabel) {
+            _previewLabel->setPixmap(firstFrame);
         }
 
     } catch (const std::exception& e) {

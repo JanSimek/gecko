@@ -101,6 +101,8 @@ set(GECK_SOURCES
     ui/widgets/TextEditorWidget.cpp
     ui/widgets/ObjectPreviewWidget.h
     ui/widgets/ObjectPreviewWidget.cpp
+    ui/widgets/AnimationController.h
+    ui/widgets/AnimationController.cpp
     ui/widgets/WelcomeWidget.h
     ui/widgets/WelcomeWidget.cpp
     ui/widgets/ProCommonFieldsWidget.h

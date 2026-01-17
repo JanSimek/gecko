@@ -5,12 +5,11 @@
 #include <QPushButton>
 #include <QSlider>
 #include <QComboBox>
-#include <QTimer>
 #include <QPixmap>
 #include <memory>
-#include <vector>
 
 #include "../UIConstants.h"
+#include "AnimationController.h"
 
 class QGroupBox;
 
@@ -73,7 +72,6 @@ public slots:
     void onPlayPauseClicked();
     void onFrameChanged(int frame);
     void onRotateClicked();
-    void onAnimationTick();
     void onFidSelectorClicked();
 
 private:
@@ -91,15 +89,13 @@ private:
     QPushButton* _playPauseButton;
     QPushButton* _rotateButton;
     QPushButton* _editButton;
-    QTimer* _animationTimer;
 
-    // Animation state
-    int _currentFrame;
+    // Animation controller (handles timer, frames, playback state)
+    AnimationController* _animationController;
+
+    // Direction state (not handled by controller)
     int _currentDirection;
-    int _totalFrames;
     int _totalDirections;
-    bool _isAnimating;
-    std::vector<QPixmap> _frameCache;
 
     // Data
     int32_t _currentFid;

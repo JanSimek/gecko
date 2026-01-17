@@ -17,7 +17,6 @@
 #include <QTextEdit>
 #include <QPushButton>
 #include <QSlider>
-#include <QTimer>
 #include <QListWidget>
 #include <QRadioButton>
 #include <QButtonGroup>
@@ -30,6 +29,7 @@
 #include "../../format/msg/Msg.h"
 #include "../../util/ResourceManager.h"
 #include "../widgets/ObjectPreviewWidget.h"
+#include "../widgets/AnimationController.h"
 #include "../widgets/ProCommonFieldsWidget.h"
 #include "../widgets/pro/ProWallWidget.h"
 #include "../widgets/pro/ProTileWidget.h"
@@ -112,9 +112,9 @@ private slots:
     void onObjectFidChangeRequested();
     void onObjectFidChanged(int32_t newFid);
     void onPlayPauseClicked();
-    void onFrameChanged(int frame);
+    void onFrameSliderChanged(int frame);
     void onDirectionChanged(int direction);
-    void onAnimationTick();
+    void onAnimationFrameChanged(int frame);
     void onObjectFlagChanged();
     void onTransparencyFlagChanged();
 
@@ -258,22 +258,16 @@ private:
     ObjectPreviewWidget* _armorMalePreviewWidget;
     ObjectPreviewWidget* _armorFemalePreviewWidget;
 
-    // Animation controls (non-critter types still use old system)
+    // Animation controls
     QWidget* _animationControls;
     QHBoxLayout* _animationLayout;
     QPushButton* _playPauseButton;
     QSlider* _frameSlider;
     QLabel* _frameLabel;
     QComboBox* _directionCombo;
-    QTimer* _animationTimer;
 
-    // Animation state (non-critter types)
-    int _currentFrame;
-    int _currentDirection;
-    int _totalFrames;
-    int _totalDirections;
-    bool _isAnimating;
-    std::vector<QPixmap> _frameCache;
+    // Animation controller (handles timer, frames, playback state)
+    AnimationController* _animationController;
 
     // AI Priority calculations (f2wedit feature)
     int calculateArmorAIPriority();

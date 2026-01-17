@@ -8,7 +8,6 @@
 #include <QComboBox>
 #include <QPushButton>
 #include <QSlider>
-#include <QTimer>
 #include <QApplication>
 #include <QStyle>
 #include <QResizeEvent>
@@ -35,12 +34,9 @@ ObjectPreviewWidget::ObjectPreviewWidget(QWidget* parent, PreviewOptions options
     , _playPauseButton(nullptr)
     , _rotateButton(nullptr)
     , _editButton(nullptr)
-    , _animationTimer(nullptr)
-    , _currentFrame(0)
+    , _animationController(new AnimationController(this))
     , _currentDirection(0)
-    , _totalFrames(0)
     , _totalDirections(0)
-    , _isAnimating(false)
     , _currentFid(0)
     , _options(options)
     , _customPreviewSize(previewSize)
@@ -127,11 +123,6 @@ void ObjectPreviewWidget::setupUI() {
         _playPauseButton->setIconSize(QSize(ui::constants::sizes::ICON_SIZE_SMALL, ui::constants::sizes::ICON_SIZE_SMALL));
         _playPauseButton->hide(); // Initially hidden until preview is loaded
 
-        // Setup animation timer
-        _animationTimer = new QTimer(this);
-        _animationTimer->setSingleShot(false);
-        _animationTimer->setInterval(ui::constants::ANIMATION_TIMER_INTERVAL);
-
         // Create rotate button overlay positioned on the preview label
         _rotateButton = new QPushButton(this);
 
@@ -144,15 +135,16 @@ void ObjectPreviewWidget::setupUI() {
         _rotateButton->hide(); // Initially hidden until preview is loaded
 
         // Connect animation control signals
-        if (_playPauseButton) {
-            connect(_playPauseButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onPlayPauseClicked);
-        }
-        if (_rotateButton) {
-            connect(_rotateButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onRotateClicked);
-        }
-        if (_animationTimer) {
-            connect(_animationTimer, &QTimer::timeout, this, &ObjectPreviewWidget::onAnimationTick);
-        }
+        connect(_playPauseButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onPlayPauseClicked);
+        connect(_rotateButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onRotateClicked);
+
+        // Connect animation controller signals
+        connect(_animationController, &AnimationController::frameChanged, this, &ObjectPreviewWidget::onFrameChanged);
+        connect(_animationController, &AnimationController::playStateChanged, this, [this](bool playing) {
+            if (_playPauseButton) {
+                _playPauseButton->setIcon(createIcon(playing ? ":/icons/actions/stop.svg" : ":/icons/actions/play.svg"));
+            }
+        });
     }
 
     // Always create edit button (independent of animation controls)
@@ -210,14 +202,12 @@ void ObjectPreviewWidget::setFid(int32_t fid) {
 }
 
 void ObjectPreviewWidget::clear() {
-    stopAnimation();
+    _animationController->stop();
+    _animationController->clearFrames();
 
     _currentFid = 0;
     _currentFrmPath.clear();
-    _frameCache.clear();
-    _totalFrames = 0;
     _totalDirections = 0;
-    _currentFrame = 0;
     _currentDirection = 0;
 
     _previewLabel->setText("No FRM loaded");
@@ -226,12 +216,13 @@ void ObjectPreviewWidget::clear() {
         _fidButton->setText("No FRM");
     }
 
-    // Hide rotate button when no FRM is loaded
+    // Hide overlay buttons when no FRM is loaded
     if (_rotateButton) {
         _rotateButton->hide();
     }
-
-    // Animation controls removed - using overlay buttons instead
+    if (_playPauseButton) {
+        _playPauseButton->hide();
+    }
 }
 
 void ObjectPreviewWidget::setScaleFactor(double scaleFactor) {
@@ -243,11 +234,10 @@ void ObjectPreviewWidget::setScaleFactor(double scaleFactor) {
 }
 
 void ObjectPreviewWidget::updatePreview() {
-    stopAnimation();
+    _animationController->stop();
 
     if (_currentFrmPath.isEmpty()) {
         _previewLabel->setText("No FRM loaded");
-        // Animation controls removed - using overlay buttons instead
         return;
     }
 
@@ -287,7 +277,7 @@ void ObjectPreviewWidget::updatePreview() {
                 _rotateButton->setVisible(_totalDirections > 1);
             }
             if (_playPauseButton) {
-                _playPauseButton->setVisible(_totalFrames > 1);
+                _playPauseButton->setVisible(_animationController->hasMultipleFrames());
             }
         }
 
@@ -295,7 +285,6 @@ void ObjectPreviewWidget::updatePreview() {
         positionOverlayButtons();
     } else {
         _previewLabel->setText("Failed to load FRM");
-        // Animation controls removed - using overlay buttons instead
         // Hide rotate button when FRM loading fails
         if (_rotateButton) {
             _rotateButton->hide();
@@ -304,62 +293,45 @@ void ObjectPreviewWidget::updatePreview() {
 }
 
 void ObjectPreviewWidget::stopAnimation() {
-    if (_animationTimer && _animationTimer->isActive()) {
-        _animationTimer->stop();
-        _isAnimating = false;
-        if (_playPauseButton) {
-            _playPauseButton->setIcon(createIcon(":/icons/actions/play.svg"));
-        }
-        // Reset to first frame when stopping
-        _currentFrame = 0;
-        onFrameChanged(0);
-    }
+    _animationController->stop();
 }
 
 void ObjectPreviewWidget::onPlayPauseClicked() {
-    if (_isAnimating) {
-        // Stop animation and reset to first frame
-        _animationTimer->stop();
-        _isAnimating = false;
-        _playPauseButton->setIcon(createIcon(":/icons/actions/play.svg"));
-        _currentFrame = 0;
-        onFrameChanged(0); // Reset to first frame
+    if (_animationController->isPlaying()) {
+        _animationController->stop();
     } else {
-        if (_totalFrames > 1) {
-            _animationTimer->start();
-            _isAnimating = true;
-            _playPauseButton->setIcon(createIcon(":/icons/actions/stop.svg"));
-        }
+        _animationController->play();
     }
 }
 
 void ObjectPreviewWidget::onFrameChanged(int frame) {
-    _currentFrame = frame;
+    const QPixmap& pixmap = _animationController->frame(frame);
+    if (pixmap.isNull()) {
+        return;
+    }
 
-    if (frame < static_cast<int>(_frameCache.size()) && !_frameCache[frame].isNull()) {
-        // Scale proportionally to fit within widget bounds while preserving aspect ratio
-        QSize labelSize = _previewLabel->size();
-        if (labelSize.isEmpty() || labelSize.width() <= 0 || labelSize.height() <= 0) {
-            // Fallback to custom size or default constraints
-            if (!_customPreviewSize.isEmpty()) {
-                labelSize = _customPreviewSize;
-            } else {
-                labelSize = QSize(PREVIEW_MIN_WIDTH, PREVIEW_MIN_HEIGHT);
-            }
-        }
-
-        // Scale image to configured size, but constrain to widget bounds if too large
-        QSize targetSize = QSize(_frameCache[frame].width() * _scaleFactor, _frameCache[frame].height() * _scaleFactor);
-
-        // If 2x size exceeds widget bounds, scale down to fit
-        if (targetSize.width() > labelSize.width() || targetSize.height() > labelSize.height()) {
-            QPixmap scaled = _frameCache[frame].scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            _previewLabel->setPixmap(scaled);
+    // Scale proportionally to fit within widget bounds while preserving aspect ratio
+    QSize labelSize = _previewLabel->size();
+    if (labelSize.isEmpty() || labelSize.width() <= 0 || labelSize.height() <= 0) {
+        // Fallback to custom size or default constraints
+        if (!_customPreviewSize.isEmpty()) {
+            labelSize = _customPreviewSize;
         } else {
-            // Use 2x scaled size
-            QPixmap scaled = _frameCache[frame].scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            _previewLabel->setPixmap(scaled);
+            labelSize = QSize(PREVIEW_MIN_WIDTH, PREVIEW_MIN_HEIGHT);
         }
+    }
+
+    // Scale image to configured size, but constrain to widget bounds if too large
+    QSize targetSize = QSize(pixmap.width() * _scaleFactor, pixmap.height() * _scaleFactor);
+
+    // If 2x size exceeds widget bounds, scale down to fit
+    if (targetSize.width() > labelSize.width() || targetSize.height() > labelSize.height()) {
+        QPixmap scaled = pixmap.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        _previewLabel->setPixmap(scaled);
+    } else {
+        // Use 2x scaled size
+        QPixmap scaled = pixmap.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        _previewLabel->setPixmap(scaled);
     }
 }
 
@@ -367,29 +339,14 @@ void ObjectPreviewWidget::onRotateClicked() {
     // Cycle through directions: 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 0
     _currentDirection = (_currentDirection + 1) % DIRECTIONS_COUNT;
 
-    // Stop animation when changing direction
-    if (_isAnimating) {
-        _animationTimer->stop();
-        _isAnimating = false;
-        _playPauseButton->setIcon(createIcon(":/icons/actions/play.svg"));
-    }
-
-    // Reload frames for new direction
+    // Stop animation and reload frames for new direction
+    _animationController->stop();
     loadAnimationFrames();
 
-    // Reset to first frame
-    _currentFrame = 0;
-    onFrameChanged(0);
-}
-
-void ObjectPreviewWidget::onAnimationTick() {
-    if (_totalFrames <= 1) {
-        return;
+    // Show first frame
+    if (_animationController->hasFrames()) {
+        onFrameChanged(0);
     }
-
-    _currentFrame = (_currentFrame + 1) % _totalFrames;
-    // Frame slider removed, call onFrameChanged directly
-    onFrameChanged(_currentFrame);
 }
 
 void ObjectPreviewWidget::onFidSelectorClicked() {
@@ -397,8 +354,7 @@ void ObjectPreviewWidget::onFidSelectorClicked() {
 }
 
 void ObjectPreviewWidget::loadAnimationFrames() {
-    _frameCache.clear();
-    _totalFrames = 0;
+    _animationController->clearFrames();
 
     if (_currentFrmPath.isEmpty()) {
         return;
@@ -426,11 +382,11 @@ void ObjectPreviewWidget::loadAnimationFrames() {
         }
 
         const auto& direction = frm->directions()[_currentDirection];
-        _totalFrames = static_cast<int>(direction.frames().size());
         _totalDirections = static_cast<int>(frm->directions().size());
 
         // Cache all frames for this direction
-        _frameCache.reserve(_totalFrames);
+        std::vector<QPixmap> frameCache;
+        frameCache.reserve(direction.frames().size());
         for (const auto& frame : direction.frames()) {
             // Get frame dimensions
             uint16_t frameWidth = frame.width();
@@ -451,12 +407,14 @@ void ObjectPreviewWidget::loadAnimationFrames() {
             QImage frameImage(rgbaData, frameWidth, frameHeight, QImage::Format_RGBA8888);
             frameImage = frameImage.copy(); // Make a copy since rgbaData might be temporary
 
-            _frameCache.push_back(QPixmap::fromImage(frameImage));
+            frameCache.push_back(QPixmap::fromImage(frameImage));
         }
+
+        // Load frames into controller
+        _animationController->loadFrames(std::move(frameCache));
     } catch (const std::exception& e) {
         spdlog::error("Error loading animation frames: {}", e.what());
-        _frameCache.clear();
-        _totalFrames = 0;
+        _animationController->clearFrames();
     }
 }
 
@@ -537,7 +495,7 @@ void ObjectPreviewWidget::setShowAnimationControls(bool show) {
         _rotateButton->setVisible(show && _totalDirections > 1);
     }
     if (_playPauseButton) {
-        _playPauseButton->setVisible(show && _totalFrames > 1);
+        _playPauseButton->setVisible(show && _animationController->hasMultipleFrames());
     }
 }
 
