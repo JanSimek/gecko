@@ -484,17 +484,14 @@ void MainWindow::setupToolBar() {
     // File operations
     QAction* newAction = _mainToolBar->addAction(createIcon(":/icons/actions/new.svg"), "New");
     newAction->setStatusTip("Create a new map");
-    newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &MainWindow::newMapRequested);
 
     QAction* openAction = _mainToolBar->addAction(createIcon(":/icons/actions/open.svg"), "Open");
     openAction->setStatusTip("Open an existing map");
-    openAction->setShortcut(QKeySequence::Open);
     connect(openAction, &QAction::triggered, this, &MainWindow::openMapRequested);
 
     QAction* saveAction = _mainToolBar->addAction(createIcon(":/icons/actions/save.svg"), "Save");
     saveAction->setStatusTip("Save the current map");
-    saveAction->setShortcut(QKeySequence::Save);
     connect(saveAction, &QAction::triggered, this, &MainWindow::saveMapRequested);
 
     // Play game action
