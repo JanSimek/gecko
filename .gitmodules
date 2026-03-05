@@ -1,3 +1,3 @@
 [submodule "vendor/vfspp"]
 	path = vendor/vfspp
-	url = git@github.com:JanSimek/vfspp.git
+	url = https://github.com/JanSimek/vfspp.git
