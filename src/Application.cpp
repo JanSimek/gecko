@@ -1,175 +1,239 @@
+#define QT_NO_EMIT
 #include "Application.h"
 
-#include <imgui-SFML.h>
-#include <imgui.h>
-#include <SFML/Window/Event.hpp>
-#include <portable-file-dialogs.h>
+#include <spdlog/spdlog.h>
+#include <QCommandLineParser>
+#include <QCommandLineOption>
+#include <QObject>
+#include <QIcon>
+#include <QCoreApplication>
 
-#include "imgui_internal.h"
-#include "state/EditorState.h"
-#include "state/LoadingState.h"
-#include "state/StateMachine.h"
+#include "version.h"
 #include "state/loader/MapLoader.h"
 #include "util/ResourceManager.h"
-#include "ui/util.h"
+#include "util/Settings.h"
+#include "util/QtDialogs.h"
+#include "ui/core/MainWindow.h"
+#include "ui/core/EditorWidget.h"
+#include "ui/widgets/LoadingWidget.h"
+#include "ui/dialogs/SettingsDialog.h"
+#include "state/loader/DataPathLoader.h"
+#include "ui/panels/FileBrowserPanel.h"
 
 namespace geck {
 
-Application::Application(const std::filesystem::path& resourcePath, const std::filesystem::path& mapPath)
-    : _running(false)
-    , _window(std::make_unique<sf::RenderWindow>(sf::VideoMode(1280, 960), "Gecko"))
-    , _stateMachine(std::make_shared<StateMachine>())
-    , _appData(std::make_shared<AppData>(AppData{ _window, _stateMachine })) {
+Application::Application(int argc, char** argv)
+    : _qtApp(std::make_unique<QApplication>(argc, argv))
+    , _mainWindow(nullptr) {
 
-    _window->setVerticalSyncEnabled(true);
+    _qtApp->setApplicationName(geck::version::name);
+    _qtApp->setApplicationDisplayName(geck::version::name);
+    _qtApp->setApplicationVersion(geck::version::string);
 
-    ResourceManager::getInstance().addDataPath(resourcePath);
+    std::filesystem::path iconPath = getResourcesPath() / "icon.png";
+    QIcon appIcon(QString::fromStdString(iconPath.string()));
+    _qtApp->setWindowIcon(appIcon);
 
-    //sf::Image icon;
-    // VSF -> loadFromMemory icon.loadFromFile(data_path / "icon.png");
-    //_window->setIcon(600, 600, icon.getPixelsPtr());
+    const std::string finalMapPath = processCommandLineArgs();
 
     initUI();
 
-    // TODO: show configuration window if no map is selected
-    loadMap(mapPath);
+    // Check for first run and show settings dialog if needed
+    checkFirstRun();
+
+    loadMap(finalMapPath);
 }
 
 void Application::loadMap(const std::filesystem::path& mapPath) {
+    if (mapPath.empty()) {
+        spdlog::info("No map file specified, starting with empty editor");
+        return;
+    }
 
-    auto loading_state = std::make_unique<LoadingState>(_appData);
-    loading_state->addLoader(std::make_unique<MapLoader>(mapPath, -1, [this](auto map) {
-        _appData->stateMachine->push(std::make_unique<EditorState>(_appData, std::move(map)), true);
+    auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
+    loadingWidget->setWindowTitle("Loading Map");
+
+    // Add map loader (filesystem loading for command line args)
+    loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, true, [this](auto map) {
+        // Check if loading was successful
+        if (map) {
+            // When loading is complete, create editor widget and switch to it
+            auto editorWidget = std::make_unique<EditorWidget>(std::move(map));
+            _mainWindow->setEditorWidget(std::move(editorWidget));
+        }
+        // If map is null, error was already shown by MapLoader::onDone()
     }));
 
-    _stateMachine->push(std::move(loading_state));
+    // Show modal loading dialog
+    loadingWidget->exec();
+}
+
+std::string Application::processCommandLineArgs() {
+    QCommandLineParser parser;
+    parser.addHelpOption();
+    parser.addVersionOption();
+    parser.setApplicationDescription(geck::version::description);
+
+    // Determine the default resources path using the centralized method
+    std::filesystem::path default_resources_path = getResourcesPath();
+
+    QCommandLineOption dataOption(QStringList() << "d" << "data",
+        "Path to the Fallout 2 directory or individual data files, e.g. master.dat and critter.dat",
+        "path", QString::fromStdString(default_resources_path.string()));
+    parser.addOption(dataOption);
+
+    QCommandLineOption mapOption(QStringList() << "m" << "map",
+        "Path to the map file to load",
+        "mapfile");
+    parser.addOption(mapOption);
+
+    QCommandLineOption debugOption("debug", "Show debug messages");
+    parser.addOption(debugOption);
+
+    parser.process(*_qtApp);
+
+    if (parser.isSet(debugOption)) {
+        spdlog::set_pattern("[%^%l%$] [thread %t] %v");
+        spdlog::set_level(spdlog::level::debug);
+    }
+
+    auto& settings = Settings::getInstance();
+    bool isFirstRun = !settings.exists();
+
+    if (!isFirstRun) {
+        settings.load();
+    }
+
+    // For first run, we'll add the default path but won't load it yet
+    if (settings.getDataPaths().empty()) {
+        QString dataPath = parser.value(dataOption);
+        spdlog::info("No data paths in settings, will use command line default: {}", dataPath.toStdString());
+
+        // Add to settings but don't save or load yet
+        settings.addDataPath(dataPath.toStdString());
+    }
+
+    // Data paths will be loaded after settings dialog in checkFirstRun()
+    return parser.isSet(mapOption) ? parser.value(mapOption).toStdString() : "";
 }
 
 Application::~Application() {
-    _window->close();
-    ImGui::SFML::Shutdown();
+    if (_mainWindow) {
+        _mainWindow->stopGameLoop();
+    }
+    // OpenGL textures must be destroyed while the OpenGL context is still valid;
+    // without this we get mutex/context crash during static destruction
+    ResourceManager::getInstance().cleanup();
 }
 
 void Application::initUI() {
-    if (!ImGui::SFML::Init(*_window)) {
-        throw std::runtime_error{ "Error initializing SFML-ImGui" };
-    }
+    _mainWindow = std::make_unique<MainWindow>();
 
-    constexpr auto scale_factor = 1.0f; // default
-
-    ImGui::GetStyle().ScaleAllSizes(scale_factor);
-
-    ImGuiIO& io = ImGui::GetIO();
-    io.FontGlobalScale = scale_factor;
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; // Enable Docking
-/*
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;       // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
-*/
-    io.Fonts->Clear();
-
-    constexpr float font_size = 20.0f;
-    constexpr float icon_size = 16.0f;
-
-    // icon font - merge in icons from Font Awesome
-    static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
-    ImFontConfig icons_config;
-    icons_config.MergeMode = true;
-    icons_config.PixelSnapH = true;
-    icons_config.GlyphOffset = ImVec2(0, 1);
-    icons_config.GlyphMinAdvanceX = 13.0f; // to make the icon monospaced
-
-    // default UI font
-    std::filesystem::path main_font = RESOURCES_DIR / FONT_MAIN;
-    io.Fonts->AddFontFromFileTTF(main_font.string().c_str(), font_size);
-    // TODO: VFS io.Fonts->AddFontFromMemoryTTF();
-
-    std::filesystem::path icon_font = RESOURCES_DIR / FONT_ICON;
-    io.Fonts->AddFontFromFileTTF(icon_font.string().c_str(), icon_size, &icons_config, icons_ranges);
-    // TODO: VFS io.Fonts->AddFontFromMemoryTTF();
-
-    io.Fonts->Build();
-
-    if (!ImGui::SFML::UpdateFontTexture()) {
-        spdlog::error("Unable to load custom ImGui font");
-    }
-
-    ImGui::SetupImGuiStyle();
-}
-
-void Application::update(float dt) {
-    sf::Event event{};
-    while (_window->pollEvent(event)) {
-        ImGui::SFML::ProcessEvent(*_window, event);
-
-        // don't pass mouse and keyboard presses to states when an ImGui widget is active
-        auto& io = ImGui::GetIO();
-        if ((io.WantCaptureMouse && (event.type == sf::Event::MouseButtonPressed || event.type == sf::Event::MouseWheelScrolled))
-            || (io.WantCaptureKeyboard && event.type == sf::Event::KeyPressed)) {
-            continue;
-        }
-
-        if (!_stateMachine->empty()) {
-            _stateMachine->top().handleEvent(event);
-        }
-
-        if (event.type == sf::Event::Closed) {
-            _running = false;
-        }
-    }
-
-    if (!_stateMachine->empty()) {
-        _stateMachine->top().update(dt);
-
-        if (!_stateMachine->top().isRunning())
-            _running = false;
+    // Check if this is first run or if user prefers maximized
+    auto& settings = Settings::getInstance();
+    if (!settings.exists() || settings.getWindowMaximized()) {
+        _mainWindow->showMaximized();
     } else {
-        _running = false;
+        _mainWindow->show();
     }
-
-    ImGui::SFML::Update(*_window, _deltaClock.getElapsedTime());
-}
-
-/**
- * @brief Creates an invisible window where other IMGUI windows can be docked into
- */
-void geck::Application::renderDockingUI() {
-    const bool enableDocking = ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DockingEnable;
-    if (enableDocking) {
-        ImGuiDockNodeFlags window_flags = ImGuiDockNodeFlags_PassthruCentralNode;
-        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), window_flags);
-    }
-}
-
-void Application::render(float dt) {
-
-    renderDockingUI(); // must be isDone before any other IMGUI rendering
-
-    _window->clear(sf::Color::Black);
-
-    if (!_stateMachine->empty()) {
-        _stateMachine->top().render(dt);
-    }
-
-    ImGui::SFML::Render(*_window);
-
-    _window->display();
 }
 
 void Application::run() {
-    _running = true;
+    _mainWindow->startGameLoop();
 
-    float dt = 0.f;
-    while (_running) {
-        update(dt);
-        render(dt);
-
-        dt = _deltaClock.restart().asSeconds();
-    }
+    int result = _qtApp->exec();
+    spdlog::debug("Application exited with code: {}", result);
 }
 
 bool Application::isRunning() const {
-    return _running;
+    return _mainWindow && _mainWindow->isVisible();
+}
+
+void Application::checkFirstRun() {
+    auto& settings = Settings::getInstance();
+    if (!settings.exists()) {
+        spdlog::info("First run detected, showing settings dialog");
+
+        SettingsDialog dialog(_mainWindow.get());
+        int result = dialog.exec();
+
+        // Always save settings after first run, even if cancelled
+        // This ensures we have at least the default data path from command line
+        settings.save();
+
+        if (result == QDialog::Accepted) {
+            spdlog::info("Settings dialog accepted, configuration saved");
+            loadDataPaths();
+        } else {
+            spdlog::info("Settings dialog cancelled, saving default configuration");
+            // Still load data paths even if cancelled, so the app is usable
+            loadDataPaths();
+        }
+    } else {
+        // Not first run, load data paths normally
+        loadDataPaths();
+    }
+}
+
+void Application::loadDataPaths() {
+    auto& settings = Settings::getInstance();
+    auto dataPaths = settings.getDataPaths();
+
+    if (dataPaths.empty()) {
+        spdlog::warn("No data paths configured, application may not function properly");
+        return;
+    }
+
+    spdlog::info("Loading {} data paths with progress dialog", dataPaths.size());
+
+    // Load Fallout 2 game data files (DAT files, directories) even when no map is loaded
+    // This is essential because:
+    // 1. ResourceManager needs access to game assets (textures, sprites, sounds)
+    // 2. File browser requires loaded data to display available maps and resources
+    // 3. Creating new maps needs tile/object assets from game data
+    // 4. Editor cannot function properly without access to FRM files and other resources
+    auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
+    loadingWidget->setWindowTitle("Loading Game Data");
+    loadingWidget->addLoader(std::make_unique<DataPathLoader>(dataPaths));
+
+    // Show modal loading dialog - this appears even without a map loaded
+    loadingWidget->exec();
+
+    // After data loading completes, refresh the file browser so it shows the loaded files
+    if (_mainWindow) {
+        _mainWindow->refreshFileBrowser();
+        _mainWindow->showFileBrowserPanel();
+    }
+
+    spdlog::info("Data paths loaded successfully");
+}
+
+std::filesystem::path Application::getResourcesPath() {
+#ifdef __APPLE__
+    // Check if we're running from a macOS app bundle
+    QString appPath = QCoreApplication::applicationDirPath();
+    if (appPath.contains(".app/Contents/MacOS")) {
+        // We're in a bundle, resources are in ../Resources
+        std::filesystem::path bundlePath = appPath.toStdString();
+        return bundlePath.parent_path() / "Resources" / RESOURCES_DIR;
+    } else {
+        // Not in a bundle, use current directory
+        return std::filesystem::current_path() / RESOURCES_DIR;
+    }
+#else
+    // For Windows and Linux, use current directory
+    return std::filesystem::current_path() / RESOURCES_DIR;
+#endif
+}
+
+bool Application::isDefaultResourcesPath(const std::filesystem::path& path) {
+    try {
+        std::filesystem::path defaultPath = getResourcesPath();
+        return std::filesystem::equivalent(path, defaultPath);
+    } catch (const std::filesystem::filesystem_error&) {
+        // If we can't compare paths (e.g., one doesn't exist), compare strings
+        return path == getResourcesPath();
+    }
 }
 
 } // namespace geck

@@ -8,6 +8,7 @@
 #include <SFML/Graphics.hpp>
 
 #include <vfspp/VirtualFileSystem.hpp>
+#include "PathUtils.h"
 
 #include "format/IFile.h"
 #include "format/pal/Pal.h"
@@ -17,6 +18,8 @@
 
 #include "reader/FileParser.h"
 #include "reader/dat/DatReader.h"
+#include "reader/ReaderFactory.h"
+#include "reader/ReaderExceptions.h"
 
 namespace geck {
 
@@ -42,38 +45,86 @@ public:
     }
 
     template <class T, typename Key>
-    T* getResource(const Key& filepath);
+    [[nodiscard]] T* getResource(const Key& filepath);
+
+    void cleanup();
+
+    // Clear all VFS mounts and caches, preparing for reload
+    void clearAllDataPaths();
+
+    // Store a custom texture in the resource manager
+    void storeTexture(std::string_view name, std::unique_ptr<sf::Texture> texture);
 
     template <class Resource>
-    Resource* loadResource(const std::filesystem::path& path, FileParser<Resource>& reader) {
-
+    [[nodiscard]] Resource* loadResource(const std::filesystem::path& path) {
         static_assert(std::is_base_of<IFile, Resource>::value, "Resource must derive from IFile");
 
-        if (!exists(path.string())) {
-            // vfspp adds / to the root by default
-            std::filesystem::path vfsPath = "/" / path;
-            vfspp::IFilePtr file = _vfs->OpenFile(vfspp::FileInfo(vfsPath.string()), vfspp::IFile::FileMode::Read);
+        const std::string pathKey = path.string();
 
-            if (!file || !file->IsOpened()) {
-                throw std::runtime_error{ "Failed to open file from VFS: " + vfsPath.string() };
+        // Check if already loaded
+        auto existingIter = _resources.find(pathKey);
+        if (existingIter == _resources.end()) {
+            try {
+                // Load data from VFS
+                // The VFS layer uses forward slashes internally, matching DAT archive format
+                const std::filesystem::path vfsPath = "/" / path;
+                vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::createNormalizedFileInfo(vfsPath), vfspp::IFile::FileMode::Read);
+
+                if (!file || !file->IsOpened()) {
+                    throw IOException("Failed to open file from VFS", vfsPath);
+                }
+
+                // Read file data from VFS into memory
+                std::vector<uint8_t> data(file->Size());
+                file->Read(data, file->Size());
+
+                auto resource = ReaderFactory::readFileFromMemory<Resource>(data, pathKey);
+
+                _resources[pathKey] = std::move(resource);
+
+            } catch (const std::exception& e) {
+                throw IOException("Failed to load resource: " + std::string(e.what()), path);
             }
-            std::vector<uint8_t> data(file->Size());
-            file->Read(data, file->Size());
-            _resources.emplace(path.string(), std::move(reader.openFile(path.string(), data)));
-            _vfs->CloseFile(file);
         }
 
-        return dynamic_cast<Resource*>(_resources.at(path.string()).get());
+        return dynamic_cast<Resource*>(_resources.at(pathKey).get());
     }
 
-    bool exists(const std::string& filename);
-    void insertTexture(const std::string& filename);
+    [[nodiscard]] bool exists(std::string_view filename) const;
+    [[nodiscard]] bool fileExistsInVFS(const std::filesystem::path& filepath) const;
+    void insertTexture(std::string_view filename);
 
-    const sf::Texture& texture(const std::string& filename);
+    [[nodiscard]] const sf::Texture& texture(std::string_view filename);
 
-    std::string FIDtoFrmName(unsigned int FID);
+    [[nodiscard]] std::string FIDtoFrmName(unsigned int FID);
 
     void addDataPath(const std::filesystem::path& path);
+
+    // ========================================
+    // Extended VFS Methods (File Listing)
+    // ========================================
+
+    /**
+     * @brief List all files from all mounted filesystems
+     * @return Vector of all file paths (absolute paths with aliases)
+     */
+    std::vector<std::string> listAllFiles() const;
+
+    /**
+     * @brief List files matching a glob pattern
+     * @param pattern Glob pattern (e.g., "*.lst", "art/items/")
+     * @return Vector of matching file paths
+     */
+    std::vector<std::string> listFilesByPattern(const std::string& pattern) const;
+
+    /**
+     * @brief Get access to the virtual file system
+     * @return Shared pointer to the VFS
+     */
+    vfspp::VirtualFileSystemPtr getVFS() const { return _vfs; }
+
+    // Cache management methods
+    void clearTextureCache(const std::string& filename);
 };
 
 } // namespace geck

@@ -1,0 +1,71 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/icons">
+        <!-- Toolbar Actions -->
+        <file alias="actions/new.svg">icons/tabler/actions/file-plus.svg</file>
+        <file alias="actions/open.svg">icons/tabler/actions/folder-open.svg</file>
+        <file alias="actions/save.svg">icons/tabler/actions/device-floppy.svg</file>
+        <file alias="actions/rotate.svg">icons/tabler/actions/rotate-clockwise.svg</file>
+        <file alias="actions/select.svg">icons/tabler/actions/pointer.svg</file>
+        <file alias="actions/paint.svg">icons/tabler/actions/brush.svg</file>
+        <file alias="actions/settings.svg">icons/tabler/actions/settings.svg</file>
+        <file alias="actions/quit.svg">icons/tabler/actions/power.svg</file>
+        <file alias="actions/map-pin.svg">icons/tabler/actions/map-pin.svg</file>
+        <file alias="actions/target-arrow.svg">icons/tabler/actions/target-arrow.svg</file>
+        <file alias="actions/play.svg">icons/tabler/actions/player-play.svg</file>
+        <file alias="actions/stop.svg">icons/tabler/actions/player-stop.svg</file>
+        <file alias="actions/edit.svg">icons/tabler/actions/pencil.svg</file>
+        <file alias="actions/door-exit.svg">icons/door-exit.svg</file>
+        
+        <!-- Edit Menu Actions -->
+        <file alias="actions/select-all.svg">icons/tabler/actions/select-all.svg</file>
+        <file alias="actions/deselect.svg">icons/tabler/actions/square-off.svg</file>
+        <file alias="actions/scroll-blocker.svg">icons/tabler/actions/border-all.svg</file>
+        
+        <!-- View Menu Actions -->
+        <file alias="actions/view-objects.svg">icons/tabler/actions/box.svg</file>
+        <file alias="actions/view-critters.svg">icons/tabler/actions/user.svg</file>
+        <file alias="actions/view-walls.svg">icons/tabler/actions/wall.svg</file>
+        <file alias="actions/view-roofs.svg">icons/tabler/actions/home-2.svg</file>
+        <file alias="actions/view-grid.svg">icons/tabler/actions/grid-dots.svg</file>
+        <file alias="actions/view-scroll-blockers.svg">icons/tabler/actions/border-all.svg</file>
+        <file alias="actions/view-wall-blockers.svg">icons/tabler/actions/barrier-block.svg</file>
+        <file alias="actions/view-light.svg">icons/tabler/actions/brightness.svg</file>
+        <file alias="actions/view-exits.svg">icons/door-exit.svg</file>
+        
+        <!-- File Types -->
+        <file alias="filetypes/map.svg">icons/tabler/filetypes/map-2.svg</file>
+        <file alias="filetypes/image.svg">icons/tabler/filetypes/photo.svg</file>
+        <file alias="filetypes/proto.svg">icons/tabler/filetypes/file-settings.svg</file>
+        <file alias="filetypes/message.svg">icons/tabler/filetypes/message-2.svg</file>
+        <file alias="filetypes/data.svg">icons/tabler/filetypes/database.svg</file>
+        <file alias="filetypes/list.svg">icons/tabler/filetypes/list.svg</file>
+        <file alias="filetypes/script.svg">icons/tabler/filetypes/file-code.svg</file>
+        <file alias="filetypes/text.svg">icons/tabler/filetypes/file-type-txt.svg</file>
+        <file alias="filetypes/palette.svg">icons/tabler/filetypes/palette.svg</file>
+        <file alias="filetypes/default.svg">icons/tabler/filetypes/file.svg</file>
+        <file alias="filetypes/folder.svg">icons/tabler/filetypes/folder.svg</file>
+        <file alias="filetypes/folder-open.svg">icons/tabler/filetypes/folder-open.svg</file>
+        
+        <!-- UI Elements -->
+        <file alias="ui/refresh.svg">icons/tabler/ui/refresh.svg</file>
+        <file alias="ui/grid.svg">icons/tabler/ui/grid-dots.svg</file>
+        <file alias="ui/add.svg">icons/tabler/ui/plus.svg</file>
+        <file alias="ui/remove.svg">icons/tabler/ui/minus.svg</file>
+        <file alias="ui/search.svg">icons/tabler/ui/search.svg</file>
+        <file alias="ui/auto-detect.svg">icons/tabler/ui/cpu.svg</file>
+        <file alias="ui/warning.svg">icons/tabler/ui/alert-triangle.svg</file>
+        <file alias="ui/error.svg">icons/tabler/ui/alert-circle.svg</file>
+        <file alias="ui/info.svg">icons/tabler/ui/info-circle.svg</file>
+        
+        <!-- Panel Icons -->
+        <file alias="panels/info.svg">icons/tabler/panels/info-circle.svg</file>
+        <file alias="panels/selection.svg">icons/tabler/panels/select.svg</file>
+        <file alias="panels/tiles.svg">icons/tabler/panels/layout-grid.svg</file>
+        <file alias="panels/objects.svg">icons/tabler/panels/box-multiple.svg</file>
+        <file alias="panels/files.svg">icons/tabler/panels/files.svg</file>
+        
+        <!-- Welcome Screen -->
+        <file alias="welcome/vault-boy.svg">images/vault-boy.svg</file>
+    </qresource>
+</RCC>

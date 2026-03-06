@@ -2,41 +2,40 @@
 
 #include "format/lst/Lst.h"
 #include "format/msg/Msg.h"
-#include "reader/lst/LstReader.h"
-#include "reader/msg/MsgReader.h"
+#include "reader/ReaderFactory.h"
 #include "util/ResourceManager.h"
+#include "util/ResourcePaths.h"
 
 namespace geck {
 
 Msg* geck::ProHelper::msgFile(Pro::OBJECT_TYPE type) {
-    MsgReader msg_reader{};
 
     std::string filename;
 
     switch (type) {
         case Pro::OBJECT_TYPE::ITEM: {
-            filename = "text/english/game/pro_item.msg";
+            filename = ResourcePaths::Msg::PRO_ITEM;
         } break;
         case Pro::OBJECT_TYPE::CRITTER: {
-            filename = "text/english/game/pro_crit.msg";
+            filename = ResourcePaths::Msg::PRO_CRIT;
         } break;
         case Pro::OBJECT_TYPE::SCENERY: {
-            filename = "text/english/game/pro_scen.msg";
+            filename = ResourcePaths::Msg::PRO_SCEN;
         } break;
         case Pro::OBJECT_TYPE::WALL: {
-            filename = "text/english/game/pro_wall.msg";
+            filename = ResourcePaths::Msg::PRO_WALL;
         } break;
         case Pro::OBJECT_TYPE::TILE: {
-            filename = "text/english/game/pro_tile.msg";
+            filename = ResourcePaths::Msg::PRO_TILE;
         } break;
         case Pro::OBJECT_TYPE::MISC: {
-            filename = "text/english/game/pro_misc.msg";
+            filename = ResourcePaths::Msg::PRO_MISC;
         } break;
         default:
             throw std::runtime_error{ "Invalid PRO type" };
     }
 
-    return ResourceManager::getInstance().loadResource(filename, msg_reader);
+    return ResourceManager::getInstance().loadResource<Msg>(filename);
 }
 
 Lst* ProHelper::lstFile(uint32_t PID) {
@@ -45,29 +44,28 @@ Lst* ProHelper::lstFile(uint32_t PID) {
     std::string filename;
     switch (static_cast<Pro::OBJECT_TYPE>(typeId)) {
         case Pro::OBJECT_TYPE::ITEM:
-            filename = "proto/items/items.lst";
+            filename = ResourcePaths::Lst::PROTO_ITEMS;
             break;
         case Pro::OBJECT_TYPE::CRITTER:
-            filename = "proto/critters/critters.lst";
+            filename = ResourcePaths::Lst::PROTO_CRITTERS;
             break;
         case Pro::OBJECT_TYPE::SCENERY:
-            filename = "proto/scenery/scenery.lst";
+            filename = ResourcePaths::Lst::PROTO_SCENERY;
             break;
         case Pro::OBJECT_TYPE::WALL:
-            filename = "proto/walls/walls.lst";
+            filename = ResourcePaths::Lst::PROTO_WALLS;
             break;
         case Pro::OBJECT_TYPE::TILE:
-            filename = "proto/tiles/tiles.lst";
+            filename = ResourcePaths::Lst::PROTO_TILES;
             break;
         case Pro::OBJECT_TYPE::MISC:
-            filename = "proto/misc/misc.lst";
+            filename = ResourcePaths::Lst::PROTO_MISC;
             break;
         default:
             throw std::runtime_error{ "Wrong PID: " + std::to_string(PID) };
     }
 
-    LstReader lst_reader{};
-    return ResourceManager::getInstance().loadResource(filename, lst_reader);
+    return ResourceManager::getInstance().loadResource<Lst>(filename);
 }
 
 const std::string ProHelper::basePath(uint32_t PID) {

@@ -33,7 +33,8 @@
 
 CMakeLists.txt.user
 #CMakeSettings.json
-build/
+build*/
+reference/
 .vs/
 
 # All the stuff that running cmake adds
@@ -51,3 +52,6 @@ src/cmake_install.cmake
 cmake-build-debug/
 
 .idea/
+
+.DS_Store
+

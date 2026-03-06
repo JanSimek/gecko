@@ -1,28 +1,81 @@
-
-add_executable(tests
-    test_reading_gam.cpp
-    test_reading_msg.cpp
+# General tests (Catch2) - Pure C++ logic tests
+add_executable(general_tests
+    general/test_reading_gam.cpp
+    general/test_reading_msg.cpp
+    general/test_reading_pro_drug.cpp
+    general/test_tile_utils.cpp
+    general/test_reader_factory.cpp
+    general/test_selection_system.cpp
+    
+    # Selection system sources (needed for linking)
+    ../src/selection/SelectionState.cpp
 )
-target_link_libraries(tests PRIVATE
+
+# Performance tests (Catch2 with benchmarking) - Reader performance tests
+add_executable(performance_tests
+    performance/test_reader_performance.cpp
+)
+
+target_link_libraries(general_tests PRIVATE
     Catch2::Catch2WithMain
-    spdlog::spdlog_header_only
+    gecko::spdlog
     vault
+    SFML::System SFML::Graphics
 )
 
+target_include_directories(general_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+
+target_link_libraries(performance_tests PRIVATE
+    Catch2::Catch2WithMain
+    gecko::spdlog
+    vault
+    SFML::System SFML::Graphics
+)
+
+
+# Enable testing
 include(CTest)
+
+# Catch2 test discovery for general tests
 include(Catch)
-catch_discover_tests(tests)
+
+# In CI environments, use simpler test registration to avoid library loading issues
+if(DEFINED ENV{CI} OR DEFINED ENV{GITHUB_ACTIONS})
+    # Register tests without discovery - this avoids running the executable during configure
+    add_test(NAME general_tests COMMAND general_tests)
+    add_test(NAME performance_tests COMMAND performance_tests)
+else()
+    # Use automatic test discovery for local development
+    catch_discover_tests(general_tests)
+    catch_discover_tests(performance_tests)
+endif()
+
 
 # copy shared external libraries to the build directory for Windows builds
 if(WIN32)
     add_custom_command(
-        TARGET tests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:tests> $<TARGET_FILE_DIR:tests>
+        TARGET general_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:general_tests> $<TARGET_FILE_DIR:general_tests>
+        COMMAND_EXPAND_LISTS
+    )
+    add_custom_command(
+        TARGET performance_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:performance_tests> $<TARGET_FILE_DIR:performance_tests>
         COMMAND_EXPAND_LISTS
     )
 endif()
 
+# Copy test data to both the executable directory and the test working directory
 add_custom_command(
-    TARGET tests POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:tests>/data
+    TARGET general_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:general_tests>/data
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data ${CMAKE_CURRENT_BINARY_DIR}/data
+)
+
+add_custom_command(
+    TARGET performance_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:performance_tests>/data
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data ${CMAKE_CURRENT_BINARY_DIR}/data
 )

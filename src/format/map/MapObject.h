@@ -4,8 +4,12 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include "../../util/Constants.h"
+#include <spdlog/spdlog.h>
 
 namespace geck {
+
+class Pro; // Forward declaration
 
 // scenery, walls, items, containers, keys and critters
 struct MapObject {
@@ -82,6 +86,62 @@ struct MapObject {
     bool isBlocker() {
         auto baseId = frm_pid & 0x00FFFFFF;
         return baseId == 1 && flags & 0x00000010;
+    }
+
+    bool isWallBlocker() {
+        // Any object that blocks movement OR is a gap-filling wall blocker
+        return blocksMovement();
+    }
+
+    bool isShootThroughWallBlocker();
+
+    bool isScrollBlocker() {
+        // Scroll blockers are visual indicators only (FRM-based, not proto-based)
+        // They use scrblk.frm (FRM baseId == 1)
+        auto baseId = frm_pid & 0x00FFFFFF;
+        return baseId == 1;
+    }
+
+private:
+    // Helper method to get PRO file data on demand
+    Pro* getProData() const;
+
+public:
+    // Check if object blocks movement based on PRO file flags
+    bool blocksMovement() const;
+
+    // Check if object is a wall (OBJECT_TYPE::WALL)
+    bool isWallObject() const;
+
+    // Check if object is a light source (has light properties)
+    bool isLightSource() const {
+        // An object is considered a light source if it has non-zero light radius or intensity
+        bool hasLight = light_radius > 0 || light_intensity > 0;
+        return hasLight;
+    }
+
+    // Check if object has significant light properties (both radius and intensity)
+    bool hasSignificantLight() const {
+        return light_radius > 0 && light_intensity > 0;
+    }
+
+    // Check if object is the specific light source scenery object (tile #140 in F2 Dims)
+    bool isLightSourceScenery() const {
+        // In F2, light sources are scenery objects with specific PID
+        // Scenery objects typically have PID format: 0x00000000 | index
+        // Light source is typically at index 140 in scenery category
+        // This would correspond to PID 0x00000000 | 140 = 140
+        return (pro_pid & 0xFF000000) == 0x00000000 && (pro_pid & 0x00FFFFFF) == 140;
+    }
+
+    // Check if object is an exit grid (MISC object with PID 16-23)
+    bool isExitGridMarker() const {
+        // Exit grids are MISC objects with PIDs 16-23
+        // MISC objects have PID format: 0x05000000 | index
+        // This matches the legacy F2 Mapper implementation: misc_ID && (nID >= 16 && nID <= 23)
+        uint32_t objectType = (pro_pid & 0xFF000000) >> 24;
+        uint32_t objectIndex = pro_pid & 0x00FFFFFF;
+        return (objectType == 0x05) && (objectIndex >= 16) && (objectIndex <= 23);
     }
 };
 

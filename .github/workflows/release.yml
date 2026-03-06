@@ -1,0 +1,440 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v0.1.0)'
+        required: true
+        type: string
+
+env:
+  CMAKE_VERSION: 3.31.4
+  BUILD_TYPE: Release
+  BUILD_DIR: ${{ github.workspace }}/build
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.result }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.tag }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/}
+        fi
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Version: ${VERSION}"
+
+    - name: Generate Release Notes
+      id: release_notes
+      run: |
+        # Generate changelog from recent commits
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+        if [ -n "$PREVIOUS_TAG" ]; then
+          echo "## Changes since ${PREVIOUS_TAG}" > release_notes.md
+          git log --pretty=format:"- %s (%h)" ${PREVIOUS_TAG}..HEAD >> release_notes.md
+        else
+          echo "## Changes" > release_notes.md
+          git log --pretty=format:"- %s (%h)" --max-count=20 >> release_notes.md
+        fi
+        
+        echo "" >> release_notes.md
+        echo "## Installation" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "Download the appropriate package for your platform:" >> release_notes.md
+        echo "- **Windows**: \`gecko-windows-installer.exe\`" >> release_notes.md
+        echo "- **macOS**: \`gecko-macos.dmg\`" >> release_notes.md
+        echo "- **Linux**: \`gecko-linux.AppImage\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## Requirements" >> release_notes.md
+        echo "- Copy \`master.dat\` and \`critter.dat\` from your Fallout 2 installation" >> release_notes.md
+        echo "- Qt6 and SFML libraries (included in packages)" >> release_notes.md
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.version }}
+        release_name: Gecko ${{ steps.get_version.outputs.version }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: ${{ contains(steps.get_version.outputs.version, 'alpha') || contains(steps.get_version.outputs.version, 'beta') || contains(steps.get_version.outputs.version, 'rc') }}
+
+  build-release:
+    name: Build Release - ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    needs: create-release
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              name: "Windows",
+              os: windows-latest,
+              artifact: "gecko-windows",
+              package_cmd: "scripts/package-windows.ps1"
+            }
+          - {
+              name: "macOS",
+              os: macos-latest,
+              artifact: "gecko-macos",
+              package_cmd: "scripts/package-macos.sh"
+            }
+          - {
+              name: "Linux",
+              os: ubuntu-latest,
+              artifact: "gecko-linux",
+              package_cmd: "scripts/package-linux.sh"
+            }
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up CMake
+      uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: ${{ env.CMAKE_VERSION }}
+
+    - name: Install dependencies - Windows
+      if: matrix.config.os == 'windows-latest'
+      run: |
+        vcpkg install qt6:x64-windows sfml:x64-windows spdlog:x64-windows zlib:x64-windows
+
+    - name: Install dependencies - macOS
+      if: matrix.config.os == 'macos-latest'
+      run: |
+        brew install qt@6 spdlog zlib create-dmg
+        # Build SFML 3 from source
+        git clone --depth 1 --branch 3.0.0 https://github.com/SFML/SFML.git
+        cd SFML
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+        cmake --build build --config Release
+        sudo cmake --install build
+        cd ..
+
+    - name: Install dependencies - Linux
+      if: matrix.config.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          qtbase6-dev qtbase6-dev-tools qt6-base-dev \
+          libgl1-mesa-dev \
+          libxrandr-dev \
+          libxcursor-dev \
+          libudev-dev \
+          libopenal-dev \
+          libflac-dev \
+          libvorbis-dev \
+          libgl1-mesa-dev \
+          libegl1-mesa-dev \
+          libdrm-dev \
+          libgbm-dev \
+          libfreetype6-dev \
+          zlib1g-dev \
+          patchelf
+        # Install linuxdeploy
+        wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+        chmod +x linuxdeploy-x86_64.AppImage
+        sudo mv linuxdeploy-x86_64.AppImage /usr/local/bin/linuxdeploy
+        # Install linuxdeploy-plugin-qt
+        wget https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+        chmod +x linuxdeploy-plugin-qt-x86_64.AppImage
+        sudo mv linuxdeploy-plugin-qt-x86_64.AppImage /usr/local/bin/
+        # Build SFML 3 from source
+        git clone --depth 1 --branch 3.0.0 https://github.com/SFML/SFML.git
+        cd SFML
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+        cmake --build build --config Release
+        sudo cmake --install build
+        cd ..
+        # Install spdlog
+        git clone --depth 1 --branch v1.x https://github.com/gabime/spdlog.git
+        cd spdlog
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --config Release
+        sudo cmake --install build
+        cd ..
+
+    - name: Configure CMake
+      shell: bash
+      run: |
+        if [ "${{ matrix.config.os }}" == "windows-latest" ]; then
+          cmake -B ${{ env.BUILD_DIR }} \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DGECK_BUILD_TESTS=OFF \
+            -S ${{ github.workspace }}
+        elif [ "${{ matrix.config.os }}" == "macos-latest" ]; then
+          export CMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6:/usr/local/opt/qt@6:$CMAKE_PREFIX_PATH"
+          cmake -B ${{ env.BUILD_DIR }} \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DGECK_BUILD_TESTS=OFF \
+            -S ${{ github.workspace }}
+        else
+          cmake -B ${{ env.BUILD_DIR }} \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DGECK_BUILD_TESTS=OFF \
+            -S ${{ github.workspace }}
+        fi
+
+    - name: Build
+      run: cmake --build ${{ env.BUILD_DIR }} --config ${{ env.BUILD_TYPE }} --parallel
+
+    - name: Create packaging scripts
+      shell: bash
+      run: |
+        mkdir -p scripts
+        
+        # Windows packaging script
+        if [ "${{ matrix.config.os }}" == "windows-latest" ]; then
+          cat > scripts/package-windows.ps1 << 'EOF'
+        $ErrorActionPreference = "Stop"
+        
+        # Create distribution directory
+        New-Item -ItemType Directory -Force -Path "dist"
+        
+        # Copy main executable
+        Copy-Item "build/src/Release/gecko.exe" "dist/"
+        
+        # Use windeployqt to gather Qt dependencies
+        & "C:/vcpkg/installed/x64-windows/tools/Qt6/bin/windeployqt.exe" "dist/gecko.exe"
+        
+        # Copy SFML and other DLLs from vcpkg
+        $vcpkgBin = "C:/vcpkg/installed/x64-windows/bin"
+        Copy-Item "$vcpkgBin/sfml-*.dll" "dist/" -ErrorAction SilentlyContinue
+        Copy-Item "$vcpkgBin/spdlog*.dll" "dist/" -ErrorAction SilentlyContinue
+        Copy-Item "$vcpkgBin/zlib*.dll" "dist/" -ErrorAction SilentlyContinue
+        
+        # Create installer using NSIS (if available) or just zip
+        if (Get-Command "makensis" -ErrorAction SilentlyContinue) {
+            # Create simple NSIS script
+            @"
+        !define APPNAME "GECK Mapper"
+        !define COMPANYNAME "JanSimek"
+        !define DESCRIPTION "Fallout 2 Map Editor"
+        !define VERSIONMAJOR 0
+        !define VERSIONMINOR 1
+        !define VERSIONBUILD 0
+        
+        RequestExecutionLevel admin
+        InstallDir `$PROGRAMFILES64\GECKMapper
+        
+        Name "`${APPNAME}"
+        OutFile "gecko-windows-installer.exe"
+        
+        Section "Install"
+            SetOutPath `$INSTDIR
+            File /r "dist\*"
+            WriteUninstaller `$INSTDIR\uninstall.exe
+        SectionEnd
+        "@ | Out-File -FilePath "installer.nsi" -Encoding ASCII
+            
+            makensis installer.nsi
+        } else {
+            # Fallback to zip
+            Compress-Archive -Path "dist/*" -DestinationPath "gecko-windows.zip"
+        }
+        EOF
+        fi
+        
+        # macOS packaging script
+        if [ "${{ matrix.config.os }}" == "macos-latest" ]; then
+          cat > scripts/package-macos.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        APP_NAME="GECK Mapper"
+        APP_DIR="$APP_NAME.app"
+        DIST_DIR="dist"
+        
+        # Create app bundle structure
+        mkdir -p "$DIST_DIR/$APP_DIR/Contents/"{MacOS,Resources,Frameworks}
+        
+        # Copy executable
+        cp "build/src/gecko" "$DIST_DIR/$APP_DIR/Contents/MacOS/"
+        
+        # Create Info.plist
+        cat > "$DIST_DIR/$APP_DIR/Contents/Info.plist" << PLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>gecko</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.jansimek.geckmapper</string>
+            <key>CFBundleName</key>
+            <string>GECK Mapper</string>
+            <key>CFBundleVersion</key>
+            <string>0.1.0</string>
+            <key>CFBundleShortVersionString</key>
+            <string>0.1.0</string>
+            <key>CFBundleInfoDictionaryVersion</key>
+            <string>6.0</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+        </dict>
+        </plist>
+        PLIST
+        
+        # Use macdeployqt to gather dependencies
+        /opt/homebrew/opt/qt@6/bin/macdeployqt "$DIST_DIR/$APP_DIR" -verbose=2
+        
+        # Copy SFML frameworks
+        cp -R /usr/local/lib/libsfml-*.dylib "$DIST_DIR/$APP_DIR/Contents/Frameworks/" || true
+        
+        # Create DMG
+        if command -v create-dmg &> /dev/null; then
+            create-dmg \
+                --volname "$APP_NAME" \
+                --volicon "resources/gecko-icon.png" \
+                --window-pos 200 120 \
+                --window-size 600 300 \
+                --icon-size 100 \
+                --icon "$APP_NAME.app" 175 120 \
+                --hide-extension "$APP_NAME.app" \
+                --app-drop-link 425 120 \
+                "gecko-macos.dmg" \
+                "$DIST_DIR/"
+        else
+            # Fallback: create zip
+            cd "$DIST_DIR"
+            zip -r "../gecko-macos.zip" "$APP_DIR"
+            cd ..
+        fi
+        EOF
+          chmod +x scripts/package-macos.sh
+        fi
+        
+        # Linux packaging script
+        if [ "${{ matrix.config.os }}" == "ubuntu-latest" ]; then
+          cat > scripts/package-linux.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        # Create AppImage
+        mkdir -p AppDir/usr/bin
+        mkdir -p AppDir/usr/share/applications
+        mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+        
+        # Copy executable
+        cp build/src/gecko AppDir/usr/bin/
+        
+        # Create desktop file
+        cat > AppDir/usr/share/applications/gecko.desktop << EOF2
+        [Desktop Entry]
+        Type=Application
+        Name=GECK Mapper
+        Comment=Fallout 2 Map Editor
+        Exec=gecko
+        Icon=gecko
+        Categories=Graphics;Development;
+        EOF2
+        
+        # Copy icon if available
+        if [ -f "resources/gecko-icon.png" ]; then
+            cp resources/gecko-icon.png AppDir/usr/share/icons/hicolor/256x256/apps/gecko.png
+            cp resources/gecko-icon.png AppDir/gecko.png
+        fi
+        
+        # Create AppRun
+        cat > AppDir/AppRun << 'EOF3'
+        #!/bin/bash
+        HERE="$(dirname "$(readlink -f "${0}")")"
+        export PATH="${HERE}/usr/bin:${PATH}"
+        export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+        exec "${HERE}/usr/bin/gecko" "$@"
+        EOF3
+        chmod +x AppDir/AppRun
+        
+        # Use linuxdeploy to create AppImage
+        linuxdeploy --appdir AppDir --plugin qt --output appimage
+        
+        # Rename the generated AppImage
+        mv GECK*.AppImage gecko-linux.AppImage 2>/dev/null || true
+        EOF
+          chmod +x scripts/package-linux.sh
+        fi
+
+    - name: Package application
+      shell: bash
+      run: |
+        if [ "${{ matrix.config.os }}" == "windows-latest" ]; then
+          powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1
+        else
+          ${{ matrix.config.package_cmd }}
+        fi
+
+    - name: Collect release files
+      shell: bash
+      run: |
+        mkdir -p release
+        shopt -s nullglob
+        for file in gecko-*; do
+          if [[ -f "$file" ]]; then
+            mv "$file" release/
+          fi
+        done
+        ls -al release
+
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.config.artifact }}-${{ needs.create-release.outputs.version }}
+        path: release/
+        if-no-files-found: error
+        retention-days: 90
+
+  publish-release-assets:
+    name: Publish Release Assets
+    runs-on: ubuntu-latest
+    needs:
+      - create-release
+      - build-release
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-bundles
+      - name: List downloaded assets
+        run: |
+          find release-bundles -type f -print
+      - name: Upload assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.create-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find release-bundles -type f -print)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No release assets found to upload" >&2
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            echo "Uploading ${file}"
+            gh release upload "$RELEASE_TAG" "$file" --clobber
+          done

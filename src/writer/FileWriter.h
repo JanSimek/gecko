@@ -2,46 +2,87 @@
 
 #include <fstream>
 #include <filesystem>
+#include <memory>
+#include <spdlog/spdlog.h>
 
-// htonl, htons
-#ifdef _WIN32
-#define NOMINMAX                   // sfml conflict
-#pragma comment(lib, "ws2_32.lib") // Winsock
-#include <winsock.h>
-#else
-#include <arpa/inet.h>
-#endif
+#include "WriterExceptions.h"
+#include "BinaryWriteUtils.h"
+
+namespace geck {
 
 template <typename T>
 class FileWriter {
 protected:
-    std::ofstream stream;
-    std::filesystem::path path;
+    std::ofstream _stream;
+    std::filesystem::path _path;
+    std::unique_ptr<BinaryWriteUtils> _utils;
 
 public:
-    void openFile(const std::filesystem::path& path) {
+    virtual ~FileWriter() = default;
 
-        stream = std::ofstream{ path.string(), std::ofstream::out | std::ofstream::binary };
-        this->path = path;
+    void openFile(const std::filesystem::path& filePath, bool overwrite = true) {
+        _path = filePath;
 
-        if (!stream.is_open()) {
-            throw std::runtime_error{ "Could not open file for writing " + path.string() };
+        // Check if file exists and overwrite is not allowed
+        if (!overwrite && std::filesystem::exists(filePath)) {
+            throw FileExistsException(filePath);
         }
+
+        // Check parent directory exists and is writable
+        auto parentPath = filePath.parent_path();
+        if (!parentPath.empty() && !std::filesystem::exists(parentPath)) {
+            try {
+                std::filesystem::create_directories(parentPath);
+            } catch (const std::filesystem::filesystem_error& e) {
+                throw PermissionException("Cannot create parent directory: " + std::string(e.what()), filePath);
+            }
+        }
+
+        // Open file for writing
+        _stream = std::ofstream{ filePath.string(), std::ofstream::out | std::ofstream::binary };
+
+        if (!_stream.is_open()) {
+            throw WriteException("Could not open file for writing", filePath);
+        }
+
+        // Check if we can actually write to the file
+        if (!_stream.good()) {
+            throw PermissionException("File opened but cannot write", filePath);
+        }
+
+        // Initialize binary utilities
+        _utils = std::make_unique<BinaryWriteUtils>(_stream, filePath);
+
+        spdlog::debug("Opened file for writing: {}", filePath.string());
     }
 
     virtual bool write(const T& object) = 0;
 
-    inline void write_be_32(uint32_t value) {
-        uint32_t be_value = htonl(value); // convert to big endian
-        stream.write(reinterpret_cast<const char*>(&be_value), sizeof(be_value));
-        //    stream.put(value >> 24);
-        //    stream.put(value >> 16);
-        //    stream.put(value >> 8);
-        //    stream.put(value);
+    // Provide access to binary utilities for subclasses
+    BinaryWriteUtils& getBinaryUtils() {
+        if (!_utils) {
+            throw WriteException("File not opened for writing", _path);
+        }
+        return *_utils;
     }
 
-    inline void write_be_16(uint16_t value) {
-        uint16_t be_value = htons(value); // convert to big endian
-        stream.write(reinterpret_cast<const char*>(&be_value), sizeof(be_value));
+    const std::filesystem::path& getPath() const {
+        return _path;
+    }
+
+    size_t getBytesWritten() const {
+        return _utils ? _utils->getBytesWritten() : 0;
+    }
+
+    void flush() {
+        if (_utils) {
+            _utils->flush();
+        }
+    }
+
+    bool isOpen() const {
+        return _stream.is_open();
     }
 };
+
+} // namespace geck

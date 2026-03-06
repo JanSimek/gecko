@@ -21,6 +21,7 @@ public:
         , _messages(messages) { }
 
     const Message& message(int id);
+    const std::map<int, Message>& getMessages() const;
 
 private:
     std::map<int, Message> _messages;
