@@ -14,7 +14,7 @@ This repository contains dependencies as git submodules. When you clone the repo
 
 ### Dependencies
 
-- **Qt6** (Core, Widgets) - Primary UI framework
+- **Qt6** (Core, Widgets, Svg) - Primary UI framework
 - **SFML 3+** - 2D graphics rendering
 - **spdlog** - Logging framework
 - **vfspp** - Virtual file system for game archives

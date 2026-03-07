@@ -44,8 +44,11 @@ ctest --test-dir build -L qt           # UI tests
 - **vault** (static library): File format handling and I/O operations
 
 ### Key Components
-- `src/format/`: File format parsers (DAT, FRM, MAP, PRO, MSG, PAL)
+- `src/format/`: File format data structures (DAT, FRM, MAP, PRO, MSG, PAL)
+- `src/reader/`: File format readers/parsers
+- `src/writer/`: File format writers
 - `src/ui/`: Qt6 interface components (dialogs, panels, widgets)
+- `src/ui/rendering/`: SFML rendering engine with viewport culling
 - `src/editor/`: Core editing logic (Object, HexagonGrid, Hex)
 - `src/selection/`: Selection management system
 - `src/util/`: Utilities (ResourceManager, Settings, Coordinates)
@@ -96,23 +99,6 @@ ctest --test-dir build -L qt           # UI tests
 - Apply semi-transparency: `setColor(sf::Color(255, 255, 255, 180))`
 - Objects without MapObject need null checks in `Object::setDirection()`
 
-## Build Commands
-
-### Standard Build
-```bash
-make -j4
-```
-
-### Test Commands
-```bash
-# Run all tests
-make test
-
-# Run specific test categories
-ctest -L general
-ctest -L performance
-```
-
 ## Common Issues and Solutions
 
 ### 1. Sprite Size Issues
@@ -143,7 +129,7 @@ object->setHexPosition(hex);
 - Texture rectangles are set by `Object::setDirection()` to show single frames
 
 ### Object Hierarchy
-- `MapObject`: Data structure for saving (unique_ptr in map)
+- `MapObject`: Data structure for saving (shared_ptr in Map storage, unique_ptr only during parsing and for inventory children)
 - `Object`: Visual representation with SFML sprite (shared_ptr)
 - Objects can exist without MapObject for preview purposes
 
@@ -152,39 +138,6 @@ object->setHexPosition(hex);
 - Coordinate conversion: Qt screen → SFML window → World coordinates
 - World coordinates → Hex position via `worldPosToHexPosition()`
 
-## Recent Fixes Applied
-
-### Session Notes
-- Fixed hex vs tile coordinate confusion (40,000 vs 10,000 range)
-- Implemented proper drag preview with FRM loading
-- Added null checks for MapObject access in Object methods
-- Corrected validation ranges for hex positioning
-- Fixed sprite texture rectangles for single frame display
-- **CRITICAL**: Fixed selection crash by using shared_ptr for MapObject instead of unique_ptr
-
-### MapObject Storage Architecture
-**IMPORTANT**: All MapObject instances must be `std::shared_ptr<MapObject>`, not `std::unique_ptr`:
-- `Map::objects()` returns `std::unordered_map<int, std::vector<std::shared_ptr<MapObject>>>`
-- `MapFile::map_objects` also uses `std::vector<std::shared_ptr<MapObject>>`
-- `Object::setMapObject()` expects `std::shared_ptr<MapObject>`
-- When creating new objects, always use `std::make_shared<MapObject>()`
-
-### Object Creation Pattern (CORRECTED)
-```cpp
-// Create MapObject as shared_ptr (not unique_ptr!)
-auto mapObject = std::make_shared<MapObject>();
-// ... set mapObject properties ...
-
-// Add to map storage
-mapFile.map_objects[elevation].push_back(mapObject);
-
-// Create visual Object and associate MapObject
-auto object = std::make_shared<Object>(frm);
-object->setMapObject(mapObject);  // Critical for selection system!
-```
-
----
-
 ## Code Style
 
 ### Naming Conventions
@@ -192,11 +145,78 @@ object->setMapObject(mapObject);  // Critical for selection system!
 - Functions: camelCase (`loadMap`)
 - Constants: SCREAMING_SNAKE (`TILES_PER_ELEVATION`)
 - Private members: `_memberName`
+- Slots: Use `onXxx()` prefix for signal-connected slots (e.g., `onSearchTextChanged`)
 
 ### C++ Standards
 - C++20 required
 - RAII and smart pointers throughout
 - `std::filesystem::path` for cross-platform file handling
+
+---
+
+## Qt UI Conventions
+
+### Theme and Styling
+
+All colors and styles are centralized in `src/ui/theme/ThemeManager.h`. Use theme constants instead of hardcoded values:
+
+```cpp
+#include "../theme/ThemeManager.h"
+
+// Colors - use ui::theme::colors::*
+ui::theme::colors::PRIMARY        // #4A90E2 - selection, focus
+ui::theme::colors::PRIMARY_LIGHT  // #E6F2FF - selected backgrounds
+ui::theme::colors::SURFACE_DARK   // #F0F0F0 - preview backgrounds
+ui::theme::colors::ERROR          // #D32F2F - error text
+ui::theme::colors::WARNING        // #F57C00 - warning text
+
+// Spacing - use ui::theme::spacing::*
+ui::theme::spacing::TIGHT   // 4px - compact/nested layouts
+ui::theme::spacing::NORMAL  // 8px - standard widget spacing
+ui::theme::spacing::LOOSE   // 12px - dialog/group spacing
+
+// Pre-built styles - use ui::theme::styles::*
+setStyleSheet(ui::theme::styles::selectedWidget());
+setStyleSheet(ui::theme::styles::previewArea());
+setStyleSheet(ui::theme::styles::statusError());
+```
+
+### Widget Base Classes
+
+Use the established base class hierarchy for consistency:
+
+| Base Class | Purpose | Key Methods |
+|------------|---------|-------------|
+| `BaseWidget` | All custom widgets | `setupStandardVBoxLayout()`, `applySelectionStyle()` |
+| `BasePanel` | Palette/browser panels | `createSearchControls()`, `createPaginationControls()` |
+| `BasePaletteWidget` | Grid items (tiles, objects) | Selection painting, drag handling |
+
+### MIME Types for Drag and Drop
+
+Use constants from `src/ui/dragdrop/MimeTypes.h`:
+
+```cpp
+#include "../dragdrop/MimeTypes.h"
+
+// Setting MIME data
+mimeData->setData(ui::mime::GECK_OBJECT, data);
+
+// Checking MIME format
+if (mimeData->hasFormat(ui::mime::GECK_OBJECT)) { ... }
+```
+
+### Layout Best Practices
+
+1. **Use theme spacing constants** instead of hardcoded values
+2. **Parent all widgets** to ensure proper cleanup
+3. **Use `BasePanel::createMainLayout()`** for consistent panel layouts
+4. **Stretch factors**: Add stretch to push content (e.g., `layout->addStretch()`)
+
+### Signal/Slot Conventions
+
+1. Use `on*` prefix for slots connected to signals: `onSearchTextChanged()`
+2. Use modern `connect()` syntax with lambdas or method pointers
+3. Emit signals with `Q_EMIT` for clarity
 
 ## Development Setup
 
@@ -212,5 +232,5 @@ object->setMapObject(mapObject);  // Critical for selection system!
 
 ---
 
-*Last updated: 2025-01-09*
+*Last updated: 2026-03-06*
 *This file should be updated whenever significant architectural decisions or fixes are made.*
