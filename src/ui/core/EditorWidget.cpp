@@ -221,8 +221,7 @@ void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>
     UndoCommand cmd;
     cmd.description = "Move Objects";
     cmd.undo = [this, objects, moves]() {
-        const auto* hexGrid = _hexgrid.grid().data() ? &_hexgrid : nullptr;
-        if (!hexGrid) {
+        if (_hexgrid.grid().empty()) {
             spdlog::error("registerObjectMove undo: hex grid not available");
             return;
         }
@@ -241,8 +240,7 @@ void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>
         refreshObjects();
     };
     cmd.redo = [this, objects, moves]() {
-        const auto* hexGrid = _hexgrid.grid().data() ? &_hexgrid : nullptr;
-        if (!hexGrid) {
+        if (_hexgrid.grid().empty()) {
             spdlog::error("registerObjectMove redo: hex grid not available");
             return;
         }
@@ -2225,11 +2223,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
         if (frm && _previewObjectInfo && !_previewObjectInfo->frmPath.isEmpty()) {
             sf::Sprite objectSprite{ resourceManager.texture(_previewObjectInfo->frmPath.toStdString()) };
             object->setSprite(std::move(objectSprite));
-
-            // Set direction to show correct frame (first frame of first direction)
-            if (frm) {
-                object->setDirection(static_cast<ObjectDirection>(0));
-            }
+            object->setDirection(static_cast<ObjectDirection>(0));
         }
 
         // Set proper position using hex positioning

@@ -161,6 +161,7 @@ private:
     void setupItemExtendedFlags(QVBoxLayout* layout);
     void setupOtherExtendedFlags(QVBoxLayout* layout);
     void addStandardItemFlags(QVBoxLayout* parentLayout);
+    void clearFieldsLayouts();
 
     void loadProData();
     void loadArmorData();

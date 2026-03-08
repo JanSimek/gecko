@@ -1656,13 +1656,7 @@ void ProEditorDialog::saveKeyData() {
     }
 }
 
-void ProEditorDialog::setupItemFields() {
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM)
-        return;
-
-    Pro::ITEM_TYPE itemType = _pro->itemType();
-
-    // Clear any existing widgets in the right panels
+void ProEditorDialog::clearFieldsLayouts() {
     while (QLayoutItem* item = _leftFieldsLayout->takeAt(0)) {
         if (item->widget())
             item->widget()->deleteLater();
@@ -1675,6 +1669,15 @@ void ProEditorDialog::setupItemFields() {
             delete item;
         }
     }
+}
+
+void ProEditorDialog::setupItemFields() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM)
+        return;
+
+    Pro::ITEM_TYPE itemType = _pro->itemType();
+
+    clearFieldsLayouts();
 
     // Setup type-specific fields based on item subtype
     switch (itemType) {
@@ -2079,19 +2082,7 @@ void ProEditorDialog::setupCritterFields() {
 }
 
 void ProEditorDialog::setupSceneryFields() {
-    // Clear any existing widgets in the right panels
-    while (QLayoutItem* item = _leftFieldsLayout->takeAt(0)) {
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
-    if (_rightFieldsLayout) {
-        while (QLayoutItem* item = _rightFieldsLayout->takeAt(0)) {
-            if (item->widget())
-                item->widget()->deleteLater();
-            delete item;
-        }
-    }
+    clearFieldsLayouts();
 
     // === COLUMN 1: Basic Scenery Properties ===
 

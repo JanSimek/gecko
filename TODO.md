@@ -62,7 +62,6 @@ Detailed progress dialog with task descriptions and completion estimates for lon
 ### Known bugs
 
 - [ ] scroll block drawing mode draws the rectangle in the isometric projection (diagonal) instead of screen projection
-- [ ] when selecting default player position hex, it should also update the default player elevation to the current elevation
 - [ ] placing lights - light.frm
 - [ ] file browser panel has issues with resizing. It is sometimes impossible to change its size or requires several clicks
 - [ ] make sure changing elevations works with the recent changes (probably not)

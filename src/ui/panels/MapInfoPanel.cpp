@@ -359,27 +359,25 @@ void MapInfoPanel::loadScriptVars() {
             return;
         }
 
-        if (gam_file) {
-            // Load global variables
-            for (uint32_t index = 0; index < _map->getMapFile().header.num_global_vars; index++) {
-                _mvars.emplace(gam_file->mvarKey(index), gam_file->mvarValue(index));
-            }
+        // Load global variables
+        for (uint32_t index = 0; index < _map->getMapFile().header.num_global_vars; index++) {
+            _mvars.emplace(gam_file->mvarKey(index), gam_file->mvarValue(index));
+        }
 
-            // Load map script name
-            int map_script_id = _map->getMapFile().header.script_id;
-            if (map_script_id > 0) {
-                auto scripts = ResourceManager::getInstance().loadResource<Lst>(ResourcePaths::Lst::SCRIPTS);
-                const auto& scriptList = scripts->list();
-                if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
-                    _mapScriptName = scripts->at(map_script_id - 1); // script id starts at 1
-                    spdlog::debug("Script name '{}' found for ID {} in: {}", _mapScriptName, map_script_id, ResourcePaths::Lst::SCRIPTS);
-                } else {
-                    _mapScriptName = "invalid script index";
-                    spdlog::warn("Script ID {} out of bounds for scripts.lst size {} in: {}", map_script_id, scriptList.size(), ResourcePaths::Lst::SCRIPTS);
-                }
+        // Load map script name
+        int map_script_id = _map->getMapFile().header.script_id;
+        if (map_script_id > 0) {
+            auto scripts = ResourceManager::getInstance().loadResource<Lst>(ResourcePaths::Lst::SCRIPTS);
+            const auto& scriptList = scripts->list();
+            if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
+                _mapScriptName = scripts->at(map_script_id - 1); // script id starts at 1
+                spdlog::debug("Script name '{}' found for ID {} in: {}", _mapScriptName, map_script_id, ResourcePaths::Lst::SCRIPTS);
             } else {
-                _mapScriptName = "no script";
+                _mapScriptName = "invalid script index";
+                spdlog::warn("Script ID {} out of bounds for scripts.lst size {} in: {}", map_script_id, scriptList.size(), ResourcePaths::Lst::SCRIPTS);
             }
+        } else {
+            _mapScriptName = "no script";
         }
     } catch (const std::exception& e) {
         spdlog::error("Error loading script vars: {}", e.what());

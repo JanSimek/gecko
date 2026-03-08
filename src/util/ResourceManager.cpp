@@ -381,11 +381,7 @@ std::vector<std::string> ResourceManager::listFilesByPattern(const std::string& 
 }
 
 void ResourceManager::clearTextureCache(const std::string& filename) {
-    auto it = _textures.find(filename);
-    if (it != _textures.end()) {
-        _textures.erase(it);
-    } else {
-    }
+    _textures.erase(filename);
 }
 
 } // namespace geck
