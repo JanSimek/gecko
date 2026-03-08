@@ -47,7 +47,6 @@ Detailed progress dialog with task descriptions and completion estimates for lon
 
 ### Panels
 - [ ] panels should be displayed above the SFML widget, so that when a panel is closed it doesn't cause redrawing of the SFML widget
-- [ ] map info panel should show elevations as checkboxes
 
 ### Code Quality
 - [ ] Refactor hex rendering into dedicated HexRenderer class
@@ -62,7 +61,6 @@ Detailed progress dialog with task descriptions and completion estimates for lon
 
 ### Known bugs
 
-- [ ] Pressing ESC should cancel current selection (?) - Ctrl+D
 - [ ] scroll block drawing mode draws the rectangle in the isometric projection (diagonal) instead of screen projection
 - [ ] when selecting default player position hex, it should also update the default player elevation to the current elevation
 - [ ] placing lights - light.frm

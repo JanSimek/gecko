@@ -1366,6 +1366,8 @@ void EditorWidget::setupInputCallbacks() {
             if (_mainWindow && _mainWindow->getTilePalettePanel()) {
                 _mainWindow->getTilePalettePanel()->deselectTile();
             }
+        } else {
+            clearSelection();
         }
     };
 
