@@ -1071,11 +1071,7 @@ void MainWindow::connectToEditorWidget() {
 
         connect(_currentEditorWidget, &EditorWidget::playerPositionSelected,
             this, [this](int hexPosition) {
-                if (_mapInfoPanel) {
-                    // Update the MapInfo panel with the selected position
-                    // The panel will update the underlying map data
-                    _mapInfoPanel->setPlayerPosition(hexPosition);
-                }
+                _mapInfoPanel->setPlayerPosition(hexPosition, _currentEditorWidget->getCurrentElevation());
             });
     }
 

@@ -499,23 +499,13 @@ void MapInfoPanel::onCenterViewClicked() {
     spdlog::debug("MapInfoPanel: Center view on player position requested");
 }
 
-void MapInfoPanel::setPlayerPosition(int hexPosition) {
+void MapInfoPanel::setPlayerPosition(int hexPosition, int elevation) {
     if (!_map) {
         return;
     }
 
-    // Update the UI
     _playerPositionSpin->setValue(hexPosition);
-
-    // Update the map data (this will trigger the onFieldChanged slot)
-    auto& mapInfo = _map->getMapFile();
-    mapInfo.header.player_default_position = static_cast<uint32_t>(hexPosition);
-
-    emit playerPositionChanged(hexPosition);
-    EventBus::getInstance().publish(PlayerPositionChangedEvent{
-        HexPosition(hexPosition),
-        _playerElevationSpin->value() });
-    spdlog::debug("MapInfoPanel: Player position set to hex {}", hexPosition);
+    _playerElevationSpin->setValue(elevation);
 }
 
 void MapInfoPanel::updateMapScriptsDisplay() {

@@ -31,7 +31,7 @@ public:
     explicit MapInfoPanel(QWidget* parent = nullptr);
 
     void setMap(Map* map);
-    void setPlayerPosition(int hexPosition);
+    void setPlayerPosition(int hexPosition, int elevation);
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
