@@ -1,4 +1,5 @@
 #include "SelectionPanel.h"
+#include "../common/InventoryItemUiHelper.h"
 #include "../dialogs/FrmSelectorDialog.h"
 #include "../theme/ThemeManager.h"
 #include "../UIConstants.h"
@@ -1172,10 +1173,11 @@ void SelectionPanel::populateInventoryTree() {
         spdlog::debug("SelectionPanel::populateInventoryTree: Processing inventory item with PID {}, amount {}",
             inventoryItem->pro_pid, inventoryItem->amount);
         QTreeWidgetItem* item = new QTreeWidgetItem(_inventoryTree);
+        const auto details = ui::inventory::describeItem(inventoryItem->pro_pid);
 
         // Set all text data first
-        item->setText(COLUMN_NAME, getItemName(inventoryItem->pro_pid));
-        item->setText(COLUMN_TYPE, getItemTypeName(inventoryItem->pro_pid));
+        item->setText(COLUMN_NAME, details.name);
+        item->setText(COLUMN_TYPE, details.typeName);
         item->setText(COLUMN_AMOUNT, QString::number(inventoryItem->amount));
 
         // Store PID in item data for reference
@@ -1210,7 +1212,10 @@ void SelectionPanel::populateInventoryTree() {
 }
 
 QPixmap SelectionPanel::getItemIconWithQuantity(uint32_t pid, int amount) const {
-    QPixmap baseIcon = getItemIcon(pid);
+    QPixmap baseIcon = ui::inventory::loadItemIcon(pid, ICON_SIZE, true);
+    if (baseIcon.isNull()) {
+        baseIcon = createPlaceholderIcon();
+    }
 
     if (amount <= 1) {
         return baseIcon;
@@ -1282,154 +1287,6 @@ QPixmap SelectionPanel::addQuantityOverlay(const QPixmap& baseIcon, int amount) 
     return result;
 }
 
-QString SelectionPanel::getItemName(uint32_t pid) const {
-    try {
-        auto pro = ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(pid));
-        if (pro) {
-            // Get object name from message file
-            auto msg = ProHelper::msgFile(pro->type());
-            if (msg) {
-                try {
-                    return QString::fromStdString(msg->message(pro->header.message_id).text);
-                } catch (const std::exception& e) {
-                    spdlog::warn("Failed to get message for ID {}: {}", pro->header.message_id, e.what());
-                }
-            }
-        }
-        return QString("Unknown Item (%1)").arg(pid);
-    } catch (const std::exception& e) {
-        spdlog::warn("Failed to get item name for PID {}: {}", pid, e.what());
-        return QString("Unknown Item (%1)").arg(pid);
-    }
-}
-
-QString SelectionPanel::getItemTypeName(uint32_t pid) const {
-    try {
-        auto pro = ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(pid));
-        if (pro) {
-            switch (pro->type()) {
-                case Pro::OBJECT_TYPE::ITEM:
-                    switch (pro->itemType()) {
-                        case Pro::ITEM_TYPE::ARMOR:
-                            return "Armor";
-                        case Pro::ITEM_TYPE::CONTAINER:
-                            return "Container";
-                        case Pro::ITEM_TYPE::DRUG:
-                            return "Drug";
-                        case Pro::ITEM_TYPE::WEAPON:
-                            return "Weapon";
-                        case Pro::ITEM_TYPE::AMMO:
-                            return "Ammo";
-                        case Pro::ITEM_TYPE::MISC:
-                            return "Misc";
-                        case Pro::ITEM_TYPE::KEY:
-                            return "Key";
-                        default:
-                            return "Item";
-                    }
-                case Pro::OBJECT_TYPE::CRITTER:
-                    return "Critter";
-                case Pro::OBJECT_TYPE::SCENERY:
-                    return "Scenery";
-                case Pro::OBJECT_TYPE::WALL:
-                    return "Wall";
-                case Pro::OBJECT_TYPE::TILE:
-                    return "Tile";
-                case Pro::OBJECT_TYPE::MISC:
-                    return "Misc";
-                default:
-                    return "Unknown";
-            }
-        }
-        return "Unknown";
-    } catch (const std::exception& e) {
-        spdlog::warn("Failed to get item type for PID {}: {}", pid, e.what());
-        return "Unknown";
-    }
-}
-
-QPixmap SelectionPanel::getItemIcon(uint32_t pid) const {
-    try {
-        spdlog::debug("SelectionPanel::getItemIcon: Loading icon for PID {}", pid);
-        auto& resourceManager = ResourceManager::getInstance();
-
-        // Load the Pro file to get the FID
-        auto pro = resourceManager.loadResource<Pro>(ProHelper::basePath(pid));
-        if (!pro) {
-            spdlog::warn("Failed to load pro file for PID {} - returning placeholder", pid);
-            return createPlaceholderIcon();
-        }
-        spdlog::debug("SelectionPanel::getItemIcon: Successfully loaded PRO for PID {}, FID: {}", pid, pro->header.FID);
-
-        // Get FRM path from the FID
-        // Use inventory FID instead of ground FID for inventory display
-        uint32_t fid = pro->commonItemData.inventoryFID != 0 ? pro->commonItemData.inventoryFID : pro->header.FID;
-        std::string frmPath = resourceManager.FIDtoFrmName(fid);
-        spdlog::debug("SelectionPanel::getItemIcon: Using inventory FID {} for PID {}, FRM path: '{}'", fid, pid, frmPath);
-
-        if (frmPath.empty()) {
-            spdlog::warn("Empty FRM path for PID {} - returning placeholder", pid);
-            return createPlaceholderIcon();
-        }
-
-        // Load FRM from ResourceManager
-        auto frm = resourceManager.loadResource<Frm>(frmPath);
-        if (!frm) {
-            spdlog::warn("Failed to load FRM for path '{}' - returning placeholder", frmPath);
-            return createPlaceholderIcon();
-        }
-        spdlog::debug("SelectionPanel::getItemIcon: Successfully loaded FRM for path '{}'", frmPath);
-
-        // Get the first frame (direction 0, frame 0)
-        const auto& directions = frm->directions();
-        if (directions.empty() || directions[0].frames().empty()) {
-            spdlog::warn("FRM has no frames for PID {}", pid);
-            return createPlaceholderIcon();
-        }
-
-        const auto& frame = directions[0].frames()[0];
-
-        // Load texture from ResourceManager
-        const sf::Texture& texture = resourceManager.texture(frmPath);
-
-        // Convert SFML texture to QPixmap and extract the first frame
-        sf::Image image = texture.copyToImage();
-
-        // Extract just the first frame based on frame dimensions
-        QImage fullImage(reinterpret_cast<const uchar*>(image.getPixelsPtr()),
-            image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
-
-        // Extract the first frame (assuming frames are laid out horizontally)
-        QImage frameImage = fullImage.copy(0, 0, frame.width(), frame.height());
-
-        // Convert to pixmap and create properly sized final icon
-        QPixmap framePixmap = QPixmap::fromImage(frameImage);
-
-        // Always create icon at exact ICON_SIZE to ensure consistency
-        QPixmap finalIcon(ICON_SIZE, ICON_SIZE);
-        finalIcon.fill(Qt::transparent);
-
-        QPainter painter(&finalIcon);
-        painter.setRenderHint(QPainter::Antialiasing);
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
-
-        // Scale and center the frame in the fixed-size icon
-        QPixmap scaledPixmap = framePixmap.scaled(ICON_SIZE, ICON_SIZE,
-            Qt::KeepAspectRatio,
-            Qt::SmoothTransformation);
-        int x = (ICON_SIZE - scaledPixmap.width()) / 2;
-        int y = (ICON_SIZE - scaledPixmap.height()) / 2;
-        painter.drawPixmap(x, y, scaledPixmap);
-
-        spdlog::debug("SelectionPanel::getItemIcon: Successfully created icon for PID {}", pid);
-        return finalIcon;
-
-    } catch (const std::exception& e) {
-        spdlog::warn("Failed to load icon for PID {}: {} - returning placeholder", pid, e.what());
-        return createPlaceholderIcon();
-    }
-}
-
 QPixmap SelectionPanel::createPlaceholderIcon() const {
     spdlog::debug("SelectionPanel::createPlaceholderIcon: Creating {}x{} placeholder icon", ICON_SIZE, ICON_SIZE);
     // Create consistently sized placeholder icon
@@ -1453,4 +1310,3 @@ QPixmap SelectionPanel::createPlaceholderIcon() const {
 }
 
 } // namespace geck
-#include <QSize>

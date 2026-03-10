@@ -95,9 +95,6 @@ private:
     void populateInventoryTree();
     QPixmap getItemIconWithQuantity(uint32_t pid, int amount) const;
     QPixmap addQuantityOverlay(const QPixmap& baseIcon, int amount) const;
-    QString getItemName(uint32_t pid) const;
-    QString getItemTypeName(uint32_t pid) const;
-    QPixmap getItemIcon(uint32_t pid) const;
     QPixmap createPlaceholderIcon() const;
 
     // Layout management

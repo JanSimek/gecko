@@ -52,6 +52,8 @@ set(GECK_SOURCES
     ui/common/BasePanel.h
     ui/common/GridPalettePanel.h
     ui/common/GridPalettePanel.cpp
+    ui/common/InventoryItemUiHelper.h
+    ui/common/InventoryItemUiHelper.cpp
 
     # Qt6 UI Core
     ui/core/MainWindow.h

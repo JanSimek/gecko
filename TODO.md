@@ -53,7 +53,6 @@ Detailed progress dialog with task descriptions and completion estimates for lon
 - [ ] Improve separation of concerns between HexagonGrid and EditorWidget
 
 ### Review Follow-ups
-- [ ] Extract shared inventory item preview/name/icon/add-remove logic used across inventory UIs
 - [ ] Make `MainWindow` action and dock setup data-driven to reduce duplicated boilerplate
 - [ ] Add Qt/UI tests around `Pro*Widget`, inventory UI flows, and panel toggles before larger refactors
 

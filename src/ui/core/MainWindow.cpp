@@ -230,57 +230,48 @@ void MainWindow::connectMenuSignals() {
 void MainWindow::setupMenuBar() {
     _menuBar = menuBar();
 
-    // File Menu
+    auto addMenuAction = [this](QMenu* menu, const QString& iconPath, const QString& text, auto slot, const QKeySequence& shortcut = QKeySequence(), const QString& statusTip = QString()) {
+        QAction* action = menu->addAction(createIcon(iconPath), text);
+        if (!shortcut.isEmpty()) {
+            action->setShortcut(shortcut);
+        }
+        if (!statusTip.isEmpty()) {
+            action->setStatusTip(statusTip);
+        }
+        connect(action, &QAction::triggered, this, slot);
+        return action;
+    };
+
+    auto addViewToggleAction = [this](QAction*& actionRef, const QString& iconPath, const QString& text, bool checked, auto signal, const QString& statusTip = QString(), const QKeySequence& shortcut = QKeySequence()) {
+        actionRef = _viewMenu->addAction(createIcon(iconPath), text);
+        actionRef->setCheckable(true);
+        actionRef->setChecked(checked);
+        if (!statusTip.isEmpty()) {
+            actionRef->setStatusTip(statusTip);
+        }
+        if (!shortcut.isEmpty()) {
+            actionRef->setShortcut(shortcut);
+        }
+        connect(actionRef, &QAction::toggled, this, signal);
+    };
+
     _fileMenu = _menuBar->addMenu("&File");
-
-    QAction* newAction = _fileMenu->addAction(createIcon(":/icons/actions/new.svg"), "&New Map");
-    newAction->setShortcut(QKeySequence::New);
-    newAction->setStatusTip("Create a new map");
-    connect(newAction, &QAction::triggered, this, &MainWindow::newMapRequested);
-
-    QAction* openAction = _fileMenu->addAction(createIcon(":/icons/actions/open.svg"), "&Open Map");
-    openAction->setShortcut(QKeySequence::Open);
-    openAction->setStatusTip("Open an existing map");
-    connect(openAction, &QAction::triggered, this, &MainWindow::openMapRequested);
-
-    QAction* saveAction = _fileMenu->addAction(createIcon(":/icons/actions/save.svg"), "&Save Map");
-    saveAction->setShortcut(QKeySequence::Save);
-    saveAction->setStatusTip("Save current map");
-    connect(saveAction, &QAction::triggered, this, &MainWindow::saveMapRequested);
+    addMenuAction(_fileMenu, ":/icons/actions/new.svg", "&New Map", &MainWindow::newMapRequested, QKeySequence::New, "Create a new map");
+    addMenuAction(_fileMenu, ":/icons/actions/open.svg", "&Open Map", &MainWindow::openMapRequested, QKeySequence::Open, "Open an existing map");
+    addMenuAction(_fileMenu, ":/icons/actions/save.svg", "&Save Map", &MainWindow::saveMapRequested, QKeySequence::Save, "Save current map");
 
     _fileMenu->addSeparator();
-
-    QAction* preferencesAction = _fileMenu->addAction(createIcon(":/icons/actions/settings.svg"), "&Preferences...");
-    preferencesAction->setShortcut(QKeySequence::Preferences);
-    preferencesAction->setStatusTip("Open application preferences");
-    connect(preferencesAction, &QAction::triggered, this, &MainWindow::showPreferences);
+    addMenuAction(_fileMenu, ":/icons/actions/settings.svg", "&Preferences...", &MainWindow::showPreferences, QKeySequence::Preferences, "Open application preferences");
 
     _fileMenu->addSeparator();
+    addMenuAction(_fileMenu, ":/icons/actions/quit.svg", "&Quit", &QWidget::close, QKeySequence::Quit, "Exit the application");
 
-    QAction* quitAction = _fileMenu->addAction(createIcon(":/icons/actions/quit.svg"), "&Quit");
-    quitAction->setShortcut(QKeySequence::Quit);
-    quitAction->setStatusTip("Exit the application");
-    connect(quitAction, &QAction::triggered, this, &QWidget::close);
-
-    // Edit Menu
     _editMenu = _menuBar->addMenu("&Edit");
-
-    QAction* selectAllAction = _editMenu->addAction(createIcon(":/icons/actions/select-all.svg"), "Select &All");
-    selectAllAction->setShortcut(QKeySequence("Ctrl+A"));
-    selectAllAction->setStatusTip("Select all items of current type");
-    connect(selectAllAction, &QAction::triggered, this, &MainWindow::selectAllRequested);
-
-    QAction* deselectAllAction = _editMenu->addAction(createIcon(":/icons/actions/deselect.svg"), "&Deselect All");
-    deselectAllAction->setShortcut(QKeySequence("Ctrl+D"));
-    deselectAllAction->setStatusTip("Clear all selections");
-    connect(deselectAllAction, &QAction::triggered, this, &MainWindow::deselectAllRequested);
+    addMenuAction(_editMenu, ":/icons/actions/select-all.svg", "Select &All", &MainWindow::selectAllRequested, QKeySequence("Ctrl+A"), "Select all items of current type");
+    addMenuAction(_editMenu, ":/icons/actions/deselect.svg", "&Deselect All", &MainWindow::deselectAllRequested, QKeySequence("Ctrl+D"), "Clear all selections");
 
     _editMenu->addSeparator();
-
-    QAction* scrollBlockerRectangleAction = _editMenu->addAction(createIcon(":/icons/actions/scroll-blocker.svg"), "Scroll &Blocker Rectangle");
-    scrollBlockerRectangleAction->setShortcut(QKeySequence("B"));
-    scrollBlockerRectangleAction->setStatusTip("Draw rectangle and place scroll blockers on borders");
-    connect(scrollBlockerRectangleAction, &QAction::triggered, this, &MainWindow::toggleScrollBlockerRectangleMode);
+    addMenuAction(_editMenu, ":/icons/actions/scroll-blocker.svg", "Scroll &Blocker Rectangle", &MainWindow::toggleScrollBlockerRectangleMode, QKeySequence("B"), "Draw rectangle and place scroll blockers on borders");
 
     _editMenu->addSeparator();
 
@@ -306,67 +297,24 @@ void MainWindow::setupMenuBar() {
 
     updateUndoRedoActions();
 
-    // View Menu
     _viewMenu = _menuBar->addMenu("&View");
-
-    _showObjectsAction = _viewMenu->addAction(createIcon(":/icons/actions/view-objects.svg"), "Show &Objects");
-    _showObjectsAction->setCheckable(true);
-    _showObjectsAction->setChecked(UI::DEFAULT_SHOW_OBJECTS);
-    connect(_showObjectsAction, &QAction::toggled, this, &MainWindow::showObjectsToggled);
-
-    _showCrittersAction = _viewMenu->addAction(createIcon(":/icons/actions/view-critters.svg"), "Show &Critters");
-    _showCrittersAction->setCheckable(true);
-    _showCrittersAction->setChecked(UI::DEFAULT_SHOW_CRITTERS);
-    connect(_showCrittersAction, &QAction::toggled, this, &MainWindow::showCrittersToggled);
-
-    _showWallsAction = _viewMenu->addAction(createIcon(":/icons/actions/view-walls.svg"), "Show &Walls");
-    _showWallsAction->setCheckable(true);
-    _showWallsAction->setChecked(UI::DEFAULT_SHOW_WALLS);
-    connect(_showWallsAction, &QAction::toggled, this, &MainWindow::showWallsToggled);
-
-    _showRoofsAction = _viewMenu->addAction(createIcon(":/icons/actions/view-roofs.svg"), "Show &Roofs");
-    _showRoofsAction->setCheckable(true);
-    _showRoofsAction->setChecked(UI::DEFAULT_SHOW_ROOF);
-    connect(_showRoofsAction, &QAction::toggled, this, &MainWindow::showRoofsToggled);
-
-    _showScrollBlockersAction = _viewMenu->addAction(createIcon(":/icons/actions/view-scroll-blockers.svg"), "Show Scroll &Blockers");
-    _showScrollBlockersAction->setCheckable(true);
-    _showScrollBlockersAction->setChecked(UI::DEFAULT_SHOW_SCROLL_BLK);
-    connect(_showScrollBlockersAction, &QAction::toggled, this, &MainWindow::showScrollBlockersToggled);
-
-    _showWallBlockersAction = _viewMenu->addAction(createIcon(":/icons/actions/view-wall-blockers.svg"), "Show &Wall Blockers");
-    _showWallBlockersAction->setCheckable(true);
-    _showWallBlockersAction->setChecked(UI::DEFAULT_SHOW_WALL_BLK);
-    connect(_showWallBlockersAction, &QAction::toggled, this, &MainWindow::showWallBlockersToggled);
-
-    _showHexGridAction = _viewMenu->addAction(createIcon(":/icons/actions/view-grid.svg"), "Show &Hex Grid");
-    _showHexGridAction->setCheckable(true);
-    _showHexGridAction->setChecked(UI::DEFAULT_SHOW_HEX_GRID);
-    connect(_showHexGridAction, &QAction::toggled, this, &MainWindow::showHexGridToggled);
-
-    _showLightOverlaysAction = _viewMenu->addAction(createIcon(":/icons/actions/view-light.svg"), "Show &Light Overlays");
-    _showLightOverlaysAction->setCheckable(true);
-    _showLightOverlaysAction->setChecked(false);
-    connect(_showLightOverlaysAction, &QAction::toggled, this, &MainWindow::showLightOverlaysToggled);
-
-    _showExitGridsAction = _viewMenu->addAction(createIcon(":/icons/actions/view-exits.svg"), "Show &Exit Grids");
-    _showExitGridsAction->setCheckable(true);
-    _showExitGridsAction->setChecked(false);
-    _showExitGridsAction->setShortcut(QKeySequence("Ctrl+E"));
-    _showExitGridsAction->setStatusTip("Show exit grid markers");
-    connect(_showExitGridsAction, &QAction::toggled, this, &MainWindow::showExitGridsToggled);
+    addViewToggleAction(_showObjectsAction, ":/icons/actions/view-objects.svg", "Show &Objects", UI::DEFAULT_SHOW_OBJECTS, &MainWindow::showObjectsToggled);
+    addViewToggleAction(_showCrittersAction, ":/icons/actions/view-critters.svg", "Show &Critters", UI::DEFAULT_SHOW_CRITTERS, &MainWindow::showCrittersToggled);
+    addViewToggleAction(_showWallsAction, ":/icons/actions/view-walls.svg", "Show &Walls", UI::DEFAULT_SHOW_WALLS, &MainWindow::showWallsToggled);
+    addViewToggleAction(_showRoofsAction, ":/icons/actions/view-roofs.svg", "Show &Roofs", UI::DEFAULT_SHOW_ROOF, &MainWindow::showRoofsToggled);
+    addViewToggleAction(_showScrollBlockersAction, ":/icons/actions/view-scroll-blockers.svg", "Show Scroll &Blockers", UI::DEFAULT_SHOW_SCROLL_BLK, &MainWindow::showScrollBlockersToggled);
+    addViewToggleAction(_showWallBlockersAction, ":/icons/actions/view-wall-blockers.svg", "Show &Wall Blockers", UI::DEFAULT_SHOW_WALL_BLK, &MainWindow::showWallBlockersToggled);
+    addViewToggleAction(_showHexGridAction, ":/icons/actions/view-grid.svg", "Show &Hex Grid", UI::DEFAULT_SHOW_HEX_GRID, &MainWindow::showHexGridToggled);
+    addViewToggleAction(_showLightOverlaysAction, ":/icons/actions/view-light.svg", "Show &Light Overlays", false, &MainWindow::showLightOverlaysToggled);
+    addViewToggleAction(_showExitGridsAction, ":/icons/actions/view-exits.svg", "Show &Exit Grids", false, &MainWindow::showExitGridsToggled, "Show exit grid markers", QKeySequence("Ctrl+E"));
 
     _viewMenu->addSeparator();
 
-    // Panels submenu (will be set up later in setupPanelsMenu)
     _panelsMenu = _viewMenu->addMenu("&Panels");
 
     _viewMenu->addSeparator();
 
-    // Dock Layout submenu
     QMenu* dockLayoutMenu = _viewMenu->addMenu("&Dock Layout");
-
-    // Panel management actions (non-exclusive)
     QAction* resetLayoutAction = dockLayoutMenu->addAction("&Reset to Default Layout");
     resetLayoutAction->setStatusTip("Reset all panels to their default positions");
     connect(resetLayoutAction, &QAction::triggered, this, &MainWindow::restoreDefaultLayout);
@@ -374,66 +322,45 @@ void MainWindow::setupMenuBar() {
     QAction* redockAllAction = dockLayoutMenu->addAction("Re-&dock All Floating Panels");
     redockAllAction->setStatusTip("Dock all floating panels back to the main window");
     connect(redockAllAction, &QAction::triggered, [this]() {
-        // Re-dock any floating panels
-        if (_mapInfoDock->isFloating())
-            _mapInfoDock->setFloating(false);
-        if (_selectionDock->isFloating())
-            _selectionDock->setFloating(false);
-        if (_tilePaletteDock->isFloating())
-            _tilePaletteDock->setFloating(false);
-        if (_objectPaletteDock->isFloating())
-            _objectPaletteDock->setFloating(false);
-        if (_fileBrowserDock->isFloating())
-            _fileBrowserDock->setFloating(false);
+        for (QDockWidget* dock : { _mapInfoDock, _selectionDock, _tilePaletteDock, _objectPaletteDock, _fileBrowserDock }) {
+            if (dock->isFloating()) {
+                dock->setFloating(false);
+            }
+        }
         spdlog::info("Re-docked all floating panels");
     });
 
     dockLayoutMenu->addSeparator();
 
-    // Create action group for mutually exclusive dock layout selection
     QActionGroup* layoutGroup = new QActionGroup(this);
 
-    QAction* verticalStackAction = dockLayoutMenu->addAction("&Vertical Stack (Right Side)");
-    verticalStackAction->setCheckable(true);
-    verticalStackAction->setChecked(true);
-    verticalStackAction->setStatusTip("Stack Map Info and Selection panels vertically on the right");
-    layoutGroup->addAction(verticalStackAction);
-    connect(verticalStackAction, &QAction::triggered, [this]() {
-        // Move panels to right side and split vertically
+    auto addDockLayoutAction = [this, dockLayoutMenu, layoutGroup](const QString& text, const QString& statusTip, bool checked, auto applyLayout) {
+        QAction* action = dockLayoutMenu->addAction(text);
+        action->setCheckable(true);
+        action->setChecked(checked);
+        action->setStatusTip(statusTip);
+        layoutGroup->addAction(action);
+        connect(action, &QAction::triggered, this, applyLayout);
+        return action;
+    };
+
+    addDockLayoutAction("&Vertical Stack (Right Side)", "Stack Map Info and Selection panels vertically on the right", true, [this]() {
         addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
         addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
         splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
     });
-
-    QAction* horizontalStackAction = dockLayoutMenu->addAction("&Horizontal Stack (Right Side)");
-    horizontalStackAction->setCheckable(true);
-    horizontalStackAction->setStatusTip("Stack Map Info and Selection panels horizontally on the right");
-    layoutGroup->addAction(horizontalStackAction);
-    connect(horizontalStackAction, &QAction::triggered, [this]() {
-        // Move panels to right side and split horizontally
+    addDockLayoutAction("&Horizontal Stack (Right Side)", "Stack Map Info and Selection panels horizontally on the right", false, [this]() {
         addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
         addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
         splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
     });
-
-    QAction* tabbedLayoutAction = dockLayoutMenu->addAction("&Tabbed Layout (Right Side)");
-    tabbedLayoutAction->setCheckable(true);
-    tabbedLayoutAction->setStatusTip("Tab Map Info and Selection panels together on the right");
-    layoutGroup->addAction(tabbedLayoutAction);
-    connect(tabbedLayoutAction, &QAction::triggered, [this]() {
-        // Move panels to right side and tabify them
+    addDockLayoutAction("&Tabbed Layout (Right Side)", "Tab Map Info and Selection panels together on the right", false, [this]() {
         addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
         addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
         tabifyDockWidget(_mapInfoDock, _selectionDock);
         _mapInfoDock->raise();
     });
-
-    QAction* bottomDockAction = dockLayoutMenu->addAction("&Bottom Dock");
-    bottomDockAction->setCheckable(true);
-    bottomDockAction->setStatusTip("Move Map Info and Selection panels to the bottom area");
-    layoutGroup->addAction(bottomDockAction);
-    connect(bottomDockAction, &QAction::triggered, [this]() {
-        // Move both docks to bottom area
+    addDockLayoutAction("&Bottom Dock", "Move Map Info and Selection panels to the bottom area", false, [this]() {
         addDockWidget(Qt::BottomDockWidgetArea, _mapInfoDock);
         addDockWidget(Qt::BottomDockWidgetArea, _selectionDock);
         splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
@@ -441,10 +368,7 @@ void MainWindow::setupMenuBar() {
 
     _viewMenu->addSeparator();
 
-    // Elevation submenu
     _elevationMenu = _viewMenu->addMenu("&Elevation");
-
-    // Create action group for mutually exclusive elevation selection
     QActionGroup* elevationGroup = new QActionGroup(this);
 
     _elevation1Action = _elevationMenu->addAction("Elevation &1");
@@ -469,7 +393,6 @@ void MainWindow::setupMenuBar() {
     elevationGroup->addAction(_elevation3Action);
     connect(_elevation3Action, &QAction::triggered, [this]() { elevationChanged(ELEVATION_3); });
 
-    // Help Menu
     _helpMenu = _menuBar->addMenu("&Help");
     QAction* aboutAction = _helpMenu->addAction("&About Gecko...");
     aboutAction->setStatusTip("Show information about the application");
@@ -481,24 +404,22 @@ void MainWindow::setupToolBar() {
     _mainToolBar->setObjectName("MainToolBar");
     _mainToolBar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
 
-    // File operations
-    QAction* newAction = _mainToolBar->addAction(createIcon(":/icons/actions/new.svg"), "New");
-    newAction->setStatusTip("Create a new map");
-    connect(newAction, &QAction::triggered, this, &MainWindow::newMapRequested);
+    auto addToolAction = [this](const QString& iconPath, const QString& text, auto slot, const QString& statusTip = QString(), const QKeySequence& shortcut = QKeySequence()) {
+        QAction* action = _mainToolBar->addAction(createIcon(iconPath), text);
+        if (!statusTip.isEmpty()) {
+            action->setStatusTip(statusTip);
+        }
+        if (!shortcut.isEmpty()) {
+            action->setShortcut(shortcut);
+        }
+        connect(action, &QAction::triggered, this, slot);
+        return action;
+    };
 
-    QAction* openAction = _mainToolBar->addAction(createIcon(":/icons/actions/open.svg"), "Open");
-    openAction->setStatusTip("Open an existing map");
-    connect(openAction, &QAction::triggered, this, &MainWindow::openMapRequested);
-
-    QAction* saveAction = _mainToolBar->addAction(createIcon(":/icons/actions/save.svg"), "Save");
-    saveAction->setStatusTip("Save the current map");
-    connect(saveAction, &QAction::triggered, this, &MainWindow::saveMapRequested);
-
-    // Play game action
-    QAction* playAction = _mainToolBar->addAction(createIcon(":/icons/actions/play.svg"), "Play");
-    playAction->setStatusTip("Save and play the current map in Fallout 2");
-    playAction->setShortcut(QKeySequence("F5"));
-    connect(playAction, &QAction::triggered, this, &MainWindow::onPlayGame);
+    addToolAction(":/icons/actions/new.svg", "New", &MainWindow::newMapRequested, "Create a new map");
+    addToolAction(":/icons/actions/open.svg", "Open", &MainWindow::openMapRequested, "Open an existing map");
+    addToolAction(":/icons/actions/save.svg", "Save", &MainWindow::saveMapRequested, "Save the current map");
+    addToolAction(":/icons/actions/play.svg", "Play", &MainWindow::onPlayGame, "Save and play the current map in Fallout 2", QKeySequence("F5"));
 
     _mainToolBar->addSeparator(); // Separate play from selection controls
 
@@ -547,8 +468,7 @@ void MainWindow::setupToolBar() {
 
     _mainToolBar->addSeparator();
 
-    // Rotate action
-    QAction* rotateAction = _mainToolBar->addAction(createIcon(":/icons/actions/rotate.svg"), "Rotate");
+    addToolAction(":/icons/actions/rotate.svg", "Rotate", &MainWindow::rotateObjectRequested, "Rotate selected object", QKeySequence("R"));
 
     // Mark exits tool
     _markExitsAction = _mainToolBar->addAction(createIcon(":/icons/actions/door-exit.svg"), "Mark Exits");
@@ -559,9 +479,6 @@ void MainWindow::setupToolBar() {
             _currentEditorWidget->setMarkExitsMode(checked);
         }
     });
-    rotateAction->setShortcut(QKeySequence("R"));
-    rotateAction->setStatusTip("Rotate selected object");
-    connect(rotateAction, &QAction::triggered, this, &MainWindow::rotateObjectRequested);
 
     _mainToolBar->addSeparator();
 
@@ -578,68 +495,33 @@ void MainWindow::setupToolBar() {
 }
 
 void MainWindow::setupDockWidgets() {
-    // Map Info dock
-    _mapInfoDock = new QDockWidget("Map Information", this);
-    _mapInfoDock->setObjectName("MapInfoDock"); // Unique name for state persistence
-    _mapInfoDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
-    _mapInfoDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
+    auto createDock = [this](const QString& title, const char* objectName, QWidget* panel, Qt::DockWidgetArea area, QSizePolicy::Policy verticalPolicy, int minHeight) {
+        QDockWidget* dock = new QDockWidget(title, this);
+        dock->setObjectName(objectName);
+        dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+        dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
+        panel->setSizePolicy(QSizePolicy(QSizePolicy::Preferred, verticalPolicy));
+        dock->setWidget(panel);
+        addDockWidget(area, dock);
+        dock->setMinimumSize(ui::constants::dock::MIN_WIDTH, minHeight);
+        dock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+        return dock;
+    };
 
-    // Create and set the MapInfoPanel
     _mapInfoPanel = new MapInfoPanel();
-    _mapInfoPanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-    _mapInfoDock->setWidget(_mapInfoPanel);
+    _mapInfoDock = createDock("Map Information", "MapInfoDock", _mapInfoPanel, Qt::RightDockWidgetArea, QSizePolicy::Preferred, ui::constants::dock::MIN_HEIGHT_SMALL);
 
-    addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
-
-    // Selection dock (unified object and tile selection)
-    _selectionDock = new QDockWidget("Selection", this);
-    _selectionDock->setObjectName("SelectionDock"); // Unique name for state persistence
-    _selectionDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
-    _selectionDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
-
-    // Create and set the unified SelectionPanel
     _selectionPanel = new SelectionPanel();
-    _selectionPanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-    _selectionDock->setWidget(_selectionPanel);
+    _selectionDock = createDock("Selection", "SelectionDock", _selectionPanel, Qt::RightDockWidgetArea, QSizePolicy::Preferred, ui::constants::dock::MIN_HEIGHT_SMALL);
 
-    addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
-
-    // Tile Palette dock
-    _tilePaletteDock = new QDockWidget("Tile Palette", this);
-    _tilePaletteDock->setObjectName("TilePaletteDock"); // Unique name for state persistence
-    _tilePaletteDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
-    _tilePaletteDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
-
-    // Create and set the TilePalettePanel
     _tilePalettePanel = new TilePalettePanel();
-    _tilePalettePanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-    _tilePaletteDock->setWidget(_tilePalettePanel);
+    _tilePaletteDock = createDock("Tile Palette", "TilePaletteDock", _tilePalettePanel, Qt::LeftDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_LARGE);
 
-    addDockWidget(Qt::LeftDockWidgetArea, _tilePaletteDock);
-
-    // Object Palette dock
-    _objectPaletteDock = new QDockWidget("Object Palette", this);
-    _objectPaletteDock->setObjectName("ObjectPaletteDock"); // Unique name for state persistence
-    _objectPaletteDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
-    _objectPaletteDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
-
-    // Create and set the ObjectPalettePanel
     _objectPalettePanel = new ObjectPalettePanel();
-    _objectPalettePanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-    _objectPaletteDock->setWidget(_objectPalettePanel);
+    _objectPaletteDock = createDock("Object Palette", "ObjectPaletteDock", _objectPalettePanel, Qt::LeftDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_LARGE);
 
-    addDockWidget(Qt::LeftDockWidgetArea, _objectPaletteDock);
-
-    // File Browser dock
-    _fileBrowserDock = new QDockWidget("Virtual File System Browser", this);
-    _fileBrowserDock->setObjectName("FileBrowserDock"); // Unique name for state persistence
-    _fileBrowserDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
-    _fileBrowserDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
-
-    // Create and set the FileBrowserPanel
     _fileBrowserPanel = new FileBrowserPanel();
-    _fileBrowserPanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-    _fileBrowserDock->setWidget(_fileBrowserPanel);
+    _fileBrowserDock = createDock("Virtual File System Browser", "FileBrowserDock", _fileBrowserPanel, Qt::LeftDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_LARGE);
 
     // Connect file browser signals
     connect(_fileBrowserPanel, &FileBrowserPanel::fileDoubleClicked, this, [this](const QString& filePath) {
@@ -661,26 +543,10 @@ void MainWindow::setupDockWidgets() {
         }
     });
 
-    addDockWidget(Qt::LeftDockWidgetArea, _fileBrowserDock);
-
     // Configure initial dock layout - vertical stacking instead of tabs
     splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
     tabifyDockWidget(_tilePaletteDock, _objectPaletteDock);
     tabifyDockWidget(_objectPaletteDock, _fileBrowserDock);
-
-    // Set minimum sizes for dock widgets - very small values for maximum flexibility
-    _mapInfoDock->setMinimumSize(ui::constants::dock::MIN_WIDTH, ui::constants::dock::MIN_HEIGHT_SMALL);
-    _selectionDock->setMinimumSize(ui::constants::dock::MIN_WIDTH, ui::constants::dock::MIN_HEIGHT_SMALL);
-    _tilePaletteDock->setMinimumSize(ui::constants::dock::MIN_WIDTH, ui::constants::dock::MIN_HEIGHT_LARGE);
-    _objectPaletteDock->setMinimumSize(ui::constants::dock::MIN_WIDTH, ui::constants::dock::MIN_HEIGHT_LARGE);
-    _fileBrowserDock->setMinimumSize(ui::constants::dock::MIN_WIDTH, ui::constants::dock::MIN_HEIGHT_LARGE);
-
-    // Set maximum sizes to allow expansion
-    _mapInfoDock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
-    _selectionDock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
-    _tilePaletteDock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
-    _objectPaletteDock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
-    _fileBrowserDock->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
 
     // Let Qt handle initial dock sizing automatically for better resize flexibility
     // Fixed resizeDocks() calls can interfere with user resize operations
@@ -902,24 +768,6 @@ void MainWindow::connectToEditorWidget() {
         _selectionPanel->setMap(_currentEditorWidget->getMap());
 
         connect(_currentEditorWidget, &EditorWidget::selectionChanged, _selectionPanel, &SelectionPanel::handleSelectionChanged);
-
-        // Connect selection changes to inventory panel for real-time updates
-        connect(_currentEditorWidget, &EditorWidget::selectionChanged, this, [this](const geck::selection::SelectionState& selectionState) {
-            auto selectedObjects = selectionState.getObjects();
-
-            if (selectedObjects.size() == 1) {
-                auto object = selectedObjects.front();
-                if (object && object->hasMapObject()) {
-                    auto mapObjectPtr = object->getMapObjectPtr();
-                    if (mapObjectPtr && (mapObjectPtr->objects_in_inventory > 0 || !mapObjectPtr->inventory.empty())) {
-                        // Object has inventory - update panel
-                        return;
-                    }
-                }
-            }
-
-            // No inventory object selected - clear panel
-        });
         connect(_selectionPanel, &SelectionPanel::objectFrmChanged, _currentEditorWidget, &EditorWidget::onObjectFrmChanged);
         connect(_selectionPanel, &SelectionPanel::objectFrmPathChanged, _currentEditorWidget, &EditorWidget::onObjectFrmPathChanged);
         connect(_selectionPanel, &SelectionPanel::statusMessage, this, &MainWindow::showStatusMessage);
@@ -1208,194 +1056,58 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFile
 }
 
 void MainWindow::setupPanelsMenu() {
-    // Map Info Panel
-    _mapInfoPanelAction = _panelsMenu->addAction("Map &Information");
-    _mapInfoPanelAction->setCheckable(true);
-    _mapInfoPanelAction->setChecked(true);
-    connect(_mapInfoPanelAction, &QAction::toggled, [this](bool visible) {
-        if (_suppressPanelPreferenceUpdates) {
-            return;
-        }
-        spdlog::debug("Map Info Panel action toggled: {}", visible);
+    auto showDock = [this](QDockWidget* dock, bool visible) {
         if (visible) {
-            _mapInfoDock->show();
-            if (!_mapInfoDock->isFloating() && dockWidgetArea(_mapInfoDock) != Qt::NoDockWidgetArea) {
-                _mapInfoDock->raise();
+            dock->show();
+            if (!dock->isFloating() && dockWidgetArea(dock) != Qt::NoDockWidgetArea) {
+                dock->raise();
             }
-        } else {
-            _mapInfoDock->hide();
-        }
-        snapshotPanelVisibility();
-        persistPanelPreference(_mapInfoDock, visible);
-    });
-
-    // Selection Panel
-    _selectionPanelAction = _panelsMenu->addAction("&Selection");
-    _selectionPanelAction->setCheckable(true);
-    _selectionPanelAction->setChecked(true);
-    connect(_selectionPanelAction, &QAction::toggled, [this](bool visible) {
-        if (_suppressPanelPreferenceUpdates) {
             return;
         }
-        spdlog::debug("Selection Panel action toggled: {}", visible);
-        if (visible) {
-            _selectionDock->show();
-            if (!_selectionDock->isFloating() && dockWidgetArea(_selectionDock) != Qt::NoDockWidgetArea) {
-                _selectionDock->raise();
+
+        dock->hide();
+    };
+
+    auto bindPanelToggle = [this, showDock](const QString& label, QDockWidget* dock, QAction*& actionRef) {
+        actionRef = _panelsMenu->addAction(label);
+        actionRef->setCheckable(true);
+        actionRef->setChecked(true);
+        QAction* action = actionRef;
+
+        connect(action, &QAction::toggled, this, [this, dock, showDock](bool visible) {
+            if (_suppressPanelPreferenceUpdates) {
+                return;
             }
-        } else {
-            _selectionDock->hide();
-        }
-        snapshotPanelVisibility();
-        persistPanelPreference(_selectionDock, visible);
-    });
 
-    // Tile Palette Panel
-    _tilePalettePanelAction = _panelsMenu->addAction("&Tile Palette");
-    _tilePalettePanelAction->setCheckable(true);
-    _tilePalettePanelAction->setChecked(true);
-    connect(_tilePalettePanelAction, &QAction::toggled, [this](bool visible) {
-        if (_suppressPanelPreferenceUpdates) {
-            return;
-        }
-        spdlog::debug("Tile Palette Panel action toggled: {}", visible);
-        if (visible) {
-            _tilePaletteDock->show();
-            if (!_tilePaletteDock->isFloating() && dockWidgetArea(_tilePaletteDock) != Qt::NoDockWidgetArea) {
-                _tilePaletteDock->raise();
+            spdlog::debug("{} action toggled: {}", dock->windowTitle().toStdString(), visible);
+            showDock(dock, visible);
+            snapshotPanelVisibility();
+            persistPanelPreference(dock, visible);
+        });
+
+        connect(dock, &QDockWidget::visibilityChanged, this, [this, dock, action](bool visible) {
+            if (!visible && !dock->isHidden()) {
+                return;
             }
-        } else {
-            _tilePaletteDock->hide();
-        }
-        snapshotPanelVisibility();
-        persistPanelPreference(_tilePaletteDock, visible);
-    });
 
-    // Object Palette Panel
-    _objectPalettePanelAction = _panelsMenu->addAction("&Object Palette");
-    _objectPalettePanelAction->setCheckable(true);
-    _objectPalettePanelAction->setChecked(true);
-    connect(_objectPalettePanelAction, &QAction::toggled, [this](bool visible) {
-        if (_suppressPanelPreferenceUpdates) {
-            return;
-        }
-        spdlog::debug("Object Palette Panel action toggled: {}", visible);
-        if (visible) {
-            _objectPaletteDock->show();
-            if (!_objectPaletteDock->isFloating() && dockWidgetArea(_objectPaletteDock) != Qt::NoDockWidgetArea) {
-                _objectPaletteDock->raise();
+            spdlog::debug("{} visibility changed: {}", dock->windowTitle().toStdString(), visible);
+            const bool dockVisible = dock->toggleViewAction()->isChecked();
+            if (action && action->isChecked() != dockVisible) {
+                QSignalBlocker blocker(*action);
+                action->setChecked(dockVisible);
             }
-        } else {
-            _objectPaletteDock->hide();
-        }
-        snapshotPanelVisibility();
-        persistPanelPreference(_objectPaletteDock, visible);
-    });
-
-    // File Browser Panel
-    _fileBrowserPanelAction = _panelsMenu->addAction("&Virtual File System Browser");
-    _fileBrowserPanelAction->setCheckable(true);
-    _fileBrowserPanelAction->setChecked(true);
-    connect(_fileBrowserPanelAction, &QAction::toggled, [this](bool visible) {
-        if (_suppressPanelPreferenceUpdates) {
-            return;
-        }
-        spdlog::debug("File Browser Panel action toggled: {}", visible);
-        if (visible) {
-            _fileBrowserDock->show();
-            if (!_fileBrowserDock->isFloating() && dockWidgetArea(_fileBrowserDock) != Qt::NoDockWidgetArea) {
-                _fileBrowserDock->raise();
+            if (!_suppressPanelPreferenceUpdates) {
+                snapshotPanelVisibility();
+                persistPanelPreference(dock, dockVisible);
             }
-        } else {
-            _fileBrowserDock->hide();
-        }
-        snapshotPanelVisibility();
-        persistPanelPreference(_fileBrowserDock, visible);
-    });
+        });
+    };
 
-    // Inventory Panel functionality integrated into Selection Panel
-
-    // Connect dock widget visibility changes back to menu actions
-    connect(_mapInfoDock, &QDockWidget::visibilityChanged, [this](bool visible) {
-        // On Linux a tab change emits visibilityChanged(false) without hiding the dock; ignore that case
-        if (!visible && !_mapInfoDock->isHidden()) {
-            return;
-        }
-        spdlog::debug("Map Info Dock visibility changed: {}", visible);
-        const bool dockVisible = _mapInfoDock->toggleViewAction()->isChecked();
-        if (_mapInfoPanelAction && _mapInfoPanelAction->isChecked() != dockVisible) {
-            QSignalBlocker blocker(*_mapInfoPanelAction);
-            _mapInfoPanelAction->setChecked(dockVisible);
-        }
-        if (!_suppressPanelPreferenceUpdates) {
-            snapshotPanelVisibility();
-            persistPanelPreference(_mapInfoDock, dockVisible);
-        }
-    });
-
-    connect(_selectionDock, &QDockWidget::visibilityChanged, [this](bool visible) {
-        if (!visible && !_selectionDock->isHidden()) {
-            return;
-        }
-        spdlog::debug("Selection Dock visibility changed: {}", visible);
-        const bool dockVisible = _selectionDock->toggleViewAction()->isChecked();
-        if (_selectionPanelAction && _selectionPanelAction->isChecked() != dockVisible) {
-            QSignalBlocker blocker(*_selectionPanelAction);
-            _selectionPanelAction->setChecked(dockVisible);
-        }
-        if (!_suppressPanelPreferenceUpdates) {
-            snapshotPanelVisibility();
-            persistPanelPreference(_selectionDock, dockVisible);
-        }
-    });
-
-    connect(_tilePaletteDock, &QDockWidget::visibilityChanged, [this](bool visible) {
-        if (!visible && !_tilePaletteDock->isHidden()) {
-            return;
-        }
-        spdlog::debug("Tile Palette Dock visibility changed: {}", visible);
-        const bool dockVisible = _tilePaletteDock->toggleViewAction()->isChecked();
-        if (_tilePalettePanelAction && _tilePalettePanelAction->isChecked() != dockVisible) {
-            QSignalBlocker blocker(*_tilePalettePanelAction);
-            _tilePalettePanelAction->setChecked(dockVisible);
-        }
-        if (!_suppressPanelPreferenceUpdates) {
-            snapshotPanelVisibility();
-            persistPanelPreference(_tilePaletteDock, dockVisible);
-        }
-    });
-
-    connect(_objectPaletteDock, &QDockWidget::visibilityChanged, [this](bool visible) {
-        if (!visible && !_objectPaletteDock->isHidden()) {
-            return;
-        }
-        spdlog::debug("Object Palette Dock visibility changed: {}", visible);
-        const bool dockVisible = _objectPaletteDock->toggleViewAction()->isChecked();
-        if (_objectPalettePanelAction && _objectPalettePanelAction->isChecked() != dockVisible) {
-            QSignalBlocker blocker(*_objectPalettePanelAction);
-            _objectPalettePanelAction->setChecked(dockVisible);
-        }
-        if (!_suppressPanelPreferenceUpdates) {
-            snapshotPanelVisibility();
-            persistPanelPreference(_objectPaletteDock, dockVisible);
-        }
-    });
-
-    connect(_fileBrowserDock, &QDockWidget::visibilityChanged, [this](bool visible) {
-        if (!visible && !_fileBrowserDock->isHidden()) {
-            return;
-        }
-        spdlog::debug("File Browser Dock visibility changed: {}", visible);
-        const bool dockVisible = _fileBrowserDock->toggleViewAction()->isChecked();
-        if (_fileBrowserPanelAction && _fileBrowserPanelAction->isChecked() != dockVisible) {
-            QSignalBlocker blocker(*_fileBrowserPanelAction);
-            _fileBrowserPanelAction->setChecked(dockVisible);
-        }
-        if (!_suppressPanelPreferenceUpdates) {
-            snapshotPanelVisibility();
-            persistPanelPreference(_fileBrowserDock, dockVisible);
-        }
-    });
+    bindPanelToggle("Map &Information", _mapInfoDock, _mapInfoPanelAction);
+    bindPanelToggle("&Selection", _selectionDock, _selectionPanelAction);
+    bindPanelToggle("&Tile Palette", _tilePaletteDock, _tilePalettePanelAction);
+    bindPanelToggle("&Object Palette", _objectPaletteDock, _objectPalettePanelAction);
+    bindPanelToggle("&Virtual File System Browser", _fileBrowserDock, _fileBrowserPanelAction);
 }
 
 void MainWindow::saveDockWidgetState() {

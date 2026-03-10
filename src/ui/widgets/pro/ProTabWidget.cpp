@@ -141,8 +141,8 @@ int ProTabWidget::getComboValue(QComboBox* combo, int defaultValue) {
         return defaultValue;
     }
 
-    QVariant data = combo->currentData();
-    return data.isValid() ? data.toInt() : defaultValue;
+    QVariant currentValue = combo->currentData();
+    return currentValue.isValid() ? currentValue.toInt() : defaultValue;
 }
 
 QStringList ProTabWidget::getMaterialNames() {

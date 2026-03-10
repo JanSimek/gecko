@@ -47,11 +47,6 @@ private:
     void updateStatusLabel();
     void clearPreview();
 
-    // Helper methods for item management
-    QString getItemName(uint32_t pid) const;
-    QString getItemTypeName(uint32_t pid) const;
-    QPixmap getItemIcon(uint32_t pid) const;
-
     // UI Components
     QVBoxLayout* _mainLayout;
     QSplitter* _splitter;

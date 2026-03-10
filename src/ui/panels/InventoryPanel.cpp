@@ -1,10 +1,7 @@
 #include "InventoryPanel.h"
 #include "../../editor/Object.h"
 #include "../../format/map/MapObject.h"
-#include "../../util/ProHelper.h"
-#include "../../util/ResourceManager.h"
-#include "../../format/pro/Pro.h"
-#include "../../format/msg/Msg.h"
+#include "../common/InventoryItemUiHelper.h"
 #include "../theme/ThemeManager.h"
 #include "../UIConstants.h"
 
@@ -243,6 +240,7 @@ void InventoryPanel::populateInventoryTree() {
             continue;
 
         QTreeWidgetItem* treeItem = new QTreeWidgetItem(_inventoryTree);
+        const auto details = ui::inventory::describeItem(item->pro_pid);
 
         // Store inventory index in item data
         treeItem->setData(COLUMN_NAME, Qt::UserRole, static_cast<int>(i));
@@ -254,10 +252,10 @@ void InventoryPanel::populateInventoryTree() {
         }
 
         // Set item details
-        treeItem->setText(COLUMN_NAME, getItemName(item->pro_pid));
-        treeItem->setText(COLUMN_TYPE, getItemTypeName(item->pro_pid));
+        treeItem->setText(COLUMN_NAME, details.name);
+        treeItem->setText(COLUMN_TYPE, details.typeName);
         treeItem->setText(COLUMN_AMOUNT, QString::number(item->amount));
-        treeItem->setText(COLUMN_PID, QString("0x%1").arg(item->pro_pid, 8, 16, QChar('0')));
+        treeItem->setText(COLUMN_PID, details.pidText);
 
         _inventoryTree->addTopLevelItem(treeItem);
     }
@@ -269,7 +267,7 @@ void InventoryPanel::populateInventoryTree() {
 }
 
 QPixmap InventoryPanel::getItemIconWithQuantity(uint32_t pid, int amount) const {
-    QPixmap baseIcon = getItemIcon(pid);
+    QPixmap baseIcon = ui::inventory::loadItemIcon(pid, ICON_SIZE);
     if (baseIcon.isNull()) {
         return QPixmap();
     }
@@ -379,8 +377,10 @@ void InventoryPanel::updateItemPreview(QTreeWidgetItem* item) {
         return;
     }
 
+    const auto details = ui::inventory::describeItem(mapItem->pro_pid);
+
     // Update preview sprite
-    QPixmap sprite = getItemIcon(mapItem->pro_pid);
+    QPixmap sprite = ui::inventory::loadItemIcon(mapItem->pro_pid);
     if (!sprite.isNull()) {
         // Scale sprite to fit preview area while maintaining aspect ratio
         sprite = sprite.scaled(_previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -390,10 +390,10 @@ void InventoryPanel::updateItemPreview(QTreeWidgetItem* item) {
     }
 
     // Update item details
-    _previewNameLabel->setText(getItemName(mapItem->pro_pid));
-    _previewTypeLabel->setText(getItemTypeName(mapItem->pro_pid));
+    _previewNameLabel->setText(details.name);
+    _previewTypeLabel->setText(details.typeName);
     _previewAmountLabel->setText(QString::number(mapItem->amount));
-    _previewPidLabel->setText(QString("0x%1").arg(mapItem->pro_pid, 8, 16, QChar('0')));
+    _previewPidLabel->setText(details.pidText);
 }
 
 void InventoryPanel::clearPreview() {
@@ -420,104 +420,6 @@ void InventoryPanel::updateStatusLabel() {
     }
 
     _statusLabel->setText(statusText);
-}
-
-// Helper methods - reuse logic from InventoryViewerDialog
-QString InventoryPanel::getItemName(uint32_t pid) const {
-    try {
-        uint32_t objectType = (pid & 0xFF000000) >> 24;
-        Pro::OBJECT_TYPE proType = static_cast<Pro::OBJECT_TYPE>(objectType);
-
-        Msg* msgFile = ProHelper::msgFile(proType);
-        if (!msgFile) {
-            return QString("Unknown Item (%1)").arg(pid, 8, 16, QChar('0'));
-        }
-
-        uint32_t objectIndex = pid & 0x00FFFFFF;
-        auto message = msgFile->message(objectIndex * 100);
-        QString name = QString::fromStdString(message.text);
-        if (!name.isEmpty()) {
-            return name;
-        }
-    } catch (const std::exception& e) {
-        spdlog::warn("InventoryPanel::getItemName: Error getting name for PID {}: {}", pid, e.what());
-    }
-
-    return QString("Item %1").arg(pid, 8, 16, QChar('0'));
-}
-
-QString InventoryPanel::getItemTypeName(uint32_t pid) const {
-    uint32_t objectType = (pid & 0xFF000000) >> 24;
-
-    switch (objectType) {
-        case 0:
-            return "Item";
-        case 1:
-            return "Critter";
-        case 2:
-            return "Scenery";
-        case 3:
-            return "Wall";
-        case 4:
-            return "Tile";
-        case 5:
-            return "Misc";
-        default:
-            return "Unknown";
-    }
-}
-
-QPixmap InventoryPanel::getItemIcon(uint32_t pid) const {
-    try {
-        std::string proPath = ProHelper::basePath(pid);
-        auto& resourceManager = ResourceManager::getInstance();
-
-        auto pro = resourceManager.loadResource<Pro>(proPath);
-        if (!pro) {
-            return QPixmap();
-        }
-
-        std::string frmPath;
-
-        // Try inventory FID first, fallback to main FID
-        if (pro->commonItemData.inventoryFID > 0) {
-            try {
-                frmPath = resourceManager.FIDtoFrmName(pro->commonItemData.inventoryFID);
-            } catch (const std::exception&) {
-                frmPath.clear();
-            }
-        }
-
-        if (frmPath.empty() && pro->header.FID > 0) {
-            try {
-                frmPath = resourceManager.FIDtoFrmName(pro->header.FID);
-            } catch (const std::exception&) {
-                return QPixmap();
-            }
-        }
-
-        if (frmPath.empty()) {
-            return QPixmap();
-        }
-
-        // Load texture and convert to QPixmap
-        sf::Texture texture = resourceManager.texture(frmPath);
-        sf::Image image = texture.copyToImage();
-        QImage qImage(image.getPixelsPtr(), image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
-        QPixmap pixmap = QPixmap::fromImage(qImage);
-
-        // Scale to icon size
-        if (!pixmap.isNull() && (pixmap.width() > ICON_SIZE || pixmap.height() > ICON_SIZE)) {
-            pixmap = pixmap.scaled(ICON_SIZE, ICON_SIZE, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        }
-
-        return pixmap;
-
-    } catch (const std::exception& e) {
-        spdlog::debug("InventoryPanel::getItemIcon: Could not load icon for PID {}: {}", pid, e.what());
-    }
-
-    return QPixmap();
 }
 
 void InventoryPanel::onAddItemClicked() {
@@ -550,29 +452,13 @@ void InventoryPanel::onAddItemClicked() {
         return;
     }
 
-    // Validate PID by trying to load the PRO file
+    if (!ui::inventory::itemExists(pid)) {
+        QMessageBox::warning(this, "Invalid Item", QString("Item with PID 0x%1 not found in game data.").arg(pid, 8, 16, QChar('0')));
+        return;
+    }
+
     try {
-        std::string proPath = ProHelper::basePath(pid);
-        auto& resourceManager = ResourceManager::getInstance();
-        auto pro = resourceManager.loadResource<Pro>(proPath);
-
-        if (!pro) {
-            QMessageBox::warning(this, "Invalid Item", QString("Item with PID 0x%1 not found in game data.").arg(pid, 8, 16, QChar('0')));
-            return;
-        }
-
-        // Create new MapObject for the item
-        auto newItem = std::make_unique<MapObject>();
-        newItem->pro_pid = pid;
-        newItem->frm_pid = 0;
-        newItem->position = 0;
-        newItem->elevation = 0;
-        newItem->direction = 0;
-        newItem->amount = amount;
-        newItem->objects_in_inventory = 0;
-        newItem->max_inventory_size = 0;
-        newItem->inventory.clear();
-
+        auto newItem = ui::inventory::createMapInventoryItem(pid, amount);
         // Add to the container's inventory
         _mapObject->inventory.push_back(std::move(newItem));
         _mapObject->objects_in_inventory = static_cast<uint32_t>(_mapObject->inventory.size());
@@ -609,12 +495,12 @@ void InventoryPanel::onRemoveItemClicked() {
     }
 
     const auto& mapItem = _mapObject->inventory[inventoryIndex];
-    QString itemName = getItemName(mapItem->pro_pid);
+    const auto details = ui::inventory::describeItem(mapItem->pro_pid);
     int amount = mapItem->amount;
 
     // Confirm removal
     int result = QMessageBox::question(this, "Remove Item",
-        QString("Remove %1 x %2 from inventory?").arg(amount).arg(itemName),
+        QString("Remove %1 x %2 from inventory?").arg(amount).arg(details.name),
         QMessageBox::Yes | QMessageBox::No);
 
     if (result != QMessageBox::Yes) {
