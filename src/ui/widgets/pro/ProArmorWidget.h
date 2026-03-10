@@ -61,7 +61,7 @@ private:
     int32_t _armorFemaleFID;
 
     // Constants
-    static constexpr int DAMAGE_TYPES_COUNT = 7;
+    static constexpr int DAMAGE_TYPES_COUNT = static_cast<int>(fallout::enumCount<fallout::DamageType>());
 };
 
 } // namespace geck

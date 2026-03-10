@@ -119,7 +119,7 @@ void ProWeaponWidget::setupUI() {
     _weaponCriticalFailEdit = createSpinBox(0, 100, "Critical failure chance");
     reqLayout->addRow("Critical Fail:", _weaponCriticalFailEdit);
 
-    _weaponPerkCombo = createComboBox(game::enums::weaponPerks(),
+    _weaponPerkCombo = createComboBox(game::enums::weaponPerkOptions(),
         "Special perk associated with weapon");
     reqLayout->addRow("Perk:", _weaponPerkCombo);
 
@@ -217,7 +217,11 @@ void ProWeaponWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
         _weaponAPSecondaryEdit->setValue(static_cast<int>(_weaponData.actionCostSecondary));
     if (_weaponCriticalFailEdit)
         _weaponCriticalFailEdit->setValue(static_cast<int>(_weaponData.criticalFail));
-    setComboIndex(_weaponPerkCombo, static_cast<int>(_weaponData.perk));
+    if (_weaponData.perk == UINT32_MAX) {
+        setComboValue(_weaponPerkCombo, fallout::NoItemPerk);
+    } else {
+        setComboValue(_weaponPerkCombo, static_cast<int>(_weaponData.perk));
+    }
     if (_weaponBurstRoundsEdit)
         _weaponBurstRoundsEdit->setValue(static_cast<int>(_weaponData.burstRounds));
     setComboIndex(_weaponAmmoTypeCombo, static_cast<int>(_weaponData.ammoType));
@@ -261,7 +265,8 @@ void ProWeaponWidget::saveToPro(std::shared_ptr<Pro>& pro) {
         _weaponData.actionCostSecondary = static_cast<uint32_t>(_weaponAPSecondaryEdit->value());
     if (_weaponCriticalFailEdit)
         _weaponData.criticalFail = static_cast<uint32_t>(_weaponCriticalFailEdit->value());
-    _weaponData.perk = static_cast<uint32_t>(getComboIndex(_weaponPerkCombo));
+    int weaponPerk = getComboValue(_weaponPerkCombo, fallout::NoItemPerk);
+    _weaponData.perk = weaponPerk < 0 ? UINT32_MAX : static_cast<uint32_t>(weaponPerk);
     if (_weaponBurstRoundsEdit)
         _weaponData.burstRounds = static_cast<uint32_t>(_weaponBurstRoundsEdit->value());
     _weaponData.ammoType = static_cast<uint32_t>(getComboIndex(_weaponAmmoTypeCombo));

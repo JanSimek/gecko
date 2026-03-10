@@ -11,6 +11,7 @@
 #include <QLabel>
 #include <memory>
 
+#include "../../GameEnums.h"
 #include "../../../format/pro/Pro.h"
 #include "../../../format/pro/ProDataModels.h"
 
@@ -99,6 +100,11 @@ protected:
     QComboBox* createComboBox(const QStringList& items, const QString& tooltip = QString());
 
     /**
+     * @brief Create a combo box with value-backed items
+     */
+    QComboBox* createComboBox(const QVector<game::enums::EnumOption>& items, const QString& tooltip = QString());
+
+    /**
      * @brief Create a material type combo box
      */
     QComboBox* createMaterialComboBox(const QString& tooltip = QString());
@@ -152,6 +158,16 @@ protected:
      * @brief Set combo box index with bounds checking
      */
     void setComboIndexSafe(QComboBox* combo, uint32_t index);
+
+    /**
+     * @brief Set combo box selection by item data value
+     */
+    void setComboValue(QComboBox* combo, int value);
+
+    /**
+     * @brief Get combo box item data value
+     */
+    int getComboValue(QComboBox* combo, int defaultValue = 0);
 
     /**
      * @brief Get material type names

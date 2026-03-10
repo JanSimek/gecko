@@ -157,7 +157,7 @@ void ProArmorWidget::setupUI() {
     QFormLayout* miscLayout = createStandardFormLayout();
     static_cast<QVBoxLayout*>(miscGroup->layout())->addLayout(miscLayout);
 
-    _armorPerkCombo = createComboBox(game::enums::armorPerks(),
+    _armorPerkCombo = createComboBox(game::enums::armorPerkOptions(),
         "Special perk associated with this armor");
     miscLayout->addRow("Perk:", _armorPerkCombo);
 
@@ -199,7 +199,11 @@ void ProArmorWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     loadIntArrayToWidgets(_damageThresholdEdits, _armorData.damageThreshold, DAMAGE_TYPES_COUNT);
     loadIntArrayToWidgets(_damageResistEdits, _armorData.damageResist, DAMAGE_TYPES_COUNT);
 
-    setComboIndex(_armorPerkCombo, static_cast<int>(_armorData.perk));
+    if (_armorData.perk == UINT32_MAX) {
+        setComboValue(_armorPerkCombo, fallout::NoItemPerk);
+    } else {
+        setComboValue(_armorPerkCombo, static_cast<int>(_armorData.perk));
+    }
 
     updateAIPriority();
     updateArmorPreviews();
@@ -216,7 +220,8 @@ void ProArmorWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     saveWidgetsToIntArray(_damageThresholdEdits, _armorData.damageThreshold, DAMAGE_TYPES_COUNT);
     saveWidgetsToIntArray(_damageResistEdits, _armorData.damageResist, DAMAGE_TYPES_COUNT);
 
-    _armorData.perk = static_cast<uint32_t>(getComboIndex(_armorPerkCombo));
+    int armorPerk = getComboValue(_armorPerkCombo, fallout::NoItemPerk);
+    _armorData.perk = armorPerk < 0 ? UINT32_MAX : static_cast<uint32_t>(armorPerk);
 
     _armorData.armorMaleFID = _armorMaleFID;
     _armorData.armorFemaleFID = _armorFemaleFID;

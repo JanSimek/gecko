@@ -45,6 +45,18 @@ QComboBox* ProTabWidget::createComboBox(const QStringList& items, const QString&
     return comboBox;
 }
 
+QComboBox* ProTabWidget::createComboBox(const QVector<game::enums::EnumOption>& items, const QString& tooltip) {
+    QComboBox* comboBox = new QComboBox();
+    for (const auto& item : items) {
+        comboBox->addItem(item.label, item.value);
+    }
+    if (!tooltip.isEmpty()) {
+        comboBox->setToolTip(tooltip);
+    }
+    connectComboBox(comboBox);
+    return comboBox;
+}
+
 QComboBox* ProTabWidget::createMaterialComboBox(const QString& tooltip) {
     return createComboBox(getMaterialNames(), tooltip);
 }
@@ -112,6 +124,25 @@ int ProTabWidget::getComboIndex(QComboBox* combo, int defaultValue) {
 void ProTabWidget::setComboIndexSafe(QComboBox* combo, uint32_t index) {
     if (combo && index < static_cast<uint32_t>(combo->count()))
         combo->setCurrentIndex(static_cast<int>(index));
+}
+
+void ProTabWidget::setComboValue(QComboBox* combo, int value) {
+    if (!combo)
+        return;
+
+    int index = combo->findData(value);
+    if (index >= 0) {
+        combo->setCurrentIndex(index);
+    }
+}
+
+int ProTabWidget::getComboValue(QComboBox* combo, int defaultValue) {
+    if (!combo) {
+        return defaultValue;
+    }
+
+    QVariant data = combo->currentData();
+    return data.isValid() ? data.toInt() : defaultValue;
 }
 
 QStringList ProTabWidget::getMaterialNames() {

@@ -322,18 +322,12 @@ private:
 
     int32_t _critterHeadFID = 0;
 
-    // MSG files for stat and perk names
-    Msg* _statMsg = nullptr;
-    Msg* _perkMsg = nullptr;
-
     // Cached stat and perk names
     QStringList _statNames;
-    QStringList _perkNames;
+    QVector<game::enums::EnumOption> _perkOptions;
 
     // Helper methods for MSG loading
     void loadStatAndPerkNames();
-    void loadStatNames();
-    void loadPerkNames();
 };
 
 } // namespace geck

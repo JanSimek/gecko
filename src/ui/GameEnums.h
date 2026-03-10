@@ -1,32 +1,37 @@
 #pragma once
 
+#include "../util/FalloutEngineEnums.h"
+
+#include <QString>
 #include <QStringList>
+#include <QVector>
 
 namespace geck::game::enums {
+
+struct EnumOption {
+    int value;
+    QString label;
+};
 
 /**
  * @brief Damage types (7 basic types for armor/items)
  */
-inline QStringList damageTypes7() {
-    return { "Normal", "Laser", "Fire", "Plasma", "Electrical", "EMP", "Explosion" };
-}
+QStringList damageTypes7();
 
 /**
  * @brief Damage types (9 types for critter resistance)
- * Includes Radiation and Poison
  */
-inline QStringList damageTypes9() {
-    return { "Normal", "Laser", "Fire", "Plasma", "Electrical",
-        "EMP", "Explosion", "Radiation", "Poison" };
-}
+QStringList damageTypes9();
+
+/**
+ * @brief Full stat names loaded from stat.msg using engine stat IDs
+ */
+QStringList statNames();
 
 /**
  * @brief Material types for objects
  */
-inline QStringList materialTypes() {
-    return { "Glass", "Metal", "Plastic", "Wood",
-        "Dirt", "Stone", "Cement", "Leather" };
-}
+QStringList materialTypes();
 
 /**
  * @brief Player/object orientations (6 hex directions)
@@ -60,30 +65,24 @@ inline QStringList weaponAnimations() {
 }
 
 /**
- * @brief Ammo caliber types (19 types from proto.msg)
- * FIXME: read directly from proto.msg?
+ * @brief Ammo caliber types loaded from proto.msg
  */
-inline QStringList ammoCaliberTypes() {
-    return { "None", ".223 FMJ", "5mm JHP", "5mm AP", "10mm JHP", "10mm AP",
-        ".44 Magnum JHP", ".44 Magnum FMJ", "14mm AP", "12 ga. Shotgun",
-        "7.62mm", "9mm", "BB's", "Energy Cell", "Micro Fusion Cell",
-        "Small Energy Cell", "Flamethrower Fuel", "Rocket", "Plasma" };
-}
+QStringList ammoCaliberTypes();
 
 /**
- * @brief Weapon perks
+ * @brief Full perk options loaded from perk.msg using engine perk IDs
  */
-inline QStringList weaponPerks() {
-    return { "None", "Fast Shot", "Long Range", "Accurate", "Penetrate",
-        "Knockback", "Knockdown", "Flame", "Other" };
-}
+QVector<EnumOption> allPerkOptions();
 
 /**
- * @brief Armor perks
+ * @brief Weapon perk options loaded from perk.msg with raw perk IDs
  */
-inline QStringList armorPerks() {
-    return { "None", "PowerArmor", "CombatArmor", "Other" };
-}
+QVector<EnumOption> weaponPerkOptions();
+
+/**
+ * @brief Armor perk options loaded from perk.msg with raw perk IDs
+ */
+QVector<EnumOption> armorPerkOptions();
 
 /**
  * @brief Container action flags
@@ -102,16 +101,12 @@ inline QStringList critterGenders() {
 /**
  * @brief Critter body types
  */
-inline QStringList critterBodyTypes() {
-    return { "Biped", "Quadruped", "Robotic" };
-}
+QStringList critterBodyTypes();
 
 /**
  * @brief Scenery subtypes
  */
-inline QStringList sceneryTypes() {
-    return { "Door", "Stairs", "Elevator", "Ladder Bottom", "Ladder Top", "Generic" };
-}
+QStringList sceneryTypes();
 
 /**
  * @brief Text file extensions (for syntax highlighting)

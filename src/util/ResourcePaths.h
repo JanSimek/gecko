@@ -72,6 +72,7 @@ namespace ResourcePaths {
     // MSG Files - Text messages
     // ========================================
     namespace Msg {
+        constexpr std::string_view PROTO = "text/english/game/proto.msg";
         constexpr std::string_view PRO_ITEM = "text/english/game/pro_item.msg";
         constexpr std::string_view PRO_CRIT = "text/english/game/pro_crit.msg";
         constexpr std::string_view PRO_SCEN = "text/english/game/pro_scen.msg";

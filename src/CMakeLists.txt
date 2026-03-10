@@ -13,12 +13,15 @@ set(GECK_SOURCES
     util/ResourceManager.h
     util/ResourceManager.cpp
 
+    util/FalloutEngineEnums.h
+    util/MessageEnumUtils.h
     util/ResourceInitializer.h
     util/ResourceInitializer.cpp
 
     util/SpriteFactory.h
     util/SpriteFactory.cpp
 
+    util/AmmoCaliberNames.h
     util/ProHelper.h
     util/ProHelper.cpp
 
@@ -129,6 +132,8 @@ set(GECK_SOURCES
     ui/widgets/pro/ProMiscItemWidget.cpp
 
     # Qt6 UI Constants
+    ui/GameEnums.h
+    ui/GameEnums.cpp
     ui/UIConstants.h
     ui/rendering/RenderingEngine.h
     ui/rendering/RenderingEngine.cpp
@@ -309,6 +314,11 @@ add_library(vault STATIC
 
     reader/StreamBuffer.cpp
     reader/StreamBuffer.h
+
+    util/AmmoCaliberNames.h
+    util/AmmoCaliberNames.cpp
+    util/MessageEnumUtils.h
+    util/MessageEnumUtils.cpp
 )
 
 target_include_directories(vault PUBLIC

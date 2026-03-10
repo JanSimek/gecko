@@ -13,8 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Configure (from project root)
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
-# Build
-cmake --build build --config Release
+# Build editor
+cmake --build build --target gecko --config Release
 
 # Or with make (from build directory)
 make -j4
@@ -25,11 +25,12 @@ make -j4
 # Run all tests
 ctest --test-dir build --output-on-failure
 
-# Run specific test categories
-ctest --test-dir build -L general      # Core logic tests
-ctest --test-dir build -L performance  # Performance benchmarks
-ctest --test-dir build -L qt           # UI tests
+# Run the current test executables directly
+./build/general_tests
+./build/performance_tests
 ```
+
+There is currently no separate `qt_tests` target or ctest label registration for test categories.
 
 ### Code Formatting
 ```bash
@@ -127,6 +128,13 @@ object->setHexPosition(hex);
 - Use `ResourceManager::getInstance()` for loading assets
 - FRM files are stitched into sprite sheets by ResourceManager
 - Texture rectangles are set by `Object::setDirection()` to show single frames
+
+### Engine Data Fidelity
+- Treat Fallout 2 CE and the shipped game data files as the source of truth for editor-visible values and IDs.
+- Prefer loading values from runtime data such as `proto.msg`, `perk.msg`, `stat.msg`, and related assets instead of duplicating label/value tables in UI code.
+- Preserve engine IDs exactly when reading or writing formats. UI widgets should map display labels to stored engine values; do not assume `QComboBox` index is the serialized value unless the format explicitly works that way.
+- Do not add fallback label tables, placeholder enum names, or substitute values when required engine data is missing or incomplete. Surface the failure explicitly and fix the loader or data path.
+- When a format detail is ambiguous, check `/Users/jansimek/Development/fallout2-ce` and match the engine's parsing and naming behavior before adding editor-side constants or reinterpretations.
 
 ### Object Hierarchy
 - `MapObject`: Data structure for saving (shared_ptr in Map storage, unique_ptr only during parsing and for inventory children)
@@ -232,5 +240,5 @@ if (mimeData->hasFormat(ui::mime::GECK_OBJECT)) { ... }
 
 ---
 
-*Last updated: 2026-03-06*
+*Last updated: 2026-03-10*
 *This file should be updated whenever significant architectural decisions or fixes are made.*

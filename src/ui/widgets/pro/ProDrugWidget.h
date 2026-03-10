@@ -29,14 +29,14 @@ public:
 
     // Set stat and perk names for dropdown lists
     void setStatNames(const QStringList& statNames);
-    void setPerkNames(const QStringList& perkNames);
+    void setPerkOptions(const QVector<game::enums::EnumOption>& perkOptions);
 
 private:
     void setupUI();
 
     // Stat names and perk names for combo boxes
     QStringList _statNames;
-    QStringList _perkNames;
+    QVector<game::enums::EnumOption> _perkOptions;
 
     // UI controls - Stat Effects (3 stats x 4 fields each)
     QComboBox* _drugStatCombos[3];           // Which stat to modify

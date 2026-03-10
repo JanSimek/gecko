@@ -886,7 +886,7 @@ void ProEditorDialog::setupDrugTab() {
 
     // Set stat and perk names from MSG files
     _drugWidget->setStatNames(_statNames);
-    _drugWidget->setPerkNames(_perkNames);
+    _drugWidget->setPerkOptions(_perkOptions);
 
     _tabWidget->addTab(_drugWidget, _drugWidget->getTabLabel());
 }
@@ -2680,79 +2680,8 @@ void ProEditorDialog::onObjectFidChanged(int32_t newFid) {
 }
 
 void ProEditorDialog::loadStatAndPerkNames() {
-    try {
-        // Load stat and perk MSG files using ResourceManager
-        _statMsg = ResourceManager::getInstance().loadResource<Msg>(std::string(ResourcePaths::Msg::STAT));
-        _perkMsg = ResourceManager::getInstance().loadResource<Msg>(std::string(ResourcePaths::Msg::PERK));
-
-        // Load names into cached lists
-        loadStatNames();
-        loadPerkNames();
-
-    } catch (const std::exception& e) {
-        spdlog::warn("ProEditorDialog: Failed to load MSG files: {}", e.what());
-
-        // Provide fallback generic names
-        _statNames.clear();
-        for (int i = 0; i < 38; ++i) {
-            _statNames.append(QString("Stat %1").arg(i));
-        }
-
-        _perkNames.clear();
-        _perkNames.append("No perk");
-        for (int i = 1; i <= 119; ++i) {
-            _perkNames.append(QString("Perk %1").arg(i));
-        }
-    }
-}
-
-void ProEditorDialog::loadStatNames() {
-    _statNames.clear();
-
-    if (!_statMsg) {
-        spdlog::warn("ProEditorDialog: Stat MSG file not loaded");
-        return;
-    }
-
-    // Load 38 stat names from indices 100-137
-    for (int i = 0; i < 38; ++i) {
-        try {
-            const auto& message = _statMsg->message(100 + i);
-            _statNames.append(QString::fromStdString(message.text));
-        } catch (const std::exception& e) {
-            spdlog::warn("ProEditorDialog: Failed to load stat name at index {}: {}", 100 + i, e.what());
-            _statNames.append(QString("Stat %1").arg(i));
-        }
-    }
-}
-
-void ProEditorDialog::loadPerkNames() {
-    _perkNames.clear();
-
-    if (!_perkMsg) {
-        spdlog::warn("ProEditorDialog: Perk MSG file not loaded");
-        return;
-    }
-
-    try {
-        // Index 100 = "No perk"
-        const auto& noPerkMessage = _perkMsg->message(100);
-        _perkNames.append(QString::fromStdString(noPerkMessage.text));
-
-        // Indices 101-219 = actual perks (119 perks)
-        for (int i = 101; i <= 219; ++i) {
-            try {
-                const auto& message = _perkMsg->message(i);
-                _perkNames.append(QString::fromStdString(message.text));
-            } catch (const std::exception& e) {
-                spdlog::warn("ProEditorDialog: Failed to load perk name at index {}: {}", i, e.what());
-                _perkNames.append(QString("Perk %1").arg(i - 100));
-            }
-        }
-    } catch (const std::exception& e) {
-        spdlog::warn("ProEditorDialog: Failed to load 'No perk' message: {}", e.what());
-        _perkNames.append("No perk");
-    }
+    _statNames = game::enums::statNames();
+    _perkOptions = game::enums::allPerkOptions();
 }
 
 void ProEditorDialog::onCritterFlagChanged() {

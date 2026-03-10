@@ -8,6 +8,18 @@
 
 namespace geck {
 
+Msg* ProHelper::protoMsgFile() {
+    return ResourceManager::getInstance().loadResource<Msg>(std::string(ResourcePaths::Msg::PROTO));
+}
+
+Msg* ProHelper::statMsgFile() {
+    return ResourceManager::getInstance().loadResource<Msg>(std::string(ResourcePaths::Msg::STAT));
+}
+
+Msg* ProHelper::perkMsgFile() {
+    return ResourceManager::getInstance().loadResource<Msg>(std::string(ResourcePaths::Msg::PERK));
+}
+
 Msg* geck::ProHelper::msgFile(Pro::OBJECT_TYPE type) {
 
     std::string filename;

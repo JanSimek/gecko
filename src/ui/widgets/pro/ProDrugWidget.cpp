@@ -79,7 +79,7 @@ void ProDrugWidget::setupUI() {
         effectsGridLayout->addWidget(statLabel, row, 0);
 
         // Stat dropdown (column 1)
-        _drugStatCombos[i] = createComboBox({}, QString("Stat %1 to modify (None=no effect)").arg(i + 1));
+        _drugStatCombos[i] = createComboBox(QStringList{}, QString("Stat %1 to modify (None=no effect)").arg(i + 1));
         effectsGridLayout->addWidget(_drugStatCombos[i], row, 1);
 
         // Immediate effect value (column 2)
@@ -126,7 +126,7 @@ void ProDrugWidget::setupUI() {
     _drugAddictionChanceEdit->setSuffix("%");
     addictionLayout->addRow("Rate:", _drugAddictionChanceEdit);
 
-    _drugAddictionPerkCombo = createComboBox({}, "Perk applied when addicted");
+    _drugAddictionPerkCombo = createComboBox(QVector<game::enums::EnumOption>{}, "Perk applied when addicted");
     addictionLayout->addRow("Effect:", _drugAddictionPerkCombo);
 
     _drugAddictionDelayEdit = createSpinBox(0, INT_MAX, "Delay in game minutes before addiction effect is applied");
@@ -189,8 +189,7 @@ void ProDrugWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
         _drugSecondDelayEdit->setValue(static_cast<int>(_drugData.duration2));
     if (_drugAddictionChanceEdit)
         _drugAddictionChanceEdit->setValue(static_cast<int>(_drugData.addictionRate));
-    if (_drugAddictionPerkCombo)
-        _drugAddictionPerkCombo->setCurrentIndex(static_cast<int>(_drugData.addictionEffect));
+    setComboValue(_drugAddictionPerkCombo, static_cast<int>(_drugData.addictionEffect));
     if (_drugAddictionDelayEdit)
         _drugAddictionDelayEdit->setValue(static_cast<int>(_drugData.addictionOnset));
 }
@@ -239,8 +238,7 @@ void ProDrugWidget::saveToPro(std::shared_ptr<Pro>& pro) {
         _drugData.duration2 = static_cast<uint32_t>(_drugSecondDelayEdit->value());
     if (_drugAddictionChanceEdit)
         _drugData.addictionRate = static_cast<uint32_t>(_drugAddictionChanceEdit->value());
-    if (_drugAddictionPerkCombo)
-        _drugData.addictionEffect = static_cast<uint32_t>(_drugAddictionPerkCombo->currentIndex());
+    _drugData.addictionEffect = static_cast<uint32_t>(getComboValue(_drugAddictionPerkCombo));
     if (_drugAddictionDelayEdit)
         _drugData.addictionOnset = static_cast<uint32_t>(_drugAddictionDelayEdit->value());
 
@@ -290,15 +288,17 @@ void ProDrugWidget::setStatNames(const QStringList& statNames) {
     }
 }
 
-void ProDrugWidget::setPerkNames(const QStringList& perkNames) {
-    _perkNames = perkNames;
+void ProDrugWidget::setPerkOptions(const QVector<game::enums::EnumOption>& perkOptions) {
+    _perkOptions = perkOptions;
 
     // Update addiction perk combo box
     if (_drugAddictionPerkCombo) {
-        int currentIndex = _drugAddictionPerkCombo->currentIndex();
+        int currentValue = getComboValue(_drugAddictionPerkCombo);
         _drugAddictionPerkCombo->clear();
-        _drugAddictionPerkCombo->addItems(_perkNames);
-        _drugAddictionPerkCombo->setCurrentIndex(currentIndex);
+        for (const auto& perkOption : _perkOptions) {
+            _drugAddictionPerkCombo->addItem(perkOption.label, perkOption.value);
+        }
+        setComboValue(_drugAddictionPerkCombo, currentValue);
     }
 }
 
