@@ -40,6 +40,9 @@ private:
     void updateAIPriority();
     void updateArmorPreviews();
     int calculateAIPriority() const;
+    void onArmorMaleFidChangeRequested();
+    void onArmorFemaleFidChangeRequested();
+    void selectArmorFid(ObjectPreviewWidget* previewWidget, int32_t& fid);
 
     // UI controls
     QSpinBox* _armorClassEdit;

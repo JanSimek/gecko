@@ -67,7 +67,7 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
                     object->ammo = read_be_u32(); // bullets
                     break;
                 case Pro::ITEM_TYPE::KEY:
-                    object->keycode = read_be_u32(); // keycode = -1 in all maps. saves only? ignore for now
+                    object->keycode = read_be_u32(); // Observed as -1 in shipped maps.
                     break;
                 case Pro::ITEM_TYPE::WEAPON:
                     object->ammo = read_be_u32();     // ammo

@@ -185,7 +185,7 @@ void InventoryViewerDialog::setupUI() {
     _buttonLayout->addWidget(_removeButton);
 
     _editButton = new QPushButton("Edit Properties...");
-    _editButton->setEnabled(false); // Future enhancement
+    _editButton->setEnabled(false);
     _editButton->setToolTip("Edit selected item properties (Coming Soon)");
     connect(_editButton, &QPushButton::clicked, this, &InventoryViewerDialog::onEditItemClicked);
     _buttonLayout->addWidget(_editButton);
@@ -219,7 +219,6 @@ void InventoryViewerDialog::populateInventoryTree() {
         // Store inventory index in item data
         treeItem->setData(COLUMN_NAME, Qt::UserRole, static_cast<int>(i));
 
-        // Set item icon (placeholder for now)
         QPixmap icon = getItemIcon(item->pro_pid);
         if (!icon.isNull()) {
             treeItem->setIcon(COLUMN_ICON, QIcon(icon));
@@ -253,9 +252,8 @@ void InventoryViewerDialog::onItemSelectionChanged() {
     QTreeWidgetItem* item = selected.first();
     updateItemPreview(item);
 
-    // Enable context buttons
-    _removeButton->setEnabled(true); // Enable remove for selected item
-    _editButton->setEnabled(false);  // Still disabled for future enhancement
+    _removeButton->setEnabled(true);
+    _editButton->setEnabled(false);
 }
 
 void InventoryViewerDialog::updateItemPreview(QTreeWidgetItem* item) {
@@ -526,7 +524,6 @@ void InventoryViewerDialog::onRemoveItemClicked() {
     QString itemName = getItemName(mapItem->pro_pid);
     int amount = mapItem->amount;
 
-    // Confirm removal
     int result = QMessageBox::question(this, "Remove Item",
         QString("Remove %1 x %2 from inventory?").arg(amount).arg(itemName),
         QMessageBox::Yes | QMessageBox::No);
@@ -536,17 +533,14 @@ void InventoryViewerDialog::onRemoveItemClicked() {
     }
 
     try {
-        // Remove the item from inventory
         uint32_t removedPid = mapItem->pro_pid;
         _mapObject->inventory.erase(_mapObject->inventory.begin() + inventoryIndex);
         _mapObject->objects_in_inventory = static_cast<uint32_t>(_mapObject->inventory.size());
 
-        // Refresh the display
         populateInventoryTree();
         updateStatusLabel();
         clearPreview();
 
-        // Disable remove button since no item is selected now
         _removeButton->setEnabled(false);
 
         spdlog::info("InventoryViewerDialog: Removed item PID 0x{:08X} (amount {}) from inventory", removedPid, amount);
@@ -558,7 +552,6 @@ void InventoryViewerDialog::onRemoveItemClicked() {
 }
 
 void InventoryViewerDialog::onEditItemClicked() {
-    // Future enhancement: Open PRO editor for selected item
     QMessageBox::information(this, "Not Implemented",
         "Edit item functionality will be implemented in a future version.");
 }
@@ -566,7 +559,7 @@ void InventoryViewerDialog::onEditItemClicked() {
 void InventoryViewerDialog::onItemDoubleClicked(QTreeWidgetItem* item, int column) {
     Q_UNUSED(column)
     if (item) {
-        onEditItemClicked(); // Double-click to edit (when implemented)
+        onEditItemClicked();
     }
 }
 

@@ -932,8 +932,6 @@ bool SelectionManager::moveTile(int sourceTileIndex, sf::Vector2f offset, bool i
             return false; // Nothing to move
         }
 
-        // Note: For future enhancement, could implement tile swapping instead of moving
-
         // Move roof content
         targetTile.setRoof(sourceRoof);
         sourceTile.setRoof(Map::EMPTY_TILE);

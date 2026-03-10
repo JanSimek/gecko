@@ -30,7 +30,6 @@ namespace geck {
 
 ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     : QDialog(parent)
-    , _pro(pro)
     , _mainLayout(nullptr)
     , _contentLayout(nullptr)
     , _tabWidget(nullptr)
@@ -42,9 +41,6 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _dualPreviewLayout(nullptr)
     , _inventoryPreviewWidget(nullptr)
     , _groundPreviewWidget(nullptr)
-    , _armorPreviewGroup(nullptr)
-    , _armorMalePreviewWidget(nullptr)
-    , _armorFemalePreviewWidget(nullptr)
     , _animationControls(nullptr)
     , _animationLayout(nullptr)
     , _playPauseButton(nullptr)
@@ -52,65 +48,30 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _frameLabel(nullptr)
     , _directionCombo(nullptr)
     , _animationController(nullptr)
-    // Common fields now handled by ProCommonFieldsWidget
+    , _commonTab(nullptr)
     , _commonFieldsWidget(nullptr)
-    // Type-specific widgets (refactored)
     , _wallWidget(nullptr)
     , _tileWidget(nullptr)
     , _armorWidget(nullptr)
     , _weaponWidget(nullptr)
     , _drugWidget(nullptr)
     , _containerKeyWidget(nullptr)
+    , _ammoWidget(nullptr)
+    , _miscItemWidget(nullptr)
     , _nameLabel(nullptr)
     , _descriptionEdit(nullptr)
     , _editMessageButton(nullptr)
     , _pidEdit(nullptr)
     , _filenameEdit(nullptr)
-    , _armorMaleFIDSelectorButton(nullptr)
-    , _armorFemaleFIDSelectorButton(nullptr)
-    , _armorMaleFIDLabel(nullptr)
-    , _armorFemaleFIDLabel(nullptr)
     , _critterHeadFIDLabel(nullptr)
     , _critterHeadFIDSelectorButton(nullptr)
-    , _weaponAnimationCombo(nullptr)
-    , _weaponDamageMinEdit(nullptr)
-    , _weaponDamageMaxEdit(nullptr)
-    , _weaponDamageTypeCombo(nullptr)
-    , _weaponRangePrimaryEdit(nullptr)
-    , _weaponRangeSecondaryEdit(nullptr)
-    , _weaponProjectilePIDEdit(nullptr)
-    , _weaponMinStrengthEdit(nullptr)
-    , _weaponAPPrimaryEdit(nullptr)
-    , _weaponAPSecondaryEdit(nullptr)
-    , _weaponCriticalFailEdit(nullptr)
-    , _weaponPerkCombo(nullptr)
-    , _weaponBurstRoundsEdit(nullptr)
-    , _weaponAmmoTypeCombo(nullptr)
-    , _weaponAmmoPIDEdit(nullptr)
-    , _weaponAmmoCapacityEdit(nullptr)
-    , _weaponSoundIdEdit(nullptr)
-    , _weaponEnergyWeaponCheck(nullptr)
-    , _weaponAIPriorityLabel(nullptr)
-    , _armorAIPriorityLabel(nullptr) {
+    , _pro(pro) {
 
     setWindowTitle("PRO Editor");
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setModal(true);
     resize(ui::constants::dialog_sizes::PRO_EDITOR_WIDTH, ui::constants::dialog_sizes::PRO_EDITOR_HEIGHT);
 
-    // Initialize data structures with defaults
-    // _commonData now handled by ProCommonFieldsWidget
-    memset(&_armorData, 0, sizeof(_armorData));
-    memset(&_containerData, 0, sizeof(_containerData));
-    memset(&_drugData, 0, sizeof(_drugData));
-    memset(&_weaponData, 0, sizeof(_weaponData));
-    memset(&_ammoData, 0, sizeof(_ammoData));
-    memset(&_miscData, 0, sizeof(_miscData));
-    memset(&_keyData, 0, sizeof(_keyData));
-    memset(&_critterData, 0, sizeof(_critterData));
-    memset(&_sceneryData, 0, sizeof(_sceneryData));
-
-    // Initialize critter UI element arrays to nullptr
     for (int i = 0; i < NUM_SKILLS; ++i) {
         _critterSkillEdits[i] = nullptr;
     }
@@ -127,7 +88,6 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
         _critterBonusDamageResistanceEdits[i] = nullptr;
     }
 
-    // Initialize individual critter UI pointers to nullptr
     _critterHeadFIDLabel = nullptr;
     _critterHeadFIDSelectorButton = nullptr;
     _critterAIPacketEdit = nullptr;
@@ -173,97 +133,19 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     _critterLongLimbsCheck = nullptr;
     _critterNoKnockbackCheck = nullptr;
 
-    // Initialize all item UI elements to nullptr to prevent crashes
-    // Armor elements
-    _armorClassEdit = nullptr;
-    for (int i = 0; i < NUM_DAMAGE_TYPES; ++i) {
-        _damageResistEdits[i] = nullptr;
-        _damageThresholdEdits[i] = nullptr;
-    }
-    _armorPerkCombo = nullptr;
-    _armorMaleFIDLabel = nullptr;
-    _armorFemaleFIDLabel = nullptr;
-    _armorAIPriorityLabel = nullptr;
-
-    // Container elements
-    _containerMaxSizeEdit = nullptr;
-    for (int i = 0; i < 5; ++i) {
-        _containerFlagChecks[i] = nullptr;
-    }
-
-    // Drug elements
-    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
-        _drugStatCombos[i] = nullptr;
-        _drugStatAmountEdits[i] = nullptr;
-        _drugFirstStatAmountEdits[i] = nullptr;
-        _drugSecondStatAmountEdits[i] = nullptr;
-    }
-    _drugFirstDelayEdit = nullptr;
-    _drugSecondDelayEdit = nullptr;
-    _drugAddictionChanceEdit = nullptr;
-    _drugAddictionPerkCombo = nullptr;
-    _drugAddictionDelayEdit = nullptr;
-
-    // Weapon elements
-    _weaponAnimationCombo = nullptr;
-    _weaponDamageMinEdit = nullptr;
-    _weaponDamageMaxEdit = nullptr;
-    _weaponDamageTypeCombo = nullptr;
-    _weaponRangePrimaryEdit = nullptr;
-    _weaponRangeSecondaryEdit = nullptr;
-    _weaponProjectilePIDEdit = nullptr;
-    _weaponMinStrengthEdit = nullptr;
-    _weaponAPPrimaryEdit = nullptr;
-    _weaponAPSecondaryEdit = nullptr;
-    _weaponCriticalFailEdit = nullptr;
-    _weaponPerkCombo = nullptr;
-    _weaponBurstRoundsEdit = nullptr;
-    _weaponAmmoTypeCombo = nullptr;
-    _weaponAmmoPIDEdit = nullptr;
-    _weaponAmmoCapacityEdit = nullptr;
-    _weaponSoundIdEdit = nullptr;
-    _weaponEnergyWeaponCheck = nullptr;
-    _weaponAIPriorityLabel = nullptr;
-
-    // Ammo elements
-    _ammoCaliberCombo = nullptr;
-    _ammoQuantityEdit = nullptr;
-    _ammoDamageModEdit = nullptr;
-    _ammoDRModEdit = nullptr;
-    _ammoDamageMultEdit = nullptr;
-    _ammoDamageTypeModCombo = nullptr;
-
-    // Misc elements
-    _miscPowerTypeCombo = nullptr;
-    _miscChargesEdit = nullptr;
-
-    // Key elements
-    _keyIdEdit = nullptr;
-
-    // Extended flags and common elements now handled by ProCommonFieldsWidget
-
-    // Load stat and perk names from MSG files BEFORE setting up UI (needed for drug fields)
     loadStatAndPerkNames();
 
     setupUI();
 
     loadProData();
 
-    // Load name and description from MSG files
     loadNameAndDescription();
 
-    // Update filename label with PRO file path
     updateFilenameLabel();
 
-    // Update window title with object name and type
     updateWindowTitle();
 
-    // Call updatePreview after a brief delay to ensure all widgets are fully initialized
     QTimer::singleShot(0, this, &ProEditorDialog::updatePreview);
-    // Update AI priority displays
-    updateAIPriorityDisplays();
-
-    // Set dialog to size to its contents only
     setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
     adjustSize();
 }
@@ -360,25 +242,20 @@ void ProEditorDialog::setupUI() {
 }
 
 void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
-    // Create compact preview group
     QWidget* previewGroup = new QWidget();
-    previewGroup->setContentsMargins(0, 0, 0, 0); // Remove widget margins
+    previewGroup->setContentsMargins(0, 0, 0, 0);
     previewGroup->setStyleSheet(ui::theme::styles::compactWidget());
 
     QVBoxLayout* previewLayout = new QVBoxLayout(previewGroup);
     previewLayout->setContentsMargins(0, 0, 0, 0);
-    previewLayout->setSpacing(0);                 // Minimize spacing within preview group
-    previewLayout->setAlignment(Qt::AlignCenter); // Center the preview content
+    previewLayout->setSpacing(0);
+    previewLayout->setAlignment(Qt::AlignCenter);
 
-    // Check if we need specialized previews for items
     bool hasSpecializedPreview = (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM);
 
-    // Only show main preview image if no specialized previews
     if (!hasSpecializedPreview) {
-        // Use ObjectPreviewWidget for non-item objects (all with full animation controls)
         _objectPreviewWidget = new ObjectPreviewWidget();
 
-        // Connect signals
         connect(_objectPreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
             this, &ProEditorDialog::onObjectFidChangeRequested);
         connect(_objectPreviewWidget, &ObjectPreviewWidget::fidChanged,
@@ -387,7 +264,6 @@ void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
         previewLayout->addWidget(_objectPreviewWidget);
     }
 
-    // Handle dual preview for items (inventory/ground) if needed
     if (hasSpecializedPreview) {
         setupDualPreviewCompact(previewLayout);
     }
@@ -395,60 +271,7 @@ void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
     parentLayout->addWidget(previewGroup);
 }
 
-void ProEditorDialog::setupCompactAnimationControls(QVBoxLayout* parentLayout) {
-    if (!_animationController) {
-        _animationController = new AnimationController(this);
-    }
-
-    _animationControls = new QWidget();
-    QHBoxLayout* animLayout = new QHBoxLayout(_animationControls);
-    animLayout->setContentsMargins(0, 0, 0, 0);
-    animLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    // Play/Pause button (small)
-    _playPauseButton = new QPushButton("▶");
-    _playPauseButton->setMaximumSize(BUTTON_MAX_WIDTH, BUTTON_MAX_HEIGHT);
-    _playPauseButton->setToolTip("Play/Pause animation");
-    connect(_playPauseButton, &QPushButton::clicked, this, &ProEditorDialog::onPlayPauseClicked);
-
-    // Frame slider (compact)
-    _frameSlider = new QSlider(Qt::Horizontal);
-    _frameSlider->setMinimum(0);
-    _frameSlider->setMaximum(0);
-    _frameSlider->setValue(0);
-    _frameSlider->setToolTip("Animation frame");
-    connect(_frameSlider, &QSlider::valueChanged, this, &ProEditorDialog::onFrameSliderChanged);
-
-    // Frame label (small)
-    _frameLabel = new QLabel("0/0");
-    _frameLabel->setFixedWidth(ui::constants::sizes::LABEL_FRAME);
-    _frameLabel->setStyleSheet("QLabel { font-size: 10px; }");
-
-    // Direction combo (compact)
-    _directionCombo = new QComboBox();
-    _directionCombo->setMaximumWidth(DIRECTION_COMBO_MAX_WIDTH); // Slightly wider for compass strings
-    _directionCombo->setToolTip("Animation direction");
-    _directionCombo->addItems(game::enums::orientationsShort()); // Fallout 2 uses 6 directions
-    connect(_directionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onDirectionChanged);
-
-    animLayout->addWidget(_playPauseButton);
-    animLayout->addWidget(_frameSlider, 1);
-    animLayout->addWidget(_frameLabel);
-    animLayout->addWidget(_directionCombo);
-
-    // Connect animation controller signals
-    connect(_animationController, &AnimationController::frameChanged, this, &ProEditorDialog::onAnimationFrameChanged);
-    connect(_animationController, &AnimationController::playStateChanged, this, [this](bool playing) {
-        _playPauseButton->setText(playing ? "⏸" : "▶");
-        _playPauseButton->setToolTip(playing ? "Pause animation" : "Play animation");
-    });
-
-    _animationControls->setVisible(false); // Hidden by default, shown when FRM is loaded
-    parentLayout->addWidget(_animationControls);
-}
-
 void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
-    // Compact dual preview for inventory/ground using ObjectPreviewWidget
     QWidget* dualWidget = new QWidget();
     dualWidget->setStyleSheet(ui::theme::styles::compactWidget());
     QHBoxLayout* dualLayout = new QHBoxLayout(dualWidget);
@@ -456,21 +279,17 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     dualLayout->setSpacing(ui::constants::SPACING_TIGHT);
     dualLayout->setAlignment(Qt::AlignCenter);
 
-    // Inventory preview - no animation controls, no title for compact layout
     _inventoryPreviewWidget = new ObjectPreviewWidget(this,
         ObjectPreviewWidget::PreviewOptions(),
         QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
 
-    // Ground preview - no animation controls, no title for compact layout
     _groundPreviewWidget = new ObjectPreviewWidget(this,
         ObjectPreviewWidget::PreviewOptions(),
         QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
 
-    // Connect signals for inventory preview
     connect(_inventoryPreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
         this, &ProEditorDialog::onObjectFidChangeRequested);
 
-    // Connect signals for ground preview
     connect(_groundPreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
         this, &ProEditorDialog::onObjectFidChangeRequested);
 
@@ -480,67 +299,8 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     parentLayout->addWidget(dualWidget);
 }
 
-void ProEditorDialog::setupArmorPreviewCompact(QVBoxLayout* parentLayout) {
-    // Compact armor preview for male/female with animation controls
-    QGroupBox* armorGroup = new QGroupBox("Armor Views");
-    QVBoxLayout* armorGroupLayout = new QVBoxLayout(armorGroup);
-    armorGroupLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
-    armorGroupLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    // Horizontal layout for male/female previews
-    QWidget* previewsWidget = new QWidget();
-    QHBoxLayout* previewsLayout = new QHBoxLayout(previewsWidget);
-    previewsLayout->setContentsMargins(0, 0, 0, 0);
-    previewsLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    // Male preview (small)
-    QWidget* maleWidget = new QWidget();
-    QVBoxLayout* maleLayout = new QVBoxLayout(maleWidget);
-    maleLayout->setContentsMargins(0, 0, 0, 0);
-    maleLayout->setSpacing(ui::constants::SPACING_GRID);
-
-    _armorMalePreviewWidget = new ObjectPreviewWidget(this,
-        ObjectPreviewWidget::ShowAnimationControls, // Enable animation controls, no FID field
-        QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
-    _armorMalePreviewWidget->setTitle("Male");
-
-    maleLayout->addWidget(_armorMalePreviewWidget);
-
-    // Female preview (small)
-    QWidget* femaleWidget = new QWidget();
-    QVBoxLayout* femaleLayout = new QVBoxLayout(femaleWidget);
-    femaleLayout->setContentsMargins(0, 0, 0, 0);
-    femaleLayout->setSpacing(ui::constants::SPACING_GRID);
-
-    _armorFemalePreviewWidget = new ObjectPreviewWidget(this,
-        ObjectPreviewWidget::ShowAnimationControls, // Enable animation controls, no FID field
-        QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
-    _armorFemalePreviewWidget->setTitle("Female");
-
-    femaleLayout->addWidget(_armorFemalePreviewWidget);
-
-    // Connect signals for male armor preview
-    connect(_armorMalePreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
-        this, &ProEditorDialog::onObjectFidChangeRequested);
-
-    // Connect signals for female armor preview
-    connect(_armorFemalePreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
-        this, &ProEditorDialog::onObjectFidChangeRequested);
-
-    previewsLayout->addWidget(maleWidget);
-    previewsLayout->addWidget(femaleWidget);
-
-    // Add previews to main layout
-    armorGroupLayout->addWidget(previewsWidget);
-
-    parentLayout->addWidget(armorGroup);
-}
-
 void ProEditorDialog::setupTabs() {
-    // Common tab first (always visible)
     setupCommonTab();
-
-    // Type-specific tabs based on PRO type
     setupTypeSpecificTabs();
 }
 
@@ -550,14 +310,10 @@ void ProEditorDialog::setupCommonTab() {
     layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     layout->setSpacing(ui::constants::SPACING_FORM);
 
-    // Common fields widget with all common PRO fields
     _commonFieldsWidget = new ProCommonFieldsWidget(this);
     layout->addWidget(_commonFieldsWidget);
 
-    // Connect ProCommonFieldsWidget signals
     connect(_commonFieldsWidget, &ProCommonFieldsWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
-
-    // Remove stretch to allow dialog to size to contents
 
     _tabWidget->addTab(_commonTab, "Common");
 }
@@ -566,7 +322,6 @@ void ProEditorDialog::setupTypeSpecificTabs() {
     if (!_pro)
         return;
 
-    // Add type-specific tabs based on PRO type
     Pro::OBJECT_TYPE type = _pro->type();
 
     switch (type) {
@@ -595,7 +350,6 @@ void ProEditorDialog::setupItemTabs() {
     if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM)
         return;
 
-    // Add tabs based on item subtype
     Pro::ITEM_TYPE itemType = _pro->itemType();
 
     switch (itemType) {
@@ -629,11 +383,9 @@ void ProEditorDialog::setupCritterTab() {
     mainLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     mainLayout->setSpacing(ui::constants::SPACING_FORM);
 
-    // Create sub-tab widget for critter sections
     QTabWidget* critterSubTabs = new QTabWidget();
     critterSubTabs->setTabPosition(QTabWidget::North);
 
-    // Create the three sub-tabs
     setupCritterStatsTab(critterSubTabs);
     setupCritterDefenceTab(critterSubTabs);
     setupCritterGeneralTab(critterSubTabs);
@@ -1079,7 +831,6 @@ void ProEditorDialog::setupWallTab() {
     // Use the new ProWallWidget
     _wallWidget = new ProWallWidget();
     connect(_wallWidget, &ProWallWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
-    _wallWidget->loadFromPro(_pro);
 
     _tabWidget->addTab(_wallWidget, _wallWidget->getTabLabel());
 }
@@ -1091,7 +842,6 @@ void ProEditorDialog::setupTileTab() {
     // Use the new ProTileWidget
     _tileWidget = new ProTileWidget();
     connect(_tileWidget, &ProTileWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
-    _tileWidget->loadFromPro(_pro);
 
     _tabWidget->addTab(_tileWidget, _tileWidget->getTabLabel());
 }
@@ -1123,8 +873,6 @@ void ProEditorDialog::setupArmorTab() {
     _armorWidget = new ProArmorWidget();
     connect(_armorWidget, &ProArmorWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
 
-    _armorWidget->loadFromPro(_pro);
-
     _tabWidget->addTab(_armorWidget, _armorWidget->getTabLabel());
 }
 
@@ -1140,8 +888,6 @@ void ProEditorDialog::setupDrugTab() {
     _drugWidget->setStatNames(_statNames);
     _drugWidget->setPerkNames(_perkNames);
 
-    _drugWidget->loadFromPro(_pro);
-
     _tabWidget->addTab(_drugWidget, _drugWidget->getTabLabel());
 }
 
@@ -1152,44 +898,41 @@ void ProEditorDialog::setupWeaponTab() {
     // Use the new ProWeaponWidget
     _weaponWidget = new ProWeaponWidget();
     connect(_weaponWidget, &ProWeaponWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
-    _weaponWidget->loadFromPro(_pro);
 
     _tabWidget->addTab(_weaponWidget, _weaponWidget->getTabLabel());
 }
 
 void ProEditorDialog::setupAmmoMiscTab() {
-    Pro::ITEM_TYPE itemType = _pro->itemType();
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || (itemType != Pro::ITEM_TYPE::AMMO && itemType != Pro::ITEM_TYPE::MISC))
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM)
         return;
 
-    QWidget* ammoMiscTab = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(ammoMiscTab);
-    layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    layout->setSpacing(ui::constants::SPACING_FORM);
+    Pro::ITEM_TYPE itemType = _pro->itemType();
+    if (itemType != Pro::ITEM_TYPE::AMMO && itemType != Pro::ITEM_TYPE::MISC)
+        return;
 
-    // Set temporary layout pointers
-    _leftFieldsLayout = layout;
-    _rightFieldsLayout = nullptr;
-
-    // Use existing fields setup based on item type
     if (itemType == Pro::ITEM_TYPE::AMMO) {
-        setupAmmoFields();
-    } else if (itemType == Pro::ITEM_TYPE::MISC) {
-        setupMiscItemFields();
+        _ammoWidget = new ProAmmoWidget();
+        connect(_ammoWidget, &ProAmmoWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
+        _tabWidget->addTab(_ammoWidget, _ammoWidget->getTabLabel());
+        return;
     }
 
-    _tabWidget->addTab(ammoMiscTab, "Ammo/Misc");
+    _miscItemWidget = new ProMiscItemWidget();
+    connect(_miscItemWidget, &ProMiscItemWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
+    _tabWidget->addTab(_miscItemWidget, _miscItemWidget->getTabLabel());
 }
 
 void ProEditorDialog::setupContainerKeyTab() {
+    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM)
+        return;
+
     Pro::ITEM_TYPE itemType = _pro->itemType();
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || (itemType != Pro::ITEM_TYPE::CONTAINER && itemType != Pro::ITEM_TYPE::KEY))
+    if (itemType != Pro::ITEM_TYPE::CONTAINER && itemType != Pro::ITEM_TYPE::KEY)
         return;
 
     // Use the new ProContainerKeyWidget
     _containerKeyWidget = new ProContainerKeyWidget();
     connect(_containerKeyWidget, &ProContainerKeyWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
-    _containerKeyWidget->loadFromPro(_pro);
 
     _tabWidget->addTab(_containerKeyWidget, _containerKeyWidget->getTabLabel());
 }
@@ -1247,17 +990,13 @@ void ProEditorDialog::setupAnimationControls() {
 }
 
 void ProEditorDialog::loadProData() {
-
     try {
-        // Load PID into left panel
         if (_pidEdit) {
             _pidEdit->setValue(_pro->header.PID);
         }
 
-        // Load common data into ProCommonFieldsWidget
         if (_commonFieldsWidget) {
             _commonFieldsWidget->loadFromPro(_pro);
-            // Set item fields visibility based on object type
             bool isItem = (_pro->type() == Pro::OBJECT_TYPE::ITEM);
             _commonFieldsWidget->setItemFieldsVisible(isItem);
         }
@@ -1267,47 +1006,22 @@ void ProEditorDialog::loadProData() {
         throw;
     }
 
-    // Note: Common UI controls are now handled by ProCommonFieldsWidget
-
-    // Load type-specific data based on object type
-
-    Pro::OBJECT_TYPE objectType = _pro->type();
-
-    switch (objectType) {
-        case Pro::OBJECT_TYPE::ITEM: {
-
-            Pro::ITEM_TYPE itemType = _pro->itemType();
-
-            switch (itemType) {
-                case Pro::ITEM_TYPE::ARMOR:
-                    try {
-                        loadArmorData();
-                    } catch (const std::exception& e) {
-                        spdlog::error("ProEditorDialog::loadProData() - exception in loadArmorData(): {}", e.what());
-                        throw;
-                    }
-                    break;
-                case Pro::ITEM_TYPE::CONTAINER:
-                    loadContainerData();
-                    break;
-                case Pro::ITEM_TYPE::DRUG:
-                    loadDrugData();
-                    break;
-                case Pro::ITEM_TYPE::WEAPON:
-                    loadWeaponData();
-                    break;
-                case Pro::ITEM_TYPE::AMMO:
-                    loadAmmoData();
-                    break;
-                case Pro::ITEM_TYPE::MISC:
-                    loadMiscData();
-                    break;
-                case Pro::ITEM_TYPE::KEY:
-                    loadKeyData();
-                    break;
+    switch (_pro->type()) {
+        case Pro::OBJECT_TYPE::ITEM:
+            if (_armorWidget) {
+                _armorWidget->loadFromPro(_pro);
+            } else if (_containerKeyWidget) {
+                _containerKeyWidget->loadFromPro(_pro);
+            } else if (_drugWidget) {
+                _drugWidget->loadFromPro(_pro);
+            } else if (_weaponWidget) {
+                _weaponWidget->loadFromPro(_pro);
+            } else if (_ammoWidget) {
+                _ammoWidget->loadFromPro(_pro);
+            } else if (_miscItemWidget) {
+                _miscItemWidget->loadFromPro(_pro);
             }
             break;
-        }
         case Pro::OBJECT_TYPE::CRITTER:
             loadCritterData();
             break;
@@ -1315,284 +1029,50 @@ void ProEditorDialog::loadProData() {
             loadSceneryData();
             break;
         case Pro::OBJECT_TYPE::WALL:
-            loadWallData();
+            if (_wallWidget) {
+                _wallWidget->loadFromPro(_pro);
+            }
             break;
         case Pro::OBJECT_TYPE::TILE:
-            loadTileData();
+            if (_tileWidget) {
+                _tileWidget->loadFromPro(_pro);
+            }
             break;
         case Pro::OBJECT_TYPE::MISC:
-            // This type only has common data
             break;
     }
 
-    // Update dual previews for items now that all data is loaded
     if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryPreviewWidget && _groundPreviewWidget) {
         updateInventoryPreview();
         updateGroundPreview();
     }
 }
 
-void ProEditorDialog::loadArmorData() {
-    if (_armorClassEdit) {
-        _armorClassEdit->setValue(_pro->armorData.armorClass);
-    }
-
-    for (int i = 0; i < 7; ++i) {
-        if (_damageResistEdits[i]) {
-            _damageResistEdits[i]->setValue(_pro->armorData.damageResist[i]);
-        }
-        if (_damageThresholdEdits[i]) {
-            _damageThresholdEdits[i]->setValue(_pro->armorData.damageThreshold[i]);
-        }
-    }
-
-    if (_armorPerkCombo) {
-        _armorPerkCombo->setCurrentIndex(_pro->armorData.perk);
-    }
-
-    _armorMaleFID = _pro->armorData.armorMaleFID;
-    if (_armorMaleFIDLabel) {
-        _armorMaleFIDLabel->setText(getFrmFilename(_armorMaleFID));
-    }
-
-    _armorFemaleFID = _pro->armorData.armorFemaleFID;
-    if (_armorFemaleFIDLabel) {
-        _armorFemaleFIDLabel->setText(getFrmFilename(_armorFemaleFID));
-    }
-
-    // Update armor preview (animation frames handled by ObjectPreviewWidget)
-    updateArmorPreview();
-}
-
-void ProEditorDialog::loadContainerData() {
-    if (_containerMaxSizeEdit) {
-        _containerMaxSizeEdit->setValue(_pro->containerData.maxSize);
-    }
-
-    // Load container flags (bit flags)
-    uint32_t flags = _pro->containerData.flags;
-    for (int i = 0; i < 5; ++i) {
-        if (_containerFlagChecks[i]) {
-            _containerFlagChecks[i]->setChecked(flags & (1 << i));
-        }
-    }
-}
-
-void ProEditorDialog::loadDrugData() {
-    // Load stat selections (0xFFFF means "None", map to index 0)
-    if (_drugStatCombos[0]) {
-        uint32_t stat = _pro->drugData.stat0;
-        if (stat == 0xFFFF || stat == 0xFFFFFFFF) {
-            _drugStatCombos[0]->setCurrentIndex(0); // "None"
-        } else {
-            _drugStatCombos[0]->setCurrentIndex(stat + 1); // Offset by 1 to account for "None" at index 0
-        }
-    }
-    if (_drugStatCombos[1]) {
-        uint32_t stat = _pro->drugData.stat1;
-        if (stat == 0xFFFF || stat == 0xFFFFFFFF) {
-            _drugStatCombos[1]->setCurrentIndex(0); // "None"
-        } else {
-            _drugStatCombos[1]->setCurrentIndex(stat + 1); // Offset by 1 to account for "None" at index 0
-        }
-    }
-    if (_drugStatCombos[2]) {
-        uint32_t stat = _pro->drugData.stat2;
-        if (stat == 0xFFFF || stat == 0xFFFFFFFF) {
-            _drugStatCombos[2]->setCurrentIndex(0); // "None"
-        } else {
-            _drugStatCombos[2]->setCurrentIndex(stat + 1); // Offset by 1 to account for "None" at index 0
-        }
-    }
-
-    // Load immediate effect amounts
-    if (_drugStatAmountEdits[0]) {
-        _drugStatAmountEdits[0]->setValue(_pro->drugData.amount0);
-    }
-    if (_drugStatAmountEdits[1]) {
-        _drugStatAmountEdits[1]->setValue(_pro->drugData.amount1);
-    }
-    if (_drugStatAmountEdits[2]) {
-        _drugStatAmountEdits[2]->setValue(_pro->drugData.amount2);
-    }
-
-    // Load first delayed effect
-    if (_drugFirstDelayEdit) {
-        _drugFirstDelayEdit->setValue(_pro->drugData.duration1);
-    }
-    if (_drugFirstStatAmountEdits[0]) {
-        _drugFirstStatAmountEdits[0]->setValue(_pro->drugData.amount0_1);
-    }
-    if (_drugFirstStatAmountEdits[1]) {
-        _drugFirstStatAmountEdits[1]->setValue(_pro->drugData.amount1_1);
-    }
-    if (_drugFirstStatAmountEdits[2]) {
-        _drugFirstStatAmountEdits[2]->setValue(_pro->drugData.amount2_1);
-    }
-
-    // Load second delayed effect
-    if (_drugSecondDelayEdit) {
-        _drugSecondDelayEdit->setValue(_pro->drugData.duration2);
-    }
-    if (_drugSecondStatAmountEdits[0]) {
-        _drugSecondStatAmountEdits[0]->setValue(_pro->drugData.amount0_2);
-    }
-    if (_drugSecondStatAmountEdits[1]) {
-        _drugSecondStatAmountEdits[1]->setValue(_pro->drugData.amount1_2);
-    }
-    if (_drugSecondStatAmountEdits[2]) {
-        _drugSecondStatAmountEdits[2]->setValue(_pro->drugData.amount2_2);
-    }
-
-    // Load addiction data
-    if (_drugAddictionChanceEdit) {
-        _drugAddictionChanceEdit->setValue(_pro->drugData.addictionRate);
-    }
-    if (_drugAddictionPerkCombo) {
-        _drugAddictionPerkCombo->setCurrentIndex(_pro->drugData.addictionEffect);
-    }
-    if (_drugAddictionDelayEdit) {
-        _drugAddictionDelayEdit->setValue(_pro->drugData.addictionOnset);
-    }
-}
-
-void ProEditorDialog::loadWeaponData() {
-    if (_weaponAnimationCombo) {
-        _weaponAnimationCombo->setCurrentIndex(_pro->weaponData.animationCode);
-    }
-    if (_weaponDamageMinEdit) {
-        _weaponDamageMinEdit->setValue(_pro->weaponData.damageMin);
-    }
-    if (_weaponDamageMaxEdit) {
-        _weaponDamageMaxEdit->setValue(_pro->weaponData.damageMax);
-    }
-    if (_weaponDamageTypeCombo) {
-        _weaponDamageTypeCombo->setCurrentIndex(_pro->weaponData.damageType);
-    }
-    if (_weaponRangePrimaryEdit) {
-        _weaponRangePrimaryEdit->setValue(_pro->weaponData.rangePrimary);
-    }
-    if (_weaponRangeSecondaryEdit) {
-        _weaponRangeSecondaryEdit->setValue(_pro->weaponData.rangeSecondary);
-    }
-    if (_weaponProjectilePIDEdit) {
-        _weaponProjectilePIDEdit->setValue(_pro->weaponData.projectilePID);
-    }
-    if (_weaponMinStrengthEdit) {
-        _weaponMinStrengthEdit->setValue(_pro->weaponData.minimumStrength);
-    }
-    if (_weaponAPPrimaryEdit) {
-        _weaponAPPrimaryEdit->setValue(_pro->weaponData.actionCostPrimary);
-    }
-    if (_weaponAPSecondaryEdit) {
-        _weaponAPSecondaryEdit->setValue(_pro->weaponData.actionCostSecondary);
-    }
-    if (_weaponCriticalFailEdit) {
-        _weaponCriticalFailEdit->setValue(_pro->weaponData.criticalFail);
-    }
-    if (_weaponPerkCombo) {
-        _weaponPerkCombo->setCurrentIndex(_pro->weaponData.perk);
-    }
-    if (_weaponBurstRoundsEdit) {
-        _weaponBurstRoundsEdit->setValue(_pro->weaponData.burstRounds);
-    }
-    if (_weaponAmmoTypeCombo) {
-        _weaponAmmoTypeCombo->setCurrentIndex(_pro->weaponData.ammoType);
-    }
-    if (_weaponAmmoPIDEdit) {
-        _weaponAmmoPIDEdit->setValue(_pro->weaponData.ammoPID);
-    }
-    if (_weaponAmmoCapacityEdit) {
-        _weaponAmmoCapacityEdit->setValue(_pro->weaponData.ammoCapacity);
-    }
-    if (_weaponSoundIdEdit) {
-        _weaponSoundIdEdit->setValue(_pro->weaponData.soundId);
-    }
-
-    // Load weapon flags
-    if (_weaponEnergyWeaponCheck) {
-        bool isEnergyWeapon = Pro::hasFlag(_pro->weaponData.weaponFlags, Pro::WEAPON_FLAGS::ENERGY_WEAPON);
-        _weaponEnergyWeaponCheck->setChecked(isEnergyWeapon);
-    }
-}
-
-void ProEditorDialog::loadAmmoData() {
-    if (_ammoCaliberCombo) {
-        _ammoCaliberCombo->setCurrentIndex(_pro->ammoData.caliber);
-    }
-    if (_ammoQuantityEdit) {
-        _ammoQuantityEdit->setValue(_pro->ammoData.quantity);
-    }
-    if (_ammoDamageModEdit) {
-        _ammoDamageModEdit->setValue(_pro->ammoData.damageModifier);
-    }
-    if (_ammoDRModEdit) {
-        _ammoDRModEdit->setValue(_pro->ammoData.damageResistModifier);
-    }
-    if (_ammoDamageMultEdit) {
-        _ammoDamageMultEdit->setValue(_pro->ammoData.damageMultiplier);
-    }
-    if (_ammoDamageTypeModCombo) {
-        _ammoDamageTypeModCombo->setCurrentIndex(_pro->ammoData.damageTypeModifier);
-    }
-}
-
-void ProEditorDialog::loadMiscData() {
-    if (_miscPowerTypeCombo) {
-        _miscPowerTypeCombo->setCurrentIndex(_pro->miscData.powerType);
-    }
-    if (_miscChargesEdit) {
-        _miscChargesEdit->setValue(_pro->miscData.charges);
-    }
-}
-
-void ProEditorDialog::loadKeyData() {
-    if (_keyIdEdit) {
-        _keyIdEdit->setValue(_pro->keyData.keyId);
-    }
-}
-
 void ProEditorDialog::saveProData() {
-    // Save PID from left panel
     if (_pidEdit) {
         _pro->header.PID = _pidEdit->value();
     }
 
-    // Save common data using ProCommonFieldsWidget
     if (_commonFieldsWidget) {
         _commonFieldsWidget->saveToPro(_pro);
     }
 
-    // Save type-specific data based on object type
     switch (_pro->type()) {
-        case Pro::OBJECT_TYPE::ITEM: {
-            Pro::ITEM_TYPE itemType = _pro->itemType();
-
-            switch (itemType) {
-                case Pro::ITEM_TYPE::ARMOR:
-                    saveArmorData();
-                    break;
-                case Pro::ITEM_TYPE::CONTAINER:
-                    saveContainerData();
-                    break;
-                case Pro::ITEM_TYPE::DRUG:
-                    saveDrugData();
-                    break;
-                case Pro::ITEM_TYPE::WEAPON:
-                    saveWeaponData();
-                    break;
-                case Pro::ITEM_TYPE::AMMO:
-                    saveAmmoData();
-                    break;
-                case Pro::ITEM_TYPE::MISC:
-                    saveMiscData();
-                    break;
-                case Pro::ITEM_TYPE::KEY:
-                    saveKeyData();
-                    break;
+        case Pro::OBJECT_TYPE::ITEM:
+            if (_armorWidget) {
+                _armorWidget->saveToPro(_pro);
+            } else if (_containerKeyWidget) {
+                _containerKeyWidget->saveToPro(_pro);
+            } else if (_drugWidget) {
+                _drugWidget->saveToPro(_pro);
+            } else if (_weaponWidget) {
+                _weaponWidget->saveToPro(_pro);
+            } else if (_ammoWidget) {
+                _ammoWidget->saveToPro(_pro);
+            } else if (_miscItemWidget) {
+                _miscItemWidget->saveToPro(_pro);
             }
             break;
-        }
         case Pro::OBJECT_TYPE::CRITTER:
             saveCritterData();
             break;
@@ -1600,59 +1080,17 @@ void ProEditorDialog::saveProData() {
             saveSceneryData();
             break;
         case Pro::OBJECT_TYPE::WALL:
-            saveWallData();
+            if (_wallWidget) {
+                _wallWidget->saveToPro(_pro);
+            }
             break;
         case Pro::OBJECT_TYPE::TILE:
-            saveTileData();
+            if (_tileWidget) {
+                _tileWidget->saveToPro(_pro);
+            }
             break;
         case Pro::OBJECT_TYPE::MISC:
-            // This type only has common data
             break;
-    }
-}
-
-void ProEditorDialog::saveArmorData() {
-    // Delegate to the widget
-    if (_armorWidget) {
-        _armorWidget->saveToPro(_pro);
-    }
-}
-
-void ProEditorDialog::saveContainerData() {
-    if (_containerKeyWidget) {
-        _containerKeyWidget->saveToPro(_pro);
-    }
-}
-
-void ProEditorDialog::saveDrugData() {
-    if (_drugWidget) {
-        _drugWidget->saveToPro(_pro);
-    }
-}
-
-void ProEditorDialog::saveWeaponData() {
-    if (_weaponWidget) {
-        _weaponWidget->saveToPro(_pro);
-    }
-}
-
-void ProEditorDialog::saveAmmoData() {
-    _pro->ammoData.caliber = _ammoCaliberCombo->currentIndex();
-    _pro->ammoData.quantity = _ammoQuantityEdit->value();
-    _pro->ammoData.damageModifier = _ammoDamageModEdit->value();
-    _pro->ammoData.damageResistModifier = _ammoDRModEdit->value();
-    _pro->ammoData.damageMultiplier = _ammoDamageMultEdit->value();
-    _pro->ammoData.damageTypeModifier = _ammoDamageTypeModCombo->currentIndex();
-}
-
-void ProEditorDialog::saveMiscData() {
-    _pro->miscData.powerType = _miscPowerTypeCombo->currentIndex();
-    _pro->miscData.charges = _miscChargesEdit->value();
-}
-
-void ProEditorDialog::saveKeyData() {
-    if (_containerKeyWidget) {
-        _containerKeyWidget->saveToPro(_pro);
     }
 }
 
@@ -1668,40 +1106,6 @@ void ProEditorDialog::clearFieldsLayouts() {
                 item->widget()->deleteLater();
             delete item;
         }
-    }
-}
-
-void ProEditorDialog::setupItemFields() {
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM)
-        return;
-
-    Pro::ITEM_TYPE itemType = _pro->itemType();
-
-    clearFieldsLayouts();
-
-    // Setup type-specific fields based on item subtype
-    switch (itemType) {
-        case Pro::ITEM_TYPE::ARMOR:
-            setupArmorFields();
-            break;
-        case Pro::ITEM_TYPE::CONTAINER:
-            setupContainerFields();
-            break;
-        case Pro::ITEM_TYPE::DRUG:
-            setupDrugFields();
-            break;
-        case Pro::ITEM_TYPE::WEAPON:
-            setupWeaponFields();
-            break;
-        case Pro::ITEM_TYPE::AMMO:
-            setupAmmoFields();
-            break;
-        case Pro::ITEM_TYPE::MISC:
-            setupMiscItemFields();
-            break;
-        case Pro::ITEM_TYPE::KEY:
-            setupKeyFields();
-            break;
     }
 }
 
@@ -2202,114 +1606,55 @@ void ProEditorDialog::setupMiscFields() {
 }
 
 void ProEditorDialog::updatePreview() {
-
-    // Stop current animations
     if (_animationController) {
         _animationController->stop();
     }
 
-    // Stop armor animation (now handled by ObjectPreviewWidget instances)
-    if (_armorMalePreviewWidget) {
-        _armorMalePreviewWidget->stopAnimation();
-    }
-    if (_armorFemalePreviewWidget) {
-        _armorFemalePreviewWidget->stopAnimation();
-    }
-
-    // Check if we're using dual preview system (for items)
     if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM && _inventoryPreviewWidget && _groundPreviewWidget) {
-        // Update both dual previews (items use static thumbnails)
         updateInventoryPreview();
         updateGroundPreview();
 
-        // Update armor preview if this is an armor item
-        if (_pro->itemType() == Pro::ITEM_TYPE::ARMOR && _armorMalePreviewWidget && _armorFemalePreviewWidget) {
-            updateArmorPreview();
-        }
-
-        // Items don't animate, so disable animation controls and return
         if (_animationControls) {
             _animationControls->setEnabled(false);
         }
         return;
     }
 
-    // Check if we're using object preview widget (all non-item objects)
     if (_pro && _pro->type() != Pro::OBJECT_TYPE::ITEM && _objectPreviewWidget) {
         std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(static_cast<unsigned int>(_pro->header.FID));
         spdlog::debug("ObjectPreviewWidget: Setting FRM path: {}", frmPath);
         _objectPreviewWidget->setFrmPath(QString::fromStdString(frmPath));
         _objectPreviewWidget->setFid(_pro->header.FID);
-        return;
     }
-
-    // No specific action needed - ObjectPreviewWidget handles everything for non-item objects
 }
 
 int32_t ProEditorDialog::getPreviewFid() {
-
-    // FID label is now handled by ProCommonFieldsWidget
-
-    // Check if PRO is valid
     if (!_pro) {
         return 0;
     }
 
-    // Items use dual preview system, not single preview, so they don't need getPreviewFid()
-
-    // For items without dual preview, prefer inventory FID over world FID for preview
-    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        int32_t inventoryFid = _pro->commonItemData.inventoryFID;
-        if (inventoryFid > 0) {
-            return inventoryFid;
-        }
-
-        // For armor, check for male/female specific FIDs
-        if (_pro->itemType() == Pro::ITEM_TYPE::ARMOR && _armorMaleFIDLabel && _armorFemaleFIDLabel) {
-            int32_t maleFid = _armorMaleFID;
-            if (maleFid > 0) {
-                return maleFid; // Default to male version
-            }
-
-            int32_t femaleFid = _armorFemaleFID;
-            if (femaleFid > 0) {
-                return femaleFid;
-            }
-        }
-    }
-
-    // Fall back to main FID
     return _pro->header.FID;
 }
 
 int32_t ProEditorDialog::getInventoryFid() {
-
-    // Check if pro is loaded
     if (!_pro) {
         return 0;
     }
 
-    // For items, return inventory FID only if set, don't fallback to main FID
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        int32_t inventoryFid = _pro->commonItemData.inventoryFID;
-        // Return the inventory FID as-is, even if 0 or -1 (let caller handle "no image" case)
-        return inventoryFid;
+        return _pro->commonItemData.inventoryFID;
     }
 
     return 0;
 }
 
 int32_t ProEditorDialog::getGroundFid() {
-
-    // Check if pro is loaded
     if (!_pro) {
         return 0;
     }
 
-    // For items, return main FID (ground view)
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-        int32_t groundFid = _pro->header.FID;
-        return groundFid;
+        return _pro->header.FID;
     }
 
     return 0;
@@ -2328,7 +1673,6 @@ void ProEditorDialog::updateInventoryPreview() {
         return;
     }
 
-    // Set FRM path for inventory view
     try {
         auto& resourceManager = ResourceManager::getInstance();
         std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(inventoryFid));
@@ -2359,7 +1703,6 @@ void ProEditorDialog::updateGroundPreview() {
         return;
     }
 
-    // Set FRM path for ground view
     try {
         auto& resourceManager = ResourceManager::getInstance();
         std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(groundFid));
@@ -2377,54 +1720,9 @@ void ProEditorDialog::updateGroundPreview() {
     }
 }
 
-void ProEditorDialog::updateArmorPreview() {
-    if (!_armorMalePreviewWidget || !_armorFemalePreviewWidget) {
-        return;
-    }
-
-    // Update male armor preview
-    if (_armorMaleFID <= 0) {
-        _armorMalePreviewWidget->clear();
-    } else {
-        try {
-            auto& resourceManager = ResourceManager::getInstance();
-            std::string maleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorMaleFID));
-
-            if (!maleFrmPath.empty()) {
-                _armorMalePreviewWidget->setFrmPath(QString::fromStdString(maleFrmPath));
-            } else {
-                _armorMalePreviewWidget->clear();
-            }
-        } catch (const std::exception& e) {
-            spdlog::error("ProEditorDialog::updateArmorPreview() - male armor exception: {}", e.what());
-            _armorMalePreviewWidget->clear();
-        }
-    }
-
-    // Update female armor preview
-    if (_armorFemaleFID <= 0) {
-        _armorFemalePreviewWidget->clear();
-    } else {
-        try {
-            auto& resourceManager = ResourceManager::getInstance();
-            std::string femaleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorFemaleFID));
-
-            if (!femaleFrmPath.empty()) {
-                _armorFemalePreviewWidget->setFrmPath(QString::fromStdString(femaleFrmPath));
-            } else {
-                _armorFemalePreviewWidget->clear();
-            }
-        } catch (const std::exception& e) {
-            spdlog::error("ProEditorDialog::updateArmorPreview() - female armor exception: {}", e.what());
-            _armorFemalePreviewWidget->clear();
-        }
-    }
-}
-
 void ProEditorDialog::onAccept() {
     saveProData();
 
-    // Ask user where to save the file
     QString suggestedName = QString::fromStdString(_pro->path().filename().string());
     QString filePath = QFileDialog::getSaveFileName(
         this,
@@ -2436,7 +1734,6 @@ void ProEditorDialog::onAccept() {
         return; // User cancelled
     }
 
-    // Create backup if file exists
     std::filesystem::path savePath(filePath.toStdString());
     if (std::filesystem::exists(savePath)) {
         std::filesystem::path backupPath = savePath;
@@ -2451,7 +1748,6 @@ void ProEditorDialog::onAccept() {
         }
     }
 
-    // Save the PRO file
     try {
         ProWriter writer;
         writer.openFile(savePath, true);
@@ -2472,33 +1768,18 @@ void ProEditorDialog::onAccept() {
 }
 
 void ProEditorDialog::onFieldChanged() {
-    QWidget* sender = qobject_cast<QWidget*>(QObject::sender());
-    if (sender) {
-        // Preview updates are now handled by ProCommonFieldsWidget signals
-
-        // Update AI priority displays when relevant fields change
-        updateAIPriorityDisplays();
-    }
+    Q_UNUSED(qobject_cast<QWidget*>(QObject::sender()));
 }
 
 void ProEditorDialog::onComboBoxChanged() {
-    QComboBox* sender = qobject_cast<QComboBox*>(QObject::sender());
-    if (sender) {
-        // Update AI priority displays when relevant fields change
-        updateAIPriorityDisplays();
-    }
+    Q_UNUSED(qobject_cast<QComboBox*>(QObject::sender()));
 }
 
 void ProEditorDialog::onCheckBoxChanged() {
-    QCheckBox* sender = qobject_cast<QCheckBox*>(QObject::sender());
-    if (sender) {
-        // CheckBox changed - no additional action needed
-    }
+    Q_UNUSED(qobject_cast<QCheckBox*>(QObject::sender()));
 }
 
 void ProEditorDialog::onFidSelectorClicked() {
-    // FID selection is now handled by ProCommonFieldsWidget
-    // This method is kept for compatibility but does nothing
 }
 
 void ProEditorDialog::onEditMessageClicked() {
@@ -2510,20 +1791,16 @@ void ProEditorDialog::onEditMessageClicked() {
             return;
         }
 
-        // Open message selector dialog with current message ID
         MessageSelectorDialog dialog(msgFile, _pro->header.message_id, this);
         if (dialog.exec() == QDialog::Accepted) {
             int selectedMessageId = dialog.getSelectedMessageId();
             if (selectedMessageId >= 0) {
-                // Update the message ID in the PRO header
                 _pro->header.message_id = selectedMessageId;
 
-                // Update the message ID in the widget and refresh name/description
                 if (_commonFieldsWidget) {
                     _commonFieldsWidget->loadFromPro(_pro);
                 }
 
-                // Update window title with new object name
                 updateWindowTitle();
 
                 spdlog::debug("ProEditorDialog: Message ID changed to {}", selectedMessageId);
@@ -2538,24 +1815,6 @@ void ProEditorDialog::onEditMessageClicked() {
 }
 
 void ProEditorDialog::onInventoryFidSelectorClicked() {
-    // Inventory FID selection is now handled by ProCommonFieldsWidget
-    // This method is kept for compatibility but does nothing
-}
-
-void ProEditorDialog::openFrmSelector(QSpinBox* targetField, uint32_t objectType) {
-    if (!targetField)
-        return;
-
-    FrmSelectorDialog dialog(this);
-    dialog.setObjectTypeFilter(objectType);
-    dialog.setInitialFrmPid(static_cast<uint32_t>(targetField->value()));
-
-    if (dialog.exec() == QDialog::Accepted) {
-        uint32_t selectedFrmPid = dialog.getSelectedFrmPid();
-        if (selectedFrmPid > 0) {
-            targetField->setValue(static_cast<int>(selectedFrmPid));
-        }
-    }
 }
 
 void ProEditorDialog::openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidStorage, uint32_t objectType) {
@@ -2627,42 +1886,12 @@ QFormLayout* ProEditorDialog::createStandardFormLayout(QWidget* parent) {
     return layout;
 }
 
-QGroupBox* ProEditorDialog::createStandardGroupBox(const QString& title) {
-    QGroupBox* groupBox = new QGroupBox(title);
-    createStandardFormLayout(groupBox);
-    return groupBox;
-}
-
-QHBoxLayout* ProEditorDialog::createTwoColumnLayout(QWidget* parent) {
-    QHBoxLayout* layout = new QHBoxLayout(parent);
-    layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    layout->setSpacing(ui::constants::SPACING_TIGHT);
-    return layout;
-}
-
-// Widget array helper methods (DRY principle)
 void ProEditorDialog::loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* arrayValues, int count) {
     for (int i = 0; i < count; ++i) {
         if (widgets[i] && arrayValues) {
             widgets[i]->setValue(static_cast<int>(arrayValues[i]));
         }
     }
-}
-
-void ProEditorDialog::saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* arrayValues, int count) {
-    for (int i = 0; i < count; ++i) {
-        if (widgets[i] && arrayValues) {
-            arrayValues[i] = static_cast<uint32_t>(widgets[i]->value());
-        }
-    }
-}
-
-QSpinBox** ProEditorDialog::createConnectedSpinBoxArray(int count, int min, int max, const QStringList& tooltips) {
-    QSpinBox** widgets = new QSpinBox*[count];
-    for (int i = 0; i < count; ++i) {
-        widgets[i] = createSpinBox(min, max, i < tooltips.size() ? tooltips[i] : QString());
-    }
-    return widgets;
 }
 
 void ProEditorDialog::loadCritterData() {
@@ -3208,7 +2437,6 @@ void ProEditorDialog::updateWindowTitle() {
         objectType = "Object";
     }
 
-    // Set the window title in the format: "ObjectName (ObjectType) - PRO editor"
     QString newTitle = QString("%1 (%2) - PRO editor").arg(objectName, objectType);
     setWindowTitle(newTitle);
 
@@ -3276,7 +2504,6 @@ void ProEditorDialog::loadAnimationFrames() {
             return;
         }
 
-        // Load the FRM
         const auto* frm = resourceManager.loadResource<Frm>(frmPath);
         if (!frm) {
             return;
@@ -3294,51 +2521,40 @@ void ProEditorDialog::loadAnimationFrames() {
         int totalDirections = static_cast<int>(directions.size());
         _animationController->setTotalDirections(totalDirections);
 
-        // Load palette
         const Pal* palette = resourceManager.loadResource<Pal>("color.pal");
         if (!palette) {
             return;
         }
 
-        // Generate thumbnails for all frames using fixed target size for better quality
         std::vector<QPixmap> frameCache;
         frameCache.reserve(frames.size());
-        QSize frameTargetSize(200, 200); // Fixed size for crisp animation frames
+        QSize frameTargetSize(200, 200);
 
         for (const auto& frame : frames) {
             QPixmap thumbnail = FrmThumbnailGenerator::fromFrame(frame, palette, frameTargetSize);
             frameCache.push_back(thumbnail);
         }
 
-        // Load frames into controller
         _animationController->loadFrames(std::move(frameCache));
 
-        // Update UI
         int totalFrames = _animationController->totalFrames();
         _frameSlider->setMaximum(totalFrames > 0 ? totalFrames - 1 : 0);
         _frameSlider->setValue(0);
         _frameLabel->setText(QString("1/%1").arg(totalFrames));
 
-        // Enable/disable direction combo based on available directions
         _directionCombo->setEnabled(totalDirections > 1);
 
-        // Enable animation controls only for critters and scenery with multiple frames
-        // Items never animate (they have static single-frame FRMs)
         bool shouldEnableAnimation = false;
         if (_pro) {
             if (_pro->type() == Pro::OBJECT_TYPE::CRITTER) {
-                // Critters can have animations
                 shouldEnableAnimation = (totalFrames > 1 || totalDirections > 1);
             } else if (_pro->type() == Pro::OBJECT_TYPE::SCENERY) {
-                // Some scenery can have animations (doors, etc.)
                 shouldEnableAnimation = (totalFrames > 1 || totalDirections > 1);
             }
-            // Items, walls, tiles, misc never animate
         }
         _animationControls->setEnabled(shouldEnableAnimation);
-        _animationControls->setVisible(shouldEnableAnimation); // Show controls when animation is available
+        _animationControls->setVisible(shouldEnableAnimation);
 
-        // Show the first frame in the appropriate preview label
         const QPixmap& firstFrame = _animationController->frame(0);
         if (!firstFrame.isNull() && _previewLabel) {
             _previewLabel->setPixmap(firstFrame);
@@ -3350,89 +2566,14 @@ void ProEditorDialog::loadAnimationFrames() {
     }
 }
 
-int ProEditorDialog::calculateArmorAIPriority() {
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || static_cast<Pro::ITEM_TYPE>(_pro->objectSubtypeId()) != Pro::ITEM_TYPE::ARMOR) {
-        return 0;
-    }
-
-    int priority = 0;
-    const auto& armorData = _pro->armorData;
-
-    // Add armor class
-    priority += static_cast<int>(armorData.armorClass);
-
-    // Add all damage threshold values (7 damage types)
-    for (int i = 0; i < 7; ++i) {
-        priority += static_cast<int>(armorData.damageThreshold[i]);
-    }
-
-    // Add all damage resistance values (7 damage types)
-    for (int i = 0; i < 7; ++i) {
-        priority += static_cast<int>(armorData.damageResist[i]);
-    }
-
-    return priority;
-}
-
-int ProEditorDialog::calculateWeaponAIPriority() {
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM || static_cast<Pro::ITEM_TYPE>(_pro->objectSubtypeId()) != Pro::ITEM_TYPE::WEAPON) {
-        return 0;
-    }
-
-    int priority = 0;
-    const auto& weaponData = _pro->weaponData;
-
-    // Add average damage
-    int avgDamage = (static_cast<int>(weaponData.damageMin) + static_cast<int>(weaponData.damageMax)) / 2;
-    priority += avgDamage * 2; // Weight damage heavily
-
-    // Add range factors
-    priority += static_cast<int>(weaponData.rangePrimary) / 2;
-    priority += static_cast<int>(weaponData.rangeSecondary) / 4;
-
-    // Subtract action point costs (lower AP cost = higher priority)
-    priority -= static_cast<int>(weaponData.actionCostPrimary);
-    priority -= static_cast<int>(weaponData.actionCostSecondary) / 2;
-
-    // Add burst rounds bonus
-    if (weaponData.burstRounds > 1) {
-        priority += static_cast<int>(weaponData.burstRounds) * BURST_ROUND_PRIORITY_MULTIPLIER;
-    }
-
-    return std::max(0, priority); // Ensure non-negative
-}
-
-void ProEditorDialog::updateAIPriorityDisplays() {
-    if (!_pro)
-        return;
-
-    // Update armor AI priority (only if label exists)
-    if (_armorAIPriorityLabel && _pro->type() == Pro::OBJECT_TYPE::ITEM && static_cast<Pro::ITEM_TYPE>(_pro->objectSubtypeId()) == Pro::ITEM_TYPE::ARMOR) {
-        int armorPriority = calculateArmorAIPriority();
-        _armorAIPriorityLabel->setText(QString::number(armorPriority));
-    }
-
-    // Update weapon AI priority (only if label exists)
-    if (_weaponAIPriorityLabel && _pro->type() == Pro::OBJECT_TYPE::ITEM && static_cast<Pro::ITEM_TYPE>(_pro->objectSubtypeId()) == Pro::ITEM_TYPE::WEAPON) {
-        int weaponPriority = calculateWeaponAIPriority();
-        _weaponAIPriorityLabel->setText(QString::number(weaponPriority));
-    }
-}
-
 void ProEditorDialog::onObjectFlagChanged() {
-    // Object flags are now handled by ProCommonFieldsWidget
-    // This method is kept for compatibility but does nothing
 }
 
 void ProEditorDialog::onTransparencyFlagChanged() {
-    // Transparency flags are now handled by ProCommonFieldsWidget
-    // This method is kept for compatibility but does nothing
 }
 
 void ProEditorDialog::loadObjectFlags(uint32_t flags) {
     Q_UNUSED(flags);
-    // Object flags loading is now handled by ProCommonFieldsWidget
-    // This method is kept for compatibility but does nothing
 }
 
 QComboBox* ProEditorDialog::createMaterialComboBox(const QString& tooltip) {
@@ -3452,7 +2593,6 @@ QString ProEditorDialog::getFrmFilename(int32_t fid) {
     if (frmPath.empty()) {
         return QString("Invalid FID (%1)").arg(fid);
     }
-    // Extract just the filename from the full path
     return QString::fromStdString(std::filesystem::path(frmPath).filename().string());
 }
 
@@ -3462,14 +2602,12 @@ void ProEditorDialog::onCritterHeadFidSelectorClicked() {
 
 void ProEditorDialog::onObjectFidChangeRequested() {
     if (_pro) {
-        // Identify which preview widget sent the signal
         ObjectPreviewWidget* senderWidget = qobject_cast<ObjectPreviewWidget*>(sender());
         if (!senderWidget) {
             return;
         }
         FrmSelectorDialog dialog(this);
 
-        // Set appropriate object type filter based on PRO type
         uint32_t objectTypeFilter = 0;
         switch (_pro->type()) {
             case Pro::OBJECT_TYPE::CRITTER:
@@ -3488,14 +2626,12 @@ void ProEditorDialog::onObjectFidChangeRequested() {
                 objectTypeFilter = 5;
                 break;
             default:
-                objectTypeFilter = 0; // No filter
+                objectTypeFilter = 0;
                 break;
         }
 
-        // Set initial FID based on sender widget and PRO type
         uint32_t initialFid = 0;
         if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
-            // Items use object type 0
             objectTypeFilter = 0;
             if (senderWidget == _inventoryPreviewWidget) {
                 initialFid = static_cast<uint32_t>(_pro->commonItemData.inventoryFID > 0 ? _pro->commonItemData.inventoryFID : _pro->header.FID);
@@ -3512,19 +2648,15 @@ void ProEditorDialog::onObjectFidChangeRequested() {
         if (dialog.exec() == QDialog::Accepted) {
             uint32_t selectedFrmPid = dialog.getSelectedFrmPid();
             if (selectedFrmPid > 0) {
-                // Update appropriate FID storage based on sender widget and PRO type
                 if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
                     if (senderWidget == _inventoryPreviewWidget) {
-                        // Update inventory FID in PRO data directly
                         _pro->commonItemData.inventoryFID = static_cast<int32_t>(selectedFrmPid);
                         updateInventoryPreview();
                     } else if (senderWidget == _groundPreviewWidget) {
-                        // Update main FID in PRO data directly
                         _pro->header.FID = static_cast<int32_t>(selectedFrmPid);
                         updateGroundPreview();
                     }
                 } else {
-                    // Non-items: update main FID
                     _pro->header.FID = static_cast<int32_t>(selectedFrmPid);
                     std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(selectedFrmPid);
                     senderWidget->setFrmPath(QString::fromStdString(frmPath));
@@ -3539,539 +2671,11 @@ void ProEditorDialog::onObjectFidChanged(int32_t newFid) {
     if (_pro && _pro->type() != Pro::OBJECT_TYPE::ITEM) {
         _pro->header.FID = newFid;
 
-        // Update the preview
         std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(static_cast<unsigned int>(newFid));
         if (_objectPreviewWidget) {
             _objectPreviewWidget->setFrmPath(QString::fromStdString(frmPath));
             _objectPreviewWidget->setFid(newFid);
         }
-    }
-}
-
-void ProEditorDialog::setupArmorFields() {
-    // Show the right column for armor tab (ensure both columns are visible)
-    if (_rightFieldsLayout) {
-        QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
-        if (rightColumn2) {
-            rightColumn2->show();
-        }
-    }
-
-    // === COLUMN 1: Armor Class and Damage Resistance ===
-
-    // Protection Values (following F2_ProtoManager pattern)
-    QGroupBox* acGroup = new QGroupBox("Protection Values");
-    acGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
-    QFormLayout* acLayout = new QFormLayout(acGroup);
-    acLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    acLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    _armorClassEdit = createSpinBox(0, 999, "Armor Class - higher values provide better protection");
-    connectSpinBox(_armorClassEdit);
-    acLayout->addRow("Armor Class:", _armorClassEdit);
-
-    _leftFieldsLayout->addWidget(acGroup);
-
-    // Defence State (unified Threshold and Resistance table)
-    QGroupBox* defenceGroup = new QGroupBox("Defence State");
-    defenceGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
-    QGridLayout* defenceLayout = new QGridLayout(defenceGroup);
-    defenceLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    defenceLayout->setSpacing(ui::constants::SPACING_GRID);
-    defenceLayout->setHorizontalSpacing(ui::constants::SPACING_GRID);
-
-    const QStringList damageTypes = game::enums::damageTypes7();
-
-    // Headers
-    QLabel* thresholdHeader = new QLabel("Threshold");
-    thresholdHeader->setFont(ui::theme::fonts::standard());
-    thresholdHeader->setAlignment(Qt::AlignCenter);
-    defenceLayout->addWidget(thresholdHeader, 0, 1);
-
-    QLabel* resistanceHeader = new QLabel("Resistance");
-    resistanceHeader->setFont(ui::theme::fonts::standard());
-    resistanceHeader->setAlignment(Qt::AlignCenter);
-    defenceLayout->addWidget(resistanceHeader, 0, 3);
-
-    // Create the unified table for each damage type
-    for (int i = 0; i < 7; ++i) {
-        // Damage type label (column 0)
-        QLabel* typeLabel = new QLabel(damageTypes[i]);
-        typeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        typeLabel->setFixedSize(ui::constants::sizes::WIDTH_TYPE_LABEL, ui::constants::sizes::HEIGHT_TYPE_LABEL);
-        defenceLayout->addWidget(typeLabel, i + 1, 0);
-
-        // Threshold input (column 1)
-        _damageThresholdEdits[i] = createSpinBox(0, 999, QString("Damage threshold against %1 damage").arg(damageTypes.at(i)));
-        _damageThresholdEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_SMALL);
-        connectSpinBox(_damageThresholdEdits[i]);
-        defenceLayout->addWidget(_damageThresholdEdits[i], i + 1, 1);
-
-        // Separator "/" (column 2)
-        QLabel* separator = new QLabel("/");
-        separator->setAlignment(Qt::AlignCenter);
-        separator->setEnabled(false);
-        defenceLayout->addWidget(separator, i + 1, 2);
-
-        // Resistance input (column 3)
-        _damageResistEdits[i] = createSpinBox(0, 100, QString("Damage resistance against %1 damage").arg(damageTypes.at(i)));
-        _damageResistEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_SMALL);
-        connectSpinBox(_damageResistEdits[i]);
-        defenceLayout->addWidget(_damageResistEdits[i], i + 1, 3);
-
-        // "%" label (column 4)
-        QLabel* percentLabel = new QLabel("%");
-        percentLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        defenceLayout->addWidget(percentLabel, i + 1, 4);
-    }
-
-    _leftFieldsLayout->addWidget(defenceGroup);
-
-    // === COLUMN 2: Armor Views and Misc Properties ===
-
-    // Armor Views (Male/Female armor preview with animation controls)
-    if (_rightFieldsLayout) {
-        setupArmorPreviewCompact(_rightFieldsLayout);
-    }
-
-    // Misc Properties
-    QGroupBox* miscGroup = createStandardGroupBox("Misc Properties");
-    QFormLayout* miscLayout = static_cast<QFormLayout*>(miscGroup->layout());
-
-    _armorPerkCombo = createComboBox(game::enums::armorPerks(), "Special perk associated with this armor");
-    miscLayout->addRow("Perk:", _armorPerkCombo);
-
-    // AI Priority display
-    _armorAIPriorityLabel = new QLabel("0");
-    _armorAIPriorityLabel->setStyleSheet(ui::theme::styles::emphasisLabel());
-    _armorAIPriorityLabel->setToolTip("AI Priority = AC + all DT values + all DR values (used by AI to select best armor)");
-    miscLayout->addRow("AI Priority:", _armorAIPriorityLabel);
-
-    if (_rightFieldsLayout) {
-        _rightFieldsLayout->addWidget(miscGroup);
-    }
-
-    // Add standard item flags
-    // Standard item flags are now handled by ProCommonFieldsWidget
-
-    // Add stretch to push content to top
-    _leftFieldsLayout->addStretch();
-    if (_rightFieldsLayout) {
-        _rightFieldsLayout->addStretch();
-    }
-}
-
-void ProEditorDialog::setupContainerFields() {
-    // Show the right column for container tab (ensure both columns are visible)
-    if (_rightFieldsLayout) {
-        QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
-        if (rightColumn2) {
-            rightColumn2->show();
-        }
-    }
-
-    // === COLUMN 1: Container Properties ===
-
-    QGroupBox* containerGroup = createStandardGroupBox("Container Properties");
-    QFormLayout* containerLayout = static_cast<QFormLayout*>(containerGroup->layout());
-
-    _containerMaxSizeEdit = createSpinBox(0, 999999, "Maximum size in volume units that this container can hold");
-    containerLayout->addRow("Max Size:", _containerMaxSizeEdit);
-
-    _leftFieldsLayout->addWidget(containerGroup);
-
-    // === COLUMN 2: Container Flags ===
-
-    QGroupBox* flagsGroup = new QGroupBox("Container Flags");
-    QVBoxLayout* flagsLayout = new QVBoxLayout(flagsGroup);
-    flagsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    flagsLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    const QStringList flagNames = game::enums::containerFlags();
-    for (int i = 0; i < 5; ++i) {
-        _containerFlagChecks[i] = new QCheckBox(flagNames[i]);
-        connectCheckBox(_containerFlagChecks[i]);
-        flagsLayout->addWidget(_containerFlagChecks[i]);
-    }
-
-    if (_rightFieldsLayout) {
-        _rightFieldsLayout->addWidget(flagsGroup);
-    }
-
-    // Add stretch to push content to top
-    _leftFieldsLayout->addStretch();
-    if (_rightFieldsLayout) {
-        _rightFieldsLayout->addStretch();
-    }
-}
-
-void ProEditorDialog::setupDrugFields() {
-    // Hide the right column for drug tab to extend left column to full width
-    if (_rightFieldsLayout) {
-        QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
-        if (rightColumn2) {
-            rightColumn2->hide();
-        }
-    }
-
-    // Use loaded stat names from MSG file and add special values
-    QStringList baseStatNames = _statNames;
-    if (baseStatNames.isEmpty()) {
-        spdlog::error("ProEditorDialog::setupDrugFields() - No stat names loaded from MSG file!");
-        baseStatNames = { "Unknown" }; // Fallback if MSG loading fails
-    }
-
-    // === LEFT PANEL: Stat Effects ===
-
-    // Stat Effects with column headers (following F2_ProtoManager pattern)
-    QGroupBox* effectsGroup = new QGroupBox("Modify Stats");
-    effectsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
-    QGridLayout* effectsGridLayout = new QGridLayout(effectsGroup);
-    effectsGridLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    effectsGridLayout->setSpacing(ui::constants::SPACING_FORM);
-
-    // Header row (row 0)
-    effectsGridLayout->addWidget(new QLabel(""), 0, 0); // Empty space for stat labels
-
-    QLabel* statHeader = new QLabel("Stat");
-    statHeader->setAlignment(Qt::AlignCenter);
-    statHeader->setStyleSheet(ui::theme::styles::boldLabel());
-    effectsGridLayout->addWidget(statHeader, 0, 1);
-
-    QLabel* immediateHeader = new QLabel("Immediate");
-    immediateHeader->setAlignment(Qt::AlignCenter);
-    immediateHeader->setStyleSheet(ui::theme::styles::boldLabel());
-    effectsGridLayout->addWidget(immediateHeader, 0, 2);
-
-    QLabel* midTimeHeader = new QLabel("Mid-time");
-    midTimeHeader->setAlignment(Qt::AlignCenter);
-    midTimeHeader->setStyleSheet(ui::theme::styles::boldLabel());
-    effectsGridLayout->addWidget(midTimeHeader, 0, 3);
-
-    QLabel* longTimeHeader = new QLabel("Long-time");
-    longTimeHeader->setAlignment(Qt::AlignCenter);
-    longTimeHeader->setStyleSheet(ui::theme::styles::boldLabel());
-    effectsGridLayout->addWidget(longTimeHeader, 0, 4);
-
-    // Set column stretches for proper sizing
-    effectsGridLayout->setColumnStretch(0, 0); // Fixed width for labels
-    effectsGridLayout->setColumnStretch(1, 2); // Stretch for combo boxes
-    effectsGridLayout->setColumnStretch(2, 1); // Stretch for spin boxes
-    effectsGridLayout->setColumnStretch(3, 1); // Stretch for spin boxes
-    effectsGridLayout->setColumnStretch(4, 1); // Stretch for spin boxes
-
-    // Create rows for each stat (rows 1-3)
-    for (int i = 0; i < NUM_DRUG_STATS; ++i) {
-        int row = i + 1;
-
-        // Stat label (column 0)
-        QLabel* statLabel = new QLabel(QString("Stat %1:").arg(i + 1));
-        effectsGridLayout->addWidget(statLabel, row, 0);
-
-        // Stat dropdown (column 1)
-        _drugStatCombos[i] = new QComboBox();
-        QStringList statNames;
-        statNames << "None";        // -1/0xFFFF
-        statNames << baseStatNames; // 0, 1, 2, ...
-        _drugStatCombos[i]->addItems(statNames);
-        _drugStatCombos[i]->setToolTip(QString("Stat %1 to modify (None=no effect)").arg(i + 1));
-        connect(_drugStatCombos[i], QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
-        effectsGridLayout->addWidget(_drugStatCombos[i], row, 1);
-
-        // Immediate effect value (column 2)
-        _drugStatAmountEdits[i] = new QSpinBox();
-        _drugStatAmountEdits[i]->setRange(INT_MIN, INT_MAX);
-        _drugStatAmountEdits[i]->setToolTip(QString("Immediate effect amount for stat %1").arg(i + 1));
-        connect(_drugStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        effectsGridLayout->addWidget(_drugStatAmountEdits[i], row, 2);
-
-        // Mid-time effect value (column 3)
-        _drugFirstStatAmountEdits[i] = new QSpinBox();
-        _drugFirstStatAmountEdits[i]->setRange(INT_MIN, INT_MAX);
-        _drugFirstStatAmountEdits[i]->setToolTip(QString("Mid-time effect amount for stat %1").arg(i + 1));
-        connect(_drugFirstStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        effectsGridLayout->addWidget(_drugFirstStatAmountEdits[i], row, 3);
-
-        // Long-time effect value (column 4)
-        _drugSecondStatAmountEdits[i] = new QSpinBox();
-        _drugSecondStatAmountEdits[i]->setRange(INT_MIN, INT_MAX);
-        _drugSecondStatAmountEdits[i]->setToolTip(QString("Long-time effect amount for stat %1").arg(i + 1));
-        connect(_drugSecondStatAmountEdits[i], QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-        effectsGridLayout->addWidget(_drugSecondStatAmountEdits[i], row, 4);
-    }
-
-    _leftFieldsLayout->addWidget(effectsGroup);
-
-    // Add some spacing between stat effects and timing
-    _leftFieldsLayout->addSpacing(ui::constants::SPACING_WIDE);
-
-    // Effect Timing (moved from right panel to under Stat Effects)
-    QGroupBox* timingGroup = new QGroupBox("Effect Timing");
-    QFormLayout* timingLayout = new QFormLayout(timingGroup);
-    timingLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    timingLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    // Mid-time delay
-    _drugFirstDelayEdit = new QSpinBox();
-    _drugFirstDelayEdit->setRange(0, INT_MAX);
-    _drugFirstDelayEdit->setToolTip("Delay in game minutes before mid-time effect");
-    connect(_drugFirstDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-    timingLayout->addRow("Mid-time Delay:", _drugFirstDelayEdit);
-
-    // Long-time delay
-    _drugSecondDelayEdit = new QSpinBox();
-    _drugSecondDelayEdit->setRange(0, INT_MAX);
-    _drugSecondDelayEdit->setToolTip("Delay in game minutes before long-time effect");
-    connect(_drugSecondDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-    timingLayout->addRow("Long-time Delay:", _drugSecondDelayEdit);
-
-    _leftFieldsLayout->addWidget(timingGroup);
-
-    // Add some spacing between timing and addiction
-    _leftFieldsLayout->addSpacing(ui::constants::SPACING_WIDE);
-
-    // Addiction Settings (following F2_ProtoManager pattern)
-    QGroupBox* addictionGroup = new QGroupBox("Addiction");
-    addictionGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
-    QFormLayout* addictionLayout = new QFormLayout(addictionGroup);
-    addictionLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    addictionLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    _drugAddictionChanceEdit = new QSpinBox();
-    _drugAddictionChanceEdit->setRange(0, INT_MAX);
-    _drugAddictionChanceEdit->setSuffix("%");
-    _drugAddictionChanceEdit->setToolTip("Percentage chance of addiction");
-    connect(_drugAddictionChanceEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-    addictionLayout->addRow("Rate:", _drugAddictionChanceEdit);
-
-    _drugAddictionPerkCombo = new QComboBox();
-    // Use loaded perk names from MSG file directly
-    if (_perkNames.isEmpty()) {
-        spdlog::error("ProEditorDialog::setupDrugFields() - No perk names loaded from MSG file!");
-        _drugAddictionPerkCombo->addItems({ "No perk" });
-    } else {
-        _drugAddictionPerkCombo->addItems(_perkNames);
-    }
-    _drugAddictionPerkCombo->setToolTip("Perk applied when addicted");
-    connect(_drugAddictionPerkCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
-    addictionLayout->addRow("Effect:", _drugAddictionPerkCombo);
-
-    // Addiction onset
-    _drugAddictionDelayEdit = new QSpinBox();
-    _drugAddictionDelayEdit->setRange(0, INT_MAX);
-    _drugAddictionDelayEdit->setToolTip("Delay in game minutes before addiction effect is applied");
-    connect(_drugAddictionDelayEdit, QOverload<int>::of(&QSpinBox::valueChanged), this, &ProEditorDialog::onFieldChanged);
-    addictionLayout->addRow("Onset:", _drugAddictionDelayEdit);
-
-    _leftFieldsLayout->addWidget(addictionGroup);
-
-    // Add standard item flags
-    // Standard item flags are now handled by ProCommonFieldsWidget
-
-    // Add stretch to push content to top (only left panel used for drugs)
-    _leftFieldsLayout->addStretch();
-}
-
-void ProEditorDialog::setupWeaponFields() {
-    // Show the right column for weapon tab (ensure both columns are visible)
-    if (_rightFieldsLayout) {
-        QWidget* rightColumn2 = _rightFieldsLayout->parentWidget();
-        if (rightColumn2) {
-            rightColumn2->show();
-        }
-    }
-
-    // === COLUMN 1: Damage & Attack ===
-
-    // Weapon Param (matching F2_ProtoManager naming)
-    QGroupBox* basicGroup = new QGroupBox("Weapon Param");
-    basicGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
-    QFormLayout* basicLayout = new QFormLayout(basicGroup);
-    basicLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    basicLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    _weaponAnimationCombo = createComboBox(game::enums::weaponAnimations(), "Weapon animation type");
-    connectComboBox(_weaponAnimationCombo);
-    basicLayout->addRow("Animation:", _weaponAnimationCombo);
-
-    _weaponDamageMinEdit = createSpinBox(0, 999, "Minimum damage");
-    connectSpinBox(_weaponDamageMinEdit);
-    basicLayout->addRow("Min Damage:", _weaponDamageMinEdit);
-
-    _weaponDamageMaxEdit = createSpinBox(0, 999, "Maximum damage");
-    connectSpinBox(_weaponDamageMaxEdit);
-    basicLayout->addRow("Max Damage:", _weaponDamageMaxEdit);
-
-    _weaponDamageTypeCombo = createComboBox(game::enums::damageTypes7(), "Damage type");
-    connectComboBox(_weaponDamageTypeCombo);
-    basicLayout->addRow("Damage Type:", _weaponDamageTypeCombo);
-
-    _leftFieldsLayout->addWidget(basicGroup);
-
-    // AP Cost Attack (separate from Range, matching F2)
-    QGroupBox* apGroup = new QGroupBox("AP Cost Attack");
-    apGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
-    QFormLayout* apLayout = new QFormLayout(apGroup);
-    apLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    apLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    _weaponAPPrimaryEdit = createSpinBox(0, 99, "Action points for primary attack");
-    connectSpinBox(_weaponAPPrimaryEdit);
-    apLayout->addRow("AP Primary:", _weaponAPPrimaryEdit);
-
-    _weaponAPSecondaryEdit = createSpinBox(0, 99, "Action points for secondary attack");
-    connectSpinBox(_weaponAPSecondaryEdit);
-    apLayout->addRow("AP Secondary:", _weaponAPSecondaryEdit);
-
-    _leftFieldsLayout->addWidget(apGroup);
-
-    // Range Attack (separate groupbox, matching F2)
-    QGroupBox* rangeGroup = new QGroupBox("Range Attack");
-    rangeGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
-    QFormLayout* rangeLayout = new QFormLayout(rangeGroup);
-    rangeLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    rangeLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    _weaponRangePrimaryEdit = createSpinBox(0, 999, "Primary attack range");
-    connectSpinBox(_weaponRangePrimaryEdit);
-    rangeLayout->addRow("Range Primary:", _weaponRangePrimaryEdit);
-
-    _weaponRangeSecondaryEdit = createSpinBox(0, 999, "Secondary attack range");
-    connectSpinBox(_weaponRangeSecondaryEdit);
-    rangeLayout->addRow("Range Secondary:", _weaponRangeSecondaryEdit);
-
-    _leftFieldsLayout->addWidget(rangeGroup);
-
-    // === COLUMN 2: Advanced Properties ===
-
-    // Requirements & Special
-    QGroupBox* reqGroup = new QGroupBox("Requirements & Special");
-    reqGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
-    QFormLayout* reqLayout = new QFormLayout(reqGroup);
-    reqLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    reqLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    _weaponMinStrengthEdit = createSpinBox(0, 10, "Minimum strength required");
-    connectSpinBox(_weaponMinStrengthEdit);
-    reqLayout->addRow("Min Strength:", _weaponMinStrengthEdit);
-
-    _weaponProjectilePIDEdit = createSpinBox(-1, 0x0FFFFFFF, "Projectile PID (or -1 for none)");
-    connectSpinBox(_weaponProjectilePIDEdit);
-    reqLayout->addRow("Projectile PID:", _weaponProjectilePIDEdit);
-
-    _weaponCriticalFailEdit = createSpinBox(0, 100, "Critical failure chance");
-    connectSpinBox(_weaponCriticalFailEdit);
-    reqLayout->addRow("Critical Fail:", _weaponCriticalFailEdit);
-
-    _weaponPerkCombo = createComboBox(game::enums::weaponPerks(), "Weapon perk");
-    connectComboBox(_weaponPerkCombo);
-    reqLayout->addRow("Perk:", _weaponPerkCombo);
-
-    if (_rightFieldsLayout) {
-        _rightFieldsLayout->addWidget(reqGroup);
-    }
-
-    // Ammo and Special
-    QGroupBox* ammoGroup = new QGroupBox("Ammo & Special");
-    QFormLayout* ammoLayout = new QFormLayout(ammoGroup);
-    ammoLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    ammoLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    _weaponAmmoTypeCombo = createComboBox(game::enums::ammoCaliberTypes(), "Ammo type");
-    connectComboBox(_weaponAmmoTypeCombo);
-    ammoLayout->addRow("Ammo Type:", _weaponAmmoTypeCombo);
-
-    _weaponAmmoPIDEdit = createSpinBox(-1, 0x0FFFFFFF, "Ammo PID (or -1 for none)");
-    connectSpinBox(_weaponAmmoPIDEdit);
-    ammoLayout->addRow("Ammo PID:", _weaponAmmoPIDEdit);
-
-    _weaponAmmoCapacityEdit = createSpinBox(0, 999, "Maximum ammo capacity");
-    connectSpinBox(_weaponAmmoCapacityEdit);
-    ammoLayout->addRow("Ammo Capacity:", _weaponAmmoCapacityEdit);
-
-    _weaponBurstRoundsEdit = createSpinBox(0, 99, "Rounds per burst");
-    connectSpinBox(_weaponBurstRoundsEdit);
-    ammoLayout->addRow("Burst Rounds:", _weaponBurstRoundsEdit);
-
-    _weaponSoundIdEdit = createSpinBox(0, 255, "Sound effect ID");
-    connectSpinBox(_weaponSoundIdEdit);
-    ammoLayout->addRow("Sound ID:", _weaponSoundIdEdit);
-
-    if (_rightFieldsLayout) {
-        _rightFieldsLayout->addWidget(ammoGroup);
-    }
-
-    // Weapon Flags
-    QGroupBox* flagsGroup = new QGroupBox("Weapon Flags");
-    QVBoxLayout* flagsLayout = new QVBoxLayout(flagsGroup);
-    flagsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    flagsLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    _weaponEnergyWeaponCheck = new QCheckBox("Energy Weapon");
-    _weaponEnergyWeaponCheck->setToolTip("Mark as energy weapon (sfall extension)");
-    connectCheckBox(_weaponEnergyWeaponCheck);
-    flagsLayout->addWidget(_weaponEnergyWeaponCheck);
-
-    if (_rightFieldsLayout) {
-        _rightFieldsLayout->addWidget(flagsGroup);
-    }
-
-    // Add stretch to push content to top
-    _leftFieldsLayout->addStretch();
-    if (_rightFieldsLayout) {
-        _rightFieldsLayout->addStretch();
-    }
-}
-
-void ProEditorDialog::setupAmmoFields() {
-    // TODO: Implement ammo fields - placeholder for now
-    QLabel* placeholder = new QLabel("Ammo fields - coming soon");
-    _leftFieldsLayout->addWidget(placeholder);
-
-    // Add standard item flags
-    // Standard item flags are now handled by ProCommonFieldsWidget
-
-    _leftFieldsLayout->addStretch();
-    if (_rightFieldsLayout) {
-        _rightFieldsLayout->addStretch();
-    }
-}
-
-void ProEditorDialog::setupMiscItemFields() {
-    // TODO: Implement misc item fields - placeholder for now
-    QLabel* placeholder = new QLabel("Misc item fields - coming soon");
-    _leftFieldsLayout->addWidget(placeholder);
-
-    // Add standard item flags
-    // Standard item flags are now handled by ProCommonFieldsWidget
-
-    _leftFieldsLayout->addStretch();
-    if (_rightFieldsLayout) {
-        _rightFieldsLayout->addStretch();
-    }
-}
-
-void ProEditorDialog::setupKeyFields() {
-    // === COLUMN 1: Key Properties ===
-
-    QGroupBox* keyGroup = new QGroupBox("Key Properties");
-    QFormLayout* keyLayout = new QFormLayout(keyGroup);
-    keyLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    keyLayout->setSpacing(ui::constants::SPACING_TIGHT);
-
-    _keyIdEdit = createSpinBox(0, 999999, "Unique key identifier");
-    connectSpinBox(_keyIdEdit);
-    keyLayout->addRow("Key ID:", _keyIdEdit);
-
-    _leftFieldsLayout->addWidget(keyGroup);
-
-    // Add standard item flags
-    // Standard item flags are now handled by ProCommonFieldsWidget
-
-    // Add stretch to push content to top
-    _leftFieldsLayout->addStretch();
-    if (_rightFieldsLayout) {
-        _rightFieldsLayout->addStretch();
     }
 }
 
@@ -4156,7 +2760,6 @@ void ProEditorDialog::onCritterFlagChanged() {
         return;
     }
 
-    // Calculate combined critter flags value from all checkboxes
     uint32_t flags = 0;
 
     if (_critterBarterCheck && _critterBarterCheck->isChecked())
@@ -4182,10 +2785,8 @@ void ProEditorDialog::onCritterFlagChanged() {
     if (_critterNoKnockbackCheck && _critterNoKnockbackCheck->isChecked())
         flags = Pro::setFlag(flags, Pro::CritterFlags::CRITTER_NO_KNOCKBACK);
 
-    // Update the PRO data
     _pro->critterData.flags = flags;
 
-    // Also update the numeric display if it exists
     if (_critterFlagsEdit) {
         _critterFlagsEdit->setValue(static_cast<int>(flags));
     }
@@ -4197,10 +2798,8 @@ void ProEditorDialog::updateFilenameLabel() {
     }
 
     try {
-        // Get the PRO filename using ProHelper
         std::string proPath = ProHelper::basePath(_pro->header.PID);
 
-        // Extract just the filename from the path
         size_t lastSlash = proPath.find_last_of('/');
         std::string filename;
         if (lastSlash != std::string::npos) {

@@ -49,11 +49,9 @@ void ObjectPreviewWidget::setupUI() {
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // Preview image label
     _previewLabel = new QLabel();
     _previewLabel->setAlignment(Qt::AlignCenter);
 
-    // Use custom size if provided
     if (!_customPreviewSize.isEmpty()) {
         _previewLabel->setMinimumSize(_customPreviewSize);
         _previewLabel->setMaximumSize(_customPreviewSize);
@@ -68,14 +66,12 @@ void ObjectPreviewWidget::setupUI() {
     _previewLabel->setText("No FRM loaded");
     mainLayout->addWidget(_previewLabel);
 
-    // Title label below image (like armor preview)
     _titleLabel = new QLabel();
     _titleLabel->setAlignment(Qt::AlignCenter);
     _titleLabel->setStyleSheet(ui::theme::styles::compactLabel());
-    _titleLabel->hide(); // Initially hidden until title is set
+    _titleLabel->hide();
     mainLayout->addWidget(_titleLabel);
 
-    // FID field (optional)
     if (_options & ShowFidField) {
         _fidWidget = new QWidget();
         QHBoxLayout* fidLayout = new QHBoxLayout(_fidWidget);
@@ -84,35 +80,26 @@ void ObjectPreviewWidget::setupUI() {
         QLabel* fidTextLabel = new QLabel("FID:");
         fidTextLabel->setMinimumWidth(30);
 
-        // Create combined button that looks like a label with icon
         _fidButton = new QPushButton("No FRM");
         _fidButton->setToolTip("Click to browse FRM files");
 
-        // Get standard folder icon from system style
         QStyle* style = QApplication::style();
         QIcon folderIcon = style->standardIcon(QStyle::SP_DirOpenIcon);
         _fidButton->setIcon(folderIcon);
 
-        // Style the button to look like a clickable label
         _fidButton->setStyleSheet(ui::theme::styles::fidButton());
-
-        // Make the icon appear on the right side
         _fidButton->setLayoutDirection(Qt::RightToLeft);
-
-        // Make button size to its contents (text + icon + padding)
         _fidButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
 
         connect(_fidButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onFidSelectorClicked);
 
         fidLayout->addWidget(fidTextLabel);
-        fidLayout->addWidget(_fidButton); // Don't expand, size to content
-        fidLayout->addStretch();          // Add stretch to push everything to the left
+        fidLayout->addWidget(_fidButton);
+        fidLayout->addStretch();
         mainLayout->addWidget(_fidWidget);
     }
 
-    // Animation control overlays (optional)
     if (_options & ShowAnimationControls) {
-        // Create play/stop button overlay positioned on the preview label
         _playPauseButton = new QPushButton(this);
 
         _playPauseButton->setIcon(createIcon(":/icons/actions/play.svg"));
@@ -121,9 +108,8 @@ void ObjectPreviewWidget::setupUI() {
         _playPauseButton->setFixedSize(ui::constants::sizes::ICON_BUTTON, ui::constants::sizes::ICON_BUTTON);
         _playPauseButton->setStyleSheet(ui::theme::styles::overlayButton());
         _playPauseButton->setIconSize(QSize(ui::constants::sizes::ICON_SIZE_SMALL, ui::constants::sizes::ICON_SIZE_SMALL));
-        _playPauseButton->hide(); // Initially hidden until preview is loaded
+        _playPauseButton->hide();
 
-        // Create rotate button overlay positioned on the preview label
         _rotateButton = new QPushButton(this);
 
         _rotateButton->setIcon(createIcon(":/icons/actions/rotate.svg"));
@@ -132,13 +118,11 @@ void ObjectPreviewWidget::setupUI() {
         _rotateButton->setFixedSize(ui::constants::sizes::ICON_BUTTON, ui::constants::sizes::ICON_BUTTON);
         _rotateButton->setStyleSheet(ui::theme::styles::overlayButton());
         _rotateButton->setIconSize(QSize(ui::constants::sizes::ICON_SIZE_SMALL, ui::constants::sizes::ICON_SIZE_SMALL));
-        _rotateButton->hide(); // Initially hidden until preview is loaded
+        _rotateButton->hide();
 
-        // Connect animation control signals
         connect(_playPauseButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onPlayPauseClicked);
         connect(_rotateButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onRotateClicked);
 
-        // Connect animation controller signals
         connect(_animationController, &AnimationController::frameChanged, this, &ObjectPreviewWidget::onFrameChanged);
         connect(_animationController, &AnimationController::playStateChanged, this, [this](bool playing) {
             if (_playPauseButton) {
@@ -147,16 +131,14 @@ void ObjectPreviewWidget::setupUI() {
         });
     }
 
-    // Always create edit button (independent of animation controls)
     _editButton = new QPushButton(this);
     _editButton->setIcon(createIcon(":/icons/actions/edit.svg"));
     _editButton->setToolTip("Change FRM file");
     _editButton->setFixedSize(ui::constants::sizes::ICON_BUTTON, ui::constants::sizes::ICON_BUTTON);
     _editButton->setStyleSheet(ui::theme::styles::overlayButton());
     _editButton->setIconSize(QSize(ui::constants::sizes::ICON_SIZE_SMALL, ui::constants::sizes::ICON_SIZE_SMALL));
-    _editButton->setVisible(true); // Always visible
+    _editButton->setVisible(true);
 
-    // Connect edit button signal
     if (_editButton) {
         connect(_editButton, &QPushButton::clicked, this, &ObjectPreviewWidget::onFidSelectorClicked);
     }
@@ -171,7 +153,6 @@ void ObjectPreviewWidget::setFrmPath(const QString& frmPath) {
 
     _currentFrmPath = frmPath;
 
-    // Update FID button if it exists
     if (_fidButton) {
         if (!frmPath.isEmpty()) {
             _fidButton->setText(frmPath.split('/').last());
@@ -180,7 +161,6 @@ void ObjectPreviewWidget::setFrmPath(const QString& frmPath) {
         }
     }
 
-    // Update tooltip with filename
     if (_previewLabel) {
         if (!frmPath.isEmpty()) {
             _previewLabel->setToolTip(QString("FRM: %1").arg(frmPath));
@@ -216,7 +196,6 @@ void ObjectPreviewWidget::clear() {
         _fidButton->setText("No FRM");
     }
 
-    // Hide overlay buttons when no FRM is loaded
     if (_rotateButton) {
         _rotateButton->hide();
     }
@@ -227,7 +206,6 @@ void ObjectPreviewWidget::clear() {
 
 void ObjectPreviewWidget::setScaleFactor(double scaleFactor) {
     _scaleFactor = scaleFactor;
-    // Update preview with new scale factor if FRM is loaded
     if (!_currentFrmPath.isEmpty()) {
         updatePreview();
     }
@@ -241,14 +219,11 @@ void ObjectPreviewWidget::updatePreview() {
         return;
     }
 
-    // Create thumbnail for preview
     QPixmap thumbnail = FrmThumbnailGenerator::fromFrmPath(_currentFrmPath.toStdString(), QSize(250, 250));
 
     if (!thumbnail.isNull()) {
-        // Scale proportionally to fit within widget bounds while preserving aspect ratio
         QSize labelSize = _previewLabel->size();
         if (labelSize.isEmpty() || labelSize.width() <= 0 || labelSize.height() <= 0) {
-            // Fallback to custom size or default constraints
             if (!_customPreviewSize.isEmpty()) {
                 labelSize = _customPreviewSize;
             } else {
@@ -256,23 +231,18 @@ void ObjectPreviewWidget::updatePreview() {
             }
         }
 
-        // Scale image to configured size, but constrain to widget bounds if too large
         QSize targetSize = QSize(thumbnail.width() * _scaleFactor, thumbnail.height() * _scaleFactor);
 
-        // If 2x size exceeds widget bounds, scale down to fit
         if (targetSize.width() > labelSize.width() || targetSize.height() > labelSize.height()) {
             QPixmap scaled = thumbnail.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
             _previewLabel->setPixmap(scaled);
         } else {
-            // Use 2x scaled size
             QPixmap scaled = thumbnail.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
             _previewLabel->setPixmap(scaled);
         }
 
-        // Load animation frames if animation controls are present
         if (_options & ShowAnimationControls) {
             loadAnimationFrames();
-            // Show overlay buttons based on available content
             if (_rotateButton) {
                 _rotateButton->setVisible(_totalDirections > 1);
             }
@@ -281,11 +251,9 @@ void ObjectPreviewWidget::updatePreview() {
             }
         }
 
-        // Always position overlay buttons (edit button is always visible)
         positionOverlayButtons();
     } else {
         _previewLabel->setText("Failed to load FRM");
-        // Hide rotate button when FRM loading fails
         if (_rotateButton) {
             _rotateButton->hide();
         }
@@ -310,10 +278,8 @@ void ObjectPreviewWidget::onFrameChanged(int frame) {
         return;
     }
 
-    // Scale proportionally to fit within widget bounds while preserving aspect ratio
     QSize labelSize = _previewLabel->size();
     if (labelSize.isEmpty() || labelSize.width() <= 0 || labelSize.height() <= 0) {
-        // Fallback to custom size or default constraints
         if (!_customPreviewSize.isEmpty()) {
             labelSize = _customPreviewSize;
         } else {
@@ -321,29 +287,23 @@ void ObjectPreviewWidget::onFrameChanged(int frame) {
         }
     }
 
-    // Scale image to configured size, but constrain to widget bounds if too large
     QSize targetSize = QSize(pixmap.width() * _scaleFactor, pixmap.height() * _scaleFactor);
 
-    // If 2x size exceeds widget bounds, scale down to fit
     if (targetSize.width() > labelSize.width() || targetSize.height() > labelSize.height()) {
         QPixmap scaled = pixmap.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
         _previewLabel->setPixmap(scaled);
     } else {
-        // Use 2x scaled size
         QPixmap scaled = pixmap.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
         _previewLabel->setPixmap(scaled);
     }
 }
 
 void ObjectPreviewWidget::onRotateClicked() {
-    // Cycle through directions: 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 0
     _currentDirection = (_currentDirection + 1) % DIRECTIONS_COUNT;
 
-    // Stop animation and reload frames for new direction
     _animationController->stop();
     loadAnimationFrames();
 
-    // Show first frame
     if (_animationController->hasFrames()) {
         onFrameChanged(0);
     }
@@ -361,7 +321,6 @@ void ObjectPreviewWidget::loadAnimationFrames() {
     }
 
     try {
-        // Load the FRM from resource manager
         auto& resourceManager = ResourceManager::getInstance();
         auto frm = resourceManager.loadResource<Frm>(_currentFrmPath.toStdString());
         if (!frm) {
@@ -369,14 +328,12 @@ void ObjectPreviewWidget::loadAnimationFrames() {
             return;
         }
 
-        // Get palette
         auto pal = resourceManager.loadResource<Pal>("color.pal");
         if (!pal) {
             spdlog::error("Failed to load palette for animation");
             return;
         }
 
-        // Check if direction exists
         if (_currentDirection >= static_cast<int>(frm->directions().size())) {
             return;
         }
@@ -384,11 +341,9 @@ void ObjectPreviewWidget::loadAnimationFrames() {
         const auto& direction = frm->directions()[_currentDirection];
         _totalDirections = static_cast<int>(frm->directions().size());
 
-        // Cache all frames for this direction
         std::vector<QPixmap> frameCache;
         frameCache.reserve(direction.frames().size());
         for (const auto& frame : direction.frames()) {
-            // Get frame dimensions
             uint16_t frameWidth = frame.width();
             uint16_t frameHeight = frame.height();
 
@@ -397,7 +352,6 @@ void ObjectPreviewWidget::loadAnimationFrames() {
                 continue;
             }
 
-            // Use Frame's built-in RGBA conversion (like ObjectPalettePanel)
             uint8_t* rgbaData = const_cast<Frame&>(frame).rgba(const_cast<Pal*>(pal));
             if (!rgbaData) {
                 spdlog::debug("Failed to get RGBA data from frame, skipping");
@@ -405,12 +359,11 @@ void ObjectPreviewWidget::loadAnimationFrames() {
             }
 
             QImage frameImage(rgbaData, frameWidth, frameHeight, QImage::Format_RGBA8888);
-            frameImage = frameImage.copy(); // Make a copy since rgbaData might be temporary
+            frameImage = frameImage.copy();
 
             frameCache.push_back(QPixmap::fromImage(frameImage));
         }
 
-        // Load frames into controller
         _animationController->loadFrames(std::move(frameCache));
     } catch (const std::exception& e) {
         spdlog::error("Error loading animation frames: {}", e.what());
@@ -483,14 +436,12 @@ void ObjectPreviewWidget::setPreviewSize(const QSize& size) {
 }
 
 void ObjectPreviewWidget::setShowAnimationControls(bool show) {
-    // Update the options flag
     if (show) {
         _options |= ShowAnimationControls;
     } else {
         _options &= ~ShowAnimationControls;
     }
 
-    // Show/hide overlay buttons
     if (_rotateButton) {
         _rotateButton->setVisible(show && _totalDirections > 1);
     }

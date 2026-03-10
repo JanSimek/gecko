@@ -9,9 +9,6 @@ namespace geck {
 
 /**
  * @brief Utility functions for tile position calculations and common operations
- *
- * This file contains refactored common tile operations to reduce code duplication
- * and improve maintainability.
  */
 
 /**
@@ -26,7 +23,6 @@ struct TileCoordinates {
         : x(initX)
         , y(initY) { }
 
-    // Support for structured bindings
     template <std::size_t I>
     [[nodiscard]] constexpr auto get() const noexcept {
         if constexpr (I == 0)
@@ -48,7 +44,6 @@ struct ScreenPosition {
         : x(posX)
         , y(posY) { }
 
-    // Support for structured bindings
     template <std::size_t I>
     [[nodiscard]] constexpr auto get() const noexcept {
         if constexpr (I == 0)

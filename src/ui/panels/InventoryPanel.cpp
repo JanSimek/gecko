@@ -145,35 +145,33 @@ void InventoryPanel::setupUI() {
     _buttonLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _addButton = new QPushButton("Add Item...");
-    _addButton->setEnabled(false); // Disabled until inventory object is selected
+    _addButton->setEnabled(false);
     _addButton->setToolTip("Add new item to inventory");
     connect(_addButton, &QPushButton::clicked, this, &InventoryPanel::onAddItemClicked);
     _buttonLayout->addWidget(_addButton);
 
     _removeButton = new QPushButton("Remove Item");
-    _removeButton->setEnabled(false); // Disabled until item is selected
+    _removeButton->setEnabled(false);
     _removeButton->setToolTip("Remove selected item from inventory");
     connect(_removeButton, &QPushButton::clicked, this, &InventoryPanel::onRemoveItemClicked);
     _buttonLayout->addWidget(_removeButton);
 
     _editButton = new QPushButton("Edit Properties...");
-    _editButton->setEnabled(false); // Future enhancement
+    _editButton->setEnabled(false);
     _editButton->setToolTip("Edit selected item properties (Coming Soon)");
     connect(_editButton, &QPushButton::clicked, this, &InventoryPanel::onEditItemClicked);
     _buttonLayout->addWidget(_editButton);
 
-    _buttonLayout->addStretch(); // Push buttons to top
+    _buttonLayout->addStretch();
 
     _rightLayout->addWidget(_buttonPanel);
-    _rightLayout->addStretch(); // Keep preview and buttons at top
+    _rightLayout->addStretch();
 
-    // Add panels to splitter
     _splitter->addWidget(_leftPanel);
     _splitter->addWidget(_rightPanel);
-    _splitter->setSizes({ 300, 200 }); // 60/40 split
+    _splitter->setSizes({ 300, 200 });
     _mainLayout->addWidget(_splitter);
 
-    // Initial state - no object selected
     clearInventory();
 }
 
@@ -338,9 +336,8 @@ void InventoryPanel::onItemSelectionChanged() {
     updateItemPreview(item);
     highlightSelectedItem(item);
 
-    // Enable context buttons
-    _removeButton->setEnabled(true); // Enable remove for selected item
-    _editButton->setEnabled(false);  // Still disabled for future enhancement
+    _removeButton->setEnabled(true);
+    _editButton->setEnabled(false);
 }
 
 void InventoryPanel::highlightSelectedItem(QTreeWidgetItem* item) {
@@ -650,7 +647,6 @@ void InventoryPanel::onRemoveItemClicked() {
 }
 
 void InventoryPanel::onEditItemClicked() {
-    // Future enhancement: Open PRO editor for selected item
     QMessageBox::information(this, "Not Implemented",
         "Edit item functionality will be implemented in a future version.");
 }
@@ -658,7 +654,7 @@ void InventoryPanel::onEditItemClicked() {
 void InventoryPanel::onItemDoubleClicked(QTreeWidgetItem* item, int column) {
     Q_UNUSED(column)
     if (item) {
-        onEditItemClicked(); // Double-click to edit (when implemented)
+        onEditItemClicked();
     }
 }
 

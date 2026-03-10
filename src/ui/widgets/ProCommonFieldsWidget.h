@@ -32,8 +32,6 @@ namespace geck {
  * - Flags - 4 bytes (+ extended flags)
  * - Additional common item fields (when applicable)
  *
- * Follows DRY principle by consolidating common PRO editing functionality
- * and KISS principle with straightforward, focused interface.
  */
 class ProCommonFieldsWidget : public QWidget {
     Q_OBJECT
@@ -100,7 +98,6 @@ private:
     uint32_t saveObjectFlags() const;
     uint32_t saveExtendedFlags() const;
 
-    // Helper methods following DRY principle
     QSpinBox* createSpinBox(int min, int max, const QString& tooltip = QString());
     QSpinBox* createHexSpinBox(int max, const QString& tooltip = QString());
     QComboBox* createMaterialComboBox(const QString& tooltip = QString());
@@ -110,7 +107,6 @@ private:
 
     // UI Components
     QVBoxLayout* _mainLayout;
-    // QGroupBox* _basicFieldsGroup;  // Commented out - not used (PID moved to main dialog)
     QGroupBox* _lightingGroup;
     QGroupBox* _objectFlagsGroup;
     QGroupBox* _extendedFlagsGroup;

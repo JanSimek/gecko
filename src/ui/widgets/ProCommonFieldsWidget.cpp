@@ -13,7 +13,7 @@ namespace geck {
 
 ProCommonFieldsWidget::ProCommonFieldsWidget(QWidget* parent)
     : QWidget(parent)
-    , _mainLayout(nullptr) // , _basicFieldsGroup(nullptr)  // Commented out - not used
+    , _mainLayout(nullptr)
     , _lightingGroup(nullptr)
     , _objectFlagsGroup(nullptr)
     , _extendedFlagsGroup(nullptr)
@@ -26,7 +26,6 @@ void ProCommonFieldsWidget::setupUI() {
     _mainLayout->setSpacing(ui::constants::SPACING_NORMAL);
     _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
 
-    // Create two-column layout for better organization (following F2_ProtoManager pattern)
     QHBoxLayout* columnsLayout = new QHBoxLayout();
     columnsLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
@@ -216,16 +215,11 @@ void ProCommonFieldsWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
 
     _pro = pro;
 
-    // Basic fields (PID now handled by main dialog)
-
-    // Load lighting
     _lightRadiusEdit->setValue(pro->header.light_distance);
     _lightIntensityEdit->setValue(pro->header.light_intensity);
 
-    // Load object flags
     loadObjectFlags(pro->header.flags);
 
-    // Load item-specific fields if this is an item
     if (pro->type() == Pro::OBJECT_TYPE::ITEM) {
         _sidEdit->setValue(pro->commonItemData.SID);
         _materialCombo->setCurrentIndex(pro->commonItemData.materialId);
@@ -233,8 +227,6 @@ void ProCommonFieldsWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
         _weightEdit->setValue(pro->commonItemData.weight);
         _basePriceEdit->setValue(pro->commonItemData.basePrice);
         _soundIdEdit->setValue(pro->commonItemData.soundId);
-
-        // Load extended flags
         loadExtendedFlags(pro->commonItemData.flagsExt);
     }
 }
@@ -245,16 +237,11 @@ void ProCommonFieldsWidget::saveToPro(std::shared_ptr<Pro>& pro) {
         return;
     }
 
-    // Basic fields (PID now handled by main dialog)
-
-    // Save lighting
     pro->header.light_distance = _lightRadiusEdit->value();
     pro->header.light_intensity = _lightIntensityEdit->value();
 
-    // Save object flags
     pro->header.flags = saveObjectFlags();
 
-    // Save item-specific fields if this is an item
     if (pro->type() == Pro::OBJECT_TYPE::ITEM) {
         pro->commonItemData.SID = _sidEdit->value();
         pro->commonItemData.materialId = _materialCombo->currentIndex();
@@ -262,8 +249,6 @@ void ProCommonFieldsWidget::saveToPro(std::shared_ptr<Pro>& pro) {
         pro->commonItemData.weight = _weightEdit->value();
         pro->commonItemData.basePrice = _basePriceEdit->value();
         pro->commonItemData.soundId = static_cast<uint8_t>(_soundIdEdit->value());
-
-        // Save extended flags
         pro->commonItemData.flagsExt = saveExtendedFlags();
     }
 }
@@ -273,13 +258,11 @@ void ProCommonFieldsWidget::setItemFieldsVisible(bool isItem) {
 }
 
 int32_t ProCommonFieldsWidget::getPID() const {
-    // PID is now handled by the main dialog, not this widget
-    return 0; // Return default value
+    return 0;
 }
 
 void ProCommonFieldsWidget::setPID([[maybe_unused]] int32_t pid) {
-    // PID is now handled by the main dialog, not this widget
-    // This method is kept for interface compatibility but does nothing
+    Q_UNUSED(pid);
 }
 
 void ProCommonFieldsWidget::loadObjectFlags(uint32_t flags) {
@@ -343,7 +326,6 @@ uint32_t ProCommonFieldsWidget::saveExtendedFlags() const {
     return flags;
 }
 
-// Helper methods implementing DRY principle
 QSpinBox* ProCommonFieldsWidget::createSpinBox(int min, int max, const QString& tooltip) {
     auto spinBox = new QSpinBox(this);
     spinBox->setRange(min, max);

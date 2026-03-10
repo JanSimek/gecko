@@ -223,22 +223,18 @@ void SelectionPanel::setupUI() {
     _hoverSpriteLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     _hoverSpriteLabel->setStyleSheet(ui::theme::styles::previewArea());
 
-    // Connect the edit button signal
     connect(_hoverSpriteLabel->editButton(), &QPushButton::clicked, this, &SelectionPanel::onChangeFrmClicked);
 
     leftSideLayout->addWidget(_hoverSpriteLabel);
 
-    // Edit PRO button below the sprite
     _editProButton = new QPushButton("Edit PRO...");
     _editProButton->setEnabled(false);
     connect(_editProButton, &QPushButton::clicked, this, &SelectionPanel::onEditProClicked);
     leftSideLayout->addWidget(_editProButton);
-    leftSideLayout->addStretch(); // Push everything to top
+    leftSideLayout->addStretch();
 
-    // Right side: object properties form
     QFormLayout* objectFormLayout = new QFormLayout();
 
-    // Keep the old _objectSpriteLabel as null since we're using _hoverSpriteLabel now
     _objectSpriteLabel = nullptr;
 
     // Object properties
@@ -270,20 +266,17 @@ void SelectionPanel::setupUI() {
     _objectProtoPidSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
     objectFormLayout->addRow("Proto PID:", _objectProtoPidSpin);
 
-    // FRM PID field
     _objectFrmPidSpin = new QSpinBox();
     _objectFrmPidSpin->setRange(0, INT_MAX);
     _objectFrmPidSpin->setReadOnly(true);
     _objectFrmPidSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
     objectFormLayout->addRow("FRM PID:", _objectFrmPidSpin);
 
-    // FRM Path display
     _objectFrmPathEdit = new QLineEdit();
     _objectFrmPathEdit->setReadOnly(true);
     _objectFrmPathEdit->setPlaceholderText("FRM path");
     objectFormLayout->addRow("FRM Path:", _objectFrmPathEdit);
 
-    // Change FRM button is now the hover edit icon on the sprite
     _changeFrmButton = nullptr;
 
     // Edit Exit Grid button
@@ -1088,6 +1081,9 @@ void SelectionPanel::setupInventorySection() {
 
     connect(_addInventoryButton, &QPushButton::clicked, this, &SelectionPanel::onAddInventoryClicked);
     connect(_removeInventoryButton, &QPushButton::clicked, this, &SelectionPanel::onRemoveInventoryClicked);
+    connect(_inventoryTree, &QTreeWidget::itemSelectionChanged, this, [this]() {
+        _removeInventoryButton->setEnabled(_inventoryTree->currentItem() != nullptr);
+    });
 
     buttonLayout->addWidget(_addInventoryButton);
     buttonLayout->addWidget(_removeInventoryButton);
@@ -1205,10 +1201,7 @@ void SelectionPanel::populateInventoryTree() {
         _inventoryTree->updateGeometry();
     }
 
-    // Enable/disable remove button based on selection
-    connect(_inventoryTree, &QTreeWidget::itemSelectionChanged, [this]() {
-        _removeInventoryButton->setEnabled(_inventoryTree->currentItem() != nullptr);
-    });
+    _removeInventoryButton->setEnabled(_inventoryTree->currentItem() != nullptr);
 
     // Force tree widget to refresh display to ensure icons appear properly
     _inventoryTree->update();

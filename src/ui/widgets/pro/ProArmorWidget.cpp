@@ -1,10 +1,12 @@
 #include "ProArmorWidget.h"
+#include <algorithm>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QFont>
 #include "util/ResourceManager.h"
+#include "../../dialogs/FrmSelectorDialog.h"
 #include "../../theme/ThemeManager.h"
 #include "../../GameEnums.h"
 #include "../../UIConstants.h"
@@ -21,7 +23,6 @@ ProArmorWidget::ProArmorWidget(QWidget* parent)
     , _armorMaleFID(0)
     , _armorFemaleFID(0) {
 
-    // Initialize arrays
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
         _damageResistEdits[i] = nullptr;
         _damageThresholdEdits[i] = nullptr;
@@ -31,7 +32,6 @@ ProArmorWidget::ProArmorWidget(QWidget* parent)
 }
 
 void ProArmorWidget::setupUI() {
-    // Create two-column layout
     QHBoxLayout* columnsLayout = new QHBoxLayout();
     columnsLayout->setSpacing(ui::constants::SPACING_COLUMNS);
 
@@ -83,15 +83,12 @@ void ProArmorWidget::setupUI() {
     resistanceHeader->setAlignment(Qt::AlignCenter);
     defenceLayout->addWidget(resistanceHeader, 0, 3);
 
-    // Create the unified table for each damage type
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
-        // Damage type label
         QLabel* typeLabel = new QLabel(damageTypes[i]);
         typeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         typeLabel->setFixedSize(ui::constants::sizes::WIDTH_TYPE_LABEL, ui::constants::sizes::HEIGHT_TYPE_LABEL);
         defenceLayout->addWidget(typeLabel, i + 1, 0);
 
-        // Threshold input
         _damageThresholdEdits[i] = createSpinBox(0, 999,
             QString("Damage threshold against %1 damage").arg(damageTypes[i]));
         _damageThresholdEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_SMALL);
@@ -99,13 +96,11 @@ void ProArmorWidget::setupUI() {
             this, &ProArmorWidget::updateAIPriority);
         defenceLayout->addWidget(_damageThresholdEdits[i], i + 1, 1);
 
-        // Separator "/"
         QLabel* separator = new QLabel("/");
         separator->setAlignment(Qt::AlignCenter);
         separator->setEnabled(false);
         defenceLayout->addWidget(separator, i + 1, 2);
 
-        // Resistance input
         _damageResistEdits[i] = createSpinBox(0, 100,
             QString("Damage resistance against %1 damage").arg(damageTypes[i]));
         _damageResistEdits[i]->setFixedWidth(ui::constants::sizes::WIDTH_INPUT_SMALL);
@@ -113,7 +108,6 @@ void ProArmorWidget::setupUI() {
             this, &ProArmorWidget::updateAIPriority);
         defenceLayout->addWidget(_damageResistEdits[i], i + 1, 3);
 
-        // "%" label
         QLabel* percentLabel = new QLabel("%");
         percentLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         defenceLayout->addWidget(percentLabel, i + 1, 4);
@@ -141,12 +135,16 @@ void ProArmorWidget::setupUI() {
         ObjectPreviewWidget::ShowAnimationControls,
         QSize(120, 120));
     _armorMalePreviewWidget->setTitle("Male");
+    connect(_armorMalePreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
+        this, &ProArmorWidget::onArmorMaleFidChangeRequested);
 
     // Female preview
     _armorFemalePreviewWidget = new ObjectPreviewWidget(this,
         ObjectPreviewWidget::ShowAnimationControls,
         QSize(120, 120));
     _armorFemalePreviewWidget->setTitle("Female");
+    connect(_armorFemalePreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
+        this, &ProArmorWidget::onArmorFemaleFidChangeRequested);
 
     previewsLayout->addWidget(_armorMalePreviewWidget);
     previewsLayout->addWidget(_armorFemalePreviewWidget);
@@ -194,18 +192,14 @@ void ProArmorWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     _armorMaleFID = pro->armorData.armorMaleFID;
     _armorFemaleFID = pro->armorData.armorFemaleFID;
 
-    // Update UI
     if (_armorClassEdit) {
         _armorClassEdit->setValue(static_cast<int>(_armorData.armorClass));
     }
 
-    // Load damage thresholds and resistances
     loadIntArrayToWidgets(_damageThresholdEdits, _armorData.damageThreshold, DAMAGE_TYPES_COUNT);
     loadIntArrayToWidgets(_damageResistEdits, _armorData.damageResist, DAMAGE_TYPES_COUNT);
 
     setComboIndex(_armorPerkCombo, static_cast<int>(_armorData.perk));
-
-    // FID labels removed - previews show the armor directly
 
     updateAIPriority();
     updateArmorPreviews();
@@ -215,12 +209,10 @@ void ProArmorWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    // Update data from UI
     if (_armorClassEdit) {
         _armorData.armorClass = static_cast<uint32_t>(_armorClassEdit->value());
     }
 
-    // Save damage thresholds and resistances
     saveWidgetsToIntArray(_damageThresholdEdits, _armorData.damageThreshold, DAMAGE_TYPES_COUNT);
     saveWidgetsToIntArray(_damageResistEdits, _armorData.damageResist, DAMAGE_TYPES_COUNT);
 
@@ -229,7 +221,6 @@ void ProArmorWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     _armorData.armorMaleFID = _armorMaleFID;
     _armorData.armorFemaleFID = _armorFemaleFID;
 
-    // Save to PRO - copy fields individually
     pro->armorData.armorClass = _armorData.armorClass;
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
         pro->armorData.damageResist[i] = _armorData.damageResist[i];
@@ -255,7 +246,6 @@ void ProArmorWidget::updateAIPriority() {
 }
 
 void ProArmorWidget::updateArmorPreviews() {
-    // Update male armor preview
     if (_armorMalePreviewWidget) {
         if (_armorMaleFID <= 0) {
             _armorMalePreviewWidget->clear();
@@ -265,6 +255,7 @@ void ProArmorWidget::updateArmorPreviews() {
                 std::string maleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorMaleFID));
 
                 if (!maleFrmPath.empty()) {
+                    _armorMalePreviewWidget->setFid(_armorMaleFID);
                     _armorMalePreviewWidget->setFrmPath(QString::fromStdString(maleFrmPath));
                 } else {
                     _armorMalePreviewWidget->clear();
@@ -275,7 +266,6 @@ void ProArmorWidget::updateArmorPreviews() {
         }
     }
 
-    // Update female armor preview
     if (_armorFemalePreviewWidget) {
         if (_armorFemaleFID <= 0) {
             _armorFemalePreviewWidget->clear();
@@ -285,6 +275,7 @@ void ProArmorWidget::updateArmorPreviews() {
                 std::string femaleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorFemaleFID));
 
                 if (!femaleFrmPath.empty()) {
+                    _armorFemalePreviewWidget->setFid(_armorFemaleFID);
                     _armorFemalePreviewWidget->setFrmPath(QString::fromStdString(femaleFrmPath));
                 } else {
                     _armorFemalePreviewWidget->clear();
@@ -299,19 +290,16 @@ void ProArmorWidget::updateArmorPreviews() {
 int ProArmorWidget::calculateAIPriority() const {
     int priority = 0;
 
-    // Add armor class
     if (_armorClassEdit) {
         priority += _armorClassEdit->value();
     }
 
-    // Add all damage thresholds
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
         if (_damageThresholdEdits[i]) {
             priority += _damageThresholdEdits[i]->value();
         }
     }
 
-    // Add all damage resistances
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
         if (_damageResistEdits[i]) {
             priority += _damageResistEdits[i]->value();
@@ -319,6 +307,37 @@ int ProArmorWidget::calculateAIPriority() const {
     }
 
     return priority;
+}
+
+void ProArmorWidget::onArmorMaleFidChangeRequested() {
+    selectArmorFid(_armorMalePreviewWidget, _armorMaleFID);
+}
+
+void ProArmorWidget::onArmorFemaleFidChangeRequested() {
+    selectArmorFid(_armorFemalePreviewWidget, _armorFemaleFID);
+}
+
+void ProArmorWidget::selectArmorFid(ObjectPreviewWidget* previewWidget, int32_t& fid) {
+    if (!previewWidget) {
+        return;
+    }
+
+    FrmSelectorDialog dialog(this);
+    dialog.setObjectTypeFilter(1);
+    dialog.setInitialFrmPid(static_cast<uint32_t>(std::max(fid, 0)));
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    uint32_t selectedFrmPid = dialog.getSelectedFrmPid();
+    if (selectedFrmPid == 0) {
+        return;
+    }
+
+    fid = static_cast<int32_t>(selectedFrmPid);
+    updateArmorPreviews();
+    emit fieldChanged();
 }
 
 void ProArmorWidget::setArmorMaleFID(int32_t fid) {

@@ -123,6 +123,10 @@ set(GECK_SOURCES
     ui/widgets/pro/ProDrugWidget.cpp
     ui/widgets/pro/ProContainerKeyWidget.h
     ui/widgets/pro/ProContainerKeyWidget.cpp
+    ui/widgets/pro/ProAmmoWidget.h
+    ui/widgets/pro/ProAmmoWidget.cpp
+    ui/widgets/pro/ProMiscItemWidget.h
+    ui/widgets/pro/ProMiscItemWidget.cpp
 
     # Qt6 UI Constants
     ui/UIConstants.h

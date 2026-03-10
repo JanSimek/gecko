@@ -34,7 +34,6 @@ ProWeaponWidget::ProWeaponWidget(QWidget* parent)
 }
 
 void ProWeaponWidget::setupUI() {
-    // Create two-column layout
     QHBoxLayout* columnsLayout = new QHBoxLayout();
     columnsLayout->setSpacing(ui::constants::SPACING_COLUMNS);
 
@@ -52,7 +51,6 @@ void ProWeaponWidget::setupUI() {
 
     // === LEFT COLUMN: Damage & Attack ===
 
-    // Weapon Param (matching F2_ProtoManager naming)
     QGroupBox* basicGroup = new QGroupBox("Weapon Param");
     basicGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* basicLayout = createStandardFormLayout();
@@ -78,7 +76,6 @@ void ProWeaponWidget::setupUI() {
     basicGroup->setLayout(basicLayout);
     leftLayout->addWidget(basicGroup);
 
-    // AP Cost Attack (separate from Range, matching F2)
     QGroupBox* apGroup = new QGroupBox("AP Cost Attack");
     apGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* apLayout = createStandardFormLayout();
@@ -92,7 +89,6 @@ void ProWeaponWidget::setupUI() {
     apGroup->setLayout(apLayout);
     leftLayout->addWidget(apGroup);
 
-    // Range Attack (separate groupbox, matching F2)
     QGroupBox* rangeGroup = new QGroupBox("Range Attack");
     rangeGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* rangeLayout = createStandardFormLayout();
@@ -183,7 +179,6 @@ void ProWeaponWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    // Load weapon data - copy fields individually
     _weaponData.animationCode = pro->weaponData.animationCode;
     _weaponData.damageMin = pro->weaponData.damageMin;
     _weaponData.damageMax = pro->weaponData.damageMax;
@@ -202,7 +197,6 @@ void ProWeaponWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     _weaponData.ammoCapacity = pro->weaponData.ammoCapacity;
     _weaponData.soundId = pro->weaponData.soundId;
 
-    // Update UI controls
     setComboIndex(_weaponAnimationCombo, static_cast<int>(_weaponData.animationCode));
     if (_weaponDamageMinEdit)
         _weaponDamageMinEdit->setValue(static_cast<int>(_weaponData.damageMin));

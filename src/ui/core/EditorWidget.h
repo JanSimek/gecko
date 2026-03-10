@@ -75,7 +75,7 @@ public:
     void enterPlayerPositionSelectionMode();
     void centerViewOnPlayerPosition();
 
-    // Tile placement functionality (delegated to TilePlacementManager)
+    // Tile placement
     void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);
     void fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof);
     void replaceSelectedTiles(int newTileIndex);
@@ -83,7 +83,7 @@ public:
     // Object placement functionality
     void placeObjectAtPosition(sf::Vector2f worldPos);
 
-    // Drag preview functionality (for palette drag and drop) - now delegated to DragDropManager
+    // Palette drag preview
     void startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos);
     void updateDragPreview(sf::Vector2f worldPos);
     void finishDragPreview(sf::Vector2f worldPos);
@@ -93,12 +93,12 @@ public:
     void updateTileSprite(int hexIndex, bool isRoof);
     void updateTileSprite(int hexIndex, bool isRoof, int elevation);
 
-    // Tile placement mode control (delegated to TilePlacementManager)
+    // Tile placement mode control
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
     void setTilePlacementAreaFill(bool enabled);
     void setTilePlacementReplaceMode(bool enabled);
 
-    // Exit grid placement mode control (delegated to ExitGridPlacementManager)
+    // Exit grid placement mode control
     void setExitGridPlacementMode(bool enabled);
     void setMarkExitsMode(bool enabled);
 
@@ -129,7 +129,7 @@ public:
     int& getCurrentHoverHex() { return _currentHoverHex; }
     void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
 
-    // Methods for SelectionManager (moved from private)
+    // SelectionManager helpers
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
     bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
 
@@ -312,8 +312,8 @@ private:
     bool _showScrollBlk = UI::DEFAULT_SHOW_SCROLL_BLK;
     bool _showWallBlockers = UI::DEFAULT_SHOW_WALL_BLK;
     bool _showHexGrid = UI::DEFAULT_SHOW_HEX_GRID;
-    bool _showLightOverlays = false; // Toggle for showing light overlays
-    bool _showExitGrids = false;     // Toggle for showing exit grid markers
+    bool _showLightOverlays = false;
+    bool _showExitGrids = false;
 
     const sf::Texture& createBlankTexture();
     const sf::Texture& createHexTexture();
@@ -325,10 +325,10 @@ private:
     static constexpr float DOUBLE_CLICK_TIME = 0.5f;      // 500ms
     static constexpr float DOUBLE_CLICK_DISTANCE = 10.0f; // pixels
 
-    // Drag selection state (managed by InputHandler now)
+    // Drag selection state
     sf::RectangleShape _selectionRectangle;
-    std::vector<int> _previewTiles;                       // Tiles being previewed during drag
-    std::vector<std::shared_ptr<Object>> _previewObjects; // Objects being previewed during drag
+    std::vector<int> _previewTiles;
+    std::vector<std::shared_ptr<Object>> _previewObjects;
 
     // Drag preview state (for palette drag and drop)
     bool _isDraggingFromPalette = false;

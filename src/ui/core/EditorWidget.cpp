@@ -1646,9 +1646,8 @@ void EditorWidget::clearSelection() {
 void EditorWidget::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof) {
     _tilePlacementManager->setTilePlacementMode(enabled, tileIndex, isRoof);
 
-    // Update InputHandler with new tile placement state
     if (_inputHandler) {
-        _inputHandler->setTilePlacementMode(enabled, tileIndex, false); // replaceMode is always false for now
+        _inputHandler->setTilePlacementMode(enabled, tileIndex, false);
     }
 }
 

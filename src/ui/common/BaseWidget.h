@@ -8,8 +8,7 @@ namespace geck {
 /**
  * @brief Base class for common widget functionality
  *
- * Provides shared utilities and standard implementations to reduce
- * code duplication across UI widgets following DRY principle.
+ * Provides shared utilities and standard implementations used by UI widgets.
  */
 class BaseWidget : public QWidget {
     Q_OBJECT

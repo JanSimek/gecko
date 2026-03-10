@@ -14,7 +14,7 @@ namespace geck {
  * @brief Base class for panel widgets
  *
  * Provides common functionality for panels like ObjectPalettePanel
- * and TilePalettePanel, following DRY principle.
+ * and TilePalettePanel.
  */
 class BasePanel : public BaseWidget {
     Q_OBJECT

@@ -15,8 +15,6 @@ namespace geck {
  * - Pagination with automatic page calculation
  * - Viewport-aware column optimization
  * - Widget clear/refresh pattern
- *
- * Following DRY principle by consolidating duplicate code from both panels.
  */
 class GridPalettePanel : public BasePanel {
     Q_OBJECT
@@ -79,7 +77,6 @@ protected:
      */
     virtual void updateGrid() = 0;
 
-    // Accessors for derived classes
     QGridLayout* gridLayout() const { return _gridLayout; }
     QScrollArea* scrollArea() const { return _scrollArea; }
     QWidget* gridWidget() const { return _gridWidget; }
@@ -91,7 +88,6 @@ protected:
 
     void setColumnsPerRow(int columns) { _columnsPerRow = columns; }
 
-    // Resize event handling
     void resizeEvent(QResizeEvent* event) override;
 
 protected slots:
@@ -102,7 +98,6 @@ protected slots:
     void onGridPaginationPageChanged(int page);
 
 protected:
-    // Grid components (managed by this class)
     QScrollArea* _scrollArea = nullptr;
     QWidget* _gridWidget = nullptr;
     QGridLayout* _gridLayout = nullptr;

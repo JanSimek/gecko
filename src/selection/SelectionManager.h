@@ -119,7 +119,7 @@ private:
     // Cycling logic for ALL mode (current behavior)
     SelectionResult cycleThroughItemsAtPosition(sf::Vector2f worldPos, int elevation);
 
-    // Internal helpers (now work with state and notify via renderer)
+    // Selection helpers
     void addItemToSelection(const SelectedItem& item);
     void removeItemFromSelection(const SelectedItem& item);
     bool isItemSelected(const SelectedItem& item) const;

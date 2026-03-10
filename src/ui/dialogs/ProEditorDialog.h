@@ -37,6 +37,8 @@
 #include "../widgets/pro/ProWeaponWidget.h"
 #include "../widgets/pro/ProDrugWidget.h"
 #include "../widgets/pro/ProContainerKeyWidget.h"
+#include "../widgets/pro/ProAmmoWidget.h"
+#include "../widgets/pro/ProMiscItemWidget.h"
 
 namespace geck {
 
@@ -122,18 +124,7 @@ private:
     void setupUI();
     void setupTabs();
     void setupCompactPreview(QVBoxLayout* parentLayout);
-    void setupCompactAnimationControls(QVBoxLayout* parentLayout);
-    void setupCompactArmorAnimationControls(QVBoxLayout* parentLayout);
     void setupDualPreviewCompact(QVBoxLayout* parentLayout);
-    void setupArmorPreviewCompact(QVBoxLayout* parentLayout);
-    void setupItemFields();
-    void setupArmorFields();
-    void setupContainerFields();
-    void setupDrugFields();
-    void setupWeaponFields();
-    void setupAmmoFields();
-    void setupMiscItemFields();
-    void setupKeyFields();
     void setupCritterFields();
     void setupSceneryFields();
     void setupMiscFields();
@@ -154,23 +145,9 @@ private:
     void setupWallTab();
     void setupTileTab();
     void setupMiscTab();
-    void setupObjectFlagsGroup(QFormLayout* layout);
-    void setupExtendedFlagsGroup(QFormLayout* layout);
-    void setupWeaponExtendedFlags(QVBoxLayout* layout);
-    void setupContainerExtendedFlags(QVBoxLayout* layout);
-    void setupItemExtendedFlags(QVBoxLayout* layout);
-    void setupOtherExtendedFlags(QVBoxLayout* layout);
-    void addStandardItemFlags(QVBoxLayout* parentLayout);
     void clearFieldsLayouts();
 
     void loadProData();
-    void loadArmorData();
-    void loadContainerData();
-    void loadDrugData();
-    void loadWeaponData();
-    void loadAmmoData();
-    void loadMiscData();
-    void loadKeyData();
     void loadCritterData();
     void loadSceneryData();
     void loadWallData();
@@ -178,13 +155,6 @@ private:
     void loadObjectFlags(uint32_t flags);
 
     void saveProData();
-    void saveArmorData();
-    void saveContainerData();
-    void saveDrugData();
-    void saveWeaponData();
-    void saveAmmoData();
-    void saveMiscData();
-    void saveKeyData();
     void saveCritterData();
     void saveSceneryData();
     void saveWallData();
@@ -193,20 +163,16 @@ private:
     void updatePreview();
     void updateInventoryPreview();
     void updateGroundPreview();
-    void updateArmorPreview();
     int32_t getPreviewFid();
     int32_t getInventoryFid();
     int32_t getGroundFid();
     void updateFilenameLabel();
-    void openFrmSelector(QSpinBox* targetField, uint32_t objectType);
     void openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidStorage, uint32_t objectType);
     void loadAnimationFrames();
     void updateWindowTitle();
 
-    // MSG file loading for name and description
     void loadNameAndDescription();
 
-    // Helper methods to reduce code duplication
     QSpinBox* createSpinBox(int min, int max, const QString& tooltip = QString());
     QSpinBox* createHexSpinBox(int max, const QString& tooltip = QString());
     QComboBox* createComboBox(const QStringList& items, const QString& tooltip = QString());
@@ -215,21 +181,9 @@ private:
     void connectComboBox(QComboBox* comboBox);
     void connectCheckBox(QCheckBox* checkBox);
 
-    // Layout helper methods (DRY principle)
     QFormLayout* createStandardFormLayout(QWidget* parent);
-    QGroupBox* createStandardGroupBox(const QString& title);
-    QHBoxLayout* createTwoColumnLayout(QWidget* parent);
-
-    // Widget array helper methods (DRY principle)
     void loadIntArrayToWidgets(QSpinBox** widgets, const uint32_t* arrayValues, int count);
-    void saveWidgetsToIntArray(QSpinBox** widgets, uint32_t* arrayValues, int count);
-    QSpinBox** createConnectedSpinBoxArray(int count, int min, int max, const QStringList& tooltips);
-
-    // FID to FRM filename conversion
     QString getFrmFilename(int32_t fid);
-
-    // Note: CommonData is now handled by ProCommonFieldsWidget
-    // Data structures have been moved to ProDataModels.h
 
     // UI Components
     QVBoxLayout* _mainLayout;
@@ -254,11 +208,6 @@ private:
     ObjectPreviewWidget* _inventoryPreviewWidget;
     ObjectPreviewWidget* _groundPreviewWidget;
 
-    // Armor preview system
-    QGroupBox* _armorPreviewGroup;
-    ObjectPreviewWidget* _armorMalePreviewWidget;
-    ObjectPreviewWidget* _armorFemalePreviewWidget;
-
     // Animation controls
     QWidget* _animationControls;
     QHBoxLayout* _animationLayout;
@@ -270,96 +219,27 @@ private:
     // Animation controller (handles timer, frames, playback state)
     AnimationController* _animationController;
 
-    // AI Priority calculations (f2wedit feature)
-    int calculateArmorAIPriority();
-    int calculateWeaponAIPriority();
-    void updateAIPriorityDisplays();
-
     // Tabs
     QWidget* _commonTab;
 
-    // Common fields widget (replaces individual common field controls)
     ProCommonFieldsWidget* _commonFieldsWidget;
 
-    // Type-specific tab widgets (refactored)
+    // Type-specific tab widgets
     ProWallWidget* _wallWidget;
     ProTileWidget* _tileWidget;
     ProArmorWidget* _armorWidget;
     ProWeaponWidget* _weaponWidget;
     ProDrugWidget* _drugWidget;
     ProContainerKeyWidget* _containerKeyWidget;
+    ProAmmoWidget* _ammoWidget;
+    ProMiscItemWidget* _miscItemWidget;
 
-    // Left panel widgets (name, preview, description, PID)
+    // Left panel widgets
     QLabel* _nameLabel;
     QTextEdit* _descriptionEdit;
     QPushButton* _editMessageButton;
     QSpinBox* _pidEdit;
     QLineEdit* _filenameEdit;
-
-    // Note: Common object flags, extended flags, and item-specific fields
-    // are now handled by ProCommonFieldsWidget
-
-    // Armor tab controls
-    QSpinBox* _armorClassEdit;
-    QSpinBox* _damageResistEdits[7];
-    QSpinBox* _damageThresholdEdits[7];
-    QComboBox* _armorPerkCombo;
-    QLabel* _armorMaleFIDLabel;
-    QPushButton* _armorMaleFIDSelectorButton;
-    QLabel* _armorFemaleFIDLabel;
-    QPushButton* _armorFemaleFIDSelectorButton;
-    QLabel* _armorAIPriorityLabel; // Read-only AI priority calculation display
-
-    // Container tab controls
-    QSpinBox* _containerMaxSizeEdit;
-    QCheckBox* _containerFlagChecks[5]; // Use, UseOn, Look, Talk, Pickup
-
-    // Drug tab controls
-    QComboBox* _drugStatCombos[3];
-    QSpinBox* _drugStatAmountEdits[3];
-    QSpinBox* _drugFirstDelayEdit;
-    QSpinBox* _drugFirstStatAmountEdits[3];
-    QSpinBox* _drugSecondDelayEdit;
-    QSpinBox* _drugSecondStatAmountEdits[3];
-    QSpinBox* _drugAddictionChanceEdit;
-    QComboBox* _drugAddictionPerkCombo;
-    QSpinBox* _drugAddictionDelayEdit;
-
-    // Weapon tab controls
-    QComboBox* _weaponAnimationCombo;
-    QSpinBox* _weaponDamageMinEdit;
-    QSpinBox* _weaponDamageMaxEdit;
-    QComboBox* _weaponDamageTypeCombo;
-    QSpinBox* _weaponRangePrimaryEdit;
-    QSpinBox* _weaponRangeSecondaryEdit;
-    QSpinBox* _weaponProjectilePIDEdit;
-    QSpinBox* _weaponMinStrengthEdit;
-    QSpinBox* _weaponAPPrimaryEdit;
-    QSpinBox* _weaponAPSecondaryEdit;
-    QSpinBox* _weaponCriticalFailEdit;
-    QComboBox* _weaponPerkCombo;
-    QSpinBox* _weaponBurstRoundsEdit;
-    QComboBox* _weaponAmmoTypeCombo;
-    QSpinBox* _weaponAmmoPIDEdit;
-    QSpinBox* _weaponAmmoCapacityEdit;
-    QSpinBox* _weaponSoundIdEdit;
-    QCheckBox* _weaponEnergyWeaponCheck; // Energy weapon flag (sfall 4.2/3.8.20 feature)
-    QLabel* _weaponAIPriorityLabel;      // Read-only AI priority calculation display
-
-    // Ammo tab controls
-    QComboBox* _ammoCaliberCombo;
-    QSpinBox* _ammoQuantityEdit;
-    QSpinBox* _ammoDamageModEdit;
-    QSpinBox* _ammoDRModEdit;
-    QSpinBox* _ammoDamageMultEdit;
-    QComboBox* _ammoDamageTypeModCombo;
-
-    // Misc tab controls
-    QComboBox* _miscPowerTypeCombo;
-    QSpinBox* _miscChargesEdit;
-
-    // Key tab controls
-    QSpinBox* _keyIdEdit;
 
     // Critter tab controls
     QLabel* _critterHeadFIDLabel;
@@ -438,23 +318,9 @@ private:
     // Generic controls
     QSpinBox* _genericUnknownEdit;
 
-    // Data
     std::shared_ptr<Pro> _pro;
-    // Note: Common data and main/inventory FIDs are now handled by ProCommonFieldsWidget
 
-    // Internal FID storage for type-specific fields
-    int32_t _armorMaleFID = 0;
-    int32_t _armorFemaleFID = 0;
     int32_t _critterHeadFID = 0;
-    ProArmorData _armorData;
-    ProContainerData _containerData;
-    ProDrugData _drugData;
-    ProWeaponData _weaponData;
-    ProAmmoData _ammoData;
-    ProMiscData _miscData;
-    ProKeyData _keyData;
-    ProCritterData _critterData;
-    ProSceneryData _sceneryData;
 
     // MSG files for stat and perk names
     Msg* _statMsg = nullptr;
