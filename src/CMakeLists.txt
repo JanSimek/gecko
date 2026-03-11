@@ -4,9 +4,7 @@
 ###################################
 
 # Define source files
-set(GECK_SOURCES
-    main.cpp
-
+set(GECK_APP_SOURCES
     Application.h
     Application.cpp
 
@@ -188,9 +186,13 @@ set(GECK_SOURCES
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
 )
 
+# Reusable application library for the executable and UI tests
+add_library(gecko_app STATIC ${GECK_APP_SOURCES})
+add_library(gecko::app ALIAS gecko_app)
+
 # Platform-specific executable settings
 if(WIN32)
-    add_executable(${PROJECT_NAME} WIN32 ${GECK_SOURCES})
+    add_executable(${PROJECT_NAME} WIN32 main.cpp)
     # Add Windows resource file for icon
     target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/resources/gecko.rc)
 elseif(APPLE)
@@ -198,7 +200,7 @@ elseif(APPLE)
     set(MACOSX_BUNDLE_ICON_FILE gecko.icns)
     set(APP_ICON_MACOSX ${CMAKE_SOURCE_DIR}/resources/gecko.icns)
     set_source_files_properties(${APP_ICON_MACOSX} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${GECK_SOURCES} ${APP_ICON_MACOSX})
+    add_executable(${PROJECT_NAME} MACOSX_BUNDLE main.cpp ${APP_ICON_MACOSX})
     
     # Set bundle properties
     set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -209,7 +211,7 @@ elseif(APPLE)
         MACOSX_BUNDLE_BUNDLE_VERSION "1"
     )
 else()
-    add_executable(${PROJECT_NAME} ${GECK_SOURCES})
+    add_executable(${PROJECT_NAME} main.cpp)
 endif()
 
 ###################################
@@ -333,7 +335,7 @@ PRIVATE
     gecko::spdlog
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
+target_link_libraries(gecko_app PUBLIC
     SFML::System SFML::Graphics SFML::Window
     Qt6::Core
     Qt6::Widgets
@@ -343,9 +345,12 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     vault
 )
 
-target_include_directories(${PROJECT_NAME} PRIVATE
-        "${CMAKE_SOURCE_DIR}/vendor/vfspp/include"
-        "${CMAKE_BINARY_DIR}/generated")
+target_include_directories(gecko_app PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    "${CMAKE_BINARY_DIR}/generated"
+)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE gecko_app)
 
 # copy shared external libraries to the build directory for Windows builds
 if(WIN32)

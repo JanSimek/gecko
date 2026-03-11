@@ -32,6 +32,7 @@ class InventoryViewerDialog : public QDialog {
 
 public:
     explicit InventoryViewerDialog(std::shared_ptr<Object> object, QWidget* parent = nullptr);
+    explicit InventoryViewerDialog(std::shared_ptr<MapObject> mapObject, QWidget* parent = nullptr);
     ~InventoryViewerDialog() = default;
 
 private slots:
@@ -80,7 +81,6 @@ private:
     QPushButton* _closeButton;
 
     // Data
-    std::shared_ptr<Object> _object;
     std::shared_ptr<MapObject> _mapObject;
 
     // Tree widget columns

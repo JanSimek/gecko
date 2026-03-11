@@ -25,15 +25,18 @@ Settings& Settings::getInstance() {
 
 QString Settings::getSettingsFilePath() const {
     QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-    QDir configDir(configPath);
+    QDir configDir;
 
-    // Create organization directory if it doesn't exist
-    if (!configDir.exists(ORGANIZATION_NAME)) {
-        configDir.mkpath(ORGANIZATION_NAME);
+    if (!configDir.mkpath(configPath)) {
+        return QDir(configPath).filePath(SETTINGS_FILENAME);
     }
 
-    configDir.cd(ORGANIZATION_NAME);
-    return configDir.absoluteFilePath(SETTINGS_FILENAME);
+    const QString organizationPath = QDir(configPath).filePath(ORGANIZATION_NAME);
+    if (!configDir.mkpath(organizationPath)) {
+        return QDir(configPath).filePath(SETTINGS_FILENAME);
+    }
+
+    return QDir(organizationPath).filePath(SETTINGS_FILENAME);
 }
 
 bool Settings::exists() const {

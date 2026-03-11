@@ -14,6 +14,10 @@
 namespace geck {
 
 InventoryViewerDialog::InventoryViewerDialog(std::shared_ptr<Object> object, QWidget* parent)
+    : InventoryViewerDialog(object ? object->getMapObjectPtr() : nullptr, parent) {
+}
+
+InventoryViewerDialog::InventoryViewerDialog(std::shared_ptr<MapObject> mapObject, QWidget* parent)
     : QDialog(parent)
     , _mainLayout(nullptr)
     , _splitter(nullptr)
@@ -38,21 +42,12 @@ InventoryViewerDialog::InventoryViewerDialog(std::shared_ptr<Object> object, QWi
     , _removeButton(nullptr)
     , _editButton(nullptr)
     , _closeButton(nullptr)
-    , _object(object)
-    , _mapObject(nullptr) {
+    , _mapObject(std::move(mapObject)) {
 
     spdlog::debug("InventoryViewerDialog: Constructor called");
 
-    if (!_object) {
-        spdlog::error("InventoryViewerDialog: Invalid object provided");
-        reject();
-        return;
-    }
-
-    _mapObject = _object->getMapObjectPtr();
     if (!_mapObject) {
-        spdlog::error("InventoryViewerDialog: Object has no MapObject");
-        QMessageBox::warning(this, "Error", "Selected object has no map data.");
+        spdlog::error("InventoryViewerDialog: Invalid map object provided");
         reject();
         return;
     }

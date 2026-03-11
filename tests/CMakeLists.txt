@@ -19,6 +19,11 @@ add_executable(performance_tests
     performance/test_reader_performance.cpp
 )
 
+add_executable(qt_tests
+    qt/qt_test_main.cpp
+    qt/test_ui_regressions.cpp
+)
+
 target_link_libraries(general_tests PRIVATE
     Catch2::Catch2WithMain
     gecko::spdlog
@@ -37,6 +42,15 @@ target_link_libraries(performance_tests PRIVATE
     SFML::System SFML::Graphics
 )
 
+target_link_libraries(qt_tests PRIVATE
+    Catch2::Catch2
+    Qt6::Test
+    gecko::app
+)
+
+target_include_directories(qt_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
 
 # Enable testing
 include(CTest)
@@ -55,6 +69,8 @@ else()
     catch_discover_tests(performance_tests)
 endif()
 
+add_test(NAME qt_tests COMMAND qt_tests)
+
 
 # copy shared external libraries to the build directory for Windows builds
 if(WIN32)
@@ -66,6 +82,11 @@ if(WIN32)
     add_custom_command(
         TARGET performance_tests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:performance_tests> $<TARGET_FILE_DIR:performance_tests>
+        COMMAND_EXPAND_LISTS
+    )
+    add_custom_command(
+        TARGET qt_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:qt_tests> $<TARGET_FILE_DIR:qt_tests>
         COMMAND_EXPAND_LISTS
     )
 endif()
@@ -81,4 +102,9 @@ add_custom_command(
     TARGET performance_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:performance_tests>/data
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data ${CMAKE_CURRENT_BINARY_DIR}/data
+)
+
+add_custom_command(
+    TARGET qt_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_FILE_DIR:qt_tests>/resources
 )

@@ -88,6 +88,9 @@ find_package(PkgConfig QUIET)
 
 # Qt6 for dialogs and future UI migration
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Svg)
+if(GECK_BUILD_TESTS)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+endif()
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
