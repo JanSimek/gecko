@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <QMainWindow>
 #include <QMenuBar>
 #include <QToolBar>
@@ -14,6 +15,7 @@
 #include <memory>
 #include <filesystem>
 #include <unordered_map>
+#include <utility>
 #include <SFML/Window/Event.hpp>
 
 QT_BEGIN_NAMESPACE
@@ -107,6 +109,8 @@ public slots:
     void deselectMarkExitsMode();
 
 private:
+    using DockActionPair = std::pair<QDockWidget*, QAction*>;
+
     void setupUI();
     void setupMenuBar();
     void setupToolBar();
@@ -124,6 +128,11 @@ private:
     void hidePanelsForNoMap();
     void setDockVisibility(QDockWidget* dock, QAction* action, bool visible);
     void persistPanelPreference(QDockWidget* dock, bool visible);
+    QAction* addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef);
+    std::array<QDockWidget*, 5> managedDocks() const;
+    std::array<DockActionPair, 5> managedDockActionPairs() const;
+    void applyDefaultDockPlacements();
+    void applyDefaultPanelDockLayout();
 
     // Text file handling
     bool isTextFile(const QString& filePath) const;

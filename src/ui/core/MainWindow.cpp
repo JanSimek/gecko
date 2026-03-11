@@ -35,6 +35,7 @@
 #include "../../vfs/VfsppNativeFileSystem.h"
 
 #include <fstream>
+#include <functional>
 
 #include <QApplication>
 #include <QVBoxLayout>
@@ -227,6 +228,115 @@ void MainWindow::connectMenuSignals() {
     updateUndoRedoActions();
 }
 
+QAction* MainWindow::addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef) {
+    auto showDock = [this](QDockWidget* targetDock, bool visible) {
+        if (!targetDock) {
+            return;
+        }
+
+        if (visible) {
+            targetDock->show();
+            if (!targetDock->isFloating() && dockWidgetArea(targetDock) != Qt::NoDockWidgetArea) {
+                targetDock->raise();
+            }
+            return;
+        }
+
+        targetDock->hide();
+    };
+
+    actionRef = _panelsMenu->addAction(label);
+    actionRef->setCheckable(true);
+    actionRef->setChecked(true);
+    QAction* action = actionRef;
+
+    connect(action, &QAction::toggled, this, [this, dock, showDock](bool visible) {
+        if (_suppressPanelPreferenceUpdates) {
+            return;
+        }
+
+        spdlog::debug("{} action toggled: {}", dock->windowTitle().toStdString(), visible);
+        showDock(dock, visible);
+        snapshotPanelVisibility();
+        persistPanelPreference(dock, visible);
+    });
+
+    connect(dock, &QDockWidget::visibilityChanged, this, [this, dock, action](bool visible) {
+        if (!visible && !dock->isHidden()) {
+            return;
+        }
+
+        spdlog::debug("{} visibility changed: {}", dock->windowTitle().toStdString(), visible);
+        const bool dockVisible = dock->toggleViewAction()->isChecked();
+        if (action && action->isChecked() != dockVisible) {
+            QSignalBlocker blocker(*action);
+            action->setChecked(dockVisible);
+        }
+        if (!_suppressPanelPreferenceUpdates) {
+            snapshotPanelVisibility();
+            persistPanelPreference(dock, dockVisible);
+        }
+    });
+
+    return action;
+}
+
+std::array<QDockWidget*, 5> MainWindow::managedDocks() const {
+    return { _mapInfoDock, _selectionDock, _tilePaletteDock, _objectPaletteDock, _fileBrowserDock };
+}
+
+std::array<MainWindow::DockActionPair, 5> MainWindow::managedDockActionPairs() const {
+    return { {
+        { _mapInfoDock, _mapInfoPanelAction },
+        { _selectionDock, _selectionPanelAction },
+        { _tilePaletteDock, _tilePalettePanelAction },
+        { _objectPaletteDock, _objectPalettePanelAction },
+        { _fileBrowserDock, _fileBrowserPanelAction },
+    } };
+}
+
+void MainWindow::applyDefaultDockPlacements() {
+    for (QDockWidget* dock : managedDocks()) {
+        if (dock) {
+            removeDockWidget(dock);
+        }
+    }
+
+    struct DockPlacement {
+        QDockWidget* dock;
+        Qt::DockWidgetArea area;
+    };
+
+    const std::array<DockPlacement, 5> placements = { {
+        { _mapInfoDock, Qt::RightDockWidgetArea },
+        { _selectionDock, Qt::RightDockWidgetArea },
+        { _tilePaletteDock, Qt::LeftDockWidgetArea },
+        { _objectPaletteDock, Qt::LeftDockWidgetArea },
+        { _fileBrowserDock, Qt::LeftDockWidgetArea },
+    } };
+
+    for (const DockPlacement& placement : placements) {
+        if (placement.dock) {
+            addDockWidget(placement.area, placement.dock);
+        }
+    }
+}
+
+void MainWindow::applyDefaultPanelDockLayout() {
+    if (_mapInfoDock && _selectionDock) {
+        splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
+    }
+    if (_tilePaletteDock && _objectPaletteDock) {
+        tabifyDockWidget(_tilePaletteDock, _objectPaletteDock);
+    }
+    if (_objectPaletteDock && _fileBrowserDock) {
+        tabifyDockWidget(_objectPaletteDock, _fileBrowserDock);
+    }
+    if (_tilePaletteDock) {
+        _tilePaletteDock->raise();
+    }
+}
+
 void MainWindow::setupMenuBar() {
     _menuBar = menuBar();
 
@@ -298,15 +408,31 @@ void MainWindow::setupMenuBar() {
     updateUndoRedoActions();
 
     _viewMenu = _menuBar->addMenu("&View");
-    addViewToggleAction(_showObjectsAction, ":/icons/actions/view-objects.svg", "Show &Objects", UI::DEFAULT_SHOW_OBJECTS, &MainWindow::showObjectsToggled);
-    addViewToggleAction(_showCrittersAction, ":/icons/actions/view-critters.svg", "Show &Critters", UI::DEFAULT_SHOW_CRITTERS, &MainWindow::showCrittersToggled);
-    addViewToggleAction(_showWallsAction, ":/icons/actions/view-walls.svg", "Show &Walls", UI::DEFAULT_SHOW_WALLS, &MainWindow::showWallsToggled);
-    addViewToggleAction(_showRoofsAction, ":/icons/actions/view-roofs.svg", "Show &Roofs", UI::DEFAULT_SHOW_ROOF, &MainWindow::showRoofsToggled);
-    addViewToggleAction(_showScrollBlockersAction, ":/icons/actions/view-scroll-blockers.svg", "Show Scroll &Blockers", UI::DEFAULT_SHOW_SCROLL_BLK, &MainWindow::showScrollBlockersToggled);
-    addViewToggleAction(_showWallBlockersAction, ":/icons/actions/view-wall-blockers.svg", "Show &Wall Blockers", UI::DEFAULT_SHOW_WALL_BLK, &MainWindow::showWallBlockersToggled);
-    addViewToggleAction(_showHexGridAction, ":/icons/actions/view-grid.svg", "Show &Hex Grid", UI::DEFAULT_SHOW_HEX_GRID, &MainWindow::showHexGridToggled);
-    addViewToggleAction(_showLightOverlaysAction, ":/icons/actions/view-light.svg", "Show &Light Overlays", false, &MainWindow::showLightOverlaysToggled);
-    addViewToggleAction(_showExitGridsAction, ":/icons/actions/view-exits.svg", "Show &Exit Grids", false, &MainWindow::showExitGridsToggled, "Show exit grid markers", QKeySequence("Ctrl+E"));
+    struct ViewToggleSpec {
+        QAction** actionRef;
+        const char* iconPath;
+        const char* text;
+        bool checked;
+        void (MainWindow::*signal)(bool);
+        QString statusTip;
+        QKeySequence shortcut;
+    };
+
+    const std::array<ViewToggleSpec, 9> viewToggleSpecs = { {
+        { &_showObjectsAction, ":/icons/actions/view-objects.svg", "Show &Objects", UI::DEFAULT_SHOW_OBJECTS, &MainWindow::showObjectsToggled, {}, {} },
+        { &_showCrittersAction, ":/icons/actions/view-critters.svg", "Show &Critters", UI::DEFAULT_SHOW_CRITTERS, &MainWindow::showCrittersToggled, {}, {} },
+        { &_showWallsAction, ":/icons/actions/view-walls.svg", "Show &Walls", UI::DEFAULT_SHOW_WALLS, &MainWindow::showWallsToggled, {}, {} },
+        { &_showRoofsAction, ":/icons/actions/view-roofs.svg", "Show &Roofs", UI::DEFAULT_SHOW_ROOF, &MainWindow::showRoofsToggled, {}, {} },
+        { &_showScrollBlockersAction, ":/icons/actions/view-scroll-blockers.svg", "Show Scroll &Blockers", UI::DEFAULT_SHOW_SCROLL_BLK, &MainWindow::showScrollBlockersToggled, {}, {} },
+        { &_showWallBlockersAction, ":/icons/actions/view-wall-blockers.svg", "Show &Wall Blockers", UI::DEFAULT_SHOW_WALL_BLK, &MainWindow::showWallBlockersToggled, {}, {} },
+        { &_showHexGridAction, ":/icons/actions/view-grid.svg", "Show &Hex Grid", UI::DEFAULT_SHOW_HEX_GRID, &MainWindow::showHexGridToggled, {}, {} },
+        { &_showLightOverlaysAction, ":/icons/actions/view-light.svg", "Show &Light Overlays", false, &MainWindow::showLightOverlaysToggled, {}, {} },
+        { &_showExitGridsAction, ":/icons/actions/view-exits.svg", "Show &Exit Grids", false, &MainWindow::showExitGridsToggled, "Show exit grid markers", QKeySequence("Ctrl+E") },
+    } };
+
+    for (const ViewToggleSpec& spec : viewToggleSpecs) {
+        addViewToggleAction(*spec.actionRef, spec.iconPath, spec.text, spec.checked, spec.signal, spec.statusTip, spec.shortcut);
+    }
 
     _viewMenu->addSeparator();
 
@@ -344,54 +470,69 @@ void MainWindow::setupMenuBar() {
         return action;
     };
 
-    addDockLayoutAction("&Vertical Stack (Right Side)", "Stack Map Info and Selection panels vertically on the right", true, [this]() {
-        addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
-        addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
-        splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
-    });
-    addDockLayoutAction("&Horizontal Stack (Right Side)", "Stack Map Info and Selection panels horizontally on the right", false, [this]() {
-        addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
-        addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
-        splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
-    });
-    addDockLayoutAction("&Tabbed Layout (Right Side)", "Tab Map Info and Selection panels together on the right", false, [this]() {
-        addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
-        addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
-        tabifyDockWidget(_mapInfoDock, _selectionDock);
-        _mapInfoDock->raise();
-    });
-    addDockLayoutAction("&Bottom Dock", "Move Map Info and Selection panels to the bottom area", false, [this]() {
-        addDockWidget(Qt::BottomDockWidgetArea, _mapInfoDock);
-        addDockWidget(Qt::BottomDockWidgetArea, _selectionDock);
-        splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
-    });
+    struct DockLayoutSpec {
+        const char* text;
+        const char* statusTip;
+        bool checked;
+        std::function<void()> applyLayout;
+    };
+
+    const std::array<DockLayoutSpec, 4> dockLayoutSpecs = { {
+        { "&Vertical Stack (Right Side)", "Stack Map Info and Selection panels vertically on the right", true, [this]() {
+            addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
+            addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
+            splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
+        } },
+        { "&Horizontal Stack (Right Side)", "Stack Map Info and Selection panels horizontally on the right", false, [this]() {
+            addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
+            addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
+            splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
+        } },
+        { "&Tabbed Layout (Right Side)", "Tab Map Info and Selection panels together on the right", false, [this]() {
+            addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
+            addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
+            tabifyDockWidget(_mapInfoDock, _selectionDock);
+            _mapInfoDock->raise();
+        } },
+        { "&Bottom Dock", "Move Map Info and Selection panels to the bottom area", false, [this]() {
+            addDockWidget(Qt::BottomDockWidgetArea, _mapInfoDock);
+            addDockWidget(Qt::BottomDockWidgetArea, _selectionDock);
+            splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
+        } },
+    } };
+
+    for (const DockLayoutSpec& spec : dockLayoutSpecs) {
+        addDockLayoutAction(spec.text, spec.statusTip, spec.checked, spec.applyLayout);
+    }
 
     _viewMenu->addSeparator();
 
     _elevationMenu = _viewMenu->addMenu("&Elevation");
     QActionGroup* elevationGroup = new QActionGroup(this);
 
-    _elevation1Action = _elevationMenu->addAction("Elevation &1");
-    _elevation1Action->setCheckable(true);
-    _elevation1Action->setChecked(true);
-    _elevation1Action->setData(ELEVATION_1);
-    _elevation1Action->setDisabled(true);
-    elevationGroup->addAction(_elevation1Action);
-    connect(_elevation1Action, &QAction::triggered, [this]() { elevationChanged(ELEVATION_1); });
+    struct ElevationActionSpec {
+        QAction** actionRef;
+        const char* text;
+        int elevation;
+        bool checked;
+    };
 
-    _elevation2Action = _elevationMenu->addAction("Elevation &2");
-    _elevation2Action->setCheckable(true);
-    _elevation2Action->setData(ELEVATION_2);
-    _elevation2Action->setDisabled(true);
-    elevationGroup->addAction(_elevation2Action);
-    connect(_elevation2Action, &QAction::triggered, [this]() { elevationChanged(ELEVATION_2); });
+    const std::array<ElevationActionSpec, 3> elevationSpecs = { {
+        { &_elevation1Action, "Elevation &1", ELEVATION_1, true },
+        { &_elevation2Action, "Elevation &2", ELEVATION_2, false },
+        { &_elevation3Action, "Elevation &3", ELEVATION_3, false },
+    } };
 
-    _elevation3Action = _elevationMenu->addAction("Elevation &3");
-    _elevation3Action->setCheckable(true);
-    _elevation3Action->setData(ELEVATION_3);
-    _elevation3Action->setDisabled(true);
-    elevationGroup->addAction(_elevation3Action);
-    connect(_elevation3Action, &QAction::triggered, [this]() { elevationChanged(ELEVATION_3); });
+    for (const ElevationActionSpec& spec : elevationSpecs) {
+        QAction* action = _elevationMenu->addAction(spec.text);
+        action->setCheckable(true);
+        action->setChecked(spec.checked);
+        action->setData(spec.elevation);
+        action->setDisabled(true);
+        elevationGroup->addAction(action);
+        connect(action, &QAction::triggered, this, [this, elevation = spec.elevation]() { elevationChanged(elevation); });
+        *spec.actionRef = action;
+    }
 
     _helpMenu = _menuBar->addMenu("&Help");
     QAction* aboutAction = _helpMenu->addAction("&About Gecko...");
@@ -416,10 +557,29 @@ void MainWindow::setupToolBar() {
         return action;
     };
 
-    addToolAction(":/icons/actions/new.svg", "New", &MainWindow::newMapRequested, "Create a new map");
-    addToolAction(":/icons/actions/open.svg", "Open", &MainWindow::openMapRequested, "Open an existing map");
-    addToolAction(":/icons/actions/save.svg", "Save", &MainWindow::saveMapRequested, "Save the current map");
-    addToolAction(":/icons/actions/play.svg", "Play", &MainWindow::onPlayGame, "Save and play the current map in Fallout 2", QKeySequence("F5"));
+    struct ToolbarActionSpec {
+        const char* iconPath;
+        const char* text;
+        const char* statusTip;
+        QKeySequence shortcut;
+        std::function<void()> trigger;
+    };
+
+    const std::array<ToolbarActionSpec, 4> primaryToolbarActions = { {
+        { ":/icons/actions/new.svg", "New", "Create a new map", {}, [this]() { newMapRequested(); } },
+        { ":/icons/actions/open.svg", "Open", "Open an existing map", {}, [this]() { openMapRequested(); } },
+        { ":/icons/actions/save.svg", "Save", "Save the current map", {}, [this]() { saveMapRequested(); } },
+        { ":/icons/actions/play.svg", "Play", "Save and play the current map in Fallout 2", QKeySequence("F5"), [this]() { onPlayGame(); } },
+    } };
+
+    for (const ToolbarActionSpec& spec : primaryToolbarActions) {
+        QAction* action = _mainToolBar->addAction(createIcon(spec.iconPath), spec.text);
+        action->setStatusTip(spec.statusTip);
+        if (!spec.shortcut.isEmpty()) {
+            action->setShortcut(spec.shortcut);
+        }
+        connect(action, &QAction::triggered, this, [trigger = spec.trigger]() { trigger(); });
+    }
 
     _mainToolBar->addSeparator(); // Separate play from selection controls
 
@@ -483,15 +643,21 @@ void MainWindow::setupToolBar() {
     _mainToolBar->addSeparator();
 
     // Layer visibility toggles (reuse View menu actions)
-    _mainToolBar->addAction(_showObjectsAction);
-    _mainToolBar->addAction(_showCrittersAction);
-    _mainToolBar->addAction(_showWallsAction);
-    _mainToolBar->addAction(_showRoofsAction);
-    _mainToolBar->addAction(_showHexGridAction);
-    _mainToolBar->addAction(_showScrollBlockersAction);
-    _mainToolBar->addAction(_showWallBlockersAction);
-    _mainToolBar->addAction(_showLightOverlaysAction);
-    _mainToolBar->addAction(_showExitGridsAction);
+    const std::array<QAction*, 9> layerVisibilityActions = {
+        _showObjectsAction,
+        _showCrittersAction,
+        _showWallsAction,
+        _showRoofsAction,
+        _showHexGridAction,
+        _showScrollBlockersAction,
+        _showWallBlockersAction,
+        _showLightOverlaysAction,
+        _showExitGridsAction,
+    };
+
+    for (QAction* action : layerVisibilityActions) {
+        _mainToolBar->addAction(action);
+    }
 }
 
 void MainWindow::setupDockWidgets() {
@@ -543,10 +709,7 @@ void MainWindow::setupDockWidgets() {
         }
     });
 
-    // Configure initial dock layout - vertical stacking instead of tabs
-    splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
-    tabifyDockWidget(_tilePaletteDock, _objectPaletteDock);
-    tabifyDockWidget(_objectPaletteDock, _fileBrowserDock);
+    applyDefaultPanelDockLayout();
 
     // Let Qt handle initial dock sizing automatically for better resize flexibility
     // Fixed resizeDocks() calls can interfere with user resize operations
@@ -1056,58 +1219,23 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFile
 }
 
 void MainWindow::setupPanelsMenu() {
-    auto showDock = [this](QDockWidget* dock, bool visible) {
-        if (visible) {
-            dock->show();
-            if (!dock->isFloating() && dockWidgetArea(dock) != Qt::NoDockWidgetArea) {
-                dock->raise();
-            }
-            return;
-        }
-
-        dock->hide();
+    struct PanelToggleSpec {
+        const char* label;
+        QDockWidget* dock;
+        QAction** actionRef;
     };
 
-    auto bindPanelToggle = [this, showDock](const QString& label, QDockWidget* dock, QAction*& actionRef) {
-        actionRef = _panelsMenu->addAction(label);
-        actionRef->setCheckable(true);
-        actionRef->setChecked(true);
-        QAction* action = actionRef;
+    const std::array<PanelToggleSpec, 5> panelToggleSpecs = { {
+        { "Map &Information", _mapInfoDock, &_mapInfoPanelAction },
+        { "&Selection", _selectionDock, &_selectionPanelAction },
+        { "&Tile Palette", _tilePaletteDock, &_tilePalettePanelAction },
+        { "&Object Palette", _objectPaletteDock, &_objectPalettePanelAction },
+        { "&Virtual File System Browser", _fileBrowserDock, &_fileBrowserPanelAction },
+    } };
 
-        connect(action, &QAction::toggled, this, [this, dock, showDock](bool visible) {
-            if (_suppressPanelPreferenceUpdates) {
-                return;
-            }
-
-            spdlog::debug("{} action toggled: {}", dock->windowTitle().toStdString(), visible);
-            showDock(dock, visible);
-            snapshotPanelVisibility();
-            persistPanelPreference(dock, visible);
-        });
-
-        connect(dock, &QDockWidget::visibilityChanged, this, [this, dock, action](bool visible) {
-            if (!visible && !dock->isHidden()) {
-                return;
-            }
-
-            spdlog::debug("{} visibility changed: {}", dock->windowTitle().toStdString(), visible);
-            const bool dockVisible = dock->toggleViewAction()->isChecked();
-            if (action && action->isChecked() != dockVisible) {
-                QSignalBlocker blocker(*action);
-                action->setChecked(dockVisible);
-            }
-            if (!_suppressPanelPreferenceUpdates) {
-                snapshotPanelVisibility();
-                persistPanelPreference(dock, dockVisible);
-            }
-        });
-    };
-
-    bindPanelToggle("Map &Information", _mapInfoDock, _mapInfoPanelAction);
-    bindPanelToggle("&Selection", _selectionDock, _selectionPanelAction);
-    bindPanelToggle("&Tile Palette", _tilePaletteDock, _tilePalettePanelAction);
-    bindPanelToggle("&Object Palette", _objectPaletteDock, _objectPalettePanelAction);
-    bindPanelToggle("&Virtual File System Browser", _fileBrowserDock, _fileBrowserPanelAction);
+    for (const PanelToggleSpec& spec : panelToggleSpecs) {
+        addPanelToggleAction(spec.label, spec.dock, *spec.actionRef);
+    }
 }
 
 void MainWindow::saveDockWidgetState() {
@@ -1116,21 +1244,10 @@ void MainWindow::saveDockWidgetState() {
     settings.setWindowGeometry(saveGeometry());
     settings.setWindowMaximized(isMaximized());
 
-    // Save individual floating dock widget geometries for better persistence
-    if (_mapInfoDock->isFloating()) {
-        settings.setFloatingDockGeometry("MapInfoDock", _mapInfoDock->saveGeometry());
-    }
-    if (_selectionDock->isFloating()) {
-        settings.setFloatingDockGeometry("SelectionDock", _selectionDock->saveGeometry());
-    }
-    if (_tilePaletteDock->isFloating()) {
-        settings.setFloatingDockGeometry("TilePaletteDock", _tilePaletteDock->saveGeometry());
-    }
-    if (_objectPaletteDock->isFloating()) {
-        settings.setFloatingDockGeometry("ObjectPaletteDock", _objectPaletteDock->saveGeometry());
-    }
-    if (_fileBrowserDock->isFloating()) {
-        settings.setFloatingDockGeometry("FileBrowserDock", _fileBrowserDock->saveGeometry());
+    for (QDockWidget* dock : managedDocks()) {
+        if (dock && dock->isFloating()) {
+            settings.setFloatingDockGeometry(dock->objectName(), dock->saveGeometry());
+        }
     }
 
     settings.save();
@@ -1161,29 +1278,15 @@ void MainWindow::restoreDockWidgetState() {
         QTimer::singleShot(100, this, [this]() {
             auto& timerSettings = Settings::getInstance();
 
-            QByteArray mapInfoGeometry = timerSettings.getFloatingDockGeometry("MapInfoDock");
-            if (!mapInfoGeometry.isEmpty() && _mapInfoDock->isFloating()) {
-                _mapInfoDock->restoreGeometry(mapInfoGeometry);
-            }
+            for (QDockWidget* dock : managedDocks()) {
+                if (!dock || !dock->isFloating()) {
+                    continue;
+                }
 
-            QByteArray selectionGeometry = timerSettings.getFloatingDockGeometry("SelectionDock");
-            if (!selectionGeometry.isEmpty() && _selectionDock->isFloating()) {
-                _selectionDock->restoreGeometry(selectionGeometry);
-            }
-
-            QByteArray tilePaletteGeometry = timerSettings.getFloatingDockGeometry("TilePaletteDock");
-            if (!tilePaletteGeometry.isEmpty() && _tilePaletteDock->isFloating()) {
-                _tilePaletteDock->restoreGeometry(tilePaletteGeometry);
-            }
-
-            QByteArray objectPaletteGeometry = timerSettings.getFloatingDockGeometry("ObjectPaletteDock");
-            if (!objectPaletteGeometry.isEmpty() && _objectPaletteDock->isFloating()) {
-                _objectPaletteDock->restoreGeometry(objectPaletteGeometry);
-            }
-
-            QByteArray fileBrowserGeometry = timerSettings.getFloatingDockGeometry("FileBrowserDock");
-            if (!fileBrowserGeometry.isEmpty() && _fileBrowserDock->isFloating()) {
-                _fileBrowserDock->restoreGeometry(fileBrowserGeometry);
+                const QByteArray geometry = timerSettings.getFloatingDockGeometry(dock->objectName());
+                if (!geometry.isEmpty()) {
+                    dock->restoreGeometry(geometry);
+                }
             }
 
             spdlog::debug("Restored floating dock widget geometries");
@@ -1198,27 +1301,8 @@ void MainWindow::restoreDockWidgetState() {
 }
 
 void MainWindow::restoreDefaultLayout() {
-    // Remove all dock widgets from their current positions
-    removeDockWidget(_mapInfoDock);
-    removeDockWidget(_selectionDock);
-    removeDockWidget(_tilePaletteDock);
-    removeDockWidget(_objectPaletteDock);
-    removeDockWidget(_fileBrowserDock);
-
-    // Restore default positions
-    addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
-    addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
-    addDockWidget(Qt::LeftDockWidgetArea, _tilePaletteDock);
-    addDockWidget(Qt::LeftDockWidgetArea, _objectPaletteDock);
-    addDockWidget(Qt::LeftDockWidgetArea, _fileBrowserDock);
-
-    // Restore default layout - vertical stacking on right, tabbed on left
-    splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
-    tabifyDockWidget(_tilePaletteDock, _objectPaletteDock);
-    tabifyDockWidget(_objectPaletteDock, _fileBrowserDock);
-
-    // Ensure tile palette is the active tab
-    _tilePaletteDock->raise();
+    applyDefaultDockPlacements();
+    applyDefaultPanelDockLayout();
 
     spdlog::debug("Restored default dock widget layout");
 }
@@ -1279,11 +1363,11 @@ void MainWindow::snapshotPanelVisibility() {
         return dock && dock->isVisible();
     };
 
-    _panelVisibilitySnapshot[_mapInfoDock] = isPanelEnabled(_mapInfoPanelAction, _mapInfoDock);
-    _panelVisibilitySnapshot[_selectionDock] = isPanelEnabled(_selectionPanelAction, _selectionDock);
-    _panelVisibilitySnapshot[_tilePaletteDock] = isPanelEnabled(_tilePalettePanelAction, _tilePaletteDock);
-    _panelVisibilitySnapshot[_objectPaletteDock] = isPanelEnabled(_objectPalettePanelAction, _objectPaletteDock);
-    _panelVisibilitySnapshot[_fileBrowserDock] = isPanelEnabled(_fileBrowserPanelAction, _fileBrowserDock);
+    for (const auto& [dock, action] : managedDockActionPairs()) {
+        if (dock) {
+            _panelVisibilitySnapshot[dock] = isPanelEnabled(action, dock);
+        }
+    }
 }
 
 void MainWindow::restorePanelVisibilitySnapshot() {
@@ -1306,11 +1390,9 @@ void MainWindow::restorePanelVisibilitySnapshot() {
         setDockVisibility(dock, action, visible);
     };
 
-    applySnapshot(_mapInfoDock, _mapInfoPanelAction);
-    applySnapshot(_selectionDock, _selectionPanelAction);
-    applySnapshot(_tilePaletteDock, _tilePalettePanelAction);
-    applySnapshot(_objectPaletteDock, _objectPalettePanelAction);
-    applySnapshot(_fileBrowserDock, _fileBrowserPanelAction);
+    for (const auto& [dock, action] : managedDockActionPairs()) {
+        applySnapshot(dock, action);
+    }
 
     updatePanelMenuActions();
     snapshotPanelVisibility();
@@ -1322,11 +1404,9 @@ void MainWindow::hidePanelsForNoMap() {
     _suppressPanelSnapshotUpdates = true;
     _suppressPanelPreferenceUpdates = true;
 
-    setDockVisibility(_mapInfoDock, _mapInfoPanelAction, false);
-    setDockVisibility(_selectionDock, _selectionPanelAction, false);
-    setDockVisibility(_tilePaletteDock, _tilePalettePanelAction, false);
-    setDockVisibility(_objectPaletteDock, _objectPalettePanelAction, false);
-    setDockVisibility(_fileBrowserDock, _fileBrowserPanelAction, true);
+    for (const auto& [dock, action] : managedDockActionPairs()) {
+        setDockVisibility(dock, action, dock == _fileBrowserDock);
+    }
 
     if (_fileBrowserDock) {
         _fileBrowserDock->raise();
@@ -1339,44 +1419,18 @@ void MainWindow::hidePanelsForNoMap() {
 void MainWindow::updatePanelMenuActions() {
     spdlog::debug("Updating panel menu actions to reflect actual visibility states");
 
-    if (_mapInfoPanelAction) {
-        const bool visible = !_mapInfoDock->isHidden();
-        QSignalBlocker blocker(*_mapInfoPanelAction);
-        _mapInfoPanelAction->setChecked(visible);
-        spdlog::debug("Map Info Panel: visible={}, hidden={}", visible, _mapInfoDock->isHidden());
-    }
-    if (_selectionPanelAction) {
-        const bool visible = !_selectionDock->isHidden();
-        QSignalBlocker blocker(*_selectionPanelAction);
-        _selectionPanelAction->setChecked(visible);
-        spdlog::debug("Selection Panel: visible={}, hidden={}", visible, _selectionDock->isHidden());
+    for (const auto& [dock, action] : managedDockActionPairs()) {
+        if (!dock || !action) {
+            continue;
+        }
+
+        const bool visible = !dock->isHidden();
+        QSignalBlocker blocker(*action);
+        action->setChecked(visible);
+        spdlog::debug("{}: visible={}, hidden={}", dock->windowTitle().toStdString(), visible, dock->isHidden());
     }
 
     updateUndoRedoActions();
-
-    // For tabified dock widgets, a dock widget can be not hidden but not visible (when another tab is active)
-    // We should check the dock widget is available to the user (not hidden), regardless of whether it's the active tab
-    if (_tilePalettePanelAction) {
-        const bool available = !_tilePaletteDock->isHidden();
-        QSignalBlocker blocker(*_tilePalettePanelAction);
-        _tilePalettePanelAction->setChecked(available);
-        spdlog::debug("Tile Palette Panel: visible={}, hidden={}, available={}",
-            _tilePaletteDock->isVisible(), _tilePaletteDock->isHidden(), available);
-    }
-    if (_objectPalettePanelAction) {
-        const bool available = !_objectPaletteDock->isHidden();
-        QSignalBlocker blocker(*_objectPalettePanelAction);
-        _objectPalettePanelAction->setChecked(available);
-        spdlog::debug("Object Palette Panel: visible={}, hidden={}, available={}",
-            _objectPaletteDock->isVisible(), _objectPaletteDock->isHidden(), available);
-    }
-    if (_fileBrowserPanelAction) {
-        const bool available = !_fileBrowserDock->isHidden();
-        QSignalBlocker blocker(*_fileBrowserPanelAction);
-        _fileBrowserPanelAction->setChecked(available);
-        spdlog::debug("File Browser Panel: visible={}, hidden={}, available={}",
-            _fileBrowserDock->isVisible(), _fileBrowserDock->isHidden(), available);
-    }
 
     spdlog::debug("Panel menu action sync completed");
 }
