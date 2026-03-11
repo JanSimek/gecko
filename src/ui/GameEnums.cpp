@@ -45,7 +45,7 @@ QVector<EnumOption> toEnumOptions(const std::vector<MessageEnumOption>& options)
 QVector<EnumOption> prependNoPerkOption(const std::vector<MessageEnumOption>& options) {
     QVector<EnumOption> values;
     values.reserve(static_cast<qsizetype>(options.size() + 1));
-    values.append({ fallout::NoItemPerk, QString() });
+    values.append({ fallout::NO_ITEM_PERK, QString() });
 
     for (const MessageEnumOption& option : options) {
         values.append({ option.value, QString::fromStdString(option.label) });
@@ -140,11 +140,11 @@ QVector<EnumOption> allPerkOptions() {
 }
 
 QVector<EnumOption> weaponPerkOptions() {
-    return prependNoPerkOption(requirePerkOptions(fallout::WeaponItemPerks, "perk.msg weapon perk"));
+    return prependNoPerkOption(requirePerkOptions(fallout::WEAPON_ITEM_PERKS, "perk.msg weapon perk"));
 }
 
 QVector<EnumOption> armorPerkOptions() {
-    return prependNoPerkOption(requirePerkOptions(fallout::ArmorItemPerks, "perk.msg armor perk"));
+    return prependNoPerkOption(requirePerkOptions(fallout::ARMOR_ITEM_PERKS, "perk.msg armor perk"));
 }
 
 QStringList critterBodyTypes() {

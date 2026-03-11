@@ -15,6 +15,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -27,6 +28,10 @@ QString formatPid(uint32_t pid) {
 
 Pro* loadPro(uint32_t pid) {
     return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(pid));
+}
+
+bool isAmmoItem(const Pro& pro) {
+    return pro.type() == Pro::OBJECT_TYPE::ITEM && pro.itemType() == Pro::ITEM_TYPE::AMMO;
 }
 
 QString typeNameForPro(const Pro& pro) {
@@ -124,6 +129,30 @@ QPixmap renderFramePixmap(const std::string& frmPath, int iconSize, bool fixedCa
 }
 
 } // namespace
+
+uint32_t displayAmount(const MapObject& item) {
+    try {
+        Pro* pro = loadPro(item.pro_pid);
+        if (!pro) {
+            return item.amount;
+        }
+
+        if (isAmmoItem(*pro)) {
+            uint64_t totalRounds = item.ammo;
+            if (item.amount > 1) {
+                totalRounds += static_cast<uint64_t>(pro->ammoData.quantity) * (item.amount - 1);
+            }
+            return totalRounds > std::numeric_limits<uint32_t>::max()
+                ? std::numeric_limits<uint32_t>::max()
+                : static_cast<uint32_t>(totalRounds);
+        }
+
+        return item.amount;
+    } catch (const std::exception& e) {
+        spdlog::warn("InventoryItemUiHelper::displayAmount: Failed to calculate display amount for PID {}: {}", item.pro_pid, e.what());
+        return item.amount;
+    }
+}
 
 ItemDetails describeItem(uint32_t pid) {
     ItemDetails details {

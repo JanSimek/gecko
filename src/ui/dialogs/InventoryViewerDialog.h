@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QGroupBox>
 #include <QFormLayout>
 #include <QHeaderView>
@@ -54,7 +55,9 @@ private:
     // Left panel - Inventory list
     QWidget* _leftPanel;
     QVBoxLayout* _leftLayout;
+    QStackedWidget* _inventoryViewStack;
     QTreeWidget* _inventoryTree;
+    QLabel* _emptyInventoryLabel;
     QLabel* _statusLabel;
 
     // Right panel - Item preview and actions

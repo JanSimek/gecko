@@ -6,12 +6,13 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QLabel>
+#include <QPixmap>
 #include <QPushButton>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QGroupBox>
 #include <QFormLayout>
 #include <QHeaderView>
-#include <QPainter>
 #include <memory>
 
 namespace geck {
@@ -24,7 +25,7 @@ class Object;
  *
  * Features:
  * - Real-time updates when objects are selected
- * - Item icons with quantity overlays
+ * - Item icons with amounts shown in the table
  * - Enhanced visual selection highlighting
  * - Drag & drop support for inventory management
  * - Auto-hide when no inventory objects are selected
@@ -60,9 +61,7 @@ private:
     void updateStatusLabel();
     void clearPreview();
 
-    // Enhanced icon loading with quantity overlays
-    QPixmap getItemIconWithQuantity(uint32_t pid, int amount) const;
-    QPixmap addQuantityOverlay(const QPixmap& baseIcon, int amount) const;
+    QPixmap getItemIconWithQuantity(const MapObject& item) const;
 
     // Custom tree widget item for enhanced selection
     void highlightSelectedItem(QTreeWidgetItem* item);
@@ -75,7 +74,9 @@ private:
     // Left panel - Inventory list
     QWidget* _leftPanel;
     QVBoxLayout* _leftLayout;
+    QStackedWidget* _inventoryViewStack;
     QTreeWidget* _inventoryTree;
+    QLabel* _emptyInventoryLabel;
     QLabel* _statusLabel;
 
     // Right panel - Item preview and actions
@@ -113,7 +114,6 @@ private:
 
     // Visual styling
     static const int ICON_SIZE;
-    static const int MAX_QUANTITY_DISPLAY;
 };
 
 } // namespace geck

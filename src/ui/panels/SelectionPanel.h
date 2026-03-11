@@ -93,8 +93,7 @@ private:
     void setupInventorySection();
     void updateInventorySection();
     void populateInventoryTree();
-    QPixmap getItemIconWithQuantity(uint32_t pid, int amount) const;
-    QPixmap addQuantityOverlay(const QPixmap& baseIcon, int amount) const;
+    QPixmap getItemIconWithQuantity(const MapObject& item) const;
     QPixmap createPlaceholderIcon() const;
 
     // Layout management
@@ -127,7 +126,9 @@ private:
 
     // Inventory section (appears when object has inventory)
     QGroupBox* _inventoryGroup;
+    QStackedWidget* _inventoryViewStack;
     QTreeWidget* _inventoryTree;
+    QLabel* _emptyInventoryLabel;
     QPushButton* _addInventoryButton;
     QPushButton* _removeInventoryButton;
 
@@ -156,7 +157,6 @@ private:
 
     // Visual styling constants
     static const int ICON_SIZE;
-    static const int MAX_QUANTITY_DISPLAY;
 
     // Custom delegate for editable amount column
     class AmountDelegate;

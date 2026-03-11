@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <type_traits>
 
 namespace geck::fallout {
@@ -18,7 +19,19 @@ constexpr size_t enumCount() {
     return static_cast<size_t>(Enum::Count);
 }
 
-inline constexpr int NoItemPerk = -1;
+inline constexpr int NO_ITEM_PERK = -1;
+inline constexpr uint32_t PROTO_ID_MONEY = 41;
+
+inline constexpr int PROTO_MATERIAL_MESSAGE_ID_BASE = 100;
+inline constexpr int PROTO_ITEM_TYPE_MESSAGE_ID_BASE = 150;
+inline constexpr int PROTO_SCENERY_TYPE_MESSAGE_ID_BASE = 200;
+inline constexpr int PROTO_DAMAGE_TYPE_MESSAGE_ID_BASE = 250;
+inline constexpr int PROTO_CALIBER_MESSAGE_ID_BASE = 300;
+inline constexpr int PROTO_BODY_TYPE_MESSAGE_ID_BASE = 400;
+
+inline constexpr int STAT_NAME_MESSAGE_ID_BASE = 100;
+inline constexpr int PERK_NAME_MESSAGE_ID_BASE = 101;
+inline constexpr int PERK_DESCRIPTION_MESSAGE_ID_BASE = 1101;
 
 enum class Gender : int {
     Male = 0,
@@ -266,42 +279,42 @@ enum class PerkId : int {
 };
 
 constexpr int protoMessageId(ItemType itemType) {
-    return 150 + enumValue(itemType);
+    return PROTO_ITEM_TYPE_MESSAGE_ID_BASE + enumValue(itemType);
 }
 
 constexpr int protoMessageId(SceneryType sceneryType) {
-    return 200 + enumValue(sceneryType);
+    return PROTO_SCENERY_TYPE_MESSAGE_ID_BASE + enumValue(sceneryType);
 }
 
 constexpr int protoMessageId(MaterialType materialType) {
-    return 100 + enumValue(materialType);
+    return PROTO_MATERIAL_MESSAGE_ID_BASE + enumValue(materialType);
 }
 
 constexpr int protoMessageId(DamageType damageType) {
-    return 250 + enumValue(damageType);
+    return PROTO_DAMAGE_TYPE_MESSAGE_ID_BASE + enumValue(damageType);
 }
 
 constexpr int protoMessageId(CaliberType caliberType) {
-    return 300 + enumValue(caliberType);
+    return PROTO_CALIBER_MESSAGE_ID_BASE + enumValue(caliberType);
 }
 
 constexpr int protoMessageId(BodyType bodyType) {
-    return 400 + enumValue(bodyType);
+    return PROTO_BODY_TYPE_MESSAGE_ID_BASE + enumValue(bodyType);
 }
 
 constexpr int statNameMessageId(StatId stat) {
-    return 100 + enumValue(stat);
+    return STAT_NAME_MESSAGE_ID_BASE + enumValue(stat);
 }
 
 constexpr int perkNameMessageId(PerkId perk) {
-    return 101 + enumValue(perk);
+    return PERK_NAME_MESSAGE_ID_BASE + enumValue(perk);
 }
 
 constexpr int perkDescriptionMessageId(PerkId perk) {
-    return 1101 + enumValue(perk);
+    return PERK_DESCRIPTION_MESSAGE_ID_BASE + enumValue(perk);
 }
 
-inline constexpr std::array<PerkId, 9> WeaponItemPerks = {
+inline constexpr std::array<PerkId, 9> WEAPON_ITEM_PERKS = {
     PerkId::WeaponLongRange,
     PerkId::WeaponAccurate,
     PerkId::WeaponPenetrate,
@@ -313,7 +326,7 @@ inline constexpr std::array<PerkId, 9> WeaponItemPerks = {
     PerkId::WeaponEnhancedKnockout,
 };
 
-inline constexpr std::array<PerkId, 5> ArmorItemPerks = {
+inline constexpr std::array<PerkId, 5> ARMOR_ITEM_PERKS = {
     PerkId::PoweredArmor,
     PerkId::CombatArmor,
     PerkId::ArmorAdvancedI,

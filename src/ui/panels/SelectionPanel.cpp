@@ -118,7 +118,6 @@ void HoverSpriteLabel::positionEditButton() {
 
 // Static constants
 const int SelectionPanel::ICON_SIZE = 96; // Larger icons than the separate panel
-const int SelectionPanel::MAX_QUANTITY_DISPLAY = 99;
 
 QSize SelectionPanel::sizeHint() const {
     return QSize(ui::constants::sizes::PANEL_PREFERRED_WIDTH, ui::constants::sizes::PANEL_PREFERRED_HEIGHT);
@@ -149,7 +148,9 @@ SelectionPanel::SelectionPanel(QWidget* parent)
     , _editProButton(nullptr)
     , _editExitGridButton(nullptr)
     , _inventoryGroup(nullptr)
+    , _inventoryViewStack(nullptr)
     , _inventoryTree(nullptr)
+    , _emptyInventoryLabel(nullptr)
     , _addInventoryButton(nullptr)
     , _removeInventoryButton(nullptr)
     , _tilePanelWidget(nullptr)
@@ -943,8 +944,11 @@ void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
         uint32_t pid = item->data(COLUMN_ICON, Qt::UserRole).toUInt();
         spdlog::debug("SelectionPanel::onInventoryItemChanged: Changing amount for PID {} to {}", pid, newAmount);
 
-        // Update the icon with new quantity overlay
-        QPixmap iconWithQuantity = getItemIconWithQuantity(pid, newAmount);
+        // Update the icon preview
+        QPixmap iconWithQuantity = ui::inventory::loadItemIcon(pid, ICON_SIZE, true);
+        if (iconWithQuantity.isNull()) {
+            iconWithQuantity = createPlaceholderIcon();
+        }
         spdlog::debug("SelectionPanel::onInventoryItemChanged: Updating icon for PID {} with size {}x{}",
             pid, iconWithQuantity.width(), iconWithQuantity.height());
 
@@ -1069,9 +1073,17 @@ void SelectionPanel::setupInventorySection() {
     // Set custom delegate for amount column editing
     _inventoryTree->setItemDelegateForColumn(COLUMN_AMOUNT, _amountDelegate);
 
+    _emptyInventoryLabel = new QLabel("No inventory items");
+    _emptyInventoryLabel->setAlignment(Qt::AlignCenter);
+    _emptyInventoryLabel->setStyleSheet(ui::theme::styles::smallLabel());
+
+    _inventoryViewStack = new QStackedWidget();
+    _inventoryViewStack->addWidget(_inventoryTree);
+    _inventoryViewStack->addWidget(_emptyInventoryLabel);
+
     connect(_inventoryTree, &QTreeWidget::itemChanged, this, &SelectionPanel::onInventoryItemChanged);
 
-    inventoryLayout->addWidget(_inventoryTree);
+    inventoryLayout->addWidget(_inventoryViewStack);
 
     // Button layout
     QHBoxLayout* buttonLayout = new QHBoxLayout();
@@ -1164,6 +1176,12 @@ void SelectionPanel::populateInventoryTree() {
         return;
     }
 
+    if (mapObject->inventory.empty()) {
+        _inventoryViewStack->setCurrentWidget(_emptyInventoryLabel);
+        _removeInventoryButton->setEnabled(false);
+        return;
+    }
+
     spdlog::debug("SelectionPanel::populateInventoryTree: Found {} inventory items", mapObject->inventory.size());
     // Populate tree with inventory items using the MapObject's inventory vector
     for (const auto& inventoryItem : mapObject->inventory) {
@@ -1174,11 +1192,12 @@ void SelectionPanel::populateInventoryTree() {
             inventoryItem->pro_pid, inventoryItem->amount);
         QTreeWidgetItem* item = new QTreeWidgetItem(_inventoryTree);
         const auto details = ui::inventory::describeItem(inventoryItem->pro_pid);
+        const uint32_t displayAmount = ui::inventory::displayAmount(*inventoryItem);
 
         // Set all text data first
         item->setText(COLUMN_NAME, details.name);
         item->setText(COLUMN_TYPE, details.typeName);
-        item->setText(COLUMN_AMOUNT, QString::number(inventoryItem->amount));
+        item->setText(COLUMN_AMOUNT, QString::number(displayAmount));
 
         // Store PID in item data for reference
         item->setData(COLUMN_ICON, Qt::UserRole, inventoryItem->pro_pid);
@@ -1189,8 +1208,7 @@ void SelectionPanel::populateInventoryTree() {
         // Set explicit size hint to ensure proper icon display
         item->setSizeHint(COLUMN_ICON, QSize(ICON_SIZE, ICON_SIZE));
 
-        // Set icon with quantity overlay AFTER all other data is set
-        QPixmap iconWithQuantity = getItemIconWithQuantity(inventoryItem->pro_pid, inventoryItem->amount);
+        QPixmap iconWithQuantity = getItemIconWithQuantity(*inventoryItem);
         spdlog::debug("SelectionPanel::populateInventoryTree: Setting icon for PID {} with size {}x{}",
             inventoryItem->pro_pid, iconWithQuantity.width(), iconWithQuantity.height());
 
@@ -1203,6 +1221,14 @@ void SelectionPanel::populateInventoryTree() {
         _inventoryTree->updateGeometry();
     }
 
+    if (_inventoryTree->topLevelItemCount() == 0) {
+        _inventoryViewStack->setCurrentWidget(_emptyInventoryLabel);
+        _removeInventoryButton->setEnabled(false);
+        return;
+    }
+
+    _inventoryViewStack->setCurrentWidget(_inventoryTree);
+
     _removeInventoryButton->setEnabled(_inventoryTree->currentItem() != nullptr);
 
     // Force tree widget to refresh display to ensure icons appear properly
@@ -1211,80 +1237,13 @@ void SelectionPanel::populateInventoryTree() {
     spdlog::debug("SelectionPanel::populateInventoryTree: Completed with {} items, forcing tree refresh", _inventoryTree->topLevelItemCount());
 }
 
-QPixmap SelectionPanel::getItemIconWithQuantity(uint32_t pid, int amount) const {
-    QPixmap baseIcon = ui::inventory::loadItemIcon(pid, ICON_SIZE, true);
+QPixmap SelectionPanel::getItemIconWithQuantity(const MapObject& item) const {
+    QPixmap baseIcon = ui::inventory::loadItemIcon(item.pro_pid, ICON_SIZE, true);
     if (baseIcon.isNull()) {
         baseIcon = createPlaceholderIcon();
     }
 
-    if (amount <= 1) {
-        return baseIcon;
-    }
-
-    return addQuantityOverlay(baseIcon, amount);
-}
-
-QPixmap SelectionPanel::addQuantityOverlay(const QPixmap& baseIcon, int amount) const {
-    if (amount <= 1) {
-        return baseIcon;
-    }
-
-    // Create result with consistent size
-    QPixmap result(ICON_SIZE, ICON_SIZE);
-    result.fill(Qt::transparent);
-
-    QPainter painter(&result);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
-
-    // Draw the base icon (should already be properly sized from getItemIcon)
-    if (baseIcon.size() != QSize(ICON_SIZE, ICON_SIZE)) {
-        // Only scale if the base icon is not the expected size
-        QPixmap scaledIcon = baseIcon.scaled(ICON_SIZE, ICON_SIZE, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        int x = (ICON_SIZE - scaledIcon.width()) / 2;
-        int y = (ICON_SIZE - scaledIcon.height()) / 2;
-        painter.drawPixmap(x, y, scaledIcon);
-    } else {
-        // Draw the icon directly since it's already the correct size
-        painter.drawPixmap(0, 0, baseIcon);
-    }
-
-    // Draw quantity text overlay in bottom-right corner
-    QString quantityText;
-    if (amount > MAX_QUANTITY_DISPLAY) {
-        quantityText = QString("%1k").arg(amount / 1000);
-    } else {
-        quantityText = QString::number(amount);
-    }
-
-    QFont font = ui::theme::fonts::small();
-    font.setBold(true);
-    painter.setFont(font);
-
-    QFontMetrics fm(font);
-    QRect textRect = fm.boundingRect(quantityText);
-
-    // Position in bottom-right corner with padding
-    int textX = ICON_SIZE - textRect.width() - 4;
-    int textY = ICON_SIZE - 4;
-
-    // Draw text outline (black)
-    QPen outlinePen(ui::theme::colors::textDark(), 2);
-    painter.setPen(outlinePen);
-    for (int dx = -1; dx <= 1; dx++) {
-        for (int dy = -1; dy <= 1; dy++) {
-            if (dx != 0 || dy != 0) {
-                painter.drawText(textX + dx, textY + dy, quantityText);
-            }
-        }
-    }
-
-    // Draw main text (bright green)
-    QPen textPen(ui::theme::colors::quantityText());
-    painter.setPen(textPen);
-    painter.drawText(textX, textY, quantityText);
-
-    return result;
+    return baseIcon;
 }
 
 QPixmap SelectionPanel::createPlaceholderIcon() const {

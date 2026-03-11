@@ -56,15 +56,15 @@ TEST_CASE("Perk enum mirrors Fallout 2 global perk ids", "[engine][enum]") {
 TEST_CASE("Weapon and armor proto perk subsets are filtered from the full perk enum", "[engine][enum]") {
     using namespace geck::fallout;
 
-    REQUIRE(WeaponItemPerks.size() == 9);
-    REQUIRE(WeaponItemPerks.front() == PerkId::WeaponLongRange);
-    REQUIRE(WeaponItemPerks.back() == PerkId::WeaponEnhancedKnockout);
+    REQUIRE(WEAPON_ITEM_PERKS.size() == 9);
+    REQUIRE(WEAPON_ITEM_PERKS.front() == PerkId::WeaponLongRange);
+    REQUIRE(WEAPON_ITEM_PERKS.back() == PerkId::WeaponEnhancedKnockout);
 
-    REQUIRE(ArmorItemPerks.size() == 5);
-    REQUIRE(ArmorItemPerks.front() == PerkId::PoweredArmor);
-    REQUIRE(ArmorItemPerks.back() == PerkId::ArmorCharisma);
+    REQUIRE(ARMOR_ITEM_PERKS.size() == 5);
+    REQUIRE(ARMOR_ITEM_PERKS.front() == PerkId::PoweredArmor);
+    REQUIRE(ARMOR_ITEM_PERKS.back() == PerkId::ArmorCharisma);
 
-    REQUIRE(NoItemPerk == -1);
+    REQUIRE(NO_ITEM_PERK == -1);
     REQUIRE(statNameMessageId(StatId::RadiationResistance) == 131);
     REQUIRE(statNameMessageId(StatId::PoisonResistance) == 132);
 }

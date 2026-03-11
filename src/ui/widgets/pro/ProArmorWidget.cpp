@@ -200,7 +200,7 @@ void ProArmorWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     loadIntArrayToWidgets(_damageResistEdits, _armorData.damageResist, DAMAGE_TYPES_COUNT);
 
     if (_armorData.perk == UINT32_MAX) {
-        setComboValue(_armorPerkCombo, fallout::NoItemPerk);
+        setComboValue(_armorPerkCombo, fallout::NO_ITEM_PERK);
     } else {
         setComboValue(_armorPerkCombo, static_cast<int>(_armorData.perk));
     }
@@ -220,7 +220,7 @@ void ProArmorWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     saveWidgetsToIntArray(_damageThresholdEdits, _armorData.damageThreshold, DAMAGE_TYPES_COUNT);
     saveWidgetsToIntArray(_damageResistEdits, _armorData.damageResist, DAMAGE_TYPES_COUNT);
 
-    int armorPerk = getComboValue(_armorPerkCombo, fallout::NoItemPerk);
+    int armorPerk = getComboValue(_armorPerkCombo, fallout::NO_ITEM_PERK);
     _armorData.perk = armorPerk < 0 ? UINT32_MAX : static_cast<uint32_t>(armorPerk);
 
     _armorData.armorMaleFID = _armorMaleFID;

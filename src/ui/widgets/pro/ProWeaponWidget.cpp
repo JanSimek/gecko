@@ -218,7 +218,7 @@ void ProWeaponWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (_weaponCriticalFailEdit)
         _weaponCriticalFailEdit->setValue(static_cast<int>(_weaponData.criticalFail));
     if (_weaponData.perk == UINT32_MAX) {
-        setComboValue(_weaponPerkCombo, fallout::NoItemPerk);
+        setComboValue(_weaponPerkCombo, fallout::NO_ITEM_PERK);
     } else {
         setComboValue(_weaponPerkCombo, static_cast<int>(_weaponData.perk));
     }
@@ -265,7 +265,7 @@ void ProWeaponWidget::saveToPro(std::shared_ptr<Pro>& pro) {
         _weaponData.actionCostSecondary = static_cast<uint32_t>(_weaponAPSecondaryEdit->value());
     if (_weaponCriticalFailEdit)
         _weaponData.criticalFail = static_cast<uint32_t>(_weaponCriticalFailEdit->value());
-    int weaponPerk = getComboValue(_weaponPerkCombo, fallout::NoItemPerk);
+    int weaponPerk = getComboValue(_weaponPerkCombo, fallout::NO_ITEM_PERK);
     _weaponData.perk = weaponPerk < 0 ? UINT32_MAX : static_cast<uint32_t>(weaponPerk);
     if (_weaponBurstRoundsEdit)
         _weaponData.burstRounds = static_cast<uint32_t>(_weaponBurstRoundsEdit->value());

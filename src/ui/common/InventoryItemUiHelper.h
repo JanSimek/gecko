@@ -18,6 +18,7 @@ struct ItemDetails {
     QString pidText;
 };
 
+uint32_t displayAmount(const MapObject& item);
 ItemDetails describeItem(uint32_t pid);
 QPixmap loadItemIcon(uint32_t pid, int iconSize = 0, bool fixedCanvas = false);
 bool itemExists(uint32_t pid);

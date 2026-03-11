@@ -19,7 +19,9 @@ InventoryViewerDialog::InventoryViewerDialog(std::shared_ptr<Object> object, QWi
     , _splitter(nullptr)
     , _leftPanel(nullptr)
     , _leftLayout(nullptr)
+    , _inventoryViewStack(nullptr)
     , _inventoryTree(nullptr)
+    , _emptyInventoryLabel(nullptr)
     , _statusLabel(nullptr)
     , _rightPanel(nullptr)
     , _rightLayout(nullptr)
@@ -105,13 +107,21 @@ void InventoryViewerDialog::setupUI() {
     _inventoryTree->setSelectionMode(QAbstractItemView::SingleSelection);
     _inventoryTree->setSelectionBehavior(QAbstractItemView::SelectRows);
 
+    _emptyInventoryLabel = new QLabel("No inventory items");
+    _emptyInventoryLabel->setAlignment(Qt::AlignCenter);
+    _emptyInventoryLabel->setStyleSheet(ui::theme::styles::smallLabel());
+
+    _inventoryViewStack = new QStackedWidget();
+    _inventoryViewStack->addWidget(_inventoryTree);
+    _inventoryViewStack->addWidget(_emptyInventoryLabel);
+
     // Connect signals
     connect(_inventoryTree, &QTreeWidget::itemSelectionChanged,
         this, &InventoryViewerDialog::onItemSelectionChanged);
     connect(_inventoryTree, &QTreeWidget::itemDoubleClicked,
         this, &InventoryViewerDialog::onItemDoubleClicked);
 
-    _leftLayout->addWidget(_inventoryTree);
+    _leftLayout->addWidget(_inventoryViewStack);
 
     // Status label
     _statusLabel = new QLabel("0 items total");
@@ -201,8 +211,12 @@ void InventoryViewerDialog::setupUI() {
 
 void InventoryViewerDialog::populateInventoryTree() {
     _inventoryTree->clear();
+    _removeButton->setEnabled(false);
+    _editButton->setEnabled(false);
 
-    if (!_mapObject || _mapObject->objects_in_inventory == 0) {
+    if (!_mapObject || _mapObject->inventory.empty()) {
+        _inventoryViewStack->setCurrentWidget(_emptyInventoryLabel);
+        clearPreview();
         return;
     }
 
@@ -213,6 +227,7 @@ void InventoryViewerDialog::populateInventoryTree() {
 
         QTreeWidgetItem* treeItem = new QTreeWidgetItem(_inventoryTree);
         const auto details = ui::inventory::describeItem(item->pro_pid);
+        const uint32_t displayAmount = ui::inventory::displayAmount(*item);
 
         // Store inventory index in item data
         treeItem->setData(COLUMN_NAME, Qt::UserRole, static_cast<int>(i));
@@ -225,11 +240,19 @@ void InventoryViewerDialog::populateInventoryTree() {
         // Set item details
         treeItem->setText(COLUMN_NAME, details.name);
         treeItem->setText(COLUMN_TYPE, details.typeName);
-        treeItem->setText(COLUMN_AMOUNT, QString::number(item->amount));
+        treeItem->setText(COLUMN_AMOUNT, QString::number(displayAmount));
         treeItem->setText(COLUMN_PID, details.pidText);
 
         _inventoryTree->addTopLevelItem(treeItem);
     }
+
+    if (_inventoryTree->topLevelItemCount() == 0) {
+        _inventoryViewStack->setCurrentWidget(_emptyInventoryLabel);
+        clearPreview();
+        return;
+    }
+
+    _inventoryViewStack->setCurrentWidget(_inventoryTree);
 
     // Adjust column widths to content
     for (int i = 0; i < COLUMN_COUNT; ++i) {
@@ -273,6 +296,7 @@ void InventoryViewerDialog::updateItemPreview(QTreeWidgetItem* item) {
     }
 
     const auto details = ui::inventory::describeItem(mapItem->pro_pid);
+    const uint32_t displayAmount = ui::inventory::displayAmount(*mapItem);
 
     // Update preview sprite
     QPixmap sprite = ui::inventory::loadItemIcon(mapItem->pro_pid);
@@ -287,7 +311,7 @@ void InventoryViewerDialog::updateItemPreview(QTreeWidgetItem* item) {
     // Update item details
     _previewNameLabel->setText(details.name);
     _previewTypeLabel->setText(details.typeName);
-    _previewAmountLabel->setText(QString::number(mapItem->amount));
+    _previewAmountLabel->setText(QString::number(displayAmount));
     _previewPidLabel->setText(details.pidText);
 }
 
@@ -303,6 +327,11 @@ void InventoryViewerDialog::clearPreview() {
 void InventoryViewerDialog::updateStatusLabel() {
     if (!_mapObject) {
         _statusLabel->setText("No inventory data");
+        return;
+    }
+
+    if (_mapObject->inventory.empty()) {
+        _statusLabel->setText("No inventory items");
         return;
     }
 
@@ -389,10 +418,10 @@ void InventoryViewerDialog::onRemoveItemClicked() {
 
     const auto& mapItem = _mapObject->inventory[inventoryIndex];
     const auto details = ui::inventory::describeItem(mapItem->pro_pid);
-    int amount = mapItem->amount;
+    const uint32_t displayAmount = ui::inventory::displayAmount(*mapItem);
 
     int result = QMessageBox::question(this, "Remove Item",
-        QString("Remove %1 x %2 from inventory?").arg(amount).arg(details.name),
+        QString("Remove %1 x %2 from inventory?").arg(displayAmount).arg(details.name),
         QMessageBox::Yes | QMessageBox::No);
 
     if (result != QMessageBox::Yes) {
@@ -410,7 +439,7 @@ void InventoryViewerDialog::onRemoveItemClicked() {
 
         _removeButton->setEnabled(false);
 
-        spdlog::info("InventoryViewerDialog: Removed item PID 0x{:08X} (amount {}) from inventory", removedPid, amount);
+        spdlog::info("InventoryViewerDialog: Removed item PID 0x{:08X} (display amount {}) from inventory", removedPid, displayAmount);
 
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Error", QString("Failed to remove item: %1").arg(e.what()));
