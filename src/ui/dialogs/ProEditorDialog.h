@@ -27,7 +27,6 @@
 #include "../../format/pro/Pro.h"
 #include "../../format/pro/ProDataModels.h"
 #include "../../format/msg/Msg.h"
-#include "../../util/ResourceManager.h"
 #include "../widgets/ObjectPreviewWidget.h"
 #include "../widgets/AnimationController.h"
 #include "../widgets/ProCommonFieldsWidget.h"
@@ -42,6 +41,10 @@
 
 namespace geck {
 
+namespace resource {
+class GameResources;
+}
+
 /**
  * @brief PRO file editor dialog matching f2wedit functionality
  *
@@ -52,7 +55,7 @@ class ProEditorDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent = nullptr);
+    explicit ProEditorDialog(resource::GameResources& resources, std::shared_ptr<Pro> pro, QWidget* parent = nullptr);
     ~ProEditorDialog() = default;
 
     std::shared_ptr<Pro> getModifiedPro() const { return _pro; }
@@ -319,6 +322,7 @@ private:
     QSpinBox* _genericUnknownEdit;
 
     std::shared_ptr<Pro> _pro;
+    resource::GameResources& _resources;
 
     int32_t _critterHeadFID = 0;
 

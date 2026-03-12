@@ -4,8 +4,8 @@
 
 namespace geck {
 
-ProTileWidget::ProTileWidget(QWidget* parent)
-    : ProTabWidget(parent)
+ProTileWidget::ProTileWidget(resource::GameResources& resources, QWidget* parent)
+    : ProTabWidget(resources, parent)
     , _materialIdCombo(nullptr) {
     setupUI();
 }

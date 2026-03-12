@@ -13,11 +13,11 @@
 
 namespace geck {
 
-InventoryViewerDialog::InventoryViewerDialog(std::shared_ptr<Object> object, QWidget* parent)
-    : InventoryViewerDialog(object ? object->getMapObjectPtr() : nullptr, parent) {
+InventoryViewerDialog::InventoryViewerDialog(resource::GameResources& resources, std::shared_ptr<Object> object, QWidget* parent)
+    : InventoryViewerDialog(resources, object ? object->getMapObjectPtr() : nullptr, parent) {
 }
 
-InventoryViewerDialog::InventoryViewerDialog(std::shared_ptr<MapObject> mapObject, QWidget* parent)
+InventoryViewerDialog::InventoryViewerDialog(resource::GameResources& resources, std::shared_ptr<MapObject> mapObject, QWidget* parent)
     : QDialog(parent)
     , _mainLayout(nullptr)
     , _splitter(nullptr)
@@ -42,6 +42,7 @@ InventoryViewerDialog::InventoryViewerDialog(std::shared_ptr<MapObject> mapObjec
     , _removeButton(nullptr)
     , _editButton(nullptr)
     , _closeButton(nullptr)
+    , _resources(resources)
     , _mapObject(std::move(mapObject)) {
 
     spdlog::debug("InventoryViewerDialog: Constructor called");
@@ -221,13 +222,13 @@ void InventoryViewerDialog::populateInventoryTree() {
             continue;
 
         QTreeWidgetItem* treeItem = new QTreeWidgetItem(_inventoryTree);
-        const auto details = ui::inventory::describeItem(item->pro_pid);
-        const uint32_t displayAmount = ui::inventory::displayAmount(*item);
+        const auto details = ui::inventory::describeItem(_resources, item->pro_pid);
+        const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *item);
 
         // Store inventory index in item data
         treeItem->setData(COLUMN_NAME, Qt::UserRole, static_cast<int>(i));
 
-        QPixmap icon = ui::inventory::loadItemIcon(item->pro_pid, ui::constants::sizes::ICON_SIZE_LARGE);
+        QPixmap icon = ui::inventory::loadItemIcon(_resources, item->pro_pid, ui::constants::sizes::ICON_SIZE_LARGE);
         if (!icon.isNull()) {
             treeItem->setIcon(COLUMN_ICON, QIcon(icon));
         }
@@ -290,11 +291,11 @@ void InventoryViewerDialog::updateItemPreview(QTreeWidgetItem* item) {
         return;
     }
 
-    const auto details = ui::inventory::describeItem(mapItem->pro_pid);
-    const uint32_t displayAmount = ui::inventory::displayAmount(*mapItem);
+    const auto details = ui::inventory::describeItem(_resources, mapItem->pro_pid);
+    const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *mapItem);
 
     // Update preview sprite
-    QPixmap sprite = ui::inventory::loadItemIcon(mapItem->pro_pid);
+    QPixmap sprite = ui::inventory::loadItemIcon(_resources, mapItem->pro_pid);
     if (!sprite.isNull()) {
         // Scale sprite to fit preview area while maintaining aspect ratio
         sprite = sprite.scaled(_previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -372,13 +373,13 @@ void InventoryViewerDialog::onAddItemClicked() {
         return;
     }
 
-    if (!ui::inventory::itemExists(pid)) {
+    if (!ui::inventory::itemExists(_resources, pid)) {
         QMessageBox::warning(this, "Invalid Item", QString("Item with PID 0x%1 not found in game data.").arg(pid, 8, 16, QChar('0')));
         return;
     }
 
     try {
-        auto newItem = ui::inventory::createMapInventoryItem(pid, amount);
+        auto newItem = ui::inventory::createMapInventoryItem(_resources, pid, amount);
         // Add to the container's inventory
         _mapObject->inventory.push_back(std::move(newItem));
         _mapObject->objects_in_inventory = static_cast<uint32_t>(_mapObject->inventory.size());
@@ -412,8 +413,8 @@ void InventoryViewerDialog::onRemoveItemClicked() {
     }
 
     const auto& mapItem = _mapObject->inventory[inventoryIndex];
-    const auto details = ui::inventory::describeItem(mapItem->pro_pid);
-    const uint32_t displayAmount = ui::inventory::displayAmount(*mapItem);
+    const auto details = ui::inventory::describeItem(_resources, mapItem->pro_pid);
+    const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *mapItem);
 
     int result = QMessageBox::question(this, "Remove Item",
         QString("Remove %1 x %2 from inventory?").arg(displayAmount).arg(details.name),

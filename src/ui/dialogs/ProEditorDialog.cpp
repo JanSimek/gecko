@@ -20,6 +20,7 @@
 #include "../../format/frm/Frame.h"
 #include "../../format/pal/Pal.h"
 #include "../../format/msg/Msg.h"
+#include "../../resource/GameResources.h"
 #include "../../util/ResourcePaths.h"
 #include "FrmSelectorDialog.h"
 
@@ -28,7 +29,7 @@
 
 namespace geck {
 
-ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
+ProEditorDialog::ProEditorDialog(resource::GameResources& resources, std::shared_ptr<Pro> pro, QWidget* parent)
     : QDialog(parent)
     , _mainLayout(nullptr)
     , _contentLayout(nullptr)
@@ -65,7 +66,8 @@ ProEditorDialog::ProEditorDialog(std::shared_ptr<Pro> pro, QWidget* parent)
     , _filenameEdit(nullptr)
     , _critterHeadFIDLabel(nullptr)
     , _critterHeadFIDSelectorButton(nullptr)
-    , _pro(pro) {
+    , _pro(pro)
+    , _resources(resources) {
 
     setWindowTitle("PRO Editor");
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
@@ -254,7 +256,7 @@ void ProEditorDialog::setupCompactPreview(QVBoxLayout* parentLayout) {
     bool hasSpecializedPreview = (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM);
 
     if (!hasSpecializedPreview) {
-        _objectPreviewWidget = new ObjectPreviewWidget();
+        _objectPreviewWidget = new ObjectPreviewWidget(_resources);
 
         connect(_objectPreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
             this, &ProEditorDialog::onObjectFidChangeRequested);
@@ -279,11 +281,11 @@ void ProEditorDialog::setupDualPreviewCompact(QVBoxLayout* parentLayout) {
     dualLayout->setSpacing(ui::constants::SPACING_TIGHT);
     dualLayout->setAlignment(Qt::AlignCenter);
 
-    _inventoryPreviewWidget = new ObjectPreviewWidget(this,
+    _inventoryPreviewWidget = new ObjectPreviewWidget(_resources, this,
         ObjectPreviewWidget::PreviewOptions(),
         QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
 
-    _groundPreviewWidget = new ObjectPreviewWidget(this,
+    _groundPreviewWidget = new ObjectPreviewWidget(_resources, this,
         ObjectPreviewWidget::PreviewOptions(),
         QSize(PREVIEW_ITEM_SIZE, PREVIEW_ITEM_SIZE));
 
@@ -310,7 +312,7 @@ void ProEditorDialog::setupCommonTab() {
     layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     layout->setSpacing(ui::constants::SPACING_FORM);
 
-    _commonFieldsWidget = new ProCommonFieldsWidget(this);
+    _commonFieldsWidget = new ProCommonFieldsWidget(_resources, this);
     layout->addWidget(_commonFieldsWidget);
 
     connect(_commonFieldsWidget, &ProCommonFieldsWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
@@ -576,7 +578,7 @@ void ProEditorDialog::setupCritterDefenceTab(QTabWidget* parentTabs) {
     resistanceHeader->setAlignment(Qt::AlignCenter);
     damageProtectionLayout->addWidget(resistanceHeader, 0, 2);
 
-    const QStringList damageTypes = game::enums::damageTypes9();
+    const QStringList damageTypes = game::enums::damageTypes9(_resources);
 
     // First 7 damage types (threshold + resistance)
     for (int i = 0; i < 7; ++i) {
@@ -707,7 +709,7 @@ void ProEditorDialog::setupCritterGeneralTab(QTabWidget* parentTabs) {
     charLayout->addRow("Gender:", _critterGenderCombo);
 
     _critterBodyTypeCombo = new QComboBox();
-    _critterBodyTypeCombo->addItems(game::enums::critterBodyTypes());
+    _critterBodyTypeCombo->addItems(game::enums::critterBodyTypes(_resources));
     _critterBodyTypeCombo->setToolTip("Body type for animations");
     connect(_critterBodyTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
     charLayout->addRow("Body Type:", _critterBodyTypeCombo);
@@ -829,7 +831,7 @@ void ProEditorDialog::setupWallTab() {
         return;
 
     // Use the new ProWallWidget
-    _wallWidget = new ProWallWidget();
+    _wallWidget = new ProWallWidget(_resources);
     connect(_wallWidget, &ProWallWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
 
     _tabWidget->addTab(_wallWidget, _wallWidget->getTabLabel());
@@ -840,7 +842,7 @@ void ProEditorDialog::setupTileTab() {
         return;
 
     // Use the new ProTileWidget
-    _tileWidget = new ProTileWidget();
+    _tileWidget = new ProTileWidget(_resources);
     connect(_tileWidget, &ProTileWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
 
     _tabWidget->addTab(_tileWidget, _tileWidget->getTabLabel());
@@ -870,7 +872,7 @@ void ProEditorDialog::setupArmorTab() {
         return;
 
     // Use the new ProArmorWidget
-    _armorWidget = new ProArmorWidget();
+    _armorWidget = new ProArmorWidget(_resources);
     connect(_armorWidget, &ProArmorWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
 
     _tabWidget->addTab(_armorWidget, _armorWidget->getTabLabel());
@@ -881,7 +883,7 @@ void ProEditorDialog::setupDrugTab() {
         return;
 
     // Use the new ProDrugWidget
-    _drugWidget = new ProDrugWidget();
+    _drugWidget = new ProDrugWidget(_resources);
     connect(_drugWidget, &ProDrugWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
 
     // Set stat and perk names from MSG files
@@ -896,7 +898,7 @@ void ProEditorDialog::setupWeaponTab() {
         return;
 
     // Use the new ProWeaponWidget
-    _weaponWidget = new ProWeaponWidget();
+    _weaponWidget = new ProWeaponWidget(_resources);
     connect(_weaponWidget, &ProWeaponWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
 
     _tabWidget->addTab(_weaponWidget, _weaponWidget->getTabLabel());
@@ -911,13 +913,13 @@ void ProEditorDialog::setupAmmoMiscTab() {
         return;
 
     if (itemType == Pro::ITEM_TYPE::AMMO) {
-        _ammoWidget = new ProAmmoWidget();
+        _ammoWidget = new ProAmmoWidget(_resources);
         connect(_ammoWidget, &ProAmmoWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
         _tabWidget->addTab(_ammoWidget, _ammoWidget->getTabLabel());
         return;
     }
 
-    _miscItemWidget = new ProMiscItemWidget();
+    _miscItemWidget = new ProMiscItemWidget(_resources);
     connect(_miscItemWidget, &ProMiscItemWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
     _tabWidget->addTab(_miscItemWidget, _miscItemWidget->getTabLabel());
 }
@@ -931,7 +933,7 @@ void ProEditorDialog::setupContainerKeyTab() {
         return;
 
     // Use the new ProContainerKeyWidget
-    _containerKeyWidget = new ProContainerKeyWidget();
+    _containerKeyWidget = new ProContainerKeyWidget(_resources);
     connect(_containerKeyWidget, &ProContainerKeyWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
 
     _tabWidget->addTab(_containerKeyWidget, _containerKeyWidget->getTabLabel());
@@ -1318,7 +1320,7 @@ void ProEditorDialog::setupCritterFields() {
     advancedLayout->addRow("Gender:", _critterGenderCombo);
 
     _critterBodyTypeCombo = new QComboBox();
-    _critterBodyTypeCombo->addItems(game::enums::critterBodyTypes());
+    _critterBodyTypeCombo->addItems(game::enums::critterBodyTypes(_resources));
     _critterBodyTypeCombo->setToolTip("Body type for animations");
     connect(_critterBodyTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ProEditorDialog::onComboBoxChanged);
     advancedLayout->addRow("Body Type:", _critterBodyTypeCombo);
@@ -1362,7 +1364,7 @@ void ProEditorDialog::setupCritterFields() {
     resistanceHeader->setAlignment(Qt::AlignCenter);
     damageProtectionLayout->addWidget(resistanceHeader, 0, 2);
 
-    const QStringList damageTypes = game::enums::damageTypes9();
+    const QStringList damageTypes = game::enums::damageTypes9(_resources);
 
     // First 7 damage types (threshold + resistance)
     for (int i = 0; i < 7; ++i) {
@@ -1503,7 +1505,7 @@ void ProEditorDialog::setupSceneryFields() {
     connectSpinBox(_scenerySoundIdEdit);
     basicLayout->addRow("Sound ID:", _scenerySoundIdEdit);
 
-    _sceneryTypeCombo = createComboBox(game::enums::sceneryTypes(), "Scenery subtype");
+    _sceneryTypeCombo = createComboBox(game::enums::sceneryTypes(_resources), "Scenery subtype");
     connectComboBox(_sceneryTypeCombo);
     basicLayout->addRow("Type:", _sceneryTypeCombo);
 
@@ -1621,7 +1623,7 @@ void ProEditorDialog::updatePreview() {
     }
 
     if (_pro && _pro->type() != Pro::OBJECT_TYPE::ITEM && _objectPreviewWidget) {
-        std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(static_cast<unsigned int>(_pro->header.FID));
+        std::string frmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(_pro->header.FID));
         spdlog::debug("ObjectPreviewWidget: Setting FRM path: {}", frmPath);
         _objectPreviewWidget->setFrmPath(QString::fromStdString(frmPath));
         _objectPreviewWidget->setFid(_pro->header.FID);
@@ -1674,8 +1676,7 @@ void ProEditorDialog::updateInventoryPreview() {
     }
 
     try {
-        auto& resourceManager = ResourceManager::getInstance();
-        std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(inventoryFid));
+        std::string frmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(inventoryFid));
 
         if (frmPath.empty()) {
             _inventoryPreviewWidget->clear();
@@ -1704,8 +1705,7 @@ void ProEditorDialog::updateGroundPreview() {
     }
 
     try {
-        auto& resourceManager = ResourceManager::getInstance();
-        std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(groundFid));
+        std::string frmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(groundFid));
 
         if (frmPath.empty()) {
             _groundPreviewWidget->clear();
@@ -1784,7 +1784,7 @@ void ProEditorDialog::onFidSelectorClicked() {
 
 void ProEditorDialog::onEditMessageClicked() {
     try {
-        const auto* msgFile = ProHelper::msgFile(_pro->type());
+        const auto* msgFile = ProHelper::msgFile(_resources, _pro->type());
         if (!msgFile) {
             QMessageBox::warning(this, "Message Selection",
                 "Could not load MSG file for this object type.");
@@ -1821,7 +1821,7 @@ void ProEditorDialog::openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidS
     if (!targetLabel || !fidStorage)
         return;
 
-    FrmSelectorDialog dialog(this);
+    FrmSelectorDialog dialog(_resources, this);
     dialog.setObjectTypeFilter(objectType);
     dialog.setInitialFrmPid(static_cast<uint32_t>(*fidStorage));
 
@@ -2319,7 +2319,7 @@ void ProEditorDialog::loadNameAndDescription() {
     }
 
     try {
-        const auto* msgFile = ProHelper::msgFile(_pro->type());
+        const auto* msgFile = ProHelper::msgFile(_resources, _pro->type());
         if (!msgFile) {
             _nameLabel->setText("MSG file not found");
             _descriptionEdit->setText("Could not load MSG file for " + QString::fromStdString(_pro->typeToString()));
@@ -2497,14 +2497,13 @@ void ProEditorDialog::loadAnimationFrames() {
             return;
         }
 
-        auto& resourceManager = ResourceManager::getInstance();
-        std::string frmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(previewFid));
+        std::string frmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(previewFid));
 
         if (frmPath.empty()) {
             return;
         }
 
-        const auto* frm = resourceManager.loadResource<Frm>(frmPath);
+        const auto* frm = _resources.repository().load<Frm>(frmPath);
         if (!frm) {
             return;
         }
@@ -2521,7 +2520,7 @@ void ProEditorDialog::loadAnimationFrames() {
         int totalDirections = static_cast<int>(directions.size());
         _animationController->setTotalDirections(totalDirections);
 
-        const Pal* palette = resourceManager.loadResource<Pal>("color.pal");
+        const Pal* palette = _resources.repository().load<Pal>("color.pal");
         if (!palette) {
             return;
         }
@@ -2578,7 +2577,7 @@ void ProEditorDialog::loadObjectFlags(uint32_t flags) {
 
 QComboBox* ProEditorDialog::createMaterialComboBox(const QString& tooltip) {
     QComboBox* comboBox = new QComboBox();
-    comboBox->addItems(game::enums::materialTypes());
+    comboBox->addItems(game::enums::materialTypes(_resources));
     if (!tooltip.isEmpty()) {
         comboBox->setToolTip(tooltip);
     }
@@ -2589,7 +2588,7 @@ QString ProEditorDialog::getFrmFilename(int32_t fid) {
     if (fid <= 0) {
         return "No FRM";
     }
-    std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(static_cast<unsigned int>(fid));
+    std::string frmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(fid));
     if (frmPath.empty()) {
         return QString("Invalid FID (%1)").arg(fid);
     }
@@ -2606,7 +2605,7 @@ void ProEditorDialog::onObjectFidChangeRequested() {
         if (!senderWidget) {
             return;
         }
-        FrmSelectorDialog dialog(this);
+        FrmSelectorDialog dialog(_resources, this);
 
         uint32_t objectTypeFilter = 0;
         switch (_pro->type()) {
@@ -2658,7 +2657,7 @@ void ProEditorDialog::onObjectFidChangeRequested() {
                     }
                 } else {
                     _pro->header.FID = static_cast<int32_t>(selectedFrmPid);
-                    std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(selectedFrmPid);
+                    std::string frmPath = _resources.frmResolver().resolve(selectedFrmPid);
                     senderWidget->setFrmPath(QString::fromStdString(frmPath));
                     senderWidget->setFid(static_cast<int32_t>(selectedFrmPid));
                 }
@@ -2671,7 +2670,7 @@ void ProEditorDialog::onObjectFidChanged(int32_t newFid) {
     if (_pro && _pro->type() != Pro::OBJECT_TYPE::ITEM) {
         _pro->header.FID = newFid;
 
-        std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(static_cast<unsigned int>(newFid));
+        std::string frmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(newFid));
         if (_objectPreviewWidget) {
             _objectPreviewWidget->setFrmPath(QString::fromStdString(frmPath));
             _objectPreviewWidget->setFid(newFid);
@@ -2680,8 +2679,8 @@ void ProEditorDialog::onObjectFidChanged(int32_t newFid) {
 }
 
 void ProEditorDialog::loadStatAndPerkNames() {
-    _statNames = game::enums::statNames();
-    _perkOptions = game::enums::allPerkOptions();
+    _statNames = game::enums::statNames(_resources);
+    _perkOptions = game::enums::allPerkOptions(_resources);
 }
 
 void ProEditorDialog::onCritterFlagChanged() {
@@ -2727,7 +2726,7 @@ void ProEditorDialog::updateFilenameLabel() {
     }
 
     try {
-        std::string proPath = ProHelper::basePath(_pro->header.PID);
+        std::string proPath = ProHelper::basePath(_resources, _pro->header.PID);
 
         size_t lastSlash = proPath.find_last_of('/');
         std::string filename;

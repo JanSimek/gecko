@@ -8,9 +8,6 @@ set(GECK_APP_SOURCES
     Application.h
     Application.cpp
 
-    util/ResourceManager.h
-    util/ResourceManager.cpp
-
     util/FalloutEngineEnums.h
     util/MessageEnumUtils.h
     util/ResourceInitializer.h
@@ -135,6 +132,8 @@ set(GECK_APP_SOURCES
     ui/GameEnums.h
     ui/GameEnums.cpp
     ui/UIConstants.h
+    ui/rendering/HexRenderer.h
+    ui/rendering/HexRenderer.cpp
     ui/rendering/RenderingEngine.h
     ui/rendering/RenderingEngine.cpp
     ui/input/InputHandler.h
@@ -178,8 +177,19 @@ set(GECK_APP_SOURCES
     
     # Path utilities
     util/PathUtils.h
+
+    resource/DataFileSystem.h
+    resource/DataFileSystem.cpp
+    resource/ResourceRepository.h
+    resource/ResourceRepository.cpp
+    resource/FrmResolver.h
+    resource/FrmResolver.cpp
+    resource/TextureManager.h
+    resource/TextureManager.cpp
+    resource/GameResources.h
+    resource/GameResources.cpp
     
-    # MapObject implementation (needs ResourceManager access)
+    # MapObject implementation (needs shared resource access)
     format/map/MapObject.cpp
     
     # Qt Resource files

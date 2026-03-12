@@ -1,6 +1,5 @@
 #include "ProCommonFieldsWidget.h"
-#include "../../util/ResourceManager.h"
-#include "../../util/ProHelper.h"
+#include "../../resource/GameResources.h"
 #include "../theme/ThemeManager.h"
 #include "../GameEnums.h"
 #include "../UIConstants.h"
@@ -11,13 +10,14 @@
 
 namespace geck {
 
-ProCommonFieldsWidget::ProCommonFieldsWidget(QWidget* parent)
+ProCommonFieldsWidget::ProCommonFieldsWidget(resource::GameResources& resources, QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
     , _lightingGroup(nullptr)
     , _objectFlagsGroup(nullptr)
     , _extendedFlagsGroup(nullptr)
-    , _itemFieldsGroup(nullptr) {
+    , _itemFieldsGroup(nullptr)
+    , _resources(resources) {
     setupUI();
 }
 
@@ -343,7 +343,7 @@ QSpinBox* ProCommonFieldsWidget::createHexSpinBox(int max, const QString& toolti
 
 QComboBox* ProCommonFieldsWidget::createMaterialComboBox(const QString& tooltip) {
     auto comboBox = new QComboBox(this);
-    comboBox->addItems(game::enums::materialTypes());
+    comboBox->addItems(game::enums::materialTypes(_resources));
     if (!tooltip.isEmpty()) {
         comboBox->setToolTip(tooltip);
     }

@@ -20,6 +20,9 @@
 namespace geck {
 
 class Map;
+namespace resource {
+class GameResources;
+}
 
 /**
  * Qt6 widget for displaying properties from the current MAP file
@@ -28,7 +31,7 @@ class MapInfoPanel : public QWidget {
     Q_OBJECT
 
 public:
-    explicit MapInfoPanel(QWidget* parent = nullptr);
+    explicit MapInfoPanel(resource::GameResources& resources, QWidget* parent = nullptr);
 
     void setMap(Map* map);
     void setPlayerPosition(int hexPosition, int elevation);
@@ -97,6 +100,7 @@ private:
     QGroupBox* _mapScriptsGroup;
     QLabel* _mapScriptsLabel;
 
+    resource::GameResources& _resources;
     Map* _map;
     std::string _mapScriptName;
     std::unordered_map<std::string, uint32_t> _mvars;

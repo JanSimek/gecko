@@ -37,36 +37,19 @@
 #include "../../format/map/Tile.h"
 #include "../../format/pro/Pro.h"
 #include "../../format/map/MapObject.h"
+#include "../../resource/GameResources.h"
 
 #include "../../writer/map/MapWriter.h"
 
 namespace geck {
 
-EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
+EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<Map> map, QWidget* parent)
     : QWidget(parent)
     , _layout(nullptr)
     , _sfmlWidget(nullptr)
     , _mainWindow(nullptr)
-    , _map(std::move(map))
-    , _hexSprite(createHexTexture())
-    , _hexHighlightSprite(createCursorHexTexture())
-    , _playerPositionSprite(createCursorHexTexture()) {
-
-    // Set texture rectangle to show only half of HEX.frm (right half for highlighting)
-    sf::Vector2u textureSize = _hexHighlightSprite.getTexture().getSize();
-    _hexHighlightSprite.setTextureRect(
-        sf::IntRect(
-            sf::Vector2i(static_cast<int>(textureSize.x / 2), 0),
-            sf::Vector2i(static_cast<int>(textureSize.x / 2), static_cast<int>(textureSize.y))));
-    _hexHighlightSprite.setColor(sf::Color(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B, 255));
-
-    // Set up player position marker (blue color for visibility)
-    _playerPositionSprite.setTextureRect(
-        sf::IntRect(
-            sf::Vector2i(static_cast<int>(textureSize.x / 2), 0),
-            sf::Vector2i(static_cast<int>(textureSize.x / 2), static_cast<int>(textureSize.y))));
-    _playerPositionSprite.setColor(sf::Color(PlayerColors::POSITION_R, PlayerColors::POSITION_G, PlayerColors::POSITION_B, PlayerColors::POSITION_ALPHA)); // Semi-transparent blue
-
+    , _resources(resources)
+    , _map(std::move(map)) {
     // Initialize sprite vectors - will be populated when sprites are loaded
     _floorSprites.reserve(Map::TILES_PER_ELEVATION);
     _roofSprites.reserve(Map::TILES_PER_ELEVATION);
@@ -77,7 +60,7 @@ EditorWidget::EditorWidget(std::unique_ptr<Map> map, QWidget* parent)
     }
 
     // Initialize rendering engine, input handler, drag/drop manager, tile placement manager, and viewport controller
-    _renderingEngine = std::make_unique<RenderingEngine>();
+    _renderingEngine = std::make_unique<RenderingEngine>(_resources);
     _inputHandler = std::make_unique<InputHandler>(this);
     _dragDropManager = std::make_unique<DragDropManager>(this);
     _tilePlacementManager = std::make_unique<TilePlacementManager>(this);
@@ -221,7 +204,7 @@ void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>
     UndoCommand cmd;
     cmd.description = "Move Objects";
     cmd.undo = [this, objects, moves]() {
-        if (_hexgrid.grid().empty()) {
+        if (_hexgrid.empty()) {
             spdlog::error("registerObjectMove undo: hex grid not available");
             return;
         }
@@ -231,8 +214,8 @@ void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>
                 continue;
             auto& mapObj = object->getMapObject();
             mapObj.position = moves[i].first;
-            if (moves[i].first >= 0 && moves[i].first < static_cast<int>(_hexgrid.grid().size())) {
-                object->setHexPosition(_hexgrid.grid()[moves[i].first]);
+            if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(moves[i].first)); hex.has_value()) {
+                object->setHexPosition(hex->get());
             } else {
                 spdlog::warn("registerObjectMove undo: Invalid hex position {}", moves[i].first);
             }
@@ -240,7 +223,7 @@ void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>
         refreshObjects();
     };
     cmd.redo = [this, objects, moves]() {
-        if (_hexgrid.grid().empty()) {
+        if (_hexgrid.empty()) {
             spdlog::error("registerObjectMove redo: hex grid not available");
             return;
         }
@@ -250,8 +233,8 @@ void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>
                 continue;
             auto& mapObj = object->getMapObject();
             mapObj.position = moves[i].second;
-            if (moves[i].second >= 0 && moves[i].second < static_cast<int>(_hexgrid.grid().size())) {
-                object->setHexPosition(_hexgrid.grid()[moves[i].second]);
+            if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(moves[i].second)); hex.has_value()) {
+                object->setHexPosition(hex->get());
             } else {
                 spdlog::warn("registerObjectMove redo: Invalid hex position {}", moves[i].second);
             }
@@ -310,8 +293,7 @@ void EditorWidget::applyFrmToObject(const std::shared_ptr<Object>& object, uint3
         return;
     }
     try {
-        auto& resourceManager = ResourceManager::getInstance();
-        const auto& texture = resourceManager.texture(frmPath);
+        const auto& texture = _resources.textures().get(frmPath);
         sf::Sprite sprite(texture);
         sprite.setPosition(object->getSprite().getPosition());
         object->setSprite(std::move(sprite));
@@ -471,7 +453,7 @@ void EditorWidget::initializeSelectionSystem() {
 
                         // Create a blank.frm background sprite for better visibility of tiles with transparent pixels
                         auto screenPos = geck::indexToScreenPosition(tileIndex, true); // true for roof offset
-                        sf::Sprite backgroundSprite(ResourceManager::getInstance().texture("art/tiles/blank.frm"));
+                        sf::Sprite backgroundSprite(_resources.textures().get("art/tiles/blank.frm"));
                         backgroundSprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
                         // Set semi-transparent red color to show through transparent areas of the roof tile
                         backgroundSprite.setColor(sf::Color(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B, 128)); // 50% transparency
@@ -490,19 +472,8 @@ void EditorWidget::initializeSelectionSystem() {
 
                 case selection::SelectionType::HEX: {
                     int hexIndex = item.getHexIndex();
-                    if (hexIndex >= 0 && hexIndex < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT)) {
-                        // Create a hex selection sprite using the hex highlight texture
-                        if (hexIndex < static_cast<int>(_hexgrid.grid().size())) {
-                            const auto& hex = _hexgrid.grid().at(hexIndex);
-                            sf::Sprite hexSelectionSprite = _hexHighlightSprite; // Copy the highlight sprite
-                            // Use the same positioning as hover highlight
-                            float spriteX = static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X);
-                            float spriteY = static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y);
-                            hexSelectionSprite.setPosition(sf::Vector2f(spriteX, spriteY));
-                            // Use a different color for selection vs hover (blue for selection, red for hover)
-                            hexSelectionSprite.setColor(sf::Color(SelectionColors::HEX_R, SelectionColors::HEX_G, SelectionColors::HEX_B, SelectionColors::HEX_ALPHA)); // Semi-transparent blue
-                            this->_selectedHexSprites.push_back(hexSelectionSprite);
-                        }
+                    if (hexIndex >= 0 && hexIndex < static_cast<int>(_hexgrid.size())) {
+                        this->_selectedHexPositions.push_back(hexIndex);
                     }
                     break;
                 }
@@ -588,8 +559,8 @@ void EditorWidget::saveMap() {
     std::string destination = destinationQString.toStdString();
 
     try {
-        MapWriter map_writer{ [](int32_t PID) {
-            return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(PID));
+        MapWriter map_writer{ [this](int32_t PID) {
+            return _resources.repository().load<Pro>(ProHelper::basePath(_resources, PID));
         } };
 
         map_writer.openFile(destination);
@@ -683,11 +654,12 @@ void EditorWidget::createNewMap() {
     _floorSprites.clear();
     _roofSprites.clear();
     _wallBlockerOverlays.clear();
-    _selectedHexSprites.clear();
+    _selectedHexPositions.clear();
 
-    // Load essential resources for empty map
+    // Load the core helper textures needed by an empty map.
+    // Resource lists are bootstrapped once during startup.
     try {
-        ResourceInitializer::loadEssentialResources();
+        ResourceInitializer::loadEssentialTextures(_resources);
     } catch (const std::exception& e) {
         spdlog::warn("Failed to load some essential resources for new map: {}", e.what());
     }
@@ -730,7 +702,7 @@ void EditorWidget::loadObjectSprites() {
             continue; // object inside an inventory/container
 
         // Special handling for wall blockers - use wallblock.frm based on blocking behavior
-        std::string frm_name = ResourceManager::getInstance().FIDtoFrmName(object->frm_pid);
+        std::string frm_name = _resources.frmResolver().resolve(object->frm_pid);
 
         if (frm_name.empty()) {
             spdlog::error("Empty FRM name for object at position {} (frm_pid=0x{:08X}, pro_pid=0x{:08X})",
@@ -740,12 +712,12 @@ void EditorWidget::loadObjectSprites() {
 
         spdlog::debug("Loading object sprite: FRM='{}', position={}, direction={}, frm_pid=0x{:08X}, pro_pid=0x{:08X}",
             frm_name, object->position, object->direction, object->frm_pid, object->pro_pid);
-        auto frm = ResourceManager::getInstance().getResource<Frm>(frm_name);
+        auto frm = _resources.repository().find<Frm>(frm_name);
 
         if (!frm) {
             spdlog::debug("FRM '{}' not in cache, attempting on-demand loading", frm_name);
             try {
-                frm = ResourceManager::getInstance().loadResource<Frm>(frm_name);
+                frm = _resources.repository().load<Frm>(frm_name);
                 if (!frm) {
                     spdlog::error("Failed to load FRM resource '{}' for object at position {} - resource still null after loading", frm_name, object->position);
                     _lastLoadErrors.failedFrmNames.insert(frm_name);
@@ -768,9 +740,11 @@ void EditorWidget::loadObjectSprites() {
 
         try {
             _objects.emplace_back(std::make_shared<Object>(frm));
-            sf::Sprite object_sprite{ ResourceManager::getInstance().texture(frm_name) };
+            sf::Sprite object_sprite{ _resources.textures().get(frm_name) };
             _objects.back()->setSprite(std::move(object_sprite));
-            _objects.back()->setHexPosition(_hexgrid.grid().at(object->position));
+            if (auto hex = _hexgrid.getHexByPosition(object->position); hex.has_value()) {
+                _objects.back()->setHexPosition(hex->get());
+            }
             _objects.back()->setMapObject(object);
             _objects.back()->setDirection(static_cast<ObjectDirection>(object->direction));
 
@@ -813,7 +787,7 @@ void EditorWidget::loadObjectSprites() {
 void EditorWidget::createWallBlockerOverlay(const std::shared_ptr<MapObject>& mapObject, int hexPosition) {
     // Only create overlays for regular objects that block movement
     // Gap-filling wall blockers (PIDs 620/621) already show wallblock.frm as their main sprite
-    bool blocks = mapObject->blocksMovement();
+    bool blocks = mapObject->blocksMovement(_resources);
 
     spdlog::debug("createWallBlockerOverlay: hex {}, pro_pid 0x{:08X}, blocks: {}",
         hexPosition, mapObject->pro_pid, blocks);
@@ -822,7 +796,7 @@ void EditorWidget::createWallBlockerOverlay(const std::shared_ptr<MapObject>& ma
         return; // No overlay needed
     }
 
-    bool is_shoot_through = mapObject->isShootThroughWallBlocker();
+    bool is_shoot_through = mapObject->isShootThroughWallBlocker(_resources);
 
     try {
         // Load wallblock.frm as overlay
@@ -832,14 +806,17 @@ void EditorWidget::createWallBlockerOverlay(const std::shared_ptr<MapObject>& ma
         } else {
             overlayFrmPath = std::string(ResourcePaths::Frm::WALL_BLOCK_FULL);
         }
-        ResourceManager::getInstance().insertTexture(overlayFrmPath);
+        _resources.textures().preload(overlayFrmPath);
 
-        sf::Sprite overlaySprite{ ResourceManager::getInstance().texture(overlayFrmPath) };
+        sf::Sprite overlaySprite{ _resources.textures().get(overlayFrmPath) };
 
         // Position overlay at the specified hex position
-        auto hex = _hexgrid.grid().at(hexPosition);
-        float x = static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X); // Use same offset as hex selection
-        float y = static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y);
+        auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(hexPosition));
+        if (!hex.has_value()) {
+            return;
+        }
+        float x = static_cast<float>(hex->get().x() + SpriteOffset::HEX_HIGHLIGHT_X);
+        float y = static_cast<float>(hex->get().y() + SpriteOffset::HEX_HIGHLIGHT_Y);
         overlaySprite.setPosition(sf::Vector2f(x, y));
 
         // Make overlay semi-transparent to show the object underneath
@@ -856,8 +833,6 @@ void EditorWidget::createWallBlockerOverlay(const std::shared_ptr<MapObject>& ma
 }
 
 std::vector<int> EditorWidget::calculateRectangleBorderHexes(sf::FloatRect rectangle) {
-    std::vector<int> borderHexes;
-
     // Convert rectangle corners to hex positions
     sf::Vector2f topLeft = sf::Vector2f(rectangle.position.x, rectangle.position.y);
     sf::Vector2f topRight = sf::Vector2f(rectangle.position.x + rectangle.size.x, rectangle.position.y);
@@ -870,65 +845,15 @@ std::vector<int> EditorWidget::calculateRectangleBorderHexes(sf::FloatRect recta
     int bottomLeftHex = _viewportController->worldPosToHexIndex(bottomLeft);
     int bottomRightHex = _viewportController->worldPosToHexIndex(bottomRight);
 
-    // Validate hex positions
-    const int maxHex = HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT;
-    if (topLeftHex < 0 || topLeftHex >= maxHex || topRightHex < 0 || topRightHex >= maxHex || bottomLeftHex < 0 || bottomLeftHex >= maxHex || bottomRightHex < 0 || bottomRightHex >= maxHex) {
+    if (!_hexgrid.containsPosition(topLeftHex)
+        || !_hexgrid.containsPosition(topRightHex)
+        || !_hexgrid.containsPosition(bottomLeftHex)
+        || !_hexgrid.containsPosition(bottomRightHex)) {
         spdlog::warn("Rectangle contains invalid hex positions, skipping border calculation");
-        return borderHexes;
+        return {};
     }
 
-    // Calculate hex grid coordinates for rectangle bounds
-    int leftX = topLeftHex % HexagonGrid::GRID_WIDTH;
-    int rightX = topRightHex % HexagonGrid::GRID_WIDTH;
-    int topY = topLeftHex / HexagonGrid::GRID_WIDTH;
-    int bottomY = bottomLeftHex / HexagonGrid::GRID_WIDTH;
-
-    // Ensure proper ordering (left < right, top < bottom)
-    if (leftX > rightX)
-        std::swap(leftX, rightX);
-    if (topY > bottomY)
-        std::swap(topY, bottomY);
-
-    std::set<int> uniqueHexes; // Use set to avoid duplicates
-
-    // Top border (left to right)
-    for (int x = leftX; x <= rightX; x++) {
-        int hexPos = topY * HexagonGrid::GRID_WIDTH + x;
-        if (hexPos >= 0 && hexPos < maxHex) {
-            uniqueHexes.insert(hexPos);
-        }
-    }
-
-    // Bottom border (left to right)
-    if (bottomY != topY) {
-        for (int x = leftX; x <= rightX; x++) {
-            int hexPos = bottomY * HexagonGrid::GRID_WIDTH + x;
-            if (hexPos >= 0 && hexPos < maxHex) {
-                uniqueHexes.insert(hexPos);
-            }
-        }
-    }
-
-    // Left border (top to bottom, excluding corners already added)
-    for (int y = topY + 1; y < bottomY; y++) {
-        int hexPos = y * HexagonGrid::GRID_WIDTH + leftX;
-        if (hexPos >= 0 && hexPos < maxHex) {
-            uniqueHexes.insert(hexPos);
-        }
-    }
-
-    // Right border (top to bottom, excluding corners already added)
-    if (rightX != leftX) {
-        for (int y = topY + 1; y < bottomY; y++) {
-            int hexPos = y * HexagonGrid::GRID_WIDTH + rightX;
-            if (hexPos >= 0 && hexPos < maxHex) {
-                uniqueHexes.insert(hexPos);
-            }
-        }
-    }
-
-    // Convert set to vector
-    borderHexes.assign(uniqueHexes.begin(), uniqueHexes.end());
+    auto borderHexes = _hexgrid.rectangleBorderPositions(topLeftHex, topRightHex, bottomLeftHex, bottomRightHex);
 
     spdlog::debug("Calculated {} border hexes for rectangle ({}, {}, {}, {})",
         borderHexes.size(), rectangle.position.x, rectangle.position.y, rectangle.size.x, rectangle.size.y);
@@ -997,8 +922,8 @@ void EditorWidget::loadTileSprites() {
         const auto screenPos = coordinatesToScreenPosition(coords);
 
         // Create floor and roof sprites using factory
-        _floorSprites.push_back(SpriteFactory::createFloorTileSprite(tile.getFloor(), screenPos));
-        _roofSprites.push_back(SpriteFactory::createRoofTileSprite(tile.getRoof(), screenPos));
+        _floorSprites.push_back(SpriteFactory::createFloorTileSprite(_resources, tile.getFloor(), screenPos));
+        _roofSprites.push_back(SpriteFactory::createRoofTileSprite(_resources, tile.getRoof(), screenPos));
     }
 }
 
@@ -1191,8 +1116,7 @@ void EditorWidget::clearAllVisualSelections() {
     // Clear roof tile selection background sprites
     _selectedRoofTileBackgroundSprites.clear();
 
-    // Clear hex selection sprites
-    _selectedHexSprites.clear();
+    _selectedHexPositions.clear();
 }
 
 // SFML Event handling interface (called by SFMLWidget)
@@ -1403,18 +1327,20 @@ void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderH
 
         // Create visual object for immediate display
         try {
-            std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(scrollBlockerObject->frm_pid);
-            auto frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
+            std::string frmPath = _resources.frmResolver().resolve(scrollBlockerObject->frm_pid);
+            auto frm = _resources.repository().find<Frm>(frmPath);
             if (!frm) {
-                frm = ResourceManager::getInstance().loadResource<Frm>(frmPath);
+                frm = _resources.repository().load<Frm>(frmPath);
             }
 
             if (frm) {
                 auto object = std::make_shared<Object>(frm);
-                sf::Sprite sprite{ ResourceManager::getInstance().texture(frmPath) };
+                sf::Sprite sprite{ _resources.textures().get(frmPath) };
                 object->setSprite(std::move(sprite));
                 object->setDirection(static_cast<ObjectDirection>(scrollBlockerObject->direction));
-                object->setHexPosition(_hexgrid.grid().at(hexPos));
+                if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(hexPos)); hex.has_value()) {
+                    object->setHexPosition(hex->get());
+                }
                 object->setMapObject(scrollBlockerObject);
                 _objects.push_back(object);
                 scrollBlockersCreated++;
@@ -1459,7 +1385,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.objects = &_objects;
     renderData.wallBlockerOverlays = &_wallBlockerOverlays;
     renderData.selectedRoofTileBackgroundSprites = &_selectedRoofTileBackgroundSprites;
-    renderData.selectedHexSprites = &_selectedHexSprites;
+    renderData.selectedHexPositions = &_selectedHexPositions;
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
     renderData.selectionRectangle = &_selectionRectangle;
@@ -1467,10 +1393,8 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.isDragSelecting = _inputHandler && _inputHandler->isDragging();
     renderData.currentSelectionMode = _currentSelectionMode;
     renderData.hexGrid = &_hexgrid;
-    renderData.hexSprite = &_hexSprite;
-    renderData.hexHighlightSprite = &_hexHighlightSprite;
-    renderData.playerPositionSprite = &_playerPositionSprite;
     renderData.currentHoverHex = _currentHoverHex;
+    renderData.playerPositionHex = _map ? static_cast<int>(_map->getMapFile().header.player_default_position) : -1;
     renderData.map = _map.get();
     renderData.currentElevation = _currentElevation;
 
@@ -1694,33 +1618,31 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof, int elevation) {
         return;
     }
 
-    // Convert hex coordinates (200x200 grid) to tile coordinates (100x100 grid)
-    int hexX = hexIndex % HexagonGrid::GRID_WIDTH; // 0-199
-    int hexY = hexIndex / HexagonGrid::GRID_WIDTH; // 0-199
-    int tileX = hexX / 2;                          // 0-99
-    int tileY = hexY / 2;                          // 0-99
-    int tileIndex = tileY * MAP_WIDTH + tileX;     // Convert to tile index
+    auto tileIndex = _hexgrid.tileIndexForPosition(hexIndex);
+    if (!tileIndex.has_value()) {
+        return;
+    }
 
     // Get tiles for requested elevation (ensures full size)
     const auto& elevationTiles = ensureElevationTiles(elevation);
-    if (tileIndex >= static_cast<int>(elevationTiles.size())) {
-        spdlog::warn("EditorWidget::updateTileSprite: Tile index {} out of bounds (hex {})", tileIndex, hexIndex);
+    if (*tileIndex >= static_cast<int>(elevationTiles.size())) {
+        spdlog::warn("EditorWidget::updateTileSprite: Tile index {} out of bounds (hex {})", *tileIndex, hexIndex);
         return;
     }
 
     // Get the tile data using the converted tile index
-    const auto& tile = elevationTiles[tileIndex];
+    const auto& tile = elevationTiles[*tileIndex];
     int tileID = isRoof ? tile.getRoof() : tile.getFloor();
 
     // Handle empty tiles by setting transparent color
     if (tileID == Map::EMPTY_TILE) {
         auto& sprites = isRoof ? _roofSprites : _floorSprites;
         const auto& blankTexture = createBlankTexture();
-        sprites[tileIndex].setTexture(blankTexture);
-        sprites[tileIndex].setColor(geck::TileColors::transparent());
-        auto screenPos = indexToScreenPosition(tileIndex, isRoof);
-        sprites[tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-        spdlog::debug("EditorWidget::updateTileSprite: Set tile {} to empty [roof: {}]", tileIndex, isRoof);
+        sprites[*tileIndex].setTexture(blankTexture);
+        sprites[*tileIndex].setColor(geck::TileColors::transparent());
+        auto screenPos = indexToScreenPosition(*tileIndex, isRoof);
+        sprites[*tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
+        spdlog::debug("EditorWidget::updateTileSprite: Set tile {} to empty [roof: {}]", *tileIndex, isRoof);
         return;
     }
 
@@ -1729,27 +1651,26 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof, int elevation) {
 
     // Load the texture for this tile
     try {
-        auto& resourceManager = ResourceManager::getInstance();
-        const auto* tileList = resourceManager.getResource<Lst, std::string>("art/tiles/tiles.lst");
+        const auto* tileList = _resources.repository().find<Lst>("art/tiles/tiles.lst");
         if (!tileList || tileID >= static_cast<int>(tileList->list().size())) {
             return;
         }
 
         const std::string tileName = tileList->list()[tileID];
         std::string tilePath = "art/tiles/" + tileName;
-        const auto& texture = resourceManager.texture(tilePath);
+        const auto& texture = _resources.textures().get(tilePath);
 
         // Update the sprite using tile index for array access
-        sprites[tileIndex].setTexture(texture);
+        sprites[*tileIndex].setTexture(texture);
         // Reset sprite color to ensure visibility (in case it was previously transparent)
-        sprites[tileIndex].setColor(sf::Color::White);
+        sprites[*tileIndex].setColor(sf::Color::White);
 
         // Calculate position using tile index for screen positioning (same as initial loading)
-        auto screenPos = indexToScreenPosition(tileIndex, isRoof);
-        sprites[tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
+        auto screenPos = indexToScreenPosition(*tileIndex, isRoof);
+        sprites[*tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
 
         spdlog::debug("EditorWidget::updateTileSprite: Updated sprite for hex {} -> tile {} ({}) [roof: {}], elevation {}",
-            hexIndex, tileIndex, tileName, isRoof, elevation);
+            hexIndex, *tileIndex, tileName, isRoof, elevation);
     } catch (const std::exception& e) {
         spdlog::warn("EditorWidget::updateTileSprite: Failed to update tile sprite: {}", e.what());
     }
@@ -1789,30 +1710,28 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
         return std::nullopt;
     }
 
-    // Convert hex coordinates (200x200 grid) to tile coordinates (100x100 grid)
-    int hexX = hexIndex % HexagonGrid::GRID_WIDTH; // 0-199
-    int hexY = hexIndex / HexagonGrid::GRID_WIDTH; // 0-199
-    int tileX = hexX / 2;                          // 0-99
-    int tileY = hexY / 2;                          // 0-99
-    int tileIndex = tileY * MAP_WIDTH + tileX;     // Convert to tile index
+    auto tileIndex = _hexgrid.tileIndexForPosition(hexIndex);
+    if (!tileIndex.has_value()) {
+        return std::nullopt;
+    }
 
     // Validate tile bounds (should be redundant but kept for safety)
-    if (tileIndex >= TILES_PER_ELEVATION) {
-        spdlog::debug("EditorWidget::getTileAtPosition: Tile index {} out of bounds", tileIndex);
+    if (*tileIndex >= TILES_PER_ELEVATION) {
+        spdlog::debug("EditorWidget::getTileAtPosition: Tile index {} out of bounds", *tileIndex);
         return std::nullopt;
     }
 
     // For roof tiles, check if there's actually a roof tile at this position
-    if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(tileIndex).getRoof() == Map::EMPTY_TILE) {
+    if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(*tileIndex).getRoof() == Map::EMPTY_TILE) {
         spdlog::debug("EditorWidget::getTileAtPosition: Empty roof tile at index {} [worldPos: ({:.1f}, {:.1f})]",
-            tileIndex, worldPos.x, worldPos.y);
+            *tileIndex, worldPos.x, worldPos.y);
         return std::nullopt;
     }
 
     spdlog::debug("EditorWidget::getTileAtPosition: Found tile {} at worldPos ({:.1f}, {:.1f}) [roof: {}]",
-        tileIndex, worldPos.x, worldPos.y, isRoof);
+        *tileIndex, worldPos.x, worldPos.y, isRoof);
 
-    return tileIndex;
+    return *tileIndex;
 }
 
 std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
@@ -1831,18 +1750,12 @@ std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2
         return std::nullopt;
     }
 
-    // Convert hex coordinates to tile coordinates
-    int hexX = hexIndex % HexagonGrid::GRID_WIDTH; // 0-199
-    int hexY = hexIndex / HexagonGrid::GRID_WIDTH; // 0-199
-    int tileX = hexX / 2;                          // 0-99
-    int tileY = hexY / 2;                          // 0-99
-    int tileIndex = tileY * MAP_WIDTH + tileX;     // Convert to tile index
-
-    if (tileIndex < 0 || tileIndex >= TILES_PER_ELEVATION) {
+    auto tileIndex = _hexgrid.tileIndexForPosition(hexIndex);
+    if (!tileIndex.has_value() || *tileIndex < 0 || *tileIndex >= TILES_PER_ELEVATION) {
         return std::nullopt;
     }
 
-    return tileIndex;
+    return *tileIndex;
 }
 
 selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f worldPos) {
@@ -2104,49 +2017,14 @@ void EditorWidget::updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector
     }
 }
 
-const sf::Texture& EditorWidget::createHexTexture() {
-    [[maybe_unused]] auto* hexFrm = ResourceManager::getInstance().loadResource<Frm>(ResourcePaths::Frm::HEX_GRID);
-    return ResourceManager::getInstance().texture(ResourcePaths::Frm::HEX_GRID);
-}
-
-const sf::Texture& EditorWidget::createCursorHexTexture() {
-    // Use the same HEX.frm texture as the normal hex sprite
-    return createHexTexture();
-}
-
 const sf::Texture& EditorWidget::createBlankTexture() {
-    // Use ResourceManager to handle the blank texture to avoid static OpenGL resources
-    static std::string blankTextureName = "__blank_texture__";
-
-    try {
-        auto& resourceManager = ResourceManager::getInstance();
-        if (resourceManager.exists(blankTextureName)) {
-            return resourceManager.texture(blankTextureName);
-        }
-
-        // Create blank texture and store it in ResourceManager
+    static sf::Texture texture = [] {
         sf::Image blankImage{ sf::Vector2u{ 1, 1 }, sf::Color::Transparent };
-
-        auto texture = std::make_unique<sf::Texture>();
-        [[maybe_unused]] bool loadSuccess = texture->loadFromImage(blankImage);
-
-        // Store in ResourceManager's texture cache using the new method
-        resourceManager.storeTexture(blankTextureName, std::move(texture));
-
-        return resourceManager.texture(blankTextureName);
-    } catch (const std::exception&) {
-        // Create blank texture and store it in ResourceManager
-        auto& resourceManager = ResourceManager::getInstance();
-        sf::Image blankImage{ sf::Vector2u{ 1, 1 }, sf::Color::Transparent };
-
-        auto texture = std::make_unique<sf::Texture>();
-        [[maybe_unused]] bool loadSuccess = texture->loadFromImage(blankImage);
-
-        // Store in ResourceManager's texture cache using the new method
-        resourceManager.storeTexture(blankTextureName, std::move(texture));
-
-        return resourceManager.texture(blankTextureName);
-    }
+        sf::Texture blankTexture;
+        [[maybe_unused]] const bool loadSuccess = blankTexture.loadFromImage(blankImage);
+        return blankTexture;
+    }();
+    return texture;
 }
 
 void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
@@ -2157,7 +2035,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
 
     // Convert world position to hex position
     int hexPosition = _viewportController->worldPosToHexIndex(worldPos);
-    if (hexPosition < 0 || hexPosition >= (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT)) {
+    if (!_hexgrid.containsPosition(hexPosition)) {
         spdlog::warn("EditorWidget: Invalid hex position {} for object placement", hexPosition);
         return;
     }
@@ -2207,9 +2085,8 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     try {
         // Try to load FRM for the object if we have ObjectInfo
         const Frm* frm = nullptr;
-        auto& resourceManager = ResourceManager::getInstance();
         if (_previewObjectInfo && !_previewObjectInfo->frmPath.isEmpty()) {
-            frm = resourceManager.loadResource<Frm>(_previewObjectInfo->frmPath.toStdString());
+            frm = _resources.repository().load<Frm>(_previewObjectInfo->frmPath.toStdString());
         }
 
         // Create Object instance same way as existing objects
@@ -2220,16 +2097,14 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
 
         // Set sprite texture if FRM was loaded successfully
         if (frm && _previewObjectInfo && !_previewObjectInfo->frmPath.isEmpty()) {
-            sf::Sprite objectSprite{ resourceManager.texture(_previewObjectInfo->frmPath.toStdString()) };
+            sf::Sprite objectSprite{ _resources.textures().get(_previewObjectInfo->frmPath.toStdString()) };
             object->setSprite(std::move(objectSprite));
             object->setDirection(static_cast<ObjectDirection>(0));
         }
 
         // Set proper position using hex positioning
-        // Use the hex grid system like existing objects
-        if (hexPosition < static_cast<int>(_hexgrid.grid().size())) {
-            const auto& hex = _hexgrid.grid()[hexPosition];
-            object->setHexPosition(hex);
+        if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(hexPosition)); hex.has_value()) {
+            object->setHexPosition(hex->get());
         }
 
         spdlog::info("EditorWidget: Successfully placed object at hex {} (pro_pid: {})",
@@ -2406,10 +2281,9 @@ void EditorWidget::onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t n
 
     try {
         // Get the new FRM path from the FRM PID
-        auto& resourceManager = ResourceManager::getInstance();
-        std::string newFrmPath = resourceManager.FIDtoFrmName(newFrmPid);
+        std::string newFrmPath = _resources.frmResolver().resolve(newFrmPid);
         uint32_t oldFrmPid = object->hasMapObject() ? object->getMapObject().frm_pid : 0;
-        std::string oldFrmPath = resourceManager.FIDtoFrmName(oldFrmPid);
+        std::string oldFrmPath = _resources.frmResolver().resolve(oldFrmPid);
 
         if (newFrmPath.empty()) {
             spdlog::error("EditorWidget::onObjectFrmChanged - could not resolve FRM path for PID {}", newFrmPid);
@@ -2435,9 +2309,8 @@ void EditorWidget::onObjectFrmPathChanged(std::shared_ptr<Object> object, const 
     }
 
     try {
-        auto& resourceManager = ResourceManager::getInstance();
         uint32_t oldFrmPid = object->hasMapObject() ? object->getMapObject().frm_pid : 0;
-        std::string oldFrmPath = resourceManager.FIDtoFrmName(oldFrmPid);
+        std::string oldFrmPath = _resources.frmResolver().resolve(oldFrmPid);
 
         registerObjectFrmChange(object, oldFrmPid, oldFrmPath, oldFrmPid, newFrmPath);
         spdlog::info("EditorWidget::onObjectFrmPathChanged - updated object visual to FRM path: {}", newFrmPath);

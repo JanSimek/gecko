@@ -8,6 +8,9 @@ namespace geck {
 
 class Frame;
 class Pal;
+namespace resource {
+    class GameResources;
+}
 
 /**
  * @brief Utility class for generating QPixmap thumbnails from FRM files
@@ -26,11 +29,12 @@ public:
 
     /**
      * @brief Create thumbnail from FRM file path
-     * @param frmPath Path to FRM file (loaded via ResourceManager)
+     * @param frmPath Path to FRM file (loaded via GameResources)
      * @param targetSize Target thumbnail size (default 64x64)
      * @return QPixmap thumbnail, or transparent pixmap on failure
      */
-    static QPixmap fromFrmPath(const std::string& frmPath,
+    static QPixmap fromFrmPath(resource::GameResources& resources,
+                               const std::string& frmPath,
                                const QSize& targetSize = QSize(64, 64));
 
     /**

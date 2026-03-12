@@ -2,8 +2,8 @@
 #include "../../editor/Object.h"
 #include "../../format/map/MapObject.h"
 #include "../../format/pro/Pro.h"
+#include "../../resource/GameResources.h"
 #include "../../util/ProHelper.h"
-#include "../../util/ResourceManager.h"
 #include "../common/InventoryItemUiHelper.h"
 #include "../theme/ThemeManager.h"
 #include "../UIConstants.h"
@@ -17,13 +17,13 @@
 namespace geck {
 namespace {
 
-bool objectCanHaveInventory(const std::shared_ptr<MapObject>& mapObject) {
+bool objectCanHaveInventory(resource::GameResources& resources, const std::shared_ptr<MapObject>& mapObject) {
     if (!mapObject) {
         return false;
     }
 
     try {
-        Pro* pro = ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(mapObject->pro_pid));
+        Pro* pro = resources.repository().load<Pro>(ProHelper::basePath(resources, mapObject->pro_pid));
         if (!pro) {
             return false;
         }
@@ -41,7 +41,7 @@ bool objectCanHaveInventory(const std::shared_ptr<MapObject>& mapObject) {
 // Static constants
 const int InventoryPanel::ICON_SIZE = 64;
 
-InventoryPanel::InventoryPanel(QWidget* parent)
+InventoryPanel::InventoryPanel(resource::GameResources& resources, QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
     , _splitter(nullptr)
@@ -65,6 +65,7 @@ InventoryPanel::InventoryPanel(QWidget* parent)
     , _addButton(nullptr)
     , _removeButton(nullptr)
     , _editButton(nullptr)
+    , _resources(resources)
     , _object(nullptr)
     , _mapObject(nullptr)
     , _currentHighlightedItem(nullptr) {
@@ -223,7 +224,7 @@ void InventoryPanel::setCurrentObject(std::shared_ptr<Object> object) {
         return;
     }
 
-    if (!objectCanHaveInventory(_mapObject)) {
+    if (!objectCanHaveInventory(_resources, _mapObject)) {
         clearInventory();
         return;
     }
@@ -256,7 +257,7 @@ void InventoryPanel::clearInventory() {
 }
 
 bool InventoryPanel::hasValidInventory() const {
-    return objectCanHaveInventory(_mapObject);
+    return objectCanHaveInventory(_resources, _mapObject);
 }
 
 void InventoryPanel::populateInventoryTree() {
@@ -278,8 +279,8 @@ void InventoryPanel::populateInventoryTree() {
             continue;
 
         QTreeWidgetItem* treeItem = new QTreeWidgetItem(_inventoryTree);
-        const auto details = ui::inventory::describeItem(item->pro_pid);
-        const uint32_t displayAmount = ui::inventory::displayAmount(*item);
+        const auto details = ui::inventory::describeItem(_resources, item->pro_pid);
+        const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *item);
 
         // Store inventory index in item data
         treeItem->setData(COLUMN_NAME, Qt::UserRole, static_cast<int>(i));
@@ -314,7 +315,7 @@ void InventoryPanel::populateInventoryTree() {
 }
 
 QPixmap InventoryPanel::getItemIconWithQuantity(const MapObject& item) const {
-    return ui::inventory::loadItemIcon(item.pro_pid, ICON_SIZE);
+    return ui::inventory::loadItemIcon(_resources, item.pro_pid, ICON_SIZE);
 }
 
 void InventoryPanel::onItemSelectionChanged() {
@@ -376,11 +377,11 @@ void InventoryPanel::updateItemPreview(QTreeWidgetItem* item) {
         return;
     }
 
-    const auto details = ui::inventory::describeItem(mapItem->pro_pid);
-    const uint32_t displayAmount = ui::inventory::displayAmount(*mapItem);
+    const auto details = ui::inventory::describeItem(_resources, mapItem->pro_pid);
+    const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *mapItem);
 
     // Update preview sprite
-    QPixmap sprite = ui::inventory::loadItemIcon(mapItem->pro_pid);
+    QPixmap sprite = ui::inventory::loadItemIcon(_resources, mapItem->pro_pid);
     if (!sprite.isNull()) {
         // Scale sprite to fit preview area while maintaining aspect ratio
         sprite = sprite.scaled(_previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -457,13 +458,13 @@ void InventoryPanel::onAddItemClicked() {
         return;
     }
 
-    if (!ui::inventory::itemExists(pid)) {
+    if (!ui::inventory::itemExists(_resources, pid)) {
         QMessageBox::warning(this, "Invalid Item", QString("Item with PID 0x%1 not found in game data.").arg(pid, 8, 16, QChar('0')));
         return;
     }
 
     try {
-        auto newItem = ui::inventory::createMapInventoryItem(pid, amount);
+        auto newItem = ui::inventory::createMapInventoryItem(_resources, pid, amount);
         // Add to the container's inventory
         _mapObject->inventory.push_back(std::move(newItem));
         _mapObject->objects_in_inventory = static_cast<uint32_t>(_mapObject->inventory.size());
@@ -500,8 +501,8 @@ void InventoryPanel::onRemoveItemClicked() {
     }
 
     const auto& mapItem = _mapObject->inventory[inventoryIndex];
-    const auto details = ui::inventory::describeItem(mapItem->pro_pid);
-    const uint32_t displayAmount = ui::inventory::displayAmount(*mapItem);
+    const auto details = ui::inventory::describeItem(_resources, mapItem->pro_pid);
+    const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *mapItem);
 
     // Confirm removal
     int result = QMessageBox::question(this, "Remove Item",

@@ -2,9 +2,7 @@
 #include "../../format/map/Map.h"
 #include "../../format/lst/Lst.h"
 #include "../../format/pro/Pro.h"
-#include "../../format/frm/Frm.h"
-#include "../../format/pal/Pal.h"
-#include "../../util/ResourceManager.h"
+#include "../../resource/GameResources.h"
 #include "../../util/Constants.h"
 #include "../../util/ColorUtils.h"
 #include "../../util/FrmThumbnailGenerator.h"
@@ -83,14 +81,15 @@ void ObjectWidget::mouseMoveEvent(QMouseEvent* event) {
     Q_UNUSED(dropAction);
 }
 
-ObjectPalettePanel::ObjectPalettePanel(QWidget* parent)
-    : GridPalettePanel("Objects", parent) {
+ObjectPalettePanel::ObjectPalettePanel(resource::GameResources& resources, QWidget* parent)
+    : GridPalettePanel("Objects", parent)
+    , _resources(resources) {
     setupUI();
     spdlog::info("ObjectPalettePanel: Created object palette panel");
 }
 
 ObjectPalettePanel::~ObjectPalettePanel() {
-    // The ResourceManager manages Pro object lifetime, not us
+    // The resource repository manages Pro object lifetime, not us
     spdlog::debug("ObjectPalettePanel: Clearing object lists before destruction");
 
     _objectsByCategory.clear();
@@ -204,14 +203,9 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
 
     try {
         // Load LST file for this category
-        auto& resourceManager = ResourceManager::getInstance();
-
-        // Try to get the LST file from ResourceManager first
-        const auto* lst = resourceManager.getResource<Lst, std::string>(lstPath.toStdString());
-
-        // If not found, try to load it manually
+        const auto* lst = _resources.repository().find<Lst>(lstPath.toStdString());
         if (!lst) {
-            lst = resourceManager.loadResource<Lst>(lstPath.toStdString());
+            lst = _resources.repository().load<Lst>(lstPath.toStdString());
         }
 
         if (!lst || lst->list().empty()) {
@@ -235,7 +229,7 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
                 // Try to load the PRO file
                 std::string proFilePath = categoryPath.toStdString() + "/" + proFileName;
 
-                objectInfo->pro = resourceManager.loadResource<Pro>(proFilePath);
+                objectInfo->pro = _resources.repository().load<Pro>(proFilePath);
 
                 if (objectInfo->pro) {
                     // Generate display name from PRO file information
@@ -245,7 +239,7 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
 
                     // Get FRM path from FID
                     try {
-                        std::string frmPath = resourceManager.FIDtoFrmName(objectInfo->pro->header.FID);
+                        std::string frmPath = _resources.frmResolver().resolve(objectInfo->pro->header.FID);
                         objectInfo->frmPath = QString::fromStdString(frmPath);
                     } catch (const std::exception& e) {
                         spdlog::debug("ObjectPalettePanel: Could not resolve FID for {}: {}",
@@ -274,19 +268,6 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
     } catch (const std::exception& e) {
         spdlog::error("ObjectPalettePanel: Failed to load category {}: {}",
             getCategoryDisplayName(category).toStdString(), e.what());
-
-        // Create fallback placeholder objects
-        QString categoryName = getCategoryDisplayName(category);
-        for (int i = 0; i < 10; ++i) {
-            auto objectInfo = std::make_unique<ObjectInfo>(
-                QString("%1_fallback_%2.pro").arg(categoryName.toLower()).arg(i), i);
-            objectInfo->displayName = QString("Fallback %1 Object %2").arg(categoryName).arg(i);
-            objectInfo->frmPath = "";
-            targetList.push_back(std::move(objectInfo));
-        }
-
-        spdlog::info("ObjectPalettePanel: Created {} fallback objects for category {}",
-            targetList.size(), categoryName.toStdString());
     }
 }
 
@@ -397,55 +378,12 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
     // Try to load actual FRM sprite first
     if (objectInfo && !objectInfo->frmPath.isEmpty()) {
         try {
-            auto& resourceManager = ResourceManager::getInstance();
-
-            // Load the FRM object directly (not the texture)
-            const auto* frm = resourceManager.loadResource<Frm>(objectInfo->frmPath.toStdString());
-            if (!frm) {
-                spdlog::debug("ObjectPalettePanel: Failed to load FRM object for {}", objectInfo->frmPath.toStdString());
-                // Fall through to placeholder generation
-            } else {
-                // Extract first frame of first direction (like F2 Dims)
-                const auto& directions = frm->directions();
-                if (!directions.empty()) {
-                    const auto& firstDirection = directions[0];
-                    const auto& frames = firstDirection.frames();
-                    if (!frames.empty()) {
-                        const auto& firstFrame = frames[0];
-
-                        // Load palette for color conversion (required)
-                        const Pal* palette = nullptr;
-                        try {
-                            palette = resourceManager.loadResource<Pal>("color.pal");
-                        } catch (...) {
-                            // Palette loading failed - this is required for proper color display
-                            spdlog::warn("ObjectPalettePanel: Could not load color.pal for {}, falling back to placeholder", objectInfo->frmPath.toStdString());
-                            // Fall through to placeholder generation since we need the palette
-                        }
-
-                        if (!palette) {
-                            // Without palette, we cannot generate proper colors, use placeholder
-                            spdlog::debug("ObjectPalettePanel: No palette available for {}", objectInfo->frmPath.toStdString());
-                            // Fall through to placeholder generation
-                        } else {
-                            // Convert single frame to thumbnail
-                            thumbnail = FrmThumbnailGenerator::fromFrame(
-                                firstFrame, palette,
-                                QSize(ObjectWidget::OBJECT_SIZE, ObjectWidget::OBJECT_SIZE));
-
-                            spdlog::debug("ObjectPalettePanel: Created single-frame thumbnail for {} ({}x{})",
-                                objectInfo->frmPath.toStdString(), firstFrame.width(), firstFrame.height());
-
-                            return thumbnail;
-                        }
-                    } else {
-                        spdlog::debug("ObjectPalettePanel: No frames found in FRM {}", objectInfo->frmPath.toStdString());
-                    }
-                } else {
-                    spdlog::debug("ObjectPalettePanel: No directions found in FRM {}", objectInfo->frmPath.toStdString());
-                }
+            thumbnail = FrmThumbnailGenerator::fromFrmPath(_resources,
+                objectInfo->frmPath.toStdString(),
+                QSize(ObjectWidget::OBJECT_SIZE, ObjectWidget::OBJECT_SIZE));
+            if (!thumbnail.isNull()) {
+                return thumbnail;
             }
-
         } catch (const std::exception& e) {
             spdlog::debug("ObjectPalettePanel: Failed to load FRM for {}: {}",
                 objectInfo->frmPath.toStdString(), e.what());

@@ -82,7 +82,7 @@ void ExitGridPropertiesDialog::setupFormLayout() {
 
     // Position input (hex coordinate)
     _positionSpinBox = new QSpinBox(this);
-    _positionSpinBox->setRange(0, HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT - 1); // 0-39999
+    _positionSpinBox->setRange(0, HexagonGrid::POSITION_COUNT - 1);
     _positionSpinBox->setToolTip("Player spawn position on destination map (0-39999)");
     connect(_positionSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
         this, &ExitGridPropertiesDialog::onPositionChanged);
@@ -212,7 +212,7 @@ void ExitGridPropertiesDialog::validateInput() {
 bool ExitGridPropertiesDialog::isValidInput() const {
     // Validate position range
     int position = _positionSpinBox->value();
-    if (position < 0 || position >= HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT) {
+    if (position < 0 || position >= HexagonGrid::POSITION_COUNT) {
         return false;
     }
 

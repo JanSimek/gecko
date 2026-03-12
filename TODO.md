@@ -48,10 +48,6 @@ Detailed progress dialog with task descriptions and completion estimates for lon
 ### Panels
 - [ ] panels should be displayed above the SFML widget, so that when a panel is closed it doesn't cause redrawing of the SFML widget
 
-### Code Quality
-- [ ] Refactor hex rendering into dedicated HexRenderer class
-- [ ] Improve separation of concerns between HexagonGrid and EditorWidget
-
 ### Presets
 - [ ] TBD: paint a pattern of tiles
 - [ ] TBD: paste a preset into the map, e.g. hut from Arroyo. Presets should be stored in a JSON/YAML/...
@@ -59,8 +55,21 @@ Detailed progress dialog with task descriptions and completion estimates for lon
 ### Performance
 - [ ] Optimize hex grid rendering to only draw visible hexes
 
+### Code Quality / Architecture
+- [ ] Split `ResourceManager` into narrower engine-facing services instead of a global singleton handling VFS, FRM decoding, message lookup, and texture caching
+- [ ] Break up `EditorWidget` into smaller controllers/services for editing, input/tool orchestration, and rendering coordination
+- [ ] Move application/workspace lifecycle out of `MainWindow` and into dedicated controllers or services
+- [ ] Refactor map reading and writing into smaller section-level parsers/serializers and add round-trip coverage
+- [ ] Finish the `ProEditorDialog` decomposition so type-specific behavior, previews, and persistence are not coordinated from one oversized dialog
+- [ ] Replace placeholder inventory mutations with a shared model-backed inventory editing service used by all inventory UIs
+- [ ] Remove remaining `const_cast` usage by fixing const-correctness and ownership boundaries
+- [ ] Eliminate existing warning debt in `ProDataModels.h` and `SelectionManager.cpp`
+- [ ] Fix tile hit testing so object/tile selection is accurate near tile/object boundaries
+
 ### Known bugs
 
+- [ ] placing lights - light.frm
+- [ ] clicking on an object is not pixel perfect and sometimes a tile underneath or an object close by is selected instead
 - [ ] scroll block drawing mode draws the rectangle in the isometric projection (diagonal) instead of screen projection
 - [ ] placing lights - light.frm
 - [ ] file browser panel has issues with resizing. It is sometimes impossible to change its size or requires several clicks

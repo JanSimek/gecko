@@ -9,6 +9,9 @@
 namespace geck {
 
 struct MapObject;
+namespace resource {
+    class GameResources;
+}
 
 namespace ui::inventory {
 
@@ -18,11 +21,11 @@ struct ItemDetails {
     QString pidText;
 };
 
-uint32_t displayAmount(const MapObject& item);
-ItemDetails describeItem(uint32_t pid);
-QPixmap loadItemIcon(uint32_t pid, int iconSize = 0, bool fixedCanvas = false);
-bool itemExists(uint32_t pid);
-std::unique_ptr<MapObject> createMapInventoryItem(uint32_t pid, int amount);
+uint32_t displayAmount(resource::GameResources& resources, const MapObject& item);
+ItemDetails describeItem(resource::GameResources& resources, uint32_t pid);
+QPixmap loadItemIcon(resource::GameResources& resources, uint32_t pid, int iconSize = 0, bool fixedCanvas = false);
+bool itemExists(resource::GameResources& resources, uint32_t pid);
+std::unique_ptr<MapObject> createMapInventoryItem(resource::GameResources& resources, uint32_t pid, int amount);
 
 } // namespace ui::inventory
 

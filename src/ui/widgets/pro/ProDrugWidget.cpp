@@ -10,8 +10,8 @@
 
 namespace geck {
 
-ProDrugWidget::ProDrugWidget(QWidget* parent)
-    : ProTabWidget(parent) {
+ProDrugWidget::ProDrugWidget(resource::GameResources& resources, QWidget* parent)
+    : ProTabWidget(resources, parent) {
 
     // Initialize arrays
     for (int i = 0; i < NUM_DRUG_STATS; ++i) {

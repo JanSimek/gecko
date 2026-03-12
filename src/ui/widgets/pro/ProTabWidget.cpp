@@ -4,9 +4,10 @@
 
 namespace geck {
 
-ProTabWidget::ProTabWidget(QWidget* parent)
+ProTabWidget::ProTabWidget(resource::GameResources& resources, QWidget* parent)
     : QWidget(parent)
-    , _mainLayout(new QVBoxLayout(this)) {
+    , _mainLayout(new QVBoxLayout(this))
+    , _resources(resources) {
     _mainLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     _mainLayout->setSpacing(FORM_SPACING);
 }
@@ -145,8 +146,8 @@ int ProTabWidget::getComboValue(QComboBox* combo, int defaultValue) {
     return currentValue.isValid() ? currentValue.toInt() : defaultValue;
 }
 
-QStringList ProTabWidget::getMaterialNames() {
-    return game::enums::materialTypes();
+QStringList ProTabWidget::getMaterialNames() const {
+    return game::enums::materialTypes(_resources);
 }
 
 void ProTabWidget::createSpinBoxArray(QSpinBox** array, int count,

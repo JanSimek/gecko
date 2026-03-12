@@ -14,11 +14,15 @@
 
 namespace geck {
 
+namespace resource {
+class GameResources;
+}
+
 class FrmSelectorDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit FrmSelectorDialog(QWidget* parent = nullptr);
+    explicit FrmSelectorDialog(resource::GameResources& resources, QWidget* parent = nullptr);
 
     /**
      * @brief Get the selected FRM PID
@@ -93,6 +97,7 @@ private:
     QPushButton* _cancelButton;
 
     // Data
+    resource::GameResources& _resources;
     uint32_t _selectedFrmPid;
     std::vector<std::pair<uint32_t, std::string>> _frmFiles; // PID, Path pairs
     uint32_t _objectTypeFilter;                              // Filter by object type (0=items, 1=critters, etc.)

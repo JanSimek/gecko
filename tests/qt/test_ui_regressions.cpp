@@ -28,8 +28,8 @@
 #include "ui/dialogs/InventoryViewerDialog.h"
 #include "ui/widgets/pro/ProAmmoWidget.h"
 #include "ui/widgets/pro/ProWeaponWidget.h"
+#include "resource/GameResources.h"
 #include "util/FalloutEngineEnums.h"
-#include "util/ResourceManager.h"
 
 namespace {
 
@@ -53,17 +53,15 @@ public:
         if (!_root.isValid()) {
             throw std::runtime_error("Failed to create temporary data directory");
         }
-
-        geck::ResourceManager::getInstance().clearAllDataPaths();
     }
 
     ~ResourceDataScope() {
-        geck::ResourceManager::getInstance().clearAllDataPaths();
-        geck::ResourceManager::getInstance().cleanup();
+        _resources->clearAllDataPaths();
     }
 
     void mount() {
-        geck::ResourceManager::getInstance().addDataPath(_root.path().toStdString());
+        _resources->clearAllDataPaths();
+        _resources->files().addDataPath(_root.path().toStdString());
     }
 
     void writeGameMessageFile(const QString& relativePath, const QString& contents) {
@@ -73,8 +71,17 @@ public:
         writeTextFile(fullPath, contents);
     }
 
+    geck::resource::GameResources& resources() {
+        return *_resources;
+    }
+
+    std::shared_ptr<geck::resource::GameResources> sharedResources() {
+        return _resources;
+    }
+
 private:
     QTemporaryDir _root;
+    std::shared_ptr<geck::resource::GameResources> _resources = std::make_shared<geck::resource::GameResources>();
 };
 
 QString buildProtoMsg() {
@@ -211,7 +218,8 @@ TEST_CASE("Inventory viewer shows empty inventory state instead of an empty tabl
     auto mapObject = std::make_shared<geck::MapObject>();
     mapObject->objects_in_inventory = 0;
 
-    geck::InventoryViewerDialog dialog(mapObject);
+    geck::resource::GameResources resources;
+    geck::InventoryViewerDialog dialog(resources, mapObject);
 
     auto* stack = dialog.findChild<QStackedWidget*>();
     auto* emptyLabel = findCenteredLabelByText(dialog, "No inventory items");
@@ -229,7 +237,7 @@ TEST_CASE("Ammo widget uses caliber labels loaded from proto.msg", "[qt][pro]") 
     resources.writeGameMessageFile("text/english/game/proto.msg", buildProtoMsg());
     resources.mount();
 
-    geck::ProAmmoWidget widget;
+    geck::ProAmmoWidget widget(resources.resources());
     auto pro = makeItemPro(geck::Pro::ITEM_TYPE::AMMO);
     pro->ammoData.caliber = geck::fallout::enumValue(geck::fallout::CaliberType::Mm10);
 
@@ -246,7 +254,7 @@ TEST_CASE("Weapon widget preserves raw perk ids while using message-backed label
     resources.writeGameMessageFile("text/english/game/perk.msg", buildPerkMsg());
     resources.mount();
 
-    geck::ProWeaponWidget widget;
+    geck::ProWeaponWidget widget(resources.resources());
     auto pro = makeItemPro(geck::Pro::ITEM_TYPE::WEAPON);
     pro->weaponData.damageType = geck::fallout::enumValue(geck::fallout::DamageType::Normal);
     pro->weaponData.ammoType = geck::fallout::enumValue(geck::fallout::CaliberType::Mm10);
@@ -277,7 +285,8 @@ TEST_CASE("Weapon widget preserves raw perk ids while using message-backed label
 TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][mainwindow]") {
     removeTestSettings();
 
-    geck::MainWindow window;
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    geck::MainWindow window(resources);
     window.show();
     QTest::qWait(250);
 

@@ -6,6 +6,10 @@
 
 namespace geck {
 
+namespace resource {
+    class GameResources;
+}
+
 /**
  * @brief Factory class for creating commonly used sprites with consistent configuration
  */
@@ -20,6 +24,7 @@ public:
      * @return Configured sf::Sprite
      */
     [[nodiscard]] static sf::Sprite createTileSprite(
+        resource::GameResources& resources,
         const std::string& texturePath,
         const ScreenPosition& screenPos,
         int yOffset = 0,
@@ -33,6 +38,7 @@ public:
      * @return Configured sf::Sprite for empty tile
      */
     [[nodiscard]] static sf::Sprite createEmptyTileSprite(
+        resource::GameResources& resources,
         const ScreenPosition& screenPos,
         int yOffset = 0,
         const sf::Color& color = sf::Color::Transparent);
@@ -44,6 +50,7 @@ public:
      * @return Configured floor tile sprite
      */
     [[nodiscard]] static sf::Sprite createFloorTileSprite(
+        resource::GameResources& resources,
         uint16_t tileId,
         const ScreenPosition& screenPos);
 
@@ -54,6 +61,7 @@ public:
      * @return Configured roof tile sprite with proper offset
      */
     [[nodiscard]] static sf::Sprite createRoofTileSprite(
+        resource::GameResources& resources,
         uint16_t tileId,
         const ScreenPosition& screenPos);
 

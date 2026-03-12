@@ -2,6 +2,7 @@
 add_executable(general_tests
     general/test_ammo_caliber_names.cpp
     general/test_fallout_engine_enums.cpp
+    general/test_hexagon_grid.cpp
     general/test_message_enum_utils.cpp
     general/test_reading_gam.cpp
     general/test_reading_msg.cpp
@@ -12,6 +13,8 @@ add_executable(general_tests
     
     # Selection system sources (needed for linking)
     ../src/selection/SelectionState.cpp
+    ../src/editor/HexagonGrid.cpp
+    ../src/editor/Hex.cpp
 )
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests

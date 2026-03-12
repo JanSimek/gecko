@@ -14,7 +14,7 @@ class ProTileWidget : public ProTabWidget {
     Q_OBJECT
 
 public:
-    explicit ProTileWidget(QWidget* parent = nullptr);
+    explicit ProTileWidget(resource::GameResources& resources, QWidget* parent = nullptr);
     ~ProTileWidget() override = default;
 
     // ProTabWidget interface

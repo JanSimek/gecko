@@ -13,6 +13,9 @@ namespace geck {
 
 class Map;
 class Lst;
+namespace resource {
+class GameResources;
+}
 
 namespace selection {
     class SelectionManager;
@@ -56,7 +59,7 @@ public:
         // Note: SINGLE_PLACEMENT and AREA_FILL merged into unified system
     };
 
-    explicit TilePalettePanel(QWidget* parent = nullptr);
+    explicit TilePalettePanel(resource::GameResources& resources, QWidget* parent = nullptr);
     ~TilePalettePanel() = default;
 
     // Initialization
@@ -134,6 +137,7 @@ private:
     QLabel* _statusLabel = nullptr;
 
     // Data
+    resource::GameResources& _resources;
     Map* _map = nullptr;
     const Lst* _tileList = nullptr;
     std::vector<std::unique_ptr<TileWidget>> _tileWidgets;

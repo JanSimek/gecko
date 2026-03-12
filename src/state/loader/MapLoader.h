@@ -10,10 +10,17 @@
 namespace geck {
 
 class Map;
+namespace resource {
+class GameResources;
+}
 
 class MapLoader : public Loader {
 public:
-    MapLoader(const std::filesystem::path& mapPath, int elevation, bool forceFilesystem, std::function<void(std::unique_ptr<Map>)> onLoadCallback);
+    MapLoader(std::shared_ptr<resource::GameResources> resources,
+              const std::filesystem::path& mapPath,
+              int elevation,
+              bool forceFilesystem,
+              std::function<void(std::unique_ptr<Map>)> onLoadCallback);
     ~MapLoader();
 
     void init() override;
@@ -24,6 +31,7 @@ public:
     const std::string& errorMessage() const { return _errorMessage; }
 
 private:
+    bool ensureResourceListsReady();
     void load() override;
     void loadFromVFS();
     void loadFromFilesystem();
@@ -31,6 +39,7 @@ private:
 
     std::atomic<bool> done = false;
 
+    std::shared_ptr<resource::GameResources> _resources;
     std::filesystem::path _mapPath;
     std::unique_ptr<Map> _map;
     int _elevation;

@@ -1,12 +1,14 @@
 #include "DataPathLoader.h"
-#include "../../util/ResourceManager.h"
+#include "../../resource/GameResources.h"
+#include "../../util/ResourceInitializer.h"
 #include <thread>
 #include <spdlog/spdlog.h>
 
 namespace geck {
 
-DataPathLoader::DataPathLoader(const std::vector<std::filesystem::path>& dataPaths)
-    : _dataPaths(dataPaths) {
+DataPathLoader::DataPathLoader(std::shared_ptr<resource::GameResources> resources, const std::vector<std::filesystem::path>& dataPaths)
+    : _resources(std::move(resources))
+    , _dataPaths(dataPaths) {
 }
 
 DataPathLoader::~DataPathLoader() {
@@ -31,19 +33,17 @@ void DataPathLoader::load() {
     _percentDone = 0;
     _currentPathIndex = 0;
 
-    auto& resourceManager = ResourceManager::getInstance();
-
     for (const auto& path : _dataPaths) {
         // Update progress
         setProgress("Loading: " + path.filename().string());
 
         try {
             spdlog::info("DataPathLoader: Loading data path: {}", path.string());
-            resourceManager.addDataPath(path);
+            _resources->files().addDataPath(path);
 
             // Update percentage
             _currentPathIndex++;
-            _percentDone = static_cast<int>((_currentPathIndex * 100) / _dataPaths.size());
+            _percentDone = static_cast<int>((_currentPathIndex * 80) / _dataPaths.size());
 
         } catch (const std::exception& e) {
             spdlog::error("DataPathLoader: Failed to load data path {}: {}", path.string(), e.what());
@@ -51,6 +51,20 @@ void DataPathLoader::load() {
             _hasError = true;
             // Continue loading other paths
         }
+    }
+
+    try {
+        setProgress("Loading resource lists");
+        _percentDone = 90;
+        ResourceInitializer::loadEssentialLstFiles(*_resources);
+    } catch (const std::exception& e) {
+        spdlog::error("DataPathLoader: Failed to initialize essential resource lists: {}", e.what());
+        if (!_errorMessage.empty()) {
+            _errorMessage += "\n\n";
+        }
+        _errorMessage += "Failed to initialize essential resource lists:\n";
+        _errorMessage += e.what();
+        _hasError = true;
     }
 
     if (_hasError) {

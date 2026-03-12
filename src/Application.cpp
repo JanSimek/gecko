@@ -9,8 +9,8 @@
 #include <QCoreApplication>
 
 #include "version.h"
+#include "resource/GameResources.h"
 #include "state/loader/MapLoader.h"
-#include "util/ResourceManager.h"
 #include "util/Settings.h"
 #include "util/QtDialogs.h"
 #include "ui/core/MainWindow.h"
@@ -24,7 +24,8 @@ namespace geck {
 
 Application::Application(int argc, char** argv)
     : _qtApp(std::make_unique<QApplication>(argc, argv))
-    , _mainWindow(nullptr) {
+    , _mainWindow(nullptr)
+    , _resources(std::make_shared<resource::GameResources>()) {
 
     _qtApp->setApplicationName(geck::version::name);
     _qtApp->setApplicationDisplayName(geck::version::name);
@@ -54,11 +55,11 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
     loadingWidget->setWindowTitle("Loading Map");
 
     // Add map loader (filesystem loading for command line args)
-    loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, true, [this](auto map) {
+    loadingWidget->addLoader(std::make_unique<MapLoader>(_resources, mapPath, -1, true, [this](auto map) {
         // Check if loading was successful
         if (map) {
             // When loading is complete, create editor widget and switch to it
-            auto editorWidget = std::make_unique<EditorWidget>(std::move(map));
+            auto editorWidget = std::make_unique<EditorWidget>(*_resources, std::move(map));
             _mainWindow->setEditorWidget(std::move(editorWidget));
         }
         // If map is null, error was already shown by MapLoader::onDone()
@@ -123,11 +124,13 @@ Application::~Application() {
     }
     // OpenGL textures must be destroyed while the OpenGL context is still valid;
     // without this we get mutex/context crash during static destruction
-    ResourceManager::getInstance().cleanup();
+    if (_resources) {
+        _resources->clearCaches();
+    }
 }
 
 void Application::initUI() {
-    _mainWindow = std::make_unique<MainWindow>();
+    _mainWindow = std::make_unique<MainWindow>(_resources);
 
     // Check if this is first run or if user prefers maximized
     auto& settings = Settings::getInstance();
@@ -188,13 +191,13 @@ void Application::loadDataPaths() {
 
     // Load Fallout 2 game data files (DAT files, directories) even when no map is loaded
     // This is essential because:
-    // 1. ResourceManager needs access to game assets (textures, sprites, sounds)
+    // 1. GameResources needs access to game assets (textures, sprites, sounds)
     // 2. File browser requires loaded data to display available maps and resources
     // 3. Creating new maps needs tile/object assets from game data
     // 4. Editor cannot function properly without access to FRM files and other resources
     auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
     loadingWidget->setWindowTitle("Loading Game Data");
-    loadingWidget->addLoader(std::make_unique<DataPathLoader>(dataPaths));
+    loadingWidget->addLoader(std::make_unique<DataPathLoader>(_resources, dataPaths));
 
     // Show modal loading dialog - this appears even without a map loaded
     loadingWidget->exec();

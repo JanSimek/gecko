@@ -3,16 +3,19 @@
 #include "../../editor/Hex.h"
 #include "../../format/map/Map.h"
 #include "../../format/map/MapObject.h"
+#include "../../resource/GameResources.h"
 #include "../../util/Constants.h"
 #include "../../util/ColorUtils.h"
-#include "../../util/ResourceManager.h"
 #include "../../util/ResourcePaths.h"
 #include "../../util/Coordinates.h"
 #include <spdlog/spdlog.h>
 
 namespace geck {
 
-RenderingEngine::RenderingEngine() = default;
+RenderingEngine::RenderingEngine(resource::GameResources& resources)
+    : _resources(resources)
+    , _hexRenderer(resources) {
+}
 
 void RenderingEngine::render(sf::RenderTarget& target,
     const sf::View& view,
@@ -65,48 +68,11 @@ void RenderingEngine::renderFloorTiles(sf::RenderTarget& target,
 void RenderingEngine::renderHexGrid(sf::RenderTarget& target,
     const sf::View& view,
     const RenderData& renderData) {
-    if (!renderData.hexGrid || !renderData.hexSprite) {
+    if (!renderData.hexGrid) {
         return;
     }
 
-    // Get viewport bounds for culling
-    sf::Vector2f viewCenter = view.getCenter();
-    sf::Vector2f viewSize = view.getSize();
-
-    // Iterate through hex grid
-    for (int y = 0; y < HexagonGrid::GRID_HEIGHT; y++) {
-        for (int x = 0; x < HexagonGrid::GRID_WIDTH; x++) {
-            // Convert hex coordinates to world coordinates
-            int hexIndex = y * HexagonGrid::GRID_WIDTH + x;
-            if (hexIndex >= static_cast<int>(renderData.hexGrid->grid().size())) {
-                continue;
-            }
-
-            // Get the hex data for this grid index
-            const auto& hex = renderData.hexGrid->grid().at(hexIndex);
-            int actualHexPosition = hex.position();
-
-            // Skip rendering the hex that's currently being highlighted
-            if (actualHexPosition == renderData.currentHoverHex) {
-                continue;
-            }
-
-            int hexWorldX = hex.x();
-            int hexWorldY = hex.y();
-
-            // Viewport culling - only render visible hex sprites
-            if (isHexVisible(hexWorldX, hexWorldY, view)) {
-                // Position hex sprite
-                float spriteX = static_cast<float>(hexWorldX - Hex::HEX_WIDTH);
-                float spriteY = static_cast<float>(hexWorldY - Hex::HEX_HEIGHT + 4);
-
-                // Create a mutable copy for positioning
-                sf::Sprite hexSprite = *renderData.hexSprite;
-                hexSprite.setPosition({ spriteX, spriteY });
-                target.draw(hexSprite);
-            }
-        }
-    }
+    _hexRenderer.renderGrid(target, view, *renderData.hexGrid, renderData.currentHoverHex);
 }
 
 void RenderingEngine::renderObjects(sf::RenderTarget& target,
@@ -167,11 +133,8 @@ void RenderingEngine::renderRoofTiles(sf::RenderTarget& target,
 
 void RenderingEngine::renderSelectionVisuals(sf::RenderTarget& target,
     const RenderData& renderData) {
-    // Render selected hex sprites
-    if (renderData.selectedHexSprites) {
-        for (const auto& hexSprite : *renderData.selectedHexSprites) {
-            target.draw(hexSprite);
-        }
+    if (renderData.selectedHexPositions && renderData.hexGrid) {
+        _hexRenderer.renderSelection(target, *renderData.hexGrid, *renderData.selectedHexPositions);
     }
 
     // Render drag selection rectangle
@@ -189,43 +152,7 @@ void RenderingEngine::renderHexHighlights(sf::RenderTarget& target,
         return;
     }
 
-    // Render hex highlight if there's a valid hover hex
-    if (renderData.currentHoverHex >= 0 && renderData.hexHighlightSprite) {
-        // Find the hex with the matching position
-        for (const auto& hex : renderData.hexGrid->grid()) {
-            if (hex.position() == static_cast<uint32_t>(renderData.currentHoverHex)) {
-                float spriteX = static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X);
-                float spriteY = static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y);
-
-                // Create a mutable copy for positioning
-                sf::Sprite highlightSprite = *renderData.hexHighlightSprite;
-                highlightSprite.setPosition({ spriteX, spriteY });
-                target.draw(highlightSprite);
-                break;
-            }
-        }
-    }
-
-    // Render player default position marker
-    if (renderData.map && renderData.playerPositionSprite) {
-        // Cast away const to access non-const getMapFile() - this is safe as we're only reading
-        uint32_t playerPosition = const_cast<Map*>(renderData.map)->getMapFile().header.player_default_position;
-        if (playerPosition < HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT) {
-            // Find the hex with the matching position
-            for (const auto& hex : renderData.hexGrid->grid()) {
-                if (hex.position() == playerPosition) {
-                    float spriteX = static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X);
-                    float spriteY = static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y);
-
-                    // Create a mutable copy for positioning
-                    sf::Sprite playerSprite = *renderData.playerPositionSprite;
-                    playerSprite.setPosition({ spriteX, spriteY });
-                    target.draw(playerSprite);
-                    break;
-                }
-            }
-        }
-    }
+    _hexRenderer.renderHighlights(target, *renderData.hexGrid, renderData.currentHoverHex, renderData.playerPositionHex);
 }
 
 bool RenderingEngine::isHexVisible(int hexWorldX, int hexWorldY,
@@ -266,8 +193,7 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
     }
 
     // Load exitgrid.frm texture
-    ResourceManager& resourceManager = ResourceManager::getInstance();
-    const sf::Texture& exitGridTexture = resourceManager.texture(ResourcePaths::Frm::EXIT_GRID);
+    const sf::Texture& exitGridTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
     sf::Sprite exitGridSprite(exitGridTexture);
 
     // Render exit grids with the loaded sprite
@@ -289,18 +215,15 @@ void RenderingEngine::renderExitGridsWithSprite(sf::RenderTarget& target,
         return; // No objects on this elevation
     }
 
-    int exitGridCount = 0;
     // Iterate through all objects on current elevation
     for (const auto& mapObject : elevationIt->second) {
         if (!mapObject || !mapObject->isExitGridMarker()) {
             continue;
         }
 
-        exitGridCount++;
-
         // Get hex position from MapObject
         int hexPosition = mapObject->position;
-        if (hexPosition < 0 || hexPosition >= HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT) {
+        if (hexPosition < 0 || hexPosition >= static_cast<int>(renderData.hexGrid->size())) {
             continue;
         }
 

@@ -9,8 +9,8 @@
 
 namespace geck {
 
-ProContainerKeyWidget::ProContainerKeyWidget(QWidget* parent)
-    : ProTabWidget(parent)
+ProContainerKeyWidget::ProContainerKeyWidget(resource::GameResources& resources, QWidget* parent)
+    : ProTabWidget(resources, parent)
     , _containerMaxSizeEdit(nullptr)
     , _keyIdEdit(nullptr)
     , _isContainer(false)

@@ -5,8 +5,6 @@
 
 #include <catch2/catch_session.hpp>
 
-#include "util/ResourceManager.h"
-
 int main(int argc, char** argv) {
     QTemporaryDir testHome;
     if (!testHome.isValid()) {
@@ -35,9 +33,6 @@ int main(int argc, char** argv) {
 
     Catch::Session session;
     const int result = session.run(argc, argv);
-
-    geck::ResourceManager::getInstance().clearAllDataPaths();
-    geck::ResourceManager::getInstance().cleanup();
 
     return result;
 }

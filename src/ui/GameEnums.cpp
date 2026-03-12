@@ -4,6 +4,7 @@
 #include "../util/FalloutEngineEnums.h"
 #include "../util/MessageEnumUtils.h"
 #include "../util/ProHelper.h"
+#include "../resource/GameResources.h"
 
 #include <array>
 #include <stdexcept>
@@ -71,16 +72,16 @@ std::vector<std::string> requireAmmoCaliberNames(const Msg* protoMsg) {
 }
 
 template <typename Enum>
-QStringList requireProtoEnumNames(Enum firstValue, const char* label) {
+QStringList requireProtoEnumNames(resource::GameResources& resources, Enum firstValue, const char* label) {
     return toQStringList(requireMessageRange(
-        ProHelper::protoMsgFile(),
+        ProHelper::protoMsgFile(resources),
         fallout::protoMessageId(firstValue),
         fallout::enumCount<Enum>(),
         label));
 }
 
 template <size_t N>
-std::vector<MessageEnumOption> requirePerkOptions(const std::array<fallout::PerkId, N>& perks, const char* label) {
+std::vector<MessageEnumOption> requirePerkOptions(resource::GameResources& resources, const std::array<fallout::PerkId, N>& perks, const char* label) {
     std::vector<MessageEnumSpec> specs;
     specs.reserve(perks.size());
 
@@ -88,10 +89,10 @@ std::vector<MessageEnumOption> requirePerkOptions(const std::array<fallout::Perk
         specs.push_back({ fallout::enumValue(perk), fallout::perkNameMessageId(perk) });
     }
 
-    return requireMessageOptions(ProHelper::perkMsgFile(), specs, label);
+    return requireMessageOptions(ProHelper::perkMsgFile(resources), specs, label);
 }
 
-std::vector<MessageEnumOption> requireAllPerkOptions() {
+std::vector<MessageEnumOption> requireAllPerkOptions(resource::GameResources& resources) {
     std::vector<MessageEnumSpec> specs;
     specs.reserve(fallout::enumCount<fallout::PerkId>());
 
@@ -100,59 +101,59 @@ std::vector<MessageEnumOption> requireAllPerkOptions() {
         specs.push_back({ perkValue, fallout::perkNameMessageId(perk) });
     }
 
-    return requireMessageOptions(ProHelper::perkMsgFile(), specs, "perk.msg perk");
+    return requireMessageOptions(ProHelper::perkMsgFile(resources), specs, "perk.msg perk");
 }
 
 } // namespace
 
-QStringList damageTypes7() {
-    return requireProtoEnumNames(fallout::DamageType::Normal, "proto.msg damage type");
+QStringList damageTypes7(resource::GameResources& resources) {
+    return requireProtoEnumNames(resources, fallout::DamageType::Normal, "proto.msg damage type");
 }
 
-QStringList damageTypes9() {
-    QStringList values = damageTypes7();
+QStringList damageTypes9(resource::GameResources& resources) {
+    QStringList values = damageTypes7(resources);
     values.append(toQStringList(requireMessageRange(
-        ProHelper::statMsgFile(),
+        ProHelper::statMsgFile(resources),
         fallout::statNameMessageId(fallout::StatId::RadiationResistance),
         2,
         "stat.msg critter resistance")));
     return values;
 }
 
-QStringList statNames() {
+QStringList statNames(resource::GameResources& resources) {
     return toQStringList(requireMessageRange(
-        ProHelper::statMsgFile(),
+        ProHelper::statMsgFile(resources),
         fallout::statNameMessageId(fallout::StatId::Strength),
         fallout::enumCount<fallout::StatId>(),
         "stat.msg stat"));
 }
 
-QStringList materialTypes() {
-    return requireProtoEnumNames(fallout::MaterialType::Glass, "proto.msg material");
+QStringList materialTypes(resource::GameResources& resources) {
+    return requireProtoEnumNames(resources, fallout::MaterialType::Glass, "proto.msg material");
 }
 
-QStringList ammoCaliberTypes() {
-    return toQStringList(requireAmmoCaliberNames(ProHelper::protoMsgFile()));
+QStringList ammoCaliberTypes(resource::GameResources& resources) {
+    return toQStringList(requireAmmoCaliberNames(ProHelper::protoMsgFile(resources)));
 }
 
-QVector<EnumOption> allPerkOptions() {
-    return toEnumOptions(requireAllPerkOptions());
+QVector<EnumOption> allPerkOptions(resource::GameResources& resources) {
+    return toEnumOptions(requireAllPerkOptions(resources));
 }
 
-QVector<EnumOption> weaponPerkOptions() {
-    return prependNoPerkOption(requirePerkOptions(fallout::WEAPON_ITEM_PERKS, "perk.msg weapon perk"));
+QVector<EnumOption> weaponPerkOptions(resource::GameResources& resources) {
+    return prependNoPerkOption(requirePerkOptions(resources, fallout::WEAPON_ITEM_PERKS, "perk.msg weapon perk"));
 }
 
-QVector<EnumOption> armorPerkOptions() {
-    return prependNoPerkOption(requirePerkOptions(fallout::ARMOR_ITEM_PERKS, "perk.msg armor perk"));
+QVector<EnumOption> armorPerkOptions(resource::GameResources& resources) {
+    return prependNoPerkOption(requirePerkOptions(resources, fallout::ARMOR_ITEM_PERKS, "perk.msg armor perk"));
 }
 
-QStringList critterBodyTypes() {
-    return requireProtoEnumNames(fallout::BodyType::Biped, "proto.msg body type");
+QStringList critterBodyTypes(resource::GameResources& resources) {
+    return requireProtoEnumNames(resources, fallout::BodyType::Biped, "proto.msg body type");
 }
 
-QStringList sceneryTypes() {
-    return requireProtoEnumNames(fallout::SceneryType::Door, "proto.msg scenery");
+QStringList sceneryTypes(resource::GameResources& resources) {
+    return requireProtoEnumNames(resources, fallout::SceneryType::Door, "proto.msg scenery");
 }
 
 } // namespace geck::game::enums

@@ -2,25 +2,24 @@
 
 #include "format/lst/Lst.h"
 #include "format/msg/Msg.h"
-#include "reader/ReaderFactory.h"
-#include "util/ResourceManager.h"
+#include "resource/GameResources.h"
 #include "util/ResourcePaths.h"
 
 namespace geck {
 
-Msg* ProHelper::protoMsgFile() {
-    return ResourceManager::getInstance().loadResource<Msg>(std::string(ResourcePaths::Msg::PROTO));
+Msg* ProHelper::protoMsgFile(resource::GameResources& resources) {
+    return resources.repository().load<Msg>(std::string(ResourcePaths::Msg::PROTO));
 }
 
-Msg* ProHelper::statMsgFile() {
-    return ResourceManager::getInstance().loadResource<Msg>(std::string(ResourcePaths::Msg::STAT));
+Msg* ProHelper::statMsgFile(resource::GameResources& resources) {
+    return resources.repository().load<Msg>(std::string(ResourcePaths::Msg::STAT));
 }
 
-Msg* ProHelper::perkMsgFile() {
-    return ResourceManager::getInstance().loadResource<Msg>(std::string(ResourcePaths::Msg::PERK));
+Msg* ProHelper::perkMsgFile(resource::GameResources& resources) {
+    return resources.repository().load<Msg>(std::string(ResourcePaths::Msg::PERK));
 }
 
-Msg* geck::ProHelper::msgFile(Pro::OBJECT_TYPE type) {
+Msg* ProHelper::msgFile(resource::GameResources& resources, Pro::OBJECT_TYPE type) {
 
     std::string filename;
 
@@ -47,10 +46,10 @@ Msg* geck::ProHelper::msgFile(Pro::OBJECT_TYPE type) {
             throw std::runtime_error{ "Invalid PRO type" };
     }
 
-    return ResourceManager::getInstance().loadResource<Msg>(filename);
+    return resources.repository().load<Msg>(filename);
 }
 
-Lst* ProHelper::lstFile(uint32_t PID) {
+Lst* ProHelper::lstFile(resource::GameResources& resources, uint32_t PID) {
 
     unsigned int typeId = PID >> 24;
     std::string filename;
@@ -77,10 +76,10 @@ Lst* ProHelper::lstFile(uint32_t PID) {
             throw std::runtime_error{ "Wrong PID: " + std::to_string(PID) };
     }
 
-    return ResourceManager::getInstance().loadResource<Lst>(filename);
+    return resources.repository().load<Lst>(filename);
 }
 
-const std::string ProHelper::basePath(uint32_t PID) {
+std::string ProHelper::basePath(resource::GameResources& resources, uint32_t PID) {
     std::string pro_basepath = "proto/";
 
     unsigned int typeId = PID >> 24;
@@ -109,7 +108,7 @@ const std::string ProHelper::basePath(uint32_t PID) {
 
     unsigned int index = 0x00000FFF & PID;
 
-    auto lst = ProHelper::lstFile(PID);
+    auto lst = ProHelper::lstFile(resources, PID);
 
     if (index > lst->list().size()) {
         throw std::runtime_error{ "LST size < PID: " + std::to_string(PID) };

@@ -8,7 +8,7 @@ class ProAmmoWidget : public ProTabWidget {
     Q_OBJECT
 
 public:
-    explicit ProAmmoWidget(QWidget* parent = nullptr);
+    explicit ProAmmoWidget(resource::GameResources& resources, QWidget* parent = nullptr);
     ~ProAmmoWidget() override = default;
 
     void loadFromPro(const std::shared_ptr<Pro>& pro) override;

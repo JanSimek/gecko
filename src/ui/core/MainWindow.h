@@ -25,6 +25,10 @@ QT_END_NAMESPACE
 
 namespace geck {
 
+namespace resource {
+class GameResources;
+}
+
 class SFMLWidget;
 class EditorWidget;
 class LoadingWidget;
@@ -40,7 +44,7 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(std::shared_ptr<resource::GameResources> resources, QWidget* parent = nullptr);
     ~MainWindow();
 
     void setEditorWidget(std::unique_ptr<EditorWidget> editorWidget);
@@ -68,6 +72,7 @@ public:
 
     // PRO editor functionality
     bool openProEditorForSelectedObject();
+    resource::GameResources& resources() const { return *_resourcesShared; }
 
 signals:
     void newMapRequested();
@@ -133,6 +138,10 @@ private:
     std::array<DockActionPair, 5> managedDockActionPairs() const;
     void applyDefaultDockPlacements();
     void applyDefaultPanelDockLayout();
+    void connectFileBrowserSignals();
+    void replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSizePolicy::Policy verticalPolicy);
+    void rebuildResourcePanels();
+    void rebuildGameResourcesFromSettings();
 
     // Text file handling
     bool isTextFile(const QString& filePath) const;
@@ -153,6 +162,7 @@ private:
 
     QStackedWidget* _centralStack;
     QTimer* _gameLoopTimer;
+    std::shared_ptr<resource::GameResources> _resourcesShared;
 
     // Current widgets
     EditorWidget* _currentEditorWidget;

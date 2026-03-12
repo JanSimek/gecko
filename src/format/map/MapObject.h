@@ -10,6 +10,9 @@
 namespace geck {
 
 class Pro; // Forward declaration
+namespace resource {
+    class GameResources;
+}
 
 // scenery, walls, items, containers, keys and critters
 struct MapObject {
@@ -88,12 +91,12 @@ struct MapObject {
         return baseId == 1 && flags & 0x00000010;
     }
 
-    bool isWallBlocker() {
+    bool isWallBlocker(resource::GameResources& resources) {
         // Any object that blocks movement OR is a gap-filling wall blocker
-        return blocksMovement();
+        return blocksMovement(resources);
     }
 
-    bool isShootThroughWallBlocker();
+    bool isShootThroughWallBlocker(resource::GameResources& resources);
 
     bool isScrollBlocker() {
         // Scroll blockers are visual indicators only (FRM-based, not proto-based)
@@ -104,11 +107,11 @@ struct MapObject {
 
 private:
     // Helper method to get PRO file data on demand
-    Pro* getProData() const;
+    Pro* getProData(resource::GameResources& resources) const;
 
 public:
     // Check if object blocks movement based on PRO file flags
-    bool blocksMovement() const;
+    bool blocksMovement(resource::GameResources& resources) const;
 
     // Check if object is a wall (OBJECT_TYPE::WALL)
     bool isWallObject() const;

@@ -8,7 +8,7 @@ class ProMiscItemWidget : public ProTabWidget {
     Q_OBJECT
 
 public:
-    explicit ProMiscItemWidget(QWidget* parent = nullptr);
+    explicit ProMiscItemWidget(resource::GameResources& resources, QWidget* parent = nullptr);
     ~ProMiscItemWidget() override = default;
 
     void loadFromPro(const std::shared_ptr<Pro>& pro) override;

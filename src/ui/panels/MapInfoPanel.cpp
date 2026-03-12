@@ -13,15 +13,15 @@
 #include "../../format/map/Map.h"
 #include "../../format/gam/Gam.h"
 #include "../../format/lst/Lst.h"
+#include "../../resource/GameResources.h"
 #include "../../reader/ReaderFactory.h"
-#include "../../util/ResourceManager.h"
 #include "../../util/ResourcePaths.h"
 #include "../../util/Coordinates.h"
 #include "../IconHelper.h"
 
 namespace geck {
 
-MapInfoPanel::MapInfoPanel(QWidget* parent)
+MapInfoPanel::MapInfoPanel(resource::GameResources& resources, QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
     , _scrollArea(nullptr)
@@ -49,6 +49,7 @@ MapInfoPanel::MapInfoPanel(QWidget* parent)
     , _globalVarsTree(nullptr)
     , _mapScriptsGroup(nullptr)
     , _mapScriptsLabel(nullptr)
+    , _resources(resources)
     , _map(nullptr)
     , _mapScriptName("no script") {
 
@@ -346,8 +347,8 @@ void MapInfoPanel::loadScriptVars() {
         std::string gam_path = "maps/" + gam_filename;
 
         Gam* gam_file = nullptr;
-        if (ResourceManager::getInstance().fileExistsInVFS(gam_path)) {
-            gam_file = ResourceManager::getInstance().loadResource<Gam>(gam_path);
+        if (_resources.files().exists(gam_path)) {
+            gam_file = _resources.repository().load<Gam>(gam_path);
             if (gam_file) {
                 spdlog::debug("GAM file loaded from VFS: {}", gam_path);
             }
@@ -367,7 +368,7 @@ void MapInfoPanel::loadScriptVars() {
         // Load map script name
         int map_script_id = _map->getMapFile().header.script_id;
         if (map_script_id > 0) {
-            auto scripts = ResourceManager::getInstance().loadResource<Lst>(ResourcePaths::Lst::SCRIPTS);
+            auto scripts = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
             const auto& scriptList = scripts->list();
             if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
                 _mapScriptName = scripts->at(map_script_id - 1); // script id starts at 1

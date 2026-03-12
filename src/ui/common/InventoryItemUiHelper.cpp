@@ -4,9 +4,9 @@
 #include "../../format/map/MapObject.h"
 #include "../../format/msg/Msg.h"
 #include "../../format/pro/Pro.h"
+#include "../../resource/GameResources.h"
 #include "../../util/FalloutEngineEnums.h"
 #include "../../util/ProHelper.h"
-#include "../../util/ResourceManager.h"
 
 #include <QImage>
 #include <QPainter>
@@ -26,17 +26,17 @@ QString formatPid(uint32_t pid) {
     return QString("0x%1").arg(pid, 8, 16, QChar('0'));
 }
 
-Pro* loadPro(uint32_t pid) {
-    return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(pid));
+Pro* loadPro(resource::GameResources& resources, uint32_t pid) {
+    return resources.repository().load<Pro>(ProHelper::basePath(resources, pid));
 }
 
 bool isAmmoItem(const Pro& pro) {
     return pro.type() == Pro::OBJECT_TYPE::ITEM && pro.itemType() == Pro::ITEM_TYPE::AMMO;
 }
 
-QString typeNameForPro(const Pro& pro) {
+QString typeNameForPro(resource::GameResources& resources, const Pro& pro) {
     if (pro.type() == Pro::OBJECT_TYPE::ITEM) {
-        Msg* protoMsg = ProHelper::protoMsgFile();
+        Msg* protoMsg = ProHelper::protoMsgFile(resources);
         if (!protoMsg) {
             throw std::runtime_error("proto.msg is not loaded");
         }
@@ -49,8 +49,8 @@ QString typeNameForPro(const Pro& pro) {
     return QString::fromStdString(pro.typeToString());
 }
 
-QString nameForPid(const Pro& pro) {
-    Msg* msg = ProHelper::msgFile(pro.type());
+QString nameForPid(resource::GameResources& resources, const Pro& pro) {
+    Msg* msg = ProHelper::msgFile(resources, pro.type());
     if (!msg) {
         throw std::runtime_error("PRO message file is not loaded");
     }
@@ -63,27 +63,25 @@ QString nameForPid(const Pro& pro) {
     return QString::fromStdString(text);
 }
 
-std::string resolveFrmPath(uint32_t pid, const Pro& pro) {
-    auto& resourceManager = ResourceManager::getInstance();
+std::string resolveFrmPath(resource::GameResources& resources, uint32_t pid, const Pro& pro) {
 
     if (pro.type() == Pro::OBJECT_TYPE::ITEM && pro.commonItemData.inventoryFID > 0) {
         try {
-            return resourceManager.FIDtoFrmName(pro.commonItemData.inventoryFID);
+            return resources.frmResolver().resolve(pro.commonItemData.inventoryFID);
         } catch (const std::exception& e) {
             spdlog::debug("InventoryItemUiHelper: Inventory FID resolution failed for PID {}: {}", pid, e.what());
         }
     }
 
     if (pro.header.FID > 0) {
-        return resourceManager.FIDtoFrmName(pro.header.FID);
+        return resources.frmResolver().resolve(pro.header.FID);
     }
 
     return {};
 }
 
-QPixmap renderFramePixmap(const std::string& frmPath, int iconSize, bool fixedCanvas) {
-    auto& resourceManager = ResourceManager::getInstance();
-    Frm* frm = resourceManager.loadResource<Frm>(frmPath);
+QPixmap renderFramePixmap(resource::GameResources& resources, const std::string& frmPath, int iconSize, bool fixedCanvas) {
+    Frm* frm = resources.repository().load<Frm>(frmPath);
     if (!frm) {
         return QPixmap();
     }
@@ -94,7 +92,7 @@ QPixmap renderFramePixmap(const std::string& frmPath, int iconSize, bool fixedCa
     }
 
     const auto& frame = directions[0].frames()[0];
-    const sf::Texture& texture = resourceManager.texture(frmPath);
+    const sf::Texture& texture = resources.textures().get(frmPath);
     sf::Image image = texture.copyToImage();
 
     QImage fullImage(
@@ -130,9 +128,9 @@ QPixmap renderFramePixmap(const std::string& frmPath, int iconSize, bool fixedCa
 
 } // namespace
 
-uint32_t displayAmount(const MapObject& item) {
+uint32_t displayAmount(resource::GameResources& resources, const MapObject& item) {
     try {
-        Pro* pro = loadPro(item.pro_pid);
+        Pro* pro = loadPro(resources, item.pro_pid);
         if (!pro) {
             return item.amount;
         }
@@ -154,7 +152,7 @@ uint32_t displayAmount(const MapObject& item) {
     }
 }
 
-ItemDetails describeItem(uint32_t pid) {
+ItemDetails describeItem(resource::GameResources& resources, uint32_t pid) {
     ItemDetails details {
         .name = QString("Item %1").arg(pid, 8, 16, QChar('0')),
         .typeName = "Unknown",
@@ -162,13 +160,13 @@ ItemDetails describeItem(uint32_t pid) {
     };
 
     try {
-        Pro* pro = loadPro(pid);
+        Pro* pro = loadPro(resources, pid);
         if (!pro) {
             return details;
         }
 
-        details.name = nameForPid(*pro);
-        details.typeName = typeNameForPro(*pro);
+        details.name = nameForPid(resources, *pro);
+        details.typeName = typeNameForPro(resources, *pro);
     } catch (const std::exception& e) {
         spdlog::warn("InventoryItemUiHelper::describeItem: Failed to describe PID {}: {}", pid, e.what());
     }
@@ -176,19 +174,19 @@ ItemDetails describeItem(uint32_t pid) {
     return details;
 }
 
-QPixmap loadItemIcon(uint32_t pid, int iconSize, bool fixedCanvas) {
+QPixmap loadItemIcon(resource::GameResources& resources, uint32_t pid, int iconSize, bool fixedCanvas) {
     try {
-        Pro* pro = loadPro(pid);
+        Pro* pro = loadPro(resources, pid);
         if (!pro) {
             return QPixmap();
         }
 
-        const std::string frmPath = resolveFrmPath(pid, *pro);
+        const std::string frmPath = resolveFrmPath(resources, pid, *pro);
         if (frmPath.empty()) {
             return QPixmap();
         }
 
-        return renderFramePixmap(frmPath, iconSize, fixedCanvas);
+        return renderFramePixmap(resources, frmPath, iconSize, fixedCanvas);
     } catch (const std::exception& e) {
         spdlog::debug("InventoryItemUiHelper::loadItemIcon: Failed to load icon for PID {}: {}", pid, e.what());
     }
@@ -196,20 +194,20 @@ QPixmap loadItemIcon(uint32_t pid, int iconSize, bool fixedCanvas) {
     return QPixmap();
 }
 
-bool itemExists(uint32_t pid) {
+bool itemExists(resource::GameResources& resources, uint32_t pid) {
     try {
-        return loadPro(pid) != nullptr;
+        return loadPro(resources, pid) != nullptr;
     } catch (const std::exception&) {
         return false;
     }
 }
 
-std::unique_ptr<MapObject> createMapInventoryItem(uint32_t pid, int amount) {
+std::unique_ptr<MapObject> createMapInventoryItem(resource::GameResources& resources, uint32_t pid, int amount) {
     if (amount < 1) {
         throw std::invalid_argument("Inventory item amount must be positive");
     }
 
-    if (!loadPro(pid)) {
+    if (!loadPro(resources, pid)) {
         throw std::runtime_error("Inventory item PRO does not exist");
     }
 

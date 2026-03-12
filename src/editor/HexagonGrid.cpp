@@ -1,7 +1,9 @@
 #include "HexagonGrid.h"
 #include "Hex.h"
+#include <algorithm>
 #include <functional>
 #include <limits>
+#include <set>
 
 namespace geck {
 
@@ -29,6 +31,18 @@ HexagonGrid::HexagonGrid() {
 
 const std::vector<Hex>& HexagonGrid::grid() const {
     return _grid;
+}
+
+size_t HexagonGrid::size() const {
+    return _grid.size();
+}
+
+bool HexagonGrid::empty() const {
+    return _grid.empty();
+}
+
+bool HexagonGrid::containsPosition(int position) const {
+    return position >= 0 && position < static_cast<int>(_grid.size());
 }
 
 uint32_t HexagonGrid::positionAt(uint32_t x, uint32_t y) const {
@@ -62,13 +76,87 @@ uint32_t HexagonGrid::positionAt(uint32_t x, uint32_t y) const {
 }
 
 std::optional<std::reference_wrapper<const Hex>> HexagonGrid::getHexByPosition(uint32_t position) const {
-    // Find the hex with the matching position value
-    for (const auto& hex : _grid) {
-        if (hex.position() == position) {
-            return std::cref(hex);
+    if (position < _grid.size()) {
+        return std::cref(_grid.at(position));
+    }
+
+    return std::nullopt;
+}
+
+std::optional<HexagonGrid::GridCoordinates> HexagonGrid::coordinatesForPosition(int position) const {
+    if (!containsPosition(position)) {
+        return std::nullopt;
+    }
+
+    return GridCoordinates {
+        position % GRID_WIDTH,
+        position / GRID_WIDTH
+    };
+}
+
+std::optional<int> HexagonGrid::positionForCoordinates(int x, int y) const {
+    if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) {
+        return std::nullopt;
+    }
+
+    return y * GRID_WIDTH + x;
+}
+
+std::optional<int> HexagonGrid::tileIndexForPosition(int position) const {
+    auto coordinates = coordinatesForPosition(position);
+    if (!coordinates.has_value()) {
+        return std::nullopt;
+    }
+
+    const int tileX = coordinates->x / 2;
+    const int tileY = coordinates->y / 2;
+    return tileY * TILE_GRID_WIDTH + tileX;
+}
+
+std::vector<int> HexagonGrid::rectangleBorderPositions(int topLeftPosition,
+    int topRightPosition,
+    int bottomLeftPosition,
+    int bottomRightPosition) const {
+    auto topLeft = coordinatesForPosition(topLeftPosition);
+    auto topRight = coordinatesForPosition(topRightPosition);
+    auto bottomLeft = coordinatesForPosition(bottomLeftPosition);
+    auto bottomRight = coordinatesForPosition(bottomRightPosition);
+    if (!topLeft.has_value() || !topRight.has_value() || !bottomLeft.has_value() || !bottomRight.has_value()) {
+        return {};
+    }
+
+    int leftX = std::min(topLeft->x, bottomLeft->x);
+    int rightX = std::max(topRight->x, bottomRight->x);
+    int topY = std::min(topLeft->y, topRight->y);
+    int bottomY = std::max(bottomLeft->y, bottomRight->y);
+
+    std::set<int> uniquePositions;
+
+    for (int x = leftX; x <= rightX; ++x) {
+        auto topPosition = positionForCoordinates(x, topY);
+        if (topPosition.has_value()) {
+            uniquePositions.insert(*topPosition);
+        }
+
+        auto bottomPosition = positionForCoordinates(x, bottomY);
+        if (bottomPosition.has_value()) {
+            uniquePositions.insert(*bottomPosition);
         }
     }
-    return std::nullopt;
+
+    for (int y = topY + 1; y < bottomY; ++y) {
+        auto leftPosition = positionForCoordinates(leftX, y);
+        if (leftPosition.has_value()) {
+            uniquePositions.insert(*leftPosition);
+        }
+
+        auto rightPosition = positionForCoordinates(rightX, y);
+        if (rightPosition.has_value()) {
+            uniquePositions.insert(*rightPosition);
+        }
+    }
+
+    return { uniquePositions.begin(), uniquePositions.end() };
 }
 
 } // namespace geck

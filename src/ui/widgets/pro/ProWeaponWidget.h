@@ -18,7 +18,7 @@ class ProWeaponWidget : public ProTabWidget {
     Q_OBJECT
 
 public:
-    explicit ProWeaponWidget(QWidget* parent = nullptr);
+    explicit ProWeaponWidget(resource::GameResources& resources, QWidget* parent = nullptr);
     ~ProWeaponWidget() override = default;
 
     // ProTabWidget interface

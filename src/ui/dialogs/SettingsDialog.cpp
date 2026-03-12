@@ -5,9 +5,6 @@
 #include "../UIConstants.h"
 #include "../theme/ThemeManager.h"
 #include "../../util/Settings.h"
-#include "../../util/ResourceManager.h"
-#include "../../state/loader/DataPathLoader.h"
-#include "../widgets/LoadingWidget.h"
 
 #include <QApplication>
 #include <QStyle>
@@ -181,26 +178,6 @@ void SettingsDialog::saveSettings() {
     settings.setGameDataDirectory(_gameLocationWidget->getDataDirectory());
 
     settings.save();
-
-    // If data paths changed, reload the ResourceManager
-    if (pathsHaveChanged) {
-        spdlog::info("Data paths changed, reloading ResourceManager...");
-
-        // Emit signal that data paths changed
-        emit dataPathsChanged();
-
-        // Clear the ResourceManager
-        auto& resourceManager = ResourceManager::getInstance();
-        resourceManager.clearAllDataPaths();
-
-        // Reload data paths with a loading dialog
-        auto loadingWidget = std::make_unique<LoadingWidget>(this);
-        loadingWidget->setWindowTitle("Reloading Game Data");
-        loadingWidget->addLoader(std::make_unique<DataPathLoader>(dataPaths));
-        loadingWidget->exec();
-
-        spdlog::info("ResourceManager reloaded with new data paths");
-    }
 
     _originalDataPaths = dataPaths;
     _hasChanges = false;

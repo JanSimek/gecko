@@ -15,7 +15,6 @@
 #include <QVBoxLayout>
 #include "../../editor/Object.h"
 #include "../../editor/HexagonGrid.h"
-#include "../../util/ResourceManager.h"
 #include "../../util/Types.h"
 #include "../../format/map/Map.h"
 #include "../../format/pro/Pro.h"
@@ -25,6 +24,10 @@
 #include "../../util/UndoStack.h"
 
 namespace geck {
+
+namespace resource {
+class GameResources;
+}
 
 // Forward declarations
 class RenderingEngine;
@@ -43,7 +46,7 @@ class EditorWidget : public QWidget {
     friend class TilePlacementManager;
 
 public:
-    EditorWidget(std::unique_ptr<Map> map, QWidget* parent = nullptr);
+    EditorWidget(resource::GameResources& resources, std::unique_ptr<Map> map, QWidget* parent = nullptr);
     ~EditorWidget();
 
     void createNewMap();
@@ -151,6 +154,7 @@ public:
 
     // Access to hex grid for SelectionManager
     const HexagonGrid* getHexagonGrid() const { return &_hexgrid; }
+    resource::GameResources& resources() const { return _resources; }
 
     // Helper methods for extracted managers (made public)
     void clearDragSelectionPreview();
@@ -303,6 +307,7 @@ private:
     LoadingErrors _lastLoadErrors;
 
     int _currentElevation = 0;
+    resource::GameResources& _resources;
     std::unique_ptr<Map> _map;
 
     bool _showObjects = UI::DEFAULT_SHOW_OBJECTS;
@@ -316,8 +321,6 @@ private:
     bool _showExitGrids = false;
 
     const sf::Texture& createBlankTexture();
-    const sf::Texture& createHexTexture();
-    const sf::Texture& createCursorHexTexture();
 
     // Double-click detection for object cycling
     sf::Clock _lastClickTime;
@@ -337,11 +340,7 @@ private:
     int _previewObjectCategory = 0;                 // Category of preview object (as int)
     const ObjectInfo* _previewObjectInfo = nullptr; // Object info from palette
 
-    // Hex grid visualization
-    sf::Sprite _hexSprite;            // Hex grid sprite from HEX.frm
-    sf::Sprite _hexHighlightSprite;   // Red highlight sprite for mouse hover
-    sf::Sprite _playerPositionSprite; // Blue marker sprite for player default position
-    int _currentHoverHex = -1;        // Current hex index under mouse cursor
+    int _currentHoverHex = -1;
 
     // Selection management
     std::unique_ptr<selection::SelectionManager> _selectionManager;
@@ -349,8 +348,7 @@ private:
     // Selected roof tile background sprites (blank.frm tiles for transparent pixel visibility)
     std::vector<sf::Sprite> _selectedRoofTileBackgroundSprites;
 
-    // Selected hex sprites for visual feedback
-    std::vector<sf::Sprite> _selectedHexSprites;
+    std::vector<int> _selectedHexPositions;
 
     // Player position selection state
     bool _playerPositionSelectionMode = false;

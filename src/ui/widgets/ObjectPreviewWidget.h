@@ -16,6 +16,9 @@ class QGroupBox;
 namespace geck {
 
 class Frm;
+namespace resource {
+class GameResources;
+}
 
 /**
  * @brief Widget for displaying and animating FRM previews
@@ -37,7 +40,8 @@ public:
     };
     Q_DECLARE_FLAGS(PreviewOptions, PreviewOption)
 
-    explicit ObjectPreviewWidget(QWidget* parent = nullptr,
+    explicit ObjectPreviewWidget(resource::GameResources& resources,
+        QWidget* parent = nullptr,
         PreviewOptions options = Default,
         const QSize& previewSize = QSize(150, 150),
         double scaleFactor = 1.25);
@@ -100,6 +104,7 @@ private:
     // Data
     int32_t _currentFid;
     QString _currentFrmPath;
+    resource::GameResources& _resources;
 
     // Configuration
     PreviewOptions _options;

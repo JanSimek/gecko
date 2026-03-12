@@ -478,12 +478,9 @@ void ExitGridPlacementManager::selectExitGridsInArea(sf::Vector2f startPos, sf::
         std::vector<int> hexesInArea;
         auto* hexGrid = _editor->getHexagonGrid();
         if (hexGrid) {
-            for (int hexIndex = 0; hexIndex < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT); ++hexIndex) {
-                if (hexIndex < static_cast<int>(hexGrid->grid().size())) {
-                    const auto& hex = hexGrid->grid().at(hexIndex);
-                    sf::Vector2f hexPos(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
-
-                    // Check if hex center is within selection area
+            for (int hexIndex = 0; hexIndex < static_cast<int>(hexGrid->size()); ++hexIndex) {
+                if (auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
+                    sf::Vector2f hexPos(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
                     sf::FloatRect hexBounds(sf::Vector2f(hexPos.x - 16, hexPos.y - 8), sf::Vector2f(32, 16));
                     if (selectionArea.findIntersection(hexBounds)) {
                         hexesInArea.push_back(hexIndex);

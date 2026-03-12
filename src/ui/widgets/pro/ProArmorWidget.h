@@ -20,7 +20,7 @@ class ProArmorWidget : public ProTabWidget {
     Q_OBJECT
 
 public:
-    explicit ProArmorWidget(QWidget* parent = nullptr);
+    explicit ProArmorWidget(resource::GameResources& resources, QWidget* parent = nullptr);
     ~ProArmorWidget() override = default;
 
     // ProTabWidget interface

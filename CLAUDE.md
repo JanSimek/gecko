@@ -52,12 +52,12 @@ There is currently no separate `qt_tests` target or ctest label registration for
 - `src/ui/rendering/`: SFML rendering engine with viewport culling
 - `src/editor/`: Core editing logic (Object, HexagonGrid, Hex)
 - `src/selection/`: Selection management system
-- `src/util/`: Utilities (ResourceManager, Settings, Coordinates)
+- `src/util/`: Utilities (Settings, Coordinates, helper modules)
 - `src/vfs/`: Virtual file system for game archives
 
 ### Resource Management
-- Singleton `ResourceManager` with VFS integration
-- Texture caching and FRM-to-sprite conversion
+- Injected `resource::GameResources` facade
+- `DataFileSystem`, `ResourceRepository`, `FrmResolver`, and `TextureManager`
 - DAT archive support via vfspp library
 
 ## Map Format References
@@ -103,7 +103,7 @@ There is currently no separate `qt_tests` target or ctest label registration for
 ## Common Issues and Solutions
 
 ### 1. Sprite Size Issues
-- Ensure proper FRM loading using `ResourceManager::texture(frmPath)`
+- Ensure proper FRM loading using `resources.textures().get(frmPath)`
 - Call `setDirection()` after `setSprite()` to set correct texture rectangle
 - Check for null FRM before calling direction methods
 
@@ -116,7 +116,7 @@ There is currently no separate `qt_tests` target or ctest label registration for
 ```cpp
 // Standard object creation pattern (existing objects)
 auto object = std::make_shared<Object>(frm);
-sf::Sprite sprite{ ResourceManager::getInstance().texture(frmPath) };
+sf::Sprite sprite{ resources.textures().get(frmPath) };
 object->setSprite(std::move(sprite));
 object->setDirection(static_cast<ObjectDirection>(direction));
 object->setHexPosition(hex);
@@ -125,8 +125,8 @@ object->setHexPosition(hex);
 ## Code Architecture Notes
 
 ### Resource Management
-- Use `ResourceManager::getInstance()` for loading assets
-- FRM files are stitched into sprite sheets by ResourceManager
+- Pass `resource::GameResources` explicitly through constructors
+- FRM files are stitched into sprite sheets by `TextureManager`
 - Texture rectangles are set by `Object::setDirection()` to show single frames
 
 ### Engine Data Fidelity

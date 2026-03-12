@@ -18,7 +18,7 @@ class ProDrugWidget : public ProTabWidget {
     Q_OBJECT
 
 public:
-    explicit ProDrugWidget(QWidget* parent = nullptr);
+    explicit ProDrugWidget(resource::GameResources& resources, QWidget* parent = nullptr);
     ~ProDrugWidget() override = default;
 
     // ProTabWidget interface

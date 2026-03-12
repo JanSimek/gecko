@@ -18,6 +18,9 @@ namespace geck {
 
 struct MapObject;
 class Object;
+namespace resource {
+class GameResources;
+}
 
 /**
  * @brief Dialog for viewing and managing object inventories
@@ -31,8 +34,8 @@ class InventoryViewerDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit InventoryViewerDialog(std::shared_ptr<Object> object, QWidget* parent = nullptr);
-    explicit InventoryViewerDialog(std::shared_ptr<MapObject> mapObject, QWidget* parent = nullptr);
+    explicit InventoryViewerDialog(resource::GameResources& resources, std::shared_ptr<Object> object, QWidget* parent = nullptr);
+    explicit InventoryViewerDialog(resource::GameResources& resources, std::shared_ptr<MapObject> mapObject, QWidget* parent = nullptr);
     ~InventoryViewerDialog() = default;
 
 private slots:
@@ -81,6 +84,7 @@ private:
     QPushButton* _closeButton;
 
     // Data
+    resource::GameResources& _resources;
     std::shared_ptr<MapObject> _mapObject;
 
     // Tree widget columns

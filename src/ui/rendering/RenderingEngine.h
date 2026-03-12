@@ -5,8 +5,13 @@
 #include <vector>
 #include "../../util/Types.h"
 #include "../../editor/HexagonGrid.h"
+#include "HexRenderer.h"
 
 namespace geck {
+
+namespace resource {
+    class GameResources;
+}
 
 // Forward declarations
 class Object;
@@ -46,7 +51,7 @@ public:
         const std::vector<std::shared_ptr<Object>>* objects = nullptr;
         const std::vector<sf::Sprite>* wallBlockerOverlays = nullptr;
         const std::vector<sf::Sprite>* selectedRoofTileBackgroundSprites = nullptr;
-        const std::vector<sf::Sprite>* selectedHexSprites = nullptr;
+        const std::vector<int>* selectedHexPositions = nullptr;
 
         // Drag preview
         const std::shared_ptr<Object>* dragPreviewObject = nullptr;
@@ -59,17 +64,15 @@ public:
 
         // Hex grid data
         const HexagonGrid* hexGrid = nullptr;
-        const sf::Sprite* hexSprite = nullptr;
-        const sf::Sprite* hexHighlightSprite = nullptr;
-        const sf::Sprite* playerPositionSprite = nullptr;
         int currentHoverHex = -1;
+        int playerPositionHex = -1;
 
         // Map data
         const Map* map = nullptr;
         int currentElevation = 0;
     };
 
-    explicit RenderingEngine();
+    explicit RenderingEngine(resource::GameResources& resources);
     ~RenderingEngine() = default;
 
     /**
@@ -154,6 +157,9 @@ private:
      */
     bool isHexVisible(int hexWorldX, int hexWorldY,
         const sf::View& view) const;
+
+    resource::GameResources& _resources;
+    HexRenderer _hexRenderer;
 };
 
 } // namespace geck

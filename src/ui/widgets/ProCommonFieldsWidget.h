@@ -20,6 +20,10 @@
 
 namespace geck {
 
+namespace resource {
+class GameResources;
+}
+
 /**
  * @brief Reusable widget for editing PRO file common fields
  *
@@ -37,7 +41,7 @@ class ProCommonFieldsWidget : public QWidget {
     Q_OBJECT
 
 public:
-    explicit ProCommonFieldsWidget(QWidget* parent = nullptr);
+    explicit ProCommonFieldsWidget(resource::GameResources& resources, QWidget* parent = nullptr);
     ~ProCommonFieldsWidget() = default;
 
     /**
@@ -147,6 +151,7 @@ private:
 
     // Data storage
     std::shared_ptr<Pro> _pro;
+    resource::GameResources& _resources;
 };
 
 } // namespace geck

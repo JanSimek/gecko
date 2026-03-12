@@ -8,8 +8,8 @@
 
 namespace geck {
 
-ProWeaponWidget::ProWeaponWidget(QWidget* parent)
-    : ProTabWidget(parent)
+ProWeaponWidget::ProWeaponWidget(resource::GameResources& resources, QWidget* parent)
+    : ProTabWidget(resources, parent)
     , _weaponAnimationCombo(nullptr)
     , _weaponDamageMinEdit(nullptr)
     , _weaponDamageMaxEdit(nullptr)
@@ -70,7 +70,7 @@ void ProWeaponWidget::setupUI() {
         this, &ProWeaponWidget::updateAIPriority);
     basicLayout->addRow("Max Damage:", _weaponDamageMaxEdit);
 
-    _weaponDamageTypeCombo = createComboBox(game::enums::damageTypes7(), "Damage type");
+    _weaponDamageTypeCombo = createComboBox(game::enums::damageTypes7(_resources), "Damage type");
     basicLayout->addRow("Damage Type:", _weaponDamageTypeCombo);
 
     basicGroup->setLayout(basicLayout);
@@ -119,7 +119,7 @@ void ProWeaponWidget::setupUI() {
     _weaponCriticalFailEdit = createSpinBox(0, 100, "Critical failure chance");
     reqLayout->addRow("Critical Fail:", _weaponCriticalFailEdit);
 
-    _weaponPerkCombo = createComboBox(game::enums::weaponPerkOptions(),
+    _weaponPerkCombo = createComboBox(game::enums::weaponPerkOptions(_resources),
         "Special perk associated with weapon");
     reqLayout->addRow("Perk:", _weaponPerkCombo);
 
@@ -134,7 +134,7 @@ void ProWeaponWidget::setupUI() {
     _weaponBurstRoundsEdit = createSpinBox(0, 99, "Number of rounds per burst");
     ammoLayout->addRow("Burst Rounds:", _weaponBurstRoundsEdit);
 
-    _weaponAmmoTypeCombo = createComboBox(game::enums::ammoCaliberTypes(),
+    _weaponAmmoTypeCombo = createComboBox(game::enums::ammoCaliberTypes(_resources),
         "Ammunition type");
     ammoLayout->addRow("Ammo Type:", _weaponAmmoTypeCombo);
 

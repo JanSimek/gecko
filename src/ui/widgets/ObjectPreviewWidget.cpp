@@ -16,7 +16,7 @@
 #include "../../format/frm/Frm.h"
 #include "../../format/frm/Frame.h"
 #include "../../format/pal/Pal.h"
-#include "../../util/ResourceManager.h"
+#include "../../resource/GameResources.h"
 #include "../../util/FrmThumbnailGenerator.h"
 #include "../IconHelper.h"
 #include "../theme/ThemeManager.h"
@@ -25,7 +25,7 @@
 
 namespace geck {
 
-ObjectPreviewWidget::ObjectPreviewWidget(QWidget* parent, PreviewOptions options, const QSize& previewSize, double scaleFactor)
+ObjectPreviewWidget::ObjectPreviewWidget(resource::GameResources& resources, QWidget* parent, PreviewOptions options, const QSize& previewSize, double scaleFactor)
     : QWidget(parent)
     , _previewLabel(nullptr)
     , _titleLabel(nullptr)
@@ -38,6 +38,7 @@ ObjectPreviewWidget::ObjectPreviewWidget(QWidget* parent, PreviewOptions options
     , _currentDirection(0)
     , _totalDirections(0)
     , _currentFid(0)
+    , _resources(resources)
     , _options(options)
     , _customPreviewSize(previewSize)
     , _scaleFactor(scaleFactor) {
@@ -219,7 +220,7 @@ void ObjectPreviewWidget::updatePreview() {
         return;
     }
 
-    QPixmap thumbnail = FrmThumbnailGenerator::fromFrmPath(_currentFrmPath.toStdString(), QSize(250, 250));
+    QPixmap thumbnail = FrmThumbnailGenerator::fromFrmPath(_resources, _currentFrmPath.toStdString(), QSize(250, 250));
 
     if (!thumbnail.isNull()) {
         QSize labelSize = _previewLabel->size();
@@ -321,14 +322,13 @@ void ObjectPreviewWidget::loadAnimationFrames() {
     }
 
     try {
-        auto& resourceManager = ResourceManager::getInstance();
-        auto frm = resourceManager.loadResource<Frm>(_currentFrmPath.toStdString());
+        auto frm = _resources.repository().load<Frm>(_currentFrmPath.toStdString());
         if (!frm) {
             spdlog::error("Failed to load FRM for animation: {}", _currentFrmPath.toStdString());
             return;
         }
 
-        auto pal = resourceManager.loadResource<Pal>("color.pal");
+        auto pal = _resources.repository().load<Pal>("color.pal");
         if (!pal) {
             spdlog::error("Failed to load palette for animation");
             return;

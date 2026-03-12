@@ -15,6 +15,9 @@ namespace geck {
 class Map;
 class Lst;
 class Pro;
+namespace resource {
+class GameResources;
+}
 
 // Forward declaration
 class ObjectPalettePanel;
@@ -46,7 +49,7 @@ namespace geck {
 struct ObjectInfo {
     QString proFileName; // Original .pro filename from LST
     QString displayName; // Human-readable name for display
-    const Pro* pro;      // Raw pointer to PRO file (managed by ResourceManager)
+    const Pro* pro;      // Raw pointer to PRO file (managed by ResourceRepository cache)
     QString frmPath;     // Path to FRM file for thumbnail
     int listIndex;       // Index in the category list
 
@@ -98,7 +101,7 @@ class ObjectPalettePanel : public GridPalettePanel {
     Q_OBJECT
 
 public:
-    explicit ObjectPalettePanel(QWidget* parent = nullptr);
+    explicit ObjectPalettePanel(resource::GameResources& resources, QWidget* parent = nullptr);
     ~ObjectPalettePanel();
 
     // Initialization
@@ -168,6 +171,7 @@ private:
     QLabel* _statusLabel = nullptr;
 
     // Data
+    resource::GameResources& _resources;
     Map* _map = nullptr;
     std::vector<std::unique_ptr<ObjectWidget>> _objectWidgets;
 

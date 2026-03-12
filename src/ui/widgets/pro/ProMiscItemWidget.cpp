@@ -9,8 +9,8 @@
 
 namespace geck {
 
-ProMiscItemWidget::ProMiscItemWidget(QWidget* parent)
-    : ProTabWidget(parent)
+ProMiscItemWidget::ProMiscItemWidget(resource::GameResources& resources, QWidget* parent)
+    : ProTabWidget(resources, parent)
     , _powerTypeEdit(nullptr)
     , _chargesEdit(nullptr) {
     setupUI();

@@ -86,14 +86,11 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
         return -1;
     }
 
-    // Find the hex index from position
-    const auto& hexGrid = _hexGrid->grid();
-    for (int i = 0; i < static_cast<int>(hexGrid.size()); ++i) {
-        if (hexGrid[i].position() == hexPosition) {
-            spdlog::trace("ViewportController::worldPosToHexIndex: world({:.1f}, {:.1f}) -> hex({})",
-                worldPos.x, worldPos.y, i);
-            return i;
-        }
+    const int hexIndex = static_cast<int>(hexPosition);
+    if (_hexGrid->containsPosition(hexIndex)) {
+        spdlog::trace("ViewportController::worldPosToHexIndex: world({:.1f}, {:.1f}) -> hex({})",
+            worldPos.x, worldPos.y, hexIndex);
+        return hexIndex;
     }
 
     return -1;
@@ -114,17 +111,15 @@ int ViewportController::worldPosToTileIndex(sf::Vector2f worldPos, bool isRoof) 
         return -1;
     }
 
-    // Convert hex coordinates to tile coordinates
-    int hexX = hexIndex % HexagonGrid::GRID_WIDTH; // 0-199
-    int hexY = hexIndex / HexagonGrid::GRID_WIDTH; // 0-199
-    int tileX = hexX / 2;                          // 0-99
-    int tileY = hexY / 2;                          // 0-99
-    int tileIndex = tileY * MAP_WIDTH + tileX;
+    auto tileIndex = _hexGrid->tileIndexForPosition(hexIndex);
+    if (!tileIndex.has_value()) {
+        return -1;
+    }
 
     spdlog::debug("ViewportController::worldPosToTileIndex: world({:.1f}, {:.1f}) adjusted({:.1f}, {:.1f}) -> hex({}) -> tile({}) [roof: {}]",
-        worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, hexIndex, tileIndex, isRoof);
+        worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, hexIndex, *tileIndex, isRoof);
 
-    return tileIndex;
+    return *tileIndex;
 }
 
 sf::Vector2f ViewportController::snapToHexGrid(sf::Vector2f worldPos) const {
@@ -134,9 +129,8 @@ sf::Vector2f ViewportController::snapToHexGrid(sf::Vector2f worldPos) const {
 
     // Find closest hex and return its center position
     int hexIndex = worldPosToHexIndex(worldPos);
-    if (hexIndex >= 0 && hexIndex < static_cast<int>(_hexGrid->grid().size())) {
-        const auto& hex = _hexGrid->grid()[hexIndex];
-        return sf::Vector2f(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
+    if (auto hex = _hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
+        return sf::Vector2f(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
     }
 
     return worldPos; // Return original position if no valid hex found

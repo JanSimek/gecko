@@ -15,13 +15,13 @@
 #include "../dialogs/ProEditorDialog.h"
 #include "../dialogs/AboutDialog.h"
 #include "../UIConstants.h"
+#include "../../resource/GameResources.h"
 #include "../../state/loader/MapLoader.h"
+#include "../../state/loader/DataPathLoader.h"
 #include "../../selection/SelectionState.h"
 #include "../../util/Types.h"
-#include "../../util/ResourceManager.h"
 #include "../../util/Settings.h"
 #include "../../util/QtDialogs.h"
-#include "../../util/PathUtils.h"
 #include "../../util/ProHelper.h"
 #include "../../reader/lst/LstReader.h"
 #include "../../reader/ReaderFactory.h"
@@ -31,8 +31,6 @@
 #include "../../editor/Object.h"
 #include "../IconHelper.h"
 #include "../GameEnums.h"
-
-#include "../../vfs/VfsppNativeFileSystem.h"
 
 #include <fstream>
 #include <functional>
@@ -63,10 +61,11 @@
 
 namespace geck {
 
-MainWindow::MainWindow(QWidget* parent)
+MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, QWidget* parent)
     : QMainWindow(parent)
     , _centralStack(nullptr)
     , _gameLoopTimer(new QTimer(this))
+    , _resourcesShared(std::move(resources))
     , _currentEditorWidget(nullptr)
     , _welcomeWidget(nullptr)
     , _menuBar(nullptr)
@@ -187,7 +186,7 @@ void MainWindow::connectMenuSignals() {
             _currentEditorWidget->createNewMap();
         } else {
             // Create new EditorWidget with empty map when no EditorWidget exists
-            auto editorWidget = std::make_unique<EditorWidget>(nullptr);
+            auto editorWidget = std::make_unique<EditorWidget>(*_resourcesShared, nullptr);
             setEditorWidget(std::move(editorWidget));
             // Now create the new map
             _currentEditorWidget->createNewMap();
@@ -674,40 +673,21 @@ void MainWindow::setupDockWidgets() {
         return dock;
     };
 
-    _mapInfoPanel = new MapInfoPanel();
+    _mapInfoPanel = new MapInfoPanel(*_resourcesShared);
     _mapInfoDock = createDock("Map Information", "MapInfoDock", _mapInfoPanel, Qt::RightDockWidgetArea, QSizePolicy::Preferred, ui::constants::dock::MIN_HEIGHT_SMALL);
 
-    _selectionPanel = new SelectionPanel();
+    _selectionPanel = new SelectionPanel(*_resourcesShared);
     _selectionDock = createDock("Selection", "SelectionDock", _selectionPanel, Qt::RightDockWidgetArea, QSizePolicy::Preferred, ui::constants::dock::MIN_HEIGHT_SMALL);
 
-    _tilePalettePanel = new TilePalettePanel();
+    _tilePalettePanel = new TilePalettePanel(*_resourcesShared);
     _tilePaletteDock = createDock("Tile Palette", "TilePaletteDock", _tilePalettePanel, Qt::LeftDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_LARGE);
 
-    _objectPalettePanel = new ObjectPalettePanel();
+    _objectPalettePanel = new ObjectPalettePanel(*_resourcesShared);
     _objectPaletteDock = createDock("Object Palette", "ObjectPaletteDock", _objectPalettePanel, Qt::LeftDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_LARGE);
 
-    _fileBrowserPanel = new FileBrowserPanel();
+    _fileBrowserPanel = new FileBrowserPanel(_resourcesShared);
     _fileBrowserDock = createDock("Virtual File System Browser", "FileBrowserDock", _fileBrowserPanel, Qt::LeftDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_LARGE);
-
-    // Connect file browser signals
-    connect(_fileBrowserPanel, &FileBrowserPanel::fileDoubleClicked, this, [this](const QString& filePath) {
-        // Check if it's a map file
-        if (filePath.endsWith(".map", Qt::CaseInsensitive)) {
-            spdlog::info("MainWindow: Opening map from file browser: {}", filePath.toStdString());
-
-            // File browser always uses VFS loading (forceFilesystem = false)
-            handleMapLoadRequest(filePath.toStdString(), false);
-        } else if (isTextFile(filePath)) {
-            spdlog::info("MainWindow: Opening text file from file browser: {}", filePath.toStdString());
-
-            // Open text files with configured editor
-            openTextFileWithEditor(filePath);
-        } else {
-            spdlog::debug("MainWindow: Unsupported file type double-clicked: {}", filePath.toStdString());
-            QtDialogs::showInfo(this, "File Type Not Supported",
-                QString("File type not supported for opening: %1\n\nYou can export the file using the right-click context menu.").arg(filePath));
-        }
-    });
+    connectFileBrowserSignals();
 
     applyDefaultPanelDockLayout();
 
@@ -719,6 +699,91 @@ void MainWindow::setupDockWidgets() {
     // This is achieved by using QDockWidget's floating and layering features
     // Dock widgets are already rendered above the central widget by Qt's design
     spdlog::info("Dock widgets configured with proper z-order and panel features");
+}
+
+void MainWindow::connectFileBrowserSignals() {
+    if (!_fileBrowserPanel) {
+        return;
+    }
+
+    connect(_fileBrowserPanel, &FileBrowserPanel::fileDoubleClicked, this, [this](const QString& filePath) {
+        if (filePath.endsWith(".map", Qt::CaseInsensitive)) {
+            spdlog::info("MainWindow: Opening map from file browser: {}", filePath.toStdString());
+            handleMapLoadRequest(filePath.toStdString(), false);
+        } else if (isTextFile(filePath)) {
+            spdlog::info("MainWindow: Opening text file from file browser: {}", filePath.toStdString());
+            openTextFileWithEditor(filePath);
+        } else {
+            spdlog::debug("MainWindow: Unsupported file type double-clicked: {}", filePath.toStdString());
+            QtDialogs::showInfo(this, "File Type Not Supported",
+                QString("File type not supported for opening: %1\n\nYou can export the file using the right-click context menu.").arg(filePath));
+        }
+    });
+}
+
+void MainWindow::replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSizePolicy::Policy verticalPolicy) {
+    if (!dock || !panel) {
+        return;
+    }
+
+    panel->setSizePolicy(QSizePolicy(QSizePolicy::Preferred, verticalPolicy));
+
+    if (QWidget* oldWidget = dock->widget()) {
+        oldWidget->hide();
+        oldWidget->setParent(nullptr);
+        delete oldWidget;
+    }
+
+    dock->setWidget(panel);
+}
+
+void MainWindow::rebuildResourcePanels() {
+    _mapInfoPanel = new MapInfoPanel(*_resourcesShared);
+    replaceDockPanelWidget(_mapInfoDock, _mapInfoPanel, QSizePolicy::Preferred);
+
+    _selectionPanel = new SelectionPanel(*_resourcesShared);
+    replaceDockPanelWidget(_selectionDock, _selectionPanel, QSizePolicy::Preferred);
+
+    _tilePalettePanel = new TilePalettePanel(*_resourcesShared);
+    replaceDockPanelWidget(_tilePaletteDock, _tilePalettePanel, QSizePolicy::Expanding);
+
+    _objectPalettePanel = new ObjectPalettePanel(*_resourcesShared);
+    replaceDockPanelWidget(_objectPaletteDock, _objectPalettePanel, QSizePolicy::Expanding);
+
+    _fileBrowserPanel = new FileBrowserPanel(_resourcesShared);
+    replaceDockPanelWidget(_fileBrowserDock, _fileBrowserPanel, QSizePolicy::Expanding);
+    connectFileBrowserSignals();
+}
+
+void MainWindow::rebuildGameResourcesFromSettings() {
+    const auto dataPaths = Settings::getInstance().getDataPaths();
+
+    if (hasActiveMap()) {
+        closeCurrentMap();
+    }
+
+    auto newResources = std::make_shared<resource::GameResources>();
+    auto loadingWidget = std::make_unique<LoadingWidget>(this);
+    loadingWidget->setWindowTitle("Reloading Game Data");
+
+    auto loader = std::make_unique<DataPathLoader>(newResources, dataPaths);
+    DataPathLoader* loaderPtr = loader.get();
+    loadingWidget->addLoader(std::move(loader));
+    loadingWidget->exec();
+
+    const bool loaderHadErrors = loaderPtr && loaderPtr->hasError();
+    const std::string loaderErrorMessage = loaderPtr ? loaderPtr->errorMessage() : std::string();
+
+    _resourcesShared = std::move(newResources);
+    rebuildResourcePanels();
+    refreshFileBrowser();
+    showFileBrowserPanel();
+    updatePanelMenuActions();
+
+    if (loaderHadErrors) {
+        QtDialogs::showWarning(this, "Game Data Reloaded With Errors",
+            QString::fromStdString(loaderErrorMessage.empty() ? "Some data paths failed to load." : loaderErrorMessage));
+    }
 }
 
 void MainWindow::setupStatusBar() {
@@ -1131,18 +1196,15 @@ void MainWindow::updateMapInfo(Map* map) {
 
     // Load tiles into palette when map is loaded
     if (_tilePalettePanel && map) {
-        // Load tile list from ResourceManager using the same method as original implementation
+        // Load tile list from the shared resource repository
         try {
-            auto& resourceManager = ResourceManager::getInstance();
-
-            // Get the tiles.lst resource (it should already be loaded by MapLoader)
-            const auto* tileList = resourceManager.getResource<Lst, std::string>("art/tiles/tiles.lst");
+            const auto* tileList = _resourcesShared->repository().find<Lst>("art/tiles/tiles.lst");
 
             if (tileList) {
                 _tilePalettePanel->loadTiles(tileList);
                 spdlog::info("Loaded tiles.lst into palette: {} tiles", tileList->list().size());
             } else {
-                spdlog::error("Failed to get tiles.lst from ResourceManager");
+                spdlog::error("Failed to get tiles.lst from the resource repository");
             }
         } catch (const std::exception& e) {
             spdlog::error("Failed to load tile list for palette: {}", e.what());
@@ -1202,11 +1264,11 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFile
     loadingWidget->setWindowTitle("Loading Map");
 
     // Use unified MapLoader with source context
-    loadingWidget->addLoader(std::make_unique<MapLoader>(mapPath, -1, forceFilesystem, [this](auto map) {
+    loadingWidget->addLoader(std::make_unique<MapLoader>(_resourcesShared, mapPath, -1, forceFilesystem, [this](auto map) {
         // Check if loading was successful
         if (map) {
             // When loading is complete, create new editor widget and switch to it
-            auto editorWidget = std::make_unique<EditorWidget>(std::move(map));
+            auto editorWidget = std::make_unique<EditorWidget>(*_resourcesShared, std::move(map));
             setEditorWidget(std::move(editorWidget));
         }
         // If map is null, error was already shown by MapLoader::onDone()
@@ -1529,25 +1591,16 @@ bool MainWindow::hasActiveMap() const {
 void MainWindow::showPreferences() {
     SettingsDialog dialog(this);
 
-    connect(&dialog, &SettingsDialog::dataPathsChanged, this, [this]() {
-        // Close the current map since it may be using assets from removed paths
-        if (hasActiveMap()) {
-            closeCurrentMap();
-        }
-    });
-
     connect(&dialog, &SettingsDialog::settingsSaved, this, [this](bool dataPathsChanged) {
         if (dataPathsChanged) {
-            refreshFileBrowser();
+            rebuildGameResourcesFromSettings();
         }
     });
 
     int result = dialog.exec();
 
     if (result == QDialog::Accepted) {
-        // Settings were saved, we might need to reload resources if data paths changed
         spdlog::info("Settings dialog closed with changes");
-        // TODO: Reload ResourceManager if data paths changed
     } else {
         spdlog::info("Settings dialog cancelled");
     }
@@ -1623,8 +1676,8 @@ void MainWindow::onPlayGame() {
             std::filesystem::create_directories(mapsDir);
         }
 
-        MapWriter mapWriter{ [](int32_t PID) {
-            return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(PID));
+        MapWriter mapWriter{ [this](int32_t PID) {
+            return _resourcesShared->repository().load<Pro>(ProHelper::basePath(*_resourcesShared, PID));
         } };
         mapWriter.openFile(mapDestination.string());
 
@@ -1669,22 +1722,8 @@ void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
             (editorMode == Settings::TextEditorMode::CUSTOM) ? "custom" : "system",
             vfsFilePath.toStdString());
 
-        // Get file from VFS
-        auto& resourceManager = ResourceManager::getInstance();
-        auto vfs = resourceManager.getVFS();
-
-        if (!vfs) {
-            QtDialogs::showError(this, "Error", "Virtual file system not available");
-            return;
-        }
-
-        // Prepare VFS path (needs leading slash)
-        std::filesystem::path vfsPath = "/" / std::filesystem::path(vfsFilePath.toStdString());
-        vfspp::FileInfo vfsFileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
-
-        // Open file in VFS
-        vfspp::IFilePtr vfsFile = vfs->OpenFile(vfsFileInfo, vfspp::IFile::FileMode::Read);
-        if (!vfsFile) {
+        auto fileData = _resourcesShared->files().readRawBytes(vfsFilePath.toStdString());
+        if (!fileData) {
             QtDialogs::showError(this, "Error",
                 QString("Failed to open file: %1").arg(vfsFilePath));
             return;
@@ -1707,45 +1746,20 @@ void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
             targetFilePath = requestedPathInfo.absoluteFilePath();
             spdlog::info("MainWindow: Opening native file directly at {}", targetFilePath.toStdString());
         } else {
-            // Fall back to VFS absolute path (may point to native files depending on mount)
-            QString vfsAbsolutePath = QString::fromStdString(vfsFile->GetFileInfo().AbsolutePath());
-            while (vfsAbsolutePath.startsWith("//")) {
-                vfsAbsolutePath.remove(0, 1);
+            QTemporaryFile tempFile(tempFilePath);
+            tempFile.setAutoRemove(false);
+
+            if (!tempFile.open()) {
+                QtDialogs::showError(this, "Error",
+                    QString("Failed to create temporary file for: %1").arg(vfsFilePath));
+                return;
             }
 
-            QFileInfo vfsInfo(vfsAbsolutePath);
-            if (vfsInfo.exists() && vfsInfo.isReadable() && vfsInfo.isFile()) {
-                targetFilePath = vfsInfo.absoluteFilePath();
-                spdlog::info("MainWindow: Opening native file via VFS absolute path {}", targetFilePath.toStdString());
-            } else {
-                // Read file data into a temp file (for DAT-backed content)
-                size_t fileSize = vfsFile->Size();
-                std::vector<uint8_t> buffer(fileSize);
-                size_t bytesRead = vfsFile->Read(buffer.data(), fileSize);
+            tempFile.write(reinterpret_cast<const char*>(fileData->data()), static_cast<qsizetype>(fileData->size()));
+            tempFile.close();
 
-                if (bytesRead != fileSize) {
-                    QtDialogs::showError(this, "Error",
-                        QString("Failed to read complete file: %1").arg(vfsFilePath));
-                    return;
-                }
-
-                QTemporaryFile tempFile(tempFilePath);
-                tempFile.setAutoRemove(false); // Keep file for editor to open
-
-                if (!tempFile.open()) {
-                    QtDialogs::showError(this, "Error",
-                        QString("Failed to create temporary file for: %1").arg(vfsFilePath));
-                    return;
-                }
-
-                // Write data to temporary file
-                tempFile.write(reinterpret_cast<const char*>(buffer.data()), fileSize);
-                tempFile.close();
-
-                // Get the actual temporary file path
-                targetFilePath = tempFile.fileName();
-                usedTemporaryFile = true;
-            }
+            targetFilePath = tempFile.fileName();
+            usedTemporaryFile = true;
         }
 
         if (targetFilePath.isEmpty()) {
@@ -2019,58 +2033,25 @@ bool MainWindow::openProEditorForSelectedObject() {
 
             // Get the PRO file path based on PID
             try {
-                std::string proFileName = ProHelper::basePath(mapObject.pro_pid);
+                std::string proFileName = ProHelper::basePath(*_resourcesShared, mapObject.pro_pid);
                 spdlog::debug("MainWindow::openProEditorForSelectedObject() - opening PRO: {}", proFileName);
 
-                // Use the same approach as FileBrowserPanel to open PRO editor
-                auto& resourceManager = ResourceManager::getInstance();
-                auto vfs = resourceManager.getVFS();
-
-                if (!vfs) {
-                    spdlog::error("MainWindow::openProEditorForSelectedObject() - VFS not available");
-                    return false;
-                }
-
-                // Create path in VFS format
-                std::filesystem::path vfsPath = std::filesystem::path("/") / proFileName;
-                auto fileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
-
-                vfspp::IFilePtr file = vfs->OpenFile(fileInfo, vfspp::IFile::FileMode::Read);
-                if (!file || !file->IsOpened()) {
+                auto fileData = _resourcesShared->files().readRawBytes(proFileName);
+                if (!fileData) {
                     spdlog::error("MainWindow::openProEditorForSelectedObject() - could not open PRO file: {}", proFileName);
                     return false;
                 }
 
-                // Read PRO file data
-                std::vector<uint8_t> buffer(file->Size());
-                size_t bytesRead = file->Read(buffer, file->Size());
-
-                if (bytesRead != file->Size()) {
-                    spdlog::error("MainWindow::openProEditorForSelectedObject() - failed to read PRO file completely");
-                    return false;
-                }
-
                 // Create temporary file
-                auto tempPath = std::filesystem::temp_directory_path() / ("temp_" + std::filesystem::path(proFileName).filename().string());
-
-                std::ofstream tempFile(tempPath, std::ios::binary);
-                tempFile.write(reinterpret_cast<const char*>(buffer.data()), bytesRead);
-                tempFile.close();
-
-                // Load PRO file
-                auto pro = ReaderFactory::readFile<Pro>(tempPath);
+                auto pro = ReaderFactory::readFileFromMemory<Pro>(*fileData, proFileName);
                 if (!pro) {
                     spdlog::error("MainWindow::openProEditorForSelectedObject() - could not parse PRO file");
-                    std::filesystem::remove(tempPath);
                     return false;
                 }
 
                 // Create and show PRO editor dialog
-                ProEditorDialog dialog(std::move(pro), this);
+                ProEditorDialog dialog(*_resourcesShared, std::shared_ptr<Pro>(pro.release()), this);
                 dialog.exec();
-
-                // Clean up temp file
-                std::filesystem::remove(tempPath);
 
                 return true;
 

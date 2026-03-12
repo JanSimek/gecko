@@ -15,7 +15,7 @@ class ProWallWidget : public ProTabWidget {
     Q_OBJECT
 
 public:
-    explicit ProWallWidget(QWidget* parent = nullptr);
+    explicit ProWallWidget(resource::GameResources& resources, QWidget* parent = nullptr);
     ~ProWallWidget() override = default;
 
     // ProTabWidget interface

@@ -1,7 +1,7 @@
 #include "TilePalettePanel.h"
 #include "../../format/map/Map.h"
 #include "../../format/lst/Lst.h"
-#include "../../util/ResourceManager.h"
+#include "../../resource/GameResources.h"
 #include "../../util/Constants.h"
 #include "../../util/ColorUtils.h"
 #include "../common/BaseWidget.h"
@@ -33,8 +33,9 @@ TileWidget::TileWidget(int tileIndex, const QPixmap& pixmap, QWidget* parent)
     });
 }
 
-TilePalettePanel::TilePalettePanel(QWidget* parent)
-    : GridPalettePanel("Tiles", parent) {
+TilePalettePanel::TilePalettePanel(resource::GameResources& resources, QWidget* parent)
+    : GridPalettePanel("Tiles", parent)
+    , _resources(resources) {
     setupUI();
     setMinimumWidth(ui::constants::sizes::WIDTH_PANEL_MIN);
 }
@@ -248,15 +249,14 @@ void TilePalettePanel::updateTileGrid() {
         }
 
         try {
-            // Load tile texture through ResourceManager
+            // Load tile texture through the shared texture manager
             std::string tilePath = "art/tiles/" + tileName;
 
             QPixmap tilePixmap;
 
             try {
-                // Try to get actual texture from ResourceManager
-                auto& resourceManager = ResourceManager::getInstance();
-                const auto& texture = resourceManager.texture(tilePath);
+                // Try to get the actual texture from the shared texture manager
+                const auto& texture = _resources.textures().get(tilePath);
 
                 // Convert SFML texture to QPixmap
                 sf::Vector2u textureSize = texture.getSize();

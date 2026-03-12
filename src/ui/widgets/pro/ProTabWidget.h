@@ -17,6 +17,10 @@
 
 namespace geck {
 
+namespace resource {
+class GameResources;
+}
+
 /**
  * @brief Base class for PRO editor tab widgets
  *
@@ -32,7 +36,7 @@ class ProTabWidget : public QWidget {
     Q_OBJECT
 
 public:
-    explicit ProTabWidget(QWidget* parent = nullptr);
+    explicit ProTabWidget(resource::GameResources& resources, QWidget* parent = nullptr);
     virtual ~ProTabWidget() = default;
 
     /**
@@ -172,7 +176,7 @@ protected:
     /**
      * @brief Get material type names
      */
-    static QStringList getMaterialNames();
+    QStringList getMaterialNames() const;
 
     /**
      * @brief Create and configure an array of spinboxes
@@ -209,6 +213,7 @@ protected slots:
 protected:
     // Layout pointers for derived classes to use
     QVBoxLayout* _mainLayout;
+    resource::GameResources& _resources;
 
     // Common constants
     static constexpr int LAYOUT_SPACING = 10;

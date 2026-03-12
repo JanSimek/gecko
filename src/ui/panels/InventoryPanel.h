@@ -19,6 +19,9 @@ namespace geck {
 
 struct MapObject;
 class Object;
+namespace resource {
+class GameResources;
+}
 
 /**
  * @brief Dockable panel for viewing and managing object inventories
@@ -34,7 +37,7 @@ class InventoryPanel : public QWidget {
     Q_OBJECT
 
 public:
-    explicit InventoryPanel(QWidget* parent = nullptr);
+    explicit InventoryPanel(resource::GameResources& resources, QWidget* parent = nullptr);
     ~InventoryPanel() = default;
 
     // Update panel when object selection changes
@@ -98,6 +101,7 @@ private:
     QPushButton* _editButton;
 
     // Data
+    resource::GameResources& _resources;
     std::shared_ptr<Object> _object;
     std::shared_ptr<MapObject> _mapObject;
     QTreeWidgetItem* _currentHighlightedItem;

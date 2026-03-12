@@ -6,6 +6,10 @@
 #include <QStringList>
 #include <QVector>
 
+namespace geck::resource {
+class GameResources;
+}
+
 namespace geck::game::enums {
 
 struct EnumOption {
@@ -16,22 +20,22 @@ struct EnumOption {
 /**
  * @brief Damage types (7 basic types for armor/items)
  */
-QStringList damageTypes7();
+QStringList damageTypes7(geck::resource::GameResources& resources);
 
 /**
  * @brief Damage types (9 types for critter resistance)
  */
-QStringList damageTypes9();
+QStringList damageTypes9(geck::resource::GameResources& resources);
 
 /**
  * @brief Full stat names loaded from stat.msg using engine stat IDs
  */
-QStringList statNames();
+QStringList statNames(geck::resource::GameResources& resources);
 
 /**
  * @brief Material types for objects
  */
-QStringList materialTypes();
+QStringList materialTypes(geck::resource::GameResources& resources);
 
 /**
  * @brief Player/object orientations (6 hex directions)
@@ -67,22 +71,22 @@ inline QStringList weaponAnimations() {
 /**
  * @brief Ammo caliber types loaded from proto.msg
  */
-QStringList ammoCaliberTypes();
+QStringList ammoCaliberTypes(geck::resource::GameResources& resources);
 
 /**
  * @brief Full perk options loaded from perk.msg using engine perk IDs
  */
-QVector<EnumOption> allPerkOptions();
+QVector<EnumOption> allPerkOptions(geck::resource::GameResources& resources);
 
 /**
  * @brief Weapon perk options loaded from perk.msg with raw perk IDs
  */
-QVector<EnumOption> weaponPerkOptions();
+QVector<EnumOption> weaponPerkOptions(geck::resource::GameResources& resources);
 
 /**
  * @brief Armor perk options loaded from perk.msg with raw perk IDs
  */
-QVector<EnumOption> armorPerkOptions();
+QVector<EnumOption> armorPerkOptions(geck::resource::GameResources& resources);
 
 /**
  * @brief Container action flags
@@ -101,12 +105,12 @@ inline QStringList critterGenders() {
 /**
  * @brief Critter body types
  */
-QStringList critterBodyTypes();
+QStringList critterBodyTypes(geck::resource::GameResources& resources);
 
 /**
  * @brief Scenery subtypes
  */
-QStringList sceneryTypes();
+QStringList sceneryTypes(geck::resource::GameResources& resources);
 
 /**
  * @brief Text file extensions (for syntax highlighting)

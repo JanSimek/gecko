@@ -16,17 +16,20 @@
 #include "../../format/lst/Lst.h"
 #include "../../format/frm/Direction.h"
 
+#include "../../resource/GameResources.h"
 #include "../../util/ProHelper.h"
-#include "../../util/ResourceManager.h"
-#include "../../util/PathUtils.h"
 #include "../../util/QtDialogs.h"
-
-#include <vfspp/VirtualFileSystem.hpp>
+#include "../../util/ResourceInitializer.h"
 
 namespace geck {
 
-MapLoader::MapLoader(const std::filesystem::path& mapFile, int elevation, bool forceFilesystem, std::function<void(std::unique_ptr<Map>)> onLoadCallback)
-    : _mapPath(mapFile)
+MapLoader::MapLoader(std::shared_ptr<resource::GameResources> resources,
+                     const std::filesystem::path& mapFile,
+                     int elevation,
+                     bool forceFilesystem,
+                     std::function<void(std::unique_ptr<Map>)> onLoadCallback)
+    : _resources(std::move(resources))
+    , _mapPath(mapFile)
     , _elevation(elevation)
     , _forceFilesystem(forceFilesystem)
     , _onLoadCallback(onLoadCallback) {
@@ -58,79 +61,15 @@ void MapLoader::loadFromVFS() {
     spdlog::info("MapLoader: Loading map from VFS: {}", _mapPath.string());
 
     try {
-        auto& resourceManager = ResourceManager::getInstance();
-        auto vfs = resourceManager.getVFS();
-
-        if (!vfs) {
-            spdlog::error("MapLoader: VFS not available for map loading");
-            _errorMessage = "Virtual file system not available";
-            _hasError = true;
-            done = true;
-            return;
-        }
-
-        // Validate and load required LST files (same as filesystem loading)
-        const std::vector<std::string> requiredLstFiles = {
-            std::string(ResourcePaths::Lst::ITEMS),
-            std::string(ResourcePaths::Lst::CRITTERS),
-            std::string(ResourcePaths::Lst::SCENERY),
-            std::string(ResourcePaths::Lst::WALLS),
-            std::string(ResourcePaths::Lst::TILES),
-            std::string(ResourcePaths::Lst::MISC),
-            std::string(ResourcePaths::Lst::INTERFACE),
-            std::string(ResourcePaths::Lst::INVENTORY)
-        };
-
-        std::vector<std::string> missingFiles;
-        for (const auto& lstPath : requiredLstFiles) {
-            if (!resourceManager.fileExistsInVFS(lstPath)) {
-                missingFiles.push_back(lstPath);
-            }
-        }
-
-        if (!missingFiles.empty()) {
-            std::string errorMessage = "Cannot load map: Missing required LST files:\n\n";
-            for (const auto& missingFile : missingFiles) {
-                errorMessage += "• " + missingFile + "\n";
-            }
-            errorMessage += "\nPlease ensure all Fallout 2 game files are properly installed and DAT archives are loaded.";
-
-            _errorMessage = errorMessage;
-            _hasError = true;
-            done = true;
-            spdlog::error("VFS map loading failed: {} LST files missing", missingFiles.size());
-            return;
-        }
-
-        // Load required LST files into ResourceManager cache
-        try {
-            setProgress("Loading resource lists");
-            _percentDone = 5;
-
-            for (const auto& lst_path : requiredLstFiles) {
-                [[maybe_unused]] auto* lstResource = resourceManager.loadResource<Lst>(lst_path);
-            }
-
-            _percentDone = 10;
-        } catch (const std::exception& e) {
-            _errorMessage = QString("Failed to load required resource files:\n%1\n\nPlease ensure all game data files are properly configured.")
-                                .arg(e.what())
-                                .toStdString();
-            _hasError = true;
-            done = true;
-            spdlog::error("Failed to load LST files for VFS map: {}", e.what());
+        if (!ensureResourceListsReady()) {
             return;
         }
 
         setProgress("Parsing map file from VFS");
         _percentDone = 15;
 
-        // Let VFS handle path resolution - it knows which files are mounted
-        vfspp::FileInfo vfsFileInfo = PathUtils::createNormalizedFileInfo(_mapPath);
-
-        // Open file in VFS
-        vfspp::IFilePtr vfsFile = vfs->OpenFile(vfsFileInfo, vfspp::IFile::FileMode::Read);
-        if (!vfsFile) {
+        auto mapData = _resources->files().readRawBytes(_mapPath);
+        if (!mapData) {
             spdlog::error("MapLoader: Failed to open map file in VFS: {}", _mapPath.string());
             _errorMessage = "Failed to open map file in VFS: " + _mapPath.string();
             _hasError = true;
@@ -138,28 +77,14 @@ void MapLoader::loadFromVFS() {
             return;
         }
 
-        // Read file data into memory
-        size_t fileSize = vfsFile->Size();
-        std::vector<uint8_t> buffer(fileSize);
-        size_t bytesRead = vfsFile->Read(buffer.data(), fileSize);
-
-        if (bytesRead != fileSize) {
-            spdlog::error("MapLoader: Failed to read complete map file from VFS: {} (read {} of {} bytes)",
-                _mapPath.string(), bytesRead, fileSize);
-            _errorMessage = "Failed to read complete map file from VFS";
-            _hasError = true;
-            done = true;
-            return;
-        }
-
         // Create MapReader and load from memory buffer
         auto proLoadCallback = [&](uint32_t PID) {
-            return resourceManager.loadResource<Pro>(ProHelper::basePath(PID));
+            return _resources->repository().load<Pro>(ProHelper::basePath(*_resources, PID));
         };
         MapReader mapReader(proLoadCallback);
 
         // Load map directly from data buffer
-        _map = mapReader.openFile(_mapPath.string(), buffer);
+        _map = mapReader.openFile(_mapPath.string(), *mapData);
 
         if (!_map) {
             spdlog::error("MapLoader: Failed to parse map data from VFS: {}", _mapPath.string());
@@ -192,58 +117,7 @@ void MapLoader::loadFromFilesystem() {
     spdlog::info("MapLoader: Loading map from filesystem: {}", _mapPath.string());
     spdlog::stopwatch stopwatch_total;
 
-    // Validate required LST files exist before loading
-    const std::vector<std::string> requiredLstFiles = {
-        std::string(ResourcePaths::Lst::ITEMS),
-        std::string(ResourcePaths::Lst::CRITTERS),
-        std::string(ResourcePaths::Lst::SCENERY),
-        std::string(ResourcePaths::Lst::WALLS),
-        std::string(ResourcePaths::Lst::TILES),
-        std::string(ResourcePaths::Lst::MISC),
-        std::string(ResourcePaths::Lst::INTERFACE),
-        std::string(ResourcePaths::Lst::INVENTORY)
-    };
-
-    std::vector<std::string> missingFiles;
-    auto& resourceManager = ResourceManager::getInstance();
-
-    for (const auto& lstPath : requiredLstFiles) {
-        if (!resourceManager.fileExistsInVFS(lstPath)) {
-            missingFiles.push_back(lstPath);
-        }
-    }
-
-    if (!missingFiles.empty()) {
-        std::string errorMessage = "Cannot load map: Missing required LST files:\n\n";
-        for (const auto& missingFile : missingFiles) {
-            errorMessage += "• " + missingFile + "\n";
-        }
-        errorMessage += "\nPlease ensure all Fallout 2 game files are properly installed and DAT archives are loaded.";
-
-        _errorMessage = errorMessage;
-        _hasError = true;
-        done = true;
-        spdlog::error("Map loading failed: {} LST files missing", missingFiles.size());
-        return;
-    }
-
-    // TODO: move to a new loader that is called only once per application start
-    try {
-        setProgress("Loading resource lists");
-        _percentDone = 5;
-
-        for (const auto& lst_path : requiredLstFiles) {
-            [[maybe_unused]] auto* lstResource = ResourceManager::getInstance().loadResource<Lst>(lst_path);
-        }
-
-        _percentDone = 10;
-    } catch (const std::exception& e) {
-        _errorMessage = QString("Failed to load required resource files:\n%1\n\nPlease ensure all game data files are properly configured.")
-                            .arg(e.what())
-                            .toStdString();
-        _hasError = true;
-        done = true;
-        spdlog::error("Failed to load LST files: {}", e.what());
+    if (!ensureResourceListsReady()) {
         return;
     }
 
@@ -253,7 +127,7 @@ void MapLoader::loadFromFilesystem() {
     // MapReader requires callback in constructor, so we need to create it directly
     try {
         auto proLoadCallback = [&](uint32_t PID) {
-            return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(PID));
+            return _resources->repository().load<Pro>(ProHelper::basePath(*_resources, PID));
         };
         MapReader map_reader{ proLoadCallback };
         _map = map_reader.openFile(_mapPath);
@@ -277,6 +151,23 @@ void MapLoader::loadFromFilesystem() {
     done = true;
 }
 
+bool MapLoader::ensureResourceListsReady() {
+    try {
+        setProgress("Checking resource lists");
+        _percentDone = 10;
+        ResourceInitializer::requireEssentialLstFilesLoaded(*_resources);
+        return true;
+    } catch (const std::exception& e) {
+        _errorMessage = QString("Required game resource files are not initialized:\n%1\n\nPlease ensure the data paths are configured and loaded before opening a map.")
+                            .arg(e.what())
+                            .toStdString();
+        _hasError = true;
+        done = true;
+        spdlog::error("MapLoader: Required resource lists are not initialized: {}", e.what());
+        return false;
+    }
+}
+
 void MapLoader::loadMapResources() {
     spdlog::stopwatch stopwatch_chunk;
 
@@ -289,7 +180,7 @@ void MapLoader::loadMapResources() {
     // Load tile textures
     Lst* lst = nullptr;
     try {
-        lst = ResourceManager::getInstance().loadResource<Lst>(ResourcePaths::Lst::TILES);
+        lst = _resources->repository().load<Lst>(ResourcePaths::Lst::TILES);
     } catch (const std::exception& e) {
         _errorMessage = QString("Failed to load tiles list file:\n%1\n\nPlease ensure all game data files are properly configured.")
                             .arg(e.what())
@@ -306,7 +197,7 @@ void MapLoader::loadMapResources() {
     // Progress for tiles: 20% to 60% (40% of total progress)
     for (const auto& tile : lst->list()) {
         setProgress("Loading map tile texture " + std::to_string(tile_number) + " of " + std::to_string(tiles_total));
-        ResourceManager::getInstance().insertTexture("art/tiles/" + tile);
+        _resources->textures().preload("art/tiles/" + tile);
 
         // Calculate progress: 20% base + (current/total * 40%)
         int tileProgress = static_cast<int>((tile_number * 40) / tiles_total);
@@ -330,8 +221,8 @@ void MapLoader::loadMapResources() {
             continue; // object inside an inventory/container
         }
 
-        const std::string frmName = ResourceManager::getInstance().FIDtoFrmName(object->frm_pid);
-        ResourceManager::getInstance().insertTexture(frmName);
+        const std::string frmName = _resources->frmResolver().resolve(object->frm_pid);
+        _resources->textures().preload(frmName);
 
         // Calculate progress: 60% base + (current/total * 35%)
         int objectProgress = static_cast<int>((objectNumber * 35) / std::max(objectsTotal, size_t(1)));
@@ -340,11 +231,11 @@ void MapLoader::loadMapResources() {
     }
 
     // Load essential editor textures
-    ResourceManager::getInstance().insertTexture(ResourcePaths::Frm::BLANK_TILE);
-    ResourceManager::getInstance().insertTexture(ResourcePaths::Frm::LIGHT);
-    ResourceManager::getInstance().insertTexture(ResourcePaths::Frm::WALL_BLOCK);
-    ResourceManager::getInstance().insertTexture(ResourcePaths::Frm::WALL_BLOCK_FULL);
-    ResourceManager::getInstance().insertTexture(ResourcePaths::Frm::SCROLL_BLOCKER);
+    _resources->textures().preload(ResourcePaths::Frm::BLANK_TILE);
+    _resources->textures().preload(ResourcePaths::Frm::LIGHT);
+    _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK);
+    _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK_FULL);
+    _resources->textures().preload(ResourcePaths::Frm::SCROLL_BLOCKER);
 
     spdlog::info("... objects and resources loaded in {:.3} seconds", stopwatch_chunk);
 

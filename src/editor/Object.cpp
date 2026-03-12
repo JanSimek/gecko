@@ -4,7 +4,6 @@
 #include "format/frm/Direction.h"
 #include "format/frm/Frame.h"
 #include "format/frm/Frm.h"
-#include "../util/ResourceManager.h"
 #include "../util/Constants.h"
 #include "../util/ColorUtils.h"
 #include "../util/Exceptions.h"
@@ -45,21 +44,13 @@ Object::Object(const Frm* frm)
 }
 
 sf::Texture& Object::createBlankTexture() {
-    static const std::string BLANK_TEXTURE_KEY = "__object_blank_texture__";
-
-    auto& resourceManager = ResourceManager::getInstance();
-
-    // Check if texture already exists in ResourceManager
-    try {
-        return const_cast<sf::Texture&>(resourceManager.texture(BLANK_TEXTURE_KEY));
-    } catch (const std::exception&) {
-        // Texture doesn't exist, create it
+    static sf::Texture texture = [] {
         sf::Image blankImage{ sf::Vector2u{ 1, 1 }, sf::Color::Transparent };
-        auto texture = std::make_unique<sf::Texture>();
-        [[maybe_unused]] bool loadSuccess = texture->loadFromImage(blankImage);
-        resourceManager.storeTexture(BLANK_TEXTURE_KEY, std::move(texture));
-        return const_cast<sf::Texture&>(resourceManager.texture(BLANK_TEXTURE_KEY));
-    }
+        sf::Texture blankTexture;
+        [[maybe_unused]] const bool loadSuccess = blankTexture.loadFromImage(blankImage);
+        return blankTexture;
+    }();
+    return texture;
 }
 
 MapObject& Object::getMapObject() {

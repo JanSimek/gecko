@@ -17,7 +17,7 @@ class ProContainerKeyWidget : public ProTabWidget {
     Q_OBJECT
 
 public:
-    explicit ProContainerKeyWidget(QWidget* parent = nullptr);
+    explicit ProContainerKeyWidget(resource::GameResources& resources, QWidget* parent = nullptr);
     ~ProContainerKeyWidget() override = default;
 
     // ProTabWidget interface

@@ -36,7 +36,6 @@ public:
 
 signals:
     void settingsSaved(bool dataPathsChanged);
-    void dataPathsChanged();
 
 private slots:
     void onWidgetChanged();

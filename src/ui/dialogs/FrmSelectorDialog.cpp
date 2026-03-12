@@ -9,14 +9,14 @@
 #include <algorithm>
 #include <functional>
 
-#include "../../util/ResourceManager.h"
+#include "../../resource/GameResources.h"
 #include "../../util/CritterFrmResolver.h"
 #include "../../format/frm/Frm.h"
 #include "../../format/lst/Lst.h"
 
 namespace geck {
 
-FrmSelectorDialog::FrmSelectorDialog(QWidget* parent)
+FrmSelectorDialog::FrmSelectorDialog(resource::GameResources& resources, QWidget* parent)
     : QDialog(parent)
     , _mainLayout(nullptr)
     , _splitter(nullptr)
@@ -35,6 +35,7 @@ FrmSelectorDialog::FrmSelectorDialog(QWidget* parent)
     , _buttonLayout(nullptr)
     , _okButton(nullptr)
     , _cancelButton(nullptr)
+    , _resources(resources)
     , _selectedFrmPid(0)
     , _objectTypeFilter(0xFFFFFFFF) { // No filter by default
 
@@ -130,8 +131,7 @@ void FrmSelectorDialog::setupUI() {
 
 void FrmSelectorDialog::populateFrmList() {
     try {
-        auto& resourceManager = ResourceManager::getInstance();
-        auto frmFiles = resourceManager.listFilesByPattern("*.frm");
+        auto frmFiles = _resources.files().list("*.frm");
 
         _frmFiles.clear();
         _frmTreeWidget->clear();
@@ -140,22 +140,24 @@ void FrmSelectorDialog::populateFrmList() {
         std::map<std::string, std::vector<std::string>> groupedFiles;
 
         for (const auto& frmPath : frmFiles) {
+            const std::string frmPathString = frmPath.generic_string();
+
             // Apply object type filter if set
             if (_objectTypeFilter != 0xFFFFFFFF) {
                 uint32_t frmType = 0; // Default to items
 
                 // Determine FRM type from path
-                if (frmPath.find("art/critters/") != std::string::npos) {
+                if (frmPathString.find("art/critters/") != std::string::npos) {
                     frmType = 1; // Critters
-                } else if (frmPath.find("art/items/") != std::string::npos) {
+                } else if (frmPathString.find("art/items/") != std::string::npos) {
                     frmType = 0; // Items
-                } else if (frmPath.find("art/scenery/") != std::string::npos) {
+                } else if (frmPathString.find("art/scenery/") != std::string::npos) {
                     frmType = 2; // Scenery
-                } else if (frmPath.find("art/walls/") != std::string::npos) {
+                } else if (frmPathString.find("art/walls/") != std::string::npos) {
                     frmType = 3; // Walls
-                } else if (frmPath.find("art/tiles/") != std::string::npos) {
+                } else if (frmPathString.find("art/tiles/") != std::string::npos) {
                     frmType = 4; // Tiles
-                } else if (frmPath.find("art/misc/") != std::string::npos) {
+                } else if (frmPathString.find("art/misc/") != std::string::npos) {
                     frmType = 5; // Misc
                 }
 
@@ -166,11 +168,11 @@ void FrmSelectorDialog::populateFrmList() {
             }
 
             // Store path as the key, we'll determine PID when needed
-            _frmFiles.emplace_back(0, frmPath); // PID will be resolved dynamically
+            _frmFiles.emplace_back(0, frmPathString); // PID will be resolved dynamically
 
             // Determine grouping key
-            std::string groupKey = getGroupingKey(frmPath);
-            groupedFiles[groupKey].push_back(frmPath);
+            std::string groupKey = getGroupingKey(frmPathString);
+            groupedFiles[groupKey].push_back(frmPathString);
         }
 
         // Create root items for different categories
@@ -283,11 +285,9 @@ void FrmSelectorDialog::updatePreview() {
     }
 
     try {
-        auto& resourceManager = ResourceManager::getInstance();
         std::string frmPathStr = frmPath.toStdString();
 
-        // Load texture from ResourceManager using the direct path
-        const auto& texture = resourceManager.texture(frmPathStr);
+        const auto& texture = _resources.textures().get(frmPathStr);
 
         // Convert SFML texture to QImage for processing
         auto image = texture.copyToImage();
@@ -296,7 +296,7 @@ void FrmSelectorDialog::updatePreview() {
 
         // Try to load the FRM file to get frame information
         try {
-            auto frm = resourceManager.loadResource<Frm>(frmPathStr);
+            auto frm = _resources.repository().load<Frm>(frmPathStr);
             if (frm && !frm->directions().empty() && !frm->directions()[0].frames().empty()) {
                 // This is a multi-frame FRM (like critters), extract the first frame
                 const auto& firstFrame = frm->directions()[0].frames()[0];
@@ -380,8 +380,7 @@ void FrmSelectorDialog::setInitialFrmPid(uint32_t frmPid) {
     _selectedFrmPid = frmPid;
     _frmPidSpin->setValue(static_cast<int>(frmPid));
 
-    auto& resourceManager = ResourceManager::getInstance();
-    std::string frmPath = resourceManager.FIDtoFrmName(frmPid);
+    std::string frmPath = _resources.frmResolver().resolve(frmPid);
     _frmPathEdit->setText(QString::fromStdString(frmPath));
 
     updatePreview();
@@ -502,7 +501,7 @@ uint32_t FrmSelectorDialog::deriveFrmPidFromPath(const std::string& frmPath) {
         return 0x02000015; // Light source
     }
 
-    // Map path prefixes to FRM types and LST files (matching ResourceManager)
+    // Map path prefixes to FRM types and LST files (matching the engine resolver)
     struct FrmTypeInfo {
         std::string pathPrefix;
         std::string lstFile;
@@ -535,12 +534,10 @@ uint32_t FrmSelectorDialog::deriveFrmPidFromPath(const std::string& frmPath) {
     }
 
     try {
-        auto& resourceManager = ResourceManager::getInstance();
-        auto lst = resourceManager.getResource<Lst>(typeInfo->lstFile);
+        auto lst = _resources.repository().find<Lst>(typeInfo->lstFile);
 
         if (!lst) {
-            spdlog::warn("FrmSelectorDialog: Failed to load LST file: {}", typeInfo->lstFile);
-            return 0;
+            lst = _resources.repository().load<Lst>(typeInfo->lstFile);
         }
 
         const auto& fileList = lst->list();

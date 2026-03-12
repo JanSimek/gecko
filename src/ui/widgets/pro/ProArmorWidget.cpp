@@ -5,7 +5,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QFont>
-#include "util/ResourceManager.h"
+#include "../../../resource/GameResources.h"
 #include "../../dialogs/FrmSelectorDialog.h"
 #include "../../theme/ThemeManager.h"
 #include "../../GameEnums.h"
@@ -13,8 +13,8 @@
 
 namespace geck {
 
-ProArmorWidget::ProArmorWidget(QWidget* parent)
-    : ProTabWidget(parent)
+ProArmorWidget::ProArmorWidget(resource::GameResources& resources, QWidget* parent)
+    : ProTabWidget(resources, parent)
     , _armorClassEdit(nullptr)
     , _armorPerkCombo(nullptr)
     , _armorAIPriorityLabel(nullptr)
@@ -70,7 +70,7 @@ void ProArmorWidget::setupUI() {
     defenceLayout->setSpacing(ui::constants::SPACING_GRID);
     defenceLayout->setHorizontalSpacing(ui::constants::SPACING_GRID);
 
-    const QStringList damageTypes = game::enums::damageTypes7();
+    const QStringList damageTypes = game::enums::damageTypes7(_resources);
 
     // Headers
     QLabel* thresholdHeader = new QLabel("Threshold");
@@ -131,7 +131,7 @@ void ProArmorWidget::setupUI() {
     previewsLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // Male preview
-    _armorMalePreviewWidget = new ObjectPreviewWidget(this,
+    _armorMalePreviewWidget = new ObjectPreviewWidget(_resources, this,
         ObjectPreviewWidget::ShowAnimationControls,
         QSize(120, 120));
     _armorMalePreviewWidget->setTitle("Male");
@@ -139,7 +139,7 @@ void ProArmorWidget::setupUI() {
         this, &ProArmorWidget::onArmorMaleFidChangeRequested);
 
     // Female preview
-    _armorFemalePreviewWidget = new ObjectPreviewWidget(this,
+    _armorFemalePreviewWidget = new ObjectPreviewWidget(_resources, this,
         ObjectPreviewWidget::ShowAnimationControls,
         QSize(120, 120));
     _armorFemalePreviewWidget->setTitle("Female");
@@ -157,7 +157,7 @@ void ProArmorWidget::setupUI() {
     QFormLayout* miscLayout = createStandardFormLayout();
     static_cast<QVBoxLayout*>(miscGroup->layout())->addLayout(miscLayout);
 
-    _armorPerkCombo = createComboBox(game::enums::armorPerkOptions(),
+    _armorPerkCombo = createComboBox(game::enums::armorPerkOptions(_resources),
         "Special perk associated with this armor");
     miscLayout->addRow("Perk:", _armorPerkCombo);
 
@@ -256,8 +256,7 @@ void ProArmorWidget::updateArmorPreviews() {
             _armorMalePreviewWidget->clear();
         } else {
             try {
-                auto& resourceManager = ResourceManager::getInstance();
-                std::string maleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorMaleFID));
+                std::string maleFrmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(_armorMaleFID));
 
                 if (!maleFrmPath.empty()) {
                     _armorMalePreviewWidget->setFid(_armorMaleFID);
@@ -276,8 +275,7 @@ void ProArmorWidget::updateArmorPreviews() {
             _armorFemalePreviewWidget->clear();
         } else {
             try {
-                auto& resourceManager = ResourceManager::getInstance();
-                std::string femaleFrmPath = resourceManager.FIDtoFrmName(static_cast<unsigned int>(_armorFemaleFID));
+                std::string femaleFrmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(_armorFemaleFID));
 
                 if (!femaleFrmPath.empty()) {
                     _armorFemalePreviewWidget->setFid(_armorFemaleFID);
@@ -327,7 +325,7 @@ void ProArmorWidget::selectArmorFid(ObjectPreviewWidget* previewWidget, int32_t&
         return;
     }
 
-    FrmSelectorDialog dialog(this);
+    FrmSelectorDialog dialog(_resources, this);
     dialog.setObjectTypeFilter(1);
     dialog.setInitialFrmPid(static_cast<uint32_t>(std::max(fid, 0)));
 

@@ -11,8 +11,8 @@
 
 namespace geck {
 
-ProAmmoWidget::ProAmmoWidget(QWidget* parent)
-    : ProTabWidget(parent)
+ProAmmoWidget::ProAmmoWidget(resource::GameResources& resources, QWidget* parent)
+    : ProTabWidget(resources, parent)
     , _caliberCombo(nullptr)
     , _quantityEdit(nullptr)
     , _damageModifierEdit(nullptr)
@@ -28,7 +28,7 @@ void ProAmmoWidget::setupUI() {
     QFormLayout* ammoLayout = createStandardFormLayout();
     static_cast<QVBoxLayout*>(ammoGroup->layout())->addLayout(ammoLayout);
 
-    _caliberCombo = createComboBox(game::enums::ammoCaliberTypes(), "Ammo caliber or energy cell type");
+    _caliberCombo = createComboBox(game::enums::ammoCaliberTypes(_resources), "Ammo caliber or energy cell type");
     ammoLayout->addRow("Caliber:", _caliberCombo);
 
     _quantityEdit = createSpinBox(0, INT_MAX, "Rounds or charges contained in the ammo item");

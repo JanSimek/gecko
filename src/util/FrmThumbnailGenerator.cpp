@@ -1,5 +1,5 @@
 #include "FrmThumbnailGenerator.h"
-#include "ResourceManager.h"
+#include "../resource/GameResources.h"
 #include "../format/frm/Frm.h"
 #include "../format/frm/Frame.h"
 #include "../format/pal/Pal.h"
@@ -10,15 +10,12 @@
 
 namespace geck {
 
-QPixmap FrmThumbnailGenerator::fromFrmPath(const std::string& frmPath, const QSize& targetSize) {
+QPixmap FrmThumbnailGenerator::fromFrmPath(resource::GameResources& resources, const std::string& frmPath, const QSize& targetSize) {
     QPixmap thumbnail(targetSize);
     thumbnail.fill(Qt::transparent);
 
     try {
-        auto& resourceManager = ResourceManager::getInstance();
-
-        // Load the FRM object
-        const auto* frm = resourceManager.loadResource<Frm>(frmPath);
+        const auto* frm = resources.repository().load<Frm>(frmPath);
         if (!frm) {
             return thumbnail;
         }
@@ -36,7 +33,7 @@ QPixmap FrmThumbnailGenerator::fromFrmPath(const std::string& frmPath, const QSi
         }
 
         // Load default palette for color conversion
-        const Pal* palette = resourceManager.loadResource<Pal>("color.pal");
+        const Pal* palette = resources.repository().load<Pal>("color.pal");
         if (!palette) {
             spdlog::warn("FrmThumbnailGenerator: Could not load color.pal for {}", frmPath);
             return thumbnail;

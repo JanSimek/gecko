@@ -1,7 +1,6 @@
 #include "FileBrowserPanel.h"
-#include "../../util/ResourceManager.h"
+#include "../../resource/GameResources.h"
 #include "../../util/QtDialogs.h"
-#include "../../util/PathUtils.h"
 #include "../../util/Settings.h"
 #include "../dialogs/ProEditorDialog.h"
 #include "../theme/ThemeManager.h"
@@ -32,8 +31,6 @@
 #include <fstream>
 #include <filesystem>
 #include <util/ProHelper.h>
-#include "../../vfs/VfsppNativeFileSystem.h"
-#include "../../vfs/Dat2FileSystem.hpp"
 
 namespace geck {
 
@@ -102,8 +99,9 @@ bool FileBrowserProxyModel::lessThan(const QModelIndex& left, const QModelIndex&
 }
 
 // FileLoaderWorker implementation
-FileLoaderWorker::FileLoaderWorker(QObject* parent)
-    : QObject(parent) {
+FileLoaderWorker::FileLoaderWorker(std::shared_ptr<resource::GameResources> resources, QObject* parent)
+    : QObject(parent)
+    , _resources(std::move(resources)) {
 }
 
 void FileLoaderWorker::loadFiles() {
@@ -111,14 +109,17 @@ void FileLoaderWorker::loadFiles() {
         spdlog::info("FileLoaderWorker: Starting background file loading...");
         emit loadingProgress(0, 100, "Initializing file system...");
 
-        // Get files from ResourceManager
-        auto& resourceManager = ResourceManager::getInstance();
-        spdlog::debug("FileLoaderWorker: Calling ResourceManager::listAllFiles()...");
-        auto allFiles = resourceManager.listAllFiles();
-        spdlog::debug("FileLoaderWorker: Got {} files from ResourceManager", allFiles.size());
+        spdlog::debug("FileLoaderWorker: Listing mounted files...");
+        auto filePaths = _resources->files().list();
+        std::vector<std::string> allFiles;
+        allFiles.reserve(filePaths.size());
+        for (const auto& path : filePaths) {
+            allFiles.push_back(path.generic_string());
+        }
+        spdlog::debug("FileLoaderWorker: Got {} files from data paths", allFiles.size());
 
         if (allFiles.empty()) {
-            spdlog::warn("FileLoaderWorker: ResourceManager returned no files - data may not be loaded yet");
+            spdlog::warn("FileLoaderWorker: Data filesystem returned no files - data may not be loaded yet");
             emit loadingError("No files found - data paths may not be loaded yet");
             emit loadingComplete();
             return;
@@ -222,7 +223,7 @@ bool FileBrowserPanel::isTextFile(const QString& filePath) const {
 }
 
 // FileBrowserPanel implementation
-FileBrowserPanel::FileBrowserPanel(QWidget* parent)
+FileBrowserPanel::FileBrowserPanel(std::shared_ptr<resource::GameResources> resources, QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
     , _filterLayout(nullptr)
@@ -239,7 +240,8 @@ FileBrowserPanel::FileBrowserPanel(QWidget* parent)
     , _currentFileTypeFilter("All Files")
     , _chunkTimer(new QTimer(this))
     , _searchTimer(new QTimer(this))
-    , _isLoading(false) {
+    , _isLoading(false)
+    , _resourcesShared(std::move(resources)) {
 
     setupUI();
 
@@ -471,7 +473,7 @@ void FileBrowserPanel::loadFiles() {
 
     // Create new worker thread
     _loaderThread = new QThread(this);
-    _loaderWorker = new FileLoaderWorker();
+    _loaderWorker = new FileLoaderWorker(_resourcesShared);
     _loaderWorker->moveToThread(_loaderThread);
 
     // Connect signals with explicit Qt::QueuedConnection for cross-thread communication
@@ -1092,37 +1094,12 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
             saveFilePath += "." + fileInfo.suffix();
         }
 
-        // Read file from VFS
-        auto& resourceManager = ResourceManager::getInstance();
-        auto vfs = resourceManager.getVFS();
-
-        if (!vfs) {
-            QMessageBox::critical(this, "Export Error", "Virtual file system not available");
-            _statusLabel->setText("Export failed: VFS not available");
-            return;
-        }
-
-        // Prepare VFS path (needs leading slash)
-        std::filesystem::path vfsPath = "/" / std::filesystem::path(filePath.toStdString());
-        vfspp::FileInfo vfsFileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
-
-        // Open file in VFS
-        vfspp::IFilePtr vfsFile = vfs->OpenFile(vfsFileInfo, vfspp::IFile::FileMode::Read);
-        if (!vfsFile) {
+        auto buffer = _resourcesShared->files().readRawBytes(filePath.toStdString());
+        if (!buffer) {
             QMessageBox::critical(this, "Export Error",
-                QString("Failed to open file in virtual file system: %1").arg(filePath));
+                QString("Failed to open file from data paths: %1").arg(filePath));
             _statusLabel->setText("Export failed: Could not open source file");
             return;
-        }
-
-        // Read file data
-        size_t fileSize = vfsFile->Size();
-        std::vector<uint8_t> buffer(fileSize);
-        size_t bytesRead = vfsFile->Read(buffer.data(), fileSize);
-
-        if (bytesRead != fileSize) {
-            QMessageBox::warning(this, "Export Warning",
-                QString("File was partially read: %1 of %2 bytes").arg(bytesRead).arg(fileSize));
         }
 
         // Write to destination file
@@ -1134,12 +1111,12 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
             return;
         }
 
-        qint64 bytesWritten = outputFile.write(reinterpret_cast<const char*>(buffer.data()), bytesRead);
+        qint64 bytesWritten = outputFile.write(reinterpret_cast<const char*>(buffer->data()), static_cast<qint64>(buffer->size()));
         outputFile.close();
 
-        if (bytesWritten != static_cast<qint64>(bytesRead)) {
+        if (bytesWritten != static_cast<qint64>(buffer->size())) {
             QMessageBox::warning(this, "Export Warning",
-                QString("File was partially written: %1 of %2 bytes").arg(bytesWritten).arg(bytesRead));
+                QString("File was partially written: %1 of %2 bytes").arg(bytesWritten).arg(buffer->size()));
         }
 
         // Update status
@@ -1212,57 +1189,20 @@ void FileBrowserPanel::openProEditor(const QString& filePath) {
     try {
         _statusLabel->setText(QString("Loading PRO file: %1...").arg(filePath));
 
-        // Read PRO file from VFS
-        auto& resourceManager = ResourceManager::getInstance();
-        auto vfs = resourceManager.getVFS();
-
-        if (!vfs) {
-            QMessageBox::critical(this, "PRO Editor Error", "Virtual file system not available");
-            _statusLabel->setText("PRO Editor failed: VFS not available");
-            return;
-        }
-
-        // Prepare VFS path (needs leading slash)
-        std::filesystem::path vfsPath = "/" / std::filesystem::path(filePath.toStdString());
-        vfspp::FileInfo vfsFileInfo = PathUtils::createNormalizedFileInfo(vfsPath);
-
-        // Open file in VFS
-        vfspp::IFilePtr vfsFile = vfs->OpenFile(vfsFileInfo, vfspp::IFile::FileMode::Read);
-        if (!vfsFile) {
+        auto buffer = _resourcesShared->files().readRawBytes(filePath.toStdString());
+        if (!buffer) {
             QMessageBox::critical(this, "PRO Editor Error",
-                QString("Failed to open PRO file in virtual file system: %1").arg(filePath));
+                QString("Failed to open PRO file from data paths: %1").arg(filePath));
             _statusLabel->setText("PRO Editor failed: Could not open PRO file");
             return;
         }
-
-        // Read file data
-        size_t fileSize = vfsFile->Size();
-        std::vector<uint8_t> buffer(fileSize);
-        size_t bytesRead = vfsFile->Read(buffer.data(), fileSize);
-
-        if (bytesRead != fileSize) {
-            QMessageBox::warning(this, "PRO Editor Warning",
-                QString("Only read %1 of %2 bytes from PRO file").arg(bytesRead).arg(fileSize));
-        }
-
-        // Create a temporary file to load the PRO data
-        auto tempPath = std::filesystem::temp_directory_path() / ("temp_" + std::filesystem::path(filePath.toStdString()).filename().string());
-
-        // Write buffer to temporary file
-        std::ofstream tempFile(tempPath, std::ios::binary);
-        tempFile.write(reinterpret_cast<const char*>(buffer.data()), bytesRead);
-        tempFile.close();
-
-        // Use ReaderFactory to read the PRO file
-        auto pro = ReaderFactory::readFile<Pro>(tempPath);
+        auto pro = ReaderFactory::readFileFromMemory<Pro>(*buffer, filePath.toStdString());
 
         if (!pro) {
             QMessageBox::critical(this, "PRO Editor Error",
                 "Failed to parse PRO file. It may be corrupted or in an unsupported format.");
             _statusLabel->setText("PRO Editor failed: Could not parse PRO file");
 
-            // Clean up temp file
-            std::filesystem::remove(tempPath);
             return;
         }
 
@@ -1270,11 +1210,8 @@ void FileBrowserPanel::openProEditor(const QString& filePath) {
         pro->setPath(std::filesystem::path(filePath.toStdString()));
 
         // Create and show PRO editor dialog
-        ProEditorDialog dialog(std::shared_ptr<Pro>(pro.release()), this);
+        ProEditorDialog dialog(*_resourcesShared, std::shared_ptr<Pro>(pro.release()), this);
         dialog.exec();
-
-        // Clean up temp file
-        std::filesystem::remove(tempPath);
 
         _statusLabel->setText("Ready");
 
@@ -1410,26 +1347,21 @@ QString FileBrowserPanel::getProName(const QString& filePath) const {
 
 QString FileBrowserPanel::loadProNameFromFile(const QString& filePath) const {
     try {
-        auto& resourceManager = ResourceManager::getInstance();
-
-        // Create normalized path for VFS access
         std::string stdPath = filePath.toStdString();
         if (stdPath.front() == '/') {
-            stdPath = stdPath.substr(1); // Remove leading slash for VFS
+            stdPath = stdPath.substr(1);
         }
 
-        // Check if file exists in VFS
-        if (!resourceManager.fileExistsInVFS(stdPath)) {
+        if (!_resourcesShared->files().exists(stdPath)) {
             return QString("File not found");
         }
 
-        // Load PRO file using ResourceManager
-        const auto* pro = resourceManager.loadResource<Pro>(stdPath);
+        const auto* pro = _resourcesShared->repository().load<Pro>(stdPath);
         if (!pro) {
             return QString("Failed to load");
         }
 
-        const auto* msgFile = ProHelper::msgFile(pro->type());
+        const auto* msgFile = ProHelper::msgFile(*_resourcesShared, pro->type());
         if (!msgFile) {
             return QString("MSG not found");
         }
@@ -1472,78 +1404,13 @@ QString FileBrowserPanel::getFileSource(const QString& filePath) const {
 }
 
 QString FileBrowserPanel::getFileSource(const QString& filePath, const std::vector<std::filesystem::path>& nativeDirectories) const {
-    std::string normalizedPath = std::filesystem::path(filePath.toStdString()).generic_string();
-    while (normalizedPath.size() > 1 && normalizedPath[0] == '/' && normalizedPath[1] == '/') {
-        normalizedPath.erase(0, 1);
-    }
-    if (!normalizedPath.empty() && normalizedPath.front() != '/') {
-        normalizedPath.insert(normalizedPath.begin(), '/');
+    Q_UNUSED(nativeDirectories);
+
+    if (auto source = _resourcesShared->files().sourceInfo(filePath.toStdString())) {
+        return QString::fromStdString(source->displayLabel);
     }
 
-    // Try to resolve source via VFS, honoring filesystem priority
-    auto& resourceManager = ResourceManager::getInstance();
-    auto vfs = resourceManager.getVFS();
-    if (vfs) {
-        const auto& fileSystems = vfs->GetFilesystems("/");
-        std::string relativePath = normalizedPath;
-        if (!relativePath.empty() && relativePath.front() == '/') {
-            relativePath.erase(0, 1);
-        }
-
-        for (auto it = fileSystems.rbegin(); it != fileSystems.rend(); ++it) {
-            const auto& fs = *it;
-            if (!fs || !fs->IsInitialized()) {
-                continue;
-            }
-
-            vfspp::FileInfo fsFileInfo(fs->BasePath(), relativePath, false);
-            if (!fs->IsFileExists(fsFileInfo)) {
-                continue;
-            }
-
-            if (auto datFs = std::dynamic_pointer_cast<geck::GeckDat2FileSystem>(fs)) {
-                std::filesystem::path datPath(datFs->getDatPath());
-                QString datName = QString::fromStdString(datPath.filename().string());
-                if (datName.isEmpty()) {
-                    datName = QString::fromStdString(datPath.generic_string());
-                }
-                return QString("DAT (%1)").arg(datName);
-            }
-
-            if (auto nativeFs = std::dynamic_pointer_cast<vfspp::NativeFileSystem>(fs)) {
-                std::filesystem::path base(nativeFs->BasePath());
-                QString label = QString::fromStdString(base.filename().string());
-                if (label.isEmpty()) {
-                    label = QString::fromStdString(base.generic_string());
-                }
-                return QString("Native (%1)").arg(label);
-            }
-
-            return QStringLiteral("VFS");
-        }
-    }
-
-    // Fallback to directory heuristic if VFS lookup failed
-    for (const auto& nativeDir : nativeDirectories) {
-        std::string nativeDirStr = nativeDir.generic_string();
-        if (!nativeDirStr.empty() && nativeDirStr.back() != '/') {
-            nativeDirStr.push_back('/');
-        }
-
-        if (normalizedPath.rfind(nativeDirStr, 0) == 0) {
-            std::string label = nativeDir.filename().string();
-            if (label.empty()) {
-                label = nativeDirStr;
-                if (!label.empty() && label.back() == '/') {
-                    label.pop_back();
-                }
-            }
-            return QString("Native (%1)").arg(QString::fromStdString(label));
-        }
-    }
-
-    // If the path doesn't live under a native directory and VFS lookup failed, assume DAT
-    return QStringLiteral("DAT");
+    return QStringLiteral("Unknown");
 }
 
 QString FileBrowserPanel::normalizeDisplayPath(const QString& fullPath) const {

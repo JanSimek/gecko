@@ -12,6 +12,9 @@
 namespace geck {
 
 class MainWindow;
+namespace resource {
+class GameResources;
+}
 
 class Application {
 public:
@@ -38,6 +41,7 @@ private:
 
     std::unique_ptr<QApplication> _qtApp;
     std::unique_ptr<MainWindow> _mainWindow;
+    std::shared_ptr<resource::GameResources> _resources;
 
     void loadMap(const std::filesystem::path& mapPath);
 };

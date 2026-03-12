@@ -24,6 +24,9 @@
 namespace geck {
 
 class Map;
+namespace resource {
+class GameResources;
+}
 
 // Custom hover-enabled sprite label for FRM previews
 class HoverSpriteLabel : public QLabel {
@@ -47,7 +50,7 @@ class SelectionPanel : public QWidget {
     Q_OBJECT
 
 public:
-    explicit SelectionPanel(QWidget* parent = nullptr);
+    explicit SelectionPanel(resource::GameResources& resources, QWidget* parent = nullptr);
 
     void setMap(Map* map);
 
@@ -166,6 +169,7 @@ private:
     HoverSpriteLabel* _hoverSpriteLabel;
 
     // Current selection state
+    resource::GameResources& _resources;
     std::optional<std::shared_ptr<Object>> _selectedObject;
     int _selectedTileIndex;
     int _selectedElevation;

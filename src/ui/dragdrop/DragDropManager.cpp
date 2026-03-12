@@ -4,7 +4,7 @@
 #include "../UIConstants.h"
 #include "../../editor/Object.h"
 #include "../../editor/HexagonGrid.h"
-#include "../../util/ResourceManager.h"
+#include "../../resource/GameResources.h"
 #include "../../format/frm/Frm.h"
 #include "../../format/map/MapObject.h"
 #include "../../util/Constants.h"
@@ -115,9 +115,8 @@ void DragDropManager::updateObjectDrag(sf::Vector2f currentWorldPos) {
         int originalHexPosition = mapObject.position;
 
         const auto* hexGrid = _editor->getHexagonGrid();
-        if (originalHexPosition >= 0 && originalHexPosition < static_cast<int>(hexGrid->grid().size())) {
-            const auto& originalHex = hexGrid->grid()[originalHexPosition];
-            sf::Vector2f originalWorldPos(static_cast<float>(originalHex.x()), static_cast<float>(originalHex.y()));
+        if (auto originalHex = hexGrid->getHexByPosition(static_cast<uint32_t>(originalHexPosition)); originalHex.has_value()) {
+            sf::Vector2f originalWorldPos(static_cast<float>(originalHex->get().x()), static_cast<float>(originalHex->get().y()));
 
             // Calculate where the object would be placed
             sf::Vector2f newWorldPos = originalWorldPos + _objectDragOffset;
@@ -152,10 +151,8 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
         auto& mapObject = _draggedObjects[i]->getMapObject();
         int originalHexPosition = mapObject.position;
 
-        if (originalHexPosition >= 0 && originalHexPosition < static_cast<int>(hexGrid->grid().size())) {
-            // Get original hex position in world coordinates
-            const auto& originalHex = hexGrid->grid()[originalHexPosition];
-            sf::Vector2f originalWorldPos(static_cast<float>(originalHex.x()), static_cast<float>(originalHex.y()));
+        if (auto originalHex = hexGrid->getHexByPosition(static_cast<uint32_t>(originalHexPosition)); originalHex.has_value()) {
+            sf::Vector2f originalWorldPos(static_cast<float>(originalHex->get().x()), static_cast<float>(originalHex->get().y()));
 
             // Calculate new position: original position + drag offset
             sf::Vector2f newWorldPos = originalWorldPos + dragOffset;
@@ -169,7 +166,7 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
                 i, originalWorldPos.x, originalWorldPos.y, dragOffset.x, dragOffset.y,
                 snappedPos.x, snappedPos.y, newHexPosition);
 
-            if (newHexPosition >= 0 && newHexPosition < static_cast<int>(hexGrid->grid().size())) {
+            if (hexGrid->containsPosition(newHexPosition)) {
                 movedObjects.push_back({ originalHexPosition, newHexPosition });
                 continue;
             }
@@ -252,18 +249,15 @@ void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vec
             try {
                 // Load the FRM for preview
                 std::string frmPath = _previewObjectInfo->frmPath.toStdString();
-                auto frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
+                auto frm = _editor->resources().repository().find<Frm>(frmPath);
                 if (!frm) {
-                    // Try loading the FRM if not in cache
-                    if (ResourceManager::getInstance().loadResource<Frm>(frmPath)) {
-                        frm = ResourceManager::getInstance().getResource<Frm>(frmPath);
-                    }
+                    frm = _editor->resources().repository().load<Frm>(frmPath);
                 }
 
                 if (frm) {
                     // Create preview object
                     _dragPreviewObject = std::make_shared<Object>(frm);
-                    sf::Sprite previewSprite{ ResourceManager::getInstance().texture(frmPath) };
+                    sf::Sprite previewSprite{ _editor->resources().textures().get(frmPath) };
                     _dragPreviewObject->setSprite(std::move(previewSprite));
                     _dragPreviewObject->setDirection(ObjectDirection(0)); // Single frame for preview
                     // Set semi-transparent color on the sprite
@@ -303,9 +297,8 @@ void DragDropManager::updateDragPreview(sf::Vector2f worldPos) {
     int hexPosition = _editor->getViewportController()->worldPosToHexIndex(worldPos);
     if (hexPosition >= 0) {
         const auto* hexGrid = _editor->getHexagonGrid();
-        if (hexPosition < static_cast<int>(hexGrid->grid().size())) {
-            const auto& hex = hexGrid->grid()[hexPosition];
-            _dragPreviewObject->setHexPosition(hex);
+        if (auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(hexPosition)); hex.has_value()) {
+            _dragPreviewObject->setHexPosition(hex->get());
         }
     }
 }

@@ -28,6 +28,10 @@
 
 namespace geck {
 
+namespace resource {
+class GameResources;
+}
+
 /**
  * @brief Worker class for loading files in background thread
  */
@@ -35,7 +39,7 @@ class FileLoaderWorker : public QObject {
     Q_OBJECT
 
 public:
-    explicit FileLoaderWorker(QObject* parent = nullptr);
+    explicit FileLoaderWorker(std::shared_ptr<resource::GameResources> resources, QObject* parent = nullptr);
 
     std::atomic<bool> _shouldStop{ false };
 
@@ -48,6 +52,9 @@ signals:
     void loadingProgress(int current, int total, const QString& status);
     void loadingError(const QString& error);
     void loadingComplete();
+
+private:
+    std::shared_ptr<resource::GameResources> _resources;
 };
 
 /**
@@ -104,7 +111,7 @@ class FileBrowserPanel : public QWidget {
     Q_OBJECT
 
 public:
-    explicit FileBrowserPanel(QWidget* parent = nullptr);
+    explicit FileBrowserPanel(std::shared_ptr<resource::GameResources> resources, QWidget* parent = nullptr);
     ~FileBrowserPanel();
 
     // File operations
@@ -218,6 +225,7 @@ private:
 
     // PRO name caching
     mutable std::unordered_map<std::string, QString> _proNameCache;
+    std::shared_ptr<resource::GameResources> _resourcesShared;
 
     // Constants
     static constexpr int CHUNK_SIZE = 50;    // Files processed per chunk (small for better UI responsiveness)

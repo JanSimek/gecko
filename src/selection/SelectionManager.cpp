@@ -679,7 +679,8 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
 
         case SelectionMode::HEXES: {
             int hexIndex = _editorWidget->getViewportController()->worldPosToHexIndex(worldPos);
-            if (hexIndex >= 0 && hexIndex < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT)) {
+            const auto* hexGrid = _editorWidget->getHexagonGrid();
+            if (hexGrid && hexGrid->containsPosition(hexIndex)) {
                 SelectedItem item{ SelectionType::HEX, hexIndex };
                 addItemToSelection(item);
                 _state.mode = mode;
@@ -958,13 +959,14 @@ std::vector<int> SelectionManager::getHexesInArea(const sf::FloatRect& area) con
     std::vector<int> result;
     result.reserve(1000); // Reserve space for typical selection
 
-    // Convert area bounds to hex grid coordinates and iterate through potential hexes
-    for (int hexIndex = 0; hexIndex < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT); ++hexIndex) {
-        // Convert hex index to world position and check if it's in the selection area
-        auto hexGrid = _editorWidget->getHexagonGrid();
-        if (hexGrid && hexIndex < static_cast<int>(hexGrid->grid().size())) {
-            const auto& hex = hexGrid->grid().at(hexIndex);
-            sf::Vector2f hexPos(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
+    auto hexGrid = _editorWidget->getHexagonGrid();
+    if (!hexGrid) {
+        return result;
+    }
+
+    for (int hexIndex = 0; hexIndex < static_cast<int>(hexGrid->size()); ++hexIndex) {
+        if (auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
+            sf::Vector2f hexPos(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
 
             // Check if hex center is within selection area
             // Using a small hex-sized bounds for better selection feel

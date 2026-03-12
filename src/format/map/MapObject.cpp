@@ -1,15 +1,15 @@
 #include "MapObject.h"
-#include "../../util/ResourceManager.h"
+#include "../../resource/GameResources.h"
 #include "../../util/ProHelper.h"
 #include "../pro/Pro.h"
 #include <spdlog/spdlog.h>
 
 namespace geck {
 
-bool MapObject::isShootThroughWallBlocker() {
+bool MapObject::isShootThroughWallBlocker(resource::GameResources& resources) {
 
     // Get PRO file data to check flags
-    Pro* pro = getProData();
+    Pro* pro = getProData(resources);
     if (!pro) {
         return false;
     }
@@ -19,21 +19,21 @@ bool MapObject::isShootThroughWallBlocker() {
     return is_shoot_through;
 }
 
-Pro* MapObject::getProData() const {
+Pro* MapObject::getProData(resource::GameResources& resources) const {
     try {
-        return ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(pro_pid));
+        return resources.repository().load<Pro>(ProHelper::basePath(resources, pro_pid));
     } catch (const std::exception& e) {
         spdlog::warn("Failed to load PRO file for PID {}: {}", pro_pid, e.what());
         return nullptr;
     }
 }
 
-bool MapObject::blocksMovement() const {
+bool MapObject::blocksMovement(resource::GameResources& resources) const {
 
     // TODO: save it the value
 
     // Get PRO file data to check flags
-    Pro* pro = getProData();
+    Pro* pro = getProData(resources);
     if (!pro) {
         spdlog::debug("No PRO data available for object PID {}, assuming non-blocking", pro_pid);
         return false;

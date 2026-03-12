@@ -19,7 +19,7 @@
 
 #include "../../format/map/Map.h"
 #include "../../format/lst/Lst.h"
-#include "../../util/ResourceManager.h"
+#include "../../resource/GameResources.h"
 #include "../../util/ProHelper.h"
 #include "../IconHelper.h"
 #include "../../format/map/MapObject.h"
@@ -127,7 +127,7 @@ QSize SelectionPanel::minimumSizeHint() const {
     return QSize(ui::constants::sizes::PANEL_MIN_SIZE_WIDTH, ui::constants::sizes::PANEL_MIN_SIZE_HEIGHT);
 }
 
-SelectionPanel::SelectionPanel(QWidget* parent)
+SelectionPanel::SelectionPanel(resource::GameResources& resources, QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
     , _scrollArea(nullptr)
@@ -166,6 +166,7 @@ SelectionPanel::SelectionPanel(QWidget* parent)
     , _tileIdSpin(nullptr)
     , _tileNameEdit(nullptr)
     , _hoverSpriteLabel(nullptr)
+    , _resources(resources)
     , _selectedTileIndex(-1)
     , _selectedElevation(-1)
     , _isRoofSelected(false)
@@ -455,11 +456,11 @@ void SelectionPanel::updateObjectInfo() {
         int32_t PID = selectedMapObject.pro_pid;
 
         // Load Proto file to get object information
-        auto pro = ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(PID));
+        auto pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, PID));
 
         if (pro) {
             // Get object name from message file
-            auto msg = ProHelper::msgFile(pro->type());
+            auto msg = ProHelper::msgFile(_resources, pro->type());
             std::string objectName = "Unknown";
             if (msg) {
                 try {
@@ -481,7 +482,7 @@ void SelectionPanel::updateObjectInfo() {
 
             // Determine which FRM is actually being used
             uint32_t activeFrmPid = selectedMapObject.frm_pid != 0 ? selectedMapObject.frm_pid : pro->header.FID;
-            std::string frmPath = ResourceManager::getInstance().FIDtoFrmName(activeFrmPid);
+            std::string frmPath = _resources.frmResolver().resolve(activeFrmPid);
             _objectFrmPathEdit->setText(QString::fromStdString(frmPath));
 
             // Enable the change FRM button (edit icon)
@@ -588,8 +589,7 @@ void geck::SelectionPanel::updateTileInfo() {
 
         // Load tiles.lst to get tile names
         try {
-            auto& resourceManager = ResourceManager::getInstance();
-            auto tilesList = resourceManager.getResource<Lst, std::string>("art/tiles/tiles.lst");
+            auto tilesList = _resources.repository().find<Lst>("art/tiles/tiles.lst");
 
             if (tilesList) {
                 auto tileNames = tilesList->list();
@@ -686,9 +686,8 @@ void geck::SelectionPanel::loadTilePreview(Lst* tilesList, uint16_t tileId) {
         // Get the tile texture path
         std::string tilePath = "art/tiles/" + tileNames.at(tileId);
 
-        // Load the texture from ResourceManager
-        auto& resourceManager = ResourceManager::getInstance();
-        auto& texture = resourceManager.texture(tilePath);
+        // Load the texture from the shared texture manager
+        auto& texture = _resources.textures().get(tilePath);
 
         // Convert SFML texture to QPixmap for display
         auto image = texture.copyToImage();
@@ -786,7 +785,7 @@ void SelectionPanel::onChangeFrmClicked() {
     auto& mapObject = _selectedObject.value()->getMapObject();
 
     // Create and show FRM selector dialog
-    FrmSelectorDialog dialog(this);
+    FrmSelectorDialog dialog(_resources, this);
 
     // Set the current FRM PID as initial selection
     uint32_t currentFrmPid = mapObject.frm_pid != 0 ? mapObject.frm_pid : mapObject.pro_pid;
@@ -804,8 +803,7 @@ void SelectionPanel::onChangeFrmClicked() {
         if (!newFrmPath.empty()) {
             // Validate that the FRM file actually exists before attempting the change
             try {
-                auto& resourceManager = ResourceManager::getInstance();
-                auto testLoad = resourceManager.loadResource<Frm>(newFrmPath);
+                auto testLoad = _resources.repository().load<Frm>(newFrmPath);
                 if (!testLoad) {
                     spdlog::error("SelectionPanel: FRM file not found or invalid: {} - aborting change", newFrmPath);
                     return;
@@ -945,7 +943,7 @@ void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
         spdlog::debug("SelectionPanel::onInventoryItemChanged: Changing amount for PID {} to {}", pid, newAmount);
 
         // Update the icon preview
-        QPixmap iconWithQuantity = ui::inventory::loadItemIcon(pid, ICON_SIZE, true);
+        QPixmap iconWithQuantity = ui::inventory::loadItemIcon(_resources, pid, ICON_SIZE, true);
         if (iconWithQuantity.isNull()) {
             iconWithQuantity = createPlaceholderIcon();
         }
@@ -1130,7 +1128,7 @@ void SelectionPanel::updateInventorySection() {
 
     // Check if object has inventory capability by loading Pro file
     try {
-        auto pro = ResourceManager::getInstance().loadResource<Pro>(ProHelper::basePath(mapObject->pro_pid));
+        auto pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, mapObject->pro_pid));
         if (pro) {
             bool hasInventory = (pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::CONTAINER) || pro->type() == Pro::OBJECT_TYPE::CRITTER;
 
@@ -1191,8 +1189,8 @@ void SelectionPanel::populateInventoryTree() {
         spdlog::debug("SelectionPanel::populateInventoryTree: Processing inventory item with PID {}, amount {}",
             inventoryItem->pro_pid, inventoryItem->amount);
         QTreeWidgetItem* item = new QTreeWidgetItem(_inventoryTree);
-        const auto details = ui::inventory::describeItem(inventoryItem->pro_pid);
-        const uint32_t displayAmount = ui::inventory::displayAmount(*inventoryItem);
+        const auto details = ui::inventory::describeItem(_resources, inventoryItem->pro_pid);
+        const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *inventoryItem);
 
         // Set all text data first
         item->setText(COLUMN_NAME, details.name);
@@ -1238,7 +1236,7 @@ void SelectionPanel::populateInventoryTree() {
 }
 
 QPixmap SelectionPanel::getItemIconWithQuantity(const MapObject& item) const {
-    QPixmap baseIcon = ui::inventory::loadItemIcon(item.pro_pid, ICON_SIZE, true);
+    QPixmap baseIcon = ui::inventory::loadItemIcon(_resources, item.pro_pid, ICON_SIZE, true);
     if (baseIcon.isNull()) {
         baseIcon = createPlaceholderIcon();
     }
