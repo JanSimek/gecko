@@ -6,7 +6,6 @@
 #include <thread>
 #include <optional>
 #include <array>
-#include <set>
 #include <vector>
 #include <utility>
 #include <functional>
@@ -22,6 +21,7 @@
 #include "../../util/Constants.h"
 #include "../../util/EventBus.h"
 #include "../../util/UndoStack.h"
+#include "../rendering/MapSpriteLoader.h"
 
 namespace geck {
 
@@ -218,28 +218,10 @@ private:
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void pushCommand(UndoCommand cmd);
 
-    // Error tracking for sprite loading
-    struct LoadingErrors {
-        size_t objectsSkipped = 0;
-        std::set<std::string> failedFrmNames;
-        std::vector<std::pair<std::string, int>> failedObjects; // FRM name, position
-
-        void clear() {
-            objectsSkipped = 0;
-            failedFrmNames.clear();
-            failedObjects.clear();
-        }
-
-        bool hasErrors() const {
-            return objectsSkipped > 0;
-        }
-    };
-
     void setupUI();
     void initializeSelectionSystem();
 
     void loadSprites();
-    void loadObjectSprites();
     void showLoadingErrorsSummary();
 
     // Object selection methods (moved to public)
@@ -265,9 +247,6 @@ private:
     void updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
 
-    // Wall blocker overlay management
-    void createWallBlockerOverlay(const std::shared_ptr<MapObject>& mapObject, int hexPosition);
-
     // Scroll blocker rectangle functionality
     std::vector<int> calculateRectangleBorderHexes(sf::FloatRect rectangle);
     std::shared_ptr<MapObject> createScrollBlockerObject(int hexPosition);
@@ -284,6 +263,7 @@ private:
     // Input, rendering, drag/drop, tile placement, and viewport systems
     std::unique_ptr<InputHandler> _inputHandler;
     std::unique_ptr<RenderingEngine> _renderingEngine;
+    std::unique_ptr<MapSpriteLoader> _mapSpriteLoader;
     std::unique_ptr<DragDropManager> _dragDropManager;
     std::unique_ptr<TilePlacementManager> _tilePlacementManager;
     std::unique_ptr<ExitGridPlacementManager> _exitGridPlacementManager;
@@ -303,9 +283,6 @@ private:
     // Wall blocker overlay sprites (rendered on top of regular objects)
     std::vector<sf::Sprite> _wallBlockerOverlays;
 
-    // Error tracking for last sprite loading operation
-    LoadingErrors _lastLoadErrors;
-
     int _currentElevation = 0;
     resource::GameResources& _resources;
     std::unique_ptr<Map> _map;
@@ -319,8 +296,6 @@ private:
     bool _showHexGrid = UI::DEFAULT_SHOW_HEX_GRID;
     bool _showLightOverlays = false;
     bool _showExitGrids = false;
-
-    const sf::Texture& createBlankTexture();
 
     // Double-click detection for object cycling
     sf::Clock _lastClickTime;

@@ -142,6 +142,8 @@ set(GECK_APP_SOURCES
     ui/UIConstants.h
     ui/rendering/HexRenderer.h
     ui/rendering/HexRenderer.cpp
+    ui/rendering/MapSpriteLoader.h
+    ui/rendering/MapSpriteLoader.cpp
     ui/rendering/RenderingEngine.h
     ui/rendering/RenderingEngine.cpp
     ui/input/InputHandler.h

@@ -1,6 +1,7 @@
 #include "EditorWidget.h"
 #include "../widgets/SFMLWidget.h"
 #include "../input/InputHandler.h"
+#include "../rendering/MapSpriteLoader.h"
 #include "../rendering/RenderingEngine.h"
 #include "../dragdrop/DragDropManager.h"
 #include "../tiles/TilePlacementManager.h"
@@ -20,20 +21,17 @@
 #include <unordered_map>
 
 #include "../../util/Constants.h"
-#include "../../util/ResourcePaths.h"
 #include "../../util/ColorUtils.h"
 #include "../../util/ResourceInitializer.h"
 #include "../../util/TileUtils.h"
 #include "../../util/QtDialogs.h"
 #include "../../util/ProHelper.h"
-#include "../../util/SpriteFactory.h"
 #include "../../util/Coordinates.h"
 
 #include "../../editor/Object.h"
 #include "../../editor/HexagonGrid.h"
 
 #include "../../format/frm/Frm.h"
-#include "../../format/lst/Lst.h"
 #include "../../format/map/Tile.h"
 #include "../../format/pro/Pro.h"
 #include "../../format/map/MapObject.h"
@@ -61,6 +59,7 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
 
     // Initialize rendering engine, input handler, drag/drop manager, tile placement manager, and viewport controller
     _renderingEngine = std::make_unique<RenderingEngine>(_resources);
+    _mapSpriteLoader = std::make_unique<MapSpriteLoader>(_resources, _hexgrid);
     _inputHandler = std::make_unique<InputHandler>(this);
     _dragDropManager = std::make_unique<DragDropManager>(this);
     _tilePlacementManager = std::make_unique<TilePlacementManager>(this);
@@ -146,9 +145,7 @@ void EditorWidget::addPlacedObject(const std::shared_ptr<MapObject>& mapObject, 
     }
     auto& mapFile = _map->getMapFile();
     mapFile.map_objects[mapObject->elevation].push_back(mapObject);
-    _objects.push_back(object);
-    createWallBlockerOverlay(mapObject, static_cast<int>(mapObject->position));
-    refreshObjects();
+    _mapSpriteLoader->appendObjectSprite(mapObject, object, _objects, _wallBlockerOverlays);
 }
 
 void EditorWidget::removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
@@ -691,152 +688,6 @@ void EditorWidget::createNewMap() {
     spdlog::info("Created new empty map with {} tiles per elevation", Map::TILES_PER_ELEVATION);
 }
 
-void EditorWidget::loadObjectSprites() {
-    // Objects
-    if (_map->objects().empty())
-        return;
-
-    size_t totalObjects = _map->objects().at(_currentElevation).size();
-    size_t objectsLoaded = 0;
-    size_t objectsSkipped = 0;
-
-    spdlog::debug("Loading {} objects for elevation {}", totalObjects, _currentElevation);
-
-    for (const auto& object : _map->objects().at(_currentElevation)) {
-        if (object->position == -1)
-            continue; // object inside an inventory/container
-
-        // Special handling for wall blockers - use wallblock.frm based on blocking behavior
-        std::string frm_name = _resources.frmResolver().resolve(object->frm_pid);
-
-        if (frm_name.empty()) {
-            spdlog::error("Empty FRM name for object at position {} (frm_pid=0x{:08X}, pro_pid=0x{:08X})",
-                object->position, object->frm_pid, object->pro_pid);
-            continue;
-        }
-
-        spdlog::debug("Loading object sprite: FRM='{}', position={}, direction={}, frm_pid=0x{:08X}, pro_pid=0x{:08X}",
-            frm_name, object->position, object->direction, object->frm_pid, object->pro_pid);
-        auto frm = _resources.repository().find<Frm>(frm_name);
-
-        if (!frm) {
-            spdlog::debug("FRM '{}' not in cache, attempting on-demand loading", frm_name);
-            try {
-                frm = _resources.repository().load<Frm>(frm_name);
-                if (!frm) {
-                    spdlog::error("Failed to load FRM resource '{}' for object at position {} - resource still null after loading", frm_name, object->position);
-                    _lastLoadErrors.failedFrmNames.insert(frm_name);
-                    _lastLoadErrors.failedObjects.emplace_back(frm_name, object->position);
-                    objectsSkipped++;
-                    continue;
-                }
-                spdlog::debug("Successfully loaded FRM '{}' on-demand", frm_name);
-            } catch (const std::exception& e) {
-                spdlog::error("Failed to load FRM '{}' for object at position {}: {}", frm_name, object->position, e.what());
-                _lastLoadErrors.failedFrmNames.insert(frm_name);
-                _lastLoadErrors.failedObjects.emplace_back(frm_name, object->position);
-                objectsSkipped++;
-                continue;
-            }
-        }
-
-        spdlog::debug("FRM '{}' available: {} directions, filename='{}'",
-            frm_name, frm->directions().size(), frm->filename());
-
-        try {
-            _objects.emplace_back(std::make_shared<Object>(frm));
-            sf::Sprite object_sprite{ _resources.textures().get(frm_name) };
-            _objects.back()->setSprite(std::move(object_sprite));
-            if (auto hex = _hexgrid.getHexByPosition(object->position); hex.has_value()) {
-                _objects.back()->setHexPosition(hex->get());
-            }
-            _objects.back()->setMapObject(object);
-            _objects.back()->setDirection(static_cast<ObjectDirection>(object->direction));
-
-            spdlog::debug("Successfully created object for FRM '{}' at position {}", frm_name, object->position);
-            objectsLoaded++;
-        } catch (const std::exception& e) {
-            spdlog::error("Failed to create object for FRM '{}' at position {}: {}",
-                frm_name, object->position, e.what());
-            // Remove the partially created object if it was added
-            if (!_objects.empty() && _objects.back() != nullptr) {
-                _objects.pop_back();
-            }
-            _lastLoadErrors.failedFrmNames.insert(frm_name);
-            _lastLoadErrors.failedObjects.emplace_back(frm_name, object->position);
-            objectsSkipped++;
-            continue; // Skip this object and continue with others
-        }
-    }
-
-    // Create wall blocker overlays for objects that block movement (but aren't gap-filling blockers)
-    _wallBlockerOverlays.clear();
-    size_t overlaysCreated = 0;
-
-    for (const auto& object : _map->objects().at(_currentElevation)) {
-        if (object->position == -1)
-            continue; // Skip inventory objects
-
-        size_t overlayCountBefore = _wallBlockerOverlays.size();
-        createWallBlockerOverlay(object, object->position);
-        if (_wallBlockerOverlays.size() > overlayCountBefore) {
-            overlaysCreated++;
-        }
-    }
-
-    _lastLoadErrors.objectsSkipped = objectsSkipped;
-    spdlog::info("Object loading complete for elevation {}: {} loaded, {} skipped, {} total, {} wall blocker overlays",
-        _currentElevation, objectsLoaded, objectsSkipped, totalObjects, overlaysCreated);
-}
-
-void EditorWidget::createWallBlockerOverlay(const std::shared_ptr<MapObject>& mapObject, int hexPosition) {
-    // Only create overlays for regular objects that block movement
-    // Gap-filling wall blockers (PIDs 620/621) already show wallblock.frm as their main sprite
-    bool blocks = mapObject->blocksMovement(_resources);
-
-    spdlog::debug("createWallBlockerOverlay: hex {}, pro_pid 0x{:08X}, blocks: {}",
-        hexPosition, mapObject->pro_pid, blocks);
-
-    if (!blocks) {
-        return; // No overlay needed
-    }
-
-    bool is_shoot_through = mapObject->isShootThroughWallBlocker(_resources);
-
-    try {
-        // Load wallblock.frm as overlay
-        std::string overlayFrmPath;
-        if (is_shoot_through) {
-            overlayFrmPath = std::string(ResourcePaths::Frm::WALL_BLOCK);
-        } else {
-            overlayFrmPath = std::string(ResourcePaths::Frm::WALL_BLOCK_FULL);
-        }
-        _resources.textures().preload(overlayFrmPath);
-
-        sf::Sprite overlaySprite{ _resources.textures().get(overlayFrmPath) };
-
-        // Position overlay at the specified hex position
-        auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(hexPosition));
-        if (!hex.has_value()) {
-            return;
-        }
-        float x = static_cast<float>(hex->get().x() + SpriteOffset::HEX_HIGHLIGHT_X);
-        float y = static_cast<float>(hex->get().y() + SpriteOffset::HEX_HIGHLIGHT_Y);
-        overlaySprite.setPosition(sf::Vector2f(x, y));
-
-        // Make overlay semi-transparent to show the object underneath
-        overlaySprite.setColor(sf::Color(255, 255, 255, OverlayColors::WALL_BLOCKER_ALPHA));
-
-        _wallBlockerOverlays.push_back(std::move(overlaySprite));
-
-        spdlog::debug("Created wall blocker overlay for object at hex {} (pro_pid {})",
-            hexPosition, mapObject->pro_pid);
-    } catch (const std::exception& e) {
-        spdlog::warn("Failed to create wall blocker overlay for object at hex {}: {}",
-            hexPosition, e.what());
-    }
-}
-
 std::vector<int> EditorWidget::calculateRectangleBorderHexes(sf::FloatRect rectangle) {
     // Convert rectangle corners to hex positions
     sf::Vector2f topLeft = sf::Vector2f(rectangle.position.x, rectangle.position.y);
@@ -907,43 +758,16 @@ std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPositi
 
 // Tiles
 void EditorWidget::loadTileSprites() {
-    // Clear previous sprites and reserve space
-    _floorSprites.clear();
-    _roofSprites.clear();
-    _floorSprites.reserve(Map::TILES_PER_ELEVATION);
-    _roofSprites.reserve(Map::TILES_PER_ELEVATION);
-
-    // Check if current elevation exists in the map data
-    if (!_map || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
-        spdlog::warn("EditorWidget::loadTileSprites: Current elevation {} does not exist in map data", _currentElevation);
+    if (!_map) {
         return;
     }
 
-    for (auto tileNumber = 0U; tileNumber < Map::TILES_PER_ELEVATION; ++tileNumber) {
-        const auto& tile = _map->getMapFile().tiles.at(_currentElevation).at(tileNumber);
-
-        // Convert tile number to screen coordinates
-        const auto coords = indexToCoordinates(static_cast<int>(tileNumber));
-        const auto screenPos = coordinatesToScreenPosition(coords);
-
-        // Create floor and roof sprites using factory
-        _floorSprites.push_back(SpriteFactory::createFloorTileSprite(_resources, tile.getFloor(), screenPos));
-        _roofSprites.push_back(SpriteFactory::createRoofTileSprite(_resources, tile.getRoof(), screenPos));
-    }
+    _mapSpriteLoader->loadTileSprites(*_map, _currentElevation, _floorSprites, _roofSprites);
 }
 
 void EditorWidget::loadSprites() {
     spdlog::stopwatch sw;
-
-    // Clear previous loading errors
-    _lastLoadErrors.clear();
-
-    _objects.clear();
-    _wallBlockerOverlays.clear();
-
-    // Data
-    loadTileSprites();
-    loadObjectSprites();
+    _mapSpriteLoader->loadSprites(*_map, _currentElevation, _floorSprites, _roofSprites, _objects, _wallBlockerOverlays);
 
     // Rebuild spatial index after sprites are loaded
     _selectionManager->initializeSpatialIndex();
@@ -1605,11 +1429,11 @@ bool EditorWidget::isTilePlacementMode() const {
 }
 
 void EditorWidget::refreshObjects() {
-    // Clear existing objects
-    _objects.clear();
+    if (!_map) {
+        return;
+    }
 
-    // Reload objects from the current map
-    loadObjectSprites();
+    _mapSpriteLoader->loadObjectSprites(*_map, _currentElevation, _objects, _wallBlockerOverlays);
 
     spdlog::debug("Refreshed objects for current elevation");
 }
@@ -1623,62 +1447,8 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof, int elevation) {
         return;
     }
 
-    auto tileIndex = _hexgrid.tileIndexForPosition(hexIndex);
-    if (!tileIndex.has_value()) {
-        return;
-    }
-
-    // Get tiles for requested elevation (ensures full size)
     const auto& elevationTiles = ensureElevationTiles(elevation);
-    if (*tileIndex >= static_cast<int>(elevationTiles.size())) {
-        spdlog::warn("EditorWidget::updateTileSprite: Tile index {} out of bounds (hex {})", *tileIndex, hexIndex);
-        return;
-    }
-
-    // Get the tile data using the converted tile index
-    const auto& tile = elevationTiles[*tileIndex];
-    int tileID = isRoof ? tile.getRoof() : tile.getFloor();
-
-    // Handle empty tiles by setting transparent color
-    if (tileID == Map::EMPTY_TILE) {
-        auto& sprites = isRoof ? _roofSprites : _floorSprites;
-        const auto& blankTexture = createBlankTexture();
-        sprites[*tileIndex].setTexture(blankTexture);
-        sprites[*tileIndex].setColor(geck::TileColors::transparent());
-        auto screenPos = indexToScreenPosition(*tileIndex, isRoof);
-        sprites[*tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-        spdlog::debug("EditorWidget::updateTileSprite: Set tile {} to empty [roof: {}]", *tileIndex, isRoof);
-        return;
-    }
-
-    // Get the sprite array to update
-    auto& sprites = isRoof ? _roofSprites : _floorSprites;
-
-    // Load the texture for this tile
-    try {
-        const auto* tileList = _resources.repository().find<Lst>("art/tiles/tiles.lst");
-        if (!tileList || tileID >= static_cast<int>(tileList->list().size())) {
-            return;
-        }
-
-        const std::string tileName = tileList->list()[tileID];
-        std::string tilePath = "art/tiles/" + tileName;
-        const auto& texture = _resources.textures().get(tilePath);
-
-        // Update the sprite using tile index for array access
-        sprites[*tileIndex].setTexture(texture);
-        // Reset sprite color to ensure visibility (in case it was previously transparent)
-        sprites[*tileIndex].setColor(sf::Color::White);
-
-        // Calculate position using tile index for screen positioning (same as initial loading)
-        auto screenPos = indexToScreenPosition(*tileIndex, isRoof);
-        sprites[*tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-
-        spdlog::debug("EditorWidget::updateTileSprite: Updated sprite for hex {} -> tile {} ({}) [roof: {}], elevation {}",
-            hexIndex, *tileIndex, tileName, isRoof, elevation);
-    } catch (const std::exception& e) {
-        spdlog::warn("EditorWidget::updateTileSprite: Failed to update tile sprite: {}", e.what());
-    }
+    _mapSpriteLoader->updateTileSprite(hexIndex, isRoof, elevation, elevationTiles, _floorSprites, _roofSprites);
 }
 
 // Helper methods implementation
@@ -2022,17 +1792,6 @@ void EditorWidget::updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector
     }
 }
 
-const sf::Texture& EditorWidget::createBlankTexture() {
-    // Intentionally leaked — see Object::createBlankTexture() for rationale.
-    static sf::Texture* texture = [] {
-        auto* t = new sf::Texture();
-        sf::Image blankImage{ sf::Vector2u{ 1, 1 }, sf::Color::Transparent };
-        [[maybe_unused]] const bool loadSuccess = t->loadFromImage(blankImage);
-        return t;
-    }();
-    return *texture;
-}
-
 void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     if (!_map) {
         spdlog::warn("EditorWidget: Cannot place object - no map loaded");
@@ -2216,7 +1975,8 @@ void EditorWidget::centerViewOnPlayerPosition() {
 }
 
 void EditorWidget::showLoadingErrorsSummary() {
-    if (!_lastLoadErrors.hasErrors()) {
+    const auto& loadingErrors = _mapSpriteLoader->lastLoadErrors();
+    if (!loadingErrors.hasErrors()) {
         return; // No errors to show
     }
 
@@ -2226,19 +1986,19 @@ void EditorWidget::showLoadingErrorsSummary() {
     // Build the error summary message
     message += QString("Some objects could not be loaded:\n\n");
     message += QString("• %1 objects skipped due to missing or invalid FRM files\n")
-                   .arg(_lastLoadErrors.objectsSkipped);
+                   .arg(loadingErrors.objectsSkipped);
 
-    if (!_lastLoadErrors.failedFrmNames.empty()) {
+    if (!loadingErrors.failedFrmNames.empty()) {
         message += QString("• %1 unique FRM files failed to load:\n\n")
-                       .arg(_lastLoadErrors.failedFrmNames.size());
+                       .arg(loadingErrors.failedFrmNames.size());
 
         // Show up to 10 FRM files to avoid overwhelming the user
         int count = 0;
         const int maxShow = 10;
-        for (const auto& frmName : _lastLoadErrors.failedFrmNames) {
+        for (const auto& frmName : loadingErrors.failedFrmNames) {
             if (count >= maxShow) {
                 message += QString("  ... and %1 more\n")
-                               .arg(_lastLoadErrors.failedFrmNames.size() - maxShow);
+                               .arg(loadingErrors.failedFrmNames.size() - maxShow);
                 break;
             }
             message += QString("  - %1\n").arg(QString::fromStdString(frmName));
