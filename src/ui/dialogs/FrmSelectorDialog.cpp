@@ -16,6 +16,33 @@
 
 namespace geck {
 
+namespace {
+
+    std::optional<Frm::FRM_TYPE> frmTypeForPath(const std::string& frmPath) {
+        if (frmPath.find("art/critters/") != std::string::npos) {
+            return Frm::FRM_TYPE::CRITTER;
+        }
+        if (frmPath.find("art/items/") != std::string::npos) {
+            return Frm::FRM_TYPE::ITEM;
+        }
+        if (frmPath.find("art/scenery/") != std::string::npos) {
+            return Frm::FRM_TYPE::SCENERY;
+        }
+        if (frmPath.find("art/walls/") != std::string::npos) {
+            return Frm::FRM_TYPE::WALL;
+        }
+        if (frmPath.find("art/tiles/") != std::string::npos) {
+            return Frm::FRM_TYPE::TILE;
+        }
+        if (frmPath.find("art/misc/") != std::string::npos) {
+            return Frm::FRM_TYPE::MISC;
+        }
+
+        return std::nullopt;
+    }
+
+}
+
 FrmSelectorDialog::FrmSelectorDialog(resource::GameResources& resources, QWidget* parent)
     : QDialog(parent)
     , _mainLayout(nullptr)
@@ -37,10 +64,38 @@ FrmSelectorDialog::FrmSelectorDialog(resource::GameResources& resources, QWidget
     , _cancelButton(nullptr)
     , _resources(resources)
     , _selectedFrmPid(0)
-    , _objectTypeFilter(0xFFFFFFFF) { // No filter by default
+    , _objectTypeFilter(std::nullopt) {
 
     setupUI();
     populateFrmList();
+}
+
+std::optional<Frm::FRM_TYPE> FrmSelectorDialog::filterForObjectType(Pro::OBJECT_TYPE objectType) {
+    switch (objectType) {
+        case Pro::OBJECT_TYPE::ITEM:
+            return Frm::FRM_TYPE::ITEM;
+        case Pro::OBJECT_TYPE::CRITTER:
+            return Frm::FRM_TYPE::CRITTER;
+        case Pro::OBJECT_TYPE::SCENERY:
+            return Frm::FRM_TYPE::SCENERY;
+        case Pro::OBJECT_TYPE::WALL:
+            return Frm::FRM_TYPE::WALL;
+        case Pro::OBJECT_TYPE::TILE:
+            return Frm::FRM_TYPE::TILE;
+        case Pro::OBJECT_TYPE::MISC:
+            return Frm::FRM_TYPE::MISC;
+    }
+
+    return std::nullopt;
+}
+
+std::optional<Frm::FRM_TYPE> FrmSelectorDialog::filterForFid(uint32_t fid) {
+    const auto frmType = static_cast<Frm::FRM_TYPE>((fid >> 24) & 0xFF);
+    if (frmType > Frm::FRM_TYPE::MISC) {
+        return std::nullopt;
+    }
+
+    return frmType;
 }
 
 void FrmSelectorDialog::setupUI() {
@@ -143,26 +198,15 @@ void FrmSelectorDialog::populateFrmList() {
             const std::string frmPathString = frmPath.generic_string();
 
             // Apply object type filter if set
-            if (_objectTypeFilter != 0xFFFFFFFF) {
-                uint32_t frmType = 0; // Default to items
+            if (_objectTypeFilter.has_value() && frmTypeForPath(frmPathString) != _objectTypeFilter) {
+                continue;
+            }
 
-                // Determine FRM type from path
-                if (frmPathString.find("art/critters/") != std::string::npos) {
-                    frmType = 1; // Critters
-                } else if (frmPathString.find("art/items/") != std::string::npos) {
-                    frmType = 0; // Items
-                } else if (frmPathString.find("art/scenery/") != std::string::npos) {
-                    frmType = 2; // Scenery
-                } else if (frmPathString.find("art/walls/") != std::string::npos) {
-                    frmType = 3; // Walls
-                } else if (frmPathString.find("art/tiles/") != std::string::npos) {
-                    frmType = 4; // Tiles
-                } else if (frmPathString.find("art/misc/") != std::string::npos) {
-                    frmType = 5; // Misc
-                }
-
-                // Skip if this FRM type doesn't match the filter
-                if (frmType != _objectTypeFilter) {
+            if (!_objectTypeFilter.has_value()) {
+                const auto frmType = frmTypeForPath(frmPathString);
+                if (!frmType.has_value()
+                    && frmPathString.find("art/intrface/") == std::string::npos
+                    && frmPathString.find("art/inven/") == std::string::npos) {
                     continue;
                 }
             }
@@ -739,9 +783,8 @@ QString FrmSelectorDialog::createDisplayName(const std::string& frmPath) {
     return QString::fromStdString(filename);
 }
 
-void FrmSelectorDialog::setObjectTypeFilter(uint32_t objectType) {
+void FrmSelectorDialog::setObjectTypeFilter(std::optional<Frm::FRM_TYPE> objectType) {
     _objectTypeFilter = objectType;
-    // Repopulate the list with the new filter
     populateFrmList();
 }
 

@@ -13,25 +13,25 @@
 namespace geck {
 namespace {
 
-constexpr std::array<std::string_view, 8> EssentialLstFiles = {
-    ResourcePaths::Lst::ITEMS,
-    ResourcePaths::Lst::CRITTERS,
-    ResourcePaths::Lst::SCENERY,
-    ResourcePaths::Lst::WALLS,
-    ResourcePaths::Lst::TILES,
-    ResourcePaths::Lst::MISC,
-    ResourcePaths::Lst::INTERFACE,
-    ResourcePaths::Lst::INVENTORY,
-};
+    constexpr std::array<std::string_view, 8> EssentialLstFiles = {
+        ResourcePaths::Lst::ITEMS,
+        ResourcePaths::Lst::CRITTERS,
+        ResourcePaths::Lst::SCENERY,
+        ResourcePaths::Lst::WALLS,
+        ResourcePaths::Lst::TILES,
+        ResourcePaths::Lst::MISC,
+        ResourcePaths::Lst::INTERFACE,
+        ResourcePaths::Lst::INVENTORY,
+    };
 
-std::runtime_error makeMissingLstError(const std::vector<std::string>& missingFiles) {
-    std::ostringstream message;
-    message << "Missing required LST files:\n";
-    for (const auto& missingFile : missingFiles) {
-        message << "- " << missingFile << '\n';
+    std::runtime_error makeMissingLstError(const std::vector<std::string>& missingFiles) {
+        std::ostringstream message;
+        message << "Missing required LST files:\n";
+        for (const auto& missingFile : missingFiles) {
+            message << "- " << missingFile << '\n';
+        }
+        return std::runtime_error(message.str());
     }
-    return std::runtime_error(message.str());
-}
 
 } // namespace
 

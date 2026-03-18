@@ -60,6 +60,7 @@ public:
 
     // Settings validation
     bool validateDataPath(const std::filesystem::path& path) const;
+    static std::filesystem::path normalizeDataPath(const std::filesystem::path& path);
 
     // Text editor configuration
     enum class TextEditorMode {

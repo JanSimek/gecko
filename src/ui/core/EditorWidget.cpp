@@ -338,9 +338,11 @@ void EditorWidget::registerExitGridCreation(const std::vector<std::shared_ptr<Ma
     cmd.description = exitGrids.size() == 1 ? "Place Exit Grid" : "Place Exit Grids";
 
     cmd.undo = [this, exitGrids, elevation]() {
-        if (!_map) return;
+        if (!_map)
+            return;
         auto& mapFile = _map->getMapFile();
-        if (mapFile.map_objects.find(elevation) == mapFile.map_objects.end()) return;
+        if (mapFile.map_objects.find(elevation) == mapFile.map_objects.end())
+            return;
 
         auto& elevationObjects = mapFile.map_objects[elevation];
         for (const auto& exitGrid : exitGrids) {
@@ -352,7 +354,8 @@ void EditorWidget::registerExitGridCreation(const std::vector<std::shared_ptr<Ma
     };
 
     cmd.redo = [this, exitGrids, elevation]() {
-        if (!_map) return;
+        if (!_map)
+            return;
         auto& mapFile = _map->getMapFile();
 
         for (const auto& exitGrid : exitGrids) {
@@ -367,8 +370,8 @@ void EditorWidget::registerExitGridCreation(const std::vector<std::shared_ptr<Ma
 }
 
 void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
-                                        const std::vector<ExitGridState>& beforeStates,
-                                        const std::vector<ExitGridState>& afterStates) {
+    const std::vector<ExitGridState>& beforeStates,
+    const std::vector<ExitGridState>& afterStates) {
     if (exitGrids.empty() || exitGrids.size() != beforeStates.size() || exitGrids.size() != afterStates.size()) {
         spdlog::warn("registerExitGridEdit: Invalid input sizes - grids:{} before:{} after:{}",
             exitGrids.size(), beforeStates.size(), afterStates.size());
@@ -380,7 +383,8 @@ void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObj
 
     cmd.undo = [this, exitGrids, beforeStates]() {
         for (size_t i = 0; i < exitGrids.size(); ++i) {
-            if (!exitGrids[i]) continue;
+            if (!exitGrids[i])
+                continue;
             exitGrids[i]->exit_map = beforeStates[i].exitMap;
             exitGrids[i]->exit_position = beforeStates[i].exitPosition;
             exitGrids[i]->exit_elevation = beforeStates[i].exitElevation;
@@ -393,7 +397,8 @@ void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObj
 
     cmd.redo = [this, exitGrids, afterStates]() {
         for (size_t i = 0; i < exitGrids.size(); ++i) {
-            if (!exitGrids[i]) continue;
+            if (!exitGrids[i])
+                continue;
             exitGrids[i]->exit_map = afterStates[i].exitMap;
             exitGrids[i]->exit_position = afterStates[i].exitPosition;
             exitGrids[i]->exit_elevation = afterStates[i].exitElevation;
@@ -2018,13 +2023,14 @@ void EditorWidget::updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector
 }
 
 const sf::Texture& EditorWidget::createBlankTexture() {
-    static sf::Texture texture = [] {
+    // Intentionally leaked — see Object::createBlankTexture() for rationale.
+    static sf::Texture* texture = [] {
+        auto* t = new sf::Texture();
         sf::Image blankImage{ sf::Vector2u{ 1, 1 }, sf::Color::Transparent };
-        sf::Texture blankTexture;
-        [[maybe_unused]] const bool loadSuccess = blankTexture.loadFromImage(blankImage);
-        return blankTexture;
+        [[maybe_unused]] const bool loadSuccess = t->loadFromImage(blankImage);
+        return t;
     }();
-    return texture;
+    return *texture;
 }
 
 void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {

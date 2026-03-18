@@ -8,6 +8,7 @@
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <algorithm>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -103,7 +104,10 @@ std::vector<std::filesystem::path> DataPathsWidget::getDataPaths() const {
     for (int i = 0; i < _pathsList->count(); ++i) {
         QListWidgetItem* item = _pathsList->item(i);
         if (item) {
-            paths.emplace_back(item->text().toStdString());
+            const std::filesystem::path normalizedPath = Settings::normalizeDataPath(item->text().toStdString());
+            if (std::find(paths.begin(), paths.end(), normalizedPath) == paths.end()) {
+                paths.emplace_back(normalizedPath);
+            }
         }
     }
 
@@ -122,7 +126,8 @@ void DataPathsWidget::setDataPaths(const std::vector<std::filesystem::path>& pat
 }
 
 void DataPathsWidget::addPathToList(const std::filesystem::path& path) {
-    QString pathStr = QString::fromStdString(path.string());
+    const std::filesystem::path normalizedPath = Settings::normalizeDataPath(path);
+    QString pathStr = QString::fromStdString(normalizedPath.string());
 
     // Check if path already exists in list
     for (int i = 0; i < _pathsList->count(); ++i) {
@@ -132,20 +137,20 @@ void DataPathsWidget::addPathToList(const std::filesystem::path& path) {
         }
     }
 
-    bool isDefaultPath = Application::isDefaultResourcesPath(path);
+    bool isDefaultPath = Application::isDefaultResourcesPath(normalizedPath);
 
     QListWidgetItem* item = new QListWidgetItem(pathStr);
 
     // Set icon based on path type and validity
     auto& settings = Settings::getInstance();
-    if (settings.validateDataPath(path)) {
+    if (settings.validateDataPath(normalizedPath)) {
         if (isDefaultPath) {
             item->setToolTip("Built-in resources path (cannot be removed)");
             // Use disabled color from the palette
             QPalette palette = QApplication::palette();
             item->setForeground(palette.color(QPalette::Disabled, QPalette::Text));
             item->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
-        } else if (std::filesystem::is_directory(path)) {
+        } else if (std::filesystem::is_directory(normalizedPath)) {
             item->setToolTip("Valid Fallout 2 data path");
             item->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
         } else {

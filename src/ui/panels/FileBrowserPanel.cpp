@@ -34,7 +34,6 @@
 
 namespace geck {
 
-// FileBrowserProxyModel implementation
 FileBrowserProxyModel::FileBrowserProxyModel(QObject* parent)
     : QSortFilterProxyModel(parent) {
     setFilterCaseSensitivity(Qt::CaseInsensitive);
@@ -43,7 +42,7 @@ FileBrowserProxyModel::FileBrowserProxyModel(QObject* parent)
 
 bool FileBrowserProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const {
     if (filterRegularExpression().pattern().isEmpty()) {
-        return true; // Accept all rows when no filter is set
+        return true;
     }
 
     QModelIndex sourceModel = this->sourceModel()->index(sourceRow, 0, sourceParent);
@@ -51,18 +50,14 @@ bool FileBrowserProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& s
         return false;
     }
 
-    // Get the filename from column 0 (Name column)
     QString fileName = sourceModel.data(Qt::DisplayRole).toString();
 
-    // Get the PRO name from column 4 (PRO Name column)
     QModelIndex proNameIndex = this->sourceModel()->index(sourceRow, 4, sourceParent);
     QString proName = proNameIndex.isValid() ? proNameIndex.data(Qt::DisplayRole).toString() : QString();
 
-    // Get the source from column 2 (Source column)
     QModelIndex sourceIndex = this->sourceModel()->index(sourceRow, 2, sourceParent);
     QString sourceName = sourceIndex.isValid() ? sourceIndex.data(Qt::DisplayRole).toString() : QString();
 
-    // Check if filename, PRO name, or source matches the filter
     bool fileNameMatches = fileName.contains(filterRegularExpression());
     bool proNameMatches = !proName.isEmpty() && proName.contains(filterRegularExpression());
     bool sourceMatches = !sourceName.isEmpty() && sourceName.contains(filterRegularExpression());
@@ -71,34 +66,29 @@ bool FileBrowserProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& s
 }
 
 bool FileBrowserProxyModel::lessThan(const QModelIndex& left, const QModelIndex& right) const {
-    // The left and right indexes are already from the source model
     if (!left.isValid() || !right.isValid()) {
         return QSortFilterProxyModel::lessThan(left, right);
     }
 
-    // Get the type from column 1 (Type column)
     QModelIndex leftTypeIndex = left.sibling(left.row(), 1);
     QModelIndex rightTypeIndex = right.sibling(right.row(), 1);
 
     QString leftType = leftTypeIndex.data(Qt::DisplayRole).toString();
     QString rightType = rightTypeIndex.data(Qt::DisplayRole).toString();
 
-    // Sort directories before files
     bool leftIsDir = (leftType == "Directory");
     bool rightIsDir = (rightType == "Directory");
 
     if (leftIsDir && !rightIsDir) {
-        return true; // Directory comes before file
+        return true;
     }
     if (!leftIsDir && rightIsDir) {
-        return false; // File comes after directory
+        return false;
     }
 
-    // Both are directories or both are files - use default alphabetical comparison
     return QSortFilterProxyModel::lessThan(left, right);
 }
 
-// FileLoaderWorker implementation
 FileLoaderWorker::FileLoaderWorker(std::shared_ptr<resource::GameResources> resources, QObject* parent)
     : QObject(parent)
     , _resources(std::move(resources)) {
@@ -131,7 +121,6 @@ void FileLoaderWorker::loadFiles() {
             return;
         }
 
-        // Extract file types for filter dropdown
         std::unordered_set<std::string> fileTypes;
         int processed = 0;
         const int totalFiles = static_cast<int>(allFiles.size());
@@ -148,7 +137,6 @@ void FileLoaderWorker::loadFiles() {
                 fileTypes.insert(("." + suffix).toStdString());
             }
 
-            // Update progress every 1000 files
             if (++processed % 1000 == 0) {
                 int progressPercent = 50 + (processed * 50) / totalFiles;
                 emit loadingProgress(progressPercent, 100,
@@ -165,7 +153,6 @@ void FileLoaderWorker::loadFiles() {
         spdlog::info("FileLoaderWorker: Loaded {} files with {} file types",
             allFiles.size(), fileTypes.size());
 
-        // Signal that work is complete
         emit loadingComplete();
 
     } catch (const std::exception& e) {
@@ -175,13 +162,11 @@ void FileLoaderWorker::loadFiles() {
     }
 }
 
-// FileTreeItem implementation
 FileTreeItem::FileTreeItem(const QString& name, ItemType type)
     : QStandardItem(name)
     , _type(type) {
     setEditable(false);
 
-    // Set different icons for files and directories
     if (type == Directory) {
         setIcon(createIcon(":/icons/filetypes/folder.svg"));
     } else {
@@ -193,7 +178,6 @@ QIcon FileTreeItem::getFileIcon(const QString& fileName) {
     QFileInfo fileInfo(fileName);
     QString suffix = fileInfo.suffix().toLower();
 
-    // Map file extensions to icon paths
     static const QMap<QString, QString> iconMap = {
         { "map", ":/icons/filetypes/map.svg" },
         { "frm", ":/icons/filetypes/image.svg" },
@@ -222,7 +206,6 @@ bool FileBrowserPanel::isTextFile(const QString& filePath) const {
     return game::enums::textFileExtensions().contains(suffix);
 }
 
-// FileBrowserPanel implementation
 FileBrowserPanel::FileBrowserPanel(std::shared_ptr<resource::GameResources> resources, QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
@@ -245,29 +228,24 @@ FileBrowserPanel::FileBrowserPanel(std::shared_ptr<resource::GameResources> reso
 
     setupUI();
 
-    // Setup chunk processing timer
     _chunkTimer->setSingleShot(true);
     _chunkTimer->setInterval(CHUNK_DELAY_MS);
     connect(_chunkTimer, &QTimer::timeout, this, &FileBrowserPanel::processNextChunk);
 
-    // Setup search debouncing timer
     _searchTimer->setSingleShot(true);
-    _searchTimer->setInterval(300); // 300ms debounce delay
+    _searchTimer->setInterval(300);
     connect(_searchTimer, &QTimer::timeout, this, &FileBrowserPanel::performDebouncedSearch);
 
-    // Set initial status
     _statusLabel->setText("Ready - Click Refresh to load files");
 }
 
 FileBrowserPanel::~FileBrowserPanel() {
     spdlog::debug("FileBrowserPanel: Destructor called, cleaning up threads...");
 
-    // First, signal the worker to stop
     if (_loaderWorker) {
         _loaderWorker->_shouldStop.store(true);
     }
 
-    // Stop timers
     if (_chunkTimer) {
         _chunkTimer->stop();
     }
@@ -276,18 +254,14 @@ FileBrowserPanel::~FileBrowserPanel() {
         _searchTimer->stop();
     }
 
-    // Handle thread cleanup carefully
     if (_loaderThread) {
-        // Disconnect signals to prevent any further processing
         if (_loaderWorker) {
             disconnect(_loaderWorker, nullptr, this, nullptr);
         }
         disconnect(_loaderThread, nullptr, this, nullptr);
 
-        // Only try to quit if the thread is still running
         if (_loaderThread->isRunning()) {
             _loaderThread->quit();
-            // Wait for thread to finish with a reasonable timeout
             if (!_loaderThread->wait(2000)) {
                 spdlog::warn("FileBrowserPanel: Thread didn't finish within 2 seconds, forcing termination");
                 _loaderThread->terminate();
@@ -295,12 +269,10 @@ FileBrowserPanel::~FileBrowserPanel() {
             }
         }
 
-        // Clean up the thread object
         delete _loaderThread;
         _loaderThread = nullptr;
     }
 
-    // Clean up worker
     if (_loaderWorker) {
         delete _loaderWorker;
         _loaderWorker = nullptr;
@@ -325,7 +297,6 @@ void FileBrowserPanel::setupFilterControls() {
     QGroupBox* filterGroup = new QGroupBox("Filters", this);
     QVBoxLayout* filterGroupLayout = new QVBoxLayout(filterGroup);
 
-    // Search filter
     QHBoxLayout* searchLayout = new QHBoxLayout();
     searchLayout->addWidget(new QLabel("Search:", this));
 
@@ -337,7 +308,6 @@ void FileBrowserPanel::setupFilterControls() {
 
     filterGroupLayout->addLayout(searchLayout);
 
-    // File type filter and refresh
     QHBoxLayout* typeLayout = new QHBoxLayout();
     typeLayout->addWidget(new QLabel("Type:", this));
 
@@ -362,10 +332,7 @@ void FileBrowserPanel::setupTreeView() {
     _treeModel = new QStandardItemModel(this);
     _proxyModel = new FileBrowserProxyModel(this);
 
-    // Set up model headers
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
-
-    // Configure proxy model
     _proxyModel->setSourceModel(_treeModel);
 
     _treeView->setModel(_proxyModel);
@@ -375,11 +342,9 @@ void FileBrowserPanel::setupTreeView() {
     _treeView->setSortingEnabled(true);
     _treeView->sortByColumn(0, Qt::AscendingOrder);
 
-    // Optimize performance
     _treeView->setUniformRowHeights(true);
     _treeView->setAnimated(false);
 
-    // Configure headers
     QHeaderView* header = _treeView->header();
     header->setStretchLastSection(true);                       // Let the last visible column stretch
     header->setSectionResizeMode(0, QHeaderView::Interactive); // Name column user-resizable
@@ -390,26 +355,19 @@ void FileBrowserPanel::setupTreeView() {
     header->setSectionResizeMode(3, QHeaderView::Interactive); // Path column user-resizable when visible
     header->setSectionResizeMode(4, QHeaderView::Interactive); // PRO Name column user-resizable
 
-    // Apply default column visibility BEFORE setting up context menu
     applyDefaultColumnVisibility();
 
-    // Enable context menu
     _treeView->setContextMenuPolicy(Qt::CustomContextMenu);
-
-    // Setup header context menu for column visibility
     setupHeaderContextMenu();
 
-    // Connect signals
     connect(_treeView, &QTreeView::clicked, this, &FileBrowserPanel::onTreeItemClicked);
     connect(_treeView, &QTreeView::doubleClicked, this, &FileBrowserPanel::onTreeItemDoubleClicked);
     connect(_treeView, &QTreeView::customContextMenuRequested, this, &FileBrowserPanel::onCustomContextMenuRequested);
 
-    // Add tree view to main layout
     _mainLayout->addWidget(_treeView, 1);
 }
 
 void FileBrowserPanel::setupStatusBar() {
-    // Create horizontal layout for status bar
     QHBoxLayout* statusLayout = new QHBoxLayout();
 
     _statusLabel = new QLabel("Ready", this);
@@ -417,11 +375,12 @@ void FileBrowserPanel::setupStatusBar() {
     statusLayout->addWidget(_statusLabel, 1);
 
     _progressBar = new QProgressBar(this);
-    _progressBar->setMaximumHeight(ui::constants::sizes::HEIGHT_PROGRESS_BAR);
+    _progressBar->setMinimumWidth(120);
+    _progressBar->setTextVisible(true);
+    _progressBar->setStyleSheet(ui::theme::styles::progressBarStyle());
     _progressBar->setVisible(false);
     statusLayout->addWidget(_progressBar);
 
-    // Add the layout to main layout
     _mainLayout->addLayout(statusLayout);
 }
 
@@ -437,20 +396,17 @@ void FileBrowserPanel::loadFiles() {
     _currentChunkIndex = 0;
     _nativeDirectoriesForSources = getNativeDirectoryPaths();
 
-    // Clear existing tree
+    _savedExpandedPaths = saveExpandedPaths();
+
     _treeModel->clear();
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
-
-    // Reapply column visibility after clearing
     applyDefaultColumnVisibility();
 
-    // Show progress bar and update status
     _progressBar->setVisible(true);
     _progressBar->setRange(0, 100);
     _progressBar->setValue(0);
     _statusLabel->setText("Starting file loading...");
 
-    // Clean up previous thread and worker if they exist
     if (_loaderThread) {
         if (_loaderWorker) {
             _loaderWorker->_shouldStop.store(true);
@@ -461,7 +417,6 @@ void FileBrowserPanel::loadFiles() {
             _loaderThread->wait(3000);
         }
 
-        // Clean up old worker and thread
         if (_loaderWorker) {
             _loaderWorker->deleteLater();
             _loaderWorker = nullptr;
@@ -471,12 +426,10 @@ void FileBrowserPanel::loadFiles() {
         _loaderThread = nullptr;
     }
 
-    // Create new worker thread
     _loaderThread = new QThread(this);
     _loaderWorker = new FileLoaderWorker(_resourcesShared);
     _loaderWorker->moveToThread(_loaderThread);
 
-    // Connect signals with explicit Qt::QueuedConnection for cross-thread communication
     spdlog::debug("FileBrowserPanel: Connecting worker signals...");
     connect(_loaderThread, &QThread::started, _loaderWorker, &FileLoaderWorker::loadFiles);
     connect(_loaderWorker, &FileLoaderWorker::filesLoaded, this, &FileBrowserPanel::onFilesLoaded, Qt::QueuedConnection);
@@ -485,12 +438,7 @@ void FileBrowserPanel::loadFiles() {
     connect(_loaderWorker, &FileLoaderWorker::loadingError, this, &FileBrowserPanel::onLoadingError, Qt::QueuedConnection);
     connect(_loaderWorker, &FileLoaderWorker::loadingComplete, _loaderThread, &QThread::quit, Qt::QueuedConnection);
 
-    // Don't use deleteLater for thread/worker - we'll manage cleanup manually
-    // This prevents crashes during destruction
-
     spdlog::debug("FileBrowserPanel: Worker signals connected");
-
-    // Start loading
     spdlog::info("FileBrowserPanel: Starting background file loading...");
     _loaderThread->start();
 }
@@ -506,8 +454,7 @@ void FileBrowserPanel::stopLoading() {
 
     if (_loaderThread && _loaderThread->isRunning()) {
         _loaderThread->quit();
-        // Don't wait here - let the finished signal handle cleanup
-    }
+        }
 
     if (_chunkTimer) {
         _chunkTimer->stop();
@@ -532,7 +479,6 @@ void FileBrowserPanel::updateFileTypeComboBox() {
     _fileTypeComboBox->clear();
     _fileTypeComboBox->addItem("All Files");
 
-    // Add file types in sorted order
     std::vector<std::string> sortedTypes(_fileTypes.begin(), _fileTypes.end());
     std::sort(sortedTypes.begin(), sortedTypes.end());
 
@@ -540,7 +486,6 @@ void FileBrowserPanel::updateFileTypeComboBox() {
         _fileTypeComboBox->addItem(QString::fromStdString(type));
     }
 
-    // Restore previous selection if it still exists
     int index = _fileTypeComboBox->findText(currentSelection);
     if (index >= 0) {
         _fileTypeComboBox->setCurrentIndex(index);
@@ -551,24 +496,20 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
     _treeModel->clear();
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
 
-    // Reapply column visibility after clearing
     applyDefaultColumnVisibility();
 
     FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
 
-    // Apply filters
     std::vector<std::string> filteredFiles;
     for (const auto& file : files) {
         QString qFile = QString::fromStdString(file);
 
-        // Apply search filter
         if (!_currentSearchFilter.isEmpty()) {
             if (!qFile.contains(_currentSearchFilter, Qt::CaseInsensitive)) {
                 continue;
             }
         }
 
-        // Apply file type filter
         if (_currentFileTypeFilter != "All Files") {
             QString extension = getFileExtension(qFile);
             if (extension != _currentFileTypeFilter) {
@@ -579,16 +520,12 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
         filteredFiles.push_back(file);
     }
 
-    // Build tree structure
     const auto nativeDirectories = _nativeDirectoriesForSources.empty() ? getNativeDirectoryPaths() : _nativeDirectoriesForSources;
 
     for (const auto& file : filteredFiles) {
         QString qFile = QString::fromStdString(file);
 
-        // Use normalized path for tree structure, but keep original for file operations
         QString normalizedPath = normalizeDisplayPath(qFile);
-
-        // Split normalized path into components
         QStringList pathComponents = normalizedPath.split('/', Qt::SkipEmptyParts);
         if (pathComponents.isEmpty())
             continue;
@@ -596,16 +533,14 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
         FileTreeItem* currentParent = rootItem;
         QString currentPath = "";
 
-        // Create directory structure using normalized path
         for (int i = 0; i < pathComponents.size() - 1; ++i) {
             currentPath += "/" + pathComponents[i];
             currentParent = findOrCreateDirectory(currentParent, pathComponents[i]);
         }
 
-        // Add file
         QString fileName = pathComponents.last();
         FileTreeItem* fileItem = new FileTreeItem(fileName, FileTreeItem::File);
-        fileItem->setFilePath(qFile); // Keep original path for file operations
+        fileItem->setFilePath(qFile);
 
         QString extension = getFileExtension(fileName);
         QStandardItem* typeItem = new QStandardItem(extension);
@@ -617,7 +552,6 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
         QStandardItem* pathItem = new QStandardItem(normalizeDisplayPath(qFile));
         pathItem->setEditable(false);
 
-        // Add PRO name for .pro files
         QString proName = (extension.toLower() == ".pro") ? getProName(qFile) : QString();
         QStandardItem* proNameItem = new QStandardItem(proName);
         proNameItem->setEditable(false);
@@ -625,21 +559,16 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
         currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << sourceItem << pathItem << proNameItem);
     }
 
-    // Expand first level directories
     for (int i = 0; i < _treeModel->rowCount(); ++i) {
         QModelIndex index = _treeModel->index(i, 0);
         _treeView->expand(index);
     }
 
-    // Trigger sorting to ensure proper directory/file order
     _proxyModel->sort(0, Qt::AscendingOrder);
-
-    // Resize Name column to fit content after tree is built and expanded
     resizeNameColumnToContent();
 }
 
 FileTreeItem* FileBrowserPanel::findOrCreateDirectory(FileTreeItem* parent, const QString& dirName) {
-    // Check if directory already exists
     for (int i = 0; i < parent->rowCount(); ++i) {
         QStandardItem* child = parent->child(i, 0);
         FileTreeItem* treeItem = static_cast<FileTreeItem*>(child);
@@ -649,7 +578,6 @@ FileTreeItem* FileBrowserPanel::findOrCreateDirectory(FileTreeItem* parent, cons
         }
     }
 
-    // Create new directory
     FileTreeItem* dirItem = new FileTreeItem(dirName, FileTreeItem::Directory);
     QStandardItem* typeItem = new QStandardItem("Directory");
     typeItem->setEditable(false);
@@ -671,7 +599,6 @@ QString FileBrowserPanel::getFileExtension(const QString& filePath) const {
 }
 
 QString FileBrowserPanel::getFileIcon(const QString& extension) const {
-    // This could be expanded to return different icons for different file types
     return extension;
 }
 
@@ -679,7 +606,6 @@ void FileBrowserPanel::updateFileCount() {
     int totalFiles = static_cast<int>(_allFiles.size());
     int visibleFiles = 0;
 
-    // Count visible files in the filtered proxy model
     std::function<void(const QModelIndex&)> countVisibleFiles = [&](const QModelIndex& parent) {
         int rowCount = _proxyModel->rowCount(parent);
         for (int i = 0; i < rowCount; ++i) {
@@ -693,7 +619,6 @@ void FileBrowserPanel::updateFileCount() {
                         visibleFiles++;
                     }
                 }
-                // Recursively count in subdirectories
                 countVisibleFiles(proxyIndex);
             }
         }
@@ -728,34 +653,24 @@ void FileBrowserPanel::setFileTypeFilter(const QString& fileType) {
 void FileBrowserPanel::onSearchTextChanged(const QString& text) {
     _currentSearchFilter = text;
 
-    // Stop the previous search timer if it's running
     _searchTimer->stop();
-
-    // Start the debounce timer - actual search will happen after delay
     _searchTimer->start();
 }
 
 void FileBrowserPanel::performDebouncedSearch() {
-    // Apply filter using proxy model
     if (!_currentSearchFilter.isEmpty()) {
-        // Escape special regex characters and use case-insensitive search
         QString escapedText = QRegularExpression::escape(_currentSearchFilter);
         QRegularExpression regex(escapedText, QRegularExpression::CaseInsensitiveOption);
         _proxyModel->setFilterRegularExpression(regex);
-
-        // Auto-expand all filtered items to show search results
         expandFilteredItems();
     } else {
         _proxyModel->setFilterRegularExpression(QRegularExpression(""));
-
-        // When search is cleared, collapse all and expand only first level
         _treeView->collapseAll();
         for (int i = 0; i < _proxyModel->rowCount(); ++i) {
             _treeView->expand(_proxyModel->index(i, 0));
         }
     }
 
-    // Update file count after filtering
     updateFileCount();
 }
 
@@ -771,7 +686,6 @@ void FileBrowserPanel::onTreeItemClicked(const QModelIndex& index) {
     if (!index.isValid())
         return;
 
-    // Map proxy index to source index
     QModelIndex sourceIndex = _proxyModel->mapToSource(index);
     QStandardItem* item = _treeModel->itemFromIndex(sourceIndex);
     FileTreeItem* treeItem = static_cast<FileTreeItem*>(item);
@@ -787,17 +701,15 @@ void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
     if (!index.isValid())
         return;
 
-    // Prevent file operations while still loading
     if (_isLoading) {
         QMessageBox::information(this, "Loading in Progress",
             "Files are still being loaded. Please wait for loading to complete before opening files.");
         return;
     }
 
-    // Map proxy index to source index
     QModelIndex sourceIndex = _proxyModel->mapToSource(index);
 
-    // Always get the FileTreeItem from column 0 (first column), regardless of which column was clicked
+    // Get the FileTreeItem from column 0 regardless of which column was clicked
     QModelIndex fileItemIndex = sourceIndex.sibling(sourceIndex.row(), 0);
     QStandardItem* item = _treeModel->itemFromIndex(fileItemIndex);
     FileTreeItem* treeItem = static_cast<FileTreeItem*>(item);
@@ -806,21 +718,19 @@ void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
         QString filePath = treeItem->getFilePath();
         spdlog::info("FileBrowserPanel: File double-clicked with path: '{}'", filePath.toStdString());
 
-        // Handle PRO files specially - open the PRO editor directly
         if (filePath.endsWith(".pro", Qt::CaseInsensitive)) {
             spdlog::debug("FileBrowserPanel: Opening PRO editor for double-clicked file: {}", filePath.toStdString());
             openProEditor(filePath);
             return;
         }
 
-        // For other files, emit the standard signal
         emit fileDoubleClicked(filePath);
     }
 }
 
 void FileBrowserPanel::updateFileDisplay() {
     if (_isLoading) {
-        return; // Don't update while loading
+        return;
     }
     buildFileTree(_allFiles);
     updateFileCount();
@@ -831,7 +741,6 @@ void FileBrowserPanel::onFilesLoaded(const std::vector<std::string>& files) {
     _allFiles = files;
     spdlog::info("FileBrowserPanel: Received {} files from background loader", files.size());
 
-    // Start progressive tree building
     buildFileTreeProgressive(files);
 }
 
@@ -839,7 +748,6 @@ void FileBrowserPanel::onFileTypesExtracted(const std::unordered_set<std::string
     spdlog::debug("FileBrowserPanel::onFileTypesExtracted called with {} types", fileTypes.size());
     _fileTypes = fileTypes;
 
-    // Update file type combo box on main thread
     updateFileTypeComboBox();
 
     spdlog::debug("FileBrowserPanel: Extracted {} file types", fileTypes.size());
@@ -861,13 +769,10 @@ void FileBrowserPanel::onLoadingError(const QString& error) {
 }
 
 void FileBrowserPanel::buildFileTreeProgressive(const std::vector<std::string>& files) {
-    // Don't filter by search text here - search is handled separately now
-    // Only apply file type filter for tree view
     std::vector<std::string> filteredFiles;
     for (const auto& file : files) {
         QString qFile = QString::fromStdString(file);
 
-        // Apply file type filter
         if (_currentFileTypeFilter != "All Files") {
             QString extension = getFileExtension(qFile);
             if (extension != _currentFileTypeFilter) {
@@ -883,45 +788,33 @@ void FileBrowserPanel::buildFileTreeProgressive(const std::vector<std::string>& 
 }
 
 void FileBrowserPanel::startProgressiveTreeBuild(const std::vector<std::string>& filteredFiles) {
-    // Store files to process
     _pendingFiles = filteredFiles;
     _currentChunkIndex = 0;
 
-    // Clear existing tree
     _treeModel->clear();
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
-
-    // Reapply column visibility after clearing
     applyDefaultColumnVisibility();
 
-    // Update progress bar for tree building phase
     _progressBar->setRange(0, static_cast<int>(_pendingFiles.size()));
     _progressBar->setValue(0);
     _statusLabel->setText("Building file tree...");
 
-    // Start processing chunks
     processNextChunk();
 }
 
 void FileBrowserPanel::processNextChunk() {
     if (_currentChunkIndex >= _pendingFiles.size()) {
-        // Finished processing all files
         _isLoading = false;
         _progressBar->setVisible(false);
 
-        // Expand first level directories
-        for (int i = 0; i < _treeModel->rowCount(); ++i) {
-            QModelIndex index = _treeModel->index(i, 0);
-            _treeView->expand(index);
-        }
-
-        // Resize Name column to fit content
-        resizeNameColumnToContent();
-
-        // Trigger sorting to ensure proper directory/file order
         _proxyModel->sort(0, Qt::AscendingOrder);
 
-        // Update file count
+        if (!_savedExpandedPaths.isEmpty()) {
+            restoreExpandedPaths(_savedExpandedPaths);
+            _savedExpandedPaths.clear();
+        }
+
+        resizeNameColumnToContent();
         updateFileCount();
 
         spdlog::info("FileBrowserPanel: Progressive tree building completed");
@@ -931,10 +824,8 @@ void FileBrowserPanel::processNextChunk() {
     FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
     const auto nativeDirectories = _nativeDirectoriesForSources.empty() ? getNativeDirectoryPaths() : _nativeDirectoriesForSources;
 
-    // Process next chunk
     size_t endIndex = std::min(_currentChunkIndex + CHUNK_SIZE, _pendingFiles.size());
     for (size_t i = _currentChunkIndex; i < endIndex; ++i) {
-        // Process events every 10 files to keep UI responsive
         if ((i - _currentChunkIndex) % 10 == 0) {
             QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
         }
@@ -942,10 +833,7 @@ void FileBrowserPanel::processNextChunk() {
         const auto& file = _pendingFiles[i];
         QString qFile = QString::fromStdString(file);
 
-        // Use normalized path for tree structure, but keep original for file operations
         QString normalizedPath = normalizeDisplayPath(qFile);
-
-        // Split normalized path into components
         QStringList pathComponents = normalizedPath.split('/', Qt::SkipEmptyParts);
         if (pathComponents.isEmpty())
             continue;
@@ -953,23 +841,14 @@ void FileBrowserPanel::processNextChunk() {
         FileTreeItem* currentParent = rootItem;
         QString currentPath = "";
 
-        // Create directory structure using normalized path
         for (int j = 0; j < pathComponents.size() - 1; ++j) {
             currentPath += "/" + pathComponents[j];
             currentParent = findOrCreateDirectory(currentParent, pathComponents[j]);
         }
 
-        // Add file
         QString fileName = pathComponents.last();
         FileTreeItem* fileItem = new FileTreeItem(fileName, FileTreeItem::File);
-        fileItem->setFilePath(qFile); // Keep original path for file operations
-
-        // Debug file path storage
-        static int debugFileCount = 0;
-        if (debugFileCount < 3) {
-            spdlog::info("File item created - Display: '{}' | Stored path: '{}'", normalizedPath.toStdString(), qFile.toStdString());
-            debugFileCount++;
-        }
+        fileItem->setFilePath(qFile);
 
         QString extension = getFileExtension(fileName);
         QStandardItem* typeItem = new QStandardItem(extension);
@@ -981,7 +860,6 @@ void FileBrowserPanel::processNextChunk() {
         QStandardItem* pathItem = new QStandardItem(normalizeDisplayPath(qFile));
         pathItem->setEditable(false);
 
-        // Add PRO name for .pro files
         QString proName = (extension.toLower() == ".pro") ? getProName(qFile) : QString();
         QStandardItem* proNameItem = new QStandardItem(proName);
         proNameItem->setEditable(false);
@@ -989,46 +867,35 @@ void FileBrowserPanel::processNextChunk() {
         currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << sourceItem << pathItem << proNameItem);
     }
 
-    // Update progress
     _currentChunkIndex = endIndex;
     _progressBar->setValue(static_cast<int>(_currentChunkIndex));
     _statusLabel->setText(QString("Building tree... %1/%2 files")
             .arg(_currentChunkIndex)
             .arg(_pendingFiles.size()));
 
-    // Schedule next chunk using Qt event queue
-    // This allows UI events to be processed between chunks
     QMetaObject::invokeMethod(this, &FileBrowserPanel::processNextChunk, Qt::QueuedConnection);
 }
 
 void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
-    // Get the item at the clicked position
     QModelIndex index = _treeView->indexAt(pos);
     if (!index.isValid()) {
         return;
     }
 
-    // Map proxy index to source index
     QModelIndex sourceIndex = _proxyModel->mapToSource(index);
-
-    // Get the item from the first column (Name column)
     QModelIndex nameIndex = sourceIndex.sibling(sourceIndex.row(), 0);
     FileTreeItem* item = static_cast<FileTreeItem*>(_treeModel->itemFromIndex(nameIndex));
     if (!item) {
         return;
     }
 
-    // Only show context menu for files, not directories
     if (item->getType() != FileTreeItem::File) {
         return;
     }
 
-    // Create context menu
     QMenu contextMenu(this);
-
     QString filePath = item->getFilePath();
 
-    // Add type-specific actions
     QAction* openAction = nullptr;
     QAction* editProAction = nullptr;
 
@@ -1049,23 +916,18 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
         openAction->setIcon(createIcon(":/icons/actions/open.svg"));
     }
 
-    // Add Export action
     QAction* exportAction = contextMenu.addAction("Export");
     exportAction->setIcon(createIcon(":/icons/actions/save.svg"));
 
-    // Execute menu and handle selected action
     QAction* selectedAction = contextMenu.exec(_treeView->viewport()->mapToGlobal(pos));
 
     if (selectedAction == openAction) {
-        // Emit the double-click signal (same behavior as double-clicking)
         spdlog::debug("FileBrowserPanel: Open action triggered for: {}", filePath.toStdString());
         emit fileDoubleClicked(filePath);
     } else if (selectedAction == editProAction) {
-        // Open PRO editor
         spdlog::debug("FileBrowserPanel: Edit PRO action triggered for: {}", filePath.toStdString());
         openProEditor(filePath);
     } else if (selectedAction == exportAction) {
-        // Export the file
         spdlog::debug("FileBrowserPanel: Export action triggered for: {}", filePath.toStdString());
         exportFile(filePath);
     }
@@ -1075,11 +937,9 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
     try {
         _statusLabel->setText(QString("Exporting %1...").arg(filePath));
 
-        // Get file info for default save name
         QFileInfo fileInfo(filePath);
         QString defaultFileName = fileInfo.fileName();
 
-        // Show save dialog
         QString filter = QString("*%1;;All Files (*.*)").arg(fileInfo.suffix().isEmpty() ? "" : "." + fileInfo.suffix());
         QString saveFilePath = QtDialogs::saveFile(this, "Export File", filter);
 
@@ -1088,7 +948,6 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
             return;
         }
 
-        // If no extension was provided and original had one, add it
         QFileInfo saveInfo(saveFilePath);
         if (saveInfo.suffix().isEmpty() && !fileInfo.suffix().isEmpty()) {
             saveFilePath += "." + fileInfo.suffix();
@@ -1102,7 +961,6 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
             return;
         }
 
-        // Write to destination file
         QFile outputFile(saveFilePath);
         if (!outputFile.open(QIODevice::WriteOnly)) {
             QMessageBox::critical(this, "Export Error",
@@ -1119,12 +977,10 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
                 QString("File was partially written: %1 of %2 bytes").arg(bytesWritten).arg(buffer->size()));
         }
 
-        // Update status
         _statusLabel->setText(QString("Exported %1 (%2 bytes)").arg(fileInfo.fileName()).arg(bytesWritten));
         spdlog::info("FileBrowserPanel: Exported {} to {} ({} bytes)",
             filePath.toStdString(), saveFilePath.toStdString(), bytesWritten);
 
-        // Emit signal in case other components want to know about the export
         emit fileExportRequested(filePath);
 
     } catch (const std::exception& e) {
@@ -1140,46 +996,67 @@ void FileBrowserPanel::resizeNameColumnToContent() {
         return;
     }
 
-    // Temporarily expand all items to measure their content
-    _treeView->expandAll();
+    _treeView->resizeColumnToContents(0);
 
-    // Let the header resize to content now that everything is expanded
     QHeaderView* header = _treeView->header();
-    header->resizeSection(0, header->sectionSizeHint(0));
-
-    // Find the maximum width needed for all visible items
-    int maxWidth = 200; // Minimum width
-
-    std::function<void(const QModelIndex&)> measureItems = [&](const QModelIndex& parent) {
-        for (int i = 0; i < _treeModel->rowCount(parent); ++i) {
-            QModelIndex index = _treeModel->index(i, 0, parent);
-            if (index.isValid()) {
-                // Get the size hint for this item
-                QSize sizeHint = _treeView->sizeHintForIndex(index);
-                maxWidth = std::max(maxWidth, sizeHint.width() + 20); // Add some padding
-
-                // Recursively check children
-                measureItems(index);
-            }
-        }
-    };
-
-    measureItems(QModelIndex());
-
-    // Apply the calculated width, but cap it at a reasonable maximum
-    int finalWidth = std::min(maxWidth, 500); // Cap at 500px to avoid excessive width
-    header->resizeSection(0, finalWidth);
-
-    // Collapse back to original state (only first level expanded)
-    _treeView->collapseAll();
-    for (int i = 0; i < _treeModel->rowCount(); ++i) {
-        QModelIndex index = _treeModel->index(i, 0);
-        _treeView->expand(index);
+    if (header->sectionSize(0) > 500) {
+        header->resizeSection(0, 500);
     }
 }
 
+QSet<QString> FileBrowserPanel::saveExpandedPaths() const {
+    QSet<QString> expanded;
+    if (!_treeView || !_proxyModel || !_treeModel) {
+        return expanded;
+    }
+
+    std::function<void(const QModelIndex&, const QString&)> collect =
+        [&](const QModelIndex& proxyParent, const QString& parentPath) {
+            for (int i = 0; i < _proxyModel->rowCount(proxyParent); ++i) {
+                QModelIndex proxyIndex = _proxyModel->index(i, 0, proxyParent);
+                QModelIndex sourceIndex = _proxyModel->mapToSource(proxyIndex);
+                auto* item = dynamic_cast<FileTreeItem*>(_treeModel->itemFromIndex(sourceIndex));
+                if (!item || item->getType() != FileTreeItem::Directory) {
+                    continue;
+                }
+                QString path = parentPath + "/" + item->text();
+                if (_treeView->isExpanded(proxyIndex)) {
+                    expanded.insert(path);
+                    collect(proxyIndex, path);
+                }
+            }
+        };
+
+    collect(QModelIndex(), "");
+    return expanded;
+}
+
+void FileBrowserPanel::restoreExpandedPaths(const QSet<QString>& paths) {
+    if (paths.isEmpty() || !_treeView || !_proxyModel || !_treeModel) {
+        return;
+    }
+
+    std::function<void(const QModelIndex&, const QString&)> restore =
+        [&](const QModelIndex& proxyParent, const QString& parentPath) {
+            for (int i = 0; i < _proxyModel->rowCount(proxyParent); ++i) {
+                QModelIndex proxyIndex = _proxyModel->index(i, 0, proxyParent);
+                QModelIndex sourceIndex = _proxyModel->mapToSource(proxyIndex);
+                auto* item = dynamic_cast<FileTreeItem*>(_treeModel->itemFromIndex(sourceIndex));
+                if (!item || item->getType() != FileTreeItem::Directory) {
+                    continue;
+                }
+                QString path = parentPath + "/" + item->text();
+                if (paths.contains(path)) {
+                    _treeView->expand(proxyIndex);
+                    restore(proxyIndex, path);
+                }
+            }
+        };
+
+    restore(QModelIndex(), "");
+}
+
 void FileBrowserPanel::openProEditor(const QString& filePath) {
-    // Additional safety check - prevent opening during loading state
     if (_isLoading) {
         QMessageBox::information(this, "Loading in Progress",
             "Files are still being loaded. Please wait for loading to complete before opening PRO files.");
@@ -1206,10 +1083,8 @@ void FileBrowserPanel::openProEditor(const QString& filePath) {
             return;
         }
 
-        // Set the original file path for saving later
         pro->setPath(std::filesystem::path(filePath.toStdString()));
 
-        // Create and show PRO editor dialog
         ProEditorDialog dialog(*_resourcesShared, std::shared_ptr<Pro>(pro.release()), this);
         dialog.exec();
 
@@ -1224,10 +1099,8 @@ void FileBrowserPanel::openProEditor(const QString& filePath) {
 }
 
 void FileBrowserPanel::expandFilteredItems() {
-    // Only expand if we have a reasonable number of visible items to avoid UI freeze
     int totalVisibleRows = 0;
 
-    // Count visible rows to decide if we should expand all
     std::function<void(const QModelIndex&)> countRows = [&](const QModelIndex& parent) {
         int rowCount = _proxyModel->rowCount(parent);
         totalVisibleRows += rowCount;
@@ -1244,19 +1117,15 @@ void FileBrowserPanel::expandFilteredItems() {
 
     countRows(QModelIndex());
 
-    // If too many items, only expand first level to maintain performance
     if (totalVisibleRows > 200) {
-        // Just expand first level directories
         for (int i = 0; i < _proxyModel->rowCount(); ++i) {
             _treeView->expand(_proxyModel->index(i, 0));
         }
         return;
     }
 
-    // Disable updates while expanding for better performance
     _treeView->setUpdatesEnabled(false);
 
-    // Recursive function to expand all visible items (limited scope)
     std::function<void(const QModelIndex&, int)> expandRecursive = [&](const QModelIndex& parent, int depth) {
         if (depth > 3)
             return; // Limit expansion depth to prevent UI freeze
@@ -1271,14 +1140,11 @@ void FileBrowserPanel::expandFilteredItems() {
         }
     };
 
-    // Start expansion from root with depth limit
     expandRecursive(QModelIndex(), 0);
 
-    // Re-enable updates
     _treeView->setUpdatesEnabled(true);
 }
 
-// Column visibility management
 void FileBrowserPanel::setupHeaderContextMenu() {
     QHeaderView* header = _treeView->header();
     header->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -1297,7 +1163,6 @@ void FileBrowserPanel::showHeaderContextMenu(const QPoint& pos) {
         action->setChecked(!_treeView->isColumnHidden(i));
         action->setData(i);
 
-        // Name column cannot be hidden
         if (i == 0) {
             action->setEnabled(false);
         }
@@ -1312,34 +1177,27 @@ void FileBrowserPanel::showHeaderContextMenu(const QPoint& pos) {
 
 void FileBrowserPanel::toggleColumnVisibility(int column) {
     if (column == 0)
-        return; // Name column cannot be hidden
+        return;
 
-    // Toggle based on current actual visibility
     bool currentlyHidden = _treeView->isColumnHidden(column);
     _treeView->setColumnHidden(column, !currentlyHidden);
 }
 
 void FileBrowserPanel::applyDefaultColumnVisibility() {
-    // Apply default column visibility
     for (int i = 0; i < 5; ++i) {
         _treeView->setColumnHidden(i, !DEFAULT_COLUMN_VISIBILITY[i]);
     }
 }
 
-// PRO name loading
 QString FileBrowserPanel::getProName(const QString& filePath) const {
     std::string stdPath = filePath.toStdString();
 
-    // Check cache first
     auto cacheIt = _proNameCache.find(stdPath);
     if (cacheIt != _proNameCache.end()) {
         return cacheIt->second;
     }
 
-    // Load PRO name from file
     QString proName = loadProNameFromFile(filePath);
-
-    // Cache the result
     _proNameCache[stdPath] = proName;
 
     return proName;
@@ -1368,7 +1226,6 @@ QString FileBrowserPanel::loadProNameFromFile(const QString& filePath) const {
 
         uint32_t messageId = pro->header.message_id;
 
-        // Get name (message at messageId)
         try {
             const auto& nameMessage = const_cast<Msg*>(msgFile)->message(messageId);
             QString name = QString::fromStdString(nameMessage.text);
@@ -1414,41 +1271,24 @@ QString FileBrowserPanel::getFileSource(const QString& filePath, const std::vect
 }
 
 QString FileBrowserPanel::normalizeDisplayPath(const QString& fullPath) const {
-    // Get all native directory paths
     auto nativeDirectories = getNativeDirectoryPaths();
-
     std::string fullPathStr = fullPath.toStdString();
 
-    // Check if the file path starts with any native directory path
-    // Note: VFS returns paths like "//home/user/path/file.txt" or "/home/user/path/file.txt"
-    // so we need to handle both cases
+    // VFS may return paths with double leading slashes, so handle both forms
     for (const auto& nativeDir : nativeDirectories) {
         std::string nativeDirStr = nativeDir.string();
 
-        // Normalize the native directory path
         if (!nativeDirStr.empty() && nativeDirStr.back() != '/') {
             nativeDirStr += '/';
         }
 
-        // Check for exact match with native directory
         size_t pos = fullPathStr.find(nativeDirStr);
         if (pos != std::string::npos) {
-            // Strip everything up to and including the native directory path
             std::string relativePath = fullPathStr.substr(pos + nativeDirStr.length());
-            QString result = QString::fromStdString(relativePath);
-
-            // Debug only for problematic cases
-            static int debugCount = 0;
-            if (debugCount < 3) {
-                spdlog::info("Path normalization: '{}' -> '{}' (will be shown in Path column)", fullPathStr, result.toStdString());
-                debugCount++;
-            }
-
-            return result;
+            return QString::fromStdString(relativePath);
         }
     }
 
-    // If not from a native directory (e.g., DAT file), just strip leading slashes
     QString result = fullPath;
     while (result.startsWith('/')) {
         result = result.mid(1);

@@ -20,7 +20,7 @@ void ProMiscItemWidget::setupUI() {
     QGroupBox* miscGroup = createStandardGroupBox("Misc Item Properties");
     miscGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* miscLayout = createStandardFormLayout();
-    static_cast<QVBoxLayout*>(miscGroup->layout())->addLayout(miscLayout);
+    addLayoutToGroupBox(miscGroup, miscLayout);
 
     _powerTypeEdit = createSpinBox(0, INT_MAX, "Raw power type value stored in the PRO");
     miscLayout->addRow("Power Type:", _powerTypeEdit);

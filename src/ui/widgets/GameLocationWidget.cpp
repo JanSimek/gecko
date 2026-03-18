@@ -1,4 +1,5 @@
 #include "GameLocationWidget.h"
+#include "../../util/GameDataPathResolver.h"
 #include "../../util/Settings.h"
 #include "../UIConstants.h"
 
@@ -234,18 +235,10 @@ void GameLocationWidget::onBrowseExecutable() {
 
         // Auto-set data directory if empty
         if (_dataDirectoryEdit->text().trimmed().isEmpty()) {
-            QFileInfo fileInfo(selectedFile);
-            QString parentDir;
-            if (selectedFile.endsWith(".app")) {
-                // For .app bundles, use the parent directory
-                // TODO: perhaps use Contents/Resources if it is GOG installation
-                parentDir = fileInfo.dir().absolutePath();
-            } else {
-                // For regular executables, use the executable's directory
-                parentDir = fileInfo.dir().absolutePath();
+            if (const auto dataDirectory = util::resolveGameDataRoot(std::filesystem::path(selectedFile.toStdString()))) {
+                _dataDirectoryEdit->setText(QString::fromStdString(dataDirectory->string()));
+                spdlog::info("Auto-set data directory to: {}", dataDirectory->string());
             }
-            _dataDirectoryEdit->setText(parentDir);
-            spdlog::info("Auto-set data directory to: {}", parentDir.toStdString());
         }
 
         validateGameLocation(selectedFile, false);
@@ -323,6 +316,9 @@ void GameLocationWidget::onAutoDetect() {
                 statusMessages += QString("Steam: %1; ").arg(description);
             } else if (installation.type == Settings::GameInstallationType::EXECUTABLE && !foundExecutable) {
                 _executableLocationEdit->setText(pathStr);
+                if (const auto dataDirectory = util::resolveGameDataRoot(installation.path)) {
+                    _dataDirectoryEdit->setText(QString::fromStdString(dataDirectory->string()));
+                }
                 foundExecutable = true;
                 statusMessages += QString("Executable: %1; ").arg(description);
             }

@@ -11,16 +11,16 @@ namespace geck {
 
 class Map;
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 class MapLoader : public Loader {
 public:
     MapLoader(std::shared_ptr<resource::GameResources> resources,
-              const std::filesystem::path& mapPath,
-              int elevation,
-              bool forceFilesystem,
-              std::function<void(std::unique_ptr<Map>)> onLoadCallback);
+        const std::filesystem::path& mapPath,
+        int elevation,
+        bool forceFilesystem,
+        std::function<void(std::unique_ptr<Map>)> onLoadCallback);
     ~MapLoader();
 
     void init() override;

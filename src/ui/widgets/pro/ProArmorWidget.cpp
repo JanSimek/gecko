@@ -155,7 +155,7 @@ void ProArmorWidget::setupUI() {
     // Misc Properties
     QGroupBox* miscGroup = createStandardGroupBox("Misc Properties");
     QFormLayout* miscLayout = createStandardFormLayout();
-    static_cast<QVBoxLayout*>(miscGroup->layout())->addLayout(miscLayout);
+    addLayoutToGroupBox(miscGroup, miscLayout);
 
     _armorPerkCombo = createComboBox(game::enums::armorPerkOptions(_resources),
         "Special perk associated with this armor");
@@ -326,7 +326,7 @@ void ProArmorWidget::selectArmorFid(ObjectPreviewWidget* previewWidget, int32_t&
     }
 
     FrmSelectorDialog dialog(_resources, this);
-    dialog.setObjectTypeFilter(1);
+    dialog.setObjectTypeFilter(Frm::FRM_TYPE::CRITTER);
     dialog.setInitialFrmPid(static_cast<uint32_t>(std::max(fid, 0)));
 
     if (dialog.exec() != QDialog::Accepted) {

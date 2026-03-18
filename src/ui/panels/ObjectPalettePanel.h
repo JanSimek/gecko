@@ -16,7 +16,7 @@ class Map;
 class Lst;
 class Pro;
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 // Forward declaration
@@ -34,7 +34,7 @@ enum class ObjectCategory {
 } // namespace geck
 
 // Hash function for ObjectCategory to use in unordered_map
-template<>
+template <>
 struct std::hash<geck::ObjectCategory> {
     std::size_t operator()(geck::ObjectCategory c) const noexcept {
         return static_cast<std::size_t>(c);
@@ -183,7 +183,6 @@ private:
 
     // Object lists by category
     std::unordered_map<ObjectCategory, std::vector<std::unique_ptr<ObjectInfo>>> _objectsByCategory;
-
 };
 
 } // namespace geck

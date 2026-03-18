@@ -13,7 +13,7 @@ namespace geck {
 
 class MainWindow;
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 class Application {

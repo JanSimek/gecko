@@ -25,11 +25,12 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <atomic>
+#include <QSet>
 
 namespace geck {
 
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 /**
@@ -168,6 +169,10 @@ private:
     bool isTextFile(const QString& filePath) const;
     void expandFilteredItems();
 
+    // Tree expansion state management
+    QSet<QString> saveExpandedPaths() const;
+    void restoreExpandedPaths(const QSet<QString>& paths);
+
     // Column visibility management
     void setupHeaderContextMenu();
     void showHeaderContextMenu(const QPoint& pos);
@@ -222,6 +227,9 @@ private:
 
     // Column visibility default state - used only for initialization
     static constexpr bool DEFAULT_COLUMN_VISIBILITY[5] = { true, false, true, false, true }; // Name, Type, Source, Path, PRO Name
+
+    // Tree expansion state (saved across refreshes)
+    QSet<QString> _savedExpandedPaths;
 
     // PRO name caching
     mutable std::unordered_map<std::string, QString> _proNameCache;

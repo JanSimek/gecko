@@ -8,7 +8,7 @@
 namespace geck {
 
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 /**

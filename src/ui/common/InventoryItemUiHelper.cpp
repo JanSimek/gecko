@@ -22,109 +22,109 @@
 namespace geck::ui::inventory {
 namespace {
 
-QString formatPid(uint32_t pid) {
-    return QString("0x%1").arg(pid, 8, 16, QChar('0'));
-}
+    QString formatPid(uint32_t pid) {
+        return QString("0x%1").arg(pid, 8, 16, QChar('0'));
+    }
 
-Pro* loadPro(resource::GameResources& resources, uint32_t pid) {
-    return resources.repository().load<Pro>(ProHelper::basePath(resources, pid));
-}
+    Pro* loadPro(resource::GameResources& resources, uint32_t pid) {
+        return resources.repository().load<Pro>(ProHelper::basePath(resources, pid));
+    }
 
-bool isAmmoItem(const Pro& pro) {
-    return pro.type() == Pro::OBJECT_TYPE::ITEM && pro.itemType() == Pro::ITEM_TYPE::AMMO;
-}
+    bool isAmmoItem(const Pro& pro) {
+        return pro.type() == Pro::OBJECT_TYPE::ITEM && pro.itemType() == Pro::ITEM_TYPE::AMMO;
+    }
 
-QString typeNameForPro(resource::GameResources& resources, const Pro& pro) {
-    if (pro.type() == Pro::OBJECT_TYPE::ITEM) {
-        Msg* protoMsg = ProHelper::protoMsgFile(resources);
-        if (!protoMsg) {
-            throw std::runtime_error("proto.msg is not loaded");
+    QString typeNameForPro(resource::GameResources& resources, const Pro& pro) {
+        if (pro.type() == Pro::OBJECT_TYPE::ITEM) {
+            Msg* protoMsg = ProHelper::protoMsgFile(resources);
+            if (!protoMsg) {
+                throw std::runtime_error("proto.msg is not loaded");
+            }
+
+            auto itemType = static_cast<fallout::ItemType>(static_cast<int>(pro.itemType()));
+            const std::string text = protoMsg->message(fallout::protoMessageId(itemType)).text;
+            return QString::fromStdString(text);
         }
 
-        auto itemType = static_cast<fallout::ItemType>(static_cast<int>(pro.itemType()));
-        const std::string text = protoMsg->message(fallout::protoMessageId(itemType)).text;
+        return QString::fromStdString(pro.typeToString());
+    }
+
+    QString nameForPid(resource::GameResources& resources, const Pro& pro) {
+        Msg* msg = ProHelper::msgFile(resources, pro.type());
+        if (!msg) {
+            throw std::runtime_error("PRO message file is not loaded");
+        }
+
+        const std::string text = msg->message(pro.header.message_id).text;
+        if (text.empty()) {
+            throw std::runtime_error("PRO message is empty");
+        }
+
         return QString::fromStdString(text);
     }
 
-    return QString::fromStdString(pro.typeToString());
-}
+    std::string resolveFrmPath(resource::GameResources& resources, uint32_t pid, const Pro& pro) {
 
-QString nameForPid(resource::GameResources& resources, const Pro& pro) {
-    Msg* msg = ProHelper::msgFile(resources, pro.type());
-    if (!msg) {
-        throw std::runtime_error("PRO message file is not loaded");
-    }
-
-    const std::string text = msg->message(pro.header.message_id).text;
-    if (text.empty()) {
-        throw std::runtime_error("PRO message is empty");
-    }
-
-    return QString::fromStdString(text);
-}
-
-std::string resolveFrmPath(resource::GameResources& resources, uint32_t pid, const Pro& pro) {
-
-    if (pro.type() == Pro::OBJECT_TYPE::ITEM && pro.commonItemData.inventoryFID > 0) {
-        try {
-            return resources.frmResolver().resolve(pro.commonItemData.inventoryFID);
-        } catch (const std::exception& e) {
-            spdlog::debug("InventoryItemUiHelper: Inventory FID resolution failed for PID {}: {}", pid, e.what());
+        if (pro.type() == Pro::OBJECT_TYPE::ITEM && pro.commonItemData.inventoryFID > 0) {
+            try {
+                return resources.frmResolver().resolve(pro.commonItemData.inventoryFID);
+            } catch (const std::exception& e) {
+                spdlog::debug("InventoryItemUiHelper: Inventory FID resolution failed for PID {}: {}", pid, e.what());
+            }
         }
+
+        if (pro.header.FID > 0) {
+            return resources.frmResolver().resolve(pro.header.FID);
+        }
+
+        return {};
     }
 
-    if (pro.header.FID > 0) {
-        return resources.frmResolver().resolve(pro.header.FID);
+    QPixmap renderFramePixmap(resource::GameResources& resources, const std::string& frmPath, int iconSize, bool fixedCanvas) {
+        Frm* frm = resources.repository().load<Frm>(frmPath);
+        if (!frm) {
+            return QPixmap();
+        }
+
+        const auto& directions = frm->directions();
+        if (directions.empty() || directions[0].frames().empty()) {
+            return QPixmap();
+        }
+
+        const auto& frame = directions[0].frames()[0];
+        const sf::Texture& texture = resources.textures().get(frmPath);
+        sf::Image image = texture.copyToImage();
+
+        QImage fullImage(
+            reinterpret_cast<const uchar*>(image.getPixelsPtr()),
+            static_cast<int>(image.getSize().x),
+            static_cast<int>(image.getSize().y),
+            QImage::Format_RGBA8888);
+        QImage frameImage = fullImage.copy(0, 0, frame.width(), frame.height()).copy();
+        QPixmap pixmap = QPixmap::fromImage(frameImage);
+
+        if (pixmap.isNull() || iconSize <= 0) {
+            return pixmap;
+        }
+
+        QPixmap scaled = pixmap.scaled(iconSize, iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        if (!fixedCanvas) {
+            return scaled;
+        }
+
+        QPixmap canvas(iconSize, iconSize);
+        canvas.fill(Qt::transparent);
+
+        QPainter painter(&canvas);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+
+        const int x = (iconSize - scaled.width()) / 2;
+        const int y = (iconSize - scaled.height()) / 2;
+        painter.drawPixmap(x, y, scaled);
+
+        return canvas;
     }
-
-    return {};
-}
-
-QPixmap renderFramePixmap(resource::GameResources& resources, const std::string& frmPath, int iconSize, bool fixedCanvas) {
-    Frm* frm = resources.repository().load<Frm>(frmPath);
-    if (!frm) {
-        return QPixmap();
-    }
-
-    const auto& directions = frm->directions();
-    if (directions.empty() || directions[0].frames().empty()) {
-        return QPixmap();
-    }
-
-    const auto& frame = directions[0].frames()[0];
-    const sf::Texture& texture = resources.textures().get(frmPath);
-    sf::Image image = texture.copyToImage();
-
-    QImage fullImage(
-        reinterpret_cast<const uchar*>(image.getPixelsPtr()),
-        static_cast<int>(image.getSize().x),
-        static_cast<int>(image.getSize().y),
-        QImage::Format_RGBA8888);
-    QImage frameImage = fullImage.copy(0, 0, frame.width(), frame.height()).copy();
-    QPixmap pixmap = QPixmap::fromImage(frameImage);
-
-    if (pixmap.isNull() || iconSize <= 0) {
-        return pixmap;
-    }
-
-    QPixmap scaled = pixmap.scaled(iconSize, iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    if (!fixedCanvas) {
-        return scaled;
-    }
-
-    QPixmap canvas(iconSize, iconSize);
-    canvas.fill(Qt::transparent);
-
-    QPainter painter(&canvas);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
-
-    const int x = (iconSize - scaled.width()) / 2;
-    const int y = (iconSize - scaled.height()) / 2;
-    painter.drawPixmap(x, y, scaled);
-
-    return canvas;
-}
 
 } // namespace
 
@@ -153,7 +153,7 @@ uint32_t displayAmount(resource::GameResources& resources, const MapObject& item
 }
 
 ItemDetails describeItem(resource::GameResources& resources, uint32_t pid) {
-    ItemDetails details {
+    ItemDetails details{
         .name = QString("Item %1").arg(pid, 8, 16, QChar('0')),
         .typeName = "Unknown",
         .pidText = formatPid(pid),

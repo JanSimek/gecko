@@ -77,6 +77,20 @@ QGroupBox* ProTabWidget::createStandardGroupBox(const QString& title) {
     return groupBox;
 }
 
+void ProTabWidget::addLayoutToGroupBox(QGroupBox* groupBox, QLayout* layout) {
+    if (!groupBox || !layout) {
+        return;
+    }
+
+    auto* groupLayout = qobject_cast<QVBoxLayout*>(groupBox->layout());
+    Q_ASSERT(groupLayout);
+    if (!groupLayout) {
+        return;
+    }
+
+    groupLayout->addLayout(layout);
+}
+
 void ProTabWidget::connectSpinBox(QSpinBox* spinBox) {
     if (!spinBox)
         return;

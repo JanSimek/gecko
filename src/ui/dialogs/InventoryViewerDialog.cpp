@@ -68,8 +68,8 @@ void InventoryViewerDialog::setupUI() {
     resize(ui::constants::dialog_sizes::LARGE_WIDTH, ui::constants::dialog_sizes::LARGE_HEIGHT);
 
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(8, 8, 8, 4); // Reduce bottom margin
-    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);                  // Reduce spacing between splitter and buttons
+    _mainLayout->setContentsMargins(8, 8, 8, 4);           // Reduce bottom margin
+    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT); // Reduce spacing between splitter and buttons
 
     // Create splitter for left/right panels
     _splitter = new QSplitter(Qt::Horizontal);

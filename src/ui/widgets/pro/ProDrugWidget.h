@@ -27,16 +27,10 @@ public:
     bool canHandle(const std::shared_ptr<Pro>& pro) const override;
     QString getTabLabel() const override;
 
-    // Set stat and perk names for dropdown lists
-    void setStatNames(const QStringList& statNames);
-    void setPerkOptions(const QVector<game::enums::EnumOption>& perkOptions);
-
 private:
     void setupUI();
-
-    // Stat names and perk names for combo boxes
-    QStringList _statNames;
-    QVector<game::enums::EnumOption> _perkOptions;
+    void populateStatOptions();
+    void populatePerkOptions();
 
     // UI controls - Stat Effects (3 stats x 4 fields each)
     QComboBox* _drugStatCombos[3];           // Which stat to modify

@@ -101,6 +101,10 @@ set(GECK_APP_SOURCES
     ui/widgets/TextEditorWidget.cpp
     ui/widgets/ObjectPreviewWidget.h
     ui/widgets/ObjectPreviewWidget.cpp
+    ui/widgets/ProInfoPanelWidget.h
+    ui/widgets/ProInfoPanelWidget.cpp
+    ui/widgets/ProPreviewPanelWidget.h
+    ui/widgets/ProPreviewPanelWidget.cpp
     ui/widgets/AnimationController.h
     ui/widgets/AnimationController.cpp
     ui/widgets/WelcomeWidget.h
@@ -113,6 +117,10 @@ set(GECK_APP_SOURCES
     ui/widgets/pro/ProTabWidget.cpp
     ui/widgets/pro/ProWallWidget.h
     ui/widgets/pro/ProWallWidget.cpp
+    ui/widgets/pro/ProCritterWidget.h
+    ui/widgets/pro/ProCritterWidget.cpp
+    ui/widgets/pro/ProSceneryWidget.h
+    ui/widgets/pro/ProSceneryWidget.cpp
     ui/widgets/pro/ProTileWidget.h
     ui/widgets/pro/ProTileWidget.cpp
     ui/widgets/pro/ProArmorWidget.h
@@ -333,6 +341,9 @@ add_library(vault STATIC
     util/AmmoCaliberNames.cpp
     util/MessageEnumUtils.h
     util/MessageEnumUtils.cpp
+
+    util/GameDataPathResolver.h
+    util/GameDataPathResolver.cpp
 )
 
 target_include_directories(vault PUBLIC

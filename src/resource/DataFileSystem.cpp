@@ -1,5 +1,6 @@
 #include "DataFileSystem.h"
 
+#include "../util/GameDataPathResolver.h"
 #include "../util/PathUtils.h"
 #include "../util/ResourcePaths.h"
 #include "../vfs/Dat2FileSystem.hpp"
@@ -19,35 +20,60 @@ void DataFileSystem::clear() {
 }
 
 void DataFileSystem::addDataPath(const std::filesystem::path& path) {
+    std::filesystem::path mountRoot;
+    if (path.extension() == ".dat") {
+        mountRoot = path;
+    } else if (auto resolved = util::resolveGameDataRoot(path)) {
+        mountRoot = *resolved;
+    } else {
+        // resolveGameDataRoot returns nullopt for macOS .app bundles without a
+        // valid GOG wrapper.  Do not fall through to mounting the raw .app root
+        // (NativeFileSystem would traverse Wine dosdevices symlinks).
+        if (path.extension() == ".app") {
+            spdlog::warn("macOS bundle '{}' does not contain a recognized Fallout 2 data layout", path.string());
+            return;
+        }
+        mountRoot = path;
+    }
+
+    if (mountRoot.empty()) {
+        spdlog::warn("Skipping unresolvable data path: {}", path.string());
+        return;
+    }
+    if (mountRoot != path) {
+        spdlog::info("Resolved data path '{}' to '{}'", path.string(), mountRoot.string());
+    }
+
+    std::error_code ec;
     vfspp::IFileSystemPtr fileSystem;
 
-    if (std::filesystem::is_directory(path)) {
-        fileSystem = std::make_shared<vfspp::NativeFileSystem>(path.string());
+    if (std::filesystem::is_directory(mountRoot, ec)) {
+        fileSystem = std::make_shared<vfspp::NativeFileSystem>(mountRoot.string());
 
-        const std::filesystem::path masterDat = path / ResourcePaths::Dat::MASTER;
-        if (std::filesystem::exists(masterDat) && std::filesystem::is_regular_file(masterDat)) {
+        const std::filesystem::path masterDat = mountRoot / ResourcePaths::Dat::MASTER;
+        if (std::filesystem::exists(masterDat, ec) && std::filesystem::is_regular_file(masterDat, ec)) {
             addDataPath(masterDat);
         }
 
-        const std::filesystem::path critterDat = path / ResourcePaths::Dat::CRITTER;
-        if (std::filesystem::exists(critterDat) && std::filesystem::is_regular_file(critterDat)) {
+        const std::filesystem::path critterDat = mountRoot / ResourcePaths::Dat::CRITTER;
+        if (std::filesystem::exists(critterDat, ec) && std::filesystem::is_regular_file(critterDat, ec)) {
             addDataPath(critterDat);
         }
-    } else if (path.extension() == ".dat") {
-        fileSystem = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem(path.string()));
+    } else if (mountRoot.extension() == ".dat") {
+        fileSystem = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem(mountRoot.string()));
     } else {
-        spdlog::error("Unsupported data location: {}", path.string());
+        spdlog::error("Unsupported data location: {}", mountRoot.string());
         return;
     }
 
     fileSystem->Initialize();
     if (!fileSystem->IsInitialized()) {
-        spdlog::error("Failed to initialize data path: {}", path.string());
+        spdlog::error("Failed to initialize data path: {}", mountRoot.string());
         return;
     }
 
     _vfs->AddFileSystem("/", fileSystem);
-    spdlog::info("Location '{}' was added to the data path", path.string());
+    spdlog::info("Location '{}' was added to the data path", mountRoot.string());
 }
 
 std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::filesystem::path& path) const {
@@ -110,9 +136,11 @@ std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesyste
         return std::nullopt;
     }
 
-    std::string normalizedPath = normalizeVfsPath(path).generic_string();
-    if (!normalizedPath.empty() && normalizedPath.front() == '/') {
-        normalizedPath.erase(normalizedPath.begin());
+    const std::string fullVfsPath = normalizeVfsPath(path).generic_string();
+
+    std::string relativePath = fullVfsPath;
+    if (!relativePath.empty() && relativePath.front() == '/') {
+        relativePath.erase(relativePath.begin());
     }
 
     const auto& fileSystems = _vfs->GetFilesystems("/");
@@ -122,8 +150,19 @@ std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesyste
             continue;
         }
 
-        const vfspp::FileInfo fileInfo(fileSystem->BasePath(), normalizedPath, false);
-        if (!fileSystem->IsFileExists(fileInfo)) {
+        // Try with BasePath + relative path (works for DAT and relative VFS paths)
+        const vfspp::FileInfo fileInfo(fileSystem->BasePath(), relativePath, false);
+        bool found = fileSystem->IsFileExists(fileInfo);
+
+        // NativeFileSystem stores absolute paths as keys; ListAllFiles returns
+        // these absolute paths directly. When that happens, BasePath + path
+        // produces a doubled path. Fall back to using the full path as-is.
+        if (!found) {
+            const vfspp::FileInfo absoluteFileInfo(fullVfsPath);
+            found = fileSystem->IsFileExists(absoluteFileInfo);
+        }
+
+        if (!found) {
             continue;
         }
 
@@ -133,7 +172,7 @@ std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesyste
             if (label.empty()) {
                 label = datPath.generic_string();
             }
-            return MountedSourceInfo { MountedSourceInfo::Kind::Dat, datPath, "DAT (" + label + ")" };
+            return MountedSourceInfo{ MountedSourceInfo::Kind::Dat, datPath, "DAT (" + label + ")" };
         }
 
         if (auto nativeFs = std::dynamic_pointer_cast<vfspp::NativeFileSystem>(fileSystem)) {
@@ -142,10 +181,10 @@ std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesyste
             if (label.empty()) {
                 label = nativePath.generic_string();
             }
-            return MountedSourceInfo { MountedSourceInfo::Kind::Directory, nativePath, "Native (" + label + ")" };
+            return MountedSourceInfo{ MountedSourceInfo::Kind::Directory, nativePath, "Native (" + label + ")" };
         }
 
-        return MountedSourceInfo { MountedSourceInfo::Kind::Directory, std::filesystem::path(fileSystem->BasePath()), "VFS" };
+        return MountedSourceInfo{ MountedSourceInfo::Kind::Directory, std::filesystem::path(fileSystem->BasePath()), "VFS" };
     }
 
     return std::nullopt;
@@ -172,30 +211,30 @@ std::string DataFileSystem::globToRegexPattern(const std::string& pattern) {
 
     for (char ch : pattern) {
         switch (ch) {
-        case '*':
-            regexPattern.append(".*");
-            break;
-        case '?':
-            regexPattern.push_back('.');
-            break;
-        case '.':
-        case '(':
-        case ')':
-        case '[':
-        case ']':
-        case '{':
-        case '}':
-        case '^':
-        case '$':
-        case '+':
-        case '|':
-        case '\\':
-            regexPattern.push_back('\\');
-            regexPattern.push_back(ch);
-            break;
-        default:
-            regexPattern.push_back(ch);
-            break;
+            case '*':
+                regexPattern.append(".*");
+                break;
+            case '?':
+                regexPattern.push_back('.');
+                break;
+            case '.':
+            case '(':
+            case ')':
+            case '[':
+            case ']':
+            case '{':
+            case '}':
+            case '^':
+            case '$':
+            case '+':
+            case '|':
+            case '\\':
+                regexPattern.push_back('\\');
+                regexPattern.push_back(ch);
+                break;
+            default:
+                regexPattern.push_back(ch);
+                break;
         }
     }
 

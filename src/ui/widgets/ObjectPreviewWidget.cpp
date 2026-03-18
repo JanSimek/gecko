@@ -179,7 +179,6 @@ void ObjectPreviewWidget::setFid(int32_t fid) {
     }
 
     _currentFid = fid;
-    emit fidChanged(fid);
 }
 
 void ObjectPreviewWidget::clear() {

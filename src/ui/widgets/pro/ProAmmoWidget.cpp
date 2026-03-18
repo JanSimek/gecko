@@ -26,7 +26,7 @@ void ProAmmoWidget::setupUI() {
     QGroupBox* ammoGroup = createStandardGroupBox("Ammo Properties");
     ammoGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* ammoLayout = createStandardFormLayout();
-    static_cast<QVBoxLayout*>(ammoGroup->layout())->addLayout(ammoLayout);
+    addLayoutToGroupBox(ammoGroup, ammoLayout);
 
     _caliberCombo = createComboBox(game::enums::ammoCaliberTypes(_resources), "Ammo caliber or energy cell type");
     ammoLayout->addRow("Caliber:", _caliberCombo);
@@ -39,7 +39,7 @@ void ProAmmoWidget::setupUI() {
     QGroupBox* modifierGroup = createStandardGroupBox("Combat Modifiers");
     modifierGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* modifierLayout = createStandardFormLayout();
-    static_cast<QVBoxLayout*>(modifierGroup->layout())->addLayout(modifierLayout);
+    addLayoutToGroupBox(modifierGroup, modifierLayout);
 
     _damageModifierEdit = createSpinBox(INT_MIN, INT_MAX, "Signed damage modifier applied by this ammo");
     modifierLayout->addRow("Damage Mod:", _damageModifierEdit);

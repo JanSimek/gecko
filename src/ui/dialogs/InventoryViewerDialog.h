@@ -19,7 +19,7 @@ namespace geck {
 struct MapObject;
 class Object;
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 /**

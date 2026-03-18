@@ -35,7 +35,7 @@ TEST_CASE("HexagonGrid rectangleBorderPositions returns the outer ring", "[hex_g
         HexagonGrid::GRID_WIDTH * 2,
         HexagonGrid::GRID_WIDTH * 2 + 2);
 
-    REQUIRE_THAT(border, Catch::Matchers::Equals(std::vector<int> {
+    REQUIRE_THAT(border, Catch::Matchers::Equals(std::vector<int>{
                              0,
                              1,
                              2,

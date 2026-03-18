@@ -21,7 +21,7 @@ namespace geck {
 
 class Map;
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 /**

@@ -14,7 +14,7 @@ namespace geck {
 class Map;
 class Lst;
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 namespace selection {

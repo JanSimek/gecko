@@ -10,8 +10,8 @@ namespace geck {
 
 namespace {
 
-constexpr int HEX_OVERLAY_FRAME_COUNT = 2;
-constexpr int HEX_GRID_BASELINE_OFFSET = 4;
+    constexpr int HEX_OVERLAY_FRAME_COUNT = 2;
+    constexpr int HEX_GRID_BASELINE_OFFSET = 4;
 
 }
 
@@ -94,10 +94,8 @@ sf::IntRect HexRenderer::overlayTextureRect(const sf::Texture& texture) {
 
 void HexRenderer::drawGridSprite(sf::RenderTarget& target, const Hex& hex) const {
     sf::Sprite hexSprite = _gridSprite;
-    hexSprite.setPosition({
-        static_cast<float>(hex.x() - Hex::HEX_WIDTH),
-        static_cast<float>(hex.y() - Hex::HEX_HEIGHT + HEX_GRID_BASELINE_OFFSET)
-    });
+    hexSprite.setPosition({ static_cast<float>(hex.x() - Hex::HEX_WIDTH),
+        static_cast<float>(hex.y() - Hex::HEX_HEIGHT + HEX_GRID_BASELINE_OFFSET) });
     target.draw(hexSprite);
 }
 
@@ -105,10 +103,8 @@ void HexRenderer::drawOverlaySprite(sf::RenderTarget& target,
     const Hex& hex,
     const sf::Sprite& spriteTemplate) const {
     sf::Sprite overlaySprite = spriteTemplate;
-    overlaySprite.setPosition({
-        static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X),
-        static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y)
-    });
+    overlaySprite.setPosition({ static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X),
+        static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y) });
     target.draw(overlaySprite);
 }
 

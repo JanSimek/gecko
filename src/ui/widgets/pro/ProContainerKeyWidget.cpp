@@ -43,7 +43,7 @@ void ProContainerKeyWidget::setupContainerUI() {
 
     QGroupBox* containerGroup = createStandardGroupBox("Container Properties");
     QFormLayout* containerLayout = createStandardFormLayout();
-    static_cast<QVBoxLayout*>(containerGroup->layout())->addLayout(containerLayout);
+    addLayoutToGroupBox(containerGroup, containerLayout);
 
     _containerMaxSizeEdit = createSpinBox(0, 999999, "Maximum size in volume units that this container can hold");
     containerLayout->addRow("Max Size:", _containerMaxSizeEdit);
@@ -87,7 +87,7 @@ void ProContainerKeyWidget::setupKeyUI() {
 
     QGroupBox* keyGroup = createStandardGroupBox("Key Properties");
     QFormLayout* keyLayout = createStandardFormLayout();
-    static_cast<QVBoxLayout*>(keyGroup->layout())->addLayout(keyLayout);
+    addLayoutToGroupBox(keyGroup, keyLayout);
 
     _keyIdEdit = createSpinBox(0, 999999, "Unique key identifier");
     keyLayout->addRow("Key ID:", _keyIdEdit);

@@ -26,7 +26,7 @@ QT_END_NAMESPACE
 namespace geck {
 
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 class SFMLWidget;
@@ -139,6 +139,7 @@ private:
     void applyDefaultDockPlacements();
     void applyDefaultPanelDockLayout();
     void connectFileBrowserSignals();
+    void connectPanelSignals();
     void replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSizePolicy::Policy verticalPolicy);
     void rebuildResourcePanels();
     void rebuildGameResourcesFromSettings();

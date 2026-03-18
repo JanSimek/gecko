@@ -70,7 +70,7 @@ void ExitGridPlacementManager::placeExitGridAtPosition(sf::Vector2f worldPos) {
     int currentElevation = _editor->getCurrentElevation();
 
     // Register undo action and add to map (redo is called immediately)
-    _editor->registerExitGridCreation({exitGridObject}, currentElevation);
+    _editor->registerExitGridCreation({ exitGridObject }, currentElevation);
 
     spdlog::info("Placed exit grid at hex position {} (elevation {})", hexPosition, currentElevation);
 }
@@ -110,8 +110,7 @@ void ExitGridPlacementManager::editExitGridProperties(std::shared_ptr<MapObject>
     exitGrid->exit_orientation = newProperties.exitOrientation;
 
     // Update PIDs based on exit type (world/town map vs specific map)
-    bool isWorldmapExit = (newProperties.exitMap == ExitGrid::WORLD_MAP_EXIT ||
-                           newProperties.exitMap == ExitGrid::TOWN_MAP_EXIT);
+    bool isWorldmapExit = (newProperties.exitMap == ExitGrid::WORLD_MAP_EXIT || newProperties.exitMap == ExitGrid::TOWN_MAP_EXIT);
     if (isWorldmapExit) {
         exitGrid->pro_pid = ExitGrid::WORLD_EXIT_PRO_PID;
         exitGrid->frm_pid = ExitGrid::WORLD_EXIT_FRM_PID;
@@ -130,7 +129,7 @@ void ExitGridPlacementManager::editExitGridProperties(std::shared_ptr<MapObject>
     afterState.proPid = exitGrid->pro_pid;
 
     // Register undo action (changes already applied, so don't call redo)
-    _editor->registerExitGridEdit({exitGrid}, {beforeState}, {afterState});
+    _editor->registerExitGridEdit({ exitGrid }, { beforeState }, { afterState });
 
     // Refresh objects in editor to show updated properties and FRM
     // FIXME: Changing exit grid FRM may cause visual position offset due to different FRM shift values
@@ -156,8 +155,7 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
     // Set exit grid PIDs based on exit type
     // World/town map exit: Uses WORLD_EXIT_PRO_PID/WORLD_EXIT_FRM_PID
     // Map exit: Uses MAP_EXIT_PRO_PID/MAP_EXIT_FRM_PID
-    bool isWorldmapExit = (properties.exitMap == ExitGrid::WORLD_MAP_EXIT ||
-                           properties.exitMap == ExitGrid::TOWN_MAP_EXIT);
+    bool isWorldmapExit = (properties.exitMap == ExitGrid::WORLD_MAP_EXIT || properties.exitMap == ExitGrid::TOWN_MAP_EXIT);
     if (isWorldmapExit) {
         exitGrid->pro_pid = ExitGrid::WORLD_EXIT_PRO_PID;
         exitGrid->frm_pid = ExitGrid::WORLD_EXIT_FRM_PID;
@@ -426,8 +424,7 @@ void ExitGridPlacementManager::selectExitGridsInArea(sf::Vector2f startPos, sf::
                 }
 
                 // Determine PIDs based on exit type
-                bool isWorldmapExit = (newProperties.exitMap == ExitGrid::WORLD_MAP_EXIT ||
-                                       newProperties.exitMap == ExitGrid::TOWN_MAP_EXIT);
+                bool isWorldmapExit = (newProperties.exitMap == ExitGrid::WORLD_MAP_EXIT || newProperties.exitMap == ExitGrid::TOWN_MAP_EXIT);
                 uint32_t newProPid = isWorldmapExit ? ExitGrid::WORLD_EXIT_PRO_PID : ExitGrid::MAP_EXIT_PRO_PID;
                 uint32_t newFrmPid = isWorldmapExit ? ExitGrid::WORLD_EXIT_FRM_PID : ExitGrid::MAP_EXIT_FRM_PID;
 

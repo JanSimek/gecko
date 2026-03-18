@@ -150,7 +150,7 @@ void ProWeaponWidget::setupUI() {
     // Misc Properties
     QGroupBox* miscGroup = createStandardGroupBox("Misc Properties");
     QFormLayout* miscLayout = createStandardFormLayout();
-    static_cast<QVBoxLayout*>(miscGroup->layout())->addLayout(miscLayout);
+    addLayoutToGroupBox(miscGroup, miscLayout);
 
     _weaponSoundIdEdit = createSpinBox(0, 255, "Sound ID for weapon");
     miscLayout->addRow("Sound ID:", _weaponSoundIdEdit);

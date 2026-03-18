@@ -34,8 +34,8 @@ public:
      * @return QPixmap thumbnail, or transparent pixmap on failure
      */
     static QPixmap fromFrmPath(resource::GameResources& resources,
-                               const std::string& frmPath,
-                               const QSize& targetSize = QSize(64, 64));
+        const std::string& frmPath,
+        const QSize& targetSize = QSize(64, 64));
 
     /**
      * @brief Create thumbnail from raw Frame data
@@ -45,8 +45,8 @@ public:
      * @return QPixmap thumbnail, or transparent pixmap on failure
      */
     static QPixmap fromFrame(const Frame& frame,
-                             const Pal* palette,
-                             const QSize& targetSize = QSize(64, 64));
+        const Pal* palette,
+        const QSize& targetSize = QSize(64, 64));
 };
 
 } // namespace geck

@@ -28,6 +28,8 @@ ProDrugWidget::ProDrugWidget(resource::GameResources& resources, QWidget* parent
     _drugAddictionDelayEdit = nullptr;
 
     setupUI();
+    populateStatOptions();
+    populatePerkOptions();
 }
 
 void ProDrugWidget::setupUI() {
@@ -270,13 +272,11 @@ QString ProDrugWidget::getTabLabel() const {
     return "Drug";
 }
 
-void ProDrugWidget::setStatNames(const QStringList& statNames) {
-    _statNames = statNames;
-
-    // Update all stat combo boxes
+void ProDrugWidget::populateStatOptions() {
+    const QStringList statNames = game::enums::statNames(_resources);
     QStringList comboItems;
-    comboItems << "None";     // Index 0 for no effect
-    comboItems << _statNames; // Indices 1+ for actual stats
+    comboItems << "None";
+    comboItems << statNames;
 
     for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         if (_drugStatCombos[i]) {
@@ -288,14 +288,12 @@ void ProDrugWidget::setStatNames(const QStringList& statNames) {
     }
 }
 
-void ProDrugWidget::setPerkOptions(const QVector<game::enums::EnumOption>& perkOptions) {
-    _perkOptions = perkOptions;
-
-    // Update addiction perk combo box
+void ProDrugWidget::populatePerkOptions() {
     if (_drugAddictionPerkCombo) {
         int currentValue = getComboValue(_drugAddictionPerkCombo);
         _drugAddictionPerkCombo->clear();
-        for (const auto& perkOption : _perkOptions) {
+        const QVector<game::enums::EnumOption> perkOptions = game::enums::allPerkOptions(_resources);
+        for (const auto& perkOption : perkOptions) {
             _drugAddictionPerkCombo->addItem(perkOption.label, perkOption.value);
         }
         setComboValue(_drugAddictionPerkCombo, currentValue);

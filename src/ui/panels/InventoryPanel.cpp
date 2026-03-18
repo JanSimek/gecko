@@ -17,24 +17,24 @@
 namespace geck {
 namespace {
 
-bool objectCanHaveInventory(resource::GameResources& resources, const std::shared_ptr<MapObject>& mapObject) {
-    if (!mapObject) {
-        return false;
-    }
-
-    try {
-        Pro* pro = resources.repository().load<Pro>(ProHelper::basePath(resources, mapObject->pro_pid));
-        if (!pro) {
+    bool objectCanHaveInventory(resource::GameResources& resources, const std::shared_ptr<MapObject>& mapObject) {
+        if (!mapObject) {
             return false;
         }
 
-        return (pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::CONTAINER)
-            || pro->type() == Pro::OBJECT_TYPE::CRITTER;
-    } catch (const std::exception& e) {
-        spdlog::warn("InventoryPanel: Failed to check inventory capability for PID 0x{:08X}: {}", mapObject->pro_pid, e.what());
-        return false;
+        try {
+            Pro* pro = resources.repository().load<Pro>(ProHelper::basePath(resources, mapObject->pro_pid));
+            if (!pro) {
+                return false;
+            }
+
+            return (pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::CONTAINER)
+                || pro->type() == Pro::OBJECT_TYPE::CRITTER;
+        } catch (const std::exception& e) {
+            spdlog::warn("InventoryPanel: Failed to check inventory capability for PID 0x{:08X}: {}", mapObject->pro_pid, e.what());
+            return false;
+        }
     }
-}
 
 } // namespace
 

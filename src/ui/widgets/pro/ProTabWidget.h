@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QWidget>
+#include <QLayout>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -12,13 +13,14 @@
 #include <memory>
 
 #include "../../GameEnums.h"
+#include "../../../format/frm/Frm.h"
 #include "../../../format/pro/Pro.h"
 #include "../../../format/pro/ProDataModels.h"
 
 namespace geck {
 
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 /**
@@ -75,7 +77,7 @@ signals:
      * @param targetField The spin box to update with selected FID
      * @param objectType The type of object to select
      */
-    void fidSelectorRequested(QSpinBox* targetField, uint32_t objectType);
+    void fidSelectorRequested(QSpinBox* targetField, Frm::FRM_TYPE objectType);
 
     /**
      * @brief Emitted when a FID label selector is clicked
@@ -83,7 +85,7 @@ signals:
      * @param fidStorage Pointer to store the selected FID
      * @param objectType The type of object to select
      */
-    void fidLabelSelectorRequested(QLabel* targetLabel, int32_t* fidStorage, uint32_t objectType);
+    void fidLabelSelectorRequested(QLabel* targetLabel, int32_t* fidStorage, Frm::FRM_TYPE objectType);
 
 protected:
     // Common helper methods for derived classes
@@ -122,6 +124,11 @@ protected:
      * @brief Create a standard group box
      */
     QGroupBox* createStandardGroupBox(const QString& title);
+
+    /**
+     * @brief Attach a child layout to a standard group box
+     */
+    void addLayoutToGroupBox(QGroupBox* groupBox, QLayout* layout);
 
     /**
      * @brief Connect spin box to emit fieldChanged signal

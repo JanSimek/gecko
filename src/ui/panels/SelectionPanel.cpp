@@ -792,9 +792,11 @@ void SelectionPanel::onChangeFrmClicked() {
     dialog.setInitialFrmPid(currentFrmPid);
 
     // Set object type filter - extract type from current FRM PID
-    uint32_t objectType = (currentFrmPid >> 24) & 0xFF;
-    dialog.setObjectTypeFilter(objectType);
-    spdlog::info("SelectionPanel: Filtering FRM dialog by object type: {}", objectType);
+    const auto objectTypeFilter = FrmSelectorDialog::filterForFid(currentFrmPid);
+    dialog.setObjectTypeFilter(objectTypeFilter);
+    if (objectTypeFilter.has_value()) {
+        spdlog::info("SelectionPanel: Filtering FRM dialog by object type: {}", static_cast<int>(*objectTypeFilter));
+    }
 
     if (dialog.exec() == QDialog::Accepted) {
         uint32_t newFrmPid = dialog.getSelectedFrmPid();

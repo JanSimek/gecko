@@ -26,7 +26,7 @@
 namespace geck {
 
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 // Forward declarations
@@ -176,8 +176,8 @@ public:
     };
     void registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation);
     void registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
-                              const std::vector<ExitGridState>& beforeStates,
-                              const std::vector<ExitGridState>& afterStates);
+        const std::vector<ExitGridState>& beforeStates,
+        const std::vector<ExitGridState>& afterStates);
 
 signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);

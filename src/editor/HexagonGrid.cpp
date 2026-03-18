@@ -88,7 +88,7 @@ std::optional<HexagonGrid::GridCoordinates> HexagonGrid::coordinatesForPosition(
         return std::nullopt;
     }
 
-    return GridCoordinates {
+    return GridCoordinates{
         position % GRID_WIDTH,
         position / GRID_WIDTH
     };

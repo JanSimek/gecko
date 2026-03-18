@@ -24,10 +24,10 @@
 namespace geck {
 
 MapLoader::MapLoader(std::shared_ptr<resource::GameResources> resources,
-                     const std::filesystem::path& mapFile,
-                     int elevation,
-                     bool forceFilesystem,
-                     std::function<void(std::unique_ptr<Map>)> onLoadCallback)
+    const std::filesystem::path& mapFile,
+    int elevation,
+    bool forceFilesystem,
+    std::function<void(std::unique_ptr<Map>)> onLoadCallback)
     : _resources(std::move(resources))
     , _mapPath(mapFile)
     , _elevation(elevation)

@@ -6,8 +6,8 @@
 namespace geck {
 namespace {
 
-constexpr int FirstCaliberMessageId = fallout::protoMessageId(fallout::CaliberType::None);
-constexpr size_t CaliberMessageCount = fallout::enumCount<fallout::CaliberType>();
+    constexpr int FirstCaliberMessageId = fallout::protoMessageId(fallout::CaliberType::None);
+    constexpr size_t CaliberMessageCount = fallout::enumCount<fallout::CaliberType>();
 
 } // namespace
 

@@ -25,7 +25,7 @@ namespace geck {
 
 class Map;
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 // Custom hover-enabled sprite label for FRM previews

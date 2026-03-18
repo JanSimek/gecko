@@ -166,7 +166,7 @@ void TilePalettePanel::setupPaginationControls() {
     _paginationWidget = new PaginationWidget(this);
     _paginationWidget->setShowFirstLastButtons(true);
     connect(_paginationWidget, &PaginationWidget::pageChanged,
-            this, &TilePalettePanel::onGridPaginationPageChanged);
+        this, &TilePalettePanel::onGridPaginationPageChanged);
     paginationLayout->addWidget(_paginationWidget);
 
     _mainLayout->addWidget(_paginationGroup);

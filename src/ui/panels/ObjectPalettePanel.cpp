@@ -175,7 +175,7 @@ void ObjectPalettePanel::setupPaginationControls() {
     _paginationWidget = new PaginationWidget(this);
     _paginationWidget->setShowFirstLastButtons(true);
     connect(_paginationWidget, &PaginationWidget::pageChanged,
-            this, &ObjectPalettePanel::onGridPaginationPageChanged);
+        this, &ObjectPalettePanel::onGridPaginationPageChanged);
     paginationLayout->addWidget(_paginationWidget);
 
     _mainLayout->addWidget(_paginationGroup);

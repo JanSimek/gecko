@@ -10,7 +10,8 @@ add_executable(general_tests
     general/test_tile_utils.cpp
     general/test_reader_factory.cpp
     general/test_selection_system.cpp
-    
+    general/test_game_data_path_resolver.cpp
+
     # Selection system sources (needed for linking)
     ../src/selection/SelectionState.cpp
     ../src/editor/HexagonGrid.cpp
@@ -24,6 +25,7 @@ add_executable(performance_tests
 
 add_executable(qt_tests
     qt/qt_test_main.cpp
+    qt/test_data_path_resolution.cpp
     qt/test_ui_regressions.cpp
 )
 

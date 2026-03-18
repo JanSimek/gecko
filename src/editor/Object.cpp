@@ -44,13 +44,17 @@ Object::Object(const Frm* frm)
 }
 
 sf::Texture& Object::createBlankTexture() {
-    static sf::Texture texture = [] {
+    // Intentionally leaked: this tiny 1x1 texture must outlive the OpenGL context.
+    // Static sf::Texture objects are destroyed during __cxa_finalize after the GL
+    // context is gone, causing a crash in sf::Texture::~Texture().  Heap-allocating
+    // without delete avoids the static destruction order problem entirely.
+    static sf::Texture* texture = [] {
+        auto* t = new sf::Texture();
         sf::Image blankImage{ sf::Vector2u{ 1, 1 }, sf::Color::Transparent };
-        sf::Texture blankTexture;
-        [[maybe_unused]] const bool loadSuccess = blankTexture.loadFromImage(blankImage);
-        return blankTexture;
+        [[maybe_unused]] const bool loadSuccess = t->loadFromImage(blankImage);
+        return t;
     }();
-    return texture;
+    return *texture;
 }
 
 MapObject& Object::getMapObject() {

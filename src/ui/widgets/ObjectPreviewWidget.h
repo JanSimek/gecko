@@ -17,7 +17,7 @@ namespace geck {
 
 class Frm;
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 /**
@@ -69,8 +69,7 @@ public:
     QString getFrmPath() const { return _currentFrmPath; }
 
 signals:
-    void fidChangeRequested();       // User clicked FID selector button
-    void fidChanged(int32_t newFid); // FID was changed
+    void fidChangeRequested(); // User clicked FID selector button
 
 public slots:
     void onPlayPauseClicked();

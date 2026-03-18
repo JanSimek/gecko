@@ -47,7 +47,7 @@ void GridPalettePanel::clearGridWidgets() {
 void GridPalettePanel::updatePaginationState(int filteredCount) {
     _totalFilteredItems = filteredCount;
     _totalPages = (filteredCount + ui::constants::palette::ITEMS_PER_PAGE - 1)
-                  / ui::constants::palette::ITEMS_PER_PAGE; // Ceiling division
+        / ui::constants::palette::ITEMS_PER_PAGE; // Ceiling division
 
     // Ensure current page is valid
     if (_currentPage >= _totalPages) {

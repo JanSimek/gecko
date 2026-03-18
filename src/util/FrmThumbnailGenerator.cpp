@@ -85,8 +85,8 @@ QPixmap FrmThumbnailGenerator::fromFrame(const Frame& frame, const Pal* palette,
 
     // Scale with high quality
     QImage scaledImage = frameImage.scaled(scaledWidth, scaledHeight,
-                                           Qt::KeepAspectRatio,
-                                           Qt::SmoothTransformation);
+        Qt::KeepAspectRatio,
+        Qt::SmoothTransformation);
     QPixmap scaledFrame = QPixmap::fromImage(scaledImage);
 
     // Center the scaled frame in the thumbnail

@@ -13,21 +13,21 @@
 namespace geck::resource {
 namespace {
 
-struct TypeArtListDescription {
-    std::string_view prefixPath;
-    std::string_view lstFilePath;
-};
+    struct TypeArtListDescription {
+        std::string_view prefixPath;
+        std::string_view lstFilePath;
+    };
 
-constexpr std::array<TypeArtListDescription, 8> frmTypeDescriptions = {{
-    { ResourcePaths::Directories::ITEMS, ResourcePaths::Lst::ITEMS },
-    { ResourcePaths::Directories::CRITTERS, ResourcePaths::Lst::CRITTERS },
-    { ResourcePaths::Directories::SCENERY, ResourcePaths::Lst::SCENERY },
-    { ResourcePaths::Directories::WALLS, ResourcePaths::Lst::WALLS },
-    { ResourcePaths::Directories::TILES, ResourcePaths::Lst::TILES },
-    { ResourcePaths::Directories::MISC, ResourcePaths::Lst::MISC },
-    { ResourcePaths::Directories::INTERFACE, ResourcePaths::Lst::INTERFACE },
-    { ResourcePaths::Directories::INVENTORY, ResourcePaths::Lst::INVENTORY },
-}};
+    constexpr std::array<TypeArtListDescription, 8> frmTypeDescriptions = { {
+        { ResourcePaths::Directories::ITEMS, ResourcePaths::Lst::ITEMS },
+        { ResourcePaths::Directories::CRITTERS, ResourcePaths::Lst::CRITTERS },
+        { ResourcePaths::Directories::SCENERY, ResourcePaths::Lst::SCENERY },
+        { ResourcePaths::Directories::WALLS, ResourcePaths::Lst::WALLS },
+        { ResourcePaths::Directories::TILES, ResourcePaths::Lst::TILES },
+        { ResourcePaths::Directories::MISC, ResourcePaths::Lst::MISC },
+        { ResourcePaths::Directories::INTERFACE, ResourcePaths::Lst::INTERFACE },
+        { ResourcePaths::Directories::INVENTORY, ResourcePaths::Lst::INVENTORY },
+    } };
 
 } // namespace
 

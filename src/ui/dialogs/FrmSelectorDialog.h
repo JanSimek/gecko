@@ -12,10 +12,15 @@
 #include <QFormLayout>
 #include <QSplitter>
 
+#include <optional>
+
+#include "../../format/frm/Frm.h"
+#include "../../format/pro/Pro.h"
+
 namespace geck {
 
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 class FrmSelectorDialog : public QDialog {
@@ -23,6 +28,9 @@ class FrmSelectorDialog : public QDialog {
 
 public:
     explicit FrmSelectorDialog(resource::GameResources& resources, QWidget* parent = nullptr);
+
+    static std::optional<Frm::FRM_TYPE> filterForObjectType(Pro::OBJECT_TYPE objectType);
+    static std::optional<Frm::FRM_TYPE> filterForFid(uint32_t fid);
 
     /**
      * @brief Get the selected FRM PID
@@ -44,9 +52,9 @@ public:
 
     /**
      * @brief Set object type filter for the FRM list
-     * @param objectType The object type to filter by (0=items, 1=critters, etc.)
+     * @param objectType Optional object type filter for the FRM list
      */
-    void setObjectTypeFilter(uint32_t objectType);
+    void setObjectTypeFilter(std::optional<Frm::FRM_TYPE> objectType);
 
 private slots:
     void onSearchTextChanged();
@@ -100,7 +108,7 @@ private:
     resource::GameResources& _resources;
     uint32_t _selectedFrmPid;
     std::vector<std::pair<uint32_t, std::string>> _frmFiles; // PID, Path pairs
-    uint32_t _objectTypeFilter;                              // Filter by object type (0=items, 1=critters, etc.)
+    std::optional<Frm::FRM_TYPE> _objectTypeFilter;
 };
 
 } // namespace geck

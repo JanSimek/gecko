@@ -478,26 +478,26 @@ void MainWindow::setupMenuBar() {
 
     const std::array<DockLayoutSpec, 4> dockLayoutSpecs = { {
         { "&Vertical Stack (Right Side)", "Stack Map Info and Selection panels vertically on the right", true, [this]() {
-            addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
-            addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
-            splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
-        } },
+             addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
+             addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
+             splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
+         } },
         { "&Horizontal Stack (Right Side)", "Stack Map Info and Selection panels horizontally on the right", false, [this]() {
-            addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
-            addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
-            splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
-        } },
+             addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
+             addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
+             splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
+         } },
         { "&Tabbed Layout (Right Side)", "Tab Map Info and Selection panels together on the right", false, [this]() {
-            addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
-            addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
-            tabifyDockWidget(_mapInfoDock, _selectionDock);
-            _mapInfoDock->raise();
-        } },
+             addDockWidget(Qt::RightDockWidgetArea, _mapInfoDock);
+             addDockWidget(Qt::RightDockWidgetArea, _selectionDock);
+             tabifyDockWidget(_mapInfoDock, _selectionDock);
+             _mapInfoDock->raise();
+         } },
         { "&Bottom Dock", "Move Map Info and Selection panels to the bottom area", false, [this]() {
-            addDockWidget(Qt::BottomDockWidgetArea, _mapInfoDock);
-            addDockWidget(Qt::BottomDockWidgetArea, _selectionDock);
-            splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
-        } },
+             addDockWidget(Qt::BottomDockWidgetArea, _mapInfoDock);
+             addDockWidget(Qt::BottomDockWidgetArea, _selectionDock);
+             splitDockWidget(_mapInfoDock, _selectionDock, Qt::Horizontal);
+         } },
     } };
 
     for (const DockLayoutSpec& spec : dockLayoutSpecs) {
@@ -688,6 +688,58 @@ void MainWindow::setupDockWidgets() {
     _fileBrowserPanel = new FileBrowserPanel(_resourcesShared);
     _fileBrowserDock = createDock("Virtual File System Browser", "FileBrowserDock", _fileBrowserPanel, Qt::LeftDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_LARGE);
     connectFileBrowserSignals();
+    connectPanelSignals();
+
+    // MainWindow signals → current editor widget (connected once; both sender
+    // and receiver are MainWindow, so these survive for the lifetime of the window)
+    connect(this, &MainWindow::showObjectsToggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setShowObjects(enabled);
+    });
+    connect(this, &MainWindow::showCrittersToggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setShowCritters(enabled);
+    });
+    connect(this, &MainWindow::showWallsToggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setShowWalls(enabled);
+    });
+    connect(this, &MainWindow::showRoofsToggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setShowRoof(enabled);
+    });
+    connect(this, &MainWindow::showScrollBlockersToggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setShowScrollBlk(enabled);
+    });
+    connect(this, &MainWindow::showWallBlockersToggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setShowWallBlockers(enabled);
+    });
+    connect(this, &MainWindow::showHexGridToggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setShowHexGrid(enabled);
+    });
+    connect(this, &MainWindow::showLightOverlaysToggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setShowLightOverlays(enabled);
+    });
+    connect(this, &MainWindow::showExitGridsToggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setShowExitGrids(enabled);
+    });
+    connect(this, &MainWindow::elevationChanged, this, [this](int elevation) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->changeElevation(elevation);
+    });
+    connect(this, &MainWindow::rotateObjectRequested, this, [this]() {
+        if (_currentEditorWidget)
+            _currentEditorWidget->rotateSelectedObject();
+    });
+    connect(this, &MainWindow::toggleScrollBlockerRectangleMode, this, [this]() {
+        if (_currentEditorWidget)
+            _currentEditorWidget->toggleScrollBlockerRectangleMode();
+    });
 
     applyDefaultPanelDockLayout();
 
@@ -753,6 +805,12 @@ void MainWindow::rebuildResourcePanels() {
     _fileBrowserPanel = new FileBrowserPanel(_resourcesShared);
     replaceDockPanelWidget(_fileBrowserDock, _fileBrowserPanel, QSizePolicy::Expanding);
     connectFileBrowserSignals();
+    connectPanelSignals();
+
+    // Re-wire per-widget connections since the old panels were destroyed
+    if (_currentEditorWidget) {
+        connectToEditorWidget();
+    }
 }
 
 void MainWindow::rebuildGameResourcesFromSettings() {
@@ -939,74 +997,34 @@ void MainWindow::convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, 
     // Modifiers should be checked using sf::Keyboard::isKeyPressed() when needed
 }
 
-void MainWindow::connectToEditorWidget() {
-    if (!_currentEditorWidget) {
-        return;
-    }
+void MainWindow::connectPanelSignals() {
+    // Connections from panel signals to lambdas that resolve _currentEditorWidget
+    // at call time. Called from setupDockWidgets() and rebuildResourcePanels()
+    // (panel recreation destroys old connections automatically).
 
-    // Connect view toggles to EditorWidget visibility flags
-    connect(this, &MainWindow::showObjectsToggled, [this](bool enabled) {
-        _currentEditorWidget->setShowObjects(enabled);
-    });
-    connect(this, &MainWindow::showCrittersToggled, [this](bool enabled) {
-        _currentEditorWidget->setShowCritters(enabled);
-    });
-    connect(this, &MainWindow::showWallsToggled, [this](bool enabled) {
-        _currentEditorWidget->setShowWalls(enabled);
-    });
-    connect(this, &MainWindow::showRoofsToggled, [this](bool enabled) {
-        _currentEditorWidget->setShowRoof(enabled);
-    });
-    connect(this, &MainWindow::showScrollBlockersToggled, [this](bool enabled) {
-        _currentEditorWidget->setShowScrollBlk(enabled);
-    });
-    connect(this, &MainWindow::showWallBlockersToggled, [this](bool enabled) {
-        _currentEditorWidget->setShowWallBlockers(enabled);
-    });
-
-    connect(this, &MainWindow::showHexGridToggled, [this](bool enabled) {
-        _currentEditorWidget->setShowHexGrid(enabled);
-    });
-
-    connect(this, &MainWindow::showLightOverlaysToggled, [this](bool enabled) {
-        _currentEditorWidget->setShowLightOverlays(enabled);
-    });
-
-    connect(this, &MainWindow::showExitGridsToggled, [this](bool enabled) {
-        _currentEditorWidget->setShowExitGrids(enabled);
-    });
-
-    // Connect elevation changes
-    connect(this, &MainWindow::elevationChanged, [this](int elevation) {
-        _currentEditorWidget->changeElevation(elevation);
-    });
-
-    // Connect toolbar actions
-    // Note: Selection mode is now handled directly by the combo box
-    connect(this, &MainWindow::rotateObjectRequested, [this]() {
-        _currentEditorWidget->rotateSelectedObject();
-    });
-    connect(this, &MainWindow::toggleScrollBlockerRectangleMode, [this]() {
-        _currentEditorWidget->toggleScrollBlockerRectangleMode();
-    });
-
-    // Connect EditorWidget's selection signals to the unified SelectionPanel
+    // SelectionPanel signals → MainWindow / current editor widget
     if (_selectionPanel) {
-        // Set the map reference for the selection panel
-        _selectionPanel->setMap(_currentEditorWidget->getMap());
-
-        connect(_currentEditorWidget, &EditorWidget::selectionChanged, _selectionPanel, &SelectionPanel::handleSelectionChanged);
-        connect(_selectionPanel, &SelectionPanel::objectFrmChanged, _currentEditorWidget, &EditorWidget::onObjectFrmChanged);
-        connect(_selectionPanel, &SelectionPanel::objectFrmPathChanged, _currentEditorWidget, &EditorWidget::onObjectFrmPathChanged);
+        connect(_selectionPanel, &SelectionPanel::objectFrmChanged,
+            this, [this](std::shared_ptr<Object> object, uint32_t newFrmPid) {
+                if (_currentEditorWidget)
+                    _currentEditorWidget->onObjectFrmChanged(object, newFrmPid);
+            });
+        connect(_selectionPanel, &SelectionPanel::objectFrmPathChanged,
+            this, [this](std::shared_ptr<Object> object, const std::string& newFrmPath) {
+                if (_currentEditorWidget)
+                    _currentEditorWidget->onObjectFrmPathChanged(object, newFrmPath);
+            });
         connect(_selectionPanel, &SelectionPanel::statusMessage, this, &MainWindow::showStatusMessage);
-        connect(_selectionPanel, &SelectionPanel::requestProEditor, [this](std::shared_ptr<Object> object) {
-            if (object && object->hasMapObject()) {
-                openProEditorForSelectedObject();
-            }
-        });
-
-        connect(_selectionPanel, &SelectionPanel::requestExitGridEditor, [this](std::shared_ptr<Object> object) {
-            if (object && object->hasMapObject()) {
+        connect(_selectionPanel, &SelectionPanel::requestProEditor,
+            this, [this](std::shared_ptr<Object> object) {
+                if (object && object->hasMapObject()) {
+                    openProEditorForSelectedObject();
+                }
+            });
+        connect(_selectionPanel, &SelectionPanel::requestExitGridEditor,
+            this, [this](std::shared_ptr<Object> object) {
+                if (!_currentEditorWidget || !object || !object->hasMapObject())
+                    return;
                 auto* exitGridManager = _currentEditorWidget->getExitGridPlacementManager();
                 if (exitGridManager) {
                     auto mapObjectPtr = object->getMapObjectPtr();
@@ -1014,110 +1032,75 @@ void MainWindow::connectToEditorWidget() {
                         exitGridManager->editExitGridProperties(mapObjectPtr);
                     }
                 }
-            }
-        });
-
-        // Connect highlight request signal
+            });
         connect(_selectionPanel, &SelectionPanel::requestObjectHighlight,
-            [this](std::shared_ptr<Object> object) {
-                if (_currentEditorWidget && object) {
-                    // Get current selection state
-                    auto* selectionManager = _currentEditorWidget->getSelectionManager();
-                    auto& selectionState = selectionManager->getMutableSelection();
+            this, [this](std::shared_ptr<Object> object) {
+                if (!_currentEditorWidget || !object)
+                    return;
+                auto* selectionManager = _currentEditorWidget->getSelectionManager();
+                auto& selectionState = selectionManager->getMutableSelection();
 
-                    // Check if object is already selected
-                    selection::SelectedItem item;
-                    item.type = selection::SelectionType::OBJECT;
-                    item.data = object;
+                selection::SelectedItem item;
+                item.type = selection::SelectionType::OBJECT;
+                item.data = object;
+                if (!selectionState.hasItem(item)) {
+                    selectionState.addItem(item);
+                }
 
-                    if (!selectionState.hasItem(item)) {
-                        // Object not selected, add it
-                        selectionState.addItem(item);
-                    }
-
-                    // Always notify the rendering system to refresh highlight
-                    _currentEditorWidget->selectionChanged(selectionState, _currentEditorWidget->getCurrentElevation());
-
-                    // Force a complete render update to ensure highlighting is visible
-                    if (_currentEditorWidget->getSFMLWidget()) {
-                        _currentEditorWidget->getSFMLWidget()->update();
-                        _currentEditorWidget->getSFMLWidget()->repaint();
-                    }
+                _currentEditorWidget->selectionChanged(selectionState, _currentEditorWidget->getCurrentElevation());
+                if (_currentEditorWidget->getSFMLWidget()) {
+                    _currentEditorWidget->getSFMLWidget()->update();
+                    _currentEditorWidget->getSFMLWidget()->repaint();
                 }
             });
-
-        spdlog::info("Connected EditorWidget selection signals to unified SelectionPanel");
     }
 
-    // Connect status message signals
-    connect(_currentEditorWidget, &EditorWidget::statusMessageRequested, this, &MainWindow::showStatusMessage);
-    connect(_currentEditorWidget, &EditorWidget::statusMessageClearRequested, this, &MainWindow::clearStatusMessage);
-
-    // Connect TilePalettePanel to EditorWidget
+    // TilePalettePanel signals → current editor widget
     if (_tilePalettePanel) {
-        // Set the map reference for the tile palette panel
-        _tilePalettePanel->setMap(_currentEditorWidget->getMap());
-
-        // Set the selection manager reference for tile replacement detection
-        _tilePalettePanel->setSelectionManager(_currentEditorWidget->getSelectionManager());
-
-        // Connect tile selection to enable tile placement mode
         connect(_tilePalettePanel, &TilePalettePanel::tileSelected,
-            [this](int tileIndex, bool isRoof) {
+            this, [this](int tileIndex, bool isRoof) {
+                if (!_currentEditorWidget)
+                    return;
                 if (tileIndex >= 0) {
-                    // Use the roof state from the tile palette
                     _currentEditorWidget->setTilePlacementMode(true, tileIndex, isRoof);
-                    // Update toolbar to show tile painting mode
                     updateModeDisplay("Mode: Tile painting", ":/icons/actions/paint.svg");
                 } else {
-                    // Disable tile placement mode
                     _currentEditorWidget->setTilePlacementMode(false);
-                    // Reset toolbar to selection mode
                     updateModeDisplay("Mode: All", ":/icons/actions/select.svg");
                 }
             });
-
-        // Connect placement mode changes to update unified placement settings
         connect(_tilePalettePanel, &TilePalettePanel::placementModeChanged,
-            [this]([[maybe_unused]] TilePalettePanel::PlacementMode mode) {
-                // With unified placement mode, both single and area placement are supported
-                // The EditorWidget will handle click vs drag detection
-                _currentEditorWidget->setTilePlacementAreaFill(true);     // Enable drag support
-                _currentEditorWidget->setTilePlacementReplaceMode(false); // Replace is automatic
+            this, [this]([[maybe_unused]] TilePalettePanel::PlacementMode mode) {
+                if (!_currentEditorWidget)
+                    return;
+                _currentEditorWidget->setTilePlacementAreaFill(true);
+                _currentEditorWidget->setTilePlacementReplaceMode(false);
                 spdlog::debug("Set unified tile placement mode");
             });
-
-        // Connect replace selected tiles signal for direct tile replacement
         connect(_tilePalettePanel, &TilePalettePanel::replaceSelectedTiles,
-            [this](int newTileIndex) {
-                // Tiles are replaced based on what's actually selected (floor/roof auto-detected)
-                _currentEditorWidget->replaceSelectedTiles(newTileIndex);
+            this, [this](int newTileIndex) {
+                if (_currentEditorWidget)
+                    _currentEditorWidget->replaceSelectedTiles(newTileIndex);
             });
-
-        spdlog::info("Connected TilePalettePanel to EditorWidget");
     }
 
-    // Connect hex hover signal to status bar
-    connect(_currentEditorWidget, &EditorWidget::hexHoverChanged, this, &MainWindow::updateHexIndexDisplay);
-
-    // Connect map loading signal (from File menu, so force filesystem)
-    connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, [this](const std::string& mapPath) {
-        handleMapLoadRequest(mapPath, true); // Force filesystem for File menu
-    });
-
-    // Connect player position selection
+    // MapInfoPanel signals → current editor widget
     if (_mapInfoPanel) {
         connect(_mapInfoPanel, &MapInfoPanel::selectPlayerPositionRequested,
-            _currentEditorWidget, &EditorWidget::enterPlayerPositionSelectionMode);
+            this, [this]() {
+                if (_currentEditorWidget)
+                    _currentEditorWidget->enterPlayerPositionSelectionMode();
+            });
         connect(_mapInfoPanel, &MapInfoPanel::centerViewOnPlayerPositionRequested,
-            _currentEditorWidget, &EditorWidget::centerViewOnPlayerPosition);
-
-        // Connect elevation added/removed signals to update elevation menu
+            this, [this]() {
+                if (_currentEditorWidget)
+                    _currentEditorWidget->centerViewOnPlayerPosition();
+            });
         connect(_mapInfoPanel, &MapInfoPanel::elevationAdded,
             this, [this](int elevation) {
+                if (!_currentEditorWidget)
+                    return;
                 updateElevationMenu(_currentEditorWidget->getMap());
-
-                // If the added elevation is the current one, reload sprites
                 if (_currentEditorWidget->getCurrentElevation() == elevation) {
                     _currentEditorWidget->loadTileSprites();
                     spdlog::info("MainWindow: Reloaded sprites for newly added elevation {}", elevation);
@@ -1125,33 +1108,62 @@ void MainWindow::connectToEditorWidget() {
             });
         connect(_mapInfoPanel, &MapInfoPanel::elevationRemoved,
             this, [this](int elevation) {
+                if (!_currentEditorWidget)
+                    return;
                 updateElevationMenu(_currentEditorWidget->getMap());
-
-                // If the removed elevation was the current one, switch to an available elevation
                 if (_currentEditorWidget->getCurrentElevation() == elevation) {
-                    // Find first available elevation and switch to it
                     auto* map = _currentEditorWidget->getMap();
                     if (map) {
                         uint32_t flags = map->getMapFile().header.flags;
-                        if ((flags & 0x2) == 0) { // Elevation 1 available
+                        if ((flags & 0x2) == 0)
                             elevationChanged(ELEVATION_1);
-                        } else if ((flags & 0x4) == 0) { // Elevation 2 available
+                        else if ((flags & 0x4) == 0)
                             elevationChanged(ELEVATION_2);
-                        } else if ((flags & 0x8) == 0) { // Elevation 3 available
+                        else if ((flags & 0x8) == 0)
                             elevationChanged(ELEVATION_3);
-                        }
                     }
                     spdlog::info("MainWindow: Switched away from removed elevation {}", elevation);
                 }
             });
+    }
+}
 
+void MainWindow::connectToEditorWidget() {
+    if (!_currentEditorWidget) {
+        return;
+    }
+
+    // Per-widget connections: sender is _currentEditorWidget.
+    // These are automatically cleaned up when the old EditorWidget is destroyed.
+
+    if (_selectionPanel) {
+        _selectionPanel->setMap(_currentEditorWidget->getMap());
+        connect(_currentEditorWidget, &EditorWidget::selectionChanged,
+            _selectionPanel, &SelectionPanel::handleSelectionChanged);
+    }
+
+    if (_tilePalettePanel) {
+        _tilePalettePanel->setMap(_currentEditorWidget->getMap());
+        _tilePalettePanel->setSelectionManager(_currentEditorWidget->getSelectionManager());
+    }
+
+    connect(_currentEditorWidget, &EditorWidget::statusMessageRequested, this, &MainWindow::showStatusMessage);
+    connect(_currentEditorWidget, &EditorWidget::statusMessageClearRequested, this, &MainWindow::clearStatusMessage);
+    connect(_currentEditorWidget, &EditorWidget::hexHoverChanged, this, &MainWindow::updateHexIndexDisplay);
+    connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, [this](const std::string& mapPath) {
+        handleMapLoadRequest(mapPath, true);
+    });
+
+    if (_mapInfoPanel) {
         connect(_currentEditorWidget, &EditorWidget::playerPositionSelected,
             this, [this](int hexPosition) {
-                _mapInfoPanel->setPlayerPosition(hexPosition, _currentEditorWidget->getCurrentElevation());
+                if (_mapInfoPanel && _currentEditorWidget) {
+                    _mapInfoPanel->setPlayerPosition(hexPosition, _currentEditorWidget->getCurrentElevation());
+                }
             });
     }
 
-    spdlog::info("Qt6 menu connected to EditorWidget");
+    spdlog::info("Connected EditorWidget instance signals");
 }
 
 void MainWindow::syncMenuStateToEditorWidget() {

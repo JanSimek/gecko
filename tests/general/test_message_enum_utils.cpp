@@ -5,10 +5,10 @@
 
 TEST_CASE("Load message ranges for dynamic enum labels", "[msg][enum]") {
     geck::Msg msgFile("proto.msg", {
-        { 100, { 100, "", "Glass" } },
-        { 101, { 101, "", "Metal" } },
-        { 102, { 102, "", "Plastic" } },
-    });
+                                       { 100, { 100, "", "Glass" } },
+                                       { 101, { 101, "", "Metal" } },
+                                       { 102, { 102, "", "Plastic" } },
+                                   });
 
     auto names = geck::loadMessageRange(&msgFile, 100, 3);
     REQUIRE(names.has_value());
@@ -19,10 +19,10 @@ TEST_CASE("Load message ranges for dynamic enum labels", "[msg][enum]") {
 
 TEST_CASE("Load message options for value-backed enum labels", "[msg][enum]") {
     geck::Msg perkMsg("perk.msg", {
-        { 159, { 159, "", "Weapon Long Range" } },
-        { 160, { 160, "", "Weapon Accurate" } },
-        { 163, { 163, "", "Powered Armor" } },
-    });
+                                      { 159, { 159, "", "Weapon Long Range" } },
+                                      { 160, { 160, "", "Weapon Accurate" } },
+                                      { 163, { 163, "", "Powered Armor" } },
+                                  });
 
     const geck::MessageEnumSpec specs[] = {
         { 58, 159 },
@@ -41,8 +41,8 @@ TEST_CASE("Load message options for value-backed enum labels", "[msg][enum]") {
 
 TEST_CASE("Missing enum messages fail extraction", "[msg][enum]") {
     geck::Msg incompleteMsg("proto.msg", {
-        { 100, { 100, "", "Glass" } },
-    });
+                                             { 100, { 100, "", "Glass" } },
+                                         });
 
     REQUIRE_FALSE(geck::loadMessageRange(&incompleteMsg, 100, 2).has_value());
 
