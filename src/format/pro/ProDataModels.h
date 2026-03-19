@@ -141,39 +141,40 @@ struct ProCritterData {
 };
 
 // Object Type: Scenery
+struct ProSceneryDoorData {
+    uint32_t walkThroughFlag;
+    uint32_t unknownField;
+};
+
+struct ProSceneryStairsData {
+    uint32_t destTile;
+    uint32_t destElevation;
+};
+
+struct ProSceneryElevatorData {
+    uint32_t elevatorType;
+    uint32_t elevatorLevel;
+};
+
+struct ProSceneryLadderData {
+    uint32_t destTileAndElevation;
+};
+
+struct ProSceneryGenericData {
+    uint32_t unknownField;
+};
+
 struct ProSceneryData {
     uint32_t materialId;
     uint8_t soundId;
 
     // Scenery subtype-specific data
     union {
-        // Door-specific data
-        struct {
-            uint32_t walkThroughFlag;
-            uint32_t unknownField;
-        } doorData;
-
-        // Stairs-specific data
-        struct {
-            uint32_t destTile;
-            uint32_t destElevation;
-        } stairsData;
-
-        // Elevator-specific data
-        struct {
-            uint32_t elevatorType;
-            uint32_t elevatorLevel;
-        } elevatorData;
-
-        // Ladder-specific data
-        struct {
-            uint32_t destTileAndElevation;
-        } ladderData;
-
-        // Generic-specific data
-        struct {
-            uint32_t unknownField;
-        } genericData;
+        ProSceneryDoorData doorData;
+        ProSceneryStairsData stairsData;
+        ProSceneryElevatorData elevatorData;
+        ProSceneryLadderData ladderData;
+        ProSceneryGenericData genericData;
     };
 };
 

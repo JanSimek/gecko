@@ -626,9 +626,6 @@ TEST_CASE("Mouse position accuracy and disambiguation (original)", "[mouse_accur
         std::vector<int> testTiles = { 0, 100, 1000, 2500, 5000, 9999 };
 
         for (int tileIndex : testTiles) {
-            // Get the screen position for this tile
-            auto screenPos = indexToScreenPosition(tileIndex, false);
-
             // The tile should be recoverable from its screen position
             // Note: This test simulates what should happen when clicking on a tile
             auto originalCoords = indexToCoordinates(tileIndex);
@@ -1064,7 +1061,7 @@ TEST_CASE("World position to tile conversion accuracy", "[position_conversion]")
 
             // Valid tile indices should be 0-9999
             REQUIRE(tileIndex >= 0);
-            REQUIRE(tileIndex < Map::TILES_PER_ELEVATION);
+            REQUIRE(tileIndex < TILES_PER_ELEVATION);
         }
     }
 
@@ -1257,8 +1254,8 @@ TEST_CASE("Selection Manager position-based selection", "[selection_manager_inte
         REQUIRE(hexResult.has_value());
 
         // Hex and tile results should be in valid ranges
-        REQUIRE(floorResult.value() < Map::TILES_PER_ELEVATION);
-        REQUIRE(roofResult.value() < Map::TILES_PER_ELEVATION);
+        REQUIRE(floorResult.value() < TILES_PER_ELEVATION);
+        REQUIRE(roofResult.value() < TILES_PER_ELEVATION);
         REQUIRE(hexResult.value() < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT));
     }
 
@@ -1268,9 +1265,6 @@ TEST_CASE("Selection Manager position-based selection", "[selection_manager_inte
         // Test at different elevations
         for (int elevation = 0; elevation < 3; elevation++) {
             mockWidget.currentElevation = elevation;
-
-            auto tileResult = mockWidget.worldPosToTileIndex(testPos, false);
-            auto hexResult = mockWidget.worldPosToHexIndex(testPos);
 
             // Position conversion should work regardless of elevation
             if (testPos.x >= 0 && testPos.y >= 0) {
@@ -1292,9 +1286,6 @@ TEST_CASE("Selection Manager position-based selection", "[selection_manager_inte
         };
 
         for (const auto& pos : invalidPositions) {
-            auto tileResult = mockWidget.worldPosToTileIndex(pos, false);
-            auto hexResult = mockWidget.worldPosToHexIndex(pos);
-
             // Invalid positions should return nullopt, not crash
             REQUIRE_NOTHROW([&]() {
                 mockWidget.worldPosToTileIndex(pos, false);
@@ -1310,7 +1301,6 @@ TEST_CASE("Selection Manager position-based selection", "[selection_manager_inte
 
 TEST_CASE("Complex selection workflows", "[complex_scenarios]") {
     SelectionState state;
-    MockEditorWidget mockWidget;
 
     SECTION("Mixed selection type workflow") {
         // Start with floor tiles
@@ -1376,6 +1366,7 @@ TEST_CASE("Complex selection workflows", "[complex_scenarios]") {
                         state.addItem({ SelectionType::FLOOR_TILE, 50 });
                         break;
                     case SelectionMode::ROOF_TILES:
+                    case SelectionMode::ROOF_TILES_ALL:
                         state.addItem({ SelectionType::ROOF_TILE, 60 });
                         break;
                     case SelectionMode::HEXES:
@@ -1383,6 +1374,7 @@ TEST_CASE("Complex selection workflows", "[complex_scenarios]") {
                         break;
                     case SelectionMode::OBJECTS:
                     case SelectionMode::SCROLL_BLOCKER_RECTANGLE:
+                    case SelectionMode::NUM_SELECTION_TYPES:
                         // These modes might not add items in basic test
                         break;
                 }
@@ -1415,7 +1407,7 @@ TEST_CASE("Regression prevention for known issues", "[regression_prevention]") {
         REQUIRE(validHexIndex < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT));
 
         // But would be invalid for tile selection
-        REQUIRE(validHexIndex >= Map::TILES_PER_ELEVATION);
+        REQUIRE(validHexIndex >= TILES_PER_ELEVATION);
 
         // Test SelectionState handles this correctly
         SelectionState state;
@@ -1443,8 +1435,8 @@ TEST_CASE("Regression prevention for known issues", "[regression_prevention]") {
         REQUIRE(floorTile.value() != roofTile.value());
 
         // Both should be in valid tile range
-        REQUIRE(floorTile.value() < Map::TILES_PER_ELEVATION);
-        REQUIRE(roofTile.value() < Map::TILES_PER_ELEVATION);
+        REQUIRE(floorTile.value() < TILES_PER_ELEVATION);
+        REQUIRE(roofTile.value() < TILES_PER_ELEVATION);
     }
 
     SECTION("Prevent area selection size calculation errors") {
@@ -1492,7 +1484,7 @@ TEST_CASE("Regression prevention for known issues", "[regression_prevention]") {
             if (x < 100 && y < 100) {
                 int tileIndex = y * 100 + x;
                 REQUIRE(tileIndex >= 0);
-                REQUIRE(tileIndex < Map::TILES_PER_ELEVATION);
+                REQUIRE(tileIndex < TILES_PER_ELEVATION);
             }
         }
     }

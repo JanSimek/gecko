@@ -63,7 +63,6 @@ Detailed progress dialog with task descriptions and completion estimates for lon
 - [ ] Finish the `ProEditorDialog` decomposition so type-specific behavior, previews, and persistence are not coordinated from one oversized dialog
 - [ ] Replace placeholder inventory mutations with a shared model-backed inventory editing service used by all inventory UIs
 - [ ] Remove remaining `const_cast` usage by fixing const-correctness and ownership boundaries
-- [ ] Eliminate existing warning debt in `ProDataModels.h` and `SelectionManager.cpp`
 - [ ] Fix tile hit testing so object/tile selection is accurate near tile/object boundaries
 
 ### Known bugs

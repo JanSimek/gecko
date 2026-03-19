@@ -322,7 +322,6 @@ SelectionResult SelectionManager::finishDrag(sf::Vector2f endPos) {
 
     _state.isDragging = false;
 
-    // Calculate the offset
     sf::Vector2f offset = endPos - _state.dragStartPosition;
 
     spdlog::info("Drag completed: offset ({:.2f}, {:.2f})", offset.x, offset.y);
@@ -355,6 +354,10 @@ SelectionResult SelectionManager::finishDrag(sf::Vector2f endPos) {
                 }
                 break;
             }
+
+            case SelectionType::HEX:
+                // Hex selections are placement markers and do not move with drag operations.
+                break;
         }
     }
 
@@ -466,6 +469,21 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
                 SelectedItem item{ SelectionType::OBJECT, object };
                 addItemToSelection(item);
             }
+            break;
+
+        case SelectionMode::HEXES:
+            if (const auto* hexGrid = _editorWidget->getHexagonGrid()) {
+                for (int position = 0; position < HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT; ++position) {
+                    if (hexGrid->containsPosition(position)) {
+                        addItemToSelection(SelectedItem{ SelectionType::HEX, position });
+                    }
+                }
+            }
+            break;
+
+        case SelectionMode::SCROLL_BLOCKER_RECTANGLE:
+            // Rectangle mode is a drawing tool, not a persistent selection set.
+            spdlog::debug("SelectionManager::selectAll ignored in scroll blocker rectangle mode");
             break;
 
         case SelectionMode::ALL:
@@ -732,6 +750,10 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
                 }
                 break;
             }
+
+            case SelectionType::HEX:
+                // Hex selections are not part of ALL-mode item cycling.
+                break;
         }
     }
 

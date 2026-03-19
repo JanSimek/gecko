@@ -6,11 +6,6 @@ namespace geck::util {
 
 namespace {
 
-    bool pathExists(const std::filesystem::path& path) {
-        std::error_code ec;
-        return std::filesystem::exists(path, ec);
-    }
-
     bool isDirectory(const std::filesystem::path& path) {
         std::error_code ec;
         return std::filesystem::is_directory(path, ec);
