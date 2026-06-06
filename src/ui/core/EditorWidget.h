@@ -21,6 +21,7 @@
 #include "../../util/Constants.h"
 #include "../../util/EventBus.h"
 #include "../../util/UndoStack.h"
+#include "../editing/ObjectCommandController.h"
 #include "../rendering/MapSpriteLoader.h"
 
 namespace geck {
@@ -36,7 +37,6 @@ class DragDropManager;
 class TilePlacementManager;
 class ExitGridPlacementManager;
 class ViewportController;
-
 class SFMLWidget;
 struct ObjectInfo;
 
@@ -166,14 +166,7 @@ public:
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
 
     // Exit grid undo support
-    struct ExitGridState {
-        uint32_t exitMap;
-        uint32_t exitPosition;
-        uint32_t exitElevation;
-        uint32_t exitOrientation;
-        uint32_t frmPid;
-        uint32_t proPid;
-    };
+    using ExitGridState = ExitGridCommandState;
     void registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation);
     void registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
         const std::vector<ExitGridState>& beforeStates,
@@ -264,6 +257,7 @@ private:
     std::unique_ptr<InputHandler> _inputHandler;
     std::unique_ptr<RenderingEngine> _renderingEngine;
     std::unique_ptr<MapSpriteLoader> _mapSpriteLoader;
+    std::unique_ptr<ObjectCommandController> _objectCommandController;
     std::unique_ptr<DragDropManager> _dragDropManager;
     std::unique_ptr<TilePlacementManager> _tilePlacementManager;
     std::unique_ptr<ExitGridPlacementManager> _exitGridPlacementManager;
