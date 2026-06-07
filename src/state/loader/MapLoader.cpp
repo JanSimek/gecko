@@ -47,7 +47,6 @@ void MapLoader::load() {
     setStatus("Loading map " + _mapPath.filename().string());
     _percentDone = 0;
 
-    // Dispatch to appropriate loading method based on source context
     if (_forceFilesystem) {
         spdlog::info("MapLoader: Force filesystem loading requested");
         loadFromFilesystem();
@@ -77,13 +76,11 @@ void MapLoader::loadFromVFS() {
             return;
         }
 
-        // Create MapReader and load from memory buffer
         auto proLoadCallback = [&](uint32_t PID) {
             return _resources->repository().load<Pro>(ProHelper::basePath(*_resources, PID));
         };
         MapReader mapReader(proLoadCallback);
 
-        // Load map directly from data buffer
         _map = mapReader.openFile(_mapPath.string(), *mapData);
 
         if (!_map) {
@@ -97,10 +94,9 @@ void MapLoader::loadFromVFS() {
         _percentDone = 20;
         spdlog::info("MapLoader: Successfully loaded map from VFS: {}", _mapPath.string());
 
-        // Load additional resources (textures, etc.) - reuse existing code
         loadMapResources();
 
-        // Mark loading as complete (only if loadMapResources didn't set error)
+        // Only mark complete if loadMapResources didn't set an error.
         if (!_hasError) {
             done = true;
         }
@@ -144,11 +140,14 @@ void MapLoader::loadFromFilesystem() {
     _percentDone = 20;
     spdlog::info("MapLoader: Successfully loaded map from filesystem: {}", _mapPath.string());
 
-    // Load additional resources (textures, etc.)
     loadMapResources();
 
     spdlog::info("Map loader finished after {:.3} seconds", stopwatch_total);
-    done = true;
+
+    // Only mark complete if loadMapResources didn't set an error.
+    if (!_hasError) {
+        done = true;
+    }
 }
 
 bool MapLoader::ensureResourceListsReady() {
@@ -171,77 +170,81 @@ bool MapLoader::ensureResourceListsReady() {
 void MapLoader::loadMapResources() {
     spdlog::stopwatch stopwatch_chunk;
 
-    if (_elevation == INVALID_ELEVATION) {
-        uint32_t default_elevation = _map->getMapFile().header.player_default_elevation;
-        spdlog::info("Using default map elevation {}", default_elevation);
-        _elevation = default_elevation;
-    }
-
-    // Load tile textures
-    Lst* lst = nullptr;
     try {
-        lst = _resources->repository().load<Lst>(ResourcePaths::Lst::TILES);
-    } catch (const std::exception& e) {
-        _errorMessage = QString("Failed to load tiles list file:\n%1\n\nPlease ensure all game data files are properly configured.")
-                            .arg(e.what())
-                            .toStdString();
-        _hasError = true;
-        done = true;
-        spdlog::error("Failed to load tiles.lst: {}", e.what());
-        return;
-    }
-
-    size_t tile_number = 1;
-    size_t tiles_total = lst->list().size();
-
-    // Progress for tiles: 20% to 60% (40% of total progress)
-    for (const auto& tile : lst->list()) {
-        setProgress("Loading map tile texture " + std::to_string(tile_number) + " of " + std::to_string(tiles_total));
-        _resources->textures().preload("art/tiles/" + tile);
-
-        // Calculate progress: 20% base + (current/total * 40%)
-        int tileProgress = static_cast<int>((tile_number * 40) / tiles_total);
-        _percentDone = 20 + tileProgress;
-        tile_number++;
-    }
-
-    spdlog::info("... tile textures loaded in {:.3} seconds", stopwatch_chunk);
-    stopwatch_chunk.reset();
-
-    // Load object textures
-    size_t objectNumber = 1;
-    size_t objectsTotal = _map->objects().at(_elevation).size();
-
-    // Progress for objects: 60% to 95% (35% of total progress)
-    for (const auto& object : _map->objects().at(_elevation)) {
-        setProgress("Loading map object " + std::to_string(objectNumber) + " of " + std::to_string(objectsTotal));
-
-        if (object->position == -1) {
-            objectNumber++;
-            continue; // object inside an inventory/container
+        if (_elevation == INVALID_ELEVATION) {
+            uint32_t default_elevation = _map->getMapFile().header.player_default_elevation;
+            spdlog::info("Using default map elevation {}", default_elevation);
+            _elevation = default_elevation;
         }
 
-        const std::string frmName = _resources->frmResolver().resolve(object->frm_pid);
-        _resources->textures().preload(frmName);
+        Lst* lst = nullptr;
+        try {
+            lst = _resources->repository().load<Lst>(ResourcePaths::Lst::TILES);
+        } catch (const std::exception& e) {
+            _errorMessage = QString("Failed to load tiles list file:\n%1\n\nPlease ensure all game data files are properly configured.")
+                                .arg(e.what())
+                                .toStdString();
+            _hasError = true;
+            done = true;
+            spdlog::error("Failed to load tiles.lst: {}", e.what());
+            return;
+        }
 
-        // Calculate progress: 60% base + (current/total * 35%)
-        int objectProgress = static_cast<int>((objectNumber * 35) / std::max(objectsTotal, size_t(1)));
-        _percentDone = 60 + objectProgress;
-        objectNumber++;
+        size_t tile_number = 1;
+        size_t tiles_total = lst->list().size();
+
+        // Progress for tiles: 20% to 60% (40% of total progress)
+        for (const auto& tile : lst->list()) {
+            setProgress("Loading map tile texture " + std::to_string(tile_number) + " of " + std::to_string(tiles_total));
+            _resources->textures().preload("art/tiles/" + tile);
+
+            // Progress: 20% base + (current/total * 40%)
+            int tileProgress = static_cast<int>((tile_number * 40) / tiles_total);
+            _percentDone = 20 + tileProgress;
+            tile_number++;
+        }
+
+        spdlog::info("... tile textures loaded in {:.3} seconds", stopwatch_chunk);
+        stopwatch_chunk.reset();
+
+        size_t objectNumber = 1;
+        size_t objectsTotal = _map->objects().at(_elevation).size();
+
+        // Progress for objects: 60% to 95% (35% of total progress)
+        for (const auto& object : _map->objects().at(_elevation)) {
+            setProgress("Loading map object " + std::to_string(objectNumber) + " of " + std::to_string(objectsTotal));
+
+            if (object->position == -1) {
+                objectNumber++;
+                continue; // object inside an inventory/container
+            }
+
+            const std::string frmName = _resources->frmResolver().resolve(object->frm_pid);
+            _resources->textures().preload(frmName);
+
+            // Progress: 60% base + (current/total * 35%)
+            int objectProgress = static_cast<int>((objectNumber * 35) / std::max(objectsTotal, size_t(1)));
+            _percentDone = 60 + objectProgress;
+            objectNumber++;
+        }
+
+        // Load essential editor textures
+        _resources->textures().preload(ResourcePaths::Frm::BLANK_TILE);
+        _resources->textures().preload(ResourcePaths::Frm::LIGHT);
+        _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK);
+        _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK_FULL);
+        _resources->textures().preload(ResourcePaths::Frm::SCROLL_BLOCKER);
+
+        spdlog::info("... objects and resources loaded in {:.3} seconds", stopwatch_chunk);
+
+        _percentDone = 100;
+        setProgress("Map loading complete");
+    } catch (const std::exception& e) {
+        spdlog::error("MapLoader: Failed to load map resources: {}", e.what());
+        _errorMessage = "Failed to load map file:\n" + _mapPath.string() + "\n\nError: " + e.what();
+        _hasError = true;
+        done = true;
     }
-
-    // Load essential editor textures
-    _resources->textures().preload(ResourcePaths::Frm::BLANK_TILE);
-    _resources->textures().preload(ResourcePaths::Frm::LIGHT);
-    _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK);
-    _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK_FULL);
-    _resources->textures().preload(ResourcePaths::Frm::SCROLL_BLOCKER);
-
-    spdlog::info("... objects and resources loaded in {:.3} seconds", stopwatch_chunk);
-
-    // Mark as complete
-    _percentDone = 100;
-    setProgress("Map loading complete");
 }
 
 MapLoader::~MapLoader() {

@@ -58,8 +58,6 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
 
     switch (static_cast<Pro::OBJECT_TYPE>(objectTypeId)) {
         case Pro::OBJECT_TYPE::ITEM: {
-            //            auto pro = _proLoadCallback(object->pro_pid);
-
             uint32_t subtype_id = pro->objectSubtypeId();
             switch (static_cast<Pro::ITEM_TYPE>(subtype_id)) {
                 case Pro::ITEM_TYPE::AMMO:        // ammo
@@ -95,8 +93,6 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
         } break;
 
         case Pro::OBJECT_TYPE::SCENERY: {
-
-            //            auto pro = _proLoadCallback(object->pro_pid);
 
             uint32_t subtype_id = pro->objectSubtypeId();
             switch (static_cast<Pro::SCENERY_TYPE>(subtype_id)) {
@@ -153,9 +149,7 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
             }
             break;
         default:
-            spdlog::error("Unknown object type {}", objectTypeId);
-            //            throw std::runtime_error{"Unknown object type: " + std::to_string(objectTypeId)};
-            break;
+            throw ParseException("Unknown object type: " + std::to_string(objectTypeId), _path, _stream.position());
     }
 
     return object;
@@ -189,11 +183,11 @@ std::unique_ptr<Map> MapReader::read() {
     map_file->header.player_default_elevation = read_be_u32();
     map_file->header.player_default_orientation = read_be_u32();
 
-    uint32_t num_local_vars = read_be_u32(); // num local vars
+    uint32_t num_local_vars = read_be_u32();
     map_file->header.num_local_vars = num_local_vars;
-    map_file->header.script_id = read_be_i32(); // Script id
+    map_file->header.script_id = read_be_i32();
 
-    uint32_t flags = read_be_u32(); // map flags
+    uint32_t flags = read_be_u32();
     map_file->header.flags = flags;
 
     bool elevation_low = (flags & 0x2) == 0;
@@ -211,11 +205,11 @@ std::unique_ptr<Map> MapReader::read() {
 
     map_file->header.darkness = read_be_u32();
 
-    uint32_t num_global_vars = read_be_u32(); // num global vars
+    uint32_t num_global_vars = read_be_u32();
     map_file->header.num_global_vars = num_global_vars;
 
-    map_file->header.map_id = read_be_u32();    // map id
-    map_file->header.timestamp = read_be_u32(); // timestamp
+    map_file->header.map_id = read_be_u32();
+    map_file->header.timestamp = read_be_u32();
 
     skip<4 * 44>(); // skipping to the end of a MAP header
 
@@ -243,7 +237,7 @@ std::unique_ptr<Map> MapReader::read() {
     // Each section contains 16 slots for scripts
     spdlog::info("Loading map scripts");
     for (unsigned script_section = 0; script_section < Map::SCRIPT_SECTIONS; script_section++) {
-        uint32_t script_section_count = read_be_u32(); // total number of scripts in section
+        uint32_t script_section_count = read_be_u32();
         map_file->scripts_in_section[script_section] = script_section_count;
 
         spdlog::info("... script section {} has {} scripts", MapScript::toString(static_cast<MapScript::ScriptType>(script_section)), script_section_count);
@@ -322,7 +316,7 @@ std::unique_ptr<Map> MapReader::read() {
     }
 
     // OBJECTS SECTION
-    uint32_t total_objects = read_be_u32(); // objects total
+    uint32_t total_objects = read_be_u32();
 
     spdlog::info("Loading {} map objects", total_objects);
     for (auto elev = 0; elev < elevations; ++elev) {

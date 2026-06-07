@@ -159,10 +159,11 @@ void ProPreviewPanelWidget::onPreviewFidChangeRequested() {
         return;
     }
 
-    const uint32_t selectedFrmPid = dialog.getSelectedFrmPid();
-    if (selectedFrmPid == 0) {
+    const std::optional<uint32_t> selectedFrmPidOpt = dialog.getSelectedFrmPid();
+    if (!selectedFrmPidOpt.has_value() || *selectedFrmPidOpt == 0) {
         return;
     }
+    const uint32_t selectedFrmPid = *selectedFrmPidOpt;
 
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
         if (senderWidget == _inventoryPreviewWidget) {

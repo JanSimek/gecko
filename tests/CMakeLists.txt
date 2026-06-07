@@ -7,6 +7,7 @@ add_executable(general_tests
     general/test_reading_gam.cpp
     general/test_reading_msg.cpp
     general/test_reading_pro_drug.cpp
+    general/test_pro_roundtrip.cpp
     general/test_tile_utils.cpp
     general/test_reader_factory.cpp
     general/test_selection_system.cpp

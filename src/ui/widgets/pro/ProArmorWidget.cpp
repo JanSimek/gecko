@@ -35,21 +35,17 @@ void ProArmorWidget::setupUI() {
     QHBoxLayout* columnsLayout = new QHBoxLayout();
     columnsLayout->setSpacing(ui::constants::SPACING_COLUMNS);
 
-    // Left column
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
     leftLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
-    // Right column
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
     rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     // === LEFT COLUMN: Protection Values ===
-
-    // Armor Class
     QGroupBox* acGroup = new QGroupBox("Protection Values");
     acGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* acLayout = createStandardFormLayout();
@@ -62,7 +58,7 @@ void ProArmorWidget::setupUI() {
     acGroup->setLayout(acLayout);
     leftLayout->addWidget(acGroup);
 
-    // Defence State (unified Threshold and Resistance table)
+    // Unified Threshold + Resistance table
     QGroupBox* defenceGroup = new QGroupBox("Defence State");
     defenceGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QGridLayout* defenceLayout = new QGridLayout(defenceGroup);
@@ -72,7 +68,6 @@ void ProArmorWidget::setupUI() {
 
     const QStringList damageTypes = game::enums::damageTypes7(_resources);
 
-    // Headers
     QLabel* thresholdHeader = new QLabel("Threshold");
     thresholdHeader->setFont(ui::theme::fonts::standard());
     thresholdHeader->setAlignment(Qt::AlignCenter);
@@ -117,20 +112,16 @@ void ProArmorWidget::setupUI() {
     leftLayout->addStretch();
 
     // === RIGHT COLUMN: Armor Views and Misc Properties ===
-
-    // Armor Views with previews
     QGroupBox* viewsGroup = new QGroupBox("Armor Views");
     viewsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QVBoxLayout* viewsLayout = new QVBoxLayout(viewsGroup);
     viewsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     viewsLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
-    // Horizontal layout for male/female previews
     QHBoxLayout* previewsLayout = new QHBoxLayout();
     previewsLayout->setContentsMargins(0, 0, 0, 0);
     previewsLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
-    // Male preview
     _armorMalePreviewWidget = new ObjectPreviewWidget(_resources, this,
         ObjectPreviewWidget::ShowAnimationControls,
         QSize(120, 120));
@@ -138,7 +129,6 @@ void ProArmorWidget::setupUI() {
     connect(_armorMalePreviewWidget, &ObjectPreviewWidget::fidChangeRequested,
         this, &ProArmorWidget::onArmorMaleFidChangeRequested);
 
-    // Female preview
     _armorFemalePreviewWidget = new ObjectPreviewWidget(_resources, this,
         ObjectPreviewWidget::ShowAnimationControls,
         QSize(120, 120));
@@ -152,7 +142,6 @@ void ProArmorWidget::setupUI() {
 
     rightLayout->addWidget(viewsGroup);
 
-    // Misc Properties
     QGroupBox* miscGroup = createStandardGroupBox("Misc Properties");
     QFormLayout* miscLayout = createStandardFormLayout();
     addLayoutToGroupBox(miscGroup, miscLayout);
@@ -161,7 +150,6 @@ void ProArmorWidget::setupUI() {
         "Special perk associated with this armor");
     miscLayout->addRow("Perk:", _armorPerkCombo);
 
-    // AI Priority display
     _armorAIPriorityLabel = new QLabel("0");
     _armorAIPriorityLabel->setStyleSheet(ui::theme::styles::emphasisLabel());
     _armorAIPriorityLabel->setToolTip("AI Priority = AC + all DT values + all DR values (used by AI to select best armor)");
@@ -170,7 +158,6 @@ void ProArmorWidget::setupUI() {
     rightLayout->addWidget(miscGroup);
     rightLayout->addStretch();
 
-    // Add columns to main layout
     columnsLayout->addWidget(leftColumn, 1);
     columnsLayout->addWidget(rightColumn, 1);
     _mainLayout->addLayout(columnsLayout);
@@ -180,7 +167,6 @@ void ProArmorWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    // Load armor data - copy fields individually
     _armorData.armorClass = pro->armorData.armorClass;
     for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
         _armorData.damageResist[i] = pro->armorData.damageResist[i];
@@ -333,12 +319,12 @@ void ProArmorWidget::selectArmorFid(ObjectPreviewWidget* previewWidget, int32_t&
         return;
     }
 
-    uint32_t selectedFrmPid = dialog.getSelectedFrmPid();
-    if (selectedFrmPid == 0) {
+    const std::optional<uint32_t> selectedFrmPidOpt = dialog.getSelectedFrmPid();
+    if (!selectedFrmPidOpt.has_value() || *selectedFrmPidOpt == 0) {
         return;
     }
 
-    fid = static_cast<int32_t>(selectedFrmPid);
+    fid = static_cast<int32_t>(*selectedFrmPidOpt);
     updateArmorPreviews();
     emit fieldChanged();
 }

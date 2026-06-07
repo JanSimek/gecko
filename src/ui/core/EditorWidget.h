@@ -19,7 +19,6 @@
 #include "../../format/pro/Pro.h"
 #include "../../selection/SelectionManager.h"
 #include "../../util/Constants.h"
-#include "../../util/EventBus.h"
 #include "../../util/UndoStack.h"
 #include "../editing/ObjectCommandController.h"
 #include "../rendering/MapSpriteLoader.h"

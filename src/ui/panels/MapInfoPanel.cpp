@@ -71,7 +71,6 @@ void MapInfoPanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
     _mainLayout->setContentsMargins(ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN);
 
-    // Create scroll area for content
     _scrollArea = new QScrollArea(this);
     _scrollArea->setWidgetResizable(true);
     _scrollArea->setMinimumSize(0, 0);
@@ -85,14 +84,12 @@ void MapInfoPanel::setupUI() {
     _contentLayout = new QVBoxLayout(_contentWidget);
     _contentLayout->setContentsMargins(ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN, ui::constants::PANEL_CONTENT_MARGIN);
 
-    // Map header group
     _mapHeaderGroup = new QGroupBox("Map Header");
     QFormLayout* headerLayout = new QFormLayout(_mapHeaderGroup);
 
     _filenameEdit = new QLineEdit();
     headerLayout->addRow("Filename:", _filenameEdit);
 
-    // Elevation checkboxes
     QWidget* elevationsWidget = new QWidget();
     QVBoxLayout* elevationsLayout = new QVBoxLayout(elevationsWidget);
     elevationsLayout->setContentsMargins(0, 0, 0, 0);
@@ -108,7 +105,6 @@ void MapInfoPanel::setupUI() {
 
     headerLayout->addRow("Map elevations:", elevationsWidget);
 
-    // Player position with button
     QHBoxLayout* positionLayout = new QHBoxLayout();
     _playerPositionSpin = new QSpinBox();
     _playerPositionSpin->setRange(0, HexPosition::MAX_VALUE); // Max hex position
@@ -174,7 +170,6 @@ void MapInfoPanel::setupUI() {
 
     _contentLayout->addWidget(_mapHeaderGroup);
 
-    // Connect signals for editable fields
     connect(_playerPositionSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
     connect(_playerElevationSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
     connect(_playerOrientationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MapInfoPanel::onOrientationChanged);
@@ -185,12 +180,10 @@ void MapInfoPanel::setupUI() {
     connect(_timestampSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
     connect(_savegameCheck, &QCheckBox::toggled, this, &MapInfoPanel::onFieldChanged);
 
-    // Connect elevation checkbox signals
     connect(_elevation1Check, &QCheckBox::toggled, this, &MapInfoPanel::onElevationCheckboxChanged);
     connect(_elevation2Check, &QCheckBox::toggled, this, &MapInfoPanel::onElevationCheckboxChanged);
     connect(_elevation3Check, &QCheckBox::toggled, this, &MapInfoPanel::onElevationCheckboxChanged);
 
-    // Global variables group
     _globalVarsGroup = new QGroupBox("Map Global Variables");
     QVBoxLayout* varsLayout = new QVBoxLayout(_globalVarsGroup);
 
@@ -203,7 +196,6 @@ void MapInfoPanel::setupUI() {
 
     _contentLayout->addWidget(_globalVarsGroup);
 
-    // Map scripts group
     _mapScriptsGroup = new QGroupBox("Map Scripts");
     QVBoxLayout* scriptsLayout = new QVBoxLayout(_mapScriptsGroup);
 
@@ -214,12 +206,11 @@ void MapInfoPanel::setupUI() {
 
     _contentLayout->addWidget(_mapScriptsGroup);
 
-    _contentLayout->addStretch(); // Add stretch to push content to top
+    _contentLayout->addStretch();
 
     _scrollArea->setWidget(_contentWidget);
     _mainLayout->addWidget(_scrollArea);
 
-    // Initially clear the display
     clearMapInfo();
 }
 
@@ -257,7 +248,6 @@ void MapInfoPanel::updateMapInfo() {
 
         spdlog::debug("Map elevations: 1={}, 2={}, 3={}", hasElevation1, hasElevation2, hasElevation3);
 
-        // Update map header information
         _filenameEdit->setText(QString::fromStdString(mapInfo.header.filename));
         _playerPositionSpin->setValue(static_cast<int>(mapInfo.header.player_default_position));
         _playerElevationSpin->setValue(static_cast<int>(mapInfo.header.player_default_elevation));
@@ -272,11 +262,9 @@ void MapInfoPanel::updateMapInfo() {
         bool isSavegame = ((mapInfo.header.flags & 0x1) != 0);
         _savegameCheck->setChecked(isSavegame);
 
-        // Load script variables and update UI
         loadScriptVars();
         _mapScriptEdit->setText(QString::fromStdString(_mapScriptName));
 
-        // Update global variables tree with enhanced display
         _globalVarsTree->clear();
 
         if (_mvars.empty() && mapInfo.header.num_global_vars > 0) {
@@ -284,28 +272,24 @@ void MapInfoPanel::updateMapInfo() {
             QTreeWidgetItem* placeholderItem = new QTreeWidgetItem(_globalVarsTree);
             placeholderItem->setText(0, QString("⚠️ %1 global variables expected").arg(mapInfo.header.num_global_vars));
             placeholderItem->setText(1, "GAM file not loaded");
-            placeholderItem->setForeground(0, QBrush(ui::theme::colors::statusWarningRgb())); // Orange color for warning
+            placeholderItem->setForeground(0, QBrush(ui::theme::colors::statusWarningRgb()));
             placeholderItem->setForeground(1, QBrush(ui::theme::colors::statusWarningRgb()));
         } else if (_mvars.empty() && mapInfo.header.num_global_vars == 0) {
-            // Show info message when no variables are expected
             QTreeWidgetItem* infoItem = new QTreeWidgetItem(_globalVarsTree);
             infoItem->setText(0, "No global variables defined");
             infoItem->setText(1, "(Map header indicates 0 variables)");
-            infoItem->setForeground(0, QBrush(ui::theme::colors::statusInfoRgb())); // Gray for info
+            infoItem->setForeground(0, QBrush(ui::theme::colors::statusInfoRgb()));
             infoItem->setForeground(1, QBrush(ui::theme::colors::statusInfoRgb()));
         } else {
-            // Display actual loaded variables
             for (const auto& [key, value] : _mvars) {
                 QTreeWidgetItem* item = new QTreeWidgetItem(_globalVarsTree);
                 item->setText(0, QString::fromStdString(key));
                 item->setText(1, QString::number(value));
 
-                // Use green color to indicate successfully loaded data
-                item->setForeground(0, QBrush(ui::theme::colors::statusSuccessRgb())); // Green for success
+                item->setForeground(0, QBrush(ui::theme::colors::statusSuccessRgb()));
                 item->setForeground(1, QBrush(ui::theme::colors::statusSuccessRgb()));
             }
 
-            // Add summary item if variables were loaded successfully
             if (!_mvars.empty()) {
                 QTreeWidgetItem* summaryItem = new QTreeWidgetItem(_globalVarsTree);
                 summaryItem->setText(0, QString("✅ Total: %1 variables loaded").arg(_mvars.size()));
@@ -315,14 +299,12 @@ void MapInfoPanel::updateMapInfo() {
             }
         }
 
-        // Expand and resize columns
         _globalVarsTree->expandAll();
         _globalVarsTree->resizeColumnToContents(0);
 
-        // Update map scripts display
         updateMapScriptsDisplay();
 
-        // Update elevation checkbox states (disable last remaining elevation)
+        // Disable the last remaining elevation's checkbox.
         updateElevationCheckboxStates();
 
     } catch (const std::exception& e) {
@@ -340,7 +322,6 @@ void MapInfoPanel::loadScriptVars() {
     }
 
     try {
-        // Extract base filename without extension
         std::string mapFilename = _map->filename();
         std::string baseName = mapFilename.substr(0, mapFilename.find("."));
         std::string gam_filename = baseName + ".gam";
@@ -360,12 +341,10 @@ void MapInfoPanel::loadScriptVars() {
             return;
         }
 
-        // Load global variables
         for (uint32_t index = 0; index < _map->getMapFile().header.num_global_vars; index++) {
             _mvars.emplace(gam_file->mvarKey(index), gam_file->mvarValue(index));
         }
 
-        // Load map script name
         int map_script_id = _map->getMapFile().header.script_id;
         if (map_script_id > 0) {
             auto scripts = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
@@ -392,7 +371,6 @@ void MapInfoPanel::clearMapInfo() {
     _filenameEdit->clear();
     _filenameEdit->setPlaceholderText("No map loaded");
 
-    // Clear elevation checkboxes
     setElevationCheckboxesBlocked(true);
     _elevation1Check->setChecked(false);
     _elevation2Check->setChecked(false);
@@ -417,7 +395,6 @@ void MapInfoPanel::clearMapInfo() {
     _mvars.clear();
     _mapScriptName = "no script";
 
-    // Clear scripts display
     updateMapScriptsDisplay();
 }
 
@@ -428,48 +405,30 @@ void MapInfoPanel::onFieldChanged() {
 
     auto& mapInfo = _map->getMapFile();
 
-    // Update map header values from the UI
     mapInfo.header.player_default_position = static_cast<uint32_t>(_playerPositionSpin->value());
     mapInfo.header.player_default_elevation = static_cast<uint32_t>(_playerElevationSpin->value());
     mapInfo.header.script_id = _mapScriptIdSpin->value();
     mapInfo.header.darkness = static_cast<uint32_t>(_darknessSpin->value());
     mapInfo.header.timestamp = static_cast<uint32_t>(_timestampSpin->value());
 
-    // Update flags based on savegame checkbox
+    // flags bit 0 = savegame map
     if (_savegameCheck->isChecked()) {
-        mapInfo.header.flags |= 0x1; // Set bit 0
+        mapInfo.header.flags |= 0x1;
     } else {
-        mapInfo.header.flags &= ~0x1; // Clear bit 0
+        mapInfo.header.flags &= ~0x1;
     }
 
-    // Emit specific signals for position and elevation changes
     QObject* sender = QObject::sender();
     if (sender == _playerPositionSpin) {
         emit playerPositionChanged(_playerPositionSpin->value());
-        // Also publish to EventBus
-        EventBus::getInstance().publish(PlayerPositionChangedEvent{
-            HexPosition(_playerPositionSpin->value()),
-            _playerElevationSpin->value() });
     } else if (sender == _playerElevationSpin) {
         emit playerElevationChanged(_playerElevationSpin->value());
-        // Position event also carries elevation
-        EventBus::getInstance().publish(PlayerPositionChangedEvent{
-            HexPosition(_playerPositionSpin->value()),
-            _playerElevationSpin->value() });
     } else if (sender == _mapScriptIdSpin) {
         emit mapScriptIdChanged(_mapScriptIdSpin->value());
-        EventBus::getInstance().publish(MapScriptChangedEvent{
-            _mapScriptIdSpin->value() });
     } else if (sender == _darknessSpin) {
         emit darknessChanged(_darknessSpin->value());
-        EventBus::getInstance().publish(MapPropertiesChangedEvent{
-            MapPropertiesChangedEvent::Property::Darkness,
-            _darknessSpin->value() });
     } else if (sender == _timestampSpin) {
         emit timestampChanged(_timestampSpin->value());
-        EventBus::getInstance().publish(MapPropertiesChangedEvent{
-            MapPropertiesChangedEvent::Property::Timestamp,
-            _timestampSpin->value() });
     }
 
     spdlog::debug("MapInfoPanel: Field changed, map header updated");
@@ -484,7 +443,6 @@ void MapInfoPanel::onOrientationChanged(int index) {
     mapInfo.header.player_default_orientation = static_cast<uint32_t>(index);
 
     emit playerOrientationChanged(index);
-    EventBus::getInstance().publish(PlayerOrientationChangedEvent{ index });
     spdlog::debug("MapInfoPanel: Player orientation changed to {}", index);
 }
 
@@ -518,12 +476,10 @@ void MapInfoPanel::updateMapScriptsDisplay() {
         auto& mapInfo = _map->getMapFile();
         QString scriptsInfo;
 
-        // Display basic script information with enhanced error reporting
         if (mapInfo.header.script_id > 0) {
             scriptsInfo += QString("Map Script ID: %1\n").arg(mapInfo.header.script_id);
             scriptsInfo += QString("Map Script Name: %1\n").arg(QString::fromStdString(_mapScriptName));
 
-            // Show status based on script name content
             if (_mapScriptName.find("not found") != std::string::npos) {
                 scriptsInfo += "⚠️ Script file could not be resolved\n";
             } else if (_mapScriptName.find("Error") != std::string::npos) {
@@ -539,7 +495,6 @@ void MapInfoPanel::updateMapScriptsDisplay() {
             scriptsInfo += QString("⚠️ Invalid script ID: %1\n").arg(mapInfo.header.script_id);
         }
 
-        // Add global variables information
         scriptsInfo += QString("\nGlobal Variables: %1\n").arg(mapInfo.header.num_global_vars);
         if (_mvars.empty() && mapInfo.header.num_global_vars > 0) {
             scriptsInfo += "⚠️ Global variables not loaded (GAM file issue)\n";
@@ -549,7 +504,6 @@ void MapInfoPanel::updateMapScriptsDisplay() {
 
         scriptsInfo += QString("Local Variables: %1\n").arg(mapInfo.header.num_local_vars);
 
-        // Count scripts in each section and display details
         int totalScripts = 0;
         bool hasObjectScripts = false;
 
@@ -585,19 +539,17 @@ void MapInfoPanel::updateMapScriptsDisplay() {
 
                 scriptsInfo += QString("%1 Scripts: %2\n").arg(sectionName).arg(sectionCount);
 
-                // Show some details about scripts in this section
                 const auto& scripts = mapInfo.map_scripts[i];
                 int actualScriptCount = static_cast<int>(scripts.size());
                 totalScripts += actualScriptCount;
 
-                // Show discrepancy if header count doesn't match actual scripts
+                // Warn if the header count doesn't match the actual scripts present.
                 if (sectionCount != actualScriptCount) {
                     scriptsInfo += QString("  ⚠️ Header says %1, but found %2 actual scripts\n")
                                        .arg(sectionCount)
                                        .arg(actualScriptCount);
                 }
 
-                // Show first few scripts as examples
                 int displayCount = std::min(3, actualScriptCount);
                 for (int j = 0; j < displayCount; j++) {
                     const auto& script = scripts[j];
@@ -621,7 +573,6 @@ void MapInfoPanel::updateMapScriptsDisplay() {
 
         _mapScriptsLabel->setText(scriptsInfo.trimmed());
 
-        // Set appropriate styling based on content
         if (scriptsInfo.contains("❌") || scriptsInfo.contains("Error")) {
             _mapScriptsLabel->setStyleSheet(ui::theme::styles::errorMonospace());
         } else if (scriptsInfo.contains("⚠️")) {
@@ -651,7 +602,7 @@ void MapInfoPanel::updateElevationCheckboxStates() {
 
     auto& mapFile = _map->getMapFile();
 
-    // Count how many elevations are currently enabled
+    // Elevation flag bits are inverted: bit clear (0) = enabled.
     int enabledCount = 0;
     bool hasElevation1 = (mapFile.header.flags & 0x2) == 0;
     bool hasElevation2 = (mapFile.header.flags & 0x4) == 0;
@@ -680,7 +631,6 @@ void MapInfoPanel::updateElevationCheckboxStates() {
             _elevation3Check->setToolTip("Cannot remove the last remaining elevation");
         }
     } else {
-        // Multiple elevations exist, enable all checkboxes
         _elevation1Check->setEnabled(true);
         _elevation1Check->setToolTip("");
         _elevation2Check->setEnabled(true);
@@ -697,7 +647,6 @@ void MapInfoPanel::onElevationCheckboxChanged() {
         return;
     }
 
-    // Determine which checkbox triggered the change and what elevation it represents
     QCheckBox* sender = qobject_cast<QCheckBox*>(QObject::sender());
     if (!sender) {
         return;
@@ -728,36 +677,27 @@ void MapInfoPanel::onElevationCheckboxChanged() {
     bool wasEnabled = (mapFile.header.flags & flagBit) == 0;
 
     if (isChecked && !wasEnabled) {
-        // Adding elevation - enable it in the map
         mapFile.header.flags &= ~flagBit; // Clear bit to enable elevation
 
-        // Initialize empty tile data for this elevation if it doesn't exist
         if (mapFile.tiles.find(elevation) == mapFile.tiles.end()) {
             mapFile.tiles[elevation].clear();
             mapFile.tiles[elevation].reserve(Map::TILES_PER_ELEVATION);
 
-            // Fill with empty tiles
             for (unsigned int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
                 mapFile.tiles[elevation].emplace_back(Map::EMPTY_TILE, Map::EMPTY_TILE);
             }
         }
 
-        // Initialize empty object list for this elevation if it doesn't exist
         if (mapFile.map_objects.find(elevation) == mapFile.map_objects.end()) {
             mapFile.map_objects[elevation].clear();
         }
 
         emit elevationAdded(elevation);
-        EventBus::getInstance().publish(ElevationChangedEvent{
-            ElevationChangedEvent::Type::Added,
-            elevation });
         spdlog::info("MapInfoPanel: Added {} to map", elevationName.toStdString());
 
-        // Update checkbox states after adding elevation
         updateElevationCheckboxStates();
 
     } else if (!isChecked && wasEnabled) {
-        // Removing elevation - show confirmation dialog
         QString message = QString("Are you sure you want to remove %1?\n\n"
                                   "This will permanently delete:\n"
                                   "• All tiles on this elevation\n"
@@ -774,17 +714,14 @@ void MapInfoPanel::onElevationCheckboxChanged() {
             QMessageBox::No);
 
         if (reply == QMessageBox::Yes) {
-            // User confirmed removal
             mapFile.header.flags |= flagBit; // Set bit to disable elevation
 
-            // Remove tile data for this elevation
             auto tileIt = mapFile.tiles.find(elevation);
             if (tileIt != mapFile.tiles.end()) {
                 tileIt->second.clear();
                 mapFile.tiles.erase(tileIt);
             }
 
-            // Remove object data for this elevation
             auto objectIt = mapFile.map_objects.find(elevation);
             if (objectIt != mapFile.map_objects.end()) {
                 objectIt->second.clear();
@@ -792,16 +729,12 @@ void MapInfoPanel::onElevationCheckboxChanged() {
             }
 
             emit elevationRemoved(elevation);
-            EventBus::getInstance().publish(ElevationChangedEvent{
-                ElevationChangedEvent::Type::Removed,
-                elevation });
             spdlog::info("MapInfoPanel: Removed {} from map", elevationName.toStdString());
 
-            // Update checkbox states after removing elevation
             updateElevationCheckboxStates();
 
         } else {
-            // User cancelled - revert checkbox state
+            // User cancelled: revert checkbox state.
             sender->blockSignals(true);
             sender->setChecked(true);
             sender->blockSignals(false);

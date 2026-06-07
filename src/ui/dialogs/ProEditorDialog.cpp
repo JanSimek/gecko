@@ -58,7 +58,7 @@ ProEditorDialog::ProEditorDialog(resource::GameResources& resources, std::shared
 void ProEditorDialog::setupUI() {
     _mainLayout = new QVBoxLayout(this);
 
-    // Create horizontal layout: Left Info Panel | Right Type-Specific Fields
+    // Horizontal layout: left info panel | right type-specific fields
     _contentLayout = new QHBoxLayout();
 
     // === LEFT PANEL: Image + Name + Description + Common Fields ===
@@ -85,14 +85,11 @@ void ProEditorDialog::setupUI() {
     _tabWidget = new QTabWidget(this);
     _tabWidget->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
 
-    // Add main panels to content layout
     _contentLayout->addWidget(_infoPanelWidget, 0); // Fixed width
     _contentLayout->addWidget(_tabWidget, 1);       // Flexible width
 
-    // Setup tabbed content
     setupTabs();
 
-    // Button box
     _buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(_buttonBox, &QDialogButtonBox::accepted, this, &ProEditorDialog::onAccept);
     connect(_buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -257,7 +254,7 @@ void ProEditorDialog::onAccept() {
         "PRO Files (*.pro);;All Files (*)");
 
     if (filePath.isEmpty()) {
-        return; // User cancelled
+        return;
     }
 
     std::filesystem::path savePath(filePath.toStdString());
@@ -339,9 +336,9 @@ void ProEditorDialog::openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidS
     dialog.setInitialFrmPid(static_cast<uint32_t>(*fidStorage));
 
     if (dialog.exec() == QDialog::Accepted) {
-        uint32_t selectedFrmPid = dialog.getSelectedFrmPid();
-        if (selectedFrmPid > 0) {
-            *fidStorage = static_cast<int32_t>(selectedFrmPid);
+        const std::optional<uint32_t> selectedFrmPidOpt = dialog.getSelectedFrmPid();
+        if (selectedFrmPidOpt.has_value() && *selectedFrmPidOpt > 0) {
+            *fidStorage = static_cast<int32_t>(*selectedFrmPidOpt);
             targetLabel->setText(getFrmFilename(*fidStorage));
         }
     }

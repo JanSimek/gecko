@@ -63,7 +63,7 @@ FrmSelectorDialog::FrmSelectorDialog(resource::GameResources& resources, QWidget
     , _okButton(nullptr)
     , _cancelButton(nullptr)
     , _resources(resources)
-    , _selectedFrmPid(0)
+    , _selectedFrmPid(std::nullopt)
     , _objectTypeFilter(std::nullopt) {
 
     setupUI();
@@ -105,20 +105,17 @@ void FrmSelectorDialog::setupUI() {
 
     _mainLayout = new QVBoxLayout(this);
 
-    // Create splitter for main content
     _splitter = new QSplitter(Qt::Horizontal, this);
 
     // Left panel - FRM list
     _listPanel = new QWidget();
     _listLayout = new QVBoxLayout(_listPanel);
 
-    // Search box
     _searchEdit = new QLineEdit();
     _searchEdit->setPlaceholderText("Search FRM files...");
     connect(_searchEdit, &QLineEdit::textChanged, this, &FrmSelectorDialog::onSearchTextChanged);
     _listLayout->addWidget(_searchEdit);
 
-    // FRM tree
     _frmTreeWidget = new QTreeWidget();
     _frmTreeWidget->setHeaderLabel("FRM Files");
     _frmTreeWidget->setAlternatingRowColors(true);
@@ -129,7 +126,6 @@ void FrmSelectorDialog::setupUI() {
     _previewPanel = new QWidget();
     _previewLayout = new QVBoxLayout(_previewPanel);
 
-    // Preview group
     _previewGroup = new QGroupBox("Preview");
     QVBoxLayout* previewGroupLayout = new QVBoxLayout(_previewGroup);
 
@@ -142,7 +138,6 @@ void FrmSelectorDialog::setupUI() {
     _previewLabel->setStyleSheet(ui::theme::styles::previewArea());
     previewGroupLayout->addWidget(_previewLabel);
 
-    // Details group
     _detailsGroup = new QGroupBox("Details");
     _detailsLayout = new QFormLayout(_detailsGroup);
 
@@ -167,7 +162,6 @@ void FrmSelectorDialog::setupUI() {
 
     _mainLayout->addWidget(_splitter);
 
-    // Button box
     _buttonLayout = new QHBoxLayout();
     _buttonLayout->addStretch();
 
@@ -191,13 +185,12 @@ void FrmSelectorDialog::populateFrmList() {
         _frmFiles.clear();
         _frmTreeWidget->clear();
 
-        // Group files by type and base name for better organization
+        // Group files by type and base name for tree organization
         std::map<std::string, std::vector<std::string>> groupedFiles;
 
         for (const auto& frmPath : frmFiles) {
             const std::string frmPathString = frmPath.generic_string();
 
-            // Apply object type filter if set
             if (_objectTypeFilter.has_value() && frmTypeForPath(frmPathString) != _objectTypeFilter) {
                 continue;
             }
@@ -211,15 +204,12 @@ void FrmSelectorDialog::populateFrmList() {
                 }
             }
 
-            // Store path as the key, we'll determine PID when needed
-            _frmFiles.emplace_back(0, frmPathString); // PID will be resolved dynamically
+            _frmFiles.emplace_back(0, frmPathString); // PID resolved dynamically when needed
 
-            // Determine grouping key
             std::string groupKey = getGroupingKey(frmPathString);
             groupedFiles[groupKey].push_back(frmPathString);
         }
 
-        // Create root items for different categories
         QTreeWidgetItem* itemsRoot = nullptr;
         QTreeWidgetItem* crittersRoot = nullptr;
         QTreeWidgetItem* sceneryRoot = nullptr;
@@ -227,7 +217,6 @@ void FrmSelectorDialog::populateFrmList() {
         QTreeWidgetItem* tilesRoot = nullptr;
         QTreeWidgetItem* miscRoot = nullptr;
 
-        // Add grouped items to the tree
         for (const auto& group : groupedFiles) {
             const std::string& groupName = group.first;
             const auto& files = group.second;
@@ -281,7 +270,7 @@ void FrmSelectorDialog::populateFrmList() {
                 }
             }
 
-            // Create group node if multiple files and it's a critter group
+            // Critter groups with multiple files get a collapsible header node
             QTreeWidgetItem* groupNode = nullptr;
             if (files.size() > 1 && isCritterGroup(groupName) && parentItem) {
                 groupNode = new QTreeWidgetItem(parentItem);
@@ -289,19 +278,16 @@ void FrmSelectorDialog::populateFrmList() {
                 groupNode->setData(0, Qt::UserRole, QString("__GROUP_HEADER__"));
             }
 
-            // Sort files within group for better presentation
             std::vector<std::string> sortedFiles = files;
             std::sort(sortedFiles.begin(), sortedFiles.end(), [this](const std::string& a, const std::string& b) {
                 return getAnimationSortKey(a) < getAnimationSortKey(b);
             });
 
-            // Add individual files
             for (const auto& frmPath : sortedFiles) {
                 QString displayName = createDisplayName(frmPath);
 
                 QTreeWidgetItem* targetParent = groupNode ? groupNode : parentItem;
                 if (!targetParent) {
-                    // If no parent determined, add to root
                     targetParent = _frmTreeWidget->invisibleRootItem();
                 }
 
@@ -319,7 +305,6 @@ void FrmSelectorDialog::populateFrmList() {
 }
 
 void FrmSelectorDialog::updatePreview() {
-    // Get the current FRM path directly from the UI
     QString frmPath = _frmPathEdit->text();
 
     if (frmPath.isEmpty()) {
@@ -333,25 +318,21 @@ void FrmSelectorDialog::updatePreview() {
 
         const auto& texture = _resources.textures().get(frmPathStr);
 
-        // Convert SFML texture to QImage for processing
         auto image = texture.copyToImage();
         const std::uint8_t* pixels = image.getPixelsPtr();
         QImage qImage(pixels, image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
 
-        // Try to load the FRM file to get frame information
         try {
             auto frm = _resources.repository().load<Frm>(frmPathStr);
             if (frm && !frm->directions().empty() && !frm->directions()[0].frames().empty()) {
-                // This is a multi-frame FRM (like critters), extract the first frame
+                // Multi-frame FRM (e.g. critters): extract only the first frame of direction 0
                 const auto& firstFrame = frm->directions()[0].frames()[0];
 
-                // Calculate texture rectangle for the first frame (direction 0)
                 uint16_t left = 0;
-                uint16_t top = 0; // First direction
+                uint16_t top = 0;
                 uint16_t width = firstFrame.width();
                 uint16_t height = firstFrame.height();
 
-                // Extract only the first frame from the full spritesheet
                 if (left + width <= qImage.width() && top + height <= qImage.height()) {
                     qImage = qImage.copy(left, top, width, height);
                 }
@@ -360,15 +341,13 @@ void FrmSelectorDialog::updatePreview() {
                     width, height, frmPathStr);
             }
         } catch (const std::exception& e) {
-            // If FRM loading fails, just use the full texture (fallback for simple FRMs)
+            // Fall back to the full texture for simple FRMs
             spdlog::debug("FrmSelectorDialog: Using full texture for FRM preview ({}): {}",
                 frmPathStr, e.what());
         }
 
-        // Create pixmap and scale to fit label while maintaining aspect ratio
         QPixmap pixmap = QPixmap::fromImage(qImage);
         if (!pixmap.isNull()) {
-            // Scale the pixmap to fit within the preview area while keeping aspect ratio
             QSize maxSize = _previewLabel->size();
             if (maxSize.width() < 100 || maxSize.height() < 100) {
                 maxSize = QSize(200, 200); // Fallback size
@@ -391,14 +370,12 @@ void FrmSelectorDialog::updatePreview() {
 }
 
 void FrmSelectorDialog::filterFrmList(const QString& searchText) {
-    // Function to recursively filter tree items
     std::function<void(QTreeWidgetItem*, const QString&)> filterItem = [&](QTreeWidgetItem* item, const QString& text) {
         if (!item)
             return;
 
         bool hasVisibleChild = false;
 
-        // Check children first
         for (int i = 0; i < item->childCount(); ++i) {
             QTreeWidgetItem* child = item->child(i);
             filterItem(child, text);
@@ -407,14 +384,12 @@ void FrmSelectorDialog::filterFrmList(const QString& searchText) {
             }
         }
 
-        // Check if this item matches search
         bool matches = text.isEmpty() || item->text(0).contains(text, Qt::CaseInsensitive);
 
-        // Show item if it matches or has visible children
+        // Keep an item visible if it matches or has any visible child
         item->setHidden(!matches && !hasVisibleChild);
     };
 
-    // Filter all top-level items
     for (int i = 0; i < _frmTreeWidget->topLevelItemCount(); ++i) {
         filterItem(_frmTreeWidget->topLevelItem(i), searchText);
     }
@@ -429,7 +404,7 @@ void FrmSelectorDialog::setInitialFrmPid(uint32_t frmPid) {
 
     updatePreview();
 
-    // Try to select the corresponding item in the tree by matching FRM path
+    // Select the tree item whose stored path matches frmPath
     std::function<bool(QTreeWidgetItem*)> findAndSelect = [&](QTreeWidgetItem* item) -> bool {
         if (!item)
             return false;
@@ -441,7 +416,6 @@ void FrmSelectorDialog::setInitialFrmPid(uint32_t frmPid) {
             return true;
         }
 
-        // Check children
         for (int i = 0; i < item->childCount(); ++i) {
             if (findAndSelect(item->child(i))) {
                 return true;
@@ -450,7 +424,6 @@ void FrmSelectorDialog::setInitialFrmPid(uint32_t frmPid) {
         return false;
     };
 
-    // Search all top-level items
     for (int i = 0; i < _frmTreeWidget->topLevelItemCount(); ++i) {
         if (findAndSelect(_frmTreeWidget->topLevelItem(i))) {
             break;
@@ -468,9 +441,9 @@ void FrmSelectorDialog::onFrmListSelectionChanged() {
         QString selectedPath = currentItem->data(0, Qt::UserRole).toString();
         std::string frmPath = selectedPath.toStdString();
 
-        // Skip group headers or category nodes
+        // Skip group headers and category nodes
         if (selectedPath.isEmpty() || selectedPath == "__GROUP_HEADER__") {
-            _selectedFrmPid = 0;
+            _selectedFrmPid = std::nullopt;
             _frmPidSpin->setValue(0);
             _frmPathEdit->clear();
             updatePreview();
@@ -478,16 +451,15 @@ void FrmSelectorDialog::onFrmListSelectionChanged() {
             return;
         }
 
-        // Try to derive FRM PID from path
         _selectedFrmPid = deriveFrmPidFromPath(frmPath);
 
-        _frmPidSpin->setValue(static_cast<int>(_selectedFrmPid));
+        _frmPidSpin->setValue(static_cast<int>(_selectedFrmPid.value_or(0)));
         _frmPathEdit->setText(selectedPath);
 
         updatePreview();
         _okButton->setEnabled(true);
     } else {
-        _selectedFrmPid = 0;
+        _selectedFrmPid = std::nullopt;
         _frmPidSpin->setValue(0);
         _frmPathEdit->clear();
         updatePreview();
@@ -496,8 +468,8 @@ void FrmSelectorDialog::onFrmListSelectionChanged() {
 }
 
 void FrmSelectorDialog::onFrmPidChanged() {
-    // For now, PID spin box is read-only, so this won't be called by user input
-    // But if we make it editable later, we could implement PID-based selection here
+    // PID spin box is read-only, so user input never reaches here. If made editable,
+    // implement PID-based selection here.
 }
 
 void FrmSelectorDialog::onAccepted() {
@@ -508,41 +480,40 @@ void FrmSelectorDialog::onRejected() {
     reject();
 }
 
-uint32_t FrmSelectorDialog::deriveFrmPidFromPath(const std::string& frmPath) {
-    // Input validation
+std::optional<uint32_t> FrmSelectorDialog::deriveFrmPidFromPath(const std::string& frmPath) {
     if (frmPath.empty()) {
         spdlog::debug("FrmSelectorDialog: Empty FRM path provided");
-        return 0;
+        return std::nullopt;
     }
 
     // Normalize path (handle both /art/critters/file.frm and art/critters/file.frm)
     std::string normalizedPath = frmPath;
     if (!normalizedPath.empty() && normalizedPath.front() == '/') {
-        normalizedPath = normalizedPath.substr(1); // Remove leading slash
+        normalizedPath = normalizedPath.substr(1);
     }
 
-    // Handle backslashes on Windows
+    // Handle Windows backslashes
     std::replace(normalizedPath.begin(), normalizedPath.end(), '\\', '/');
 
-    // Extract filename from path
     size_t lastSlash = normalizedPath.find_last_of('/');
     std::string filename = (lastSlash != std::string::npos) ? normalizedPath.substr(lastSlash + 1) : normalizedPath;
 
     // Validate filename has proper extension
     if (filename.length() < 5 || (filename.substr(filename.length() - 4) != ".frm" && filename.substr(filename.length() - 4) != ".fr0" && filename.substr(filename.length() - 4) != ".fr1" && filename.substr(filename.length() - 4) != ".fr2" && filename.substr(filename.length() - 4) != ".fr3" && filename.substr(filename.length() - 4) != ".fr4" && filename.substr(filename.length() - 4) != ".fr5")) {
         spdlog::debug("FrmSelectorDialog: Invalid FRM file extension: {}", filename);
-        return 0;
+        return std::nullopt;
     }
 
-    // Handle well-known special cases first (use normalized path)
+    // Handle well-known special cases first (use normalized path).
+    // These are legitimate (sometimes low-valued) FIDs, not failure sentinels.
     if (normalizedPath == "art/misc/scrblk.frm") {
-        return 0x00000001; // Scroll blocker
+        return uint32_t{ 0x00000001 }; // Scroll blocker
     }
     if (normalizedPath == "art/misc/wallblock.frm") {
-        return 0x0400026C; // Wall blocker (type=WALL, baseId=620)
+        return uint32_t{ 0x0400026C }; // Wall blocker (type=WALL, baseId=620)
     }
     if (normalizedPath == "art/misc/light.frm") {
-        return 0x02000015; // Light source
+        return uint32_t{ 0x02000015 }; // Light source
     }
 
     // Map path prefixes to FRM types and LST files (matching the engine resolver)
@@ -563,7 +534,7 @@ uint32_t FrmSelectorDialog::deriveFrmPidFromPath(const std::string& frmPath) {
         { "art/inven/", "art/inven/inven.lst", 8 },          // INVENTORY
     };
 
-    // Find matching type for the path (use normalized path without leading slash)
+    // Find the matching type for the normalized path (no leading slash)
     const FrmTypeInfo* typeInfo = nullptr;
     for (const auto& info : frmTypeMap) {
         if (normalizedPath.find(info.pathPrefix) == 0) {
@@ -574,7 +545,7 @@ uint32_t FrmSelectorDialog::deriveFrmPidFromPath(const std::string& frmPath) {
 
     if (!typeInfo) {
         spdlog::debug("FrmSelectorDialog: Unknown path type for: {} (normalized: {})", frmPath, normalizedPath);
-        return 0;
+        return std::nullopt;
     }
 
     try {
@@ -640,11 +611,11 @@ uint32_t FrmSelectorDialog::deriveFrmPidFromPath(const std::string& frmPath) {
             return fallbackFid;
         }
 
-        return 0;
+        return std::nullopt;
 
     } catch (const std::exception& e) {
         spdlog::error("FrmSelectorDialog: Error deriving FID for {}: {}", frmPath, e.what());
-        return 0;
+        return std::nullopt;
     }
 }
 
@@ -674,31 +645,27 @@ uint32_t FrmSelectorDialog::tryFallbackFidDerivation(const std::string& /* norma
 }
 
 std::string FrmSelectorDialog::getGroupingKey(const std::string& frmPath) {
-    // Extract path prefix to determine type
     std::string normalizedPath = frmPath;
     if (!normalizedPath.empty() && normalizedPath.front() == '/') {
         normalizedPath = normalizedPath.substr(1);
     }
 
-    // For critters, group by base name
+    // Critters group by base name (first 6 chars of the filename)
     if (normalizedPath.find("art/critters/") == 0) {
-        // Extract filename
         size_t lastSlash = normalizedPath.find_last_of('/');
         std::string filename = (lastSlash != std::string::npos) ? normalizedPath.substr(lastSlash + 1) : normalizedPath;
 
-        // Remove extension
         size_t dotPos = filename.find_last_of('.');
         if (dotPos != std::string::npos) {
             filename = filename.substr(0, dotPos);
         }
 
-        // Extract base name (first 6 characters for critters)
         if (filename.length() >= 8) { // 6 char base + 2 char suffix minimum
             return "Critter: " + filename.substr(0, 6);
         }
     }
 
-    // For other types, group by directory
+    // Other types group by directory
     size_t secondSlash = normalizedPath.find('/', normalizedPath.find('/') + 1);
     if (secondSlash != std::string::npos) {
         std::string typeDir = normalizedPath.substr(0, secondSlash);
@@ -726,19 +693,15 @@ bool FrmSelectorDialog::isCritterGroup(const std::string& groupName) {
 }
 
 std::string FrmSelectorDialog::getAnimationSortKey(const std::string& frmPath) {
-    // Extract filename
     size_t lastSlash = frmPath.find_last_of('/');
     std::string filename = (lastSlash != std::string::npos) ? frmPath.substr(lastSlash + 1) : frmPath;
 
-    // For critters, prioritize by animation type
+    // Critters are sorted by animation-type priority (the 2-char filename suffix)
     if (frmPath.find("art/critters/") != std::string::npos) {
-        // Extract animation suffix (simplified parsing)
         if (filename.length() >= 8) {                                    // 6 char base + 2 char suffix minimum
             std::string suffix = filename.substr(filename.length() - 2); // Last 2 characters
-            // Convert to lowercase for consistent matching
             std::transform(suffix.begin(), suffix.end(), suffix.begin(), ::tolower);
 
-            // Priority animations come first
             static const std::map<std::string, int> animationPriority = {
                 { "aa", 1 },  // Standing (most important)
                 { "ab", 2 },  // Walking
@@ -758,21 +721,18 @@ std::string FrmSelectorDialog::getAnimationSortKey(const std::string& frmPath) {
             auto it = animationPriority.find(suffix);
             int priority = (it != animationPriority.end()) ? it->second : 999;
 
-            // Sort by priority, then direction, then suffix
             return std::to_string(priority) + "_" + suffix;
         }
     }
 
-    // Default alphabetical sort
-    return filename;
+    return filename; // default alphabetical sort
 }
 
 QString FrmSelectorDialog::createDisplayName(const std::string& frmPath) {
-    // Extract filename
     size_t lastSlash = frmPath.find_last_of('/');
     std::string filename = (lastSlash != std::string::npos) ? frmPath.substr(lastSlash + 1) : frmPath;
 
-    // For critters, add animation description
+    // Critters get an animation-type description appended
     if (frmPath.find("art/critters/") != std::string::npos) {
         std::string animationType = CritterFrmResolver::getAnimationTypeName(filename);
         if (animationType != "Unknown") {

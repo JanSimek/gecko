@@ -36,7 +36,6 @@ set(GECK_APP_SOURCES
     util/Exceptions.h
     util/Coordinates.h
     util/Coordinates.cpp
-    util/EventBus.h
     util/SpatialIndex.h
     util/SpatialIndex.cpp
 
@@ -146,6 +145,8 @@ set(GECK_APP_SOURCES
     ui/rendering/MapSpriteLoader.cpp
     ui/rendering/RenderingEngine.h
     ui/rendering/RenderingEngine.cpp
+    ui/editing/ObjectCommandController.h
+    ui/editing/ObjectCommandController.cpp
     ui/input/InputHandler.h
     ui/input/InputHandler.cpp
     ui/dragdrop/DragDropManager.h

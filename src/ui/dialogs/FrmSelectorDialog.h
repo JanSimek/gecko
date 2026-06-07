@@ -34,9 +34,10 @@ public:
 
     /**
      * @brief Get the selected FRM PID
-     * @return The FRM PID (FID) selected by the user, or 0 if none selected
+     * @return The FRM PID (FID) selected by the user, or std::nullopt if no
+     *         valid FID could be determined for the current selection
      */
-    uint32_t getSelectedFrmPid() const { return _selectedFrmPid; }
+    std::optional<uint32_t> getSelectedFrmPid() const { return _selectedFrmPid; }
 
     /**
      * @brief Get the selected FRM path
@@ -68,7 +69,7 @@ private:
     void populateFrmList();
     void updatePreview();
     void filterFrmList(const QString& searchText);
-    uint32_t deriveFrmPidFromPath(const std::string& frmPath);
+    std::optional<uint32_t> deriveFrmPidFromPath(const std::string& frmPath);
     uint32_t tryFallbackFidDerivation(const std::string& normalizedPath,
         const std::string& filename,
         uint32_t frmType);
@@ -106,7 +107,7 @@ private:
 
     // Data
     resource::GameResources& _resources;
-    uint32_t _selectedFrmPid;
+    std::optional<uint32_t> _selectedFrmPid;
     std::vector<std::pair<uint32_t, std::string>> _frmFiles; // PID, Path pairs
     std::optional<Frm::FRM_TYPE> _objectTypeFilter;
 };

@@ -11,10 +11,8 @@ bool ProWriter::write(const Pro& pro) {
 
         auto& utils = getBinaryUtils();
 
-        // Write header data
         writeHeader(pro);
 
-        // Write type-specific data based on object type
         switch (pro.type()) {
             case Pro::OBJECT_TYPE::ITEM:
                 writeItemData(pro);
@@ -36,7 +34,6 @@ bool ProWriter::write(const Pro& pro) {
                 break;
         }
 
-        // Flush to ensure all data is written
         utils.flush();
 
         spdlog::debug("Successfully wrote PRO file: {} ({} bytes)",
@@ -92,10 +89,8 @@ void ProWriter::writeItemData(const Pro& pro) {
             break;
     }
 
-    // Write object subtype ID
     utils.writeBE32(pro.objectSubtypeId());
 
-    // Write common item data
     utils.writeBE32(pro.commonItemData.materialId);
     utils.writeBE32(pro.commonItemData.containerSize);
     utils.writeBE32(pro.commonItemData.weight);
@@ -136,7 +131,6 @@ void ProWriter::writeItemData(const Pro& pro) {
 void ProWriter::writeArmorData(const Pro& pro) {
     auto& utils = getBinaryUtils();
 
-    // Write armor class
     utils.writeBE32(pro.armorData.armorClass);
 
     // Write damage resistance array (7 damage types)
@@ -149,7 +143,6 @@ void ProWriter::writeArmorData(const Pro& pro) {
         utils.writeBE32(pro.armorData.damageThreshold[i]);
     }
 
-    // Write perk and FIDs
     utils.writeBE32(pro.armorData.perk);
     utils.writeBE32Signed(pro.armorData.armorMaleFID);
     utils.writeBE32Signed(pro.armorData.armorFemaleFID);
@@ -202,7 +195,6 @@ void ProWriter::writeDrugData(const Pro& pro) {
 void ProWriter::writeWeaponData(const Pro& pro) {
     auto& utils = getBinaryUtils();
 
-    // Write weapon properties
     utils.writeBE32(pro.weaponData.animationCode);
     utils.writeBE32(pro.weaponData.damageMin);
     utils.writeBE32(pro.weaponData.damageMax);
@@ -231,7 +223,6 @@ void ProWriter::writeWeaponData(const Pro& pro) {
 void ProWriter::writeAmmoData(const Pro& pro) {
     auto& utils = getBinaryUtils();
 
-    // Write ammo-specific data
     utils.writeBE32(pro.ammoData.caliber);
     utils.writeBE32(pro.ammoData.quantity);
     utils.writeBE32Signed(pro.ammoData.damageModifier);
@@ -246,7 +237,6 @@ void ProWriter::writeAmmoData(const Pro& pro) {
 void ProWriter::writeMiscItemData(const Pro& pro) {
     auto& utils = getBinaryUtils();
 
-    // Write misc item data
     utils.writeBE32(pro.miscData.powerType);
     utils.writeBE32(pro.miscData.charges);
 
@@ -257,7 +247,6 @@ void ProWriter::writeMiscItemData(const Pro& pro) {
 void ProWriter::writeKeyData(const Pro& pro) {
     auto& utils = getBinaryUtils();
 
-    // Write key data
     utils.writeBE32(pro.keyData.keyId);
 
     spdlog::trace("ProWriter: Wrote key data (key ID: {})", pro.keyData.keyId);
@@ -267,7 +256,6 @@ void ProWriter::writeCritterData(const Pro& pro) {
     auto& utils = getBinaryUtils();
     const auto& critterData = pro.critterData;
 
-    // Write critter data from the structure
     utils.writeBE32(critterData.headFID);
     utils.writeBE32(critterData.aiPacket);
     utils.writeBE32(critterData.teamNumber);
@@ -352,7 +340,6 @@ void ProWriter::writeSceneryData(const Pro& pro) {
     // Write scenery subtype first
     utils.writeBE32(pro.objectSubtypeId());
 
-    // Write scenery data from the structure
     utils.writeBE32(sceneryData.materialId);
     utils.writeU8(sceneryData.soundId);
 
@@ -388,16 +375,8 @@ void ProWriter::writeSceneryData(const Pro& pro) {
 void ProWriter::writeWallData(const Pro& pro) {
     auto& utils = getBinaryUtils();
 
-    // Write wall data
-    /*
-     * TODO:
-     *   0x0018	2	Wall Light Type Flags
-     *   0x001A	2	Action Flags
-     *   0x001C	4	ScriptType & ScriptID
-     *   0x0020	4	MaterialID
-     */
-    utils.writeBE32(0); // flagsExt placeholder
-    utils.writeBE32(0); // SID placeholder
+    utils.writeBE32(pro.commonItemData.flagsExt);
+    utils.writeBE32(pro.commonItemData.SID);
     utils.writeBE32(pro.wallData.materialId);
 
     spdlog::debug("ProWriter: Wall data written - materialId: {}", pro.wallData.materialId);
@@ -406,7 +385,6 @@ void ProWriter::writeWallData(const Pro& pro) {
 void ProWriter::writeTileData(const Pro& pro) {
     auto& utils = getBinaryUtils();
 
-    // Write tile data
     utils.writeBE32(pro.tileData.materialId);
 
     spdlog::debug("ProWriter: Tile data written - materialId: {}", pro.tileData.materialId);
@@ -415,7 +393,6 @@ void ProWriter::writeTileData(const Pro& pro) {
 void ProWriter::writeMiscData([[maybe_unused]] const Pro& pro) {
     auto& utils = getBinaryUtils();
 
-    // Write basic misc object data
     utils.writeBE32(0); // unknown field placeholder
 
     spdlog::debug("ProWriter: Basic misc data written (minimal implementation)");

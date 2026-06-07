@@ -25,21 +25,23 @@ public:
     virtual bool isDone() = 0;
     virtual void onDone() = 0;
 
-    const std::string& status() {
+    std::string status() {
         std::shared_lock lock(_mutex);
         return _status;
     }
 
-    const std::string& progress() {
+    std::string progress() {
         std::shared_lock lock(_mutex);
         return _progress;
     }
 
     void setStatus(const std::string& status) {
+        std::unique_lock lock(_mutex);
         this->_status = status;
     }
 
     void setProgress(const std::string& progress) {
+        std::unique_lock lock(_mutex);
         this->_progress = progress;
     }
 

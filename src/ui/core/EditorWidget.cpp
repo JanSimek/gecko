@@ -48,16 +48,13 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
     , _mainWindow(nullptr)
     , _resources(resources)
     , _map(std::move(map)) {
-    // Initialize sprite vectors - will be populated when sprites are loaded
     _floorSprites.reserve(Map::TILES_PER_ELEVATION);
     _roofSprites.reserve(Map::TILES_PER_ELEVATION);
 
-    // Initialize selection management only if map is provided
     if (_map) {
         initializeSelectionSystem();
     }
 
-    // Initialize rendering engine, input handler, drag/drop manager, tile placement manager, and viewport controller
     _renderingEngine = std::make_unique<RenderingEngine>(_resources);
     _mapSpriteLoader = std::make_unique<MapSpriteLoader>(_resources, _hexgrid);
     _objectCommandController = std::make_unique<ObjectCommandController>(
@@ -90,7 +87,6 @@ void EditorWidget::applyTileChanges(const std::vector<TileChange>& changes, bool
         return;
     }
 
-    // Group changes by elevation for efficient batch processing
     std::unordered_map<int, std::vector<const TileChange*>> changesByElevation;
     for (const auto& change : changes) {
         changesByElevation[change.elevation].push_back(&change);
@@ -100,7 +96,6 @@ void EditorWidget::applyTileChanges(const std::vector<TileChange>& changes, bool
     for (const auto& [elevation, elevChanges] : changesByElevation) {
         auto& elevationTiles = ensureElevationTiles(elevation);
 
-        // Apply all tile changes for this elevation
         for (const auto* change : elevChanges) {
             if (change->tileIndex < 0 || change->tileIndex >= static_cast<int>(elevationTiles.size())) {
                 continue;
@@ -114,7 +109,6 @@ void EditorWidget::applyTileChanges(const std::vector<TileChange>& changes, bool
             }
         }
 
-        // Now update all sprites for this elevation if it's the current one
         if (elevation == _currentElevation) {
             for (const auto* change : elevChanges) {
                 if (change->tileIndex >= 0 && change->tileIndex < static_cast<int>(elevationTiles.size())) {
@@ -194,7 +188,6 @@ void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObj
 }
 
 EditorWidget::~EditorWidget() {
-    // Qt will handle cleanup of child widgets automatically
 }
 
 bool EditorWidget::undoLastEdit() {
@@ -210,15 +203,11 @@ bool EditorWidget::redoLastEdit() {
 }
 
 void EditorWidget::initializeSelectionSystem() {
-    // Initialize the selection manager
     _selectionManager = std::make_unique<selection::SelectionManager>(_map.get(), this);
 
-    // Setup direct callback for selection changes
     _selectionManager->setSelectionCallback([this](const selection::SelectionState& selection) {
-        // First, clear all existing visual selections
         this->clearAllVisualSelections();
 
-        // Then apply new visual selections
         for (const auto& item : selection.items) {
             switch (item.type) {
                 case selection::SelectionType::OBJECT: {
@@ -232,16 +221,13 @@ void EditorWidget::initializeSelectionSystem() {
                 case selection::SelectionType::ROOF_TILE: {
                     int tileIndex = item.getTileIndex();
                     if (isValidTileIndex(tileIndex) && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
-                        // Check if this is an empty roof tile and we're in ROOF_TILES_ALL mode
                         [[maybe_unused]] auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
-                        // Apply highlighting to roof sprite with higher visibility for better contrast
                         this->_roofSprites.at(tileIndex).setColor(geck::ColorUtils::createRoofTileSelectionColor());
 
-                        // Create a blank.frm background sprite for better visibility of tiles with transparent pixels
+                        // blank.frm background sprite makes tiles with transparent pixels visible when selected
                         auto screenPos = geck::indexToScreenPosition(tileIndex, true); // true for roof offset
                         sf::Sprite backgroundSprite(_resources.textures().get("art/tiles/blank.frm"));
                         backgroundSprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-                        // Set semi-transparent red color to show through transparent areas of the roof tile
                         backgroundSprite.setColor(sf::Color(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B, 128)); // 50% transparency
                         this->_selectedRoofTileBackgroundSprites.push_back(backgroundSprite);
                     }
@@ -266,16 +252,8 @@ void EditorWidget::initializeSelectionSystem() {
             }
         }
 
-        // Emit unified selection update
         emit selectionChanged(selection, _currentElevation);
-
-        // Publish to EventBus
-        EventBus::getInstance().publish(SelectionChangedEvent{
-            selection.items.empty() ? SelectionChangedEvent::Type::Cleared : SelectionChangedEvent::Type::Added,
-            static_cast<int>(selection.items.size()) });
     });
-
-    // Register the observer with the selection manager
 }
 
 void EditorWidget::setupUI() {
@@ -293,7 +271,6 @@ void EditorWidget::setupUI() {
     containerLayout->setContentsMargins(0, 0, 0, 0);
     containerLayout->setSpacing(0);
 
-    // Create the SFML widget that will handle rendering
     _sfmlWidget = new SFMLWidget(renderingContainer);
 
     // Set this EditorWidget as the delegate for SFML event handling
@@ -307,25 +284,20 @@ void EditorWidget::setupUI() {
 }
 
 void EditorWidget::init() {
-    // Only load sprites if we have a map
     if (_map) {
         loadSprites();
-
-        // Show error summary if there were loading issues
         showLoadingErrorsSummary();
 
-        // Initialize spatial index for O(1) area selection performance
+        // Spatial index gives O(1) area selection
         if (_selectionManager) {
             _selectionManager->initializeSpatialIndex();
         }
     }
 
-    // Initialize selection rectangle for drag selection
     _selectionRectangle.setFillColor(TileColors::selectionFill());
     _selectionRectangle.setOutlineColor(TileColors::selectionOutline());
     _selectionRectangle.setOutlineThickness(2.0f);
 
-    // Initialize viewport controller with current widget size
     sf::Vector2u windowSize(800, 600); // Default size
     if (_sfmlWidget) {
         windowSize = sf::Vector2u(
@@ -339,7 +311,7 @@ void EditorWidget::saveMap() {
     QString destinationQString = QtDialogs::saveFile(this, "Select a file", "Map Files (*.map);;All Files (*.*)");
 
     if (destinationQString.isEmpty()) {
-        return; // User cancelled
+        return;
     }
 
     std::string destination = destinationQString.toStdString();
@@ -354,17 +326,19 @@ void EditorWidget::saveMap() {
             spdlog::info("Saved map {} ({} bytes)", destination, map_writer.getBytesWritten());
         } else {
             spdlog::error("Failed to save map {}", destination);
+            QtDialogs::showError(this, "Save Failed",
+                QString("Failed to save map to:\n%1").arg(destinationQString));
         }
     } catch (const geck::FileWriterException& e) {
         spdlog::error("Failed to save map {}: {}", destination, e.what());
-        // Could show error dialog to user here
+        QtDialogs::showError(this, "Save Failed",
+            QString("Failed to save map to:\n%1\n\n%2").arg(destinationQString, QString::fromStdString(e.what())));
     } catch (const std::exception& e) {
         spdlog::error("Unexpected error saving map {}: {}", destination, e.what());
     }
 }
 
 void EditorWidget::openMap() {
-    // Show file dialog to select a new map
     QString mapPathQString = QtDialogs::openMapFile(this, "Choose Fallout 2 map to load");
 
     if (mapPathQString.isEmpty()) {
@@ -375,67 +349,57 @@ void EditorWidget::openMap() {
     std::string mapPath = mapPathQString.toStdString();
     spdlog::info("User requested to open new map: {}", mapPath);
 
-    // Emit signal to request map loading - MainWindow will handle the actual loading
+    // MainWindow handles the actual loading
     emit mapLoadRequested(mapPath);
 }
 
 void EditorWidget::createNewMap() {
     spdlog::info("Creating new empty map");
 
-    // Create a new empty MapFile
     auto newMapFile = std::make_unique<Map::MapFile>();
 
-    // Initialize header with default values
-    newMapFile->header.version = FileFormat::FALLOUT2_MAP_VERSION;                           // Standard Fallout 2 map version
-    newMapFile->header.filename = "newmap";                                                  // Default filename
+    newMapFile->header.version = FileFormat::FALLOUT2_MAP_VERSION;
+    newMapFile->header.filename = "newmap";
     newMapFile->header.player_default_position = MapDefaults::PLAYER_DEFAULT_POSITION;       // Center of map (hex 99,99 area)
     newMapFile->header.player_default_elevation = MapDefaults::PLAYER_DEFAULT_ELEVATION;     // Ground level
     newMapFile->header.player_default_orientation = MapDefaults::PLAYER_DEFAULT_ORIENTATION; // North
     newMapFile->header.num_local_vars = 0;
     newMapFile->header.script_id = MapDefaults::NO_SCRIPT_ID; // No map script
     newMapFile->header.flags = MapDefaults::DEFAULT_FLAGS;    // All elevations enabled
-    newMapFile->header.darkness = MapDefaults::NO_DARKNESS;   // No darkness
+    newMapFile->header.darkness = MapDefaults::NO_DARKNESS;
     newMapFile->header.num_global_vars = 0;
-    newMapFile->header.map_id = MapDefaults::DEFAULT_MAP_ID; // Default map ID
+    newMapFile->header.map_id = MapDefaults::DEFAULT_MAP_ID;
     newMapFile->header.timestamp = MapDefaults::DEFAULT_TIMESTAMP;
 
-    // Initialize empty variables
     newMapFile->map_local_vars.clear();
     newMapFile->map_global_vars.clear();
 
-    // Initialize empty tiles for all elevations (0, 1, 2)
     for (int elevation = ELEVATION_1; elevation <= ELEVATION_3; elevation++) {
         std::vector<Tile> elevationTiles;
         elevationTiles.reserve(Map::TILES_PER_ELEVATION);
 
-        // Create empty tiles (EMPTY_TILE = 1 for both floor and roof)
         for (unsigned int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
-            Tile tile(Map::EMPTY_TILE, Map::EMPTY_TILE); // Empty floor and roof tiles
+            Tile tile(Map::EMPTY_TILE, Map::EMPTY_TILE); // EMPTY_TILE = 1 for both floor and roof
             elevationTiles.push_back(tile);
         }
 
         newMapFile->tiles[elevation] = std::move(elevationTiles);
     }
 
-    // Initialize empty scripts
     for (int i = 0; i < Map::SCRIPT_SECTIONS; i++) {
         newMapFile->map_scripts[i].clear();
         newMapFile->scripts_in_section[i] = 0;
     }
 
-    // Initialize empty objects for all elevations
     for (int elevation = ELEVATION_1; elevation <= ELEVATION_3; elevation++) {
         newMapFile->map_objects[elevation].clear();
     }
 
-    // Create a new Map instance with default filename for new map
     _map = std::make_unique<Map>(std::filesystem::path("newmap.map"));
     _map->setMapFile(std::move(newMapFile));
 
-    // Reset current elevation to 0
     _currentElevation = 0;
 
-    // Clear all existing visual data
     _objects.clear();
     _floorSprites.clear();
     _roofSprites.clear();
@@ -450,21 +414,15 @@ void EditorWidget::createNewMap() {
         spdlog::warn("Failed to load some essential resources for new map: {}", e.what());
     }
 
-    // Initialize selection system now that map is available
     if (!_selectionManager) {
         initializeSelectionSystem();
     }
 
-    // Initialize sprites for the new empty map
     loadSprites();
 
-    // Clear selection
     _selectionManager->clearSelection();
-
-    // Center view on the map
     _viewportController->centerViewOnMap();
 
-    // Update palettes and UI now that map is created
     if (_mainWindow) {
         _mainWindow->updateMapInfo(_map.get());
     }
@@ -473,13 +431,11 @@ void EditorWidget::createNewMap() {
 }
 
 std::vector<int> EditorWidget::calculateRectangleBorderHexes(sf::FloatRect rectangle) {
-    // Convert rectangle corners to hex positions
     sf::Vector2f topLeft = sf::Vector2f(rectangle.position.x, rectangle.position.y);
     sf::Vector2f topRight = sf::Vector2f(rectangle.position.x + rectangle.size.x, rectangle.position.y);
     sf::Vector2f bottomLeft = sf::Vector2f(rectangle.position.x, rectangle.position.y + rectangle.size.y);
     sf::Vector2f bottomRight = sf::Vector2f(rectangle.position.x + rectangle.size.x, rectangle.position.y + rectangle.size.y);
 
-    // Convert corner world positions to hex indices
     int topLeftHex = _viewportController->worldPosToHexIndex(topLeft);
     int topRightHex = _viewportController->worldPosToHexIndex(topRight);
     int bottomLeftHex = _viewportController->worldPosToHexIndex(bottomLeft);
@@ -504,22 +460,20 @@ std::vector<int> EditorWidget::calculateRectangleBorderHexes(sf::FloatRect recta
 std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPosition) {
     auto mapObject = std::make_shared<MapObject>();
 
-    // Set basic properties
     mapObject->position = hexPosition;
     mapObject->elevation = _currentElevation;
     mapObject->direction = 0;
     mapObject->frame_number = 0;
 
-    // Set scroll blocker FRM PID (base ID = 1 for scrblk.frm)
-    mapObject->frm_pid = 0x05000000 | WallBlockers::SCROLL_BLOCKER_BASE_ID; // MISC type (0x05) with base ID 1
+    // scrblk.frm: MISC type (0x05) with base ID 1
+    mapObject->frm_pid = 0x05000000 | WallBlockers::SCROLL_BLOCKER_BASE_ID;
 
-    // Set proto PID to a valid MISC object proto
-    mapObject->pro_pid = 0x05000000 | WallBlockers::GENERIC_PROTO_ID; // MISC type, generic small object
+    // MISC type, generic small object proto
+    mapObject->pro_pid = 0x05000000 | WallBlockers::GENERIC_PROTO_ID;
 
-    // Set flags - scroll blockers don't block movement, just visual indicators
+    // Scroll blockers don't block movement, they are visual indicators only
     mapObject->flags = 0;
 
-    // Initialize other fields to default values
     mapObject->unknown0 = 0;
     mapObject->x = 0;
     mapObject->y = 0;
@@ -540,7 +494,6 @@ std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPositi
     return mapObject;
 }
 
-// Tiles
 void EditorWidget::loadTileSprites() {
     if (!_map) {
         return;
@@ -553,13 +506,11 @@ void EditorWidget::loadSprites() {
     spdlog::stopwatch sw;
     _mapSpriteLoader->loadSprites(*_map, _currentElevation, _floorSprites, _roofSprites, _objects, _wallBlockerOverlays);
 
-    // Rebuild spatial index after sprites are loaded
     _selectionManager->initializeSpatialIndex();
 
     spdlog::info("Map sprites loaded in {:.3} seconds", sw);
 }
 
-// New improved object selection methods
 std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vector2f worldPos) {
     std::vector<std::shared_ptr<Object>> objectsAtPos;
 
@@ -579,7 +530,7 @@ std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vect
                 return posA > posB; // Higher position = front
             }
 
-            // Same position - use object type priority
+            // Same position - break ties by object type priority
             auto getTypePriority = [](uint32_t pid) -> int {
                 unsigned int typeId = pid >> FileFormat::TYPE_MASK_SHIFT;
                 switch (static_cast<Pro::OBJECT_TYPE>(typeId)) {
@@ -603,7 +554,6 @@ std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vect
             return getTypePriority(a->getMapObject().pro_pid) > getTypePriority(b->getMapObject().pro_pid);
         });
 
-    // Debug: Log object positions and PIDs for debugging
     if (objectsAtPos.size() > 1) {
         spdlog::debug("getObjectsAtPosition: Found {} overlapping objects:", objectsAtPos.size());
         for (size_t i = 0; i < objectsAtPos.size(); i++) {
@@ -647,40 +597,30 @@ bool EditorWidget::isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite&
         return false;
     }
 
-    // Get sprite bounds and texture
     const auto bounds = sprite.getGlobalBounds();
     const auto& texture = sprite.getTexture();
 
-    // Convert world position to sprite-local coordinates
+    // Convert world position to sprite-local, then to texture coordinates (accounting for texture rect and scale)
     sf::Vector2f localPos = worldPos - sf::Vector2f(bounds.position.x, bounds.position.y);
-
-    // Apply sprite's texture rectangle and scale
     const auto textureRect = sprite.getTextureRect();
     const auto scale = sprite.getScale();
-
-    // Convert to texture coordinates
     unsigned int texX = static_cast<unsigned int>((localPos.x / scale.x) + textureRect.position.x);
     unsigned int texY = static_cast<unsigned int>((localPos.y / scale.y) + textureRect.position.y);
 
-    // Get texture size
     const auto texSize = texture.getSize();
-
-    // Bounds check
     if (texX >= texSize.x || texY >= texSize.y) {
         return false;
     }
 
-    // Get the image and check pixel transparency
     const auto image = texture.copyToImage();
     const auto pixel = image.getPixel({ texX, texY });
 
-    bool isHit = pixel.a > 0;
+    bool isHit = pixel.a > 0; // not fully transparent
     if (isHit) {
         spdlog::debug("Hit detected: world({:.2f},{:.2f}) -> local({:.2f},{:.2f}) -> tex({},{}) alpha={}",
             worldPos.x, worldPos.y, localPos.x, localPos.y, texX, texY, pixel.a);
     }
 
-    // Return true if pixel is not fully transparent
     return isHit;
 }
 
@@ -697,44 +637,38 @@ bool EditorWidget::isDoubleClick(sf::Vector2f worldPos) {
 }
 
 void EditorWidget::clearAllVisualSelections() {
-    // Clear all object selections
     std::ranges::for_each(_objects, [](auto& object) {
         if (object) {
             object->unselect();
         }
     });
 
-    // Clear all tile colors
     std::ranges::for_each(_floorSprites, [](auto& sprite) {
         sprite.setColor(sf::Color::White);
     });
 
-    // Reset roof sprites - empty tiles back to transparent, others to white
+    // Reset roof sprites: empty tiles back to transparent, others to white
     if (_map && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
         for (int i = 0; i < static_cast<int>(_roofSprites.size()); ++i) {
             auto tile = _map->getMapFile().tiles.at(_currentElevation).at(i);
             if (tile.getRoof() == Map::EMPTY_TILE) {
-                _roofSprites[i].setColor(geck::TileColors::transparent()); // Transparent
+                _roofSprites[i].setColor(geck::TileColors::transparent());
             } else {
-                _roofSprites[i].setColor(sf::Color::White); // Opaque white
+                _roofSprites[i].setColor(sf::Color::White);
             }
         }
     } else {
-        // If elevation doesn't exist, just set all roof sprites to white
         std::ranges::for_each(_roofSprites, [](auto& sprite) {
             sprite.setColor(sf::Color::White);
         });
     }
 
-    // Clear roof tile selection background sprites
     _selectedRoofTileBackgroundSprites.clear();
-
     _selectedHexPositions.clear();
 }
 
-// SFML Event handling interface (called by SFMLWidget)
+// SFML event handling interface (called by SFMLWidget)
 void EditorWidget::handleEvent(const sf::Event& event) {
-    // Handle resize events to maintain aspect ratio (SFML 3 syntax)
     if (const auto* resized = event.getIf<sf::Event::Resized>()) {
         if (_viewportController) {
             _viewportController->updateViewForWindowSize(sf::Vector2u(resized->size.x, resized->size.y));
@@ -742,7 +676,6 @@ void EditorWidget::handleEvent(const sf::Event& event) {
         }
     }
 
-    // Delegate all other event handling to InputHandler
     if (_inputHandler && _sfmlWidget) {
         if (auto* target = _sfmlWidget->getRenderTarget()) {
             _inputHandler->handleEvent(event, *target, _viewportController->getView());
@@ -788,11 +721,9 @@ void EditorWidget::setupInputCallbacks() {
         sf::FloatRect selectionArea({ left, top }, { width, height });
 
         if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
-            // Handle scroll blocker rectangle placement
             auto borderHexes = calculateRectangleBorderHexes(selectionArea);
             createScrollBlockersFromHexes(borderHexes);
         } else {
-            // Normal area selection
             auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
             if (result.success) {
                 spdlog::debug("Area selection completed: {}", result.message);
@@ -821,7 +752,6 @@ void EditorWidget::setupInputCallbacks() {
         _viewportController->zoomView(direction);
     };
 
-    // Object dragging - delegate to DragDropManager
     callbacks.canStartObjectDrag = [this](sf::Vector2f worldPos) {
         return _dragDropManager ? _dragDropManager->canStartObjectDrag(worldPos) : false;
     };
@@ -848,7 +778,6 @@ void EditorWidget::setupInputCallbacks() {
         }
     };
 
-    // Special modes
     callbacks.onPlayerPositionSelect = [this](sf::Vector2f worldPos) {
         int hexPosition = _viewportController->worldPosToHexIndex(worldPos);
         if (hexPosition >= 0) {
@@ -887,15 +816,12 @@ void EditorWidget::setupInputCallbacks() {
         updateMarkExitsPreview(startPos, currentPos);
     };
 
-    // Hover
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
         _currentHoverHex = _viewportController->updateHoverHex(worldPos);
         emit hexHoverChanged(_currentHoverHex);
     };
 
-    // Keyboard
     callbacks.onEscape = [this]() {
-        // Handle escape key logic
         if (_tilePlacementManager->isTilePlacementMode()) {
             _tilePlacementManager->resetState();
             if (_mainWindow && _mainWindow->getTilePalettePanel()) {
@@ -907,7 +833,6 @@ void EditorWidget::setupInputCallbacks() {
     };
 
     callbacks.onDeleteObjects = [this]() {
-        // Handle delete key to remove selected objects
         deleteSelectedObjects();
     };
 
@@ -920,11 +845,9 @@ void EditorWidget::setupInputCallbacks() {
 
     _inputHandler->setCallbacks(callbacks);
 
-    // Set initial modes
     _inputHandler->setSelectionMode(_currentSelectionMode);
 }
 
-// Helper method to extract scroll blocker creation logic
 void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderHexes) {
     if (borderHexes.empty()) {
         spdlog::warn("No valid border hexes found for scroll blocker rectangle");
@@ -935,7 +858,6 @@ void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderH
     for (int hexPos : borderHexes) {
         auto scrollBlockerObject = createScrollBlockerObject(hexPos);
 
-        // Add to map storage
         _map->getMapFile().map_objects[_currentElevation].push_back(scrollBlockerObject);
 
         // Create visual object for immediate display
@@ -967,19 +889,15 @@ void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderH
 }
 
 void EditorWidget::update([[maybe_unused]] const float dt) {
-    // Update game logic here
-    // This is called by the SFMLWidget's update loop
+    // Called by the SFMLWidget's update loop
 }
 
 void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float dt) {
-    // Render the game here
-    // This is called by the SFMLWidget's render loop
-
+    // Called by the SFMLWidget's render loop
     if (!_renderingEngine) {
         return;
     }
 
-    // Prepare visibility settings
     RenderingEngine::VisibilitySettings visibility;
     visibility.showObjects = _showObjects;
     visibility.showCritters = _showCritters;
@@ -991,7 +909,6 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     visibility.showLightOverlays = _showLightOverlays;
     visibility.showExitGrids = _showExitGrids;
 
-    // Prepare render data
     RenderingEngine::RenderData renderData;
     renderData.floorSprites = &_floorSprites;
     renderData.roofSprites = &_roofSprites;
@@ -1011,46 +928,37 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.map = _map.get();
     renderData.currentElevation = _currentElevation;
 
-    // Delegate rendering to the engine
     _renderingEngine->render(target, _viewportController->getView(), renderData, visibility);
 }
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
-    // Default to normal selection (no modifier)
     return selectAtPosition(worldPos, SelectionModifier::NONE);
 }
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier modifier) {
-    // Update the observer with current elevation
-
     selection::SelectionResult result;
 
     switch (modifier) {
         case SelectionModifier::NONE:
-            // Normal single selection (clear and select one)
             result = _selectionManager->selectAtPosition(worldPos, _currentSelectionMode, _currentElevation);
             break;
 
         case SelectionModifier::ADD:
-            // Alt+Click - add to existing selection
             result = _selectionManager->addToSelection(worldPos, _currentSelectionMode, _currentElevation);
             spdlog::debug("Add to selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
 
         case SelectionModifier::TOGGLE:
-            // Ctrl+Click - toggle selection (add if not selected, remove if selected)
             result = _selectionManager->toggleSelection(worldPos, _currentSelectionMode, _currentElevation);
             spdlog::debug("Toggle selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
 
         case SelectionModifier::RANGE:
-            // Shift+Click - range selection for tiles
             result = handleRangeSelection(worldPos);
             spdlog::debug("Range selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
     }
 
-    // Log selection count for multi-selection feedback
     if (result.success && result.selectionChanged) {
         const auto& selection = _selectionManager->getCurrentSelection();
         if (selection.count() > 1) {
@@ -1062,17 +970,14 @@ bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier mod
 }
 
 void EditorWidget::cycleSelectionMode() {
-    // Cycle through selection modes
     int currentMode = static_cast<int>(_currentSelectionMode);
     currentMode = (currentMode + 1) % static_cast<int>(SelectionMode::NUM_SELECTION_TYPES);
     _currentSelectionMode = static_cast<SelectionMode>(currentMode);
 
-    // Update InputHandler with new selection mode
     if (_inputHandler) {
         _inputHandler->setSelectionMode(_currentSelectionMode);
     }
 
-    // Clear current selection when mode changes
     _selectionManager->clearSelection();
 
     spdlog::info("Selection mode changed to: {}", selectionModeToString(_currentSelectionMode));
@@ -1080,17 +985,15 @@ void EditorWidget::cycleSelectionMode() {
 
 void EditorWidget::setSelectionMode(SelectionMode mode) {
     if (_currentSelectionMode == mode) {
-        return; // No change needed
+        return;
     }
 
     _currentSelectionMode = mode;
 
-    // Update InputHandler with new selection mode
     if (_inputHandler) {
         _inputHandler->setSelectionMode(_currentSelectionMode);
     }
 
-    // Clear current selection when mode changes
     _selectionManager->clearSelection();
 
     spdlog::info("Selection mode set to: {}", selectionModeToString(_currentSelectionMode));
@@ -1098,13 +1001,11 @@ void EditorWidget::setSelectionMode(SelectionMode mode) {
 
 void EditorWidget::toggleScrollBlockerRectangleMode() {
     if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
-        // Switch back to ALL mode
         _currentSelectionMode = SelectionMode::ALL;
         spdlog::info("Scroll blocker rectangle mode disabled, switched to ALL mode");
     } else {
-        // Switch to scroll blocker rectangle mode
         _currentSelectionMode = SelectionMode::SCROLL_BLOCKER_RECTANGLE;
-        // Automatically enable scroll blocker visibility for better UX
+        // Auto-enable scroll blocker visibility so the user can see what they are placing
         if (!_showScrollBlk) {
             _showScrollBlk = true;
             spdlog::info("Automatically enabled scroll blocker visibility");
@@ -1112,12 +1013,10 @@ void EditorWidget::toggleScrollBlockerRectangleMode() {
         spdlog::info("Scroll blocker rectangle mode enabled");
     }
 
-    // Update InputHandler with new selection mode
     if (_inputHandler) {
         _inputHandler->setSelectionMode(_currentSelectionMode);
     }
 
-    // Clear current selection when mode changes
     _selectionManager->clearSelection();
 }
 
@@ -1152,7 +1051,7 @@ void EditorWidget::rotateSelectedObject() {
 void EditorWidget::changeElevation(int elevation) {
     if (elevation >= ELEVATION_1 && elevation <= ELEVATION_3) {
         _currentElevation = elevation;
-        loadSprites(); // Reload sprites for new elevation
+        loadSprites();
     }
 }
 
@@ -1235,28 +1134,18 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof, int elevation) {
     _mapSpriteLoader->updateTileSprite(hexIndex, isRoof, elevation, elevationTiles, _floorSprites, _roofSprites);
 }
 
-// Helper methods implementation
-
-// Tile selection helper implementation
-
 bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) {
-    // Simple bounding box collision check - same as original EditorState
     return sprite.getGlobalBounds().contains(worldPos);
 }
 
-// Methods for SelectionManager to access tile and object data
-
 std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool isRoof) {
-    // Check if current elevation exists in the map data
     if (!_map || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
         return std::nullopt;
     }
 
-    // FIXME: this is inaccurate and we should not use hex-to-tile conversion in the future
-    // Use hex-based selection for consistency with hex highlighting
-    // This ensures tile selection matches what users see in the hex highlights
+    // FIXME: this is inaccurate and we should not use hex-to-tile conversion in the future.
+    // Hex-based selection keeps tile selection consistent with the hex highlights users see.
 
-    // Adjust world position for roof offset if selecting roof tiles
     sf::Vector2f adjustedWorldPos = worldPos;
     if (isRoof) {
         adjustedWorldPos.y += ROOF_OFFSET; // Roof tiles are visually offset upward
@@ -1280,7 +1169,6 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
         return std::nullopt;
     }
 
-    // For roof tiles, check if there's actually a roof tile at this position
     if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(*tileIndex).getRoof() == Map::EMPTY_TILE) {
         spdlog::debug("EditorWidget::getTileAtPosition: Empty roof tile at index {} [worldPos: ({:.1f}, {:.1f})]",
             *tileIndex, worldPos.x, worldPos.y);
@@ -1294,13 +1182,11 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
 }
 
 std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
-    // This version includes empty roof tiles in the selection using F2 Mapper algorithm
+    // Includes empty roof tiles in the selection, using the F2 Mapper algorithm
     if (!_map || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
         return std::nullopt;
     }
 
-    // Use hex-based selection for roof tiles too, for consistency
-    // Adjust world position for roof offset since we're selecting roof tiles
     sf::Vector2f adjustedWorldPos = worldPos;
     adjustedWorldPos.y += ROOF_OFFSET; // Roof tiles are visually offset upward
 
@@ -1318,22 +1204,20 @@ std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2
 }
 
 selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f worldPos) {
-    // Range selection is primarily for tiles - select a rectangular area of tiles
+    // Range selection is primarily for tiles. It needs a starting point, so if
+    // nothing is selected, fall back to a normal single selection.
     const auto& currentSelection = _selectionManager->getCurrentSelection();
 
-    // For range selection to work, we need a starting point
-    // If nothing is selected, just do a normal selection
     if (currentSelection.isEmpty()) {
         return _selectionManager->selectAtPosition(worldPos, _currentSelectionMode, _currentElevation);
     }
 
-    // Get the first selected tile as the starting point for range selection
+    // First selected tile becomes the range start point
     sf::Vector2f startPos;
     bool hasStartTile = false;
 
     for (const auto& item : currentSelection.items) {
         if (item.type == selection::SelectionType::FLOOR_TILE || item.type == selection::SelectionType::ROOF_TILE) {
-            // Convert tile index to world position
             int tileIndex = item.getTileIndex();
             auto screenPos = indexToScreenPosition(tileIndex);
             startPos = sf::Vector2f(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y));
@@ -1342,30 +1226,25 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
         }
     }
 
-    // If no tile in current selection, fallback to normal selection
     if (!hasStartTile) {
         return _selectionManager->selectAtPosition(worldPos, _currentSelectionMode, _currentElevation);
     }
 
-    // Calculate rectangular area between start and current position
     float left = std::min(startPos.x, worldPos.x);
     float top = std::min(startPos.y, worldPos.y);
     float right = std::max(startPos.x, worldPos.x);
     float bottom = std::max(startPos.y, worldPos.y);
 
-    // Add some padding to ensure we catch tiles at the edges
+    // Padding ensures we catch tiles at the edges
     sf::FloatRect selectionArea(
         { left - AREA_SELECTION_X_PADDING, top - AREA_SELECTION_Y_PADDING },
         { (right - left) + AREA_SELECTION_X_TOTAL_PADDING, (bottom - top) + AREA_SELECTION_Y_TOTAL_PADDING });
 
-    // Determine selection mode based on current mode
     SelectionMode areaMode = _currentSelectionMode;
     if (_currentSelectionMode == SelectionMode::ALL) {
-        // For ALL mode, default to floor tiles for range selection
-        areaMode = SelectionMode::FLOOR_TILES;
+        areaMode = SelectionMode::FLOOR_TILES; // ALL mode defaults to floor tiles for range selection
     }
 
-    // Use the SelectionManager's area selection functionality
     auto result = _selectionManager->selectArea(selectionArea, areaMode, _currentElevation);
 
     spdlog::info("Range selection: area ({:.1f}, {:.1f}, {:.1f}, {:.1f})",
@@ -1375,25 +1254,20 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
 }
 
 void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos) {
-    // Clear previous preview
     clearDragPreview();
 
-    // Create selection area
     float left = std::min(startWorldPos.x, currentWorldPos.x);
     float top = std::min(startWorldPos.y, currentWorldPos.y);
     float width = std::abs(currentWorldPos.x - startWorldPos.x);
     float height = std::abs(currentWorldPos.y - startWorldPos.y);
     sf::FloatRect selectionArea({ left, top }, { width, height });
 
-    // Update the visual selection rectangle
     _selectionRectangle.setPosition({ left, top });
     _selectionRectangle.setSize({ width, height });
 
-    // Get items that would be selected
     switch (_currentSelectionMode) {
         case SelectionMode::FLOOR_TILES: {
             _previewTiles = _selectionManager->getTilesInArea(selectionArea, false, _currentElevation);
-            // Apply preview coloring to floor tiles
             for (int tileIndex : _previewTiles) {
                 if (isValidTileIndex(tileIndex)) {
                     applyPreviewHighlight(_floorSprites.at(tileIndex));
@@ -1404,7 +1278,6 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
 
         case SelectionMode::ROOF_TILES: {
             _previewTiles = _selectionManager->getTilesInArea(selectionArea, true, _currentElevation);
-            // Apply preview coloring to roof tiles
             for (int tileIndex : _previewTiles) {
                 if (isValidTileIndex(tileIndex)) {
                     applyPreviewHighlight(_roofSprites.at(tileIndex));
@@ -1415,10 +1288,9 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
 
         case SelectionMode::ROOF_TILES_ALL: {
             _previewTiles = _selectionManager->getTilesInAreaIncludingEmpty(selectionArea, true, _currentElevation);
-            // Apply preview coloring to roof tiles including empty ones
+            // Highlight makes empty (transparent) roof tiles visible
             for (int tileIndex : _previewTiles) {
                 if (isValidTileIndex(tileIndex)) {
-                    // Apply preview coloring to roof sprite (makes empty tiles visible if they were transparent)
                     applyPreviewHighlight(_roofSprites.at(tileIndex));
                 }
             }
@@ -1427,7 +1299,6 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
 
         case SelectionMode::OBJECTS: {
             _previewObjects = _selectionManager->getObjectsInArea(selectionArea, _currentElevation);
-            // Apply preview coloring to objects
             std::ranges::for_each(_previewObjects, [](auto& object) {
                 if (object) {
                     applyPreviewHighlight(object->getSprite());
@@ -1437,9 +1308,6 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
         }
 
         case SelectionMode::ALL: {
-            // Preview all types of items in ALL mode
-
-            // Preview floor tiles
             _previewTiles = _selectionManager->getTilesInArea(selectionArea, false, _currentElevation);
             for (int tileIndex : _previewTiles) {
                 if (isValidTileIndex(tileIndex)) {
@@ -1447,7 +1315,6 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
                 }
             }
 
-            // Preview roof tiles
             auto roofTiles = _selectionManager->getTilesInArea(selectionArea, true, _currentElevation);
             for (int tileIndex : roofTiles) {
                 if (isValidTileIndex(tileIndex)) {
@@ -1456,7 +1323,6 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
             }
             _previewTiles.insert(_previewTiles.end(), roofTiles.begin(), roofTiles.end());
 
-            // Preview objects
             _previewObjects = _selectionManager->getObjectsInArea(selectionArea, _currentElevation);
             std::ranges::for_each(_previewObjects, [](auto& object) {
                 if (object) {
@@ -1472,21 +1338,17 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
 }
 
 void EditorWidget::updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos) {
-    // Clear previous preview
     clearDragPreview();
 
-    // Create selection area
     float left = std::min(startWorldPos.x, currentWorldPos.x);
     float top = std::min(startWorldPos.y, currentWorldPos.y);
     float width = std::abs(currentWorldPos.x - startWorldPos.x);
     float height = std::abs(currentWorldPos.y - startWorldPos.y);
     sf::FloatRect selectionArea({ left, top }, { width, height });
 
-    // Get tiles that would be affected by the area fill (default to floor tiles)
     bool isRoof = _tilePlacementManager->getTilePlacementIsRoof();
     _previewTiles = _selectionManager->getTilesInArea(selectionArea, isRoof, _currentElevation);
 
-    // Apply preview coloring to tiles (same as selection mode)
     auto& sprites = isRoof ? _roofSprites : _floorSprites;
     for (int tileIndex : _previewTiles) {
         if (isValidTileIndex(tileIndex)) {
@@ -1496,38 +1358,33 @@ void EditorWidget::updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vec
 }
 
 void EditorWidget::clearDragPreview() {
-    // Clear selection rectangle
     _selectionRectangle.setSize({ 0, 0 });
     _selectionRectangle.setPosition({ 0, 0 });
 
-    // Clear tile preview coloring
     for (int tileIndex : _previewTiles) {
         if (isValidTileIndex(tileIndex)) {
             removePreviewHighlight(_floorSprites.at(tileIndex));
 
-            // For roof sprites, check if it's empty and set back to transparent
+            // Empty roof sprites must go back to transparent, not white
             if (_map && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
                 auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
                 if (tile.getRoof() == Map::EMPTY_TILE) {
-                    _roofSprites.at(tileIndex).setColor(geck::TileColors::transparent()); // Transparent
+                    _roofSprites.at(tileIndex).setColor(geck::TileColors::transparent());
                 } else {
                     removePreviewHighlight(_roofSprites.at(tileIndex));
                 }
             } else {
-                // If elevation doesn't exist, just remove preview highlight
                 removePreviewHighlight(_roofSprites.at(tileIndex));
             }
         }
     }
 
-    // Clear object preview coloring
     std::ranges::for_each(_previewObjects, [](auto& object) {
         if (object) {
             removePreviewHighlight(object->getSprite());
         }
     });
 
-    // Clear the preview arrays
     _previewTiles.clear();
     _previewObjects.clear();
 }
@@ -1542,35 +1399,30 @@ std::vector<Tile>& EditorWidget::ensureElevationTiles(int elevation) {
 }
 
 void EditorWidget::updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos) {
-    // Clear previous preview
     clearDragPreview();
 
-    // Create selection area
     float left = std::min(startWorldPos.x, currentWorldPos.x);
     float top = std::min(startWorldPos.y, currentWorldPos.y);
     float width = std::abs(currentWorldPos.x - startWorldPos.x);
     float height = std::abs(currentWorldPos.y - startWorldPos.y);
     sf::FloatRect selectionArea({ left, top }, { width, height });
 
-    // Update the visual selection rectangle
     _selectionRectangle.setPosition({ left, top });
     _selectionRectangle.setSize({ width, height });
 
-    // Find and highlight only exit grid objects
+    // Highlight only exit grid objects
     for (auto& object : _objects) {
         if (!object || !object->getMapObjectPtr() || !object->getMapObjectPtr()->isExitGridMarker()) {
             continue;
         }
 
-        // Get object sprite bounds
         const auto& sprite = object->getSprite();
         auto objectBounds = sprite.getGlobalBounds();
 
-        // Check if object intersects with selection area
         auto intersection = selectionArea.findIntersection(objectBounds);
         if (intersection.has_value()) {
             _previewObjects.push_back(object);
-            // Use bright magenta highlight for better contrast against green exit grids
+            // Bright magenta highlight contrasts well against green exit grids
             object->getSprite().setColor(geck::TileColors::exitGridHighlight());
         }
     }
@@ -1582,30 +1434,26 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
         return;
     }
 
-    // Convert world position to hex position
     int hexPosition = _viewportController->worldPosToHexIndex(worldPos);
     if (!_hexgrid.containsPosition(hexPosition)) {
         spdlog::warn("EditorWidget: Invalid hex position {} for object placement", hexPosition);
         return;
     }
 
-    // Create a MapObject for the placed object using shared_ptr (same as existing objects)
     auto mapObject = std::make_shared<MapObject>();
 
-    // Set basic properties
     mapObject->position = hexPosition;
     mapObject->elevation = _currentElevation;
     mapObject->direction = 0;
     mapObject->frame_number = 0;
 
-    // Set world coordinates
     auto hexCoords = _hexgrid.getHexByPosition(static_cast<uint32_t>(hexPosition));
     if (hexCoords) {
         mapObject->x = static_cast<uint32_t>(hexCoords->get().x());
         mapObject->y = static_cast<uint32_t>(hexCoords->get().y());
     }
 
-    // Only use actual PIDs from ObjectInfo - fail if not available
+    // Only use actual PIDs from ObjectInfo - fail rather than substitute placeholder PIDs
     if (!_previewObjectInfo || !_previewObjectInfo->pro) {
         spdlog::error("EditorWidget: Cannot place object - no ObjectInfo or PRO data available");
         return;
@@ -1614,7 +1462,6 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     mapObject->pro_pid = _previewObjectInfo->pro->header.PID;
     mapObject->frm_pid = _previewObjectInfo->pro->header.FID;
 
-    // Initialize remaining fields
     mapObject->sx = 0;
     mapObject->sy = 0;
     mapObject->flags = 0;
@@ -1632,26 +1479,20 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
 
     // Create visual Object for immediate display
     try {
-        // Try to load FRM for the object if we have ObjectInfo
         const Frm* frm = nullptr;
         if (_previewObjectInfo && !_previewObjectInfo->frmPath.isEmpty()) {
             frm = _resources.repository().load<Frm>(_previewObjectInfo->frmPath.toStdString());
         }
 
-        // Create Object instance same way as existing objects
         auto object = std::make_shared<Object>(frm);
-
-        // Set the MapObject association (same as existing objects)
         object->setMapObject(mapObject);
 
-        // Set sprite texture if FRM was loaded successfully
         if (frm && _previewObjectInfo && !_previewObjectInfo->frmPath.isEmpty()) {
             sf::Sprite objectSprite{ _resources.textures().get(_previewObjectInfo->frmPath.toStdString()) };
             object->setSprite(std::move(objectSprite));
             object->setDirection(static_cast<ObjectDirection>(0));
         }
 
-        // Set proper position using hex positioning
         if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(hexPosition)); hex.has_value()) {
             object->setHexPosition(hex->get());
         }
@@ -1668,7 +1509,6 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
 }
 
 void EditorWidget::startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos) {
-    // Get object info from palette
     if (_mainWindow) {
         auto palette = _mainWindow->getObjectPalettePanel();
         if (palette) {
@@ -1687,7 +1527,6 @@ void EditorWidget::startDragPreview(int objectIndex, int categoryInt, sf::Vector
 void EditorWidget::updateDragPreview(sf::Vector2f worldPos) {
     if (_dragDropManager) {
         _dragDropManager->updateDragPreview(worldPos);
-        // Keep the preview object in sync for rendering
         if (_isDraggingFromPalette) {
             _dragPreviewObject = _dragDropManager->getDragPreviewObject();
         }
@@ -1713,19 +1552,15 @@ void EditorWidget::cancelDragPreview() {
 }
 
 void EditorWidget::enterPlayerPositionSelectionMode() {
-    // Exit any current modes
     _tilePlacementManager->resetState();
 
-    // Enter player position selection mode
     _playerPositionSelectionMode = true;
 
-    // Update InputHandler
     if (_inputHandler) {
         _inputHandler->setPlayerPositionMode(true);
         _inputHandler->setTilePlacementMode(false);
     }
 
-    // Show status message
     emit statusMessageRequested("Click on a hex to set the player starting position (Press Escape to cancel)");
 
     spdlog::debug("EditorWidget: Entered player position selection mode");
@@ -1737,21 +1572,17 @@ void EditorWidget::centerViewOnPlayerPosition() {
         return;
     }
 
-    // Get player default position from map header
     uint32_t playerHexPosition = _map->getMapFile().header.player_default_position;
 
-    // Get the hex at the player position
     auto hex = _hexgrid.getHexByPosition(playerHexPosition);
     if (!hex) {
         spdlog::warn("EditorWidget::centerViewOnPlayerPosition: Invalid player hex position {}", playerHexPosition);
         return;
     }
 
-    // Get screen coordinates from the hex
     float screenX = static_cast<float>(hex->get().x());
     float screenY = static_cast<float>(hex->get().y());
 
-    // Set view center to the hex position
     _viewportController->getView().setCenter(sf::Vector2f(screenX, screenY));
 
     spdlog::debug("EditorWidget::centerViewOnPlayerPosition: Centered view on player position {} at screen ({}, {})",
@@ -1761,13 +1592,12 @@ void EditorWidget::centerViewOnPlayerPosition() {
 void EditorWidget::showLoadingErrorsSummary() {
     const auto& loadingErrors = _mapSpriteLoader->lastLoadErrors();
     if (!loadingErrors.hasErrors()) {
-        return; // No errors to show
+        return;
     }
 
     QString title = "Map Loading Warnings";
     QString message;
 
-    // Build the error summary message
     message += QString("Some objects could not be loaded:\n\n");
     message += QString("• %1 objects skipped due to missing or invalid FRM files\n")
                    .arg(loadingErrors.objectsSkipped);
@@ -1803,7 +1633,6 @@ void EditorWidget::setShowLightOverlays(bool show) {
     _showLightOverlays = show;
 
     int lightObjectCount = 0;
-    // Update all objects to show/hide their light overlays
     std::ranges::for_each(_objects, [&lightObjectCount, show](auto& object) {
         if (object->hasLight()) {
             lightObjectCount++;
@@ -1817,7 +1646,6 @@ void EditorWidget::setShowLightOverlays(bool show) {
 }
 
 void EditorWidget::clearDragSelectionPreview() {
-    // Clear all drag preview highlighting and selection rectangle
     clearDragPreview();
 
     spdlog::debug("EditorWidget::clearDragSelectionPreview() - cleared selection rectangle");
@@ -1830,7 +1658,6 @@ void EditorWidget::onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t n
     }
 
     try {
-        // Get the new FRM path from the FRM PID
         std::string newFrmPath = _resources.frmResolver().resolve(newFrmPid);
         uint32_t oldFrmPid = object->hasMapObject() ? object->getMapObject().frm_pid : 0;
         std::string oldFrmPath = _resources.frmResolver().resolve(oldFrmPid);
@@ -1892,7 +1719,7 @@ void EditorWidget::deleteSelectedObjects() {
             continue;
 
         try {
-            // CRITICAL FIX: Use the actual shared_ptr instead of creating one with no-op deleter
+            // Use the actual shared_ptr; do not construct one with a no-op deleter here
             auto mapObjPtr = object->getMapObjectPtr();
             if (!mapObjPtr) {
                 spdlog::warn("EditorWidget::deleteSelectedObjects - Object has null MapObject shared_ptr");
@@ -1925,17 +1752,9 @@ void EditorWidget::deleteSelectedObjects() {
         pushCommand(std::move(cmd));
     }
 
-    // Clear selection
     _selectionManager->clearSelection();
 
-    // Update UI
     emit selectionChanged(_selectionManager->getCurrentSelection(), _currentElevation);
-
-    // Publish to EventBus - objects were removed
-    EventBus::getInstance().publish(SelectionChangedEvent{
-        SelectionChangedEvent::Type::Removed,
-        0 // After deletion, selection is cleared
-    });
 
     spdlog::info("EditorWidget::deleteSelectedObjects - Successfully deleted {} objects", removedObjects.size());
 }

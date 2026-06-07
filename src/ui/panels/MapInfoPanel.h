@@ -15,8 +15,6 @@
 #include <QPushButton>
 #include <unordered_map>
 
-#include "../../util/EventBus.h"
-
 namespace geck {
 
 class Map;
@@ -24,9 +22,7 @@ namespace resource {
     class GameResources;
 }
 
-/**
- * Qt6 widget for displaying properties from the current MAP file
- */
+/// @brief Qt6 widget for displaying properties from the current MAP file.
 class MapInfoPanel : public QWidget {
     Q_OBJECT
 
