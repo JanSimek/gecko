@@ -13,10 +13,8 @@ HexagonGrid::HexagonGrid() {
     const unsigned int yMod = Hex::HEX_HEIGHT / 2; // y offset
 
     uint32_t position = 0;
-    for (unsigned int hy = 0; hy != GRID_HEIGHT; ++hy)
-    {
-        for (unsigned int hx = 0; hx != GRID_WIDTH; ++hx)
-        {
+    for (unsigned int hy = 0; hy != GRID_HEIGHT; ++hy) {
+        for (unsigned int hx = 0; hx != GRID_WIDTH; ++hx) {
             // Calculate hex's actual screen position
             const bool oddCol = hx & 1;
             const int oddMod = hy + 1;

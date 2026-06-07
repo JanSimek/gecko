@@ -455,7 +455,7 @@ void FileBrowserPanel::stopLoading() {
 
     if (_loaderThread && _loaderThread->isRunning()) {
         _loaderThread->quit();
-        }
+    }
 
     if (_chunkTimer) {
         _chunkTimer->stop();

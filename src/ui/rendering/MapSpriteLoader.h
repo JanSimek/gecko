@@ -17,7 +17,7 @@ struct MapObject;
 class Tile;
 
 namespace resource {
-class GameResources;
+    class GameResources;
 }
 
 class MapSpriteLoader {

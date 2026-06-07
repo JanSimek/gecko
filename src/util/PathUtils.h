@@ -20,16 +20,14 @@ public:
      * Converting through generic_string() normalises Windows back-slashes to the
      * forward slashes used in DAT archives and the VFS layer.
      */
-    static std::string toVfsPath(const std::filesystem::path& path)
-    {
+    static std::string toVfsPath(const std::filesystem::path& path) {
         return path.generic_string();
     }
 
     /**
      * @brief Normalize path separators to forward slashes.
      */
-    static std::filesystem::path normalize(const std::filesystem::path& path)
-    {
+    static std::filesystem::path normalize(const std::filesystem::path& path) {
         return std::filesystem::path(path.generic_string());
     }
 };
