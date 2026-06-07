@@ -141,6 +141,17 @@ if(NOT ZLIB_FOUND)
     set(ZLIB_INCLUDE_DIRS ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
 endif()
 
+# macOS find_package(ZLIB) points at the SDK's <SDK>/usr/include (the C stdlib
+# dir); propagated as -isystem it shadows libc++ and breaks <cstddef> on clang 21.
+# zlib.h is already on the default search path, so drop the redundant include dir.
+if(APPLE AND ZLIB_FOUND AND TARGET ZLIB::ZLIB)
+    get_target_property(_geck_zlib_inc ZLIB::ZLIB INTERFACE_INCLUDE_DIRECTORIES)
+    if(_geck_zlib_inc MATCHES "/usr/include$")
+        set_target_properties(ZLIB::ZLIB PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "")
+        message(STATUS "Stripped SDK /usr/include from ZLIB::ZLIB to protect libc++ header order")
+    endif()
+endif()
+
 # spdlog - prefer system package
 if(GECK_USE_SYSTEM_LIBS)
     find_package(spdlog)
@@ -151,11 +162,17 @@ if(NOT spdlog_FOUND)
     FetchContent_Declare(
             spdlog
             GIT_REPOSITORY https://github.com/gabime/spdlog.git
-            GIT_TAG v1.12.0
+            # Bumped from v1.12.0: its bundled fmt fails under Apple clang 21
+            # (FMT_COMPILE_STRING rejected as non-constexpr). We also use
+            # SPDLOG_USE_STD_FORMAT (below) so spdlog uses C++20 <format> instead
+            # of bundled fmt, side-stepping the macOS-SDK/libc++ fmt incompatibilities
+            # entirely (the codebase has no fmt:: usage or custom fmt formatters).
+            GIT_TAG v1.15.3
             GIT_SHALLOW TRUE
     )
     set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "Build examples")
     set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "Build tests")
+    set(SPDLOG_USE_STD_FORMAT ON CACHE BOOL "Use std::format instead of bundled fmt")
     FetchContent_MakeAvailable(spdlog)
     # Note: spdlog creates namespace targets, we'll handle warnings via system includes
 endif()
@@ -171,6 +188,10 @@ endif()
 if(GECKO_SPDLOG_TARGET)
     add_library(gecko_spdlog INTERFACE)
     target_link_libraries(gecko_spdlog INTERFACE ${GECKO_SPDLOG_TARGET})
+    # spdlog is consumed header-only, so every TU must see SPDLOG_USE_STD_FORMAT to
+    # match how spdlog itself was built; otherwise the bundled fmt headers are pulled
+    # in and break under Apple clang 21 / macOS SDK libc++.
+    target_compile_definitions(gecko_spdlog INTERFACE SPDLOG_USE_STD_FORMAT)
     target_include_directories(gecko_spdlog SYSTEM INTERFACE
         $<TARGET_PROPERTY:${GECKO_SPDLOG_TARGET},INTERFACE_INCLUDE_DIRECTORIES>
     )
