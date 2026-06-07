@@ -30,7 +30,8 @@ public:
     static QStringList openFiles(QWidget* parent, const QString& title,
         const QString& filter = "All Files (*.*)");
     static QString saveFile(QWidget* parent, const QString& title,
-        const QString& filter = "All Files (*.*)");
+        const QString& filter = "All Files (*.*)",
+        const QString& suggestedName = QString());
     static QString selectDirectory(QWidget* parent, const QString& title);
 
     // Input dialogs

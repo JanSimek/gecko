@@ -1,6 +1,7 @@
 #include "QtDialogs.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QStandardPaths>
 #include <QScreen>
 #include <QSettings>
@@ -54,7 +55,7 @@ bool QtDialogs::showQuestion(QWidget* parent, const QString& title, const QStrin
 QString QtDialogs::openFile(QWidget* parent, const QString& title, const QString& filter) {
     QString fileName = QFileDialog::getOpenFileName(parent, title, getLastDirectory(), filter);
     if (!fileName.isEmpty()) {
-        setLastDirectory(QDir(fileName).absolutePath());
+        setLastDirectory(QFileInfo(fileName).absolutePath());
     }
     return fileName;
 }
@@ -62,15 +63,23 @@ QString QtDialogs::openFile(QWidget* parent, const QString& title, const QString
 QStringList QtDialogs::openFiles(QWidget* parent, const QString& title, const QString& filter) {
     QStringList fileNames = QFileDialog::getOpenFileNames(parent, title, getLastDirectory(), filter);
     if (!fileNames.isEmpty()) {
-        setLastDirectory(QDir(fileNames.first()).absolutePath());
+        setLastDirectory(QFileInfo(fileNames.first()).absolutePath());
     }
     return fileNames;
 }
 
-QString QtDialogs::saveFile(QWidget* parent, const QString& title, const QString& filter) {
-    QString fileName = QFileDialog::getSaveFileName(parent, title, getLastDirectory(), filter);
+QString QtDialogs::saveFile(QWidget* parent, const QString& title, const QString& filter, const QString& suggestedName) {
+    // Seed the dialog with the last directory and, when given, a default file name
+    // (e.g. the current map). getLastDirectory() always returns a directory, so the
+    // suggested name is never prefixed with a stale file path.
+    QString initialPath = getLastDirectory();
+    if (!suggestedName.isEmpty()) {
+        initialPath = QDir(initialPath).filePath(suggestedName);
+    }
+
+    QString fileName = QFileDialog::getSaveFileName(parent, title, initialPath, filter);
     if (!fileName.isEmpty()) {
-        setLastDirectory(QDir(fileName).absolutePath());
+        setLastDirectory(QFileInfo(fileName).absolutePath());
     }
     return fileName;
 }
@@ -164,6 +173,13 @@ QString QtDialogs::getLastDirectory() {
         s_lastDirectory = settings.value("lastDirectory",
                                       QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation))
                               .toString();
+    }
+    // Defensive: earlier versions stored a file path here (a file's path, not its
+    // directory). If so, fall back to the containing directory so save dialogs do
+    // not pre-fill an unrelated file name.
+    QFileInfo info(s_lastDirectory);
+    if (info.exists() && info.isFile()) {
+        return info.absolutePath();
     }
     return s_lastDirectory;
 }

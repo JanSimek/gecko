@@ -308,7 +308,10 @@ void EditorWidget::init() {
 }
 
 void EditorWidget::saveMap() {
-    QString destinationQString = QtDialogs::saveFile(this, "Select a file", "Map Files (*.map);;All Files (*.*)");
+    // Default the save dialog to the current map's file name.
+    const QString suggestedName = _map ? QString::fromStdString(_map->filename()) : QString();
+    QString destinationQString = QtDialogs::saveFile(this, "Save Map",
+        "Map Files (*.map);;All Files (*.*)", suggestedName);
 
     if (destinationQString.isEmpty()) {
         return;
