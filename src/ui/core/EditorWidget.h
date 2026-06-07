@@ -18,6 +18,7 @@
 #include "../../format/map/Map.h"
 #include "../../format/pro/Pro.h"
 #include "../../selection/SelectionManager.h"
+#include "../../selection/SelectionDataProvider.h"
 #include "../../util/Constants.h"
 #include "../../util/UndoStack.h"
 #include "../editing/ObjectCommandController.h"
@@ -39,7 +40,7 @@ class ViewportController;
 class SFMLWidget;
 struct ObjectInfo;
 
-class EditorWidget : public QWidget {
+class EditorWidget : public QWidget, public selection::SelectionDataProvider {
     Q_OBJECT
 
     friend class TilePlacementManager;
@@ -127,32 +128,32 @@ public:
     selection::SelectionManager* getSelectionManager() const { return _selectionManager.get(); }
     TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
     ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
-    ViewportController* getViewportController() const { return _viewportController.get(); }
+    ViewportController* getViewportController() const override { return _viewportController.get(); }
     int& getCurrentHoverHex() { return _currentHoverHex; }
     void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
 
     // SelectionManager helpers
-    std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos);
+    std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) override;
     bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
 
     // Tile hit testing methods
-    std::optional<int> getTileAtPosition(sf::Vector2f worldPos, bool isRoof);
-    std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos);
+    std::optional<int> getTileAtPosition(sf::Vector2f worldPos, bool isRoof) override;
+    std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) override;
 
     // Access to sprite vectors for SelectionManager
-    const std::vector<sf::Sprite>& getFloorSprites() const { return _floorSprites; }
-    const std::vector<sf::Sprite>& getRoofSprites() const { return _roofSprites; }
+    const std::vector<sf::Sprite>& getFloorSprites() const override { return _floorSprites; }
+    const std::vector<sf::Sprite>& getRoofSprites() const override { return _roofSprites; }
 
     // Access to current elevation and map data
-    int getCurrentElevation() const { return _currentElevation; }
-    Map::MapFile& getMapFile() { return _map->getMapFile(); }
-    const Map::MapFile& getMapFile() const { return _map->getMapFile(); }
+    int getCurrentElevation() const override { return _currentElevation; }
+    Map::MapFile& getMapFile() override { return _map->getMapFile(); }
+    const Map::MapFile& getMapFile() const override { return _map->getMapFile(); }
 
     // Access to objects for SelectionManager
-    const std::vector<std::shared_ptr<Object>>& getObjects() const { return _objects; }
+    const std::vector<std::shared_ptr<Object>>& getObjects() const override { return _objects; }
 
     // Access to hex grid for SelectionManager
-    const HexagonGrid* getHexagonGrid() const { return &_hexgrid; }
+    const HexagonGrid* getHexagonGrid() const override { return &_hexgrid; }
     resource::GameResources& resources() const { return _resources; }
 
     // Helper methods for extracted managers (made public)

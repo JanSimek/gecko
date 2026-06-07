@@ -1,10 +1,9 @@
 #include "SelectionManager.h"
-#include "../ui/core/EditorWidget.h"
+#include "SelectionDataProvider.h"
 #include "../ui/viewport/ViewportController.h"
 #include "../format/map/MapObject.h"
 #include "../util/Constants.h"
 #include "../util/TileUtils.h"
-#include "../util/Exceptions.h"
 #include "../editor/HexagonGrid.h"
 #include <algorithm>
 #include <unordered_set>
@@ -12,16 +11,8 @@
 
 namespace geck::selection {
 
-SelectionManager::SelectionManager(Map* map, geck::EditorWidget* editorWidget)
-    : _map(map)
-    , _editorWidget(editorWidget) {
-    if (!_map) {
-        throw InvalidArgumentException("Map cannot be null", "map");
-    }
-    if (!_editorWidget) {
-        throw InvalidArgumentException("EditorWidget cannot be null", "editorWidget");
-    }
-
+SelectionManager::SelectionManager(SelectionDataProvider& provider)
+    : _provider(provider) {
     _spatialIndex = std::make_unique<TileSpatialIndex>();
 }
 
@@ -399,8 +390,9 @@ SelectionResult SelectionManager::finishAreaSelection() {
     // Clear the area selection state but keep the mode
     _state.selectionArea.reset();
 
-    // TODO: elevation should be passed in; defaulting to 0 for now.
-    return selectArea(area, mode, 0);
+    // Bug fix: previously hardcoded elevation 0, which broke area selection on
+    // any elevation other than the ground floor. Use the host's current elevation.
+    return selectArea(area, mode, _provider.getCurrentElevation());
 }
 
 void SelectionManager::cancelAreaSelection() {
@@ -430,7 +422,7 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
 
         case SelectionMode::ROOF_TILES:
             for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
-                auto tile = _map->getMapFile().tiles.at(currentElevation).at(i);
+                auto tile = _provider.getMapFile().tiles.at(currentElevation).at(i);
                 if (tile.getRoof() != Map::EMPTY_TILE) {
                     SelectedItem item{ SelectionType::ROOF_TILE, i };
                     addItemToSelection(item);
@@ -447,14 +439,14 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
             break;
 
         case SelectionMode::OBJECTS:
-            for (auto& object : _editorWidget->getObjects()) {
+            for (auto& object : _provider.getObjects()) {
                 SelectedItem item{ SelectionType::OBJECT, object };
                 addItemToSelection(item);
             }
             break;
 
         case SelectionMode::HEXES:
-            if (const auto* hexGrid = _editorWidget->getHexagonGrid()) {
+            if (const auto* hexGrid = _provider.getHexagonGrid()) {
                 for (int position = 0; position < HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT; ++position) {
                     if (hexGrid->containsPosition(position)) {
                         addItemToSelection(SelectedItem{ SelectionType::HEX, position });
@@ -477,14 +469,14 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
 
             // Roof tiles: only those with textures
             for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
-                auto tile = _map->getMapFile().tiles.at(currentElevation).at(i);
+                auto tile = _provider.getMapFile().tiles.at(currentElevation).at(i);
                 if (tile.getRoof() != Map::EMPTY_TILE) {
                     SelectedItem item{ SelectionType::ROOF_TILE, i };
                     addItemToSelection(item);
                 }
             }
 
-            for (auto& object : _editorWidget->getObjects()) {
+            for (auto& object : _provider.getObjects()) {
                 SelectedItem item{ SelectionType::OBJECT, object };
                 addItemToSelection(item);
             }
@@ -504,19 +496,19 @@ bool SelectionManager::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& 
 }
 
 std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsAtPosition(sf::Vector2f worldPos, [[maybe_unused]] int elevation) const {
-    return _editorWidget->getObjectsAtPosition(worldPos);
+    return _provider.getObjectsAtPosition(worldPos);
 }
 
 std::optional<int> SelectionManager::getRoofTileAtPosition(sf::Vector2f worldPos, [[maybe_unused]] int elevation) const {
-    return _editorWidget->getTileAtPosition(worldPos, true); // true for roof
+    return _provider.getTileAtPosition(worldPos, true); // true for roof
 }
 
 std::optional<int> SelectionManager::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos, [[maybe_unused]] int elevation) const {
-    return _editorWidget->getRoofTileAtPositionIncludingEmpty(worldPos);
+    return _provider.getRoofTileAtPositionIncludingEmpty(worldPos);
 }
 
 std::optional<int> SelectionManager::getFloorTileAtPosition(sf::Vector2f worldPos, [[maybe_unused]] int elevation) const {
-    return _editorWidget->getTileAtPosition(worldPos, false); // false for floor
+    return _provider.getTileAtPosition(worldPos, false); // false for floor
 }
 
 std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, bool roof, [[maybe_unused]] int elevation) const {
@@ -528,8 +520,8 @@ std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, boo
             std::vector<int> result;
             result.reserve(spatialResult.size());
 
-            const auto& mapFile = _editorWidget->getMapFile();
-            int currentElevation = _editorWidget->getCurrentElevation();
+            const auto& mapFile = _provider.getMapFile();
+            int currentElevation = _provider.getCurrentElevation();
 
             for (int tileIndex : spatialResult) {
                 if (mapFile.tiles.at(currentElevation).at(tileIndex).getRoof() != Map::EMPTY_TILE) {
@@ -548,10 +540,10 @@ std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, boo
     std::vector<int> result;
     result.reserve(1000);
 
-    const auto& floorSprites = _editorWidget->getFloorSprites();
-    const auto& roofSprites = _editorWidget->getRoofSprites();
-    const auto& mapFile = _editorWidget->getMapFile();
-    int currentElevation = _editorWidget->getCurrentElevation();
+    const auto& floorSprites = _provider.getFloorSprites();
+    const auto& roofSprites = _provider.getRoofSprites();
+    const auto& mapFile = _provider.getMapFile();
+    int currentElevation = _provider.getCurrentElevation();
 
     for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
         sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
@@ -576,8 +568,8 @@ std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatR
     std::vector<int> result;
     result.reserve(1000);
 
-    const auto& floorSprites = _editorWidget->getFloorSprites();
-    const auto& roofSprites = _editorWidget->getRoofSprites();
+    const auto& floorSprites = _provider.getFloorSprites();
+    const auto& roofSprites = _provider.getRoofSprites();
 
     for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
         sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
@@ -603,7 +595,7 @@ std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf
     std::vector<std::shared_ptr<Object>> result;
     result.reserve(100);
 
-    const auto& allObjects = _editorWidget->getObjects();
+    const auto& allObjects = _provider.getObjects();
 
     for (const auto& object : allObjects) {
         const auto& sprite = object->getSprite();
@@ -671,8 +663,8 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
         }
 
         case SelectionMode::HEXES: {
-            int hexIndex = _editorWidget->getViewportController()->worldPosToHexIndex(worldPos);
-            const auto* hexGrid = _editorWidget->getHexagonGrid();
+            int hexIndex = _provider.getViewportController()->worldPosToHexIndex(worldPos);
+            const auto* hexGrid = _provider.getHexagonGrid();
             if (hexGrid && hexGrid->containsPosition(hexIndex)) {
                 SelectedItem item{ SelectionType::HEX, hexIndex };
                 addItemToSelection(item);
@@ -817,16 +809,6 @@ bool SelectionManager::isItemSelected(const SelectedItem& item) const {
     return _state.hasItem(item);
 }
 
-sf::Vector2f SelectionManager::getTileWorldPosition([[maybe_unused]] int tileIndex) const {
-    // TODO: stub; port tile positioning logic from EditorWidget.
-    return sf::Vector2f(0, 0);
-}
-
-bool SelectionManager::isPositionInTile([[maybe_unused]] sf::Vector2f worldPos, [[maybe_unused]] int tileIndex, [[maybe_unused]] bool roof) const {
-    // TODO: stub; port tile hit detection from EditorWidget.
-    return false;
-}
-
 bool SelectionManager::moveObject(std::shared_ptr<Object> object, sf::Vector2f offset) {
     if (!object) {
         return false;
@@ -885,9 +867,9 @@ bool SelectionManager::moveTile(int sourceTileIndex, sf::Vector2f offset, bool i
         return false;
     }
 
-    int currentElevation = _editorWidget->getCurrentElevation();
+    int currentElevation = _provider.getCurrentElevation();
 
-    auto& mapFile = _editorWidget->getMapFile();
+    auto& mapFile = _provider.getMapFile();
     auto& tiles = mapFile.tiles.at(currentElevation);
 
     auto& sourceTile = tiles.at(sourceTileIndex);
@@ -923,7 +905,7 @@ std::vector<int> SelectionManager::getHexesInArea(const sf::FloatRect& area) con
     std::vector<int> result;
     result.reserve(1000); // Reserve space for typical selection
 
-    auto hexGrid = _editorWidget->getHexagonGrid();
+    auto hexGrid = _provider.getHexagonGrid();
     if (!hexGrid) {
         return result;
     }
@@ -949,8 +931,8 @@ void SelectionManager::initializeSpatialIndex() {
         return;
     }
 
-    const auto& floorSprites = _editorWidget->getFloorSprites();
-    const auto& roofSprites = _editorWidget->getRoofSprites();
+    const auto& floorSprites = _provider.getFloorSprites();
+    const auto& roofSprites = _provider.getRoofSprites();
 
     _spatialIndex->buildIndex(floorSprites, roofSprites);
 

@@ -12,11 +12,6 @@ add_executable(general_tests
     general/test_reader_factory.cpp
     general/test_selection_system.cpp
     general/test_game_data_path_resolver.cpp
-
-    # Selection system sources (needed for linking)
-    ../src/selection/SelectionState.cpp
-    ../src/editor/HexagonGrid.cpp
-    ../src/editor/Hex.cpp
 )
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests
@@ -34,6 +29,7 @@ add_executable(qt_tests
 target_link_libraries(general_tests PRIVATE
     Catch2::Catch2WithMain
     gecko::spdlog
+    gecko::app
     vault
     SFML::System SFML::Graphics
 )

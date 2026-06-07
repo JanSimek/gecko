@@ -203,7 +203,7 @@ bool EditorWidget::redoLastEdit() {
 }
 
 void EditorWidget::initializeSelectionSystem() {
-    _selectionManager = std::make_unique<selection::SelectionManager>(_map.get(), this);
+    _selectionManager = std::make_unique<selection::SelectionManager>(*this);
 
     _selectionManager->setSelectionCallback([this](const selection::SelectionState& selection) {
         this->clearAllVisualSelections();

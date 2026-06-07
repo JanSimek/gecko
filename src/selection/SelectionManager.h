@@ -12,11 +12,7 @@
 #include "../format/map/Map.h"
 #include "../editor/Object.h"
 #include "SelectionState.h"
-
-namespace geck {
-class EditorWidget; // Forward declaration
-class ViewportController;
-}
+#include "SelectionDataProvider.h"
 
 namespace geck::selection {
 
@@ -46,7 +42,7 @@ class SelectionManager {
 public:
     using SelectionCallback = std::function<void(const SelectionState&)>;
 
-    explicit SelectionManager(Map* map, geck::EditorWidget* editorWidget);
+    explicit SelectionManager(SelectionDataProvider& provider);
     ~SelectionManager() = default;
 
     // Selection operations
@@ -99,8 +95,7 @@ public:
     bool moveTile(int sourceTileIndex, sf::Vector2f offset, bool isRoof);
 
 private:
-    Map* _map;
-    geck::EditorWidget* _editorWidget = nullptr;
+    SelectionDataProvider& _provider;
     SelectionState _state;
     SelectionCallback _selectionCallback;
 
@@ -126,10 +121,6 @@ private:
 
     // Notification helper
     void notifySelectionChanged();
-
-    // Position calculations (will need access to sprite positioning logic)
-    sf::Vector2f getTileWorldPosition(int tileIndex) const;
-    bool isPositionInTile(sf::Vector2f worldPos, int tileIndex, bool roof) const;
 };
 
 } // namespace geck::selection
