@@ -1,13 +1,17 @@
 #pragma once
 
 #include <SFML/Graphics.hpp>
+#include <functional>
 #include <memory>
+
+#include <QString>
+
 #include "../dialogs/ExitGridPropertiesDialog.h"
+#include "ExitGridContext.h"
 
 namespace geck {
 
 // Forward declarations
-class EditorWidget;
 class Map;
 struct MapObject;
 
@@ -22,7 +26,7 @@ struct MapObject;
  */
 class ExitGridPlacementManager {
 public:
-    explicit ExitGridPlacementManager(EditorWidget* editor);
+    ExitGridPlacementManager(ExitGridContext& context, std::function<void(const QString&)> showStatus);
     ~ExitGridPlacementManager() = default;
 
     // Exit grid placement operations
@@ -57,7 +61,8 @@ private:
     // Show properties dialog and handle result
     bool showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing = nullptr);
 
-    EditorWidget* _editor;
+    ExitGridContext& _context;
+    std::function<void(const QString&)> _showStatus;
 
     // State
     bool _exitGridPlacementMode = false;

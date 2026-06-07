@@ -150,11 +150,13 @@ set(GECK_APP_SOURCES
     ui/editing/ObjectCommandController.cpp
     ui/input/InputHandler.h
     ui/input/InputHandler.cpp
+    ui/dragdrop/DragDropContext.h
     ui/dragdrop/DragDropManager.h
     ui/dragdrop/DragDropManager.cpp
     ui/tiles/TilePlacementContext.h
     ui/tiles/TilePlacementManager.h
     ui/tiles/TilePlacementManager.cpp
+    ui/tools/ExitGridContext.h
     ui/tools/ExitGridPlacementManager.h
     ui/tools/ExitGridPlacementManager.cpp
     ui/viewport/ViewportController.h

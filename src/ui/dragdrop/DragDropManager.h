@@ -2,16 +2,18 @@
 
 #include <SFML/Graphics/View.hpp>
 #include <SFML/System/Vector2.hpp>
+#include <functional>
 #include <memory>
 #include <vector>
 #include "../../util/Types.h"
+#include "DragDropContext.h"
 
 namespace geck {
 
-class EditorWidget;
 class Object;
 class HexagonGrid;
 struct ObjectInfo;
+enum class ObjectCategory;
 
 /**
  * @brief Manages drag and drop operations for objects and palette items
@@ -31,7 +33,8 @@ public:
         PALETTE_PREVIEW // Previewing object from palette
     };
 
-    explicit DragDropManager(EditorWidget* editor);
+    DragDropManager(DragDropContext& context,
+        std::function<const ObjectInfo*(int objectIndex, ObjectCategory category)> lookupObjectInfo);
     ~DragDropManager() = default;
 
     // Object dragging (moving existing objects)
@@ -58,7 +61,8 @@ public:
     sf::Vector2f getObjectDragOffset() const { return _objectDragOffset; }
 
 private:
-    EditorWidget* _editor;
+    DragDropContext& _context;
+    std::function<const ObjectInfo*(int objectIndex, ObjectCategory category)> _lookupObjectInfo;
 
     // Object dragging state
     bool _isDraggingObjects = false;

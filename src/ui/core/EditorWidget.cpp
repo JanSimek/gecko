@@ -67,9 +67,20 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
         _undoStack,
         [this]() { refreshObjects(); });
     _inputHandler = std::make_unique<InputHandler>();
-    _dragDropManager = std::make_unique<DragDropManager>(this);
+    _dragDropManager = std::make_unique<DragDropManager>(
+        *this,
+        [this](int idx, ObjectCategory cat) -> const ObjectInfo* {
+            auto* mw = getMainWindow();
+            auto* p = mw ? mw->getObjectPalettePanel() : nullptr;
+            return p ? p->getObjectInfo(idx, cat) : nullptr;
+        });
     _tilePlacementManager = std::make_unique<TilePlacementManager>(*this);
-    _exitGridPlacementManager = std::make_unique<ExitGridPlacementManager>(this);
+    _exitGridPlacementManager = std::make_unique<ExitGridPlacementManager>(
+        *this,
+        [this](const QString& m) {
+            if (auto* mw = getMainWindow())
+                mw->showStatusMessage(m);
+        });
     _viewportController = std::make_unique<ViewportController>(&_hexgrid);
     setupInputCallbacks();
 

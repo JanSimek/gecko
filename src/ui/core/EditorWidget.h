@@ -24,6 +24,8 @@
 #include "../editing/ObjectCommandController.h"
 #include "../rendering/MapSpriteLoader.h"
 #include "../tiles/TilePlacementContext.h"
+#include "../tools/ExitGridContext.h"
+#include "../dragdrop/DragDropContext.h"
 #include "TileChange.h"
 
 namespace geck {
@@ -42,7 +44,7 @@ class ViewportController;
 class SFMLWidget;
 struct ObjectInfo;
 
-class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext {
+class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext {
     Q_OBJECT
 
     friend class TilePlacementManager;
@@ -86,7 +88,7 @@ public:
     void replaceSelectedTiles(int newTileIndex);
 
     // Object placement functionality
-    void placeObjectAtPosition(sf::Vector2f worldPos);
+    void placeObjectAtPosition(sf::Vector2f worldPos) override;
 
     // Palette drag preview
     void startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos);
@@ -108,9 +110,9 @@ public:
     void setMarkExitsMode(bool enabled);
 
     // Object refresh methods
-    void refreshObjects();
+    void refreshObjects() override;
     void selectAll();
-    void clearSelection();
+    void clearSelection() override;
     bool isTilePlacementMode() const;
 
     // SFML rendering interface (called by SFMLWidget)
@@ -120,7 +122,7 @@ public:
     void init();
 
     // Access to SFML widget for main window
-    SFMLWidget* getSFMLWidget() const { return _sfmlWidget; }
+    SFMLWidget* getSFMLWidget() const override { return _sfmlWidget; }
 
     // Set main window reference for accessing palette panels
     void setMainWindow(class MainWindow* mainWindow) { _mainWindow = mainWindow; }
@@ -131,8 +133,8 @@ public:
     TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
     ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
     ViewportController* getViewportController() const override { return _viewportController.get(); }
-    int& getCurrentHoverHex() { return _currentHoverHex; }
-    void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
+    int& getCurrentHoverHex() override { return _currentHoverHex; }
+    void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves) override;
 
     // SelectionManager helpers
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) override;
@@ -156,10 +158,13 @@ public:
 
     // Access to hex grid for SelectionManager
     const HexagonGrid* getHexagonGrid() const override { return &_hexgrid; }
-    resource::GameResources& resources() const { return _resources; }
+    resource::GameResources& resources() const override { return _resources; }
 
     // Helper methods for extracted managers (made public)
-    void clearDragSelectionPreview();
+    void clearDragSelectionPreview() override;
+
+    // Parent widget for modal dialogs raised by extracted managers.
+    QWidget* getDialogParent() override { return this; }
 
     // Ensure tile storage exists for an elevation
     std::vector<Tile>& ensureElevationTiles(int elevation) override;
@@ -169,10 +174,10 @@ public:
 
     // Exit grid undo support
     using ExitGridState = ExitGridCommandState;
-    void registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation);
+    void registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation) override;
     void registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
         const std::vector<ExitGridState>& beforeStates,
-        const std::vector<ExitGridState>& afterStates);
+        const std::vector<ExitGridState>& afterStates) override;
 
 signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
