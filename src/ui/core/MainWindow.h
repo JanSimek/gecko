@@ -29,6 +29,7 @@ namespace resource {
     class GameResources;
 }
 
+class Settings;
 class SFMLWidget;
 class EditorWidget;
 class LoadingWidget;
@@ -44,7 +45,7 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(std::shared_ptr<resource::GameResources> resources, QWidget* parent = nullptr);
+    MainWindow(std::shared_ptr<resource::GameResources> resources, std::shared_ptr<Settings> settings, QWidget* parent = nullptr);
     ~MainWindow();
 
     void setEditorWidget(std::unique_ptr<EditorWidget> editorWidget);
@@ -164,6 +165,7 @@ private:
     QStackedWidget* _centralStack;
     QTimer* _gameLoopTimer;
     std::shared_ptr<resource::GameResources> _resourcesShared;
+    std::shared_ptr<Settings> _settings;
 
     // Current widgets
     EditorWidget* _currentEditorWidget;

@@ -61,11 +61,12 @@
 
 namespace geck {
 
-MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, QWidget* parent)
+MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::shared_ptr<Settings> settings, QWidget* parent)
     : QMainWindow(parent)
     , _centralStack(nullptr)
     , _gameLoopTimer(new QTimer(this))
     , _resourcesShared(std::move(resources))
+    , _settings(std::move(settings))
     , _currentEditorWidget(nullptr)
     , _welcomeWidget(nullptr)
     , _menuBar(nullptr)
@@ -664,7 +665,7 @@ void MainWindow::setupDockWidgets() {
     _objectPalettePanel = new ObjectPalettePanel(*_resourcesShared);
     _objectPaletteDock = createDock("Object Palette", "ObjectPaletteDock", _objectPalettePanel, Qt::LeftDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_LARGE);
 
-    _fileBrowserPanel = new FileBrowserPanel(_resourcesShared);
+    _fileBrowserPanel = new FileBrowserPanel(_resourcesShared, _settings);
     _fileBrowserDock = createDock("Virtual File System Browser", "FileBrowserDock", _fileBrowserPanel, Qt::LeftDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_LARGE);
     connectFileBrowserSignals();
     connectPanelSignals();
@@ -778,7 +779,7 @@ void MainWindow::rebuildResourcePanels() {
     _objectPalettePanel = new ObjectPalettePanel(*_resourcesShared);
     replaceDockPanelWidget(_objectPaletteDock, _objectPalettePanel, QSizePolicy::Expanding);
 
-    _fileBrowserPanel = new FileBrowserPanel(_resourcesShared);
+    _fileBrowserPanel = new FileBrowserPanel(_resourcesShared, _settings);
     replaceDockPanelWidget(_fileBrowserDock, _fileBrowserPanel, QSizePolicy::Expanding);
     connectFileBrowserSignals();
     connectPanelSignals();
@@ -790,7 +791,7 @@ void MainWindow::rebuildResourcePanels() {
 }
 
 void MainWindow::rebuildGameResourcesFromSettings() {
-    const auto dataPaths = Settings::getInstance().getDataPaths();
+    const auto dataPaths = _settings->getDataPaths();
 
     if (hasActiveMap()) {
         closeCurrentMap();
@@ -1272,7 +1273,7 @@ void MainWindow::setupPanelsMenu() {
 }
 
 void MainWindow::saveDockWidgetState() {
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
     settings.setDockState(saveState());
     settings.setWindowGeometry(saveGeometry());
     settings.setWindowMaximized(isMaximized());
@@ -1288,7 +1289,7 @@ void MainWindow::saveDockWidgetState() {
 }
 
 void MainWindow::restoreDockWidgetState() {
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
 
     // Restore window geometry first
     QByteArray geometry = settings.getWindowGeometry();
@@ -1307,7 +1308,7 @@ void MainWindow::restoreDockWidgetState() {
         // Restore individual floating dock widget geometries after a short delay
         // This ensures the dock widgets are fully initialized first
         QTimer::singleShot(100, this, [this]() {
-            auto& timerSettings = Settings::getInstance();
+            auto& timerSettings = *_settings;
 
             for (QDockWidget* dock : managedDocks()) {
                 if (!dock || !dock->isFloating()) {
@@ -1368,7 +1369,7 @@ void MainWindow::persistPanelPreference(QDockWidget* dock, bool visible) {
 
     const bool isShown = !dock->isHidden();
 
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
     const QString dockName = dock->objectName();
     if (dockName.isEmpty()) {
         return;
@@ -1405,7 +1406,7 @@ void MainWindow::restorePanelVisibilitySnapshot() {
         snapshotPanelVisibility();
     }
 
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
 
     auto applySnapshot = [&](QDockWidget* dock, QAction* action) {
         if (!dock) {
@@ -1549,7 +1550,7 @@ bool MainWindow::hasActiveMap() const {
 }
 
 void MainWindow::showPreferences() {
-    SettingsDialog dialog(this);
+    SettingsDialog dialog(_settings, this);
 
     connect(&dialog, &SettingsDialog::settingsSaved, this, [this](bool dataPathsChanged) {
         if (dataPathsChanged) {
@@ -1574,7 +1575,7 @@ void MainWindow::showAbout() {
 }
 
 void MainWindow::onPlayGame() {
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
 
     if (!settings.isGameLocationValid()) {
         QtDialogs::showWarning(this, "Game Location Not Configured",
@@ -1664,7 +1665,7 @@ bool MainWindow::isTextFile(const QString& filePath) const {
 
 void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
     try {
-        auto& settings = Settings::getInstance();
+        auto& settings = *_settings;
         auto editorMode = settings.getTextEditorMode();
         QString customEditorPath = settings.getCustomEditorPath();
 

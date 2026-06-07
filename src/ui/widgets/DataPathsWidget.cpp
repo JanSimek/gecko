@@ -15,7 +15,7 @@ namespace geck {
 
 using namespace ui::constants;
 
-DataPathsWidget::DataPathsWidget(QWidget* parent)
+DataPathsWidget::DataPathsWidget(std::shared_ptr<Settings> settings, QWidget* parent)
     : QGroupBox("Fallout 2 Data Paths", parent)
     , _layout(nullptr)
     , _helpLabel(nullptr)
@@ -26,7 +26,8 @@ DataPathsWidget::DataPathsWidget(QWidget* parent)
     , _moveUpButton(nullptr)
     , _moveDownButton(nullptr)
     , _autoDetectButton(nullptr)
-    , _progressBar(nullptr) {
+    , _progressBar(nullptr)
+    , _settings(std::move(settings)) {
 
     setupUI();
     setupConnections();
@@ -137,7 +138,7 @@ void DataPathsWidget::addPathToList(const std::filesystem::path& path) {
     QListWidgetItem* item = new QListWidgetItem(pathStr);
 
     // Set icon based on path type and validity
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
     if (settings.validateDataPath(normalizedPath)) {
         if (isDefaultPath) {
             item->setToolTip("Built-in resources path (cannot be removed)");
@@ -164,7 +165,7 @@ void DataPathsWidget::addPathToList(const std::filesystem::path& path) {
 }
 
 void DataPathsWidget::validatePaths() {
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
     auto dataPaths = getDataPaths();
 
     if (dataPaths.empty()) {

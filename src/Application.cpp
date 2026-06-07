@@ -24,6 +24,7 @@ namespace geck {
 
 Application::Application(int argc, char** argv)
     : _qtApp(std::make_unique<QApplication>(argc, argv))
+    , _settings(Settings::sharedInstance())
     , _mainWindow(nullptr)
     , _resources(std::make_shared<resource::GameResources>()) {
 
@@ -92,7 +93,7 @@ std::string Application::processCommandLineArgs() {
         spdlog::set_level(spdlog::level::debug);
     }
 
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
     bool isFirstRun = !settings.exists();
 
     if (!isFirstRun) {
@@ -124,10 +125,10 @@ Application::~Application() {
 }
 
 void Application::initUI() {
-    _mainWindow = std::make_unique<MainWindow>(_resources);
+    _mainWindow = std::make_unique<MainWindow>(_resources, _settings);
 
     // Check if this is first run or if user prefers maximized
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
     if (!settings.exists() || settings.getWindowMaximized()) {
         _mainWindow->showMaximized();
     } else {
@@ -147,11 +148,11 @@ bool Application::isRunning() const {
 }
 
 void Application::checkFirstRun() {
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
     if (!settings.exists()) {
         spdlog::info("First run detected, showing settings dialog");
 
-        SettingsDialog dialog(_mainWindow.get());
+        SettingsDialog dialog(_settings, _mainWindow.get());
         int result = dialog.exec();
 
         // Save even if cancelled so we keep at least the default data path from the command line.
@@ -171,7 +172,7 @@ void Application::checkFirstRun() {
 }
 
 void Application::loadDataPaths() {
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
     auto dataPaths = settings.getDataPaths();
 
     if (dataPaths.empty()) {

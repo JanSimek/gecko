@@ -33,6 +33,8 @@ namespace resource {
     class GameResources;
 }
 
+class Settings;
+
 /**
  * @brief Worker class for loading files in background thread
  */
@@ -112,7 +114,7 @@ class FileBrowserPanel : public QWidget {
     Q_OBJECT
 
 public:
-    explicit FileBrowserPanel(std::shared_ptr<resource::GameResources> resources, QWidget* parent = nullptr);
+    FileBrowserPanel(std::shared_ptr<resource::GameResources> resources, std::shared_ptr<Settings> settings, QWidget* parent = nullptr);
     ~FileBrowserPanel();
 
     // File operations
@@ -234,6 +236,7 @@ private:
     // PRO name caching
     mutable std::unordered_map<std::string, QString> _proNameCache;
     std::shared_ptr<resource::GameResources> _resourcesShared;
+    std::shared_ptr<Settings> _settings;
 
     // Constants
     static constexpr int CHUNK_SIZE = 50;    // Files processed per chunk (small for better UI responsiveness)

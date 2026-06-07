@@ -9,9 +9,12 @@
 #include <QGroupBox>
 #include <QProgressBar>
 #include <filesystem>
+#include <memory>
 #include <vector>
 
 namespace geck {
+
+class Settings;
 
 /**
  * @brief Widget for managing Fallout 2 data paths
@@ -23,7 +26,7 @@ class DataPathsWidget : public QGroupBox {
     Q_OBJECT
 
 public:
-    explicit DataPathsWidget(QWidget* parent = nullptr);
+    explicit DataPathsWidget(std::shared_ptr<Settings> settings, QWidget* parent = nullptr);
     ~DataPathsWidget() = default;
 
     // Data access
@@ -66,6 +69,8 @@ private:
     QPushButton* _moveDownButton;
     QPushButton* _autoDetectButton;
     QProgressBar* _progressBar;
+
+    std::shared_ptr<Settings> _settings;
 };
 
 } // namespace geck

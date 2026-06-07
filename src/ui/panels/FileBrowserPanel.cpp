@@ -206,7 +206,7 @@ bool FileBrowserPanel::isTextFile(const QString& filePath) const {
     return game::enums::textFileExtensions().contains(suffix);
 }
 
-FileBrowserPanel::FileBrowserPanel(std::shared_ptr<resource::GameResources> resources, QWidget* parent)
+FileBrowserPanel::FileBrowserPanel(std::shared_ptr<resource::GameResources> resources, std::shared_ptr<Settings> settings, QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
     , _filterLayout(nullptr)
@@ -224,7 +224,8 @@ FileBrowserPanel::FileBrowserPanel(std::shared_ptr<resource::GameResources> reso
     , _chunkTimer(new QTimer(this))
     , _searchTimer(new QTimer(this))
     , _isLoading(false)
-    , _resourcesShared(std::move(resources)) {
+    , _resourcesShared(std::move(resources))
+    , _settings(std::move(settings)) {
 
     setupUI();
 
@@ -1244,7 +1245,7 @@ QString FileBrowserPanel::loadProNameFromFile(const QString& filePath) const {
 std::vector<std::filesystem::path> FileBrowserPanel::getNativeDirectoryPaths() const {
     std::vector<std::filesystem::path> nativeDirectories;
 
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
     auto dataPaths = settings.getDataPaths();
 
     for (const auto& path : dataPaths) {

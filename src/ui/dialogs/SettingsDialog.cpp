@@ -16,7 +16,7 @@ namespace geck {
 using namespace ui::constants;
 using namespace ui::defaults;
 
-SettingsDialog::SettingsDialog(QWidget* parent)
+SettingsDialog::SettingsDialog(std::shared_ptr<Settings> settings, QWidget* parent)
     : QDialog(parent)
     , _mainLayout(nullptr)
     , _tabWidget(nullptr)
@@ -32,6 +32,7 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     , _buttonBox(nullptr)
     , _applyButton(nullptr)
     , _resetButton(nullptr)
+    , _settings(std::move(settings))
     , _hasChanges(false) {
 
     setWindowTitle("Preferences");
@@ -79,7 +80,7 @@ void SettingsDialog::setupGeneralTab() {
     _generalTabLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
     _generalTabLayout->setSpacing(SPACING_LOOSE);
 
-    _dataPathsWidget = new DataPathsWidget();
+    _dataPathsWidget = new DataPathsWidget(_settings);
     _generalTabLayout->addWidget(_dataPathsWidget);
 
     _gameLocationWidget = new GameLocationWidget();
@@ -128,7 +129,7 @@ void SettingsDialog::setupButtonBox() {
 }
 
 void SettingsDialog::loadSettings() {
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
 
     // Kept for the Reset action so changes can be reverted
     _originalDataPaths = settings.getDataPaths();
@@ -148,7 +149,7 @@ void SettingsDialog::loadSettings() {
 }
 
 void SettingsDialog::saveSettings() {
-    auto& settings = Settings::getInstance();
+    auto& settings = *_settings;
 
     auto dataPaths = _dataPathsWidget->getDataPaths();
     bool pathsHaveChanged = dataPaths != _originalDataPaths;

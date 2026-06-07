@@ -37,6 +37,7 @@
 #include "ui/widgets/pro/ProWeaponWidget.h"
 #include "resource/GameResources.h"
 #include "util/FalloutEngineEnums.h"
+#include "util/Settings.h"
 
 namespace {
 
@@ -571,7 +572,7 @@ TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][main
     removeTestSettings();
 
     auto resources = std::make_shared<geck::resource::GameResources>();
-    geck::MainWindow window(resources);
+    geck::MainWindow window(resources, geck::Settings::sharedInstance());
     window.show();
     QTest::qWait(250);
 

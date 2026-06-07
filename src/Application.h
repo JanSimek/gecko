@@ -12,6 +12,7 @@
 namespace geck {
 
 class MainWindow;
+class Settings;
 namespace resource {
     class GameResources;
 }
@@ -40,6 +41,7 @@ private:
     void loadDataPaths();
 
     std::unique_ptr<QApplication> _qtApp;
+    std::shared_ptr<Settings> _settings;
     std::unique_ptr<MainWindow> _mainWindow;
     std::shared_ptr<resource::GameResources> _resources;
 

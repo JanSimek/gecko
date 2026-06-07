@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QByteArray>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -21,7 +22,11 @@ namespace geck {
  */
 class Settings {
 public:
-    // Singleton access
+    // Canonical single shared instance shared by both the migration shim and
+    // dependency-injected pointers.
+    static std::shared_ptr<Settings> sharedInstance();
+
+    // Migration shim -> *sharedInstance(). Kept as the compatibility seam.
     static Settings& getInstance();
 
     // Disable copy/assignment
