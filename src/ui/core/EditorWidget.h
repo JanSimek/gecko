@@ -27,6 +27,7 @@
 #include "../tools/ExitGridContext.h"
 #include "../dragdrop/DragDropContext.h"
 #include "TileChange.h"
+#include "VisibilitySettings.h"
 
 namespace geck {
 
@@ -58,15 +59,15 @@ public:
     void saveMap();
 
     // Qt6 menu integration - visibility controls
-    void setShowObjects(bool show) { _showObjects = show; }
-    void setShowCritters(bool show) { _showCritters = show; }
-    void setShowWalls(bool show) { _showWalls = show; }
-    void setShowRoof(bool show) { _showRoof = show; }
-    void setShowScrollBlk(bool show) { _showScrollBlk = show; }
-    void setShowWallBlockers(bool show) { _showWallBlockers = show; }
-    void setShowHexGrid(bool show) { _showHexGrid = show; }
+    void setShowObjects(bool show) { _visibility.showObjects = show; }
+    void setShowCritters(bool show) { _visibility.showCritters = show; }
+    void setShowWalls(bool show) { _visibility.showWalls = show; }
+    void setShowRoof(bool show) { _visibility.showRoof = show; }
+    void setShowScrollBlk(bool show) { _visibility.showScrollBlockers = show; }
+    void setShowWallBlockers(bool show) { _visibility.showWallBlockers = show; }
+    void setShowHexGrid(bool show) { _visibility.showHexGrid = show; }
     void setShowLightOverlays(bool show);
-    void setShowExitGrids(bool show) { _showExitGrids = show; }
+    void setShowExitGrids(bool show) { _visibility.showExitGrids = show; }
 
     Map* getMap() const override { return _map.get(); }
 
@@ -280,15 +281,7 @@ private:
     resource::GameResources& _resources;
     std::unique_ptr<Map> _map;
 
-    bool _showObjects = UI::DEFAULT_SHOW_OBJECTS;
-    bool _showCritters = UI::DEFAULT_SHOW_CRITTERS;
-    bool _showRoof = UI::DEFAULT_SHOW_ROOF;
-    bool _showWalls = UI::DEFAULT_SHOW_WALLS;
-    bool _showScrollBlk = UI::DEFAULT_SHOW_SCROLL_BLK;
-    bool _showWallBlockers = UI::DEFAULT_SHOW_WALL_BLK;
-    bool _showHexGrid = UI::DEFAULT_SHOW_HEX_GRID;
-    bool _showLightOverlays = false;
-    bool _showExitGrids = false;
+    VisibilitySettings _visibility;
 
     // Double-click detection for object cycling
     sf::Clock _lastClickTime;

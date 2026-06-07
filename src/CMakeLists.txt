@@ -53,6 +53,7 @@ set(GECK_APP_SOURCES
     ui/core/MainWindow.h
     ui/core/MainWindow.cpp
     ui/core/TileChange.h
+    ui/core/VisibilitySettings.h
     ui/core/EditorWidget.h
     ui/core/EditorWidget.cpp
 

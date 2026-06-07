@@ -913,15 +913,15 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     }
 
     RenderingEngine::VisibilitySettings visibility;
-    visibility.showObjects = _showObjects;
-    visibility.showCritters = _showCritters;
-    visibility.showWalls = _showWalls;
-    visibility.showRoof = _showRoof;
-    visibility.showScrollBlockers = _showScrollBlk;
-    visibility.showWallBlockers = _showWallBlockers;
-    visibility.showHexGrid = _showHexGrid;
-    visibility.showLightOverlays = _showLightOverlays;
-    visibility.showExitGrids = _showExitGrids;
+    visibility.showObjects = _visibility.showObjects;
+    visibility.showCritters = _visibility.showCritters;
+    visibility.showWalls = _visibility.showWalls;
+    visibility.showRoof = _visibility.showRoof;
+    visibility.showScrollBlockers = _visibility.showScrollBlockers;
+    visibility.showWallBlockers = _visibility.showWallBlockers;
+    visibility.showHexGrid = _visibility.showHexGrid;
+    visibility.showLightOverlays = _visibility.showLightOverlays;
+    visibility.showExitGrids = _visibility.showExitGrids;
 
     RenderingEngine::RenderData renderData;
     renderData.floorSprites = &_floorSprites;
@@ -1020,8 +1020,8 @@ void EditorWidget::toggleScrollBlockerRectangleMode() {
     } else {
         _currentSelectionMode = SelectionMode::SCROLL_BLOCKER_RECTANGLE;
         // Auto-enable scroll blocker visibility so the user can see what they are placing
-        if (!_showScrollBlk) {
-            _showScrollBlk = true;
+        if (!_visibility.showScrollBlockers) {
+            _visibility.showScrollBlockers = true;
             spdlog::info("Automatically enabled scroll blocker visibility");
         }
         spdlog::info("Scroll blocker rectangle mode enabled");
@@ -1644,7 +1644,7 @@ void EditorWidget::showLoadingErrorsSummary() {
 }
 
 void EditorWidget::setShowLightOverlays(bool show) {
-    _showLightOverlays = show;
+    _visibility.showLightOverlays = show;
 
     int lightObjectCount = 0;
     std::ranges::for_each(_objects, [&lightObjectCount, show](auto& object) {
