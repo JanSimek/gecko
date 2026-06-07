@@ -14,21 +14,18 @@ PaginationWidget::PaginationWidget(QWidget* parent)
     _layout = new QHBoxLayout(this);
     _layout->setContentsMargins(0, 0, 0, 0);
 
-    // First page button
     _firstButton = new QPushButton("|◀", this);
     _firstButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _firstButton->setToolTip("Go to first page");
     connect(_firstButton, &QPushButton::clicked, this, &PaginationWidget::onFirstButtonClicked);
     _layout->addWidget(_firstButton);
 
-    // Previous button
     _prevButton = new QPushButton("◀", this);
     _prevButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _prevButton->setToolTip("Previous page");
     connect(_prevButton, &QPushButton::clicked, this, &PaginationWidget::onPrevButtonClicked);
     _layout->addWidget(_prevButton);
 
-    // Page selector
     _layout->addWidget(new QLabel("Page:", this));
     _pageSpinBox = new QSpinBox(this);
     _pageSpinBox->setMinimum(1);
@@ -42,21 +39,18 @@ PaginationWidget::PaginationWidget(QWidget* parent)
     _pageInfoLabel = new QLabel("of 1", this);
     _layout->addWidget(_pageInfoLabel);
 
-    // Next button
     _nextButton = new QPushButton("▶", this);
     _nextButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _nextButton->setToolTip("Next page");
     connect(_nextButton, &QPushButton::clicked, this, &PaginationWidget::onNextButtonClicked);
     _layout->addWidget(_nextButton);
 
-    // Last page button
     _lastButton = new QPushButton("▶|", this);
     _lastButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _lastButton->setToolTip("Go to last page");
     connect(_lastButton, &QPushButton::clicked, this, &PaginationWidget::onLastButtonClicked);
     _layout->addWidget(_lastButton);
 
-    // Add stretch to push controls to the left
     _layout->addStretch();
 
     updateControls();
@@ -82,7 +76,6 @@ void PaginationWidget::setTotalPages(int totalPages) {
     _totalPages = totalPages;
     _pageSpinBox->setMaximum(_totalPages);
 
-    // Adjust current page if it's now out of range
     if (_currentPage > _totalPages) {
         setCurrentPage(_totalPages);
     }
@@ -167,13 +160,11 @@ void PaginationWidget::onPageSpinBoxChanged(int page) {
 }
 
 void PaginationWidget::updateControls() {
-    // Update button states
     _firstButton->setEnabled(_currentPage > 1 && _totalPages > 1);
     _prevButton->setEnabled(_currentPage > 1 && _totalPages > 1);
     _nextButton->setEnabled(_currentPage < _totalPages && _totalPages > 1);
     _lastButton->setEnabled(_currentPage < _totalPages && _totalPages > 1);
 
-    // Update spin box state
     _pageSpinBox->setEnabled(_totalPages > 1);
 }
 

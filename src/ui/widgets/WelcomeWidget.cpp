@@ -30,17 +30,13 @@ void WelcomeWidget::setupUI() {
     _layout->setContentsMargins(0, 0, 10, 0);
     _layout->setSpacing(0);
 
-    // Create label for the Vault Boy image
     _imageLabel = new QLabel();
     _imageLabel->setAlignment(Qt::AlignCenter);
-    // Make background fully transparent
     _imageLabel->setStyleSheet(ui::theme::styles::transparentWidget());
 
-    // Load Vault Boy SVG using application's resource path method
     std::filesystem::path svgPath = Application::getResourcesPath() / "images" / "vault-boy.svg";
     QString svgPathStr = QString::fromStdString(svgPath.string());
 
-    // Use the centralized helper to load themed SVG
     QByteArray svgData = loadThemedSvg(svgPathStr);
     if (!svgData.isEmpty()) {
         QSvgRenderer svgRenderer(svgData);
@@ -48,7 +44,6 @@ void WelcomeWidget::setupUI() {
     }
     createVersionLabel();
 
-    // Add stretching to center the content vertically and horizontally
     _layout->addStretch();
     _layout->addWidget(_imageLabel, 0, Qt::AlignCenter);
     if (_versionLabel) {
@@ -58,11 +53,9 @@ void WelcomeWidget::setupUI() {
 }
 
 void WelcomeWidget::renderSvgToLabel(QSvgRenderer& svgRenderer) {
-    // Get the default size from the SVG (maintains original aspect ratio)
     QSize svgSize = svgRenderer.defaultSize();
 
-    // Scale to a reasonable size while maintaining aspect ratio
-    // Original is 210mm x 297mm (portrait), scale to max 400px height
+    // Source SVG is 210mm x 297mm (portrait); scale to max 400px height, keeping aspect ratio
     int maxHeight = 400;
     QSize renderSize = svgSize.scaled(QSize(maxHeight * svgSize.width() / svgSize.height(), maxHeight), Qt::KeepAspectRatio);
 
@@ -75,8 +68,8 @@ void WelcomeWidget::renderSvgToLabel(QSvgRenderer& svgRenderer) {
     svgRenderer.render(&painter);
 
     _imageLabel->setPixmap(pixmap);
-    _imageLabel->setScaledContents(false); // Keep original size/aspect ratio
-    // Remove size constraints to allow proper centering
+    _imageLabel->setScaledContents(false);
+    // Remove size constraints so the label can center properly
     _imageLabel->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
     _imageLabel->setMinimumSize(0, 0);
 }
@@ -88,13 +81,11 @@ void WelcomeWidget::createVersionLabel() {
             .arg(geck::version::string));
     _versionLabel->setAlignment(Qt::AlignCenter);
 
-    // Set monospace bold font
     QFont font("Monaco, Consolas, 'Courier New', monospace");
     font.setBold(true);
     font.setPointSize(ui::constants::fonts::SIZE_TITLE);
     _versionLabel->setFont(font);
 
-    // Style the label
     _versionLabel->setStyleSheet(
         "QLabel { "
         "background-color: transparent; "

@@ -90,7 +90,6 @@ inline ScreenPosition coordinatesToScreenPosition(const TileCoordinates& coords,
     unsigned int y = coords.x * TILE_Y_OFFSET_SMALL + coords.y * TILE_Y_OFFSET_TINY + TILE_Y_OFFSET_TINY;
 
     if (isRoof) {
-        // Apply roof offset
         y -= ROOF_OFFSET;
     }
 
@@ -190,7 +189,7 @@ namespace TileColors {
 
     // Exit grid highlight colors (bright magenta for better contrast against green)
     inline sf::Color exitGridHighlight() {
-        return sf::Color(255, 0, 255, 180); // Bright magenta with alpha
+        return sf::Color(255, 0, 255, 180);
     }
 }
 

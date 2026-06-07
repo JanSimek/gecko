@@ -43,12 +43,10 @@ void MessageSelectorDialog::setupUI() {
     _mainLayout->setContentsMargins(ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN);
     _mainLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
-    // Title label
     _titleLabel = new QLabel("Select a message from the list:");
     _titleLabel->setStyleSheet(ui::theme::styles::boldLabelWithMargin());
     _mainLayout->addWidget(_titleLabel);
 
-    // Message list
     _messageList = new QListWidget(this);
     _messageList->setAlternatingRowColors(true);
     _messageList->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -58,12 +56,11 @@ void MessageSelectorDialog::setupUI() {
     connect(_messageList, &QListWidget::itemSelectionChanged, this, &MessageSelectorDialog::onSelectionChanged);
     connect(_messageList, &QListWidget::itemDoubleClicked, this, &MessageSelectorDialog::onItemDoubleClicked);
 
-    // Button layout
     _buttonLayout = new QHBoxLayout();
     _buttonLayout->addStretch();
 
     _okButton = new QPushButton("OK", this);
-    _okButton->setEnabled(false); // Disabled until selection is made
+    _okButton->setEnabled(false); // enabled once a message is selected
     _okButton->setDefault(true);
     connect(_okButton, &QPushButton::clicked, this, &QDialog::accept);
     _buttonLayout->addWidget(_okButton);
@@ -87,7 +84,6 @@ void MessageSelectorDialog::populateMessages() {
         QListWidgetItem* currentItem = nullptr;
 
         for (const auto& [id, message] : messages) {
-            // Create display text: "ID: 123 - Message text..."
             QString displayText = QString("ID: %1 - %2")
                                       .arg(id)
                                       .arg(QString::fromStdString(message.text));
@@ -98,12 +94,11 @@ void MessageSelectorDialog::populateMessages() {
             }
 
             QListWidgetItem* item = new QListWidgetItem(displayText);
-            item->setData(Qt::UserRole, id);                        // Store the message ID
-            item->setToolTip(QString::fromStdString(message.text)); // Full text as tooltip
+            item->setData(Qt::UserRole, id);
+            item->setToolTip(QString::fromStdString(message.text));
 
             _messageList->addItem(item);
 
-            // Remember the current message item for selection
             if (id == _currentMessageId) {
                 currentItem = item;
             }
@@ -122,7 +117,6 @@ void MessageSelectorDialog::populateMessages() {
     } catch (const std::exception& e) {
         spdlog::error("MessageSelectorDialog: Error populating messages: {}", e.what());
 
-        // Add error item
         QListWidgetItem* errorItem = new QListWidgetItem("Error: Could not load messages");
         errorItem->setData(Qt::UserRole, -1);
         _messageList->addItem(errorItem);
@@ -144,7 +138,7 @@ void MessageSelectorDialog::onSelectionChanged() {
 void MessageSelectorDialog::onItemDoubleClicked(QListWidgetItem* item) {
     if (item && item->data(Qt::UserRole).toInt() >= 0) {
         _selectedMessageId = item->data(Qt::UserRole).toInt();
-        accept(); // Close dialog with OK result
+        accept();
     }
 }
 

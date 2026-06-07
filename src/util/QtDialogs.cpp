@@ -10,7 +10,6 @@ namespace geck {
 
 QString QtDialogs::s_lastDirectory = QString();
 
-// Message dialogs
 void QtDialogs::showInfo(QWidget* parent, const QString& title, const QString& message) {
     QMessageBox msgBox(parent);
     msgBox.setWindowTitle(title);
@@ -52,7 +51,6 @@ bool QtDialogs::showQuestion(QWidget* parent, const QString& title, const QStrin
     return msgBox.exec() == QMessageBox::Yes;
 }
 
-// File dialogs
 QString QtDialogs::openFile(QWidget* parent, const QString& title, const QString& filter) {
     QString fileName = QFileDialog::getOpenFileName(parent, title, getLastDirectory(), filter);
     if (!fileName.isEmpty()) {
@@ -85,7 +83,6 @@ QString QtDialogs::selectDirectory(QWidget* parent, const QString& title) {
     return dirName;
 }
 
-// Input dialogs
 QString QtDialogs::getString(QWidget* parent, const QString& title,
     const QString& label, const QString& defaultValue) {
     bool ok;
@@ -107,7 +104,6 @@ double QtDialogs::getDouble(QWidget* parent, const QString& title, const QString
     return ok ? value : defaultValue;
 }
 
-// Progress dialogs
 std::unique_ptr<QProgressDialog> QtDialogs::createProgress(QWidget* parent,
     const QString& labelText,
     int minimum, int maximum) {
@@ -117,7 +113,6 @@ std::unique_ptr<QProgressDialog> QtDialogs::createProgress(QWidget* parent,
     return progress;
 }
 
-// Game-specific dialogs
 QString QtDialogs::openGameFile(QWidget* parent, const QString& title) {
     QString filter = "All Game Files (*.dat *.pro *.frm *.map *.msg *.gam *.lst);;"
                      "DAT Archives (*.dat);;"
@@ -143,7 +138,6 @@ QString QtDialogs::openProFile(QWidget* parent, const QString& title) {
     return openFile(parent, title, "PRO Objects (*.pro);;All Files (*.*)");
 }
 
-// Utility methods
 void QtDialogs::centerOnScreen(QWidget* widget) {
     if (!widget)
         return;
@@ -159,13 +153,11 @@ void QtDialogs::centerOnScreen(QWidget* widget) {
 }
 
 void QtDialogs::setDialogIcon(QMessageBox* dialog) {
-    // Set application icon if available
     if (QApplication::windowIcon().isNull() == false) {
         dialog->setWindowIcon(QApplication::windowIcon());
     }
 }
 
-// Helper methods
 QString QtDialogs::getLastDirectory() {
     if (s_lastDirectory.isEmpty()) {
         QSettings settings;

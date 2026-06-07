@@ -13,7 +13,6 @@ namespace geck {
 ProDrugWidget::ProDrugWidget(resource::GameResources& resources, QWidget* parent)
     : ProTabWidget(resources, parent) {
 
-    // Initialize arrays
     for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         _drugStatCombos[i] = nullptr;
         _drugStatAmountEdits[i] = nullptr;
@@ -33,8 +32,6 @@ ProDrugWidget::ProDrugWidget(resource::GameResources& resources, QWidget* parent
 }
 
 void ProDrugWidget::setupUI() {
-    // Drug tab uses single column layout (full width)
-
     // === Stat Effects Group ===
     QGroupBox* effectsGroup = new QGroupBox("Modify Stats");
     effectsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
@@ -42,7 +39,6 @@ void ProDrugWidget::setupUI() {
     effectsGridLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     effectsGridLayout->setSpacing(ui::constants::SPACING_FORM);
 
-    // Header row (row 0)
     effectsGridLayout->addWidget(new QLabel(""), 0, 0); // Empty space for stat labels
 
     QLabel* statHeader = new QLabel("Stat");
@@ -65,41 +61,32 @@ void ProDrugWidget::setupUI() {
     longTimeHeader->setStyleSheet(ui::theme::styles::boldLabel());
     effectsGridLayout->addWidget(longTimeHeader, 0, 4);
 
-    // Set column stretches for proper sizing
-    effectsGridLayout->setColumnStretch(0, 0); // Fixed width for labels
-    effectsGridLayout->setColumnStretch(1, 2); // Stretch for combo boxes
-    effectsGridLayout->setColumnStretch(2, 1); // Stretch for spin boxes
-    effectsGridLayout->setColumnStretch(3, 1); // Stretch for spin boxes
-    effectsGridLayout->setColumnStretch(4, 1); // Stretch for spin boxes
+    effectsGridLayout->setColumnStretch(0, 0);
+    effectsGridLayout->setColumnStretch(1, 2);
+    effectsGridLayout->setColumnStretch(2, 1);
+    effectsGridLayout->setColumnStretch(3, 1);
+    effectsGridLayout->setColumnStretch(4, 1);
 
-    // Create rows for each stat (rows 1-3)
     for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         int row = i + 1;
 
-        // Stat label (column 0)
         QLabel* statLabel = new QLabel(QString("Stat %1:").arg(i + 1));
         effectsGridLayout->addWidget(statLabel, row, 0);
 
-        // Stat dropdown (column 1)
         _drugStatCombos[i] = createComboBox(QStringList{}, QString("Stat %1 to modify (None=no effect)").arg(i + 1));
         effectsGridLayout->addWidget(_drugStatCombos[i], row, 1);
 
-        // Immediate effect value (column 2)
         _drugStatAmountEdits[i] = createSpinBox(INT_MIN, INT_MAX, QString("Immediate effect amount for stat %1").arg(i + 1));
         effectsGridLayout->addWidget(_drugStatAmountEdits[i], row, 2);
 
-        // Mid-time effect value (column 3)
         _drugFirstStatAmountEdits[i] = createSpinBox(INT_MIN, INT_MAX, QString("Mid-time effect amount for stat %1").arg(i + 1));
         effectsGridLayout->addWidget(_drugFirstStatAmountEdits[i], row, 3);
 
-        // Long-time effect value (column 4)
         _drugSecondStatAmountEdits[i] = createSpinBox(INT_MIN, INT_MAX, QString("Long-time effect amount for stat %1").arg(i + 1));
         effectsGridLayout->addWidget(_drugSecondStatAmountEdits[i], row, 4);
     }
 
     _mainLayout->addWidget(effectsGroup);
-
-    // Add some spacing
     _mainLayout->addSpacing(ui::constants::SPACING_WIDE);
 
     // === Effect Timing Group ===
@@ -115,8 +102,6 @@ void ProDrugWidget::setupUI() {
 
     timingGroup->setLayout(timingLayout);
     _mainLayout->addWidget(timingGroup);
-
-    // Add some spacing
     _mainLayout->addSpacing(ui::constants::SPACING_WIDE);
 
     // === Addiction Group ===
@@ -136,8 +121,6 @@ void ProDrugWidget::setupUI() {
 
     addictionGroup->setLayout(addictionLayout);
     _mainLayout->addWidget(addictionGroup);
-
-    // Add stretch to push content to top
     _mainLayout->addStretch();
 }
 
@@ -145,7 +128,6 @@ void ProDrugWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    // Load drug data - copy fields individually
     _drugData.stat0 = pro->drugData.stat0;
     _drugData.stat1 = pro->drugData.stat1;
     _drugData.stat2 = pro->drugData.stat2;
@@ -164,13 +146,11 @@ void ProDrugWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     _drugData.addictionEffect = pro->drugData.addictionEffect;
     _drugData.addictionOnset = pro->drugData.addictionOnset;
 
-    // Map data to UI arrays
     uint32_t stats[NUM_DRUG_STATS] = { _drugData.stat0, _drugData.stat1, _drugData.stat2 };
     int32_t amounts[NUM_DRUG_STATS] = { _drugData.amount0, _drugData.amount1, _drugData.amount2 };
     int32_t firstAmounts[NUM_DRUG_STATS] = { _drugData.amount0_1, _drugData.amount1_1, _drugData.amount2_1 };
     int32_t secondAmounts[NUM_DRUG_STATS] = { _drugData.amount0_2, _drugData.amount1_2, _drugData.amount2_2 };
 
-    // Update UI controls
     for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         if (_drugStatCombos[i]) {
             // Convert stat ID: -1/0xFFFF means "None" (index 0), otherwise stat ID + 1
@@ -200,7 +180,6 @@ void ProDrugWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    // Update data from UI
     uint32_t stats[NUM_DRUG_STATS];
     int32_t amounts[NUM_DRUG_STATS];
     int32_t firstAmounts[NUM_DRUG_STATS];
@@ -220,7 +199,6 @@ void ProDrugWidget::saveToPro(std::shared_ptr<Pro>& pro) {
             secondAmounts[i] = static_cast<int32_t>(_drugSecondStatAmountEdits[i]->value());
     }
 
-    // Map arrays back to data structure
     _drugData.stat0 = stats[0];
     _drugData.stat1 = stats[1];
     _drugData.stat2 = stats[2];
@@ -244,7 +222,6 @@ void ProDrugWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     if (_drugAddictionDelayEdit)
         _drugData.addictionOnset = static_cast<uint32_t>(_drugAddictionDelayEdit->value());
 
-    // Save to PRO - copy fields individually
     pro->drugData.stat0 = _drugData.stat0;
     pro->drugData.stat1 = _drugData.stat1;
     pro->drugData.stat2 = _drugData.stat2;

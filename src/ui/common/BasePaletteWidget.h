@@ -38,7 +38,7 @@ public:
     virtual void setSelected(bool selected) {
         if (_selected != selected) {
             _selected = selected;
-            update(); // Trigger repaint
+            update();
         }
     }
 

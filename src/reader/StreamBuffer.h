@@ -13,31 +13,27 @@ namespace geck {
 class DatReader;
 
 /**
- * An abstract data stream for binary resource files loaded from either Dat file or a file system
+ * @brief A data stream for binary resource files loaded from either a Dat file or the file system.
  *
  * @author alexeevdv / Falltergeist
  * @link https://github.com/falltergeist/falltergeist
  */
 class StreamBuffer : public std::streambuf {
 private:
-    // A thin wrapper over plain C-array.
-    // Handles allocation and deallocation of the underlying buffer.
-    // Does not perform any kind of initialization of allocated memory.
+    /// Thin RAII wrapper over a plain C-array. Owns allocation/deallocation but
+    /// does not initialize the allocated memory.
     class Buffer {
     public:
-        // Creates new empty buffer
         Buffer()
             : _size(0)
             , _buf(nullptr) {
         }
 
-        // Creates new buffer with given size
         Buffer(size_t size)
             : _size(size) {
             _buf = new char[size];
         }
 
-        // Constructs by moving buffer pointer from another Buffer object
         Buffer(Buffer&& other)
             : _size(other._size)
             , _buf(other._buf) {
@@ -45,7 +41,6 @@ private:
             other._buf = nullptr;
         }
 
-        // Move-assigns buffer pointer from another Buffer object
         Buffer& operator=(Buffer&& other) {
             _cleanUpBuffer();
             _size = other._size;
@@ -62,12 +57,12 @@ private:
             _cleanUpBuffer();
         }
 
-        // Access element at a given index. No bounds checking is performed.
+        /// Indexed access; no bounds checking is performed.
         char& operator[](size_t index) {
             return _buf[index];
         }
 
-        // Access element at a given index. No bounds checking is performed.
+        /// Indexed access; no bounds checking is performed.
         const char& operator[](size_t index) const {
             return _buf[index];
         }
@@ -80,8 +75,7 @@ private:
             return &_buf[_size];
         }
 
-        // Reallocate the underlying buffer to the specified size
-        // All data in buffer will be discarded
+        // Reallocates to newSize; existing data is discarded.
         void resize(size_t newSize) {
             _cleanUpBuffer();
             _size = newSize;
@@ -92,22 +86,18 @@ private:
             }
         }
 
-        // The current size of data in buffer
         size_t size() const {
             return _size;
         }
 
-        // Returns true if the buffer is currently empty
         bool empty() const {
             return _size == 0;
         }
 
-        // The pointer to underlying buffer
         char* data() {
             return _buf;
         }
 
-        // The const pointer to underlying buffer
         const char* data() const {
             return _buf;
         }

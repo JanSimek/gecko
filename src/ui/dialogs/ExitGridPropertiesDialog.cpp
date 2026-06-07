@@ -46,7 +46,6 @@ void ExitGridPropertiesDialog::setupUI() {
     setupFormLayout();
     setupButtonBox();
 
-    // Status label for validation feedback
     _statusLabel = new QLabel(this);
     _statusLabel->setWordWrap(true);
     _statusLabel->setStyleSheet(ui::theme::styles::statusError());
@@ -120,7 +119,6 @@ void ExitGridPropertiesDialog::setupFormLayout() {
 void ExitGridPropertiesDialog::setupButtonBox() {
     _buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 
-    // Use standard Qt dialog connections
     connect(_buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(_buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 }
@@ -146,7 +144,6 @@ void ExitGridPropertiesDialog::updateUI() {
     _mapIdSpinBox->setValue(isTownMap ? -1 : (isWorldMap ? -2 : static_cast<int>(_properties.exitMap)));
     _positionSpinBox->setValue(static_cast<int>(_properties.exitPosition));
 
-    // Set elevation combo box
     for (int i = 0; i < _elevationComboBox->count(); ++i) {
         if (_elevationComboBox->itemData(i).toUInt() == _properties.exitElevation) {
             _elevationComboBox->setCurrentIndex(i);
@@ -154,7 +151,6 @@ void ExitGridPropertiesDialog::updateUI() {
         }
     }
 
-    // Set orientation combo box
     for (int i = 0; i < _orientationComboBox->count(); ++i) {
         if (_orientationComboBox->itemData(i).toUInt() == _properties.exitOrientation) {
             _orientationComboBox->setCurrentIndex(i);
@@ -162,10 +158,9 @@ void ExitGridPropertiesDialog::updateUI() {
         }
     }
 
-    // Update enabled state of map-specific controls
     updateMapControlsEnabled();
 
-    // Ensure validation is run to enable/disable OK button properly
+    // Run validation to enable/disable the OK button
     validateInput();
 }
 
@@ -188,7 +183,6 @@ void ExitGridPropertiesDialog::accept() {
         _properties = getProperties();
         QDialog::accept();
     } else {
-        // Show validation error to user
         validateInput();
     }
 }
@@ -210,21 +204,18 @@ void ExitGridPropertiesDialog::validateInput() {
 }
 
 bool ExitGridPropertiesDialog::isValidInput() const {
-    // Validate position range
     int position = _positionSpinBox->value();
-    if (position < 0 || position >= HexagonGrid::POSITION_COUNT) {
+    if (position < 0 || position >= HexagonGrid::POSITION_COUNT) { // hex position 0-39999
         return false;
     }
 
-    // Validate elevation range
     uint32_t elevation = _elevationComboBox->currentData().toUInt();
-    if (elevation > 2) {
+    if (elevation > 2) { // elevation 0-2
         return false;
     }
 
-    // Validate orientation range
     uint32_t orientation = _orientationComboBox->currentData().toUInt();
-    if (orientation > 5) {
+    if (orientation > 5) { // orientation 0-5
         return false;
     }
 
@@ -238,13 +229,13 @@ void ExitGridPropertiesDialog::onExitToWorldmapToggled(bool checked) {
         _townMapCheckBox->setChecked(false);
         _townMapCheckBox->blockSignals(false);
 
-        // Set world map exit values
+        // World map exit (map ID -2)
         _mapIdSpinBox->setValue(-2);
         _positionSpinBox->setValue(0);
         _elevationComboBox->setCurrentIndex(0);   // Ground level
         _orientationComboBox->setCurrentIndex(0); // North
     } else {
-        // Reset to specific map exit - set map ID to 0 if it was a world/town map value
+        // Reset to specific map exit if it was a world/town map value
         if (_mapIdSpinBox->value() < 0) {
             _mapIdSpinBox->setValue(0);
         }
@@ -261,13 +252,13 @@ void ExitGridPropertiesDialog::onTownMapToggled(bool checked) {
         _exitToWorldmapCheckBox->setChecked(false);
         _exitToWorldmapCheckBox->blockSignals(false);
 
-        // Set town map exit values
+        // Town map exit (map ID -1)
         _mapIdSpinBox->setValue(-1);
         _positionSpinBox->setValue(0);
         _elevationComboBox->setCurrentIndex(0);   // Ground level
         _orientationComboBox->setCurrentIndex(0); // North
     } else {
-        // Reset to specific map exit - set map ID to 0 if it was a world/town map value
+        // Reset to specific map exit if it was a world/town map value
         if (_mapIdSpinBox->value() < 0) {
             _mapIdSpinBox->setValue(0);
         }

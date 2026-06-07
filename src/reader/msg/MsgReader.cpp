@@ -13,13 +13,11 @@ std::unique_ptr<Msg> MsgReader::read() {
         auto& utils = getBinaryUtils();
         spdlog::debug("Reading MSG file: {}", _path.string());
 
-        // Validate file size
         auto pos = utils.getPosition();
         if (pos.total == 0) {
             throw UnsupportedFormatException("Empty MSG file", _path);
         }
 
-        // Add MSG format validation
         FormatValidator::validateMsgFile(utils, _path);
 
         spdlog::trace("MSG file size: {} bytes", pos.total);
@@ -27,16 +25,13 @@ std::unique_ptr<Msg> MsgReader::read() {
         std::map<int, Msg::Message> _messages;
         int messages_found = 0;
 
-        // Load entire file content into string using BinaryUtils
         std::string s = utils.readFixedString(pos.total);
 
-        // Validate that content looks like MSG format
         if (s.find('{') == std::string::npos || s.find('}') == std::string::npos) {
             spdlog::warn("MSG file may not contain valid message format");
         }
 
-        // Enhanced regex for MSG parsing
-        // NOTE: Known issues to handle:
+        // Known unhandled cases:
         // 1. Multiline strings (not yet implemented)
         // 2. Missing '}' in some files (e.g., CMBATAI2.MSG messages #1382, #32020)
         std::regex re{ R"(\{(\d+)\}\{(.*)?\}\{(.*)?\})" };
@@ -57,12 +52,10 @@ std::unique_ptr<Msg> MsgReader::read() {
                 std::string audio = matches[2].str();
                 std::string message = matches[3].str();
 
-                // Clean up message text
-                // Remove newlines (TODO: better handling of \r\n sequences)
+                // TODO: better handling of \r\n sequences
                 message.erase(std::remove(message.begin(), message.end(), '\n'), message.end());
                 message.erase(std::remove(message.begin(), message.end(), '\r'), message.end());
 
-                // Check for duplicate message IDs
                 if (_messages.find(id) != _messages.end()) {
                     spdlog::warn("Duplicate message ID {} in MSG file", id);
                 }
@@ -76,7 +69,7 @@ std::unique_ptr<Msg> MsgReader::read() {
                 spdlog::error("Invalid message ID in MSG file: {}", matches[1].str());
             }
 
-            s = matches.suffix(); // Move to next match
+            s = matches.suffix();
         }
 
         spdlog::debug("Successfully read MSG file: {} messages found", messages_found);

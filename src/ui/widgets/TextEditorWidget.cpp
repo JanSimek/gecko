@@ -28,22 +28,19 @@ TextEditorWidget::TextEditorWidget(QWidget* parent)
 void TextEditorWidget::setupUI() {
     _layout = new QVBoxLayout(this);
 
-    // Help text
     _helpLabel = new QLabel(
         "Choose how to open text files (txt, gam, lst, ini, etc.) from the file browser.");
     _helpLabel->setWordWrap(true);
     _helpLabel->setStyleSheet(ui::theme::styles::helpText());
     _layout->addWidget(_helpLabel);
 
-    // Radio buttons
     _systemEditorRadio = new QRadioButton("Use default system editor");
-    _systemEditorRadio->setChecked(true); // Default selection
+    _systemEditorRadio->setChecked(true);
     _layout->addWidget(_systemEditorRadio);
 
     _customEditorRadio = new QRadioButton("Use custom editor:");
     _layout->addWidget(_customEditorRadio);
 
-    // Custom editor path layout
     _customEditorLayout = new QHBoxLayout();
     _customEditorLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0); // Indent under radio button
 
@@ -59,7 +56,6 @@ void TextEditorWidget::setupUI() {
 
     _layout->addLayout(_customEditorLayout);
 
-    // Update initial control states
     updateControlStates();
 }
 
@@ -94,7 +90,6 @@ void TextEditorWidget::setCustomEditorPath(const QString& path) {
 void TextEditorWidget::updateControlStates() {
     bool customSelected = _customEditorRadio->isChecked();
 
-    // Enable/disable custom editor controls
     _customEditorPathEdit->setEnabled(customSelected);
     _browseEditorButton->setEnabled(customSelected);
 }
@@ -113,7 +108,6 @@ void TextEditorWidget::onCustomEditorPathChanged() {
 void TextEditorWidget::onBrowseEditor() {
     QString currentPath = _customEditorPathEdit->text();
 
-    // Default to the current path or home directory
     QString startPath = currentPath.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::HomeLocation) : QFileInfo(currentPath).absolutePath();
 
     QString editorPath = QFileDialog::getOpenFileName(this,

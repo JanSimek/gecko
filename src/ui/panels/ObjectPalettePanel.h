@@ -19,10 +19,9 @@ namespace resource {
     class GameResources;
 }
 
-// Forward declaration
 class ObjectPalettePanel;
 
-// Object category enum - moved outside class for easier access
+// Defined outside the class so it can be used as an unordered_map key.
 enum class ObjectCategory {
     ITEMS,    // Weapons, armor, consumables, etc.
     SCENERY,  // Furniture, decorations, interactive objects
@@ -59,10 +58,7 @@ struct ObjectInfo {
         , listIndex(index) { }
 };
 
-/**
- * @brief Widget representing a single object in the palette
- * Now inherits from BasePaletteWidget to eliminate duplication
- */
+/// @brief Widget representing a single object in the palette.
 class ObjectWidget : public BasePaletteWidget {
     Q_OBJECT
 

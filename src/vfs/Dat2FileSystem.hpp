@@ -48,9 +48,6 @@ public:
         Shutdown();
     }
     
-    /*
-     * Initialize filesystem, call this method as soon as possible
-     */
     virtual void Initialize() override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -61,9 +58,6 @@ public:
         }
     }
 
-    /*
-     * Shutdown filesystem
-     */
     virtual void Shutdown() override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -74,17 +68,11 @@ public:
         }
     }
     
-    /*
-     * Check if filesystem is initialized
-     */
     virtual bool IsInitialized() const override
     {
         return m_IsInitialized;
     }
     
-    /*
-     * Get base path
-     */
     virtual const std::string& BasePath() const override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -95,9 +83,6 @@ public:
         }
     }
     
-    /*
-     * Retrieve file list according filter
-     */
     virtual const vfspp::IFileSystem::TFileList& FileList() const override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -108,9 +93,6 @@ public:
         }
     }
     
-    /*
-     * Check is readonly filesystem
-     */
     virtual bool IsReadOnly() const override
     {
         return true;
@@ -130,41 +112,26 @@ public:
         }
     }
     
-    /*
-     * Create file on writeable filesystem. Returns true if file created successfully
-     */
     virtual bool CreateFile([[maybe_unused]] const vfspp::FileInfo& filePath) override
     {
         return false;
     }
     
-    /*
-     * Remove existing file on writable filesystem
-     */
     virtual bool RemoveFile([[maybe_unused]] const vfspp::FileInfo& filePath) override
     {
         return false;
     }
     
-    /*
-     * Copy existing file on writable filesystem
-     */
     virtual bool CopyFile([[maybe_unused]] const vfspp::FileInfo& src, [[maybe_unused]] const vfspp::FileInfo& dest) override
     {
         return false;
     }
     
-    /*
-     * Rename existing file on writable filesystem
-     */
     virtual bool RenameFile([[maybe_unused]] const vfspp::FileInfo& srcPath, [[maybe_unused]] const vfspp::FileInfo& dstPath) override
     {
         return false;
     }
 
-    /*
-     * Close file on filesystem
-     */
     virtual void CloseFile(vfspp::IFilePtr file) override
     {
         if (file) {
@@ -172,9 +139,6 @@ public:
         }
     }
 
-    /*
-     * Check if file exists on filesystem
-     */
     virtual bool IsFileExists(const vfspp::FileInfo& filePath) const override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -185,9 +149,6 @@ public:
         }
     }
 
-    /*
-     * Check is file
-     */
     virtual bool IsFile(const vfspp::FileInfo& filePath) const override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -198,9 +159,6 @@ public:
         }
     }
     
-    /*
-     * Check is dir
-     */
     virtual bool IsDir(const vfspp::FileInfo& dirPath) const override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -231,7 +189,6 @@ private:
     inline void ShutdownST()
     {
         m_DatPath = "";
-        // close all files
         for (auto& file : m_FileList) {
             file.second->Close();
         }
@@ -258,7 +215,6 @@ private:
     
     inline vfspp::IFilePtr OpenFileST(const vfspp::FileInfo& filePath, vfspp::IFile::FileMode mode)
     {
-        // check if filesystem is readonly and mode is write then return null
         bool requestWrite = ((mode & vfspp::IFile::FileMode::Write) == vfspp::IFile::FileMode::Write);
         requestWrite |= ((mode & vfspp::IFile::FileMode::Append) == vfspp::IFile::FileMode::Append);
         requestWrite |= ((mode & vfspp::IFile::FileMode::Truncate) == vfspp::IFile::FileMode::Truncate);
@@ -284,10 +240,9 @@ private:
     void BuildFilelist(const std::shared_ptr<geck::Dat>& datArchive, vfspp::IFileSystem::TFileList& outFileList)
     {
         for (const auto& datEntry : datArchive->getEntries()) {
-            // TODO: add directories !!!!
-            // DAT entries use forward slashes (e.g., "art/tiles/tile.frm")
-            // FileInfo constructor will call Configure() which uses generic_string()
-            // This ensures consistent forward slash usage in the VFS layer
+            // TODO: add directories
+            // DAT entries use forward slashes (e.g. "art/tiles/tile.frm"); FileInfo's
+            // Configure() uses generic_string() to keep slashes consistent in the VFS layer.
             vfspp::FileInfo fileInfo(BasePathST(), datEntry.first, false);
             vfspp::IFilePtr file(new Dat2File(fileInfo, datEntry.second, m_datReader));
             outFileList.insert(std::pair(file->GetFileInfo().AbsolutePath(), file));

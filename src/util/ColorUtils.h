@@ -36,12 +36,12 @@ inline sf::Color createRoofTileSelectionColor() {
 }
 
 inline sf::Color createObjectSelectionColor() {
-    return sf::Color::Magenta; // Standard SFML magenta for object selection
+    return sf::Color::Magenta;
 }
 
 // Qt Color utilities
 inline QColor createSelectionBorderColor() {
-    return QColor(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B); // Red selection border
+    return QColor(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B);
 }
 
 inline QColor createTilePlaceholderColor(int index) {

@@ -6,7 +6,8 @@
 namespace geck {
 
 /**
- * Writer for Fallout PRO (Prototype) files.
+ * @brief Writer for Fallout PRO (Prototype) files.
+ *
  * PRO files contain object definitions and properties.
  */
 class ProWriter : public FileWriter<Pro> {

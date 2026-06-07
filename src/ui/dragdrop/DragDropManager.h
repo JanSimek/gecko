@@ -8,7 +8,6 @@
 
 namespace geck {
 
-// Forward declarations
 class EditorWidget;
 class Object;
 class HexagonGrid;
@@ -59,9 +58,6 @@ public:
     sf::Vector2f getObjectDragOffset() const { return _objectDragOffset; }
 
 private:
-    // Helper methods
-
-    // Reference to editor for accessing shared state
     EditorWidget* _editor;
 
     // Object dragging state

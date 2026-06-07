@@ -98,27 +98,23 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, QWidg
     setDockOptions(QMainWindow::AllowTabbedDocks | QMainWindow::AllowNestedDocks | QMainWindow::AnimatedDocks);
     setDockNestingEnabled(true);
 
-    // Enable proper focus handling for dock widgets
     setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 
     setupUI();
 
-    // Restore dock widget state from previous session
     restoreDockWidgetState();
 
-    // Capture the restored visibility and hide panels until a map is loaded
+    // Capture the restored visibility, then hide panels until a map is loaded
     snapshotPanelVisibility();
     hidePanelsForNoMap();
 
-    // Update panel menu actions to reflect actual visibility after restoration
+    // Reflect actual visibility once restoration settles
     QTimer::singleShot(200, this, &MainWindow::updatePanelMenuActions);
 
-    // Connect timer to update loop
     connect(_gameLoopTimer, &QTimer::timeout, this, &MainWindow::updateAndRender);
 }
 
 MainWindow::~MainWindow() {
-    // Save dock widget state before destruction
     saveDockWidgetState();
     stopGameLoop();
 }
@@ -136,17 +132,12 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     _centralStack->addWidget(_currentEditorWidget);
     _centralStack->setCurrentWidget(_currentEditorWidget);
 
-    // Set main window reference for palette access
     _currentEditorWidget->setMainWindow(this);
-
-    // Initialize the editor widget
     _currentEditorWidget->init();
 
-    // Connect signals
     connectToEditorWidget();
     connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, &MainWindow::updateUndoRedoActions);
 
-    // Sync current menu state to the new EditorWidget
     syncMenuStateToEditorWidget();
 
     if (_currentEditorWidget->getMap()) {
@@ -162,11 +153,10 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
 }
 
 void MainWindow::setupUI() {
-    // Create central stacked widget to hold loading and editor widgets
     _centralStack = new QStackedWidget(this);
     setCentralWidget(_centralStack);
 
-    // Create and add welcome widget (shown when no map is loaded)
+    // Welcome widget is shown when no map is loaded
     _welcomeWidget = new WelcomeWidget(this);
     _centralStack->addWidget(_welcomeWidget);
     _centralStack->setCurrentWidget(_welcomeWidget);
@@ -180,24 +170,22 @@ void MainWindow::setupUI() {
 }
 
 void MainWindow::connectMenuSignals() {
-    // Connect MainWindow menu signals - these work regardless of EditorWidget state
+    // MainWindow menu signals - these work regardless of EditorWidget state
     connect(this, &MainWindow::newMapRequested, [this]() {
         if (_currentEditorWidget) {
             _currentEditorWidget->createNewMap();
         } else {
-            // Create new EditorWidget with empty map when no EditorWidget exists
+            // Create an EditorWidget with an empty map, then populate it
             auto editorWidget = std::make_unique<EditorWidget>(*_resourcesShared, nullptr);
             setEditorWidget(std::move(editorWidget));
-            // Now create the new map
             _currentEditorWidget->createNewMap();
         }
     });
     connect(this, &MainWindow::openMapRequested, [this]() {
         if (_currentEditorWidget) {
-            // Normal case: delegate to EditorWidget
             _currentEditorWidget->openMap();
         } else {
-            // Fallback case: handle directly in MainWindow
+            // No editor yet: handle the open directly
             QString mapPath = QtDialogs::openMapFile(this, "Choose Fallout 2 map to load");
             if (!mapPath.isEmpty()) {
                 handleMapLoadRequest(mapPath.toStdString(), true); // Force filesystem for File menu
@@ -208,7 +196,6 @@ void MainWindow::connectMenuSignals() {
         if (_currentEditorWidget) {
             _currentEditorWidget->saveMap();
         }
-        // Note: Save Map should be disabled when no map is loaded
     });
     connect(this, &MainWindow::selectAllRequested, [this]() {
         if (_currentEditorWidget) {
@@ -580,13 +567,12 @@ void MainWindow::setupToolBar() {
         connect(action, &QAction::triggered, this, [trigger = spec.trigger]() { trigger(); });
     }
 
-    _mainToolBar->addSeparator(); // Separate play from selection controls
+    _mainToolBar->addSeparator();
 
     // Selection mode action with dropdown menu
     _selectionModeAction = _mainToolBar->addAction(createIcon(":/icons/actions/select.svg"), "All");
     _selectionModeAction->setToolTip("Select the current selection mode");
 
-    // Create dropdown menu with all selection modes
     _selectionModeMenu = new QMenu(this);
     for (int i = 0; i < static_cast<int>(SelectionMode::NUM_SELECTION_TYPES); ++i) {
         SelectionMode mode = static_cast<SelectionMode>(i);
@@ -594,19 +580,15 @@ void MainWindow::setupToolBar() {
         action->setData(static_cast<int>(mode));
         action->setCheckable(true);
 
-        // Set "All" mode as checked by default
         if (mode == SelectionMode::ALL) {
-            action->setChecked(true);
+            action->setChecked(true); // ALL is the default mode
         }
 
-        // Connect each menu action to update editor widget
         connect(action, &QAction::triggered, this, [this, mode]() {
             if (_currentEditorWidget) {
                 _currentEditorWidget->setSelectionMode(mode);
-                // Update action text to show current mode
                 _selectionModeAction->setText(selectionModeToString(mode));
 
-                // Update checkmarks in menu
                 for (QAction* menuAction : _selectionModeMenu->actions()) {
                     menuAction->setChecked(menuAction->data().toInt() == static_cast<int>(mode));
                 }
@@ -614,12 +596,10 @@ void MainWindow::setupToolBar() {
         });
     }
 
-    // Connect the main action to show the dropdown menu
     connect(_selectionModeAction, &QAction::triggered, this, [this]() {
-        // Get the toolbar button widget for this action to position the menu correctly
         QWidget* actionWidget = _mainToolBar->widgetForAction(_selectionModeAction);
         if (actionWidget) {
-            // Position menu below the button
+            // Position the dropdown directly below the toolbar button
             QPoint menuPos = actionWidget->mapToGlobal(QPoint(0, actionWidget->height()));
             _selectionModeMenu->exec(menuPos);
         }
@@ -629,7 +609,6 @@ void MainWindow::setupToolBar() {
 
     addToolAction(":/icons/actions/rotate.svg", "Rotate", &MainWindow::rotateObjectRequested, "Rotate selected object", QKeySequence("R"));
 
-    // Mark exits tool
     _markExitsAction = _mainToolBar->addAction(createIcon(":/icons/actions/door-exit.svg"), "Mark Exits");
     _markExitsAction->setStatusTip("Select exit grids to edit their properties");
     _markExitsAction->setCheckable(true);
@@ -743,13 +722,10 @@ void MainWindow::setupDockWidgets() {
 
     applyDefaultPanelDockLayout();
 
-    // Let Qt handle initial dock sizing automatically for better resize flexibility
-    // Fixed resizeDocks() calls can interfere with user resize operations
+    // Let Qt handle initial dock sizing; explicit resizeDocks() calls would interfere with user resizes
     spdlog::debug("Dock widget setup completed with flexible sizing and state monitoring");
 
-    // Set panels above the SFML widget to prevent redrawing issues
-    // This is achieved by using QDockWidget's floating and layering features
-    // Dock widgets are already rendered above the central widget by Qt's design
+    // Qt already renders dock widgets above the central SFML widget, avoiding redraw issues
     spdlog::info("Dock widgets configured with proper z-order and panel features");
 }
 
@@ -911,7 +887,6 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 void MainWindow::keyPressEvent(QKeyEvent* event) {
     // Handle special shortcuts before forwarding to SFML
     if (event->key() == Qt::Key_P && _currentEditorWidget) {
-        // Open PRO editor for selected object
         if (openProEditorForSelectedObject()) {
             event->accept();
             return;
@@ -942,7 +917,6 @@ void MainWindow::keyReleaseEvent(QKeyEvent* event) {
 }
 
 void MainWindow::convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed) {
-    // Convert Qt key to SFML key
     sf::Keyboard::Key key = sf::Keyboard::Key::Unknown;
     switch (qtEvent->key()) {
         case Qt::Key_Escape:
@@ -986,15 +960,13 @@ void MainWindow::convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, 
             break;
     }
 
-    // Create the proper SFML 3 event
     if (pressed) {
         sfmlEvent = sf::Event::KeyPressed{ key };
     } else {
         sfmlEvent = sf::Event::KeyReleased{ key };
     }
 
-    // Note: SFML 3 events don't store modifier states directly
-    // Modifiers should be checked using sf::Keyboard::isKeyPressed() when needed
+    // SFML 3 events don't carry modifier state; check modifiers via sf::Keyboard::isKeyPressed() when needed
 }
 
 void MainWindow::connectPanelSignals() {
@@ -1133,9 +1105,8 @@ void MainWindow::connectToEditorWidget() {
         return;
     }
 
-    // Per-widget connections: sender is _currentEditorWidget.
-    // These are automatically cleaned up when the old EditorWidget is destroyed.
-
+    // Per-widget connections (sender is _currentEditorWidget) are auto-cleaned when
+    // the old EditorWidget is destroyed.
     if (_selectionPanel) {
         _selectionPanel->setMap(_currentEditorWidget->getMap());
         connect(_currentEditorWidget, &EditorWidget::selectionChanged,
@@ -1171,7 +1142,7 @@ void MainWindow::syncMenuStateToEditorWidget() {
         return;
     }
 
-    // Sync all visibility toggle states from menu to EditorWidget
+    // Sync visibility toggle states from menu to EditorWidget
     _currentEditorWidget->setShowObjects(_showObjectsAction->isChecked());
     _currentEditorWidget->setShowCritters(_showCrittersAction->isChecked());
     _currentEditorWidget->setShowWalls(_showWallsAction->isChecked());
@@ -1183,13 +1154,12 @@ void MainWindow::syncMenuStateToEditorWidget() {
     _currentEditorWidget->setShowExitGrids(_showExitGridsAction->isChecked());
     updateUndoRedoActions();
 
-    // Sync selection mode from action to EditorWidget (defaults to ALL mode)
+    // Reset selection mode to the default (ALL)
     if (_currentEditorWidget) {
         _currentEditorWidget->setSelectionMode(SelectionMode::ALL);
         if (_selectionModeAction) {
             _selectionModeAction->setText("All");
         }
-        // Update checkmarks in menu to show ALL mode is selected
         if (_selectionModeMenu) {
             for (QAction* menuAction : _selectionModeMenu->actions()) {
                 menuAction->setChecked(menuAction->data().toInt() == static_cast<int>(SelectionMode::ALL));
@@ -1203,12 +1173,9 @@ void MainWindow::updateMapInfo(Map* map) {
         _mapInfoPanel->setMap(map);
     }
 
-    // Update elevation menu based on available elevations
     updateElevationMenu(map);
 
-    // Load tiles into palette when map is loaded
     if (_tilePalettePanel && map) {
-        // Load tile list from the shared resource repository
         try {
             const auto* tileList = _resourcesShared->repository().find<Lst>("art/tiles/tiles.lst");
 
@@ -1223,7 +1190,6 @@ void MainWindow::updateMapInfo(Map* map) {
         }
     }
 
-    // Load objects into object palette panel
     if (_objectPalettePanel) {
         try {
             _objectPalettePanel->setMap(map);
@@ -1237,25 +1203,23 @@ void MainWindow::updateMapInfo(Map* map) {
 
 void MainWindow::updateElevationMenu(Map* map) {
     if (!map) {
-        // No map loaded, disable all elevation actions
         _elevation1Action->setDisabled(true);
         _elevation2Action->setDisabled(true);
         _elevation3Action->setDisabled(true);
         return;
     }
 
-    // Get map flags to determine available elevations
+    // MAP header flag bits 0x2/0x4/0x8: a set bit means that elevation is DISABLED
     uint32_t map_flags = map->getMapFile().header.flags;
     bool hasElevation1 = ((map_flags & 0x2) == 0);
     bool hasElevation2 = ((map_flags & 0x4) == 0);
     bool hasElevation3 = ((map_flags & 0x8) == 0);
 
-    // Enable/disable elevation actions based on availability
     _elevation1Action->setEnabled(hasElevation1);
     _elevation2Action->setEnabled(hasElevation2);
     _elevation3Action->setEnabled(hasElevation3);
 
-    // Ensure the first available elevation is selected
+    // Select the first available elevation
     if (hasElevation1) {
         _elevation1Action->setChecked(true);
     } else if (hasElevation2) {
@@ -1271,22 +1235,17 @@ void MainWindow::updateElevationMenu(Map* map) {
 void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem) {
     spdlog::info("MainWindow: Handling request to load map: {} (filesystem: {})", mapPath, forceFilesystem);
 
-    // Create loading dialog
     auto loadingWidget = std::make_unique<LoadingWidget>(this);
     loadingWidget->setWindowTitle("Loading Map");
 
-    // Use unified MapLoader with source context
     loadingWidget->addLoader(std::make_unique<MapLoader>(_resourcesShared, mapPath, -1, forceFilesystem, [this](auto map) {
-        // Check if loading was successful
         if (map) {
-            // When loading is complete, create new editor widget and switch to it
             auto editorWidget = std::make_unique<EditorWidget>(*_resourcesShared, std::move(map));
             setEditorWidget(std::move(editorWidget));
         }
-        // If map is null, error was already shown by MapLoader::onDone()
+        // If map is null, the error was already shown by MapLoader::onDone()
     }));
 
-    // Show modal loading dialog
     loadingWidget->exec();
 
     spdlog::info("Map loading completed from MainWindow");
@@ -1337,12 +1296,10 @@ void MainWindow::restoreDockWidgetState() {
         restoreGeometry(geometry);
     }
 
-    // Restore window state (maximized/normal)
     if (settings.getWindowMaximized()) {
         setWindowState(Qt::WindowMaximized);
     }
 
-    // Restore dock widget state
     QByteArray state = settings.getDockState();
     if (!state.isEmpty()) {
         restoreState(state);
@@ -1368,7 +1325,6 @@ void MainWindow::restoreDockWidgetState() {
 
         spdlog::debug("Restored dock widget state and window geometry");
     } else {
-        // If no saved state, ensure default layout is applied
         restoreDefaultLayout();
         spdlog::debug("No saved state found, using default dock widget layout");
     }
@@ -1556,12 +1512,10 @@ void MainWindow::refreshFileBrowser() {
 }
 
 void MainWindow::showFileBrowserPanel() {
-    // Show and raise the dock widget containing the file browser
     _fileBrowserDock->show();
     _fileBrowserDock->raise();
 
-    // Make the file browser tab active within the tabbed dock area
-    // Since file browser is tabified with tile and object palettes, we need to ensure it's the active tab
+    // File browser is tabified with the tile/object palettes; focusing it makes it the active tab
     _fileBrowserDock->widget()->setFocus();
 
     snapshotPanelVisibility();
@@ -1576,20 +1530,14 @@ void MainWindow::closeCurrentMap() {
 
     spdlog::info("Closing current map due to data path changes");
 
-    // Stop the game loop
     stopGameLoop();
 
-    // Remove the current editor widget from the stack
     _centralStack->removeWidget(_currentEditorWidget);
-
-    // Delete the editor widget
     _currentEditorWidget->deleteLater();
     _currentEditorWidget = nullptr;
 
-    // Show the welcome widget
     _centralStack->setCurrentWidget(_welcomeWidget);
 
-    // Hide panels that are only relevant when a map is loaded
     hidePanelsForNoMap();
 
     spdlog::debug("Current map closed successfully");
@@ -1617,7 +1565,6 @@ void MainWindow::showPreferences() {
         spdlog::info("Settings dialog cancelled");
     }
 
-    // Ensure file browser panel is visible after closing preferences
     showFileBrowserPanel();
 }
 
@@ -1629,7 +1576,6 @@ void MainWindow::showAbout() {
 void MainWindow::onPlayGame() {
     auto& settings = Settings::getInstance();
 
-    // Check if game location is configured and valid
     if (!settings.isGameLocationValid()) {
         QtDialogs::showWarning(this, "Game Location Not Configured",
             "Fallout 2 game location is not configured or invalid.\n\n"
@@ -1637,31 +1583,25 @@ void MainWindow::onPlayGame() {
         return;
     }
 
-    // Check if a map is currently loaded
     if (!_currentEditorWidget) {
         QtDialogs::showWarning(this, "No Map Loaded",
             "No map is currently loaded. Please open or create a map before playing.");
         return;
     }
 
-    // Get the current map
     const auto& mapFile = _currentEditorWidget->getMapFile();
     std::string mapFilename = _currentEditorWidget->getMap()->filename();
 
-    // Ensure the filename has .map extension
     if (!mapFilename.ends_with(".map")) {
         mapFilename += ".map";
     }
 
-    // Handle different installation types
+    // Steam installs launch via App ID and don't need the map file copied
     if (settings.getGameInstallationType() == Settings::GameInstallationType::STEAM) {
-        // For Steam installations, we don't need to copy the map file
-        // Steam will handle the game launch via App ID
         launchGameViaSteam(settings.getSteamAppId());
         return;
     }
 
-    // Get game data directory for map copying and ddraw.ini modification
     std::filesystem::path gameDataDir = settings.getGameLocation(); // Returns data directory for executable installs
     if (gameDataDir.empty()) {
         QtDialogs::showError(this, "Play Failed",
@@ -1669,7 +1609,6 @@ void MainWindow::onPlayGame() {
         return;
     }
 
-    // Get executable location for launching
     std::filesystem::path executableLocation = settings.getExecutableGameLocation();
     if (executableLocation.empty()) {
         QtDialogs::showError(this, "Play Failed",
@@ -1725,7 +1664,6 @@ bool MainWindow::isTextFile(const QString& filePath) const {
 
 void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
     try {
-        // Get editor configuration from settings
         auto& settings = Settings::getInstance();
         auto editorMode = settings.getTextEditorMode();
         QString customEditorPath = settings.getCustomEditorPath();
@@ -1752,7 +1690,7 @@ void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
         QString targetFilePath;
         bool usedTemporaryFile = false;
 
-        // Try the original path from the browser first
+        // Prefer the original path from the browser; only fall back to a temp copy if it isn't a readable file
         QFileInfo requestedPathInfo(vfsFilePath);
         if (requestedPathInfo.exists() && requestedPathInfo.isReadable() && requestedPathInfo.isFile()) {
             targetFilePath = requestedPathInfo.absoluteFilePath();
@@ -1798,7 +1736,7 @@ void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
             }
         }
 
-        // Use system default editor if custom failed or not configured
+        // Fall back to the system default editor if the custom one failed or isn't configured
         if (!opened) {
             QUrl fileUrl = QUrl::fromLocalFile(targetFilePath);
             opened = QDesktopServices::openUrl(fileUrl);
@@ -1809,7 +1747,6 @@ void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
                     : QString("Failed to open file with system default editor.");
                 QtDialogs::showError(this, "Error", errorText);
 
-                // Clean up the temp file if opening failed
                 if (usedTemporaryFile) {
                     QFile::remove(targetFilePath);
                 }
@@ -1861,7 +1798,6 @@ bool MainWindow::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const
             std::string currentSection;
 
             while (std::getline(file, line)) {
-                // Check for section headers
                 if (line.starts_with("[") && line.ends_with("]")) {
                     currentSection = line;
                     if (line == "[Misc]") {
@@ -1869,7 +1805,7 @@ bool MainWindow::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const
                     }
                 }
 
-                // Check for StartingMap in Misc section
+                // Replace StartingMap inside [Misc] (also matches a commented-out ;StartingMap=)
                 if (foundMiscSection && currentSection == "[Misc]" && (line.starts_with("StartingMap=") || line.starts_with(";StartingMap="))) {
                     foundStartingMap = true;
                     line = "StartingMap=" + mapFilename;
@@ -1886,9 +1822,8 @@ bool MainWindow::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const
             foundMiscSection = true;
         }
 
-        // If no StartingMap found in [Misc] section, add it
+        // If no StartingMap found in [Misc] section, add it after the section header
         if (!foundStartingMap && foundMiscSection) {
-            // Find the [Misc] section and add StartingMap after it
             size_t miscPos = content.find("[Misc]");
             if (miscPos != std::string::npos) {
                 size_t nextSection = content.find("\n[", miscPos + 6);
@@ -1922,13 +1857,9 @@ bool MainWindow::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const
 void MainWindow::launchGame(const std::filesystem::path& executablePath) {
     spdlog::info("Launching game executable: {}", executablePath.string());
 
-    // Create and configure the game process
     QProcess* gameProcess = new QProcess(this);
-
-    // Set working directory to the executable's directory
     gameProcess->setWorkingDirectory(QString::fromStdString(executablePath.parent_path().string()));
 
-    // Connect to handle process events
     connect(gameProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
         [gameProcess](int exitCode, QProcess::ExitStatus exitStatus) {
             if (exitStatus == QProcess::CrashExit) {
@@ -2035,7 +1966,6 @@ bool MainWindow::openProEditorForSelectedObject() {
                 continue;
             }
 
-            // Get the MapObject which contains the PID
             if (!selectedObject->hasMapObject()) {
                 spdlog::debug("MainWindow::openProEditorForSelectedObject() - selected object has no MapObject");
                 continue;
@@ -2043,7 +1973,6 @@ bool MainWindow::openProEditorForSelectedObject() {
 
             auto& mapObject = selectedObject->getMapObject();
 
-            // Get the PRO file path based on PID
             try {
                 std::string proFileName = ProHelper::basePath(*_resourcesShared, mapObject.pro_pid);
                 spdlog::debug("MainWindow::openProEditorForSelectedObject() - opening PRO: {}", proFileName);
@@ -2054,14 +1983,12 @@ bool MainWindow::openProEditorForSelectedObject() {
                     return false;
                 }
 
-                // Create temporary file
                 auto pro = ReaderFactory::readFileFromMemory<Pro>(*fileData, proFileName);
                 if (!pro) {
                     spdlog::error("MainWindow::openProEditorForSelectedObject() - could not parse PRO file");
                     return false;
                 }
 
-                // Create and show PRO editor dialog
                 ProEditorDialog dialog(*_resourcesShared, std::shared_ptr<Pro>(pro.release()), this);
                 dialog.exec();
 

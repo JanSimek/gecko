@@ -28,7 +28,7 @@ namespace resource {
     class GameResources;
 }
 
-// Custom hover-enabled sprite label for FRM previews
+/// @brief Hover-enabled sprite label for FRM previews (shows an edit button on hover).
 class HoverSpriteLabel : public QLabel {
     Q_OBJECT
 public:

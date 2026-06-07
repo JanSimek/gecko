@@ -157,7 +157,7 @@ private:
     }
 };
 
-// Helper class for structured field reading with optional preservation
+/// Structured field reading with optional preservation of skipped fields.
 template <typename T>
 class StructuredReader {
 private:

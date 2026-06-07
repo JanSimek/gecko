@@ -33,7 +33,7 @@ void ProCommonFieldsWidget::setupUI() {
     QVBoxLayout* leftColumn = new QVBoxLayout();
     leftColumn->setSpacing(ui::constants::SPACING_FORM);
 
-    // Item Properties Group (for items only)
+    // Item Properties group is only shown for item types
     _itemFieldsGroup = new QGroupBox("Item Properties", this);
     _itemFieldsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     auto itemLayout = new QFormLayout(_itemFieldsGroup);
@@ -42,7 +42,6 @@ void ProCommonFieldsWidget::setupUI() {
     leftColumn->addWidget(_itemFieldsGroup);
     _itemFieldsGroup->setVisible(false);
 
-    // Object Flags Group
     _objectFlagsGroup = new QGroupBox("Object Flags", this);
     _objectFlagsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     auto flagsLayout = new QFormLayout(_objectFlagsGroup);
@@ -56,7 +55,6 @@ void ProCommonFieldsWidget::setupUI() {
     QVBoxLayout* rightColumn = new QVBoxLayout();
     rightColumn->setSpacing(ui::constants::SPACING_FORM);
 
-    // Lighting & Transparency Group
     _lightingGroup = new QGroupBox("Lighting & Transparency", this);
     _lightingGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     auto lightingLayout = new QFormLayout(_lightingGroup);
@@ -64,7 +62,6 @@ void ProCommonFieldsWidget::setupUI() {
     setupLightingFields(lightingLayout);
     rightColumn->addWidget(_lightingGroup);
 
-    // Animation Control Group
     _extendedFlagsGroup = new QGroupBox("Animation Control", this);
     _extendedFlagsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     auto extFlagsLayout = new QFormLayout(_extendedFlagsGroup);
@@ -74,14 +71,12 @@ void ProCommonFieldsWidget::setupUI() {
 
     rightColumn->addStretch();
 
-    // Add columns to main layout
     columnsLayout->addLayout(leftColumn, 1);
     columnsLayout->addLayout(rightColumn, 1);
     _mainLayout->addLayout(columnsLayout);
 }
 
 void ProCommonFieldsWidget::setupLightingFields(QFormLayout* layout) {
-    // Lighting controls
     _lightingCheck = new QCheckBox("Has Lighting", this);
     _lightingCheck->setToolTip("Object provides lighting effects");
     connectCheckBox(_lightingCheck);
@@ -95,13 +90,11 @@ void ProCommonFieldsWidget::setupLightingFields(QFormLayout* layout) {
     connectSpinBox(_lightIntensityEdit);
     layout->addRow("Intensity:", _lightIntensityEdit);
 
-    // Add separator
     auto separator = new QFrame();
     separator->setFrameShape(QFrame::HLine);
     separator->setFrameShadow(QFrame::Sunken);
     layout->addRow(separator);
 
-    // Transparency options
     auto transLabel = new QLabel("<b>Transparency Type:</b>");
     layout->addRow(transLabel);
 
@@ -131,7 +124,6 @@ void ProCommonFieldsWidget::setupLightingFields(QFormLayout* layout) {
 }
 
 void ProCommonFieldsWidget::setupObjectFlags(QFormLayout* layout) {
-    // Core behavior flags
     _flatCheck = new QCheckBox("Flat", this);
     _flatCheck->setToolTip("Object is rendered flat with tiles (no height)");
     connectCheckBox(_flatCheck);
@@ -152,7 +144,6 @@ void ProCommonFieldsWidget::setupObjectFlags(QFormLayout* layout) {
     connectCheckBox(_noHighlightCheck);
     layout->addRow(_noHighlightCheck);
 
-    // Pass-through flags
     _lightThruCheck = new QCheckBox("Light Through", this);
     _lightThruCheck->setToolTip("Light can pass through this object");
     connectCheckBox(_lightThruCheck);
@@ -165,7 +156,6 @@ void ProCommonFieldsWidget::setupObjectFlags(QFormLayout* layout) {
 }
 
 void ProCommonFieldsWidget::setupExtendedFlags(QFormLayout* layout) {
-    // Animation control fields (directly in the main group, no nested group)
     _animationPrimaryEdit = createSpinBox(0, 15, "Primary attack animation index (0-15)");
     connectSpinBox(_animationPrimaryEdit);
     layout->addRow("Primary Animation:", _animationPrimaryEdit);
@@ -176,32 +166,27 @@ void ProCommonFieldsWidget::setupExtendedFlags(QFormLayout* layout) {
 }
 
 void ProCommonFieldsWidget::setupItemFields(QFormLayout* layout) {
-    // Script ID
     _sidEdit = createSpinBox(0, 999999, "Script ID for this object");
     connectSpinBox(_sidEdit);
     layout->addRow("Script ID:", _sidEdit);
 
-    // Material type
     _materialCombo = createMaterialComboBox("Material type affects sound and destruction");
     connectComboBox(_materialCombo);
     layout->addRow("Material:", _materialCombo);
 
-    // Container size
     _containerSizeEdit = createSpinBox(0, INT_MAX, "Maximum container volume");
     connectSpinBox(_containerSizeEdit);
     layout->addRow("Container Size:", _containerSizeEdit);
 
-    // Weight (in pounds * 16)
+    // Weight stored as pounds * 16
     _weightEdit = createSpinBox(0, INT_MAX, "Weight in pounds * 16");
     connectSpinBox(_weightEdit);
     layout->addRow("Weight:", _weightEdit);
 
-    // Base price
     _basePriceEdit = createSpinBox(0, INT_MAX, "Base price in bottle caps");
     connectSpinBox(_basePriceEdit);
     layout->addRow("Base Price:", _basePriceEdit);
 
-    // Sound ID
     _soundIdEdit = createSpinBox(0, MAX_SOUND_ID, "Sound effect ID (0-255)");
     connectSpinBox(_soundIdEdit);
     layout->addRow("Sound ID:", _soundIdEdit);
@@ -365,7 +350,6 @@ void ProCommonFieldsWidget::connectCheckBox(QCheckBox* checkBox) {
         this, &ProCommonFieldsWidget::onObjectFlagChanged);
 }
 
-// Slot implementations
 void ProCommonFieldsWidget::onFieldChanged() {
     emit fieldChanged();
 }

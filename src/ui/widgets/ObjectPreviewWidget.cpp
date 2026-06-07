@@ -380,35 +380,34 @@ void ObjectPreviewWidget::positionOverlayButtons() {
     // Position rotate button in top-right corner
     if (_rotateButton) {
         QPoint topRight = previewRect.topRight();
-        topRight.setX(topRight.x() - _rotateButton->width() - 4); // 4px margin from edge
-        topRight.setY(topRight.y() + 4);                          // 4px margin from top
+        topRight.setX(topRight.x() - _rotateButton->width() - 4);
+        topRight.setY(topRight.y() + 4);
         _rotateButton->move(topRight);
-        _rotateButton->raise(); // Ensure it's on top
+        _rotateButton->raise();
     }
 
-    // Position play button next to rotate button (top-right area)
+    // Position play button just below the rotate button
     if (_playPauseButton) {
         QPoint topRight = previewRect.topRight();
-        topRight.setX(topRight.x() - _playPauseButton->width() - 4);                         // 4px margin from edge
-        topRight.setY(topRight.y() + 4 + (_rotateButton ? _rotateButton->height() + 4 : 0)); // Below rotate button with 4px gap
+        topRight.setX(topRight.x() - _playPauseButton->width() - 4);
+        topRight.setY(topRight.y() + 4 + (_rotateButton ? _rotateButton->height() + 4 : 0));
         _playPauseButton->move(topRight);
-        _playPauseButton->raise(); // Ensure it's on top
+        _playPauseButton->raise();
     }
 
     // Position edit button in top-left corner for balance
     if (_editButton) {
         QPoint topLeft = previewRect.topLeft();
-        topLeft.setX(topLeft.x() + 4); // 4px margin from left edge
-        topLeft.setY(topLeft.y() + 4); // 4px margin from top
+        topLeft.setX(topLeft.x() + 4);
+        topLeft.setY(topLeft.y() + 4);
         _editButton->move(topLeft);
-        _editButton->raise(); // Ensure it's on top
+        _editButton->raise();
     }
 }
 
 void ObjectPreviewWidget::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
 
-    // Reposition overlay buttons when widget is resized
     if ((_rotateButton && _rotateButton->isVisible()) || (_playPauseButton && _playPauseButton->isVisible()) || (_editButton && _editButton->isVisible())) {
         positionOverlayButtons();
     }

@@ -72,7 +72,7 @@ uint8_t* Frame::rgba(Pal* pal) {
             _rgba.emplace_back(0);
             _rgba.emplace_back(0);
         } else {
-            constexpr int brightness = 4; // brightness modifier
+            constexpr int brightness = 4;
             _rgba.emplace_back(color.r * brightness);
             _rgba.emplace_back(color.g * brightness);
             _rgba.emplace_back(color.b * brightness);

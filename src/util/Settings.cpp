@@ -106,7 +106,6 @@ QJsonObject Settings::toJson() const {
     json["version"] = _version;
     json["dataPaths"] = pathVectorToJsonArray(_dataPaths);
 
-    // UI state
     QJsonObject ui;
     if (!_windowGeometry.isEmpty()) {
         ui["windowGeometry"] = QString::fromLatin1(_windowGeometry.toBase64());
@@ -135,7 +134,6 @@ QJsonObject Settings::toJson() const {
 
     json["ui"] = ui;
 
-    // Text editor configuration
     QJsonObject textEditor;
     textEditor["mode"] = (_textEditorMode == TextEditorMode::SYSTEM_DEFAULT) ? "system" : "custom";
     if (!_customEditorPath.isEmpty()) {
@@ -143,7 +141,6 @@ QJsonObject Settings::toJson() const {
     }
     json["textEditor"] = textEditor;
 
-    // Game location configuration
     QJsonObject gameLocation;
     gameLocation["installationType"] = (_gameInstallationType == GameInstallationType::STEAM) ? "steam" : "executable";
 
@@ -165,12 +162,10 @@ QJsonObject Settings::toJson() const {
 void Settings::fromJson(const QJsonObject& json) {
     _version = json["version"].toString(SETTINGS_VERSION);
 
-    // Data paths
     if (json.contains("dataPaths")) {
         setDataPaths(jsonArrayToPathVector(json["dataPaths"].toArray()));
     }
 
-    // UI state
     if (json.contains("ui")) {
         QJsonObject ui = json["ui"].toObject();
 
@@ -202,7 +197,6 @@ void Settings::fromJson(const QJsonObject& json) {
         }
     }
 
-    // Text editor configuration
     if (json.contains("textEditor")) {
         QJsonObject textEditor = json["textEditor"].toObject();
 
@@ -214,7 +208,6 @@ void Settings::fromJson(const QJsonObject& json) {
         }
     }
 
-    // Game location configuration
     if (json.contains("gameLocation") && json["gameLocation"].isObject()) {
         QJsonObject gameLocation = json["gameLocation"].toObject();
 
@@ -266,7 +259,6 @@ std::vector<std::filesystem::path> Settings::jsonArrayToPathVector(const QJsonAr
 void Settings::addDataPath(const std::filesystem::path& path) {
     const std::filesystem::path normalizedPath = normalizeDataPath(path);
 
-    // Check if path already exists
     for (const auto& existingPath : _dataPaths) {
         if (util::pathsEquivalent(existingPath, normalizedPath)) {
             spdlog::debug("Data path already exists: {}", normalizedPath.string());
@@ -466,8 +458,7 @@ std::vector<std::filesystem::path> Settings::detectFallout2Installations() {
 std::vector<std::filesystem::path> Settings::detectSteamLibraries() {
     std::vector<std::filesystem::path> libraries;
 
-    // TODO: Implement Steam library.vdf parsing
-    // This would involve parsing the Steam configuration to find additional library folders
+    // TODO: parse Steam library.vdf to find additional library folders
 
     return libraries;
 }
@@ -556,14 +547,13 @@ std::filesystem::path Settings::getGameLocation() const {
     // For Steam installations, we don't use a path - return empty path
     // The launcher should check the installation type and use Steam App ID instead
     if (_gameInstallationType == GameInstallationType::STEAM) {
-        return std::filesystem::path{}; // Empty path for Steam
+        return std::filesystem::path{};
     } else {
-        // Return the data directory for map copying and ddraw.ini modification
+        // Data directory is used for map copying and ddraw.ini modification
         if (!_gameDataDirectory.empty()) {
             return _gameDataDirectory;
         }
 
-        // Use executable's parent directory as the data directory
         return _executableGameLocation.parent_path();
     }
 }
@@ -617,14 +607,14 @@ bool Settings::isGameLocationValid() const {
         return false;
     }
 
-    // Get the data directory (executable should be a file, use its parent directory as fallback)
+    // Fall back to the executable's parent directory when no data dir is set
     std::filesystem::path dataRoot = _gameDataDirectory.empty() ? _executableGameLocation.parent_path() : _gameDataDirectory;
 
     if (!std::filesystem::exists(dataRoot) || !std::filesystem::is_directory(dataRoot)) {
         return false;
     }
 
-    // Check if data/maps directory exists (required for map copying)
+    // "data" subdirectory is required for map copying
     std::filesystem::path dataDir = dataRoot / "data";
     return std::filesystem::exists(dataDir) && std::filesystem::is_directory(dataDir);
 }

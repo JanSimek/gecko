@@ -26,8 +26,6 @@ public:
      * @return vfspp::FileInfo with forward slash separators
      */
     static vfspp::FileInfo createNormalizedFileInfo(const std::filesystem::path& path) {
-        // Convert to generic format with forward slashes for VFS consistency
-        // This matches the format used in DAT archives and ensures cross-platform compatibility
         return vfspp::FileInfo(path.generic_string());
     }
 
@@ -48,7 +46,6 @@ public:
      * @return Normalized path with forward slash separators
      */
     static std::filesystem::path normalize(const std::filesystem::path& path) {
-        // Return path with forward slashes for consistency
         return std::filesystem::path(path.generic_string());
     }
 };

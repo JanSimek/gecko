@@ -8,29 +8,24 @@ namespace geck {
 TileSpatialIndex::TileSpatialIndex()
     : _floorIndex(TILE_WIDTH)
     , _roofIndex(TILE_WIDTH) {
-    // Initialize with tile-optimized cell size
 }
 
 void TileSpatialIndex::buildIndex(const std::vector<sf::Sprite>& floorSprites,
     const std::vector<sf::Sprite>& roofSprites) {
-    // Clear existing indices
     _floorIndex.clear();
     _roofIndex.clear();
     _indexedTiles = 0;
 
-    // Build floor tile index
+    // Every sprite carries a texture (real or blank) under SFML 3, so no null check is needed
     for (size_t i = 0; i < TILES_PER_ELEVATION; ++i) {
         const auto& floorSprite = floorSprites[i];
-        // All sprites now have textures (either real texture or blank texture for SFML 3 compatibility)
         sf::FloatRect bounds = floorSprite.getGlobalBounds();
         _floorIndex.addItem(static_cast<int>(i), bounds);
         _indexedTiles++;
     }
 
-    // Build roof tile index
     for (size_t i = 0; i < TILES_PER_ELEVATION; ++i) {
         const auto& roofSprite = roofSprites[i];
-        // All sprites now have textures (either real texture or blank texture for SFML 3 compatibility)
         sf::FloatRect bounds = roofSprite.getGlobalBounds();
         _roofIndex.addItem(static_cast<int>(i), bounds);
         _indexedTiles++;
@@ -119,7 +114,6 @@ sf::FloatRect TileSpatialIndex::getTileBounds(int tileIndex, bool roof) const {
     auto screenPos = indexToScreenPosition(tileIndex, roof);
     sf::Vector2f position(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y));
 
-    // Create bounds based on tile size
     return sf::FloatRect({ position.x - TILE_WIDTH / 2, position.y - TILE_HEIGHT / 2 },
         { TILE_WIDTH, TILE_HEIGHT });
 }

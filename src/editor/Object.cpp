@@ -20,7 +20,6 @@ Object::Object(const Frm* frm)
     , _selected(false)
     , _showLightOverlay(false) {
 
-    // Validate FRM has at least one direction
     if (!frm) {
         spdlog::error("Object constructor: FRM pointer is null");
         throw SpriteException("Cannot create Object with null FRM");
@@ -32,14 +31,12 @@ Object::Object(const Frm* frm)
         throw SpriteException("FRM has no directions", frm->filename());
     }
 
-    // Validate first direction has at least one frame
     if (frm->directions().at(0).frames().empty()) {
         spdlog::error("Object constructor: FRM '{}' direction 0 has no frames (size: {})",
             frm->filename(), frm->directions().at(0).frames().size());
         throw SpriteException("FRM direction has no frames", frm->filename());
     }
 
-    // Initialize light overlay
     initializeLightOverlay();
 }
 
@@ -61,7 +58,7 @@ MapObject& Object::getMapObject() {
     if (!_mapObject) {
         throw ObjectException("getMapObject() called but _mapObject is null");
     }
-    return *_mapObject; //.get();
+    return *_mapObject;
 }
 
 std::shared_ptr<MapObject> Object::getMapObjectPtr() const noexcept {
@@ -112,7 +109,6 @@ void Object::setFrm(const Frm* frm) {
 
     _frm = frm;
 
-    // Reset direction to 0 and update texture rectangle
     _direction = 0;
     setDirection(ObjectDirection(_direction));
 }
@@ -129,7 +125,6 @@ void Object::setHexPosition(const Hex& hex) {
         _mapObject->position = hex.position();
     }
 
-    // Update light overlay position if needed
     if (_showLightOverlay && hasLight()) {
         updateLightOverlay();
     }
@@ -154,8 +149,8 @@ int Object::height() const {
 void Object::setDirection(ObjectDirection direction) {
     _direction = static_cast<int>(direction);
 
-    // Validate direction index to prevent out-of-bounds access
-    // Note: arcaves.map has one scrblk object with invalid direction that triggers this
+    // Clamp out-of-range direction index. arcaves.map has one scrblk object with an
+    // invalid direction that triggers this.
     if (_frm->directions().size() <= static_cast<size_t>(_direction) || _direction < 0) {
         spdlog::error("Object has orientation index {} but the FRM has only [{}] orientations", _direction, _frm->directions().size());
         _direction = 0;
@@ -165,7 +160,6 @@ void Object::setDirection(ObjectDirection direction) {
         _mapObject->direction = _direction;
     }
 
-    // Take the first frame of the direction
     auto first_frame = _frm->directions().at(_direction).frames().at(0);
 
     uint16_t left = 0;
@@ -200,7 +194,6 @@ bool Object::isSelected() const noexcept {
 }
 
 void Object::initializeLightOverlay() {
-    // Initialize the light overlay circle
     _lightOverlay.setFillColor(sf::Color(255, 255, 100, 30));    // Light yellow, semi-transparent
     _lightOverlay.setOutlineColor(sf::Color(255, 255, 150, 80)); // Brighter yellow outline
     _lightOverlay.setOutlineThickness(1.0f);
@@ -219,24 +212,22 @@ void Object::updateLightOverlay() {
         return;
     }
 
-    // Calculate radius based on light_radius property
-    // Each hex is approximately 32 pixels wide in standard zoom
+    // Each hex is approximately 32 pixels wide in standard zoom.
     float hexWidth = 32.0f;
     float radius = _mapObject->light_radius * hexWidth / 2.0f;
 
     _lightOverlay.setRadius(radius);
     _lightOverlay.setOrigin(sf::Vector2f(radius, radius));
 
-    // Position the overlay at the object's center
+    // Position the overlay at the object's center.
     auto spritePos = _sprite.getPosition();
     auto spriteBounds = _sprite.getLocalBounds();
     _lightOverlay.setPosition(sf::Vector2f(
         spritePos.x + spriteBounds.size.x / 2.0f,
         spritePos.y + spriteBounds.size.y / 2.0f));
 
-    // Adjust opacity based on light intensity
     auto color = _lightOverlay.getFillColor();
-    // Map intensity (0-65535) to alpha (30-100)
+    // Map light intensity (engine range 0-65535) to alpha (30-100).
     uint8_t alpha = static_cast<uint8_t>(30 + (_mapObject->light_intensity / 65535.0f) * 70);
     color.a = alpha;
     _lightOverlay.setFillColor(color);

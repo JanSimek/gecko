@@ -12,8 +12,9 @@
 namespace geck {
 
 /**
- * Utility class for common Qt dialog operations
- * Provides convenient static methods for showing dialogs with consistent styling
+ * @brief Common Qt dialog operations with consistent styling
+ *
+ * Provides convenient static methods for showing dialogs.
  */
 class QtDialogs {
 public:

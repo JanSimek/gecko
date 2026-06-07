@@ -120,11 +120,8 @@ public:
         GENERAL_FLAG = 0x00002000,     // General purpose flag (scenery/walls/tiles)
         INTERACTION_FLAG = 0x00008000, // Related to item interactions
 
-        // Special item flags
-        // This flag is used on weapons to indicate that's an natural (integral)
-        // part of it's owner, for example Claw, or Robot's Rocket Launcher. Items
-        // with this flag on do count toward total weight and cannot be dropped.
-        ITEM_HIDDEN = 0x08000000, // Item is integral part of owner, cannot be dropped (creature weapons)
+        // Integral natural weapon (e.g. Claw, Robot's Rocket Launcher): counts toward total weight and cannot be dropped.
+        ITEM_HIDDEN = 0x08000000,
     };
 
     // Extended flags helper functions
@@ -144,19 +141,16 @@ public:
         return (flags & ~static_cast<uint32_t>(ObjectFlags::ANIMATION_SECONDARY_MASK)) | ((animation & 0xF) << 4);
     }
 
-    // Helper function to check if a flag is set
     template <typename FlagEnum>
     static constexpr bool hasFlag(uint32_t flags, FlagEnum flag) {
         return (flags & static_cast<uint32_t>(flag)) != 0;
     }
 
-    // Helper function to set a flag
     template <typename FlagEnum>
     static constexpr uint32_t setFlag(uint32_t flags, FlagEnum flag) {
         return flags | static_cast<uint32_t>(flag);
     }
 
-    // Helper function to clear a flag
     template <typename FlagEnum>
     static constexpr uint32_t clearFlag(uint32_t flags, FlagEnum flag) {
         return flags & ~static_cast<uint32_t>(flag);

@@ -6,9 +6,7 @@
 
 namespace geck {
 
-/**
- * Base exception class for all file writing operations.
- */
+/// Base exception class for all file writing operations.
 class FileWriterException : public std::runtime_error {
 private:
     std::filesystem::path _filePath;
@@ -23,9 +21,7 @@ public:
     }
 };
 
-/**
- * Exception thrown when a write I/O operation fails.
- */
+/// Exception thrown when a write I/O operation fails.
 class WriteException : public FileWriterException {
 public:
     explicit WriteException(const std::string& message, const std::filesystem::path& filePath, size_t bytesWritten = 0)
@@ -40,18 +36,14 @@ private:
     size_t _bytesWritten;
 };
 
-/**
- * Exception thrown when attempting to write data in an invalid format.
- */
+/// Exception thrown when attempting to write data in an invalid format.
 class FormatWriteException : public FileWriterException {
 public:
     explicit FormatWriteException(const std::string& message, const std::filesystem::path& filePath)
         : FileWriterException("Format error: " + message, filePath) { }
 };
 
-/**
- * Exception thrown when data validation fails before writing.
- */
+/// Exception thrown when data validation fails before writing.
 class ValidationException : public FileWriterException {
 private:
     std::string _field;
@@ -66,9 +58,7 @@ public:
     }
 };
 
-/**
- * Exception thrown when insufficient disk space or file system limits are encountered.
- */
+/// Exception thrown when insufficient disk space or file system limits are encountered.
 class DiskSpaceException : public FileWriterException {
 private:
     size_t _bytesRequested;
@@ -90,27 +80,21 @@ public:
     }
 };
 
-/**
- * Exception thrown when attempting to write to a file that already exists (when overwrite is not allowed).
- */
+/// Exception thrown when writing to a file that already exists and overwrite is not allowed.
 class FileExistsException : public FileWriterException {
 public:
     explicit FileExistsException(const std::filesystem::path& filePath)
         : FileWriterException("File already exists", filePath) { }
 };
 
-/**
- * Exception thrown when file permissions prevent writing.
- */
+/// Exception thrown when file permissions prevent writing.
 class PermissionException : public FileWriterException {
 public:
     explicit PermissionException(const std::string& message, const std::filesystem::path& filePath)
         : FileWriterException("Permission error: " + message, filePath) { }
 };
 
-/**
- * Exception thrown when attempting to write corrupted or incomplete data structures.
- */
+/// Exception thrown when attempting to write corrupted or incomplete data structures.
 class CorruptDataException : public FileWriterException {
 private:
     std::string _dataType;

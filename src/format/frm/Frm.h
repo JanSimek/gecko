@@ -39,13 +39,7 @@ public:
         INVENTORY
     };
 
-    // TODO : enum
-    //    north_east,
-    //    east,
-    //    south_east,
-    //    south_west,
-    //    west,
-    //    north_west,
+    // TODO: enum for the 6 directions in order: north_east, east, south_east, south_west, west, north_west
     constexpr static int DIRECTIONS = 6;
 
     const std::vector<Direction>& directions() const;

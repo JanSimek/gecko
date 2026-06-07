@@ -37,13 +37,11 @@ void ProWeaponWidget::setupUI() {
     QHBoxLayout* columnsLayout = new QHBoxLayout();
     columnsLayout->setSpacing(ui::constants::SPACING_COLUMNS);
 
-    // Left column
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
     leftLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
-    // Right column
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
@@ -105,7 +103,6 @@ void ProWeaponWidget::setupUI() {
 
     // === RIGHT COLUMN: Advanced Properties ===
 
-    // Requirements & Special
     QGroupBox* reqGroup = new QGroupBox("Requirements & Special");
     reqGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* reqLayout = createStandardFormLayout();
@@ -126,7 +123,6 @@ void ProWeaponWidget::setupUI() {
     reqGroup->setLayout(reqLayout);
     rightLayout->addWidget(reqGroup);
 
-    // Ammo & Burst
     QGroupBox* ammoGroup = new QGroupBox("Ammo & Burst");
     ammoGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* ammoLayout = createStandardFormLayout();
@@ -147,7 +143,6 @@ void ProWeaponWidget::setupUI() {
     ammoGroup->setLayout(ammoLayout);
     rightLayout->addWidget(ammoGroup);
 
-    // Misc Properties
     QGroupBox* miscGroup = createStandardGroupBox("Misc Properties");
     QFormLayout* miscLayout = createStandardFormLayout();
     addLayoutToGroupBox(miscGroup, miscLayout);
@@ -160,7 +155,6 @@ void ProWeaponWidget::setupUI() {
     connectCheckBox(_weaponEnergyWeaponCheck);
     miscLayout->addRow("", _weaponEnergyWeaponCheck);
 
-    // AI Priority display
     _weaponAIPriorityLabel = new QLabel("0");
     _weaponAIPriorityLabel->setStyleSheet(ui::theme::styles::emphasisLabel());
     _weaponAIPriorityLabel->setToolTip("AI Priority = average damage + range (used by AI to select best weapon)");
@@ -169,7 +163,6 @@ void ProWeaponWidget::setupUI() {
     rightLayout->addWidget(miscGroup);
     rightLayout->addStretch();
 
-    // Add columns to main layout
     columnsLayout->addWidget(leftColumn, 1);
     columnsLayout->addWidget(rightColumn, 1);
     _mainLayout->addLayout(columnsLayout);
@@ -232,7 +225,7 @@ void ProWeaponWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (_weaponSoundIdEdit)
         _weaponSoundIdEdit->setValue(static_cast<int>(_weaponData.soundId));
 
-    // Handle energy weapon flag from Pro.h weaponFlags field if available
+    // weaponFlags bit 0x1 = energy weapon flag (sfall feature)
     if (_weaponEnergyWeaponCheck && pro->weaponData.weaponFlags) {
         _weaponEnergyWeaponCheck->setChecked((pro->weaponData.weaponFlags & 0x1) != 0);
     }
@@ -244,7 +237,6 @@ void ProWeaponWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    // Update data from UI
     _weaponData.animationCode = static_cast<uint32_t>(getComboIndex(_weaponAnimationCombo));
     if (_weaponDamageMinEdit)
         _weaponData.damageMin = static_cast<uint32_t>(_weaponDamageMinEdit->value());
@@ -277,7 +269,6 @@ void ProWeaponWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     if (_weaponSoundIdEdit)
         _weaponData.soundId = static_cast<uint8_t>(_weaponSoundIdEdit->value());
 
-    // Save to PRO - copy fields individually
     pro->weaponData.animationCode = _weaponData.animationCode;
     pro->weaponData.damageMin = _weaponData.damageMin;
     pro->weaponData.damageMax = _weaponData.damageMax;
@@ -296,7 +287,6 @@ void ProWeaponWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     pro->weaponData.ammoCapacity = _weaponData.ammoCapacity;
     pro->weaponData.soundId = _weaponData.soundId;
 
-    // Handle energy weapon flag
     if (_weaponEnergyWeaponCheck) {
         if (_weaponEnergyWeaponCheck->isChecked()) {
             pro->weaponData.weaponFlags |= 0x1;
@@ -324,12 +314,10 @@ int ProWeaponWidget::calculateAIPriority() const {
     int avgDamage = 0;
     int range = 0;
 
-    // Calculate average damage
     if (_weaponDamageMinEdit && _weaponDamageMaxEdit) {
         avgDamage = (_weaponDamageMinEdit->value() + _weaponDamageMaxEdit->value()) / 2;
     }
 
-    // Use primary range
     if (_weaponRangePrimaryEdit) {
         range = _weaponRangePrimaryEdit->value();
     }

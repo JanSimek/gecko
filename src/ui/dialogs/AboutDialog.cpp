@@ -43,29 +43,25 @@ void AboutDialog::createContent() {
     _contentLayout = new QHBoxLayout();
     _contentLayout->setSpacing(ui::constants::SPACING_DIALOG);
 
-    // Create icon label
     _iconLabel = new QLabel();
     _iconLabel->setFixedSize(ui::constants::sizes::ICON_SIZE_LARGE, ui::constants::sizes::ICON_SIZE_LARGE);
     _iconLabel->setScaledContents(true);
 
-    // Load application icon
     std::filesystem::path iconPath = Application::getResourcesPath() / "icon.png";
     QPixmap iconPixmap(QString::fromStdString(iconPath.string()));
     if (!iconPixmap.isNull()) {
         _iconLabel->setPixmap(iconPixmap.scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     } else {
-        // Fallback to application icon
+        // Fall back to the application window icon
         QIcon appIcon = QApplication::windowIcon();
         if (!appIcon.isNull()) {
             _iconLabel->setPixmap(appIcon.pixmap(64, 64));
         }
     }
 
-    // Create text layout
     _textLayout = new QVBoxLayout();
     _textLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
-    // Title label
     _titleLabel = new QLabel();
     _titleLabel->setText(QString("%1 %2").arg(geck::version::name).arg(geck::version::string));
     QFont titleFont = _titleLabel->font();
@@ -73,12 +69,10 @@ void AboutDialog::createContent() {
     titleFont.setPointSize(titleFont.pointSize() + 4);
     _titleLabel->setFont(titleFont);
 
-    // Description label
     _descriptionLabel = new QLabel();
     _descriptionLabel->setText(geck::version::description);
     _descriptionLabel->setWordWrap(true);
 
-    // Add copyright/build info
     QLabel* buildInfoLabel = new QLabel();
     buildInfoLabel->setText("Built with Qt6, SFML, and ❤️");
     buildInfoLabel->setStyleSheet(ui::theme::styles::mutedText());

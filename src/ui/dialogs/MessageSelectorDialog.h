@@ -25,7 +25,7 @@ public:
     explicit MessageSelectorDialog(const Msg* msgFile, int currentMessageId, QWidget* parent = nullptr);
     ~MessageSelectorDialog() = default;
 
-    // Returns the selected message ID, or -1 if cancelled
+    /// @return the selected message ID, or -1 if cancelled
     int getSelectedMessageId() const;
 
 private slots:

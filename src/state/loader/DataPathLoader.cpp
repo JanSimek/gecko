@@ -34,14 +34,12 @@ void DataPathLoader::load() {
     _currentPathIndex = 0;
 
     for (const auto& path : _dataPaths) {
-        // Update progress
         setProgress("Loading: " + path.filename().string());
 
         try {
             spdlog::info("DataPathLoader: Loading data path: {}", path.string());
             _resources->files().addDataPath(path);
 
-            // Update percentage
             _currentPathIndex++;
             _percentDone = static_cast<int>((_currentPathIndex * 80) / _dataPaths.size());
 
@@ -49,7 +47,7 @@ void DataPathLoader::load() {
             spdlog::error("DataPathLoader: Failed to load data path {}: {}", path.string(), e.what());
             _errorMessage = "Failed to load data path: " + path.string() + "\nError: " + e.what();
             _hasError = true;
-            // Continue loading other paths
+            // Continue loading the remaining paths despite this failure.
         }
     }
 

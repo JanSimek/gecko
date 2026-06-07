@@ -14,10 +14,7 @@ ViewportController::ViewportController(const HexagonGrid* hexGrid)
 }
 
 void ViewportController::initialize(sf::Vector2u windowSize) {
-    // Initialize with proper aspect ratio management
     updateViewForWindowSize(windowSize);
-
-    // Center the view on the map initially
     centerViewOnMap();
 
     spdlog::debug("ViewportController: Initialized with window size {}x{}",
@@ -40,10 +37,8 @@ void ViewportController::zoomView(float direction) {
     float newZoom = _zoomLevel;
 
     if (direction > 0) {
-        // Zoom in
         newZoom *= (1.0f + ZOOM_STEP);
     } else if (direction < 0) {
-        // Zoom out
         newZoom *= (1.0f - ZOOM_STEP);
     }
 
@@ -77,7 +72,6 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
         return -1;
     }
 
-    // Use improved hex grid position lookup with better accuracy
     uint32_t hexPosition = _hexGrid->positionAt(static_cast<uint32_t>(worldPos.x), static_cast<uint32_t>(worldPos.y));
 
     if (hexPosition == Hex::HEX_OUT_OF_MAP) {
@@ -97,8 +91,7 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
 }
 
 int ViewportController::worldPosToTileIndex(sf::Vector2f worldPos, bool isRoof) const {
-    // Use hex-based approach for consistency with tile selection
-    // Adjust world position for roof offset if selecting roof tiles
+    // Hex-based lookup for consistency with tile selection
     sf::Vector2f adjustedWorldPos = worldPos;
     if (isRoof) {
         adjustedWorldPos.y += ROOF_OFFSET; // Roof tiles are visually offset upward

@@ -13,11 +13,11 @@ HexagonGrid::HexagonGrid() {
     const unsigned int yMod = Hex::HEX_HEIGHT / 2; // y offset
 
     uint32_t position = 0;
-    for (unsigned int hy = 0; hy != GRID_HEIGHT; ++hy) // rows
+    for (unsigned int hy = 0; hy != GRID_HEIGHT; ++hy)
     {
-        for (unsigned int hx = 0; hx != GRID_WIDTH; ++hx) // columns
+        for (unsigned int hx = 0; hx != GRID_WIDTH; ++hx)
         {
-            // Calculate hex's actual position
+            // Calculate hex's actual screen position
             const bool oddCol = hx & 1;
             const int oddMod = hy + 1;
             const int x = (48 * (GRID_WIDTH / 2)) + (Hex::HEX_WIDTH * oddMod) - ((Hex::HEX_HEIGHT * 2) * hx) - (xMod * oddCol);
@@ -58,15 +58,13 @@ uint32_t HexagonGrid::positionAt(uint32_t x, uint32_t y) const {
         float dy = static_cast<float>(y) - static_cast<float>(hex.y());
         float distanceSquared = dx * dx + dy * dy;
 
-        // Check if this is the closest hex so far
         if (distanceSquared < minDistance) {
             minDistance = distanceSquared;
             closestPosition = hex.position();
         }
     }
 
-    // Only return a valid position if we're within a reasonable distance
-    // Using threshold based on hex dimensions
+    // Reject hits too far from any hex; threshold derived from hex dimensions.
     const float maxDistance = static_cast<float>(Hex::HEX_WIDTH * Hex::HEX_WIDTH + Hex::HEX_HEIGHT * Hex::HEX_HEIGHT);
     if (minDistance <= maxDistance) {
         return closestPosition;

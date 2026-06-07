@@ -9,7 +9,6 @@
 
 namespace geck {
 
-// Forward declarations
 class EditorWidget;
 
 /**

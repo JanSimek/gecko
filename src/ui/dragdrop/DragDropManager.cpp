@@ -24,21 +24,17 @@ bool DragDropManager::canStartObjectDrag(sf::Vector2f worldPos) const {
     if (!_editor)
         return false;
 
-    // Check if there are selected objects at this position that can be dragged
     const auto& selection = _editor->getSelectionManager()->getCurrentSelection();
 
     spdlog::debug("DragDropManager::canStartObjectDrag - worldPos({:.1f}, {:.1f}), selection has {} items",
         worldPos.x, worldPos.y, selection.items.size());
 
-    // Get objects at clicked position using proper hit detection
     auto objectsAtPos = _editor->getObjectsAtPosition(worldPos);
 
-    // Check if any of the selected objects are at the clicked position
     for (const auto& item : selection.items) {
         if (item.type == selection::SelectionType::OBJECT) {
             auto selectedObject = item.getObject();
             if (selectedObject && selectedObject->hasMapObject()) {
-                // Check if this selected object is in the list of objects at clicked position
                 for (const auto& objectAtPos : objectsAtPos) {
                     if (selectedObject == objectAtPos) {
                         spdlog::debug("DragDropManager::canStartObjectDrag - found selected object at clicked position");
@@ -58,7 +54,6 @@ bool DragDropManager::startObjectDrag(sf::Vector2f worldPos) {
         return false;
     }
 
-    // Get selected objects to drag
     const auto& selection = _editor->getSelectionManager()->getCurrentSelection();
     _draggedObjects.clear();
     _objectDragStartPositions.clear();
@@ -80,13 +75,11 @@ bool DragDropManager::startObjectDrag(sf::Vector2f worldPos) {
         return false;
     }
 
-    // Initialize drag state
     _isDraggingObjects = true;
     _dragStartWorldPos = worldPos;
     _objectDragOffset = sf::Vector2f(0, 0);
 
-    // Clear any existing drag selection visual feedback
-    // This ensures the selection rectangle doesn't remain visible during object drag
+    // Ensures the selection rectangle doesn't remain visible during object drag
     _editor->clearDragSelectionPreview();
 
     spdlog::debug("DragDropManager: Started dragging {} objects", _draggedObjects.size());
@@ -98,7 +91,6 @@ void DragDropManager::updateObjectDrag(sf::Vector2f currentWorldPos) {
         return;
     }
 
-    // Calculate drag offset
     _objectDragOffset = currentWorldPos - _dragStartWorldPos;
 
     // Apply visual offset to dragged objects (preview)
@@ -107,10 +99,8 @@ void DragDropManager::updateObjectDrag(sf::Vector2f currentWorldPos) {
         _draggedObjects[i]->getSprite().setPosition(newPos);
     }
 
-    // Highlight target hex where object would be placed
-    // Calculate target position for the first object (representative)
+    // Highlight target hex for the first (representative) object
     if (!_draggedObjects.empty()) {
-        // Get original position of first object
         auto& mapObject = _draggedObjects[0]->getMapObject();
         int originalHexPosition = mapObject.position;
 
@@ -118,12 +108,10 @@ void DragDropManager::updateObjectDrag(sf::Vector2f currentWorldPos) {
         if (auto originalHex = hexGrid->getHexByPosition(static_cast<uint32_t>(originalHexPosition)); originalHex.has_value()) {
             sf::Vector2f originalWorldPos(static_cast<float>(originalHex->get().x()), static_cast<float>(originalHex->get().y()));
 
-            // Calculate where the object would be placed
             sf::Vector2f newWorldPos = originalWorldPos + _objectDragOffset;
             sf::Vector2f snappedPos = _editor->getViewportController()->snapToHexGrid(newWorldPos);
             int targetHexPosition = _editor->getViewportController()->worldPosToHexIndex(snappedPos);
 
-            // Update hover hex to highlight the target position
             if (targetHexPosition >= 0) {
                 _editor->getCurrentHoverHex() = targetHexPosition;
             }
@@ -138,7 +126,6 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
 
     spdlog::debug("DragDropManager::finishObjectDrag - finalWorldPos({:.1f}, {:.1f})", finalWorldPos.x, finalWorldPos.y);
 
-    // Calculate drag offset from start position
     sf::Vector2f dragOffset = finalWorldPos - _dragStartWorldPos;
     spdlog::debug("DragDropManager::finishObjectDrag - dragOffset({:.1f}, {:.1f})", dragOffset.x, dragOffset.y);
 
@@ -154,11 +141,9 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
         if (auto originalHex = hexGrid->getHexByPosition(static_cast<uint32_t>(originalHexPosition)); originalHex.has_value()) {
             sf::Vector2f originalWorldPos(static_cast<float>(originalHex->get().x()), static_cast<float>(originalHex->get().y()));
 
-            // Calculate new position: original position + drag offset
             sf::Vector2f newWorldPos = originalWorldPos + dragOffset;
 
-            // Snap to nearest hex grid position
-            // Note: Don't manually apply shift offsets here - setHexPosition() will handle them
+            // Don't manually apply shift offsets here - setHexPosition() will handle them
             sf::Vector2f snappedPos = _editor->getViewportController()->snapToHexGrid(newWorldPos);
             int newHexPosition = _editor->getViewportController()->worldPosToHexIndex(snappedPos);
 
@@ -170,12 +155,10 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
                 movedObjects.push_back({ originalHexPosition, newHexPosition });
                 continue;
             }
-            // Invalid position, restore original
             _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);
             spdlog::warn("DragDropManager: Invalid drop position hex {}, restored original position", newHexPosition);
             continue;
         }
-        // Invalid original position, restore original sprite position
         _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);
         spdlog::warn("DragDropManager: Invalid original hex position {}, restored original position", originalHexPosition);
     }
@@ -184,13 +167,11 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
         _editor->registerObjectMove(_draggedObjects, movedObjects);
     }
 
-    // Clean up drag state
     _isDraggingObjects = false;
     _draggedObjects.clear();
     _objectDragStartPositions.clear();
     _objectDragOffset = sf::Vector2f(0, 0);
 
-    // Clear target hex highlighting
     _editor->getCurrentHoverHex() = -1;
 
     spdlog::debug("DragDropManager: Finished object drag operation");
@@ -206,29 +187,24 @@ void DragDropManager::cancelObjectDrag() {
         _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);
     }
 
-    // Clean up drag state
     _isDraggingObjects = false;
     _draggedObjects.clear();
     _objectDragStartPositions.clear();
     _objectDragOffset = sf::Vector2f(0, 0);
 
-    // Clear target hex highlighting
     _editor->getCurrentHoverHex() = -1;
 
     spdlog::debug("DragDropManager: Cancelled object drag operation");
 }
 
 void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos) {
-    // Cancel any existing drag preview
     cancelDragPreview();
 
-    // Set drag preview state
     _isDraggingFromPalette = true;
     _previewObjectIndex = objectIndex;
     _previewObjectCategory = categoryInt;
 
     try {
-        // Get ObjectInfo from the palette
         auto mainWindow = _editor->getMainWindow();
         if (!mainWindow) {
             spdlog::warn("DragDropManager: No MainWindow reference for drag preview");
@@ -247,7 +223,6 @@ void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vec
 
         if (_previewObjectInfo) {
             try {
-                // Load the FRM for preview
                 std::string frmPath = _previewObjectInfo->frmPath.toStdString();
                 auto frm = _editor->resources().repository().find<Frm>(frmPath);
                 if (!frm) {
@@ -255,12 +230,11 @@ void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vec
                 }
 
                 if (frm) {
-                    // Create preview object
                     _dragPreviewObject = std::make_shared<Object>(frm);
                     sf::Sprite previewSprite{ _editor->resources().textures().get(frmPath) };
                     _dragPreviewObject->setSprite(std::move(previewSprite));
                     _dragPreviewObject->setDirection(ObjectDirection(0)); // Single frame for preview
-                    // Set semi-transparent color on the sprite
+                    // Semi-transparent so the underlying map stays visible
                     auto& spriteRef = _dragPreviewObject->getSprite();
                     spriteRef.setColor(sf::Color(255, 255, 255, ui::constants::sfml::DRAG_PREVIEW_ALPHA));
 
@@ -279,7 +253,6 @@ void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vec
         spdlog::warn("DragDropManager: No ObjectInfo available for drag preview");
         cancelDragPreview();
 
-        // Position the preview object initially
         updateDragPreview(worldPos);
 
     } catch (const std::exception& e) {
@@ -293,7 +266,6 @@ void DragDropManager::updateDragPreview(sf::Vector2f worldPos) {
         return;
     }
 
-    // Find the closest hex position directly
     int hexPosition = _editor->getViewportController()->worldPosToHexIndex(worldPos);
     if (hexPosition >= 0) {
         const auto* hexGrid = _editor->getHexagonGrid();
@@ -308,17 +280,14 @@ void DragDropManager::finishDragPreview(sf::Vector2f worldPos) {
         return;
     }
 
-    // Convert to hex position
     int hexPosition = _editor->getViewportController()->worldPosToHexIndex(worldPos);
     if (hexPosition >= 0) {
-        // Place the object at this position
         _editor->placeObjectAtPosition(worldPos);
         spdlog::debug("DragDropManager: Placed object from palette at hex {}", hexPosition);
     } else {
         spdlog::warn("DragDropManager: Invalid drop position for palette object");
     }
 
-    // Clean up preview
     cancelDragPreview();
 }
 

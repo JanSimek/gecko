@@ -137,7 +137,7 @@ int8_t StreamBuffer::int8() {
 
 std::string StreamBuffer::readString(size_t len) {
 
-    std::string str(len, '\0'); // construct string to stream size
+    std::string str(len, '\0');
     sgetn(str.data(), len);
     return str;
 }

@@ -10,7 +10,6 @@
 #include <filesystem>
 #include <vector>
 
-// Forward declarations for our widgets
 namespace geck {
 class DataPathsWidget;
 class GameLocationWidget;

@@ -206,8 +206,7 @@ constexpr bool isValidElevation(int elevation) noexcept {
 
 constexpr Elevation toElevation(int elevation) {
     if (!isValidElevation(elevation)) {
-        // Note: In a constexpr context, we can't throw, so this would be a compile-time error
-        // At runtime, this should be validated before calling this function
+        // Can't throw in constexpr context; callers must validate before calling.
     }
     return static_cast<Elevation>(elevation);
 }

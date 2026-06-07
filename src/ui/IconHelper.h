@@ -22,16 +22,13 @@ inline QByteArray loadThemedSvg(const QString& path) {
     QByteArray svgData = file.readAll();
     file.close();
 
-    // Replace black colors with palette color
+    // Recolor the icon to the current theme's text color
     QPalette palette = QApplication::palette();
     QString textColor = palette.color(QPalette::WindowText).name();
 
-    // Replace various black color formats
     svgData.replace("#000000", textColor.toUtf8());
     svgData.replace("stroke:black", QString("stroke:%1").arg(textColor).toUtf8());
     svgData.replace("fill:black", QString("fill:%1").arg(textColor).toUtf8());
-
-    // Also replace currentColor
     svgData.replace("currentColor", textColor.toUtf8());
 
     return svgData;
@@ -42,19 +39,17 @@ inline QIcon createIcon(const QString& path) {
     static QHash<QString, QIcon> iconCache;
     static QPalette lastPalette;
 
-    // Check if palette changed (theme switch)
+    // Invalidate the cache on theme switch (palette change)
     QPalette currentPalette = QApplication::palette();
     if (lastPalette != currentPalette) {
         iconCache.clear();
         lastPalette = currentPalette;
     }
 
-    // Check cache first
     if (iconCache.contains(path)) {
         return iconCache[path];
     }
 
-    // Load the SVG with theme colors
     QByteArray svgData = loadThemedSvg(path);
     if (svgData.isEmpty()) {
         QIcon icon(path); // Fallback to regular icon
@@ -64,7 +59,7 @@ inline QIcon createIcon(const QString& path) {
 
     QIcon icon;
 
-    // Create pixmaps at common sizes for normal mode
+    // Render pixmaps at common sizes for normal mode
     for (int size : { 16, 22, 32 }) {
         QSvgRenderer renderer(svgData);
         QPixmap pixmap(size, size);
@@ -74,7 +69,7 @@ inline QIcon createIcon(const QString& path) {
         icon.addPixmap(pixmap, QIcon::Normal);
     }
 
-    // For disabled mode - reload with disabled colors
+    // Disabled mode: recolor with the palette's disabled text color
     QByteArray disabledData = svgData;
     QString disabledColor = currentPalette.color(QPalette::Disabled, QPalette::WindowText).name();
     disabledData.replace(currentPalette.color(QPalette::WindowText).name().toUtf8(), disabledColor.toUtf8());

@@ -8,8 +8,7 @@ namespace geck {
  * @brief Widget for editing Wall type PRO files
  *
  * Walls are the simplest PRO type, containing only a material ID
- * field after the common header. This makes it an ideal starting
- * point for the refactoring.
+ * field after the common header.
  */
 class ProWallWidget : public ProTabWidget {
     Q_OBJECT

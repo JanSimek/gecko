@@ -70,7 +70,6 @@ void GridPalettePanel::updatePaginationControls() {
 
     _paginationGroup->show();
 
-    // Update shared pagination widget
     _paginationWidget->setTotalPages(_totalPages);
     _paginationWidget->setCurrentPage(_currentPage + 1); // Convert to 1-based
     _paginationWidget->setEnabled(_totalPages > 1);
@@ -89,35 +88,28 @@ int GridPalettePanel::calculateOptimalColumnsPerRow(int itemSize) const {
         return getDefaultColumnsPerRow();
     }
 
-    // Get available width from the scroll area viewport
     int availableWidth = _scrollArea->viewport()->width();
-
-    // Calculate space needed per item (widget size + margin)
     int itemWidth = itemSize + 4; // Item size + margin
 
-    // Get spacing and margins from the grid layout
     int spacing = _gridLayout ? _gridLayout->spacing() : 2;
     int leftMargin = _gridLayout ? _gridLayout->contentsMargins().left() : 4;
     int rightMargin = _gridLayout ? _gridLayout->contentsMargins().right() : 4;
 
-    // Calculate effective width available for items
     int effectiveWidth = availableWidth - leftMargin - rightMargin;
 
-    // Calculate how many items can fit per row
-    // Each item needs itemWidth + spacing, except the last one doesn't need spacing
-    int columns = 1; // At least 1 column
+    // Each item needs itemWidth + spacing, except the last which needs no trailing spacing
+    int columns = 1;
     if (effectiveWidth >= itemWidth) {
         columns = (effectiveWidth + spacing) / (itemWidth + spacing);
     }
 
-    // Apply reasonable bounds
     columns = std::max(1, std::min(columns, ui::constants::palette::MAX_ITEMS_PER_ROW));
 
     return columns;
 }
 
 void GridPalettePanel::onGridPaginationPageChanged(int page) {
-    int newPage = page - 1; // Convert from 1-based to 0-based
+    int newPage = page - 1; // 1-based to 0-based
     if (newPage != _currentPage && newPage >= 0 && newPage < _totalPages) {
         _currentPage = newPage;
         updateGrid();

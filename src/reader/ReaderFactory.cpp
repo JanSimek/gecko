@@ -21,7 +21,6 @@
 
 namespace geck {
 
-// Format information mapping
 const std::map<ReaderFactory::Format, ReaderFactory::FormatInfo> ReaderFactory::format_info_map = {
     { Format::DAT, { Format::DAT, "Fallout Data Archive", { ".dat" }, {}, 0, 32, 1.0 } },
     { Format::PRO, { Format::PRO, "Fallout PRO Object", { ".pro" }, {}, 0, 24, 1.0 } },
@@ -33,7 +32,6 @@ const std::map<ReaderFactory::Format, ReaderFactory::FormatInfo> ReaderFactory::
     { Format::MAP, { Format::MAP, "Fallout Map", { ".map" }, { 'M', 'A', 'P', ' ' }, 0, 4, 1.0 } },
 };
 
-// Extension to format mapping
 const std::map<std::string, ReaderFactory::Format> ReaderFactory::extension_format_map = {
     { ".dat", Format::DAT },
     { ".pro", Format::PRO },
@@ -45,7 +43,6 @@ const std::map<std::string, ReaderFactory::Format> ReaderFactory::extension_form
     { ".map", Format::MAP }
 };
 
-// Template specializations for createReader
 template <>
 std::unique_ptr<FileParser<Dat>> ReaderFactory::createReader<Dat>(Format format) {
     switch (format) {
@@ -116,9 +113,8 @@ std::unique_ptr<FileParser<Lst>> ReaderFactory::createReader<Lst>(Format format)
     }
 }
 
-// Map reader not supported - requires callback parameter
-
-// Legacy interface support methods
+// Map reader is intentionally absent: MapReader requires a callback parameter
+// and must be constructed directly.
 void* ReaderFactory::createGenericReader(const std::filesystem::path& filePath, Format& detectedFormat) {
     detectedFormat = detectFormat(filePath);
 
@@ -297,10 +293,8 @@ ReaderFactory::Format ReaderFactory::detectByContent(const std::vector<uint8_t>&
         }
     }
 
-    // PRO files have specific structure - check size and some known patterns
+    // Fallback heuristic: assume PRO once the file meets the minimum PRO size.
     if (data.size() >= 80) { // Minimum PRO size
-        // PRO files typically have specific patterns in first few bytes
-        // This is a simple heuristic and might need refinement
         return Format::PRO;
     }
 
@@ -308,8 +302,7 @@ ReaderFactory::Format ReaderFactory::detectByContent(const std::vector<uint8_t>&
 }
 
 double ReaderFactory::calculateConfidence(Format format, [[maybe_unused]] const std::vector<uint8_t>& data) {
-    // This is a simplified confidence calculation
-    // In a more sophisticated implementation, this would analyze the data
+    // Simplified heuristic; a stronger version would analyze the data.
     return (format != Format::UNKNOWN) ? 0.8 : 0.0;
 }
 

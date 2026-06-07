@@ -9,10 +9,7 @@ Pro::Pro(std::filesystem::path path)
 }
 
 void Pro::initializeDataStructures() {
-    // Initialize header
     memset(&header, 0, sizeof(header));
-
-    // Initialize all data structures to zero
     memset(&commonItemData, 0, sizeof(commonItemData));
     memset(&armorData, 0, sizeof(armorData));
     memset(&containerData, 0, sizeof(containerData));
@@ -42,7 +39,7 @@ Pro::ITEM_TYPE Pro::itemType() const {
     if (type() == OBJECT_TYPE::ITEM) {
         return static_cast<Pro::ITEM_TYPE>(_objectSubtypeId);
     }
-    return Pro::ITEM_TYPE::MISC; // Default fallback
+    return Pro::ITEM_TYPE::MISC;
 }
 
 const std::string Pro::typeToString() const {

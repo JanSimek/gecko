@@ -38,7 +38,6 @@ namespace {
 
 } // namespace
 
-// Static constants
 const int InventoryPanel::ICON_SIZE = 64;
 
 InventoryPanel::InventoryPanel(resource::GameResources& resources, QWidget* parent)
@@ -79,7 +78,6 @@ void InventoryPanel::setupUI() {
     _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
     _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
-    // Create splitter for left/right panels
     _splitter = new QSplitter(Qt::Horizontal);
 
     // === LEFT PANEL: Inventory Tree ===
@@ -88,21 +86,18 @@ void InventoryPanel::setupUI() {
     _leftLayout->setContentsMargins(0, 0, 0, 0);
     _leftLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
-    // Inventory tree widget
     _inventoryTree = new QTreeWidget();
     _inventoryTree->setColumnCount(COLUMN_COUNT);
 
     QStringList headers = { "Icon", "Name", "Type", "Amount", "PID" };
     _inventoryTree->setHeaderLabels(headers);
 
-    // Configure columns
     _inventoryTree->setColumnWidth(COLUMN_ICON, ui::constants::column_widths::ICON);
     _inventoryTree->setColumnWidth(COLUMN_NAME, ui::constants::column_widths::NAME_MEDIUM);
     _inventoryTree->setColumnWidth(COLUMN_TYPE, ui::constants::column_widths::TYPE);
     _inventoryTree->setColumnWidth(COLUMN_AMOUNT, ui::constants::column_widths::AMOUNT);
     _inventoryTree->setColumnWidth(COLUMN_PID, ui::constants::column_widths::PID);
 
-    // Set icon size and row height
     _inventoryTree->setIconSize(QSize(ICON_SIZE, ICON_SIZE));
     _inventoryTree->header()->setDefaultSectionSize(ICON_SIZE + 8);
 
@@ -119,7 +114,6 @@ void InventoryPanel::setupUI() {
     _inventoryViewStack->addWidget(_inventoryTree);
     _inventoryViewStack->addWidget(_emptyInventoryLabel);
 
-    // Connect signals
     connect(_inventoryTree, &QTreeWidget::itemSelectionChanged,
         this, &InventoryPanel::onItemSelectionChanged);
     connect(_inventoryTree, &QTreeWidget::itemDoubleClicked,
@@ -127,7 +121,6 @@ void InventoryPanel::setupUI() {
 
     _leftLayout->addWidget(_inventoryViewStack);
 
-    // Status label
     _statusLabel = new QLabel("No inventory object selected");
     _statusLabel->setStyleSheet(ui::theme::styles::smallLabel());
     _leftLayout->addWidget(_statusLabel);
@@ -138,13 +131,11 @@ void InventoryPanel::setupUI() {
     _rightLayout->setContentsMargins(0, 0, 0, 0);
     _rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
-    // Preview group
     _previewGroup = new QGroupBox("Item Preview");
     _previewFormLayout = new QFormLayout(_previewGroup);
     _previewFormLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     _previewFormLayout->setSpacing(ui::constants::SPACING_FORM);
 
-    // Item sprite preview
     _previewLabel = new QLabel("No item selected");
     _previewLabel->setAlignment(Qt::AlignCenter);
     _previewLabel->setMinimumSize(120, 120);
@@ -154,7 +145,6 @@ void InventoryPanel::setupUI() {
     _previewLabel->setStyleSheet(ui::theme::styles::previewArea());
     _previewFormLayout->addRow("Sprite:", _previewLabel);
 
-    // Item details
     _previewNameLabel = new QLabel("—");
     _previewFormLayout->addRow("Name:", _previewNameLabel);
 
@@ -232,7 +222,6 @@ void InventoryPanel::setCurrentObject(std::shared_ptr<Object> object) {
     spdlog::debug("InventoryPanel: Setting up for object with {} inventory items",
         _mapObject->objects_in_inventory);
 
-    // Enable inventory management
     _addButton->setEnabled(true);
 
     populateInventoryTree();
@@ -246,7 +235,6 @@ void InventoryPanel::clearInventory() {
     _inventoryViewStack->setCurrentWidget(_emptyInventoryLabel);
     _statusLabel->setText("No inventory object selected");
 
-    // Disable all buttons
     _addButton->setEnabled(false);
     _removeButton->setEnabled(false);
     _editButton->setEnabled(false);
@@ -282,7 +270,6 @@ void InventoryPanel::populateInventoryTree() {
         const auto details = ui::inventory::describeItem(_resources, item->pro_pid);
         const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *item);
 
-        // Store inventory index in item data
         treeItem->setData(COLUMN_NAME, Qt::UserRole, static_cast<int>(i));
 
         QPixmap iconWithQuantity = getItemIconWithQuantity(*item);
@@ -290,7 +277,6 @@ void InventoryPanel::populateInventoryTree() {
             treeItem->setIcon(COLUMN_ICON, QIcon(iconWithQuantity));
         }
 
-        // Set item details
         treeItem->setText(COLUMN_NAME, details.name);
         treeItem->setText(COLUMN_TYPE, details.typeName);
         treeItem->setText(COLUMN_AMOUNT, QString::number(displayAmount));
@@ -308,7 +294,6 @@ void InventoryPanel::populateInventoryTree() {
 
     _inventoryViewStack->setCurrentWidget(_inventoryTree);
 
-    // Adjust column widths to content
     for (int i = 0; i < COLUMN_COUNT; ++i) {
         _inventoryTree->resizeColumnToContents(i);
     }
@@ -342,7 +327,6 @@ void InventoryPanel::highlightSelectedItem(QTreeWidgetItem* item) {
     clearItemHighlight();
     _currentHighlightedItem = item;
 
-    // Set custom background color for enhanced visual feedback
     if (item) {
         for (int col = 0; col < COLUMN_COUNT; ++col) {
             item->setBackground(col, QBrush(ui::theme::colors::selectionHighlight()));
@@ -353,7 +337,7 @@ void InventoryPanel::highlightSelectedItem(QTreeWidgetItem* item) {
 void InventoryPanel::clearItemHighlight() {
     if (_currentHighlightedItem) {
         for (int col = 0; col < COLUMN_COUNT; ++col) {
-            _currentHighlightedItem->setBackground(col, QBrush()); // Clear background
+            _currentHighlightedItem->setBackground(col, QBrush());
         }
         _currentHighlightedItem = nullptr;
     }
@@ -380,17 +364,14 @@ void InventoryPanel::updateItemPreview(QTreeWidgetItem* item) {
     const auto details = ui::inventory::describeItem(_resources, mapItem->pro_pid);
     const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *mapItem);
 
-    // Update preview sprite
     QPixmap sprite = ui::inventory::loadItemIcon(_resources, mapItem->pro_pid);
     if (!sprite.isNull()) {
-        // Scale sprite to fit preview area while maintaining aspect ratio
         sprite = sprite.scaled(_previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         _previewLabel->setPixmap(sprite);
     } else {
         _previewLabel->setText("No sprite");
     }
 
-    // Update item details
     _previewNameLabel->setText(details.name);
     _previewTypeLabel->setText(details.typeName);
     _previewAmountLabel->setText(QString::number(displayAmount));
@@ -452,7 +433,6 @@ void InventoryPanel::onAddItemClicked() {
         return;
     }
 
-    // Get amount
     int amount = QInputDialog::getInt(this, "Add Item", "Enter amount:", 1, 1, 99999, 1, &ok);
     if (!ok) {
         return;
@@ -465,15 +445,12 @@ void InventoryPanel::onAddItemClicked() {
 
     try {
         auto newItem = ui::inventory::createMapInventoryItem(_resources, pid, amount);
-        // Add to the container's inventory
         _mapObject->inventory.push_back(std::move(newItem));
         _mapObject->objects_in_inventory = static_cast<uint32_t>(_mapObject->inventory.size());
 
-        // Refresh the display
         populateInventoryTree();
         updateStatusLabel();
 
-        // Emit signal for other components to update
         emit inventoryChanged();
 
         spdlog::info("InventoryPanel: Added item PID 0x{:08X} with amount {} to inventory", pid, amount);
@@ -504,7 +481,6 @@ void InventoryPanel::onRemoveItemClicked() {
     const auto details = ui::inventory::describeItem(_resources, mapItem->pro_pid);
     const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *mapItem);
 
-    // Confirm removal
     int result = QMessageBox::question(this, "Remove Item",
         QString("Remove %1 x %2 from inventory?").arg(displayAmount).arg(details.name),
         QMessageBox::Yes | QMessageBox::No);
@@ -514,20 +490,17 @@ void InventoryPanel::onRemoveItemClicked() {
     }
 
     try {
-        // Remove the item from inventory
         uint32_t removedPid = mapItem->pro_pid;
         _mapObject->inventory.erase(_mapObject->inventory.begin() + inventoryIndex);
         _mapObject->objects_in_inventory = static_cast<uint32_t>(_mapObject->inventory.size());
 
-        // Refresh the display
         populateInventoryTree();
         updateStatusLabel();
         clearPreview();
 
-        // Disable remove button since no item is selected now
+        // No item is selected after removal.
         _removeButton->setEnabled(false);
 
-        // Emit signal for other components to update
         emit inventoryChanged();
 
         spdlog::info("InventoryPanel: Removed item PID 0x{:08X} (display amount {}) from inventory", removedPid, displayAmount);

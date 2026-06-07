@@ -21,10 +21,7 @@ namespace selection {
     class SelectionManager;
 }
 
-/**
- * @brief Widget representing a single tile in the palette
- * Now inherits from BasePaletteWidget to eliminate duplication
- */
+/// @brief Widget representing a single tile in the palette.
 class TileWidget : public BasePaletteWidget {
     Q_OBJECT
 

@@ -34,7 +34,7 @@ struct ParseStatistics {
 class ReaderDiagnostics {
 
 public:
-    // RAII timer for automatic timing
+    /// RAII timer that measures elapsed parse time.
     class ParseTimer {
         std::chrono::high_resolution_clock::time_point startTime;
 
@@ -49,7 +49,7 @@ public:
         }
     };
 
-    // Simple logging-based diagnostics
+    /// Logs the start of a parse, including file size and format type.
     static void logParseStart(const std::filesystem::path& filePath, const std::string& formatType) {
         size_t fileSize = std::filesystem::file_size(filePath);
         spdlog::trace("Starting parse: {} ({} bytes, {} format)",
@@ -65,16 +65,15 @@ public:
             filePath.filename().string(), throughput);
     }
 
-    // Integration with BinaryUtils for automatic tracking
+    /// Logs reads tagged as skips when they exceed a few bytes.
     static void trackRead(size_t bytes, const std::string& description = "") {
-        // Simple tracking - just log significant skips
         if (!description.empty() && description.find("skip") != std::string::npos && bytes > 16) {
             spdlog::trace("Skipped {} bytes: {}", bytes, description);
         }
     }
 };
 
-// Convenience macro for automatic timing
+/// Declares a ParseTimer named timer__ for scope-based parse timing.
 #define READER_PARSE_TIMER() geck::ReaderDiagnostics::ParseTimer timer__;
 
 } // namespace geck

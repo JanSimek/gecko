@@ -39,7 +39,6 @@ QPixmap FrmThumbnailGenerator::fromFrmPath(resource::GameResources& resources, c
             return thumbnail;
         }
 
-        // Convert first frame to thumbnail
         return fromFrame(frames[0], palette, targetSize);
 
     } catch (const std::exception& e) {
@@ -53,7 +52,6 @@ QPixmap FrmThumbnailGenerator::fromFrame(const Frame& frame, const Pal* palette,
     QPixmap thumbnail(targetSize);
     thumbnail.fill(Qt::transparent);
 
-    // Get frame dimensions
     uint16_t frameWidth = frame.width();
     uint16_t frameHeight = frame.height();
 
@@ -61,7 +59,6 @@ QPixmap FrmThumbnailGenerator::fromFrame(const Frame& frame, const Pal* palette,
         return thumbnail;
     }
 
-    // Get RGBA data with palette
     uint8_t* rgbaData = const_cast<Frame&>(frame).rgba(const_cast<Pal*>(palette));
     if (!rgbaData) {
         return thumbnail;
@@ -79,11 +76,9 @@ QPixmap FrmThumbnailGenerator::fromFrame(const Frame& frame, const Pal* palette,
     // Limit upscaling to prevent blurry thumbnails
     scale = qMin(scale, MAX_SCALE);
 
-    // Calculate final size
     int scaledWidth = static_cast<int>(frameWidth * scale);
     int scaledHeight = static_cast<int>(frameHeight * scale);
 
-    // Scale with high quality
     QImage scaledImage = frameImage.scaled(scaledWidth, scaledHeight,
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation);

@@ -22,10 +22,9 @@ std::string parseLine(std::string line) {
     }).base(),
         line.end());
 
-    // replace slashes
+    // normalize backslash paths to forward slashes
     std::replace(line.begin(), line.end(), '\\', '/');
 
-    // to lower
     std::transform(line.begin(), line.end(), line.begin(), ::tolower);
 
     return line;
@@ -36,7 +35,6 @@ std::unique_ptr<Lst> LstReader::read() {
         auto& utils = getBinaryUtils();
         spdlog::debug("Reading LST file: {}", _path.string());
 
-        // Validate file size
         auto pos = utils.getPosition();
         spdlog::trace("LST file size: {} bytes", pos.total);
 
@@ -52,10 +50,8 @@ std::unique_ptr<Lst> LstReader::read() {
         if (pos.total == 0) {
             spdlog::debug("Empty LST file");
         } else {
-            // Read entire file content as string using BinaryUtils
             std::string contents = utils.readFixedString(pos.total);
 
-            // Parse content line by line with better line ending support
             std::istringstream stream(contents);
             std::string line;
 
@@ -67,10 +63,8 @@ std::unique_ptr<Lst> LstReader::read() {
                     line.pop_back();
                 }
 
-                // Parse and clean up the line
                 std::string parsed_line = parseLine(line);
 
-                // Skip empty lines after parsing
                 if (!parsed_line.empty()) {
                     list.push_back(parsed_line);
                     valid_entries++;

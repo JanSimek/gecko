@@ -12,7 +12,7 @@ const std::unordered_map<int, std::vector<std::shared_ptr<MapObject>>>& Map::obj
 }
 
 Map::MapFile& Map::getMapFile() {
-    return *mapFile; //.get();
+    return *mapFile;
 }
 
 void Map::setMapFile(std::unique_ptr<MapFile> newMapFile) {

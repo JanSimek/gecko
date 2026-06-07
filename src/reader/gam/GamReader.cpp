@@ -24,11 +24,10 @@ std::unique_ptr<Gam> GamReader::read() {
 
         auto gam = std::make_unique<Gam>(_path);
 
-        // Define regex patterns for GAM file parsing
-        const std::regex regex_key_value(R"~(^\s*(\w+)\s*:=\s*(\d+)\s*;)~"); // More flexible whitespace
-        const std::regex regex_gvars_start(R"~(^\s*GAME_GLOBAL_VARS:)~");    // GVARS
-        const std::regex regex_mvars_start(R"~(^\s*MAP_GLOBAL_VARS:)~");     // MVARS
-        const std::regex regex_comment(R"~(^\s*//.*$)~");                    // Comment lines
+        const std::regex regex_key_value(R"~(^\s*(\w+)\s*:=\s*(\d+)\s*;)~");
+        const std::regex regex_gvars_start(R"~(^\s*GAME_GLOBAL_VARS:)~");
+        const std::regex regex_mvars_start(R"~(^\s*MAP_GLOBAL_VARS:)~");
+        const std::regex regex_comment(R"~(^\s*//.*$)~");
 
         std::smatch regex_match;
 
@@ -37,31 +36,25 @@ std::unique_ptr<Gam> GamReader::read() {
         int lines_processed = 0;
         int variables_found = 0;
 
-        // Read entire file content as string using BinaryUtils
         std::string contents = utils.readFixedString(pos.total);
 
-        // Validate that the content contains expected sections
         if (contents.find("GAME_GLOBAL_VARS:") == std::string::npos && contents.find("MAP_GLOBAL_VARS:") == std::string::npos) {
             throw UnsupportedFormatException(
                 ErrorMessages::corruptedData(_path, "Missing required GAM sections"), _path);
         }
-        // Parse the content line by line
         std::stringstream stream(contents);
         for (std::string line; std::getline(stream, line);) {
             lines_processed++;
 
-            // Skip comment lines
             if (std::regex_search(line, regex_comment)) {
                 spdlog::trace("Skipping comment line {}: {}", lines_processed, line);
                 continue;
             }
 
-            // Skip empty lines
             if (line.empty() || std::regex_match(line, std::regex(R"~(^\s*$)~"))) {
                 continue;
             }
 
-            // GAME_GLOBAL_VARS section start
             if (std::regex_search(line, regex_gvars_start)) {
                 parsingGvars = true;
                 parsingMvars = false;
@@ -69,7 +62,6 @@ std::unique_ptr<Gam> GamReader::read() {
                 continue;
             }
 
-            // MAP_GLOBAL_VARS section start
             if (std::regex_search(line, regex_mvars_start)) {
                 parsingGvars = false;
                 parsingMvars = true;
@@ -77,7 +69,6 @@ std::unique_ptr<Gam> GamReader::read() {
                 continue;
             }
 
-            // Parse variable assignment
             if (std::regex_search(line, regex_match, regex_key_value)) {
                 if (regex_match.size() == 3) {
                     auto key = regex_match[1].str();

@@ -11,7 +11,6 @@ namespace geck {
 
 std::unique_ptr<geck::Frm> geck::FrmReader::read() {
     try {
-        // Use format validation
         FormatValidator::validateFrmFile(getBinaryUtils(), _path);
 
         auto& utils = getBinaryUtils();
@@ -31,7 +30,6 @@ std::unique_ptr<geck::Frm> geck::FrmReader::read() {
         spdlog::trace("FRM header: version={}, fps={}, frames_per_dir={}",
             version, fps, frm->framesPerDirection());
 
-        // Read direction data arrays
         std::array<uint16_t, Frm::DIRECTIONS> shiftX;
         std::array<uint16_t, Frm::DIRECTIONS> shiftY;
         std::array<uint32_t, Frm::DIRECTIONS> dataOffset;
@@ -67,7 +65,6 @@ std::unique_ptr<geck::Frm> geck::FrmReader::read() {
 
         auto data_start = utils.getPosition().current;
 
-        // Validate frame data size
         if (data_start + size_of_frame_data > utils.getPosition().total) {
             throw ParseException(
                 ErrorMessages::frmFileError(_path,
@@ -75,15 +72,12 @@ std::unique_ptr<geck::Frm> geck::FrmReader::read() {
                 _path);
         }
 
-        // Process each direction's frame data
         for (auto& direction : directions) {
-            // Jump to frames data at frames area
             size_t frame_data_offset = data_start + direction.dataOffset();
             utils.setPosition(frame_data_offset);
 
             spdlog::trace("Processing direction at offset {}", frame_data_offset);
 
-            // Read all frames for this direction
             std::vector<Frame> frames;
             for (unsigned i = 0; i != frm->framesPerDirection(); ++i) {
                 uint16_t width = utils.readBE16();
@@ -101,9 +95,8 @@ std::unique_ptr<geck::Frm> geck::FrmReader::read() {
                 frame.setOffsetX(utils.readBE16());
                 frame.setOffsetY(utils.readBE16());
 
-                // Read pixel data
                 size_t pixel_data_size = frame.width() * frame.height();
-                // Use stream read directly for pixel data (large binary blob)
+                // Stream read directly: pixel data is a large binary blob
                 _stream.read(frame.data(), pixel_data_size);
 
                 frames.emplace_back(frame);

@@ -15,7 +15,6 @@ std::unique_ptr<geck::Pal> geck::PalReader::read() {
 
         constexpr size_t EXPECTED_FILESIZE = 0x00008300; // 33,536 bytes
 
-        // Validate file size
         auto pos = utils.getPosition();
         if (pos.total < EXPECTED_FILESIZE) {
             throw UnsupportedFormatException(
@@ -24,13 +23,11 @@ std::unique_ptr<geck::Pal> geck::PalReader::read() {
 
         spdlog::trace("PAL file size validation passed: {} bytes", pos.total);
 
-        // Read the entire palette data as a block
         std::array<uint8_t, EXPECTED_FILESIZE> buf;
         read_bytes(buf.data(), buf.size());
 
         auto pal = std::make_unique<Pal>(_path);
 
-        // Parse palette data from buffer
         size_t offset = 0;
 
         // Read RGB palette (256 colors * 3 bytes each = 768 bytes)

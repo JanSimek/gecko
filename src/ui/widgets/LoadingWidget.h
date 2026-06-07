@@ -21,7 +21,7 @@ public:
     void addLoader(std::unique_ptr<Loader> loader);
     void start();
 
-    // Override exec() to auto-start loading
+    /// Starts loading automatically, then runs the modal event loop.
     int exec() override;
 
 signals:

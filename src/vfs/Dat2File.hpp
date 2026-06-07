@@ -29,9 +29,6 @@ public:
         Close();
     }
 
-    /*
-     * Get file information
-     */
     virtual const vfspp::FileInfo& GetFileInfo() const override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -42,9 +39,6 @@ public:
         }
     }
 
-    /*
-     * Returns file size
-     */
     virtual uint64_t Size() override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -55,9 +49,6 @@ public:
         }
     }
 
-    /*
-     * Check is readonly filesystem
-     */
     virtual bool IsReadOnly() const override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -68,9 +59,6 @@ public:
         }
     }
 
-    /*
-     * Open file for reading/writting
-     */
     virtual void Open(FileMode mode) override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -81,9 +69,6 @@ public:
         }
     }
 
-    /*
-     * Close file
-     */
     virtual void Close() override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -94,9 +79,6 @@ public:
         }
     }
 
-    /*
-     * Check is file ready for reading/writing
-     */
     virtual bool IsOpened() const override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -107,9 +89,6 @@ public:
         }
     }
 
-    /*
-     * Seek on a file
-     */
     virtual uint64_t Seek(uint64_t offset, Origin origin) override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -119,9 +98,6 @@ public:
             return SeekST(offset, origin);
         }
     }
-    /*
-     * Returns offset in file
-     */
     virtual uint64_t Tell() override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -132,9 +108,6 @@ public:
         }
     }
 
-    /*
-     * Read data from file to buffer
-     */
     virtual uint64_t Read(uint8_t* buffer, uint64_t size) override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -144,9 +117,6 @@ public:
             return ReadST(buffer, size);
         }
     }
-    /*
-     * Write buffer data to file
-     */
     virtual uint64_t Write(const uint8_t* buffer, uint64_t size) override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -157,9 +127,6 @@ public:
         }
     }
 
-    /*
-     * Read data from file to vector
-     */
     virtual uint64_t Read(std::vector<uint8_t>& buffer, uint64_t size) override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -170,9 +137,6 @@ public:
         }
     }
 
-    /*
-     * Write data from vector to file
-     */
     virtual uint64_t Write(const std::vector<uint8_t>& buffer) override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -183,9 +147,6 @@ public:
         }
     }
 
-    /*
-     * Read data from file to stream
-     */
     virtual uint64_t Read(std::ostream& stream, uint64_t size, uint64_t bufferSize = 1024) override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -196,9 +157,6 @@ public:
         }
     }
 
-    /*
-     * Write data from stream to file
-     */
     virtual uint64_t Write(std::istream& stream, uint64_t size, uint64_t bufferSize = 1024) override
     {
         if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
@@ -248,13 +206,12 @@ private:
 
         m_Data.resize(m_datEntry->getDecompressedSize());
 
-        // Read into the buffer
         m_datReader->setPosition(m_datEntry->getOffset());
         if (m_datEntry->getCompressed()) {
             auto* packed_data = new uint8_t[m_datEntry->getPackedSize()];
             m_datReader->read_bytes(packed_data, m_datEntry->getPackedSize());
 
-            // unpacking
+            // zlib inflate decompression of the DAT entry
             z_stream zStream;
             zStream.total_in = m_datEntry->getPackedSize();
             zStream.avail_in = m_datEntry->getPackedSize();
@@ -264,9 +221,9 @@ private:
             zStream.zalloc = Z_NULL;
             zStream.zfree = Z_NULL;
             zStream.opaque = Z_NULL;
-            inflateInit(&zStream);                    // zlib function
-            inflate(&zStream, Z_FINISH);  // zlib function
-            inflateEnd(&zStream);               // zlib function
+            inflateInit(&zStream);
+            inflate(&zStream, Z_FINISH);
+            inflateEnd(&zStream);
 
             delete[] packed_data;
         } else {

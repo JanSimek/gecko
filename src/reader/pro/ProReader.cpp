@@ -12,7 +12,6 @@ namespace geck {
  */
 std::unique_ptr<Pro> ProReader::read() {
     try {
-        // Use format validation
         FormatValidator::validateProFile(getBinaryUtils(), _path);
 
         auto& utils = getBinaryUtils();
@@ -53,7 +52,6 @@ std::unique_ptr<Pro> ProReader::read() {
                 uint32_t subtypeId = utils.readBE32();
                 pro->setObjectSubtypeId(subtypeId);
 
-                // Read common item data
                 pro->commonItemData.materialId = utils.readBE32();
                 pro->commonItemData.containerSize = utils.readBE32();
                 pro->commonItemData.weight = utils.readBE32();
@@ -155,7 +153,6 @@ std::unique_ptr<Pro> ProReader::read() {
                 break;
             }
             case Pro::OBJECT_TYPE::CRITTER: {
-                // Read critter data into the structure
                 auto& critterData = pro->critterData;
 
                 critterData.headFID = utils.readBE32();
@@ -247,7 +244,6 @@ std::unique_ptr<Pro> ProReader::read() {
                 uint32_t subtypeId = utils.readBE32();
                 pro->setObjectSubtypeId(subtypeId);
 
-                // Read scenery data into the structure
                 auto& sceneryData = pro->sceneryData;
 
                 sceneryData.materialId = utils.readBE32();

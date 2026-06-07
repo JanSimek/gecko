@@ -15,7 +15,6 @@ std::string CritterFrmResolver::generateCritterFrmName(const std::string& baseNa
     spdlog::debug("CritterFrmResolver: Generating FRM name for PID 0x{:08X} - index={}, id1={}, id2={}, id3={}",
         frmPid, index, id1, id2, id3);
 
-    // Generate animation suffixes
     char suffix1, suffix2;
     if (!getSuffixes(id1, id2, suffix1, suffix2)) {
         spdlog::warn("CritterFrmResolver: Invalid suffix combination for id1={}, id2={}", id1, id2);
@@ -61,13 +60,11 @@ uint32_t CritterFrmResolver::deriveCritterFrmPid(const std::string& /* baseName 
 }
 
 std::string CritterFrmResolver::getAnimationTypeName(const std::string& frmFilename) {
-    // Extract animation suffixes
     char suffix1, suffix2, direction;
     if (!parseAnimationSuffixes(frmFilename, suffix1, suffix2, direction)) {
         return "Unknown";
     }
 
-    // Map common animation combinations to readable names
     static const std::unordered_map<std::string, std::string> animationNames = {
         { "aa", "Standing" },
         { "ab", "Walking" },

@@ -178,7 +178,7 @@ std::unique_ptr<FileParser<Lst>> ReaderFactory::createReader<Lst>(Format format)
 // Template implementations for generic createReader
 template <typename T>
 inline std::unique_ptr<FileParser<T>> ReaderFactory::createReader(Format format) {
-    (void)format; // Suppress unused parameter warning
+    (void)format;
     static_assert(sizeof(T) == 0, "Unsupported type for ReaderFactory::createReader. Add explicit specialization.");
     return nullptr;
 }

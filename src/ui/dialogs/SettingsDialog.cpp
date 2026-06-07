@@ -51,7 +51,6 @@ void SettingsDialog::setupUI() {
 
     setupTabs();
 
-    // Status area
     _statusLabel = new QLabel(READY_STATUS);
     _statusLabel->setStyleSheet(ui::theme::styles::statusNormal());
     _mainLayout->addWidget(_statusLabel);
@@ -80,7 +79,6 @@ void SettingsDialog::setupGeneralTab() {
     _generalTabLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
     _generalTabLayout->setSpacing(SPACING_LOOSE);
 
-    // Create and add widget instances
     _dataPathsWidget = new DataPathsWidget();
     _generalTabLayout->addWidget(_dataPathsWidget);
 
@@ -91,7 +89,6 @@ void SettingsDialog::setupGeneralTab() {
 
     _tabWidget->addTab(_generalTab, "General");
 
-    // Connect signals
     connect(_dataPathsWidget, &DataPathsWidget::dataPathsChanged, this, &SettingsDialog::onWidgetChanged);
     connect(_dataPathsWidget, &DataPathsWidget::statusChanged, this, &SettingsDialog::onStatusChanged);
     connect(_gameLocationWidget, &GameLocationWidget::configurationChanged, this, &SettingsDialog::onWidgetChanged);
@@ -104,7 +101,6 @@ void SettingsDialog::setupEditorTab() {
     _editorTabLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
     _editorTabLayout->setSpacing(SPACING_LOOSE);
 
-    // Create and add text editor widget
     _textEditorWidget = new TextEditorWidget();
     _editorTabLayout->addWidget(_textEditorWidget);
 
@@ -112,7 +108,6 @@ void SettingsDialog::setupEditorTab() {
 
     _tabWidget->addTab(_editorTab, "Text Editor");
 
-    // Connect signals
     connect(_textEditorWidget, &TextEditorWidget::configurationChanged, this, &SettingsDialog::onWidgetChanged);
 }
 
@@ -135,17 +130,14 @@ void SettingsDialog::setupButtonBox() {
 void SettingsDialog::loadSettings() {
     auto& settings = Settings::getInstance();
 
-    // Store original data paths for reset functionality
+    // Kept for the Reset action so changes can be reverted
     _originalDataPaths = settings.getDataPaths();
 
-    // Load data paths
     _dataPathsWidget->setDataPaths(_originalDataPaths);
 
-    // Load text editor settings
     _textEditorWidget->setEditorMode(settings.getTextEditorMode());
     _textEditorWidget->setCustomEditorPath(settings.getCustomEditorPath());
 
-    // Load game location settings
     _gameLocationWidget->setInstallationType(settings.getGameInstallationType());
     _gameLocationWidget->setSteamAppId(settings.getSteamAppId());
     _gameLocationWidget->setExecutableLocation(settings.getExecutableGameLocation());
@@ -158,12 +150,10 @@ void SettingsDialog::loadSettings() {
 void SettingsDialog::saveSettings() {
     auto& settings = Settings::getInstance();
 
-    // Save data paths
     auto dataPaths = _dataPathsWidget->getDataPaths();
     bool pathsHaveChanged = dataPaths != _originalDataPaths;
     settings.setDataPaths(dataPaths);
 
-    // Save text editor settings
     settings.setTextEditorMode(_textEditorWidget->getEditorMode());
     if (_textEditorWidget->getEditorMode() == Settings::TextEditorMode::CUSTOM) {
         settings.setCustomEditorPath(_textEditorWidget->getCustomEditorPath());
@@ -171,7 +161,6 @@ void SettingsDialog::saveSettings() {
         settings.setCustomEditorPath(""); // Clear custom path when using system default
     }
 
-    // Save game location settings
     settings.setGameInstallationType(_gameLocationWidget->getInstallationType());
     settings.setSteamAppId(_gameLocationWidget->getSteamAppId());
     settings.setExecutableGameLocation(_gameLocationWidget->getExecutableLocation());
@@ -185,7 +174,6 @@ void SettingsDialog::saveSettings() {
     setMainStatus("Settings saved successfully", "success");
     spdlog::info("Settings saved from preferences dialog");
 
-    // Notify that settings have been saved
     Q_EMIT settingsSaved(pathsHaveChanged);
 }
 
@@ -209,14 +197,12 @@ void SettingsDialog::setMainStatus(const QString& message, const QString& styleC
     }
 }
 
-// Slots
 void SettingsDialog::onWidgetChanged() {
     _hasChanges = true;
     updateUI();
 }
 
 void SettingsDialog::onStatusChanged(const QString& message, const QString& styleClass) {
-    // Propagate status messages from child widgets to main status
     setMainStatus(message, styleClass);
 }
 

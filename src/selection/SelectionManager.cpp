@@ -12,7 +12,6 @@
 
 namespace geck::selection {
 
-// SelectionManager implementation
 SelectionManager::SelectionManager(Map* map, geck::EditorWidget* editorWidget)
     : _map(map)
     , _editorWidget(editorWidget) {
@@ -23,7 +22,6 @@ SelectionManager::SelectionManager(Map* map, geck::EditorWidget* editorWidget)
         throw InvalidArgumentException("EditorWidget cannot be null", "editorWidget");
     }
 
-    // Initialize spatial index for performance
     _spatialIndex = std::make_unique<TileSpatialIndex>();
 }
 
@@ -82,7 +80,6 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
         }
 
         case SelectionMode::ALL: {
-            // Select all items in the area: objects, floor tiles, and roof tiles
             auto objects = getObjectsInArea(area, currentElevation);
             std::ranges::for_each(objects, [this](auto& object) {
                 addItemToSelection(SelectedItem{ SelectionType::OBJECT, object });
@@ -118,7 +115,6 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
 }
 
 SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
-    // Don't clear existing selection - add to it
     switch (mode) {
         case SelectionMode::FLOOR_TILES: {
             auto tileIndex = getFloorTileAtPosition(worldPos, currentElevation);
@@ -159,7 +155,6 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
         case SelectionMode::OBJECTS: {
             auto objects = getObjectsAtPosition(worldPos, currentElevation);
             if (!objects.empty()) {
-                // Add the first object found
                 SelectedItem item{ SelectionType::OBJECT, objects[0] };
                 addItemToSelection(item);
                 _state.mode = mode;
@@ -170,8 +165,7 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
         }
 
         case SelectionMode::ALL:
-            // For ALL mode, find and add the first available item without cycling
-            // Try roof tile first
+            // ALL mode adds the first available item in priority order (roof, object, floor) without cycling.
             {
                 auto tileIndex = getRoofTileAtPosition(worldPos, currentElevation);
                 if (tileIndex) {
@@ -182,7 +176,6 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                     return SelectionResult::createSuccess("");
                 }
             }
-            // Then try objects
             {
                 auto objects = getObjectsAtPosition(worldPos, currentElevation);
                 if (!objects.empty()) {
@@ -193,7 +186,6 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                     return SelectionResult::createSuccess("");
                 }
             }
-            // Finally try floor tile
             {
                 auto tileIndex = getFloorTileAtPosition(worldPos, currentElevation);
                 if (tileIndex) {
@@ -214,7 +206,6 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
 }
 
 SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
-    // Find what item is at this position without clearing current selection
     std::optional<SelectedItem> itemAtPosition;
 
     switch (mode) {
@@ -251,7 +242,7 @@ SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, Selecti
         }
 
         case SelectionMode::ALL: {
-            // For ALL mode, check in priority order: roof -> objects -> floor
+            // Priority order: roof -> objects -> floor
             auto roofTileIndex = getRoofTileAtPosition(worldPos, currentElevation);
             if (roofTileIndex) {
                 itemAtPosition = SelectedItem{ SelectionType::ROOF_TILE, roofTileIndex.value() };
@@ -275,13 +266,11 @@ SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, Selecti
 
     if (itemAtPosition) {
         if (isItemSelected(itemAtPosition.value())) {
-            // Item is selected - remove it
             removeItemFromSelection(itemAtPosition.value());
             _state.mode = mode;
             notifySelectionChanged();
             return SelectionResult::createSuccess("Item removed from selection");
         } else {
-            // Item is not selected - add it
             addItemToSelection(itemAtPosition.value());
             _state.mode = mode;
             notifySelectionChanged();
@@ -297,7 +286,6 @@ bool SelectionManager::startDrag(sf::Vector2f worldPos) {
         return false;
     }
 
-    // Check if any selected item is at this position
     _state.isDragging = true;
     _state.dragStartPosition = worldPos;
 
@@ -310,8 +298,6 @@ void SelectionManager::updateDrag(sf::Vector2f currentPos) {
         return;
     }
 
-    // Update drag position - this will be used for visual feedback
-    // The actual moving logic will be implemented later
     spdlog::debug("Updating drag to ({:.2f}, {:.2f})", currentPos.x, currentPos.y);
 }
 
@@ -326,7 +312,6 @@ SelectionResult SelectionManager::finishDrag(sf::Vector2f endPos) {
 
     spdlog::info("Drag completed: offset ({:.2f}, {:.2f})", offset.x, offset.y);
 
-    // Implement drag & drop logic
     bool hasMovements = false;
 
     for (const auto& item : _state.items) {
@@ -414,9 +399,7 @@ SelectionResult SelectionManager::finishAreaSelection() {
     // Clear the area selection state but keep the mode
     _state.selectionArea.reset();
 
-    // Perform the actual area selection
-    // Note: We need to get current elevation from somewhere - this will need to be passed in
-    // For now, we'll use elevation 0
+    // TODO: elevation should be passed in; defaulting to 0 for now.
     return selectArea(area, mode, 0);
 }
 
@@ -464,7 +447,6 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
             break;
 
         case SelectionMode::OBJECTS:
-            // Get all objects from EditorWidget
             for (auto& object : _editorWidget->getObjects()) {
                 SelectedItem item{ SelectionType::OBJECT, object };
                 addItemToSelection(item);
@@ -487,14 +469,13 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
             break;
 
         case SelectionMode::ALL:
-            // Select all tiles and objects directly (without recursive calls to avoid clearSelection conflicts)
-            // Add all floor tiles
+            // Inlined rather than recursing to avoid the clearSelection() conflicts that nested calls would cause.
             for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
                 SelectedItem item{ SelectionType::FLOOR_TILE, i };
                 addItemToSelection(item);
             }
 
-            // Add all roof tiles (only those with textures)
+            // Roof tiles: only those with textures
             for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
                 auto tile = _map->getMapFile().tiles.at(currentElevation).at(i);
                 if (tile.getRoof() != Map::EMPTY_TILE) {
@@ -503,7 +484,6 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
                 }
             }
 
-            // Add all objects
             for (auto& object : _editorWidget->getObjects()) {
                 SelectedItem item{ SelectionType::OBJECT, object };
                 addItemToSelection(item);
@@ -523,7 +503,6 @@ bool SelectionManager::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& 
     return sprite.getGlobalBounds().contains(worldPos);
 }
 
-// Private helper methods
 std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsAtPosition(sf::Vector2f worldPos, [[maybe_unused]] int elevation) const {
     return _editorWidget->getObjectsAtPosition(worldPos);
 }
@@ -541,11 +520,10 @@ std::optional<int> SelectionManager::getFloorTileAtPosition(sf::Vector2f worldPo
 }
 
 std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, bool roof, [[maybe_unused]] int elevation) const {
-    // Use spatial index for O(1) performance if available
     if (_spatialIndex) {
         auto spatialResult = _spatialIndex->getTilesInArea(area, roof);
 
-        // Filter by tile content for roof tiles (spatial index doesn't know about empty tiles)
+        // The spatial index doesn't track empty tiles, so filter roof results by tile content.
         if (roof) {
             std::vector<int> result;
             result.reserve(spatialResult.size());
@@ -561,7 +539,7 @@ std::vector<int> SelectionManager::getTilesInArea(const sf::FloatRect& area, boo
 
             return result;
         } else {
-            // For floor tiles, return all results (floor tiles always have content)
+            // Floor tiles always have content, so no filtering needed.
             return spatialResult;
         }
     }
@@ -596,7 +574,7 @@ std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatR
     // Include all tiles intersecting the area, even if currently empty.
     // We intentionally skip the spatial index here because it only tracks placed tiles.
     std::vector<int> result;
-    result.reserve(1000); // Reserve space for typical selection
+    result.reserve(1000);
 
     const auto& floorSprites = _editorWidget->getFloorSprites();
     const auto& roofSprites = _editorWidget->getRoofSprites();
@@ -604,7 +582,7 @@ std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatR
     for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
         sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
 
-        // If the sprite has no bounds (empty tile), synthesize bounds from tile index using the same positioning as sprites
+        // Empty tiles have no sprite bounds, so synthesize bounds from the tile index using the same positioning as sprites.
         if (tileBounds.size.x == 0 || tileBounds.size.y == 0) {
             auto screenPos = indexToScreenPosition(i, roof);
             tileBounds = sf::FloatRect(
@@ -621,20 +599,17 @@ std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatR
 }
 
 std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf::FloatRect& area, [[maybe_unused]] int elevation) const {
-    // Note: TileSpatialIndex only handles tiles, not objects
-    // For now, always use linear search for objects
+    // TileSpatialIndex only handles tiles, so objects use a linear search.
     std::vector<std::shared_ptr<Object>> result;
-    result.reserve(100); // Reserve space for typical object selection
+    result.reserve(100);
 
-    // Get all objects from EditorWidget and check bounds intersection
     const auto& allObjects = _editorWidget->getObjects();
 
     for (const auto& object : allObjects) {
-        // Check if object sprite bounds intersect with selection area
         const auto& sprite = object->getSprite();
         sf::FloatRect objectBounds = sprite.getGlobalBounds();
 
-        // Use simple bounds intersection test (much faster than hit detection)
+        // Bounds intersection is much faster than full hit detection.
         if (area.findIntersection(objectBounds)) {
             result.push_back(object);
         }
@@ -716,19 +691,14 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
 }
 
 SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f worldPos, int elevation) {
-    // Implementation of cycling logic without bridge
-
-    // Get all available items at this position
     auto objectsAtPos = getObjectsAtPosition(worldPos, elevation);
     auto roofTileIndex = getRoofTileAtPosition(worldPos, elevation);
     auto floorTileIndex = getFloorTileAtPosition(worldPos, elevation);
 
-    // Check what's currently selected at this position
     bool roofSelected = false;
     bool floorSelected = false;
     int selectedObjectIndex = -1;
 
-    // Check if there's an item at this position that's currently selected
     for (const auto& item : _state.items) {
         switch (item.type) {
             case SelectionType::ROOF_TILE:
@@ -757,9 +727,8 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
         }
     }
 
-    // Selection logic: roof → objects (cycle through all) → floor → deselect
+    // Cycle order: roof -> objects (all) -> floor -> deselect
     if (roofSelected) {
-        // Roof is selected, move to first object or floor if no objects
         if (!objectsAtPos.empty()) {
             clearSelection();
             SelectedItem item{ SelectionType::OBJECT, objectsAtPos[0] };
@@ -779,9 +748,7 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
             return SelectionResult::createSuccess();
         }
     } else if (selectedObjectIndex >= 0) {
-        // An object is selected, cycle to next object or move to floor
         if (selectedObjectIndex < static_cast<int>(objectsAtPos.size()) - 1) {
-            // Select next object
             clearSelection();
             SelectedItem item{ SelectionType::OBJECT, objectsAtPos[selectedObjectIndex + 1] };
             addItemToSelection(item);
@@ -789,7 +756,6 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
             notifySelectionChanged();
             return SelectionResult::createSuccess();
         } else if (floorTileIndex) {
-            // No more objects, select floor
             clearSelection();
             SelectedItem item{ SelectionType::FLOOR_TILE, floorTileIndex.value() };
             addItemToSelection(item);
@@ -801,11 +767,10 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
             return SelectionResult::createSuccess();
         }
     } else if (floorSelected) {
-        // Floor is selected, deselect everything
         clearSelection();
         return SelectionResult::createSuccess();
     } else {
-        // Nothing selected, start with roof or first available
+        // Nothing selected yet: start at roof, else first available item.
         if (roofTileIndex) {
             clearSelection();
             SelectedItem item{ SelectionType::ROOF_TILE, roofTileIndex.value() };
@@ -853,14 +818,12 @@ bool SelectionManager::isItemSelected(const SelectedItem& item) const {
 }
 
 sf::Vector2f SelectionManager::getTileWorldPosition([[maybe_unused]] int tileIndex) const {
-    // This will need to implement the tile positioning logic from EditorWidget
-    // For now, return a placeholder
+    // TODO: stub; port tile positioning logic from EditorWidget.
     return sf::Vector2f(0, 0);
 }
 
 bool SelectionManager::isPositionInTile([[maybe_unused]] sf::Vector2f worldPos, [[maybe_unused]] int tileIndex, [[maybe_unused]] bool roof) const {
-    // This will need to implement the tile hit detection logic from EditorWidget
-    // For now, return false
+    // TODO: stub; port tile hit detection from EditorWidget.
     return false;
 }
 
@@ -869,110 +832,89 @@ bool SelectionManager::moveObject(std::shared_ptr<Object> object, sf::Vector2f o
         return false;
     }
 
-    // Get current object position
     auto& mapObject = object->getMapObject();
     int32_t currentPosition = mapObject.position;
 
-    // Convert current position to coordinates
     auto currentCoords = indexToCoordinates(currentPosition);
 
-    // Calculate new position using screen offset -> hex offset conversion
-    // For simplicity, convert screen offset to approximate hex offset
-    // This is a simplified conversion - in a full implementation you'd use proper isometric projection
+    // Approximate screen offset -> hex offset; a full implementation would use proper isometric projection.
     int deltaX = static_cast<int>(offset.x / TILE_WIDTH);
     int deltaY = static_cast<int>(offset.y / TILE_HEIGHT);
 
-    // Calculate new coordinates (with bounds checking)
     int newX = static_cast<int>(currentCoords.x) + deltaY; // Screen Y maps to hex X
     int newY = static_cast<int>(currentCoords.y) + deltaX; // Screen X maps to hex Y
 
-    // Validate bounds
     if (newX < 0 || newX >= MAP_HEIGHT || newY < 0 || newY >= MAP_WIDTH) {
         spdlog::debug("Object move out of bounds: ({}, {}) -> ({}, {})",
             currentCoords.x, currentCoords.y, newX, newY);
         return false;
     }
 
-    // Calculate new tile index
     int newPosition = coordinatesToIndex(TileCoordinates(newX, newY));
-
-    // Update object position
     mapObject.position = newPosition;
 
-    // Note: Object sprite position will be updated on next render cycle
+    // Object sprite position is updated on the next render cycle.
 
     spdlog::info("Moved object from tile {} to tile {}", currentPosition, newPosition);
     return true;
 }
 
 bool SelectionManager::moveTile(int sourceTileIndex, sf::Vector2f offset, bool isRoof) {
-    // Validate source tile index
     if (sourceTileIndex < 0 || sourceTileIndex >= static_cast<int>(Map::TILES_PER_ELEVATION)) {
         return false;
     }
 
-    // Convert source position to coordinates
     auto sourceCoords = indexToCoordinates(sourceTileIndex);
 
-    // Calculate new position using screen offset -> hex offset conversion
+    // Approximate screen offset -> hex offset; screen Y maps to hex X, screen X maps to hex Y.
     int deltaX = static_cast<int>(offset.x / TILE_WIDTH);
     int deltaY = static_cast<int>(offset.y / TILE_HEIGHT);
 
-    // Calculate new coordinates
     int newX = static_cast<int>(sourceCoords.x) + deltaY;
     int newY = static_cast<int>(sourceCoords.y) + deltaX;
 
-    // Validate bounds
     if (newX < 0 || newX >= MAP_HEIGHT || newY < 0 || newY >= MAP_WIDTH) {
         spdlog::debug("Tile move out of bounds: ({}, {}) -> ({}, {})",
             sourceCoords.x, sourceCoords.y, newX, newY);
         return false;
     }
 
-    // Calculate target tile index
     int targetTileIndex = coordinatesToIndex(TileCoordinates(newX, newY));
 
-    // Don't move to same position
     if (targetTileIndex == sourceTileIndex) {
         return false;
     }
 
-    // Get current elevation from EditorWidget
     int currentElevation = _editorWidget->getCurrentElevation();
 
-    // Access map tiles
     auto& mapFile = _editorWidget->getMapFile();
     auto& tiles = mapFile.tiles.at(currentElevation);
 
-    // Get source and target tiles
     auto& sourceTile = tiles.at(sourceTileIndex);
     auto& targetTile = tiles.at(targetTileIndex);
 
     if (isRoof) {
-        // Move roof tile content
         uint16_t sourceRoof = sourceTile.getRoof();
         if (sourceRoof == Map::EMPTY_TILE) {
             return false; // Nothing to move
         }
 
-        // Move roof content
         targetTile.setRoof(sourceRoof);
         sourceTile.setRoof(Map::EMPTY_TILE);
 
         spdlog::info("Moved roof tile from {} to {}", sourceTileIndex, targetTileIndex);
     } else {
-        // Move floor tile content
         uint16_t sourceFloor = sourceTile.getFloor();
         uint16_t targetFloor = targetTile.getFloor();
 
-        // Swap floor tiles (floor tiles are always present)
+        // Floor tiles are always present, so swap rather than clear the source.
         targetTile.setFloor(sourceFloor);
         sourceTile.setFloor(targetFloor);
 
         spdlog::info("Swapped floor tiles {} and {}", sourceTileIndex, targetTileIndex);
     }
 
-    // Note: Tile sprites will be updated on next render cycle
+    // Tile sprites are updated on the next render cycle.
 
     return true;
 }
@@ -990,8 +932,7 @@ std::vector<int> SelectionManager::getHexesInArea(const sf::FloatRect& area) con
         if (auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
             sf::Vector2f hexPos(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
 
-            // Check if hex center is within selection area
-            // Using a small hex-sized bounds for better selection feel
+            // Small hex-sized bounds around the center give a better selection feel.
             sf::FloatRect hexBounds(sf::Vector2f(hexPos.x - 16, hexPos.y - 8), sf::Vector2f(32, 16));
             if (area.findIntersection(hexBounds)) {
                 result.push_back(hexIndex);
@@ -1008,7 +949,6 @@ void SelectionManager::initializeSpatialIndex() {
         return;
     }
 
-    // Build the spatial index from current sprite data
     const auto& floorSprites = _editorWidget->getFloorSprites();
     const auto& roofSprites = _editorWidget->getRoofSprites();
 

@@ -23,12 +23,10 @@ public:
     void openFile(const std::filesystem::path& filePath, bool overwrite = true) {
         _path = filePath;
 
-        // Check if file exists and overwrite is not allowed
         if (!overwrite && std::filesystem::exists(filePath)) {
             throw FileExistsException(filePath);
         }
 
-        // Check parent directory exists and is writable
         auto parentPath = filePath.parent_path();
         if (!parentPath.empty() && !std::filesystem::exists(parentPath)) {
             try {
@@ -38,19 +36,16 @@ public:
             }
         }
 
-        // Open file for writing
         _stream = std::ofstream{ filePath.string(), std::ofstream::out | std::ofstream::binary };
 
         if (!_stream.is_open()) {
             throw WriteException("Could not open file for writing", filePath);
         }
 
-        // Check if we can actually write to the file
         if (!_stream.good()) {
             throw PermissionException("File opened but cannot write", filePath);
         }
 
-        // Initialize binary utilities
         _utils = std::make_unique<BinaryWriteUtils>(_stream, filePath);
 
         spdlog::debug("Opened file for writing: {}", filePath.string());
@@ -58,7 +53,6 @@ public:
 
     virtual bool write(const T& object) = 0;
 
-    // Provide access to binary utilities for subclasses
     BinaryWriteUtils& getBinaryUtils() {
         if (!_utils) {
             throw WriteException("File not opened for writing", _path);

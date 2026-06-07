@@ -5,7 +5,6 @@
 
 namespace geck {
 
-// Scripts
 struct MapScript {
     uint32_t pid;
     uint32_t next_script;    // unused

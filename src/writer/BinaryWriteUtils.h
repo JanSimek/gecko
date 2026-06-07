@@ -24,7 +24,8 @@
 namespace geck {
 
 /**
- * Utility class for safe binary writing operations with bounds checking and error handling.
+ * @brief Safe binary writing with bounds checking and error handling.
+ *
  * Provides consistent endianness conversion and validation for all binary write operations.
  */
 class BinaryWriteUtils {
@@ -280,7 +281,6 @@ public:
 
     // Validation helpers
     void validateWriteCapacity(size_t bytesToWrite) const {
-        // Check available disk space if possible
         try {
             auto space = std::filesystem::space(_filePath.parent_path());
             if (space.available < bytesToWrite) {

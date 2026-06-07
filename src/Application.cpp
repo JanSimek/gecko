@@ -39,7 +39,6 @@ Application::Application(int argc, char** argv)
 
     initUI();
 
-    // Check for first run and show settings dialog if needed
     checkFirstRun();
 
     loadMap(finalMapPath);
@@ -54,18 +53,14 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
     auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
     loadingWidget->setWindowTitle("Loading Map");
 
-    // Add map loader (filesystem loading for command line args)
     loadingWidget->addLoader(std::make_unique<MapLoader>(_resources, mapPath, -1, true, [this](auto map) {
-        // Check if loading was successful
         if (map) {
-            // When loading is complete, create editor widget and switch to it
             auto editorWidget = std::make_unique<EditorWidget>(*_resources, std::move(map));
             _mainWindow->setEditorWidget(std::move(editorWidget));
         }
         // If map is null, error was already shown by MapLoader::onDone()
     }));
 
-    // Show modal loading dialog
     loadingWidget->exec();
 }
 
@@ -75,7 +70,6 @@ std::string Application::processCommandLineArgs() {
     parser.addVersionOption();
     parser.setApplicationDescription(geck::version::description);
 
-    // Determine the default resources path using the centralized method
     std::filesystem::path default_resources_path = getResourcesPath();
 
     QCommandLineOption dataOption(QStringList() << "d" << "data",
@@ -160,8 +154,7 @@ void Application::checkFirstRun() {
         SettingsDialog dialog(_mainWindow.get());
         int result = dialog.exec();
 
-        // Always save settings after first run, even if cancelled
-        // This ensures we have at least the default data path from command line
+        // Save even if cancelled so we keep at least the default data path from the command line.
         settings.save();
 
         if (result == QDialog::Accepted) {
@@ -169,11 +162,10 @@ void Application::checkFirstRun() {
             loadDataPaths();
         } else {
             spdlog::info("Settings dialog cancelled, saving default configuration");
-            // Still load data paths even if cancelled, so the app is usable
+            // Load data paths even if cancelled, so the app is usable.
             loadDataPaths();
         }
     } else {
-        // Not first run, load data paths normally
         loadDataPaths();
     }
 }
@@ -189,20 +181,14 @@ void Application::loadDataPaths() {
 
     spdlog::info("Loading {} data paths with progress dialog", dataPaths.size());
 
-    // Load Fallout 2 game data files (DAT files, directories) even when no map is loaded
-    // This is essential because:
-    // 1. GameResources needs access to game assets (textures, sprites, sounds)
-    // 2. File browser requires loaded data to display available maps and resources
-    // 3. Creating new maps needs tile/object assets from game data
-    // 4. Editor cannot function properly without access to FRM files and other resources
+    // Load game data even without a map: GameResources, the file browser, and new-map
+    // creation all need access to FRM/tile/object assets from the DAT files.
     auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
     loadingWidget->setWindowTitle("Loading Game Data");
     loadingWidget->addLoader(std::make_unique<DataPathLoader>(_resources, dataPaths));
 
-    // Show modal loading dialog - this appears even without a map loaded
     loadingWidget->exec();
 
-    // After data loading completes, refresh the file browser so it shows the loaded files
     if (_mainWindow) {
         _mainWindow->refreshFileBrowser();
         _mainWindow->showFileBrowserPanel();
@@ -216,15 +202,13 @@ std::filesystem::path Application::getResourcesPath() {
     // Check if we're running from a macOS app bundle
     QString appPath = QCoreApplication::applicationDirPath();
     if (appPath.contains(".app/Contents/MacOS")) {
-        // We're in a bundle, resources are in ../Resources
+        // Inside a bundle, resources live in ../Resources
         std::filesystem::path bundlePath = appPath.toStdString();
         return bundlePath.parent_path() / "Resources" / RESOURCES_DIR;
     } else {
-        // Not in a bundle, use current directory
         return std::filesystem::current_path() / RESOURCES_DIR;
     }
 #else
-    // For Windows and Linux, use current directory
     return std::filesystem::current_path() / RESOURCES_DIR;
 #endif
 }

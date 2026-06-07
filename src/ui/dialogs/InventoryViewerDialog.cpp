@@ -68,10 +68,9 @@ void InventoryViewerDialog::setupUI() {
     resize(ui::constants::dialog_sizes::LARGE_WIDTH, ui::constants::dialog_sizes::LARGE_HEIGHT);
 
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(8, 8, 8, 4);           // Reduce bottom margin
-    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT); // Reduce spacing between splitter and buttons
+    _mainLayout->setContentsMargins(8, 8, 8, 4);
+    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
-    // Create splitter for left/right panels
     _splitter = new QSplitter(Qt::Horizontal);
 
     // === LEFT PANEL: Inventory Tree ===
@@ -80,23 +79,20 @@ void InventoryViewerDialog::setupUI() {
     _leftLayout->setContentsMargins(0, 0, 0, 0);
     _leftLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
-    // Inventory tree widget
     _inventoryTree = new QTreeWidget();
     _inventoryTree->setColumnCount(COLUMN_COUNT);
 
     QStringList headers = { "Icon", "Name", "Type", "Amount", "PID" };
     _inventoryTree->setHeaderLabels(headers);
 
-    // Configure columns
     _inventoryTree->setColumnWidth(COLUMN_ICON, ui::constants::column_widths::ICON);
     _inventoryTree->setColumnWidth(COLUMN_NAME, ui::constants::column_widths::NAME_WIDE);
     _inventoryTree->setColumnWidth(COLUMN_TYPE, ui::constants::column_widths::TYPE_WIDE);
     _inventoryTree->setColumnWidth(COLUMN_AMOUNT, ui::constants::column_widths::AMOUNT_WIDE);
     _inventoryTree->setColumnWidth(COLUMN_PID, ui::constants::column_widths::PID);
 
-    // Set uniform row height to accommodate larger icons
     _inventoryTree->setIconSize(QSize(ui::constants::sizes::ICON_SIZE_LARGE, ui::constants::sizes::ICON_SIZE_LARGE));
-    _inventoryTree->header()->setDefaultSectionSize(70); // Minimum height for rows
+    _inventoryTree->header()->setDefaultSectionSize(70); // Minimum row height to fit larger icons
 
     _inventoryTree->setSortingEnabled(false);
     _inventoryTree->setAlternatingRowColors(true);
@@ -111,7 +107,6 @@ void InventoryViewerDialog::setupUI() {
     _inventoryViewStack->addWidget(_inventoryTree);
     _inventoryViewStack->addWidget(_emptyInventoryLabel);
 
-    // Connect signals
     connect(_inventoryTree, &QTreeWidget::itemSelectionChanged,
         this, &InventoryViewerDialog::onItemSelectionChanged);
     connect(_inventoryTree, &QTreeWidget::itemDoubleClicked,
@@ -119,7 +114,6 @@ void InventoryViewerDialog::setupUI() {
 
     _leftLayout->addWidget(_inventoryViewStack);
 
-    // Status label
     _statusLabel = new QLabel("0 items total");
     _statusLabel->setStyleSheet(ui::theme::styles::smallLabel());
     _leftLayout->addWidget(_statusLabel);
@@ -130,13 +124,11 @@ void InventoryViewerDialog::setupUI() {
     _rightLayout->setContentsMargins(0, 0, 0, 0);
     _rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
-    // Preview group
     _previewGroup = new QGroupBox("Item Preview");
     _previewFormLayout = new QFormLayout(_previewGroup);
     _previewFormLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     _previewFormLayout->setSpacing(ui::constants::SPACING_FORM);
 
-    // Item sprite preview
     _previewLabel = new QLabel("No item selected");
     _previewLabel->setAlignment(Qt::AlignCenter);
     _previewLabel->setMinimumSize(ui::constants::sizes::PREVIEW_TILE, ui::constants::sizes::PREVIEW_TILE);
@@ -146,7 +138,6 @@ void InventoryViewerDialog::setupUI() {
     _previewLabel->setStyleSheet(ui::theme::styles::previewArea());
     _previewFormLayout->addRow("Sprite:", _previewLabel);
 
-    // Item details
     _previewNameLabel = new QLabel("—");
     _previewFormLayout->addRow("Name:", _previewNameLabel);
 
@@ -162,7 +153,6 @@ void InventoryViewerDialog::setupUI() {
     _rightLayout->addWidget(_previewGroup);
     _rightLayout->addStretch(); // Keep preview at top of right panel
 
-    // Add panels to splitter
     _splitter->addWidget(_leftPanel);
     _splitter->addWidget(_rightPanel);
     _splitter->setSizes({ 500, 300 }); // 70/30 split
@@ -171,10 +161,9 @@ void InventoryViewerDialog::setupUI() {
     // === BUTTON PANEL ===
     _buttonPanel = new QWidget();
     _buttonLayout = new QHBoxLayout(_buttonPanel);
-    _buttonLayout->setContentsMargins(0, 4, 0, 0); // Minimal margins - small top margin only
+    _buttonLayout->setContentsMargins(0, 4, 0, 0);
     _buttonLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
-    // Action buttons
     _addButton = new QPushButton("Add Item...");
     _addButton->setEnabled(true);
     _addButton->setToolTip("Add new item to inventory");
@@ -182,7 +171,7 @@ void InventoryViewerDialog::setupUI() {
     _buttonLayout->addWidget(_addButton);
 
     _removeButton = new QPushButton("Remove Item");
-    _removeButton->setEnabled(false); // Disabled until item is selected
+    _removeButton->setEnabled(false); // Enabled once an item is selected
     _removeButton->setToolTip("Remove selected item from inventory");
     connect(_removeButton, &QPushButton::clicked, this, &InventoryViewerDialog::onRemoveItemClicked);
     _buttonLayout->addWidget(_removeButton);
@@ -225,7 +214,7 @@ void InventoryViewerDialog::populateInventoryTree() {
         const auto details = ui::inventory::describeItem(_resources, item->pro_pid);
         const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *item);
 
-        // Store inventory index in item data
+        // Store inventory index in item data for later lookup
         treeItem->setData(COLUMN_NAME, Qt::UserRole, static_cast<int>(i));
 
         QPixmap icon = ui::inventory::loadItemIcon(_resources, item->pro_pid, ui::constants::sizes::ICON_SIZE_LARGE);
@@ -233,7 +222,6 @@ void InventoryViewerDialog::populateInventoryTree() {
             treeItem->setIcon(COLUMN_ICON, QIcon(icon));
         }
 
-        // Set item details
         treeItem->setText(COLUMN_NAME, details.name);
         treeItem->setText(COLUMN_TYPE, details.typeName);
         treeItem->setText(COLUMN_AMOUNT, QString::number(displayAmount));
@@ -250,7 +238,6 @@ void InventoryViewerDialog::populateInventoryTree() {
 
     _inventoryViewStack->setCurrentWidget(_inventoryTree);
 
-    // Adjust column widths to content
     for (int i = 0; i < COLUMN_COUNT; ++i) {
         _inventoryTree->resizeColumnToContents(i);
     }
@@ -294,17 +281,14 @@ void InventoryViewerDialog::updateItemPreview(QTreeWidgetItem* item) {
     const auto details = ui::inventory::describeItem(_resources, mapItem->pro_pid);
     const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *mapItem);
 
-    // Update preview sprite
     QPixmap sprite = ui::inventory::loadItemIcon(_resources, mapItem->pro_pid);
     if (!sprite.isNull()) {
-        // Scale sprite to fit preview area while maintaining aspect ratio
         sprite = sprite.scaled(_previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         _previewLabel->setPixmap(sprite);
     } else {
         _previewLabel->setText("No sprite");
     }
 
-    // Update item details
     _previewNameLabel->setText(details.name);
     _previewTypeLabel->setText(details.typeName);
     _previewAmountLabel->setText(QString::number(displayAmount));
@@ -367,7 +351,6 @@ void InventoryViewerDialog::onAddItemClicked() {
         return;
     }
 
-    // Get amount
     int amount = QInputDialog::getInt(this, "Add Item", "Enter amount:", 1, 1, 99999, 1, &ok);
     if (!ok) {
         return;
@@ -380,11 +363,9 @@ void InventoryViewerDialog::onAddItemClicked() {
 
     try {
         auto newItem = ui::inventory::createMapInventoryItem(_resources, pid, amount);
-        // Add to the container's inventory
         _mapObject->inventory.push_back(std::move(newItem));
         _mapObject->objects_in_inventory = static_cast<uint32_t>(_mapObject->inventory.size());
 
-        // Refresh the display
         populateInventoryTree();
         updateStatusLabel();
 

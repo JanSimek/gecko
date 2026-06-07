@@ -12,7 +12,6 @@ namespace geck {
 
 std::unique_ptr<Dat> DatReader::read() {
     try {
-        // Use format validation
         FormatValidator::validateDatFile(getBinaryUtils(), _path);
 
         auto& utils = getBinaryUtils();
@@ -36,7 +35,6 @@ std::unique_ptr<Dat> DatReader::read() {
 
         auto dat = std::make_unique<Dat>();
 
-        // Read DAT entry information using BinaryUtils
         for (size_t i = 0; i < file_count; ++i) {
             std::unique_ptr<DatEntry> entry = std::make_unique<DatEntry>();
 

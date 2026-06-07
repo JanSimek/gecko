@@ -28,14 +28,11 @@ SFMLWidget::SFMLWidget(QWidget* parent)
     this->setAttribute(Qt::WA_NoSystemBackground);
     this->setAttribute(Qt::WA_DontCreateNativeAncestors);
 
-    // Enable mouse tracking
     this->setMouseTracking(true);
     this->setFocusPolicy(Qt::StrongFocus);
 
-    // Enable drag and drop
     this->setAcceptDrops(true);
 
-    // Set size policy to expand and fill available space
     this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }
 
@@ -193,7 +190,6 @@ void SFMLWidget::handleSFMLEvent(const sf::Event& event) {
 }
 
 sf::Event SFMLWidget::createMouseEvent(QMouseEvent* qtEvent, bool isPressed) const {
-    // Convert mouse button
     sf::Mouse::Button button = sf::Mouse::Button::Left;
     switch (qtEvent->button()) {
         case Qt::LeftButton:
@@ -210,7 +206,6 @@ sf::Event SFMLWidget::createMouseEvent(QMouseEvent* qtEvent, bool isPressed) con
             break;
     }
 
-    // Create the appropriate SFML 3 event
     sf::Vector2i position{ static_cast<int>(qtEvent->position().x()), static_cast<int>(qtEvent->position().y()) };
     if (isPressed) {
         return sf::Event::MouseButtonPressed{ button, position };
@@ -332,7 +327,6 @@ void SFMLWidget::dragEnterEvent(QDragEnterEvent* event) {
     }
 
     if (mimeData->hasFormat(ui::mime::GECK_OBJECT)) {
-        // Extract object data and start drag preview
         QByteArray objectData = mimeData->data(ui::mime::GECK_OBJECT);
         QStringList parts = QString::fromUtf8(objectData).split(',');
 
@@ -340,10 +334,9 @@ void SFMLWidget::dragEnterEvent(QDragEnterEvent* event) {
             int objectIndex = parts[0].toInt();
             int categoryInt = parts[1].toInt();
 
-            // Convert Qt coordinates to SFML world coordinates
+            // Qt widget coordinates -> SFML world coordinates
             sf::Vector2f worldPos = mapToWorld(event->position());
 
-            // Start drag preview in editor
             _editorWidget->startDragPreview(objectIndex, categoryInt, worldPos);
         }
 
@@ -361,7 +354,6 @@ void SFMLWidget::dragMoveEvent(QDragMoveEvent* event) {
     }
 
     if (mimeData->hasFormat(ui::mime::GECK_OBJECT)) {
-        // Update drag preview position
         if (_editorWidget) {
             sf::Vector2f worldPos = mapToWorld(event->position());
             _editorWidget->updateDragPreview(worldPos);
@@ -374,7 +366,6 @@ void SFMLWidget::dragMoveEvent(QDragMoveEvent* event) {
 }
 
 void SFMLWidget::dragLeaveEvent(QDragLeaveEvent* event) {
-    // Clean up drag preview when drag leaves the widget
     if (_editorWidget) {
         _editorWidget->cancelDragPreview();
     }
@@ -389,7 +380,6 @@ void SFMLWidget::dropEvent(QDropEvent* event) {
     }
 
     if (mimeData->hasFormat(ui::mime::GECK_OBJECT)) {
-        // Finish the drag preview and place the object
         if (_editorWidget) {
             sf::Vector2f worldPos = mapToWorld(event->position());
             _editorWidget->finishDragPreview(worldPos);
@@ -397,7 +387,6 @@ void SFMLWidget::dropEvent(QDropEvent* event) {
 
         event->acceptProposedAction();
     } else {
-        // Propagate to parent if not handled
         event->ignore();
     }
 }

@@ -43,19 +43,16 @@ GameLocationWidget::GameLocationWidget(QWidget* parent)
 void GameLocationWidget::setupUI() {
     _layout = new QVBoxLayout(this);
 
-    // Help text
     _helpLabel = new QLabel(
         "Select the Fallout 2 game installation directory. This is used for the Play feature to launch the game with your current map.");
     _helpLabel->setWordWrap(true);
     _helpLabel->setStyleSheet(ui::theme::styles::helpText());
     _layout->addWidget(_helpLabel);
 
-    // Steam installation option
     _steamRadio = new QRadioButton("Steam Installation");
     _steamRadio->setChecked(false);
     _layout->addWidget(_steamRadio);
 
-    // Steam App ID input
     _steamLayout = new QHBoxLayout();
     _steamLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0);
 
@@ -75,12 +72,10 @@ void GameLocationWidget::setupUI() {
     _steamLayout->addStretch();
     _layout->addLayout(_steamLayout);
 
-    // Executable installation option
     _executableRadio = new QRadioButton("Executable/GOG Installation");
-    _executableRadio->setChecked(true); // Default selection
+    _executableRadio->setChecked(true);
     _layout->addWidget(_executableRadio);
 
-    // Executable location input
     _executableLayout = new QHBoxLayout();
     _executableLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0);
 
@@ -115,7 +110,6 @@ void GameLocationWidget::setupUI() {
 
     _layout->addLayout(_dataDirectoryLayout);
 
-    // Auto-detect button
     _controlLayout = new QHBoxLayout();
     _controlLayout->addStretch();
 
@@ -126,12 +120,10 @@ void GameLocationWidget::setupUI() {
 
     _layout->addLayout(_controlLayout);
 
-    // Progress bar (initially hidden)
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);
     _layout->addWidget(_progressBar);
 
-    // Update initial control states
     updateControlStates();
 }
 
@@ -193,7 +185,6 @@ void GameLocationWidget::setStatusMessage(const QString& message, const QString&
 void GameLocationWidget::updateControlStates() {
     bool steamSelected = _steamRadio->isChecked();
 
-    // Enable/disable controls based on selection
     _steamAppIdEdit->setEnabled(steamSelected);
     _executableLocationEdit->setEnabled(!steamSelected);
     _browseExecutableButton->setEnabled(!steamSelected);
@@ -293,7 +284,7 @@ void GameLocationWidget::onAutoDetect() {
     _progressBar->setRange(0, 0); // Indeterminate progress
     setStatusMessage("Detecting Fallout 2 game installations...", "normal");
 
-    QApplication::processEvents(); // Update UI
+    QApplication::processEvents();
 
     auto detectedInstallations = Settings::detectFallout2InstallationsDetailed();
 
@@ -301,7 +292,6 @@ void GameLocationWidget::onAutoDetect() {
     _autoDetectButton->setEnabled(true);
 
     if (!detectedInstallations.empty()) {
-        // Populate both Steam and Executable fields based on detected installations
         bool foundSteam = false;
         bool foundExecutable = false;
         QString statusMessages;
@@ -324,7 +314,6 @@ void GameLocationWidget::onAutoDetect() {
             }
         }
 
-        // Set the radio button to the first detected type
         if (foundSteam && !foundExecutable) {
             _steamRadio->setChecked(true);
         } else if (foundExecutable) {
@@ -354,19 +343,16 @@ void GameLocationWidget::onAutoDetect() {
 void GameLocationWidget::validateGameLocation(const QString& gamePath, bool isSteam) {
     std::filesystem::path path(gamePath.toStdString());
 
-    // Check if the path is an executable file or a directory
     bool isFile = std::filesystem::is_regular_file(path);
     bool isDirectory = std::filesystem::is_directory(path);
 
     if (isFile) {
-        // User selected an executable file
         QString fileName = QString::fromStdString(path.filename().string()).toLower();
         bool isValidExecutable = fileName.contains("fallout2") || fileName.contains("fallout 2") || fileName.endsWith(".app");
 
         if (isValidExecutable) {
             setStatusMessage("Valid Fallout 2 executable selected.", "success");
 
-            // Check if data directory has required files
             std::filesystem::path dataDir(_dataDirectoryEdit->text().toStdString());
             if (!dataDir.empty() && std::filesystem::exists(dataDir / "data")) {
                 setStatusMessage("Valid Fallout 2 executable and data directory selected.", "success");

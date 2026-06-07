@@ -23,7 +23,6 @@ LoadingWidget::LoadingWidget(QWidget* parent)
     , _updateTimer(new QTimer(this))
     , _isLoading(false) {
 
-    // Set up as modal dialog
     setModal(true);
     setWindowTitle("Loading");
     setWindowFlags(Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
@@ -31,10 +30,9 @@ LoadingWidget::LoadingWidget(QWidget* parent)
 
     setupUI();
 
-    // Connect timer to update progress
     connect(_updateTimer, &QTimer::timeout, this, &LoadingWidget::updateProgress);
 
-    // Auto-close when loading completes
+    // Auto-close the dialog when loading completes
     connect(this, &LoadingWidget::loadingComplete, this, &QDialog::accept);
 }
 
@@ -50,28 +48,22 @@ void LoadingWidget::setupUI() {
         ui::constants::DIALOG_PADDING, ui::constants::DIALOG_PADDING);
     _layout->setSpacing(ui::constants::SPACING_WIDE);
 
-    // Title label
     _titleLabel = new QLabel("Loading", this);
     _titleLabel->setFont(ui::theme::fonts::largeTitle());
     _titleLabel->setAlignment(Qt::AlignCenter);
 
-    // Status label
     _statusLabel = new QLabel("Initializing...", this);
     _statusLabel->setFont(ui::theme::fonts::statusText());
     _statusLabel->setAlignment(Qt::AlignCenter);
     _statusLabel->setStyleSheet(ui::theme::styles::smallLabel());
 
-    // Progress bar
     _progressBar = new QProgressBar(this);
     _progressBar->setMinimum(0);
     _progressBar->setMaximum(100);
     _progressBar->setValue(0);
     _progressBar->setTextVisible(true);
-
-    // Style the progress bar for better visibility
     _progressBar->setStyleSheet(ui::theme::styles::progressBarStyle());
 
-    // Add widgets to layout
     _layout->addWidget(_titleLabel);
     _layout->addWidget(_statusLabel);
     _layout->addSpacing(ui::constants::SPACING_WIDE);
@@ -83,7 +75,7 @@ void LoadingWidget::setupUI() {
 
 void LoadingWidget::addLoader(std::unique_ptr<Loader> loader) {
     _loaders.push_back(std::move(loader));
-    _loadersCompleted.push_back(false); // Track completion status
+    _loadersCompleted.push_back(false);
 }
 
 void LoadingWidget::start() {
@@ -95,12 +87,11 @@ void LoadingWidget::start() {
 
     _isLoading = true;
 
-    // Initialize all loaders
     for (const auto& loader : _loaders) {
         loader->init();
     }
 
-    // Start update timer (30 FPS for smooth progress updates)
+    // 30 FPS for smooth progress updates
     _updateTimer->start(UI::TIMER_INTERVAL_MS);
 
     spdlog::info("LoadingWidget started with {} loaders", _loaders.size());
@@ -122,19 +113,16 @@ void LoadingWidget::updateProgress() {
             allDone = false;
             activeLoaders++;
 
-            // Update UI with current loader status
             _statusLabel->setText(QString::fromStdString(loader->status()));
 
-            // Get actual progress percentage from loader
             int loaderProgress = loader->percentDone();
             totalProgress += loaderProgress;
 
-            // Update progress bar with actual percentage
             if (activeLoaders == 1) {
                 _progressBar->setValue(loaderProgress);
             }
 
-            // Only show status from first active loader
+            // Only show status from the first active loader
             if (activeLoaders == 1) {
                 std::string progressStr = loader->progress();
                 if (!progressStr.empty()) {
@@ -142,7 +130,7 @@ void LoadingWidget::updateProgress() {
                 }
             }
         } else {
-            // Loader is done, execute completion callback once
+            // Run the completion callback exactly once per loader
             if (!_loadersCompleted[i]) {
                 spdlog::debug("LoadingWidget: Calling onDone() for completed loader {}", i);
                 loader->onDone();
@@ -152,7 +140,6 @@ void LoadingWidget::updateProgress() {
         }
     }
 
-    // If multiple loaders, show average progress
     if (_loaders.size() > 1 && !allDone) {
         int averageProgress = totalProgress / static_cast<int>(_loaders.size());
         _progressBar->setValue(averageProgress);
@@ -165,7 +152,7 @@ void LoadingWidget::updateProgress() {
         _statusLabel->setText("Complete");
         spdlog::info("LoadingWidget completed all loaders");
 
-        // Emit signal after a short delay to show completion
+        // Delay so the completed (100%) state is briefly visible before closing
         QTimer::singleShot(200, this, [this]() {
             emit loadingComplete();
         });
@@ -173,10 +160,7 @@ void LoadingWidget::updateProgress() {
 }
 
 int LoadingWidget::exec() {
-    // Auto-start loading when exec() is called
     start();
-
-    // Call parent exec() for modal behavior
     return QDialog::exec();
 }
 

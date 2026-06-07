@@ -56,7 +56,6 @@ public:
                 filePath);
         }
 
-        // Restore original position
         utils.setPosition(pos.current);
         spdlog::debug("DAT format validation passed: {} files", treeSize);
     }
@@ -82,14 +81,12 @@ public:
             throw UnsupportedFormatException("File too small to be a valid FRM file", filePath);
         }
 
-        // Read version
         uint32_t version = utils.readBE32();
         if (version != 4) {
             throw UnsupportedFormatException(
                 "Unsupported FRM version: " + std::to_string(version), filePath);
         }
 
-        // Reset to start
         utils.setPosition(0);
         spdlog::debug("FRM format validation passed: version={}", version);
     }
@@ -134,7 +131,6 @@ public:
             throw UnsupportedFormatException("File too small to be a valid MAP file", filePath);
         }
 
-        // Read version
         uint32_t version = utils.readBE32();
         if (version < 19 || version > 21) { // Known Fallout map versions
             spdlog::warn("Unusual MAP version: {}", version);
@@ -177,7 +173,6 @@ public:
 
         if (ext == ".dat") {
             info.formatName = "Fallout DAT Archive";
-            // Could extract more metadata here
         } else if (ext == ".pro") {
             info.formatName = "Fallout PRO Object";
         } else if (ext == ".frm") {

@@ -8,7 +8,6 @@ namespace geck {
 
 bool MapObject::isShootThroughWallBlocker(resource::GameResources& resources) {
 
-    // Get PRO file data to check flags
     Pro* pro = getProData(resources);
     if (!pro) {
         return false;
@@ -30,9 +29,8 @@ Pro* MapObject::getProData(resource::GameResources& resources) const {
 
 bool MapObject::blocksMovement(resource::GameResources& resources) const {
 
-    // TODO: save it the value
+    // TODO: cache this value instead of reloading the PRO each call
 
-    // Get PRO file data to check flags
     Pro* pro = getProData(resources);
     if (!pro) {
         spdlog::debug("No PRO data available for object PID {}, assuming non-blocking", pro_pid);
