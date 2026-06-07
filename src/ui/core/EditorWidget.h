@@ -23,6 +23,8 @@
 #include "../../util/UndoStack.h"
 #include "../editing/ObjectCommandController.h"
 #include "../rendering/MapSpriteLoader.h"
+#include "../tiles/TilePlacementContext.h"
+#include "TileChange.h"
 
 namespace geck {
 
@@ -40,7 +42,7 @@ class ViewportController;
 class SFMLWidget;
 struct ObjectInfo;
 
-class EditorWidget : public QWidget, public selection::SelectionDataProvider {
+class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext {
     Q_OBJECT
 
     friend class TilePlacementManager;
@@ -64,7 +66,7 @@ public:
     void setShowLightOverlays(bool show);
     void setShowExitGrids(bool show) { _showExitGrids = show; }
 
-    Map* getMap() const { return _map.get(); }
+    Map* getMap() const override { return _map.get(); }
 
     // Qt6 toolbar actions
     void cycleSelectionMode();
@@ -93,8 +95,8 @@ public:
     void cancelDragPreview();
 
     // Efficient tile update
-    void updateTileSprite(int hexIndex, bool isRoof);
-    void updateTileSprite(int hexIndex, bool isRoof, int elevation);
+    void updateTileSprite(int hexIndex, bool isRoof) override;
+    void updateTileSprite(int hexIndex, bool isRoof, int elevation) override;
 
     // Tile placement mode control
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
@@ -125,7 +127,7 @@ public:
     class MainWindow* getMainWindow() const { return _mainWindow; }
 
     // Access to internal components for extracted managers
-    selection::SelectionManager* getSelectionManager() const { return _selectionManager.get(); }
+    selection::SelectionManager* getSelectionManager() const override { return _selectionManager.get(); }
     TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
     ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
     ViewportController* getViewportController() const override { return _viewportController.get(); }
@@ -160,7 +162,7 @@ public:
     void clearDragSelectionPreview();
 
     // Ensure tile storage exists for an elevation
-    std::vector<Tile>& ensureElevationTiles(int elevation);
+    std::vector<Tile>& ensureElevationTiles(int elevation) override;
     void registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
     void registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
@@ -194,17 +196,9 @@ public slots:
     const UndoStack& getUndoStack() const { return _undoStack; }
 
 private:
-    struct TileChange {
-        int elevation;
-        int tileIndex;
-        bool isRoof;
-        uint16_t before;
-        uint16_t after;
-    };
-
     // Object management
     void deleteSelectedObjects();
-    void registerTileEdit(const QString& description, const std::vector<TileChange>& changes);
+    void registerTileEdit(const QString& description, const std::vector<TileChange>& changes) override;
     void applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState);
     void registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);

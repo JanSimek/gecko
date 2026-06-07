@@ -3,10 +3,11 @@
 #include <SFML/Graphics.hpp>
 #include <memory>
 
+#include "TilePlacementContext.h"
+
 namespace geck {
 
 // Forward declarations
-class EditorWidget;
 class Map;
 namespace selection {
     class SelectionManager;
@@ -23,7 +24,7 @@ namespace selection {
  */
 class TilePlacementManager {
 public:
-    explicit TilePlacementManager(EditorWidget* editor);
+    explicit TilePlacementManager(TilePlacementContext& context);
     ~TilePlacementManager() = default;
 
     // Tile placement operations
@@ -52,7 +53,7 @@ public:
     void resetState();
 
 private:
-    EditorWidget* _editor;
+    TilePlacementContext& _context;
 
     // Tile placement state
     bool _tilePlacementMode = false;

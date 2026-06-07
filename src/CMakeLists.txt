@@ -52,6 +52,7 @@ set(GECK_APP_SOURCES
     # Qt6 UI Core
     ui/core/MainWindow.h
     ui/core/MainWindow.cpp
+    ui/core/TileChange.h
     ui/core/EditorWidget.h
     ui/core/EditorWidget.cpp
 
@@ -151,6 +152,7 @@ set(GECK_APP_SOURCES
     ui/input/InputHandler.cpp
     ui/dragdrop/DragDropManager.h
     ui/dragdrop/DragDropManager.cpp
+    ui/tiles/TilePlacementContext.h
     ui/tiles/TilePlacementManager.h
     ui/tiles/TilePlacementManager.cpp
     ui/tools/ExitGridPlacementManager.h

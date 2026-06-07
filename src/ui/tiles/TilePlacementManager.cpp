@@ -1,7 +1,8 @@
 #include "TilePlacementManager.h"
-#include "../core/EditorWidget.h"
+#include "../core/TileChange.h"
 #include "../viewport/ViewportController.h"
 #include "../../format/map/Map.h"
+#include "../../format/map/Tile.h"
 #include "../../selection/SelectionManager.h"
 #include "../../editor/HexagonGrid.h"
 #include "../../util/Constants.h"
@@ -11,12 +12,12 @@
 
 namespace geck {
 
-TilePlacementManager::TilePlacementManager(EditorWidget* editor)
-    : _editor(editor) {
+TilePlacementManager::TilePlacementManager(TilePlacementContext& context)
+    : _context(context) {
 }
 
 void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof) {
-    if (!_editor->getMap()) {
+    if (!_context.getMap()) {
         spdlog::warn("TilePlacementManager::placeTileAtPosition: No map loaded");
         return;
     }
@@ -26,7 +27,7 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
         adjustedWorldPos.y += ROOF_OFFSET; // Roof tiles are visually offset upward
     }
 
-    int hexIndex = _editor->getViewportController()->worldPosToHexIndex(adjustedWorldPos);
+    int hexIndex = _context.getViewportController()->worldPosToHexIndex(adjustedWorldPos);
     if (hexIndex < 0) {
         spdlog::debug("TilePlacementManager::placeTileAtPosition: No valid position found");
         return;
@@ -39,7 +40,7 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
         return;
     }
 
-    auto& elevationTiles = _editor->ensureElevationTiles(_editor->getCurrentElevation());
+    auto& elevationTiles = _context.ensureElevationTiles(_context.getCurrentElevation());
 
     if (tileIndex_pos >= static_cast<int>(elevationTiles.size())) {
         spdlog::warn("TilePlacementManager::placeTileAtPosition: Tile index {} out of bounds",
@@ -55,27 +56,27 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
     }
     uint16_t after = isRoof ? elevationTiles[tileIndex_pos].getRoof() : elevationTiles[tileIndex_pos].getFloor();
 
-    _editor->updateTileSprite(hexIndex, isRoof);
+    _context.updateTileSprite(hexIndex, isRoof);
 
-    _editor->registerTileEdit("Place Tile", { { _editor->getCurrentElevation(), tileIndex_pos, isRoof, before, after } });
+    _context.registerTileEdit("Place Tile", { { _context.getCurrentElevation(), tileIndex_pos, isRoof, before, after } });
 }
 
 void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof) {
-    if (!_editor->getMap()) {
+    if (!_context.getMap()) {
         spdlog::warn("TilePlacementManager::fillAreaWithTile: No map loaded");
         return;
     }
 
-    std::vector<int> tilesToFill = _editor->getSelectionManager()->getTilesInAreaIncludingEmpty(area, isRoof, _editor->getCurrentElevation());
+    std::vector<int> tilesToFill = _context.getSelectionManager()->getTilesInAreaIncludingEmpty(area, isRoof, _context.getCurrentElevation());
 
     if (tilesToFill.empty()) {
         spdlog::debug("TilePlacementManager::fillAreaWithTile: No tiles found in area");
         return;
     }
 
-    auto& elevationTiles = _editor->ensureElevationTiles(_editor->getCurrentElevation());
+    auto& elevationTiles = _context.ensureElevationTiles(_context.getCurrentElevation());
 
-    std::vector<EditorWidget::TileChange> changes;
+    std::vector<TileChange> changes;
     changes.reserve(tilesToFill.size());
 
     for (int tileIdx : tilesToFill) {
@@ -87,25 +88,25 @@ void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& 
                 elevationTiles[tileIdx].setFloor(tileIndex);
             }
             uint16_t after = isRoof ? elevationTiles[tileIdx].getRoof() : elevationTiles[tileIdx].getFloor();
-            changes.push_back({ _editor->getCurrentElevation(), tileIdx, isRoof, before, after });
+            changes.push_back({ _context.getCurrentElevation(), tileIdx, isRoof, before, after });
 
             int hexIndex = tileIndexToHexIndex(tileIdx);
-            _editor->updateTileSprite(hexIndex, isRoof);
+            _context.updateTileSprite(hexIndex, isRoof);
         }
     }
 
     if (!changes.empty()) {
-        _editor->registerTileEdit("Fill Tiles", changes);
+        _context.registerTileEdit("Fill Tiles", changes);
     }
 }
 
 void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
-    if (!_editor->getMap()) {
+    if (!_context.getMap()) {
         spdlog::warn("TilePlacementManager::replaceSelectedTiles: No map loaded");
         return;
     }
 
-    const auto& selection = _editor->getSelectionManager()->getCurrentSelection();
+    const auto& selection = _context.getSelectionManager()->getCurrentSelection();
 
     std::vector<int> floorTileIndices = selection.getFloorTileIndices();
     std::vector<int> roofTileIndices = selection.getRoofTileIndices();
@@ -115,9 +116,9 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
         return;
     }
 
-    auto& elevationTiles = _editor->ensureElevationTiles(_editor->getCurrentElevation());
+    auto& elevationTiles = _context.ensureElevationTiles(_context.getCurrentElevation());
 
-    std::vector<EditorWidget::TileChange> changes;
+    std::vector<TileChange> changes;
     changes.reserve(floorTileIndices.size() + roofTileIndices.size());
 
     for (int tileIdx : floorTileIndices) {
@@ -125,10 +126,10 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
             uint16_t before = elevationTiles[tileIdx].getFloor();
             elevationTiles[tileIdx].setFloor(newTileIndex);
             uint16_t after = elevationTiles[tileIdx].getFloor();
-            changes.push_back({ _editor->getCurrentElevation(), tileIdx, false, before, after });
+            changes.push_back({ _context.getCurrentElevation(), tileIdx, false, before, after });
 
             int hexIndex = tileIndexToHexIndex(tileIdx);
-            _editor->updateTileSprite(hexIndex, false); // false = floor tile
+            _context.updateTileSprite(hexIndex, false); // false = floor tile
         }
     }
 
@@ -137,15 +138,15 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
             uint16_t before = elevationTiles[tileIdx].getRoof();
             elevationTiles[tileIdx].setRoof(newTileIndex);
             uint16_t after = elevationTiles[tileIdx].getRoof();
-            changes.push_back({ _editor->getCurrentElevation(), tileIdx, true, before, after });
+            changes.push_back({ _context.getCurrentElevation(), tileIdx, true, before, after });
 
             int hexIndex = tileIndexToHexIndex(tileIdx);
-            _editor->updateTileSprite(hexIndex, true); // true = roof tile
+            _context.updateTileSprite(hexIndex, true); // true = roof tile
         }
     }
 
     if (!changes.empty()) {
-        _editor->registerTileEdit("Replace Tiles", changes);
+        _context.registerTileEdit("Replace Tiles", changes);
     }
 }
 
@@ -166,7 +167,7 @@ void TilePlacementManager::setTilePlacementReplaceMode(bool enabled) {
 void TilePlacementManager::handleTilePlacement(sf::Vector2f worldPos, bool /*isRoof*/) {
     if (_tilePlacementMode && _tilePlacementIndex >= 0) {
         // If tiles are already selected, replace them instead of placing a new tile
-        if (_editor->getSelectionManager()->hasSelection()) {
+        if (_context.getSelectionManager()->hasSelection()) {
             replaceSelectedTiles(_tilePlacementIndex);
         } else {
             // Use stored roof state instead of the parameter to ensure consistency
@@ -178,7 +179,7 @@ void TilePlacementManager::handleTilePlacement(sf::Vector2f worldPos, bool /*isR
 void TilePlacementManager::handleTileAreaFill(sf::Vector2f startPos, sf::Vector2f endPos, bool /*isRoof*/) {
     if (_tilePlacementMode && _tilePlacementIndex >= 0) {
         // If tiles are already selected, replace them instead of area filling
-        if (_editor->getSelectionManager()->hasSelection()) {
+        if (_context.getSelectionManager()->hasSelection()) {
             replaceSelectedTiles(_tilePlacementIndex);
         } else {
             float left = std::min(startPos.x, endPos.x);

@@ -9,8 +9,6 @@
 
 namespace geck {
 
-class EditorWidget;
-
 /**
  * @brief Handles all input events for the editor
  *
@@ -78,7 +76,7 @@ public:
         std::function<void()> onMarkExitsModeCancelled;
     };
 
-    explicit InputHandler(EditorWidget* editor);
+    InputHandler() = default;
     ~InputHandler() = default;
 
     /**
@@ -138,7 +136,6 @@ private:
     bool isShiftPressed() const;
 
     // State
-    EditorWidget* _editor;
     Callbacks _callbacks;
 
     EditorAction _currentAction = EditorAction::NONE;

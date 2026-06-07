@@ -66,9 +66,9 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
         _wallBlockerOverlays,
         _undoStack,
         [this]() { refreshObjects(); });
-    _inputHandler = std::make_unique<InputHandler>(this);
+    _inputHandler = std::make_unique<InputHandler>();
     _dragDropManager = std::make_unique<DragDropManager>(this);
-    _tilePlacementManager = std::make_unique<TilePlacementManager>(this);
+    _tilePlacementManager = std::make_unique<TilePlacementManager>(*this);
     _exitGridPlacementManager = std::make_unique<ExitGridPlacementManager>(this);
     _viewportController = std::make_unique<ViewportController>(&_hexgrid);
     setupInputCallbacks();

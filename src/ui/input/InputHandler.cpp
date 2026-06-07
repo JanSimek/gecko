@@ -1,15 +1,10 @@
 #include "InputHandler.h"
-#include "../core/EditorWidget.h"
 #include "../../util/Constants.h"
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/Mouse.hpp>
 #include <spdlog/spdlog.h>
 
 namespace geck {
-
-InputHandler::InputHandler(EditorWidget* editor)
-    : _editor(editor) {
-}
 
 void InputHandler::handleEvent(const sf::Event& event,
     sf::RenderTarget& target,
