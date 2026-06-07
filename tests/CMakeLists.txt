@@ -28,6 +28,7 @@ add_executable(qt_tests
     qt/qt_test_main.cpp
     qt/test_data_path_resolution.cpp
     qt/test_ui_regressions.cpp
+    qt/test_dat_archive.cpp
 )
 
 target_link_libraries(general_tests PRIVATE
@@ -52,6 +53,10 @@ target_link_libraries(qt_tests PRIVATE
     Catch2::Catch2
     Qt6::Test
     gecko::app
+)
+
+target_compile_definitions(qt_tests PRIVATE
+    GECK_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
 )
 
 target_include_directories(qt_tests PRIVATE

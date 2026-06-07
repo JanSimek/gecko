@@ -11,13 +11,16 @@
 #endif
 #endif
 
-#include <cstring>
+#include <algorithm>
+#include <filesystem>
 #include <memory>
 #include <mutex>
-#include <filesystem>
+#include <string>
+#include <unordered_map>
 
 #include <vfspp/IFile.h>
 #include <vfspp/IFileSystem.h>
+#include <vfspp/ThreadingPolicy.hpp>
 
 #include "Dat2File.hpp"
 #include "format/dat/Dat.h"
@@ -29,233 +32,196 @@ namespace fs = std::filesystem;
 using GeckDat2FileSystemPtr = std::shared_ptr<class GeckDat2FileSystem>;
 using GeckDat2FileSystemWeakPtr = std::weak_ptr<class GeckDat2FileSystem>;
 
+// Mounts a Fallout 2 DAT2 archive into the vfspp virtual filesystem. Entries are
+// keyed by their virtual path (alias + forward-slashed archive path) and served
+// read-only through Dat2File.
 class GeckDat2FileSystem final : public vfspp::IFileSystem {
 public:
-    GeckDat2FileSystem(const std::string& datPath)
-        : m_DatPath(datPath)
+    GeckDat2FileSystem(const std::string& aliasPath, const std::string& datPath)
+        : m_AliasPath(aliasPath)
+        , m_DatPath(datPath)
         , m_datReader(std::make_shared<geck::DatReader>())
-        , m_IsInitialized(false)
     {
     }
-    
-    const std::string& getDatPath() const
-    {
-        return m_DatPath;
-    }
-    
+
     ~GeckDat2FileSystem()
     {
         Shutdown();
     }
-    
-    virtual void Initialize() override
+
+    const std::string& getDatPath() const
     {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            InitializeST();
-        } else {
-            InitializeST();
-        }
+        return m_DatPath;
     }
 
-    virtual void Shutdown() override
+    [[nodiscard]] bool Initialize() override
     {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            ShutdownST();
-        } else {
-            ShutdownST();
-        }
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return InitializeImpl();
     }
-    
-    virtual bool IsInitialized() const override
+
+    void Shutdown() override
     {
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        ShutdownImpl();
+    }
+
+    [[nodiscard]] bool IsInitialized() const override
+    {
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
         return m_IsInitialized;
     }
-    
-    virtual const std::string& BasePath() const override
+
+    [[nodiscard]] const std::string& BasePath() const override
     {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return BasePathST();
-        } else {
-            return BasePathST();
-        }
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return m_BasePath;
     }
-    
-    virtual const vfspp::IFileSystem::TFileList& FileList() const override
+
+    [[nodiscard]] const std::string& VirtualPath() const override
     {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return FileListST();
-        } else {
-            return FileListST();
-        }
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return m_AliasPath;
     }
-    
-    virtual bool IsReadOnly() const override
+
+    [[nodiscard]] vfspp::IFileSystem::FilesList GetFilesList() const override
+    {
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return GetFilesListImpl();
+    }
+
+    [[nodiscard]] bool IsReadOnly() const override
     {
         return true;
     }
-    
-    /*
-     * Open existing file for reading, if not exists returns null for readonly filesystem. 
-     * If file not exists and filesystem is writable then create new file
-     */
-    virtual vfspp::IFilePtr OpenFile(const vfspp::FileInfo& filePath, vfspp::IFile::FileMode mode) override
+
+    vfspp::IFilePtr OpenFile(const std::string& virtualPath, vfspp::IFile::FileMode mode) override
     {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return OpenFileST(filePath, mode);
-        } else {
-            return OpenFileST(filePath, mode);
-        }
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return OpenFileImpl(virtualPath, mode);
     }
-    
-    virtual bool CreateFile([[maybe_unused]] const vfspp::FileInfo& filePath) override
+
+    vfspp::IFilePtr CreateFile(const std::string& /*virtualPath*/) override
     {
-        return false;
+        return nullptr;
     }
-    
-    virtual bool RemoveFile([[maybe_unused]] const vfspp::FileInfo& filePath) override
-    {
-        return false;
-    }
-    
-    virtual bool CopyFile([[maybe_unused]] const vfspp::FileInfo& src, [[maybe_unused]] const vfspp::FileInfo& dest) override
-    {
-        return false;
-    }
-    
-    virtual bool RenameFile([[maybe_unused]] const vfspp::FileInfo& srcPath, [[maybe_unused]] const vfspp::FileInfo& dstPath) override
+
+    bool RemoveFile(const std::string& /*virtualPath*/) override
     {
         return false;
     }
 
-    virtual void CloseFile(vfspp::IFilePtr file) override
+    bool CopyFile(const std::string& /*srcVirtualPath*/, const std::string& /*dstVirtualPath*/, bool /*overwrite*/ = false) override
+    {
+        return false;
+    }
+
+    bool RenameFile(const std::string& /*srcVirtualPath*/, const std::string& /*dstVirtualPath*/) override
+    {
+        return false;
+    }
+
+    void CloseFile(vfspp::IFilePtr file) override
     {
         if (file) {
             file->Close();
         }
     }
 
-    virtual bool IsFileExists(const vfspp::FileInfo& filePath) const override
+    [[nodiscard]] bool IsFileExists(const std::string& virtualPath) const override
     {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return IsFileExistsST(filePath);
-        } else {
-            return IsFileExistsST(filePath);
-        }
-    }
-
-    virtual bool IsFile(const vfspp::FileInfo& filePath) const override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return IFileSystem::IsFile(filePath, m_FileList);
-        } else {
-            return IFileSystem::IsFile(filePath, m_FileList);
-        }
-    }
-    
-    virtual bool IsDir(const vfspp::FileInfo& dirPath) const override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return IFileSystem::IsDir(dirPath, m_FileList);
-        } else {
-            return IFileSystem::IsDir(dirPath, m_FileList);
-        }
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return m_Files.find(virtualPath) != m_Files.end();
     }
 
 private:
-    inline void InitializeST()
+    struct FileEntry {
+        vfspp::FileInfo Info;
+        std::shared_ptr<geck::DatEntry> Entry;
+
+        FileEntry(const vfspp::FileInfo& info, std::shared_ptr<geck::DatEntry> entry)
+            : Info(info)
+            , Entry(std::move(entry))
+        {
+        }
+    };
+
+    bool InitializeImpl()
     {
         if (m_IsInitialized) {
-            return;
+            return true;
         }
 
         if (!fs::is_regular_file(m_DatPath)) {
-            return;
+            return false;
         }
 
         m_DatArchive = m_datReader->openFile(m_DatPath);
+        if (!m_DatArchive) {
+            return false;
+        }
 
-        BuildFilelist(m_DatArchive, m_FileList);
+        BuildFilelist();
         m_IsInitialized = true;
+        return true;
     }
 
-    inline void ShutdownST()
+    void ShutdownImpl()
     {
         m_DatPath = "";
-        for (auto& file : m_FileList) {
-            file.second->Close();
-        }
-        m_FileList.clear();
-
+        m_Files.clear();
+        m_DatArchive.reset();
         m_IsInitialized = false;
     }
-    
-    inline bool IsInitializedST() const
+
+    void BuildFilelist()
     {
-        return m_IsInitialized;
+        for (const auto& datEntry : m_DatArchive->getEntries()) {
+            // DAT2 stores backslash paths; normalise to forward slashes so the
+            // computed VirtualPath() matches the VFS lookup keys.
+            std::string name = datEntry.first;
+            std::replace(name.begin(), name.end(), '\\', '/');
+
+            vfspp::FileInfo fileInfo(m_AliasPath, m_BasePath, name);
+            m_Files.emplace(fileInfo.VirtualPath(), FileEntry(fileInfo, datEntry.second));
+        }
     }
 
-    inline const std::string& BasePathST() const
+    vfspp::IFileSystem::FilesList GetFilesListImpl() const
     {
-        static std::string rootPath = "/";
-        return rootPath;
+        vfspp::IFileSystem::FilesList fileList;
+        fileList.reserve(m_Files.size());
+        for (const auto& [path, entry] : m_Files) {
+            fileList.push_back(entry.Info);
+        }
+        return fileList;
     }
 
-    inline const vfspp::IFileSystem::TFileList& FileListST() const
+    vfspp::IFilePtr OpenFileImpl(const std::string& virtualPath, vfspp::IFile::FileMode mode)
     {
-        return m_FileList;
-    }
-    
-    inline vfspp::IFilePtr OpenFileST(const vfspp::FileInfo& filePath, vfspp::IFile::FileMode mode)
-    {
-        bool requestWrite = ((mode & vfspp::IFile::FileMode::Write) == vfspp::IFile::FileMode::Write);
-        requestWrite |= ((mode & vfspp::IFile::FileMode::Append) == vfspp::IFile::FileMode::Append);
-        requestWrite |= ((mode & vfspp::IFile::FileMode::Truncate) == vfspp::IFile::FileMode::Truncate);
-
-        // Note 'IsReadOnly()' is safe to call on any thread
-        if (IsReadOnly() && requestWrite) {
+        const auto it = m_Files.find(virtualPath);
+        if (it == m_Files.end()) {
             return nullptr;
         }
 
-        vfspp::IFilePtr file = FindFile(filePath, m_FileList);
-        if (file) {
-            file->Open(mode);
+        auto file = std::make_shared<Dat2File>(it->second.Info, it->second.Entry, m_datReader);
+        if (!file->Open(mode)) {
+            return nullptr;
         }
-        
         return file;
     }
 
-    inline bool IsFileExistsST(const vfspp::FileInfo& filePath) const
-    {
-        return FindFile(filePath, m_FileList) != nullptr;
-    }
-
-    void BuildFilelist(const std::shared_ptr<geck::Dat>& datArchive, vfspp::IFileSystem::TFileList& outFileList)
-    {
-        for (const auto& datEntry : datArchive->getEntries()) {
-            // TODO: add directories
-            // DAT entries use forward slashes (e.g. "art/tiles/tile.frm"); FileInfo's
-            // Configure() uses generic_string() to keep slashes consistent in the VFS layer.
-            vfspp::FileInfo fileInfo(BasePathST(), datEntry.first, false);
-            vfspp::IFilePtr file(new Dat2File(fileInfo, datEntry.second, m_datReader));
-            outFileList.insert(std::pair(file->GetFileInfo().AbsolutePath(), file));
-        }
-    }
-    
 private:
+    std::string m_AliasPath;
+    std::string m_BasePath; // empty: DAT entries are addressed purely by alias
     std::string m_DatPath;
     std::shared_ptr<geck::Dat> m_DatArchive;
     std::shared_ptr<geck::DatReader> m_datReader;
-    bool m_IsInitialized;
-    vfspp::IFileSystem::TFileList m_FileList;
+    bool m_IsInitialized = false;
+    std::unordered_map<std::string, FileEntry> m_Files;
     mutable std::mutex m_Mutex;
 };
-} // geck
+
+} // namespace geck
+
 #endif // GECK_MAPPER_DAT2FILESYSTEM_HPP

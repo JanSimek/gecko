@@ -1,17 +1,25 @@
 #ifndef GECK_MAPPER_DAT2FILE_HPP
 #define GECK_MAPPER_DAT2FILE_HPP
 
+#include <algorithm>
 #include <cstring>
+#include <span>
+#include <vector>
+
 #include <zlib.h>
 
 #include <vfspp/IFile.h>
+#include <vfspp/ThreadingPolicy.hpp>
 
 #include "format/dat/Dat.h"
 #include "reader/dat/DatReader.h"
 
 namespace geck {
-class Dat2File final : public vfspp::IFile {
 
+// A single entry of a Fallout 2 DAT2 archive exposed through the vfspp IFile
+// interface. The (optionally zlib-compressed) entry is inflated into memory on
+// Open() and served from there. The archive is read-only.
+class Dat2File final : public vfspp::IFile {
 public:
     Dat2File(const vfspp::FileInfo& fileInfo,
         const std::shared_ptr<geck::DatEntry>& datEntry,
@@ -19,335 +27,164 @@ public:
         : m_FileInfo(fileInfo)
         , m_datEntry(datEntry)
         , m_datReader(datReader)
-        , m_IsOpened(false)
-        , m_SeekPos(0)
     {
     }
 
-    ~Dat2File()
+    ~Dat2File() override
     {
         Close();
     }
 
-    virtual const vfspp::FileInfo& GetFileInfo() const override
+    [[nodiscard]] const vfspp::FileInfo& GetFileInfo() const override
     {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return GetFileInfoST();
-        } else {
-            return GetFileInfoST();
-        }
-    }
-
-    virtual uint64_t Size() override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return SizeST();
-        } else {
-            return SizeST();
-        }
-    }
-
-    virtual bool IsReadOnly() const override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return IsReadOnlyST();
-        } else {
-            return IsReadOnlyST();
-        }
-    }
-
-    virtual void Open(FileMode mode) override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            OpenST(mode);
-        } else {
-            OpenST(mode);
-        }
-    }
-
-    virtual void Close() override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            CloseST();
-        } else {
-            CloseST();
-        }
-    }
-
-    virtual bool IsOpened() const override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return IsOpenedST();
-        } else {
-            return IsOpenedST();
-        }
-    }
-
-    virtual uint64_t Seek(uint64_t offset, Origin origin) override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return SeekST(offset, origin);
-        } else {
-            return SeekST(offset, origin);
-        }
-    }
-    virtual uint64_t Tell() override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return TellST();
-        } else {
-            return TellST();
-        }
-    }
-
-    virtual uint64_t Read(uint8_t* buffer, uint64_t size) override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return ReadST(buffer, size);
-        } else {
-            return ReadST(buffer, size);
-        }
-    }
-    virtual uint64_t Write(const uint8_t* buffer, uint64_t size) override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return WriteST(buffer, size);
-        } else {
-            return WriteST(buffer, size);
-        }
-    }
-
-    virtual uint64_t Read(std::vector<uint8_t>& buffer, uint64_t size) override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return ReadST(buffer, size);
-        } else {
-            return ReadST(buffer, size);
-        }
-    }
-
-    virtual uint64_t Write(const std::vector<uint8_t>& buffer) override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return WriteST(buffer);
-        } else {
-            return WriteST(buffer);
-        }
-    }
-
-    virtual uint64_t Read(std::ostream& stream, uint64_t size, uint64_t bufferSize = 1024) override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return ReadST(stream, size, bufferSize);
-        } else {
-            return ReadST(stream, size, bufferSize);
-        }
-    }
-
-    virtual uint64_t Write(std::istream& stream, uint64_t size, uint64_t bufferSize = 1024) override
-    {
-        if constexpr (VFSPP_MT_SUPPORT_ENABLED) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            return WriteST(stream, size, bufferSize);
-        } else {
-            return WriteST(stream, size, bufferSize);
-        }
-    }
-
-private:
-    inline const vfspp::FileInfo& GetFileInfoST() const
-    {
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
         return m_FileInfo;
     }
 
-    inline uint64_t SizeST()
+    [[nodiscard]] uint64_t Size() const override
     {
-        if (IsOpenedST()) {
-            return m_datEntry->getDecompressedSize();
-        }
-
-        return 0;
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return m_datEntry->getDecompressedSize();
     }
 
-    inline bool IsReadOnlyST() const
+    [[nodiscard]] bool IsReadOnly() const override
     {
         return true;
     }
 
-    inline void OpenST(FileMode mode)
+    [[nodiscard]] bool Open(FileMode mode) override
     {
-        bool requestWrite = ((mode & IFile::FileMode::Write) == IFile::FileMode::Write);
-        requestWrite |= ((mode & IFile::FileMode::Append) == IFile::FileMode::Append);
-        requestWrite |= ((mode & IFile::FileMode::Truncate) == IFile::FileMode::Truncate);
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return OpenImpl(mode);
+    }
 
-        if (IsReadOnlyST() && requestWrite) {
-            return;
+    void Close() override
+    {
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        m_IsOpened = false;
+        m_SeekPos = 0;
+        m_Data.clear();
+    }
+
+    [[nodiscard]] bool IsOpened() const override
+    {
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return m_IsOpened;
+    }
+
+    uint64_t Seek(uint64_t offset, Origin origin) override
+    {
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return SeekImpl(offset, origin);
+    }
+
+    [[nodiscard]] uint64_t Tell() const override
+    {
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return m_SeekPos;
+    }
+
+    uint64_t Read(std::span<uint8_t> buffer) override
+    {
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        return ReadImpl(buffer);
+    }
+
+    uint64_t Read(std::vector<uint8_t>& buffer, uint64_t size) override
+    {
+        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
+        buffer.resize(size);
+        return ReadImpl(std::span<uint8_t>(buffer.data(), buffer.size()));
+    }
+
+    // Read-only filesystem: writes are no-ops.
+    uint64_t Write(std::span<const uint8_t> /*buffer*/) override
+    {
+        return 0;
+    }
+
+    uint64_t Write(const std::vector<uint8_t>& /*buffer*/) override
+    {
+        return 0;
+    }
+
+private:
+    bool OpenImpl(FileMode mode)
+    {
+        if (!IFile::IsModeValid(mode)) {
+            return false;
+        }
+        if (IFile::ModeHasFlag(mode, FileMode::Write)) {
+            return false; // read-only archive
         }
 
-        if (IsOpenedST()) {
-            SeekST(0, IFile::Origin::Begin);
-            return;
+        if (m_IsOpened) {
+            m_SeekPos = 0;
+            return true;
         }
 
         m_SeekPos = 0;
-
         m_Data.resize(m_datEntry->getDecompressedSize());
 
         m_datReader->setPosition(m_datEntry->getOffset());
         if (m_datEntry->getCompressed()) {
-            auto* packed_data = new uint8_t[m_datEntry->getPackedSize()];
-            m_datReader->read_bytes(packed_data, m_datEntry->getPackedSize());
+            std::vector<uint8_t> packed(m_datEntry->getPackedSize());
+            m_datReader->read_bytes(packed.data(), packed.size());
 
-            // zlib inflate decompression of the DAT entry
-            z_stream zStream;
-            zStream.total_in = m_datEntry->getPackedSize();
-            zStream.avail_in = m_datEntry->getPackedSize();
-            zStream.next_in = packed_data;
-            zStream.total_out = zStream.avail_out = m_datEntry->getDecompressedSize();
-            zStream.next_out = &m_Data[0];
+            // zlib inflate the DAT entry into m_Data
+            z_stream zStream {};
+            zStream.next_in = packed.data();
+            zStream.avail_in = static_cast<uInt>(packed.size());
+            zStream.next_out = m_Data.data();
+            zStream.avail_out = static_cast<uInt>(m_Data.size());
             zStream.zalloc = Z_NULL;
             zStream.zfree = Z_NULL;
             zStream.opaque = Z_NULL;
             inflateInit(&zStream);
             inflate(&zStream, Z_FINISH);
             inflateEnd(&zStream);
-
-            delete[] packed_data;
         } else {
-            m_datReader->read_bytes(&m_Data[0], m_datEntry->getDecompressedSize());
+            m_datReader->read_bytes(m_Data.data(), m_Data.size());
         }
 
         m_IsOpened = true;
+        return true;
     }
 
-    inline void CloseST()
+    uint64_t SeekImpl(uint64_t offset, Origin origin)
     {
-        m_IsOpened = false;
-        m_SeekPos = 0;
-
-        m_Data.clear();
-    }
-
-    inline bool IsOpenedST() const
-    {
-        return m_IsOpened;
-    }
-
-    inline uint64_t SeekST(uint64_t offset, Origin origin)
-    {
-        if (!IsOpenedST()) {
+        if (!m_IsOpened) {
             return 0;
         }
 
+        const uint64_t size = m_Data.size();
         if (origin == IFile::Origin::Begin) {
             m_SeekPos = offset;
         } else if (origin == IFile::Origin::End) {
-            m_SeekPos = SizeST() - offset;
+            m_SeekPos = (offset <= size) ? size - offset : 0;
         } else if (origin == IFile::Origin::Set) {
             m_SeekPos += offset;
         }
-        m_SeekPos = std::min(m_SeekPos, SizeST() - 1);
+        m_SeekPos = std::min(m_SeekPos, size);
 
-        return TellST();
-    }
-
-    inline uint64_t TellST()
-    {
         return m_SeekPos;
     }
 
-    inline uint64_t ReadST(uint8_t* buffer, uint64_t size)
+    uint64_t ReadImpl(std::span<uint8_t> buffer)
     {
-        if (!IsOpenedST()) {
+        if (!m_IsOpened || m_SeekPos >= m_Data.size()) {
             return 0;
         }
 
-        memcpy(buffer, &m_Data[0], static_cast<size_t>(size));
-
-        uint64_t leftSize = SizeST() - TellST();
-        uint64_t maxSize = std::min(size, leftSize);
-        if (maxSize > 0) {
-            memcpy(buffer, &m_Data[0], static_cast<size_t>(maxSize));
-            return maxSize;
+        const uint64_t bytesLeft = m_Data.size() - m_SeekPos;
+        const uint64_t bytesToRead = std::min<uint64_t>(bytesLeft, buffer.size());
+        if (bytesToRead == 0) {
+            return 0;
         }
 
-        return 0;
-    }
-
-    inline uint64_t WriteST([[maybe_unused]] const uint8_t* buffer, [[maybe_unused]] uint64_t size)
-    {
-        return 0;
-    }
-
-    inline uint64_t ReadST(std::vector<uint8_t>& buffer, uint64_t size)
-    {
-        buffer.resize(size);
-        return ReadST(buffer.data(), size);
-    }
-
-    inline uint64_t WriteST(const std::vector<uint8_t>& buffer)
-    {
-        return WriteST(buffer.data(), buffer.size());
-    }
-
-    inline uint64_t ReadST(std::ostream& stream, uint64_t size, uint64_t bufferSize = 1024)
-    {
-        // read chunk of data from file and write it to stream until all data is read
-        uint64_t totalSize = size;
-        std::vector<uint8_t> buffer(bufferSize);
-        while (size > 0) {
-            uint64_t bytesRead = ReadST(buffer.data(), std::min(size, static_cast<uint64_t>(buffer.size())));
-            if (bytesRead == 0) {
-                break;
-            }
-
-            if (size < bytesRead) {
-                bytesRead = size;
-            }
-
-            stream.write(reinterpret_cast<char*>(buffer.data()), bytesRead);
-
-            size -= bytesRead;
-        }
-
-        return totalSize - size;
-    }
-
-    inline uint64_t WriteST(std::istream& stream, uint64_t size, uint64_t bufferSize = 1024)
-    {
-        // write chunk of data from stream to file untill all data is written
-        uint64_t totalSize = size;
-        std::vector<uint8_t> buffer(bufferSize);
-        while (size > 0) {
-            stream.read(reinterpret_cast<char*>(buffer.data()), std::min(size, static_cast<uint64_t>(buffer.size())));
-            uint64_t bytesRead = stream.gcount();
-            if (bytesRead == 0) {
-                break;
-            }
-
-            if (size < bytesRead) {
-                bytesRead = size;
-            }
-
-            WriteST(buffer.data(), bytesRead);
-
-            size -= bytesRead;
-        }
-
-        return totalSize - size;
+        std::memcpy(buffer.data(), m_Data.data() + m_SeekPos, static_cast<size_t>(bytesToRead));
+        m_SeekPos += bytesToRead;
+        return bytesToRead;
     }
 
 private:
@@ -355,9 +192,11 @@ private:
     std::vector<uint8_t> m_Data;
     std::shared_ptr<geck::DatEntry> m_datEntry;
     std::shared_ptr<geck::DatReader> m_datReader;
-    bool m_IsOpened;
-    uint64_t m_SeekPos;
+    bool m_IsOpened = false;
+    uint64_t m_SeekPos = 0;
     mutable std::mutex m_Mutex;
 };
-} // geck
+
+} // namespace geck
+
 #endif // GECK_MAPPER_DAT2FILE_HPP

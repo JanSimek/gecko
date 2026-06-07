@@ -48,7 +48,7 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
     vfspp::IFileSystemPtr fileSystem;
 
     if (std::filesystem::is_directory(mountRoot, ec)) {
-        fileSystem = std::make_shared<vfspp::NativeFileSystem>(mountRoot.string());
+        fileSystem = std::make_shared<vfspp::NativeFileSystem>("/", mountRoot.string());
 
         const std::filesystem::path masterDat = mountRoot / ResourcePaths::Dat::MASTER;
         if (std::filesystem::exists(masterDat, ec) && std::filesystem::is_regular_file(masterDat, ec)) {
@@ -60,14 +60,13 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
             addDataPath(critterDat);
         }
     } else if (mountRoot.extension() == ".dat") {
-        fileSystem = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem(mountRoot.string()));
+        fileSystem = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem("/", mountRoot.string()));
     } else {
         spdlog::error("Unsupported data location: {}", mountRoot.string());
         return;
     }
 
-    fileSystem->Initialize();
-    if (!fileSystem->IsInitialized()) {
+    if (!fileSystem->Initialize() || !fileSystem->IsInitialized()) {
         spdlog::error("Failed to initialize data path: {}", mountRoot.string());
         return;
     }
@@ -82,7 +81,7 @@ std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::file
     }
 
     const std::filesystem::path vfsPath = normalizeVfsPath(path);
-    vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::createNormalizedFileInfo(vfsPath), vfspp::IFile::FileMode::Read);
+    vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::toVfsPath(vfsPath), vfspp::IFile::FileMode::Read);
     if (!file || !file->IsOpened()) {
         return std::nullopt;
     }
@@ -102,7 +101,7 @@ bool DataFileSystem::exists(const std::filesystem::path& path) const {
     }
 
     const std::filesystem::path vfsPath = normalizeVfsPath(path);
-    vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::createNormalizedFileInfo(vfsPath), vfspp::IFile::FileMode::Read);
+    vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::toVfsPath(vfsPath), vfspp::IFile::FileMode::Read);
     return file != nullptr;
 }
 
@@ -138,31 +137,22 @@ std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesyste
 
     const std::string fullVfsPath = normalizeVfsPath(path).generic_string();
 
-    std::string relativePath = fullVfsPath;
-    if (!relativePath.empty() && relativePath.front() == '/') {
-        relativePath.erase(relativePath.begin());
+    // Every mounted filesystem is registered under the "/" alias and keys its
+    // entries by virtual path (alias + forward-slashed name), so the full VFS
+    // path is the lookup key for both DAT and native filesystems.
+    const auto fileSystemsOpt = _vfs->GetFilesystems("/");
+    if (!fileSystemsOpt) {
+        return std::nullopt;
     }
 
-    const auto& fileSystems = _vfs->GetFilesystems("/");
+    const auto& fileSystems = fileSystemsOpt->get();
     for (auto it = fileSystems.rbegin(); it != fileSystems.rend(); ++it) {
         const auto& fileSystem = *it;
         if (!fileSystem || !fileSystem->IsInitialized()) {
             continue;
         }
 
-        // Try with BasePath + relative path (works for DAT and relative VFS paths)
-        const vfspp::FileInfo fileInfo(fileSystem->BasePath(), relativePath, false);
-        bool found = fileSystem->IsFileExists(fileInfo);
-
-        // NativeFileSystem stores absolute paths as keys; ListAllFiles returns
-        // these absolute paths directly. When that happens, BasePath + path
-        // produces a doubled path. Fall back to using the full path as-is.
-        if (!found) {
-            const vfspp::FileInfo absoluteFileInfo(fullVfsPath);
-            found = fileSystem->IsFileExists(absoluteFileInfo);
-        }
-
-        if (!found) {
+        if (!fileSystem->IsFileExists(fullVfsPath)) {
             continue;
         }
 
