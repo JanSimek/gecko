@@ -31,6 +31,16 @@ namespace {
 
 } // namespace
 
+std::optional<Frm::FRM_TYPE> frmTypeForArtPath(std::string_view path) {
+    // frmTypeDescriptions is indexed in FRM_TYPE enum order, so the index is the type.
+    for (size_t i = 0; i < frmTypeDescriptions.size(); ++i) {
+        if (path.find(frmTypeDescriptions[i].prefixPath) != std::string_view::npos) {
+            return static_cast<Frm::FRM_TYPE>(i);
+        }
+    }
+    return std::nullopt;
+}
+
 FrmResolver::FrmResolver(ResourceRepository& repository)
     : _repository(repository) {
 }

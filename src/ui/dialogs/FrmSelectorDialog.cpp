@@ -10,38 +10,12 @@
 #include <functional>
 
 #include "../../resource/GameResources.h"
+#include "../../resource/FrmResolver.h"
 #include "../../util/CritterFrmResolver.h"
 #include "../../format/frm/Frm.h"
 #include "../../format/lst/Lst.h"
 
 namespace geck {
-
-namespace {
-
-    std::optional<Frm::FRM_TYPE> frmTypeForPath(const std::string& frmPath) {
-        if (frmPath.find("art/critters/") != std::string::npos) {
-            return Frm::FRM_TYPE::CRITTER;
-        }
-        if (frmPath.find("art/items/") != std::string::npos) {
-            return Frm::FRM_TYPE::ITEM;
-        }
-        if (frmPath.find("art/scenery/") != std::string::npos) {
-            return Frm::FRM_TYPE::SCENERY;
-        }
-        if (frmPath.find("art/walls/") != std::string::npos) {
-            return Frm::FRM_TYPE::WALL;
-        }
-        if (frmPath.find("art/tiles/") != std::string::npos) {
-            return Frm::FRM_TYPE::TILE;
-        }
-        if (frmPath.find("art/misc/") != std::string::npos) {
-            return Frm::FRM_TYPE::MISC;
-        }
-
-        return std::nullopt;
-    }
-
-}
 
 FrmSelectorDialog::FrmSelectorDialog(resource::GameResources& resources, QWidget* parent)
     : QDialog(parent)
@@ -191,17 +165,15 @@ void FrmSelectorDialog::populateFrmList() {
         for (const auto& frmPath : frmFiles) {
             const std::string frmPathString = frmPath.generic_string();
 
-            if (_objectTypeFilter.has_value() && frmTypeForPath(frmPathString) != _objectTypeFilter) {
+            const auto frmType = resource::frmTypeForArtPath(frmPathString);
+
+            if (_objectTypeFilter.has_value() && frmType != _objectTypeFilter) {
                 continue;
             }
 
-            if (!_objectTypeFilter.has_value()) {
-                const auto frmType = frmTypeForPath(frmPathString);
-                if (!frmType.has_value()
-                    && frmPathString.find("art/intrface/") == std::string::npos
-                    && frmPathString.find("art/inven/") == std::string::npos) {
-                    continue;
-                }
+            // Without a filter, keep anything under a known art/ directory.
+            if (!_objectTypeFilter.has_value() && !frmType.has_value()) {
+                continue;
             }
 
             _frmFiles.emplace_back(0, frmPathString); // PID resolved dynamically when needed
@@ -217,6 +189,21 @@ void FrmSelectorDialog::populateFrmList() {
         QTreeWidgetItem* tilesRoot = nullptr;
         QTreeWidgetItem* miscRoot = nullptr;
 
+        // FRM type -> its lazily-created root node and display label. Types without
+        // an entry here (interface, inventory) get no root and stay unparented.
+        const struct {
+            Frm::FRM_TYPE type;
+            QTreeWidgetItem** root;
+            const char* label;
+        } categories[] = {
+            { Frm::FRM_TYPE::CRITTER, &crittersRoot, "Critters" },
+            { Frm::FRM_TYPE::ITEM, &itemsRoot, "Items" },
+            { Frm::FRM_TYPE::SCENERY, &sceneryRoot, "Scenery" },
+            { Frm::FRM_TYPE::WALL, &wallsRoot, "Walls" },
+            { Frm::FRM_TYPE::TILE, &tilesRoot, "Tiles" },
+            { Frm::FRM_TYPE::MISC, &miscRoot, "Misc" },
+        };
+
         for (const auto& group : groupedFiles) {
             const std::string& groupName = group.first;
             const auto& files = group.second;
@@ -224,49 +211,18 @@ void FrmSelectorDialog::populateFrmList() {
             // Determine which root category this group belongs to
             QTreeWidgetItem* parentItem = nullptr;
             if (!files.empty()) {
-                const std::string& samplePath = files.front();
-                if (samplePath.find("art/critters/") != std::string::npos) {
-                    if (!crittersRoot) {
-                        crittersRoot = new QTreeWidgetItem(_frmTreeWidget);
-                        crittersRoot->setText(0, "Critters");
-                        crittersRoot->setExpanded(true);
+                const auto type = resource::frmTypeForArtPath(files.front());
+                for (const auto& category : categories) {
+                    if (type != category.type) {
+                        continue;
                     }
-                    parentItem = crittersRoot;
-                } else if (samplePath.find("art/items/") != std::string::npos) {
-                    if (!itemsRoot) {
-                        itemsRoot = new QTreeWidgetItem(_frmTreeWidget);
-                        itemsRoot->setText(0, "Items");
-                        itemsRoot->setExpanded(true);
+                    if (!*category.root) {
+                        *category.root = new QTreeWidgetItem(_frmTreeWidget);
+                        (*category.root)->setText(0, category.label);
+                        (*category.root)->setExpanded(true);
                     }
-                    parentItem = itemsRoot;
-                } else if (samplePath.find("art/scenery/") != std::string::npos) {
-                    if (!sceneryRoot) {
-                        sceneryRoot = new QTreeWidgetItem(_frmTreeWidget);
-                        sceneryRoot->setText(0, "Scenery");
-                        sceneryRoot->setExpanded(true);
-                    }
-                    parentItem = sceneryRoot;
-                } else if (samplePath.find("art/walls/") != std::string::npos) {
-                    if (!wallsRoot) {
-                        wallsRoot = new QTreeWidgetItem(_frmTreeWidget);
-                        wallsRoot->setText(0, "Walls");
-                        wallsRoot->setExpanded(true);
-                    }
-                    parentItem = wallsRoot;
-                } else if (samplePath.find("art/tiles/") != std::string::npos) {
-                    if (!tilesRoot) {
-                        tilesRoot = new QTreeWidgetItem(_frmTreeWidget);
-                        tilesRoot->setText(0, "Tiles");
-                        tilesRoot->setExpanded(true);
-                    }
-                    parentItem = tilesRoot;
-                } else if (samplePath.find("art/misc/") != std::string::npos) {
-                    if (!miscRoot) {
-                        miscRoot = new QTreeWidgetItem(_frmTreeWidget);
-                        miscRoot->setText(0, "Misc");
-                        miscRoot->setExpanded(true);
-                    }
-                    parentItem = miscRoot;
+                    parentItem = *category.root;
+                    break;
                 }
             }
 
