@@ -274,3 +274,88 @@ TEST_CASE("PRO scenery round-trip preserves the common header and subtype data",
     std::error_code ec;
     std::filesystem::remove(tempPath, ec);
 }
+
+TEST_CASE("PRO weapon round-trip preserves the optional weaponFlags field", "[pro][roundtrip][weapon]") {
+    const auto tempPath = makeTempProPath("test_pro_roundtrip_weapon");
+
+    geck::Pro weapon{ tempPath };
+    weapon.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::ITEM) << 24) | 0x20u);
+    weapon.header.flags = 0x00000008;
+    weapon.commonItemData.flagsExt = 0x11112222u;
+    weapon.commonItemData.SID = 0x33u;
+    weapon.commonItemData.weight = 5;
+    weapon.commonItemData.basePrice = 250;
+    weapon.commonItemData.soundId = 7;
+    weapon.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::ITEM_TYPE::WEAPON));
+    weapon.weaponData.damageMin = 8;
+    weapon.weaponData.damageMax = 16;
+    weapon.weaponData.ammoPID = 0x00000029;
+    weapon.weaponData.ammoCapacity = 30;
+    weapon.weaponData.soundId = 4;
+    weapon.weaponData.weaponFlags = 0x00000001; // energy-weapon bit; optional trailing field
+
+    const geck::Pro got = roundTrip(weapon, tempPath);
+
+    REQUIRE(got.itemType() == geck::Pro::ITEM_TYPE::WEAPON);
+    REQUIRE(got.commonItemData.flagsExt == 0x11112222u);
+    REQUIRE(got.commonItemData.SID == 0x33u);
+    REQUIRE(got.commonItemData.weight == 5);
+    REQUIRE(got.weaponData.damageMin == 8);
+    REQUIRE(got.weaponData.damageMax == 16);
+    REQUIRE(got.weaponData.ammoPID == 0x00000029);
+    REQUIRE(got.weaponData.ammoCapacity == 30);
+    REQUIRE(got.weaponData.weaponFlags == 0x00000001u);
+
+    std::error_code ec;
+    std::filesystem::remove(tempPath, ec);
+}
+
+TEST_CASE("PRO container round-trip preserves item subtype data", "[pro][roundtrip][item]") {
+    const auto tempPath = makeTempProPath("test_pro_roundtrip_container");
+
+    geck::Pro container{ tempPath };
+    container.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::ITEM) << 24) | 0x30u);
+    container.commonItemData.flagsExt = 0x44445555u;
+    container.commonItemData.SID = 0x66u;
+    container.commonItemData.materialId = 2;
+    container.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::ITEM_TYPE::CONTAINER));
+    container.containerData.maxSize = 100;
+    container.containerData.flags = 0x0Au;
+
+    const geck::Pro got = roundTrip(container, tempPath);
+
+    REQUIRE(got.itemType() == geck::Pro::ITEM_TYPE::CONTAINER);
+    REQUIRE(got.commonItemData.flagsExt == 0x44445555u);
+    REQUIRE(got.commonItemData.SID == 0x66u);
+    REQUIRE(got.commonItemData.materialId == 2);
+    REQUIRE(got.containerData.maxSize == 100);
+    REQUIRE(got.containerData.flags == 0x0Au);
+
+    std::error_code ec;
+    std::filesystem::remove(tempPath, ec);
+}
+
+TEST_CASE("PRO tile round-trip omits the common header prefix", "[pro][roundtrip][tile]") {
+    const auto tempPath = makeTempProPath("test_pro_roundtrip_tile");
+
+    // TILE (and MISC) are the types WITHOUT the flagsExt/SID prefix.
+    geck::Pro tile{ tempPath };
+    tile.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::TILE) << 24) | 0x55u);
+    tile.header.message_id = 321;
+    tile.header.flags = 0x00000002;
+    tile.tileData.materialId = 3;
+
+    const geck::Pro got = roundTrip(tile, tempPath);
+
+    REQUIRE(got.type() == geck::Pro::OBJECT_TYPE::TILE);
+    REQUIRE(got.header.PID == tile.header.PID);
+    REQUIRE(got.header.message_id == 321);
+    REQUIRE(got.header.flags == 0x00000002);
+    REQUIRE(got.tileData.materialId == 3);
+
+    std::error_code ec;
+    std::filesystem::remove(tempPath, ec);
+}
