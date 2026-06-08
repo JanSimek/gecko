@@ -184,7 +184,6 @@ set(GECK_APP_SOURCES
     editor/Object.h
     editor/Object.cpp
 
-    editor/helper/ObjectHelper.h
 
     editor/HexagonGrid.h
     editor/HexagonGrid.cpp

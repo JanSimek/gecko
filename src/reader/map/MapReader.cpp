@@ -12,7 +12,6 @@
 #include "../../format/pro/Pro.h"
 #include "../../reader/pro/ProReader.h"
 #include "../../reader/lst/LstReader.h"
-#include "../../writer/map/MapWriter.h"
 
 // Windows defines INTERFACE macro in some headers which conflicts with our enum value
 #ifdef INTERFACE

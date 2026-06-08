@@ -5,9 +5,30 @@
 #include "../../format/pro/Pro.h"
 #include "../../format/map/MapScript.h"
 #include "../../format/map/Tile.h"
-#include "../../editor/helper/ObjectHelper.h"
 
 namespace geck {
+namespace {
+
+    const char* objectTypeName(uint32_t objectTypeId) {
+        switch (static_cast<Pro::OBJECT_TYPE>(objectTypeId)) {
+            case Pro::OBJECT_TYPE::ITEM:
+                return "ITEM";
+            case Pro::OBJECT_TYPE::CRITTER:
+                return "CRITTER";
+            case Pro::OBJECT_TYPE::SCENERY:
+                return "SCENERY";
+            case Pro::OBJECT_TYPE::WALL:
+                return "WALL";
+            case Pro::OBJECT_TYPE::TILE:
+                return "TILE";
+            case Pro::OBJECT_TYPE::MISC:
+                return "MISC";
+            default:
+                return "unknown";
+        }
+    }
+
+} // namespace
 
 bool MapWriter::write(const Map::MapFile& map) {
     try {
@@ -208,7 +229,7 @@ void MapWriter::writeObject(const MapObject& object) {
     uint32_t objectTypeId = object.pro_pid >> 24;
     uint32_t objectId = 0x00FFFFFF & object.pro_pid;
 
-    spdlog::debug("Writing object type: {}", ObjectHelper::objectTypeFromId(objectTypeId));
+    spdlog::debug("Writing object type: {}", objectTypeName(objectTypeId));
 
     auto object_type = static_cast<Pro::OBJECT_TYPE>(objectTypeId);
 
