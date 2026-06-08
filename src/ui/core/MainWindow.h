@@ -31,6 +31,7 @@ namespace resource {
 
 class Settings;
 class GameLauncher;
+class ExternalEditorLauncher;
 class SFMLWidget;
 class EditorWidget;
 class LoadingWidget;
@@ -146,10 +147,6 @@ private:
     void rebuildResourcePanels();
     void rebuildGameResourcesFromSettings();
 
-    // Text file handling
-    bool isTextFile(const QString& filePath) const;
-    void openTextFileWithEditor(const QString& vfsFilePath);
-
     // Dock widget state management
     void saveDockWidgetState();
     void restoreDockWidgetState();
@@ -163,6 +160,7 @@ private:
     std::shared_ptr<resource::GameResources> _resourcesShared;
     std::shared_ptr<Settings> _settings;
     std::unique_ptr<GameLauncher> _gameLauncher;
+    std::unique_ptr<ExternalEditorLauncher> _externalEditorLauncher;
 
     // Current widgets
     EditorWidget* _currentEditorWidget;

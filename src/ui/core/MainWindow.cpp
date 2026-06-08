@@ -24,6 +24,7 @@
 #include "../../util/Settings.h"
 #include "../../util/QtDialogs.h"
 #include "../../util/ProHelper.h"
+#include "../../util/ExternalEditorLauncher.h"
 #include "../../reader/lst/LstReader.h"
 #include "../../reader/ReaderFactory.h"
 #include "../../format/lst/Lst.h"
@@ -31,7 +32,6 @@
 #include "../../format/pro/Pro.h"
 #include "../../editor/Object.h"
 #include "../IconHelper.h"
-#include "../GameEnums.h"
 
 #include <functional>
 
@@ -49,13 +49,6 @@
 #include <QMenu>
 #include <QIcon>
 #include <QSignalBlocker>
-#include <QDesktopServices>
-#include <QUrl>
-#include <QTemporaryFile>
-#include <QStandardPaths>
-#include <QProcess>
-#include <QDir>
-#include <QStringList>
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 
@@ -107,6 +100,8 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
     // parents its own QProcess children). `this` is only the dialog parent.
     _gameLauncher = std::make_unique<GameLauncher>(*_resourcesShared, _settings, this,
         [this](const QString& message) { showStatusMessage(message); }, nullptr);
+
+    _externalEditorLauncher = std::make_unique<ExternalEditorLauncher>(*_resourcesShared, _settings, this);
 
     restoreDockWidgetState();
 
@@ -744,9 +739,9 @@ void MainWindow::connectFileBrowserSignals() {
         if (filePath.endsWith(".map", Qt::CaseInsensitive)) {
             spdlog::info("MainWindow: Opening map from file browser: {}", filePath.toStdString());
             handleMapLoadRequest(filePath.toStdString(), false);
-        } else if (isTextFile(filePath)) {
+        } else if (ExternalEditorLauncher::isTextFile(filePath)) {
             spdlog::info("MainWindow: Opening text file from file browser: {}", filePath.toStdString());
-            openTextFileWithEditor(filePath);
+            _externalEditorLauncher->openFile(filePath);
         } else {
             spdlog::debug("MainWindow: Unsupported file type double-clicked: {}", filePath.toStdString());
             QtDialogs::showInfo(this, "File Type Not Supported",
@@ -1588,110 +1583,6 @@ void MainWindow::onPlayGame() {
     }
 
     _gameLauncher->playGame(mapFile, mapFilename);
-}
-
-bool MainWindow::isTextFile(const QString& filePath) const {
-    QString suffix = QFileInfo(filePath).suffix().toLower();
-    return game::enums::textFileExtensions().contains(suffix);
-}
-
-void MainWindow::openTextFileWithEditor(const QString& vfsFilePath) {
-    try {
-        auto& settings = *_settings;
-        auto editorMode = settings.getTextEditorMode();
-        QString customEditorPath = settings.getCustomEditorPath();
-
-        spdlog::info("MainWindow: Opening text file with {} editor: {}",
-            (editorMode == Settings::TextEditorMode::CUSTOM) ? "custom" : "system",
-            vfsFilePath.toStdString());
-
-        auto fileData = _resourcesShared->files().readRawBytes(vfsFilePath.toStdString());
-        if (!fileData) {
-            QtDialogs::showError(this, "Error",
-                QString("Failed to open file: %1").arg(vfsFilePath));
-            return;
-        }
-
-        // Create temporary file with same extension (if needed)
-        QFileInfo fileInfo(vfsFilePath);
-        QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-        QString tempFileName = QString("%1_XXXXXX.%2")
-                                   .arg(fileInfo.baseName())
-                                   .arg(fileInfo.suffix());
-        QString tempFilePath = tempDir + "/" + tempFileName;
-
-        QString targetFilePath;
-        bool usedTemporaryFile = false;
-
-        // Prefer the original path from the browser; only fall back to a temp copy if it isn't a readable file
-        QFileInfo requestedPathInfo(vfsFilePath);
-        if (requestedPathInfo.exists() && requestedPathInfo.isReadable() && requestedPathInfo.isFile()) {
-            targetFilePath = requestedPathInfo.absoluteFilePath();
-            spdlog::info("MainWindow: Opening native file directly at {}", targetFilePath.toStdString());
-        } else {
-            QTemporaryFile tempFile(tempFilePath);
-            tempFile.setAutoRemove(false);
-
-            if (!tempFile.open()) {
-                QtDialogs::showError(this, "Error",
-                    QString("Failed to create temporary file for: %1").arg(vfsFilePath));
-                return;
-            }
-
-            tempFile.write(reinterpret_cast<const char*>(fileData->data()), static_cast<qsizetype>(fileData->size()));
-            tempFile.close();
-
-            targetFilePath = tempFile.fileName();
-            usedTemporaryFile = true;
-        }
-
-        if (targetFilePath.isEmpty()) {
-            QtDialogs::showError(this, "Error",
-                QString("Failed to resolve path for: %1").arg(vfsFilePath));
-            return;
-        }
-
-        bool opened = false;
-        bool customAttempted = false;
-
-        if (editorMode == Settings::TextEditorMode::CUSTOM && !customEditorPath.isEmpty()) {
-            customAttempted = true;
-            QStringList arguments;
-            arguments << targetFilePath;
-
-            opened = QProcess::startDetached(customEditorPath, arguments);
-
-            if (opened) {
-                spdlog::info("MainWindow: Successfully opened file with custom editor: {} -> {}",
-                    customEditorPath.toStdString(), targetFilePath.toStdString());
-            } else {
-                spdlog::warn("MainWindow: Failed to start custom editor: {}", customEditorPath.toStdString());
-            }
-        }
-
-        // Fall back to the system default editor if the custom one failed or isn't configured
-        if (!opened) {
-            QUrl fileUrl = QUrl::fromLocalFile(targetFilePath);
-            opened = QDesktopServices::openUrl(fileUrl);
-
-            if (!opened) {
-                QString errorText = customAttempted
-                    ? QString("Failed to open file with custom editor (%1) or system default.").arg(customEditorPath)
-                    : QString("Failed to open file with system default editor.");
-                QtDialogs::showError(this, "Error", errorText);
-
-                if (usedTemporaryFile) {
-                    QFile::remove(targetFilePath);
-                }
-            } else {
-                spdlog::info("MainWindow: Successfully opened file with system default editor: {}", targetFilePath.toStdString());
-            }
-        }
-
-    } catch (const std::exception& e) {
-        QtDialogs::showError(this, "Error",
-            QString("Failed to open text file: %1").arg(e.what()));
-    }
 }
 
 void MainWindow::showStatusMessage(const QString& message) {

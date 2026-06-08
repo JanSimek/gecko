@@ -26,6 +26,9 @@ set(GECK_APP_SOURCES
     util/Settings.h
     util/Settings.cpp
 
+    util/ExternalEditorLauncher.h
+    util/ExternalEditorLauncher.cpp
+
     util/CritterFrmResolver.h
     util/CritterFrmResolver.cpp
 
