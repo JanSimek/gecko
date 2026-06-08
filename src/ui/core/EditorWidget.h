@@ -209,7 +209,6 @@ private:
     void registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
-    void pushCommand(UndoCommand cmd);
 
     void setupUI();
     void initializeSelectionSystem();

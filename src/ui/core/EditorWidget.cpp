@@ -65,7 +65,8 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
         _objects,
         _wallBlockerOverlays,
         _undoStack,
-        [this]() { refreshObjects(); });
+        [this]() { refreshObjects(); },
+        [this]() { Q_EMIT undoStackChanged(); });
     _inputHandler = std::make_unique<InputHandler>();
     _dragDropManager = std::make_unique<DragDropManager>(
         *this,
@@ -86,11 +87,6 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
 
     setupUI();
     _viewportController->centerViewOnMap();
-}
-
-void EditorWidget::pushCommand(UndoCommand cmd) {
-    _undoStack.push(std::move(cmd));
-    Q_EMIT undoStackChanged();
 }
 
 void EditorWidget::applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState) {
@@ -144,7 +140,7 @@ void EditorWidget::registerTileEdit(const QString& description, const std::vecto
     cmd.redo = [this, changes]() {
         applyTileChanges(changes, true);
     };
-    pushCommand(std::move(cmd));
+    _objectCommandController->pushCommand(std::move(cmd));
 }
 
 void EditorWidget::addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
@@ -155,23 +151,19 @@ void EditorWidget::removePlacedObject(const std::shared_ptr<MapObject>& mapObjec
     _objectCommandController->removePlacedObject(mapObject, object);
 }
 
+// The register*() helpers below emit undoStackChanged through the controller's
+// onStackChanged callback (wired in the constructor), so they no longer emit here.
 void EditorWidget::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
-    if (_objectCommandController->registerObjectPlacement(mapObject, object)) {
-        Q_EMIT undoStackChanged();
-    }
+    _objectCommandController->registerObjectPlacement(mapObject, object);
 }
 
 void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects,
     const std::vector<std::pair<int, int>>& moves) {
-    if (_objectCommandController->registerObjectMove(objects, moves)) {
-        Q_EMIT undoStackChanged();
-    }
+    _objectCommandController->registerObjectMove(objects, moves);
 }
 
 void EditorWidget::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs) {
-    if (_objectCommandController->registerObjectRotation(objects, beforeDirs, afterDirs)) {
-        Q_EMIT undoStackChanged();
-    }
+    _objectCommandController->registerObjectRotation(objects, beforeDirs, afterDirs);
 }
 
 void EditorWidget::applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath) {
@@ -179,23 +171,17 @@ void EditorWidget::applyFrmToObject(const std::shared_ptr<Object>& object, uint3
 }
 
 void EditorWidget::registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath) {
-    if (_objectCommandController->registerObjectFrmChange(object, oldFrmPid, oldFrmPath, newFrmPid, newFrmPath)) {
-        Q_EMIT undoStackChanged();
-    }
+    _objectCommandController->registerObjectFrmChange(object, oldFrmPid, oldFrmPath, newFrmPid, newFrmPath);
 }
 
 void EditorWidget::registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation) {
-    if (_objectCommandController->registerExitGridCreation(exitGrids, elevation)) {
-        Q_EMIT undoStackChanged();
-    }
+    _objectCommandController->registerExitGridCreation(exitGrids, elevation);
 }
 
 void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
     const std::vector<ExitGridState>& beforeStates,
     const std::vector<ExitGridState>& afterStates) {
-    if (_objectCommandController->registerExitGridEdit(exitGrids, beforeStates, afterStates)) {
-        Q_EMIT undoStackChanged();
-    }
+    _objectCommandController->registerExitGridEdit(exitGrids, beforeStates, afterStates);
 }
 
 EditorWidget::~EditorWidget() {
@@ -1690,25 +1676,7 @@ void EditorWidget::deleteSelectedObjects() {
         }
     }
 
-    if (!removedObjects.empty()) {
-        UndoCommand cmd;
-        cmd.description = "Delete Objects";
-        cmd.undo = [this, removedObjects]() {
-            for (const auto& pair : removedObjects) {
-                if (pair.first && pair.second) {
-                    addPlacedObject(pair.first, pair.second);
-                }
-            }
-        };
-        cmd.redo = [this, removedObjects]() {
-            for (const auto& pair : removedObjects) {
-                if (pair.first && pair.second) {
-                    removePlacedObject(pair.first, pair.second);
-                }
-            }
-        };
-        pushCommand(std::move(cmd));
-    }
+    _objectCommandController->registerObjectDeletion(removedObjects);
 
     _selectionManager->clearSelection();
 
