@@ -31,6 +31,11 @@
 
 namespace geck {
 
+using ui::inventory::COLUMN_ICON;
+using ui::inventory::COLUMN_NAME;
+using ui::inventory::COLUMN_TYPE;
+using ui::inventory::COLUMN_AMOUNT;
+
 /// Spinbox-based delegate for editing the inventory amount column.
 class SelectionPanel::AmountDelegate : public QStyledItemDelegate {
 public:
@@ -1152,39 +1157,15 @@ void SelectionPanel::populateInventoryTree() {
     }
 
     spdlog::debug("SelectionPanel::populateInventoryTree: Found {} inventory items", mapObject->inventory.size());
-    for (const auto& inventoryItem : mapObject->inventory) {
-        if (!inventoryItem)
-            continue;
 
-        spdlog::debug("SelectionPanel::populateInventoryTree: Processing inventory item with PID {}, amount {}",
-            inventoryItem->pro_pid, inventoryItem->amount);
-        QTreeWidgetItem* item = new QTreeWidgetItem(_inventoryTree);
-        const auto details = ui::inventory::describeItem(_resources, inventoryItem->pro_pid);
-        const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *inventoryItem);
-
-        item->setText(COLUMN_NAME, details.name);
-        item->setText(COLUMN_TYPE, details.typeName);
-        item->setText(COLUMN_AMOUNT, QString::number(displayAmount));
-
-        item->setData(COLUMN_ICON, Qt::UserRole, inventoryItem->pro_pid);
-
-        item->setFlags(item->flags() | Qt::ItemIsEditable);
-
-        // Set explicit size hint to ensure proper icon display
-        item->setSizeHint(COLUMN_ICON, QSize(ICON_SIZE, ICON_SIZE));
-
-        QPixmap iconWithQuantity = getItemIconWithQuantity(*inventoryItem);
-        spdlog::debug("SelectionPanel::populateInventoryTree: Setting icon for PID {} with size {}x{}",
-            inventoryItem->pro_pid, iconWithQuantity.width(), iconWithQuantity.height());
-
-        // Create QIcon explicitly with the correct size to avoid scaling issues
-        QIcon icon;
-        icon.addPixmap(iconWithQuantity, QIcon::Normal, QIcon::Off);
-        item->setIcon(COLUMN_ICON, icon);
-
-        // Force tree widget to recognize the icon change
-        _inventoryTree->updateGeometry();
-    }
+    ui::inventory::InventoryTreeOptions options;
+    options.iconSize = ICON_SIZE;
+    options.editable = true;
+    options.setIconSizeHint = true;
+    options.userRoleIsPid = true;
+    options.userRoleColumn = ui::inventory::COLUMN_ICON;
+    options.iconProvider = [this](const MapObject& item) { return getItemIconWithQuantity(item); };
+    ui::inventory::populateInventoryTree(_inventoryTree, _resources, mapObject->inventory, options);
 
     if (_inventoryTree->topLevelItemCount() == 0) {
         _inventoryViewStack->setCurrentWidget(_emptyInventoryLabel);

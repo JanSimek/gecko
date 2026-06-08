@@ -8,10 +8,13 @@
 #include "../../util/FalloutEngineEnums.h"
 #include "../../util/ProHelper.h"
 
+#include <QIcon>
 #include <QImage>
 #include <QPainter>
 #include <QSize>
 #include <QPixmap>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 
 #include <spdlog/spdlog.h>
 
@@ -223,6 +226,53 @@ std::unique_ptr<MapObject> createMapInventoryItem(resource::GameResources& resou
     item->inventory.clear();
 
     return item;
+}
+
+void populateInventoryTree(QTreeWidget* tree,
+    resource::GameResources& resources,
+    const std::vector<std::unique_ptr<MapObject>>& inventory,
+    const InventoryTreeOptions& options) {
+
+    for (size_t i = 0; i < inventory.size(); ++i) {
+        const auto& item = inventory[i];
+        if (!item) {
+            continue;
+        }
+
+        auto* row = new QTreeWidgetItem();
+        const ItemDetails details = describeItem(resources, item->pro_pid);
+
+        row->setText(COLUMN_NAME, details.name);
+        row->setText(COLUMN_TYPE, details.typeName);
+        row->setText(COLUMN_AMOUNT, QString::number(displayAmount(resources, *item)));
+        if (options.showPidColumn) {
+            row->setText(COLUMN_PID, details.pidText);
+        }
+
+        const QVariant payload = options.userRoleIsPid
+            ? QVariant(item->pro_pid)
+            : QVariant(static_cast<int>(i));
+        row->setData(options.userRoleColumn, Qt::UserRole, payload);
+
+        const QPixmap pixmap = options.iconProvider
+            ? options.iconProvider(*item)
+            : loadItemIcon(resources, item->pro_pid, options.iconSize, options.fixedCanvas);
+        if (!pixmap.isNull()) {
+            QIcon icon;
+            icon.addPixmap(pixmap, QIcon::Normal, QIcon::Off);
+            row->setIcon(COLUMN_ICON, icon);
+        }
+
+        if (options.setIconSizeHint && options.iconSize > 0) {
+            row->setSizeHint(COLUMN_ICON, QSize(options.iconSize, options.iconSize));
+        }
+
+        if (options.editable) {
+            row->setFlags(row->flags() | Qt::ItemIsEditable);
+        }
+
+        tree->addTopLevelItem(row);
+    }
 }
 
 } // namespace geck::ui::inventory

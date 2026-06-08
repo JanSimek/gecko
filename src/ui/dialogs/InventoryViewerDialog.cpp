@@ -13,6 +13,13 @@
 
 namespace geck {
 
+using ui::inventory::COLUMN_ICON;
+using ui::inventory::COLUMN_NAME;
+using ui::inventory::COLUMN_TYPE;
+using ui::inventory::COLUMN_AMOUNT;
+using ui::inventory::COLUMN_PID;
+constexpr int COLUMN_COUNT = ui::inventory::COLUMN_PID + 1;
+
 InventoryViewerDialog::InventoryViewerDialog(resource::GameResources& resources, std::shared_ptr<Object> object, QWidget* parent)
     : InventoryViewerDialog(resources, object ? object->getMapObjectPtr() : nullptr, parent) {
 }
@@ -205,30 +212,10 @@ void InventoryViewerDialog::populateInventoryTree() {
         return;
     }
 
-    for (size_t i = 0; i < _mapObject->inventory.size(); ++i) {
-        const auto& item = _mapObject->inventory[i];
-        if (!item)
-            continue;
-
-        QTreeWidgetItem* treeItem = new QTreeWidgetItem(_inventoryTree);
-        const auto details = ui::inventory::describeItem(_resources, item->pro_pid);
-        const uint32_t displayAmount = ui::inventory::displayAmount(_resources, *item);
-
-        // Store inventory index in item data for later lookup
-        treeItem->setData(COLUMN_NAME, Qt::UserRole, static_cast<int>(i));
-
-        QPixmap icon = ui::inventory::loadItemIcon(_resources, item->pro_pid, ui::constants::sizes::ICON_SIZE_LARGE);
-        if (!icon.isNull()) {
-            treeItem->setIcon(COLUMN_ICON, QIcon(icon));
-        }
-
-        treeItem->setText(COLUMN_NAME, details.name);
-        treeItem->setText(COLUMN_TYPE, details.typeName);
-        treeItem->setText(COLUMN_AMOUNT, QString::number(displayAmount));
-        treeItem->setText(COLUMN_PID, details.pidText);
-
-        _inventoryTree->addTopLevelItem(treeItem);
-    }
+    ui::inventory::InventoryTreeOptions options;
+    options.iconSize = ui::constants::sizes::ICON_SIZE_LARGE;
+    options.showPidColumn = true;
+    ui::inventory::populateInventoryTree(_inventoryTree, _resources, _mapObject->inventory, options);
 
     if (_inventoryTree->topLevelItemCount() == 0) {
         _inventoryViewStack->setCurrentWidget(_emptyInventoryLabel);

@@ -86,16 +86,6 @@ private:
     // Data
     resource::GameResources& _resources;
     std::shared_ptr<MapObject> _mapObject;
-
-    // Tree widget columns
-    enum InventoryColumns {
-        COLUMN_ICON = 0,
-        COLUMN_NAME = 1,
-        COLUMN_TYPE = 2,
-        COLUMN_AMOUNT = 3,
-        COLUMN_PID = 4,
-        COLUMN_COUNT
-    };
 };
 
 } // namespace geck

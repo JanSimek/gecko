@@ -152,15 +152,6 @@ private:
     QSpinBox* _tileIdSpin;
     QLineEdit* _tileNameEdit;
 
-    // Inventory tree columns
-    enum InventoryColumns {
-        COLUMN_ICON = 0,
-        COLUMN_NAME = 1,
-        COLUMN_TYPE = 2,
-        COLUMN_AMOUNT = 3,
-        COLUMN_COUNT
-    };
-
     // Visual styling constants
     static const int ICON_SIZE;
 
