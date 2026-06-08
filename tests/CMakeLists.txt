@@ -15,6 +15,7 @@ add_executable(general_tests
     general/test_ddraw_ini.cpp
     general/test_map_object_defaults.cpp
     general/test_frm_resolver.cpp
+    general/test_viewport_controller.cpp
 )
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests
