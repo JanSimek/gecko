@@ -61,12 +61,7 @@ void ProAmmoWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    _ammoData.caliber = pro->ammoData.caliber;
-    _ammoData.quantity = pro->ammoData.quantity;
-    _ammoData.damageModifier = pro->ammoData.damageModifier;
-    _ammoData.damageResistModifier = pro->ammoData.damageResistModifier;
-    _ammoData.damageMultiplier = pro->ammoData.damageMultiplier;
-    _ammoData.damageTypeModifier = pro->ammoData.damageTypeModifier;
+    _ammoData = pro->ammoData;
 
     setComboIndexSafe(_caliberCombo, _ammoData.caliber);
     if (_quantityEdit)
@@ -97,12 +92,7 @@ void ProAmmoWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     if (_damageTypeModifierEdit)
         _ammoData.damageTypeModifier = _damageTypeModifierEdit->value();
 
-    pro->ammoData.caliber = _ammoData.caliber;
-    pro->ammoData.quantity = _ammoData.quantity;
-    pro->ammoData.damageModifier = _ammoData.damageModifier;
-    pro->ammoData.damageResistModifier = _ammoData.damageResistModifier;
-    pro->ammoData.damageMultiplier = _ammoData.damageMultiplier;
-    pro->ammoData.damageTypeModifier = _ammoData.damageTypeModifier;
+    pro->ammoData = _ammoData;
 }
 
 bool ProAmmoWidget::canHandle(const std::shared_ptr<Pro>& pro) const {

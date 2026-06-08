@@ -167,16 +167,9 @@ void ProArmorWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    _armorData.armorClass = pro->armorData.armorClass;
-    for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
-        _armorData.damageResist[i] = pro->armorData.damageResist[i];
-        _armorData.damageThreshold[i] = pro->armorData.damageThreshold[i];
-    }
-    _armorData.perk = pro->armorData.perk;
-    _armorData.armorMaleFID = pro->armorData.armorMaleFID;
-    _armorData.armorFemaleFID = pro->armorData.armorFemaleFID;
-    _armorMaleFID = pro->armorData.armorMaleFID;
-    _armorFemaleFID = pro->armorData.armorFemaleFID;
+    _armorData = pro->armorData;
+    _armorMaleFID = _armorData.armorMaleFID;
+    _armorFemaleFID = _armorData.armorFemaleFID;
 
     if (_armorClassEdit) {
         _armorClassEdit->setValue(static_cast<int>(_armorData.armorClass));
@@ -212,14 +205,7 @@ void ProArmorWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     _armorData.armorMaleFID = _armorMaleFID;
     _armorData.armorFemaleFID = _armorFemaleFID;
 
-    pro->armorData.armorClass = _armorData.armorClass;
-    for (int i = 0; i < DAMAGE_TYPES_COUNT; ++i) {
-        pro->armorData.damageResist[i] = _armorData.damageResist[i];
-        pro->armorData.damageThreshold[i] = _armorData.damageThreshold[i];
-    }
-    pro->armorData.perk = _armorData.perk;
-    pro->armorData.armorMaleFID = _armorData.armorMaleFID;
-    pro->armorData.armorFemaleFID = _armorData.armorFemaleFID;
+    pro->armorData = _armorData;
 }
 
 bool ProArmorWidget::canHandle(const std::shared_ptr<Pro>& pro) const {

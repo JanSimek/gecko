@@ -128,23 +128,7 @@ void ProDrugWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    _drugData.stat0 = pro->drugData.stat0;
-    _drugData.stat1 = pro->drugData.stat1;
-    _drugData.stat2 = pro->drugData.stat2;
-    _drugData.amount0 = pro->drugData.amount0;
-    _drugData.amount1 = pro->drugData.amount1;
-    _drugData.amount2 = pro->drugData.amount2;
-    _drugData.duration1 = pro->drugData.duration1;
-    _drugData.amount0_1 = pro->drugData.amount0_1;
-    _drugData.amount1_1 = pro->drugData.amount1_1;
-    _drugData.amount2_1 = pro->drugData.amount2_1;
-    _drugData.duration2 = pro->drugData.duration2;
-    _drugData.amount0_2 = pro->drugData.amount0_2;
-    _drugData.amount1_2 = pro->drugData.amount1_2;
-    _drugData.amount2_2 = pro->drugData.amount2_2;
-    _drugData.addictionRate = pro->drugData.addictionRate;
-    _drugData.addictionEffect = pro->drugData.addictionEffect;
-    _drugData.addictionOnset = pro->drugData.addictionOnset;
+    _drugData = pro->drugData;
 
     uint32_t stats[NUM_DRUG_STATS] = { _drugData.stat0, _drugData.stat1, _drugData.stat2 };
     int32_t amounts[NUM_DRUG_STATS] = { _drugData.amount0, _drugData.amount1, _drugData.amount2 };
@@ -222,23 +206,7 @@ void ProDrugWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     if (_drugAddictionDelayEdit)
         _drugData.addictionOnset = static_cast<uint32_t>(_drugAddictionDelayEdit->value());
 
-    pro->drugData.stat0 = _drugData.stat0;
-    pro->drugData.stat1 = _drugData.stat1;
-    pro->drugData.stat2 = _drugData.stat2;
-    pro->drugData.amount0 = _drugData.amount0;
-    pro->drugData.amount1 = _drugData.amount1;
-    pro->drugData.amount2 = _drugData.amount2;
-    pro->drugData.duration1 = _drugData.duration1;
-    pro->drugData.amount0_1 = _drugData.amount0_1;
-    pro->drugData.amount1_1 = _drugData.amount1_1;
-    pro->drugData.amount2_1 = _drugData.amount2_1;
-    pro->drugData.duration2 = _drugData.duration2;
-    pro->drugData.amount0_2 = _drugData.amount0_2;
-    pro->drugData.amount1_2 = _drugData.amount1_2;
-    pro->drugData.amount2_2 = _drugData.amount2_2;
-    pro->drugData.addictionRate = _drugData.addictionRate;
-    pro->drugData.addictionEffect = _drugData.addictionEffect;
-    pro->drugData.addictionOnset = _drugData.addictionOnset;
+    pro->drugData = _drugData;
 }
 
 bool ProDrugWidget::canHandle(const std::shared_ptr<Pro>& pro) const {

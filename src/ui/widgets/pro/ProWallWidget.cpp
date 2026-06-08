@@ -26,7 +26,7 @@ void ProWallWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    _wallData.materialId = pro->wallData.materialId;
+    _wallData = pro->wallData;
     setComboIndexSafe(_materialIdCombo, _wallData.materialId);
 }
 
@@ -35,7 +35,7 @@ void ProWallWidget::saveToPro(std::shared_ptr<Pro>& pro) {
         return;
 
     _wallData.materialId = static_cast<uint32_t>(getComboIndex(_materialIdCombo));
-    pro->wallData.materialId = _wallData.materialId;
+    pro->wallData = _wallData;
 }
 
 bool ProWallWidget::canHandle(const std::shared_ptr<Pro>& pro) const {

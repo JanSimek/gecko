@@ -106,8 +106,7 @@ void ProContainerKeyWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (_isContainer) {
         setupContainerUI();
 
-        _containerData.maxSize = pro->containerData.maxSize;
-        _containerData.flags = pro->containerData.flags;
+        _containerData = pro->containerData;
 
         if (_containerMaxSizeEdit) {
             _containerMaxSizeEdit->setValue(static_cast<int>(_containerData.maxSize));
@@ -123,7 +122,7 @@ void ProContainerKeyWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     } else if (_isKey) {
         setupKeyUI();
 
-        _keyData.keyId = pro->keyData.keyId;
+        _keyData = pro->keyData;
 
         if (_keyIdEdit) {
             _keyIdEdit->setValue(static_cast<int>(_keyData.keyId));
@@ -148,15 +147,14 @@ void ProContainerKeyWidget::saveToPro(std::shared_ptr<Pro>& pro) {
         }
         _containerData.flags = flags;
 
-        pro->containerData.maxSize = _containerData.maxSize;
-        pro->containerData.flags = _containerData.flags;
+        pro->containerData = _containerData;
 
     } else if (_isKey) {
         if (_keyIdEdit) {
             _keyData.keyId = static_cast<uint32_t>(_keyIdEdit->value());
         }
 
-        pro->keyData.keyId = _keyData.keyId;
+        pro->keyData = _keyData;
     }
 }
 

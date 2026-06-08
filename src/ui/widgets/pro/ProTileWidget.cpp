@@ -26,7 +26,7 @@ void ProTileWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    _tileData.materialId = pro->tileData.materialId;
+    _tileData = pro->tileData;
     setComboIndexSafe(_materialIdCombo, _tileData.materialId);
 }
 
@@ -35,7 +35,7 @@ void ProTileWidget::saveToPro(std::shared_ptr<Pro>& pro) {
         return;
 
     _tileData.materialId = static_cast<uint32_t>(getComboIndex(_materialIdCombo));
-    pro->tileData.materialId = _tileData.materialId;
+    pro->tileData = _tileData;
 }
 
 bool ProTileWidget::canHandle(const std::shared_ptr<Pro>& pro) const {

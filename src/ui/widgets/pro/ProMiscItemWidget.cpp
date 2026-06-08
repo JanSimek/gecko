@@ -36,8 +36,7 @@ void ProMiscItemWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    _miscData.powerType = pro->miscData.powerType;
-    _miscData.charges = pro->miscData.charges;
+    _miscData = pro->miscData;
 
     if (_powerTypeEdit)
         _powerTypeEdit->setValue(static_cast<int>(_miscData.powerType));
@@ -54,8 +53,7 @@ void ProMiscItemWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     if (_chargesEdit)
         _miscData.charges = static_cast<uint32_t>(_chargesEdit->value());
 
-    pro->miscData.powerType = _miscData.powerType;
-    pro->miscData.charges = _miscData.charges;
+    pro->miscData = _miscData;
 }
 
 bool ProMiscItemWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
