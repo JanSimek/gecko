@@ -73,13 +73,30 @@ bool MapWriter::write(const Map::MapFile& map) {
         spdlog::debug("Wrote {} local variables", map.map_local_vars.size());
 
         // Write tiles
-        for (const auto& elevation : map.tiles) {
-            for (const auto& tile : elevation.second) {
-                utils.writeBE16(tile.getRoof());
-                utils.writeBE16(tile.getFloor());
+        int elevationsWritten = 0;
+        for (int elevation = 0; elevation < Map::ELEVATION_COUNT; ++elevation) {
+            if (!Map::elevationIsPresent(map.header.flags, elevation)) {
+                continue;
+            }
+            ++elevationsWritten;
+
+            auto it = map.tiles.find(elevation);
+            if (it != map.tiles.end() && it->second.size() == Map::TILES_PER_ELEVATION) {
+                for (const auto& tile : it->second) {
+                    utils.writeBE16(tile.getRoof());
+                    utils.writeBE16(tile.getFloor());
+                }
+            } else {
+                // Elevation flagged present but without a full tile grid in
+                // memory: emit an empty grid so the block size matches what the
+                // engine expects to read for this elevation.
+                for (unsigned i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
+                    utils.writeBE16(Map::EMPTY_TILE);
+                    utils.writeBE16(Map::EMPTY_TILE);
+                }
             }
         }
-        spdlog::debug("Wrote tiles for {} elevations", map.tiles.size());
+        spdlog::debug("Wrote tiles for {} elevations", elevationsWritten);
 
         // Write scripts
         for (const auto& script_section : map.map_scripts) {
@@ -122,26 +139,29 @@ bool MapWriter::write(const Map::MapFile& map) {
         }
         spdlog::debug("Wrote script sections for {} script types", Map::SCRIPT_SECTIONS);
 
-        // Write objects
         size_t total_objects = 0;
-        for (size_t elev = 0; elev < map.map_objects.size(); elev++) {
-            total_objects += map.map_objects.at(static_cast<int>(elev)).size();
+        for (int elev = 0; elev < Map::ELEVATION_COUNT; ++elev) {
+            auto it = map.map_objects.find(elev);
+            if (it != map.map_objects.end()) {
+                total_objects += it->second.size();
+            }
         }
 
         utils.writeWithLog(static_cast<uint32_t>(total_objects), "total objects on map");
 
-        for (size_t elev = 0; elev < map.map_objects.size(); elev++) {
-            auto objectsOnElevation = map.map_objects.at(static_cast<int>(elev)).size();
-            utils.writeWithLog(static_cast<uint32_t>(objectsOnElevation), "objects on elevation " + std::to_string(static_cast<int>(elev)));
+        const std::vector<std::shared_ptr<MapObject>> emptyElevation;
+        for (int elev = 0; elev < Map::ELEVATION_COUNT; ++elev) {
+            auto it = map.map_objects.find(elev);
+            const auto& objectsOnElevation = (it != map.map_objects.end()) ? it->second : emptyElevation;
+            utils.writeWithLog(static_cast<uint32_t>(objectsOnElevation.size()), "objects on elevation " + std::to_string(elev));
 
             // TODO: sort objects by their position for better loading performance
-            for (size_t i = 0; i < objectsOnElevation; i++) {
-                const auto& object = map.map_objects.at(static_cast<int>(elev))[i];
+            for (const auto& object : objectsOnElevation) {
                 writeObject(*object);
             }
         }
 
-        // FIXME: some maps (artemple.map, kladwtwn.map, all?) contain 2x extra 0x000000 at the end of the file
+        // (probably not relevant anymore) FIXME: some maps (artemple.map, kladwtwn.map, all?) contain 2x extra 0x000000 at the end of the file
         // without them kladwtnwn.map crashes Fallout 2; however F2_Dims_Mapper doesn't seem to add them (?)
         // utils.writeBE32(0);
         // utils.writeBE32(0);
@@ -227,7 +247,6 @@ void MapWriter::writeObject(const MapObject& object) {
     utils.writeBE32(object.unknown11);
 
     uint32_t objectTypeId = object.pro_pid >> 24;
-    uint32_t objectId = 0x00FFFFFF & object.pro_pid;
 
     spdlog::debug("Writing object type: {}", objectTypeName(objectTypeId));
 
@@ -313,26 +332,11 @@ void MapWriter::writeObject(const MapObject& object) {
         case Pro::OBJECT_TYPE::TILE:
             break;
         case Pro::OBJECT_TYPE::MISC:
-            switch (objectId) {
-                case 12:
-                    // No additional data for misc object ID 12
-                    break;
-                // Exit Grids (16-23)
-                case 16:
-                case 17:
-                case 18:
-                case 19:
-                case 20:
-                case 21:
-                case 22:
-                case 23:
-                default:
-                    // Write exit information for exit grids
-                    utils.writeBE32(object.exit_map);
-                    utils.writeBE32(object.exit_position);
-                    utils.writeBE32(object.exit_elevation);
-                    utils.writeBE32(object.exit_orientation);
-                    break;
+            if (object.isExitGridMarker()) {
+                utils.writeBE32(object.exit_map);
+                utils.writeBE32(object.exit_position);
+                utils.writeBE32(object.exit_elevation);
+                utils.writeBE32(object.exit_orientation);
             }
             break;
         default:

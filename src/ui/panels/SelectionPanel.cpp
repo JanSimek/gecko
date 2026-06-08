@@ -815,6 +815,7 @@ void SelectionPanel::onChangeFrmClicked() {
                 size_t lastSlash = newFrmPath.find_last_of('/');
                 std::string filename = (lastSlash != std::string::npos) ? newFrmPath.substr(lastSlash + 1) : newFrmPath;
 
+                // TODO: verify in engine that the comment below is valid
                 // Critters are a special case: many FRMs work in-game even if not in the LST.
                 // Deliberate visual-only fallback - keep the original frm_pid for game
                 // compatibility while still showing the new FRM in the editor.

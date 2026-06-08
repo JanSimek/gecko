@@ -27,8 +27,17 @@ public:
     static constexpr int SCRIPT_SECTIONS = 5;
     static constexpr int FILENAME_LENGTH = 16;
 
+    //!< Fallout 2 maps always have three elevation slots (engine ELEVATION_COUNT).
+    static constexpr int ELEVATION_COUNT = 3;
+
     Map(std::filesystem::path path)
         : IFile(path) { }
+
+    /// A cleared elevation flag bit (0x2 << elevation) means that elevation's
+    /// tile block is present in the .map file; a set bit means it is absent.
+    static constexpr bool elevationIsPresent(uint32_t flags, int elevation) {
+        return (flags & (0x2u << elevation)) == 0;
+    }
 
     // Header
     struct MapHeader {

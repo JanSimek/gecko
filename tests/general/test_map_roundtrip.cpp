@@ -252,3 +252,136 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
     std::error_code ec;
     std::filesystem::remove(path, ec);
 }
+
+// A map with only elevation 0 enabled (flags disable elevations 1 and 2) must
+// still round-trip. The engine frames the object section as exactly three
+// per-elevation count blocks regardless of which elevations are enabled
+// (objectSaveAll / objectLoadAll); before the fix the reader consumed only one
+// count block here and desynced the stream. Walls/critters don't dereference a
+// Pro, so a provider that returns nullptr is sufficient.
+TEST_CASE("MAP single-enabled-elevation map keeps engine 3-block object framing", "[map][roundtrip][compat]") {
+    StubProvider provider;
+
+    auto original = Map::createEmptyMapFile();
+    // Disable elevations 1 and 2 (flag bits 0x4 and 0x8 set => tiles absent).
+    original.header.flags = 0x4 | 0x8;
+    original.tiles.erase(1);
+    original.tiles.erase(2);
+
+    auto& objects = original.map_objects[0];
+    auto add = [&](uint32_t proPid, int32_t seed) {
+        auto o = std::make_shared<MapObject>();
+        fillBase(*o, seed);
+        o->pro_pid = proPid;
+        o->elevation = 0;
+        objects.push_back(o);
+        return o;
+    };
+    add(pidOf(Pro::OBJECT_TYPE::WALL, 100), 1);
+    auto critter = add(pidOf(Pro::OBJECT_TYPE::CRITTER, 50), 2);
+    critter->current_hp = 42;
+
+    const size_t objectCount = objects.size();
+
+    const auto path = tempMapPath();
+    {
+        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        writer.openFile(path);
+        REQUIRE(writer.write(original));
+    }
+
+    MapReader reader{ [&](uint32_t pid) { return provider.load(pid); } };
+    auto reloaded = reader.openFile(path);
+    REQUIRE(reloaded != nullptr);
+    const auto& result = reloaded->getMapFile();
+
+    CHECK(result.header.flags == (0x4u | 0x8u));
+
+    // All three object blocks are present; only elevation 0 holds objects.
+    REQUIRE(result.map_objects.at(0).size() == objectCount);
+    CHECK(result.map_objects.at(1).empty());
+    CHECK(result.map_objects.at(2).empty());
+    checkBase(*result.map_objects.at(0)[0], *objects[0]);
+    CHECK(result.map_objects.at(0)[1]->current_hp == 42);
+
+    // Only elevation 0's tiles are present on disk.
+    CHECK(result.tiles.count(0) == 1);
+    CHECK(result.tiles.count(1) == 0);
+    CHECK(result.tiles.count(2) == 0);
+
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
+// A non-exit-grid MISC object must not serialize the 4 trailing exit fields:
+// the engine writes them only for exit-grid PIDs (MISC ids 16-23). Two
+// otherwise-identical single-object maps - one exit-grid MISC, one ordinary
+// MISC - must differ in size by exactly those 4 int32 fields (16 bytes). The
+// ordinary MISC must also still round-trip without desyncing.
+TEST_CASE("MAP non-exit MISC object writes no trailing exit data", "[map][roundtrip][compat]") {
+    StubProvider provider;
+
+    auto buildSingleMisc = [&](uint32_t miscIndex) {
+        auto map = Map::createEmptyMapFile();
+        auto o = std::make_shared<MapObject>();
+        fillBase(*o, 1);
+        o->pro_pid = pidOf(Pro::OBJECT_TYPE::MISC, miscIndex);
+        o->elevation = 0;
+        o->exit_map = 901;
+        o->exit_position = 902;
+        o->exit_elevation = 903;
+        o->exit_orientation = 904;
+        map.map_objects[0].push_back(o);
+        return map;
+    };
+
+    auto writeMap = [&](const Map::MapFile& m, const std::filesystem::path& p) {
+        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        writer.openFile(p);
+        REQUIRE(writer.write(m));
+    };
+
+    auto readMap = [&](const std::filesystem::path& p) {
+        MapReader reader{ [&](uint32_t pid) { return provider.load(pid); } };
+        return reader.openFile(p);
+    };
+
+    const auto exitPath = std::filesystem::temp_directory_path() / "geck_misc_exit.map";
+    const auto plainPath = std::filesystem::temp_directory_path() / "geck_misc_plain.map";
+    std::error_code ec;
+    std::filesystem::remove(exitPath, ec);
+    std::filesystem::remove(plainPath, ec);
+
+    writeMap(buildSingleMisc(16), exitPath); // exit grid -> 4 trailing fields
+    writeMap(buildSingleMisc(5), plainPath); // ordinary MISC -> none
+
+    const auto exitSize = std::filesystem::file_size(exitPath);
+    const auto plainSize = std::filesystem::file_size(plainPath);
+    CHECK(exitSize - plainSize == 4 * sizeof(uint32_t));
+
+    // The ordinary MISC still round-trips; its (unserialized) exit fields come
+    // back at their defaults rather than the sentinels we set.
+    auto reloadedPlain = readMap(plainPath);
+    REQUIRE(reloadedPlain != nullptr);
+    const auto& plain = reloadedPlain->getMapFile();
+    REQUIRE(plain.map_objects.at(0).size() == 1);
+    const auto& misc = *plain.map_objects.at(0)[0];
+    CHECK(misc.exit_map == 0);
+    CHECK(misc.exit_position == 0);
+    CHECK(misc.exit_elevation == 0);
+    CHECK(misc.exit_orientation == 0);
+
+    // The exit grid preserves them.
+    auto reloadedExit = readMap(exitPath);
+    REQUIRE(reloadedExit != nullptr);
+    const auto& exitMap = reloadedExit->getMapFile();
+    REQUIRE(exitMap.map_objects.at(0).size() == 1);
+    const auto& exitObj = *exitMap.map_objects.at(0)[0];
+    CHECK(exitObj.exit_map == 901);
+    CHECK(exitObj.exit_position == 902);
+    CHECK(exitObj.exit_elevation == 903);
+    CHECK(exitObj.exit_orientation == 904);
+
+    std::filesystem::remove(exitPath, ec);
+    std::filesystem::remove(plainPath, ec);
+}

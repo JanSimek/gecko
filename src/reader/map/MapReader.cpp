@@ -51,7 +51,6 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
     object->unknown11 = read_be_u32();
 
     uint32_t objectTypeId = object->pro_pid >> 24;
-    uint32_t objectId = 0x00FFFFFF & object->pro_pid;
 
     auto pro = _proLoadCallback(object->pro_pid);
 
@@ -126,25 +125,11 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
         case Pro::OBJECT_TYPE::TILE:
             break;
         case Pro::OBJECT_TYPE::MISC:
-
-            switch (objectId) {
-                case 12:
-                    break;
-                // Exit Grids
-                case 16:
-                case 17:
-                case 18:
-                case 19:
-                case 20:
-                case 21:
-                case 22:
-                case 23:
-                default:
-                    object->exit_map = read_be_i32();
-                    object->exit_position = read_be_i32();
-                    object->exit_elevation = read_be_i32();
-                    object->exit_orientation = read_be_i32();
-                    break;
+            if (object->isExitGridMarker()) {
+                object->exit_map = read_be_i32();
+                object->exit_position = read_be_i32();
+                object->exit_elevation = read_be_i32();
+                object->exit_orientation = read_be_i32();
             }
             break;
         default:
@@ -219,7 +204,10 @@ std::unique_ptr<Map> MapReader::read() {
         map_file->map_local_vars.emplace_back(read_be_i32());
     }
 
-    for (auto elevation = 0; elevation < elevations; ++elevation) {
+    for (int elevation = 0; elevation < Map::ELEVATION_COUNT; ++elevation) {
+        if (!Map::elevationIsPresent(flags, elevation)) {
+            continue;
+        }
         spdlog::info("Loading tiles at elevation {}", elevation);
 
         map_file->tiles[elevation].reserve(Map::TILES_PER_ELEVATION);
@@ -315,10 +303,13 @@ std::unique_ptr<Map> MapReader::read() {
     }
 
     // OBJECTS SECTION
+    // The engine (object.cc objectLoadAll / objectSaveAll) always frames this
+    // section as exactly ELEVATION_COUNT per-elevation count blocks, regardless
+    // of which elevations are enabled. Read all three unconditionally.
     uint32_t total_objects = read_be_u32();
 
     spdlog::info("Loading {} map objects", total_objects);
-    for (auto elev = 0; elev < elevations; ++elev) {
+    for (int elev = 0; elev < Map::ELEVATION_COUNT; ++elev) {
         auto objectsOnElevation = read_be_u32();
 
         spdlog::info("... loading {} map objects on elevation {}", objectsOnElevation, elev);
