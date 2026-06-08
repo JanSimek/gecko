@@ -73,6 +73,13 @@ public:
     MapFile& getMapFile();
     void setMapFile(std::unique_ptr<MapFile> newMapFile);
 
+    /// Builds a blank Fallout 2 map: default header, three empty elevations of
+    /// EMPTY_TILE tiles, and no scripts or objects.
+    static MapFile createEmptyMapFile();
+
+    /// One elevation's worth of empty floor/roof tiles (TILES_PER_ELEVATION of them).
+    static std::vector<Tile> createEmptyElevation();
+
 private:
     std::unique_ptr<MapFile> mapFile;
 };

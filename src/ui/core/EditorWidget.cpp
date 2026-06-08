@@ -370,44 +370,7 @@ void EditorWidget::openMap() {
 void EditorWidget::createNewMap() {
     spdlog::info("Creating new empty map");
 
-    auto newMapFile = std::make_unique<Map::MapFile>();
-
-    newMapFile->header.version = FileFormat::FALLOUT2_MAP_VERSION;
-    newMapFile->header.filename = "newmap";
-    newMapFile->header.player_default_position = MapDefaults::PLAYER_DEFAULT_POSITION;       // Center of map (hex 99,99 area)
-    newMapFile->header.player_default_elevation = MapDefaults::PLAYER_DEFAULT_ELEVATION;     // Ground level
-    newMapFile->header.player_default_orientation = MapDefaults::PLAYER_DEFAULT_ORIENTATION; // North
-    newMapFile->header.num_local_vars = 0;
-    newMapFile->header.script_id = MapDefaults::NO_SCRIPT_ID; // No map script
-    newMapFile->header.flags = MapDefaults::DEFAULT_FLAGS;    // All elevations enabled
-    newMapFile->header.darkness = MapDefaults::NO_DARKNESS;
-    newMapFile->header.num_global_vars = 0;
-    newMapFile->header.map_id = MapDefaults::DEFAULT_MAP_ID;
-    newMapFile->header.timestamp = MapDefaults::DEFAULT_TIMESTAMP;
-
-    newMapFile->map_local_vars.clear();
-    newMapFile->map_global_vars.clear();
-
-    for (int elevation = ELEVATION_1; elevation <= ELEVATION_3; elevation++) {
-        std::vector<Tile> elevationTiles;
-        elevationTiles.reserve(Map::TILES_PER_ELEVATION);
-
-        for (unsigned int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
-            Tile tile(Map::EMPTY_TILE, Map::EMPTY_TILE); // EMPTY_TILE = 1 for both floor and roof
-            elevationTiles.push_back(tile);
-        }
-
-        newMapFile->tiles[elevation] = std::move(elevationTiles);
-    }
-
-    for (int i = 0; i < Map::SCRIPT_SECTIONS; i++) {
-        newMapFile->map_scripts[i].clear();
-        newMapFile->scripts_in_section[i] = 0;
-    }
-
-    for (int elevation = ELEVATION_1; elevation <= ELEVATION_3; elevation++) {
-        newMapFile->map_objects[elevation].clear();
-    }
+    auto newMapFile = std::make_unique<Map::MapFile>(Map::createEmptyMapFile());
 
     _map = std::make_unique<Map>(std::filesystem::path("newmap.map"));
     _map->setMapFile(std::move(newMapFile));

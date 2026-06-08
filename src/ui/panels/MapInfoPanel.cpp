@@ -680,12 +680,7 @@ void MapInfoPanel::onElevationCheckboxChanged() {
         mapFile.header.flags &= ~flagBit; // Clear bit to enable elevation
 
         if (mapFile.tiles.find(elevation) == mapFile.tiles.end()) {
-            mapFile.tiles[elevation].clear();
-            mapFile.tiles[elevation].reserve(Map::TILES_PER_ELEVATION);
-
-            for (unsigned int i = 0; i < Map::TILES_PER_ELEVATION; i++) {
-                mapFile.tiles[elevation].emplace_back(Map::EMPTY_TILE, Map::EMPTY_TILE);
-            }
+            mapFile.tiles[elevation] = Map::createEmptyElevation();
         }
 
         if (mapFile.map_objects.find(elevation) == mapFile.map_objects.end()) {
