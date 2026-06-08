@@ -54,13 +54,20 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
     auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
     loadingWidget->setWindowTitle("Loading Map");
 
-    loadingWidget->addLoader(std::make_unique<MapLoader>(_resources, mapPath, -1, true, [this](auto map) {
+    // MapLoader is Qt-free; LoadingWidget owns it once added, so the callback uses
+    // a handle to read its error message and present it here on the main thread.
+    auto loaderHandle = std::make_shared<MapLoader*>(nullptr);
+    auto mapLoader = std::make_unique<MapLoader>(_resources, mapPath, -1, true, [this, loaderHandle](auto map) {
         if (map) {
             auto editorWidget = std::make_unique<EditorWidget>(*_resources, std::move(map));
             _mainWindow->setEditorWidget(std::move(editorWidget));
+        } else if (*loaderHandle && (*loaderHandle)->hasError()) {
+            QtDialogs::showError(_mainWindow.get(), "Missing Game Files",
+                QString::fromStdString((*loaderHandle)->errorMessage()));
         }
-        // If map is null, error was already shown by MapLoader::onDone()
-    }));
+    });
+    *loaderHandle = mapLoader.get();
+    loadingWidget->addLoader(std::move(mapLoader));
 
     loadingWidget->exec();
 }

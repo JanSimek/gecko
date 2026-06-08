@@ -1,6 +1,6 @@
 #include "MapLoader.h"
+#include <string>
 #include <thread>
-#include <QString>
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
 #include "util/Constants.h"
@@ -18,7 +18,6 @@
 
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
-#include "util/QtDialogs.h"
 #include "util/ResourceInitializer.h"
 
 namespace geck {
@@ -128,9 +127,8 @@ void MapLoader::loadFromFilesystem() {
         MapReader map_reader{ proLoadCallback };
         _map = map_reader.openFile(_mapPath);
     } catch (const std::exception& e) {
-        _errorMessage = QString("Failed to parse map file:\n%1\n\nPlease ensure all game data files are properly configured.")
-                            .arg(e.what())
-                            .toStdString();
+        _errorMessage = "Failed to parse map file:\n" + std::string(e.what())
+            + "\n\nPlease ensure all game data files are properly configured.";
         _hasError = true;
         done = true;
         spdlog::error("Failed to parse map: {}", e.what());
@@ -157,9 +155,8 @@ bool MapLoader::ensureResourceListsReady() {
         ResourceInitializer::requireEssentialLstFilesLoaded(*_resources);
         return true;
     } catch (const std::exception& e) {
-        _errorMessage = QString("Required game resource files are not initialized:\n%1\n\nPlease ensure the data paths are configured and loaded before opening a map.")
-                            .arg(e.what())
-                            .toStdString();
+        _errorMessage = "Required game resource files are not initialized:\n" + std::string(e.what())
+            + "\n\nPlease ensure the data paths are configured and loaded before opening a map.";
         _hasError = true;
         done = true;
         spdlog::error("MapLoader: Required resource lists are not initialized: {}", e.what());
@@ -181,9 +178,8 @@ void MapLoader::loadMapResources() {
         try {
             lst = _resources->repository().load<Lst>(ResourcePaths::Lst::TILES);
         } catch (const std::exception& e) {
-            _errorMessage = QString("Failed to load tiles list file:\n%1\n\nPlease ensure all game data files are properly configured.")
-                                .arg(e.what())
-                                .toStdString();
+            _errorMessage = "Failed to load tiles list file:\n" + std::string(e.what())
+                + "\n\nPlease ensure all game data files are properly configured.";
             _hasError = true;
             done = true;
             spdlog::error("Failed to load tiles.lst: {}", e.what());
@@ -262,9 +258,9 @@ bool MapLoader::isDone() {
 
 void MapLoader::onDone() {
     if (_hasError) {
-        // Show error dialog on main thread
-        QtDialogs::showError(nullptr, "Missing Game Files", QString::fromStdString(_errorMessage));
-        // Call callback with null map to indicate failure
+        // Presentation is the caller's responsibility: onDone() runs on the main
+        // thread via the load callback, which can inspect hasError()/errorMessage().
+        spdlog::warn("MapLoader completed with errors: {}", _errorMessage);
         _onLoadCallback(nullptr);
     } else {
         _onLoadCallback(std::move(_map));
