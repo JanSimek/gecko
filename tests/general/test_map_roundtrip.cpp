@@ -22,9 +22,12 @@ namespace {
 struct StubProvider {
     std::map<uint32_t, std::unique_ptr<Pro>> pros;
 
-    void add(uint32_t pid, Pro::ITEM_TYPE itemType) {
+    void addItem(uint32_t pid, Pro::ITEM_TYPE t) { set(pid, static_cast<unsigned int>(t)); }
+    void addScenery(uint32_t pid, Pro::SCENERY_TYPE t) { set(pid, static_cast<unsigned int>(t)); }
+
+    void set(uint32_t pid, unsigned int subtype) {
         auto pro = std::make_unique<Pro>(std::filesystem::path("stub"));
-        pro->setObjectSubtypeId(static_cast<unsigned int>(itemType));
+        pro->setObjectSubtypeId(subtype);
         pros[pid] = std::move(pro);
     }
 
@@ -45,8 +48,32 @@ std::filesystem::path tempMapPath() {
     return path;
 }
 
-// Asserts every serialized base field survived the round-trip.
-void checkBaseFields(const MapObject& got, const MapObject& want) {
+// Fills every serialized base field with a distinctive seed-derived value, so a
+// field-order or width bug anywhere in the 22-field block is caught for each
+// object type. pro_pid / elevation / inventory are set by the caller.
+void fillBase(MapObject& o, int32_t seed) {
+    o.unknown0 = static_cast<uint32_t>(seed * 100 + 1);
+    o.position = seed * 100 + 2;
+    o.x = static_cast<uint32_t>(seed * 100 + 3);
+    o.y = static_cast<uint32_t>(seed * 100 + 4);
+    o.sx = -(seed * 100 + 5);
+    o.sy = -(seed * 100 + 6);
+    o.frame_number = static_cast<uint32_t>(seed * 100 + 7);
+    o.direction = static_cast<uint32_t>(seed % 6);
+    o.frm_pid = static_cast<uint32_t>(seed * 100 + 9);
+    o.flags = static_cast<uint32_t>(seed * 100 + 10);
+    o.critter_index = seed * 100 + 11;
+    o.light_radius = static_cast<uint32_t>(seed % 9);
+    o.light_intensity = static_cast<uint32_t>(seed * 100 + 13);
+    o.outline_color = static_cast<uint32_t>(seed % 256);
+    o.map_scripts_pid = seed * 100 + 15;
+    o.script_id = seed * 100 + 16;
+    o.max_inventory_size = static_cast<uint32_t>(seed * 100 + 17);
+    o.unknown10 = static_cast<uint32_t>(seed * 100 + 18);
+    o.unknown11 = static_cast<uint32_t>(seed * 100 + 19);
+}
+
+void checkBase(const MapObject& got, const MapObject& want) {
     CHECK(got.unknown0 == want.unknown0);
     CHECK(got.position == want.position);
     CHECK(got.x == want.x);
@@ -72,75 +99,87 @@ void checkBaseFields(const MapObject& got, const MapObject& want) {
 
 } // namespace
 
-// MapWriter/MapReader symmetry guard: build a map with a wall, a critter and a
-// container holding an inventory item, write it, read it back, and assert the
-// objects (incl. the nested inventory item and its amount) survive intact.
-TEST_CASE("MAP round-trip preserves objects and inventory", "[map][roundtrip]") {
+// MapWriter/MapReader symmetry guard. Builds one object of every type and item/
+// scenery subtype that has a distinct serialization path (plus a nested inventory
+// item), writes it, reads it back, and asserts the base fields AND every
+// type-specific field survive. Needs no .map/.pro fixture - a stub PRO provider
+// supplies the subtypes the (de)serialization dereferences.
+TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roundtrip]") {
     StubProvider provider;
     const uint32_t containerPid = pidOf(Pro::OBJECT_TYPE::ITEM, 200);
     const uint32_t armorPid = pidOf(Pro::OBJECT_TYPE::ITEM, 201);
-    provider.add(containerPid, Pro::ITEM_TYPE::CONTAINER);
-    provider.add(armorPid, Pro::ITEM_TYPE::ARMOR);
+    const uint32_t weaponPid = pidOf(Pro::OBJECT_TYPE::ITEM, 202);
+    const uint32_t ammoPid = pidOf(Pro::OBJECT_TYPE::ITEM, 203);
+    const uint32_t keyPid = pidOf(Pro::OBJECT_TYPE::ITEM, 204);
+    const uint32_t doorPid = pidOf(Pro::OBJECT_TYPE::SCENERY, 300);
+    const uint32_t stairsPid = pidOf(Pro::OBJECT_TYPE::SCENERY, 301);
+    provider.addItem(containerPid, Pro::ITEM_TYPE::CONTAINER);
+    provider.addItem(armorPid, Pro::ITEM_TYPE::ARMOR);
+    provider.addItem(weaponPid, Pro::ITEM_TYPE::WEAPON);
+    provider.addItem(ammoPid, Pro::ITEM_TYPE::AMMO);
+    provider.addItem(keyPid, Pro::ITEM_TYPE::KEY);
+    provider.addScenery(doorPid, Pro::SCENERY_TYPE::DOOR);
+    provider.addScenery(stairsPid, Pro::SCENERY_TYPE::STAIRS);
 
     auto original = Map::createEmptyMapFile();
+    auto& objects = original.map_objects[0];
 
-    // A wall, with every base field set to a distinctive value so a field-order
-    // or width bug anywhere in the 22-field block is caught.
-    auto wall = std::make_shared<MapObject>();
-    wall->unknown0 = 0x11111111;
-    wall->position = 12345;
-    wall->x = 50;
-    wall->y = 60;
-    wall->sx = -7;
-    wall->sy = -9;
-    wall->frame_number = 4;
-    wall->direction = 3;
-    wall->frm_pid = pidOf(Pro::OBJECT_TYPE::WALL, 7);
-    wall->flags = 0x04000000;
-    wall->elevation = 0;
-    wall->pro_pid = pidOf(Pro::OBJECT_TYPE::WALL, 100);
-    wall->critter_index = 1234;
-    wall->light_radius = 8;
-    wall->light_intensity = 65536;
-    wall->outline_color = 0xAB;
-    wall->map_scripts_pid = 4242;
-    wall->script_id = 99;
-    wall->max_inventory_size = 0;
-    wall->unknown10 = 0x22222222;
-    wall->unknown11 = 0x33333333;
-    original.map_objects[0].push_back(wall);
+    auto add = [&](uint32_t proPid, int32_t seed) {
+        auto o = std::make_shared<MapObject>();
+        fillBase(*o, seed);
+        o->pro_pid = proPid;
+        o->elevation = 0;
+        objects.push_back(o);
+        return o;
+    };
 
-    // A critter, exercising the 10-field critter-only block.
-    auto critter = std::make_shared<MapObject>();
-    critter->pro_pid = pidOf(Pro::OBJECT_TYPE::CRITTER, 50);
-    critter->position = 6789;
-    critter->elevation = 0;
-    critter->player_reaction = 3;
-    critter->current_mp = 11;
-    critter->combat_results = 22;
-    critter->dmg_last_turn = 33;
-    critter->ai_packet = 7;
-    critter->group_id = 1;
-    critter->who_hit_me = 44;
-    critter->current_hp = 42;
-    critter->current_rad = 0;
-    critter->current_poison = 0;
-    original.map_objects[0].push_back(critter);
+    auto wall = add(pidOf(Pro::OBJECT_TYPE::WALL, 100), 1);
 
-    // A container holding one armor item, exercising the inventory path.
-    auto container = std::make_shared<MapObject>();
-    container->pro_pid = containerPid;
-    container->position = 100;
-    container->elevation = 0;
+    auto critter = add(pidOf(Pro::OBJECT_TYPE::CRITTER, 50), 2);
+    critter->player_reaction = 301;
+    critter->current_mp = 302;
+    critter->combat_results = 303;
+    critter->dmg_last_turn = 304;
+    critter->ai_packet = 305;
+    critter->group_id = 306;
+    critter->who_hit_me = 307;
+    critter->current_hp = 308;
+    critter->current_rad = 309;
+    critter->current_poison = 310;
+
+    auto container = add(containerPid, 3);
     container->objects_in_inventory = 1;
-    container->max_inventory_size = 10;
     auto armor = std::make_unique<MapObject>();
+    fillBase(*armor, 30);
     armor->pro_pid = armorPid;
-    armor->position = 200;
     armor->elevation = 0;
     armor->amount = 5;
     container->inventory.push_back(std::move(armor));
-    original.map_objects[0].push_back(container);
+
+    auto weapon = add(weaponPid, 4);
+    weapon->ammo = 401;
+    weapon->ammo_pid = 402;
+
+    auto ammo = add(ammoPid, 5);
+    ammo->ammo = 501;
+
+    auto key = add(keyPid, 6);
+    key->keycode = 601;
+
+    auto door = add(doorPid, 7);
+    door->walkthrough = 701;
+
+    auto stairs = add(stairsPid, 8);
+    stairs->elevhex = 801;
+    stairs->map = 802;
+
+    auto exitGrid = add(pidOf(Pro::OBJECT_TYPE::MISC, 16), 9);
+    exitGrid->exit_map = 901;
+    exitGrid->exit_position = 902;
+    exitGrid->exit_elevation = 903;
+    exitGrid->exit_orientation = 904;
+
+    const size_t objectCount = objects.size();
 
     const auto path = tempMapPath();
     {
@@ -161,15 +200,20 @@ TEST_CASE("MAP round-trip preserves objects and inventory", "[map][roundtrip]") 
     CHECK(result.header.flags == original.header.flags);
     CHECK(result.header.script_id == original.header.script_id);
 
-    // Three objects on elevation 0, none on the other elevations.
-    REQUIRE(result.map_objects.at(0).size() == 3);
+    // All objects on elevation 0; the other two elevations stay empty.
+    REQUIRE(result.map_objects.at(0).size() == objectCount);
     CHECK(result.map_objects.at(1).empty());
     CHECK(result.map_objects.at(2).empty());
 
-    checkBaseFields(*result.map_objects.at(0)[0], *wall);
+    const auto& got = result.map_objects.at(0);
 
-    const auto& gotCritter = *result.map_objects.at(0)[1];
-    CHECK(gotCritter.pro_pid == critter->pro_pid);
+    // Base fields survive for every object type.
+    for (size_t i = 0; i < objectCount; ++i) {
+        checkBase(*got[i], *objects[i]);
+    }
+
+    // Type-specific fields survive.
+    const auto& gotCritter = *got[1];
     CHECK(gotCritter.player_reaction == critter->player_reaction);
     CHECK(gotCritter.current_mp == critter->current_mp);
     CHECK(gotCritter.combat_results == critter->combat_results);
@@ -181,13 +225,29 @@ TEST_CASE("MAP round-trip preserves objects and inventory", "[map][roundtrip]") 
     CHECK(gotCritter.current_rad == critter->current_rad);
     CHECK(gotCritter.current_poison == critter->current_poison);
 
-    const auto& gotContainer = *result.map_objects.at(0)[2];
-    CHECK(gotContainer.pro_pid == containerPid);
+    const auto& gotContainer = *got[2];
     CHECK(gotContainer.objects_in_inventory == 1);
     REQUIRE(gotContainer.inventory.size() == 1);
-    CHECK(gotContainer.inventory[0]->pro_pid == armorPid);
+    checkBase(*gotContainer.inventory[0], *container->inventory[0]);
     CHECK(gotContainer.inventory[0]->amount == 5);
-    CHECK(gotContainer.inventory[0]->position == 200);
+
+    const auto& gotWeapon = *got[3];
+    CHECK(gotWeapon.ammo == weapon->ammo);
+    CHECK(gotWeapon.ammo_pid == weapon->ammo_pid);
+
+    CHECK(got[4]->ammo == ammo->ammo);
+    CHECK(got[5]->keycode == key->keycode);
+    CHECK(got[6]->walkthrough == door->walkthrough);
+
+    const auto& gotStairs = *got[7];
+    CHECK(gotStairs.elevhex == stairs->elevhex);
+    CHECK(gotStairs.map == stairs->map);
+
+    const auto& gotExit = *got[8];
+    CHECK(gotExit.exit_map == exitGrid->exit_map);
+    CHECK(gotExit.exit_position == exitGrid->exit_position);
+    CHECK(gotExit.exit_elevation == exitGrid->exit_elevation);
+    CHECK(gotExit.exit_orientation == exitGrid->exit_orientation);
 
     std::error_code ec;
     std::filesystem::remove(path, ec);
