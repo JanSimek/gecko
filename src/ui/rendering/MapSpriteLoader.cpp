@@ -2,6 +2,7 @@
 
 #include "../../editor/HexagonGrid.h"
 #include "../../editor/Object.h"
+#include "../../editor/helper/ObjectQueries.h"
 #include "../../format/frm/Frm.h"
 #include "../../format/lst/Lst.h"
 #include "../../format/map/Map.h"
@@ -238,7 +239,7 @@ void MapSpriteLoader::createWallBlockerOverlay(
     const std::shared_ptr<MapObject>& mapObject,
     int hexPosition,
     std::vector<sf::Sprite>& wallBlockerOverlays) const {
-    bool blocks = mapObject->blocksMovement(_resources);
+    bool blocks = object_query::blocksMovement(*mapObject, _resources);
 
     spdlog::debug("createWallBlockerOverlay: hex {}, pro_pid 0x{:08X}, blocks: {}",
         hexPosition, mapObject->pro_pid, blocks);
@@ -247,7 +248,7 @@ void MapSpriteLoader::createWallBlockerOverlay(
         return;
     }
 
-    bool isShootThrough = mapObject->isShootThroughWallBlocker(_resources);
+    bool isShootThrough = object_query::isShootThroughWallBlocker(*mapObject, _resources);
 
     try {
         std::string overlayFrmPath = isShootThrough

@@ -9,11 +9,6 @@
 
 namespace geck {
 
-class Pro; // Forward declaration
-namespace resource {
-    class GameResources;
-}
-
 /// A single map object: scenery, walls, items, containers, keys or critters.
 struct MapObject {
 
@@ -91,26 +86,12 @@ struct MapObject {
         return baseId == 1 && flags & 0x00000010;
     }
 
-    bool isWallBlocker(resource::GameResources& resources) {
-        // Any object that blocks movement OR is a gap-filling wall blocker
-        return blocksMovement(resources);
-    }
-
-    bool isShootThroughWallBlocker(resource::GameResources& resources);
-
     bool isScrollBlocker() {
         // Scroll blockers are visual indicators only (FRM-based, not proto-based)
         // They use scrblk.frm (FRM baseId == 1)
         auto baseId = frm_pid & 0x00FFFFFF;
         return baseId == 1;
     }
-
-private:
-    /// Loads the PRO file data on demand (not cached).
-    Pro* getProData(resource::GameResources& resources) const;
-
-public:
-    bool blocksMovement(resource::GameResources& resources) const;
 
     bool isWallObject() const;
 

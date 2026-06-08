@@ -191,6 +191,9 @@ set(GECK_APP_SOURCES
     editor/Hex.h
     editor/Hex.cpp
 
+    editor/helper/ObjectQueries.h
+    editor/helper/ObjectQueries.cpp
+
     # vfspp plugin
     vfs/Dat2File.hpp
     vfs/Dat2FileSystem.hpp
@@ -208,10 +211,7 @@ set(GECK_APP_SOURCES
     resource/TextureManager.cpp
     resource/GameResources.h
     resource/GameResources.cpp
-    
-    # MapObject implementation (needs shared resource access)
-    format/map/MapObject.cpp
-    
+
     # Qt Resource files
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
 )
@@ -278,6 +278,7 @@ add_library(vault STATIC
     format/map/Map.cpp
     format/map/MapScript.h
     format/map/MapObject.h
+    format/map/MapObject.cpp
     format/map/Tile.h
     format/map/Tile.cpp
 
