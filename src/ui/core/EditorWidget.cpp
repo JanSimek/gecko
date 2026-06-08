@@ -66,7 +66,10 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
         _wallBlockerOverlays,
         _undoStack,
         [this]() { refreshObjects(); },
-        [this]() { Q_EMIT undoStackChanged(); });
+        [this]() { Q_EMIT undoStackChanged(); },
+        [this](int elevation) -> std::vector<Tile>& { return ensureElevationTiles(elevation); },
+        [this]() { return _currentElevation; },
+        [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); });
     _inputHandler = std::make_unique<InputHandler>();
     _dragDropManager = std::make_unique<DragDropManager>(
         *this,
@@ -89,58 +92,15 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
     _viewportController->centerViewOnMap();
 }
 
+// Tile-edit command logic lives in ObjectCommandController (the single command
+// owner); these are thin TilePlacementContext delegators. The controller invokes
+// ensureElevationTiles/updateTileSprite/getCurrentElevation back through callbacks.
 void EditorWidget::applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState) {
-    if (!_map) {
-        return;
-    }
-
-    std::unordered_map<int, std::vector<const TileChange*>> changesByElevation;
-    for (const auto& change : changes) {
-        changesByElevation[change.elevation].push_back(&change);
-    }
-
-    // Apply all changes first, then update sprites in batch
-    for (const auto& [elevation, elevChanges] : changesByElevation) {
-        auto& elevationTiles = ensureElevationTiles(elevation);
-
-        for (const auto* change : elevChanges) {
-            if (change->tileIndex < 0 || change->tileIndex >= static_cast<int>(elevationTiles.size())) {
-                continue;
-            }
-
-            uint16_t value = applyAfterState ? change->after : change->before;
-            if (change->isRoof) {
-                elevationTiles[change->tileIndex].setRoof(value);
-            } else {
-                elevationTiles[change->tileIndex].setFloor(value);
-            }
-        }
-
-        if (elevation == _currentElevation) {
-            for (const auto* change : elevChanges) {
-                if (change->tileIndex >= 0 && change->tileIndex < static_cast<int>(elevationTiles.size())) {
-                    int hexIndex = tileIndexToHexIndex(change->tileIndex);
-                    updateTileSprite(hexIndex, change->isRoof, elevation);
-                }
-            }
-        }
-    }
+    _objectCommandController->applyTileChanges(changes, applyAfterState);
 }
 
 void EditorWidget::registerTileEdit(const QString& description, const std::vector<TileChange>& changes) {
-    if (changes.empty()) {
-        return;
-    }
-
-    UndoCommand cmd;
-    cmd.description = description.toStdString();
-    cmd.undo = [this, changes]() {
-        applyTileChanges(changes, false);
-    };
-    cmd.redo = [this, changes]() {
-        applyTileChanges(changes, true);
-    };
-    _objectCommandController->pushCommand(std::move(cmd));
+    _objectCommandController->registerTileEdit(description.toStdString(), changes);
 }
 
 void EditorWidget::addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {

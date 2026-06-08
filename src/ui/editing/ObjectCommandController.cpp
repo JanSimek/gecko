@@ -4,11 +4,15 @@
 #include "editor/Object.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
+#include "format/map/Tile.h"
 #include "resource/GameResources.h"
+#include "ui/core/TileChange.h"
+#include "util/TileUtils.h"
 #include "util/UndoStack.h"
 #include "ui/rendering/MapSpriteLoader.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -21,7 +25,10 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     std::vector<sf::Sprite>& wallBlockerOverlays,
     UndoStack& undoStack,
     std::function<void()> refreshObjects,
-    std::function<void()> onStackChanged)
+    std::function<void()> onStackChanged,
+    std::function<std::vector<Tile>&(int)> ensureElevationTiles,
+    std::function<int()> getCurrentElevation,
+    std::function<void(int, bool, int)> updateTileSprite)
     : _resources(resources)
     , _map(map)
     , _hexgrid(hexgrid)
@@ -30,7 +37,64 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     , _wallBlockerOverlays(wallBlockerOverlays)
     , _undoStack(undoStack)
     , _refreshObjects(std::move(refreshObjects))
-    , _onStackChanged(std::move(onStackChanged)) {
+    , _onStackChanged(std::move(onStackChanged))
+    , _ensureElevationTiles(std::move(ensureElevationTiles))
+    , _getCurrentElevation(std::move(getCurrentElevation))
+    , _updateTileSprite(std::move(updateTileSprite)) {
+}
+
+void ObjectCommandController::applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState) {
+    if (!_map) {
+        return;
+    }
+
+    std::unordered_map<int, std::vector<const TileChange*>> changesByElevation;
+    for (const auto& change : changes) {
+        changesByElevation[change.elevation].push_back(&change);
+    }
+
+    // Apply all changes first, then update sprites in batch.
+    for (const auto& [elevation, elevChanges] : changesByElevation) {
+        auto& elevationTiles = _ensureElevationTiles(elevation);
+
+        for (const auto* change : elevChanges) {
+            if (change->tileIndex < 0 || change->tileIndex >= static_cast<int>(elevationTiles.size())) {
+                continue;
+            }
+
+            uint16_t value = applyAfterState ? change->after : change->before;
+            if (change->isRoof) {
+                elevationTiles[change->tileIndex].setRoof(value);
+            } else {
+                elevationTiles[change->tileIndex].setFloor(value);
+            }
+        }
+
+        if (elevation == _getCurrentElevation()) {
+            for (const auto* change : elevChanges) {
+                if (change->tileIndex >= 0 && change->tileIndex < static_cast<int>(elevationTiles.size())) {
+                    int hexIndex = tileIndexToHexIndex(change->tileIndex);
+                    _updateTileSprite(hexIndex, change->isRoof, elevation);
+                }
+            }
+        }
+    }
+}
+
+void ObjectCommandController::registerTileEdit(const std::string& description, const std::vector<TileChange>& changes) {
+    if (changes.empty()) {
+        return;
+    }
+
+    UndoCommand cmd;
+    cmd.description = description;
+    cmd.undo = [this, changes]() {
+        applyTileChanges(changes, false);
+    };
+    cmd.redo = [this, changes]() {
+        applyTileChanges(changes, true);
+    };
+    pushCommand(std::move(cmd));
 }
 
 void ObjectCommandController::addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {

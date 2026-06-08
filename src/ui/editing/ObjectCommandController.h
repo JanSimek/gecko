@@ -17,7 +17,9 @@ class HexagonGrid;
 class Map;
 class MapSpriteLoader;
 class Object;
+class Tile;
 struct MapObject;
+struct TileChange;
 
 namespace resource {
     class GameResources;
@@ -42,7 +44,10 @@ public:
         std::vector<sf::Sprite>& wallBlockerOverlays,
         UndoStack& undoStack,
         std::function<void()> refreshObjects,
-        std::function<void()> onStackChanged);
+        std::function<void()> onStackChanged,
+        std::function<std::vector<Tile>&(int)> ensureElevationTiles,
+        std::function<int()> getCurrentElevation,
+        std::function<void(int, bool, int)> updateTileSprite);
 
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
@@ -62,6 +67,11 @@ public:
         const std::vector<ExitGridCommandState>& beforeStates,
         const std::vector<ExitGridCommandState>& afterStates);
 
+    /// Applies the before/after state of tile edits and refreshes affected sprites.
+    void applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState);
+    /// Records an undoable tile edit (the change was already applied by the caller).
+    void registerTileEdit(const std::string& description, const std::vector<TileChange>& changes);
+
 private:
     resource::GameResources& _resources;
     std::unique_ptr<Map>& _map;
@@ -72,6 +82,9 @@ private:
     UndoStack& _undoStack;
     std::function<void()> _refreshObjects;
     std::function<void()> _onStackChanged;
+    std::function<std::vector<Tile>&(int)> _ensureElevationTiles;
+    std::function<int()> _getCurrentElevation;
+    std::function<void(int, bool, int)> _updateTileSprite;
 };
 
 } // namespace geck
