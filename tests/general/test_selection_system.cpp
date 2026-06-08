@@ -723,37 +723,6 @@ public:
     int getCurrentElevation() const override { return currentElevation; }
     ViewportController* getViewportController() const override { return nullptr; }
 
-    // Mock viewport controller methods (new methods)
-    std::optional<int> worldPosToTileIndex(sf::Vector2f worldPos, bool isRoof = false) const {
-        // Simplified mock that works for test positions
-        if (worldPos.x < 0 || worldPos.y < 0) {
-            return std::nullopt; // Only reject clearly invalid positions
-        }
-
-        // Simple coordinate mapping for testing
-        int tileX = static_cast<int>(worldPos.x / 80) % 100; // Use TILE_WIDTH=80
-        int tileY = static_cast<int>(worldPos.y / 36) % 100; // Use TILE_HEIGHT=36
-
-        // Add roof offset
-        if (isRoof) {
-            tileY = (tileY + 10) % 100; // Simple offset to make roof different
-        }
-
-        return tileY * 100 + tileX;
-    }
-
-    std::optional<int> worldPosToHexIndex(sf::Vector2f worldPos) const {
-        // Mock hex conversion
-        int hexX = static_cast<int>(worldPos.x / 24); // Approximate hex width
-        int hexY = static_cast<int>(worldPos.y / 12); // Approximate hex height
-
-        if (hexX < 0 || hexX >= HexagonGrid::GRID_WIDTH || hexY < 0 || hexY >= HexagonGrid::GRID_HEIGHT) {
-            return std::nullopt;
-        }
-
-        return hexY * HexagonGrid::GRID_WIDTH + hexX;
-    }
-
     // --- SelectionDataProvider: hit tests ---
     std::optional<int> getTileAtPosition(sf::Vector2f worldPos, [[maybe_unused]] bool isRoof) override {
         // Simple mock: convert world position to tile index for testing
@@ -1274,68 +1243,10 @@ TEST_CASE("Mouse position accuracy and disambiguation", "[mouse_accuracy]") {
 // SECTION: SelectionManager Integration Tests
 //==============================================================================
 
-TEST_CASE("Selection Manager position-based selection", "[selection_manager_integration]") {
-    MockEditorWidget mockWidget;
-
-    SECTION("selectAtPosition with different modes") {
-        sf::Vector2f testPos(200.0f, 150.0f);
-
-        // Test floor tile selection
-        auto floorResult = mockWidget.worldPosToTileIndex(testPos, false);
-        REQUIRE(floorResult.has_value());
-
-        // Test roof tile selection at same position
-        auto roofResult = mockWidget.worldPosToTileIndex(testPos, true);
-        REQUIRE(roofResult.has_value());
-
-        // Results should be different (roof offset effect)
-        REQUIRE(floorResult.value() != roofResult.value());
-
-        // Test hex selection at same position
-        auto hexResult = mockWidget.worldPosToHexIndex(testPos);
-        REQUIRE(hexResult.has_value());
-
-        // Hex and tile results should be in valid ranges
-        REQUIRE(floorResult.value() < TILES_PER_ELEVATION);
-        REQUIRE(roofResult.value() < TILES_PER_ELEVATION);
-        REQUIRE(hexResult.value() < (HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT));
-    }
-
-    SECTION("Elevation-specific behavior") {
-        sf::Vector2f testPos(150.0f, 100.0f);
-
-        // Test at different elevations
-        for (int elevation = 0; elevation < 3; elevation++) {
-            mockWidget.currentElevation = elevation;
-
-            // Position conversion should work regardless of elevation
-            if (testPos.x >= 0 && testPos.y >= 0) {
-                // Results may or may not be valid depending on position, but shouldn't crash
-                REQUIRE_NOTHROW([&]() {
-                    mockWidget.worldPosToTileIndex(testPos, false);
-                    mockWidget.worldPosToHexIndex(testPos);
-                }());
-            }
-        }
-    }
-
-    SECTION("Invalid position handling") {
-        std::vector<sf::Vector2f> invalidPositions = {
-            sf::Vector2f(-100.0f, -100.0f),   // Far negative
-            sf::Vector2f(10000.0f, 10000.0f), // Far positive
-            sf::Vector2f(-1.0f, 100.0f),      // Partially invalid
-            sf::Vector2f(100.0f, -1.0f)       // Partially invalid
-        };
-
-        for (const auto& pos : invalidPositions) {
-            // Invalid positions should return nullopt, not crash
-            REQUIRE_NOTHROW([&]() {
-                mockWidget.worldPosToTileIndex(pos, false);
-                mockWidget.worldPosToHexIndex(pos);
-            }());
-        }
-    }
-}
+// NOTE: the former "Selection Manager position-based selection" case here only
+// asserted on MockEditorWidget's fabricated coordinate formula (never touched
+// SelectionManager). The real world->hex/tile conversion is now covered by
+// test_viewport_controller.cpp, so it was removed with the mock methods.
 
 //==============================================================================
 // SECTION: Complex Selection Scenarios
@@ -1461,25 +1372,8 @@ TEST_CASE("Regression prevention for known issues", "[regression_prevention]") {
         REQUIRE(state.getHexIndices()[0] == validHexIndex);
     }
 
-    SECTION("Prevent roof/floor selection confusion") {
-        // Bug: roof and floor tiles at same screen position selected wrong tile
-        sf::Vector2f testPos(300.0f, 200.0f);
-        MockEditorWidget mockWidget;
-
-        auto floorTile = mockWidget.worldPosToTileIndex(testPos, false);
-        auto roofTile = mockWidget.worldPosToTileIndex(testPos, true);
-
-        // Both should be valid
-        REQUIRE(floorTile.has_value());
-        REQUIRE(roofTile.has_value());
-
-        // They should be different due to roof offset
-        REQUIRE(floorTile.value() != roofTile.value());
-
-        // Both should be in valid tile range
-        REQUIRE(floorTile.value() < TILES_PER_ELEVATION);
-        REQUIRE(roofTile.value() < TILES_PER_ELEVATION);
-    }
+    // (Roof/floor disambiguation is exercised against the real algorithm in
+    // test_viewport_controller.cpp's ROOF_OFFSET case, not a mock formula.)
 
     SECTION("Prevent area selection size calculation errors") {
         SelectionState state;
