@@ -462,10 +462,10 @@ std::optional<uint32_t> FrmSelectorDialog::deriveFrmPidFromPath(const std::strin
     // Handle well-known special cases first (use normalized path).
     // These are legitimate (sometimes low-valued) FIDs, not failure sentinels.
     if (normalizedPath == "art/misc/scrblk.frm") {
-        return uint32_t{ 0x00000001 }; // Scroll blocker
+        return uint32_t{ 0x05000001 }; // Scroll blocker: MISC (type 5), baseId 1 - matches FrmResolver::resolve
     }
     if (normalizedPath == "art/misc/wallblock.frm") {
-        return uint32_t{ 0x0400026C }; // Wall blocker (type=WALL, baseId=620)
+        return uint32_t{ 0x0300026C }; // Wall blocker: WALL (type 3), baseId 620 - matches FrmResolver::resolve
     }
     if (normalizedPath == "art/misc/light.frm") {
         return uint32_t{ 0x02000015 }; // Light source

@@ -78,7 +78,9 @@ FrmResolver::FrmResolver(ResourceRepository& repository)
 
 std::string FrmResolver::resolve(uint32_t fid) {
     auto baseId = fid & FileFormat::BASE_ID_MASK;
-    auto type = static_cast<Frm::FRM_TYPE>(fid >> FileFormat::TYPE_MASK_SHIFT);
+    // Mask to the 4 type bits (engine FID_TYPE == (fid & 0x0F000000) >> 24); a bare
+    // shift would fold in the rotation bits (28-30) and misclassify rotated FIDs.
+    auto type = static_cast<Frm::FRM_TYPE>((fid & FileFormat::TYPE_MASK) >> FileFormat::TYPE_MASK_SHIFT);
 
     if (type == Frm::FRM_TYPE::CRITTER) {
         baseId = fid & FileFormat::CRITTER_ID_MASK;
