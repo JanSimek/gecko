@@ -17,8 +17,6 @@ set(GECK_APP_SOURCES
     util/SpriteFactory.cpp
 
     util/AmmoCaliberNames.h
-    util/ProHelper.h
-    util/ProHelper.cpp
 
     util/QtDialogs.h
     util/QtDialogs.cpp
@@ -34,10 +32,6 @@ set(GECK_APP_SOURCES
 
     util/Types.h
     util/Exceptions.h
-    util/Coordinates.h
-    util/Coordinates.cpp
-    util/SpatialIndex.h
-    util/SpatialIndex.cpp
 
     # Qt6 UI Common
     ui/common/BaseWidget.h
@@ -158,15 +152,6 @@ set(GECK_APP_SOURCES
     ui/tools/ExitGridContext.h
     ui/tools/ExitGridPlacementManager.h
     ui/tools/ExitGridPlacementManager.cpp
-    ui/viewport/ViewportController.h
-    ui/viewport/ViewportController.cpp
-
-    # Selection management
-    selection/SelectionState.h
-    selection/SelectionState.cpp
-    selection/SelectionManager.h
-    selection/SelectionManager.cpp
-
     # Loaders (kept from state system)
     state/loader/Loader.h
     state/loader/MapLoader.cpp
@@ -177,19 +162,6 @@ set(GECK_APP_SOURCES
     # Game launch service
     state/GameLauncher.cpp
     state/GameLauncher.h
-
-    editor/Object.h
-    editor/Object.cpp
-
-
-    editor/HexagonGrid.h
-    editor/HexagonGrid.cpp
-
-    editor/Hex.h
-    editor/Hex.cpp
-
-    editor/helper/ObjectQueries.h
-    editor/helper/ObjectQueries.cpp
 
     # Qt Resource files
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
@@ -386,6 +358,51 @@ target_link_libraries(gecko_resource PUBLIC
     vault
 )
 
+###################################
+# GECK Core layer (Qt-free)
+###################################
+# Editor model (objects, hex grid), selection, viewport coordinate math and the
+# Qt-free geometry utilities. Depends only on gecko_resource, vault and SFML - no
+# Qt - so editor/selection logic stays headless-testable.
+add_library(gecko_core STATIC
+    util/ProHelper.h
+    util/ProHelper.cpp
+    util/Coordinates.h
+    util/Coordinates.cpp
+    util/SpatialIndex.h
+    util/SpatialIndex.cpp
+
+    ui/viewport/ViewportController.h
+    ui/viewport/ViewportController.cpp
+
+    selection/SelectionDataProvider.h
+    selection/SelectionState.h
+    selection/SelectionState.cpp
+    selection/SelectionManager.h
+    selection/SelectionManager.cpp
+
+    editor/Object.h
+    editor/Object.cpp
+    editor/HexagonGrid.h
+    editor/HexagonGrid.cpp
+    editor/Hex.h
+    editor/Hex.cpp
+    editor/helper/ObjectQueries.h
+    editor/helper/ObjectQueries.cpp
+)
+add_library(gecko::core ALIAS gecko_core)
+
+target_include_directories(gecko_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(gecko_core PUBLIC
+    SFML::System SFML::Graphics SFML::Window
+    gecko::spdlog
+    vault
+    gecko_resource
+)
+
 target_link_libraries(gecko_app PUBLIC
     SFML::System SFML::Graphics SFML::Window
     Qt6::Core
@@ -395,6 +412,7 @@ target_link_libraries(gecko_app PUBLIC
     vfspp
     vault
     gecko_resource
+    gecko_core
 )
 
 target_include_directories(gecko_app PUBLIC

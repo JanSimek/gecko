@@ -2,7 +2,6 @@
 
 #include "Constants.h"
 #include <SFML/Graphics/Color.hpp>
-#include <QtGui/QColor>
 
 namespace geck::ColorUtils {
 
@@ -37,15 +36,6 @@ inline sf::Color createRoofTileSelectionColor() {
 
 inline sf::Color createObjectSelectionColor() {
     return sf::Color::Magenta;
-}
-
-// Qt Color utilities
-inline QColor createSelectionBorderColor() {
-    return QColor(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B);
-}
-
-inline QColor createTilePlaceholderColor(int index) {
-    return QColor(100 + (index % 156), 100 + ((index * 7) % 156), 100 + ((index * 13) % 156));
 }
 
 } // namespace geck::ColorUtils

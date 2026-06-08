@@ -257,7 +257,8 @@ void TilePalettePanel::updateTileGrid() {
                 spdlog::debug("TilePalettePanel: Using placeholder for tile {}: {}", i, e.what());
 
                 tilePixmap = QPixmap(TileWidget::TILE_SIZE, TileWidget::TILE_SIZE);
-                tilePixmap.fill(geck::ColorUtils::createTilePlaceholderColor(i));
+                // Deterministic pseudo-random placeholder tint keyed on the tile index.
+                tilePixmap.fill(QColor(100 + (i % 156), 100 + ((i * 7) % 156), 100 + ((i * 13) % 156)));
 
                 QPainter painter(&tilePixmap);
                 painter.setPen(ui::theme::colors::textLight());
