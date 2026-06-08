@@ -2,56 +2,35 @@
 
 #include <cstdint>
 
+#include "Pro.h"
+
 namespace geck {
 
 /**
  * @brief Data models for PRO file type-specific data
  *
- * These structures represent the various data sections that appear
- * after the common header in PRO files, depending on the object type.
+ * These structures represent the various data sections that appear after the
+ * common header in PRO files, depending on the object type.
  *
- * Extracted from ProEditorDialog to follow Single Responsibility Principle
- * and enable reuse across different UI components.
+ * Where the editor's representation matches Pro's on-disk layout exactly, the
+ * type is an alias of the canonical Pro definition so there is a single source
+ * of truth (the two can no longer drift). Types whose editor representation
+ * deliberately differs from the on-disk Pro layout keep their own struct here.
  */
 
-// Item Type: Armor
-struct ProArmorData {
-    uint32_t armorClass;
-    uint32_t damageResist[7]; // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
-    uint32_t damageThreshold[7];
-    uint32_t perk;
-    int32_t armorMaleFID;
-    int32_t armorFemaleFID;
-};
-
-// Item Type: Container
-struct ProContainerData {
-    uint32_t maxSize;
-    uint32_t flags; // Use, UseOn, Look, Talk, Pickup flags
-};
-
-// Item Type: Drug
-struct ProDrugData {
-    uint32_t stat0;           // Stat ID for immediate effect (0-14)
-    uint32_t stat1;           // Stat ID for immediate effect (0-14)
-    uint32_t stat2;           // Stat ID for immediate effect (0-14)
-    int32_t amount0;          // Modifier for stat0 (signed)
-    int32_t amount1;          // Modifier for stat1 (signed)
-    int32_t amount2;          // Modifier for stat2 (signed)
-    uint32_t duration1;       // Delay before first effect (game minutes)
-    int32_t amount0_1;        // First delayed effect for stat0
-    int32_t amount1_1;        // First delayed effect for stat1
-    int32_t amount2_1;        // First delayed effect for stat2
-    uint32_t duration2;       // Delay before second effect (game minutes)
-    int32_t amount0_2;        // Second delayed effect for stat0
-    int32_t amount1_2;        // Second delayed effect for stat1
-    int32_t amount2_2;        // Second delayed effect for stat2
-    uint32_t addictionRate;   // Addiction chance (percentage)
-    uint32_t addictionEffect; // Addiction perk ID
-    uint32_t addictionOnset;  // Delay before addiction effect (game minutes)
-};
+// Identical to the canonical Pro definitions -> aliases.
+using ProArmorData = Pro::ArmorData;
+using ProContainerData = Pro::ContainerData;
+using ProDrugData = Pro::DrugData;
+using ProAmmoData = Pro::AmmoData;
+using ProMiscData = Pro::MiscData;
+using ProKeyData = Pro::KeyData;
+using ProWallData = Pro::WallData;
+using ProTileData = Pro::TileData;
 
 // Item Type: Weapon
+// Pro::WeaponData additionally carries weaponFlags, which the weapon widget
+// manages directly on pro->weaponData; the editor struct intentionally omits it.
 struct ProWeaponData {
     uint32_t animationCode;
     uint32_t damageMin, damageMax;
@@ -69,28 +48,8 @@ struct ProWeaponData {
     uint8_t soundId;
 };
 
-// Item Type: Ammo
-struct ProAmmoData {
-    uint32_t caliber;
-    uint32_t quantity;
-    int32_t damageModifier;
-    int32_t damageResistModifier;
-    int32_t damageMultiplier;
-    int32_t damageTypeModifier;
-};
-
-// Item Type: Misc
-struct ProMiscData {
-    uint32_t powerType;
-    uint32_t charges;
-};
-
-// Item Type: Key
-struct ProKeyData {
-    uint32_t keyId;
-};
-
 // Object Type: Critter
+// Kept separate pending a full layout reconciliation against Pro::CritterData.
 struct ProCritterData {
     uint32_t headFID;
     uint32_t aiPacket;
@@ -141,6 +100,9 @@ struct ProCritterData {
 };
 
 // Object Type: Scenery
+// The editor uses a union of subtype-specific data, whereas Pro::SceneryData
+// stores every subtype struct separately; keep separate until reconciled with
+// ProReader/ProWriter.
 struct ProSceneryDoorData {
     uint32_t walkThroughFlag;
     uint32_t unknownField;
@@ -176,16 +138,6 @@ struct ProSceneryData {
         ProSceneryLadderData ladderData;
         ProSceneryGenericData genericData;
     };
-};
-
-// Object Type: Wall
-struct ProWallData {
-    uint32_t materialId;
-};
-
-// Object Type: Tile
-struct ProTileData {
-    uint32_t materialId;
 };
 
 } // namespace geck
