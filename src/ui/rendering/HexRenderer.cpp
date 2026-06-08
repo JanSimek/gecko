@@ -3,6 +3,7 @@
 #include "editor/HexagonGrid.h"
 #include "format/frm/Frm.h"
 #include "resource/GameResources.h"
+#include "ui/viewport/ViewportController.h"
 #include "util/Constants.h"
 #include "util/ResourcePaths.h"
 
@@ -109,15 +110,7 @@ void HexRenderer::drawOverlaySprite(sf::RenderTarget& target,
 }
 
 bool HexRenderer::isHexVisible(const Hex& hex, const sf::View& view) const {
-    const sf::Vector2f viewCenter = view.getCenter();
-    const sf::Vector2f viewSize = view.getSize();
-    const int worldX = static_cast<int>(viewCenter.x - viewSize.x / 2);
-    const int worldY = static_cast<int>(viewCenter.y - viewSize.y / 2);
-    const int viewWidth = static_cast<int>(viewSize.x);
-    const int viewHeight = static_cast<int>(viewSize.y);
-
-    return (hex.x() + Hex::HEX_WIDTH * HEX_OVERLAY_FRAME_COUNT > worldX && hex.x() < worldX + viewWidth)
-        && (hex.y() + Hex::HEX_HEIGHT + HEX_GRID_BASELINE_OFFSET > worldY && hex.y() < worldY + viewHeight);
+    return ViewportController::isHexVisible(hex.x(), hex.y(), view);
 }
 
 } // namespace geck

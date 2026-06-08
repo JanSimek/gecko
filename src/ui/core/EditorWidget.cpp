@@ -1123,39 +1123,20 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
     // FIXME: this is inaccurate and we should not use hex-to-tile conversion in the future.
     // Hex-based selection keeps tile selection consistent with the hex highlights users see.
 
-    sf::Vector2f adjustedWorldPos = worldPos;
-    if (isRoof) {
-        adjustedWorldPos.y += ROOF_OFFSET; // Roof tiles are visually offset upward
-    }
-
-    int hexIndex = _viewportController->worldPosToHexIndex(adjustedWorldPos);
-    if (hexIndex < 0) {
-        spdlog::debug("EditorWidget::getTileAtPosition: No hex found at worldPos ({:.1f}, {:.1f}) adjusted({:.1f}, {:.1f}) [roof: {}]",
-            worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, isRoof);
+    // The roof offset + hex->tile lookup lives in ViewportController::worldPosToTileIndex.
+    const int tileIndex = _viewportController->worldPosToTileIndex(worldPos, isRoof);
+    if (tileIndex < 0) {
         return std::nullopt;
     }
 
-    auto tileIndex = _hexgrid.tileIndexForPosition(hexIndex);
-    if (!tileIndex.has_value()) {
-        return std::nullopt;
-    }
-
-    // Validate tile bounds (should be redundant but kept for safety)
-    if (*tileIndex >= TILES_PER_ELEVATION) {
-        spdlog::debug("EditorWidget::getTileAtPosition: Tile index {} out of bounds", *tileIndex);
-        return std::nullopt;
-    }
-
-    if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(*tileIndex).getRoof() == Map::EMPTY_TILE) {
+    // Editor-specific guard: a roof selection only counts on a non-empty roof tile.
+    if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(tileIndex).getRoof() == Map::EMPTY_TILE) {
         spdlog::debug("EditorWidget::getTileAtPosition: Empty roof tile at index {} [worldPos: ({:.1f}, {:.1f})]",
-            *tileIndex, worldPos.x, worldPos.y);
+            tileIndex, worldPos.x, worldPos.y);
         return std::nullopt;
     }
 
-    spdlog::debug("EditorWidget::getTileAtPosition: Found tile {} at worldPos ({:.1f}, {:.1f}) [roof: {}]",
-        *tileIndex, worldPos.x, worldPos.y, isRoof);
-
-    return *tileIndex;
+    return tileIndex;
 }
 
 std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {

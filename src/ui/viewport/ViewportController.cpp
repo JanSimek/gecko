@@ -115,6 +115,23 @@ int ViewportController::worldPosToTileIndex(sf::Vector2f worldPos, bool isRoof) 
     return *tileIndex;
 }
 
+bool ViewportController::isHexVisible(int hexWorldX, int hexWorldY, const sf::View& view) {
+    // A hex sprite spans ~2 hex-widths and sits a few px below its baseline, so pad
+    // the right/bottom test by those amounts to avoid culling partially-visible hexes.
+    constexpr int HEX_SPRITE_WIDTH_SPAN = Hex::HEX_WIDTH * 2;
+    constexpr int HEX_BASELINE_OFFSET = 4;
+
+    const sf::Vector2f viewCenter = view.getCenter();
+    const sf::Vector2f viewSize = view.getSize();
+    const int worldX = static_cast<int>(viewCenter.x - viewSize.x / 2);
+    const int worldY = static_cast<int>(viewCenter.y - viewSize.y / 2);
+    const int viewWidth = static_cast<int>(viewSize.x);
+    const int viewHeight = static_cast<int>(viewSize.y);
+
+    return (hexWorldX + HEX_SPRITE_WIDTH_SPAN > worldX && hexWorldX < worldX + viewWidth)
+        && (hexWorldY + Hex::HEX_HEIGHT + HEX_BASELINE_OFFSET > worldY && hexWorldY < worldY + viewHeight);
+}
+
 sf::Vector2f ViewportController::snapToHexGrid(sf::Vector2f worldPos) const {
     if (!_hexGrid) {
         return worldPos;

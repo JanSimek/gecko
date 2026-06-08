@@ -1,6 +1,7 @@
 #include "RenderingEngine.h"
 #include "editor/Object.h"
 #include "editor/Hex.h"
+#include "ui/viewport/ViewportController.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "resource/GameResources.h"
@@ -152,15 +153,7 @@ void RenderingEngine::renderHexHighlights(sf::RenderTarget& target,
 
 bool RenderingEngine::isHexVisible(int hexWorldX, int hexWorldY,
     const sf::View& view) const {
-    sf::Vector2f viewCenter = view.getCenter();
-    sf::Vector2f viewSize = view.getSize();
-
-    int worldX = static_cast<int>(viewCenter.x - viewSize.x / 2);
-    int worldY = static_cast<int>(viewCenter.y - viewSize.y / 2);
-    int viewWidth = static_cast<int>(viewSize.x);
-    int viewHeight = static_cast<int>(viewSize.y);
-
-    return (hexWorldX + Hex::HEX_WIDTH * 2 > worldX && hexWorldX < worldX + viewWidth) && (hexWorldY + Hex::HEX_HEIGHT + 4 > worldY && hexWorldY < worldY + viewHeight);
+    return ViewportController::isHexVisible(hexWorldX, hexWorldY, view);
 }
 
 void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangle,

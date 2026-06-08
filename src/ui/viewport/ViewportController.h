@@ -73,6 +73,15 @@ public:
     int worldPosToTileIndex(sf::Vector2f worldPos, bool isRoof = false) const;
 
     /**
+     * @brief Whether a hex at the given world coordinates is within `view`.
+     *
+     * The viewport owns this cull/projection math; the renderers delegate here so
+     * there is one definition (HexRenderer and RenderingEngine previously each had
+     * their own copy). Static because it depends only on the hex coords and view.
+     */
+    [[nodiscard]] static bool isHexVisible(int hexWorldX, int hexWorldY, const sf::View& view);
+
+    /**
      * @brief Convert world position to hex position (type-safe)
      * @param worldPos World position to convert
      * @return HexPosition, or invalid if conversion fails
