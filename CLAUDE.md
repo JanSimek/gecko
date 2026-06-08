@@ -28,9 +28,12 @@ ctest --test-dir build --output-on-failure
 # Run the current test executables directly
 ./build/general_tests
 ./build/performance_tests
+./build/qt_tests
 ```
 
-There is currently no separate `qt_tests` target or ctest label registration for test categories.
+Tests are split into three executables, each registered with ctest: `general_tests`
+(formats, readers/writers, editor logic), `performance_tests`, and `qt_tests` (Qt UI
+regressions). There is no ctest label registration for filtering by category.
 
 ### Code Formatting
 ```bash

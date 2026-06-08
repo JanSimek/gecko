@@ -23,19 +23,6 @@ QSpinBox* ProTabWidget::createSpinBox(int min, int max, const QString& tooltip) 
     return spinBox;
 }
 
-QSpinBox* ProTabWidget::createHexSpinBox(int max, const QString& tooltip) {
-    QSpinBox* spinBox = new QSpinBox();
-    spinBox->setMinimum(0);
-    spinBox->setMaximum(max);
-    spinBox->setDisplayIntegerBase(16);
-    spinBox->setPrefix("0x");
-    if (!tooltip.isEmpty()) {
-        spinBox->setToolTip(tooltip);
-    }
-    connectSpinBox(spinBox);
-    return spinBox;
-}
-
 QComboBox* ProTabWidget::createComboBox(const QStringList& items, const QString& tooltip) {
     QComboBox* comboBox = new QComboBox();
     comboBox->addItems(items);

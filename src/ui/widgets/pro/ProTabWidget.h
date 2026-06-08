@@ -96,11 +96,6 @@ protected:
     QSpinBox* createSpinBox(int min, int max, const QString& tooltip = QString());
 
     /**
-     * @brief Create a hex value spin box
-     */
-    QSpinBox* createHexSpinBox(int max, const QString& tooltip = QString());
-
-    /**
      * @brief Create a combo box with items
      */
     QComboBox* createComboBox(const QStringList& items, const QString& tooltip = QString());

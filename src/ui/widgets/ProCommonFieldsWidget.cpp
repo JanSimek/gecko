@@ -320,12 +320,6 @@ QSpinBox* ProCommonFieldsWidget::createSpinBox(int min, int max, const QString& 
     return spinBox;
 }
 
-QSpinBox* ProCommonFieldsWidget::createHexSpinBox(int max, const QString& tooltip) {
-    auto spinBox = createSpinBox(0, max, tooltip);
-    spinBox->setDisplayIntegerBase(16);
-    return spinBox;
-}
-
 QComboBox* ProCommonFieldsWidget::createMaterialComboBox(const QString& tooltip) {
     auto comboBox = new QComboBox(this);
     comboBox->addItems(game::enums::materialTypes(_resources));

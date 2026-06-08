@@ -103,7 +103,6 @@ private:
     uint32_t saveExtendedFlags() const;
 
     QSpinBox* createSpinBox(int min, int max, const QString& tooltip = QString());
-    QSpinBox* createHexSpinBox(int max, const QString& tooltip = QString());
     QComboBox* createMaterialComboBox(const QString& tooltip = QString());
     void connectSpinBox(QSpinBox* spinBox);
     void connectComboBox(QComboBox* comboBox);
