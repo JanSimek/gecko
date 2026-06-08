@@ -71,8 +71,6 @@ set(GECK_APP_SOURCES
     ui/panels/SelectionPanel.cpp
     ui/panels/FileBrowserPanel.h
     ui/panels/FileBrowserPanel.cpp
-    ui/panels/InventoryPanel.h
-    ui/panels/InventoryPanel.cpp
 
     # Qt6 UI Dialogs
     ui/dialogs/FrmSelectorDialog.h
