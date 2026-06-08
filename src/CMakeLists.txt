@@ -29,9 +29,6 @@ set(GECK_APP_SOURCES
     util/ExternalEditorLauncher.h
     util/ExternalEditorLauncher.cpp
 
-    util/CritterFrmResolver.h
-    util/CritterFrmResolver.cpp
-
     util/FrmThumbnailGenerator.h
     util/FrmThumbnailGenerator.cpp
 
@@ -194,24 +191,6 @@ set(GECK_APP_SOURCES
     editor/helper/ObjectQueries.h
     editor/helper/ObjectQueries.cpp
 
-    # vfspp plugin
-    vfs/Dat2File.hpp
-    vfs/Dat2FileSystem.hpp
-    
-    # Path utilities
-    util/PathUtils.h
-
-    resource/DataFileSystem.h
-    resource/DataFileSystem.cpp
-    resource/ResourceRepository.h
-    resource/ResourceRepository.cpp
-    resource/FrmResolver.h
-    resource/FrmResolver.cpp
-    resource/TextureManager.h
-    resource/TextureManager.cpp
-    resource/GameResources.h
-    resource/GameResources.cpp
-
     # Qt Resource files
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
 )
@@ -369,6 +348,44 @@ PRIVATE
     gecko::spdlog
 )
 
+###################################
+# GECK Resource layer (Qt-free)
+###################################
+# DAT/VFS, the resource repository, FRM resolution and texture loading. Depends
+# only on vault, SFML and vfspp - no Qt, no editor/UI - so it can sit below the
+# app layer and be linked by headless tools and tests.
+add_library(gecko_resource STATIC
+    vfs/Dat2File.hpp
+    vfs/Dat2FileSystem.hpp
+
+    util/PathUtils.h
+    util/CritterFrmResolver.h
+    util/CritterFrmResolver.cpp
+
+    resource/DataFileSystem.h
+    resource/DataFileSystem.cpp
+    resource/ResourceRepository.h
+    resource/ResourceRepository.cpp
+    resource/FrmResolver.h
+    resource/FrmResolver.cpp
+    resource/TextureManager.h
+    resource/TextureManager.cpp
+    resource/GameResources.h
+    resource/GameResources.cpp
+)
+add_library(gecko::resource ALIAS gecko_resource)
+
+target_include_directories(gecko_resource PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(gecko_resource PUBLIC
+    SFML::System SFML::Graphics SFML::Window
+    gecko::spdlog
+    vfspp
+    vault
+)
+
 target_link_libraries(gecko_app PUBLIC
     SFML::System SFML::Graphics SFML::Window
     Qt6::Core
@@ -377,6 +394,7 @@ target_link_libraries(gecko_app PUBLIC
     gecko::spdlog
     vfspp
     vault
+    gecko_resource
 )
 
 target_include_directories(gecko_app PUBLIC
