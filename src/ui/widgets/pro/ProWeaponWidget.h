@@ -56,7 +56,7 @@ private:
     QLabel* _weaponAIPriorityLabel;
 
     // Data
-    ProWeaponData _weaponData;
+    ProWeaponData _weaponData {};
 };
 
 } // namespace geck

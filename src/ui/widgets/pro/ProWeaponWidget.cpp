@@ -172,23 +172,7 @@ void ProWeaponWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    _weaponData.animationCode = pro->weaponData.animationCode;
-    _weaponData.damageMin = pro->weaponData.damageMin;
-    _weaponData.damageMax = pro->weaponData.damageMax;
-    _weaponData.damageType = pro->weaponData.damageType;
-    _weaponData.rangePrimary = pro->weaponData.rangePrimary;
-    _weaponData.rangeSecondary = pro->weaponData.rangeSecondary;
-    _weaponData.projectilePID = pro->weaponData.projectilePID;
-    _weaponData.minimumStrength = pro->weaponData.minimumStrength;
-    _weaponData.actionCostPrimary = pro->weaponData.actionCostPrimary;
-    _weaponData.actionCostSecondary = pro->weaponData.actionCostSecondary;
-    _weaponData.criticalFail = pro->weaponData.criticalFail;
-    _weaponData.perk = pro->weaponData.perk;
-    _weaponData.burstRounds = pro->weaponData.burstRounds;
-    _weaponData.ammoType = pro->weaponData.ammoType;
-    _weaponData.ammoPID = pro->weaponData.ammoPID;
-    _weaponData.ammoCapacity = pro->weaponData.ammoCapacity;
-    _weaponData.soundId = pro->weaponData.soundId;
+    _weaponData = pro->weaponData;
 
     setComboIndex(_weaponAnimationCombo, static_cast<int>(_weaponData.animationCode));
     if (_weaponDamageMinEdit)
@@ -269,23 +253,9 @@ void ProWeaponWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     if (_weaponSoundIdEdit)
         _weaponData.soundId = static_cast<uint8_t>(_weaponSoundIdEdit->value());
 
-    pro->weaponData.animationCode = _weaponData.animationCode;
-    pro->weaponData.damageMin = _weaponData.damageMin;
-    pro->weaponData.damageMax = _weaponData.damageMax;
-    pro->weaponData.damageType = _weaponData.damageType;
-    pro->weaponData.rangePrimary = _weaponData.rangePrimary;
-    pro->weaponData.rangeSecondary = _weaponData.rangeSecondary;
-    pro->weaponData.projectilePID = _weaponData.projectilePID;
-    pro->weaponData.minimumStrength = _weaponData.minimumStrength;
-    pro->weaponData.actionCostPrimary = _weaponData.actionCostPrimary;
-    pro->weaponData.actionCostSecondary = _weaponData.actionCostSecondary;
-    pro->weaponData.criticalFail = _weaponData.criticalFail;
-    pro->weaponData.perk = _weaponData.perk;
-    pro->weaponData.burstRounds = _weaponData.burstRounds;
-    pro->weaponData.ammoType = _weaponData.ammoType;
-    pro->weaponData.ammoPID = _weaponData.ammoPID;
-    pro->weaponData.ammoCapacity = _weaponData.ammoCapacity;
-    pro->weaponData.soundId = _weaponData.soundId;
+    // Whole-struct copy carries weaponFlags through unchanged; the energy-weapon
+    // bit below is then applied on top of the value loaded from the PRO.
+    pro->weaponData = _weaponData;
 
     if (_weaponEnergyWeaponCheck) {
         if (_weaponEnergyWeaponCheck->isChecked()) {
