@@ -1002,12 +1002,58 @@ void EditorWidget::clearSelection() {
     }
 }
 
-void EditorWidget::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof) {
-    _tilePlacementManager->setTilePlacementMode(enabled, tileIndex, isRoof);
+void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
+    _mode = mode;
 
+    // Single owner of mutual exclusion: deactivate every mode's state across all
+    // components, then activate the target. This replaces the scattered
+    // resetState()/setX(false) calls the individual setters used to make.
+    _tilePlacementManager->setTilePlacementMode(false, -1, false);
+    _exitGridPlacementManager->setExitGridPlacementMode(false);
+    _exitGridPlacementManager->setMarkExitsMode(false);
+    _playerPositionSelectionMode = false;
     if (_inputHandler) {
-        _inputHandler->setTilePlacementMode(enabled, tileIndex, false);
+        _inputHandler->setTilePlacementMode(false, -1, false);
+        _inputHandler->setExitGridPlacementMode(false);
+        _inputHandler->setMarkExitsMode(false);
+        _inputHandler->setPlayerPositionMode(false);
     }
+
+    switch (mode) {
+        case EditorMode::Select:
+            break;
+        case EditorMode::PlaceTile:
+            _tilePlacementManager->setTilePlacementMode(true, tileIndex, isRoof);
+            if (_inputHandler) {
+                _inputHandler->setTilePlacementMode(true, tileIndex, false);
+            }
+            break;
+        case EditorMode::PlaceExitGrid:
+            _exitGridPlacementManager->setExitGridPlacementMode(true);
+            if (_inputHandler) {
+                // Previously skipped: placement clicks never reached the handler.
+                _inputHandler->setExitGridPlacementMode(true);
+            }
+            break;
+        case EditorMode::MarkExits:
+            _exitGridPlacementManager->setMarkExitsMode(true);
+            if (_inputHandler) {
+                _inputHandler->setMarkExitsMode(true);
+            }
+            break;
+        case EditorMode::SetPlayerPosition:
+            _playerPositionSelectionMode = true;
+            if (_inputHandler) {
+                _inputHandler->setPlayerPositionMode(true);
+            }
+            break;
+    }
+
+    Q_EMIT editorModeChanged(_mode);
+}
+
+void EditorWidget::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof) {
+    setMode(enabled ? EditorMode::PlaceTile : EditorMode::Select, tileIndex, isRoof);
 }
 
 void EditorWidget::setTilePlacementAreaFill(bool enabled) {
@@ -1019,15 +1065,11 @@ void EditorWidget::setTilePlacementReplaceMode(bool enabled) {
 }
 
 void EditorWidget::setExitGridPlacementMode(bool enabled) {
-    _exitGridPlacementManager->setExitGridPlacementMode(enabled);
+    setMode(enabled ? EditorMode::PlaceExitGrid : EditorMode::Select);
 }
 
 void EditorWidget::setMarkExitsMode(bool enabled) {
-    _exitGridPlacementManager->setMarkExitsMode(enabled);
-    // Update InputHandler with new mark exits mode state
-    if (_inputHandler) {
-        _inputHandler->setMarkExitsMode(enabled);
-    }
+    setMode(enabled ? EditorMode::MarkExits : EditorMode::Select);
 }
 
 bool EditorWidget::isTilePlacementMode() const {
@@ -1456,14 +1498,7 @@ void EditorWidget::cancelDragPreview() {
 }
 
 void EditorWidget::enterPlayerPositionSelectionMode() {
-    _tilePlacementManager->resetState();
-
-    _playerPositionSelectionMode = true;
-
-    if (_inputHandler) {
-        _inputHandler->setPlayerPositionMode(true);
-        _inputHandler->setTilePlacementMode(false);
-    }
+    setMode(EditorMode::SetPlayerPosition);
 
     Q_EMIT statusMessageRequested("Click on a hex to set the player starting position (Press Escape to cancel)");
 

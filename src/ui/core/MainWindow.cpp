@@ -1111,6 +1111,14 @@ void MainWindow::connectToEditorWidget() {
 
     connect(_currentEditorWidget, &EditorWidget::statusMessageRequested, this, &MainWindow::showStatusMessage);
     connect(_currentEditorWidget, &EditorWidget::statusMessageClearRequested, this, &MainWindow::clearStatusMessage);
+    // Keep the checkable Mark-Exits toolbar action in sync with the active mode
+    // (entering any other mode now exits mark-exits via EditorWidget::setMode).
+    connect(_currentEditorWidget, &EditorWidget::editorModeChanged, this, [this](EditorMode mode) {
+        if (_markExitsAction) {
+            QSignalBlocker blocker(_markExitsAction);
+            _markExitsAction->setChecked(mode == EditorMode::MarkExits);
+        }
+    });
     connect(_currentEditorWidget, &EditorWidget::hexHoverChanged, this, &MainWindow::updateHexIndexDisplay);
     connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, [this](const std::string& mapPath) {
         handleMapLoadRequest(mapPath, true);

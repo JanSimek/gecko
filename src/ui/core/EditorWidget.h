@@ -24,6 +24,7 @@
 #include "ui/editing/ObjectCommandController.h"
 #include "ui/rendering/MapSpriteLoader.h"
 #include "ui/tiles/TilePlacementContext.h"
+#include "ui/core/EditorMode.h"
 #include "ui/tools/ExitGridContext.h"
 #include "ui/dragdrop/DragDropContext.h"
 #include "TileChange.h"
@@ -100,6 +101,10 @@ public:
     // Efficient tile update
     void updateTileSprite(int hexIndex, bool isRoof) override;
     void updateTileSprite(int hexIndex, bool isRoof, int elevation) override;
+
+    // Single tool-mode entry point: activates `mode` and exits all others.
+    void setMode(EditorMode mode, int tileIndex = -1, bool isRoof = false);
+    EditorMode currentMode() const { return _mode; }
 
     // Tile placement mode control
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
@@ -188,6 +193,7 @@ signals:
     void statusMessageRequested(const QString& message);
     void statusMessageClearRequested();
     void undoStackChanged();
+    void editorModeChanged(EditorMode mode);
 
 public slots:
     void onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
@@ -309,6 +315,9 @@ private:
     std::vector<sf::Sprite> _selectedRoofTileBackgroundSprites;
 
     std::vector<int> _selectedHexPositions;
+
+    // Active tool mode (single source of truth; see setMode).
+    EditorMode _mode = EditorMode::Select;
 
     // Player position selection state
     bool _playerPositionSelectionMode = false;
