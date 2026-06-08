@@ -1,5 +1,5 @@
 #include "MapObject.h"
-#include "../pro/Pro.h"
+#include "format/pro/Pro.h"
 
 namespace geck {
 

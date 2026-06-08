@@ -1,13 +1,13 @@
 #include "TilePalettePanel.h"
-#include "../../format/map/Map.h"
-#include "../../format/lst/Lst.h"
-#include "../../resource/GameResources.h"
-#include "../../util/Constants.h"
-#include "../../util/ColorUtils.h"
-#include "../common/BaseWidget.h"
-#include "../theme/ThemeManager.h"
-#include "../UIConstants.h"
-#include "../../selection/SelectionManager.h"
+#include "format/map/Map.h"
+#include "format/lst/Lst.h"
+#include "resource/GameResources.h"
+#include "util/Constants.h"
+#include "util/ColorUtils.h"
+#include "ui/common/BaseWidget.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
+#include "selection/SelectionManager.h"
 
 #include <QPainter>
 #include <QMouseEvent>

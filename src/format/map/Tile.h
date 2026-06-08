@@ -1,7 +1,7 @@
 #pragma once
 
 #include <inttypes.h>
-#include "../../util/Constants.h"
+#include "util/Constants.h"
 
 namespace geck {
 

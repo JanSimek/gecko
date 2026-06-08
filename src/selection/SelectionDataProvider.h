@@ -5,7 +5,7 @@
 #include <optional>
 #include <vector>
 
-#include "../format/map/Map.h"
+#include "format/map/Map.h"
 
 namespace geck {
 class Object;

@@ -7,7 +7,7 @@
 #include <memory>
 #include <string>
 
-#include "../format/map/Map.h"
+#include "format/map/Map.h"
 
 QT_BEGIN_NAMESPACE
 class QWidget;

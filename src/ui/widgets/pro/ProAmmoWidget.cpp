@@ -1,8 +1,8 @@
 #include "ProAmmoWidget.h"
 
-#include "../../GameEnums.h"
-#include "../../theme/ThemeManager.h"
-#include "../../UIConstants.h"
+#include "ui/GameEnums.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
 
 #include <QFormLayout>
 #include <QGroupBox>

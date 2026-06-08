@@ -1,10 +1,10 @@
 #include "DataFileSystem.h"
 
-#include "../util/GameDataPathResolver.h"
-#include "../util/PathUtils.h"
-#include "../util/ResourcePaths.h"
-#include "../vfs/Dat2FileSystem.hpp"
-#include "../vfs/VfsppNativeFileSystem.h"
+#include "util/GameDataPathResolver.h"
+#include "util/PathUtils.h"
+#include "util/ResourcePaths.h"
+#include "vfs/Dat2FileSystem.hpp"
+#include "vfs/VfsppNativeFileSystem.h"
 
 #include <regex>
 #include <spdlog/spdlog.h>

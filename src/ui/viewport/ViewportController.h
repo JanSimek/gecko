@@ -3,9 +3,9 @@
 #include <SFML/Graphics.hpp>
 #include <optional>
 #include <memory>
-#include "../../editor/HexagonGrid.h"
-#include "../../util/Coordinates.h"
-#include "../../util/TileUtils.h"
+#include "editor/HexagonGrid.h"
+#include "util/Coordinates.h"
+#include "util/TileUtils.h"
 
 namespace geck {
 

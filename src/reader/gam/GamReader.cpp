@@ -4,8 +4,8 @@
 #include <regex>
 #include <spdlog/spdlog.h>
 
-#include "../../format/gam/Gam.h"
-#include "../ErrorMessages.h"
+#include "format/gam/Gam.h"
+#include "reader/ErrorMessages.h"
 
 namespace geck {
 

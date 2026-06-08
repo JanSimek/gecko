@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../common/GridPalettePanel.h"
-#include "../common/BasePaletteWidget.h"
-#include "../UIConstants.h"
+#include "ui/common/GridPalettePanel.h"
+#include "ui/common/BasePaletteWidget.h"
+#include "ui/UIConstants.h"
 #include <QTabWidget>
 #include <QDrag>
 #include <QMimeData>

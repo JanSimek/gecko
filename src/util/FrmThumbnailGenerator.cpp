@@ -1,8 +1,8 @@
 #include "FrmThumbnailGenerator.h"
-#include "../resource/GameResources.h"
-#include "../format/frm/Frm.h"
-#include "../format/frm/Frame.h"
-#include "../format/pal/Pal.h"
+#include "resource/GameResources.h"
+#include "format/frm/Frm.h"
+#include "format/frm/Frame.h"
+#include "format/pal/Pal.h"
 
 #include <QImage>
 #include <QPainter>

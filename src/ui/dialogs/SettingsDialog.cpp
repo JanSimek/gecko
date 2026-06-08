@@ -1,10 +1,10 @@
 #include "SettingsDialog.h"
-#include "../widgets/DataPathsWidget.h"
-#include "../widgets/GameLocationWidget.h"
-#include "../widgets/TextEditorWidget.h"
-#include "../UIConstants.h"
-#include "../theme/ThemeManager.h"
-#include "../../util/Settings.h"
+#include "ui/widgets/DataPathsWidget.h"
+#include "ui/widgets/GameLocationWidget.h"
+#include "ui/widgets/TextEditorWidget.h"
+#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
+#include "util/Settings.h"
 
 #include <QApplication>
 #include <QStyle>

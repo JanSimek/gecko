@@ -3,7 +3,7 @@
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QDialogButtonBox>
-#include "../theme/ThemeManager.h"
+#include "ui/theme/ThemeManager.h"
 
 namespace geck {
 

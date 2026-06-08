@@ -1,12 +1,12 @@
 #include "TilePlacementManager.h"
-#include "../core/TileChange.h"
-#include "../viewport/ViewportController.h"
-#include "../../format/map/Map.h"
-#include "../../format/map/Tile.h"
-#include "../../selection/SelectionManager.h"
-#include "../../editor/HexagonGrid.h"
-#include "../../util/Constants.h"
-#include "../../util/TileUtils.h"
+#include "ui/core/TileChange.h"
+#include "ui/viewport/ViewportController.h"
+#include "format/map/Map.h"
+#include "format/map/Tile.h"
+#include "selection/SelectionManager.h"
+#include "editor/HexagonGrid.h"
+#include "util/Constants.h"
+#include "util/TileUtils.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 

@@ -1,11 +1,11 @@
 #include "ProPreviewPanelWidget.h"
 
 #include "ObjectPreviewWidget.h"
-#include "../dialogs/FrmSelectorDialog.h"
-#include "../theme/ThemeManager.h"
-#include "../UIConstants.h"
-#include "../../format/pro/Pro.h"
-#include "../../resource/GameResources.h"
+#include "ui/dialogs/FrmSelectorDialog.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
+#include "format/pro/Pro.h"
+#include "resource/GameResources.h"
 
 #include <QHBoxLayout>
 #include <QVBoxLayout>

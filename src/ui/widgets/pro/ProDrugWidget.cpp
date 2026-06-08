@@ -1,6 +1,6 @@
 #include "ProDrugWidget.h"
-#include "../../theme/ThemeManager.h"
-#include "../../UIConstants.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>

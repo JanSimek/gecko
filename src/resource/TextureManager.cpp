@@ -2,12 +2,12 @@
 
 #include "ResourceRepository.h"
 
-#include "../format/frm/Direction.h"
-#include "../format/frm/Frame.h"
-#include "../format/frm/Frm.h"
-#include "../format/pal/Pal.h"
-#include "../util/Exceptions.h"
-#include "../util/ResourcePaths.h"
+#include "format/frm/Direction.h"
+#include "format/frm/Frame.h"
+#include "format/frm/Frm.h"
+#include "format/pal/Pal.h"
+#include "util/Exceptions.h"
+#include "util/ResourcePaths.h"
 
 #include <algorithm>
 #include <cctype>

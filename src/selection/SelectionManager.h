@@ -7,10 +7,10 @@
 #include <variant>
 #include <functional>
 
-#include "../util/Types.h"
-#include "../util/SpatialIndex.h"
-#include "../format/map/Map.h"
-#include "../editor/Object.h"
+#include "util/Types.h"
+#include "util/SpatialIndex.h"
+#include "format/map/Map.h"
+#include "editor/Object.h"
 #include "SelectionState.h"
 #include "SelectionDataProvider.h"
 

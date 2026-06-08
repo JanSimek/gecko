@@ -1,10 +1,10 @@
 #include "GameEnums.h"
 
-#include "../util/AmmoCaliberNames.h"
-#include "../util/FalloutEngineEnums.h"
-#include "../util/MessageEnumUtils.h"
-#include "../util/ProHelper.h"
-#include "../resource/GameResources.h"
+#include "util/AmmoCaliberNames.h"
+#include "util/FalloutEngineEnums.h"
+#include "util/MessageEnumUtils.h"
+#include "util/ProHelper.h"
+#include "resource/GameResources.h"
 
 #include <array>
 #include <stdexcept>

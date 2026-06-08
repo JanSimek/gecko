@@ -9,10 +9,10 @@
 #include <QFont>
 #include <spdlog/spdlog.h>
 
-#include "../../Application.h"
-#include "../IconHelper.h"
-#include "../theme/ThemeManager.h"
-#include "../UIConstants.h"
+#include "Application.h"
+#include "ui/IconHelper.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
 #include "version.h"
 
 namespace geck {

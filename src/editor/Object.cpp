@@ -4,10 +4,10 @@
 #include "format/frm/Direction.h"
 #include "format/frm/Frame.h"
 #include "format/frm/Frm.h"
-#include "../util/Constants.h"
-#include "../util/ColorUtils.h"
-#include "../util/Exceptions.h"
-#include "../util/Coordinates.h"
+#include "util/Constants.h"
+#include "util/ColorUtils.h"
+#include "util/Exceptions.h"
+#include "util/Coordinates.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 

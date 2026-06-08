@@ -13,15 +13,15 @@
 #include <QResizeEvent>
 #include <spdlog/spdlog.h>
 
-#include "../../format/frm/Frm.h"
-#include "../../format/frm/Frame.h"
-#include "../../format/pal/Pal.h"
-#include "../../resource/GameResources.h"
-#include "../../util/FrmThumbnailGenerator.h"
-#include "../IconHelper.h"
-#include "../theme/ThemeManager.h"
-#include "../UIConstants.h"
-#include "../../reader/ReaderFactory.h"
+#include "format/frm/Frm.h"
+#include "format/frm/Frame.h"
+#include "format/pal/Pal.h"
+#include "resource/GameResources.h"
+#include "util/FrmThumbnailGenerator.h"
+#include "ui/IconHelper.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
+#include "reader/ReaderFactory.h"
 
 namespace geck {
 

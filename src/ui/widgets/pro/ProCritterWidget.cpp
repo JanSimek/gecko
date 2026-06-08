@@ -1,8 +1,8 @@
 #include "ProCritterWidget.h"
 
-#include "../../../resource/GameResources.h"
-#include "../../theme/ThemeManager.h"
-#include "../../UIConstants.h"
+#include "resource/GameResources.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
 
 #include <QFormLayout>
 #include <QGridLayout>

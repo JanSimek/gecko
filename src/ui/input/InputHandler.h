@@ -5,7 +5,7 @@
 #include <SFML/Graphics/View.hpp>
 #include <functional>
 #include <spdlog/spdlog.h>
-#include "../../util/Types.h"
+#include "util/Types.h"
 
 namespace geck {
 

@@ -1,9 +1,9 @@
 #include "InventoryViewerDialog.h"
-#include "../../editor/Object.h"
-#include "../../format/map/MapObject.h"
-#include "../common/InventoryItemUiHelper.h"
-#include "../theme/ThemeManager.h"
-#include "../UIConstants.h"
+#include "editor/Object.h"
+#include "format/map/MapObject.h"
+#include "ui/common/InventoryItemUiHelper.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
 
 #include <QApplication>
 #include <QHeaderView>

@@ -3,10 +3,10 @@
 #include <cstdint>
 #include <functional>
 
-#include "../FileWriter.h"
-#include "../../format/map/Map.h"
-#include "../../format/map/MapScript.h"
-#include "../../format/map/MapObject.h"
+#include "writer/FileWriter.h"
+#include "format/map/Map.h"
+#include "format/map/MapScript.h"
+#include "format/map/MapObject.h"
 
 namespace geck {
 

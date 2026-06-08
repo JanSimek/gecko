@@ -1,10 +1,10 @@
 #include "SelectionManager.h"
 #include "SelectionDataProvider.h"
-#include "../ui/viewport/ViewportController.h"
-#include "../format/map/MapObject.h"
-#include "../util/Constants.h"
-#include "../util/TileUtils.h"
-#include "../editor/HexagonGrid.h"
+#include "ui/viewport/ViewportController.h"
+#include "format/map/MapObject.h"
+#include "util/Constants.h"
+#include "util/TileUtils.h"
+#include "editor/HexagonGrid.h"
 #include <algorithm>
 #include <unordered_set>
 #include <spdlog/spdlog.h>

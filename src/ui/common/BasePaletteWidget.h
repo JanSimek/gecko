@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../theme/ThemeManager.h"
+#include "ui/theme/ThemeManager.h"
 
 #include <QLabel>
 #include <QMouseEvent>

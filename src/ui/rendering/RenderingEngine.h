@@ -3,8 +3,8 @@
 #include <SFML/Graphics.hpp>
 #include <memory>
 #include <vector>
-#include "../../util/Types.h"
-#include "../../editor/HexagonGrid.h"
+#include "util/Types.h"
+#include "editor/HexagonGrid.h"
 #include "HexRenderer.h"
 
 namespace geck {

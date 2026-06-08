@@ -6,7 +6,7 @@
 
 #include <QString>
 
-#include "../dialogs/ExitGridPropertiesDialog.h"
+#include "ui/dialogs/ExitGridPropertiesDialog.h"
 #include "ExitGridContext.h"
 
 namespace geck {

@@ -3,23 +3,23 @@
 #include <QString>
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
-#include "../../util/Constants.h"
-#include "../../util/ResourcePaths.h"
+#include "util/Constants.h"
+#include "util/ResourcePaths.h"
 
-#include "../../reader/ReaderFactory.h"
-#include "../../reader/map/MapReader.h"
+#include "reader/ReaderFactory.h"
+#include "reader/map/MapReader.h"
 
-#include "../../format/pro/Pro.h"
-#include "../../format/map/Map.h"
-#include "../../format/map/MapObject.h"
-#include "../../format/map/Tile.h"
-#include "../../format/lst/Lst.h"
-#include "../../format/frm/Direction.h"
+#include "format/pro/Pro.h"
+#include "format/map/Map.h"
+#include "format/map/MapObject.h"
+#include "format/map/Tile.h"
+#include "format/lst/Lst.h"
+#include "format/frm/Direction.h"
 
-#include "../../resource/GameResources.h"
-#include "../../util/ProHelper.h"
-#include "../../util/QtDialogs.h"
-#include "../../util/ResourceInitializer.h"
+#include "resource/GameResources.h"
+#include "util/ProHelper.h"
+#include "util/QtDialogs.h"
+#include "util/ResourceInitializer.h"
 
 namespace geck {
 

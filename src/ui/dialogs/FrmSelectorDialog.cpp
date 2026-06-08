@@ -1,6 +1,6 @@
 #include "FrmSelectorDialog.h"
-#include "../theme/ThemeManager.h"
-#include "../UIConstants.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
 
 #include <QApplication>
 #include <QPixmap>
@@ -9,10 +9,10 @@
 #include <algorithm>
 #include <functional>
 
-#include "../../resource/GameResources.h"
-#include "../../resource/FrmResolver.h"
-#include "../../util/CritterFrmResolver.h"
-#include "../../format/frm/Frm.h"
+#include "resource/GameResources.h"
+#include "resource/FrmResolver.h"
+#include "util/CritterFrmResolver.h"
+#include "format/frm/Frm.h"
 
 namespace geck {
 

@@ -3,7 +3,7 @@
 #include <array>
 #include <fstream>
 
-#include "../IFile.h"
+#include "format/IFile.h"
 
 namespace geck {
 

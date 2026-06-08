@@ -1,7 +1,7 @@
 #include "ResourceInitializer.h"
 #include "resource/GameResources.h"
 #include "ResourcePaths.h"
-#include "../format/lst/Lst.h"
+#include "format/lst/Lst.h"
 
 #include <array>
 #include <vector>

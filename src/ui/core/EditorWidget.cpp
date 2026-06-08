@@ -1,14 +1,14 @@
 #include "EditorWidget.h"
-#include "../widgets/SFMLWidget.h"
-#include "../input/InputHandler.h"
-#include "../rendering/MapSpriteLoader.h"
-#include "../rendering/RenderingEngine.h"
-#include "../dragdrop/DragDropManager.h"
-#include "../tiles/TilePlacementManager.h"
-#include "../tools/ExitGridPlacementManager.h"
-#include "../viewport/ViewportController.h"
-#include "../panels/ObjectPalettePanel.h"
-#include "../panels/TilePalettePanel.h"
+#include "ui/widgets/SFMLWidget.h"
+#include "ui/input/InputHandler.h"
+#include "ui/rendering/MapSpriteLoader.h"
+#include "ui/rendering/RenderingEngine.h"
+#include "ui/dragdrop/DragDropManager.h"
+#include "ui/tiles/TilePlacementManager.h"
+#include "ui/tools/ExitGridPlacementManager.h"
+#include "ui/viewport/ViewportController.h"
+#include "ui/panels/ObjectPalettePanel.h"
+#include "ui/panels/TilePalettePanel.h"
 #include "MainWindow.h"
 
 #include <spdlog/spdlog.h>
@@ -20,24 +20,24 @@
 #include <set>
 #include <unordered_map>
 
-#include "../../util/Constants.h"
-#include "../../util/ColorUtils.h"
-#include "../../util/ResourceInitializer.h"
-#include "../../util/TileUtils.h"
-#include "../../util/QtDialogs.h"
-#include "../../util/ProHelper.h"
-#include "../../util/Coordinates.h"
+#include "util/Constants.h"
+#include "util/ColorUtils.h"
+#include "util/ResourceInitializer.h"
+#include "util/TileUtils.h"
+#include "util/QtDialogs.h"
+#include "util/ProHelper.h"
+#include "util/Coordinates.h"
 
-#include "../../editor/Object.h"
-#include "../../editor/HexagonGrid.h"
+#include "editor/Object.h"
+#include "editor/HexagonGrid.h"
 
-#include "../../format/frm/Frm.h"
-#include "../../format/map/Tile.h"
-#include "../../format/pro/Pro.h"
-#include "../../format/map/MapObject.h"
-#include "../../resource/GameResources.h"
+#include "format/frm/Frm.h"
+#include "format/map/Tile.h"
+#include "format/pro/Pro.h"
+#include "format/map/MapObject.h"
+#include "resource/GameResources.h"
 
-#include "../../writer/map/MapWriter.h"
+#include "writer/map/MapWriter.h"
 
 namespace geck {
 

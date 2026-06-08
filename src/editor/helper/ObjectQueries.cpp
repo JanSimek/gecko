@@ -1,9 +1,9 @@
 #include "ObjectQueries.h"
 
-#include "../../format/map/MapObject.h"
-#include "../../format/pro/Pro.h"
-#include "../../resource/GameResources.h"
-#include "../../util/ProHelper.h"
+#include "format/map/MapObject.h"
+#include "format/pro/Pro.h"
+#include "resource/GameResources.h"
+#include "util/ProHelper.h"
 
 #include <spdlog/spdlog.h>
 

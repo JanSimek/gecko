@@ -3,7 +3,7 @@
 #include <fstream>
 #include <vector>
 
-#include "../IFile.h"
+#include "format/IFile.h"
 
 namespace geck {
 

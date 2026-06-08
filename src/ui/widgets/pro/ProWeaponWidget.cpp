@@ -2,9 +2,9 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
-#include "../../theme/ThemeManager.h"
-#include "../../GameEnums.h"
-#include "../../UIConstants.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/GameEnums.h"
+#include "ui/UIConstants.h"
 
 namespace geck {
 

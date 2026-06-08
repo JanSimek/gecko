@@ -5,11 +5,11 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QFont>
-#include "../../../resource/GameResources.h"
-#include "../../dialogs/FrmSelectorDialog.h"
-#include "../../theme/ThemeManager.h"
-#include "../../GameEnums.h"
-#include "../../UIConstants.h"
+#include "resource/GameResources.h"
+#include "ui/dialogs/FrmSelectorDialog.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/GameEnums.h"
+#include "ui/UIConstants.h"
 
 namespace geck {
 

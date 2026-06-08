@@ -1,9 +1,9 @@
 #include "SpriteFactory.h"
-#include "../resource/GameResources.h"
+#include "resource/GameResources.h"
 #include "Constants.h"
 #include "TileUtils.h"
-#include "../format/lst/Lst.h"
-#include "../format/map/Map.h"
+#include "format/lst/Lst.h"
+#include "format/map/Map.h"
 
 namespace geck {
 

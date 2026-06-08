@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../util/FalloutEngineEnums.h"
+#include "util/FalloutEngineEnums.h"
 
 #include <QString>
 #include <QStringList>

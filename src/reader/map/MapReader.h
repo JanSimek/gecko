@@ -2,10 +2,10 @@
 
 #include <map>
 
-#include "../FileParser.h"
-#include "../../format/map/MapObject.h"
-#include "../../format/map/MapScript.h"
-#include "../../format/lst/Lst.h"
+#include "reader/FileParser.h"
+#include "format/map/MapObject.h"
+#include "format/map/MapScript.h"
+#include "format/lst/Lst.h"
 
 namespace geck {
 

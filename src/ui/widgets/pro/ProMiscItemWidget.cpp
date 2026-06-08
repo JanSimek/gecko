@@ -1,6 +1,6 @@
 #include "ProMiscItemWidget.h"
 
-#include "../../theme/ThemeManager.h"
+#include "ui/theme/ThemeManager.h"
 
 #include <QFormLayout>
 #include <QGroupBox>

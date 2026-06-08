@@ -5,7 +5,7 @@
 #include <functional>
 #include <memory>
 #include <vector>
-#include "../../util/Types.h"
+#include "util/Types.h"
 #include "DragDropContext.h"
 
 namespace geck {

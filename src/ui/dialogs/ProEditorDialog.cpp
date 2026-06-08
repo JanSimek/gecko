@@ -1,17 +1,17 @@
 #include "ProEditorDialog.h"
 #include "MessageSelectorDialog.h"
-#include "../UIConstants.h"
-#include "../widgets/pro/ProAmmoWidget.h"
-#include "../widgets/pro/ProArmorWidget.h"
-#include "../widgets/pro/ProContainerKeyWidget.h"
-#include "../widgets/pro/ProCritterWidget.h"
-#include "../widgets/pro/ProDrugWidget.h"
-#include "../widgets/pro/ProMiscItemWidget.h"
-#include "../widgets/pro/ProSceneryWidget.h"
-#include "../widgets/pro/ProTabWidget.h"
-#include "../widgets/pro/ProTileWidget.h"
-#include "../widgets/pro/ProWallWidget.h"
-#include "../widgets/pro/ProWeaponWidget.h"
+#include "ui/UIConstants.h"
+#include "ui/widgets/pro/ProAmmoWidget.h"
+#include "ui/widgets/pro/ProArmorWidget.h"
+#include "ui/widgets/pro/ProContainerKeyWidget.h"
+#include "ui/widgets/pro/ProCritterWidget.h"
+#include "ui/widgets/pro/ProDrugWidget.h"
+#include "ui/widgets/pro/ProMiscItemWidget.h"
+#include "ui/widgets/pro/ProSceneryWidget.h"
+#include "ui/widgets/pro/ProTabWidget.h"
+#include "ui/widgets/pro/ProTileWidget.h"
+#include "ui/widgets/pro/ProWallWidget.h"
+#include "ui/widgets/pro/ProWeaponWidget.h"
 
 #include <QMessageBox>
 #include <QFileDialog>
@@ -19,8 +19,8 @@
 #include <algorithm>
 #include <spdlog/spdlog.h>
 
-#include "../../writer/pro/ProWriter.h"
-#include "../../resource/GameResources.h"
+#include "writer/pro/ProWriter.h"
+#include "resource/GameResources.h"
 #include "FrmSelectorDialog.h"
 
 #include <util/ProHelper.h>

@@ -1,7 +1,7 @@
 #include "MessageSelectorDialog.h"
-#include "../../format/msg/Msg.h"
-#include "../theme/ThemeManager.h"
-#include "../UIConstants.h"
+#include "format/msg/Msg.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
 
 #include <QListWidget>
 #include <QPushButton>

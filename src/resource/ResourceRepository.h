@@ -2,9 +2,9 @@
 
 #include "DataFileSystem.h"
 
-#include "../format/IFile.h"
-#include "../reader/ReaderExceptions.h"
-#include "../reader/ReaderFactory.h"
+#include "format/IFile.h"
+#include "reader/ReaderExceptions.h"
+#include "reader/ReaderFactory.h"
 
 #include <filesystem>
 #include <memory>

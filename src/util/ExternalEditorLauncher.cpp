@@ -1,7 +1,7 @@
 #include "ExternalEditorLauncher.h"
 
-#include "../resource/GameResources.h"
-#include "../ui/GameEnums.h"
+#include "resource/GameResources.h"
+#include "ui/GameEnums.h"
 #include "Settings.h"
 #include "QtDialogs.h"
 

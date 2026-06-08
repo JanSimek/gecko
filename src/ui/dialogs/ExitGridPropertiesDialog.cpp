@@ -1,9 +1,9 @@
 #include "ExitGridPropertiesDialog.h"
-#include "../UIConstants.h"
-#include "../theme/ThemeManager.h"
-#include "../GameEnums.h"
-#include "../../util/Constants.h"
-#include "../../editor/HexagonGrid.h"
+#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/GameEnums.h"
+#include "util/Constants.h"
+#include "editor/HexagonGrid.h"
 
 #include <QApplication>
 #include <QStyle>

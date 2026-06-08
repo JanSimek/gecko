@@ -2,8 +2,8 @@
 
 #include <string>
 
-#include "../lst/Lst.h"
-#include "../map/MapObject.h"
+#include "format/lst/Lst.h"
+#include "format/map/MapObject.h"
 
 namespace geck {
 

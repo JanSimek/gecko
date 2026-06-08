@@ -5,8 +5,8 @@
 #include <sstream>
 #include <spdlog/spdlog.h>
 
-#include "../../format/lst/Lst.h"
-#include "../ErrorMessages.h"
+#include "format/lst/Lst.h"
+#include "reader/ErrorMessages.h"
 
 namespace geck {
 

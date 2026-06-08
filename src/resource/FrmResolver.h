@@ -6,7 +6,7 @@
 #include <string>
 #include <string_view>
 
-#include "../format/frm/Frm.h"
+#include "format/frm/Frm.h"
 
 namespace geck {
 class Lst;

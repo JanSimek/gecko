@@ -1,5 +1,5 @@
 #include "PaginationWidget.h"
-#include "../UIConstants.h"
+#include "ui/UIConstants.h"
 #include <QHBoxLayout>
 
 namespace geck {

@@ -1,7 +1,7 @@
 #include "Frm.h"
 #include "Direction.h"
 #include "Frame.h"
-#include "../pal/Pal.h"
+#include "format/pal/Pal.h"
 
 #include <algorithm>
 

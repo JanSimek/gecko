@@ -6,9 +6,9 @@
 #include <QPixmap>
 
 #include "version.h"
-#include "../../Application.h"
-#include "../theme/ThemeManager.h"
-#include "../UIConstants.h"
+#include "Application.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
 
 namespace geck {
 

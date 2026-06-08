@@ -1,10 +1,10 @@
 #include "HexRenderer.h"
-#include "../../editor/Hex.h"
-#include "../../editor/HexagonGrid.h"
-#include "../../format/frm/Frm.h"
-#include "../../resource/GameResources.h"
-#include "../../util/Constants.h"
-#include "../../util/ResourcePaths.h"
+#include "editor/Hex.h"
+#include "editor/HexagonGrid.h"
+#include "format/frm/Frm.h"
+#include "resource/GameResources.h"
+#include "util/Constants.h"
+#include "util/ResourcePaths.h"
 
 namespace geck {
 

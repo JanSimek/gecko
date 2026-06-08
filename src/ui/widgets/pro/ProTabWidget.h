@@ -12,10 +12,10 @@
 #include <QLabel>
 #include <memory>
 
-#include "../../GameEnums.h"
-#include "../../../format/frm/Frm.h"
-#include "../../../format/pro/Pro.h"
-#include "../../../format/pro/ProDataModels.h"
+#include "ui/GameEnums.h"
+#include "format/frm/Frm.h"
+#include "format/pro/Pro.h"
+#include "format/pro/ProDataModels.h"
 
 namespace geck {
 

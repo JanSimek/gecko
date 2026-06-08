@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "../IFile.h"
+#include "format/IFile.h"
 #include "Direction.h"
 
 namespace geck {

@@ -1,6 +1,6 @@
 #include "SFMLWidget.h"
-#include "../core/EditorWidget.h"
-#include "../dragdrop/MimeTypes.h"
+#include "ui/core/EditorWidget.h"
+#include "ui/dragdrop/MimeTypes.h"
 
 #include <QPaintEvent>
 #include <QResizeEvent>

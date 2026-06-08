@@ -14,8 +14,8 @@
 
 #include <optional>
 
-#include "../../format/frm/Frm.h"
-#include "../../format/pro/Pro.h"
+#include "format/frm/Frm.h"
+#include "format/pro/Pro.h"
 
 namespace geck {
 

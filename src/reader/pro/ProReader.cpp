@@ -2,8 +2,8 @@
 
 #include <spdlog/spdlog.h>
 
-#include "../../format/pro/Pro.h"
-#include "../ErrorMessages.h"
+#include "format/pro/Pro.h"
+#include "reader/ErrorMessages.h"
 
 namespace geck {
 

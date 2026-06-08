@@ -2,9 +2,9 @@
 
 #include <spdlog/spdlog.h>
 
-#include "../../format/pro/Pro.h"
-#include "../../format/map/MapScript.h"
-#include "../../format/map/Tile.h"
+#include "format/pro/Pro.h"
+#include "format/map/MapScript.h"
+#include "format/map/Tile.h"
 
 namespace geck {
 namespace {

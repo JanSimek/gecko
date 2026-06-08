@@ -1,5 +1,5 @@
 #include "Frame.h"
-#include "../pal/Pal.h"
+#include "format/pal/Pal.h"
 
 namespace geck {
 

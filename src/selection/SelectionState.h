@@ -6,8 +6,8 @@
 #include <optional>
 #include <variant>
 
-#include "../util/Types.h"
-#include "../editor/Object.h"
+#include "util/Types.h"
+#include "editor/Object.h"
 
 namespace geck::selection {
 

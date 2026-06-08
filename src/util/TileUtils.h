@@ -3,7 +3,7 @@
 #include <tuple>
 #include <SFML/Graphics.hpp>
 #include "Constants.h"
-#include "../editor/HexagonGrid.h"
+#include "editor/HexagonGrid.h"
 
 namespace geck {
 

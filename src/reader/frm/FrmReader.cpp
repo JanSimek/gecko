@@ -2,10 +2,10 @@
 
 #include <spdlog/spdlog.h>
 
-#include "../../format/frm/Direction.h"
-#include "../../format/frm/Frame.h"
-#include "../../format/frm/Frm.h"
-#include "../ErrorMessages.h"
+#include "format/frm/Direction.h"
+#include "format/frm/Frame.h"
+#include "format/frm/Frm.h"
+#include "reader/ErrorMessages.h"
 
 namespace geck {
 

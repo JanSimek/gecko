@@ -4,7 +4,7 @@
 #include <streambuf>
 #include <spdlog/spdlog.h>
 
-#include "../ErrorMessages.h"
+#include "reader/ErrorMessages.h"
 
 namespace geck {
 

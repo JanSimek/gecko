@@ -1,6 +1,6 @@
 #include "GridPalettePanel.h"
-#include "../theme/ThemeManager.h"
-#include "../widgets/PaginationWidget.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/widgets/PaginationWidget.h"
 #include <spdlog/spdlog.h>
 #include <QResizeEvent>
 

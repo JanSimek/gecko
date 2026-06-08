@@ -3,8 +3,8 @@
 #include <array>
 #include <spdlog/spdlog.h>
 
-#include "../../format/pal/Pal.h"
-#include "../ErrorMessages.h"
+#include "format/pal/Pal.h"
+#include "reader/ErrorMessages.h"
 
 namespace geck {
 

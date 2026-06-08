@@ -1,6 +1,6 @@
 #include "ViewportController.h"
-#include "../../editor/Hex.h"
-#include "../../util/Constants.h"
+#include "editor/Hex.h"
+#include "util/Constants.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <cmath>

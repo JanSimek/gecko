@@ -15,8 +15,8 @@
 #include <memory>
 #include <climits>
 
-#include "../../format/pro/Pro.h"
-#include "../../format/msg/Msg.h"
+#include "format/pro/Pro.h"
+#include "format/msg/Msg.h"
 
 namespace geck {
 

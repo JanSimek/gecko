@@ -1,5 +1,5 @@
 #include "InputHandler.h"
-#include "../../util/Constants.h"
+#include "util/Constants.h"
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/Mouse.hpp>
 #include <spdlog/spdlog.h>

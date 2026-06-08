@@ -1,7 +1,7 @@
 #include "GameLocationWidget.h"
-#include "../../util/GameDataPathResolver.h"
-#include "../../util/Settings.h"
-#include "../UIConstants.h"
+#include "util/GameDataPathResolver.h"
+#include "util/Settings.h"
+#include "ui/UIConstants.h"
 
 #include <QApplication>
 #include <QStyle>

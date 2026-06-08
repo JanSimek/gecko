@@ -2,7 +2,7 @@
 
 #include <cstdint> // Constants.h uses fixed-width ints without including this itself
 
-#include "../../util/Constants.h"
+#include "util/Constants.h"
 
 namespace geck {
 

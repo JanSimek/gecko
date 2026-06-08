@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "../FileParser.h"
+#include "reader/FileParser.h"
 
 namespace geck {
 

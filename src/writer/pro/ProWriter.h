@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../FileWriter.h"
-#include "../../format/pro/Pro.h"
+#include "writer/FileWriter.h"
+#include "format/pro/Pro.h"
 
 namespace geck {
 

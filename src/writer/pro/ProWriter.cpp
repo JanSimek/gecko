@@ -1,7 +1,7 @@
 #include "ProWriter.h"
 
 #include <spdlog/spdlog.h>
-#include "../WriterExceptions.h"
+#include "writer/WriterExceptions.h"
 
 namespace geck {
 

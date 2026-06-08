@@ -1,13 +1,13 @@
 #include "RenderingEngine.h"
-#include "../../editor/Object.h"
-#include "../../editor/Hex.h"
-#include "../../format/map/Map.h"
-#include "../../format/map/MapObject.h"
-#include "../../resource/GameResources.h"
-#include "../../util/Constants.h"
-#include "../../util/ColorUtils.h"
-#include "../../util/ResourcePaths.h"
-#include "../../util/Coordinates.h"
+#include "editor/Object.h"
+#include "editor/Hex.h"
+#include "format/map/Map.h"
+#include "format/map/MapObject.h"
+#include "resource/GameResources.h"
+#include "util/Constants.h"
+#include "util/ColorUtils.h"
+#include "util/ResourcePaths.h"
+#include "util/Coordinates.h"
 #include <spdlog/spdlog.h>
 
 namespace geck {

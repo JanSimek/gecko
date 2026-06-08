@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include "../../util/Constants.h"
+#include "util/Constants.h"
 #include <spdlog/spdlog.h>
 
 namespace geck {

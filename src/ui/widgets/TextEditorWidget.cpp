@@ -1,5 +1,5 @@
 #include "TextEditorWidget.h"
-#include "../UIConstants.h"
+#include "ui/UIConstants.h"
 
 #include <QApplication>
 #include <QStyle>

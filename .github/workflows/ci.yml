@@ -12,6 +12,20 @@ env:
   QT_VERSION: 6.8.3
 
 jobs:
+  include-hygiene:
+    name: Include hygiene
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Forbid relative ".." quote-includes in src/
+      run: |
+        if grep -rEn '#include "\.\./' src; then
+          echo "::error::Relative '..' includes found. Use root-relative paths (relative to src/)."
+          exit 1
+        fi
+        echo "OK: no relative '..' includes in src/"
+
   build-linux:
     name: Linux - ${{ matrix.build_type }}
     runs-on: ubuntu-latest

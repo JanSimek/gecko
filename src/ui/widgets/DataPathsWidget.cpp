@@ -1,7 +1,7 @@
 #include "DataPathsWidget.h"
-#include "../../util/Settings.h"
-#include "../../Application.h"
-#include "../UIConstants.h"
+#include "util/Settings.h"
+#include "Application.h"
+#include "ui/UIConstants.h"
 
 #include <QApplication>
 #include <QStyle>

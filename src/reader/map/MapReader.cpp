@@ -6,12 +6,12 @@
 #include <stdexcept>
 #include <string>
 
-#include "../../format/map/Map.h"
-#include "../../format/msg/Msg.h"
-#include "../../format/map/Tile.h"
-#include "../../format/pro/Pro.h"
-#include "../../reader/pro/ProReader.h"
-#include "../../reader/lst/LstReader.h"
+#include "format/map/Map.h"
+#include "format/msg/Msg.h"
+#include "format/map/Tile.h"
+#include "format/pro/Pro.h"
+#include "reader/pro/ProReader.h"
+#include "reader/lst/LstReader.h"
 
 // Windows defines INTERFACE macro in some headers which conflicts with our enum value
 #ifdef INTERFACE

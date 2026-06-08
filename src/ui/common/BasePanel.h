@@ -1,8 +1,8 @@
 #pragma once
 
 #include "BaseWidget.h"
-#include "../widgets/PaginationWidget.h"
-#include "../theme/ThemeManager.h"
+#include "ui/widgets/PaginationWidget.h"
+#include "ui/theme/ThemeManager.h"
 #include <QGroupBox>
 #include <QScrollArea>
 #include <QLineEdit>

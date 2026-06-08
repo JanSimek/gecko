@@ -1,11 +1,11 @@
 #include "ProInfoPanelWidget.h"
 
-#include "../../format/msg/Msg.h"
-#include "../../format/pro/Pro.h"
-#include "../../resource/GameResources.h"
-#include "../../util/ProHelper.h"
-#include "../theme/ThemeManager.h"
-#include "../UIConstants.h"
+#include "format/msg/Msg.h"
+#include "format/pro/Pro.h"
+#include "resource/GameResources.h"
+#include "util/ProHelper.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
 
 #include <QAbstractSpinBox>
 #include <QHBoxLayout>

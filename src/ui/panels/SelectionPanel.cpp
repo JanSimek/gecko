@@ -1,9 +1,9 @@
 #include "SelectionPanel.h"
-#include "../common/InventoryItemUiHelper.h"
-#include "../dialogs/FrmSelectorDialog.h"
-#include "../dialogs/ProEditorDialog.h"
-#include "../theme/ThemeManager.h"
-#include "../UIConstants.h"
+#include "ui/common/InventoryItemUiHelper.h"
+#include "ui/dialogs/FrmSelectorDialog.h"
+#include "ui/dialogs/ProEditorDialog.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/UIConstants.h"
 
 #include <QFormLayout>
 #include <QPixmap>
@@ -18,16 +18,16 @@
 #include <spdlog/spdlog.h>
 #include <cmath>
 
-#include "../../format/map/Map.h"
-#include "../../format/lst/Lst.h"
-#include "../../resource/GameResources.h"
-#include "../../util/ProHelper.h"
-#include "../../reader/ReaderFactory.h"
-#include "../IconHelper.h"
-#include "../../format/map/MapObject.h"
-#include "../../format/pro/Pro.h"
-#include "../../format/msg/Msg.h"
-#include "../../format/frm/Frm.h"
+#include "format/map/Map.h"
+#include "format/lst/Lst.h"
+#include "resource/GameResources.h"
+#include "util/ProHelper.h"
+#include "reader/ReaderFactory.h"
+#include "ui/IconHelper.h"
+#include "format/map/MapObject.h"
+#include "format/pro/Pro.h"
+#include "format/msg/Msg.h"
+#include "format/frm/Frm.h"
 
 namespace geck {
 

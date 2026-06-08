@@ -8,7 +8,7 @@
 #include <vector>
 #include <array>
 
-#include "../IFile.h"
+#include "format/IFile.h"
 #include "MapScript.h"
 #include "Tile.h"
 

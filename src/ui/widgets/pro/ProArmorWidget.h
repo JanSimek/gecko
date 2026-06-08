@@ -2,7 +2,7 @@
 
 #include "ProTabWidget.h"
 #include <QPushButton>
-#include "../ObjectPreviewWidget.h"
+#include "ui/widgets/ObjectPreviewWidget.h"
 
 namespace geck {
 

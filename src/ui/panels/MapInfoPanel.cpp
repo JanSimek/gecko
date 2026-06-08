@@ -1,7 +1,7 @@
 #include "MapInfoPanel.h"
-#include "../theme/ThemeManager.h"
-#include "../GameEnums.h"
-#include "../UIConstants.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/GameEnums.h"
+#include "ui/UIConstants.h"
 
 #include <QHeaderView>
 #include <QApplication>
@@ -10,14 +10,14 @@
 #include <spdlog/spdlog.h>
 #include <filesystem>
 
-#include "../../format/map/Map.h"
-#include "../../format/gam/Gam.h"
-#include "../../format/lst/Lst.h"
-#include "../../resource/GameResources.h"
-#include "../../reader/ReaderFactory.h"
-#include "../../util/ResourcePaths.h"
-#include "../../util/Coordinates.h"
-#include "../IconHelper.h"
+#include "format/map/Map.h"
+#include "format/gam/Gam.h"
+#include "format/lst/Lst.h"
+#include "resource/GameResources.h"
+#include "reader/ReaderFactory.h"
+#include "util/ResourcePaths.h"
+#include "util/Coordinates.h"
+#include "ui/IconHelper.h"
 
 namespace geck {
 

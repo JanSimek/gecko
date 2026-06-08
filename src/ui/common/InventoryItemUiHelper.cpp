@@ -1,12 +1,12 @@
 #include "InventoryItemUiHelper.h"
 
-#include "../../format/frm/Frm.h"
-#include "../../format/map/MapObject.h"
-#include "../../format/msg/Msg.h"
-#include "../../format/pro/Pro.h"
-#include "../../resource/GameResources.h"
-#include "../../util/FalloutEngineEnums.h"
-#include "../../util/ProHelper.h"
+#include "format/frm/Frm.h"
+#include "format/map/MapObject.h"
+#include "format/msg/Msg.h"
+#include "format/pro/Pro.h"
+#include "resource/GameResources.h"
+#include "util/FalloutEngineEnums.h"
+#include "util/ProHelper.h"
 
 #include <QIcon>
 #include <QImage>

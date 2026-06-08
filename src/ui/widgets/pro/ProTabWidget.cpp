@@ -1,6 +1,6 @@
 #include "ProTabWidget.h"
-#include "../../GameEnums.h"
-#include "../../UIConstants.h"
+#include "ui/GameEnums.h"
+#include "ui/UIConstants.h"
 
 namespace geck {
 

@@ -1,6 +1,6 @@
 #include "MessageEnumUtils.h"
 
-#include "../format/msg/Msg.h"
+#include "format/msg/Msg.h"
 
 namespace geck {
 
