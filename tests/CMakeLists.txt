@@ -17,6 +17,7 @@ add_executable(general_tests
     general/test_frm_resolver.cpp
     general/test_viewport_controller.cpp
     general/test_map_factory.cpp
+    general/test_map_roundtrip.cpp
 )
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests
