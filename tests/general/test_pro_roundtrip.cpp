@@ -170,3 +170,107 @@ TEST_CASE("PRO wall round-trip preserves flagsExt and SID (WP-1.1)", "[pro][roun
     std::error_code ec;
     std::filesystem::remove(tempPath, ec);
 }
+
+// ---------------------------------------------------------------------------
+// Level 3: per-type read->write->read for the non-item object types, built in
+// memory (type comes from the PID nibble). These guard the reader/writer field
+// schema against drift - notably that CRITTER and SCENERY write the common
+// flagsExt/SID prefix that the reader reads (writeCritterData/writeSceneryData
+// previously omitted them, corrupting saved critter/scenery prototypes).
+// ---------------------------------------------------------------------------
+namespace {
+
+geck::Pro roundTrip(const geck::Pro& original, const std::filesystem::path& tempPath) {
+    {
+        geck::ProWriter writer{};
+        writer.openFile(tempPath);
+        REQUIRE(writer.write(original));
+    }
+    geck::ProReader reader{};
+    auto reparsed = reader.openFile(tempPath);
+    REQUIRE(reparsed != nullptr);
+    return *reparsed;
+}
+
+} // namespace
+
+TEST_CASE("PRO critter round-trip preserves the common header and stats", "[pro][roundtrip][critter]") {
+    const auto tempPath = makeTempProPath("test_pro_roundtrip_critter");
+
+    geck::Pro critter{ tempPath };
+    critter.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::CRITTER) << 24) | 0x42u);
+    critter.header.message_id = 111;
+    critter.header.FID = 0x01000005;
+    critter.header.light_distance = 6;
+    critter.header.light_intensity = 65536;
+    critter.header.flags = 0x00000040;
+    critter.commonItemData.flagsExt = 0xDEADBEEFu; // <- bug fields: writer must emit these
+    critter.commonItemData.SID = 0x1234u;
+
+    auto& c = critter.critterData;
+    c.headFID = 700;
+    c.aiPacket = 701;
+    c.teamNumber = 702;
+    c.flags = 703;
+    for (int i = 0; i < geck::Pro::SPECIAL_STATS_COUNT; ++i) c.specialStats[i] = 10 + i;
+    c.maxHitPoints = 50;
+    c.experienceForKill = 999;
+    c.killType = 3;
+    c.damageType = 2;
+    c.bodyType = 1;
+
+    REQUIRE(critter.type() == geck::Pro::OBJECT_TYPE::CRITTER);
+
+    const geck::Pro got = roundTrip(critter, tempPath);
+
+    REQUIRE(got.type() == geck::Pro::OBJECT_TYPE::CRITTER);
+    REQUIRE(got.header.PID == critter.header.PID);
+    REQUIRE(got.header.flags == critter.header.flags);
+    // The regression: these survive only if the writer emits the common prefix.
+    REQUIRE(got.commonItemData.flagsExt == 0xDEADBEEFu);
+    REQUIRE(got.commonItemData.SID == 0x1234u);
+    REQUIRE(got.critterData.headFID == 700);
+    REQUIRE(got.critterData.aiPacket == 701);
+    REQUIRE(got.critterData.maxHitPoints == 50);
+    REQUIRE(got.critterData.experienceForKill == 999);
+    REQUIRE(got.critterData.killType == 3);
+    REQUIRE(got.critterData.damageType == 2);
+
+    std::error_code ec;
+    std::filesystem::remove(tempPath, ec);
+}
+
+TEST_CASE("PRO scenery round-trip preserves the common header and subtype data", "[pro][roundtrip][scenery]") {
+    const auto tempPath = makeTempProPath("test_pro_roundtrip_scenery");
+
+    geck::Pro scenery{ tempPath };
+    scenery.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::SCENERY) << 24) | 0x10u);
+    scenery.header.message_id = 222;
+    scenery.header.FID = 0x02000003;
+    scenery.header.flags = 0x00000080;
+    scenery.commonItemData.flagsExt = 0xCAFEF00Du; // <- bug fields
+    scenery.commonItemData.SID = 0x5678u;
+    scenery.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::SCENERY_TYPE::STAIRS));
+    scenery.sceneryData.materialId = 4;
+    scenery.sceneryData.soundId = 9;
+    scenery.sceneryData.stairsData.destTile = 12345;
+    scenery.sceneryData.stairsData.destElevation = 2;
+
+    REQUIRE(scenery.type() == geck::Pro::OBJECT_TYPE::SCENERY);
+
+    const geck::Pro got = roundTrip(scenery, tempPath);
+
+    REQUIRE(got.type() == geck::Pro::OBJECT_TYPE::SCENERY);
+    REQUIRE(got.objectSubtypeId() == static_cast<unsigned int>(geck::Pro::SCENERY_TYPE::STAIRS));
+    REQUIRE(got.commonItemData.flagsExt == 0xCAFEF00Du);
+    REQUIRE(got.commonItemData.SID == 0x5678u);
+    REQUIRE(got.sceneryData.materialId == 4);
+    REQUIRE(got.sceneryData.soundId == 9);
+    REQUIRE(got.sceneryData.stairsData.destTile == 12345);
+    REQUIRE(got.sceneryData.stairsData.destElevation == 2);
+
+    std::error_code ec;
+    std::filesystem::remove(tempPath, ec);
+}

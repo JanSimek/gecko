@@ -13,6 +13,29 @@ bool ProWriter::write(const Pro& pro) {
 
         writeHeader(pro);
 
+        // Common header prefix (flagsExt then SID), present for every type except
+        // TILE/MISC. This mirrors ProReader; it used to be scattered into
+        // writeItemData/writeWallData and was MISSING from writeCritterData/
+        // writeSceneryData, which truncated those prototypes by 8 bytes.
+        switch (pro.type()) {
+            case Pro::OBJECT_TYPE::TILE:
+            case Pro::OBJECT_TYPE::MISC:
+                break;
+            default:
+                utils.writeBE32(pro.commonItemData.flagsExt);
+                break;
+        }
+        switch (pro.type()) {
+            case Pro::OBJECT_TYPE::ITEM:
+            case Pro::OBJECT_TYPE::CRITTER:
+            case Pro::OBJECT_TYPE::SCENERY:
+            case Pro::OBJECT_TYPE::WALL:
+                utils.writeBE32(pro.commonItemData.SID);
+                break;
+            default:
+                break;
+        }
+
         switch (pro.type()) {
             case Pro::OBJECT_TYPE::ITEM:
                 writeItemData(pro);
@@ -66,29 +89,7 @@ void ProWriter::writeHeader(const Pro& pro) {
 void ProWriter::writeItemData(const Pro& pro) {
     auto& utils = getBinaryUtils();
 
-    // Write flagsExt field (not present for TILE and MISC types)
-    switch (pro.type()) {
-        case Pro::OBJECT_TYPE::TILE:
-        case Pro::OBJECT_TYPE::MISC:
-            break;
-        default:
-            utils.writeBE32(pro.commonItemData.flagsExt);
-            break;
-    }
-
-    // Write SID field (not present for TILE and MISC types)
-    switch (pro.type()) {
-        case Pro::OBJECT_TYPE::ITEM:
-        case Pro::OBJECT_TYPE::CRITTER:
-        case Pro::OBJECT_TYPE::SCENERY:
-        case Pro::OBJECT_TYPE::WALL:
-            utils.writeBE32(pro.commonItemData.SID);
-            break;
-        case Pro::OBJECT_TYPE::TILE:
-        case Pro::OBJECT_TYPE::MISC:
-            break;
-    }
-
+    // flagsExt + SID are written by the common prefix in write().
     utils.writeBE32(pro.objectSubtypeId());
 
     utils.writeBE32(pro.commonItemData.materialId);
@@ -375,8 +376,7 @@ void ProWriter::writeSceneryData(const Pro& pro) {
 void ProWriter::writeWallData(const Pro& pro) {
     auto& utils = getBinaryUtils();
 
-    utils.writeBE32(pro.commonItemData.flagsExt);
-    utils.writeBE32(pro.commonItemData.SID);
+    // flagsExt + SID are written by the common prefix in write().
     utils.writeBE32(pro.wallData.materialId);
 
     spdlog::debug("ProWriter: Wall data written - materialId: {}", pro.wallData.materialId);
