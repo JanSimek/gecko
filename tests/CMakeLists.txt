@@ -14,6 +14,7 @@ add_executable(general_tests
     general/test_game_data_path_resolver.cpp
     general/test_ddraw_ini.cpp
     general/test_map_object_defaults.cpp
+    general/test_frm_resolver.cpp
 )
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests

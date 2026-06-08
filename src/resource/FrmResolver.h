@@ -24,7 +24,16 @@ class FrmResolver final {
 public:
     explicit FrmResolver(ResourceRepository& repository);
 
+    /// Resolves a FID to its art path (LST lookup, type byte = FRM_TYPE).
     [[nodiscard]] std::string resolve(uint32_t fid);
+
+    /// Inverse of resolve(): derives the FID for an art/ path by locating its
+    /// filename in the matching LST. The FID type byte is the FRM_TYPE ordinal,
+    /// matching the engine (OBJ_TYPE) and resolve(). Returns nullopt when the
+    /// path is not under a known art/ directory or is absent from its LST; there
+    /// is no heuristic fallback. Critter resolution is lossy (animation-encoded),
+    /// so resolve(resolveFid(p)) is not guaranteed to round-trip for critters.
+    [[nodiscard]] std::optional<uint32_t> resolveFid(const std::string& artPath);
 
 private:
     ResourceRepository& _repository;

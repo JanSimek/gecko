@@ -5,9 +5,13 @@
 #include "../format/frm/Frm.h"
 #include "../format/lst/Lst.h"
 #include "../util/Constants.h"
+#include "../util/CritterFrmResolver.h"
 #include "../util/ResourcePaths.h"
 
+#include <algorithm>
+#include <cctype>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 
 namespace geck::resource {
@@ -28,6 +32,33 @@ namespace {
         { ResourcePaths::Directories::INTERFACE, ResourcePaths::Lst::INTERFACE },
         { ResourcePaths::Directories::INVENTORY, ResourcePaths::Lst::INVENTORY },
     } };
+
+    std::string trimmed(std::string_view text) {
+        const auto first = text.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos) {
+            return {};
+        }
+        const auto last = text.find_last_not_of(" \t\r\n");
+        return std::string(text.substr(first, last - first + 1));
+    }
+
+    bool equalsIgnoreCase(std::string_view a, std::string_view b) {
+        return a.size() == b.size()
+            && std::equal(a.begin(), a.end(), b.begin(), [](char lhs, char rhs) {
+                   return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
+               });
+    }
+
+    bool hasFrmExtension(std::string_view filename) {
+        if (filename.size() < 4) {
+            return false;
+        }
+        std::string ext = trimmed(filename.substr(filename.size() - 4));
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+            [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+        return ext == ".frm" || ext == ".fr0" || ext == ".fr1" || ext == ".fr2"
+            || ext == ".fr3" || ext == ".fr4" || ext == ".fr5";
+    }
 
 } // namespace
 
@@ -84,6 +115,64 @@ std::string FrmResolver::resolve(uint32_t fid) {
     }
 
     return std::string(typeDescription.prefixPath) + frmName;
+}
+
+std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
+    if (artPath.empty()) {
+        return std::nullopt;
+    }
+
+    std::string normalized = artPath;
+    if (normalized.front() == '/') {
+        normalized.erase(0, 1);
+    }
+    std::replace(normalized.begin(), normalized.end(), '\\', '/');
+
+    const size_t lastSlash = normalized.find_last_of('/');
+    const std::string filename = (lastSlash != std::string::npos) ? normalized.substr(lastSlash + 1) : normalized;
+
+    if (!hasFrmExtension(filename)) {
+        return std::nullopt;
+    }
+
+    for (size_t typeIndex = 0; typeIndex < frmTypeDescriptions.size(); ++typeIndex) {
+        const auto& description = frmTypeDescriptions[typeIndex];
+        if (normalized.find(description.prefixPath) != 0) {
+            continue;
+        }
+
+        auto* lst = _repository.load<Lst>(std::string(description.lstFilePath));
+        if (!lst) {
+            return std::nullopt;
+        }
+
+        const auto type = static_cast<Frm::FRM_TYPE>(typeIndex);
+        const auto& entries = lst->list();
+        for (size_t i = 0; i < entries.size(); ++i) {
+            if (type == Frm::FRM_TYPE::CRITTER) {
+                const auto commaPos = entries[i].find(',');
+                const std::string baseName = trimmed(
+                    commaPos != std::string::npos ? std::string_view(entries[i]).substr(0, commaPos) : std::string_view(entries[i]));
+                if (!baseName.empty() && CritterFrmResolver::matchesCritterBase(baseName, filename)) {
+                    const uint32_t fid = CritterFrmResolver::deriveCritterFrmPid(baseName, filename, static_cast<uint32_t>(i));
+                    if (fid != 0) {
+                        return fid;
+                    }
+                }
+                continue;
+            }
+
+            const std::string entry = trimmed(entries[i]);
+            if (!entry.empty() && equalsIgnoreCase(entry, filename)) {
+                return (static_cast<uint32_t>(type) << FileFormat::TYPE_MASK_SHIFT) | static_cast<uint32_t>(i);
+            }
+        }
+
+        // Path is under a known art directory but absent from its LST.
+        return std::nullopt;
+    }
+
+    return std::nullopt;
 }
 
 } // namespace geck::resource

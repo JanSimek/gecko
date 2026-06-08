@@ -13,7 +13,6 @@
 #include "../../resource/FrmResolver.h"
 #include "../../util/CritterFrmResolver.h"
 #include "../../format/frm/Frm.h"
-#include "../../format/lst/Lst.h"
 
 namespace geck {
 
@@ -472,99 +471,20 @@ std::optional<uint32_t> FrmSelectorDialog::deriveFrmPidFromPath(const std::strin
         return uint32_t{ 0x02000015 }; // Light source
     }
 
-    // Map path prefixes to FRM types and LST files (matching the engine resolver)
-    struct FrmTypeInfo {
-        std::string pathPrefix;
-        std::string lstFile;
-        uint32_t frmType;
-    };
-
-    static const FrmTypeInfo frmTypeMap[] = {
-        { "art/items/", "art/items/items.lst", 0 },          // ITEMS
-        { "art/critters/", "art/critters/critters.lst", 1 }, // CRITTER
-        { "art/scenery/", "art/scenery/scenery.lst", 2 },    // SCENERY
-        { "art/walls/", "art/walls/walls.lst", 4 },          // WALL
-        { "art/tiles/", "art/tiles/tiles.lst", 5 },          // TILE
-        { "art/misc/", "art/misc/misc.lst", 6 },             // MISC
-        { "art/intrface/", "art/intrface/intrface.lst", 7 }, // INTRFACE
-        { "art/inven/", "art/inven/inven.lst", 8 },          // INVENTORY
-    };
-
-    // Find the matching type for the normalized path (no leading slash)
-    const FrmTypeInfo* typeInfo = nullptr;
-    for (const auto& info : frmTypeMap) {
-        if (normalizedPath.find(info.pathPrefix) == 0) {
-            typeInfo = &info;
-            break;
-        }
-    }
-
-    if (!typeInfo) {
-        spdlog::debug("FrmSelectorDialog: Unknown path type for: {} (normalized: {})", frmPath, normalizedPath);
-        return std::nullopt;
-    }
-
+    // Canonical LST-based derivation lives in the resource layer (engine-correct
+    // FID type byte, shared with FrmResolver::resolve).
     try {
-        auto lst = _resources.repository().find<Lst>(typeInfo->lstFile);
-
-        if (!lst) {
-            lst = _resources.repository().load<Lst>(typeInfo->lstFile);
+        if (const auto fid = _resources.frmResolver().resolveFid(frmPath)) {
+            return fid;
         }
 
-        const auto& fileList = lst->list();
-
-        for (size_t i = 0; i < fileList.size(); ++i) {
-            std::string lstEntry = fileList[i];
-
-            // Skip empty entries
-            if (lstEntry.empty()) {
-                continue;
+        // The FRM sits under a known art directory but is absent from its LST:
+        // fall back to the editor's heuristic derivation for items and critters.
+        if (const auto type = resource::frmTypeForArtPath(normalizedPath)) {
+            const uint32_t fallbackFid = tryFallbackFidDerivation(normalizedPath, filename, static_cast<uint32_t>(*type));
+            if (fallbackFid != 0) {
+                return fallbackFid;
             }
-
-            if (typeInfo->frmType == 1) { // CRITTER type
-                size_t commaPos = lstEntry.find(',');
-                std::string baseName = (commaPos != std::string::npos) ? lstEntry.substr(0, commaPos) : lstEntry;
-
-                baseName.erase(0, baseName.find_first_not_of(" \t\r\n"));
-                baseName.erase(baseName.find_last_not_of(" \t\r\n") + 1);
-
-                if (baseName.empty()) {
-                    continue;
-                }
-
-                if (CritterFrmResolver::matchesCritterBase(baseName, filename)) {
-                    uint32_t fid = CritterFrmResolver::deriveCritterFrmPid(baseName, filename, static_cast<uint32_t>(i));
-                    if (fid != 0) {
-                        return fid;
-                    }
-                }
-            } else {
-                std::string trimmedEntry = lstEntry;
-                trimmedEntry.erase(0, trimmedEntry.find_first_not_of(" \t\r\n"));
-                trimmedEntry.erase(trimmedEntry.find_last_not_of(" \t\r\n") + 1);
-
-                if (trimmedEntry.empty()) {
-                    continue;
-                }
-
-                if (trimmedEntry == filename) {
-                    return (typeInfo->frmType << 24) | static_cast<uint32_t>(i);
-                }
-
-                std::string lowerEntry = trimmedEntry;
-                std::string lowerFilename = filename;
-                std::transform(lowerEntry.begin(), lowerEntry.end(), lowerEntry.begin(), ::tolower);
-                std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(), ::tolower);
-
-                if (lowerEntry == lowerFilename) {
-                    return (typeInfo->frmType << 24) | static_cast<uint32_t>(i);
-                }
-            }
-        }
-
-        uint32_t fallbackFid = tryFallbackFidDerivation(normalizedPath, filename, typeInfo->frmType);
-        if (fallbackFid != 0) {
-            return fallbackFid;
         }
 
         return std::nullopt;
