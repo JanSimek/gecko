@@ -905,7 +905,7 @@ void SelectionPanel::onEditExitGridClicked() {
 }
 
 void SelectionPanel::onAddInventoryClicked() {
-    // TODO: Implement add inventory item functionality
+    // TODO: implement inventory management
     spdlog::debug("SelectionPanel::onAddInventoryClicked: Add inventory functionality not yet implemented");
 }
 
@@ -915,8 +915,8 @@ void SelectionPanel::onRemoveInventoryClicked() {
         return;
     }
 
-    // TODO: Implement remove inventory item functionality
-    // For now, just remove from tree widget
+    // TODO: implement inventory management
+    // Visual-only for now: removes the row but not the underlying inventory item.
     delete currentItem;
     spdlog::debug("SelectionPanel::onRemoveInventoryClicked: Remove inventory functionality partially implemented");
 }
@@ -926,7 +926,8 @@ void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
         return;
     }
 
-    // TODO: Implement inventory item amount change functionality
+    // TODO: implement inventory management
+    // Visual-only for now: refreshes the icon but does not persist the new amount.
     bool ok;
     int newAmount = item->text(COLUMN_AMOUNT).toInt(&ok);
     if (ok && newAmount >= 0) {
