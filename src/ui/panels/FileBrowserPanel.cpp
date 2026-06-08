@@ -97,7 +97,7 @@ FileLoaderWorker::FileLoaderWorker(std::shared_ptr<resource::GameResources> reso
 void FileLoaderWorker::loadFiles() {
     try {
         spdlog::info("FileLoaderWorker: Starting background file loading...");
-        emit loadingProgress(0, 100, "Initializing file system...");
+        Q_EMIT loadingProgress(0, 100, "Initializing file system...");
 
         spdlog::debug("FileLoaderWorker: Listing mounted files...");
         auto filePaths = _resources->files().list();
@@ -110,12 +110,12 @@ void FileLoaderWorker::loadFiles() {
 
         if (allFiles.empty()) {
             spdlog::warn("FileLoaderWorker: Data filesystem returned no files - data may not be loaded yet");
-            emit loadingError("No files found - data paths may not be loaded yet");
-            emit loadingComplete();
+            Q_EMIT loadingError("No files found - data paths may not be loaded yet");
+            Q_EMIT loadingComplete();
             return;
         }
 
-        emit loadingProgress(50, 100, "Processing file list...");
+        Q_EMIT loadingProgress(50, 100, "Processing file list...");
 
         if (_shouldStop.load()) {
             return;
@@ -139,26 +139,26 @@ void FileLoaderWorker::loadFiles() {
 
             if (++processed % 1000 == 0) {
                 int progressPercent = 50 + (processed * 50) / totalFiles;
-                emit loadingProgress(progressPercent, 100,
+                Q_EMIT loadingProgress(progressPercent, 100,
                     QString("Processing files... %1/%2").arg(processed).arg(totalFiles));
             }
         }
 
-        emit loadingProgress(100, 100, "File loading completed");
+        Q_EMIT loadingProgress(100, 100, "File loading completed");
         spdlog::debug("FileLoaderWorker: Emitting fileTypesExtracted with {} types", fileTypes.size());
-        emit fileTypesExtracted(fileTypes);
+        Q_EMIT fileTypesExtracted(fileTypes);
         spdlog::debug("FileLoaderWorker: Emitting filesLoaded with {} files", allFiles.size());
-        emit filesLoaded(allFiles);
+        Q_EMIT filesLoaded(allFiles);
 
         spdlog::info("FileLoaderWorker: Loaded {} files with {} file types",
             allFiles.size(), fileTypes.size());
 
-        emit loadingComplete();
+        Q_EMIT loadingComplete();
 
     } catch (const std::exception& e) {
         spdlog::error("FileLoaderWorker: Error loading files: {}", e.what());
-        emit loadingError(QString::fromStdString(e.what()));
-        emit loadingComplete();
+        Q_EMIT loadingError(QString::fromStdString(e.what()));
+        Q_EMIT loadingComplete();
     }
 }
 
@@ -694,7 +694,7 @@ void FileBrowserPanel::onTreeItemClicked(const QModelIndex& index) {
     if (treeItem && treeItem->getType() == FileTreeItem::File) {
         QString filePath = treeItem->getFilePath();
         spdlog::debug("FileBrowserPanel: File selected: {}", filePath.toStdString());
-        emit fileSelected(filePath);
+        Q_EMIT fileSelected(filePath);
     }
 }
 
@@ -725,7 +725,7 @@ void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
             return;
         }
 
-        emit fileDoubleClicked(filePath);
+        Q_EMIT fileDoubleClicked(filePath);
     }
 }
 
@@ -924,7 +924,7 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
 
     if (selectedAction == openAction) {
         spdlog::debug("FileBrowserPanel: Open action triggered for: {}", filePath.toStdString());
-        emit fileDoubleClicked(filePath);
+        Q_EMIT fileDoubleClicked(filePath);
     } else if (selectedAction == editProAction) {
         spdlog::debug("FileBrowserPanel: Edit PRO action triggered for: {}", filePath.toStdString());
         openProEditor(filePath);
@@ -982,7 +982,7 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
         spdlog::info("FileBrowserPanel: Exported {} to {} ({} bytes)",
             filePath.toStdString(), saveFilePath.toStdString(), bytesWritten);
 
-        emit fileExportRequested(filePath);
+        Q_EMIT fileExportRequested(filePath);
 
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Export Error",

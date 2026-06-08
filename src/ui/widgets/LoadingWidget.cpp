@@ -81,7 +81,7 @@ void LoadingWidget::addLoader(std::unique_ptr<Loader> loader) {
 void LoadingWidget::start() {
     if (_loaders.empty()) {
         spdlog::warn("LoadingWidget::start() called with no loaders");
-        emit loadingComplete();
+        Q_EMIT loadingComplete();
         return;
     }
 
@@ -154,7 +154,7 @@ void LoadingWidget::updateProgress() {
 
         // Delay so the completed (100%) state is briefly visible before closing
         QTimer::singleShot(200, this, [this]() {
-            emit loadingComplete();
+            Q_EMIT loadingComplete();
         });
     }
 }

@@ -285,7 +285,7 @@ void ProCritterWidget::setupGeneralTab(QTabWidget* parentTabs) {
     _headFidSelectorButton->setMaximumHeight(ui::constants::sizes::ICON_BUTTON_HEIGHT);
     _headFidSelectorButton->setToolTip("Browse FRM files for critter head");
     connect(_headFidSelectorButton, &QPushButton::clicked, this, [this]() {
-        emit fidLabelSelectorRequested(_headFidLabel, &_headFid, HeadFrmObjectType);
+        Q_EMIT fidLabelSelectorRequested(_headFidLabel, &_headFid, HeadFrmObjectType);
     });
 
     headFidLayout->addWidget(_headFidLabel, 1);

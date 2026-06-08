@@ -179,7 +179,7 @@ void GameLocationWidget::setDataDirectory(const std::filesystem::path& location)
 }
 
 void GameLocationWidget::setStatusMessage(const QString& message, const QString& styleClass) {
-    emit statusChanged(message, styleClass);
+    Q_EMIT statusChanged(message, styleClass);
 }
 
 void GameLocationWidget::updateControlStates() {
@@ -194,20 +194,20 @@ void GameLocationWidget::updateControlStates() {
 
 void GameLocationWidget::onInstallationTypeChanged() {
     updateControlStates();
-    emit installationTypeChanged();
-    emit configurationChanged();
+    Q_EMIT installationTypeChanged();
+    Q_EMIT configurationChanged();
 }
 
 void GameLocationWidget::onSteamAppIdChanged() {
-    emit configurationChanged();
+    Q_EMIT configurationChanged();
 }
 
 void GameLocationWidget::onExecutableLocationChanged() {
-    emit configurationChanged();
+    Q_EMIT configurationChanged();
 }
 
 void GameLocationWidget::onDataDirectoryChanged() {
-    emit configurationChanged();
+    Q_EMIT configurationChanged();
 }
 
 void GameLocationWidget::onBrowseExecutable() {
@@ -233,7 +233,7 @@ void GameLocationWidget::onBrowseExecutable() {
         }
 
         validateGameLocation(selectedFile, false);
-        emit configurationChanged();
+        Q_EMIT configurationChanged();
     }
 #else
     QString filters;
@@ -262,7 +262,7 @@ void GameLocationWidget::onBrowseExecutable() {
         }
 
         validateGameLocation(selectedFile, false);
-        emit configurationChanged();
+        Q_EMIT configurationChanged();
     }
 #endif
 }
@@ -274,7 +274,7 @@ void GameLocationWidget::onBrowseDataDirectory() {
     QString gameDir = QFileDialog::getExistingDirectory(this, "Select Fallout 2 Game Data Directory", startPath);
     if (!gameDir.isEmpty()) {
         _dataDirectoryEdit->setText(gameDir);
-        emit configurationChanged();
+        Q_EMIT configurationChanged();
     }
 }
 
@@ -326,7 +326,7 @@ void GameLocationWidget::onAutoDetect() {
         }
 
         setStatusMessage(QString("Auto-detected installations: %1").arg(statusMessages), "success");
-        emit configurationChanged();
+        Q_EMIT configurationChanged();
     } else {
         setStatusMessage("No Fallout 2 game installations detected automatically. Please select the directory manually.", "warning");
         onBrowseExecutable();
@@ -335,7 +335,7 @@ void GameLocationWidget::onAutoDetect() {
         if (!manualSelection.isEmpty()) {
             _executableRadio->setChecked(true);
             validateGameLocation(manualSelection, false);
-            emit configurationChanged();
+            Q_EMIT configurationChanged();
         }
     }
 }

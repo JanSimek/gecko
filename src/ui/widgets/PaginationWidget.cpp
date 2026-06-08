@@ -116,46 +116,46 @@ void PaginationWidget::setShowFirstLastButtons(bool show) {
 void PaginationWidget::goToFirstPage() {
     if (_currentPage != 1) {
         setCurrentPage(1);
-        emit pageChanged(_currentPage);
+        Q_EMIT pageChanged(_currentPage);
     }
 }
 
 void PaginationWidget::goToLastPage() {
     if (_currentPage != _totalPages) {
         setCurrentPage(_totalPages);
-        emit pageChanged(_currentPage);
+        Q_EMIT pageChanged(_currentPage);
     }
 }
 
 void PaginationWidget::onFirstButtonClicked() {
     goToFirstPage();
-    emit firstPageRequested();
+    Q_EMIT firstPageRequested();
 }
 
 void PaginationWidget::onPrevButtonClicked() {
     if (_currentPage > 1) {
         setCurrentPage(_currentPage - 1);
-        emit pageChanged(_currentPage);
+        Q_EMIT pageChanged(_currentPage);
     }
 }
 
 void PaginationWidget::onNextButtonClicked() {
     if (_currentPage < _totalPages) {
         setCurrentPage(_currentPage + 1);
-        emit pageChanged(_currentPage);
+        Q_EMIT pageChanged(_currentPage);
     }
 }
 
 void PaginationWidget::onLastButtonClicked() {
     goToLastPage();
-    emit lastPageRequested();
+    Q_EMIT lastPageRequested();
 }
 
 void PaginationWidget::onPageSpinBoxChanged(int page) {
     if (page != _currentPage) {
         _currentPage = page;
         updateControls();
-        emit pageChanged(_currentPage);
+        Q_EMIT pageChanged(_currentPage);
     }
 }
 

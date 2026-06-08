@@ -44,7 +44,7 @@ ObjectWidget::ObjectWidget(int objectIndex, const ObjectInfo* objectInfo, const 
     }
 
     connect(this, &BasePaletteWidget::clicked, this, [this](int index) {
-        emit objectClicked(index);
+        Q_EMIT objectClicked(index);
     });
 }
 
@@ -452,7 +452,7 @@ void ObjectPalettePanel::onObjectClicked(int objectIndex) {
         _objectWidgets[objectIndex]->setSelected(true);
     }
 
-    emit objectSelected(objectIndex, _currentCategory);
+    Q_EMIT objectSelected(objectIndex, _currentCategory);
 
     spdlog::debug("ObjectPalettePanel: Selected object {} in category {}",
         objectIndex, static_cast<int>(_currentCategory));

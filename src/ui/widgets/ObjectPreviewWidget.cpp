@@ -310,7 +310,7 @@ void ObjectPreviewWidget::onRotateClicked() {
 }
 
 void ObjectPreviewWidget::onFidSelectorClicked() {
-    emit fidChangeRequested();
+    Q_EMIT fidChangeRequested();
 }
 
 void ObjectPreviewWidget::loadAnimationFrames() {

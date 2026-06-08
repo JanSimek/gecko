@@ -420,15 +420,15 @@ void MapInfoPanel::onFieldChanged() {
 
     QObject* sender = QObject::sender();
     if (sender == _playerPositionSpin) {
-        emit playerPositionChanged(_playerPositionSpin->value());
+        Q_EMIT playerPositionChanged(_playerPositionSpin->value());
     } else if (sender == _playerElevationSpin) {
-        emit playerElevationChanged(_playerElevationSpin->value());
+        Q_EMIT playerElevationChanged(_playerElevationSpin->value());
     } else if (sender == _mapScriptIdSpin) {
-        emit mapScriptIdChanged(_mapScriptIdSpin->value());
+        Q_EMIT mapScriptIdChanged(_mapScriptIdSpin->value());
     } else if (sender == _darknessSpin) {
-        emit darknessChanged(_darknessSpin->value());
+        Q_EMIT darknessChanged(_darknessSpin->value());
     } else if (sender == _timestampSpin) {
-        emit timestampChanged(_timestampSpin->value());
+        Q_EMIT timestampChanged(_timestampSpin->value());
     }
 
     spdlog::debug("MapInfoPanel: Field changed, map header updated");
@@ -442,17 +442,17 @@ void MapInfoPanel::onOrientationChanged(int index) {
     auto& mapInfo = _map->getMapFile();
     mapInfo.header.player_default_orientation = static_cast<uint32_t>(index);
 
-    emit playerOrientationChanged(index);
+    Q_EMIT playerOrientationChanged(index);
     spdlog::debug("MapInfoPanel: Player orientation changed to {}", index);
 }
 
 void MapInfoPanel::onSelectPositionClicked() {
-    emit selectPlayerPositionRequested();
+    Q_EMIT selectPlayerPositionRequested();
     spdlog::debug("MapInfoPanel: Player position selection requested");
 }
 
 void MapInfoPanel::onCenterViewClicked() {
-    emit centerViewOnPlayerPositionRequested();
+    Q_EMIT centerViewOnPlayerPositionRequested();
     spdlog::debug("MapInfoPanel: Center view on player position requested");
 }
 
@@ -692,7 +692,7 @@ void MapInfoPanel::onElevationCheckboxChanged() {
             mapFile.map_objects[elevation].clear();
         }
 
-        emit elevationAdded(elevation);
+        Q_EMIT elevationAdded(elevation);
         spdlog::info("MapInfoPanel: Added {} to map", elevationName.toStdString());
 
         updateElevationCheckboxStates();
@@ -728,7 +728,7 @@ void MapInfoPanel::onElevationCheckboxChanged() {
                 mapFile.map_objects.erase(objectIt);
             }
 
-            emit elevationRemoved(elevation);
+            Q_EMIT elevationRemoved(elevation);
             spdlog::info("MapInfoPanel: Removed {} from map", elevationName.toStdString());
 
             updateElevationCheckboxStates();

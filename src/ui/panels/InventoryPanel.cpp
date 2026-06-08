@@ -451,7 +451,7 @@ void InventoryPanel::onAddItemClicked() {
         populateInventoryTree();
         updateStatusLabel();
 
-        emit inventoryChanged();
+        Q_EMIT inventoryChanged();
 
         spdlog::info("InventoryPanel: Added item PID 0x{:08X} with amount {} to inventory", pid, amount);
 
@@ -501,7 +501,7 @@ void InventoryPanel::onRemoveItemClicked() {
         // No item is selected after removal.
         _removeButton->setEnabled(false);
 
-        emit inventoryChanged();
+        Q_EMIT inventoryChanged();
 
         spdlog::info("InventoryPanel: Removed item PID 0x{:08X} (display amount {}) from inventory", removedPid, displayAmount);
 

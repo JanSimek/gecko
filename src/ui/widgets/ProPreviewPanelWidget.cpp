@@ -167,15 +167,15 @@ void ProPreviewPanelWidget::onPreviewFidChangeRequested() {
 
     if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
         if (senderWidget == _inventoryPreviewWidget) {
-            emit inventoryFidSelected(static_cast<int32_t>(selectedFrmPid));
+            Q_EMIT inventoryFidSelected(static_cast<int32_t>(selectedFrmPid));
         } else if (senderWidget == _groundPreviewWidget) {
-            emit groundFidSelected(static_cast<int32_t>(selectedFrmPid));
+            Q_EMIT groundFidSelected(static_cast<int32_t>(selectedFrmPid));
         }
         refresh();
         return;
     }
 
-    emit objectFidSelected(static_cast<int32_t>(selectedFrmPid));
+    Q_EMIT objectFidSelected(static_cast<int32_t>(selectedFrmPid));
     refresh();
 }
 

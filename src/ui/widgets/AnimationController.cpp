@@ -15,9 +15,9 @@ void AnimationController::loadFrames(const std::vector<QPixmap>& frames) {
     stop();
     _frameCache = frames;
     _currentFrame = 0;
-    emit framesLoaded(static_cast<int>(_frameCache.size()));
+    Q_EMIT framesLoaded(static_cast<int>(_frameCache.size()));
     if (!_frameCache.empty()) {
-        emit frameChanged(0);
+        Q_EMIT frameChanged(0);
     }
 }
 
@@ -25,9 +25,9 @@ void AnimationController::loadFrames(std::vector<QPixmap>&& frames) {
     stop();
     _frameCache = std::move(frames);
     _currentFrame = 0;
-    emit framesLoaded(static_cast<int>(_frameCache.size()));
+    Q_EMIT framesLoaded(static_cast<int>(_frameCache.size()));
     if (!_frameCache.empty()) {
-        emit frameChanged(0);
+        Q_EMIT frameChanged(0);
     }
 }
 
@@ -35,7 +35,7 @@ void AnimationController::clearFrames() {
     stop();
     _frameCache.clear();
     _currentFrame = 0;
-    emit framesLoaded(0);
+    Q_EMIT framesLoaded(0);
 }
 
 void AnimationController::play() {
@@ -45,7 +45,7 @@ void AnimationController::play() {
     if (!_isPlaying) {
         _isPlaying = true;
         _timer->start();
-        emit playStateChanged(true);
+        Q_EMIT playStateChanged(true);
     }
 }
 
@@ -53,7 +53,7 @@ void AnimationController::pause() {
     if (_isPlaying) {
         _isPlaying = false;
         _timer->stop();
-        emit playStateChanged(false);
+        Q_EMIT playStateChanged(false);
     }
 }
 
@@ -62,7 +62,7 @@ void AnimationController::stop() {
     if (_currentFrame != 0) {
         _currentFrame = 0;
         if (!_frameCache.empty()) {
-            emit frameChanged(0);
+            Q_EMIT frameChanged(0);
         }
     }
 }
@@ -81,7 +81,7 @@ void AnimationController::setFrame(int frame) {
     }
     if (frame != _currentFrame) {
         _currentFrame = frame;
-        emit frameChanged(frame);
+        Q_EMIT frameChanged(frame);
     }
 }
 
@@ -107,7 +107,7 @@ void AnimationController::setDirection(int direction) {
     }
     if (direction != _currentDirection) {
         _currentDirection = direction;
-        emit directionChanged(direction);
+        Q_EMIT directionChanged(direction);
     }
 }
 

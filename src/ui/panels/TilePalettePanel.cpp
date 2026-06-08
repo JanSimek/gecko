@@ -28,7 +28,7 @@ TileWidget::TileWidget(int tileIndex, const QPixmap& pixmap, QWidget* parent)
     setToolTip(QString("Tile %1").arg(tileIndex));
 
     connect(this, &BasePaletteWidget::clicked, this, [this](int index) {
-        emit tileClicked(index);
+        Q_EMIT tileClicked(index);
     });
 }
 
@@ -345,7 +345,7 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
         clearTileSelection();
         _selectedTileIndex = -1;
 
-        emit tileSelected(-1, _isRoofMode); // -1 signals no tile selected
+        Q_EMIT tileSelected(-1, _isRoofMode); // -1 signals no tile selected
         return;
     }
 
@@ -365,7 +365,7 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
         _selectionManager->clearSelection();
     }
 
-    emit tileSelected(tileIndex, _isRoofMode);
+    Q_EMIT tileSelected(tileIndex, _isRoofMode);
 }
 
 void TilePalettePanel::clearTileSelection() {
@@ -378,7 +378,7 @@ void TilePalettePanel::deselectTile() {
     if (_selectedTileIndex >= 0) {
         clearTileSelection();
         _selectedTileIndex = -1;
-        emit tileSelected(-1, _isRoofMode); // -1 signals no tile selected
+        Q_EMIT tileSelected(-1, _isRoofMode); // -1 signals no tile selected
     }
 }
 
@@ -391,14 +391,14 @@ void TilePalettePanel::setRoofMode(bool isRoof) {
 
         // Re-emit so a currently selected tile picks up the new roof/floor state.
         if (_selectedTileIndex >= 0) {
-            emit tileSelected(_selectedTileIndex, _isRoofMode);
+            Q_EMIT tileSelected(_selectedTileIndex, _isRoofMode);
         }
     }
 }
 
 void TilePalettePanel::onPlacementModeChanged() {
     // With unified placement mode, this function is simplified
-    emit placementModeChanged(_placementMode);
+    Q_EMIT placementModeChanged(_placementMode);
 
     QString modeText = "Unified placement mode - click or drag to place tiles (auto-replace if tiles selected)";
     _statusLabel->setText(modeText);
@@ -409,7 +409,7 @@ void TilePalettePanel::setPlacementMode(PlacementMode mode) {
         _placementMode = mode;
 
         // With unified placement mode, no button state to update
-        emit placementModeChanged(_placementMode);
+        Q_EMIT placementModeChanged(_placementMode);
     }
 }
 

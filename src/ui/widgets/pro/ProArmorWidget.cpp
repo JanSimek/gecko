@@ -326,7 +326,7 @@ void ProArmorWidget::selectArmorFid(ObjectPreviewWidget* previewWidget, int32_t&
 
     fid = static_cast<int32_t>(*selectedFrmPidOpt);
     updateArmorPreviews();
-    emit fieldChanged();
+    Q_EMIT fieldChanged();
 }
 
 void ProArmorWidget::setArmorMaleFID(int32_t fid) {

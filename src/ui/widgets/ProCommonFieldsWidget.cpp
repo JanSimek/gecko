@@ -351,11 +351,11 @@ void ProCommonFieldsWidget::connectCheckBox(QCheckBox* checkBox) {
 }
 
 void ProCommonFieldsWidget::onFieldChanged() {
-    emit fieldChanged();
+    Q_EMIT fieldChanged();
 }
 
 void ProCommonFieldsWidget::onObjectFlagChanged() {
-    emit fieldChanged();
+    Q_EMIT fieldChanged();
 }
 
 } // namespace geck

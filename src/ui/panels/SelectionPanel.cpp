@@ -773,7 +773,7 @@ void SelectionPanel::onChangeFrmClicked() {
             if (newFrmPid.has_value()) {
                 const uint32_t derivedFrmPid = *newFrmPid;
 
-                emit objectFrmPathChanged(_selectedObject.value(), newFrmPath);
+                Q_EMIT objectFrmPathChanged(_selectedObject.value(), newFrmPath);
 
                 // Custom FID: 0xFF in the high byte of the baseId (not from an LST).
                 bool isCustomFid = ((derivedFrmPid & 0x00FF0000) == 0x00FF0000);
@@ -786,7 +786,7 @@ void SelectionPanel::onChangeFrmClicked() {
                         // the editor shows the new FRM while the saved map stays loadable in-game.
                         spdlog::info("SelectionPanel: Keeping original frm_pid {} for game compatibility, visual uses custom FRM", currentFrmPid);
 
-                        emit statusMessage(QString("Warning: Custom FRM may not display correctly in game"));
+                        Q_EMIT statusMessage(QString("Warning: Custom FRM may not display correctly in game"));
                     } else {
                         // Valid LST-based FID, safe to persist.
                         mapObject.frm_pid = derivedFrmPid;
@@ -817,12 +817,12 @@ void SelectionPanel::onChangeFrmClicked() {
                     spdlog::warn("SelectionPanel: FRM '{}' not found in critters.lst - change may not persist in game", filename);
                     spdlog::info("SelectionPanel: Keeping original FRM PID ({}) for game compatibility", currentFrmPid);
 
-                    emit statusMessage(QString("Warning: FRM '%1' may not display correctly in game - not found in critters.lst")
+                    Q_EMIT statusMessage(QString("Warning: FRM '%1' may not display correctly in game - not found in critters.lst")
                             .arg(QString::fromStdString(filename)));
                 }
 
                 // Visual-only update for the derivation-failed path; frm_pid is left untouched.
-                emit objectFrmPathChanged(_selectedObject.value(), newFrmPath);
+                Q_EMIT objectFrmPathChanged(_selectedObject.value(), newFrmPath);
 
                 _objectFrmPathEdit->setText(QString::fromStdString(newFrmPath));
                 updateObjectInfo();
@@ -835,7 +835,7 @@ void SelectionPanel::onChangeFrmClicked() {
             if (_selectedObject.has_value() && _selectedObject.value()) {
                 QTimer::singleShot(50, this, [this]() {
                     if (_selectedObject.has_value() && _selectedObject.value()) {
-                        emit requestObjectHighlight(_selectedObject.value());
+                        Q_EMIT requestObjectHighlight(_selectedObject.value());
                     }
                 });
             }
@@ -896,7 +896,7 @@ void SelectionPanel::onEditExitGridClicked() {
         return;
     }
 
-    emit requestExitGridEditor(_selectedObject.value());
+    Q_EMIT requestExitGridEditor(_selectedObject.value());
 }
 
 void SelectionPanel::onAddInventoryClicked() {

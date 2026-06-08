@@ -195,7 +195,7 @@ void ProTabWidget::createCompactSpinBoxArray(QSpinBox** array, int count,
 }
 
 void ProTabWidget::onFieldChanged() {
-    emit fieldChanged();
+    Q_EMIT fieldChanged();
 }
 
 } // namespace geck

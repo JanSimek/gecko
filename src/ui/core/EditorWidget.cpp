@@ -90,7 +90,7 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
 
 void EditorWidget::pushCommand(UndoCommand cmd) {
     _undoStack.push(std::move(cmd));
-    emit undoStackChanged();
+    Q_EMIT undoStackChanged();
 }
 
 void EditorWidget::applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState) {
@@ -157,20 +157,20 @@ void EditorWidget::removePlacedObject(const std::shared_ptr<MapObject>& mapObjec
 
 void EditorWidget::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
     if (_objectCommandController->registerObjectPlacement(mapObject, object)) {
-        emit undoStackChanged();
+        Q_EMIT undoStackChanged();
     }
 }
 
 void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects,
     const std::vector<std::pair<int, int>>& moves) {
     if (_objectCommandController->registerObjectMove(objects, moves)) {
-        emit undoStackChanged();
+        Q_EMIT undoStackChanged();
     }
 }
 
 void EditorWidget::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs) {
     if (_objectCommandController->registerObjectRotation(objects, beforeDirs, afterDirs)) {
-        emit undoStackChanged();
+        Q_EMIT undoStackChanged();
     }
 }
 
@@ -180,13 +180,13 @@ void EditorWidget::applyFrmToObject(const std::shared_ptr<Object>& object, uint3
 
 void EditorWidget::registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath) {
     if (_objectCommandController->registerObjectFrmChange(object, oldFrmPid, oldFrmPath, newFrmPid, newFrmPath)) {
-        emit undoStackChanged();
+        Q_EMIT undoStackChanged();
     }
 }
 
 void EditorWidget::registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation) {
     if (_objectCommandController->registerExitGridCreation(exitGrids, elevation)) {
-        emit undoStackChanged();
+        Q_EMIT undoStackChanged();
     }
 }
 
@@ -194,7 +194,7 @@ void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObj
     const std::vector<ExitGridState>& beforeStates,
     const std::vector<ExitGridState>& afterStates) {
     if (_objectCommandController->registerExitGridEdit(exitGrids, beforeStates, afterStates)) {
-        emit undoStackChanged();
+        Q_EMIT undoStackChanged();
     }
 }
 
@@ -203,13 +203,13 @@ EditorWidget::~EditorWidget() {
 
 bool EditorWidget::undoLastEdit() {
     bool result = _undoStack.undo();
-    emit undoStackChanged();
+    Q_EMIT undoStackChanged();
     return result;
 }
 
 bool EditorWidget::redoLastEdit() {
     bool result = _undoStack.redo();
-    emit undoStackChanged();
+    Q_EMIT undoStackChanged();
     return result;
 }
 
@@ -263,7 +263,7 @@ void EditorWidget::initializeSelectionSystem() {
             }
         }
 
-        emit selectionChanged(selection, _currentElevation);
+        Q_EMIT selectionChanged(selection, _currentElevation);
     });
 }
 
@@ -364,7 +364,7 @@ void EditorWidget::openMap() {
     spdlog::info("User requested to open new map: {}", mapPath);
 
     // MainWindow handles the actual loading
-    emit mapLoadRequested(mapPath);
+    Q_EMIT mapLoadRequested(mapPath);
 }
 
 void EditorWidget::createNewMap() {
@@ -795,10 +795,10 @@ void EditorWidget::setupInputCallbacks() {
     callbacks.onPlayerPositionSelect = [this](sf::Vector2f worldPos) {
         int hexPosition = _viewportController->worldPosToHexIndex(worldPos);
         if (hexPosition >= 0) {
-            emit playerPositionSelected(hexPosition);
+            Q_EMIT playerPositionSelected(hexPosition);
             spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
         }
-        emit statusMessageClearRequested();
+        Q_EMIT statusMessageClearRequested();
     };
 
     callbacks.onScrollBlockerRectangle = [this](sf::FloatRect area) {
@@ -832,7 +832,7 @@ void EditorWidget::setupInputCallbacks() {
 
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
         _currentHoverHex = _viewportController->updateHoverHex(worldPos);
-        emit hexHoverChanged(_currentHoverHex);
+        Q_EMIT hexHoverChanged(_currentHoverHex);
     };
 
     callbacks.onEscape = [this]() {
@@ -1575,7 +1575,7 @@ void EditorWidget::enterPlayerPositionSelectionMode() {
         _inputHandler->setTilePlacementMode(false);
     }
 
-    emit statusMessageRequested("Click on a hex to set the player starting position (Press Escape to cancel)");
+    Q_EMIT statusMessageRequested("Click on a hex to set the player starting position (Press Escape to cancel)");
 
     spdlog::debug("EditorWidget: Entered player position selection mode");
 }
@@ -1768,7 +1768,7 @@ void EditorWidget::deleteSelectedObjects() {
 
     _selectionManager->clearSelection();
 
-    emit selectionChanged(_selectionManager->getCurrentSelection(), _currentElevation);
+    Q_EMIT selectionChanged(_selectionManager->getCurrentSelection(), _currentElevation);
 
     spdlog::info("EditorWidget::deleteSelectedObjects - Successfully deleted {} objects", removedObjects.size());
 }

@@ -190,7 +190,7 @@ void DataPathsWidget::validatePaths() {
 }
 
 void DataPathsWidget::setStatusMessage(const QString& message, const QString& styleClass) {
-    emit statusChanged(message, styleClass);
+    Q_EMIT statusChanged(message, styleClass);
 }
 
 void DataPathsWidget::updateButtonStates() {
@@ -220,7 +220,7 @@ void DataPathsWidget::removeSelectedPath() {
         }
 
         delete _pathsList->takeItem(_pathsList->row(item));
-        emit dataPathsChanged();
+        Q_EMIT dataPathsChanged();
         validatePaths();
         updateButtonStates();
     }
@@ -233,7 +233,7 @@ void DataPathsWidget::onAddPath() {
 
     if (!path.isEmpty()) {
         addPathToList(std::filesystem::path(path.toStdString()));
-        emit dataPathsChanged();
+        Q_EMIT dataPathsChanged();
         validatePaths();
         updateButtonStates();
     }
@@ -273,7 +273,7 @@ void DataPathsWidget::onAutoDetect() {
     }
 
     if (addedPaths > 0) {
-        emit dataPathsChanged();
+        Q_EMIT dataPathsChanged();
         setStatusMessage(QString("Auto-detection complete. Added %1 new path(s).").arg(addedPaths), "success");
     } else if (detectedPaths.empty()) {
         setStatusMessage("No Fallout 2 installations detected automatically.", "warning");
@@ -305,7 +305,7 @@ void DataPathsWidget::moveSelectedPath(int offset) {
     _pathsList->insertItem(targetRow, takenItem);
     _pathsList->setCurrentItem(takenItem);
 
-    emit dataPathsChanged();
+    Q_EMIT dataPathsChanged();
     validatePaths();
     updateButtonStates();
 }
@@ -324,7 +324,7 @@ void DataPathsWidget::onItemDoubleClicked(QListWidgetItem* item) {
             "Select Fallout 2 Data Directory", currentPath);
         if (!newPath.isEmpty() && newPath != currentPath) {
             item->setText(newPath);
-            emit dataPathsChanged();
+            Q_EMIT dataPathsChanged();
             validatePaths();
         }
     }
