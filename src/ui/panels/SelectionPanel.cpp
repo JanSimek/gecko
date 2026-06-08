@@ -1,6 +1,7 @@
 #include "SelectionPanel.h"
 #include "../common/InventoryItemUiHelper.h"
 #include "../dialogs/FrmSelectorDialog.h"
+#include "../dialogs/ProEditorDialog.h"
 #include "../theme/ThemeManager.h"
 #include "../UIConstants.h"
 
@@ -21,6 +22,7 @@
 #include "../../format/lst/Lst.h"
 #include "../../resource/GameResources.h"
 #include "../../util/ProHelper.h"
+#include "../../reader/ReaderFactory.h"
 #include "../IconHelper.h"
 #include "../../format/map/MapObject.h"
 #include "../../format/pro/Pro.h"
@@ -846,7 +848,47 @@ void SelectionPanel::onEditProClicked() {
         return;
     }
 
-    emit requestProEditor(_selectedObject.value());
+    openProEditorForSelectedObject();
+}
+
+bool SelectionPanel::openProEditorForSelectedObject() {
+    if (!_selectedObject.has_value()) {
+        return false;
+    }
+
+    auto selectedObject = _selectedObject.value();
+    if (!selectedObject || !selectedObject->hasMapObject()) {
+        spdlog::debug("SelectionPanel::openProEditorForSelectedObject() - selected object has no MapObject");
+        return false;
+    }
+
+    auto& mapObject = selectedObject->getMapObject();
+
+    try {
+        std::string proFileName = ProHelper::basePath(_resources, mapObject.pro_pid);
+        spdlog::debug("SelectionPanel::openProEditorForSelectedObject() - opening PRO: {}", proFileName);
+
+        auto fileData = _resources.files().readRawBytes(proFileName);
+        if (!fileData) {
+            spdlog::error("SelectionPanel::openProEditorForSelectedObject() - could not open PRO file: {}", proFileName);
+            return false;
+        }
+
+        auto pro = ReaderFactory::readFileFromMemory<Pro>(*fileData, proFileName);
+        if (!pro) {
+            spdlog::error("SelectionPanel::openProEditorForSelectedObject() - could not parse PRO file");
+            return false;
+        }
+
+        ProEditorDialog dialog(_resources, std::shared_ptr<Pro>(pro.release()), this);
+        dialog.exec();
+
+        return true;
+
+    } catch (const std::exception& e) {
+        spdlog::error("SelectionPanel::openProEditorForSelectedObject() - exception: {}", e.what());
+        return false;
+    }
 }
 
 void SelectionPanel::onEditExitGridClicked() {

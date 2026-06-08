@@ -73,8 +73,6 @@ public:
     TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
     FileBrowserPanel* getFileBrowserPanel() const { return _fileBrowserPanel; }
 
-    // PRO editor functionality
-    bool openProEditorForSelectedObject();
     resource::GameResources& resources() const { return *_resourcesShared; }
 
 signals:

@@ -12,7 +12,6 @@
 #include "../tiles/TilePlacementManager.h"
 #include "../tools/ExitGridPlacementManager.h"
 #include "../dialogs/SettingsDialog.h"
-#include "../dialogs/ProEditorDialog.h"
 #include "../dialogs/AboutDialog.h"
 #include "../UIConstants.h"
 #include "../../resource/GameResources.h"
@@ -23,13 +22,10 @@
 #include "../../util/Types.h"
 #include "../../util/Settings.h"
 #include "../../util/QtDialogs.h"
-#include "../../util/ProHelper.h"
 #include "../../util/ExternalEditorLauncher.h"
 #include "../../reader/lst/LstReader.h"
-#include "../../reader/ReaderFactory.h"
 #include "../../format/lst/Lst.h"
 #include "../../format/map/MapObject.h"
-#include "../../format/pro/Pro.h"
 #include "../../editor/Object.h"
 #include "../IconHelper.h"
 
@@ -888,7 +884,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 void MainWindow::keyPressEvent(QKeyEvent* event) {
     // Handle special shortcuts before forwarding to SFML
     if (event->key() == Qt::Key_P && _currentEditorWidget) {
-        if (openProEditorForSelectedObject()) {
+        if (_selectionPanel ? _selectionPanel->openProEditorForSelectedObject() : false) {
             event->accept();
             return;
         }
@@ -988,12 +984,6 @@ void MainWindow::connectPanelSignals() {
                     _currentEditorWidget->onObjectFrmPathChanged(object, newFrmPath);
             });
         connect(_selectionPanel, &SelectionPanel::statusMessage, this, &MainWindow::showStatusMessage);
-        connect(_selectionPanel, &SelectionPanel::requestProEditor,
-            this, [this](std::shared_ptr<Object> object) {
-                if (object && object->hasMapObject()) {
-                    openProEditorForSelectedObject();
-                }
-            });
         connect(_selectionPanel, &SelectionPanel::requestExitGridEditor,
             this, [this](std::shared_ptr<Object> object) {
                 if (!_currentEditorWidget || !object || !object->hasMapObject())
@@ -1601,69 +1591,6 @@ void MainWindow::deselectMarkExitsMode() {
     if (_markExitsAction) {
         _markExitsAction->setChecked(false);
     }
-}
-
-bool MainWindow::openProEditorForSelectedObject() {
-    if (!_currentEditorWidget) {
-        return false;
-    }
-
-    auto* selectionManager = _currentEditorWidget->getSelectionManager();
-    if (!selectionManager) {
-        return false;
-    }
-
-    const auto& selectionState = selectionManager->getCurrentSelection();
-    if (selectionState.isEmpty()) {
-        spdlog::debug("MainWindow::openProEditorForSelectedObject() - no selection");
-        return false;
-    }
-
-    // Find the first selected object
-    for (const auto& item : selectionState.items) {
-        if (item.isObject()) {
-            auto selectedObject = item.getObject();
-            if (!selectedObject) {
-                continue;
-            }
-
-            if (!selectedObject->hasMapObject()) {
-                spdlog::debug("MainWindow::openProEditorForSelectedObject() - selected object has no MapObject");
-                continue;
-            }
-
-            auto& mapObject = selectedObject->getMapObject();
-
-            try {
-                std::string proFileName = ProHelper::basePath(*_resourcesShared, mapObject.pro_pid);
-                spdlog::debug("MainWindow::openProEditorForSelectedObject() - opening PRO: {}", proFileName);
-
-                auto fileData = _resourcesShared->files().readRawBytes(proFileName);
-                if (!fileData) {
-                    spdlog::error("MainWindow::openProEditorForSelectedObject() - could not open PRO file: {}", proFileName);
-                    return false;
-                }
-
-                auto pro = ReaderFactory::readFileFromMemory<Pro>(*fileData, proFileName);
-                if (!pro) {
-                    spdlog::error("MainWindow::openProEditorForSelectedObject() - could not parse PRO file");
-                    return false;
-                }
-
-                ProEditorDialog dialog(*_resourcesShared, std::shared_ptr<Pro>(pro.release()), this);
-                dialog.exec();
-
-                return true;
-
-            } catch (const std::exception& e) {
-                spdlog::error("MainWindow::openProEditorForSelectedObject() - exception: {}", e.what());
-                return false;
-            }
-        }
-    }
-
-    spdlog::debug("MainWindow::openProEditorForSelectedObject() - no object selected");
-    return false;
 }
 
 } // namespace geck

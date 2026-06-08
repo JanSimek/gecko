@@ -57,6 +57,10 @@ public:
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 
+    /// @brief Opens the PRO editor dialog for the currently selected object.
+    /// @return true if a PRO editor was opened, false otherwise.
+    bool openProEditorForSelectedObject();
+
 protected:
     void resizeEvent(QResizeEvent* event) override;
 
@@ -65,7 +69,6 @@ signals:
     void objectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
     void requestObjectHighlight(std::shared_ptr<Object> object);
     void statusMessage(const QString& message);
-    void requestProEditor(std::shared_ptr<Object> object);
     void requestExitGridEditor(std::shared_ptr<Object> object);
 
 public slots:
