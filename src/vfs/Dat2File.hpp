@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstring>
 #include <span>
+#include <string>
 #include <vector>
 
 #include <zlib.h>
@@ -12,6 +13,7 @@
 #include <vfspp/ThreadingPolicy.hpp>
 
 #include "format/dat/Dat.h"
+#include "reader/ReaderExceptions.h"
 #include "reader/dat/DatReader.h"
 
 namespace geck {
@@ -131,7 +133,9 @@ private:
             std::vector<uint8_t> packed(m_datEntry->getPackedSize());
             m_datReader->read_bytes(packed.data(), packed.size());
 
-            // zlib inflate the DAT entry into m_Data
+            // zlib inflate the DAT entry into m_Data, with checked returns: a
+            // corrupt or truncated archive entry is a real error, not silent
+            // success with garbage/partial data.
             z_stream zStream {};
             zStream.next_in = packed.data();
             zStream.avail_in = static_cast<uInt>(packed.size());
@@ -140,9 +144,19 @@ private:
             zStream.zalloc = Z_NULL;
             zStream.zfree = Z_NULL;
             zStream.opaque = Z_NULL;
-            inflateInit(&zStream);
-            inflate(&zStream, Z_FINISH);
-            inflateEnd(&zStream);
+
+            if (inflateInit(&zStream) != Z_OK) {
+                throw geck::ParseException("zlib inflateInit failed for compressed DAT entry");
+            }
+            const int inflateResult = inflate(&zStream, Z_FINISH);
+            const uLong producedBytes = zStream.total_out;
+            inflateEnd(&zStream); // always release zlib state before reacting to the result
+
+            if (inflateResult != Z_STREAM_END || producedBytes != m_Data.size()) {
+                throw geck::ParseException(
+                    "zlib inflate failed for compressed DAT entry (result=" + std::to_string(inflateResult)
+                    + ", produced " + std::to_string(producedBytes) + " of " + std::to_string(m_Data.size()) + " bytes)");
+            }
         } else {
             m_datReader->read_bytes(m_Data.data(), m_Data.size());
         }
