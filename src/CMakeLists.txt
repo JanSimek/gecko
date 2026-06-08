@@ -9,14 +9,11 @@ set(GECK_APP_SOURCES
     Application.cpp
 
     util/FalloutEngineEnums.h
-    util/MessageEnumUtils.h
     util/ResourceInitializer.h
     util/ResourceInitializer.cpp
 
     util/SpriteFactory.h
     util/SpriteFactory.cpp
-
-    util/AmmoCaliberNames.h
 
     util/QtDialogs.h
     util/QtDialogs.cpp
