@@ -176,6 +176,10 @@ set(GECK_APP_SOURCES
     state/loader/DataPathLoader.cpp
     state/loader/DataPathLoader.h
 
+    # Game launch service
+    state/GameLauncher.cpp
+    state/GameLauncher.h
+
     editor/Object.h
     editor/Object.cpp
 

@@ -30,6 +30,7 @@ namespace resource {
 }
 
 class Settings;
+class GameLauncher;
 class SFMLWidget;
 class EditorWidget;
 class LoadingWidget;
@@ -157,15 +158,11 @@ private:
 
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
 
-    // Play game helper methods
-    bool modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const std::string& mapFilename);
-    void launchGame(const std::filesystem::path& gameLocation);
-    void launchGameViaSteam(const std::string& appId);
-
     QStackedWidget* _centralStack;
     QTimer* _gameLoopTimer;
     std::shared_ptr<resource::GameResources> _resourcesShared;
     std::shared_ptr<Settings> _settings;
+    std::unique_ptr<GameLauncher> _gameLauncher;
 
     // Current widgets
     EditorWidget* _currentEditorWidget;
