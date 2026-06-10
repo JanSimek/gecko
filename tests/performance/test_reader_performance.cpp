@@ -13,6 +13,7 @@
 #include "reader/msg/MsgReader.h"
 #include "reader/lst/LstReader.h"
 #include "reader/ReaderDiagnostics.h"
+#include "support/Fixtures.h"
 
 // Include format classes for complete type definitions
 #include "format/dat/Dat.h"
@@ -208,20 +209,20 @@ TEST_CASE("FrmReader Performance", "[performance][frm]") {
 
 TEST_CASE("GamReader Performance", "[performance][gam]") {
     // Test with actual GAM file if available
-    if (std::filesystem::exists("data/test.gam")) {
+    if (std::filesystem::exists(geck::test::dataPath("test.gam"))) {
         BENCHMARK("GamReader - Real File") {
             geck::GamReader reader;
-            return reader.openFile("data/test.gam");
+            return reader.openFile(geck::test::dataPath("test.gam"));
         };
     }
 }
 
 TEST_CASE("MsgReader Performance", "[performance][msg]") {
     // Test with actual MSG file if available
-    if (std::filesystem::exists("data/test.msg")) {
+    if (std::filesystem::exists(geck::test::dataPath("test.msg"))) {
         BENCHMARK("MsgReader - Real File") {
             geck::MsgReader reader;
-            return reader.openFile("data/test.msg");
+            return reader.openFile(geck::test::dataPath("test.msg"));
         };
     }
 }

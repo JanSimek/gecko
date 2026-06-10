@@ -2,10 +2,11 @@
 
 #include "format/pro/Pro.h"
 #include "reader/pro/ProReader.h"
+#include "support/Fixtures.h"
 
 TEST_CASE("Parse .pro drug file", "[pro]") {
     geck::ProReader pro_reader{};
-    auto pro_file = pro_reader.openFile("data/test_item_drug_radx.pro");
+    auto pro_file = pro_reader.openFile(geck::test::dataPath("test_item_drug_radx.pro"));
 
     // Verify it's an item type
     REQUIRE(pro_file->type() == geck::Pro::OBJECT_TYPE::ITEM);
