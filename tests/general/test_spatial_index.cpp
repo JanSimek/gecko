@@ -11,7 +11,7 @@ using namespace geck;
 
 namespace {
 bool contains(const std::vector<int>& v, int value) {
-    return std::find(v.begin(), v.end(), value) != v.end();
+    return std::ranges::find(v, value) != v.end();
 }
 } // namespace
 
@@ -85,7 +85,7 @@ TEST_CASE("SpatialIndex queryArea callback can stop early", "[spatial]") {
     }
 
     int visited = 0;
-    index.queryArea(sf::FloatRect({ 0.f, 0.f }, { 50.f, 50.f }), [&](const int&) {
+    index.queryArea(sf::FloatRect({ 0.f, 0.f }, { 50.f, 50.f }), [&visited](const int&) {
         ++visited;
         return false; // request stop after the first match
     });
