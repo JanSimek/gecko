@@ -6,6 +6,7 @@
 
 #include "format/gam/Gam.h"
 #include "reader/ErrorMessages.h"
+#include <stdexcept>
 
 namespace geck {
 

@@ -7,6 +7,7 @@
 #include <sstream>
 #include <array>
 #include <unordered_set>
+#include <cstring>
 
 namespace geck {
 

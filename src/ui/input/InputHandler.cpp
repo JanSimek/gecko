@@ -3,6 +3,7 @@
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/Mouse.hpp>
 #include <spdlog/spdlog.h>
+#include <cmath>
 
 namespace geck {
 
