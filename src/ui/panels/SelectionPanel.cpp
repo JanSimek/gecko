@@ -41,10 +41,10 @@
 
 namespace geck {
 
+using ui::inventory::COLUMN_AMOUNT;
 using ui::inventory::COLUMN_ICON;
 using ui::inventory::COLUMN_NAME;
 using ui::inventory::COLUMN_TYPE;
-using ui::inventory::COLUMN_AMOUNT;
 
 /// Spinbox-based delegate for editing the inventory amount column.
 class SelectionPanel::AmountDelegate : public QStyledItemDelegate {
@@ -1275,10 +1275,9 @@ void SelectionPanel::onDetachScriptClicked() {
     updateScriptSection();
 }
 
-// Inventory edits mutate the selected container/critter's MapObject inventory
-// directly and keep objects_in_inventory in sync so they persist on save. These
-// edits are not yet routed through the undo stack (the inventory's unique_ptr
-// ownership makes snapshotting awkward) - tracked in PLAN.md F14.
+// Returns the selected object's MapObject (the inventory holder). The inventory
+// section is only shown for container/critter types, so callers reach this only
+// for objects that can hold inventory; it does not re-check that here.
 MapObject* SelectionPanel::selectedInventoryHolder() const {
     if (!_selectedObject || !_selectedObject.value()) {
         return nullptr;

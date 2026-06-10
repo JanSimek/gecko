@@ -787,8 +787,8 @@ void MapInfoPanel::onElevationCheckboxChanged() {
     }
 }
 
-// Bulk map operations mutate the model directly and (like elevation add/remove
-// above) are confirmed rather than undoable.
+// Bulk map operations confirm with the user, then emit a request the editor
+// routes through ObjectCommandController so they are recorded as one undoable command.
 void MapInfoPanel::onClearElevationClicked() {
     if (!_map) {
         return;

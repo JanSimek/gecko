@@ -128,7 +128,8 @@ private:
     void setupInventorySection();
     void updateInventorySection();
     void populateInventoryTree();
-    /// The selected object's MapObject if it can hold inventory, else nullptr.
+    /// The selected object's MapObject (the inventory holder), or nullptr if
+    /// nothing is selected.
     MapObject* selectedInventoryHolder() const;
     /// Captures the after-snapshot, refreshes the tree, and emits an undoable
     /// inventory edit. `before` is the snapshot taken before the mutation.
