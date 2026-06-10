@@ -90,7 +90,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/dependencies.cmake)
 
 # Enable verbose compiler warnings
 if(MSVC)
-    add_compile_options(/W4 /WX)
+    add_compile_options(/W4) # TEMP: /WX dropped to enumerate all Windows warnings
 else()
     add_compile_options(-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic)
 endif()
