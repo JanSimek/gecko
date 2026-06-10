@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "util/UndoStack.h"
+#include "format/map/MapScript.h"
 
 namespace geck {
 
@@ -121,7 +122,23 @@ public:
     /// undoable command, overwriting the destination.
     bool copyElevation(int fromElevation, int toElevation);
 
+    // Script attachment (undoable). `scriptType` is the MapScript section/type
+    // (ITEM for items/scenery/walls, CRITTER for critters); `programIndex` is the
+    // scripts.lst line. attachScript replaces any existing script on the object.
+    bool attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex);
+    bool detachScript(const std::shared_ptr<MapObject>& object);
+    bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
+
 private:
+    uint32_t allocateScriptId(int section) const;
+    uint32_t allocateObjectId() const;
+    void removeObjectScript(MapObject& object);
+    void applyScriptSnapshot(int section, const std::shared_ptr<MapObject>& object,
+        const std::vector<MapScript>& sectionScripts, uint32_t oid, int32_t sid);
+    bool recordScriptEdit(const std::string& description, int section,
+        const std::shared_ptr<MapObject>& object,
+        std::vector<MapScript> beforeSection, uint32_t beforeOid, int32_t beforeSid);
+
     static void applyInstanceState(MapObject& object, const MapObjectInstanceState& state);
 
     resource::GameResources& _resources;

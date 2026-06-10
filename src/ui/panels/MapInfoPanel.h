@@ -50,6 +50,7 @@ signals:
     /// are undoable. The confirmation dialog lives here in the panel.
     void clearElevationRequested(int elevation);
     void copyElevationRequested(int fromElevation, int toElevation);
+    void addSpatialScriptRequested(int programIndex, int tile, int elevation, int radius);
 
 private slots:
     void onFieldChanged();

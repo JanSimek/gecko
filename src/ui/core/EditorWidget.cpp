@@ -166,6 +166,18 @@ void EditorWidget::registerInventoryEdit(const std::shared_ptr<MapObject>& conta
     _objectCommandController->registerInventoryEdit(container, std::move(before), std::move(after));
 }
 
+void EditorWidget::attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex) {
+    _objectCommandController->attachScript(object, scriptType, programIndex);
+}
+
+void EditorWidget::detachScript(const std::shared_ptr<MapObject>& object) {
+    _objectCommandController->detachScript(object);
+}
+
+void EditorWidget::addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius) {
+    _objectCommandController->addSpatialScript(programIndex, tile, elevation, radius);
+}
+
 EditorWidget::~EditorWidget() {
 }
 

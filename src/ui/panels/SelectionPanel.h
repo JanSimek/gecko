@@ -86,6 +86,11 @@ signals:
         std::vector<std::shared_ptr<MapObject>> before,
         std::vector<std::shared_ptr<MapObject>> after);
 
+    /// Script attach/detach, routed to the editor's ObjectCommandController so
+    /// they are undoable.
+    void requestAttachScript(std::shared_ptr<MapObject> object, int scriptType, uint32_t programIndex);
+    void requestDetachScript(std::shared_ptr<MapObject> object);
+
 public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);
     void selectTile(int tileIndex, int elevation, bool isRoof);
@@ -129,13 +134,8 @@ private:
     /// inventory edit. `before` is the snapshot taken before the mutation.
     void commitInventoryEdit(std::vector<std::shared_ptr<MapObject>> before);
 
-    // Script attachment (F10)
+    // Script attachment: refreshes the displayed script name/buttons.
     void updateScriptSection();
-    void detachScriptInternal(MapObject& object);
-    /// Next free script id within a section (the low 24 bits of the SID).
-    uint32_t allocateScriptId(int section) const;
-    /// Next free object OID across all objects and script owners.
-    uint32_t allocateObjectId() const;
     QPixmap getItemIconWithQuantity(const MapObject& item) const;
     QPixmap createPlaceholderIcon() const;
 

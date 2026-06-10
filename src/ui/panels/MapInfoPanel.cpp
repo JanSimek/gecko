@@ -875,43 +875,9 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
         return;
     }
 
-    auto& mapFile = _map->getMapFile();
-    const int spatialSection = static_cast<int>(MapScript::ScriptType::SPATIAL);
-
-    // Next free script id within the spatial pool.
-    uint32_t scriptId = 0;
-    for (const auto& s : mapFile.map_scripts[spatialSection]) {
-        scriptId = std::max(scriptId, MapScript::sidIndex(s.pid) + 1);
-    }
-
-    // A fresh owner OID. The engine ignores it for spatial scripts, but keeping
-    // it unique avoids clashes with object OIDs.
-    uint32_t oid = 0;
-    for (const auto& [elevation, objects] : mapFile.map_objects) {
-        for (const auto& obj : objects) {
-            if (obj) {
-                oid = std::max(oid, obj->unknown0);
-            }
-        }
-    }
-    for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
-        for (const auto& s : mapFile.map_scripts[section]) {
-            oid = std::max(oid, s.script_oid);
-        }
-    }
-    ++oid;
-
-    MapScript script = MapScript::makeSpatialScript(scriptId,
-        static_cast<uint32_t>(dialog.programIndex()),
-        static_cast<uint32_t>(dialog.tile()),
-        static_cast<uint32_t>(dialog.elevation()),
-        static_cast<uint32_t>(dialog.radius()), oid);
-
-    mapFile.map_scripts[spatialSection].push_back(script);
-    mapFile.scripts_in_section[spatialSection] = static_cast<int>(mapFile.map_scripts[spatialSection].size());
-
-    spdlog::info("MapInfoPanel: Added spatial script {} at tile {} elev {} radius {}",
-        dialog.programIndex(), dialog.tile(), dialog.elevation(), dialog.radius());
+    // Direct (synchronous) connection: the script is created before this returns.
+    Q_EMIT addSpatialScriptRequested(dialog.programIndex(), dialog.tile(),
+        dialog.elevation(), dialog.radius());
     updateMapScriptsDisplay();
 }
 

@@ -1185,57 +1185,8 @@ void SelectionPanel::onEditCritterClicked() {
     Q_EMIT requestInstanceEdit(object, before, after, "Edit Critter Properties");
 }
 
-// Script attachment mutates the map's script sections and the object's SID/OID
-// directly (model reached via _map, like MapInfoPanel). Mirrors the engine's
-// objectSetScript. Not yet routed through the undo stack (tracked in PLAN.md).
-
-uint32_t SelectionPanel::allocateScriptId(int section) const {
-    if (!_map || section < 0 || section >= Map::SCRIPT_SECTIONS) {
-        return 0;
-    }
-    uint32_t nextId = 0;
-    for (const auto& s : _map->getMapFile().map_scripts[section]) {
-        nextId = std::max(nextId, MapScript::sidIndex(s.pid) + 1);
-    }
-    return nextId;
-}
-
-uint32_t SelectionPanel::allocateObjectId() const {
-    if (!_map) {
-        return 1;
-    }
-    uint32_t maxId = 0;
-    const auto& mapFile = _map->getMapFile();
-    for (const auto& [elevation, objects] : mapFile.map_objects) {
-        for (const auto& obj : objects) {
-            if (obj) {
-                maxId = std::max(maxId, obj->unknown0);
-            }
-        }
-    }
-    for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
-        for (const auto& s : mapFile.map_scripts[section]) {
-            maxId = std::max(maxId, s.script_oid);
-        }
-    }
-    return maxId + 1;
-}
-
-void SelectionPanel::detachScriptInternal(MapObject& object) {
-    if (!_map || object.map_scripts_pid == -1) {
-        return;
-    }
-    const uint32_t sid = static_cast<uint32_t>(object.map_scripts_pid);
-    const int section = MapScript::sidSection(sid);
-    if (section >= 0 && section < Map::SCRIPT_SECTIONS) {
-        auto& vec = _map->getMapFile().map_scripts[section];
-        vec.erase(std::remove_if(vec.begin(), vec.end(),
-                      [sid](const MapScript& s) { return s.pid == sid; }),
-            vec.end());
-        _map->getMapFile().scripts_in_section[section] = static_cast<int>(vec.size());
-    }
-    object.map_scripts_pid = -1;
-}
+// Script attach/detach open the picker here, then route the change through the
+// editor's ObjectCommandController (via MainWindow) so it is undoable.
 
 void SelectionPanel::updateScriptSection() {
     if (!_scriptContainer) {
@@ -1301,26 +1252,13 @@ void SelectionPanel::onAttachScriptClicked() {
 
     const uint32_t objectType = mapObject->pro_pid >> 24;
     // Critters use the CRITTER section; items/scenery/walls use the ITEM section.
-    const MapScript::ScriptType scriptType = (objectType == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER))
-        ? MapScript::ScriptType::CRITTER
-        : MapScript::ScriptType::ITEM;
-    const int section = static_cast<int>(scriptType);
+    const int scriptType = (objectType == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER))
+        ? static_cast<int>(MapScript::ScriptType::CRITTER)
+        : static_cast<int>(MapScript::ScriptType::ITEM);
 
-    // Re-attaching: drop any existing script first.
-    detachScriptInternal(*mapObject);
-
-    auto& mapFile = _map->getMapFile();
-    const uint32_t oid = allocateObjectId();
-
-    MapScript script = MapScript::makeObjectScript(scriptType, allocateScriptId(section),
-        static_cast<uint32_t>(programIndex), oid);
-
-    mapFile.map_scripts[section].push_back(script);
-    mapFile.scripts_in_section[section] = static_cast<int>(mapFile.map_scripts[section].size());
-
-    mapObject->unknown0 = oid;                                     // object OID
-    mapObject->map_scripts_pid = static_cast<int32_t>(script.pid); // SID
-
+    // Direct (synchronous) connection: the model is mutated before this returns,
+    // so updateScriptSection() reads the new state.
+    Q_EMIT requestAttachScript(mapObject, scriptType, static_cast<uint32_t>(programIndex));
     updateScriptSection();
     Q_EMIT statusMessage(QString("Attached script %1 to object").arg(programIndex));
 }
@@ -1333,7 +1271,7 @@ void SelectionPanel::onDetachScriptClicked() {
     if (!mapObject) {
         return;
     }
-    detachScriptInternal(*mapObject);
+    Q_EMIT requestDetachScript(mapObject);
     updateScriptSection();
 }
 

@@ -1015,6 +1015,16 @@ void MainWindow::connectPanelSignals() {
                 if (_currentEditorWidget && container)
                     _currentEditorWidget->registerInventoryEdit(container, std::move(before), std::move(after));
             });
+        connect(_selectionPanel, &SelectionPanel::requestAttachScript,
+            this, [this](std::shared_ptr<MapObject> object, int scriptType, uint32_t programIndex) {
+                if (_currentEditorWidget && object)
+                    _currentEditorWidget->attachScript(object, scriptType, programIndex);
+            });
+        connect(_selectionPanel, &SelectionPanel::requestDetachScript,
+            this, [this](std::shared_ptr<MapObject> object) {
+                if (_currentEditorWidget && object)
+                    _currentEditorWidget->detachScript(object);
+            });
         connect(_selectionPanel, &SelectionPanel::requestObjectHighlight,
             this, [this](std::shared_ptr<Object> object) {
                 if (!_currentEditorWidget || !object)
@@ -1116,6 +1126,11 @@ void MainWindow::connectPanelSignals() {
             this, [this](int from, int to) {
                 if (_currentEditorWidget)
                     _currentEditorWidget->copyElevation(from, to);
+            });
+        connect(_mapInfoPanel, &MapInfoPanel::addSpatialScriptRequested,
+            this, [this](int programIndex, int tile, int elevation, int radius) {
+                if (_currentEditorWidget)
+                    _currentEditorWidget->addSpatialScript(static_cast<uint32_t>(programIndex), tile, elevation, radius);
             });
     }
 }

@@ -201,6 +201,11 @@ public:
         std::vector<std::shared_ptr<MapObject>> before,
         std::vector<std::shared_ptr<MapObject>> after);
 
+    // Script attachment / spatial scripts (undoable).
+    void attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex);
+    void detachScript(const std::shared_ptr<MapObject>& object);
+    void addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
+
 signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
