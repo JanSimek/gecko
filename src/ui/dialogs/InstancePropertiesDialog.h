@@ -8,15 +8,12 @@ class QCheckBox;
 
 namespace geck {
 
-/// @brief Editor for door/container interaction state: locked and jammed.
+/// @brief Editor for door/container locked & jammed state.
 ///
-/// The engine keeps these bits in different fields depending on type
-/// (proto_instance.cc objectIsLocked / objectLock):
-///   - doors: obj->data.scenery.door.openFlags  (our MapObject.walkthrough)
-///   - containers: obj->data.flags              (our MapObject.unknown11)
-/// Both use the same bit values (LOCKED 0x02000000, JAMMED 0x04000000). The
-/// dialog edits whichever field applies and returns the other unchanged. No
-/// .map format change - both fields already round-trip.
+/// The engine keeps these bits in different fields by type (proto_instance.cc
+/// objectIsLocked): doors use openFlags (our MapObject.walkthrough), containers
+/// use the object data flags (our MapObject.unknown11). The dialog edits
+/// whichever applies and returns the other unchanged.
 class InstancePropertiesDialog : public QDialog {
     Q_OBJECT
 
@@ -29,9 +26,6 @@ public:
 
     uint32_t getDoorOpenFlags() const;
     uint32_t getContainerDataFlags() const;
-
-    static constexpr uint32_t FLAG_LOCKED = 0x02000000;
-    static constexpr uint32_t FLAG_JAMMED = 0x04000000;
 
 private:
     bool _isDoor;

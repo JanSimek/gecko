@@ -5,7 +5,14 @@
 #include <QGroupBox>
 #include <QVBoxLayout>
 
+#include "format/pro/Pro.h"
+
 namespace geck {
+
+namespace {
+    constexpr uint32_t FLAG_LOCKED = static_cast<uint32_t>(Pro::InteractionFlags::LOCKED);
+    constexpr uint32_t FLAG_JAMMED = static_cast<uint32_t>(Pro::InteractionFlags::JAMMED);
+} // namespace
 
 InstancePropertiesDialog::InstancePropertiesDialog(bool isDoor, uint32_t doorOpenFlags,
     uint32_t containerDataFlags, QWidget* parent)

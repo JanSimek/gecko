@@ -124,6 +124,14 @@ public:
         ITEM_HIDDEN = 0x08000000,
     };
 
+    // Door/container interaction state. These bits overload OBJECT_IN_RIGHT_HAND /
+    // OBJECT_WORN above; for doors/containers the engine stores them in the
+    // object's data flags, not the main flags word (proto_instance.cc objectLock).
+    enum class InteractionFlags : uint32_t {
+        LOCKED = 0x02000000,
+        JAMMED = 0x04000000,
+    };
+
     // Extended flags helper functions
     static constexpr uint32_t getAnimationPrimary(uint32_t flags) {
         return flags & static_cast<uint32_t>(ObjectFlags::ANIMATION_PRIMARY_MASK);

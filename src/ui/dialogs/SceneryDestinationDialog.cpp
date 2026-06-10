@@ -5,7 +5,14 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
+#include "editor/HexagonGrid.h"
+#include "util/BuiltTile.h"
+
 namespace geck {
+
+namespace {
+    constexpr int MAX_HEX_TILE = HexagonGrid::POSITION_COUNT - 1;
+} // namespace
 
 SceneryDestinationDialog::SceneryDestinationDialog(Pro::SCENERY_TYPE sceneryType,
     uint32_t elevhex, uint32_t map, uint32_t elevtype, uint32_t elevlevel, QWidget* parent)
@@ -32,8 +39,8 @@ SceneryDestinationDialog::SceneryDestinationDialog(Pro::SCENERY_TYPE sceneryType
         _elevLevelSpin->setValue(static_cast<int>(elevlevel));
         formLayout->addRow("Elevator level:", _elevLevelSpin);
     } else {
-        const int tile = static_cast<int>(elevhex & BUILT_TILE_TILE_MASK);
-        const int elevation = static_cast<int>((elevhex & BUILT_TILE_ELEVATION_MASK) >> BUILT_TILE_ELEVATION_SHIFT);
+        const int tile = static_cast<int>(built_tile::tileOf(elevhex));
+        const int elevation = static_cast<int>(built_tile::elevationOf(elevhex));
 
         _tileSpin = new QSpinBox(this);
         _tileSpin->setRange(0, MAX_HEX_TILE);
@@ -63,9 +70,8 @@ uint32_t SceneryDestinationDialog::getElevhex() const {
     if (_isElevator) {
         return _elevhex;
     }
-    const uint32_t tile = static_cast<uint32_t>(_tileSpin->value()) & BUILT_TILE_TILE_MASK;
-    const uint32_t elevation = (static_cast<uint32_t>(_elevationSpin->value()) << BUILT_TILE_ELEVATION_SHIFT) & BUILT_TILE_ELEVATION_MASK;
-    return tile | elevation;
+    return built_tile::create(static_cast<uint32_t>(_tileSpin->value()),
+        static_cast<uint32_t>(_elevationSpin->value()));
 }
 
 uint32_t SceneryDestinationDialog::getMap() const {

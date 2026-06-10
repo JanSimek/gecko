@@ -27,8 +27,7 @@ public:
     int elevation() const;
     int radius() const;
 
-    static constexpr int MAX_HEX_TILE = 39999;
-    static constexpr int MAX_RADIUS = 50;
+    static constexpr int MAX_RADIUS = 50; // engine win_get_num_i range in map_scr_add_spatial
 
 private slots:
     void onChooseScript();

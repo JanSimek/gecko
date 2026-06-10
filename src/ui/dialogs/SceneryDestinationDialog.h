@@ -13,11 +13,9 @@ namespace geck {
 /// @brief Editor for a scenery transition destination (stairs / ladders /
 /// elevators).
 ///
-/// Stairs and ladders store their target as a packed "built tile" (hex tile in
-/// the low bits, elevation in bits 29-31 - engine builtTileCreate) plus a
-/// destination map id. Elevators instead store a type and a current level.
-/// Matches proto.cc scenery objectDataRead/Write and mp_instance.cc
-/// protoInstSceneryEdit. No .map format change - all fields already round-trip.
+/// Stairs and ladders store their target as a packed built tile plus a
+/// destination map id; elevators store a type and a current level. Matches
+/// proto.cc scenery objectDataRead/Write and mp_instance.cc protoInstSceneryEdit.
 class SceneryDestinationDialog : public QDialog {
     Q_OBJECT
 
@@ -32,13 +30,6 @@ public:
     uint32_t getMap() const;
     uint32_t getElevtype() const;
     uint32_t getElevlevel() const;
-
-    // Engine built-tile packing (obj_types.h): tile in the low bits, elevation in
-    // bits 29-31.
-    static constexpr uint32_t BUILT_TILE_TILE_MASK = 0x3FFFFFF;
-    static constexpr int BUILT_TILE_ELEVATION_SHIFT = 29;
-    static constexpr uint32_t BUILT_TILE_ELEVATION_MASK = 0xE0000000;
-    static constexpr int MAX_HEX_TILE = 39999;
 
 private:
     bool _isElevator;

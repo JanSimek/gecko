@@ -11,6 +11,8 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
+#include "editor/HexagonGrid.h"
+
 namespace geck {
 
 SpatialScriptDialog::SpatialScriptDialog(const std::vector<std::string>& scriptNames, QWidget* parent)
@@ -30,7 +32,7 @@ SpatialScriptDialog::SpatialScriptDialog(const std::vector<std::string>& scriptN
     formLayout->addRow("Script:", scriptRow);
 
     _tileSpin = new QSpinBox(this);
-    _tileSpin->setRange(0, MAX_HEX_TILE);
+    _tileSpin->setRange(0, HexagonGrid::POSITION_COUNT - 1);
     formLayout->addRow("Hex tile:", _tileSpin);
 
     _elevationCombo = new QComboBox(this);

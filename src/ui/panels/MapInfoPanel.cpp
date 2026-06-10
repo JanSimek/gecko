@@ -901,24 +901,16 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
     }
 
     auto& mapFile = _map->getMapFile();
+    const int spatialSection = static_cast<int>(MapScript::ScriptType::SPATIAL);
 
-    // SPATIAL is section index 1 (engine SCRIPT_TYPE_SPATIAL).
-    constexpr int SPATIAL_SECTION = 1;
-
-    // Allocate the next free script id within the spatial pool.
+    // Next free script id within the spatial pool.
     uint32_t scriptId = 0;
-    {
-        bool any = false;
-        for (const auto& s : mapFile.map_scripts[SPATIAL_SECTION]) {
-            uint32_t id = s.pid & 0x00FFFFFF;
-            scriptId = any ? std::max(scriptId, id) : id;
-            any = true;
-        }
-        scriptId = any ? scriptId + 1 : 0;
+    for (const auto& s : mapFile.map_scripts[spatialSection]) {
+        scriptId = std::max(scriptId, MapScript::sidIndex(s.pid) + 1);
     }
 
-    // Allocate a fresh owner OID (unused by the engine for spatial scripts, but
-    // kept unique to avoid clashes with object OIDs).
+    // A fresh owner OID. The engine ignores it for spatial scripts, but keeping
+    // it unique avoids clashes with object OIDs.
     uint32_t oid = 0;
     for (const auto& [elevation, objects] : mapFile.map_objects) {
         for (const auto& obj : objects) {
@@ -934,27 +926,17 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
     }
     ++oid;
 
-    const int tile = dialog.tile();
-    const int elevation = dialog.elevation();
-    // Engine built-tile packing: tile in the low bits, elevation in bits 29-31.
-    const uint32_t builtTile = (static_cast<uint32_t>(tile) & 0x3FFFFFF)
-        | ((static_cast<uint32_t>(elevation) << 29) & 0xE0000000);
+    MapScript script = MapScript::makeSpatialScript(scriptId,
+        static_cast<uint32_t>(dialog.programIndex()),
+        static_cast<uint32_t>(dialog.tile()),
+        static_cast<uint32_t>(dialog.elevation()),
+        static_cast<uint32_t>(dialog.radius()), oid);
 
-    MapScript script{};
-    script.pid = (static_cast<uint32_t>(SPATIAL_SECTION) << 24) | scriptId;
-    script.timer = builtTile;                                    // SPATIAL: built_tile
-    script.spatial_radius = static_cast<uint32_t>(dialog.radius());
-    script.script_id = static_cast<uint32_t>(dialog.programIndex());
-    script.script_oid = oid;
-    script.local_var_offset = 0xFFFFFFFF; // -1, matches scriptAdd
-    script.local_var_count = 0;
-    script.unknown12 = 0xFFFFFFFF; // actionBeingUsed == -1
-
-    mapFile.map_scripts[SPATIAL_SECTION].push_back(script);
-    mapFile.scripts_in_section[SPATIAL_SECTION] = static_cast<int>(mapFile.map_scripts[SPATIAL_SECTION].size());
+    mapFile.map_scripts[spatialSection].push_back(script);
+    mapFile.scripts_in_section[spatialSection] = static_cast<int>(mapFile.map_scripts[spatialSection].size());
 
     spdlog::info("MapInfoPanel: Added spatial script {} at tile {} elev {} radius {}",
-        dialog.programIndex(), tile, elevation, dialog.radius());
+        dialog.programIndex(), dialog.tile(), dialog.elevation(), dialog.radius());
     updateMapScriptsDisplay();
 }
 

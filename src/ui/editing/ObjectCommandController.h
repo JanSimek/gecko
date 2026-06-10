@@ -34,11 +34,8 @@ struct ExitGridCommandState {
     uint32_t proPid;
 };
 
-/// Snapshot of the per-instance, UI-editable fields of a MapObject. The unified
-/// instance-edit undo command (registerInstanceEdit) uses this so the flag,
-/// light, scenery-destination and critter editors all share one code path. Every
-/// field here already round-trips through the .map format, so editing them is a
-/// purely in-memory change with no serialization impact.
+/// Snapshot of a MapObject's UI-editable per-instance fields, shared by the
+/// flag/light/destination/interaction/critter editors via registerInstanceEdit.
 struct MapObjectInstanceState {
     uint32_t flags = 0;
     uint32_t dataFlags = 0; // MapObject.unknown11 == engine obj->data.flags (container lock/jam)
