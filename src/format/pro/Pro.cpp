@@ -18,6 +18,8 @@ void Pro::initializeDataStructures() {
     memset(&ammoData, 0, sizeof(ammoData));
     memset(&miscData, 0, sizeof(miscData));
     memset(&keyData, 0, sizeof(keyData));
+    memset(&critterData, 0, sizeof(critterData));
+    memset(&sceneryData, 0, sizeof(sceneryData));
 
     _objectSubtypeId = 0;
 }
