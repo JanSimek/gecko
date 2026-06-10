@@ -117,8 +117,8 @@ void Object::setHexPosition(const Hex& hex) {
 
     // center on the hex
     WorldCoords position(
-        hex.x() - (width() / 2) + shiftX(),
-        hex.y() - height() + shiftY());
+        static_cast<float>(hex.x() - (width() / 2) + shiftX()),
+        static_cast<float>(hex.y() - height() + shiftY()));
 
     _sprite.setPosition(position.toVector());
     if (_mapObject != nullptr) {
@@ -163,7 +163,7 @@ void Object::setDirection(ObjectDirection direction) {
     auto first_frame = _frm->directions().at(_direction).frames().at(0);
 
     uint16_t left = 0;
-    uint16_t top = _direction * _frm->maxFrameHeight();
+    uint16_t top = static_cast<uint16_t>(_direction * _frm->maxFrameHeight());
     uint16_t width = first_frame.width();
     uint16_t height = first_frame.height();
 
