@@ -25,6 +25,7 @@ add_executable(general_tests
     general/test_reading_pal.cpp
     general/test_reading_frm.cpp
     general/test_coordinates.cpp
+    general/test_spatial_index.cpp
 )
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests
