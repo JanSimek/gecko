@@ -83,3 +83,12 @@ TEST_CASE("computeAnimationLayout reports invalid for no renderable frames", "[a
     CHECK_FALSE(computeAnimationLayout({}).valid());
     CHECK_FALSE(computeAnimationLayout({ { 0, 0, 0, 0 } }).valid());
 }
+
+TEST_CASE("computeAnimationLayout rejects an implausibly large canvas", "[animation]") {
+    // A corrupt FRM with a huge frame must not produce a giant-canvas allocation.
+    const int tooBig = MAX_ANIMATION_CANVAS_DIMENSION + 1;
+    CHECK_FALSE(computeAnimationLayout({ { 0, 0, tooBig, 10 } }).valid());
+    CHECK_FALSE(computeAnimationLayout({ { 0, 0, 10, tooBig } }).valid());
+    // A frame right at the bound is still accepted.
+    CHECK(computeAnimationLayout({ { 0, 0, MAX_ANIMATION_CANVAS_DIMENSION, 10 } }).valid());
+}

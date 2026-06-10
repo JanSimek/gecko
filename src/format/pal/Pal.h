@@ -22,6 +22,7 @@ public:
     static constexpr unsigned NUM_CONVERSION_VALUES = 32768;
 
     std::array<Rgb, NUM_PALETTE_COLORS>& palette();
+    const std::array<Rgb, NUM_PALETTE_COLORS>& palette() const;
     void setPalette(const std::array<Rgb, NUM_PALETTE_COLORS>& value);
 
     std::array<uint8_t, NUM_CONVERSION_VALUES>& rgbConversionTable();

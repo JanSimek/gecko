@@ -30,6 +30,11 @@ struct AnimationLayout {
     bool valid() const { return canvasWidth > 0 && canvasHeight > 0; }
 };
 
+/// Upper bound on a laid-out canvas dimension. Real FRM sprites are at most a few
+/// hundred pixels; anything larger means a malformed/corrupt FRM (e.g. wild
+/// offsets), and we refuse it rather than attempt a huge pixmap allocation.
+inline constexpr int MAX_ANIMATION_CANVAS_DIMENSION = 2048;
+
 /// Lays out an FRM animation onto a single fixed-size canvas.
 ///
 /// FRM frames differ in size and carry signed per-frame offsets that the engine
@@ -75,8 +80,14 @@ inline AnimationLayout computeAnimationLayout(const std::vector<FrameBox>& frame
         return layout; // no renderable frames -> invalid 0x0 layout
     }
 
-    layout.canvasWidth = maxX - minX;
-    layout.canvasHeight = maxY - minY;
+    const int width = maxX - minX;
+    const int height = maxY - minY;
+    if (width > MAX_ANIMATION_CANVAS_DIMENSION || height > MAX_ANIMATION_CANVAS_DIMENSION) {
+        return layout; // implausibly large -> treat as invalid, do not allocate
+    }
+
+    layout.canvasWidth = width;
+    layout.canvasHeight = height;
 
     // Second pass: shift every placement into canvas-local coordinates.
     for (const auto& r : raw) {

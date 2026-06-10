@@ -368,7 +368,7 @@ void ObjectPreviewWidget::loadAnimationFrames() {
                 continue;
             }
 
-            uint8_t* rgbaData = const_cast<Frame&>(frames[i]).rgba(const_cast<Pal*>(pal));
+            uint8_t* rgbaData = frames[i].rgba(pal);
             if (!rgbaData) {
                 spdlog::debug("Failed to get RGBA data from frame, skipping");
                 continue;

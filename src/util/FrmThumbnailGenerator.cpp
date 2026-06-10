@@ -59,7 +59,7 @@ QPixmap FrmThumbnailGenerator::fromFrame(const Frame& frame, const Pal* palette,
         return thumbnail;
     }
 
-    uint8_t* rgbaData = const_cast<Frame&>(frame).rgba(const_cast<Pal*>(palette));
+    uint8_t* rgbaData = frame.rgba(palette);
     if (!rgbaData) {
         return thumbnail;
     }
