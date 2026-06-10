@@ -20,6 +20,7 @@ add_executable(general_tests
     general/test_map_roundtrip.cpp
     general/test_undo_stack.cpp
     general/test_object_command_controller.cpp
+    general/test_animation_layout.cpp
 )
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests

@@ -13,6 +13,9 @@
 #include <QResizeEvent>
 #include <spdlog/spdlog.h>
 
+#include <vector>
+
+#include "AnimationLayout.h"
 #include "format/frm/Frm.h"
 #include "format/frm/Frame.h"
 #include "format/pal/Pal.h"
@@ -339,28 +342,48 @@ void ObjectPreviewWidget::loadAnimationFrames() {
 
         const auto& direction = frm->directions()[_currentDirection];
         _totalDirections = static_cast<int>(frm->directions().size());
+        const auto& frames = direction.frames();
 
+        // Lay the frames out on a single canvas so playback keeps the sprite
+        // anchored (per-frame offsets accumulated, bottom-centre anchor) instead
+        // of re-centring each differently-sized frame — the "shaky camera" bug.
+        std::vector<FrameBox> boxes;
+        boxes.reserve(frames.size());
+        for (const auto& frame : frames) {
+            boxes.push_back({ frame.offsetX(), frame.offsetY(), frame.width(), frame.height() });
+        }
+        const AnimationLayout layout = computeAnimationLayout(boxes);
+        if (!layout.valid()) {
+            _animationController->clearFrames();
+            return; // no renderable frames
+        }
+
+        // Composite each frame onto an identically-sized transparent canvas at
+        // its laid-out position; equal sizes make the preview's centring stable.
         std::vector<QPixmap> frameCache;
-        frameCache.reserve(direction.frames().size());
-        for (const auto& frame : direction.frames()) {
-            uint16_t frameWidth = frame.width();
-            uint16_t frameHeight = frame.height();
-
-            if (frameWidth == 0 || frameHeight == 0) {
-                spdlog::debug("Frame has zero dimensions, skipping");
+        frameCache.reserve(frames.size());
+        for (size_t i = 0; i < frames.size(); ++i) {
+            const FrameRect& place = layout.placements[i];
+            if (place.width == 0 || place.height == 0) {
                 continue;
             }
 
-            uint8_t* rgbaData = const_cast<Frame&>(frame).rgba(const_cast<Pal*>(pal));
+            uint8_t* rgbaData = const_cast<Frame&>(frames[i]).rgba(const_cast<Pal*>(pal));
             if (!rgbaData) {
                 spdlog::debug("Failed to get RGBA data from frame, skipping");
                 continue;
             }
 
-            QImage frameImage(rgbaData, frameWidth, frameHeight, QImage::Format_RGBA8888);
+            QImage frameImage(rgbaData, place.width, place.height, QImage::Format_RGBA8888);
             frameImage = frameImage.copy();
 
-            frameCache.push_back(QPixmap::fromImage(frameImage));
+            QPixmap canvas(layout.canvasWidth, layout.canvasHeight);
+            canvas.fill(Qt::transparent);
+            QPainter painter(&canvas);
+            painter.drawImage(place.left, place.top, frameImage);
+            painter.end();
+
+            frameCache.push_back(std::move(canvas));
         }
 
         _animationController->loadFrames(std::move(frameCache));
