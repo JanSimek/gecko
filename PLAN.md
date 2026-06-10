@@ -263,13 +263,13 @@ undo command; built-tile packing, SID encoding and script-record construction ar
 
 ## Known limitations & follow-ups
 
-1. **Undo is partial.** Single-object instance edits (flags, light, critter, destination,
-   locked/jammed) are undoable. **Inventory edits, script attach/detach, spatial-script
-   creation, and map-wide ops (clear/copy elevation) are direct model mutations without undo**
-   — they live in panels holding a raw `Map*`, like the pre-existing elevation add/remove.
-   Routing them through `ObjectCommandController` (a generic `cloneDeep`-based vector-swap
-   command for inventory/clear/copy + a script-edit command, via the existing signal-up
-   pattern) is the main follow-up; also add a cascading script-delete on object deletion.
+1. **Undo coverage.** Instance edits (flags, light, critter, destination, locked/jammed),
+   **inventory** add/remove/quantity, **clear/copy elevation**, and **script attach/detach +
+   spatial-script creation** are now all undoable through `ObjectCommandController`, covered by
+   `UndoStack` + `cloneDeep` unit tests. *Remaining:* the pre-existing elevation add/remove
+   (`MapInfoPanel` checkboxes) is still a direct mutation; a cascading script-delete when an
+   object is deleted; and the command-controller actions themselves aren't integration-tested
+   (they need GameResources/Qt — a `qt_tests` follow-up).
 2. **Exit grids are rectangle-only** — detailed below.
 3. **AI packet / script program are raw values** (engine packet numbers / scripts.lst names),
    not friendly labels — no invented label tables, per the engine-fidelity rule. Real labels
@@ -288,6 +288,13 @@ undo command; built-tile packing, SID encoding and script-record construction ar
 8. **Inventory "Add" uses a numeric proto index**, not a browsable item picker.
 9. **Edit visuals are sprite-rebuild only** — no engine-style `_obj_toggle_flat` outline
    recompute, multi-hex occupancy overlay, or live light-radius overlay beyond the rebuild.
+10. **PRO-dialog animation preview jitters ("shaky camera").** Playback works, but each frame is
+    centred on its own bounding box instead of being anchored to a fixed reference point. FRM
+    frames carry per-frame signed (x, y) pixel **offsets** (the `Object::shiftX()/shiftY()`
+    values) that the engine accumulates so the sprite's anchor stays put across frames; the
+    preview ignores them, so frames with slightly different centres wobble. **Fix:** position
+    each preview frame by its FRM offset relative to a fixed anchor (mirror how the map
+    renderer/`Object` applies `shiftX/shiftY`) instead of re-centering per frame.
 
 ### Exit-grid shapes (rectangle-only) — limitation #2 in detail
 
@@ -599,3 +606,45 @@ the user to press Ctrl-Z thousands of times. Therefore:
 - Multi-elevation prefabs (store/stamp across the 3 `ELEVATION_COUNT` slots?).
 - Collision policy on stamp (overwrite vs skip vs error when target hexes are occupied).
 - Whether to lift `UndoStack::maxCommands` or rely solely on batching (batching is enough).
+
+---
+
+# In-game preview mode (future idea)
+
+> Status: idea / scoping. A toggle that makes the editor viewport behave more like the
+> running game — idle animations play, ambient sound plays, lighting/darkness renders, and
+> the editor chrome dims — so a designer can sanity-check "does this scene feel right?"
+> without launching Fallout 2.
+
+## What it would involve, by piece (rough effort)
+
+- **Idle animations — Medium.** We already decode FRM frames (the PRO dialog previews them)
+  and `Object::setDirection` sets a frame's texture rect; `TextureManager` stitches FRM frames
+  into sheets. The core work is a preview clock that advances each animated object's frame
+  index over time (honouring the FRM `fps` / `framesPerDirection`, looping idle anims), plus
+  per-object animation state and only animating culled/on-screen objects for perf at map scale.
+  **Depends on** fixing the per-frame offset handling (known limitation #10) or animations will
+  wobble. No new assets needed.
+- **Lighting / darkness — Medium.** Render honouring `header.darkness` and per-object light
+  (`light_radius` / `light_intensity`, already in the model) — an additive light pass / ambient
+  tint in `RenderingEngine`. The data already exists; it's a rendering feature.
+- **Ambient sound — Large.** SFML audio is currently **disabled** (`SFML_BUILD_AUDIO=FALSE`,
+  `cmake/dependencies.cmake`), so step one is enabling it. F2 sounds are **ACM** files (a custom
+  ADPCM-style codec) needing a decoder, and ambient/background audio isn't stored in the `.map`
+  (it's script/worldmap-driven), so "what plays here" has to come from the map script or a
+  convention. Biggest, most independent lift.
+- **"Game-like" chrome — Small.** A mode toggle that hides grid/overlays/selection, dims the
+  panels, and centres on the player start. Cheap polish once the above exist.
+
+## Recommendation / sequencing
+
+Value is front-loaded, cost is back-loaded — so tier it:
+1. **Idle-animation preview** (Medium) — highest value, reuses existing FRM decode + render;
+   gated on fixing the frame-offset bug. Ship as a "Play animations" toggle first.
+2. **Lighting / darkness** (Medium) — independent, data already present.
+3. **Ambient sound** (Large) — only if worth enabling SFML audio + writing an ACM decoder; the
+   long pole and least essential for an editor.
+
+Bottom line: an "idle animations + lighting" preview is a **Medium** effort on top of what
+exists; full parity with the running game (sound, day/night, critter wander/AI) is **Large**
+and probably not worth chasing for a map editor.
