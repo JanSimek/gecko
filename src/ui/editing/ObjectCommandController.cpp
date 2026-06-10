@@ -508,8 +508,8 @@ bool ObjectCommandController::registerInventoryEdit(const std::shared_ptr<MapObj
 
     UndoCommand cmd;
     cmd.description = "Edit Inventory";
-    cmd.undo = [container, before]() { restoreInventory(*container, before); };
-    cmd.redo = [container, after]() { restoreInventory(*container, after); };
+    cmd.undo = [container, before = std::move(before)]() { restoreInventory(*container, before); };
+    cmd.redo = [container, after = std::move(after)]() { restoreInventory(*container, after); };
     // The caller already applied the edit, so do not run redo() here.
     return pushCommand(std::move(cmd));
 }
@@ -685,9 +685,7 @@ void ObjectCommandController::eraseScript(uint32_t sid) {
         return;
     }
     auto& vec = _map->getMapFile().map_scripts[section];
-    vec.erase(std::remove_if(vec.begin(), vec.end(),
-                  [sid](const MapScript& s) { return s.pid == sid; }),
-        vec.end());
+    std::erase_if(vec, [sid](const MapScript& s) { return s.pid == sid; });
     _map->getMapFile().scripts_in_section[section] = static_cast<int>(vec.size());
 }
 
@@ -726,10 +724,10 @@ bool ObjectCommandController::recordScriptEdit(const std::string& description, i
 
     UndoCommand cmd;
     cmd.description = description;
-    cmd.undo = [this, section, object, beforeSection, beforeOid, beforeSid]() {
+    cmd.undo = [this, section, object, beforeSection = std::move(beforeSection), beforeOid, beforeSid]() {
         applyScriptSnapshot(section, object, beforeSection, beforeOid, beforeSid);
     };
-    cmd.redo = [this, section, object, afterSection, afterOid, afterSid]() {
+    cmd.redo = [this, section, object, afterSection = std::move(afterSection), afterOid, afterSid]() {
         applyScriptSnapshot(section, object, afterSection, afterOid, afterSid);
     };
     return pushCommand(std::move(cmd));

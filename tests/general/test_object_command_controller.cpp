@@ -39,10 +39,12 @@ struct ControllerFixture {
         : map(std::make_unique<Map>("test.map"))
         , controller(
               resources, map, hexgrid, spriteLoader, objects, overlays, undoStack,
-              [] {}, [] {},
+              [] { /* refreshObjects: no rendering in tests */ },
+              [] { /* onStackChanged: no UI to notify */ },
               [this](int elevation) -> std::vector<Tile>& { return map->getMapFile().tiles[elevation]; },
               [] { return 0; },
-              [](int, bool, int) {}, [] {}) {
+              [](int, bool, int) { /* updateTileSprite: no rendering in tests */ },
+              [] { /* reloadTiles: no rendering in tests */ }) {
         map->setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
     }
 
@@ -170,10 +172,12 @@ TEST_CASE("attachScript and detachScript are undoable", "[undo][controller]") {
     auto obj = std::make_shared<MapObject>();
     REQUIRE(fx.mapFile().map_scripts[ITEM_SECTION].empty());
 
+    // First ITEM script in an empty section gets index 0, so the SID is deterministic.
+    const int32_t expectedSid = static_cast<int32_t>(MapScript::makeSid(MapScript::ScriptType::ITEM, 0));
+
     REQUIRE(fx.controller.attachScript(obj, ITEM_SECTION, /*programIndex*/ 42));
     REQUIRE(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
-    REQUIRE(obj->map_scripts_pid != -1);
-    const int32_t attachedSid = obj->map_scripts_pid;
+    CHECK(obj->map_scripts_pid == expectedSid);
 
     // Undo removes the script and unlinks the object.
     REQUIRE(fx.undoStack.undo());
@@ -183,7 +187,7 @@ TEST_CASE("attachScript and detachScript are undoable", "[undo][controller]") {
     // Redo re-attaches the same script.
     REQUIRE(fx.undoStack.redo());
     CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
-    CHECK(obj->map_scripts_pid == attachedSid);
+    CHECK(obj->map_scripts_pid == expectedSid);
 
     // Detaching removes it again, and undo restores the linkage.
     REQUIRE(fx.controller.detachScript(obj));
@@ -192,7 +196,7 @@ TEST_CASE("attachScript and detachScript are undoable", "[undo][controller]") {
 
     REQUIRE(fx.undoStack.undo());
     CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
-    CHECK(obj->map_scripts_pid == attachedSid);
+    CHECK(obj->map_scripts_pid == expectedSid);
 }
 
 TEST_CASE("registerInventoryEdit restores inventory snapshots", "[undo][controller]") {
