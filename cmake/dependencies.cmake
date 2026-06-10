@@ -136,14 +136,26 @@ if(NOT SFML_FOUND)
     FetchContent_MakeAvailable(SFML)
 endif()
 
-# Catch2 for testing
+# Catch2 for testing - prefer system package, fall back to FetchContent
 if(GECK_BUILD_TESTS)
-    FetchContent_Declare(
-            Catch2
-            GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-            GIT_TAG v3.4.0
-            GIT_SHALLOW TRUE
-    )
-    FetchContent_MakeAvailable(Catch2)
-    geck_disable_target_warnings(Catch2 Catch2WithMain)
+    if(GECK_USE_SYSTEM_LIBS)
+        find_package(Catch2 3 QUIET)
+    endif()
+
+    if(NOT Catch2_FOUND)
+        message(STATUS "Using FetchContent for Catch2")
+        FetchContent_Declare(
+                Catch2
+                GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+                # Pinned to the exact v3.4.0 commit rather than the tag, and cloned
+                # in full (no GIT_SHALLOW). A commit hash lets FetchContent verify
+                # the checkout without a network update step on every reconfigure,
+                # which avoids the flaky "fatal: not a git repository" gitupdate
+                # failure; a full clone avoids the incomplete checkouts that a
+                # shallow fetch of a tag occasionally produced.
+                GIT_TAG 6e79e682b726f524310d55dec8ddac4e9c52fb5f # v3.4.0
+        )
+        FetchContent_MakeAvailable(Catch2)
+        geck_disable_target_warnings(Catch2 Catch2WithMain)
+    endif()
 endif()
