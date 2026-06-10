@@ -51,7 +51,7 @@ private:
 
 /// Reads an entire file into a byte vector for byte-for-byte comparisons.
 inline std::vector<uint8_t> readAllBytes(const std::filesystem::path& path) {
-    std::ifstream stream{ path.string(), std::ios::binary };
+    std::ifstream stream{ path, std::ios::binary };
     REQUIRE(stream.is_open());
     return std::vector<uint8_t>(std::istreambuf_iterator<char>(stream),
         std::istreambuf_iterator<char>());
