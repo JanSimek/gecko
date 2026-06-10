@@ -51,13 +51,20 @@ TEST_CASE("HexagonGrid position<->coordinates round-trip over the whole grid", "
     HexagonGrid grid;
 
     // Row-major mapping: position = y * GRID_WIDTH + x.
-    REQUIRE(grid.coordinatesForPosition(0).has_value());
-    CHECK(grid.coordinatesForPosition(0)->x == 0);
-    CHECK(grid.coordinatesForPosition(0)->y == 0);
-    CHECK(grid.coordinatesForPosition(HexagonGrid::GRID_WIDTH + 1)->x == 1);
-    CHECK(grid.coordinatesForPosition(HexagonGrid::GRID_WIDTH + 1)->y == 1);
-    CHECK(grid.coordinatesForPosition(HexagonGrid::POSITION_COUNT - 1)->x == HexagonGrid::GRID_WIDTH - 1);
-    CHECK(grid.coordinatesForPosition(HexagonGrid::POSITION_COUNT - 1)->y == HexagonGrid::GRID_HEIGHT - 1);
+    const auto origin = grid.coordinatesForPosition(0);
+    REQUIRE(origin.has_value());
+    CHECK(origin->x == 0);
+    CHECK(origin->y == 0);
+
+    const auto oneOne = grid.coordinatesForPosition(HexagonGrid::GRID_WIDTH + 1);
+    REQUIRE(oneOne.has_value());
+    CHECK(oneOne->x == 1);
+    CHECK(oneOne->y == 1);
+
+    const auto last = grid.coordinatesForPosition(HexagonGrid::POSITION_COUNT - 1);
+    REQUIRE(last.has_value());
+    CHECK(last->x == HexagonGrid::GRID_WIDTH - 1);
+    CHECK(last->y == HexagonGrid::GRID_HEIGHT - 1);
 
     // Every position converts to coordinates and back to the same position.
     for (int position = 0; position < HexagonGrid::POSITION_COUNT; ++position) {
