@@ -2,6 +2,7 @@
 
 #include <SFML/Graphics.hpp>
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -119,7 +120,8 @@ public:
     /// if the elevation has no objects.
     bool clearElevationObjects(int elevation);
     /// Copies tiles + objects (deep-cloned) from one elevation to another as one
-    /// undoable command, overwriting the destination.
+    /// undoable command, overwriting the destination. Scripts are not copied; the
+    /// cloned objects are detached from any source scripts.
     bool copyElevation(int fromElevation, int toElevation);
 
     // Script attachment (undoable). `scriptType` is the MapScript section/type
@@ -130,6 +132,20 @@ public:
     bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
 
 private:
+    // Number of map_scripts sections; mirrors Map::SCRIPT_SECTIONS (asserted in .cpp).
+    static constexpr int SCRIPT_SECTIONS = 5;
+
+    /// Snapshot of all map_scripts sections and their counts, for undoing bulk
+    /// edits that touch scripts across sections (e.g. clearing an elevation).
+    struct ScriptSections {
+        std::array<std::vector<MapScript>, SCRIPT_SECTIONS> sections;
+        std::array<int, SCRIPT_SECTIONS> counts{};
+    };
+
+    ScriptSections snapshotScripts() const;
+    void restoreScripts(const ScriptSections& snapshot);
+    /// Removes the script whose pid == sid from its section, updating the count.
+    void eraseScript(uint32_t sid);
     uint32_t allocateScriptId(int section) const;
     uint32_t allocateObjectId() const;
     void removeObjectScript(MapObject& object);

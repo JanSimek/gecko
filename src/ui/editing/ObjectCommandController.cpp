@@ -528,17 +528,31 @@ bool ObjectCommandController::clearElevationObjects(int elevation) {
     std::vector<std::shared_ptr<MapObject>> before = it->second;
     std::vector<std::shared_ptr<MapObject>> after; // empty
 
+    // Removing the objects must also remove their attached scripts, otherwise the
+    // map keeps orphaned MapScript records pointing at OIDs that no longer exist.
+    // Prune by SID so the objects' own map_scripts_pid stays intact for undo.
+    ScriptSections beforeScripts = snapshotScripts();
+    it->second.clear();
+    for (const auto& obj : before) {
+        if (obj && obj->map_scripts_pid != -1) {
+            eraseScript(static_cast<uint32_t>(obj->map_scripts_pid));
+        }
+    }
+    ScriptSections afterScripts = snapshotScripts();
+
     UndoCommand cmd;
     cmd.description = "Clear Elevation Objects";
-    cmd.undo = [this, elevation, before]() {
+    cmd.undo = [this, elevation, before, beforeScripts]() {
         _map->getMapFile().map_objects[elevation] = before;
+        restoreScripts(beforeScripts);
         _refreshObjects();
     };
-    cmd.redo = [this, elevation, after]() {
+    cmd.redo = [this, elevation, after, afterScripts]() {
         _map->getMapFile().map_objects[elevation] = after;
+        restoreScripts(afterScripts);
         _refreshObjects();
     };
-    cmd.redo();
+    // The edit was already applied above; only register the undo/redo handlers.
     return pushCommand(std::move(cmd));
 }
 
@@ -570,6 +584,11 @@ bool ObjectCommandController::copyElevation(int fromElevation, int toElevation) 
             }
             auto clone = std::shared_ptr<MapObject>(o->cloneDeep());
             clone->elevation = static_cast<uint32_t>(toElevation);
+            // Scripts are not copied, so detach the clone's linkage; otherwise it
+            // would duplicate the source object's OID and share its SID/script.
+            clone->map_scripts_pid = -1;
+            clone->script_id = -1;
+            clone->unknown0 = 0;
             afterObjects.push_back(std::move(clone));
         }
     }
@@ -640,19 +659,43 @@ uint32_t ObjectCommandController::allocateObjectId() const {
     return maxId + 1;
 }
 
+ObjectCommandController::ScriptSections ObjectCommandController::snapshotScripts() const {
+    static_assert(SCRIPT_SECTIONS == Map::SCRIPT_SECTIONS,
+        "ScriptSections snapshot size must match Map::SCRIPT_SECTIONS");
+    ScriptSections snapshot;
+    const auto& mapFile = _map->getMapFile();
+    for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
+        snapshot.sections[section] = mapFile.map_scripts[section];
+        snapshot.counts[section] = mapFile.scripts_in_section[section];
+    }
+    return snapshot;
+}
+
+void ObjectCommandController::restoreScripts(const ScriptSections& snapshot) {
+    auto& mapFile = _map->getMapFile();
+    for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
+        mapFile.map_scripts[section] = snapshot.sections[section];
+        mapFile.scripts_in_section[section] = snapshot.counts[section];
+    }
+}
+
+void ObjectCommandController::eraseScript(uint32_t sid) {
+    const int section = MapScript::sidSection(sid);
+    if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
+        return;
+    }
+    auto& vec = _map->getMapFile().map_scripts[section];
+    vec.erase(std::remove_if(vec.begin(), vec.end(),
+                  [sid](const MapScript& s) { return s.pid == sid; }),
+        vec.end());
+    _map->getMapFile().scripts_in_section[section] = static_cast<int>(vec.size());
+}
+
 void ObjectCommandController::removeObjectScript(MapObject& object) {
     if (!_map || object.map_scripts_pid == -1) {
         return;
     }
-    const uint32_t sid = static_cast<uint32_t>(object.map_scripts_pid);
-    const int section = MapScript::sidSection(sid);
-    if (section >= 0 && section < Map::SCRIPT_SECTIONS) {
-        auto& vec = _map->getMapFile().map_scripts[section];
-        vec.erase(std::remove_if(vec.begin(), vec.end(),
-                      [sid](const MapScript& s) { return s.pid == sid; }),
-            vec.end());
-        _map->getMapFile().scripts_in_section[section] = static_cast<int>(vec.size());
-    }
+    eraseScript(static_cast<uint32_t>(object.map_scripts_pid));
     object.map_scripts_pid = -1;
 }
 
