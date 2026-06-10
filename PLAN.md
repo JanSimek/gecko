@@ -690,15 +690,23 @@ rules (hex 0–39999, 3-elevation framing, exit-grid PIDs 16–23).
   → proc list + the linked `.msg` text gives an AI the conversation tree and behaviour surface
   without running the game. Cross-reference `scripts.lst` (index→name) and the map's
   `MapScript`/object `sid` to answer "what does the NPC on this hex say/do?".
-- **Visual analysis — Large (the only hard part).** To let the AI *see* the map (rendered
-  screenshot per elevation / region), expose an **offscreen render** through the SFML rendering
-  layer (`RenderingEngine`/`MapSpriteLoader`) producing a PNG the AI can read. Everything else is
-  structural and needs no rendering. This is the long pole; start without it.
+- **Visual analysis — Small–Medium (a refactor, not a rewrite).** To let the AI *see* the map
+  (rendered screenshot per elevation/region), reuse the **existing** SFML renderer:
+  `RenderingEngine`/`MapSpriteLoader` already have **zero Qt includes** and `render()` already
+  takes a generic `sf::RenderTarget&`. They just live in the Qt CMake target (`gecko_app`). The
+  clean move is to **extract a Qt-free `gecko_render` library** (renderer + sprite loader +
+  hex/viewport math; CMake-target move, not a code change) that both `gecko_app` (window target)
+  and the headless MCP/CLI use. The CLI renders to an **`sf::RenderTexture`** (offscreen) and does
+  `copyToImage()` → PNG — the same draw code the editor runs each frame, **no duplication**.
+  *Caveat:* `sf::RenderTexture` needs an OpenGL context — automatic on a desktop, but a headless
+  box (Docker/CI) needs `xvfb`/EGL. No Qt event loop is involved.
 
 ## Estimate
 
 A read-only "describe/analyze" server is a **few days**; adding write tools is **another few
 days** (~**1–2 weeks** for a solid read+write server), mostly tool-surface design + a JSON-RPC/CLI
 shim, not format work. Script/dialog understanding reuses the `Msg` reader + the proposed `.int`
-metadata reader. Visual analysis (offscreen render → PNG) is a separate **Large** add-on. Start
-with `gecko-cli` + read tools, since that's immediately useful and de-risks the rest.
+metadata reader. Visual analysis becomes a **Small–Medium** add-on once the Qt-free `gecko_render`
+extraction is done (the renderer is already Qt-free; it just needs to move to a shared library +
+an offscreen `sf::RenderTexture` wrapper). Start with `gecko-cli` + read tools, since that's
+immediately useful and de-risks the rest.
