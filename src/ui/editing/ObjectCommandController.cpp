@@ -412,6 +412,66 @@ bool ObjectCommandController::registerExitGridEdit(const std::vector<std::shared
     return pushCommand(std::move(cmd));
 }
 
+MapObjectInstanceState ObjectCommandController::captureInstanceState(const MapObject& o) {
+    MapObjectInstanceState s;
+    s.flags = o.flags;
+    s.dataFlags = o.unknown11;
+    s.lightRadius = o.light_radius;
+    s.lightIntensity = o.light_intensity;
+    s.walkthrough = o.walkthrough;
+    s.map = o.map;
+    s.elevhex = o.elevhex;
+    s.elevtype = o.elevtype;
+    s.elevlevel = o.elevlevel;
+    s.aiPacket = o.ai_packet;
+    s.groupId = o.group_id;
+    s.currentHp = o.current_hp;
+    s.currentRad = o.current_rad;
+    s.currentPoison = o.current_poison;
+    return s;
+}
+
+void ObjectCommandController::applyInstanceState(MapObject& o, const MapObjectInstanceState& s) {
+    o.flags = s.flags;
+    o.unknown11 = s.dataFlags;
+    o.light_radius = s.lightRadius;
+    o.light_intensity = s.lightIntensity;
+    o.walkthrough = s.walkthrough;
+    o.map = s.map;
+    o.elevhex = s.elevhex;
+    o.elevtype = s.elevtype;
+    o.elevlevel = s.elevlevel;
+    o.ai_packet = s.aiPacket;
+    o.group_id = s.groupId;
+    o.current_hp = s.currentHp;
+    o.current_rad = s.currentRad;
+    o.current_poison = s.currentPoison;
+}
+
+bool ObjectCommandController::registerInstanceEdit(const std::shared_ptr<MapObject>& mapObject,
+    const MapObjectInstanceState& before,
+    const MapObjectInstanceState& after,
+    const std::string& description) {
+    if (!mapObject) {
+        spdlog::warn("registerInstanceEdit: null mapObject");
+        return false;
+    }
+
+    UndoCommand cmd;
+    cmd.description = description;
+    cmd.undo = [this, mapObject, before]() {
+        applyInstanceState(*mapObject, before);
+        _refreshObjects();
+    };
+    cmd.redo = [this, mapObject, after]() {
+        applyInstanceState(*mapObject, after);
+        _refreshObjects();
+    };
+
+    cmd.redo();
+    return pushCommand(std::move(cmd));
+}
+
 bool ObjectCommandController::pushCommand(UndoCommand cmd) {
     _undoStack.push(std::move(cmd));
     if (_onStackChanged) {

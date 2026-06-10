@@ -66,6 +66,38 @@ keep. Revisit only if exact byte-parity with engine-saved maps becomes a require
 
 ## Missing in-engine-mapper features (instance & map editing)
 
+> **Status (implemented):** F10–F17 below are now implemented and build cleanly
+> (96 base tests + the 2 MAP-compat regression tests pass). Summary:
+> - **F12 flags** — `ObjectFlagsDialog`, undoable via `registerInstanceEdit`.
+> - **F13 light** — `LightPropertiesDialog`, undoable.
+> - **F14 critter** — `CritterPropertiesDialog` (AI packet numeric, team, HP/rad/poison),
+>   undoable; inventory Add/Remove/quantity now mutate the model (persist on save).
+> - **F15 scenery destination** — `SceneryDestinationDialog` (stairs/ladder built-tile,
+>   elevator type/level), undoable.
+> - **F16 interaction** — `InstancePropertiesDialog` locked/jammed routed to the correct
+>   per-type field (doors → `walkthrough`/openFlags, containers → `unknown11`/data.flags),
+>   undoable.
+> - **F17 map ops** — `MapInfoPanel` "Map Operations": Clear Elevation Objects, Copy
+>   Elevation (tiles + deep-cloned objects via `MapObject::cloneDeep`).
+> - **F10 script attach** — `ScriptSelectorDialog` from scripts.lst; creates a `MapScript`
+>   with engine-correct linkage (per-type SID, fresh object OID, program index,
+>   `local_var_count=0`/`offset=-1` exactly as `scriptAdd`).
+> - **F11 spatial script** — `SpatialScriptDialog` from `MapInfoPanel` creates a spatial
+>   `MapScript` (built-tile + radius).
+>
+> **Known limitations (follow-ups):**
+> - **Undo:** instance edits (F12/13/14-critter/15/16) are undoable; **inventory edits,
+>   script attach/detach, spatial scripts, and map-wide ops are direct mutations without
+>   undo** (matching `MapInfoPanel`'s existing elevation add/remove). Routing these through
+>   `ObjectCommandController` is the main follow-up.
+> - **AI packet / script program** are entered as raw engine numbers / scripts.lst names
+>   (no invented label tables, per the engine-fidelity rule). Local variables for newly
+>   attached scripts are left to the engine at runtime (as the mapper's own `scriptAdd` does).
+> - **F11** is dialog-driven (enter tile/elevation/radius) rather than click-to-place with a
+>   live hex marker + new `EditorMode`; that interactive flow is the remaining enhancement.
+> - **F16 deferred extensions** (per-instance kill-type / custom name) remain out of scope —
+>   they need new serialized fields and are not in the engine mapper.
+
 These are the editor capabilities the fallout2-ce in-engine mapper has that Gecko lacks.
 **Key finding: nearly all of the underlying data already round-trips through our `.map`
 format** — `MapObject` already carries `flags`, `light_radius`/`light_intensity`,

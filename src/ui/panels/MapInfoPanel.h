@@ -46,6 +46,9 @@ signals:
     void timestampChanged(int timestamp);
     void elevationAdded(int elevation);
     void elevationRemoved(int elevation);
+    /// Emitted after a bulk map operation (clear/copy elevation) mutates the
+    /// model, so the editor can reload sprites for the affected elevation.
+    void mapContentChanged(int elevation);
 
 private slots:
     void onFieldChanged();
@@ -53,6 +56,9 @@ private slots:
     void onSelectPositionClicked();
     void onCenterViewClicked();
     void onElevationCheckboxChanged();
+    void onClearElevationClicked();
+    void onCopyElevationClicked();
+    void onAddSpatialScriptClicked();
 
 private:
     void setupUI();
@@ -95,6 +101,12 @@ private:
     // Map scripts group (placeholder)
     QGroupBox* _mapScriptsGroup;
     QLabel* _mapScriptsLabel;
+
+    // Map operations group (clear / copy elevation)
+    QGroupBox* _mapOperationsGroup;
+    QComboBox* _clearElevationCombo;
+    QComboBox* _copyFromCombo;
+    QComboBox* _copyToCombo;
 
     resource::GameResources& _resources;
     Map* _map;

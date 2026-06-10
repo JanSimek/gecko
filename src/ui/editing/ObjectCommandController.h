@@ -34,6 +34,28 @@ struct ExitGridCommandState {
     uint32_t proPid;
 };
 
+/// Snapshot of the per-instance, UI-editable fields of a MapObject. The unified
+/// instance-edit undo command (registerInstanceEdit) uses this so the flag,
+/// light, scenery-destination and critter editors all share one code path. Every
+/// field here already round-trips through the .map format, so editing them is a
+/// purely in-memory change with no serialization impact.
+struct MapObjectInstanceState {
+    uint32_t flags = 0;
+    uint32_t dataFlags = 0; // MapObject.unknown11 == engine obj->data.flags (container lock/jam)
+    uint32_t lightRadius = 0;
+    uint32_t lightIntensity = 0;
+    uint32_t walkthrough = 0; // doors: engine obj->data.scenery.door.openFlags (lock/jam)
+    uint32_t map = 0;
+    uint32_t elevhex = 0;
+    uint32_t elevtype = 0;
+    uint32_t elevlevel = 0;
+    uint32_t aiPacket = 0;
+    uint32_t groupId = 0;
+    uint32_t currentHp = 0;
+    uint32_t currentRad = 0;
+    uint32_t currentPoison = 0;
+};
+
 class ObjectCommandController {
 public:
     ObjectCommandController(resource::GameResources& resources,
@@ -67,12 +89,25 @@ public:
         const std::vector<ExitGridCommandState>& beforeStates,
         const std::vector<ExitGridCommandState>& afterStates);
 
+    /// Captures the editable per-instance fields of a MapObject.
+    static MapObjectInstanceState captureInstanceState(const MapObject& object);
+
+    /// Records an undoable change to a single object's per-instance fields. The
+    /// after-state is applied immediately (redo); objects are refreshed so light
+    /// overlays and flag-derived visuals update.
+    bool registerInstanceEdit(const std::shared_ptr<MapObject>& mapObject,
+        const MapObjectInstanceState& before,
+        const MapObjectInstanceState& after,
+        const std::string& description);
+
     /// Applies the before/after state of tile edits and refreshes affected sprites.
     void applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState);
     /// Records an undoable tile edit (the change was already applied by the caller).
     void registerTileEdit(const std::string& description, const std::vector<TileChange>& changes);
 
 private:
+    static void applyInstanceState(MapObject& object, const MapObjectInstanceState& state);
+
     resource::GameResources& _resources;
     std::unique_ptr<Map>& _map;
     const HexagonGrid& _hexgrid;

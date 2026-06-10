@@ -11,6 +11,8 @@
 #include <filesystem>
 
 #include "format/map/Map.h"
+#include "format/map/MapObject.h"
+#include "format/map/MapScript.h"
 #include "format/gam/Gam.h"
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
@@ -18,6 +20,7 @@
 #include "util/ResourcePaths.h"
 #include "util/Coordinates.h"
 #include "ui/IconHelper.h"
+#include "ui/dialogs/SpatialScriptDialog.h"
 
 namespace geck {
 
@@ -49,6 +52,10 @@ MapInfoPanel::MapInfoPanel(resource::GameResources& resources, QWidget* parent)
     , _globalVarsTree(nullptr)
     , _mapScriptsGroup(nullptr)
     , _mapScriptsLabel(nullptr)
+    , _mapOperationsGroup(nullptr)
+    , _clearElevationCombo(nullptr)
+    , _copyFromCombo(nullptr)
+    , _copyToCombo(nullptr)
     , _resources(resources)
     , _map(nullptr)
     , _mapScriptName("no script") {
@@ -205,6 +212,48 @@ void MapInfoPanel::setupUI() {
     scriptsLayout->addWidget(_mapScriptsLabel);
 
     _contentLayout->addWidget(_mapScriptsGroup);
+
+    // === Map Operations group (clear / copy elevation) ===
+    _mapOperationsGroup = new QGroupBox("Map Operations");
+    QFormLayout* opsLayout = new QFormLayout(_mapOperationsGroup);
+
+    auto makeElevationCombo = []() {
+        auto* combo = new QComboBox();
+        combo->addItem("Elevation 1", ELEVATION_1);
+        combo->addItem("Elevation 2", ELEVATION_2);
+        combo->addItem("Elevation 3", ELEVATION_3);
+        return combo;
+    };
+
+    QHBoxLayout* clearRow = new QHBoxLayout();
+    _clearElevationCombo = makeElevationCombo();
+    auto* clearButton = new QPushButton("Clear Objects");
+    clearButton->setToolTip("Delete every object on the chosen elevation (tiles are kept).");
+    clearRow->addWidget(_clearElevationCombo, 1);
+    clearRow->addWidget(clearButton);
+    opsLayout->addRow("Clear:", clearRow);
+
+    QHBoxLayout* copyRow = new QHBoxLayout();
+    _copyFromCombo = makeElevationCombo();
+    _copyToCombo = makeElevationCombo();
+    _copyToCombo->setCurrentIndex(1);
+    auto* copyButton = new QPushButton("Copy");
+    copyButton->setToolTip("Copy tiles and objects from one elevation to another (overwrites the destination).");
+    copyRow->addWidget(_copyFromCombo, 1);
+    copyRow->addWidget(new QLabel("to"));
+    copyRow->addWidget(_copyToCombo, 1);
+    copyRow->addWidget(copyButton);
+    opsLayout->addRow("Copy:", copyRow);
+
+    auto* spatialScriptButton = new QPushButton("Add Spatial Script...");
+    spatialScriptButton->setToolTip("Place a spatial (hex trigger-zone) script at a tile with a radius.");
+    opsLayout->addRow("Scripts:", spatialScriptButton);
+
+    connect(clearButton, &QPushButton::clicked, this, &MapInfoPanel::onClearElevationClicked);
+    connect(copyButton, &QPushButton::clicked, this, &MapInfoPanel::onCopyElevationClicked);
+    connect(spatialScriptButton, &QPushButton::clicked, this, &MapInfoPanel::onAddSpatialScriptClicked);
+
+    _contentLayout->addWidget(_mapOperationsGroup);
 
     _contentLayout->addStretch();
 
@@ -736,6 +785,177 @@ void MapInfoPanel::onElevationCheckboxChanged() {
             spdlog::debug("MapInfoPanel: Elevation removal cancelled by user");
         }
     }
+}
+
+// Bulk map operations mutate the model directly and (like elevation add/remove
+// above) are confirmed rather than undoable.
+void MapInfoPanel::onClearElevationClicked() {
+    if (!_map) {
+        return;
+    }
+
+    const int elevation = _clearElevationCombo->currentData().toInt();
+    auto& mapFile = _map->getMapFile();
+
+    auto it = mapFile.map_objects.find(elevation);
+    const size_t count = (it != mapFile.map_objects.end()) ? it->second.size() : 0;
+    if (count == 0) {
+        QMessageBox::information(this, "Clear Elevation",
+            QString("Elevation %1 has no objects to clear.").arg(elevation + 1));
+        return;
+    }
+
+    const auto reply = QMessageBox::question(this, "Clear Elevation",
+        QString("Delete all %1 object(s) on Elevation %2?\n\nThis cannot be undone.")
+            .arg(count)
+            .arg(elevation + 1),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (reply != QMessageBox::Yes) {
+        return;
+    }
+
+    it->second.clear();
+    spdlog::info("MapInfoPanel: Cleared {} object(s) on elevation {}", count, elevation);
+    Q_EMIT mapContentChanged(elevation);
+}
+
+void MapInfoPanel::onCopyElevationClicked() {
+    if (!_map) {
+        return;
+    }
+
+    const int from = _copyFromCombo->currentData().toInt();
+    const int to = _copyToCombo->currentData().toInt();
+    if (from == to) {
+        QMessageBox::information(this, "Copy Elevation",
+            "Source and destination elevations are the same.");
+        return;
+    }
+
+    auto& mapFile = _map->getMapFile();
+
+    // Both elevations must be enabled (present) for a meaningful, saveable copy.
+    if (!Map::elevationIsPresent(mapFile.header.flags, from)) {
+        QMessageBox::warning(this, "Copy Elevation",
+            QString("Source Elevation %1 is not enabled.").arg(from + 1));
+        return;
+    }
+    if (!Map::elevationIsPresent(mapFile.header.flags, to)) {
+        QMessageBox::warning(this, "Copy Elevation",
+            QString("Destination Elevation %1 is not enabled. Enable it first.").arg(to + 1));
+        return;
+    }
+
+    const size_t dstObjs = mapFile.map_objects.count(to) ? mapFile.map_objects.at(to).size() : 0;
+    const auto reply = QMessageBox::question(this, "Copy Elevation",
+        QString("Copy tiles and objects from Elevation %1 to Elevation %2?\n\n"
+                "This overwrites Elevation %2 (%3 existing object(s)) and cannot be undone.")
+            .arg(from + 1)
+            .arg(to + 1)
+            .arg(dstObjs),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (reply != QMessageBox::Yes) {
+        return;
+    }
+
+    // Tiles (Tile is copyable).
+    auto tileIt = mapFile.tiles.find(from);
+    if (tileIt != mapFile.tiles.end()) {
+        mapFile.tiles[to] = tileIt->second;
+    }
+
+    // Objects: deep-clone each and retarget the clone's elevation.
+    auto& dst = mapFile.map_objects[to];
+    dst.clear();
+    auto srcIt = mapFile.map_objects.find(from);
+    if (srcIt != mapFile.map_objects.end()) {
+        dst.reserve(srcIt->second.size());
+        for (const auto& obj : srcIt->second) {
+            if (!obj) {
+                continue;
+            }
+            auto clone = obj->cloneDeep();
+            clone->elevation = static_cast<uint32_t>(to);
+            dst.push_back(std::shared_ptr<MapObject>(std::move(clone)));
+        }
+    }
+
+    spdlog::info("MapInfoPanel: Copied elevation {} to {} ({} object(s))", from, to, dst.size());
+    Q_EMIT mapContentChanged(to);
+}
+
+void MapInfoPanel::onAddSpatialScriptClicked() {
+    if (!_map) {
+        return;
+    }
+
+    auto* scriptsLst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
+    if (!scriptsLst) {
+        QMessageBox::warning(this, "Add Spatial Script", "Could not load scripts.lst.");
+        return;
+    }
+
+    SpatialScriptDialog dialog(scriptsLst->list(), this);
+    if (dialog.exec() != QDialog::Accepted || dialog.programIndex() < 0) {
+        return;
+    }
+
+    auto& mapFile = _map->getMapFile();
+
+    // SPATIAL is section index 1 (engine SCRIPT_TYPE_SPATIAL).
+    constexpr int SPATIAL_SECTION = 1;
+
+    // Allocate the next free script id within the spatial pool.
+    uint32_t scriptId = 0;
+    {
+        bool any = false;
+        for (const auto& s : mapFile.map_scripts[SPATIAL_SECTION]) {
+            uint32_t id = s.pid & 0x00FFFFFF;
+            scriptId = any ? std::max(scriptId, id) : id;
+            any = true;
+        }
+        scriptId = any ? scriptId + 1 : 0;
+    }
+
+    // Allocate a fresh owner OID (unused by the engine for spatial scripts, but
+    // kept unique to avoid clashes with object OIDs).
+    uint32_t oid = 0;
+    for (const auto& [elevation, objects] : mapFile.map_objects) {
+        for (const auto& obj : objects) {
+            if (obj) {
+                oid = std::max(oid, obj->unknown0);
+            }
+        }
+    }
+    for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
+        for (const auto& s : mapFile.map_scripts[section]) {
+            oid = std::max(oid, s.script_oid);
+        }
+    }
+    ++oid;
+
+    const int tile = dialog.tile();
+    const int elevation = dialog.elevation();
+    // Engine built-tile packing: tile in the low bits, elevation in bits 29-31.
+    const uint32_t builtTile = (static_cast<uint32_t>(tile) & 0x3FFFFFF)
+        | ((static_cast<uint32_t>(elevation) << 29) & 0xE0000000);
+
+    MapScript script{};
+    script.pid = (static_cast<uint32_t>(SPATIAL_SECTION) << 24) | scriptId;
+    script.timer = builtTile;                                    // SPATIAL: built_tile
+    script.spatial_radius = static_cast<uint32_t>(dialog.radius());
+    script.script_id = static_cast<uint32_t>(dialog.programIndex());
+    script.script_oid = oid;
+    script.local_var_offset = 0xFFFFFFFF; // -1, matches scriptAdd
+    script.local_var_count = 0;
+    script.unknown12 = 0xFFFFFFFF; // actionBeingUsed == -1
+
+    mapFile.map_scripts[SPATIAL_SECTION].push_back(script);
+    mapFile.scripts_in_section[SPATIAL_SECTION] = static_cast<int>(mapFile.map_scripts[SPATIAL_SECTION].size());
+
+    spdlog::info("MapInfoPanel: Added spatial script {} at tile {} elev {} radius {}",
+        dialog.programIndex(), tile, elevation, dialog.radius());
+    updateMapScriptsDisplay();
 }
 
 } // namespace geck

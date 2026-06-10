@@ -95,6 +95,10 @@ struct MapObject {
 
     bool isWallObject() const;
 
+    /// Deep copy of this object, recursively cloning inventory. Needed because
+    /// MapObject is otherwise non-copyable (the inventory holds unique_ptrs).
+    std::unique_ptr<MapObject> cloneDeep() const;
+
     bool isLightSource() const {
         bool hasLight = light_radius > 0 || light_intensity > 0;
         return hasLight;

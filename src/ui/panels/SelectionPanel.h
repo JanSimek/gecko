@@ -20,6 +20,7 @@
 #include "editor/Object.h"
 #include "format/map/Tile.h"
 #include "selection/SelectionState.h"
+#include "ui/editing/ObjectCommandController.h"
 
 namespace geck {
 
@@ -71,6 +72,15 @@ signals:
     void statusMessage(const QString& message);
     void requestExitGridEditor(std::shared_ptr<Object> object);
 
+    /// Emitted when an in-panel instance editor (flags, light, scenery
+    /// destination, interaction) produces a before/after change. MainWindow
+    /// forwards it to the active EditorWidget so it is recorded as one undoable
+    /// command.
+    void requestInstanceEdit(std::shared_ptr<Object> object,
+        MapObjectInstanceState before,
+        MapObjectInstanceState after,
+        QString description);
+
 public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);
     void selectTile(int tileIndex, int elevation, bool isRoof);
@@ -81,6 +91,13 @@ private slots:
     void onChangeFrmClicked();
     void onEditProClicked();
     void onEditExitGridClicked();
+    void onEditFlagsClicked();
+    void onEditLightClicked();
+    void onEditDestinationClicked();
+    void onEditInteractionClicked();
+    void onEditCritterClicked();
+    void onAttachScriptClicked();
+    void onDetachScriptClicked();
     void onAddInventoryClicked();
     void onRemoveInventoryClicked();
     void onInventoryItemChanged(QTreeWidgetItem* item, int column);
@@ -99,6 +116,16 @@ private:
     void setupInventorySection();
     void updateInventorySection();
     void populateInventoryTree();
+    /// The selected object's MapObject if it can hold inventory, else nullptr.
+    MapObject* selectedInventoryHolder() const;
+
+    // Script attachment (F10)
+    void updateScriptSection();
+    void detachScriptInternal(MapObject& object);
+    /// Next free script id within a section (the low 24 bits of the SID).
+    uint32_t allocateScriptId(int section) const;
+    /// Next free object OID across all objects and script owners.
+    uint32_t allocateObjectId() const;
     QPixmap getItemIconWithQuantity(const MapObject& item) const;
     QPixmap createPlaceholderIcon() const;
 
@@ -129,6 +156,17 @@ private:
     QPushButton* _changeFrmButton;
     QPushButton* _editProButton;
     QPushButton* _editExitGridButton;
+    QPushButton* _editFlagsButton;
+    QPushButton* _editLightButton;
+    QPushButton* _editDestinationButton;
+    QPushButton* _editInteractionButton;
+    QPushButton* _editCritterButton;
+
+    // Script attachment controls (shown for scriptable object types)
+    QWidget* _scriptContainer;
+    QLineEdit* _scriptValueEdit;
+    QPushButton* _attachScriptButton;
+    QPushButton* _detachScriptButton;
 
     // Inventory section (appears when object has inventory)
     QGroupBox* _inventoryGroup;

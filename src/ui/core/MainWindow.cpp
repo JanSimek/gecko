@@ -996,6 +996,14 @@ void MainWindow::connectPanelSignals() {
                     }
                 }
             });
+        connect(_selectionPanel, &SelectionPanel::requestInstanceEdit,
+            this, [this](std::shared_ptr<Object> object, MapObjectInstanceState before,
+                       MapObjectInstanceState after, QString description) {
+                if (!_currentEditorWidget || !object || !object->hasMapObject())
+                    return;
+                _currentEditorWidget->registerInstanceEdit(object->getMapObjectPtr(),
+                    before, after, description.toStdString());
+            });
         connect(_selectionPanel, &SelectionPanel::requestObjectHighlight,
             this, [this](std::shared_ptr<Object> object) {
                 if (!_currentEditorWidget || !object)
@@ -1086,6 +1094,15 @@ void MainWindow::connectPanelSignals() {
                             elevationChanged(ELEVATION_3);
                     }
                     spdlog::info("MainWindow: Switched away from removed elevation {}", elevation);
+                }
+            });
+        connect(_mapInfoPanel, &MapInfoPanel::mapContentChanged,
+            this, [this](int elevation) {
+                if (!_currentEditorWidget)
+                    return;
+                if (_currentEditorWidget->getCurrentElevation() == elevation) {
+                    _currentEditorWidget->loadTileSprites();
+                    _currentEditorWidget->refreshObjects();
                 }
             });
     }

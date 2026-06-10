@@ -2,8 +2,18 @@
 #include "ui/common/InventoryItemUiHelper.h"
 #include "ui/dialogs/FrmSelectorDialog.h"
 #include "ui/dialogs/ProEditorDialog.h"
+#include "ui/dialogs/ObjectFlagsDialog.h"
+#include "ui/dialogs/LightPropertiesDialog.h"
+#include "ui/dialogs/SceneryDestinationDialog.h"
+#include "ui/dialogs/InstancePropertiesDialog.h"
+#include "ui/dialogs/CritterPropertiesDialog.h"
+#include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/UIConstants.h"
+#include "util/ResourcePaths.h"
+#include "format/map/MapScript.h"
+
+#include <algorithm>
 
 #include <QFormLayout>
 #include <QPixmap>
@@ -152,6 +162,15 @@ SelectionPanel::SelectionPanel(resource::GameResources& resources, QWidget* pare
     , _changeFrmButton(nullptr)
     , _editProButton(nullptr)
     , _editExitGridButton(nullptr)
+    , _editFlagsButton(nullptr)
+    , _editLightButton(nullptr)
+    , _editDestinationButton(nullptr)
+    , _editInteractionButton(nullptr)
+    , _editCritterButton(nullptr)
+    , _scriptContainer(nullptr)
+    , _scriptValueEdit(nullptr)
+    , _attachScriptButton(nullptr)
+    , _detachScriptButton(nullptr)
     , _inventoryGroup(nullptr)
     , _inventoryViewStack(nullptr)
     , _inventoryTree(nullptr)
@@ -287,6 +306,55 @@ void SelectionPanel::setupUI() {
     _editExitGridButton->setVisible(false); // Only shown for exit-grid marker objects
     connect(_editExitGridButton, &QPushButton::clicked, this, &SelectionPanel::onEditExitGridClicked);
     objectFormLayout->addRow("", _editExitGridButton);
+
+    // Per-instance editors. Visibility is decided per object type in updateObjectInfo().
+    _editFlagsButton = new QPushButton("Edit Flags...");
+    _editFlagsButton->setVisible(false);
+    connect(_editFlagsButton, &QPushButton::clicked, this, &SelectionPanel::onEditFlagsClicked);
+    objectFormLayout->addRow("", _editFlagsButton);
+
+    _editLightButton = new QPushButton("Edit Light...");
+    _editLightButton->setVisible(false);
+    connect(_editLightButton, &QPushButton::clicked, this, &SelectionPanel::onEditLightClicked);
+    objectFormLayout->addRow("", _editLightButton);
+
+    _editDestinationButton = new QPushButton("Edit Destination...");
+    _editDestinationButton->setVisible(false);
+    connect(_editDestinationButton, &QPushButton::clicked, this, &SelectionPanel::onEditDestinationClicked);
+    objectFormLayout->addRow("", _editDestinationButton);
+
+    _editInteractionButton = new QPushButton("Edit Interaction...");
+    _editInteractionButton->setVisible(false);
+    connect(_editInteractionButton, &QPushButton::clicked, this, &SelectionPanel::onEditInteractionClicked);
+    objectFormLayout->addRow("", _editInteractionButton);
+
+    _editCritterButton = new QPushButton("Edit Critter...");
+    _editCritterButton->setVisible(false);
+    connect(_editCritterButton, &QPushButton::clicked, this, &SelectionPanel::onEditCritterClicked);
+    objectFormLayout->addRow("", _editCritterButton);
+
+    // Script attachment controls (spanning row, shown for scriptable objects).
+    _scriptContainer = new QWidget();
+    QVBoxLayout* scriptLayout = new QVBoxLayout(_scriptContainer);
+    scriptLayout->setContentsMargins(0, 0, 0, 0);
+    QHBoxLayout* scriptValueRow = new QHBoxLayout();
+    scriptValueRow->addWidget(new QLabel("Script:"));
+    _scriptValueEdit = new QLineEdit();
+    _scriptValueEdit->setReadOnly(true);
+    _scriptValueEdit->setPlaceholderText("None");
+    scriptValueRow->addWidget(_scriptValueEdit, 1);
+    scriptLayout->addLayout(scriptValueRow);
+    QHBoxLayout* scriptButtonRow = new QHBoxLayout();
+    _attachScriptButton = new QPushButton("Attach Script...");
+    _detachScriptButton = new QPushButton("Detach");
+    _detachScriptButton->setEnabled(false);
+    connect(_attachScriptButton, &QPushButton::clicked, this, &SelectionPanel::onAttachScriptClicked);
+    connect(_detachScriptButton, &QPushButton::clicked, this, &SelectionPanel::onDetachScriptClicked);
+    scriptButtonRow->addWidget(_attachScriptButton);
+    scriptButtonRow->addWidget(_detachScriptButton);
+    scriptLayout->addLayout(scriptButtonRow);
+    _scriptContainer->setVisible(false);
+    objectFormLayout->addRow(_scriptContainer);
 
     objectInfoMainLayout->addLayout(leftSideLayout);
     objectInfoMainLayout->addLayout(objectFormLayout, 1);
@@ -481,6 +549,41 @@ void SelectionPanel::updateObjectInfo() {
                 _editExitGridButton->setEnabled(false);
             }
 
+            // Per-instance editors, gated by object type.
+            const auto objectType = pro->type();
+            const bool isScenery = objectType == Pro::OBJECT_TYPE::SCENERY;
+            Pro::SCENERY_TYPE sceneryType = Pro::SCENERY_TYPE::GENERIC;
+            if (isScenery) {
+                sceneryType = static_cast<Pro::SCENERY_TYPE>(pro->objectSubtypeId());
+            }
+            const bool hasDestination = isScenery
+                && (sceneryType == Pro::SCENERY_TYPE::STAIRS
+                    || sceneryType == Pro::SCENERY_TYPE::LADDER_TOP
+                    || sceneryType == Pro::SCENERY_TYPE::LADDER_BOTTOM
+                    || sceneryType == Pro::SCENERY_TYPE::ELEVATOR);
+            const bool isDoor = isScenery && sceneryType == Pro::SCENERY_TYPE::DOOR;
+            const bool isContainer = objectType == Pro::OBJECT_TYPE::ITEM
+                && pro->itemType() == Pro::ITEM_TYPE::CONTAINER;
+
+            // Flags and light apply to every real object (exit-grid markers use
+            // their own editor, handled above).
+            _editFlagsButton->setVisible(true);
+            _editLightButton->setVisible(true);
+            _editDestinationButton->setVisible(hasDestination);
+            _editInteractionButton->setVisible(isDoor || isContainer);
+            _editCritterButton->setVisible(objectType == Pro::OBJECT_TYPE::CRITTER);
+
+            // Scripts can be attached to items, critters, scenery and walls
+            // (engine mapper instance editors). Tiles/misc markers cannot.
+            const bool scriptable = objectType == Pro::OBJECT_TYPE::ITEM
+                || objectType == Pro::OBJECT_TYPE::CRITTER
+                || objectType == Pro::OBJECT_TYPE::SCENERY
+                || objectType == Pro::OBJECT_TYPE::WALL;
+            _scriptContainer->setVisible(scriptable);
+            if (scriptable) {
+                updateScriptSection();
+            }
+
             // Convert the SFML sprite to a QPixmap for display.
             const auto& sprite = _selectedObject.value()->getSprite();
             const auto& texture = sprite.getTexture();
@@ -616,6 +719,12 @@ void geck::SelectionPanel::clearObjectInfo() {
     _editProButton->setEnabled(false);
     _editExitGridButton->setEnabled(false);
     _editExitGridButton->setVisible(false);
+    _editFlagsButton->setVisible(false);
+    _editLightButton->setVisible(false);
+    _editDestinationButton->setVisible(false);
+    _editInteractionButton->setVisible(false);
+    _editCritterButton->setVisible(false);
+    _scriptContainer->setVisible(false);
 
     _hoverSpriteLabel->clear();
     _hoverSpriteLabel->setText("No object selected");
@@ -905,54 +1014,442 @@ void SelectionPanel::onEditExitGridClicked() {
     Q_EMIT requestExitGridEditor(_selectedObject.value());
 }
 
+void SelectionPanel::onEditFlagsClicked() {
+    if (!_selectedObject || !_selectedObject.value()) {
+        return;
+    }
+    auto object = _selectedObject.value();
+    auto mapObject = object->getMapObjectPtr();
+    if (!mapObject) {
+        return;
+    }
+
+    const uint32_t objectType = mapObject->pro_pid >> 24;
+    ObjectFlagsDialog dialog(mapObject->flags, objectType, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const uint32_t newFlags = dialog.getFlags();
+    if (newFlags == mapObject->flags) {
+        return;
+    }
+
+    auto before = ObjectCommandController::captureInstanceState(*mapObject);
+    auto after = before;
+    after.flags = newFlags;
+    Q_EMIT requestInstanceEdit(object, before, after, "Edit Object Flags");
+}
+
+void SelectionPanel::onEditLightClicked() {
+    if (!_selectedObject || !_selectedObject.value()) {
+        return;
+    }
+    auto object = _selectedObject.value();
+    auto mapObject = object->getMapObjectPtr();
+    if (!mapObject) {
+        return;
+    }
+
+    LightPropertiesDialog dialog(mapObject->light_radius, mapObject->light_intensity, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const uint32_t newRadius = dialog.getLightRadius();
+    const uint32_t newIntensity = dialog.getLightIntensity();
+    if (newRadius == mapObject->light_radius && newIntensity == mapObject->light_intensity) {
+        return;
+    }
+
+    auto before = ObjectCommandController::captureInstanceState(*mapObject);
+    auto after = before;
+    after.lightRadius = newRadius;
+    after.lightIntensity = newIntensity;
+    Q_EMIT requestInstanceEdit(object, before, after, "Edit Light Properties");
+}
+
+void SelectionPanel::onEditDestinationClicked() {
+    if (!_selectedObject || !_selectedObject.value()) {
+        return;
+    }
+    auto object = _selectedObject.value();
+    auto mapObject = object->getMapObjectPtr();
+    if (!mapObject) {
+        return;
+    }
+
+    Pro::SCENERY_TYPE sceneryType = Pro::SCENERY_TYPE::GENERIC;
+    try {
+        auto pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, mapObject->pro_pid));
+        if (!pro || pro->type() != Pro::OBJECT_TYPE::SCENERY) {
+            return;
+        }
+        sceneryType = static_cast<Pro::SCENERY_TYPE>(pro->objectSubtypeId());
+    } catch (const std::exception& e) {
+        spdlog::warn("onEditDestinationClicked: failed to load pro: {}", e.what());
+        return;
+    }
+
+    SceneryDestinationDialog dialog(sceneryType, mapObject->elevhex, mapObject->map,
+        mapObject->elevtype, mapObject->elevlevel, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    auto before = ObjectCommandController::captureInstanceState(*mapObject);
+    auto after = before;
+    after.elevhex = dialog.getElevhex();
+    after.map = dialog.getMap();
+    after.elevtype = dialog.getElevtype();
+    after.elevlevel = dialog.getElevlevel();
+    if (after.elevhex == before.elevhex && after.map == before.map
+        && after.elevtype == before.elevtype && after.elevlevel == before.elevlevel) {
+        return;
+    }
+    Q_EMIT requestInstanceEdit(object, before, after, "Edit Scenery Destination");
+}
+
+void SelectionPanel::onEditInteractionClicked() {
+    if (!_selectedObject || !_selectedObject.value()) {
+        return;
+    }
+    auto object = _selectedObject.value();
+    auto mapObject = object->getMapObjectPtr();
+    if (!mapObject) {
+        return;
+    }
+
+    bool isDoor = false;
+    try {
+        auto pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, mapObject->pro_pid));
+        if (!pro) {
+            return;
+        }
+        isDoor = pro->type() == Pro::OBJECT_TYPE::SCENERY
+            && static_cast<Pro::SCENERY_TYPE>(pro->objectSubtypeId()) == Pro::SCENERY_TYPE::DOOR;
+    } catch (const std::exception& e) {
+        spdlog::warn("onEditInteractionClicked: failed to load pro: {}", e.what());
+        return;
+    }
+
+    // Doors keep lock/jam in their openFlags (our `walkthrough`); containers keep
+    // them in the object data flags (our `unknown11`). The dialog edits whichever
+    // applies and leaves the other untouched.
+    InstancePropertiesDialog dialog(isDoor, mapObject->walkthrough, mapObject->unknown11, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const uint32_t newWalkthrough = dialog.getDoorOpenFlags();
+    const uint32_t newDataFlags = dialog.getContainerDataFlags();
+    if (newWalkthrough == mapObject->walkthrough && newDataFlags == mapObject->unknown11) {
+        return;
+    }
+
+    auto before = ObjectCommandController::captureInstanceState(*mapObject);
+    auto after = before;
+    after.walkthrough = newWalkthrough;
+    after.dataFlags = newDataFlags;
+    Q_EMIT requestInstanceEdit(object, before, after, "Edit Interaction State");
+}
+
+void SelectionPanel::onEditCritterClicked() {
+    if (!_selectedObject || !_selectedObject.value()) {
+        return;
+    }
+    auto object = _selectedObject.value();
+    auto mapObject = object->getMapObjectPtr();
+    if (!mapObject) {
+        return;
+    }
+
+    CritterPropertiesDialog dialog(mapObject->ai_packet, mapObject->group_id,
+        mapObject->current_hp, mapObject->current_rad, mapObject->current_poison, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    auto before = ObjectCommandController::captureInstanceState(*mapObject);
+    auto after = before;
+    after.aiPacket = dialog.getAiPacket();
+    after.groupId = dialog.getTeam();
+    after.currentHp = dialog.getHp();
+    after.currentRad = dialog.getRadiation();
+    after.currentPoison = dialog.getPoison();
+    if (after.aiPacket == before.aiPacket && after.groupId == before.groupId
+        && after.currentHp == before.currentHp && after.currentRad == before.currentRad
+        && after.currentPoison == before.currentPoison) {
+        return;
+    }
+    Q_EMIT requestInstanceEdit(object, before, after, "Edit Critter Properties");
+}
+
+// --- F10: object-instance script attachment ---------------------------------
+// These mutate the map's script sections and the object's SID/OID directly
+// (the model is reachable via _map, like MapInfoPanel's operations). The wiring
+// mirrors the engine's objectSetScript: a new per-type script id, a fresh
+// object OID, and the chosen scripts.lst program index. Local-variable setup is
+// left to the engine at runtime (count 0 / offset -1, exactly as scriptAdd).
+// Script edits are not routed through the undo stack yet (tracked in PLAN.md).
+
+uint32_t SelectionPanel::allocateScriptId(int section) const {
+    if (!_map || section < 0 || section >= Map::SCRIPT_SECTIONS) {
+        return 0;
+    }
+    uint32_t maxId = 0;
+    bool any = false;
+    for (const auto& s : _map->getMapFile().map_scripts[section]) {
+        uint32_t id = s.pid & 0x00FFFFFF;
+        maxId = any ? std::max(maxId, id) : id;
+        any = true;
+    }
+    return any ? maxId + 1 : 0;
+}
+
+uint32_t SelectionPanel::allocateObjectId() const {
+    if (!_map) {
+        return 1;
+    }
+    uint32_t maxId = 0;
+    const auto& mapFile = _map->getMapFile();
+    for (const auto& [elevation, objects] : mapFile.map_objects) {
+        for (const auto& obj : objects) {
+            if (obj) {
+                maxId = std::max(maxId, obj->unknown0);
+            }
+        }
+    }
+    for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
+        for (const auto& s : mapFile.map_scripts[section]) {
+            maxId = std::max(maxId, s.script_oid);
+        }
+    }
+    return maxId + 1;
+}
+
+void SelectionPanel::detachScriptInternal(MapObject& object) {
+    if (!_map || object.map_scripts_pid == -1) {
+        return;
+    }
+    const uint32_t sid = static_cast<uint32_t>(object.map_scripts_pid);
+    const int section = static_cast<int>((sid >> 24) & 0xFF);
+    if (section >= 0 && section < Map::SCRIPT_SECTIONS) {
+        auto& vec = _map->getMapFile().map_scripts[section];
+        vec.erase(std::remove_if(vec.begin(), vec.end(),
+                      [sid](const MapScript& s) { return s.pid == sid; }),
+            vec.end());
+        _map->getMapFile().scripts_in_section[section] = static_cast<int>(vec.size());
+    }
+    object.map_scripts_pid = -1;
+}
+
+void SelectionPanel::updateScriptSection() {
+    if (!_scriptContainer) {
+        return;
+    }
+    if (!_selectedObject || !_selectedObject.value() || !_map) {
+        _scriptValueEdit->clear();
+        _attachScriptButton->setEnabled(false);
+        _detachScriptButton->setEnabled(false);
+        return;
+    }
+
+    auto mapObject = _selectedObject.value()->getMapObjectPtr();
+    const bool attached = mapObject && mapObject->map_scripts_pid != -1;
+
+    QString text;
+    if (attached) {
+        const uint32_t sid = static_cast<uint32_t>(mapObject->map_scripts_pid);
+        const int section = static_cast<int>((sid >> 24) & 0xFF);
+        if (section >= 0 && section < Map::SCRIPT_SECTIONS) {
+            for (const auto& s : _map->getMapFile().map_scripts[section]) {
+                if (s.pid == sid) {
+                    auto* lst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
+                    if (lst && s.script_id < lst->list().size()) {
+                        text = QString::fromStdString(lst->list().at(s.script_id));
+                    } else {
+                        text = QString("Script #%1").arg(s.script_id);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    _scriptValueEdit->setText(text);
+    _attachScriptButton->setEnabled(true);
+    _detachScriptButton->setEnabled(attached);
+}
+
+void SelectionPanel::onAttachScriptClicked() {
+    if (!_selectedObject || !_selectedObject.value() || !_map) {
+        return;
+    }
+    auto mapObject = _selectedObject.value()->getMapObjectPtr();
+    if (!mapObject) {
+        return;
+    }
+
+    auto* scriptsLst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
+    if (!scriptsLst) {
+        QMessageBox::warning(this, "Attach Script", "Could not load scripts.lst.");
+        return;
+    }
+
+    ScriptSelectorDialog dialog(scriptsLst->list(), -1, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    const int programIndex = dialog.selectedIndex();
+    if (programIndex < 0) {
+        return;
+    }
+
+    const uint32_t objectType = mapObject->pro_pid >> 24;
+    // Critters use the CRITTER section; items/scenery/walls use the ITEM section.
+    const int scriptType = (objectType == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)) ? 4 : 3;
+
+    // Re-attaching: drop any existing script first.
+    detachScriptInternal(*mapObject);
+
+    auto& mapFile = _map->getMapFile();
+    const uint32_t scriptId = allocateScriptId(scriptType);
+    const uint32_t oid = allocateObjectId();
+
+    MapScript script{};
+    script.pid = (static_cast<uint32_t>(scriptType) << 24) | scriptId;
+    script.script_id = static_cast<uint32_t>(programIndex); // scripts.lst program index
+    script.script_oid = oid;                                // owner OID
+    script.local_var_offset = 0xFFFFFFFF;                   // -1, matches scriptAdd
+    script.local_var_count = 0;
+    script.unknown12 = 0xFFFFFFFF; // actionBeingUsed == -1 (engine scriptAdd default)
+
+    mapFile.map_scripts[scriptType].push_back(script);
+    mapFile.scripts_in_section[scriptType] = static_cast<int>(mapFile.map_scripts[scriptType].size());
+
+    mapObject->unknown0 = oid;                // object OID
+    mapObject->map_scripts_pid = static_cast<int32_t>(script.pid); // SID
+
+    updateScriptSection();
+    Q_EMIT statusMessage(QString("Attached script %1 to object").arg(programIndex));
+}
+
+void SelectionPanel::onDetachScriptClicked() {
+    if (!_selectedObject || !_selectedObject.value() || !_map) {
+        return;
+    }
+    auto mapObject = _selectedObject.value()->getMapObjectPtr();
+    if (!mapObject) {
+        return;
+    }
+    detachScriptInternal(*mapObject);
+    updateScriptSection();
+}
+
+// Inventory edits mutate the selected container/critter's MapObject inventory
+// directly and keep objects_in_inventory in sync so they persist on save. These
+// edits are not yet routed through the undo stack (the inventory's unique_ptr
+// ownership makes snapshotting awkward) - tracked in PLAN.md F14.
+MapObject* SelectionPanel::selectedInventoryHolder() const {
+    if (!_selectedObject || !_selectedObject.value()) {
+        return nullptr;
+    }
+    return _selectedObject.value()->getMapObjectPtr().get();
+}
+
 void SelectionPanel::onAddInventoryClicked() {
-    // TODO: implement inventory management
-    spdlog::debug("SelectionPanel::onAddInventoryClicked: Add inventory functionality not yet implemented");
+    auto* holder = selectedInventoryHolder();
+    if (!holder) {
+        return;
+    }
+
+    bool ok = false;
+    const int index = QInputDialog::getInt(this, "Add Inventory Item",
+        "Item proto index:", 1, 1, 0x00FFFFFF, 1, &ok);
+    if (!ok) {
+        return;
+    }
+
+    const uint32_t itemPid = (static_cast<uint32_t>(Pro::OBJECT_TYPE::ITEM) << 24) | static_cast<uint32_t>(index);
+
+    Pro* pro = nullptr;
+    try {
+        pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, itemPid));
+    } catch (const std::exception& e) {
+        spdlog::warn("onAddInventoryClicked: failed to load proto for pid {}: {}", itemPid, e.what());
+    }
+    if (!pro) {
+        QMessageBox::warning(this, "Add Inventory Item",
+            QString("No item prototype found for index %1.").arg(index));
+        return;
+    }
+
+    auto item = std::make_unique<MapObject>();
+    item->pro_pid = itemPid;
+    item->frm_pid = pro->header.FID;
+    item->amount = 1;
+    item->elevation = holder->elevation;
+    item->position = holder->position;
+
+    holder->inventory.push_back(std::move(item));
+    holder->objects_in_inventory = static_cast<uint32_t>(holder->inventory.size());
+
+    populateInventoryTree();
 }
 
 void SelectionPanel::onRemoveInventoryClicked() {
     QTreeWidgetItem* currentItem = _inventoryTree->currentItem();
-    if (!currentItem) {
+    auto* holder = selectedInventoryHolder();
+    if (!currentItem || !holder) {
         return;
     }
 
-    // TODO: implement inventory management
-    // Visual-only for now: removes the row but not the underlying inventory item.
-    delete currentItem;
-    spdlog::debug("SelectionPanel::onRemoveInventoryClicked: Remove inventory functionality partially implemented");
+    const int row = _inventoryTree->indexOfTopLevelItem(currentItem);
+    if (row < 0 || row >= static_cast<int>(holder->inventory.size())) {
+        return;
+    }
+
+    holder->inventory.erase(holder->inventory.begin() + row);
+    holder->objects_in_inventory = static_cast<uint32_t>(holder->inventory.size());
+
+    populateInventoryTree();
 }
 
 void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
     if (!item || column != COLUMN_AMOUNT) {
         return;
     }
-
-    // TODO: implement inventory management
-    // Visual-only for now: refreshes the icon but does not persist the new amount.
-    bool ok;
-    int newAmount = item->text(COLUMN_AMOUNT).toInt(&ok);
-    if (ok && newAmount >= 0) {
-        uint32_t pid = item->data(COLUMN_ICON, Qt::UserRole).toUInt();
-        spdlog::debug("SelectionPanel::onInventoryItemChanged: Changing amount for PID {} to {}", pid, newAmount);
-
-        QPixmap iconWithQuantity = ui::inventory::loadItemIcon(_resources, pid, ICON_SIZE, true);
-        if (iconWithQuantity.isNull()) {
-            iconWithQuantity = createPlaceholderIcon();
-        }
-        spdlog::debug("SelectionPanel::onInventoryItemChanged: Updating icon for PID {} with size {}x{}",
-            pid, iconWithQuantity.width(), iconWithQuantity.height());
-
-        // Create QIcon explicitly with the correct size to avoid scaling issues
-        QIcon icon;
-        icon.addPixmap(iconWithQuantity, QIcon::Normal, QIcon::Off);
-        item->setIcon(COLUMN_ICON, icon);
-
-        // Set explicit size hint to ensure proper icon display
-        item->setSizeHint(COLUMN_ICON, QSize(ICON_SIZE, ICON_SIZE));
-    } else {
-        // TODO: revert to the actual amount from the underlying data instead of 1.
-        item->setText(COLUMN_AMOUNT, "1");
+    auto* holder = selectedInventoryHolder();
+    if (!holder) {
+        return;
     }
+
+    const int row = _inventoryTree->indexOfTopLevelItem(item);
+    if (row < 0 || row >= static_cast<int>(holder->inventory.size())) {
+        return;
+    }
+
+    bool ok = false;
+    const int newAmount = item->text(COLUMN_AMOUNT).toInt(&ok);
+    if (!ok || newAmount < 1) {
+        // Revert to the stored amount.
+        item->setText(COLUMN_AMOUNT, QString::number(holder->inventory[row]->amount));
+        return;
+    }
+
+    holder->inventory[row]->amount = static_cast<uint32_t>(newAmount);
+
+    // Refresh the icon to reflect the new quantity.
+    uint32_t pid = item->data(COLUMN_ICON, Qt::UserRole).toUInt();
+    QPixmap iconWithQuantity = ui::inventory::loadItemIcon(_resources, pid, ICON_SIZE, true);
+    if (iconWithQuantity.isNull()) {
+        iconWithQuantity = createPlaceholderIcon();
+    }
+    QIcon icon;
+    icon.addPixmap(iconWithQuantity, QIcon::Normal, QIcon::Off);
+    item->setIcon(COLUMN_ICON, icon);
+    item->setSizeHint(COLUMN_ICON, QSize(ICON_SIZE, ICON_SIZE));
 }
 
 void SelectionPanel::resizeEvent(QResizeEvent* event) {
@@ -1167,7 +1664,11 @@ void SelectionPanel::populateInventoryTree() {
     options.userRoleIsPid = true;
     options.userRoleColumn = ui::inventory::COLUMN_ICON;
     options.iconProvider = [this](const MapObject& item) { return getItemIconWithQuantity(item); };
+    // Block itemChanged while we repopulate so the per-row amount handler does not
+    // fire against half-built rows.
+    _inventoryTree->blockSignals(true);
     ui::inventory::populateInventoryTree(_inventoryTree, _resources, mapObject->inventory, options);
+    _inventoryTree->blockSignals(false);
 
     if (_inventoryTree->topLevelItemCount() == 0) {
         _inventoryViewStack->setCurrentWidget(_emptyInventoryLabel);

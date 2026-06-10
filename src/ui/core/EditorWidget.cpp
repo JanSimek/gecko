@@ -144,6 +144,13 @@ void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObj
     _objectCommandController->registerExitGridEdit(exitGrids, beforeStates, afterStates);
 }
 
+void EditorWidget::registerInstanceEdit(const std::shared_ptr<MapObject>& mapObject,
+    const MapObjectInstanceState& before,
+    const MapObjectInstanceState& after,
+    const std::string& description) {
+    _objectCommandController->registerInstanceEdit(mapObject, before, after, description);
+}
+
 EditorWidget::~EditorWidget() {
 }
 

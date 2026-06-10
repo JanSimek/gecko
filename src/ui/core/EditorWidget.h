@@ -185,6 +185,13 @@ public:
         const std::vector<ExitGridState>& beforeStates,
         const std::vector<ExitGridState>& afterStates) override;
 
+    // Per-instance property (flags / light / scenery destination / critter) undo
+    // support. The before/after snapshots come from SelectionPanel's editors.
+    void registerInstanceEdit(const std::shared_ptr<MapObject>& mapObject,
+        const MapObjectInstanceState& before,
+        const MapObjectInstanceState& after,
+        const std::string& description);
+
 signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
