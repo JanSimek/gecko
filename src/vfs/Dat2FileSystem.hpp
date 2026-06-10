@@ -1,16 +1,6 @@
 #ifndef GECK_MAPPER_DAT2FILESYSTEM_HPP
 #define GECK_MAPPER_DAT2FILESYSTEM_HPP
 
-// Prevent Windows API macros from interfering with method names
-#ifdef _WIN32
-#ifdef CreateFile
-#undef CreateFile
-#endif
-#ifdef CopyFile
-#undef CopyFile
-#endif
-#endif
-
 #include <algorithm>
 #include <filesystem>
 #include <memory>
@@ -25,6 +15,19 @@
 #include "Dat2File.hpp"
 #include "format/dat/Dat.h"
 #include "reader/dat/DatReader.h"
+
+// vfspp's IFileSystem declares CreateFile / CopyFile. On Windows <windows.h>
+// (pulled in transitively by the headers above) rewrites those names to ...A,
+// which breaks the overrides below. Undo the macros *after* the includes so our
+// method names still match the base class.
+#ifdef _WIN32
+#ifdef CreateFile
+#undef CreateFile
+#endif
+#ifdef CopyFile
+#undef CopyFile
+#endif
+#endif
 
 namespace geck {
 namespace fs = std::filesystem;

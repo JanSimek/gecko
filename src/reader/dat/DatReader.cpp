@@ -7,6 +7,7 @@
 #include "format/dat/DatEntry.h"
 #include "format/IFile.h"
 #include "reader/ErrorMessages.h"
+#include <algorithm>
 
 namespace geck {
 

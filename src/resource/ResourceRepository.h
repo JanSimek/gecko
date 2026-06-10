@@ -11,6 +11,7 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <stdexcept>
 
 namespace geck::resource {
 

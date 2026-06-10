@@ -10,6 +10,7 @@
 #include <cmath>
 
 #include "Constants.h"
+#include <algorithm>
 
 namespace geck {
 

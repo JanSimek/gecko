@@ -4,6 +4,7 @@
 #include "format/msg/Msg.h"
 #include "resource/GameResources.h"
 #include "util/ResourcePaths.h"
+#include <stdexcept>
 
 namespace geck {
 

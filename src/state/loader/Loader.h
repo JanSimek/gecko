@@ -2,6 +2,7 @@
 #define GECK_MAPPER_LOADER_H
 
 #include <atomic>
+#include <mutex>
 #include <thread>
 #include <shared_mutex>
 

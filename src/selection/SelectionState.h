@@ -8,6 +8,7 @@
 
 #include "util/Types.h"
 #include "editor/Object.h"
+#include <algorithm>
 
 namespace geck::selection {
 

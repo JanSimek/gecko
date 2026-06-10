@@ -5,6 +5,8 @@
 #include <spdlog/spdlog.h>
 
 #include "reader/ErrorMessages.h"
+#include <algorithm>
+#include <stdexcept>
 
 namespace geck {
 

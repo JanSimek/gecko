@@ -8,6 +8,7 @@
 #include "ReaderExceptions.h"
 #include "BinaryUtils.h"
 #include "FormatValidator.h"
+#include <stdexcept>
 
 namespace geck {
 

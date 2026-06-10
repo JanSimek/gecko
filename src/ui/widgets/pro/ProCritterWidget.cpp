@@ -10,7 +10,9 @@
 #include <QPushButton>
 #include <QTabWidget>
 #include <QVBoxLayout>
+#include <spdlog/spdlog.h>
 #include <climits>
+#include <exception>
 #include <filesystem>
 
 namespace geck {
@@ -462,7 +464,15 @@ void ProCritterWidget::updateHeadFidLabel() {
         return;
     }
 
-    const std::string frmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(_headFid));
+    std::string frmPath;
+    try {
+        frmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(_headFid));
+    } catch (const std::exception& e) {
+        // A valid PRO never has a corrupt head FID; if one slips through (e.g. a
+        // damaged .pro), don't crash the widget - surface it and flag it below.
+        spdlog::warn("ProCritterWidget: failed to resolve head FID {}: {}", _headFid, e.what());
+        frmPath.clear();
+    }
     if (frmPath.empty()) {
         _headFidLabel->setText(QString("Invalid FID (%1)").arg(_headFid));
         return;

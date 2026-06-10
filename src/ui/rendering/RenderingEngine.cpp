@@ -213,9 +213,9 @@ void RenderingEngine::renderExitGridsWithSprite(sf::RenderTarget& target,
         }
 
         const Hex& hex = hexOptional.value().get();
-        WorldCoords hexCenter(hex.x(), hex.y());
+        WorldCoords hexCenter(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
 
-        if (!isHexVisible(hexCenter.x(), hexCenter.y(), view)) {
+        if (!isHexVisible(static_cast<int>(hexCenter.x()), static_cast<int>(hexCenter.y()), view)) {
             continue;
         }
 
