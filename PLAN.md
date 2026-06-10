@@ -648,3 +648,57 @@ Value is front-loaded, cost is back-loaded — so tier it:
 Bottom line: an "idle animations + lighting" preview is a **Medium** effort on top of what
 exists; full parity with the running game (sound, day/night, critter wander/AI) is **Large**
 and probably not worth chasing for a map editor.
+
+---
+
+# MCP server for AI-assisted map analysis & editing (future)
+
+> Status: idea / scoping. Expose the editor's map model as an MCP (Model Context Protocol)
+> server so an AI assistant can analyze a map, describe it, add/move objects, change scripts,
+> and (eventually) understand it visually and via its scripts/NPC dialogs.
+
+## Why it's cheap here
+
+The four-library split already makes the model, formats, and resources **Qt-free and
+headless-linkable** (`vault` → `gecko_resource` → `gecko_core`; the test suite links them with
+no GUI). So an MCP server **reuses `MapReader`/`MapWriter`, `MapObject`/`MapScript`
+(+ `cloneDeep`, the `makeObjectScript`/`makeSpatialScript` factories), and PID→name resolution
+via the resource layer** — zero format re-implementation, guaranteed fidelity, same validation
+rules (hex 0–39999, 3-elevation framing, exit-grid PIDs 16–23).
+
+## Tool surface (tiers)
+
+- **Read / describe — Small–Medium.** `describe_map` (header, enabled elevations, object/script
+  counts), `list_objects(elevation)` with resolved names, `list_scripts`, `get_hex(pos)`,
+  `find_objects(pid|type)`, exit-grid/transition connectivity. This is the bulk of "analyze the
+  map completely" and is the easy half.
+- **Write — Medium.** `add_object(pid, hex)`, `remove_object`, `edit_object_fields`,
+  `attach_script`/`detach_script`, `place_spatial_script`, `paint_floor/roof`,
+  `clear/copy_elevation`, `save`. Mirrors logic now centralized in `ObjectCommandController` /
+  `MapScript`; headless needs no undo, just model mutation + the existing writer.
+- **Transport — Small.** MCP is JSON-RPC over stdio (`initialize`, `tools/list`, `tools/call`).
+  Lowest-risk: build a headless **`gecko-cli`** (JSON in/out) over the existing libs first
+  (independently testable, reuses the round-trip tests), then wrap it with an MCP server in any
+  language. Alternatively a C++ MCP server linking the libs directly.
+
+## Deeper understanding (the longer-term goals)
+
+- **Script & NPC-dialog analysis — Medium.** "Understand the scripts" pairs the **`.int`
+  metadata reader** (procedure names, exported/imported procs, string table — see the SSL/INT
+  notes; the `.int` has no description) with the **`.msg`** file of the same basename (we already
+  have an `Msg` reader), which holds the NPC's dialogue/display lines. So `describe_script(index)`
+  → proc list + the linked `.msg` text gives an AI the conversation tree and behaviour surface
+  without running the game. Cross-reference `scripts.lst` (index→name) and the map's
+  `MapScript`/object `sid` to answer "what does the NPC on this hex say/do?".
+- **Visual analysis — Large (the only hard part).** To let the AI *see* the map (rendered
+  screenshot per elevation / region), expose an **offscreen render** through the SFML rendering
+  layer (`RenderingEngine`/`MapSpriteLoader`) producing a PNG the AI can read. Everything else is
+  structural and needs no rendering. This is the long pole; start without it.
+
+## Estimate
+
+A read-only "describe/analyze" server is a **few days**; adding write tools is **another few
+days** (~**1–2 weeks** for a solid read+write server), mostly tool-surface design + a JSON-RPC/CLI
+shim, not format work. Script/dialog understanding reuses the `Msg` reader + the proposed `.int`
+metadata reader. Visual analysis (offscreen render → PNG) is a separate **Large** add-on. Start
+with `gecko-cli` + read tools, since that's immediately useful and de-risks the rest.
