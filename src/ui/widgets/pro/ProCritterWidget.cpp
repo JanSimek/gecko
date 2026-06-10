@@ -462,7 +462,13 @@ void ProCritterWidget::updateHeadFidLabel() {
         return;
     }
 
-    const std::string frmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(_headFid));
+    std::string frmPath;
+    try {
+        frmPath = _resources.frmResolver().resolve(static_cast<unsigned int>(_headFid));
+    } catch (const std::exception&) {
+        // A malformed/unknown FID must not crash the widget; show it as invalid.
+        frmPath.clear();
+    }
     if (frmPath.empty()) {
         _headFidLabel->setText(QString("Invalid FID (%1)").arg(_headFid));
         return;
