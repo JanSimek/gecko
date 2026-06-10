@@ -73,6 +73,20 @@ set(GECK_APP_SOURCES
     ui/dialogs/MessageSelectorDialog.cpp
     ui/dialogs/ExitGridPropertiesDialog.h
     ui/dialogs/ExitGridPropertiesDialog.cpp
+    ui/dialogs/ObjectFlagsDialog.h
+    ui/dialogs/ObjectFlagsDialog.cpp
+    ui/dialogs/LightPropertiesDialog.h
+    ui/dialogs/LightPropertiesDialog.cpp
+    ui/dialogs/SceneryDestinationDialog.h
+    ui/dialogs/SceneryDestinationDialog.cpp
+    ui/dialogs/InstancePropertiesDialog.h
+    ui/dialogs/InstancePropertiesDialog.cpp
+    ui/dialogs/CritterPropertiesDialog.h
+    ui/dialogs/CritterPropertiesDialog.cpp
+    ui/dialogs/ScriptSelectorDialog.h
+    ui/dialogs/ScriptSelectorDialog.cpp
+    ui/dialogs/SpatialScriptDialog.h
+    ui/dialogs/SpatialScriptDialog.cpp
     ui/dialogs/AboutDialog.h
     ui/dialogs/AboutDialog.cpp
 

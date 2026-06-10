@@ -69,7 +69,8 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
         [this]() { Q_EMIT undoStackChanged(); },
         [this](int elevation) -> std::vector<Tile>& { return ensureElevationTiles(elevation); },
         [this]() { return _currentElevation; },
-        [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); });
+        [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); },
+        [this]() { loadTileSprites(); });
     _inputHandler = std::make_unique<InputHandler>();
     _dragDropManager = std::make_unique<DragDropManager>(
         *this,
@@ -142,6 +143,39 @@ void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObj
     const std::vector<ExitGridState>& beforeStates,
     const std::vector<ExitGridState>& afterStates) {
     _objectCommandController->registerExitGridEdit(exitGrids, beforeStates, afterStates);
+}
+
+void EditorWidget::registerInstanceEdit(const std::shared_ptr<MapObject>& mapObject,
+    const MapObjectInstanceState& before,
+    const MapObjectInstanceState& after,
+    const std::string& description) {
+    _objectCommandController->registerInstanceEdit(mapObject, before, after, description);
+}
+
+void EditorWidget::clearElevationObjects(int elevation) {
+    _objectCommandController->clearElevationObjects(elevation);
+}
+
+void EditorWidget::copyElevation(int fromElevation, int toElevation) {
+    _objectCommandController->copyElevation(fromElevation, toElevation);
+}
+
+void EditorWidget::registerInventoryEdit(const std::shared_ptr<MapObject>& container,
+    std::vector<std::shared_ptr<MapObject>> before,
+    std::vector<std::shared_ptr<MapObject>> after) {
+    _objectCommandController->registerInventoryEdit(container, std::move(before), std::move(after));
+}
+
+void EditorWidget::attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex) {
+    _objectCommandController->attachScript(object, scriptType, programIndex);
+}
+
+void EditorWidget::detachScript(const std::shared_ptr<MapObject>& object) {
+    _objectCommandController->detachScript(object);
+}
+
+void EditorWidget::addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius) {
+    _objectCommandController->addSpatialScript(programIndex, tile, elevation, radius);
 }
 
 EditorWidget::~EditorWidget() {

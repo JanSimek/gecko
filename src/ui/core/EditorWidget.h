@@ -185,6 +185,27 @@ public:
         const std::vector<ExitGridState>& beforeStates,
         const std::vector<ExitGridState>& afterStates) override;
 
+    // Per-instance property (flags / light / scenery destination / critter) undo
+    // support. The before/after snapshots come from SelectionPanel's editors.
+    void registerInstanceEdit(const std::shared_ptr<MapObject>& mapObject,
+        const MapObjectInstanceState& before,
+        const MapObjectInstanceState& after,
+        const std::string& description);
+
+    // Map-wide operations (undoable). The confirmation dialog lives in MapInfoPanel.
+    void clearElevationObjects(int elevation);
+    void copyElevation(int fromElevation, int toElevation);
+
+    // Inventory edit (undoable). Snapshots come from SelectionPanel.
+    void registerInventoryEdit(const std::shared_ptr<MapObject>& container,
+        std::vector<std::shared_ptr<MapObject>> before,
+        std::vector<std::shared_ptr<MapObject>> after);
+
+    // Script attachment / spatial scripts (undoable).
+    void attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex);
+    void detachScript(const std::shared_ptr<MapObject>& object);
+    void addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
+
 signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);

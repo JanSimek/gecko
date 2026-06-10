@@ -28,7 +28,8 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     std::function<void()> onStackChanged,
     std::function<std::vector<Tile>&(int)> ensureElevationTiles,
     std::function<int()> getCurrentElevation,
-    std::function<void(int, bool, int)> updateTileSprite)
+    std::function<void(int, bool, int)> updateTileSprite,
+    std::function<void()> reloadTiles)
     : _resources(resources)
     , _map(map)
     , _hexgrid(hexgrid)
@@ -40,7 +41,8 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     , _onStackChanged(std::move(onStackChanged))
     , _ensureElevationTiles(std::move(ensureElevationTiles))
     , _getCurrentElevation(std::move(getCurrentElevation))
-    , _updateTileSprite(std::move(updateTileSprite)) {
+    , _updateTileSprite(std::move(updateTileSprite))
+    , _reloadTiles(std::move(reloadTiles)) {
 }
 
 void ObjectCommandController::applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState) {
@@ -410,6 +412,389 @@ bool ObjectCommandController::registerExitGridEdit(const std::vector<std::shared
     };
 
     return pushCommand(std::move(cmd));
+}
+
+MapObjectInstanceState ObjectCommandController::captureInstanceState(const MapObject& o) {
+    MapObjectInstanceState s;
+    s.flags = o.flags;
+    s.dataFlags = o.unknown11;
+    s.lightRadius = o.light_radius;
+    s.lightIntensity = o.light_intensity;
+    s.walkthrough = o.walkthrough;
+    s.map = o.map;
+    s.elevhex = o.elevhex;
+    s.elevtype = o.elevtype;
+    s.elevlevel = o.elevlevel;
+    s.aiPacket = o.ai_packet;
+    s.groupId = o.group_id;
+    s.currentHp = o.current_hp;
+    s.currentRad = o.current_rad;
+    s.currentPoison = o.current_poison;
+    return s;
+}
+
+void ObjectCommandController::applyInstanceState(MapObject& o, const MapObjectInstanceState& s) {
+    o.flags = s.flags;
+    o.unknown11 = s.dataFlags;
+    o.light_radius = s.lightRadius;
+    o.light_intensity = s.lightIntensity;
+    o.walkthrough = s.walkthrough;
+    o.map = s.map;
+    o.elevhex = s.elevhex;
+    o.elevtype = s.elevtype;
+    o.elevlevel = s.elevlevel;
+    o.ai_packet = s.aiPacket;
+    o.group_id = s.groupId;
+    o.current_hp = s.currentHp;
+    o.current_rad = s.currentRad;
+    o.current_poison = s.currentPoison;
+}
+
+bool ObjectCommandController::registerInstanceEdit(const std::shared_ptr<MapObject>& mapObject,
+    const MapObjectInstanceState& before,
+    const MapObjectInstanceState& after,
+    const std::string& description) {
+    if (!mapObject) {
+        spdlog::warn("registerInstanceEdit: null mapObject");
+        return false;
+    }
+
+    UndoCommand cmd;
+    cmd.description = description;
+    cmd.undo = [this, mapObject, before]() {
+        applyInstanceState(*mapObject, before);
+        _refreshObjects();
+    };
+    cmd.redo = [this, mapObject, after]() {
+        applyInstanceState(*mapObject, after);
+        _refreshObjects();
+    };
+
+    cmd.redo();
+    return pushCommand(std::move(cmd));
+}
+
+std::vector<std::shared_ptr<MapObject>> ObjectCommandController::cloneInventory(
+    const std::vector<std::unique_ptr<MapObject>>& inventory) {
+    std::vector<std::shared_ptr<MapObject>> out;
+    out.reserve(inventory.size());
+    for (const auto& item : inventory) {
+        if (item) {
+            out.push_back(std::shared_ptr<MapObject>(item->cloneDeep()));
+        }
+    }
+    return out;
+}
+
+namespace {
+    void restoreInventory(MapObject& container, const std::vector<std::shared_ptr<MapObject>>& snapshot) {
+        container.inventory.clear();
+        container.inventory.reserve(snapshot.size());
+        for (const auto& item : snapshot) {
+            if (item) {
+                container.inventory.push_back(item->cloneDeep());
+            }
+        }
+        container.objects_in_inventory = static_cast<uint32_t>(container.inventory.size());
+    }
+} // namespace
+
+bool ObjectCommandController::registerInventoryEdit(const std::shared_ptr<MapObject>& container,
+    std::vector<std::shared_ptr<MapObject>> before,
+    std::vector<std::shared_ptr<MapObject>> after) {
+    if (!container) {
+        return false;
+    }
+
+    UndoCommand cmd;
+    cmd.description = "Edit Inventory";
+    cmd.undo = [container, before = std::move(before)]() { restoreInventory(*container, before); };
+    cmd.redo = [container, after = std::move(after)]() { restoreInventory(*container, after); };
+    // The caller already applied the edit, so do not run redo() here.
+    return pushCommand(std::move(cmd));
+}
+
+bool ObjectCommandController::clearElevationObjects(int elevation) {
+    if (!_map) {
+        return false;
+    }
+    auto& mapFile = _map->getMapFile();
+    auto it = mapFile.map_objects.find(elevation);
+    if (it == mapFile.map_objects.end() || it->second.empty()) {
+        return false;
+    }
+
+    // shared_ptr copy keeps the removed objects alive in the command for undo.
+    std::vector<std::shared_ptr<MapObject>> before = it->second;
+    std::vector<std::shared_ptr<MapObject>> after; // empty
+
+    // Removing the objects must also remove their attached scripts, otherwise the
+    // map keeps orphaned MapScript records pointing at OIDs that no longer exist.
+    // Prune by SID so the objects' own map_scripts_pid stays intact for undo.
+    ScriptSections beforeScripts = snapshotScripts();
+    it->second.clear();
+    for (const auto& obj : before) {
+        if (obj && obj->map_scripts_pid != -1) {
+            eraseScript(static_cast<uint32_t>(obj->map_scripts_pid));
+        }
+    }
+    ScriptSections afterScripts = snapshotScripts();
+
+    UndoCommand cmd;
+    cmd.description = "Clear Elevation Objects";
+    cmd.undo = [this, elevation, before, beforeScripts]() {
+        _map->getMapFile().map_objects[elevation] = before;
+        restoreScripts(beforeScripts);
+        _refreshObjects();
+    };
+    cmd.redo = [this, elevation, after, afterScripts]() {
+        _map->getMapFile().map_objects[elevation] = after;
+        restoreScripts(afterScripts);
+        _refreshObjects();
+    };
+    // The edit was already applied above; only register the undo/redo handlers.
+    return pushCommand(std::move(cmd));
+}
+
+bool ObjectCommandController::copyElevation(int fromElevation, int toElevation) {
+    if (!_map || fromElevation == toElevation) {
+        return false;
+    }
+    auto& mapFile = _map->getMapFile();
+
+    // Destination "before": share ownership of existing objects + copy its tiles.
+    std::vector<std::shared_ptr<MapObject>> beforeObjects;
+    if (auto it = mapFile.map_objects.find(toElevation); it != mapFile.map_objects.end()) {
+        beforeObjects = it->second;
+    }
+    std::vector<Tile> beforeTiles;
+    bool haveBeforeTiles = false;
+    if (auto it = mapFile.tiles.find(toElevation); it != mapFile.tiles.end()) {
+        beforeTiles = it->second;
+        haveBeforeTiles = true;
+    }
+
+    // Destination "after": deep-cloned source objects (retargeted) + source tiles.
+    std::vector<std::shared_ptr<MapObject>> afterObjects;
+    if (auto it = mapFile.map_objects.find(fromElevation); it != mapFile.map_objects.end()) {
+        afterObjects.reserve(it->second.size());
+        for (const auto& o : it->second) {
+            if (!o) {
+                continue;
+            }
+            auto clone = std::shared_ptr<MapObject>(o->cloneDeep());
+            clone->elevation = static_cast<uint32_t>(toElevation);
+            // Scripts are not copied, so detach the clone's linkage; otherwise it
+            // would duplicate the source object's OID and share its SID/script.
+            clone->map_scripts_pid = -1;
+            clone->script_id = -1;
+            clone->unknown0 = 0;
+            afterObjects.push_back(std::move(clone));
+        }
+    }
+    std::vector<Tile> afterTiles;
+    bool haveAfterTiles = false;
+    if (auto it = mapFile.tiles.find(fromElevation); it != mapFile.tiles.end()) {
+        afterTiles = it->second;
+        haveAfterTiles = true;
+    }
+
+    UndoCommand cmd;
+    cmd.description = "Copy Elevation";
+    cmd.undo = [this, toElevation, beforeObjects, beforeTiles, haveBeforeTiles]() {
+        auto& mf = _map->getMapFile();
+        mf.map_objects[toElevation] = beforeObjects;
+        if (haveBeforeTiles) {
+            mf.tiles[toElevation] = beforeTiles;
+        }
+        _refreshObjects();
+        if (_reloadTiles) {
+            _reloadTiles();
+        }
+    };
+    cmd.redo = [this, toElevation, afterObjects, afterTiles, haveAfterTiles]() {
+        auto& mf = _map->getMapFile();
+        mf.map_objects[toElevation] = afterObjects;
+        if (haveAfterTiles) {
+            mf.tiles[toElevation] = afterTiles;
+        }
+        _refreshObjects();
+        if (_reloadTiles) {
+            _reloadTiles();
+        }
+    };
+    cmd.redo();
+    return pushCommand(std::move(cmd));
+}
+
+uint32_t ObjectCommandController::allocateScriptId(int section) const {
+    if (!_map || section < 0 || section >= Map::SCRIPT_SECTIONS) {
+        return 0;
+    }
+    uint32_t nextId = 0;
+    for (const auto& s : _map->getMapFile().map_scripts[section]) {
+        nextId = std::max(nextId, MapScript::sidIndex(s.pid) + 1);
+    }
+    return nextId;
+}
+
+uint32_t ObjectCommandController::allocateObjectId() const {
+    if (!_map) {
+        return 1;
+    }
+    uint32_t maxId = 0;
+    const auto& mapFile = _map->getMapFile();
+    for (const auto& [elevation, objects] : mapFile.map_objects) {
+        for (const auto& obj : objects) {
+            if (obj) {
+                maxId = std::max(maxId, obj->unknown0);
+            }
+        }
+    }
+    for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
+        for (const auto& s : mapFile.map_scripts[section]) {
+            maxId = std::max(maxId, s.script_oid);
+        }
+    }
+    return maxId + 1;
+}
+
+ObjectCommandController::ScriptSections ObjectCommandController::snapshotScripts() const {
+    static_assert(SCRIPT_SECTIONS == Map::SCRIPT_SECTIONS,
+        "ScriptSections snapshot size must match Map::SCRIPT_SECTIONS");
+    ScriptSections snapshot;
+    const auto& mapFile = _map->getMapFile();
+    for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
+        snapshot.sections[section] = mapFile.map_scripts[section];
+        snapshot.counts[section] = mapFile.scripts_in_section[section];
+    }
+    return snapshot;
+}
+
+void ObjectCommandController::restoreScripts(const ScriptSections& snapshot) {
+    auto& mapFile = _map->getMapFile();
+    for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
+        mapFile.map_scripts[section] = snapshot.sections[section];
+        mapFile.scripts_in_section[section] = snapshot.counts[section];
+    }
+}
+
+void ObjectCommandController::eraseScript(uint32_t sid) {
+    const int section = MapScript::sidSection(sid);
+    if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
+        return;
+    }
+    auto& vec = _map->getMapFile().map_scripts[section];
+    std::erase_if(vec, [sid](const MapScript& s) { return s.pid == sid; });
+    _map->getMapFile().scripts_in_section[section] = static_cast<int>(vec.size());
+}
+
+void ObjectCommandController::removeObjectScript(MapObject& object) {
+    if (!_map || object.map_scripts_pid == -1) {
+        return;
+    }
+    eraseScript(static_cast<uint32_t>(object.map_scripts_pid));
+    object.map_scripts_pid = -1;
+}
+
+void ObjectCommandController::applyScriptSnapshot(int section, const std::shared_ptr<MapObject>& object,
+    const std::vector<MapScript>& sectionScripts, uint32_t oid, int32_t sid) {
+    if (!_map || section < 0 || section >= Map::SCRIPT_SECTIONS) {
+        return;
+    }
+    auto& mapFile = _map->getMapFile();
+    mapFile.map_scripts[section] = sectionScripts;
+    mapFile.scripts_in_section[section] = static_cast<int>(sectionScripts.size());
+    if (object) {
+        object->unknown0 = oid;
+        object->map_scripts_pid = sid;
+    }
+}
+
+bool ObjectCommandController::recordScriptEdit(const std::string& description, int section,
+    const std::shared_ptr<MapObject>& object,
+    std::vector<MapScript> beforeSection, uint32_t beforeOid, int32_t beforeSid) {
+    if (!_map) {
+        return false;
+    }
+    // The caller already applied the edit; capture the resulting "after" state.
+    std::vector<MapScript> afterSection = _map->getMapFile().map_scripts[section];
+    uint32_t afterOid = object ? object->unknown0 : 0;
+    int32_t afterSid = object ? object->map_scripts_pid : -1;
+
+    UndoCommand cmd;
+    cmd.description = description;
+    cmd.undo = [this, section, object, beforeSection = std::move(beforeSection), beforeOid, beforeSid]() {
+        applyScriptSnapshot(section, object, beforeSection, beforeOid, beforeSid);
+    };
+    cmd.redo = [this, section, object, afterSection = std::move(afterSection), afterOid, afterSid]() {
+        applyScriptSnapshot(section, object, afterSection, afterOid, afterSid);
+    };
+    return pushCommand(std::move(cmd));
+}
+
+bool ObjectCommandController::attachScript(const std::shared_ptr<MapObject>& object,
+    int scriptType, uint32_t programIndex) {
+    if (!_map || !object || scriptType < 0 || scriptType >= Map::SCRIPT_SECTIONS) {
+        return false;
+    }
+    const int section = scriptType;
+    auto& mapFile = _map->getMapFile();
+
+    std::vector<MapScript> beforeSection = mapFile.map_scripts[section];
+    const uint32_t beforeOid = object->unknown0;
+    const int32_t beforeSid = object->map_scripts_pid;
+
+    // Replace any existing script (same object type -> same section).
+    removeObjectScript(*object);
+
+    const uint32_t scriptId = allocateScriptId(section);
+    const uint32_t oid = allocateObjectId();
+    MapScript script = MapScript::makeObjectScript(static_cast<MapScript::ScriptType>(scriptType),
+        scriptId, programIndex, oid);
+    mapFile.map_scripts[section].push_back(script);
+    mapFile.scripts_in_section[section] = static_cast<int>(mapFile.map_scripts[section].size());
+    object->unknown0 = oid;
+    object->map_scripts_pid = static_cast<int32_t>(script.pid);
+
+    return recordScriptEdit("Attach Script", section, object, std::move(beforeSection), beforeOid, beforeSid);
+}
+
+bool ObjectCommandController::detachScript(const std::shared_ptr<MapObject>& object) {
+    if (!_map || !object || object->map_scripts_pid == -1) {
+        return false;
+    }
+    const int section = MapScript::sidSection(static_cast<uint32_t>(object->map_scripts_pid));
+    if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
+        return false;
+    }
+
+    std::vector<MapScript> beforeSection = _map->getMapFile().map_scripts[section];
+    const uint32_t beforeOid = object->unknown0;
+    const int32_t beforeSid = object->map_scripts_pid;
+
+    removeObjectScript(*object);
+
+    return recordScriptEdit("Detach Script", section, object, std::move(beforeSection), beforeOid, beforeSid);
+}
+
+bool ObjectCommandController::addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius) {
+    if (!_map) {
+        return false;
+    }
+    const int section = static_cast<int>(MapScript::ScriptType::SPATIAL);
+    auto& mapFile = _map->getMapFile();
+
+    std::vector<MapScript> beforeSection = mapFile.map_scripts[section];
+
+    const uint32_t scriptId = allocateScriptId(section);
+    const uint32_t oid = allocateObjectId();
+    MapScript script = MapScript::makeSpatialScript(scriptId, programIndex,
+        static_cast<uint32_t>(tile), static_cast<uint32_t>(elevation), static_cast<uint32_t>(radius), oid);
+    mapFile.map_scripts[section].push_back(script);
+    mapFile.scripts_in_section[section] = static_cast<int>(mapFile.map_scripts[section].size());
+
+    return recordScriptEdit("Add Spatial Script", section, nullptr, std::move(beforeSection), 0, -1);
 }
 
 bool ObjectCommandController::pushCommand(UndoCommand cmd) {

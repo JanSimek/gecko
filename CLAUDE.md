@@ -229,6 +229,20 @@ if (mimeData->hasFormat(ui::mime::GECK_OBJECT)) { ... }
 2. Use modern `connect()` syntax with lambdas or method pointers
 3. Emit signals with `Q_EMIT` for clarity
 
+## Git & PR Workflow
+
+On feature branches, follow this workflow:
+
+1. **Clean commit messages.** Describe the change in plain language. Do not include internal
+   identifiers such as `WP-9`, `F11`, or other plan/task codes in commit messages or PR titles.
+2. **Open a PR** for the branch once the work is ready for review.
+3. **Wait for CI to finish.** Use `gh pr checks <num> --watch` (or poll `gh run list`) until all
+   workflow runs complete.
+4. **Read and address review feedback.** After the build finishes, read any code-review comments
+   (Copilot, human reviewers) and SonarCloud/SonarQube warnings on the PR, then fix the valid ones
+   and push the updates. Keep any explanatory comments you add relevant and brief — do not
+   overcomment.
+
 ## Development Setup
 
 ### Essential Setup
@@ -243,5 +257,5 @@ if (mimeData->hasFormat(ui::mime::GECK_OBJECT)) { ... }
 
 ---
 
-*Last updated: 2026-03-10*
+*Last updated: 2026-06-10*
 *This file should be updated whenever significant architectural decisions or fixes are made.*

@@ -46,6 +46,11 @@ signals:
     void timestampChanged(int timestamp);
     void elevationAdded(int elevation);
     void elevationRemoved(int elevation);
+    /// Bulk map operations, routed to the editor's ObjectCommandController so they
+    /// are undoable. The confirmation dialog lives here in the panel.
+    void clearElevationRequested(int elevation);
+    void copyElevationRequested(int fromElevation, int toElevation);
+    void addSpatialScriptRequested(int programIndex, int tile, int elevation, int radius);
 
 private slots:
     void onFieldChanged();
@@ -53,6 +58,9 @@ private slots:
     void onSelectPositionClicked();
     void onCenterViewClicked();
     void onElevationCheckboxChanged();
+    void onClearElevationClicked();
+    void onCopyElevationClicked();
+    void onAddSpatialScriptClicked();
 
 private:
     void setupUI();
@@ -95,6 +103,12 @@ private:
     // Map scripts group (placeholder)
     QGroupBox* _mapScriptsGroup;
     QLabel* _mapScriptsLabel;
+
+    // Map operations group (clear / copy elevation)
+    QGroupBox* _mapOperationsGroup;
+    QComboBox* _clearElevationCombo;
+    QComboBox* _copyFromCombo;
+    QComboBox* _copyToCombo;
 
     resource::GameResources& _resources;
     Map* _map;

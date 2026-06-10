@@ -2,6 +2,7 @@
 
 #include <SFML/Graphics.hpp>
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include "util/UndoStack.h"
+#include "format/map/MapScript.h"
 
 namespace geck {
 
@@ -34,6 +36,25 @@ struct ExitGridCommandState {
     uint32_t proPid;
 };
 
+/// Snapshot of a MapObject's UI-editable per-instance fields, shared by the
+/// flag/light/destination/interaction/critter editors via registerInstanceEdit.
+struct MapObjectInstanceState {
+    uint32_t flags = 0;
+    uint32_t dataFlags = 0; // MapObject.unknown11 == engine obj->data.flags (container lock/jam)
+    uint32_t lightRadius = 0;
+    uint32_t lightIntensity = 0;
+    uint32_t walkthrough = 0; // doors: engine obj->data.scenery.door.openFlags (lock/jam)
+    uint32_t map = 0;
+    uint32_t elevhex = 0;
+    uint32_t elevtype = 0;
+    uint32_t elevlevel = 0;
+    uint32_t aiPacket = 0;
+    uint32_t groupId = 0;
+    uint32_t currentHp = 0;
+    uint32_t currentRad = 0;
+    uint32_t currentPoison = 0;
+};
+
 class ObjectCommandController {
 public:
     ObjectCommandController(resource::GameResources& resources,
@@ -47,7 +68,8 @@ public:
         std::function<void()> onStackChanged,
         std::function<std::vector<Tile>&(int)> ensureElevationTiles,
         std::function<int()> getCurrentElevation,
-        std::function<void(int, bool, int)> updateTileSprite);
+        std::function<void(int, bool, int)> updateTileSprite,
+        std::function<void()> reloadTiles);
 
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
@@ -67,12 +89,74 @@ public:
         const std::vector<ExitGridCommandState>& beforeStates,
         const std::vector<ExitGridCommandState>& afterStates);
 
+    /// Captures the editable per-instance fields of a MapObject.
+    static MapObjectInstanceState captureInstanceState(const MapObject& object);
+
+    /// Records an undoable change to a single object's per-instance fields. The
+    /// after-state is applied immediately (redo); objects are refreshed so light
+    /// overlays and flag-derived visuals update.
+    bool registerInstanceEdit(const std::shared_ptr<MapObject>& mapObject,
+        const MapObjectInstanceState& before,
+        const MapObjectInstanceState& after,
+        const std::string& description);
+
     /// Applies the before/after state of tile edits and refreshes affected sprites.
     void applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState);
     /// Records an undoable tile edit (the change was already applied by the caller).
     void registerTileEdit(const std::string& description, const std::vector<TileChange>& changes);
 
+    /// Deep-clones a container/critter inventory into a detached snapshot (the
+    /// inventory holds unique_ptrs, so a snapshot must clone).
+    static std::vector<std::shared_ptr<MapObject>> cloneInventory(
+        const std::vector<std::unique_ptr<MapObject>>& inventory);
+
+    /// Records an undoable inventory change. The caller has already applied the
+    /// edit; `before`/`after` are cloneInventory() snapshots taken around it.
+    bool registerInventoryEdit(const std::shared_ptr<MapObject>& container,
+        std::vector<std::shared_ptr<MapObject>> before,
+        std::vector<std::shared_ptr<MapObject>> after);
+
+    /// Deletes every object on an elevation as one undoable command. Returns false
+    /// if the elevation has no objects.
+    bool clearElevationObjects(int elevation);
+    /// Copies tiles + objects (deep-cloned) from one elevation to another as one
+    /// undoable command, overwriting the destination. Scripts are not copied; the
+    /// cloned objects are detached from any source scripts.
+    bool copyElevation(int fromElevation, int toElevation);
+
+    // Script attachment (undoable). `scriptType` is the MapScript section/type
+    // (ITEM for items/scenery/walls, CRITTER for critters); `programIndex` is the
+    // scripts.lst line. attachScript replaces any existing script on the object.
+    bool attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex);
+    bool detachScript(const std::shared_ptr<MapObject>& object);
+    bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
+
 private:
+    // Number of map_scripts sections; mirrors Map::SCRIPT_SECTIONS (asserted in .cpp).
+    static constexpr int SCRIPT_SECTIONS = 5;
+
+    /// Snapshot of all map_scripts sections and their counts, for undoing bulk
+    /// edits that touch scripts across sections (e.g. clearing an elevation).
+    struct ScriptSections {
+        std::array<std::vector<MapScript>, SCRIPT_SECTIONS> sections;
+        std::array<int, SCRIPT_SECTIONS> counts{};
+    };
+
+    ScriptSections snapshotScripts() const;
+    void restoreScripts(const ScriptSections& snapshot);
+    /// Removes the script whose pid == sid from its section, updating the count.
+    void eraseScript(uint32_t sid);
+    uint32_t allocateScriptId(int section) const;
+    uint32_t allocateObjectId() const;
+    void removeObjectScript(MapObject& object);
+    void applyScriptSnapshot(int section, const std::shared_ptr<MapObject>& object,
+        const std::vector<MapScript>& sectionScripts, uint32_t oid, int32_t sid);
+    bool recordScriptEdit(const std::string& description, int section,
+        const std::shared_ptr<MapObject>& object,
+        std::vector<MapScript> beforeSection, uint32_t beforeOid, int32_t beforeSid);
+
+    static void applyInstanceState(MapObject& object, const MapObjectInstanceState& state);
+
     resource::GameResources& _resources;
     std::unique_ptr<Map>& _map;
     const HexagonGrid& _hexgrid;
@@ -85,6 +169,7 @@ private:
     std::function<std::vector<Tile>&(int)> _ensureElevationTiles;
     std::function<int()> _getCurrentElevation;
     std::function<void(int, bool, int)> _updateTileSprite;
+    std::function<void()> _reloadTiles;
 };
 
 } // namespace geck
