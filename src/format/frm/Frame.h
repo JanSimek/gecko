@@ -14,7 +14,7 @@ private:
     int16_t _offsetX = 0;
     int16_t _offsetY = 0;
     std::vector<uint8_t> _indexes;
-    std::vector<uint8_t> _rgba;
+    mutable std::vector<uint8_t> _rgba; // lazily built RGBA cache (see rgba())
 
 public:
     static constexpr int RGBA = 4; // RGBA of SFML texture
@@ -37,7 +37,7 @@ public:
 
     uint8_t* data();
 
-    uint8_t* rgba(Pal* pal);
+    uint8_t* rgba(const Pal* pal) const;
 };
 
 } // namespace geck

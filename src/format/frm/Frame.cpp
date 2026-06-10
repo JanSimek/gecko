@@ -51,11 +51,12 @@ uint8_t* Frame::data() {
     return _indexes.data();
 }
 
-uint8_t* Frame::rgba(Pal* pal) {
+uint8_t* Frame::rgba(const Pal* pal) const {
     const auto pixelCount = width() * height() * RGBA;
     const auto& colors = pal->palette();
     const auto& colorIndexes = _indexes.data();
 
+    _rgba.clear(); // rebuild the cache; otherwise repeated calls keep appending
     _rgba.reserve(pixelCount);
 
     for (int i = 0; i < pixelCount; i += RGBA) {
