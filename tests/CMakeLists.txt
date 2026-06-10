@@ -40,6 +40,10 @@ add_executable(qt_tests
 add_library(test_support INTERFACE)
 target_include_directories(test_support INTERFACE ${CMAKE_SOURCE_DIR}/tests)
 target_link_libraries(test_support INTERFACE Catch2::Catch2)
+target_compile_definitions(test_support INTERFACE
+    GECK_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
+    GECK_TEST_TMP_DIR="${CMAKE_BINARY_DIR}/test-tmp"
+)
 
 target_link_libraries(general_tests PRIVATE
     Catch2::Catch2WithMain
@@ -54,10 +58,6 @@ target_include_directories(general_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
-target_compile_definitions(general_tests PRIVATE
-    GECK_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
-)
-
 target_link_libraries(performance_tests PRIVATE
     Catch2::Catch2WithMain
     test_support
@@ -66,19 +66,11 @@ target_link_libraries(performance_tests PRIVATE
     SFML::System SFML::Graphics
 )
 
-target_compile_definitions(performance_tests PRIVATE
-    GECK_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
-)
-
 target_link_libraries(qt_tests PRIVATE
     Catch2::Catch2
     test_support
     Qt6::Test
     gecko::app
-)
-
-target_compile_definitions(qt_tests PRIVATE
-    GECK_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
 )
 
 target_include_directories(qt_tests PRIVATE
