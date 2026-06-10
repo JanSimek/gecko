@@ -375,6 +375,8 @@ void MainWindow::setupMenuBar() {
         if (_currentEditorWidget) {
             _currentEditorWidget->undoLastEdit();
             updateUndoRedoActions();
+            if (_selectionPanel)
+                _selectionPanel->refresh();
         }
     });
 
@@ -385,6 +387,8 @@ void MainWindow::setupMenuBar() {
         if (_currentEditorWidget) {
             _currentEditorWidget->redoLastEdit();
             updateUndoRedoActions();
+            if (_selectionPanel)
+                _selectionPanel->refresh();
         }
     });
 
@@ -1004,6 +1008,13 @@ void MainWindow::connectPanelSignals() {
                 _currentEditorWidget->registerInstanceEdit(object->getMapObjectPtr(),
                     before, after, description.toStdString());
             });
+        connect(_selectionPanel, &SelectionPanel::requestInventoryEdit,
+            this, [this](std::shared_ptr<MapObject> container,
+                       std::vector<std::shared_ptr<MapObject>> before,
+                       std::vector<std::shared_ptr<MapObject>> after) {
+                if (_currentEditorWidget && container)
+                    _currentEditorWidget->registerInventoryEdit(container, std::move(before), std::move(after));
+            });
         connect(_selectionPanel, &SelectionPanel::requestObjectHighlight,
             this, [this](std::shared_ptr<Object> object) {
                 if (!_currentEditorWidget || !object)
@@ -1096,14 +1107,15 @@ void MainWindow::connectPanelSignals() {
                     spdlog::info("MainWindow: Switched away from removed elevation {}", elevation);
                 }
             });
-        connect(_mapInfoPanel, &MapInfoPanel::mapContentChanged,
+        connect(_mapInfoPanel, &MapInfoPanel::clearElevationRequested,
             this, [this](int elevation) {
-                if (!_currentEditorWidget)
-                    return;
-                if (_currentEditorWidget->getCurrentElevation() == elevation) {
-                    _currentEditorWidget->loadTileSprites();
-                    _currentEditorWidget->refreshObjects();
-                }
+                if (_currentEditorWidget)
+                    _currentEditorWidget->clearElevationObjects(elevation);
+            });
+        connect(_mapInfoPanel, &MapInfoPanel::copyElevationRequested,
+            this, [this](int from, int to) {
+                if (_currentEditorWidget)
+                    _currentEditorWidget->copyElevation(from, to);
             });
     }
 }

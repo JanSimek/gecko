@@ -253,6 +253,38 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
     std::filesystem::remove(path, ec);
 }
 
+// MapObject::cloneDeep underpins the inventory and copy-elevation undo commands,
+// so its deep-copy semantics (including nested inventory) must hold: the clone
+// matches field-for-field, and mutating the clone never touches the original.
+TEST_CASE("MapObject::cloneDeep deep-copies fields and inventory", "[map][clone]") {
+    MapObject original;
+    fillBase(original, 7);
+    original.pro_pid = pidOf(Pro::OBJECT_TYPE::ITEM, 200);
+    original.elevation = 2;
+    original.objects_in_inventory = 1;
+
+    auto child = std::make_unique<MapObject>();
+    fillBase(*child, 8);
+    child->pro_pid = pidOf(Pro::OBJECT_TYPE::ITEM, 201);
+    child->elevation = 2;
+    child->amount = 9;
+    original.inventory.push_back(std::move(child));
+
+    auto clone = original.cloneDeep();
+    REQUIRE(clone != nullptr);
+    checkBase(*clone, original);
+    REQUIRE(clone->inventory.size() == 1);
+    checkBase(*clone->inventory[0], *original.inventory[0]);
+    CHECK(clone->inventory[0]->amount == 9);
+
+    // The clone is independent: editing it must not affect the original.
+    CHECK(clone->inventory[0].get() != original.inventory[0].get());
+    clone->inventory[0]->amount = 999;
+    clone->elevation = 0;
+    CHECK(original.inventory[0]->amount == 9);
+    CHECK(original.elevation == 2);
+}
+
 // A map with only elevation 0 enabled (flags disable elevations 1 and 2) must
 // still round-trip. The engine frames the object section as exactly three
 // per-elevation count blocks regardless of which elevations are enabled

@@ -806,7 +806,7 @@ void MapInfoPanel::onClearElevationClicked() {
     }
 
     const auto reply = QMessageBox::question(this, "Clear Elevation",
-        QString("Delete all %1 object(s) on Elevation %2?\n\nThis cannot be undone.")
+        QString("Delete all %1 object(s) on Elevation %2?")
             .arg(count)
             .arg(elevation + 1),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
@@ -814,9 +814,7 @@ void MapInfoPanel::onClearElevationClicked() {
         return;
     }
 
-    it->second.clear();
-    spdlog::info("MapInfoPanel: Cleared {} object(s) on elevation {}", count, elevation);
-    Q_EMIT mapContentChanged(elevation);
+    Q_EMIT clearElevationRequested(elevation);
 }
 
 void MapInfoPanel::onCopyElevationClicked() {
@@ -849,7 +847,7 @@ void MapInfoPanel::onCopyElevationClicked() {
     const size_t dstObjs = mapFile.map_objects.count(to) ? mapFile.map_objects.at(to).size() : 0;
     const auto reply = QMessageBox::question(this, "Copy Elevation",
         QString("Copy tiles and objects from Elevation %1 to Elevation %2?\n\n"
-                "This overwrites Elevation %2 (%3 existing object(s)) and cannot be undone.")
+                "This overwrites Elevation %2 (%3 existing object(s)).")
             .arg(from + 1)
             .arg(to + 1)
             .arg(dstObjs),
@@ -858,30 +856,7 @@ void MapInfoPanel::onCopyElevationClicked() {
         return;
     }
 
-    // Tiles (Tile is copyable).
-    auto tileIt = mapFile.tiles.find(from);
-    if (tileIt != mapFile.tiles.end()) {
-        mapFile.tiles[to] = tileIt->second;
-    }
-
-    // Objects: deep-clone each and retarget the clone's elevation.
-    auto& dst = mapFile.map_objects[to];
-    dst.clear();
-    auto srcIt = mapFile.map_objects.find(from);
-    if (srcIt != mapFile.map_objects.end()) {
-        dst.reserve(srcIt->second.size());
-        for (const auto& obj : srcIt->second) {
-            if (!obj) {
-                continue;
-            }
-            auto clone = obj->cloneDeep();
-            clone->elevation = static_cast<uint32_t>(to);
-            dst.push_back(std::shared_ptr<MapObject>(std::move(clone)));
-        }
-    }
-
-    spdlog::info("MapInfoPanel: Copied elevation {} to {} ({} object(s))", from, to, dst.size());
-    Q_EMIT mapContentChanged(to);
+    Q_EMIT copyElevationRequested(from, to);
 }
 
 void MapInfoPanel::onAddSpatialScriptClicked() {

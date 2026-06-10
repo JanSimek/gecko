@@ -192,6 +192,15 @@ public:
         const MapObjectInstanceState& after,
         const std::string& description);
 
+    // Map-wide operations (undoable). The confirmation dialog lives in MapInfoPanel.
+    void clearElevationObjects(int elevation);
+    void copyElevation(int fromElevation, int toElevation);
+
+    // Inventory edit (undoable). Snapshots come from SelectionPanel.
+    void registerInventoryEdit(const std::shared_ptr<MapObject>& container,
+        std::vector<std::shared_ptr<MapObject>> before,
+        std::vector<std::shared_ptr<MapObject>> after);
+
 signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);

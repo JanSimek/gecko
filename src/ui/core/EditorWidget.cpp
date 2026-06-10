@@ -69,7 +69,8 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
         [this]() { Q_EMIT undoStackChanged(); },
         [this](int elevation) -> std::vector<Tile>& { return ensureElevationTiles(elevation); },
         [this]() { return _currentElevation; },
-        [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); });
+        [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); },
+        [this]() { loadTileSprites(); });
     _inputHandler = std::make_unique<InputHandler>();
     _dragDropManager = std::make_unique<DragDropManager>(
         *this,
@@ -149,6 +150,20 @@ void EditorWidget::registerInstanceEdit(const std::shared_ptr<MapObject>& mapObj
     const MapObjectInstanceState& after,
     const std::string& description) {
     _objectCommandController->registerInstanceEdit(mapObject, before, after, description);
+}
+
+void EditorWidget::clearElevationObjects(int elevation) {
+    _objectCommandController->clearElevationObjects(elevation);
+}
+
+void EditorWidget::copyElevation(int fromElevation, int toElevation) {
+    _objectCommandController->copyElevation(fromElevation, toElevation);
+}
+
+void EditorWidget::registerInventoryEdit(const std::shared_ptr<MapObject>& container,
+    std::vector<std::shared_ptr<MapObject>> before,
+    std::vector<std::shared_ptr<MapObject>> after) {
+    _objectCommandController->registerInventoryEdit(container, std::move(before), std::move(after));
 }
 
 EditorWidget::~EditorWidget() {

@@ -46,9 +46,10 @@ signals:
     void timestampChanged(int timestamp);
     void elevationAdded(int elevation);
     void elevationRemoved(int elevation);
-    /// Emitted after a bulk map operation (clear/copy elevation) mutates the
-    /// model, so the editor can reload sprites for the affected elevation.
-    void mapContentChanged(int elevation);
+    /// Bulk map operations, routed to the editor's ObjectCommandController so they
+    /// are undoable. The confirmation dialog lives here in the panel.
+    void clearElevationRequested(int elevation);
+    void copyElevationRequested(int fromElevation, int toElevation);
 
 private slots:
     void onFieldChanged();

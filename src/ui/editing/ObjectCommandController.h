@@ -66,7 +66,8 @@ public:
         std::function<void()> onStackChanged,
         std::function<std::vector<Tile>&(int)> ensureElevationTiles,
         std::function<int()> getCurrentElevation,
-        std::function<void(int, bool, int)> updateTileSprite);
+        std::function<void(int, bool, int)> updateTileSprite,
+        std::function<void()> reloadTiles);
 
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
@@ -102,6 +103,24 @@ public:
     /// Records an undoable tile edit (the change was already applied by the caller).
     void registerTileEdit(const std::string& description, const std::vector<TileChange>& changes);
 
+    /// Deep-clones a container/critter inventory into a detached snapshot (the
+    /// inventory holds unique_ptrs, so a snapshot must clone).
+    static std::vector<std::shared_ptr<MapObject>> cloneInventory(
+        const std::vector<std::unique_ptr<MapObject>>& inventory);
+
+    /// Records an undoable inventory change. The caller has already applied the
+    /// edit; `before`/`after` are cloneInventory() snapshots taken around it.
+    bool registerInventoryEdit(const std::shared_ptr<MapObject>& container,
+        std::vector<std::shared_ptr<MapObject>> before,
+        std::vector<std::shared_ptr<MapObject>> after);
+
+    /// Deletes every object on an elevation as one undoable command. Returns false
+    /// if the elevation has no objects.
+    bool clearElevationObjects(int elevation);
+    /// Copies tiles + objects (deep-cloned) from one elevation to another as one
+    /// undoable command, overwriting the destination.
+    bool copyElevation(int fromElevation, int toElevation);
+
 private:
     static void applyInstanceState(MapObject& object, const MapObjectInstanceState& state);
 
@@ -117,6 +136,7 @@ private:
     std::function<std::vector<Tile>&(int)> _ensureElevationTiles;
     std::function<int()> _getCurrentElevation;
     std::function<void(int, bool, int)> _updateTileSprite;
+    std::function<void()> _reloadTiles;
 };
 
 } // namespace geck

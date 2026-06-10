@@ -28,7 +28,8 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     std::function<void()> onStackChanged,
     std::function<std::vector<Tile>&(int)> ensureElevationTiles,
     std::function<int()> getCurrentElevation,
-    std::function<void(int, bool, int)> updateTileSprite)
+    std::function<void(int, bool, int)> updateTileSprite,
+    std::function<void()> reloadTiles)
     : _resources(resources)
     , _map(map)
     , _hexgrid(hexgrid)
@@ -40,7 +41,8 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     , _onStackChanged(std::move(onStackChanged))
     , _ensureElevationTiles(std::move(ensureElevationTiles))
     , _getCurrentElevation(std::move(getCurrentElevation))
-    , _updateTileSprite(std::move(updateTileSprite)) {
+    , _updateTileSprite(std::move(updateTileSprite))
+    , _reloadTiles(std::move(reloadTiles)) {
 }
 
 void ObjectCommandController::applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState) {
@@ -468,6 +470,140 @@ bool ObjectCommandController::registerInstanceEdit(const std::shared_ptr<MapObje
         _refreshObjects();
     };
 
+    cmd.redo();
+    return pushCommand(std::move(cmd));
+}
+
+std::vector<std::shared_ptr<MapObject>> ObjectCommandController::cloneInventory(
+    const std::vector<std::unique_ptr<MapObject>>& inventory) {
+    std::vector<std::shared_ptr<MapObject>> out;
+    out.reserve(inventory.size());
+    for (const auto& item : inventory) {
+        if (item) {
+            out.push_back(std::shared_ptr<MapObject>(item->cloneDeep()));
+        }
+    }
+    return out;
+}
+
+namespace {
+    void restoreInventory(MapObject& container, const std::vector<std::shared_ptr<MapObject>>& snapshot) {
+        container.inventory.clear();
+        container.inventory.reserve(snapshot.size());
+        for (const auto& item : snapshot) {
+            if (item) {
+                container.inventory.push_back(item->cloneDeep());
+            }
+        }
+        container.objects_in_inventory = static_cast<uint32_t>(container.inventory.size());
+    }
+} // namespace
+
+bool ObjectCommandController::registerInventoryEdit(const std::shared_ptr<MapObject>& container,
+    std::vector<std::shared_ptr<MapObject>> before,
+    std::vector<std::shared_ptr<MapObject>> after) {
+    if (!container) {
+        return false;
+    }
+
+    UndoCommand cmd;
+    cmd.description = "Edit Inventory";
+    cmd.undo = [container, before]() { restoreInventory(*container, before); };
+    cmd.redo = [container, after]() { restoreInventory(*container, after); };
+    // The caller already applied the edit, so do not run redo() here.
+    return pushCommand(std::move(cmd));
+}
+
+bool ObjectCommandController::clearElevationObjects(int elevation) {
+    if (!_map) {
+        return false;
+    }
+    auto& mapFile = _map->getMapFile();
+    auto it = mapFile.map_objects.find(elevation);
+    if (it == mapFile.map_objects.end() || it->second.empty()) {
+        return false;
+    }
+
+    // shared_ptr copy keeps the removed objects alive in the command for undo.
+    std::vector<std::shared_ptr<MapObject>> before = it->second;
+    std::vector<std::shared_ptr<MapObject>> after; // empty
+
+    UndoCommand cmd;
+    cmd.description = "Clear Elevation Objects";
+    cmd.undo = [this, elevation, before]() {
+        _map->getMapFile().map_objects[elevation] = before;
+        _refreshObjects();
+    };
+    cmd.redo = [this, elevation, after]() {
+        _map->getMapFile().map_objects[elevation] = after;
+        _refreshObjects();
+    };
+    cmd.redo();
+    return pushCommand(std::move(cmd));
+}
+
+bool ObjectCommandController::copyElevation(int fromElevation, int toElevation) {
+    if (!_map || fromElevation == toElevation) {
+        return false;
+    }
+    auto& mapFile = _map->getMapFile();
+
+    // Destination "before": share ownership of existing objects + copy its tiles.
+    std::vector<std::shared_ptr<MapObject>> beforeObjects;
+    if (auto it = mapFile.map_objects.find(toElevation); it != mapFile.map_objects.end()) {
+        beforeObjects = it->second;
+    }
+    std::vector<Tile> beforeTiles;
+    bool haveBeforeTiles = false;
+    if (auto it = mapFile.tiles.find(toElevation); it != mapFile.tiles.end()) {
+        beforeTiles = it->second;
+        haveBeforeTiles = true;
+    }
+
+    // Destination "after": deep-cloned source objects (retargeted) + source tiles.
+    std::vector<std::shared_ptr<MapObject>> afterObjects;
+    if (auto it = mapFile.map_objects.find(fromElevation); it != mapFile.map_objects.end()) {
+        afterObjects.reserve(it->second.size());
+        for (const auto& o : it->second) {
+            if (!o) {
+                continue;
+            }
+            auto clone = std::shared_ptr<MapObject>(o->cloneDeep());
+            clone->elevation = static_cast<uint32_t>(toElevation);
+            afterObjects.push_back(std::move(clone));
+        }
+    }
+    std::vector<Tile> afterTiles;
+    bool haveAfterTiles = false;
+    if (auto it = mapFile.tiles.find(fromElevation); it != mapFile.tiles.end()) {
+        afterTiles = it->second;
+        haveAfterTiles = true;
+    }
+
+    UndoCommand cmd;
+    cmd.description = "Copy Elevation";
+    cmd.undo = [this, toElevation, beforeObjects, beforeTiles, haveBeforeTiles]() {
+        auto& mf = _map->getMapFile();
+        mf.map_objects[toElevation] = beforeObjects;
+        if (haveBeforeTiles) {
+            mf.tiles[toElevation] = beforeTiles;
+        }
+        _refreshObjects();
+        if (_reloadTiles) {
+            _reloadTiles();
+        }
+    };
+    cmd.redo = [this, toElevation, afterObjects, afterTiles, haveAfterTiles]() {
+        auto& mf = _map->getMapFile();
+        mf.map_objects[toElevation] = afterObjects;
+        if (haveAfterTiles) {
+            mf.tiles[toElevation] = afterTiles;
+        }
+        _refreshObjects();
+        if (_reloadTiles) {
+            _reloadTiles();
+        }
+    };
     cmd.redo();
     return pushCommand(std::move(cmd));
 }

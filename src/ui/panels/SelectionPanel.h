@@ -81,11 +81,18 @@ signals:
         MapObjectInstanceState after,
         QString description);
 
+    /// Emitted after an inventory edit so it is recorded as one undoable command.
+    void requestInventoryEdit(std::shared_ptr<MapObject> container,
+        std::vector<std::shared_ptr<MapObject>> before,
+        std::vector<std::shared_ptr<MapObject>> after);
+
 public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);
     void selectTile(int tileIndex, int elevation, bool isRoof);
     void clearSelection();
     void handleSelectionChanged(const selection::SelectionState& selection, int elevation);
+    /// Re-reads the selected object's fields (e.g. after an undo/redo).
+    void refresh();
 
 private slots:
     void onChangeFrmClicked();
@@ -118,6 +125,9 @@ private:
     void populateInventoryTree();
     /// The selected object's MapObject if it can hold inventory, else nullptr.
     MapObject* selectedInventoryHolder() const;
+    /// Captures the after-snapshot, refreshes the tree, and emits an undoable
+    /// inventory edit. `before` is the snapshot taken before the mutation.
+    void commitInventoryEdit(std::vector<std::shared_ptr<MapObject>> before);
 
     // Script attachment (F10)
     void updateScriptSection();

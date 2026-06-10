@@ -1348,6 +1348,23 @@ MapObject* SelectionPanel::selectedInventoryHolder() const {
     return _selectedObject.value()->getMapObjectPtr().get();
 }
 
+void SelectionPanel::refresh() {
+    if (_selectedObject && _selectedObject.value()) {
+        updateObjectInfo();
+    }
+}
+
+void SelectionPanel::commitInventoryEdit(std::vector<std::shared_ptr<MapObject>> before) {
+    auto* holder = selectedInventoryHolder();
+    if (!holder) {
+        return;
+    }
+    auto after = ObjectCommandController::cloneInventory(holder->inventory);
+    populateInventoryTree();
+    Q_EMIT requestInventoryEdit(_selectedObject.value()->getMapObjectPtr(),
+        std::move(before), std::move(after));
+}
+
 void SelectionPanel::onAddInventoryClicked() {
     auto* holder = selectedInventoryHolder();
     if (!holder) {
@@ -1375,6 +1392,8 @@ void SelectionPanel::onAddInventoryClicked() {
         return;
     }
 
+    auto before = ObjectCommandController::cloneInventory(holder->inventory);
+
     auto item = std::make_unique<MapObject>();
     item->pro_pid = itemPid;
     item->frm_pid = pro->header.FID;
@@ -1385,7 +1404,7 @@ void SelectionPanel::onAddInventoryClicked() {
     holder->inventory.push_back(std::move(item));
     holder->objects_in_inventory = static_cast<uint32_t>(holder->inventory.size());
 
-    populateInventoryTree();
+    commitInventoryEdit(std::move(before));
 }
 
 void SelectionPanel::onRemoveInventoryClicked() {
@@ -1400,10 +1419,11 @@ void SelectionPanel::onRemoveInventoryClicked() {
         return;
     }
 
+    auto before = ObjectCommandController::cloneInventory(holder->inventory);
     holder->inventory.erase(holder->inventory.begin() + row);
     holder->objects_in_inventory = static_cast<uint32_t>(holder->inventory.size());
 
-    populateInventoryTree();
+    commitInventoryEdit(std::move(before));
 }
 
 void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
@@ -1428,6 +1448,7 @@ void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
         return;
     }
 
+    auto before = ObjectCommandController::cloneInventory(holder->inventory);
     holder->inventory[row]->amount = static_cast<uint32_t>(newAmount);
 
     // Refresh the icon to reflect the new quantity.
@@ -1440,6 +1461,10 @@ void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
     icon.addPixmap(iconWithQuantity, QIcon::Normal, QIcon::Off);
     item->setIcon(COLUMN_ICON, icon);
     item->setSizeHint(COLUMN_ICON, QSize(ICON_SIZE, ICON_SIZE));
+
+    auto after = ObjectCommandController::cloneInventory(holder->inventory);
+    Q_EMIT requestInventoryEdit(_selectedObject.value()->getMapObjectPtr(),
+        std::move(before), std::move(after));
 }
 
 void SelectionPanel::resizeEvent(QResizeEvent* event) {
