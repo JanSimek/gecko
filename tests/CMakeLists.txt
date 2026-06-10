@@ -35,8 +35,19 @@ add_executable(qt_tests
     qt/test_dat_archive.cpp
 )
 
+# Shared, header-only test support (fixtures, temp files, builders, stub provider).
+# Included as "support/<Header>.h"; fixtures resolve via GECK_TEST_DATA_DIR.
+add_library(test_support INTERFACE)
+target_include_directories(test_support INTERFACE ${CMAKE_SOURCE_DIR}/tests)
+target_link_libraries(test_support INTERFACE Catch2::Catch2)
+target_compile_definitions(test_support INTERFACE
+    GECK_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
+    GECK_TEST_TMP_DIR="${CMAKE_BINARY_DIR}/test-tmp"
+)
+
 target_link_libraries(general_tests PRIVATE
     Catch2::Catch2WithMain
+    test_support
     gecko::spdlog
     gecko::app
     vault
@@ -49,6 +60,7 @@ target_include_directories(general_tests PRIVATE
 
 target_link_libraries(performance_tests PRIVATE
     Catch2::Catch2WithMain
+    test_support
     gecko::spdlog
     vault
     SFML::System SFML::Graphics
@@ -56,12 +68,9 @@ target_link_libraries(performance_tests PRIVATE
 
 target_link_libraries(qt_tests PRIVATE
     Catch2::Catch2
+    test_support
     Qt6::Test
     gecko::app
-)
-
-target_compile_definitions(qt_tests PRIVATE
-    GECK_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
 )
 
 target_include_directories(qt_tests PRIVATE
@@ -107,18 +116,8 @@ if(WIN32)
     )
 endif()
 
-# Copy test data to both the executable directory and the test working directory
-add_custom_command(
-    TARGET general_tests POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:general_tests>/data
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data ${CMAKE_CURRENT_BINARY_DIR}/data
-)
-
-add_custom_command(
-    TARGET performance_tests POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data $<TARGET_FILE_DIR:performance_tests>/data
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/tests/data ${CMAKE_CURRENT_BINARY_DIR}/data
-)
+# general_tests / performance_tests resolve fixtures by absolute path
+# (GECK_TEST_DATA_DIR via test_support), so no tests/data copy is needed for them.
 
 add_custom_command(
     TARGET qt_tests POST_BUILD

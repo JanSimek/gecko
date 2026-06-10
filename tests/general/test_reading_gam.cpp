@@ -2,10 +2,11 @@
 
 #include "format/gam/Gam.h"
 #include "reader/gam/GamReader.h"
+#include "support/Fixtures.h"
 
 TEST_CASE("Parse .gam file", "[gam]") {
     geck::GamReader gam_reader{};
-    auto gam_file = gam_reader.openFile("data/test.gam");
+    auto gam_file = gam_reader.openFile(geck::test::dataPath("test.gam"));
 
     constexpr int vars_count = 10;
 

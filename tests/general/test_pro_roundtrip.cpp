@@ -2,34 +2,15 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <vector>
 
 #include "format/pro/Pro.h"
 #include "reader/pro/ProReader.h"
 #include "writer/pro/ProWriter.h"
+#include "support/Fixtures.h"
+#include "support/ProBuilder.h"
+#include "support/TempFile.h"
 
-namespace {
-
-// Read an entire file into a byte vector for byte-for-byte comparisons.
-std::vector<uint8_t> readAllBytes(const std::filesystem::path& path) {
-    std::ifstream stream{ path.string(), std::ios::binary };
-    REQUIRE(stream.is_open());
-    return std::vector<uint8_t>(std::istreambuf_iterator<char>(stream),
-        std::istreambuf_iterator<char>());
-}
-
-// Build a unique temp path inside the test working directory so the existing
-// tests/data copy rules are untouched and parallel runs do not collide.
-std::filesystem::path makeTempProPath(const std::string& stem) {
-    auto dir = std::filesystem::temp_directory_path();
-    auto path = dir / (stem + ".pro");
-    std::error_code ec;
-    std::filesystem::remove(path, ec);
-    return path;
-}
-
-} // namespace
+using namespace geck::test;
 
 // ---------------------------------------------------------------------------
 // Level 1: generic read -> write -> read integrity using the shipped fixture.
@@ -37,7 +18,7 @@ std::filesystem::path makeTempProPath(const std::string& stem) {
 // re-parsed produces identical state AND identical on-disk bytes.
 // ---------------------------------------------------------------------------
 TEST_CASE("PRO generic round-trip preserves bytes and state", "[pro][roundtrip]") {
-    const std::filesystem::path fixture = "data/test_item_drug_radx.pro";
+    const std::filesystem::path fixture = dataPath("test_item_drug_radx.pro");
 
     geck::ProReader reader{};
     auto original = reader.openFile(fixture);
@@ -45,7 +26,8 @@ TEST_CASE("PRO generic round-trip preserves bytes and state", "[pro][roundtrip]"
     REQUIRE(original->type() == geck::Pro::OBJECT_TYPE::ITEM);
     REQUIRE(original->itemType() == geck::Pro::ITEM_TYPE::DRUG);
 
-    const auto tempPath = makeTempProPath("test_pro_roundtrip_drug");
+    TempFile tmpFile{ "test_pro_roundtrip_drug", ".pro" };
+    const auto& tempPath = tmpFile.path();
 
     {
         geck::ProWriter writer{};
@@ -101,9 +83,6 @@ TEST_CASE("PRO generic round-trip preserves bytes and state", "[pro][roundtrip]"
     REQUIRE(reparsed->drugData.addictionRate == original->drugData.addictionRate);
     REQUIRE(reparsed->drugData.addictionEffect == original->drugData.addictionEffect);
     REQUIRE(reparsed->drugData.addictionOnset == original->drugData.addictionOnset);
-
-    std::error_code ec;
-    std::filesystem::remove(tempPath, ec);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +97,8 @@ TEST_CASE("PRO generic round-trip preserves bytes and state", "[pro][roundtrip]"
 // 0 and the test FAILS; against the fix they round-trip and the test PASSES.
 // ---------------------------------------------------------------------------
 TEST_CASE("PRO wall round-trip preserves flagsExt and SID (WP-1.1)", "[pro][roundtrip][wall]") {
-    const std::filesystem::path tempPath = makeTempProPath("test_pro_roundtrip_wall");
+    TempFile tmpFile{ "test_pro_roundtrip_wall", ".pro" };
+    const auto& tempPath = tmpFile.path();
 
     // PID type nibble == 3 selects OBJECT_TYPE::WALL. The remaining bits are
     // an arbitrary but distinctive prototype index, preserved verbatim.
@@ -166,9 +146,6 @@ TEST_CASE("PRO wall round-trip preserves flagsExt and SID (WP-1.1)", "[pro][roun
     REQUIRE(reparsed->commonItemData.flagsExt == SENTINEL_FLAGS_EXT);
     REQUIRE(reparsed->commonItemData.SID == SENTINEL_SID);
     REQUIRE(reparsed->wallData.materialId == SENTINEL_MATERIAL);
-
-    std::error_code ec;
-    std::filesystem::remove(tempPath, ec);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,24 +155,10 @@ TEST_CASE("PRO wall round-trip preserves flagsExt and SID (WP-1.1)", "[pro][roun
 // flagsExt/SID prefix that the reader reads (writeCritterData/writeSceneryData
 // previously omitted them, corrupting saved critter/scenery prototypes).
 // ---------------------------------------------------------------------------
-namespace {
-
-geck::Pro roundTrip(const geck::Pro& original, const std::filesystem::path& tempPath) {
-    {
-        geck::ProWriter writer{};
-        writer.openFile(tempPath);
-        REQUIRE(writer.write(original));
-    }
-    geck::ProReader reader{};
-    auto reparsed = reader.openFile(tempPath);
-    REQUIRE(reparsed != nullptr);
-    return *reparsed;
-}
-
-} // namespace
 
 TEST_CASE("PRO critter round-trip preserves the common header and stats", "[pro][roundtrip][critter]") {
-    const auto tempPath = makeTempProPath("test_pro_roundtrip_critter");
+    TempFile tmpFile{ "test_pro_roundtrip_critter", ".pro" };
+    const auto& tempPath = tmpFile.path();
 
     geck::Pro critter{ tempPath };
     critter.header.PID = static_cast<int32_t>(
@@ -213,7 +176,8 @@ TEST_CASE("PRO critter round-trip preserves the common header and stats", "[pro]
     c.aiPacket = 701;
     c.teamNumber = 702;
     c.flags = 703;
-    for (int i = 0; i < geck::Pro::SPECIAL_STATS_COUNT; ++i) c.specialStats[i] = 10 + i;
+    for (int i = 0; i < geck::Pro::SPECIAL_STATS_COUNT; ++i)
+        c.specialStats[i] = 10 + i;
     c.maxHitPoints = 50;
     c.experienceForKill = 999;
     c.killType = 3;
@@ -222,7 +186,7 @@ TEST_CASE("PRO critter round-trip preserves the common header and stats", "[pro]
 
     REQUIRE(critter.type() == geck::Pro::OBJECT_TYPE::CRITTER);
 
-    const geck::Pro got = roundTrip(critter, tempPath);
+    const geck::Pro got = proRoundTrip(critter, tempPath);
 
     REQUIRE(got.type() == geck::Pro::OBJECT_TYPE::CRITTER);
     REQUIRE(got.header.PID == critter.header.PID);
@@ -236,13 +200,11 @@ TEST_CASE("PRO critter round-trip preserves the common header and stats", "[pro]
     REQUIRE(got.critterData.experienceForKill == 999);
     REQUIRE(got.critterData.killType == 3);
     REQUIRE(got.critterData.damageType == 2);
-
-    std::error_code ec;
-    std::filesystem::remove(tempPath, ec);
 }
 
 TEST_CASE("PRO scenery round-trip preserves the common header and subtype data", "[pro][roundtrip][scenery]") {
-    const auto tempPath = makeTempProPath("test_pro_roundtrip_scenery");
+    TempFile tmpFile{ "test_pro_roundtrip_scenery", ".pro" };
+    const auto& tempPath = tmpFile.path();
 
     geck::Pro scenery{ tempPath };
     scenery.header.PID = static_cast<int32_t>(
@@ -260,7 +222,7 @@ TEST_CASE("PRO scenery round-trip preserves the common header and subtype data",
 
     REQUIRE(scenery.type() == geck::Pro::OBJECT_TYPE::SCENERY);
 
-    const geck::Pro got = roundTrip(scenery, tempPath);
+    const geck::Pro got = proRoundTrip(scenery, tempPath);
 
     REQUIRE(got.type() == geck::Pro::OBJECT_TYPE::SCENERY);
     REQUIRE(got.objectSubtypeId() == static_cast<unsigned int>(geck::Pro::SCENERY_TYPE::STAIRS));
@@ -270,13 +232,11 @@ TEST_CASE("PRO scenery round-trip preserves the common header and subtype data",
     REQUIRE(got.sceneryData.soundId == 9);
     REQUIRE(got.sceneryData.stairsData.destTile == 12345);
     REQUIRE(got.sceneryData.stairsData.destElevation == 2);
-
-    std::error_code ec;
-    std::filesystem::remove(tempPath, ec);
 }
 
 TEST_CASE("PRO weapon round-trip preserves the optional weaponFlags field", "[pro][roundtrip][weapon]") {
-    const auto tempPath = makeTempProPath("test_pro_roundtrip_weapon");
+    TempFile tmpFile{ "test_pro_roundtrip_weapon", ".pro" };
+    const auto& tempPath = tmpFile.path();
 
     geck::Pro weapon{ tempPath };
     weapon.header.PID = static_cast<int32_t>(
@@ -295,7 +255,7 @@ TEST_CASE("PRO weapon round-trip preserves the optional weaponFlags field", "[pr
     weapon.weaponData.soundId = 4;
     weapon.weaponData.weaponFlags = 0x00000001; // energy-weapon bit; optional trailing field
 
-    const geck::Pro got = roundTrip(weapon, tempPath);
+    const geck::Pro got = proRoundTrip(weapon, tempPath);
 
     REQUIRE(got.itemType() == geck::Pro::ITEM_TYPE::WEAPON);
     REQUIRE(got.commonItemData.flagsExt == 0x11112222u);
@@ -306,13 +266,11 @@ TEST_CASE("PRO weapon round-trip preserves the optional weaponFlags field", "[pr
     REQUIRE(got.weaponData.ammoPID == 0x00000029);
     REQUIRE(got.weaponData.ammoCapacity == 30);
     REQUIRE(got.weaponData.weaponFlags == 0x00000001u);
-
-    std::error_code ec;
-    std::filesystem::remove(tempPath, ec);
 }
 
 TEST_CASE("PRO container round-trip preserves item subtype data", "[pro][roundtrip][item]") {
-    const auto tempPath = makeTempProPath("test_pro_roundtrip_container");
+    TempFile tmpFile{ "test_pro_roundtrip_container", ".pro" };
+    const auto& tempPath = tmpFile.path();
 
     geck::Pro container{ tempPath };
     container.header.PID = static_cast<int32_t>(
@@ -324,7 +282,7 @@ TEST_CASE("PRO container round-trip preserves item subtype data", "[pro][roundtr
     container.containerData.maxSize = 100;
     container.containerData.flags = 0x0Au;
 
-    const geck::Pro got = roundTrip(container, tempPath);
+    const geck::Pro got = proRoundTrip(container, tempPath);
 
     REQUIRE(got.itemType() == geck::Pro::ITEM_TYPE::CONTAINER);
     REQUIRE(got.commonItemData.flagsExt == 0x44445555u);
@@ -332,13 +290,11 @@ TEST_CASE("PRO container round-trip preserves item subtype data", "[pro][roundtr
     REQUIRE(got.commonItemData.materialId == 2);
     REQUIRE(got.containerData.maxSize == 100);
     REQUIRE(got.containerData.flags == 0x0Au);
-
-    std::error_code ec;
-    std::filesystem::remove(tempPath, ec);
 }
 
 TEST_CASE("PRO tile round-trip omits the common header prefix", "[pro][roundtrip][tile]") {
-    const auto tempPath = makeTempProPath("test_pro_roundtrip_tile");
+    TempFile tmpFile{ "test_pro_roundtrip_tile", ".pro" };
+    const auto& tempPath = tmpFile.path();
 
     // TILE (and MISC) are the types WITHOUT the flagsExt/SID prefix.
     geck::Pro tile{ tempPath };
@@ -348,14 +304,11 @@ TEST_CASE("PRO tile round-trip omits the common header prefix", "[pro][roundtrip
     tile.header.flags = 0x00000002;
     tile.tileData.materialId = 3;
 
-    const geck::Pro got = roundTrip(tile, tempPath);
+    const geck::Pro got = proRoundTrip(tile, tempPath);
 
     REQUIRE(got.type() == geck::Pro::OBJECT_TYPE::TILE);
     REQUIRE(got.header.PID == tile.header.PID);
     REQUIRE(got.header.message_id == 321);
     REQUIRE(got.header.flags == 0x00000002);
     REQUIRE(got.tileData.materialId == 3);
-
-    std::error_code ec;
-    std::filesystem::remove(tempPath, ec);
 }

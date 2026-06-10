@@ -3,12 +3,13 @@
 
 #include "format/msg/Msg.h"
 #include "reader/msg/MsgReader.h"
+#include "support/Fixtures.h"
 
 using Catch::Matchers::Equals;
 
 TEST_CASE("Parse .msg file", "[msg]") {
     geck::MsgReader msg_reader{};
-    auto msg_file = msg_reader.openFile("data/test.msg");
+    auto msg_file = msg_reader.openFile(geck::test::dataPath("test.msg"));
 
     REQUIRE_THAT(msg_file->message(6500).text, Equals("Mutant"));
     REQUIRE(msg_file->message(6500).id == 6500);
