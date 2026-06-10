@@ -11,8 +11,10 @@
 namespace geck {
 
 std::string parseLine(std::string line) {
-    // strip comments
-    if (auto pos = line.find(';')) {
+    // strip a trailing or full-line comment (everything from the first ';').
+    // Note: find() returning 0 (a leading ';') must still strip, so test against
+    // npos explicitly rather than relying on the position being truthy.
+    if (auto pos = line.find(';'); pos != std::string::npos) {
         line = line.substr(0, pos);
     }
 

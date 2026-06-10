@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
-#include <string>
+#include <string_view>
 #include <vector>
 
 #include "format/lst/Lst.h"
@@ -11,7 +11,7 @@
 using namespace geck;
 
 namespace {
-std::vector<uint8_t> bytesOf(const std::string& s) {
+std::vector<uint8_t> bytesOf(std::string_view s) {
     return std::vector<uint8_t>(s.begin(), s.end());
 }
 } // namespace
@@ -19,6 +19,7 @@ std::vector<uint8_t> bytesOf(const std::string& s) {
 TEST_CASE("LstReader trims comments, normalizes slashes, lowercases and skips blanks", "[lst]") {
     const std::string content = "ART/items/KNIFE.FRM ; a knife\r\n" // trailing comment + CRLF
                                 "art\\scenery\\TREE.frm\n"          // backslashes -> forward slashes, LF
+                                "; a full-line comment\n"           // leading ';' -> whole line is a comment -> skipped
                                 "   \n"                             // whitespace only -> skipped
                                 "\n"                                // blank -> skipped
                                 "PLAIN.frm";                        // last line, no trailing newline

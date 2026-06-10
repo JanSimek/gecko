@@ -1,3 +1,4 @@
 # Test fixtures are exact byte sequences (binary formats and CRLF-sensitive
-# lists). Never apply EOL or text normalization to them.
-* binary
+# lists). Disable EOL/text normalization so their bytes are preserved verbatim;
+# Git still auto-detects truly binary files for diffing.
+* -text
