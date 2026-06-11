@@ -50,6 +50,12 @@ MapObject wallObject(uint32_t index) {
     return object;
 }
 
+// Unique-per-call suffix so concurrently-constructed fixtures never collide.
+int nextFixtureId() {
+    static std::atomic counter{ 0 };
+    return counter++;
+}
+
 // A temp data tree with a proto/walls list + three crafted wall PROs, mounted
 // into a GameResources so object_query resolves them through the resource stack.
 struct ProFixture {
@@ -61,11 +67,10 @@ struct ProFixture {
     static constexpr uint32_t NON_BLOCKING = 2;  // PRO has the NoBlock flag    -> passable
     static constexpr uint32_t SHOOT_THROUGH = 3; // PRO has the ShootThrough flag
 
-    ProFixture() {
-        // Build the tree under the build-tree scratch dir (not the world-writable
-        // system temp dir), with a unique suffix so fixtures never collide.
-        static std::atomic<int> counter{ 0 };
-        root = fs::path(GECK_TEST_TMP_DIR) / ("object_query_" + std::to_string(counter++));
+    // Build the tree under the build-tree scratch dir (not the world-writable
+    // system temp dir), with a unique suffix so fixtures never collide.
+    ProFixture()
+        : root(fs::path(GECK_TEST_TMP_DIR) / ("object_query_" + std::to_string(nextFixtureId()))) {
         std::error_code ec;
         fs::remove_all(root, ec);
 
