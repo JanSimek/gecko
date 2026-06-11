@@ -31,6 +31,31 @@ Pattern makeSamplePattern() {
     return p;
 }
 
+// Wraps an extra top-level fragment (e.g. an "objects"/"floor" array) into an
+// otherwise-minimal valid pattern document, so rejection cases differ only by the
+// part under test.
+QByteArray patternDoc(const QByteArray& extraFields) {
+    QByteArray fields = R"("name": "x", "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 })";
+    if (!extraFields.isEmpty()) {
+        fields += ", " + extraFields;
+    }
+    return "{ " + fields + " }";
+}
+
+// Asserts a document is rejected. When `needle` is given, also asserts the error
+// names the offending field; otherwise just that some error was reported.
+void checkRejected(const QByteArray& doc, const char* needle = nullptr) {
+    QString error;
+    const auto parsed = PatternSerializer::deserialize(doc, &error);
+    INFO("error: " << error.toStdString());
+    CHECK_FALSE(parsed.has_value());
+    if (needle != nullptr) {
+        CHECK(error.contains(QLatin1String(needle)));
+    } else {
+        CHECK_FALSE(error.isEmpty());
+    }
+}
+
 } // namespace
 
 TEST_CASE("PatternSerializer round-trips a pattern verbatim", "[pattern]") {
@@ -97,90 +122,35 @@ TEST_CASE("PatternSerializer parses a hand-written document", "[pattern]") {
     CHECK(parsed->roof.empty()); // omitted section defaults to empty
 }
 
-TEST_CASE("PatternSerializer rejects malformed input", "[pattern]") {
+TEST_CASE("PatternSerializer rejects malformed and out-of-spec input", "[pattern]") {
     SECTION("invalid JSON") {
-        QString error;
-        const auto parsed = PatternSerializer::deserialize(QByteArray("{ not json"), &error);
-        CHECK_FALSE(parsed.has_value());
-        CHECK_FALSE(error.isEmpty());
+        checkRejected(QByteArray("{ not json"));
     }
-
-    SECTION("top-level array is rejected") {
-        QString error;
-        const auto parsed = PatternSerializer::deserialize(QByteArray("[]"), &error);
-        CHECK_FALSE(parsed.has_value());
+    SECTION("top-level array is not an object") {
+        checkRejected(QByteArray("[]"));
     }
-
     SECTION("missing version") {
-        QString error;
-        const auto parsed = PatternSerializer::deserialize(
-            QByteArray(R"({ "name": "x", "anchorHex": 0 })"), &error);
-        CHECK_FALSE(parsed.has_value());
+        checkRejected(QByteArray(R"({ "name": "x", "anchorHex": 0 })"));
     }
-
     SECTION("unsupported version") {
-        QString error;
-        const auto parsed = PatternSerializer::deserialize(
-            QByteArray(R"({ "version": 99, "anchorHex": 0 })"), &error);
-        CHECK_FALSE(parsed.has_value());
-        CHECK(error.contains("version"));
+        checkRejected(QByteArray(R"({ "version": 99, "anchorHex": 0 })"), "version");
     }
-
+    SECTION("missing name") {
+        checkRejected(QByteArray(R"({ "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 } })"), "name");
+    }
+    SECTION("missing size") {
+        checkRejected(QByteArray(R"({ "name": "x", "version": 1, "anchorHex": 0 })"), "size");
+    }
     SECTION("object missing a required field") {
-        QString error;
-        const auto parsed = PatternSerializer::deserialize(
-            QByteArray(R"({ "name": "x", "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 },
-                "objects": [ { "dxHex": 0, "dyHex": 0, "proPid": 1 } ] })"),
-            &error);
-        CHECK_FALSE(parsed.has_value());
-        CHECK(error.contains("frmPid"));
+        checkRejected(patternDoc(R"("objects": [ { "dxHex": 0, "dyHex": 0, "proPid": 1 } ])"), "frmPid");
     }
-}
-
-TEST_CASE("PatternSerializer validates required fields, types and ranges", "[pattern]") {
-    SECTION("missing name is rejected") {
-        QString error;
-        const auto parsed = PatternSerializer::deserialize(
-            QByteArray(R"({ "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 } })"), &error);
-        CHECK_FALSE(parsed.has_value());
-        CHECK(error.contains("name"));
+    SECTION("a negative proPid would wrap when narrowed, so it is rejected") {
+        checkRejected(patternDoc(R"("objects": [ { "dxHex": 0, "dyHex": 0, "proPid": -1, "frmPid": 0 } ])"), "proPid");
     }
-
-    SECTION("missing size is rejected") {
-        QString error;
-        const auto parsed = PatternSerializer::deserialize(
-            QByteArray(R"({ "name": "x", "version": 1, "anchorHex": 0 })"), &error);
-        CHECK_FALSE(parsed.has_value());
-        CHECK(error.contains("size"));
-    }
-
-    SECTION("a negative proPid is rejected (would wrap when narrowed)") {
-        QString error;
-        const auto parsed = PatternSerializer::deserialize(
-            QByteArray(R"({ "name": "x", "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 },
-                "objects": [ { "dxHex": 0, "dyHex": 0, "proPid": -1, "frmPid": 0 } ] })"),
-            &error);
-        CHECK_FALSE(parsed.has_value());
-        CHECK(error.contains("proPid"));
-    }
-
     SECTION("a tileId above 65535 is rejected") {
-        QString error;
-        const auto parsed = PatternSerializer::deserialize(
-            QByteArray(R"({ "name": "x", "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 },
-                "floor": [ { "dxTile": 0, "dyTile": 0, "tileId": 70000 } ] })"),
-            &error);
-        CHECK_FALSE(parsed.has_value());
-        CHECK(error.contains("tileId"));
+        checkRejected(patternDoc(R"("floor": [ { "dxTile": 0, "dyTile": 0, "tileId": 70000 } ])"), "tileId");
     }
-
     SECTION("a present-but-non-numeric direction is rejected, not defaulted") {
-        QString error;
-        const auto parsed = PatternSerializer::deserialize(
-            QByteArray(R"({ "name": "x", "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 },
-                "objects": [ { "dxHex": 0, "dyHex": 0, "proPid": 1, "frmPid": 2, "direction": "north" } ] })"),
-            &error);
-        CHECK_FALSE(parsed.has_value());
-        CHECK(error.contains("direction"));
+        checkRejected(patternDoc(R"("objects": [ { "dxHex": 0, "dyHex": 0, "proPid": 1, "frmPid": 2, "direction": "north" } ])"), "direction");
     }
 }
