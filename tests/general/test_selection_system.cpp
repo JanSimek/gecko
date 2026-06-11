@@ -5,7 +5,11 @@
 #include "util/Constants.h"
 #include "editor/HexagonGrid.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
+#include <optional>
+#include <utility>
 #include <vector>
 
 using namespace geck;
