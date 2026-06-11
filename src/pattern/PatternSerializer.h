@@ -9,8 +9,8 @@
 
 namespace geck::pattern {
 
-/// JSON (de)serialization for the Tier-1 prefab format (PLAN.md §4). PID, direction
-/// and tile-id values are preserved verbatim; the format stores no display labels.
+/// JSON (de)serialization for the prefab pattern format. PID, direction and tile-id
+/// values are preserved verbatim; the format stores no display labels.
 ///
 /// Serialization is total. Deserialization is validated: it rejects malformed JSON,
 /// a missing/unsupported `version`, and entries missing required fields, returning

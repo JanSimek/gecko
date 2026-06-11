@@ -86,7 +86,7 @@ TEST_CASE("PRO generic round-trip preserves bytes and state", "[pro][roundtrip]"
 }
 
 // ---------------------------------------------------------------------------
-// Level 2: WP-1.1 guard. ProWriter::writeWallData previously serialized hard
+// Level 2: wall flagsExt/SID guard. ProWriter::writeWallData previously serialized hard
 // zeros for the extended flags and SID fields (writeBE32(0)), silently losing
 // any non-zero engine values. Wall .pro files are derived purely from the PID
 // type nibble (Pro::type() == (PID & 0x0F000000) >> 24), so a faithful wall
@@ -96,7 +96,7 @@ TEST_CASE("PRO generic round-trip preserves bytes and state", "[pro][roundtrip]"
 // and assert they survive. Against the old writeBE32(0) code these reads return
 // 0 and the test FAILS; against the fix they round-trip and the test PASSES.
 // ---------------------------------------------------------------------------
-TEST_CASE("PRO wall round-trip preserves flagsExt and SID (WP-1.1)", "[pro][roundtrip][wall]") {
+TEST_CASE("PRO wall round-trip preserves flagsExt and SID", "[pro][roundtrip][wall]") {
     TempFile tmpFile{ "test_pro_roundtrip_wall", ".pro" };
     const auto& tempPath = tmpFile.path();
 
@@ -141,7 +141,7 @@ TEST_CASE("PRO wall round-trip preserves flagsExt and SID (WP-1.1)", "[pro][roun
     REQUIRE(reparsed->header.light_intensity == 65536);
     REQUIRE(reparsed->header.flags == 0x00000020);
 
-    // The actual WP-1.1 regression assertions: these are the fields the old
+    // The actual wall-fix regression assertions: these are the fields the old
     // writer zeroed out.
     REQUIRE(reparsed->commonItemData.flagsExt == SENTINEL_FLAGS_EXT);
     REQUIRE(reparsed->commonItemData.SID == SENTINEL_SID);
