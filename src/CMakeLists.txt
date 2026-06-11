@@ -166,6 +166,8 @@ set(GECK_APP_SOURCES
     ui/rendering/MapSpriteLoader.cpp
     ui/rendering/RenderingEngine.h
     ui/rendering/RenderingEngine.cpp
+    ui/rendering/ThumbnailRenderer.h
+    ui/rendering/ThumbnailRenderer.cpp
     ui/editing/ObjectCommandController.h
     ui/editing/ObjectCommandController.cpp
     ui/input/InputHandler.h
