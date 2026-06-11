@@ -611,6 +611,29 @@ void MainWindow::setupToolBar() {
 
     _mainToolBar->addSeparator();
 
+    setupToolModeActions();
+
+    _mainToolBar->addSeparator();
+
+    // Layer visibility toggles (reuse View menu actions)
+    const std::array<QAction*, 9> layerVisibilityActions = {
+        _showObjectsAction,
+        _showCrittersAction,
+        _showWallsAction,
+        _showRoofsAction,
+        _showHexGridAction,
+        _showScrollBlockersAction,
+        _showWallBlockersAction,
+        _showLightOverlaysAction,
+        _showExitGridsAction,
+    };
+
+    for (QAction* action : layerVisibilityActions) {
+        _mainToolBar->addAction(action);
+    }
+}
+
+void MainWindow::setupToolModeActions() {
     // Tool-mode group (mutually exclusive; kept in sync with the active EditorMode).
     _selectToolAction = _mainToolBar->addAction(createIcon(":/icons/actions/select.svg"), "Select");
     _selectToolAction->setStatusTip("Select and move objects (exits any active tool)");
@@ -639,25 +662,18 @@ void MainWindow::setupToolBar() {
             _currentEditorWidget->setExitGridPlacementMode(checked);
         }
     });
+}
 
-    _mainToolBar->addSeparator();
-
-    // Layer visibility toggles (reuse View menu actions)
-    const std::array<QAction*, 9> layerVisibilityActions = {
-        _showObjectsAction,
-        _showCrittersAction,
-        _showWallsAction,
-        _showRoofsAction,
-        _showHexGridAction,
-        _showScrollBlockersAction,
-        _showWallBlockersAction,
-        _showLightOverlaysAction,
-        _showExitGridsAction,
+void MainWindow::syncToolModeActions(EditorMode mode) {
+    const auto sync = [mode](QAction* action, EditorMode actionMode) {
+        if (action) {
+            QSignalBlocker blocker(action);
+            action->setChecked(mode == actionMode);
+        }
     };
-
-    for (QAction* action : layerVisibilityActions) {
-        _mainToolBar->addAction(action);
-    }
+    sync(_selectToolAction, EditorMode::Select);
+    sync(_markExitsAction, EditorMode::MarkExits);
+    sync(_placeExitGridAction, EditorMode::PlaceExitGrid);
 }
 
 void MainWindow::setupDockWidgets() {
@@ -1176,16 +1192,11 @@ void MainWindow::connectToEditorWidget() {
     // Keep the checkable tool-mode toolbar actions in sync with the active mode
     // (entering any mode exits the others via EditorWidget::setMode).
     connect(_currentEditorWidget, &EditorWidget::editorModeChanged, this, [this](EditorMode mode) {
-        const auto sync = [mode](QAction* action, EditorMode actionMode) {
-            if (action) {
-                QSignalBlocker blocker(action);
-                action->setChecked(mode == actionMode);
-            }
-        };
-        sync(_selectToolAction, EditorMode::Select);
-        sync(_markExitsAction, EditorMode::MarkExits);
-        sync(_placeExitGridAction, EditorMode::PlaceExitGrid);
+        syncToolModeActions(mode);
     });
+    // The editor widget doesn't emit editorModeChanged on connect, so seed the
+    // toolbar state from its current mode (e.g. after switching maps).
+    syncToolModeActions(_currentEditorWidget->currentMode());
     connect(_currentEditorWidget, &EditorWidget::hexHoverChanged, this, &MainWindow::updateHexIndexDisplay);
     connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, [this](const std::string& mapPath) {
         handleMapLoadRequest(mapPath, true);
