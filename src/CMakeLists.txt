@@ -168,6 +168,8 @@ set(GECK_APP_SOURCES
     ui/rendering/RenderingEngine.cpp
     ui/rendering/ThumbnailRenderer.h
     ui/rendering/ThumbnailRenderer.cpp
+    ui/rendering/MapThumbnail.h
+    ui/rendering/MapThumbnail.cpp
     ui/editing/ObjectCommandController.h
     ui/editing/ObjectCommandController.cpp
     ui/input/InputHandler.h
