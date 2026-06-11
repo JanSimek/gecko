@@ -59,6 +59,25 @@ TEST_CASE("PatternStamper::plan resolves object and tile positions", "[pattern][
     CHECK(plan.tiles[0].tileId == 271);
 }
 
+TEST_CASE("PatternStamper::plan keeps tiles aligned with objects at any click parity", "[pattern][stamper]") {
+    using namespace geck::hexgrid;
+    PatternVariant aligned;
+    aligned.anchorHex = 80 * WIDTH + 80; // col 80 (even), row 80
+    // An object 3 columns / 2 rows from the anchor, plus the floor tile that sits under it.
+    aligned.objects.push_back(PatternObject{ 3, 2, 1u, 1u, 0u, 0u });
+    aligned.floor.push_back(PatternTile{ (80 + 3) / 2 - 80 / 2, (80 + 2) / 2 - 80 / 2, 271 });
+
+    // Stamp on an ODD-column target (opposite parity to the even anchor) — the case that
+    // used to drift the tiles relative to the objects.
+    const auto alignedPlan = PatternStamper::plan(aligned, 50 * WIDTH + 51);
+
+    REQUIRE(alignedPlan.objects.size() == 1);
+    REQUIRE(alignedPlan.tiles.size() == 1);
+    const int objHex = alignedPlan.objects[0].hex;
+    const int objTile = (rowOf(objHex) / 2) * HexagonGrid::TILE_GRID_WIDTH + (columnOf(objHex) / 2);
+    CHECK(alignedPlan.tiles[0].tileIndex == objTile); // the floor tile still sits under the object
+}
+
 TEST_CASE("PatternStamper::plan drops entries that fall off the grid", "[pattern][stamper]") {
     PatternVariant v;
     v.anchorHex = 0;                                              // top-left corner

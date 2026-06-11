@@ -24,12 +24,25 @@ PatternStamper::Plan PatternStamper::plan(const PatternVariant& variant, int tar
 
     const int anchorCol = columnOf(variant.anchorHex);
     const int anchorRow = rowOf(variant.anchorHex);
+
+    // Objects place at hex precision (cube translation, shape-preserving) but tiles only
+    // at tile precision (2-hex steps). Because the hex grid is column-offset, those two
+    // translations only agree when the target column has the same parity as the anchor
+    // column; otherwise the cube-translated objects drift relative to the tiles (visible
+    // as the roof sitting off the walls, differently for each click). Snapping the target
+    // column to the anchor's parity locks objects and tiles together.
+    int targetCol = columnOf(targetHex);
+    if (((targetCol ^ anchorCol) & 1) != 0) {
+        targetCol += (targetCol > 0) ? -1 : 1;
+    }
+    const int snappedTarget = rowOf(targetHex) * WIDTH + targetCol;
+
     for (const PatternObject& obj : variant.objects) {
         const int col = anchorCol + obj.dxHex;
         const int row = anchorRow + obj.dyHex;
         std::optional<int> placed;
         if (col >= 0 && col < WIDTH && row >= 0 && row < HEIGHT) {
-            placed = translate(row * WIDTH + col, variant.anchorHex, targetHex);
+            placed = translate(row * WIDTH + col, variant.anchorHex, snappedTarget);
         }
         if (placed.has_value()) {
             p.objects.push_back({ *placed, obj.proPid, obj.frmPid, obj.direction, obj.flags });
@@ -39,9 +52,9 @@ PatternStamper::Plan PatternStamper::plan(const PatternVariant& variant, int tar
     }
 
     // Tile offsets are relative to the anchor's tile, so a stamp re-anchors them on the
-    // target hex's tile. The tile grid is a plain square grid (no parity offset).
-    const int targetTileCol = columnOf(targetHex) / 2;
-    const int targetTileRow = rowOf(targetHex) / 2;
+    // (snapped) target hex's tile. The tile grid is a plain square grid (no parity offset).
+    const int targetTileCol = targetCol / 2;
+    const int targetTileRow = rowOf(snappedTarget) / 2;
     const auto resolveTiles = [&](const std::vector<PatternTile>& src, bool isRoof) {
         for (const PatternTile& t : src) {
             const int col = targetTileCol + t.dxTile;

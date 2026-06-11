@@ -79,7 +79,9 @@ TEST_CASE("PatternBuilder and PatternStamper are inverses", "[pattern][builder]"
     }
 
     SECTION("stamping at a new anchor translates every object by the same cube delta") {
-        const int target = 120 * hexgrid::WIDTH + 91; // different column parity
+        // Same column parity as the anchor (col 80), so the stamper's parity-snap is a
+        // no-op and the placement is exactly the cube translation.
+        const int target = 120 * hexgrid::WIDTH + 90;
         const auto plan = PatternStamper::plan(v, target);
         REQUIRE(plan.objects.size() == 3);
         for (size_t i = 0; i < objects.size(); ++i) {
