@@ -396,6 +396,7 @@ add_library(gecko_core STATIC
     editor/Object.cpp
     editor/HexagonGrid.h
     editor/HexagonGrid.cpp
+    editor/HexGeometry.h
     editor/Hex.h
     editor/Hex.cpp
     editor/helper/ObjectQueries.h
