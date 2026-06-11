@@ -21,6 +21,7 @@
 #include "selection/SelectionState.h"
 #include "selection/SelectionManager.h"
 #include "pattern/PatternBuilder.h"
+#include "pattern/PatternLibrary.h"
 #include "pattern/PatternSerializer.h"
 #include "format/map/Map.h"
 #include "util/Types.h"
@@ -1689,7 +1690,7 @@ void MainWindow::showSavePatternDialog() {
     }
 
     const QString path = QFileDialog::getSaveFileName(
-        this, "Save Selection as Pattern", QString(), "Gecko Pattern (*.json)");
+        this, "Save Selection as Pattern", pattern::PatternLibrary::rootDir(), "Gecko Pattern (*.json)");
     if (path.isEmpty()) {
         return;
     }
@@ -1720,7 +1721,7 @@ void MainWindow::showStampPatternDialog() {
     }
 
     const QString path = QFileDialog::getOpenFileName(
-        this, "Stamp Pattern", QString(), "Gecko Pattern (*.json)");
+        this, "Stamp Pattern", pattern::PatternLibrary::rootDir(), "Gecko Pattern (*.json)");
     if (path.isEmpty()) {
         return;
     }

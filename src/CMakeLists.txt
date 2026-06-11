@@ -28,6 +28,8 @@ set(GECK_APP_SOURCES
     pattern/PatternStamper.cpp
     pattern/PatternBuilder.h
     pattern/PatternBuilder.cpp
+    pattern/PatternLibrary.h
+    pattern/PatternLibrary.cpp
 
     util/ExternalEditorLauncher.h
     util/ExternalEditorLauncher.cpp
