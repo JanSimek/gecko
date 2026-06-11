@@ -1,5 +1,7 @@
 #include "pattern/PatternSerializer.h"
 
+#include <limits>
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -9,6 +11,11 @@
 namespace geck::pattern {
 
 namespace {
+
+    constexpr qint64 INT32_LO = std::numeric_limits<int>::min();
+    constexpr qint64 INT32_HI = std::numeric_limits<int>::max();
+    constexpr qint64 U32_HI = std::numeric_limits<uint32_t>::max();
+    constexpr qint64 U16_HI = std::numeric_limits<uint16_t>::max();
 
     QJsonObject objectToJson(const PatternObject& obj) {
         QJsonObject json;
@@ -29,18 +36,40 @@ namespace {
         return json;
     }
 
-    // Reads a required integer-valued field. Returns false (and sets `error`) when the
-    // field is absent or not a JSON number.
-    bool readRequiredInt(const QJsonObject& json, const QString& key, qint64& out, QString* error) {
-        const QJsonValue value = json.value(key);
+    // Validates a JSON value as an integer within [lo, hi]. Rejects non-numeric values
+    // and out-of-range integers (which would otherwise wrap when narrowed to the target
+    // type), so engine IDs/directions/flags/tile-ids cannot be silently corrupted.
+    bool checkInt(const QJsonValue& value, qint64 lo, qint64 hi, const QString& key, qint64& out, QString* error) {
         if (!value.isDouble()) {
             if (error) {
                 *error = QStringLiteral("missing or non-numeric field '%1'").arg(key);
             }
             return false;
         }
-        out = value.toInteger();
+        const qint64 v = value.toInteger();
+        if (v < lo || v > hi) {
+            if (error) {
+                *error = QStringLiteral("field '%1' value %2 is out of range").arg(key).arg(v);
+            }
+            return false;
+        }
+        out = v;
         return true;
+    }
+
+    // Required integer field in [lo, hi].
+    bool readRequired(const QJsonObject& json, const QString& key, qint64 lo, qint64 hi, qint64& out, QString* error) {
+        return checkInt(json.value(key), lo, hi, key, out, error);
+    }
+
+    // Optional integer field: absent => `fallback`; present => validated against [lo, hi]
+    // (a present-but-wrong-type or out-of-range value is an error, not a default).
+    bool readOptional(const QJsonObject& json, const QString& key, qint64 lo, qint64 hi, qint64 fallback, qint64& out, QString* error) {
+        if (!json.contains(key)) {
+            out = fallback;
+            return true;
+        }
+        return checkInt(json.value(key), lo, hi, key, out, error);
     }
 
     bool parseObject(const QJsonValue& value, PatternObject& out, QString* error) {
@@ -56,10 +85,14 @@ namespace {
         qint64 dyHex = 0;
         qint64 proPid = 0;
         qint64 frmPid = 0;
-        if (!readRequiredInt(json, QStringLiteral("dxHex"), dxHex, error)
-            || !readRequiredInt(json, QStringLiteral("dyHex"), dyHex, error)
-            || !readRequiredInt(json, QStringLiteral("proPid"), proPid, error)
-            || !readRequiredInt(json, QStringLiteral("frmPid"), frmPid, error)) {
+        qint64 direction = 0;
+        qint64 flags = 0;
+        if (!readRequired(json, QStringLiteral("dxHex"), INT32_LO, INT32_HI, dxHex, error)
+            || !readRequired(json, QStringLiteral("dyHex"), INT32_LO, INT32_HI, dyHex, error)
+            || !readRequired(json, QStringLiteral("proPid"), 0, U32_HI, proPid, error)
+            || !readRequired(json, QStringLiteral("frmPid"), 0, U32_HI, frmPid, error)
+            || !readOptional(json, QStringLiteral("direction"), 0, U32_HI, 0, direction, error)
+            || !readOptional(json, QStringLiteral("flags"), 0, U32_HI, 0, flags, error)) {
             return false;
         }
 
@@ -67,9 +100,8 @@ namespace {
         out.dyHex = static_cast<int>(dyHex);
         out.proPid = static_cast<uint32_t>(proPid);
         out.frmPid = static_cast<uint32_t>(frmPid);
-        // direction and flags are optional; default to 0.
-        out.direction = static_cast<uint32_t>(json.value(QStringLiteral("direction")).toInteger(0));
-        out.flags = static_cast<uint32_t>(json.value(QStringLiteral("flags")).toInteger(0));
+        out.direction = static_cast<uint32_t>(direction);
+        out.flags = static_cast<uint32_t>(flags);
         return true;
     }
 
@@ -85,9 +117,9 @@ namespace {
         qint64 dxTile = 0;
         qint64 dyTile = 0;
         qint64 tileId = 0;
-        if (!readRequiredInt(json, QStringLiteral("dxTile"), dxTile, error)
-            || !readRequiredInt(json, QStringLiteral("dyTile"), dyTile, error)
-            || !readRequiredInt(json, QStringLiteral("tileId"), tileId, error)) {
+        if (!readRequired(json, QStringLiteral("dxTile"), INT32_LO, INT32_HI, dxTile, error)
+            || !readRequired(json, QStringLiteral("dyTile"), INT32_LO, INT32_HI, dyTile, error)
+            || !readRequired(json, QStringLiteral("tileId"), 0, U16_HI, tileId, error)) {
             return false;
         }
 
@@ -178,7 +210,7 @@ std::optional<Pattern> PatternSerializer::deserialize(const QByteArray& data, QS
     const QJsonObject root = doc.object();
 
     qint64 version = 0;
-    if (!readRequiredInt(root, QStringLiteral("version"), version, error)) {
+    if (!readRequired(root, QStringLiteral("version"), INT32_LO, INT32_HI, version, error)) {
         return std::nullopt;
     }
     if (version != Pattern::CURRENT_VERSION) {
@@ -190,20 +222,41 @@ std::optional<Pattern> PatternSerializer::deserialize(const QByteArray& data, QS
         return std::nullopt;
     }
 
+    const QJsonValue nameValue = root.value(QStringLiteral("name"));
+    if (!nameValue.isString()) {
+        if (error) {
+            *error = QStringLiteral("missing or non-string field 'name'");
+        }
+        return std::nullopt;
+    }
+
     qint64 anchorHex = 0;
-    if (!readRequiredInt(root, QStringLiteral("anchorHex"), anchorHex, error)) {
+    if (!readRequired(root, QStringLiteral("anchorHex"), INT32_LO, INT32_HI, anchorHex, error)) {
+        return std::nullopt;
+    }
+
+    const QJsonValue sizeValue = root.value(QStringLiteral("size"));
+    if (!sizeValue.isObject()) {
+        if (error) {
+            *error = QStringLiteral("missing or non-object field 'size'");
+        }
+        return std::nullopt;
+    }
+    const QJsonObject size = sizeValue.toObject();
+    qint64 hexW = 0;
+    qint64 hexH = 0;
+    if (!readRequired(size, QStringLiteral("hexW"), INT32_LO, INT32_HI, hexW, error)
+        || !readRequired(size, QStringLiteral("hexH"), INT32_LO, INT32_HI, hexH, error)) {
         return std::nullopt;
     }
 
     Pattern pattern;
     pattern.version = static_cast<int>(version);
-    pattern.name = root.value(QStringLiteral("name")).toString().toStdString();
+    pattern.name = nameValue.toString().toStdString();
     pattern.anchorHex = static_cast<int>(anchorHex);
+    pattern.sizeHexW = static_cast<int>(hexW);
+    pattern.sizeHexH = static_cast<int>(hexH);
     pattern.rotatable = root.value(QStringLiteral("rotatable")).toBool(false);
-
-    const QJsonObject size = root.value(QStringLiteral("size")).toObject();
-    pattern.sizeHexW = static_cast<int>(size.value(QStringLiteral("hexW")).toInteger(0));
-    pattern.sizeHexH = static_cast<int>(size.value(QStringLiteral("hexH")).toInteger(0));
 
     if (!parseArray(root, QStringLiteral("objects"), pattern.objects, parseObject, error)
         || !parseArray(root, QStringLiteral("floor"), pattern.floor, parseTile, error)

@@ -41,8 +41,8 @@ TEST_CASE("PatternSerializer round-trips a pattern verbatim", "[pattern]") {
 
     QString error;
     const auto parsed = PatternSerializer::deserialize(json, &error);
+    INFO("error: " << error.toStdString()); // shown if the REQUIRE below fails
     REQUIRE(parsed.has_value());
-    INFO("error: " << error.toStdString());
 
     CHECK(parsed->name == original.name);
     CHECK(parsed->version == original.version);
@@ -129,10 +129,58 @@ TEST_CASE("PatternSerializer rejects malformed input", "[pattern]") {
     SECTION("object missing a required field") {
         QString error;
         const auto parsed = PatternSerializer::deserialize(
-            QByteArray(R"({ "version": 1, "anchorHex": 0,
+            QByteArray(R"({ "name": "x", "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 },
                 "objects": [ { "dxHex": 0, "dyHex": 0, "proPid": 1 } ] })"),
             &error);
         CHECK_FALSE(parsed.has_value());
         CHECK(error.contains("frmPid"));
+    }
+}
+
+TEST_CASE("PatternSerializer validates required fields, types and ranges", "[pattern]") {
+    SECTION("missing name is rejected") {
+        QString error;
+        const auto parsed = PatternSerializer::deserialize(
+            QByteArray(R"({ "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 } })"), &error);
+        CHECK_FALSE(parsed.has_value());
+        CHECK(error.contains("name"));
+    }
+
+    SECTION("missing size is rejected") {
+        QString error;
+        const auto parsed = PatternSerializer::deserialize(
+            QByteArray(R"({ "name": "x", "version": 1, "anchorHex": 0 })"), &error);
+        CHECK_FALSE(parsed.has_value());
+        CHECK(error.contains("size"));
+    }
+
+    SECTION("a negative proPid is rejected (would wrap when narrowed)") {
+        QString error;
+        const auto parsed = PatternSerializer::deserialize(
+            QByteArray(R"({ "name": "x", "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 },
+                "objects": [ { "dxHex": 0, "dyHex": 0, "proPid": -1, "frmPid": 0 } ] })"),
+            &error);
+        CHECK_FALSE(parsed.has_value());
+        CHECK(error.contains("proPid"));
+    }
+
+    SECTION("a tileId above 65535 is rejected") {
+        QString error;
+        const auto parsed = PatternSerializer::deserialize(
+            QByteArray(R"({ "name": "x", "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 },
+                "floor": [ { "dxTile": 0, "dyTile": 0, "tileId": 70000 } ] })"),
+            &error);
+        CHECK_FALSE(parsed.has_value());
+        CHECK(error.contains("tileId"));
+    }
+
+    SECTION("a present-but-non-numeric direction is rejected, not defaulted") {
+        QString error;
+        const auto parsed = PatternSerializer::deserialize(
+            QByteArray(R"({ "name": "x", "version": 1, "anchorHex": 0, "size": { "hexW": 1, "hexH": 1 },
+                "objects": [ { "dxHex": 0, "dyHex": 0, "proPid": 1, "frmPid": 2, "direction": "north" } ] })"),
+            &error);
+        CHECK_FALSE(parsed.has_value());
+        CHECK(error.contains("direction"));
     }
 }
