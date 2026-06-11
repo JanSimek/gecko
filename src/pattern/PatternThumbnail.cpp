@@ -8,17 +8,15 @@
 #include <SFML/Graphics.hpp>
 #include <spdlog/spdlog.h>
 
-#include <QCryptographicHash>
 #include <QDateTime>
-#include <QDir>
 #include <QFileInfo>
 #include <QImage>
 #include <QPainter>
+#include <QPixmapCache>
 
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
 #include "pattern/Pattern.h"
-#include "pattern/PatternLibrary.h"
 #include "pattern/PatternSprite.h"
 #include "pattern/PatternStamper.h"
 
@@ -26,16 +24,12 @@ namespace geck::pattern {
 
 namespace {
 
-    // Disk cache path for a pattern's thumbnail, invalidated by the source file's size+mtime.
-    QString cachePath(const QString& sourcePath, int size) {
-        const QFileInfo info(sourcePath);
-        const QString key = sourcePath + '|' + QString::number(info.size()) + '|'
-            + QString::number(info.lastModified().toSecsSinceEpoch()) + '|' + QString::number(size);
-        const QString hash = QString::fromLatin1(
-            QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha1).toHex());
-        const QString dir = QDir(PatternLibrary::rootDir()).filePath(QStringLiteral(".thumbnails"));
-        QDir().mkpath(dir);
-        return QDir(dir).filePath(hash + QStringLiteral(".png"));
+    // In-memory cache key, invalidated by the source file's mtime. Only a handful of
+    // small thumbnails are live at a time, so they are rendered on demand and kept in
+    // Qt's global pixmap cache rather than written to disk.
+    QString cacheKey(const QString& sourcePath, int size) {
+        const qint64 mtime = QFileInfo(sourcePath).lastModified().toSecsSinceEpoch();
+        return sourcePath + '|' + QString::number(mtime) + '|' + QString::number(size);
     }
 
     // Copy an SFML RGBA image into an owned QImage.
@@ -50,10 +44,10 @@ namespace {
 
 QPixmap PatternThumbnail::forPattern(const Pattern& pattern, const QString& sourcePath,
     resource::GameResources& resources, const HexagonGrid& hexgrid, int size) {
-    const QString cache = sourcePath.isEmpty() ? QString() : cachePath(sourcePath, size);
-    if (!cache.isEmpty() && QFileInfo::exists(cache)) {
+    const QString key = sourcePath.isEmpty() ? QString() : cacheKey(sourcePath, size);
+    if (!key.isEmpty()) {
         QPixmap cached;
-        if (cached.load(cache)) {
+        if (QPixmapCache::find(key, &cached)) {
             return cached;
         }
     }
@@ -118,8 +112,8 @@ QPixmap PatternThumbnail::forPattern(const Pattern& pattern, const QString& sour
     painter.end();
 
     QPixmap pixmap = QPixmap::fromImage(canvas);
-    if (!cache.isEmpty()) {
-        pixmap.save(cache, "PNG");
+    if (!key.isEmpty()) {
+        QPixmapCache::insert(key, pixmap);
     }
     return pixmap;
 }

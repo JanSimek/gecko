@@ -18,10 +18,10 @@ struct Pattern;
 class PatternThumbnail {
 public:
     /// Render variant 0 of `pattern` to a `size`x`size` transparent thumbnail using game
-    /// art. The result is cached on disk (under the library's .thumbnails folder, keyed by
-    /// `sourcePath` + size/mtime), so the first browse pays the render cost and later opens
-    /// are instant. Returns a null QPixmap when nothing could be rendered (e.g. no art
-    /// loaded or the pattern has no objects).
+    /// art. Only a few dozen thumbnails are live at a time, so they are rendered on demand
+    /// and kept in Qt's in-memory pixmap cache (keyed by `sourcePath` + size/mtime) — no
+    /// files are written. Returns a null QPixmap when nothing could be rendered (e.g. no
+    /// art loaded or the pattern has no objects).
     static QPixmap forPattern(const Pattern& pattern,
         const QString& sourcePath,
         resource::GameResources& resources,
