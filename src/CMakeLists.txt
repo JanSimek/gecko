@@ -21,6 +21,10 @@ set(GECK_APP_SOURCES
     util/Settings.h
     util/Settings.cpp
 
+    pattern/Pattern.h
+    pattern/PatternSerializer.h
+    pattern/PatternSerializer.cpp
+
     util/ExternalEditorLauncher.h
     util/ExternalEditorLauncher.cpp
 
