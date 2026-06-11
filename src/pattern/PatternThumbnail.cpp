@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
 #include <SFML/Graphics.hpp>
@@ -16,9 +18,13 @@
 
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
+#include "format/lst/Lst.h"
+#include "format/map/Map.h"
 #include "pattern/Pattern.h"
 #include "pattern/PatternSprite.h"
 #include "pattern/PatternStamper.h"
+#include "resource/GameResources.h"
+#include "util/TileUtils.h"
 
 namespace geck::pattern {
 
@@ -40,6 +46,29 @@ namespace {
             .copy();
     }
 
+    // Build a floor/roof tile sprite (tile id -> tiles.lst name -> art) positioned at the
+    // tile's isometric screen coordinates. Returns nullopt for empty/unresolvable tiles.
+    std::optional<sf::Sprite> buildTileSprite(resource::GameResources& resources,
+        int tileIndex, bool isRoof, uint16_t tileId) {
+        if (tileId == static_cast<uint16_t>(Map::EMPTY_TILE)) {
+            return std::nullopt;
+        }
+        const auto* tileList = resources.repository().find<Lst>("art/tiles/tiles.lst");
+        if (tileList == nullptr || tileId >= tileList->list().size()) {
+            return std::nullopt;
+        }
+        try {
+            const std::string tilePath = "art/tiles/" + tileList->list()[tileId];
+            sf::Sprite sprite{ resources.textures().get(tilePath) };
+            const ScreenPosition pos = indexToScreenPosition(tileIndex, isRoof);
+            sprite.setPosition({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
+            return sprite;
+        } catch (const std::exception& e) {
+            spdlog::warn("PatternThumbnail: tile {} art failed: {}", tileId, e.what());
+            return std::nullopt;
+        }
+    }
+
 } // namespace
 
 QPixmap PatternThumbnail::forPattern(const Pattern& pattern, const QString& sourcePath,
@@ -56,16 +85,27 @@ QPixmap PatternThumbnail::forPattern(const Pattern& pattern, const QString& sour
         return {};
     }
 
-    // Build positioned sprites for variant 0 at its authored hexes.
+    // Build positioned sprites for variant 0 at its authored positions: floor and roof
+    // tiles plus objects.
     const PatternVariant& variant = pattern.variants.front();
     const PatternStamper::Plan plan = PatternStamper::plan(variant, variant.anchorHex);
+
+    std::vector<sf::Sprite> floorSprites;
+    std::vector<sf::Sprite> roofSprites;
+    for (const PatternStamper::TilePlacement& tp : plan.tiles) {
+        if (auto sprite = buildTileSprite(resources, tp.tileIndex, tp.isRoof, tp.tileId)) {
+            (tp.isRoof ? roofSprites : floorSprites).push_back(std::move(*sprite));
+        }
+    }
+
     std::vector<std::shared_ptr<Object>> objects;
     for (const PatternStamper::ObjectPlacement& op : plan.objects) {
         if (auto object = buildSpriteObject(resources, hexgrid, op.frmPid, op.hex, op.direction)) {
             objects.push_back(std::move(object));
         }
     }
-    if (objects.empty()) {
+
+    if (floorSprites.empty() && roofSprites.empty() && objects.empty()) {
         return {}; // no resolvable art
     }
 
@@ -74,12 +114,20 @@ QPixmap PatternThumbnail::forPattern(const Pattern& pattern, const QString& sour
     float minY = std::numeric_limits<float>::max();
     float maxX = std::numeric_limits<float>::lowest();
     float maxY = std::numeric_limits<float>::lowest();
-    for (const auto& object : objects) {
-        const sf::FloatRect b = object->getSprite().getGlobalBounds();
+    const auto extend = [&](const sf::FloatRect& b) {
         minX = std::min(minX, b.position.x);
         minY = std::min(minY, b.position.y);
         maxX = std::max(maxX, b.position.x + b.size.x);
         maxY = std::max(maxY, b.position.y + b.size.y);
+    };
+    for (const auto& sprite : floorSprites) {
+        extend(sprite.getGlobalBounds());
+    }
+    for (const auto& object : objects) {
+        extend(object->getSprite().getGlobalBounds());
+    }
+    for (const auto& sprite : roofSprites) {
+        extend(sprite.getGlobalBounds());
     }
     constexpr float pad = 4.0f;
     minX -= pad;
@@ -97,8 +145,15 @@ QPixmap PatternThumbnail::forPattern(const Pattern& pattern, const QString& sour
     renderTexture.setView(sf::View(sf::FloatRect({ minX, minY },
         { static_cast<float>(width), static_cast<float>(height) })));
     renderTexture.clear(sf::Color::Transparent);
+    // Draw order matches the editor: floor tiles, then objects, then roof tiles on top.
+    for (const auto& sprite : floorSprites) {
+        renderTexture.draw(sprite);
+    }
     for (const auto& object : objects) {
         renderTexture.draw(object->getSprite());
+    }
+    for (const auto& sprite : roofSprites) {
+        renderTexture.draw(sprite);
     }
     renderTexture.display();
 
