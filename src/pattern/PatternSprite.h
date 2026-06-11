@@ -2,6 +2,9 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
+
+#include <SFML/Graphics/Sprite.hpp>
 
 namespace geck {
 class HexagonGrid;
@@ -22,5 +25,13 @@ std::shared_ptr<Object> buildSpriteObject(resource::GameResources& resources,
     uint32_t frmPid,
     int hex,
     uint32_t direction);
+
+/// Build a floor/roof tile sprite (tile id -> tiles.lst name -> art) positioned at the
+/// tile's isometric screen coordinates. Returns std::nullopt for empty/unresolvable
+/// tiles. Shared by the thumbnail compositor and the stamp ghost preview.
+std::optional<sf::Sprite> buildTileSprite(resource::GameResources& resources,
+    int tileIndex,
+    bool isRoof,
+    uint16_t tileId);
 
 } // namespace geck::pattern

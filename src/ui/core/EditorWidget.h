@@ -351,8 +351,11 @@ private:
     int _stampVariantIndex = 0;
     void stampPatternAt(sf::Vector2f worldPos);
 
-    // Semi-transparent ghost of the current variant under the cursor (StampPattern mode).
+    // Semi-transparent ghost of the current variant under the cursor (StampPattern mode):
+    // floor tiles (drawn under), objects, and roof tiles (drawn over).
+    std::vector<sf::Sprite> _stampPreviewFloorTiles;
     std::vector<std::shared_ptr<Object>> _stampPreviewObjects;
+    std::vector<sf::Sprite> _stampPreviewRoofTiles;
     int _stampPreviewHex = -1;
     void updateStampPreview(sf::Vector2f worldPos);
     void clearStampPreview();

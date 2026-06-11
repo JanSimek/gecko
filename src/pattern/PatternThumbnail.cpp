@@ -4,7 +4,6 @@
 #include <limits>
 #include <memory>
 #include <optional>
-#include <string>
 #include <vector>
 
 #include <SFML/Graphics.hpp>
@@ -18,13 +17,9 @@
 
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
-#include "format/lst/Lst.h"
-#include "format/map/Map.h"
 #include "pattern/Pattern.h"
 #include "pattern/PatternSprite.h"
 #include "pattern/PatternStamper.h"
-#include "resource/GameResources.h"
-#include "util/TileUtils.h"
 
 namespace geck::pattern {
 
@@ -44,29 +39,6 @@ namespace {
         return QImage(image.getPixelsPtr(), static_cast<int>(sz.x), static_cast<int>(sz.y),
             QImage::Format_RGBA8888)
             .copy();
-    }
-
-    // Build a floor/roof tile sprite (tile id -> tiles.lst name -> art) positioned at the
-    // tile's isometric screen coordinates. Returns nullopt for empty/unresolvable tiles.
-    std::optional<sf::Sprite> buildTileSprite(resource::GameResources& resources,
-        int tileIndex, bool isRoof, uint16_t tileId) {
-        if (tileId == static_cast<uint16_t>(Map::EMPTY_TILE)) {
-            return std::nullopt;
-        }
-        const auto* tileList = resources.repository().find<Lst>("art/tiles/tiles.lst");
-        if (tileList == nullptr || tileId >= tileList->list().size()) {
-            return std::nullopt;
-        }
-        try {
-            const std::string tilePath = "art/tiles/" + tileList->list()[tileId];
-            sf::Sprite sprite{ resources.textures().get(tilePath) };
-            const ScreenPosition pos = indexToScreenPosition(tileIndex, isRoof);
-            sprite.setPosition({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
-            return sprite;
-        } catch (const std::exception& e) {
-            spdlog::warn("PatternThumbnail: tile {} art failed: {}", tileId, e.what());
-            return std::nullopt;
-        }
     }
 
 } // namespace

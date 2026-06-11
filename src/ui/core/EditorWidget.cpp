@@ -893,7 +893,9 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.selectedHexPositions = &_selectedHexPositions;
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
+    renderData.stampPreviewFloorTiles = &_stampPreviewFloorTiles;
     renderData.stampPreviewObjects = &_stampPreviewObjects;
+    renderData.stampPreviewRoofTiles = &_stampPreviewRoofTiles;
     renderData.selectionRectangle = &_selectionRectangle;
     // Use InputHandler state for drag selection rendering
     renderData.isDragSelecting = _inputHandler && _inputHandler->isDragging();
@@ -1194,7 +1196,9 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
 }
 
 void EditorWidget::clearStampPreview() {
+    _stampPreviewFloorTiles.clear();
     _stampPreviewObjects.clear();
+    _stampPreviewRoofTiles.clear();
     _stampPreviewHex = -1;
 }
 
@@ -1212,7 +1216,9 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
         return; // still over the same hex; the ghost is unchanged
     }
     _stampPreviewHex = hex;
+    _stampPreviewFloorTiles.clear();
     _stampPreviewObjects.clear();
+    _stampPreviewRoofTiles.clear();
 
     if (_stampVariantIndex < 0 || _stampVariantIndex >= static_cast<int>(_stampPattern->variants.size())) {
         _stampVariantIndex = 0;
@@ -1220,12 +1226,20 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
     const pattern::PatternVariant& variant = _stampPattern->variants[_stampVariantIndex];
     const pattern::PatternStamper::Plan plan = pattern::PatternStamper::plan(variant, hex);
 
+    const auto ghostAlpha = sf::Color(255, 255, 255, 140);
+    for (const pattern::PatternStamper::TilePlacement& tp : plan.tiles) {
+        if (auto sprite = pattern::buildTileSprite(_resources, tp.tileIndex, tp.isRoof, tp.tileId)) {
+            sprite->setColor(ghostAlpha);
+            (tp.isRoof ? _stampPreviewRoofTiles : _stampPreviewFloorTiles).push_back(std::move(*sprite));
+        }
+    }
+
     for (const pattern::PatternStamper::ObjectPlacement& op : plan.objects) {
         auto object = pattern::buildSpriteObject(_resources, _hexgrid, op.frmPid, op.hex, op.direction);
         if (!object) {
             continue;
         }
-        object->getSprite().setColor(sf::Color(255, 255, 255, 140)); // semi-transparent ghost
+        object->getSprite().setColor(ghostAlpha); // semi-transparent ghost
         _stampPreviewObjects.push_back(std::move(object));
     }
 }
