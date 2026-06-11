@@ -857,11 +857,9 @@ bool ObjectCommandController::endBatch() {
         }
     };
 
-    _undoStack.push(std::move(combined));
-    if (_onStackChanged) {
-        _onStackChanged();
-    }
-    return true;
+    // _batchDepth is now 0, so this pushes (rather than buffers) through the single
+    // funnel that owns the undo stack and its stack-changed notification.
+    return pushCommand(std::move(combined));
 }
 
 } // namespace geck

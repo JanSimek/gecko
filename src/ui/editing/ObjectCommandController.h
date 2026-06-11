@@ -209,7 +209,17 @@ public:
         : _controller(controller) {
         _controller.beginBatch(description);
     }
-    ~ScopedUndoBatch() { _controller.endBatch(); }
+    ~ScopedUndoBatch() {
+        // endBatch() allocates (make_shared / std::function), so it can throw. A
+        // throwing destructor during stack unwinding would std::terminate — which
+        // would defeat the whole point of flushing safely when a scope exits via an
+        // exception — so swallow any failure here. The edits were already applied;
+        // at worst their batched undo record is dropped.
+        try {
+            _controller.endBatch();
+        } catch (...) { // NOLINT(bugprone-empty-catch)
+        }
+    }
 
     ScopedUndoBatch(const ScopedUndoBatch&) = delete;
     ScopedUndoBatch& operator=(const ScopedUndoBatch&) = delete;
