@@ -2,7 +2,8 @@
 
 #include "util/TileUtils.h"
 #include "util/Constants.h"
-#include <cstdlib>
+
+#include "support/GraphicsTestEnv.h"
 
 using namespace geck;
 
@@ -187,22 +188,7 @@ TEST_CASE("Color utilities", "[tile_utils]") {
 }
 
 TEST_CASE("Sprite highlight functions", "[tile_utils]") {
-    // Skip graphics tests in CI/headless environments
-#ifdef _WIN32
-    char* ci = nullptr;
-    char* github_actions = nullptr;
-    size_t len = 0;
-    _dupenv_s(&ci, &len, "CI");
-    _dupenv_s(&github_actions, &len, "GITHUB_ACTIONS");
-    bool skip_tests = (ci != nullptr || github_actions != nullptr);
-    free(ci);
-    free(github_actions);
-#else
-    bool skip_tests = (std::getenv("CI") != nullptr || std::getenv("GITHUB_ACTIONS") != nullptr);
-#endif
-    if (skip_tests) {
-        SKIP("Graphics tests skipped in CI environment");
-    }
+    GECK_SKIP_IF_HEADLESS_CI();
 
     SECTION("Apply and remove preview highlight") {
         // Create a minimal 1x1 texture for testing
