@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <string_view>
 #include <vector>
 
 #include "selection/SelectionState.h"
@@ -90,7 +91,7 @@ TEST_CASE("SelectionState area selection", "[selection_state]") {
         REQUIRE(state.isAreaSelecting());
 
         if (state.selectionArea.has_value()) {
-            auto& area = state.selectionArea.value();
+            const auto& area = state.selectionArea.value();
             REQUIRE(area.position.x == 100.0f);
             REQUIRE(area.position.y == 150.0f);
             REQUIRE(area.size.x == 100.0f); // 200 - 100
@@ -165,21 +166,20 @@ TEST_CASE("Selection mode enumeration", "[selection_modes]") {
 
         // Verify string conversion works for all modes
         for (auto mode : allModes) {
-            const char* modeStr = selectionModeToString(mode);
-            REQUIRE(modeStr != nullptr);
-            REQUIRE(strlen(modeStr) > 0);
-            REQUIRE(strcmp(modeStr, "Unknown") != 0);
+            const std::string_view modeStr = selectionModeToString(mode);
+            REQUIRE_FALSE(modeStr.empty());
+            REQUIRE(modeStr != "Unknown");
         }
     }
 
     SECTION("Selection mode string representations") {
-        REQUIRE(strcmp(selectionModeToString(SelectionMode::ALL), "All") == 0);
-        REQUIRE(strcmp(selectionModeToString(SelectionMode::FLOOR_TILES), "Floor Tiles") == 0);
-        REQUIRE(strcmp(selectionModeToString(SelectionMode::ROOF_TILES), "Roof Tiles") == 0);
-        REQUIRE(strcmp(selectionModeToString(SelectionMode::ROOF_TILES_ALL), "Roof Tiles + Empty") == 0);
-        REQUIRE(strcmp(selectionModeToString(SelectionMode::OBJECTS), "Objects") == 0);
-        REQUIRE(strcmp(selectionModeToString(SelectionMode::HEXES), "Hexes") == 0);
-        REQUIRE(strcmp(selectionModeToString(SelectionMode::SCROLL_BLOCKER_RECTANGLE), "Scroll Blocker") == 0);
+        CHECK(std::string_view(selectionModeToString(SelectionMode::ALL)) == "All");
+        CHECK(std::string_view(selectionModeToString(SelectionMode::FLOOR_TILES)) == "Floor Tiles");
+        CHECK(std::string_view(selectionModeToString(SelectionMode::ROOF_TILES)) == "Roof Tiles");
+        CHECK(std::string_view(selectionModeToString(SelectionMode::ROOF_TILES_ALL)) == "Roof Tiles + Empty");
+        CHECK(std::string_view(selectionModeToString(SelectionMode::OBJECTS)) == "Objects");
+        CHECK(std::string_view(selectionModeToString(SelectionMode::HEXES)) == "Hexes");
+        CHECK(std::string_view(selectionModeToString(SelectionMode::SCROLL_BLOCKER_RECTANGLE)) == "Scroll Blocker");
     }
 }
 
