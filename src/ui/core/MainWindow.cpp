@@ -19,6 +19,10 @@
 #include "state/loader/DataPathLoader.h"
 #include "state/GameLauncher.h"
 #include "selection/SelectionState.h"
+#include "selection/SelectionManager.h"
+#include "pattern/PatternBuilder.h"
+#include "pattern/PatternSerializer.h"
+#include "format/map/Map.h"
 #include "util/Types.h"
 #include "util/Settings.h"
 #include "util/QtDialogs.h"
@@ -45,6 +49,9 @@
 #include <QMenu>
 #include <QIcon>
 #include <QSignalBlocker>
+#include <QFileDialog>
+#include <QFile>
+#include <QFileInfo>
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 
@@ -364,6 +371,7 @@ void MainWindow::setupMenuBar() {
 
     _editMenu->addSeparator();
     addMenuAction(_editMenu, ":/icons/actions/scroll-blocker.svg", "Scroll &Blocker Rectangle", &MainWindow::toggleScrollBlockerRectangleMode, QKeySequence("B"), "Draw rectangle and place scroll blockers on borders");
+    addMenuAction(_editMenu, ":/icons/actions/save.svg", "Save Selection as &Pattern...", &MainWindow::showSavePatternDialog, QKeySequence(), "Save the current selection as a reusable prefab pattern");
 
     _editMenu->addSeparator();
 
@@ -1666,6 +1674,42 @@ void MainWindow::onPlayGame() {
     }
 
     _gameLauncher->playGame(mapFile, mapFilename);
+}
+
+void MainWindow::showSavePatternDialog() {
+    if (!_currentEditorWidget || !hasActiveMap()) {
+        showStatusMessage("Open a map and select objects or tiles first.");
+        return;
+    }
+    auto* selectionManager = _currentEditorWidget->getSelectionManager();
+    Map* map = _currentEditorWidget->getMap();
+    if (!selectionManager || !map) {
+        return;
+    }
+
+    const QString path = QFileDialog::getSaveFileName(
+        this, "Save Selection as Pattern", QString(), "Gecko Pattern (*.json)");
+    if (path.isEmpty()) {
+        return;
+    }
+
+    const std::string name = QFileInfo(path).completeBaseName().toStdString();
+    auto pattern = pattern::PatternBuilder::fromSelection(
+        selectionManager->getCurrentSelection(), *map, _currentEditorWidget->getCurrentElevation(), name);
+    if (!pattern.has_value()) {
+        showStatusMessage("Nothing selected to save as a pattern.");
+        return;
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        showStatusMessage("Failed to write pattern file.");
+        return;
+    }
+    file.write(pattern::PatternSerializer::serialize(*pattern));
+    showStatusMessage(QString("Saved pattern '%1' (%2 variant).")
+            .arg(QString::fromStdString(pattern->name))
+            .arg(pattern->variants.size()));
 }
 
 void MainWindow::showStatusMessage(const QString& message) {

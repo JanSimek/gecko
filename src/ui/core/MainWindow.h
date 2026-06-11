@@ -110,6 +110,7 @@ private slots:
     void showPreferences();
     void showAbout();
     void onPlayGame();
+    void showSavePatternDialog();
 
 public slots:
     void showStatusMessage(const QString& message);
