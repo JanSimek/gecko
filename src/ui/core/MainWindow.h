@@ -18,6 +18,8 @@
 #include <utility>
 #include <SFML/Window/Event.hpp>
 
+#include "EditorMode.h"
+
 QT_BEGIN_NAMESPACE
 class QVBoxLayout;
 class QHBoxLayout;
@@ -120,6 +122,8 @@ private:
     void setupUI();
     void setupMenuBar();
     void setupToolBar();
+    void setupToolModeActions();
+    void syncToolModeActions(EditorMode mode);
     void setupDockWidgets();
     void setupStatusBar();
     void setupPanelsMenu();
@@ -175,7 +179,9 @@ private:
 
     // Toolbar
     QToolBar* _mainToolBar;
-    QAction* _markExitsAction;
+    QAction* _selectToolAction = nullptr;
+    QAction* _markExitsAction = nullptr;
+    QAction* _placeExitGridAction = nullptr;
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
 
