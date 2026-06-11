@@ -15,7 +15,8 @@ namespace {
     constexpr qint64 INT32_LO = std::numeric_limits<int>::min();
     constexpr qint64 INT32_HI = std::numeric_limits<int>::max();
     constexpr qint64 U32_HI = std::numeric_limits<uint32_t>::max();
-    constexpr qint64 U16_HI = std::numeric_limits<uint16_t>::max();
+    constexpr qint64 DIRECTION_HI = 5;    // Fallout 2 hex facings are 0..5.
+    constexpr qint64 TILE_ID_HI = 0x0FFF; // Engine tile ids are 12-bit (Tile masks & 0x0FFF).
 
     QJsonObject objectToJson(const PatternObject& obj) {
         QJsonObject json;
@@ -110,7 +111,7 @@ namespace {
             || !readRequired(json, QStringLiteral("dyHex"), INT32_LO, INT32_HI, dyHex, error)
             || !readRequired(json, QStringLiteral("proPid"), 0, U32_HI, proPid, error)
             || !readRequired(json, QStringLiteral("frmPid"), 0, U32_HI, frmPid, error)
-            || !readOptional(json, QStringLiteral("direction"), 0, U32_HI, 0, direction, error)
+            || !readOptional(json, QStringLiteral("direction"), 0, DIRECTION_HI, 0, direction, error)
             || !readOptional(json, QStringLiteral("flags"), 0, U32_HI, 0, flags, error)) {
             return false;
         }
@@ -138,7 +139,7 @@ namespace {
         qint64 tileId = 0;
         if (!readRequired(json, QStringLiteral("dxTile"), INT32_LO, INT32_HI, dxTile, error)
             || !readRequired(json, QStringLiteral("dyTile"), INT32_LO, INT32_HI, dyTile, error)
-            || !readRequired(json, QStringLiteral("tileId"), 0, U16_HI, tileId, error)) {
+            || !readRequired(json, QStringLiteral("tileId"), 0, TILE_ID_HI, tileId, error)) {
             return false;
         }
 

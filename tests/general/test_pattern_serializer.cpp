@@ -25,7 +25,7 @@ Pattern makeSamplePattern() {
     west.objects.push_back(PatternObject{ -3, -1, 33554435u, 16777220u, 5u, 0u });
     west.floor.push_back(PatternTile{ 0, 0, 271 });
     west.floor.push_back(PatternTile{ 1, 0, 271 });
-    west.roof.push_back(PatternTile{ 0, 0, 4096 });
+    west.roof.push_back(PatternTile{ 0, 0, 2048 });
     p.variants.push_back(west);
 
     PatternVariant south;
@@ -106,7 +106,7 @@ TEST_CASE("PatternSerializer round-trips a pattern verbatim", "[pattern]") {
     CHECK(west.floor[1].dxTile == 1);
     CHECK(west.floor[1].tileId == 271);
     REQUIRE(west.roof.size() == 1);
-    CHECK(west.roof[0].tileId == 4096);
+    CHECK(west.roof[0].tileId == 2048);
 
     const auto& south = parsed->variants[1];
     CHECK(south.label == "entrance south");
@@ -174,10 +174,13 @@ TEST_CASE("PatternSerializer rejects malformed and out-of-spec input", "[pattern
     SECTION("a negative proPid would wrap when narrowed, so it is rejected") {
         checkRejected(variantDoc(R"("objects": [ { "dxHex": 0, "dyHex": 0, "proPid": -1, "frmPid": 0 } ])"), "proPid");
     }
-    SECTION("a tileId above 65535 is rejected") {
-        checkRejected(variantDoc(R"("floor": [ { "dxTile": 0, "dyTile": 0, "tileId": 70000 } ])"), "tileId");
+    SECTION("a tileId above the engine's 12-bit limit is rejected") {
+        checkRejected(variantDoc(R"("floor": [ { "dxTile": 0, "dyTile": 0, "tileId": 4096 } ])"), "tileId");
     }
     SECTION("a present-but-non-numeric direction is rejected, not defaulted") {
         checkRejected(variantDoc(R"("objects": [ { "dxHex": 0, "dyHex": 0, "proPid": 1, "frmPid": 2, "direction": "north" } ])"), "direction");
+    }
+    SECTION("a direction outside 0..5 is rejected") {
+        checkRejected(variantDoc(R"("objects": [ { "dxHex": 0, "dyHex": 0, "proPid": 1, "frmPid": 2, "direction": 6 } ])"), "direction");
     }
 }

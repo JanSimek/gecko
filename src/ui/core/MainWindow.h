@@ -184,6 +184,7 @@ private:
     QAction* _selectToolAction = nullptr;
     QAction* _markExitsAction = nullptr;
     QAction* _placeExitGridAction = nullptr;
+    QAction* _rotateAction = nullptr;
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
 

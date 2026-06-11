@@ -618,7 +618,9 @@ void MainWindow::setupToolBar() {
 
     _mainToolBar->addSeparator();
 
-    addToolAction(":/icons/actions/rotate.svg", "Rotate", &MainWindow::rotateObjectRequested, "Rotate selected object", QKeySequence("R"));
+    // Stored so it can be disabled while stamping a pattern — otherwise its "R" shortcut
+    // swallows the key before it reaches the viewport, where R cycles pattern variants.
+    _rotateAction = addToolAction(":/icons/actions/rotate.svg", "Rotate", &MainWindow::rotateObjectRequested, "Rotate selected object", QKeySequence("R"));
 
     _mainToolBar->addSeparator();
 
@@ -685,6 +687,11 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
     sync(_selectToolAction, EditorMode::Select);
     sync(_markExitsAction, EditorMode::MarkExits);
     sync(_placeExitGridAction, EditorMode::PlaceExitGrid);
+
+    // Free up "R" for variant cycling while a pattern is being stamped.
+    if (_rotateAction) {
+        _rotateAction->setEnabled(mode != EditorMode::StampPattern);
+    }
 }
 
 void MainWindow::setupDockWidgets() {

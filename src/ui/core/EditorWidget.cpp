@@ -797,7 +797,10 @@ void EditorWidget::setupInputCallbacks() {
     };
 
     callbacks.onEscape = [this]() {
-        if (_tilePlacementManager->isTilePlacementMode()) {
+        if (_mode == EditorMode::StampPattern) {
+            setMode(EditorMode::Select);
+            Q_EMIT statusMessageRequested("Pattern stamping cancelled.");
+        } else if (_tilePlacementManager->isTilePlacementMode()) {
             _tilePlacementManager->resetState();
             if (_mainWindow && _mainWindow->getTilePalettePanel()) {
                 _mainWindow->getTilePalettePanel()->deselectTile();
@@ -1144,9 +1147,13 @@ void EditorWidget::beginStampPattern(pattern::Pattern pattern) {
     _stampPattern = std::move(pattern);
     _stampVariantIndex = 0;
     setMode(EditorMode::StampPattern);
-    Q_EMIT statusMessageRequested(
-        QString("Stamp mode: click to place '%1'. Right-click or Esc to exit.")
-            .arg(QString::fromStdString(_stampPattern->name)));
+    QString message = QString("Stamp mode: click to place '%1'.")
+                          .arg(QString::fromStdString(_stampPattern->name));
+    if (_stampPattern->variants.size() > 1) {
+        message += " R cycles variants.";
+    }
+    message += " Right-click or Esc to exit.";
+    Q_EMIT statusMessageRequested(message);
 }
 
 void EditorWidget::cycleStampVariant() {

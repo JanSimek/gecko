@@ -271,6 +271,12 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
         if (_callbacks.onDeleteObjects) {
             _callbacks.onDeleteObjects();
         }
+    } else if (event.code == sf::Keyboard::Key::R) {
+        // In stamp mode, R cycles the pattern's orientation variants (the Rotate toolbar
+        // shortcut is disabled by the editor while stamping, so the key reaches us here).
+        if (_stampPatternMode && _callbacks.onStampCycleVariant) {
+            _callbacks.onStampCycleVariant();
+        }
     }
 }
 

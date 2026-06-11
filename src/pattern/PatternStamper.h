@@ -52,9 +52,13 @@ public:
         bool success = false;
     };
 
-    /// Resolve where each entry of `variant` lands when its anchor is stamped on
-    /// `targetHex`. Object offsets translate in cube space (parity-correct); tile
-    /// offsets translate in tile space. Off-grid entries are dropped and counted. Pure.
+    /// Resolve where each entry of `variant` lands when its anchor is stamped near
+    /// `targetHex`. Objects place at hex precision but tiles only at tile (2-hex)
+    /// precision, so `targetHex` is first **snapped to the anchor's column/row parity**
+    /// (placement is therefore tile-granular — the actual anchor may be up to one hex
+    /// from `targetHex`); this keeps floor/roof tiles locked to the objects. Object
+    /// offsets then translate in cube space, tile offsets in tile space; off-grid entries
+    /// are dropped and counted. Pure.
     static Plan plan(const PatternVariant& variant, int targetHex);
 
     PatternStamper(resource::GameResources& resources,
@@ -62,7 +66,8 @@ public:
         ObjectCommandController& controller,
         Map& map);
 
-    /// Apply `variant` at `targetHex` on `elevation` as one undo entry.
+    /// Apply `variant` near `targetHex` on `elevation` as one undo entry. `targetHex` is
+    /// snapped to the anchor's parity (see plan()), so placement is tile-granular.
     Result stamp(const PatternVariant& variant, int targetHex, int elevation);
 
 private:
