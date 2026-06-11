@@ -11,7 +11,8 @@
 #include "editor/Object.h"
 #include "editor/HexagonGrid.h"
 
-#include <cstdlib>
+#include "support/GraphicsTestEnv.h"
+
 #include <memory>
 #include <optional>
 #include <utility>
@@ -56,20 +57,18 @@ public:
 
     // --- SelectionDataProvider: hit tests ---
     std::optional<int> getTileAtPosition(sf::Vector2f worldPos, [[maybe_unused]] bool isRoof) override {
-        // Simple mock: convert world position to tile index for testing
-        // In real implementation, this would do complex hit detection
-
-        // Check for invalid coordinates first
+        // Deliberately simple, deterministic stub (not the real hit-test math, which
+        // lives in ViewportController and is covered by test_viewport_controller.cpp):
+        // x maps to a column, y to a row, in a row-major MAP_HEIGHT x MAP_WIDTH grid.
         if (worldPos.x < 0.0f || worldPos.y < 0.0f) {
             return std::nullopt;
         }
 
-        int x = static_cast<int>(worldPos.x) / 32; // Simplified conversion
-        int y = static_cast<int>(worldPos.y) / 24; // Simplified conversion
+        const int col = static_cast<int>(worldPos.x) / 32;
+        const int row = static_cast<int>(worldPos.y) / 24;
 
-        // Ensure within bounds
-        if (x >= 0 && x < MAP_HEIGHT && y >= 0 && y < MAP_WIDTH) {
-            return x * MAP_WIDTH + y;
+        if (col >= 0 && col < MAP_WIDTH && row >= 0 && row < MAP_HEIGHT) {
+            return row * MAP_WIDTH + col;
         }
         return std::nullopt;
     }
@@ -111,9 +110,10 @@ TEST_CASE("Mock provider position-based tile hit tests", "[selection_manager][mo
     SECTION("Single click tile selection behavior") {
         MockEditorWidget mockEditor;
 
-        // Test different world positions and verify correct tile selection
-        sf::Vector2f testPos1(64.0f, 48.0f);  // Should map to tile around (2,1)
-        sf::Vector2f testPos2(128.0f, 96.0f); // Should map to tile around (4,2)
+        // Test different world positions and verify correct tile selection.
+        // Per the mock formula (col = x/32, row = y/24):
+        sf::Vector2f testPos1(64.0f, 48.0f);  // -> col 2, row 2
+        sf::Vector2f testPos2(128.0f, 96.0f); // -> col 4, row 4
 
         // Verify the mock returns reasonable tile indices
         auto tile1 = mockEditor.getTileAtPosition(testPos1, false);
@@ -245,21 +245,7 @@ TEST_CASE("SelectionManager drives provider-backed selection paths", "[selection
 //==============================================================================
 
 TEST_CASE("SelectionManager area selection honors host elevation (regression)", "[selection_manager_real][regression]") {
-#if defined(_WIN32)
-    char* ci = nullptr;
-    char* github_actions = nullptr;
-    size_t len = 0;
-    _dupenv_s(&ci, &len, "CI");
-    _dupenv_s(&github_actions, &len, "GITHUB_ACTIONS");
-    bool skip_tests = (ci != nullptr || github_actions != nullptr);
-    free(ci);
-    free(github_actions);
-#else
-    bool skip_tests = (std::getenv("CI") != nullptr || std::getenv("GITHUB_ACTIONS") != nullptr);
-#endif
-    if (skip_tests) {
-        SKIP("Graphics tests skipped in CI environment");
-    }
+    GECK_SKIP_IF_HEADLESS_CI();
 
     // The roof tile we will both place a sprite for and mark present on elevation 2.
     constexpr int TARGET_ROOF_TILE = 4242;
