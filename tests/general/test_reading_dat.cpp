@@ -1,10 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
-#include <string>
-#include <vector>
-
 #include <filesystem>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include "format/dat/Dat.h"
 #include "format/dat/DatEntry.h"
@@ -19,10 +19,9 @@ namespace {
 // zlib-compressed entries (also pinned by the vfspp-based qt test).
 constexpr size_t F2_RES_ENTRY_COUNT = 178;
 
-const DatEntry* findBySuffix(const Dat& dat, const std::string& suffix) {
+const DatEntry* findBySuffix(const Dat& dat, std::string_view suffix) {
     for (const auto& [name, entry] : dat.getEntries()) {
-        if (name.size() >= suffix.size()
-            && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+        if (std::string_view(name).ends_with(suffix)) {
             return entry.get();
         }
     }
