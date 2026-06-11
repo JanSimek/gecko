@@ -30,6 +30,10 @@ set(GECK_APP_SOURCES
     pattern/PatternBuilder.cpp
     pattern/PatternLibrary.h
     pattern/PatternLibrary.cpp
+    pattern/PatternSprite.h
+    pattern/PatternSprite.cpp
+    pattern/PatternThumbnail.h
+    pattern/PatternThumbnail.cpp
 
     util/ExternalEditorLauncher.h
     util/ExternalEditorLauncher.cpp

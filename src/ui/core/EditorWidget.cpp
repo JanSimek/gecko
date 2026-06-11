@@ -30,6 +30,7 @@
 
 #include "editor/Object.h"
 #include "pattern/PatternStamper.h"
+#include "pattern/PatternSprite.h"
 #include "editor/HexagonGrid.h"
 
 #include "format/frm/Frm.h"
@@ -1220,32 +1221,12 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
     const pattern::PatternStamper::Plan plan = pattern::PatternStamper::plan(variant, hex);
 
     for (const pattern::PatternStamper::ObjectPlacement& op : plan.objects) {
-        const Frm* frm = nullptr;
-        std::string frmPath;
-        try {
-            frmPath = _resources.frmResolver().resolve(op.frmPid);
-            if (!frmPath.empty()) {
-                frm = _resources.repository().load<Frm>(frmPath);
-            }
-        } catch (const std::exception&) {
-            frm = nullptr;
-        }
-        if (frm == nullptr) {
+        auto object = pattern::buildSpriteObject(_resources, _hexgrid, op.frmPid, op.hex, op.direction);
+        if (!object) {
             continue;
         }
-        try {
-            auto object = std::make_shared<Object>(frm);
-            sf::Sprite sprite{ _resources.textures().get(frmPath) };
-            object->setSprite(std::move(sprite));
-            object->setDirection(static_cast<ObjectDirection>(op.direction));
-            if (auto h = _hexgrid.getHexByPosition(static_cast<uint32_t>(op.hex)); h.has_value()) {
-                object->setHexPosition(h->get());
-            }
-            object->getSprite().setColor(sf::Color(255, 255, 255, 140)); // semi-transparent ghost
-            _stampPreviewObjects.push_back(std::move(object));
-        } catch (const std::exception&) {
-            // Skip objects whose sprite cannot be built.
-        }
+        object->getSprite().setColor(sf::Color(255, 255, 255, 140)); // semi-transparent ghost
+        _stampPreviewObjects.push_back(std::move(object));
     }
 }
 

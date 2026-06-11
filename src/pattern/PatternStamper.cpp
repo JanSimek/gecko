@@ -12,6 +12,7 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
+#include "pattern/PatternSprite.h"
 #include "resource/GameResources.h"
 #include "ui/core/TileChange.h"
 #include "ui/editing/ObjectCommandController.h"
@@ -83,37 +84,11 @@ PatternStamper::PatternStamper(resource::GameResources& resources, const Hexagon
     , _map(map) { }
 
 std::shared_ptr<Object> PatternStamper::buildObject(const std::shared_ptr<MapObject>& mapObject, uint32_t frmPid) const {
-    const Frm* frm = nullptr;
-    std::string frmPath;
-    try {
-        frmPath = _resources.frmResolver().resolve(frmPid);
-        if (!frmPath.empty()) {
-            frm = _resources.repository().load<Frm>(frmPath);
-        }
-    } catch (const std::exception& e) {
-        spdlog::warn("PatternStamper: FRM resolve/load failed for fid {}: {}", frmPid, e.what());
-    }
-
-    // Object requires valid art (it draws a sprite); without a resolvable FRM there is
-    // nothing to place, so the caller skips this entry rather than crashing.
-    if (frm == nullptr) {
-        return nullptr;
-    }
-
-    try {
-        auto object = std::make_shared<Object>(frm);
+    auto object = buildSpriteObject(_resources, _hexgrid, frmPid, mapObject->position, mapObject->direction);
+    if (object) {
         object->setMapObject(mapObject);
-        sf::Sprite sprite{ _resources.textures().get(frmPath) };
-        object->setSprite(std::move(sprite));
-        object->setDirection(static_cast<ObjectDirection>(mapObject->direction));
-        if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(mapObject->position)); hex.has_value()) {
-            object->setHexPosition(hex->get());
-        }
-        return object;
-    } catch (const std::exception& e) {
-        spdlog::warn("PatternStamper: failed to build object for fid {}: {}", frmPid, e.what());
-        return nullptr;
     }
+    return object;
 }
 
 PatternStamper::Result PatternStamper::stamp(const PatternVariant& variant, int targetHex, int elevation) {
