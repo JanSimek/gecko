@@ -790,6 +790,9 @@ void EditorWidget::setupInputCallbacks() {
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
         _currentHoverHex = _viewportController->updateHoverHex(worldPos);
         Q_EMIT hexHoverChanged(_currentHoverHex);
+        if (_mode == EditorMode::StampPattern) {
+            updateStampPreview(worldPos);
+        }
     };
 
     callbacks.onEscape = [this]() {
@@ -889,6 +892,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.selectedHexPositions = &_selectedHexPositions;
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
+    renderData.stampPreviewObjects = &_stampPreviewObjects;
     renderData.selectionRectangle = &_selectionRectangle;
     // Use InputHandler state for drag selection rendering
     renderData.isDragSelecting = _inputHandler && _inputHandler->isDragging();
@@ -1060,6 +1064,9 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     _exitGridPlacementManager->setExitGridPlacementMode(false);
     _exitGridPlacementManager->setMarkExitsMode(false);
     _playerPositionSelectionMode = false;
+    if (mode != EditorMode::StampPattern) {
+        clearStampPreview();
+    }
     if (_inputHandler) {
         _inputHandler->setTilePlacementMode(false, -1, false);
         _inputHandler->setExitGridPlacementMode(false);
@@ -1183,6 +1190,63 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
         message += QString(" (%1 off-grid)").arg(result.dropped);
     }
     Q_EMIT statusMessageRequested(message);
+}
+
+void EditorWidget::clearStampPreview() {
+    _stampPreviewObjects.clear();
+    _stampPreviewHex = -1;
+}
+
+void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
+    if (!_stampPattern || _mode != EditorMode::StampPattern || _stampPattern->variants.empty()) {
+        clearStampPreview();
+        return;
+    }
+    const int hex = _viewportController->worldPosToHexIndex(worldPos);
+    if (!_hexgrid.containsPosition(hex)) {
+        clearStampPreview();
+        return;
+    }
+    if (hex == _stampPreviewHex) {
+        return; // still over the same hex; the ghost is unchanged
+    }
+    _stampPreviewHex = hex;
+    _stampPreviewObjects.clear();
+
+    if (_stampVariantIndex < 0 || _stampVariantIndex >= static_cast<int>(_stampPattern->variants.size())) {
+        _stampVariantIndex = 0;
+    }
+    const pattern::PatternVariant& variant = _stampPattern->variants[_stampVariantIndex];
+    const pattern::PatternStamper::Plan plan = pattern::PatternStamper::plan(variant, hex);
+
+    for (const pattern::PatternStamper::ObjectPlacement& op : plan.objects) {
+        const Frm* frm = nullptr;
+        std::string frmPath;
+        try {
+            frmPath = _resources.frmResolver().resolve(op.frmPid);
+            if (!frmPath.empty()) {
+                frm = _resources.repository().load<Frm>(frmPath);
+            }
+        } catch (const std::exception&) {
+            frm = nullptr;
+        }
+        if (frm == nullptr) {
+            continue;
+        }
+        try {
+            auto object = std::make_shared<Object>(frm);
+            sf::Sprite sprite{ _resources.textures().get(frmPath) };
+            object->setSprite(std::move(sprite));
+            object->setDirection(static_cast<ObjectDirection>(op.direction));
+            if (auto h = _hexgrid.getHexByPosition(static_cast<uint32_t>(op.hex)); h.has_value()) {
+                object->setHexPosition(h->get());
+            }
+            object->getSprite().setColor(sf::Color(255, 255, 255, 140)); // semi-transparent ghost
+            _stampPreviewObjects.push_back(std::move(object));
+        } catch (const std::exception&) {
+            // Skip objects whose sprite cannot be built.
+        }
+    }
 }
 
 bool EditorWidget::isTilePlacementMode() const {

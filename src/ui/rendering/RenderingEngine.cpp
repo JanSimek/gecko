@@ -44,6 +44,15 @@ void RenderingEngine::render(sf::RenderTarget& target,
         target.draw((*renderData.dragPreviewObject)->getSprite());
     }
 
+    // Layer 4b: Pattern stamp ghost preview (objects already carry their semi-transparency)
+    if (renderData.stampPreviewObjects) {
+        for (const auto& object : *renderData.stampPreviewObjects) {
+            if (object) {
+                target.draw(object->getSprite());
+            }
+        }
+    }
+
     // Layer 5: Roof tiles (if enabled)
     renderRoofTiles(target, renderData, visibility.showRoof);
 

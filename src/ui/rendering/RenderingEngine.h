@@ -57,6 +57,9 @@ public:
         const std::shared_ptr<Object>* dragPreviewObject = nullptr;
         bool isDraggingFromPalette = false;
 
+        // Pattern stamp ghost preview (semi-transparent objects under the cursor)
+        const std::vector<std::shared_ptr<Object>>* stampPreviewObjects = nullptr;
+
         // Selection rectangle
         const sf::RectangleShape* selectionRectangle = nullptr;
         bool isDragSelecting = false;

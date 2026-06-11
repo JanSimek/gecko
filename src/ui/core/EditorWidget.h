@@ -351,6 +351,12 @@ private:
     int _stampVariantIndex = 0;
     void stampPatternAt(sf::Vector2f worldPos);
 
+    // Semi-transparent ghost of the current variant under the cursor (StampPattern mode).
+    std::vector<std::shared_ptr<Object>> _stampPreviewObjects;
+    int _stampPreviewHex = -1;
+    void updateStampPreview(sf::Vector2f worldPos);
+    void clearStampPreview();
+
     // Player position selection state
     bool _playerPositionSelectionMode = false;
 
