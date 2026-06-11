@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 #include "editor/HexagonGrid.h"
@@ -219,4 +220,131 @@ TEST_CASE("registerInventoryEdit restores inventory snapshots", "[undo][controll
     REQUIRE(fx.undoStack.redo());
     REQUIRE(container->inventory.size() == 1);
     CHECK(container->inventory.front()->pro_pid == 1234u);
+}
+
+namespace {
+// Records an undoable flags edit on a fresh object (applied immediately) so batch
+// tests have observable, independent state to assert on.
+std::shared_ptr<MapObject> editFlags(ObjectCommandController& controller, uint32_t flags) {
+    auto obj = std::make_shared<MapObject>();
+    MapObjectInstanceState before;
+    MapObjectInstanceState after;
+    after.flags = flags;
+    controller.registerInstanceEdit(obj, before, after, "Edit Flags");
+    return obj;
+}
+} // namespace
+
+TEST_CASE("beginBatch/endBatch collapse many edits into one undo entry", "[undo][controller][batch]") {
+    ControllerFixture fx;
+
+    fx.controller.beginBatch("Batch edit");
+    CHECK(fx.controller.isBatching());
+
+    auto o1 = editFlags(fx.controller, 0x01);
+    auto o2 = editFlags(fx.controller, 0x02);
+    auto o3 = editFlags(fx.controller, 0x04);
+
+    // Each edit is applied immediately, but nothing is on the stack mid-batch.
+    CHECK(o1->flags == 0x01u);
+    CHECK(o2->flags == 0x02u);
+    CHECK(o3->flags == 0x04u);
+    CHECK_FALSE(fx.undoStack.canUndo());
+
+    CHECK(fx.controller.endBatch());
+    CHECK_FALSE(fx.controller.isBatching());
+    CHECK(fx.undoStack.lastUndoLabel() == "Batch edit");
+
+    // A single undo reverts ALL three edits, and the stack then holds nothing else
+    // (proving the batch is one entry, not three).
+    REQUIRE(fx.undoStack.undo());
+    CHECK(o1->flags == 0u);
+    CHECK(o2->flags == 0u);
+    CHECK(o3->flags == 0u);
+    CHECK_FALSE(fx.undoStack.canUndo());
+
+    // A single redo re-applies the whole batch.
+    REQUIRE(fx.undoStack.redo());
+    CHECK(o1->flags == 0x01u);
+    CHECK(o2->flags == 0x02u);
+    CHECK(o3->flags == 0x04u);
+}
+
+TEST_CASE("an empty batch records nothing", "[undo][controller][batch]") {
+    ControllerFixture fx;
+
+    fx.controller.beginBatch("Nothing happens");
+    CHECK_FALSE(fx.controller.endBatch()); // false: nothing was recorded
+    CHECK_FALSE(fx.controller.isBatching());
+    CHECK_FALSE(fx.undoStack.canUndo());
+}
+
+TEST_CASE("an unbalanced endBatch is a no-op", "[undo][controller][batch]") {
+    ControllerFixture fx;
+    CHECK_FALSE(fx.controller.endBatch());
+    CHECK_FALSE(fx.controller.isBatching());
+    CHECK_FALSE(fx.undoStack.canUndo());
+}
+
+TEST_CASE("nested batches flush once at the outermost endBatch", "[undo][controller][batch]") {
+    ControllerFixture fx;
+
+    fx.controller.beginBatch("Outer");
+    auto o1 = editFlags(fx.controller, 0x01);
+
+    fx.controller.beginBatch("Inner");
+    auto o2 = editFlags(fx.controller, 0x02);
+    CHECK_FALSE(fx.controller.endBatch()); // inner close defers the flush
+    CHECK(fx.controller.isBatching());     // still inside the outer batch
+    CHECK_FALSE(fx.undoStack.canUndo());
+
+    auto o3 = editFlags(fx.controller, 0x04);
+    CHECK(fx.controller.endBatch()); // outer close flushes one combined command
+    CHECK_FALSE(fx.controller.isBatching());
+
+    // One undo reverts all three edits across both nesting levels.
+    REQUIRE(fx.undoStack.undo());
+    CHECK(o1->flags == 0u);
+    CHECK(o2->flags == 0u);
+    CHECK(o3->flags == 0u);
+    CHECK_FALSE(fx.undoStack.canUndo());
+}
+
+TEST_CASE("ScopedUndoBatch flushes on scope exit, even via an exception", "[undo][controller][batch]") {
+    ControllerFixture fx;
+    std::shared_ptr<MapObject> o1;
+    std::shared_ptr<MapObject> o2;
+
+    SECTION("normal scope exit collapses to one entry") {
+        {
+            ScopedUndoBatch batch(fx.controller, "Scoped");
+            o1 = editFlags(fx.controller, 0x01);
+            o2 = editFlags(fx.controller, 0x02);
+            CHECK(fx.controller.isBatching());
+        }
+        CHECK_FALSE(fx.controller.isBatching());
+
+        REQUIRE(fx.undoStack.undo());
+        CHECK(o1->flags == 0u);
+        CHECK(o2->flags == 0u);
+        CHECK_FALSE(fx.undoStack.canUndo());
+    }
+
+    SECTION("an exception mid-batch still flushes the buffered edits as one entry") {
+        try {
+            ScopedUndoBatch batch(fx.controller, "Aborted");
+            o1 = editFlags(fx.controller, 0x01);
+            o2 = editFlags(fx.controller, 0x02);
+            throw std::runtime_error("simulated script abort");
+        } catch (const std::runtime_error&) {
+            // The guard's destructor ran during unwinding and flushed the batch.
+        }
+
+        CHECK_FALSE(fx.controller.isBatching());
+        CHECK(fx.undoStack.canUndo());
+        REQUIRE(fx.undoStack.undo());
+        CHECK(o1->flags == 0u);
+        CHECK(o2->flags == 0u);
+        CHECK_FALSE(fx.undoStack.canUndo());
+    }
 }

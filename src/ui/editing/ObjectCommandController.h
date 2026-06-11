@@ -76,7 +76,28 @@ public:
 
     /// Pushes a command onto the shared undo stack and notifies (the single owner
     /// of "a command was recorded"). All register*() helpers funnel through here.
+    /// While a batch is open (see beginBatch), commands are buffered instead of
+    /// pushed so the whole batch lands as a single undo entry.
     bool pushCommand(UndoCommand cmd);
+
+    /// Opens an undo batch: subsequent register*()/pushCommand() calls buffer their
+    /// commands instead of pushing them, and endBatch() collapses the whole run into
+    /// ONE UndoStack entry (replayed/reverted as a unit). This keeps multi-edit
+    /// operations — area paste, prefab stamp, procedural fill — from blowing the
+    /// UndoStack's command cap and forcing one Ctrl-Z per hex. Batches nest: only the
+    /// outermost endBatch() flushes, and the outermost description is the one used.
+    /// The individual edits are still applied immediately by the register*() calls;
+    /// the batch only governs how they are recorded for undo/redo.
+    void beginBatch(const std::string& description);
+
+    /// Closes the batch opened by the matching beginBatch(). On the outermost close,
+    /// buffered commands are collapsed into a single UndoCommand and pushed (one
+    /// stack-changed notification). Returns true iff a command was pushed (false for
+    /// an empty batch, an inner nested close, or an unbalanced call).
+    bool endBatch();
+
+    /// True while at least one beginBatch() is open.
+    bool isBatching() const { return _batchDepth > 0; }
 
     bool registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     bool registerObjectDeletion(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& removedObjects);
@@ -170,6 +191,43 @@ private:
     std::function<int()> _getCurrentElevation;
     std::function<void(int, bool, int)> _updateTileSprite;
     std::function<void()> _reloadTiles;
+
+    // Undo-batch state. While _batchDepth > 0, pushCommand() appends to
+    // _batchedCommands instead of touching _undoStack; endBatch() collapses them.
+    int _batchDepth = 0;
+    std::string _batchDescription;
+    std::vector<UndoCommand> _batchedCommands;
+};
+
+/// RAII guard that opens an undo batch for its lifetime: collapses every edit made
+/// within the scope into a single undo entry, and flushes even if the scope exits
+/// via an exception (e.g. a sandboxed script aborting mid-generation). Prefer this
+/// over manual beginBatch()/endBatch() at call sites.
+class ScopedUndoBatch {
+public:
+    ScopedUndoBatch(ObjectCommandController& controller, const std::string& description)
+        : _controller(controller) {
+        _controller.beginBatch(description);
+    }
+    ~ScopedUndoBatch() {
+        // endBatch() allocates (make_shared / std::function), so it can throw. A
+        // throwing destructor during stack unwinding would std::terminate — which
+        // would defeat the whole point of flushing safely when a scope exits via an
+        // exception — so swallow any failure here. The edits were already applied;
+        // at worst their batched undo record is dropped.
+        try {
+            _controller.endBatch();
+        } catch (...) { // NOLINT(bugprone-empty-catch)
+        }
+    }
+
+    ScopedUndoBatch(const ScopedUndoBatch&) = delete;
+    ScopedUndoBatch& operator=(const ScopedUndoBatch&) = delete;
+    ScopedUndoBatch(ScopedUndoBatch&&) = delete;
+    ScopedUndoBatch& operator=(ScopedUndoBatch&&) = delete;
+
+private:
+    ObjectCommandController& _controller;
 };
 
 } // namespace geck
