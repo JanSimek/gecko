@@ -102,13 +102,12 @@ TEST_CASE("Floor tile selection validation", "[tile_selection][floor]") {
     }
 
     SECTION("Floor tile screen position calculation") {
-        // Test screen position calculation for floor tiles
+        // A non-origin tile must map to a screen position distinct from the origin.
         int testTileIndex = 1234;
         auto screenPos = indexToScreenPosition(testTileIndex, false); // Floor tile
+        auto originPos = indexToScreenPosition(0, false);
 
-        // Verify position is calculated (non-zero for non-origin tiles)
-        REQUIRE(screenPos.x >= 0);
-        REQUIRE(screenPos.y >= 0);
+        REQUIRE((screenPos.x != originPos.x || screenPos.y != originPos.y));
 
         // Test that roof offset is NOT applied for floor tiles
         auto roofScreenPos = indexToScreenPosition(testTileIndex, true); // Roof tile
@@ -154,8 +153,7 @@ TEST_CASE("Hex selection coordinate system", "[hex_selection]") {
     }
 
     SECTION("Hex index bounds checking") {
-        // Test boundary hex positions
-        REQUIRE(0 >= 0); // Minimum hex
+        // The minimum hex index (0) must fall within the grid bounds.
         REQUIRE(0 < HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT);
 
         int maxHex = HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT - 1;
