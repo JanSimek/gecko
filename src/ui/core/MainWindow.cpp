@@ -94,8 +94,7 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
 
     // The unique_ptr owns the launcher, so it has no QObject parent (it still
     // parents its own QProcess children). `this` is only the dialog parent.
-    _gameLauncher = std::make_unique<GameLauncher>(*_resourcesShared, _settings, this,
-        [this](const QString& message) { showStatusMessage(message); }, nullptr);
+    _gameLauncher = std::make_unique<GameLauncher>(*_resourcesShared, _settings, this, [this](const QString& message) { showStatusMessage(message); }, nullptr);
 
     _externalEditorLauncher = std::make_unique<ExternalEditorLauncher>(*_resourcesShared, _settings, this);
 
@@ -610,12 +609,34 @@ void MainWindow::setupToolBar() {
 
     addToolAction(":/icons/actions/rotate.svg", "Rotate", &MainWindow::rotateObjectRequested, "Rotate selected object", QKeySequence("R"));
 
+    _mainToolBar->addSeparator();
+
+    // Tool-mode group (mutually exclusive; kept in sync with the active EditorMode).
+    _selectToolAction = _mainToolBar->addAction(createIcon(":/icons/actions/select.svg"), "Select");
+    _selectToolAction->setStatusTip("Select and move objects (exits any active tool)");
+    _selectToolAction->setCheckable(true);
+    _selectToolAction->setChecked(true); // Select is the default mode
+    connect(_selectToolAction, &QAction::triggered, this, [this](bool) {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->setMode(EditorMode::Select);
+        }
+    });
+
     _markExitsAction = _mainToolBar->addAction(createIcon(":/icons/actions/door-exit.svg"), "Mark Exits");
     _markExitsAction->setStatusTip("Select exit grids to edit their properties");
     _markExitsAction->setCheckable(true);
     connect(_markExitsAction, &QAction::triggered, this, [this](bool checked) {
         if (_currentEditorWidget) {
             _currentEditorWidget->setMarkExitsMode(checked);
+        }
+    });
+
+    _placeExitGridAction = _mainToolBar->addAction(createIcon(":/icons/actions/door-exit.svg"), "Place Exit Grids");
+    _placeExitGridAction->setStatusTip("Place new exit-grid markers by clicking individual hexes");
+    _placeExitGridAction->setCheckable(true);
+    connect(_placeExitGridAction, &QAction::triggered, this, [this](bool checked) {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->setExitGridPlacementMode(checked);
         }
     });
 
@@ -1001,17 +1022,14 @@ void MainWindow::connectPanelSignals() {
                 }
             });
         connect(_selectionPanel, &SelectionPanel::requestInstanceEdit,
-            this, [this](std::shared_ptr<Object> object, MapObjectInstanceState before,
-                       MapObjectInstanceState after, QString description) {
+            this, [this](std::shared_ptr<Object> object, MapObjectInstanceState before, MapObjectInstanceState after, QString description) {
                 if (!_currentEditorWidget || !object || !object->hasMapObject())
                     return;
                 _currentEditorWidget->registerInstanceEdit(object->getMapObjectPtr(),
                     before, after, description.toStdString());
             });
         connect(_selectionPanel, &SelectionPanel::requestInventoryEdit,
-            this, [this](std::shared_ptr<MapObject> container,
-                       std::vector<std::shared_ptr<MapObject>> before,
-                       std::vector<std::shared_ptr<MapObject>> after) {
+            this, [this](std::shared_ptr<MapObject> container, std::vector<std::shared_ptr<MapObject>> before, std::vector<std::shared_ptr<MapObject>> after) {
                 if (_currentEditorWidget && container)
                     _currentEditorWidget->registerInventoryEdit(container, std::move(before), std::move(after));
             });
@@ -1155,13 +1173,18 @@ void MainWindow::connectToEditorWidget() {
 
     connect(_currentEditorWidget, &EditorWidget::statusMessageRequested, this, &MainWindow::showStatusMessage);
     connect(_currentEditorWidget, &EditorWidget::statusMessageClearRequested, this, &MainWindow::clearStatusMessage);
-    // Keep the checkable Mark-Exits toolbar action in sync with the active mode
-    // (entering any other mode now exits mark-exits via EditorWidget::setMode).
+    // Keep the checkable tool-mode toolbar actions in sync with the active mode
+    // (entering any mode exits the others via EditorWidget::setMode).
     connect(_currentEditorWidget, &EditorWidget::editorModeChanged, this, [this](EditorMode mode) {
-        if (_markExitsAction) {
-            QSignalBlocker blocker(_markExitsAction);
-            _markExitsAction->setChecked(mode == EditorMode::MarkExits);
-        }
+        const auto sync = [mode](QAction* action, EditorMode actionMode) {
+            if (action) {
+                QSignalBlocker blocker(action);
+                action->setChecked(mode == actionMode);
+            }
+        };
+        sync(_selectToolAction, EditorMode::Select);
+        sync(_markExitsAction, EditorMode::MarkExits);
+        sync(_placeExitGridAction, EditorMode::PlaceExitGrid);
     });
     connect(_currentEditorWidget, &EditorWidget::hexHoverChanged, this, &MainWindow::updateHexIndexDisplay);
     connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, [this](const std::string& mapPath) {

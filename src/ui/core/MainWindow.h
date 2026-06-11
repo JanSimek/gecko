@@ -175,7 +175,9 @@ private:
 
     // Toolbar
     QToolBar* _mainToolBar;
+    QAction* _selectToolAction = nullptr;
     QAction* _markExitsAction;
+    QAction* _placeExitGridAction = nullptr;
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
 
