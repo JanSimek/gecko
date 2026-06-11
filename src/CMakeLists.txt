@@ -24,6 +24,8 @@ set(GECK_APP_SOURCES
     pattern/Pattern.h
     pattern/PatternSerializer.h
     pattern/PatternSerializer.cpp
+    pattern/PatternStamper.h
+    pattern/PatternStamper.cpp
 
     util/ExternalEditorLauncher.h
     util/ExternalEditorLauncher.cpp
