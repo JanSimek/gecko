@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -55,12 +56,16 @@ struct ProFixture {
     fs::path root;
     GameResources resources;
 
-    static constexpr uint32_t BLOCKING = 1;      // flags 0          -> blocks
-    static constexpr uint32_t NON_BLOCKING = 2;  // NoBlock flag    -> passable
-    static constexpr uint32_t SHOOT_THROUGH = 3; // ShootThrough flag
+    // walls.lst line indices (1-based), each pointing at a wall PRO crafted below.
+    static constexpr uint32_t BLOCKING = 1;      // PRO has no NoBlock flag    -> blocks
+    static constexpr uint32_t NON_BLOCKING = 2;  // PRO has the NoBlock flag    -> passable
+    static constexpr uint32_t SHOOT_THROUGH = 3; // PRO has the ShootThrough flag
 
     ProFixture() {
-        root = fs::temp_directory_path() / "geck_object_query_test";
+        // Build the tree under the build-tree scratch dir (not the world-writable
+        // system temp dir), with a unique suffix so fixtures never collide.
+        static std::atomic<int> counter{ 0 };
+        root = fs::path(GECK_TEST_TMP_DIR) / ("object_query_" + std::to_string(counter++));
         std::error_code ec;
         fs::remove_all(root, ec);
 
@@ -76,6 +81,9 @@ struct ProFixture {
         std::error_code ec;
         fs::remove_all(root, ec);
     }
+
+    ProFixture(const ProFixture&) = delete;
+    ProFixture& operator=(const ProFixture&) = delete;
 };
 
 } // namespace
