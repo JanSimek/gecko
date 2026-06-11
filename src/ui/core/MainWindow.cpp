@@ -372,6 +372,7 @@ void MainWindow::setupMenuBar() {
     _editMenu->addSeparator();
     addMenuAction(_editMenu, ":/icons/actions/scroll-blocker.svg", "Scroll &Blocker Rectangle", &MainWindow::toggleScrollBlockerRectangleMode, QKeySequence("B"), "Draw rectangle and place scroll blockers on borders");
     addMenuAction(_editMenu, ":/icons/actions/save.svg", "Save Selection as &Pattern...", &MainWindow::showSavePatternDialog, QKeySequence(), "Save the current selection as a reusable prefab pattern");
+    addMenuAction(_editMenu, ":/icons/actions/open.svg", "S&tamp Pattern...", &MainWindow::showStampPatternDialog, QKeySequence(), "Load a prefab pattern and click to place it");
 
     _editMenu->addSeparator();
 
@@ -1710,6 +1711,34 @@ void MainWindow::showSavePatternDialog() {
     showStatusMessage(QString("Saved pattern '%1' (%2 variant).")
             .arg(QString::fromStdString(pattern->name))
             .arg(pattern->variants.size()));
+}
+
+void MainWindow::showStampPatternDialog() {
+    if (!_currentEditorWidget || !hasActiveMap()) {
+        showStatusMessage("Open a map before stamping a pattern.");
+        return;
+    }
+
+    const QString path = QFileDialog::getOpenFileName(
+        this, "Stamp Pattern", QString(), "Gecko Pattern (*.json)");
+    if (path.isEmpty()) {
+        return;
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        showStatusMessage("Failed to open pattern file.");
+        return;
+    }
+
+    QString error;
+    auto loaded = pattern::PatternSerializer::deserialize(file.readAll(), &error);
+    if (!loaded.has_value()) {
+        showStatusMessage(QString("Invalid pattern: %1").arg(error));
+        return;
+    }
+
+    _currentEditorWidget->beginStampPattern(std::move(*loaded));
 }
 
 void MainWindow::showStatusMessage(const QString& message) {

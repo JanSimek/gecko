@@ -111,6 +111,7 @@ private slots:
     void showAbout();
     void onPlayGame();
     void showSavePatternDialog();
+    void showStampPatternDialog();
 
 public slots:
     void showStatusMessage(const QString& message);

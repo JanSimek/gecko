@@ -29,6 +29,7 @@
 #include "util/Coordinates.h"
 
 #include "editor/Object.h"
+#include "pattern/PatternStamper.h"
 #include "editor/HexagonGrid.h"
 
 #include "format/frm/Frm.h"
@@ -761,6 +762,19 @@ void EditorWidget::setupInputCallbacks() {
         _exitGridPlacementManager->handleExitGridPlacement(worldPos);
     };
 
+    callbacks.onStampPattern = [this](sf::Vector2f worldPos) {
+        stampPatternAt(worldPos);
+    };
+
+    callbacks.onStampPatternCancel = [this]() {
+        setMode(EditorMode::Select);
+        Q_EMIT statusMessageRequested("Pattern stamping cancelled.");
+    };
+
+    callbacks.onStampCycleVariant = [this]() {
+        cycleStampVariant();
+    };
+
     callbacks.onMarkExitsSelection = [this](sf::Vector2f worldPos) {
         _exitGridPlacementManager->handleMarkExitsSelection(worldPos);
     };
@@ -1051,6 +1065,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         _inputHandler->setExitGridPlacementMode(false);
         _inputHandler->setMarkExitsMode(false);
         _inputHandler->setPlayerPositionMode(false);
+        _inputHandler->setStampPatternMode(false);
     }
 
     switch (mode) {
@@ -1081,6 +1096,11 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
                 _inputHandler->setPlayerPositionMode(true);
             }
             break;
+        case EditorMode::StampPattern:
+            if (_inputHandler) {
+                _inputHandler->setStampPatternMode(true);
+            }
+            break;
     }
 
     Q_EMIT editorModeChanged(_mode);
@@ -1104,6 +1124,65 @@ void EditorWidget::setExitGridPlacementMode(bool enabled) {
 
 void EditorWidget::setMarkExitsMode(bool enabled) {
     setMode(enabled ? EditorMode::MarkExits : EditorMode::Select);
+}
+
+void EditorWidget::beginStampPattern(pattern::Pattern pattern) {
+    if (pattern.variants.empty()) {
+        Q_EMIT statusMessageRequested("Pattern has no variants to stamp.");
+        return;
+    }
+    _stampPattern = std::move(pattern);
+    _stampVariantIndex = 0;
+    setMode(EditorMode::StampPattern);
+    Q_EMIT statusMessageRequested(
+        QString("Stamp mode: click to place '%1'. Right-click or Esc to exit.")
+            .arg(QString::fromStdString(_stampPattern->name)));
+}
+
+void EditorWidget::cycleStampVariant() {
+    if (!_stampPattern || _stampPattern->variants.size() <= 1) {
+        return;
+    }
+    _stampVariantIndex = (_stampVariantIndex + 1) % static_cast<int>(_stampPattern->variants.size());
+    const std::string& label = _stampPattern->variants[_stampVariantIndex].label;
+    Q_EMIT statusMessageRequested(
+        QString("Pattern variant %1/%2: %3")
+            .arg(_stampVariantIndex + 1)
+            .arg(_stampPattern->variants.size())
+            .arg(label.empty() ? QStringLiteral("(unnamed)") : QString::fromStdString(label)));
+}
+
+void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
+    if (!_stampPattern || !_map || _stampPattern->variants.empty()) {
+        return;
+    }
+    const int hex = _viewportController->worldPosToHexIndex(worldPos);
+    if (!_hexgrid.containsPosition(hex)) {
+        return;
+    }
+    if (_stampVariantIndex < 0 || _stampVariantIndex >= static_cast<int>(_stampPattern->variants.size())) {
+        _stampVariantIndex = 0;
+    }
+    const pattern::PatternVariant& variant = _stampPattern->variants[_stampVariantIndex];
+
+    pattern::PatternStamper stamper(_resources, _hexgrid, *_objectCommandController, *_map);
+    const pattern::PatternStamper::Result result = stamper.stamp(variant, hex, _currentElevation);
+
+    // PatternStamper appends object sprites and applies tile sprites incrementally
+    // through the controller, so no full refresh is needed here (mirrors the single
+    // placeObjectAtPosition path).
+
+    QString message = QString("Stamped '%1': %2 objects, %3 tiles")
+                          .arg(QString::fromStdString(_stampPattern->name))
+                          .arg(result.objectsPlaced)
+                          .arg(result.tilesPainted);
+    if (result.objectsFailed > 0) {
+        message += QString(" (%1 missing art)").arg(result.objectsFailed);
+    }
+    if (result.dropped > 0) {
+        message += QString(" (%1 off-grid)").arg(result.dropped);
+    }
+    Q_EMIT statusMessageRequested(message);
 }
 
 bool EditorWidget::isTilePlacementMode() const {
