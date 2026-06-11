@@ -13,6 +13,7 @@
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
+#include "ui/dialogs/PatternBrowserDialog.h"
 #include "ui/UIConstants.h"
 #include "resource/GameResources.h"
 #include "state/loader/MapLoader.h"
@@ -1720,26 +1721,14 @@ void MainWindow::showStampPatternDialog() {
         return;
     }
 
-    const QString path = QFileDialog::getOpenFileName(
-        this, "Stamp Pattern", pattern::PatternLibrary::rootDir(), "Gecko Pattern (*.json)");
-    if (path.isEmpty()) {
+    PatternBrowserDialog dialog(*_resourcesShared, this);
+    if (dialog.exec() != QDialog::Accepted) {
         return;
     }
-
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        showStatusMessage("Failed to open pattern file.");
-        return;
+    auto selected = dialog.selectedPattern();
+    if (selected.has_value()) {
+        _currentEditorWidget->beginStampPattern(std::move(*selected));
     }
-
-    QString error;
-    auto loaded = pattern::PatternSerializer::deserialize(file.readAll(), &error);
-    if (!loaded.has_value()) {
-        showStatusMessage(QString("Invalid pattern: %1").arg(error));
-        return;
-    }
-
-    _currentEditorWidget->beginStampPattern(std::move(*loaded));
 }
 
 void MainWindow::showStatusMessage(const QString& message) {

@@ -103,6 +103,8 @@ set(GECK_APP_SOURCES
     ui/dialogs/SpatialScriptDialog.cpp
     ui/dialogs/AboutDialog.h
     ui/dialogs/AboutDialog.cpp
+    ui/dialogs/PatternBrowserDialog.h
+    ui/dialogs/PatternBrowserDialog.cpp
 
     # Qt6 UI Widgets
     ui/widgets/SFMLWidget.h
