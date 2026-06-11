@@ -63,19 +63,22 @@ TEST_CASE("PatternStamper::plan keeps tiles aligned with objects at any click pa
     using namespace geck::hexgrid;
     PatternVariant aligned;
     aligned.anchorHex = 80 * WIDTH + 80; // col 80 (even), row 80
-    // An object 3 columns / 2 rows from the anchor, plus the floor tile that sits under it.
-    aligned.objects.push_back(PatternObject{ 3, 2, 1u, 1u, 0u, 0u });
-    aligned.floor.push_back(PatternTile{ (80 + 3) / 2 - 80 / 2, (80 + 2) / 2 - 80 / 2, 271 });
+    // An object an ODD number of columns and rows from the anchor, plus the floor tile
+    // that sits under it. Odd offsets are what expose the hex/2 rounding mismatch.
+    aligned.objects.push_back(PatternObject{ 3, 3, 1u, 1u, 0u, 0u });
+    aligned.floor.push_back(PatternTile{ (80 + 3) / 2 - 80 / 2, (80 + 3) / 2 - 80 / 2, 271 });
 
-    // Stamp on an ODD-column target (opposite parity to the even anchor) — the case that
-    // used to drift the tiles relative to the objects.
-    const auto alignedPlan = PatternStamper::plan(aligned, 50 * WIDTH + 51);
-
-    REQUIRE(alignedPlan.objects.size() == 1);
-    REQUIRE(alignedPlan.tiles.size() == 1);
-    const int objHex = alignedPlan.objects[0].hex;
-    const int objTile = (rowOf(objHex) / 2) * HexagonGrid::TILE_GRID_WIDTH + (columnOf(objHex) / 2);
-    CHECK(alignedPlan.tiles[0].tileIndex == objTile); // the floor tile still sits under the object
+    // Stamp on an ODD-column, ODD-row target (opposite parity in both axes to the even
+    // anchor) — the case that used to drift the tiles relative to the objects.
+    for (const int target : { 50 * WIDTH + 51, 51 * WIDTH + 50, 51 * WIDTH + 51, 50 * WIDTH + 50 }) {
+        const auto alignedPlan = PatternStamper::plan(aligned, target);
+        REQUIRE(alignedPlan.objects.size() == 1);
+        REQUIRE(alignedPlan.tiles.size() == 1);
+        const int objHex = alignedPlan.objects[0].hex;
+        const int objTile = (rowOf(objHex) / 2) * HexagonGrid::TILE_GRID_WIDTH + (columnOf(objHex) / 2);
+        INFO("target " << target);
+        CHECK(alignedPlan.tiles[0].tileIndex == objTile); // the floor tile still sits under the object
+    }
 }
 
 TEST_CASE("PatternStamper::plan drops entries that fall off the grid", "[pattern][stamper]") {
