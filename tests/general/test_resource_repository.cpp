@@ -27,7 +27,9 @@ struct RepoFixture {
     GameResources resources;
 
     RepoFixture() {
-        root = fs::temp_directory_path() / "geck_resourcerepo_test";
+        // GECK_TEST_TMP_DIR (a build-tree dir, injected per target in tests/CMakeLists.txt)
+        // rather than the world-writable system temp, which keeps a predictable name private.
+        root = fs::path(GECK_TEST_TMP_DIR) / "geck_resourcerepo_test";
         std::error_code ec;
         fs::remove_all(root, ec); // non-throwing: a stale dir from a prior run is fine to ignore
         writeFile(root / "art/tiles/tiles.lst", "floor.frm\ngrass.frm\n");
