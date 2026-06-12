@@ -22,12 +22,10 @@ namespace geck {
  */
 class Settings {
 public:
-    // Canonical single shared instance shared by both the migration shim and
-    // dependency-injected pointers.
-    static std::shared_ptr<Settings> sharedInstance();
-
-    // Migration shim -> *sharedInstance(). Kept as the compatibility seam.
-    static Settings& getInstance();
+    // Creates a fresh, caller-owned Settings instance. Ownership lives at the
+    // Application root and is injected from there (mirroring GameResources); there is
+    // no global singleton.
+    static std::shared_ptr<Settings> create();
 
     // Disable copy/assignment
     Settings(const Settings&) = delete;
