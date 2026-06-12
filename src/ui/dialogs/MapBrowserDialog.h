@@ -3,12 +3,15 @@
 #include <memory>
 
 #include <QDialog>
+#include <QPixmap>
 #include <QString>
 
+class QEvent;
 class QLabel;
 class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
+class QObject;
 class QPushButton;
 class QShowEvent;
 class QTimer;
@@ -38,6 +41,8 @@ public:
 
 protected:
     void showEvent(QShowEvent* event) override;
+    // Rescales the preview to fit when the preview label is resized (e.g. by the splitter).
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private slots:
     void onFilterChanged(const QString& text);
@@ -49,6 +54,7 @@ private:
     void populate();
     void acceptCurrent();
     void updatePreview(const QListWidgetItem* item);
+    void rescalePreview();
     QListWidgetItem* nextUnrenderedVisibleItem() const;
 
     resource::GameResources& _resources;
@@ -59,6 +65,7 @@ private:
     QLabel* _previewName = nullptr;
     QPushButton* _openButton = nullptr;
     QTimer* _thumbnailTimer = nullptr;
+    QPixmap _previewSource; ///< Native-resolution preview, rescaled to fit on resize.
     QString _selectedPath;
 };
 

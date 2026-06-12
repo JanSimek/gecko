@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QDialogButtonBox>
+#include <QEvent>
 #include <QFileInfo>
 #include <QLabel>
 #include <QLineEdit>
@@ -25,7 +26,11 @@ namespace geck {
 
 namespace {
     constexpr int THUMBNAIL_SIZE = 128;
-    constexpr int PREVIEW_SIZE = 320;
+    // The preview is rendered once at this resolution (the renderer's own cap), then
+    // scaled to fit the preview pane as it is resized. 160 is a floor so the pane can be
+    // dragged small without the preview vanishing.
+    constexpr int PREVIEW_RENDER_SIZE = 512;
+    constexpr int PREVIEW_MIN_SIZE = 160;
     constexpr int CELL_PADDING_W = 24;
     constexpr int CELL_PADDING_H = 40;
     constexpr int PATH_ROLE = Qt::UserRole + 1;
@@ -62,7 +67,12 @@ MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources, QWidget* 
 
     _previewImage = new QLabel(this);
     _previewImage->setAlignment(Qt::AlignCenter);
-    _previewImage->setMinimumSize(PREVIEW_SIZE, PREVIEW_SIZE);
+    _previewImage->setMinimumSize(PREVIEW_MIN_SIZE, PREVIEW_MIN_SIZE);
+    // Ignore the pixmap's own size hint so the label fills whatever the splitter gives it
+    // (and the scaled pixmap never feeds back into the layout); rescalePreview fits the
+    // image to that size on every resize.
+    _previewImage->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    _previewImage->installEventFilter(this);
     _previewName = new QLabel(this);
     _previewName->setAlignment(Qt::AlignCenter);
     _previewName->setWordWrap(true);
@@ -176,9 +186,9 @@ void MapBrowserDialog::onCurrentItemChanged(QListWidgetItem* current) {
 }
 
 void MapBrowserDialog::updatePreview(const QListWidgetItem* item) {
+    _previewSource = QPixmap();
     if (item == nullptr) {
-        _previewImage->setText(QString());
-        _previewImage->setPixmap(QPixmap());
+        _previewImage->clear();
         _previewName->clear();
         return;
     }
@@ -193,13 +203,28 @@ void MapBrowserDialog::updatePreview(const QListWidgetItem* item) {
             current == nullptr || current->data(PATH_ROLE).toString() != path) {
             return;
         }
-        const QPixmap preview = MapThumbnail::forMap(path, _resources, *_hexgrid, PREVIEW_SIZE);
-        if (preview.isNull()) {
+        _previewSource = MapThumbnail::forMap(path, _resources, *_hexgrid, PREVIEW_RENDER_SIZE);
+        if (_previewSource.isNull()) {
             _previewImage->setText("No preview");
         } else {
-            _previewImage->setPixmap(preview);
+            rescalePreview();
         }
     });
+}
+
+void MapBrowserDialog::rescalePreview() {
+    if (_previewSource.isNull()) {
+        return;
+    }
+    _previewImage->setPixmap(_previewSource.scaled(
+        _previewImage->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+}
+
+bool MapBrowserDialog::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == _previewImage && event->type() == QEvent::Resize) {
+        rescalePreview();
+    }
+    return QDialog::eventFilter(watched, event);
 }
 
 void MapBrowserDialog::onItemActivated(const QListWidgetItem* item) {
