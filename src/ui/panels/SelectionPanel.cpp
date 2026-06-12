@@ -1024,7 +1024,7 @@ void SelectionPanel::onEditFlagsClicked() {
         return;
     }
 
-    const uint32_t objectType = mapObject->pro_pid >> 24;
+    const uint32_t objectType = mapObject->objectType();
     ObjectFlagsDialog dialog(mapObject->flags, objectType, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
@@ -1250,7 +1250,7 @@ void SelectionPanel::onAttachScriptClicked() {
         return;
     }
 
-    const uint32_t objectType = mapObject->pro_pid >> 24;
+    const uint32_t objectType = mapObject->objectType();
     // Critters use the CRITTER section; items/scenery/walls use the ITEM section.
     const int scriptType = (objectType == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER))
         ? static_cast<int>(MapScript::ScriptType::CRITTER)

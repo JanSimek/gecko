@@ -50,7 +50,7 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
     object->unknown10 = read_be_u32();
     object->unknown11 = read_be_u32();
 
-    uint32_t objectTypeId = object->pro_pid >> 24;
+    uint32_t objectTypeId = object->objectType();
 
     auto pro = _proLoadCallback(object->pro_pid);
 

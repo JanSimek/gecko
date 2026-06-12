@@ -81,16 +81,24 @@ struct MapObject {
     uint32_t exit_elevation = 0;
     uint32_t exit_orientation = 0;
 
+    /// Object type from the PID's high byte (matches engine PID_TYPE). Values are
+    /// Pro::OBJECT_TYPE — ITEM=0, CRITTER=1, SCENERY=2, WALL=3, TILE=4, MISC=5.
+    uint32_t objectType() const { return (pro_pid & FileFormat::FULL_TYPE_MASK) >> FileFormat::TYPE_MASK_SHIFT; }
+
+    /// Proto index: the PID's low 24 bits.
+    uint32_t protoId() const { return pro_pid & FileFormat::BASE_ID_MASK; }
+
+    /// Art index: the FID's (frm_pid) low 24 bits.
+    uint32_t fidBaseId() const { return frm_pid & FileFormat::BASE_ID_MASK; }
+
     bool isBlocker() {
-        auto baseId = frm_pid & 0x00FFFFFF;
-        return baseId == 1 && flags & 0x00000010;
+        return fidBaseId() == 1 && flags & 0x00000010;
     }
 
     bool isScrollBlocker() {
         // Scroll blockers are visual indicators only (FRM-based, not proto-based)
         // They use scrblk.frm (FRM baseId == 1)
-        auto baseId = frm_pid & 0x00FFFFFF;
-        return baseId == 1;
+        return fidBaseId() == 1;
     }
 
     bool isWallObject() const;
@@ -110,14 +118,12 @@ struct MapObject {
 
     /// True for the specific light-source scenery object: ITEM/index-0 type with PID index 140 (tile #140 in F2 Dims).
     bool isLightSourceScenery() const {
-        return (pro_pid & 0xFF000000) == 0x00000000 && (pro_pid & 0x00FFFFFF) == 140;
+        return objectType() == 0 && protoId() == 140;
     }
 
     /// True for exit-grid markers: MISC objects (type 0x05) with PID index 16-23 (matches legacy F2 Mapper: misc_ID && nID 16..23).
     bool isExitGridMarker() const {
-        uint32_t objectType = (pro_pid & 0xFF000000) >> 24;
-        uint32_t objectIndex = pro_pid & 0x00FFFFFF;
-        return (objectType == 0x05) && (objectIndex >= 16) && (objectIndex <= 23);
+        return (objectType() == 0x05) && (protoId() >= 16) && (protoId() <= 23);
     }
 };
 
