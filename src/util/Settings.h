@@ -31,6 +31,10 @@ public:
     Settings(const Settings&) = delete;
     Settings& operator=(const Settings&) = delete;
 
+    // Public so shared_ptr's default deleter can destroy a create()'d instance;
+    // construction stays controlled (the constructor is private).
+    ~Settings() = default;
+
     // Settings management
     void load();
     void save();
@@ -112,7 +116,6 @@ public:
 
 private:
     Settings();
-    ~Settings() = default;
 
     // JSON serialization
     QJsonObject toJson() const;

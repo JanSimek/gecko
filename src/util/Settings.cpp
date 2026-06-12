@@ -33,11 +33,11 @@ Settings::Settings()
 }
 
 std::shared_ptr<Settings> Settings::create() {
-    // Custom deleter so the shared_ptr can reach the private destructor; the lambda is
-    // local to this member function and therefore has the necessary access to both the
-    // private constructor and destructor. Each call yields a fresh, independently-owned
-    // instance — ownership lives at the Application root, not in a global singleton.
-    return std::shared_ptr<Settings>(new Settings(), [](Settings* s) { delete s; });
+    // Each call yields a fresh, independently-owned instance — ownership lives at the
+    // Application root, not in a global singleton. The constructor is private (controlled
+    // construction), but this static member can reach it; shared_ptr's default deleter
+    // handles destruction via the public destructor.
+    return std::shared_ptr<Settings>(new Settings());
 }
 
 QString Settings::getSettingsFilePath() const {
