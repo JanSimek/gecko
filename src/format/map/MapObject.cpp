@@ -4,9 +4,7 @@
 namespace geck {
 
 bool MapObject::isWallObject() const {
-    // Extract object type from the protocol ID
-    uint32_t typeId = (pro_pid >> 24) & 0x0F;
-    return typeId == static_cast<uint32_t>(Pro::OBJECT_TYPE::WALL);
+    return objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::WALL);
 }
 
 std::unique_ptr<MapObject> MapObject::cloneDeep() const {

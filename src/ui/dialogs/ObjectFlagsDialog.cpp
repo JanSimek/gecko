@@ -1,7 +1,6 @@
 #include "ObjectFlagsDialog.h"
 
 #include <QCheckBox>
-#include <QDialogButtonBox>
 #include <QGroupBox>
 #include <QVBoxLayout>
 
@@ -14,10 +13,8 @@ namespace {
 } // namespace
 
 ObjectFlagsDialog::ObjectFlagsDialog(uint32_t flags, uint32_t objectType, QWidget* parent)
-    : QDialog(parent)
+    : BaseDialog("Object Flags", parent)
     , _originalFlags(flags) {
-
-    setWindowTitle("Object Flags");
 
     auto* mainLayout = new QVBoxLayout(this);
 
@@ -49,10 +46,7 @@ ObjectFlagsDialog::ObjectFlagsDialog(uint32_t flags, uint32_t objectType, QWidge
     addFlag(transparencyLayout, "Energy", bit(Pro::ObjectFlags::OBJECT_TRANS_ENERGY));
     mainLayout->addWidget(transparencyGroup);
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    mainLayout->addWidget(buttonBox);
+    mainLayout->addWidget(createButtonBox());
 }
 
 void ObjectFlagsDialog::addFlag(QLayout* layout, const QString& label, uint32_t bit) {

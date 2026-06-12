@@ -32,18 +32,6 @@ Settings::Settings()
     : _version(SETTINGS_VERSION) {
 }
 
-std::shared_ptr<Settings> Settings::sharedInstance() {
-    // Custom deleter so the shared_ptr can reach the private destructor; the
-    // lambda is local to this member function and therefore has the necessary
-    // access to both the private constructor and destructor.
-    static std::shared_ptr<Settings> instance(new Settings(), [](Settings* s) { delete s; });
-    return instance;
-}
-
-Settings& Settings::getInstance() {
-    return *sharedInstance();
-}
-
 QString Settings::getSettingsFilePath() const {
     QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
     QDir configDir;

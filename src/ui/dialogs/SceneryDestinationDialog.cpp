@@ -1,6 +1,5 @@
 #include "SceneryDestinationDialog.h"
 
-#include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -16,14 +15,12 @@ namespace {
 
 SceneryDestinationDialog::SceneryDestinationDialog(Pro::SCENERY_TYPE sceneryType,
     uint32_t elevhex, uint32_t map, uint32_t elevtype, uint32_t elevlevel, QWidget* parent)
-    : QDialog(parent)
+    : BaseDialog("Scenery Destination", parent)
     , _isElevator(sceneryType == Pro::SCENERY_TYPE::ELEVATOR)
     , _elevhex(elevhex)
     , _map(map)
     , _elevtype(elevtype)
     , _elevlevel(elevlevel) {
-
-    setWindowTitle("Scenery Destination");
 
     auto* mainLayout = new QVBoxLayout(this);
     auto* formLayout = new QFormLayout();
@@ -60,10 +57,7 @@ SceneryDestinationDialog::SceneryDestinationDialog(Pro::SCENERY_TYPE sceneryType
 
     mainLayout->addLayout(formLayout);
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    mainLayout->addWidget(buttonBox);
+    mainLayout->addWidget(createButtonBox());
 }
 
 uint32_t SceneryDestinationDialog::getElevhex() const {

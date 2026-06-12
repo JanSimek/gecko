@@ -47,6 +47,8 @@ set(GECK_APP_SOURCES
     # Qt6 UI Common
     ui/common/BaseWidget.h
     ui/common/BaseWidget.cpp
+    ui/common/BaseDialog.h
+    ui/common/BaseDialog.cpp
     ui/common/BasePaletteWidget.h
     ui/common/BasePanel.h
     ui/common/GridPalettePanel.h

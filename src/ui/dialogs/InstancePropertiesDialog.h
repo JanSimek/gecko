@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QDialog>
+#include "ui/common/BaseDialog.h"
 
 #include <cstdint>
 
@@ -14,7 +14,7 @@ namespace geck {
 /// objectIsLocked): doors use openFlags (our MapObject.walkthrough), containers
 /// use the object data flags (our MapObject.unknown11). The dialog edits
 /// whichever applies and returns the other unchanged.
-class InstancePropertiesDialog : public QDialog {
+class InstancePropertiesDialog : public BaseDialog {
     Q_OBJECT
 
 public:

@@ -28,9 +28,7 @@ public:
         Custom    // No automatic buttons
     };
 
-    explicit BaseDialog(const QString& title,
-        QWidget* parent = nullptr,
-        ButtonConfig buttons = OkCancel);
+    explicit BaseDialog(const QString& title, QWidget* parent = nullptr);
     virtual ~BaseDialog() = default;
 
 protected:

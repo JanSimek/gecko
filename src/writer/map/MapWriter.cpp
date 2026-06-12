@@ -246,7 +246,7 @@ void MapWriter::writeObject(const MapObject& object) {
     utils.writeBE32(object.unknown10);
     utils.writeBE32(object.unknown11);
 
-    uint32_t objectTypeId = object.pro_pid >> 24;
+    uint32_t objectTypeId = object.objectType();
 
     spdlog::debug("Writing object type: {}", objectTypeName(objectTypeId));
 

@@ -22,12 +22,9 @@ namespace geck {
  */
 class Settings {
 public:
-    // Canonical single shared instance shared by both the migration shim and
-    // dependency-injected pointers.
-    static std::shared_ptr<Settings> sharedInstance();
-
-    // Migration shim -> *sharedInstance(). Kept as the compatibility seam.
-    static Settings& getInstance();
+    // Constructed and owned at the Application root, then injected (mirroring
+    // GameResources); there is no global singleton.
+    Settings();
 
     // Disable copy/assignment
     Settings(const Settings&) = delete;
@@ -113,9 +110,6 @@ public:
     static std::vector<DetectedInstallation> detectFallout2InstallationsDetailed();
 
 private:
-    Settings();
-    ~Settings() = default;
-
     // JSON serialization
     QJsonObject toJson() const;
     void fromJson(const QJsonObject& json);

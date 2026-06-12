@@ -1,6 +1,5 @@
 #include "ScriptSelectorDialog.h"
 
-#include <QDialogButtonBox>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QVBoxLayout>
@@ -9,9 +8,8 @@ namespace geck {
 
 ScriptSelectorDialog::ScriptSelectorDialog(const std::vector<std::string>& scriptNames,
     int currentIndex, QWidget* parent)
-    : QDialog(parent) {
+    : BaseDialog("Select Script", parent) {
 
-    setWindowTitle("Select Script");
     resize(360, 460);
 
     auto* mainLayout = new QVBoxLayout(this);
@@ -33,9 +31,7 @@ ScriptSelectorDialog::ScriptSelectorDialog(const std::vector<std::string>& scrip
         _listWidget->setCurrentRow(currentIndex);
     }
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    auto* buttonBox = createButtonBox();
     connect(_listWidget, &QListWidget::itemDoubleClicked, this, &QDialog::accept);
     connect(_filterEdit, &QLineEdit::textChanged, this, &ScriptSelectorDialog::onFilterChanged);
     mainLayout->addWidget(buttonBox);

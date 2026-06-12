@@ -1,7 +1,6 @@
 #include "InstancePropertiesDialog.h"
 
 #include <QCheckBox>
-#include <QDialogButtonBox>
 #include <QGroupBox>
 #include <QVBoxLayout>
 
@@ -16,12 +15,10 @@ namespace {
 
 InstancePropertiesDialog::InstancePropertiesDialog(bool isDoor, uint32_t doorOpenFlags,
     uint32_t containerDataFlags, QWidget* parent)
-    : QDialog(parent)
+    : BaseDialog(isDoor ? "Door Interaction" : "Container Interaction", parent)
     , _isDoor(isDoor)
     , _doorOpenFlags(doorOpenFlags)
     , _containerDataFlags(containerDataFlags) {
-
-    setWindowTitle(isDoor ? "Door Interaction" : "Container Interaction");
 
     const uint32_t source = isDoor ? doorOpenFlags : containerDataFlags;
 
@@ -40,10 +37,7 @@ InstancePropertiesDialog::InstancePropertiesDialog(bool isDoor, uint32_t doorOpe
 
     mainLayout->addWidget(group);
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    mainLayout->addWidget(buttonBox);
+    mainLayout->addWidget(createButtonBox());
 }
 
 uint32_t InstancePropertiesDialog::getDoorOpenFlags() const {

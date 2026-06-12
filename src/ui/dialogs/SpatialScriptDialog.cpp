@@ -16,10 +16,8 @@
 namespace geck {
 
 SpatialScriptDialog::SpatialScriptDialog(const std::vector<std::string>& scriptNames, QWidget* parent)
-    : QDialog(parent)
+    : BaseDialog("Add Spatial Script", parent)
     , _scriptNames(scriptNames) {
-
-    setWindowTitle("Add Spatial Script");
 
     auto* mainLayout = new QVBoxLayout(this);
     auto* formLayout = new QFormLayout();
@@ -48,11 +46,9 @@ SpatialScriptDialog::SpatialScriptDialog(const std::vector<std::string>& scriptN
 
     mainLayout->addLayout(formLayout);
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    auto* buttonBox = createButtonBox();
     _okButton = buttonBox->button(QDialogButtonBox::Ok);
     _okButton->setEnabled(false); // need a script first
-    connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(chooseButton, &QPushButton::clicked, this, &SpatialScriptDialog::onChooseScript);
     mainLayout->addWidget(buttonBox);
 }
