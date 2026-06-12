@@ -28,7 +28,8 @@ struct RepoFixture {
 
     RepoFixture() {
         root = fs::temp_directory_path() / "geck_resourcerepo_test";
-        fs::remove_all(root);
+        std::error_code ec;
+        fs::remove_all(root, ec); // non-throwing: a stale dir from a prior run is fine to ignore
         writeFile(root / "art/tiles/tiles.lst", "floor.frm\ngrass.frm\n");
         resources.files().addDataPath(root.string());
     }
