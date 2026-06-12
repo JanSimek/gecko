@@ -26,10 +26,10 @@ struct RepoFixture {
     fs::path root;
     GameResources resources;
 
-    RepoFixture() {
-        // GECK_TEST_TMP_DIR (a build-tree dir, injected per target in tests/CMakeLists.txt)
-        // rather than the world-writable system temp, which keeps a predictable name private.
-        root = fs::path(GECK_TEST_TMP_DIR) / "geck_resourcerepo_test";
+    // GECK_TEST_TMP_DIR (a build-tree dir, injected per target in tests/CMakeLists.txt)
+    // rather than the world-writable system temp, which keeps a predictable name private.
+    RepoFixture()
+        : root(fs::path(GECK_TEST_TMP_DIR) / "geck_resourcerepo_test") {
         std::error_code ec;
         fs::remove_all(root, ec); // non-throwing: a stale dir from a prior run is fine to ignore
         writeFile(root / "art/tiles/tiles.lst", "floor.frm\ngrass.frm\n");
@@ -59,7 +59,7 @@ TEST_CASE("ResourceRepository caches and reuses loaded resources", "[resource]")
     CHECK(first->list()[0] == "floor.frm");
 
     // Hit: a second load returns the SAME cached object, not a fresh parse.
-    Lst* second = repo.load<Lst>(LST_PATH);
+    const Lst* second = repo.load<Lst>(LST_PATH);
     CHECK(second == first);
     CHECK(repo.find<Lst>(LST_PATH) == first);
 }
