@@ -80,20 +80,7 @@ QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& re
         }
     }
 
-    // Flatten into draw order: floor tiles, objects, roof tiles.
-    std::vector<const sf::Sprite*> ordered;
-    ordered.reserve(floorSprites.size() + objects.size() + roofSprites.size());
-    for (const sf::Sprite& sprite : floorSprites) {
-        ordered.push_back(&sprite);
-    }
-    for (const auto& object : objects) {
-        ordered.push_back(&object->getSprite());
-    }
-    for (const sf::Sprite& sprite : roofSprites) {
-        ordered.push_back(&sprite);
-    }
-
-    return ThumbnailRenderer::render(ordered, size, key);
+    return pattern::composeThumbnail(floorSprites, objects, roofSprites, size, key);
 }
 
 } // namespace geck

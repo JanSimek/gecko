@@ -60,20 +60,7 @@ QPixmap PatternThumbnail::forPattern(const Pattern& pattern, const QString& sour
         }
     }
 
-    // Flatten into the editor's draw order: floor tiles, then objects, then roof tiles.
-    std::vector<const sf::Sprite*> ordered;
-    ordered.reserve(floorSprites.size() + objects.size() + roofSprites.size());
-    for (const sf::Sprite& sprite : floorSprites) {
-        ordered.push_back(&sprite);
-    }
-    for (const auto& object : objects) {
-        ordered.push_back(&object->getSprite());
-    }
-    for (const sf::Sprite& sprite : roofSprites) {
-        ordered.push_back(&sprite);
-    }
-
-    return ThumbnailRenderer::render(ordered, size, key);
+    return composeThumbnail(floorSprites, objects, roofSprites, size, key);
 }
 
 } // namespace geck::pattern
