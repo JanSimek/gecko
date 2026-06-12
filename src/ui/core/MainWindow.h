@@ -112,6 +112,7 @@ private slots:
     void onPlayGame();
     void showSavePatternDialog();
     void showStampPatternDialog();
+    void showMapBrowserDialog();
 
 public slots:
     void showStatusMessage(const QString& message);

@@ -105,6 +105,8 @@ set(GECK_APP_SOURCES
     ui/dialogs/AboutDialog.cpp
     ui/dialogs/PatternBrowserDialog.h
     ui/dialogs/PatternBrowserDialog.cpp
+    ui/dialogs/MapBrowserDialog.h
+    ui/dialogs/MapBrowserDialog.cpp
 
     # Qt6 UI Widgets
     ui/widgets/SFMLWidget.h

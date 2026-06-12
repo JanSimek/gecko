@@ -416,15 +416,25 @@ the user to press Ctrl-Z thousands of times. Therefore:
 
 # Map loader panel with thumbnail previews
 
-> Status: planned. A visual map picker that lists available maps as rendered thumbnails
+> Status: in progress. A visual map picker that lists available maps as rendered thumbnails
 > with their names, so a designer browses maps by sight instead of by filename. Replaces /
 > augments the plain "Open Map" file dialog and the text-only file browser.
+>
+> Done: `MapBrowserDialog` (File → Browse Maps…, Ctrl+B) — grid of map thumbnails + filter
+> box + larger preview pane, double-click / Open loads the map via `handleMapLoadRequest`.
+> Thumbnails come from `MapThumbnail::forMap` (built on the shared `ThumbnailRenderer`) and
+> render **lazily**: only the cells in view, one per event-loop turn, restarted on
+> scroll/filter so browsing a DAT's worth of maps stays responsive. Cache is in-memory
+> (`QPixmapCache`), matching the pattern browser; no on-disk cache.
+>
+> Remaining ideas: source grouping (vanilla vs user maps), a Welcome-screen entry point,
+> and a persisted cross-session cache if first-render latency proves annoying.
 
 ## What it is
-A dockable panel (or a dialog reachable from the Welcome screen / File menu) showing a grid
-of map thumbnails + names, with a larger preview of the highlighted map. Double-click (or an
-"Open" button) loads the map. Optional: a search/filter box and a folder/source grouping
-(vanilla `master.dat` maps vs user/filesystem maps).
+A dialog reachable from the File menu (a dockable panel is a possible later variant) showing a
+grid of map thumbnails + names, with a larger preview of the highlighted map. Double-click (or
+the "Open" button) loads the map. A search/filter box is included; folder/source grouping
+(vanilla `master.dat` maps vs user/filesystem maps) is a possible follow-up.
 
 ## Where maps come from
 Enumerate `*.map` under `maps/` across the mounted VFS (`master.dat`/`critter.dat` + any
@@ -438,9 +448,11 @@ it to "render a set of tiles + objects to an `sf::RenderTexture`, read back to a
 and both patterns and maps feed it. Differences for maps:
 - A map render is **much heavier** than a prefab (up to `TILES_PER_ELEVATION` floor/roof
   tiles + all objects on the default elevation), and producing it means **loading the map**
-  (`MapLoader` parse + FRM/tile resolution). So the **disk cache is mandatory**, keyed by map
-  path + size/mtime, with **lazy** (visible-cell-only) and **background** generation — never
-  block the UI loading dozens of maps up front.
+  (parse + FRM/tile resolution). The dialog therefore renders **lazily** — visible cells
+  only, one per event-loop turn — and caches in memory via `QPixmapCache`, matching the
+  pattern browser. (SFML's GL context rules out a true background thread, so "background" is
+  the event-loop-yielding lazy queue rather than a worker thread.) A persisted on-disk cache
+  keyed by map path + mtime remains a future option if cold-start latency becomes a problem.
 - Decide the thumbnail's elevation (default 0) and whether to include objects/critters or just
   the tile layer (tiles alone are cheaper and already give a recognizable silhouette).
 
