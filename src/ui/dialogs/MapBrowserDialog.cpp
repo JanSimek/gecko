@@ -180,7 +180,7 @@ void MapBrowserDialog::onFilterChanged(const QString& text) {
     _thumbnailTimer->start(); // render any cells the filter just revealed
 }
 
-void MapBrowserDialog::onCurrentItemChanged(QListWidgetItem* current) {
+void MapBrowserDialog::onCurrentItemChanged(const QListWidgetItem* current) {
     _openButton->setEnabled(current != nullptr);
     updatePreview(current);
 }

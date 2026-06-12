@@ -46,7 +46,7 @@ protected:
 
 private slots:
     void onFilterChanged(const QString& text);
-    void onCurrentItemChanged(QListWidgetItem* current);
+    void onCurrentItemChanged(const QListWidgetItem* current);
     void onItemActivated(const QListWidgetItem* item);
     void renderNextVisibleThumbnail();
 
