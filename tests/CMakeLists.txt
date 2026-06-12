@@ -36,6 +36,7 @@ add_executable(general_tests
     general/test_hex_geometry.cpp
     general/test_pattern_stamper.cpp
     general/test_pattern_builder.cpp
+    general/test_map_script_api.cpp
 )
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests

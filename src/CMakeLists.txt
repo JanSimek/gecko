@@ -176,6 +176,10 @@ set(GECK_APP_SOURCES
     ui/rendering/MapThumbnail.cpp
     ui/editing/ObjectCommandController.h
     ui/editing/ObjectCommandController.cpp
+
+    # Scripting host API (Tier-1/Tier-2 façade over ObjectCommandController; Lua-free)
+    scripting/MapScriptApi.h
+    scripting/MapScriptApi.cpp
     ui/input/InputHandler.h
     ui/input/InputHandler.cpp
     ui/dragdrop/DragDropContext.h
