@@ -159,3 +159,29 @@ if(GECK_BUILD_TESTS)
         geck_disable_target_warnings(Catch2 Catch2WithMain)
     endif()
 endif()
+
+# Optional Tier-2 scripting runtime: embed Luau (its VM/Compiler/Ast) + LuaBridge3
+# (header-only binding). Gated on GECK_ENABLE_SCRIPTING so a default build never fetches
+# or compiles them. Declared here (before the project's global /W4 /WX) so Luau's own
+# sources aren't held to the editor's warning policy.
+if(GECK_ENABLE_SCRIPTING)
+    set(LUAU_BUILD_CLI OFF CACHE BOOL "" FORCE)
+    set(LUAU_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(LUAU_BUILD_WEB OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        Luau
+        GIT_REPOSITORY https://github.com/luau-lang/luau.git
+        GIT_TAG 8f33df910d790c1321a20028af8d8134fa3e0334 # 0.724
+    )
+    FetchContent_MakeAvailable(Luau)
+    geck_disable_target_warnings(Luau.VM Luau.Compiler Luau.Ast Luau.Common Luau.Bytecode)
+
+    # LuaBridge3 is header-only; its LUABRIDGE_TESTING auto-disables when consumed as a
+    # subproject, so MakeAvailable just exposes the headers (used via its source dir).
+    FetchContent_Declare(
+        LuaBridge3
+        GIT_REPOSITORY https://github.com/kunitoki/LuaBridge3.git
+        GIT_TAG 53e031b7df6a14d43f92a54fd792b76dbadcc970 # 3.0-rc12
+    )
+    FetchContent_MakeAvailable(LuaBridge3)
+endif()

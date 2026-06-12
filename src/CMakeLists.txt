@@ -206,9 +206,23 @@ set(GECK_APP_SOURCES
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
 )
 
+# Optional Tier-2 scripting runtime (embeds Luau); only compiled when enabled.
+if(GECK_ENABLE_SCRIPTING)
+    list(APPEND GECK_APP_SOURCES
+        scripting/LuaScriptRuntime.h
+        scripting/LuaScriptRuntime.cpp)
+endif()
+
 # Reusable application library for the executable and UI tests
 add_library(gecko_app STATIC ${GECK_APP_SOURCES})
 add_library(gecko::app ALIAS gecko_app)
+
+if(GECK_ENABLE_SCRIPTING)
+    target_link_libraries(gecko_app PUBLIC
+        Luau.VM Luau.Compiler Luau.Ast Luau.Bytecode Luau.Common)
+    target_include_directories(gecko_app PRIVATE ${luabridge3_SOURCE_DIR}/Source)
+    target_compile_definitions(gecko_app PUBLIC GECK_SCRIPTING_ENABLED)
+endif()
 
 # Platform-specific executable settings
 if(WIN32)

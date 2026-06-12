@@ -41,6 +41,9 @@ configure_file(
 option(GECK_USE_SYSTEM_LIBS "Use system libraries when available" ON)
 option(GECK_BUILD_TESTS "Build tests" ON)
 option(GECK_ENABLE_SANITIZERS "Enable sanitizer builds for debugging" OFF)
+# Tier-2 scripting (embeds Luau + LuaBridge3). OFF by default so a normal build never
+# downloads or compiles Luau; CI builds it ON. See PLAN.md "Optional, compile-flag-gated".
+option(GECK_ENABLE_SCRIPTING "Build the optional Luau scripting runtime" OFF)
 
 ##################################################
 # Helper Functions

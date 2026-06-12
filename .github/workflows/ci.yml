@@ -131,6 +131,94 @@ jobs:
         export LD_LIBRARY_PATH=${{ runner.temp }}/sfml-install/lib:$LD_LIBRARY_PATH
         ctest --test-dir build --output-on-failure --parallel
 
+  # Dedicated job that builds the optional Tier-2 scripting runtime (embeds Luau) and
+  # runs the Luau integration tests, so the flagged path and its dependency stay tested.
+  # The default jobs above build with scripting OFF (the end-user default).
+  build-linux-scripting:
+    name: Linux - Scripting
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install CMake
+      uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: ${{ env.CMAKE_VERSION }}
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        aqtversion: '==3.3.0'
+        version: ${{ env.QT_VERSION }}
+        host: 'linux'
+        target: 'desktop'
+        arch: 'linux_gcc_64'
+        cache: true
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libgl1-mesa-dev \
+          libxrandr-dev \
+          libxcursor-dev \
+          libudev-dev \
+          libfreetype6-dev \
+          zlib1g-dev \
+          libxinerama-dev \
+          libxi-dev \
+          ninja-build
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
+      with:
+        key: ${{ runner.os }}-scripting
+
+    - name: Cache SFML
+      id: cache-sfml
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/sfml-install
+        key: ${{ runner.os }}-sfml-3.0.1
+
+    - name: Build and install SFML 3
+      if: steps.cache-sfml.outputs.cache-hit != 'true'
+      run: |
+        git clone --depth 1 --branch 3.0.1 https://github.com/SFML/SFML.git
+        cd SFML
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=ON \
+          -DSFML_BUILD_AUDIO=OFF \
+          -DSFML_BUILD_NETWORK=OFF \
+          -DCMAKE_INSTALL_PREFIX=${{ runner.temp }}/sfml-install
+        cmake --build build --config Release
+        cmake --install build
+        cd ..
+
+    - name: Configure CMake (scripting enabled)
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DGECK_BUILD_TESTS=ON \
+          -DGECK_USE_SYSTEM_LIBS=ON \
+          -DGECK_ENABLE_SCRIPTING=ON \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DQt6_DIR=$Qt6_DIR \
+          -DCMAKE_PREFIX_PATH=${{ runner.temp }}/sfml-install
+
+    - name: Build
+      run: cmake --build build --config Release --parallel
+
+    - name: Run tests (incl. Luau scripting)
+      run: |
+        export LD_LIBRARY_PATH=${{ runner.temp }}/sfml-install/lib:$LD_LIBRARY_PATH
+        ctest --test-dir build --output-on-failure --parallel
+
   build-macos:
     name: macOS - ${{ matrix.build_type }}
     runs-on: macos-latest
