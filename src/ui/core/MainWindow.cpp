@@ -13,6 +13,7 @@
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
+#include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
 #include "ui/UIConstants.h"
 #include "resource/GameResources.h"
@@ -359,6 +360,7 @@ void MainWindow::setupMenuBar() {
     _fileMenu = _menuBar->addMenu("&File");
     addMenuAction(_fileMenu, ":/icons/actions/new.svg", "&New Map", &MainWindow::newMapRequested, QKeySequence::New, "Create a new map");
     addMenuAction(_fileMenu, ":/icons/actions/open.svg", "&Open Map", &MainWindow::openMapRequested, QKeySequence::Open, "Open an existing map");
+    addMenuAction(_fileMenu, ":/icons/actions/open.svg", "&Browse Maps...", &MainWindow::showMapBrowserDialog, QKeySequence("Ctrl+B"), "Browse available maps as thumbnails");
     addMenuAction(_fileMenu, ":/icons/actions/save.svg", "&Save Map", &MainWindow::saveMapRequested, QKeySequence::Save, "Save current map");
 
     _fileMenu->addSeparator();
@@ -1735,6 +1737,17 @@ void MainWindow::showStampPatternDialog() {
     auto selected = dialog.selectedPattern();
     if (selected.has_value()) {
         _currentEditorWidget->beginStampPattern(std::move(*selected));
+    }
+}
+
+void MainWindow::showMapBrowserDialog() {
+    MapBrowserDialog dialog(*_resourcesShared, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    const QString mapPath = dialog.selectedMapPath();
+    if (!mapPath.isEmpty()) {
+        handleMapLoadRequest(mapPath.toStdString(), false);
     }
 }
 

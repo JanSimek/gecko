@@ -105,6 +105,8 @@ set(GECK_APP_SOURCES
     ui/dialogs/AboutDialog.cpp
     ui/dialogs/PatternBrowserDialog.h
     ui/dialogs/PatternBrowserDialog.cpp
+    ui/dialogs/MapBrowserDialog.h
+    ui/dialogs/MapBrowserDialog.cpp
 
     # Qt6 UI Widgets
     ui/widgets/SFMLWidget.h
@@ -168,6 +170,8 @@ set(GECK_APP_SOURCES
     ui/rendering/RenderingEngine.cpp
     ui/rendering/ThumbnailRenderer.h
     ui/rendering/ThumbnailRenderer.cpp
+    ui/rendering/MapThumbnail.h
+    ui/rendering/MapThumbnail.cpp
     ui/editing/ObjectCommandController.h
     ui/editing/ObjectCommandController.cpp
     ui/input/InputHandler.h

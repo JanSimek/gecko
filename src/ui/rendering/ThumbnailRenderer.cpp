@@ -61,16 +61,22 @@ QPixmap ThumbnailRenderer::render(const std::vector<const sf::Sprite*>& sprites,
     minY -= pad;
     maxX += pad;
     maxY += pad;
-    const auto width = static_cast<unsigned int>(std::max(1.0f, maxX - minX));
-    const auto height = static_cast<unsigned int>(std::max(1.0f, maxY - minY));
+    const float bboxWidth = std::max(1.0f, maxX - minX);
+    const float bboxHeight = std::max(1.0f, maxY - minY);
+
+    // Cap the render texture so huge content (whole maps) stays bounded; the world-space
+    // view still covers the full bounds, so the content is supersampled down into it.
+    constexpr float maxRenderDim = 512.0f;
+    const float scale = std::min(1.0f, maxRenderDim / std::max(bboxWidth, bboxHeight));
+    const auto width = static_cast<unsigned int>(std::max(1.0f, bboxWidth * scale));
+    const auto height = static_cast<unsigned int>(std::max(1.0f, bboxHeight * scale));
 
     sf::RenderTexture renderTexture;
     if (!renderTexture.resize({ width, height })) {
         spdlog::warn("ThumbnailRenderer: failed to create {}x{} render texture", width, height);
         return {};
     }
-    renderTexture.setView(sf::View(sf::FloatRect({ minX, minY },
-        { static_cast<float>(width), static_cast<float>(height) })));
+    renderTexture.setView(sf::View(sf::FloatRect({ minX, minY }, { bboxWidth, bboxHeight })));
     renderTexture.clear(sf::Color::Transparent);
     for (const sf::Sprite* sprite : sprites) {
         if (sprite != nullptr) {

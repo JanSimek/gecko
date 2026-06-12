@@ -3,8 +3,12 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include <SFML/Graphics/Sprite.hpp>
+
+#include <QPixmap>
+#include <QString>
 
 namespace geck {
 class HexagonGrid;
@@ -33,5 +37,15 @@ std::optional<sf::Sprite> buildTileSprite(resource::GameResources& resources,
     int tileIndex,
     bool isRoof,
     uint16_t tileId);
+
+/// Flatten floor tiles, objects, then roof tiles into the editor's back-to-front draw
+/// order and render them to a `size`x`size` thumbnail via the shared ThumbnailRenderer.
+/// Shared by the pattern and map thumbnail compositors. `cacheKey` is forwarded to the
+/// renderer's in-memory cache (an empty key disables caching).
+QPixmap composeThumbnail(const std::vector<sf::Sprite>& floorSprites,
+    const std::vector<std::shared_ptr<Object>>& objects,
+    const std::vector<sf::Sprite>& roofSprites,
+    int size,
+    const QString& cacheKey);
 
 } // namespace geck::pattern
