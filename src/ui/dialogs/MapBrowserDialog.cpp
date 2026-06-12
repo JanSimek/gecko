@@ -105,8 +105,7 @@ MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources, QWidget* 
     connect(_thumbnailTimer, &QTimer::timeout, this, &MapBrowserDialog::renderNextVisibleThumbnail);
 
     connect(_search, &QLineEdit::textChanged, this, &MapBrowserDialog::onFilterChanged);
-    connect(_grid, &QListWidget::currentItemChanged, this,
-        [this](QListWidgetItem* current, QListWidgetItem*) { onCurrentItemChanged(current); });
+    connect(_grid, &QListWidget::currentItemChanged, this, &MapBrowserDialog::onCurrentItemChanged);
     connect(_grid, &QListWidget::itemActivated, this, &MapBrowserDialog::onItemActivated);
     connect(_grid->verticalScrollBar(), &QScrollBar::valueChanged, this,
         [this] { _thumbnailTimer->start(); });
