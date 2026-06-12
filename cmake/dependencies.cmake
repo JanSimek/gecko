@@ -160,7 +160,7 @@ if(GECK_BUILD_TESTS)
     endif()
 endif()
 
-# Optional Tier-2 scripting runtime: embed Luau (its VM/Compiler/Ast) + LuaBridge3
+# Optional scripting runtime: embed Luau (its VM/Compiler/Ast) + LuaBridge3
 # (header-only binding). Gated on GECK_ENABLE_SCRIPTING so a default build never fetches
 # or compiles them. Declared here (before the project's global /W4 /WX) so Luau's own
 # sources aren't held to the editor's warning policy.
@@ -175,6 +175,13 @@ if(GECK_ENABLE_SCRIPTING)
     )
     FetchContent_MakeAvailable(Luau)
     geck_disable_target_warnings(Luau.VM Luau.Compiler Luau.Ast Luau.Common Luau.Bytecode)
+    # Consumed under /W4 /WX, so mark the targets SYSTEM: their headers are treated as
+    # external (warnings suppressed) when included, not only when Luau itself builds.
+    foreach(_luau_target IN ITEMS Luau.VM Luau.Compiler Luau.Ast Luau.Common Luau.Bytecode)
+        if(TARGET ${_luau_target})
+            set_target_properties(${_luau_target} PROPERTIES SYSTEM TRUE)
+        endif()
+    endforeach()
 
     # LuaBridge3 is header-only; its LUABRIDGE_TESTING auto-disables when consumed as a
     # subproject, so MakeAvailable just exposes the headers (used via its source dir).

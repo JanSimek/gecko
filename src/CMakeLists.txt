@@ -177,7 +177,7 @@ set(GECK_APP_SOURCES
     ui/editing/ObjectCommandController.h
     ui/editing/ObjectCommandController.cpp
 
-    # Scripting host API (Tier-1/Tier-2 façade over ObjectCommandController; Lua-free)
+    # Scripting host API (Lua-free façade over ObjectCommandController)
     scripting/MapScriptApi.h
     scripting/MapScriptApi.cpp
     ui/input/InputHandler.h
@@ -206,7 +206,7 @@ set(GECK_APP_SOURCES
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
 )
 
-# Optional Tier-2 scripting runtime (embeds Luau); only compiled when enabled.
+# Optional scripting runtime (embeds Luau); only compiled when enabled.
 if(GECK_ENABLE_SCRIPTING)
     list(APPEND GECK_APP_SOURCES
         scripting/LuaScriptRuntime.h
@@ -220,7 +220,8 @@ add_library(gecko::app ALIAS gecko_app)
 if(GECK_ENABLE_SCRIPTING)
     target_link_libraries(gecko_app PUBLIC
         Luau.VM Luau.Compiler Luau.Ast Luau.Bytecode Luau.Common)
-    target_include_directories(gecko_app PRIVATE ${luabridge3_SOURCE_DIR}/Source)
+    # SYSTEM so LuaBridge3's header warnings (e.g. MSVC C4702) aren't held to /W4 /WX.
+    target_include_directories(gecko_app SYSTEM PRIVATE ${luabridge3_SOURCE_DIR}/Source)
     target_compile_definitions(gecko_app PUBLIC GECK_SCRIPTING_ENABLED)
 endif()
 

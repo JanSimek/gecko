@@ -13,15 +13,13 @@ namespace resource {
     class GameResources;
 }
 
-/// The single host-API façade both scripting tiers funnel through. It is **pure C++ over
-/// ObjectCommandController — no scripting runtime** — so Tier 1 (prefab stamping) and
-/// headless tests use it without any Lua/Luau dependency; only Tier 2 binds it into a
-/// script VM (behind GECK_ENABLE_SCRIPTING).
+/// Host API for editing the map: queries plus undoable mutators that route through
+/// ObjectCommandController. Pure C++ with no scripting-runtime dependency, so it is usable
+/// (and unit-testable) without Lua.
 ///
-/// Every mutator routes through the controller, so edits are undoable and uniform. A
-/// procedural run that touches many hexes must be wrapped in beginBatch()/endBatch() (or
-/// an ObjectCommandController ScopedUndoBatch) so the whole run collapses into ONE undo
-/// entry instead of one-per-hex — the UndoStack has a hard command cap.
+/// A run that touches many hexes must be wrapped in beginBatch()/endBatch() (or a
+/// ScopedUndoBatch) so it collapses into ONE undo entry instead of one-per-hex — the
+/// UndoStack has a hard command cap.
 class MapScriptApi {
 public:
     /// Binds to a live editing session at `elevation`. References are borrowed and must
