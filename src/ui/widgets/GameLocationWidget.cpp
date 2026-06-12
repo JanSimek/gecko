@@ -1,6 +1,6 @@
 #include "GameLocationWidget.h"
 #include "util/GameDataPathResolver.h"
-#include "util/Settings.h"
+#include "ui/Settings.h"
 #include "ui/UIConstants.h"
 
 #include <QApplication>

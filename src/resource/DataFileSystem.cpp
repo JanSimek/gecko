@@ -1,8 +1,8 @@
 #include "DataFileSystem.h"
 
 #include "util/GameDataPathResolver.h"
-#include "util/PathUtils.h"
-#include "util/ResourcePaths.h"
+#include "resource/PathUtils.h"
+#include "resource/ResourcePaths.h"
 #include "vfs/Dat2FileSystem.hpp"
 #include "vfs/VfsppNativeFileSystem.h"
 

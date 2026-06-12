@@ -4,7 +4,7 @@
 #include "ui/widgets/TextEditorWidget.h"
 #include "ui/UIConstants.h"
 #include "ui/theme/ThemeManager.h"
-#include "util/Settings.h"
+#include "ui/Settings.h"
 
 #include <QApplication>
 #include <QStyle>

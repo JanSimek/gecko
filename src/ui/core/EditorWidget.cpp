@@ -22,9 +22,9 @@
 
 #include "util/Constants.h"
 #include "util/ColorUtils.h"
-#include "util/ResourceInitializer.h"
+#include "ui/ResourceInitializer.h"
 #include "util/TileUtils.h"
-#include "util/QtDialogs.h"
+#include "ui/QtDialogs.h"
 #include "util/ProHelper.h"
 #include "util/Coordinates.h"
 

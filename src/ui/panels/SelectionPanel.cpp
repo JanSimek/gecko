@@ -10,7 +10,7 @@
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/UIConstants.h"
-#include "util/ResourcePaths.h"
+#include "resource/ResourcePaths.h"
 #include "format/map/MapScript.h"
 
 #include <algorithm>

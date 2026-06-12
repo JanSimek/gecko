@@ -5,8 +5,8 @@
 #include "format/frm/Frm.h"
 #include "format/lst/Lst.h"
 #include "util/Constants.h"
-#include "util/CritterFrmResolver.h"
-#include "util/ResourcePaths.h"
+#include "resource/CritterFrmResolver.h"
+#include "resource/ResourcePaths.h"
 
 #include <algorithm>
 #include <cctype>

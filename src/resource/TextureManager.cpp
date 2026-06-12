@@ -7,7 +7,7 @@
 #include "format/frm/Frm.h"
 #include "format/pal/Pal.h"
 #include "util/Exceptions.h"
-#include "util/ResourcePaths.h"
+#include "resource/ResourcePaths.h"
 
 #include <algorithm>
 #include <cctype>

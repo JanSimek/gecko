@@ -1,5 +1,5 @@
 #include "DataPathsWidget.h"
-#include "util/Settings.h"
+#include "ui/Settings.h"
 #include "Application.h"
 #include "ui/UIConstants.h"
 

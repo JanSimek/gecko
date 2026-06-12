@@ -1,5 +1,5 @@
 #include "Settings.h"
-#include "GameDataPathResolver.h"
+#include "util/GameDataPathResolver.h"
 
 #include <QStandardPaths>
 #include <QDir>

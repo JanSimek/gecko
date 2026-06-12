@@ -1,8 +1,8 @@
 #include "GameLauncher.h"
 
 #include "resource/GameResources.h"
-#include "util/Settings.h"
-#include "util/QtDialogs.h"
+#include "ui/Settings.h"
+#include "ui/QtDialogs.h"
 #include "util/ProHelper.h"
 #include "format/pro/Pro.h"
 #include "writer/map/MapWriter.h"

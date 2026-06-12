@@ -3,7 +3,7 @@
 #include "format/lst/Lst.h"
 #include "format/msg/Msg.h"
 #include "resource/GameResources.h"
-#include "util/ResourcePaths.h"
+#include "resource/ResourcePaths.h"
 #include <stdexcept>
 
 namespace geck {

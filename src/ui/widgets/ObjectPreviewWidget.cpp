@@ -20,7 +20,7 @@
 #include "format/frm/Frame.h"
 #include "format/pal/Pal.h"
 #include "resource/GameResources.h"
-#include "util/FrmThumbnailGenerator.h"
+#include "ui/FrmThumbnailGenerator.h"
 #include "ui/IconHelper.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/UIConstants.h"

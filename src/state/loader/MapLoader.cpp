@@ -4,7 +4,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
 #include "util/Constants.h"
-#include "util/ResourcePaths.h"
+#include "resource/ResourcePaths.h"
 
 #include "reader/ReaderFactory.h"
 #include "reader/map/MapReader.h"
@@ -18,7 +18,7 @@
 
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
-#include "util/ResourceInitializer.h"
+#include "ui/ResourceInitializer.h"
 
 namespace geck {
 

@@ -9,17 +9,17 @@ set(GECK_APP_SOURCES
     Application.cpp
 
     util/FalloutEngineEnums.h
-    util/ResourceInitializer.h
-    util/ResourceInitializer.cpp
+    ui/ResourceInitializer.h
+    ui/ResourceInitializer.cpp
 
     util/SpriteFactory.h
     util/SpriteFactory.cpp
 
-    util/QtDialogs.h
-    util/QtDialogs.cpp
+    ui/QtDialogs.h
+    ui/QtDialogs.cpp
 
-    util/Settings.h
-    util/Settings.cpp
+    ui/Settings.h
+    ui/Settings.cpp
 
     pattern/Pattern.h
     pattern/PatternSerializer.h
@@ -35,11 +35,11 @@ set(GECK_APP_SOURCES
     pattern/PatternThumbnail.h
     pattern/PatternThumbnail.cpp
 
-    util/ExternalEditorLauncher.h
-    util/ExternalEditorLauncher.cpp
+    ui/ExternalEditorLauncher.h
+    ui/ExternalEditorLauncher.cpp
 
-    util/FrmThumbnailGenerator.h
-    util/FrmThumbnailGenerator.cpp
+    ui/FrmThumbnailGenerator.h
+    ui/FrmThumbnailGenerator.cpp
 
     util/Types.h
     util/Exceptions.h
@@ -391,9 +391,9 @@ add_library(gecko_resource STATIC
     vfs/Dat2File.hpp
     vfs/Dat2FileSystem.hpp
 
-    util/PathUtils.h
-    util/CritterFrmResolver.h
-    util/CritterFrmResolver.cpp
+    resource/PathUtils.h
+    resource/CritterFrmResolver.h
+    resource/CritterFrmResolver.cpp
 
     resource/DataFileSystem.h
     resource/DataFileSystem.cpp
