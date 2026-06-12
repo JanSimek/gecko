@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace geck {
 
 /**
@@ -86,14 +88,6 @@ namespace UI {
     constexpr int SPACING_LARGE = 20;     ///< Large spacing between widgets
 }
 
-// Hexagon grid constants
-namespace HexGrid {
-    constexpr int HEX_WIDTH = 32;    ///< Width of a hexagon
-    constexpr int HEX_HEIGHT = 16;   ///< Height of a hexagon
-    constexpr int GRID_WIDTH = 200;  ///< Width of the hex grid
-    constexpr int GRID_HEIGHT = 200; ///< Height of the hex grid
-}
-
 // Object rotation constants
 namespace Rotation {
     constexpr int DEFAULT_DIRECTION = 0; ///< Default object direction
@@ -102,9 +96,9 @@ namespace Rotation {
 
 // File format constants
 namespace FileFormat {
-    constexpr int TYPE_MASK_SHIFT = 24;              ///< Bit shift for type mask in PIDs/FIDs
-    constexpr uint32_t TYPE_MASK = 0x0F000000;       ///< Type mask for PIDs/FIDs
-    constexpr uint32_t FULL_TYPE_MASK = 0xFF000000;  ///< Full type mask
+    constexpr int TYPE_MASK_SHIFT = 24;              ///< Bit shift for type field in PIDs/FIDs
+    constexpr uint32_t TYPE_MASK = 0x0F000000;       ///< FID type mask: high nibble only (bits 28-30 hold rotation)
+    constexpr uint32_t FULL_TYPE_MASK = 0xFF000000;  ///< PID type mask: full high byte (PIDs carry no rotation)
     constexpr uint32_t BASE_ID_MASK = 0x00FFFFFF;    ///< Base ID mask for PIDs/FIDs
     constexpr uint32_t CRITTER_ID_MASK = 0x00000FFF; ///< Special mask for critter IDs
     constexpr int FALLOUT2_MAP_VERSION = 20;         ///< Standard Fallout 2 map version
