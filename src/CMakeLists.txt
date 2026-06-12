@@ -21,6 +21,20 @@ set(GECK_APP_SOURCES
     util/Settings.h
     util/Settings.cpp
 
+    pattern/Pattern.h
+    pattern/PatternSerializer.h
+    pattern/PatternSerializer.cpp
+    pattern/PatternStamper.h
+    pattern/PatternStamper.cpp
+    pattern/PatternBuilder.h
+    pattern/PatternBuilder.cpp
+    pattern/PatternLibrary.h
+    pattern/PatternLibrary.cpp
+    pattern/PatternSprite.h
+    pattern/PatternSprite.cpp
+    pattern/PatternThumbnail.h
+    pattern/PatternThumbnail.cpp
+
     util/ExternalEditorLauncher.h
     util/ExternalEditorLauncher.cpp
 
@@ -89,6 +103,8 @@ set(GECK_APP_SOURCES
     ui/dialogs/SpatialScriptDialog.cpp
     ui/dialogs/AboutDialog.h
     ui/dialogs/AboutDialog.cpp
+    ui/dialogs/PatternBrowserDialog.h
+    ui/dialogs/PatternBrowserDialog.cpp
 
     # Qt6 UI Widgets
     ui/widgets/SFMLWidget.h
@@ -150,6 +166,8 @@ set(GECK_APP_SOURCES
     ui/rendering/MapSpriteLoader.cpp
     ui/rendering/RenderingEngine.h
     ui/rendering/RenderingEngine.cpp
+    ui/rendering/ThumbnailRenderer.h
+    ui/rendering/ThumbnailRenderer.cpp
     ui/editing/ObjectCommandController.h
     ui/editing/ObjectCommandController.cpp
     ui/input/InputHandler.h
@@ -396,6 +414,7 @@ add_library(gecko_core STATIC
     editor/Object.cpp
     editor/HexagonGrid.h
     editor/HexagonGrid.cpp
+    editor/HexGeometry.h
     editor/Hex.h
     editor/Hex.cpp
     editor/helper/ObjectQueries.h

@@ -61,6 +61,9 @@ public:
         std::function<void(sf::FloatRect area)> onScrollBlockerRectangle;
         std::function<void()> onTilePlacementCancel;
         std::function<void(sf::Vector2f worldPos)> onExitGridPlacement;
+        std::function<void(sf::Vector2f worldPos)> onStampPattern;
+        std::function<void()> onStampPatternCancel;
+        std::function<void()> onStampCycleVariant;
         std::function<void(sf::Vector2f worldPos)> onMarkExitsSelection;
         std::function<void(sf::Vector2f startPos, sf::Vector2f endPos)> onMarkExitsAreaSelection;
         std::function<void(sf::Vector2f startPos, sf::Vector2f currentPos)> onMarkExitsPreview;
@@ -109,6 +112,8 @@ public:
      */
     void setPlayerPositionMode(bool enabled) { _playerPositionMode = enabled; }
     void setExitGridPlacementMode(bool enabled) { _exitGridPlacementMode = enabled; }
+    void setStampPatternMode(bool enabled) { _stampPatternMode = enabled; }
+    bool isInStampPatternMode() const { return _stampPatternMode; }
     void setMarkExitsMode(bool enabled) {
         _markExitsMode = enabled;
     }
@@ -154,6 +159,7 @@ private:
     bool _tilePlacementReplaceMode = false;
     bool _exitGridPlacementMode = false;
     bool _markExitsMode = false;
+    bool _stampPatternMode = false;
     int _tilePlacementIndex = -1;
     bool _tilePlacementIsRoof = false;
 };

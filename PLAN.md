@@ -1,201 +1,13 @@
 # Improvement Backlog
 
-## Test-suite audit & refactor plan
+## Test-suite audit & refactor plan — DONE
 
-Audit of `tests/` (22 source files, ~117 `TEST_CASE`s across `general_tests`,
-`performance_tests`, `qt_tests`). The format round-trip coverage (PRO all-types,
-MAP all-object-types + engine-framing regressions) is genuinely strong; the gaps
-are in (a) the other binary formats, (b) editor/coordinate invariants, and (c)
-duplicated scaffolding plus a fragile fixture-path setup. Items are ordered by
-value/effort.
-
-### P0 — Shared test-support header (highest leverage, unblocks everything below)
-
-Create `tests/support/` with a small, header-only support library linked into all
-three executables. The two round-trip suites already re-derive the same helpers;
-new format tests would copy them a third and fourth time.
-
-- **`tests/support/Fixtures.h`** — one function `geck::test::dataDir()` /
-  `dataPath(name)` that resolves fixtures from a compile-time
-  `GECK_TEST_DATA_DIR` (see P1). Replaces the bare `"data/test.gam"` string
-  literal repeated in `test_reading_gam.cpp`, `test_reading_msg.cpp`,
-  `test_reading_pro_drug.cpp`, `test_pro_roundtrip.cpp`, and the `"data/…"` calls
-  inside `test_reader_performance.cpp`.
-- **`tests/support/TempFile.h`** — RAII `TempFile{stem, ".pro"}` that picks a
-  unique path under `temp_directory_path()`, removes any stale copy on
-  construction, and unlinks on destruction. This collapses the near-identical
-  `makeTempProPath()` (test_pro_roundtrip.cpp:24) and `tempMapPath()`
-  (test_map_roundtrip.cpp:44) plus the hand-written `std::error_code ec;
-  std::filesystem::remove(...)` cleanup that appears at the end of **every**
-  round-trip `TEST_CASE` (10+ copies). Also folds in `readAllBytes()`
-  (test_pro_roundtrip.cpp:15) for byte-for-byte comparisons.
-- **`tests/support/ProStubProvider.h`** — promote `StubProvider` from
-  test_map_roundtrip.cpp (the in-memory `pid -> Pro` map with `addItem` /
-  `addScenery` / `set` / `load`) and the free `pidOf(OBJECT_TYPE, index)` helper.
-  These are exactly the provider callbacks `MapReader`/`MapWriter` take, so any
-  future MAP or object-query test needs them. Keep `StubProvider` returning raw
-  subtype-only `Pro`s (the only thing (de)serialization dereferences).
-- **`tests/support/MapObjectBuilder.h`** — promote `fillBase()` / `checkBase()`
-  (test_map_roundtrip.cpp:54/76) and the local `add(proPid, seed)` lambda into a
-  reusable builder/asserter over the 22-field base block. This is the single
-  biggest duplicated block and is needed verbatim by the MAP fixture test (P2)
-  and any editor/selection test that fabricates objects.
-- **`tests/support/ProBuilder.h`** — the `roundTrip(Pro, path)` helper
-  (test_pro_roundtrip.cpp:183) plus thin constructors that set a PID with the
-  correct type nibble (`(type<<24)|index`), currently re-spelled in every PRO
-  `TEST_CASE`.
-
-Wire it up in `tests/CMakeLists.txt` as
-`add_library(test_support INTERFACE)` with
-`target_include_directories(test_support INTERFACE ${CMAKE_SOURCE_DIR}/tests)`,
-and link it into `general_tests`, `performance_tests`, `qt_tests`. Migrate the two
-existing round-trip suites onto it in the same change to prove the API.
-
-### P1 — Make fixture loading robust (fixes the ctest-only gotcha)
-
-**Problem:** `general_tests` / `performance_tests` load fixtures via bare relative
-paths (`reader.openFile("data/test.gam")`). These only resolve because
-`catch_discover_tests` runs each test with its working directory defaulting to
-`$<TARGET_FILE_DIR>` (the build dir, where the post-build `copy_directory` rule
-drops `data/`). Running the executable directly from any other cwd
-(`./build/general_tests`, a debugger, an IDE) silently fails to find fixtures.
-Only `qt_tests` does this correctly, via the `GECK_TEST_DATA_DIR` compile
-definition (tests/CMakeLists.txt:60-62).
-
-**Fix:**
-1. Add `target_compile_definitions(general_tests PRIVATE
-   GECK_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")` (and the same for
-   `performance_tests`). Point fixtures at the source tree so no copy step is
-   needed for *reading*.
-2. Route all fixture access through `test::dataPath()` (P0). Delete the bare
-   `"data/…"` literals.
-3. Once fixtures resolve by absolute path, the per-target
-   `copy_directory tests/data` POST_BUILD commands (tests/CMakeLists.txt:108-118)
-   become dead weight — drop them (keep only what `qt_tests` still needs for the
-   `resources/` copy).
-4. Add a `set_tests_properties(... PROPERTIES WORKING_DIRECTORY ...)` is then
-   unnecessary; document in `AGENTS.md` that fixtures are absolute and tests are
-   cwd-independent.
-
-### P2 — Highest-value missing tests (format round-trips & editor invariants)
-
-Format fidelity is the project's core promise; these are the untested formats and
-the load-bearing editor math.
-
-**Formats / readers / writers (priority order):**
-
-1. **FRM round-trip + correctness** — `FrmReader` is exercised only for *timing*
-   in `test_reader_performance.cpp` (in-memory buffer, no assertions on decoded
-   frames). No correctness test exists, and there is **no `FrmWriter`** — confirm
-   whether FRM is read-only; if so, add a read-correctness test against a small
-   real `.frm` fixture (frame count, dimensions, per-direction offsets, pixel-0
-   sanity). `new tests/general/test_reading_frm.cpp`.
-2. **DAT reader correctness in `general_tests`** — `DatReader` is only touched by
-   `test_dat_archive.cpp` in the **qt** suite (because it pulls the resource
-   stack), exercising the vfspp path. Add a pure-`vault` test for the raw
-   `DatReader` (entry table parse, compressed vs stored entries, file extraction
-   bytes) using the existing `tests/data/f2_res.dat` fixture. Belongs in
-   `general_tests` (no Qt needed). `new tests/general/test_reading_dat.cpp`.
-3. **LST reader** — `LstReader` (used everywhere for proto/script list lookups)
-   has zero coverage. Add a trivial fixture test: line parsing, comment/whitespace
-   trimming, 1-based vs 0-based indexing, CRLF handling.
-   `new tests/general/test_reading_lst.cpp`.
-4. **PAL reader** — `PalReader` untested. Small, deterministic: 256-entry palette,
-   6-bit→8-bit channel scaling, the cycling/animation indices. Pairs well with a
-   `ColorUtils` test. `new tests/general/test_reading_pal.cpp`.
-5. **MAP read from a real fixture** — the MAP round-trip is fully synthetic (no
-   `.map` on disk). Add one small real `.map` fixture and assert header +
-   representative objects/tiles parse, to catch reader assumptions the synthetic
-   path can't (real elevation flags, real script sections, tile blocks).
-   Reuses the P0 `StubProvider`. Extend `test_map_roundtrip.cpp` or
-   `new tests/general/test_reading_map.cpp`.
-6. **MSG / GAM negative + edge cases** — current tests assert a few happy-path
-   lookups. Add: missing message id, the documented unclosed-`}` recovery
-   (test_reading_msg.cpp has a `FIXME` for messages #1382/#32020 — turn it into a
-   real expectation or an xfail), empty file, duplicate ids.
-
-**Editor / selection / util invariants (priority order):**
-
-7. **`Coordinates.h` round-trips & clamping** — `HexPosition` (0–39999),
-   `TileIndex` (0–9999), and the world/screen/hex conversions are the project's
-   most safety-critical math (the CLAUDE.md "never validate hex against
-   TILES_PER_ELEVATION" rule lives or dies here). Test `isValid()` boundaries,
-   `operator+/-` clamping at the 39999/9999 edges, and world→hex→world stability.
-   `new tests/general/test_coordinates.cpp`.
-8. **`HexagonGrid` invariants** — only 2 `TEST_CASE`s today. Add:
-   `positionForCoordinates`↔`coordinatesForPosition` round-trip over the whole
-   grid, `containsPosition` boundary, `tileIndexForPosition` mapping
-   (200×200 hex ↔ 100×100 tile), and `rectangleBorderPositions` for a known rect.
-9. **`UndoStack`** — pure, deterministic, zero deps, currently untested. Test
-   push/undo/redo ordering, redo-stack invalidation on new push, the
-   `_maxCommands` eviction (oldest dropped), `lastUndo/RedoLabel`, and the
-   reject-on-missing-undo/redo guard (UndoStack.h:26). High value because every
-   instance-edit feature in this very PLAN routes through it.
-10. **`object_query` (ObjectQueries.h)** — `blocksMovement` /
-    `isWallBlocker` / `isShootThroughWallBlocker` read PRO flags and gate
-    movement/rendering. Testable with the P0 `StubProvider` supplying flag bits;
-    no Qt needed (but needs `GameResources`, so likely a `qt_tests` resident).
-11. **`SpatialIndex` / `TileSpatialIndex`** — query-correctness (point/area/radius
-    membership, no duplicates across cells, update/remove consistency). Pure
-    geometry over SFML rects; belongs in `general_tests`.
-
-### P3 — Structure & categorization cleanup
-
-The 3-executable split (general = pure C++ logic, performance = Catch2 benchmarks,
-qt = needs `gecko::app` + `Qt6::Test`) is sound and the boundary is mostly clean.
-Issues:
-
-- **Naming is inconsistent.** Two conventions coexist: `test_reading_<fmt>.cpp`
-  (gam/msg/pro_drug) vs `test_<fmt>_roundtrip.cpp` (pro/map) vs
-  `test_<subject>.cpp` (everything else). Pick one. Recommend
-  `test_<subject>.cpp` for unit/logic and reserve `_roundtrip` as a meaningful
-  suffix; rename `test_reading_gam/msg/pro_drug` → `test_gam/test_msg/test_pro`
-  (and fold `test_reading_pro_drug` into the PRO suite, since `test_pro_roundtrip`
-  already owns the drug fixture). This also de-confuses "reading" tests that
-  actually only read vs the round-trip ones.
-- **`test_reading_pro_drug.cpp` is redundant.** Its single happy-path drug parse
-  is a strict subset of `test_pro_roundtrip.cpp`'s Level-1 case (same fixture).
-  Merge and delete.
-- **No tag-based categorization.** Catch2 tags exist (`[map]`, `[pro]`,
-  `[selection_state]`, …) but `ctest` can't filter by them (AGENTS/CLAUDE both
-  note "no ctest label registration"). Low priority, but `catch_discover_tests`
-  supports `TEST_PREFIX`/`PROPERTIES LABELS` — consider emitting one ctest label
-  per top-level area so `ctest -L format` works.
-- **`test_selection_system.cpp` is a 1631-line, 24-`TEST_CASE` monolith** (a third
-  of all test LOC). It mixes `SelectionState`, tile/hex coordinate conversions,
-  selection-mode enums, and "original" position-conversion cases. Split into
-  `test_selection_state.cpp`, `test_tile_hex_conversion.cpp` (overlaps
-  `test_tile_utils.cpp` — consolidate), and fold the coordinate cases into the new
-  `test_coordinates.cpp` (P2#7). Several of its coordinate `SECTION`s duplicate
-  `test_tile_utils.cpp` and `test_selection_system.cpp` itself.
-- **Misplacement check:** `test_data_path_resolution.cpp` and
-  `test_game_data_path_resolver.cpp` are near-siblings split across qt/general by
-  whether they touch `DataFileSystem`. That's defensible, but verify the general
-  one doesn't transitively need Qt; if it links cleanly it's correctly placed.
-
-### P4 — Other duplication to retire (after P0 lands)
-
-- The **writer-then-reader block** `{ Writer w; w.openFile(p); REQUIRE(w.write(x)); }`
-  immediately followed by `Reader r; auto back = r.openFile(p);` appears in every
-  round-trip case in both PRO and MAP suites. The P0 `roundTrip()` /
-  `MapRoundTrip()` helpers cover PRO and inline MAP; add a `mapRoundTrip(MapFile,
-  StubProvider&)` to fully retire it.
-- The **`pidOf` / type-nibble PID construction**
-  (`(static_cast<uint32_t>(type) << 24) | index`) is hand-inlined in ~8 places
-  across both suites with slightly different casts — centralize in P0.
-- **Per-test temp-path + `std::error_code ec; remove(...)` cleanup** — fully
-  removed by `TempFile` RAII (P0).
-
-### Suggested sequencing
-
-1. **P0 + P1 together** (shared support header + robust fixtures; migrate the two
-   existing round-trip suites onto them as the proof). Net LOC should *drop*.
-2. **P2 formats** (FRM, DAT-in-general, LST, PAL, real-MAP fixture) — each is a
-   small file that reuses P0.
-3. **P2 invariants** (Coordinates, HexagonGrid, UndoStack first — pure & zero-dep;
-   then object_query, SpatialIndex).
-4. **P3 restructure** (renames, split the selection monolith, merge the redundant
-   drug test) — purely mechanical once P0 helpers exist.
+The P0–P4 plan landed: a shared `tests/support/` header + robust build-tree fixtures,
+the missing format round-trips and editor/coordinate-invariant tests, and the
+selection-monolith split. `general_tests`, `performance_tests` and `qt_tests` now cover
+the binary formats, coordinate/hex geometry, selection, undo + command-controller, and the
+pattern/prefab code. Any remaining test gaps are tracked inline with the features that need
+them.
 
 ## Architecture backlog (remaining)
 
@@ -215,30 +27,6 @@ Issues:
 *(Done since this backlog was first written: the four-library CMake split with per-target
 includes + `cmake/dependencies.cmake`; the `ProEditorDialog` breakup into `ui/widgets/pro/`
 — now 367 lines; and removal of the macOS `post-build-test.sh`.)*
-
-## Known tool-mode (EditorMode) UI gaps
-
-These surfaced while building the `EditorMode` state machine (`EditorWidget::setMode`,
-`src/ui/core/EditorMode.h`). The state machine itself is correct — these are missing
-UI affordances, not regressions:
-
-- **No "Select tool" affordance to exit a tool mode.** Once in tile painting (or
-  Mark-Exits / Set-Player-Position), the only way back to plain Select is Escape /
-  right-click cancel (or deselecting the tile in the palette). The "Selection mode"
-  toolbar button (`_selectionModeAction`) only changes the *selection type*
-  (`SelectionMode`: All/Objects/Tiles/…), **not** the tool mode (`EditorMode`), so
-  clicking it does not exit painting. Fix: add a dedicated Select-tool toolbar/menu
-  action that calls `EditorWidget::setMode(EditorMode::Select)` (and consider having
-  the selection-type dropdown also drop the active tool mode). Pre-existing.
-
-- **Exit-grid *placement* mode has no UI trigger.** `EditorMode::PlaceExitGrid` /
-  `setExitGridPlacementMode(true)` is fully wired internally (InputHandler's
-  `onExitGridPlacement` callback at `EditorWidget.cpp` → `ExitGridPlacementManager`),
-  but nothing in the UI ever enters the mode, so exit-grid placement is unreachable.
-  Only Mark-Exits (editing existing exit grids) has a button. Fix: add a toolbar/menu
-  action to enter `PlaceExitGrid`. Pre-existing / incomplete feature.
-
----
 
 ## Done — engine MAP compatibility & instance/map editing
 
@@ -392,9 +180,21 @@ Adopt **C as the core**, structured so **B** falls out for free and **A** remain
 
 # Scripting & Automation Layer (Patterns / Prefabs + Procedural Generation)
 
-> Status: design proposal. Grounded in `src/format/map/Map.h`, `MapObject.h`,
-> `src/editor/HexagonGrid.h` / `Hex.h`, `src/format/map/Tile.h`,
-> `src/ui/editing/ObjectCommandController.h`, and `src/util/UndoStack.h`.
+> Status: **Tier-1 prefabs implemented**; Tier-2 scripting still a design proposal.
+> Grounded in `src/format/map/Map.h`, `MapObject.h`, `src/editor/HexagonGrid.h` / `Hex.h`,
+> `src/format/map/Tile.h`, `src/ui/editing/ObjectCommandController.h`, and `src/util/UndoStack.h`.
+>
+> **Implemented (`src/pattern/`):** the prefab format + JSON serializer, hex cube geometry
+> (`src/editor/HexGeometry.h`), `PatternStamper` (place a variant as one undo entry, with
+> a parity-snap so floor/roof tiles stay locked to the objects), `PatternBuilder` (capture a
+> selection), the `ObjectCommandController` undo-batching, and the UI (Save Selection as
+> Pattern, Stamp Pattern mode with a ghost preview, default library folder). Remaining:
+> the pattern **browser** (cached on-the-fly thumbnails + folders), and the Tier-2 work.
+>
+> **Important correction to §4 below:** orientation is **not** done by geometric rotation —
+> F2 object art is direction-specific, so a pattern stores one or more **pre-authored
+> orientation variants** that the editor cycles through. The `rotatable` / rotate-at-stamp
+> design in §4/§9 was superseded by the variant-set model.
 
 ## 1. Goals & two use cases
 
@@ -602,10 +402,61 @@ the user to press Ctrl-Z thousands of times. Therefore:
 
 ## 9. Open questions
 
-- Hex rotation correctness on the F2 odd/even-row layout (needs golden tests).
+- ~~Hex rotation correctness~~ — moot: no geometric rotation (variant-set model); the cube
+  geometry is validated against fallout2-ce's `_dir_tile`. The remaining geometry choice was
+  the stamp parity-snap (tiles vs objects), now resolved.
 - Multi-elevation prefabs (store/stamp across the 3 `ELEVATION_COUNT` slots?).
 - Collision policy on stamp (overwrite vs skip vs error when target hexes are occupied).
-- Whether to lift `UndoStack::maxCommands` or rely solely on batching (batching is enough).
+- Scripts in patterns (object scripts via `programIndex`; spatial scripts) — deferred; see
+  the script-model notes (programIndex is portable, SID/OID re-allocated at stamp).
+- Tile-id range: the format stores `uint16` but `Tile` masks to 12 bits (`& 0x0FFF`); decide
+  whether to cap `tileId` at 4095 in the format.
+
+---
+
+# Map loader panel with thumbnail previews
+
+> Status: planned. A visual map picker that lists available maps as rendered thumbnails
+> with their names, so a designer browses maps by sight instead of by filename. Replaces /
+> augments the plain "Open Map" file dialog and the text-only file browser.
+
+## What it is
+A dockable panel (or a dialog reachable from the Welcome screen / File menu) showing a grid
+of map thumbnails + names, with a larger preview of the highlighted map. Double-click (or an
+"Open" button) loads the map. Optional: a search/filter box and a folder/source grouping
+(vanilla `master.dat` maps vs user/filesystem maps).
+
+## Where maps come from
+Enumerate `*.map` under `maps/` across the mounted VFS (`master.dat`/`critter.dat` + any
+mounted DATs) plus filesystem data paths — the same surface `FileBrowserPanel` /
+`DataFileSystem` already walk, so reuse that enumeration rather than re-scanning.
+
+## Thumbnails — reuse the pattern compositor
+A map thumbnail is "render this map to an image, scaled to fit". This is the **same offscreen
+compositor + disk cache** being built for the Tier-1 pattern browser (§4-5 above): generalize
+it to "render a set of tiles + objects to an `sf::RenderTexture`, read back to a `QImage`",
+and both patterns and maps feed it. Differences for maps:
+- A map render is **much heavier** than a prefab (up to `TILES_PER_ELEVATION` floor/roof
+  tiles + all objects on the default elevation), and producing it means **loading the map**
+  (`MapLoader` parse + FRM/tile resolution). So the **disk cache is mandatory**, keyed by map
+  path + size/mtime, with **lazy** (visible-cell-only) and **background** generation — never
+  block the UI loading dozens of maps up front.
+- Decide the thumbnail's elevation (default 0) and whether to include objects/critters or just
+  the tile layer (tiles alone are cheaper and already give a recognizable silhouette).
+
+## Reuse / dependencies
+- **Offscreen thumbnail compositor + disk cache** — shared with the pattern browser; build it
+  generic from the start (it's the prerequisite for both).
+- **Headless/offscreen map render path** — the current renderer is tied to the live editor
+  view; the same generalization the pattern thumbnails need (render to an arbitrary target)
+  applies here. Ties into the WP-9 "UI-free render" seam.
+- **Grid + folder view widgets** — shared with the pattern browser's grid.
+
+## Rough effort
+M–L. The grid/panel UI is S–M; the heavy/risky part is the offscreen map render + cache
+(shared with patterns) and keeping browsing responsive over a large map set (lazy + background
++ persisted cache). Sequence **after** the pattern thumbnail compositor exists, since it
+provides the rendering+cache foundation this reuses.
 
 ---
 

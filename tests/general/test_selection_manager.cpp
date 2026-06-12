@@ -26,7 +26,7 @@ using namespace geck::selection;
 //
 // MockEditorWidget implements the narrow SelectionDataProvider interface so
 // SelectionManager can be exercised without the real EditorWidget god-object
-// (this is the point of WP-4). The hit-test methods use a deliberately simple
+// (the point of the SelectionDataProvider seam). The hit-test methods use a deliberately simple
 // fabricated coordinate formula; the real world->hex/tile conversion is covered
 // by test_viewport_controller.cpp.
 //==============================================================================
@@ -162,7 +162,7 @@ TEST_CASE("Mock provider position-based tile hit tests", "[selection_manager][mo
 //==============================================================================
 // SECTION: Real SelectionManager construction through the mock provider
 //
-// These tests close the WP-4 testability gap: previously MockEditorWidget only
+// These tests close the testability gap: previously MockEditorWidget only
 // proved the SelectionDataProvider interface compiled. Here we actually construct
 // geck::selection::SelectionManager(mockWidget) and drive provider-backed paths
 // end-to-end. We deliberately avoid the HEXES single-click branch, because the
@@ -227,7 +227,7 @@ TEST_CASE("SelectionManager drives provider-backed selection paths", "[selection
 //==============================================================================
 // SECTION: Elevation regression for finishAreaSelection()
 //
-// REGRESSION TEST for the elevation bug fixed in WP-4:
+// REGRESSION TEST for the elevation bug fixed in the manager-decoupling work:
 // SelectionManager::finishAreaSelection() used to call selectArea(area, mode, 0)
 // with a HARDCODED elevation of 0, which broke area selection on every elevation
 // other than the ground floor. It now calls selectArea(area, mode,

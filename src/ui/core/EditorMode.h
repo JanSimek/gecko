@@ -10,6 +10,7 @@ enum class EditorMode {
     PlaceExitGrid,     ///< Placing exit-grid markers.
     MarkExits,         ///< Selecting exit grids to edit their properties.
     SetPlayerPosition, ///< One-shot: next click sets the player start hex.
+    StampPattern,      ///< Placing a loaded prefab pattern by clicking hexes.
 };
 
 } // namespace geck

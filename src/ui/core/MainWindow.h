@@ -110,6 +110,8 @@ private slots:
     void showPreferences();
     void showAbout();
     void onPlayGame();
+    void showSavePatternDialog();
+    void showStampPatternDialog();
 
 public slots:
     void showStatusMessage(const QString& message);
@@ -182,6 +184,7 @@ private:
     QAction* _selectToolAction = nullptr;
     QAction* _markExitsAction = nullptr;
     QAction* _placeExitGridAction = nullptr;
+    QAction* _rotateAction = nullptr;
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
 

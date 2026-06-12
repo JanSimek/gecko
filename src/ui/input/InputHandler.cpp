@@ -54,6 +54,13 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             return;
         }
 
+        if (_stampPatternMode) {
+            if (_callbacks.onStampPattern) {
+                _callbacks.onStampPattern(worldPos);
+            }
+            return;
+        }
+
         // Mark exits mode is handled in mouse release (not here) so drag selection works.
 
         SelectionModifier modifier = getSelectionModifier();
@@ -105,6 +112,12 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
                 _callbacks.onMarkExitsModeCancelled();
             }
             spdlog::info("Mark exits mode cancelled with right-click");
+        } else if (_stampPatternMode) {
+            _stampPatternMode = false;
+            if (_callbacks.onStampPatternCancel) {
+                _callbacks.onStampPatternCancel();
+            }
+            spdlog::info("Stamp pattern mode cancelled with right-click");
         } else {
             _currentAction = EditorAction::PANNING;
             _mouseStartPos = event.position;
@@ -257,6 +270,12 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
     } else if (event.code == sf::Keyboard::Key::Delete || event.code == sf::Keyboard::Key::Backspace) {
         if (_callbacks.onDeleteObjects) {
             _callbacks.onDeleteObjects();
+        }
+    } else if (event.code == sf::Keyboard::Key::R) {
+        // In stamp mode, R cycles the pattern's orientation variants (the Rotate toolbar
+        // shortcut is disabled by the editor while stamping, so the key reaches us here).
+        if (_stampPatternMode && _callbacks.onStampCycleVariant) {
+            _callbacks.onStampCycleVariant();
         }
     }
 }

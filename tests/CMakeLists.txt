@@ -32,6 +32,10 @@ add_executable(general_tests
     general/test_object_queries.cpp
     general/test_reading_dat.cpp
     general/test_reading_map.cpp
+    general/test_pattern_serializer.cpp
+    general/test_hex_geometry.cpp
+    general/test_pattern_stamper.cpp
+    general/test_pattern_builder.cpp
 )
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests

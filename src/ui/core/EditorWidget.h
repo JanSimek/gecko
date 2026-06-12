@@ -25,6 +25,7 @@
 #include "ui/rendering/MapSpriteLoader.h"
 #include "ui/tiles/TilePlacementContext.h"
 #include "ui/core/EditorMode.h"
+#include "pattern/Pattern.h"
 #include "ui/tools/ExitGridContext.h"
 #include "ui/dragdrop/DragDropContext.h"
 #include "TileChange.h"
@@ -114,6 +115,11 @@ public:
     // Exit grid placement mode control
     void setExitGridPlacementMode(bool enabled);
     void setMarkExitsMode(bool enabled);
+
+    // Pattern stamping: enter stamp mode with a loaded prefab; clicks place the current
+    // variant, and cycleStampVariant() advances which orientation is placed.
+    void beginStampPattern(pattern::Pattern pattern);
+    void cycleStampVariant();
 
     // Object refresh methods
     void refreshObjects() override;
@@ -339,6 +345,20 @@ private:
 
     // Active tool mode (single source of truth; see setMode).
     EditorMode _mode = EditorMode::Select;
+
+    // Loaded prefab being stamped (StampPattern mode) and the active variant index.
+    std::optional<pattern::Pattern> _stampPattern;
+    int _stampVariantIndex = 0;
+    void stampPatternAt(sf::Vector2f worldPos);
+
+    // Semi-transparent ghost of the current variant under the cursor (StampPattern mode):
+    // floor tiles (drawn under), objects, and roof tiles (drawn over).
+    std::vector<sf::Sprite> _stampPreviewFloorTiles;
+    std::vector<std::shared_ptr<Object>> _stampPreviewObjects;
+    std::vector<sf::Sprite> _stampPreviewRoofTiles;
+    int _stampPreviewHex = -1;
+    void updateStampPreview(sf::Vector2f worldPos);
+    void clearStampPreview();
 
     // Player position selection state
     bool _playerPositionSelectionMode = false;

@@ -13,12 +13,18 @@
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
+#include "ui/dialogs/PatternBrowserDialog.h"
 #include "ui/UIConstants.h"
 #include "resource/GameResources.h"
 #include "state/loader/MapLoader.h"
 #include "state/loader/DataPathLoader.h"
 #include "state/GameLauncher.h"
 #include "selection/SelectionState.h"
+#include "selection/SelectionManager.h"
+#include "pattern/PatternBuilder.h"
+#include "pattern/PatternLibrary.h"
+#include "pattern/PatternSerializer.h"
+#include "format/map/Map.h"
 #include "util/Types.h"
 #include "util/Settings.h"
 #include "util/QtDialogs.h"
@@ -45,6 +51,9 @@
 #include <QMenu>
 #include <QIcon>
 #include <QSignalBlocker>
+#include <QFileDialog>
+#include <QFile>
+#include <QFileInfo>
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 
@@ -364,6 +373,8 @@ void MainWindow::setupMenuBar() {
 
     _editMenu->addSeparator();
     addMenuAction(_editMenu, ":/icons/actions/scroll-blocker.svg", "Scroll &Blocker Rectangle", &MainWindow::toggleScrollBlockerRectangleMode, QKeySequence("B"), "Draw rectangle and place scroll blockers on borders");
+    addMenuAction(_editMenu, ":/icons/actions/save.svg", "Save Selection as &Pattern...", &MainWindow::showSavePatternDialog, QKeySequence(), "Save the current selection as a reusable prefab pattern");
+    addMenuAction(_editMenu, ":/icons/actions/open.svg", "S&tamp Pattern...", &MainWindow::showStampPatternDialog, QKeySequence(), "Load a prefab pattern and click to place it");
 
     _editMenu->addSeparator();
 
@@ -607,7 +618,9 @@ void MainWindow::setupToolBar() {
 
     _mainToolBar->addSeparator();
 
-    addToolAction(":/icons/actions/rotate.svg", "Rotate", &MainWindow::rotateObjectRequested, "Rotate selected object", QKeySequence("R"));
+    // Stored so it can be disabled while stamping a pattern — otherwise its "R" shortcut
+    // swallows the key before it reaches the viewport, where R cycles pattern variants.
+    _rotateAction = addToolAction(":/icons/actions/rotate.svg", "Rotate", &MainWindow::rotateObjectRequested, "Rotate selected object", QKeySequence("R"));
 
     _mainToolBar->addSeparator();
 
@@ -674,6 +687,11 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
     sync(_selectToolAction, EditorMode::Select);
     sync(_markExitsAction, EditorMode::MarkExits);
     sync(_placeExitGridAction, EditorMode::PlaceExitGrid);
+
+    // Free up "R" for variant cycling while a pattern is being stamped.
+    if (_rotateAction) {
+        _rotateAction->setEnabled(mode != EditorMode::StampPattern);
+    }
 }
 
 void MainWindow::setupDockWidgets() {
@@ -1666,6 +1684,58 @@ void MainWindow::onPlayGame() {
     }
 
     _gameLauncher->playGame(mapFile, mapFilename);
+}
+
+void MainWindow::showSavePatternDialog() {
+    if (!_currentEditorWidget || !hasActiveMap()) {
+        showStatusMessage("Open a map and select objects or tiles first.");
+        return;
+    }
+    auto* selectionManager = _currentEditorWidget->getSelectionManager();
+    Map* map = _currentEditorWidget->getMap();
+    if (!selectionManager || !map) {
+        return;
+    }
+
+    const QString path = QFileDialog::getSaveFileName(
+        this, "Save Selection as Pattern", pattern::PatternLibrary::rootDir(), "Gecko Pattern (*.json)");
+    if (path.isEmpty()) {
+        return;
+    }
+
+    const std::string name = QFileInfo(path).completeBaseName().toStdString();
+    auto pattern = pattern::PatternBuilder::fromSelection(
+        selectionManager->getCurrentSelection(), *map, _currentEditorWidget->getCurrentElevation(), name);
+    if (!pattern.has_value()) {
+        showStatusMessage("Nothing selected to save as a pattern.");
+        return;
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        showStatusMessage("Failed to write pattern file.");
+        return;
+    }
+    file.write(pattern::PatternSerializer::serialize(*pattern));
+    showStatusMessage(QString("Saved pattern '%1' (%2 variant).")
+            .arg(QString::fromStdString(pattern->name))
+            .arg(pattern->variants.size()));
+}
+
+void MainWindow::showStampPatternDialog() {
+    if (!_currentEditorWidget || !hasActiveMap()) {
+        showStatusMessage("Open a map before stamping a pattern.");
+        return;
+    }
+
+    PatternBrowserDialog dialog(*_resourcesShared, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    auto selected = dialog.selectedPattern();
+    if (selected.has_value()) {
+        _currentEditorWidget->beginStampPattern(std::move(*selected));
+    }
 }
 
 void MainWindow::showStatusMessage(const QString& message) {
