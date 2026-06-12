@@ -2,8 +2,6 @@
 
 #include <memory>
 #include <filesystem>
-#include <atomic>
-#include <shared_mutex>
 
 #include <QApplication>
 #include <SFML/Graphics/RenderWindow.hpp>
