@@ -36,7 +36,13 @@ add_executable(general_tests
     general/test_hex_geometry.cpp
     general/test_pattern_stamper.cpp
     general/test_pattern_builder.cpp
+    general/test_map_script_api.cpp
 )
+
+# Tier-2 scripting integration tests: only built when the Luau runtime is compiled in.
+if(GECK_ENABLE_SCRIPTING)
+    target_sources(general_tests PRIVATE general/test_lua_script_runtime.cpp)
+endif()
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests
 add_executable(performance_tests

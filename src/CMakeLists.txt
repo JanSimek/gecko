@@ -176,6 +176,10 @@ set(GECK_APP_SOURCES
     ui/rendering/MapThumbnail.cpp
     ui/editing/ObjectCommandController.h
     ui/editing/ObjectCommandController.cpp
+
+    # Scripting host API (Lua-free façade over ObjectCommandController)
+    scripting/MapScriptApi.h
+    scripting/MapScriptApi.cpp
     ui/input/InputHandler.h
     ui/input/InputHandler.cpp
     ui/dragdrop/DragDropContext.h
@@ -202,9 +206,31 @@ set(GECK_APP_SOURCES
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
 )
 
+# Optional scripting runtime (embeds Luau); only compiled when enabled.
+if(GECK_ENABLE_SCRIPTING)
+    list(APPEND GECK_APP_SOURCES
+        scripting/LuaScriptRuntime.h
+        scripting/LuaScriptRuntime.cpp)
+endif()
+
 # Reusable application library for the executable and UI tests
 add_library(gecko_app STATIC ${GECK_APP_SOURCES})
 add_library(gecko::app ALIAS gecko_app)
+
+if(GECK_ENABLE_SCRIPTING)
+    target_link_libraries(gecko_app PUBLIC
+        Luau.VM Luau.Compiler Luau.Ast Luau.Bytecode Luau.Common)
+    # SYSTEM so the LuaBridge3 headers are external (suppresses their parse-time warnings).
+    target_include_directories(gecko_app SYSTEM PRIVATE ${luabridge3_SOURCE_DIR}/Source)
+    target_compile_definitions(gecko_app PUBLIC GECK_SCRIPTING_ENABLED)
+    if(MSVC)
+        # LuaBridge3's templates trip C4702 (unreachable code) at instantiation — an
+        # optimizer warning emitted in our TU, which /external can't suppress. Allow it
+        # for just this binding file rather than weakening /WX globally.
+        set_source_files_properties(scripting/LuaScriptRuntime.cpp
+            PROPERTIES COMPILE_OPTIONS "/wd4702")
+    endif()
+endif()
 
 # Platform-specific executable settings
 if(WIN32)
