@@ -216,7 +216,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_type: [Release, Debug]
+        # Full matrix on master/dispatch; only Release on PRs to cut PR time
+        # (Windows is the slowest build after macOS).
+        build_type: ${{ (github.event_name == 'pull_request') && fromJSON('["Release"]') || fromJSON('["Release", "Debug"]') }}
 
     steps:
     - name: Checkout repository
@@ -238,6 +240,19 @@ jobs:
         target: 'desktop'
         arch: 'win64_msvc2022_64'
         cache: true
+
+    # Caching MSVC needs a compiler launcher, which the Visual Studio generator can't
+    # use — so the main build below switches to Ninja, which needs cl.exe on PATH.
+    - name: Setup MSVC environment
+      uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+      with:
+        arch: x64
+
+    - name: Setup sccache
+      uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
+      with:
+        variant: sccache
+        key: ${{ runner.os }}-${{ matrix.build_type }}
 
     - name: Cache SFML
       id: cache-sfml
@@ -264,10 +279,14 @@ jobs:
     - name: Configure CMake
       shell: cmd
       run: |
-        cmake -B build ^
+        cmake -B build -G Ninja ^
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} ^
           -DGECK_BUILD_TESTS=ON ^
           -DGECK_USE_SYSTEM_LIBS=ON ^
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache ^
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
+          -DCMAKE_POLICY_DEFAULT_CMP0141=NEW ^
+          -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded ^
           -DQt6_DIR=%Qt6_DIR% ^
           -DCMAKE_PREFIX_PATH=${{ runner.temp }}/sfml-install
 
@@ -278,4 +297,4 @@ jobs:
       shell: cmd
       run: |
         set PATH=${{ runner.temp }}\sfml-install\bin;%PATH%
-        ctest --test-dir build --output-on-failure --parallel -C ${{ matrix.build_type }}
+        ctest --test-dir build --output-on-failure --parallel
