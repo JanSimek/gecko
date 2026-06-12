@@ -260,10 +260,10 @@ split that keeps this low-complexity:
   (one CMake `option()` + one `if()` block), which also gates the `FetchContent(luau,
   LuaBridge3)`. A default build never sees Luau.
 
-**Defaults:** `GECK_ENABLE_SCRIPTING` is **OFF** for end-user builds, but **CI builds it ON**
-(at least one matrix entry passes `-DGECK_ENABLE_SCRIPTING=ON`) so the scripting path and the
-Luau dependency are always compiled, tested, and kept from rotting. When the feature lands,
-add that flag to `.github/workflows/ci.yml`.
+**Defaults:** `GECK_ENABLE_SCRIPTING` is **OFF** for end-user builds, but **every CI build
+enables it** (`-DGECK_ENABLE_SCRIPTING=ON` on the Linux, macOS and Windows jobs in
+`.github/workflows/ci.yml`) so the scripting path and the from-source Luau build are tested
+on all platforms and kept from rotting.
 
 ## 4. Pattern/prefab JSON format (Tier 1)
 
