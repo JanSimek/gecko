@@ -420,6 +420,63 @@ part and overlaps the spatial-placement `EditorMode` follow-up.
 
 ---
 
+# Feature-gap audit vs the reference mappers (investigate)
+
+> Status: investigation. Catalog the editing features the two reference mappers have that
+> Gecko lacks, then turn the gap into a prioritized backlog. One concrete, confirmed example
+> is **EDG (map-edge) support**: fallout2-ce stores per-map `.edg` files (`build/data/MAPS/*.edg`)
+> and the engine mapper authors them (`src/map_edge.{cc,h}`, `src/mapper/map_edge_setup.{cc,h}`,
+> gated by the `edg_support` setting) — Gecko has no `.edg` read/write or edge-setup UI. Find
+> the rest of the gaps the same way, systematically rather than ad hoc.
+
+## The two references
+- **Legacy Dims Mapper** — `reference/F2_Mapper_Dims-master/` (the community F2 mapper Gecko is
+  modelled on). TODO.md already has a partial "Legacy F2_Mapper_Dims Missing Features" list
+  (minimap, brush system, batch property editing, script-assignment UI, template system,
+  advanced search/filter, richer progress dialogs) — fold that into this audit rather than
+  keeping a second list.
+- **fallout2-ce built-in mapper** — `/Users/jansimek/Development/fallout2-ce/src/mapper/`
+  (`mapper.cc`, `map_func.cc`, `mp_instance.cc`, `mp_proto.cc`, `mp_scrpt.cc`, `mp_targt.cc`,
+  `mp_text.cc`). This is the engine's own authoring tool and the source of truth for behaviour
+  — walk its tool modes / menu actions and check each against Gecko.
+
+## What to produce
+A single prioritized parity list: feature → which reference has it → does Gecko have it →
+adopt / defer / intentional non-goal (per the engine-fidelity rule — match the reference's
+behaviour, don't invent). Candidate areas to check beyond EDG/map-edge and the Dims list:
+edge-scroll panning (`map_func.cc`), proto editing (`mp_proto`), script & target tooling
+(`mp_scrpt` / `mp_targt`), per-hex block/roof/light toggles, and exit-grid authoring (already
+partly covered — see the exit-grid limitation above).
+
+## Rough effort
+S to produce the catalogue (read-only audit of two known codebases); the individual features
+it surfaces are then sized and sequenced separately.
+
+---
+
+# Clean and verify TODO.md (housekeeping)
+
+> Status: to do. `TODO.md` has drifted and needs the same "track what's left, not what's done"
+> pass this plan just had.
+
+## What needs doing
+- **Remove completed items.** Several Code Quality / Architecture entries are done now that the
+  architecture roadmap landed — e.g. splitting the resource singleton (`Settings` is injected;
+  resource access is the `GameResources`/`DataFileSystem` facade), the MAP read/write refactor
+  + round-trip coverage, and the `ProEditorDialog` decomposition. Verify each against the
+  current code and delete the ones that shipped.
+- **De-duplicate.** "placing lights - light.frm" is listed twice; collapse duplicates.
+- **Verify the rest still applies** — some bugs/usability items may already be fixed (e.g. the
+  scroll-blocker isometric-rectangle bug is also tracked here in the exit-grid section).
+- **Reconcile with this plan.** Fold the "Legacy F2_Mapper_Dims Missing Features" section into
+  the feature-gap audit above so there is one backlog, not two.
+
+## Rough effort
+S. Pure housekeeping — read TODO.md against current code, delete done/dupe items, cross-link
+the rest.
+
+---
+
 # In-game preview mode (future idea)
 
 > Status: idea / scoping. A toggle that makes the editor viewport behave more like the
