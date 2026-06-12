@@ -86,7 +86,7 @@ jobs:
           ninja-build
 
     - name: Setup ccache
-      uses: hendrikmuhs/ccache-action@v1.2
+      uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
       with:
         key: ${{ runner.os }}-${{ matrix.build_type }}
 
@@ -165,7 +165,7 @@ jobs:
         cache: true
 
     - name: Setup ccache
-      uses: hendrikmuhs/ccache-action@v1.2
+      uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
       with:
         key: ${{ runner.os }}-${{ matrix.build_type }}
 
@@ -239,19 +239,6 @@ jobs:
         arch: 'win64_msvc2022_64'
         cache: true
 
-    # Ninja + a compiler launcher (sccache) needs cl.exe on PATH; the Visual Studio
-    # generator can't use a launcher, so the main build below uses Ninja instead.
-    - name: Setup MSVC environment
-      uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x64
-
-    - name: Setup sccache
-      uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        variant: sccache
-        key: ${{ runner.os }}-${{ matrix.build_type }}
-
     - name: Cache SFML
       id: cache-sfml
       uses: actions/cache@v4
@@ -277,12 +264,10 @@ jobs:
     - name: Configure CMake
       shell: cmd
       run: |
-        cmake -B build -G Ninja ^
+        cmake -B build ^
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} ^
           -DGECK_BUILD_TESTS=ON ^
           -DGECK_USE_SYSTEM_LIBS=ON ^
-          -DCMAKE_C_COMPILER_LAUNCHER=sccache ^
-          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
           -DQt6_DIR=%Qt6_DIR% ^
           -DCMAKE_PREFIX_PATH=${{ runner.temp }}/sfml-install
 
@@ -293,4 +278,4 @@ jobs:
       shell: cmd
       run: |
         set PATH=${{ runner.temp }}\sfml-install\bin;%PATH%
-        ctest --test-dir build --output-on-failure --parallel
+        ctest --test-dir build --output-on-failure --parallel -C ${{ matrix.build_type }}
