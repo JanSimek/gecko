@@ -1,6 +1,7 @@
 #include "scripting/LuaScriptRuntime.h"
 
 #include <cstdlib>
+#include <memory>
 
 #include <lua.h>
 #include <lualib.h>
@@ -37,11 +38,12 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
 
     luaL_sandbox(L);
 
-    // Luau has no source loader: compile to bytecode, then load the bytecode.
+    // Luau has no source loader: compile to bytecode, then load it. luau_compile mallocs
+    // the buffer, so own it with a free-deleter rather than a manual free.
     size_t bytecodeSize = 0;
-    char* bytecode = luau_compile(source.data(), source.size(), nullptr, &bytecodeSize);
-    const int loadResult = luau_load(L, "=script", bytecode, bytecodeSize, 0);
-    std::free(bytecode);
+    const std::unique_ptr<char, void (*)(void*)> bytecode(
+        luau_compile(source.data(), source.size(), nullptr, &bytecodeSize), std::free);
+    const int loadResult = luau_load(L, "=script", bytecode.get(), bytecodeSize, 0);
     if (loadResult != 0) {
         ScriptResult result{ false, std::string("compile error: ") + lua_tostring(L, -1) };
         lua_close(L);

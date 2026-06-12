@@ -38,7 +38,7 @@ TEST_CASE("MapScriptApi query surface", "[scripting]") {
         }
         // All distinct.
         auto sorted = n;
-        std::sort(sorted.begin(), sorted.end());
+        std::ranges::sort(sorted);
         CHECK(std::unique(sorted.begin(), sorted.end()) == sorted.end());
     }
 

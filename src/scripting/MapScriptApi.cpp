@@ -1,5 +1,7 @@
 #include "scripting/MapScriptApi.h"
 
+#include <array>
+
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
@@ -29,8 +31,8 @@ std::vector<int> MapScriptApi::hexNeighbors(int hex) const {
     using namespace geck::hexgrid;
     // The six cube-coordinate neighbour directions; converting through cube space gives
     // the parity-correct offset neighbours regardless of the hex's column parity.
-    static constexpr Cube kDirs[6] = {
-        { 1, -1, 0 }, { 1, 0, -1 }, { 0, 1, -1 }, { -1, 1, 0 }, { -1, 0, 1 }, { 0, -1, 1 }
+    static constexpr std::array<Cube, 6> kDirs = {
+        { { 1, -1, 0 }, { 1, 0, -1 }, { 0, 1, -1 }, { -1, 1, 0 }, { -1, 0, 1 }, { 0, -1, 1 } }
     };
     std::vector<int> result;
     if (!isValidHex(hex)) {

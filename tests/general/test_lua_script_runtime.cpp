@@ -123,12 +123,12 @@ TEST_CASE("Luau-painted tiles survive a map save/reload round-trip", "[scripting
     geck::test::StubProvider provider;
     geck::test::TempFile tmp{ "geck_lua_roundtrip", ".map" };
     {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
         writer.openFile(tmp.path());
         REQUIRE(writer.write(fx.mapFile()));
     }
 
-    MapReader reader{ [&](uint32_t pid) { return provider.load(pid); } };
+    MapReader reader{ [&provider](uint32_t pid) { return provider.load(pid); } };
     auto reloaded = reader.openFile(tmp.path());
     REQUIRE(reloaded != nullptr);
 
