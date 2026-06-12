@@ -2,7 +2,7 @@
 
 namespace geck {
 
-BaseDialog::BaseDialog(const QString& title, QWidget* parent, ButtonConfig buttons)
+BaseDialog::BaseDialog(const QString& title, QWidget* parent)
     : QDialog(parent)
     , _mainLayout(nullptr)
     , _buttonBox(nullptr) {
