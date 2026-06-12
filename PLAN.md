@@ -183,9 +183,9 @@ Weighted on: embedding ease, sandboxing/safety, performance at map scale
 
 | Option | Embed ease | Sandboxing | Perf @ 40k hex | Binding ergonomics | License | Learning curve | Verdict |
 |---|---|---|---|---|---|---|---|
-| **Lua 5.4 + sol2/sol3** | Excellent — header-only wrapper, ~25k LOC C core, trivial CMake | Strong: build a custom `_ENV`/sandbox, no default `io`/`os`/`require`; per-call instruction-count hook for timeout | Excellent (sol2 is among the fastest bindings); interpreter loop fine for tens of thousands of host calls | Best-in-class: `usertype`, overloads, `std::function`, containers, automatic shared_ptr handling | MIT (Lua) + MIT (sol2) | Lowest — the de-facto game/modding language; tiny surface area | **Primary** |
+| **Lua 5.4 + sol2/sol3** | Excellent — header-only wrapper, ~25k LOC C core, trivial CMake | Strong: build a custom `_ENV`/sandbox, no default `io`/`os`/`require`; per-call instruction-count hook for timeout | Excellent (sol2 is among the fastest bindings); interpreter loop fine for tens of thousands of host calls | Best-in-class: `usertype`, overloads, `std::function`, containers, automatic shared_ptr handling | MIT (Lua) + MIT (sol2) | Lowest — the de-facto game/modding language; tiny surface area | **Fallback** (lighter dep, but DIY sandbox — see decision below) |
 | LuaJIT + sol2 | Good, but LuaJIT stalled on 5.1 semantics + ARM/Apple-Silicon JIT caveats | Same sandbox story as Lua | Fastest, but we don't need JIT speed for I/O-bound host calls | Same as sol2 | MIT | Same as Lua | Overkill; portability risk on macOS arm64 |
-| Luau (Roblox) | Moderate — C++ build, fewer turnkey C++ binding libs than sol2 | Best-in-class (sandbox + type checker designed for untrusted user scripts) | Very good (near-LuaJIT without JIT) | Good but you hand-roll more glue than sol2 | MIT | Low (Lua-family) | Strong #2 if untrusted-script safety becomes paramount |
+| **Luau (Roblox)** | Moderate — C++ libs built from source (brew ships only the CLI) | Best-in-class: **safe by default** (no `io`, `os` trimmed, no bytecode loaders) + `luaL_sandbox` read-only globals + interrupt CPU hook | Very good (interpreter rivals LuaJIT's) + gradual typing & `luau-lsp` | Good — **LuaBridge3 binding confirmed acceptable by spike**; `std::vector` auto-converts | MIT | Low (Lua-family) | **Primary (spike-validated)** — see decision below |
 | QuickJS (+ quickjs-ng) | Good — single C file, but you write your own C++ binding glue | Good: no ambient FS/net unless you wire it; interrupt handler for timeouts | Good; ~15% behind Lua-for-speed in micro-benchmarks, fine here | Verbose: manual `JS_NewCFunction`, class IDs, no auto C++ usertypes | MIT | JS is widely known — *broadest* non-gamedev audience | Viable alt if JS familiarity is the priority |
 | duktape | Excellent (two files) | Good | Slower than QuickJS/Lua | Manual, C-style | MIT | JS | Only if footprint trumps speed |
 | V8 | Poor — heavyweight, large build, version churn | Strong but huge surface | Fastest JS, irrelevant here | Complex | BSD | JS | Rejected: disproportionate for an editor plugin |
@@ -198,6 +198,28 @@ Precedent worth noting: **Qt Creator 14 (2024) added a first-class plugin system
 on embedded Lua 5.4**, and sol2 remains the reference C++<->Lua binding. That is a strong
 signal for a Qt6 C++20 app choosing Lua.
 
+### Decision: Luau + LuaBridge3 (spike-validated)
+
+A throwaway spike bound the same 3-method host-API slice + sandbox + ran the same script on
+**both** stacks. Findings:
+
+- **Sandboxing decides it.** Tier 2 exists to run *shared* (untrusted) generator scripts.
+  Luau's stdlib is **safe by default** (no `io`, `os` trimmed, bytecode loaders gone) and
+  `luaL_sandbox` makes globals read-only in one line. The sol2/PUC-Lua path required manually
+  nilling out ~10 dangerous globals (`io os package debug require dofile loadfile load
+  loadstring collectgarbage`) — forgetting one is a silent sandbox escape.
+- **The one feared cost — binding without sol2 — is fine.** LuaBridge3 bound the API and
+  auto-converted `std::vector` cleanly; ~7 lines vs sol2's ~4. Not the blocker the paper
+  table implied.
+- **Only real downside: Luau is a from-source C++ dependency** (~2.1 MB of static libs;
+  brew ships only the CLI) vs sol2+Lua being ready-made brew/FetchContent kegs. Modest and
+  one-time — and mitigated by the compile flag below.
+- Bonus: Luau's faster interpreter + gradual typing / `luau-lsp` help an in-editor script editor.
+
+This **reverses the earlier "sol2 primary" lean** on evidence. Keep **sol2 + Lua 5.4 (with a
+hardened, audited sandbox)** as the documented fallback if minimising the build footprint ever
+outranks untrusted-script safety.
+
 ## 3. Recommendation — TWO-TIER design
 
 Do **not** pick a single mechanism. Split by use case:
@@ -208,10 +230,10 @@ Do **not** pick a single mechanism. Split by use case:
   safe by construction, instantly replayable, and trivially undoable. This covers the
   overwhelming majority of what users want and needs **zero** scripting runtime.
 
-- **Tier 2 — Embedded Lua (5.4 via sol2/sol3)** for *generation* (use case 2's noise,
-  neighbour rules, randomness, and the eventual full-map generator). Lua scripts are the
-  only place arbitrary computation lives, and they reach the map **only** through the same
-  narrow host API that Tier 1's interpreter uses.
+- **Tier 2 — Embedded Luau (via LuaBridge3)** for *generation* (use case 2's noise,
+  neighbour rules, randomness, and the eventual full-map generator). Scripts are the only
+  place arbitrary computation lives, and they reach the map **only** through the same narrow
+  host API that Tier 1 uses — see the spike-validated decision above.
 
 Rationale: Tier 1 keeps the common, user-facing path safe and code-free (a level designer
 should never write a script to stamp a tent). Tier 2 confines the security/perf surface of
@@ -219,13 +241,29 @@ should never write a script to stamp a tent). Tier 2 confines the security/perf 
 through the **identical** host API and therefore through `ObjectCommandController`, so
 **everything is undoable through one code path**.
 
-### Why Lua over JS/AngelScript here
+### Why the Lua family over JS/AngelScript here
 
-Lowest modder learning curve (it *is* the modding lingua franca), best C++ binding
-ergonomics via sol2 (shared_ptr-aware usertypes map cleanly onto our `MapObject` /
-`Hex` model), trivial sandboxing (drop `io`/`os`/`require`, custom `_ENV`, instruction
-hook), MIT throughout, and a tiny build footprint that won't disturb the existing
-FetchContent/clang pinning recorded in the toolchain memory.
+Lowest modder learning curve (Lua *is* the modding lingua franca), strong C++ binding
+ergonomics (sol2 for PUC-Lua, LuaBridge3 for Luau — both map cleanly onto our `MapObject` /
+`Hex` model), MIT throughout, and — with Luau — **turnkey sandboxing built for untrusted
+code**. JS engines add a heavier runtime for no gain here; AngelScript has a thin modder
+ecosystem.
+
+### Optional, compile-flag-gated (`GECK_ENABLE_SCRIPTING`)
+
+Tier 2 is an **opt-in** feature so users who don't script never download or build Luau. The
+split that keeps this low-complexity:
+
+- **`MapScriptApi`** — the C++ façade over `ObjectCommandController` — is **Luau-free** and
+  always compiled. Tier 1 and headless unit tests use it without any scripting runtime.
+- **The Luau runtime + binding + sandbox + script UI** live behind `GECK_ENABLE_SCRIPTING`
+  (one CMake `option()` + one `if()` block), which also gates the `FetchContent(luau,
+  LuaBridge3)`. A default build never sees Luau.
+
+**Defaults:** `GECK_ENABLE_SCRIPTING` is **OFF** for end-user builds, but **CI builds it ON**
+(at least one matrix entry passes `-DGECK_ENABLE_SCRIPTING=ON`) so the scripting path and the
+Luau dependency are always compiled, tested, and kept from rotting. When the feature lands,
+add that flag to `.github/workflows/ci.yml`.
 
 ## 4. Pattern/prefab JSON format (Tier 1)
 
