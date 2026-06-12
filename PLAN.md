@@ -472,6 +472,46 @@ provides the rendering+cache foundation this reuses.
 
 ---
 
+# Visualize spatial scripts on the map (investigate)
+
+> Status: investigation. Spatial scripts can be created (`SpatialScriptDialog` → F-key flow)
+> but are **invisible on the map** once placed — there's no marker, no radius overlay, and no
+> way to see, select, edit, or delete an existing one (see Known limitations #5). Goal: render
+> existing spatial scripts on the canvas so designers can see where their trigger zones are.
+
+## What the data model gives us
+A spatial script is a `MapScript` (not a saved object) with `pid == 1`, its position packed
+into `timer` as a `built_tile` (`built_tile::create(tile, elevation)`), and `spatial_radius`
+(`src/format/map/MapScript.h:11-14`; created via `MapScript::createSpatial(...)`, read at
+`MapReader.cpp:254`). They live in the map's script section and are NO_SAVE editor markers in
+the engine (no `MapObject`), so visualization must be driven from the script list, not the
+object list. Placement currently flows MapInfoPanel → `EditorWidget::addSpatialScript` →
+`ObjectCommandController` (undoable); the editor already owns the data.
+
+## Questions to answer
+- **Reference behaviour:** how does the fallout2-ce mapper draw spatial-script markers + their
+  radius? (Check `mapper.cc`/`map.cc` for the spatial-script overlay; mirror its marker art and
+  radius shape rather than inventing one — engine-fidelity rule.)
+- **Coordinate path:** `built_tile` → tile/elevation → hex → screen. Confirm the `built_tile`
+  position is a tile index vs hex, and reuse `ViewportController`/`HexagonGrid` conversions; only
+  draw scripts on the current elevation.
+- **Radius overlay shape:** the engine radius is in hexes — is the trigger zone a hex-ring/filled
+  hex area (engine uses hex distance) or a screen circle? Render whatever matches the engine's
+  trigger test, reusing the hex-grid overlay machinery.
+- **Render layer:** add a dedicated overlay layer in `RenderingEngine` (like the exit-grid /
+  blocker / light overlays), gated by a View-menu visibility toggle + `VisibilitySettings` flag,
+  culled via the viewport like the other overlays.
+- **Interaction (stretch):** hit-test a marker to select → open `SpatialScriptDialog` to
+  edit/delete; ties into the F-key click-to-place + new `EditorMode` already sketched in
+  Known limitations #5 (live hex marker + radius preview while placing).
+
+## Rough effort
+S–M for read-only visualization (marker + radius overlay + visibility toggle), reusing the
+existing overlay-layer and hex-grid plumbing. Editing/deleting via map interaction is the M
+part and overlaps the spatial-placement `EditorMode` follow-up.
+
+---
+
 # In-game preview mode (future idea)
 
 > Status: idea / scoping. A toggle that makes the editor viewport behave more like the
