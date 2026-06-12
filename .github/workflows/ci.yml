@@ -1,11 +1,27 @@
 name: CI
 
+# Skip CI for docs/text-only changes: a run is suppressed only when EVERY changed file
+# matches one of these patterns (a mixed code+docs change still builds).
 on:
   push:
-    branches: [ master, develop, feature/* ]
+    branches: [ master, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   pull_request:
     branches: [ master, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   workflow_dispatch:
+
+# Cancel superseded runs for the same branch/PR so the queue doesn't pile up with stale
+# builds. master is excluded, so a merge's mainline validation always runs to completion.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 env:
   CMAKE_VERSION: 3.31.4
