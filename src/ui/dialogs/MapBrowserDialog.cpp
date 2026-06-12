@@ -115,7 +115,7 @@ void MapBrowserDialog::populate() {
     for (const auto& path : _resources.files().list("*.map")) {
         mapPaths.push_back(QString::fromStdString(path.generic_string()));
     }
-    std::sort(mapPaths.begin(), mapPaths.end(),
+    std::ranges::sort(mapPaths,
         [](const QString& a, const QString& b) { return a.compare(b, Qt::CaseInsensitive) < 0; });
 
     const QPixmap placeholder = placeholderThumbnail();
@@ -175,7 +175,7 @@ void MapBrowserDialog::onCurrentItemChanged(QListWidgetItem* current) {
     updatePreview(current);
 }
 
-void MapBrowserDialog::updatePreview(QListWidgetItem* item) {
+void MapBrowserDialog::updatePreview(const QListWidgetItem* item) {
     if (item == nullptr) {
         _previewImage->setText(QString());
         _previewImage->setPixmap(QPixmap());
@@ -189,8 +189,8 @@ void MapBrowserDialog::updatePreview(QListWidgetItem* item) {
     // Defer the heavy render so selection stays snappy; bail if the selection has since
     // moved on (the cache makes a later re-selection of the same map instant).
     QTimer::singleShot(0, this, [this, path] {
-        const QListWidgetItem* current = _grid->currentItem();
-        if (current == nullptr || current->data(PATH_ROLE).toString() != path) {
+        if (const QListWidgetItem* current = _grid->currentItem();
+            current == nullptr || current->data(PATH_ROLE).toString() != path) {
             return;
         }
         const QPixmap preview = MapThumbnail::forMap(path, _resources, *_hexgrid, PREVIEW_SIZE);
@@ -202,7 +202,7 @@ void MapBrowserDialog::updatePreview(QListWidgetItem* item) {
     });
 }
 
-void MapBrowserDialog::onItemActivated(QListWidgetItem* item) {
+void MapBrowserDialog::onItemActivated(const QListWidgetItem* item) {
     if (item != nullptr) {
         _selectedPath = item->data(PATH_ROLE).toString();
         accept();
@@ -210,7 +210,7 @@ void MapBrowserDialog::onItemActivated(QListWidgetItem* item) {
 }
 
 void MapBrowserDialog::acceptCurrent() {
-    if (QListWidgetItem* item = _grid->currentItem()) {
+    if (const QListWidgetItem* item = _grid->currentItem()) {
         _selectedPath = item->data(PATH_ROLE).toString();
         accept();
     }

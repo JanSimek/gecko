@@ -42,13 +42,13 @@ protected:
 private slots:
     void onFilterChanged(const QString& text);
     void onCurrentItemChanged(QListWidgetItem* current);
-    void onItemActivated(QListWidgetItem* item);
+    void onItemActivated(const QListWidgetItem* item);
     void renderNextVisibleThumbnail();
 
 private:
     void populate();
     void acceptCurrent();
-    void updatePreview(QListWidgetItem* item);
+    void updatePreview(const QListWidgetItem* item);
     QListWidgetItem* nextUnrenderedVisibleItem() const;
 
     resource::GameResources& _resources;

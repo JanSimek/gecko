@@ -37,7 +37,7 @@ QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& re
 
     std::unique_ptr<Map> map;
     try {
-        const auto proLoad = [&resources](uint32_t pid) -> Pro* {
+        const auto proLoad = [&resources](uint32_t pid) {
             return resources.repository().load<Pro>(ProHelper::basePath(resources, pid));
         };
         MapReader reader(proLoad);
