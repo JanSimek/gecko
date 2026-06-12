@@ -32,14 +32,6 @@ Settings::Settings()
     : _version(SETTINGS_VERSION) {
 }
 
-std::shared_ptr<Settings> Settings::create() {
-    // Each call yields a fresh, independently-owned instance — ownership lives at the
-    // Application root, not in a global singleton. The constructor is private (controlled
-    // construction), but this static member can reach it; shared_ptr's default deleter
-    // handles destruction via the public destructor.
-    return std::shared_ptr<Settings>(new Settings());
-}
-
 QString Settings::getSettingsFilePath() const {
     QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
     QDir configDir;

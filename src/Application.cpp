@@ -24,7 +24,7 @@ namespace geck {
 
 Application::Application(int argc, char** argv)
     : _qtApp(std::make_unique<QApplication>(argc, argv))
-    , _settings(Settings::create())
+    , _settings(std::make_shared<Settings>())
     , _mainWindow(nullptr)
     , _resources(std::make_shared<resource::GameResources>()) {
 

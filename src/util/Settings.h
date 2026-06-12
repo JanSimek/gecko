@@ -22,18 +22,13 @@ namespace geck {
  */
 class Settings {
 public:
-    // Creates a fresh, caller-owned Settings instance. Ownership lives at the
-    // Application root and is injected from there (mirroring GameResources); there is
-    // no global singleton.
-    static std::shared_ptr<Settings> create();
+    // Constructed and owned at the Application root, then injected (mirroring
+    // GameResources); there is no global singleton.
+    Settings();
 
     // Disable copy/assignment
     Settings(const Settings&) = delete;
     Settings& operator=(const Settings&) = delete;
-
-    // Public so shared_ptr's default deleter can destroy a create()'d instance;
-    // construction stays controlled (the constructor is private).
-    ~Settings() = default;
 
     // Settings management
     void load();
@@ -115,8 +110,6 @@ public:
     static std::vector<DetectedInstallation> detectFallout2InstallationsDetailed();
 
 private:
-    Settings();
-
     // JSON serialization
     QJsonObject toJson() const;
     void fromJson(const QJsonObject& json);
