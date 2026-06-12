@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QDialog>
+#include "ui/common/BaseDialog.h"
 
 #include <vector>
 #include <string>
@@ -16,7 +16,7 @@ namespace geck {
 /// script "program index" the engine stores as Script::index (our
 /// MapScript.script_id). The script *type* (item/critter) is decided by the
 /// object being scripted, not here - see objectSetScript in the engine.
-class ScriptSelectorDialog : public QDialog {
+class ScriptSelectorDialog : public BaseDialog {
     Q_OBJECT
 
 public:

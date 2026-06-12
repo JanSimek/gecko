@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QDialog>
+#include "ui/common/BaseDialog.h"
 
 #include <cstdint>
 #include <vector>
@@ -16,7 +16,7 @@ namespace geck {
 /// Shoot Thru, Light Thru, Wall Trans End, and (items only) No Highlight. Bits
 /// that are not shown for the object's type are preserved untouched, so the
 /// animation bits and engine-managed flags are never clobbered.
-class ObjectFlagsDialog : public QDialog {
+class ObjectFlagsDialog : public BaseDialog {
     Q_OBJECT
 
 public:

@@ -1,6 +1,5 @@
 #include "CritterPropertiesDialog.h"
 
-#include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -18,9 +17,7 @@ namespace {
 
 CritterPropertiesDialog::CritterPropertiesDialog(uint32_t aiPacket, uint32_t team, uint32_t hp,
     uint32_t radiation, uint32_t poison, QWidget* parent)
-    : QDialog(parent) {
-
-    setWindowTitle("Critter Properties");
+    : BaseDialog("Critter Properties", parent) {
 
     auto* mainLayout = new QVBoxLayout(this);
     auto* formLayout = new QFormLayout();
@@ -43,10 +40,7 @@ CritterPropertiesDialog::CritterPropertiesDialog(uint32_t aiPacket, uint32_t tea
 
     mainLayout->addLayout(formLayout);
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    mainLayout->addWidget(buttonBox);
+    mainLayout->addWidget(createButtonBox());
 }
 
 uint32_t CritterPropertiesDialog::getAiPacket() const { return static_cast<uint32_t>(_aiPacketSpin->value()); }

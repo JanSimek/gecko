@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QDialog>
+#include "ui/common/BaseDialog.h"
 
 #include <vector>
 #include <string>
@@ -16,7 +16,7 @@ namespace geck {
 /// placed at a hex with a radius. Mirrors the engine's map_scr_add_spatial - the
 /// script record carries the built-tile position and radius; no saved object is
 /// involved (the engine's hex marker is editor-only / NO_SAVE).
-class SpatialScriptDialog : public QDialog {
+class SpatialScriptDialog : public BaseDialog {
     Q_OBJECT
 
 public:

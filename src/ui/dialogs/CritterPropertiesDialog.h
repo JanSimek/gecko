@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QDialog>
+#include "ui/common/BaseDialog.h"
 
 #include <cstdint>
 
@@ -15,7 +15,7 @@ namespace geck {
 /// poison (see mp_instance.cc protoInstCritterEdit, object.cc critter data).
 /// The AI packet is shown as its raw engine number rather than a name table, to
 /// avoid inventing labels that may not match the loaded game data.
-class CritterPropertiesDialog : public QDialog {
+class CritterPropertiesDialog : public BaseDialog {
     Q_OBJECT
 
 public:

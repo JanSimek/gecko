@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QDialog>
+#include "ui/common/BaseDialog.h"
 
 #include <cstdint>
 
@@ -14,7 +14,7 @@ namespace geck {
 /// intensity is entered as a 0-100% value and stored raw against the engine's
 /// light scale (0x10000 == 100%). See object.cc objectSetLight and
 /// mp_instance.cc (kInstMaxLightDistance / kInstMaxLightPct / kInstLightScale).
-class LightPropertiesDialog : public QDialog {
+class LightPropertiesDialog : public BaseDialog {
     Q_OBJECT
 
 public:

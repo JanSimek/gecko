@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QDialog>
+#include "ui/common/BaseDialog.h"
 
 #include <cstdint>
 
@@ -16,7 +16,7 @@ namespace geck {
 /// Stairs and ladders store their target as a packed built tile plus a
 /// destination map id; elevators store a type and a current level. Matches
 /// proto.cc scenery objectDataRead/Write and mp_instance.cc protoInstSceneryEdit.
-class SceneryDestinationDialog : public QDialog {
+class SceneryDestinationDialog : public BaseDialog {
     Q_OBJECT
 
 public:

@@ -1,6 +1,5 @@
 #include "LightPropertiesDialog.h"
 
-#include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -10,9 +9,7 @@
 namespace geck {
 
 LightPropertiesDialog::LightPropertiesDialog(uint32_t lightRadius, uint32_t lightIntensity, QWidget* parent)
-    : QDialog(parent) {
-
-    setWindowTitle("Light Properties");
+    : BaseDialog("Light Properties", parent) {
 
     auto* mainLayout = new QVBoxLayout(this);
     auto* formLayout = new QFormLayout();
@@ -34,10 +31,7 @@ LightPropertiesDialog::LightPropertiesDialog(uint32_t lightRadius, uint32_t ligh
 
     mainLayout->addLayout(formLayout);
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    mainLayout->addWidget(buttonBox);
+    mainLayout->addWidget(createButtonBox());
 }
 
 uint32_t LightPropertiesDialog::getLightRadius() const {
