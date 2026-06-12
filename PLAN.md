@@ -1,53 +1,21 @@
 # Improvement Backlog
 
-## Test-suite audit & refactor plan — DONE
-
-The P0–P4 plan landed: a shared `tests/support/` header + robust build-tree fixtures,
-the missing format round-trips and editor/coordinate-invariant tests, and the
-selection-monolith split. `general_tests`, `performance_tests` and `qt_tests` now cover
-the binary formats, coordinate/hex geometry, selection, undo + command-controller, and the
-pattern/prefab code. Any remaining test gaps are tracked inline with the features that need
-them.
-
 ## Architecture backlog (remaining)
 
-- **Replace the `Settings` singleton with an injected service.** `ResourceManager` and
-  `EventBus` are already gone (resource access is the injected `GameResources` facade), but
-  `Settings::getInstance()` remains a global. Introduce a dedicated VFS service alongside it
-  so loaders/widgets receive dependencies explicitly — simplifies tests and enables
-  headless/mocked runs.
 - **Reorganize the catch-all `src/util/` directory** (still ~40 mixed files spanning UI
   helpers, resource utilities and platform code). Group UI-specific helpers under `ui/`,
   resource utilities under `resources/`, and platform helpers separately to improve
   discoverability and reduce accidental dependencies.
-- **Loader/resource-caching tests** — the DI precondition is now met (`gecko_resource` and
-  `gecko_core` are Qt-free, headless-linkable), but no dedicated loader/cache tests exist
-  yet. Tracked under P2 of the test-suite plan above.
+- **`ResourceRepository` cache tests** — the DI precondition is met (`gecko_resource` and
+  `gecko_core` are Qt-free, headless-linkable) and `test_frm_resolver.cpp` now covers the
+  resolver, but there is still no dedicated cache hit/miss / type-mismatch test for the
+  repository.
 
-*(Done since this backlog was first written: the four-library CMake split with per-target
-includes + `cmake/dependencies.cmake`; the `ProEditorDialog` breakup into `ui/widgets/pro/`
-— now 367 lines; and removal of the macOS `post-build-test.sh`.)*
-
-## Done — engine MAP compatibility & instance/map editing
-
-**MAP format compatibility (fixed; regression tests #89/#90 in `test_map_roundtrip.cpp`):**
-object section is always 3 elevations (`objectSaveAll`/`objectLoadAll` framing), tiles keyed
-by true elevation gated on the per-elevation flag bit, and MISC exit-grid trailing data only
-for exit-grid PIDs (ids 16–23). *Intentional non-goal:* we deliberately do not recompute /
-auto-prune the per-elevation enable flags at save time (the engine does in `_map_save_file`) —
-our output is always internally consistent and engine-loadable, and pruning risks silently
-dropping an elevation the user wants. Revisit only if exact byte-parity with engine-saved maps
-becomes a requirement.
-
-**Instance & map editing (F10–F17 implemented; 98 tests pass):** object flags
-(`ObjectFlagsDialog`), light (`LightPropertiesDialog`), scenery destination
-(`SceneryDestinationDialog`), door/container locked-jammed (`InstancePropertiesDialog`, routed
-to the correct per-type field — doors `walkthrough`/openFlags, containers `unknown11`/data.flags),
-critter combat + working inventory add/remove/quantity (`CritterPropertiesDialog`), object
-script attach (`ScriptSelectorDialog`), spatial scripts (`SpatialScriptDialog`), and map ops
-(`MapInfoPanel` clear/copy elevation). Instance edits route through a shared `registerInstanceEdit`
-undo command; built-tile packing, SID encoding and script-record construction are centralized
-(`util/BuiltTile.h`, `MapScript` helpers/factories); `MapObject::cloneDeep` supports copy/stamp.
+> **Intentional non-goal (MAP save):** we deliberately do not recompute / auto-prune the
+> per-elevation enable flags at save time (the engine does in `_map_save_file`) — our output is
+> always internally consistent and engine-loadable, and pruning risks silently dropping an
+> elevation the user wants. Revisit only if exact byte-parity with engine-saved maps becomes a
+> requirement.
 
 ## Known limitations & follow-ups
 
@@ -180,21 +148,15 @@ Adopt **C as the core**, structured so **B** falls out for free and **A** remain
 
 # Scripting & Automation Layer (Patterns / Prefabs + Procedural Generation)
 
-> Status: **Tier-1 prefabs implemented**; Tier-2 scripting still a design proposal.
-> Grounded in `src/format/map/Map.h`, `MapObject.h`, `src/editor/HexagonGrid.h` / `Hex.h`,
-> `src/format/map/Tile.h`, `src/ui/editing/ObjectCommandController.h`, and `src/util/UndoStack.h`.
+> Status: **Tier-2 scripting (procedural generation) is the remaining work** — the rest of
+> this section. Tier-1 prefabs shipped (`src/pattern/`: format + JSON serializer, hex cube
+> geometry, `PatternStamper`/`PatternBuilder`, undo-batching, and the pattern browser), which
+> is the reusable foundation Tier-2's host API binds to.
 >
-> **Implemented (`src/pattern/`):** the prefab format + JSON serializer, hex cube geometry
-> (`src/editor/HexGeometry.h`), `PatternStamper` (place a variant as one undo entry, with
-> a parity-snap so floor/roof tiles stay locked to the objects), `PatternBuilder` (capture a
-> selection), the `ObjectCommandController` undo-batching, and the UI (Save Selection as
-> Pattern, Stamp Pattern mode with a ghost preview, default library folder). Remaining:
-> the pattern **browser** (cached on-the-fly thumbnails + folders), and the Tier-2 work.
->
-> **Important correction to §4 below:** orientation is **not** done by geometric rotation —
-> F2 object art is direction-specific, so a pattern stores one or more **pre-authored
-> orientation variants** that the editor cycles through. The `rotatable` / rotate-at-stamp
-> design in §4/§9 was superseded by the variant-set model.
+> **Caveat for the design below:** orientation is a **variant set** (pre-authored
+> direction-specific variants the editor cycles through), **not** geometric rotation — F2
+> object art is direction-specific, so the `rotatable` / rotate-at-stamp design in §4/§9 was
+> superseded by the variant-set model.
 
 ## 1. Goals & two use cases
 
@@ -389,86 +351,72 @@ the user to press Ctrl-Z thousands of times. Therefore:
 
 ## 8. Suggested sequencing
 
-1. **Host API skeleton** (`MapScriptApi`) over `ObjectCommandController`, plus
-   `beginBatch/endBatch` so any multi-edit is one undo step. Unit-testable headless.
-2. **Tier 1 JSON prefab**: `PatternFormat` (read/write), "Save selection as pattern",
-   `rotateHexOffset` with tests, `PatternStamper`, and `stampPattern` drag-drop with
-   rotation. Ships the highest-value feature with no scripting runtime.
-3. **Tier 2 Lua**: integrate Lua 5.4 + sol2 via FetchContent, sandboxed state, bind the
+1. **Host API skeleton** (`MapScriptApi`) over `ObjectCommandController` so any multi-edit is
+   one undo step — the `beginBatch/endBatch` + `ScopedUndoBatch` foundation it sits on already
+   exists. Unit-testable headless.
+2. **Tier 2 Lua**: integrate Lua 5.4 + sol2 via FetchContent, sandboxed state, bind the
    *same* host API, add a script console/runner. Start with area-fill generators
    (desert+rocks, acid lake + shore border).
-4. **Full-map generator** as a Lua entry point consuming a definition file, reusing
+3. **Full-map generator** as a Lua entry point consuming a definition file, reusing
    `stampPattern` for set-pieces.
 
 ## 9. Open questions
 
-- ~~Hex rotation correctness~~ — moot: no geometric rotation (variant-set model); the cube
-  geometry is validated against fallout2-ce's `_dir_tile`. The remaining geometry choice was
-  the stamp parity-snap (tiles vs objects), now resolved.
 - Multi-elevation prefabs (store/stamp across the 3 `ELEVATION_COUNT` slots?).
 - Collision policy on stamp (overwrite vs skip vs error when target hexes are occupied).
 - Scripts in patterns (object scripts via `programIndex`; spatial scripts) — deferred; see
   the script-model notes (programIndex is portable, SID/OID re-allocated at stamp).
-- Tile-id range: the format stores `uint16` but `Tile` masks to 12 bits (`& 0x0FFF`); decide
-  whether to cap `tileId` at 4095 in the format.
 
 ---
 
-# Map loader panel with thumbnail previews
+# Map loader panel — remaining enhancements
 
-> Status: in progress. A visual map picker that lists available maps as rendered thumbnails
-> with their names, so a designer browses maps by sight instead of by filename. Replaces /
-> augments the plain "Open Map" file dialog and the text-only file browser.
->
-> Done: `MapBrowserDialog` (File → Browse Maps…, Ctrl+B) — grid of map thumbnails + filter
-> box + larger preview pane, double-click / Open loads the map via `handleMapLoadRequest`.
-> Thumbnails come from `MapThumbnail::forMap` (built on the shared `ThumbnailRenderer`) and
-> render **lazily**: only the cells in view, one per event-loop turn, restarted on
-> scroll/filter so browsing a DAT's worth of maps stays responsive. Cache is in-memory
-> (`QPixmapCache`), matching the pattern browser; no on-disk cache.
->
-> Remaining ideas: source grouping (vanilla vs user maps), a Welcome-screen entry point,
-> and a persisted cross-session cache if first-render latency proves annoying.
+The visual map picker shipped (`MapBrowserDialog`, File → Browse Maps…: thumbnail grid + filter
++ preview, lazy render, in-memory cache). Possible follow-ups:
+- **Source grouping** — separate vanilla `master.dat` maps from user/filesystem maps.
+- **Welcome-screen entry point** — reach the browser from the no-map welcome screen.
+- **Persisted cross-session thumbnail cache** (keyed by map path + mtime) — only if cold-start
+  render latency proves annoying; the current cache is in-memory `QPixmapCache`.
 
-## What it is
-A dialog reachable from the File menu (a dockable panel is a possible later variant) showing a
-grid of map thumbnails + names, with a larger preview of the highlighted map. Double-click (or
-the "Open" button) loads the map. A search/filter box is included; folder/source grouping
-(vanilla `master.dat` maps vs user/filesystem maps) is a possible follow-up.
+---
 
-## Where maps come from
-Enumerate `*.map` under `maps/` across the mounted VFS (`master.dat`/`critter.dat` + any
-mounted DATs) plus filesystem data paths — the same surface `FileBrowserPanel` /
-`DataFileSystem` already walk, so reuse that enumeration rather than re-scanning.
+# Visualize spatial scripts on the map (investigate)
 
-## Thumbnails — reuse the pattern compositor
-A map thumbnail is "render this map to an image, scaled to fit". This is the **same offscreen
-compositor + disk cache** being built for the Tier-1 pattern browser (§4-5 above): generalize
-it to "render a set of tiles + objects to an `sf::RenderTexture`, read back to a `QImage`",
-and both patterns and maps feed it. Differences for maps:
-- A map render is **much heavier** than a prefab (up to `TILES_PER_ELEVATION` floor/roof
-  tiles + all objects on the default elevation), and producing it means **loading the map**
-  (parse + FRM/tile resolution). The dialog therefore renders **lazily** — visible cells
-  only, one per event-loop turn — and caches in memory via `QPixmapCache`, matching the
-  pattern browser. (SFML's GL context rules out a true background thread, so "background" is
-  the event-loop-yielding lazy queue rather than a worker thread.) A persisted on-disk cache
-  keyed by map path + mtime remains a future option if cold-start latency becomes a problem.
-- Decide the thumbnail's elevation (default 0) and whether to include objects/critters or just
-  the tile layer (tiles alone are cheaper and already give a recognizable silhouette).
+> Status: investigation. Spatial scripts can be created (`SpatialScriptDialog` → F-key flow)
+> but are **invisible on the map** once placed — there's no marker, no radius overlay, and no
+> way to see, select, edit, or delete an existing one (see Known limitations #5). Goal: render
+> existing spatial scripts on the canvas so designers can see where their trigger zones are.
 
-## Reuse / dependencies
-- **Offscreen thumbnail compositor + disk cache** — shared with the pattern browser; build it
-  generic from the start (it's the prerequisite for both).
-- **Headless/offscreen map render path** — the current renderer is tied to the live editor
-  view; the same generalization the pattern thumbnails need (render to an arbitrary target)
-  applies here. Ties into the WP-9 "UI-free render" seam.
-- **Grid + folder view widgets** — shared with the pattern browser's grid.
+## What the data model gives us
+A spatial script is a `MapScript` (not a saved object) with `pid == 1`, its position packed
+into `timer` as a `built_tile` (`built_tile::create(tile, elevation)`), and `spatial_radius`
+(`src/format/map/MapScript.h:11-14`; created via `MapScript::createSpatial(...)`, read at
+`MapReader.cpp:254`). They live in the map's script section and are NO_SAVE editor markers in
+the engine (no `MapObject`), so visualization must be driven from the script list, not the
+object list. Placement currently flows MapInfoPanel → `EditorWidget::addSpatialScript` →
+`ObjectCommandController` (undoable); the editor already owns the data.
+
+## Questions to answer
+- **Reference behaviour:** how does the fallout2-ce mapper draw spatial-script markers + their
+  radius? (Check `mapper.cc`/`map.cc` for the spatial-script overlay; mirror its marker art and
+  radius shape rather than inventing one — engine-fidelity rule.)
+- **Coordinate path:** `built_tile` → tile/elevation → hex → screen. Confirm the `built_tile`
+  position is a tile index vs hex, and reuse `ViewportController`/`HexagonGrid` conversions; only
+  draw scripts on the current elevation.
+- **Radius overlay shape:** the engine radius is in hexes — is the trigger zone a hex-ring/filled
+  hex area (engine uses hex distance) or a screen circle? Render whatever matches the engine's
+  trigger test, reusing the hex-grid overlay machinery.
+- **Render layer:** add a dedicated overlay layer in `RenderingEngine` (like the exit-grid /
+  blocker / light overlays), gated by a View-menu visibility toggle + `VisibilitySettings` flag,
+  culled via the viewport like the other overlays.
+- **Interaction (stretch):** hit-test a marker to select → open `SpatialScriptDialog` to
+  edit/delete; ties into the F-key click-to-place + new `EditorMode` already sketched in
+  Known limitations #5 (live hex marker + radius preview while placing).
 
 ## Rough effort
-M–L. The grid/panel UI is S–M; the heavy/risky part is the offscreen map render + cache
-(shared with patterns) and keeping browsing responsive over a large map set (lazy + background
-+ persisted cache). Sequence **after** the pattern thumbnail compositor exists, since it
-provides the rendering+cache foundation this reuses.
+S–M for read-only visualization (marker + radius overlay + visibility toggle), reusing the
+existing overlay-layer and hex-grid plumbing. Editing/deleting via map interaction is the M
+part and overlaps the spatial-placement `EditorMode` follow-up.
 
 ---
 
