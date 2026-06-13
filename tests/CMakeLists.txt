@@ -39,6 +39,7 @@ add_executable(general_tests
     general/test_map_script_api.cpp
     general/test_resource_repository.cpp
     general/test_object_visibility.cpp
+    general/test_dat_concurrency.cpp
 )
 
 # Tier-2 scripting integration tests: only built when the Luau runtime is compiled in.
