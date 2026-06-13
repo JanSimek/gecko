@@ -83,18 +83,26 @@ std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::file
     }
 
     const std::filesystem::path vfsPath = normalizeVfsPath(path);
-    vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::toVfsPath(vfsPath), vfspp::IFile::FileMode::Read);
-    if (!file || !file->IsOpened()) {
+    try {
+        vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::toVfsPath(vfsPath), vfspp::IFile::FileMode::Read);
+        if (!file || !file->IsOpened()) {
+            return std::nullopt;
+        }
+
+        std::vector<uint8_t> data(file->Size());
+        const size_t bytesRead = file->Read(data, file->Size());
+        if (bytesRead != data.size()) {
+            data.resize(bytesRead);
+        }
+
+        return data;
+    } catch (const std::exception& e) {
+        // A corrupt/truncated archive entry (e.g. a failed zlib inflate) must not crash the
+        // app: surface it as "no data" so callers (thumbnail rendering, map loading) can
+        // degrade gracefully instead of letting the throw reach an abort().
+        spdlog::warn("DataFileSystem::readRawBytes: failed to read '{}': {}", path.string(), e.what());
         return std::nullopt;
     }
-
-    std::vector<uint8_t> data(file->Size());
-    const size_t bytesRead = file->Read(data, file->Size());
-    if (bytesRead != data.size()) {
-        data.resize(bytesRead);
-    }
-
-    return data;
 }
 
 bool DataFileSystem::exists(const std::filesystem::path& path) const {
