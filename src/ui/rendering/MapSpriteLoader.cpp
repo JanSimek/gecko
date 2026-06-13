@@ -11,7 +11,7 @@
 #include "resource/GameResources.h"
 #include "util/Constants.h"
 #include "util/Coordinates.h"
-#include "util/ResourcePaths.h"
+#include "resource/ResourcePaths.h"
 #include "util/SpriteFactory.h"
 #include "util/TileUtils.h"
 

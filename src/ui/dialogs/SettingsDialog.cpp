@@ -4,7 +4,7 @@
 #include "ui/widgets/TextEditorWidget.h"
 #include "ui/UIConstants.h"
 #include "ui/theme/ThemeManager.h"
-#include "util/Settings.h"
+#include "ui/Settings.h"
 
 #include <QApplication>
 #include <QStyle>
@@ -139,8 +139,6 @@ void SettingsDialog::loadSettings() {
     _textEditorWidget->setEditorMode(settings.getTextEditorMode());
     _textEditorWidget->setCustomEditorPath(settings.getCustomEditorPath());
 
-    _gameLocationWidget->setInstallationType(settings.getGameInstallationType());
-    _gameLocationWidget->setSteamAppId(settings.getSteamAppId());
     _gameLocationWidget->setExecutableLocation(settings.getExecutableGameLocation());
     _gameLocationWidget->setDataDirectory(settings.getGameDataDirectory());
 
@@ -162,8 +160,6 @@ void SettingsDialog::saveSettings() {
         settings.setCustomEditorPath(""); // Clear custom path when using system default
     }
 
-    settings.setGameInstallationType(_gameLocationWidget->getInstallationType());
-    settings.setSteamAppId(_gameLocationWidget->getSteamAppId());
     settings.setExecutableGameLocation(_gameLocationWidget->getExecutableLocation());
     settings.setGameDataDirectory(_gameLocationWidget->getDataDirectory());
 

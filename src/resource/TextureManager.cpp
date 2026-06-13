@@ -7,7 +7,7 @@
 #include "format/frm/Frm.h"
 #include "format/pal/Pal.h"
 #include "util/Exceptions.h"
-#include "util/ResourcePaths.h"
+#include "resource/ResourcePaths.h"
 
 #include <algorithm>
 #include <cctype>
@@ -93,7 +93,7 @@ const sf::Texture& TextureManager::get(const std::filesystem::path& path) {
     return *storedIter->second;
 }
 
-sf::Image TextureManager::imageFromFrm(const Frm& frm, Pal& pal) const {
+sf::Image TextureManager::imageFromFrm(const Frm& frm, Pal& pal) {
     const auto colors = pal.palette();
     const unsigned maxWidth = frm.maxFrameWidth();
     const unsigned maxHeight = frm.maxFrameHeight();

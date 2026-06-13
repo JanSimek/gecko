@@ -28,7 +28,7 @@ public:
     [[nodiscard]] const sf::Texture& get(const std::filesystem::path& path);
 
 private:
-    [[nodiscard]] sf::Image imageFromFrm(const Frm& frm, Pal& pal) const;
+    [[nodiscard]] static sf::Image imageFromFrm(const Frm& frm, Pal& pal);
 
     ResourceRepository& _repository;
     std::unordered_map<std::string, std::unique_ptr<sf::Texture>> _textures;

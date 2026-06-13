@@ -1,5 +1,5 @@
 #include "Settings.h"
-#include "GameDataPathResolver.h"
+#include "util/GameDataPathResolver.h"
 
 #include <QStandardPaths>
 #include <QDir>
@@ -137,11 +137,6 @@ QJsonObject Settings::toJson() const {
     json["textEditor"] = textEditor;
 
     QJsonObject gameLocation;
-    gameLocation["installationType"] = (_gameInstallationType == GameInstallationType::STEAM) ? "steam" : "executable";
-
-    if (!_steamAppId.empty()) {
-        gameLocation["steamAppId"] = QString::fromStdString(_steamAppId);
-    }
     if (!_executableGameLocation.empty()) {
         gameLocation["executablePath"] = QString::fromStdString(_executableGameLocation.string());
     }
@@ -205,16 +200,6 @@ void Settings::fromJson(const QJsonObject& json) {
 
     if (json.contains("gameLocation") && json["gameLocation"].isObject()) {
         QJsonObject gameLocation = json["gameLocation"].toObject();
-
-        QString installationType = gameLocation["installationType"].toString("executable");
-        _gameInstallationType = (installationType == "steam") ? GameInstallationType::STEAM : GameInstallationType::EXECUTABLE;
-
-        if (gameLocation.contains("steamAppId")) {
-            QString steamAppId = gameLocation["steamAppId"].toString();
-            if (!steamAppId.isEmpty()) {
-                _steamAppId = steamAppId.toStdString();
-            }
-        }
 
         if (gameLocation.contains("executablePath")) {
             QString executablePath = gameLocation["executablePath"].toString();
@@ -437,25 +422,7 @@ std::vector<std::filesystem::path> Settings::detectFallout2Installations() {
     }
 #endif
 
-    // Steam library detection (cross-platform)
-    auto steamLibraries = detectSteamLibraries();
-    for (const auto& library : steamLibraries) {
-        const std::filesystem::path fo2Path = library / "steamapps" / "common" / "Fallout 2";
-        if (const auto normalized = util::resolveGameDataRoot(fo2Path)) {
-            appendUnique(installations, *normalized);
-            spdlog::info("Found Fallout 2 in Steam library: {}", normalized->string());
-        }
-    }
-
     return installations;
-}
-
-std::vector<std::filesystem::path> Settings::detectSteamLibraries() {
-    std::vector<std::filesystem::path> libraries;
-
-    // TODO: parse Steam library.vdf to find additional library folders
-
-    return libraries;
 }
 
 std::vector<Settings::DetectedInstallation> Settings::detectFallout2InstallationsDetailed() {
@@ -470,7 +437,7 @@ std::vector<Settings::DetectedInstallation> Settings::detectFallout2Installation
     if (!gogPath.isEmpty()) {
         std::filesystem::path gogGamePath = std::filesystem::path(gogPath.toStdString());
         if (util::hasFallout2DataLayout(gogGamePath)) {
-            installations.push_back({ gogGamePath, GameInstallationType::EXECUTABLE, "GOG Installation" });
+            installations.push_back({ gogGamePath, "GOG Installation" });
             spdlog::info("Found GOG Fallout 2 installation: {}", gogGamePath.string());
         }
     }
@@ -481,7 +448,7 @@ std::vector<Settings::DetectedInstallation> Settings::detectFallout2Installation
     if (!steamPath.isEmpty()) {
         std::filesystem::path steamGamePath = std::filesystem::path(steamPath.toStdString()) / "steamapps" / "common" / "Fallout 2";
         if (util::hasFallout2DataLayout(steamGamePath)) {
-            installations.push_back({ steamGamePath, GameInstallationType::STEAM, "Steam Installation" });
+            installations.push_back({ steamGamePath, "Steam Installation" });
             spdlog::info("Found Steam Fallout 2 installation: {}", steamGamePath.string());
         }
     }
@@ -495,7 +462,7 @@ std::vector<Settings::DetectedInstallation> Settings::detectFallout2Installation
 
     for (const auto& [path, description] : macPaths) {
         if (util::resolveGameDataRoot(path).has_value()) {
-            installations.push_back({ path, GameInstallationType::EXECUTABLE, description });
+            installations.push_back({ path, description });
             spdlog::info("Found macOS Fallout 2 installation: {}", path.string());
         }
     }
@@ -503,7 +470,7 @@ std::vector<Settings::DetectedInstallation> Settings::detectFallout2Installation
     // Check for Steam on macOS
     std::filesystem::path steamMacPath = std::filesystem::path(QDir::homePath().toStdString()) / "Library/Application Support/Steam/steamapps/common/Fallout 2";
     if (util::hasFallout2DataLayout(steamMacPath)) {
-        installations.push_back({ steamMacPath, GameInstallationType::STEAM, "Steam Installation (macOS)" });
+        installations.push_back({ steamMacPath, "Steam Installation (macOS)" });
         spdlog::info("Found Steam Fallout 2 installation on macOS: {}", steamMacPath.string());
     }
 
@@ -517,58 +484,23 @@ std::vector<Settings::DetectedInstallation> Settings::detectFallout2Installation
 
     for (const auto& [path, description] : linuxPaths) {
         if (util::hasFallout2DataLayout(path)) {
-            GameInstallationType type = description.find("Steam") != std::string::npos ? GameInstallationType::STEAM : GameInstallationType::EXECUTABLE;
-            installations.push_back({ path, type, description });
+            installations.push_back({ path, description });
             spdlog::info("Found Linux Fallout 2 installation: {}", path.string());
         }
     }
 #endif
 
-    // Steam library detection (cross-platform)
-    auto steamLibraries = detectSteamLibraries();
-    for (const auto& library : steamLibraries) {
-        std::filesystem::path fo2Path = library / "steamapps" / "common" / "Fallout 2";
-        if (util::hasFallout2DataLayout(fo2Path)) {
-            installations.push_back({ fo2Path, GameInstallationType::STEAM, "Steam Library Installation" });
-            spdlog::info("Found Fallout 2 in Steam library: {}", fo2Path.string());
-        }
-    }
-
     return installations;
 }
 
-// Game location configuration
+// Game location configuration. The data directory is used for map copying and
+// ddraw.ini modification; fall back to the executable's parent directory.
 std::filesystem::path Settings::getGameLocation() const {
-    // For Steam installations, we don't use a path - return empty path
-    // The launcher should check the installation type and use Steam App ID instead
-    if (_gameInstallationType == GameInstallationType::STEAM) {
-        return std::filesystem::path{};
-    } else {
-        // Data directory is used for map copying and ddraw.ini modification
-        if (!_gameDataDirectory.empty()) {
-            return _gameDataDirectory;
-        }
-
-        return _executableGameLocation.parent_path();
+    if (!_gameDataDirectory.empty()) {
+        return _gameDataDirectory;
     }
-}
 
-Settings::GameInstallationType Settings::getGameInstallationType() const {
-    return _gameInstallationType;
-}
-
-void Settings::setGameInstallationType(GameInstallationType type) {
-    _gameInstallationType = type;
-    spdlog::info("Game installation type set to: {}", type == GameInstallationType::STEAM ? "Steam" : "Executable");
-}
-
-std::string Settings::getSteamAppId() const {
-    return _steamAppId;
-}
-
-void Settings::setSteamAppId(const std::string& appId) {
-    _steamAppId = appId;
-    spdlog::info("Steam App ID set to: {}", appId);
+    return _executableGameLocation.parent_path();
 }
 
 std::filesystem::path Settings::getExecutableGameLocation() const {
@@ -590,10 +522,6 @@ void Settings::setGameDataDirectory(const std::filesystem::path& location) {
 }
 
 bool Settings::isGameLocationValid() const {
-    if (_gameInstallationType == GameInstallationType::STEAM) {
-        return !_steamAppId.empty();
-    }
-
     if (_executableGameLocation.empty()) {
         return false;
     }
@@ -619,7 +547,6 @@ void Settings::autoDetectGameLocation() {
 
     if (!installations.empty()) {
         const std::filesystem::path& gameDir = installations[0];
-        _gameInstallationType = GameInstallationType::EXECUTABLE;
         _executableGameLocation = gameDir;
         _gameDataDirectory = gameDir;
         spdlog::info("Auto-detected game location: {}", gameDir.string());

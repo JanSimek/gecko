@@ -129,7 +129,7 @@ bool CritterFrmResolver::matchesCritterBase(const std::string& baseName, const s
     if (dotPos != std::string::npos) {
         std::string extension = filename.substr(dotPos + 1);
         if (extension == "frm" || (extension.length() == 3 && extension.substr(0, 2) == "fr")) {
-            filename = filename.substr(0, dotPos);
+            filename.erase(dotPos);
         } else {
             return false;
         }
@@ -260,7 +260,7 @@ bool CritterFrmResolver::parseAnimationSuffixes(const std::string& frmFilename,
     }
 
     std::string extension = filename.substr(dotPos + 1);
-    filename = filename.substr(0, dotPos);
+    filename.erase(dotPos);
 
     if (extension == "frm") {
         direction = 'm';

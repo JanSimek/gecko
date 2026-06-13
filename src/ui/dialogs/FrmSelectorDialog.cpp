@@ -11,7 +11,7 @@
 
 #include "resource/GameResources.h"
 #include "resource/FrmResolver.h"
-#include "util/CritterFrmResolver.h"
+#include "resource/CritterFrmResolver.h"
 #include "format/frm/Frm.h"
 
 namespace geck {

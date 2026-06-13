@@ -39,6 +39,13 @@ Detailed progress dialog with task descriptions and completion estimates for lon
 ### Execute map
 
 - [ ] revert the change when the game closes
+- [ ] (future maybe) Steam launch support — removed. Only the executable/GOG install type is
+      supported now. Launching FO2 via `steam://run/<appid>` worked, but playtesting the *edited*
+      map did not: the Steam path couldn't locate the install dir to copy the map into and patch
+      `ddraw.ini`. Reviving it means resolving the Steam install path (parse
+      `steamapps/libraryfolders.vdf` + `appmanifest_38410.acf`), then reusing the executable
+      path's map-copy + ddraw.ini step. (Detection of a Steam-*installed* copy as a regular
+      executable install is still supported.)
 
 ### Map info panel
 

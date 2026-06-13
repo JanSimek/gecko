@@ -1,11 +1,13 @@
 #include "DataFileSystem.h"
 
 #include "util/GameDataPathResolver.h"
-#include "util/PathUtils.h"
-#include "util/ResourcePaths.h"
+#include "resource/PathUtils.h"
+#include "resource/ResourcePaths.h"
 #include "vfs/Dat2FileSystem.hpp"
 #include "vfs/VfsppNativeFileSystem.h"
 
+#include <algorithm>
+#include <iterator>
 #include <regex>
 #include <spdlog/spdlog.h>
 
@@ -106,14 +108,12 @@ bool DataFileSystem::exists(const std::filesystem::path& path) const {
 }
 
 std::vector<std::filesystem::path> DataFileSystem::list(const std::string& pattern) const {
-    std::vector<std::filesystem::path> files;
     if (!_vfs) {
-        return files;
+        return {};
     }
 
-    for (const std::string& file : _vfs->ListAllFiles()) {
-        files.emplace_back(file);
-    }
+    const std::vector<std::string> allFiles = _vfs->ListAllFiles();
+    std::vector<std::filesystem::path> files(allFiles.begin(), allFiles.end());
 
     if (pattern == "*" || pattern.empty()) {
         return files;
@@ -121,11 +121,10 @@ std::vector<std::filesystem::path> DataFileSystem::list(const std::string& patte
 
     const std::regex regex(globToRegexPattern(pattern));
     std::vector<std::filesystem::path> filtered;
-    for (const auto& file : files) {
-        if (std::regex_match(file.generic_string(), regex)) {
-            filtered.push_back(file);
-        }
-    }
+    std::copy_if(files.begin(), files.end(), std::back_inserter(filtered),
+        [&regex](const std::filesystem::path& file) {
+            return std::regex_match(file.generic_string(), regex);
+        });
 
     return filtered;
 }

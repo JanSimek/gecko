@@ -1,15 +1,10 @@
 # Improvement Backlog
 
-## Architecture backlog (remaining)
+## Architecture
 
-- **Reorganize the catch-all `src/util/` directory** (still ~40 mixed files spanning UI
-  helpers, resource utilities and platform code). Group UI-specific helpers under `ui/`,
-  resource utilities under `resources/`, and platform helpers separately to improve
-  discoverability and reduce accidental dependencies.
-- **`ResourceRepository` cache tests** — the DI precondition is met (`gecko_resource` and
-  `gecko_core` are Qt-free, headless-linkable) and `test_frm_resolver.cpp` now covers the
-  resolver, but there is still no dedicated cache hit/miss / type-mismatch test for the
-  repository.
+The 13-work-package roadmap (`ARCHITECTURE_REVIEW.md`) is complete; no architectural backlog
+remains. `src/util/` keeps only genuinely cross-cutting helpers — single-layer utilities now
+live with their library (`src/resource/`, `src/ui/`).
 
 > **Intentional non-goal (MAP save):** we deliberately do not recompute / auto-prune the
 > per-elevation enable flags at save time (the engine does in `_map_save_file`) — our output is

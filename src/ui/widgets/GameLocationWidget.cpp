@@ -1,7 +1,7 @@
 #include "GameLocationWidget.h"
 #include "util/GameDataPathResolver.h"
-#include "util/Settings.h"
-#include "ui/UIConstants.h"
+#include "ui/Settings.h"
+#include "ui/theme/ThemeManager.h"
 
 #include <QApplication>
 #include <QStyle>
@@ -13,18 +13,11 @@
 
 namespace geck {
 
-using namespace ui::constants;
-
 GameLocationWidget::GameLocationWidget(QWidget* parent)
     : QGroupBox("Fallout 2 Game Location", parent)
     , _layout(nullptr)
     , _helpLabel(nullptr)
-    , _steamRadio(nullptr)
-    , _steamLayout(nullptr)
-    , _steamAppIdLabel(nullptr)
-    , _steamAppIdEdit(nullptr)
-    , _steamHelpLabel(nullptr)
-    , _executableRadio(nullptr)
+    , _executableLabel(nullptr)
     , _executableLayout(nullptr)
     , _executableLocationEdit(nullptr)
     , _browseExecutableButton(nullptr)
@@ -44,37 +37,13 @@ void GameLocationWidget::setupUI() {
     _layout = new QVBoxLayout(this);
 
     _helpLabel = new QLabel(
-        "Select the Fallout 2 game installation directory. This is used for the Play feature to launch the game with your current map.");
+        "Select the Fallout 2 game installation. This is used for the Play feature to launch the game with your current map.");
     _helpLabel->setWordWrap(true);
     _helpLabel->setStyleSheet(ui::theme::styles::helpText());
     _layout->addWidget(_helpLabel);
 
-    _steamRadio = new QRadioButton("Steam Installation");
-    _steamRadio->setChecked(false);
-    _layout->addWidget(_steamRadio);
-
-    _steamLayout = new QHBoxLayout();
-    _steamLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0);
-
-    _steamAppIdLabel = new QLabel("Steam App ID:");
-    _steamLayout->addWidget(_steamAppIdLabel);
-
-    _steamAppIdEdit = new QLineEdit();
-    _steamAppIdEdit->setPlaceholderText(ui::defaults::STEAM_APPID);
-    _steamAppIdEdit->setEnabled(false);
-    _steamAppIdEdit->setMaximumWidth(STEAM_APPID_WIDTH);
-    _steamLayout->addWidget(_steamAppIdEdit);
-
-    _steamHelpLabel = new QLabel("(Default: 38410 for Fallout 2)");
-    _steamHelpLabel->setStyleSheet(ui::theme::styles::smallLabel());
-    _steamLayout->addWidget(_steamHelpLabel);
-
-    _steamLayout->addStretch();
-    _layout->addLayout(_steamLayout);
-
-    _executableRadio = new QRadioButton("Executable/GOG Installation");
-    _executableRadio->setChecked(true);
-    _layout->addWidget(_executableRadio);
+    _executableLabel = new QLabel("Fallout 2 Executable (or GOG install):");
+    _layout->addWidget(_executableLabel);
 
     _executableLayout = new QHBoxLayout();
     _executableLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0);
@@ -90,7 +59,7 @@ void GameLocationWidget::setupUI() {
 
     _layout->addLayout(_executableLayout);
 
-    // Game data directory (for executable installs)
+    // Game data directory
     _dataDirectoryLabel = new QLabel("Game Data Directory:");
     _dataDirectoryLabel->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 8, 0, 0);
     _dataDirectoryLabel->setStyleSheet(ui::theme::styles::smallLabel());
@@ -123,41 +92,14 @@ void GameLocationWidget::setupUI() {
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);
     _layout->addWidget(_progressBar);
-
-    updateControlStates();
 }
 
 void GameLocationWidget::setupConnections() {
-    connect(_steamRadio, &QRadioButton::toggled, this, &GameLocationWidget::onInstallationTypeChanged);
-    connect(_executableRadio, &QRadioButton::toggled, this, &GameLocationWidget::onInstallationTypeChanged);
-    connect(_steamAppIdEdit, &QLineEdit::textChanged, this, &GameLocationWidget::onSteamAppIdChanged);
     connect(_executableLocationEdit, &QLineEdit::textChanged, this, &GameLocationWidget::onExecutableLocationChanged);
     connect(_dataDirectoryEdit, &QLineEdit::textChanged, this, &GameLocationWidget::onDataDirectoryChanged);
     connect(_browseExecutableButton, &QPushButton::clicked, this, &GameLocationWidget::onBrowseExecutable);
     connect(_browseDataDirectoryButton, &QPushButton::clicked, this, &GameLocationWidget::onBrowseDataDirectory);
     connect(_autoDetectButton, &QPushButton::clicked, this, &GameLocationWidget::onAutoDetect);
-}
-
-Settings::GameInstallationType GameLocationWidget::getInstallationType() const {
-    return _steamRadio->isChecked() ? Settings::GameInstallationType::STEAM : Settings::GameInstallationType::EXECUTABLE;
-}
-
-void GameLocationWidget::setInstallationType(Settings::GameInstallationType type) {
-    if (type == Settings::GameInstallationType::STEAM) {
-        _steamRadio->setChecked(true);
-    } else {
-        _executableRadio->setChecked(true);
-    }
-    updateControlStates();
-}
-
-std::string GameLocationWidget::getSteamAppId() const {
-    QString appId = _steamAppIdEdit->text().trimmed();
-    return appId.isEmpty() ? ui::defaults::STEAM_APPID : appId.toStdString();
-}
-
-void GameLocationWidget::setSteamAppId(const std::string& appId) {
-    _steamAppIdEdit->setText(QString::fromStdString(appId));
 }
 
 std::filesystem::path GameLocationWidget::getExecutableLocation() const {
@@ -180,26 +122,6 @@ void GameLocationWidget::setDataDirectory(const std::filesystem::path& location)
 
 void GameLocationWidget::setStatusMessage(const QString& message, const QString& styleClass) {
     Q_EMIT statusChanged(message, styleClass);
-}
-
-void GameLocationWidget::updateControlStates() {
-    bool steamSelected = _steamRadio->isChecked();
-
-    _steamAppIdEdit->setEnabled(steamSelected);
-    _executableLocationEdit->setEnabled(!steamSelected);
-    _browseExecutableButton->setEnabled(!steamSelected);
-    _dataDirectoryEdit->setEnabled(!steamSelected);
-    _browseDataDirectoryButton->setEnabled(!steamSelected);
-}
-
-void GameLocationWidget::onInstallationTypeChanged() {
-    updateControlStates();
-    Q_EMIT installationTypeChanged();
-    Q_EMIT configurationChanged();
-}
-
-void GameLocationWidget::onSteamAppIdChanged() {
-    Q_EMIT configurationChanged();
 }
 
 void GameLocationWidget::onExecutableLocationChanged() {
@@ -232,7 +154,7 @@ void GameLocationWidget::onBrowseExecutable() {
             }
         }
 
-        validateGameLocation(selectedFile, false);
+        validateGameLocation(selectedFile);
         Q_EMIT configurationChanged();
     }
 #else
@@ -261,7 +183,7 @@ void GameLocationWidget::onBrowseExecutable() {
             spdlog::info("Auto-set data directory to: {}", parentDir.toStdString());
         }
 
-        validateGameLocation(selectedFile, false);
+        validateGameLocation(selectedFile);
         Q_EMIT configurationChanged();
     }
 #endif
@@ -292,40 +214,13 @@ void GameLocationWidget::onAutoDetect() {
     _autoDetectButton->setEnabled(true);
 
     if (!detectedInstallations.empty()) {
-        bool foundSteam = false;
-        bool foundExecutable = false;
-        QString statusMessages;
-
-        for (const auto& installation : detectedInstallations) {
-            QString pathStr = QString::fromStdString(installation.path.string());
-            QString description = QString::fromStdString(installation.description);
-
-            if (installation.type == Settings::GameInstallationType::STEAM && !foundSteam) {
-                _steamAppIdEdit->setText(ui::defaults::STEAM_APPID);
-                foundSteam = true;
-                statusMessages += QString("Steam: %1; ").arg(description);
-            } else if (installation.type == Settings::GameInstallationType::EXECUTABLE && !foundExecutable) {
-                _executableLocationEdit->setText(pathStr);
-                if (const auto dataDirectory = util::resolveGameDataRoot(installation.path)) {
-                    _dataDirectoryEdit->setText(QString::fromStdString(dataDirectory->string()));
-                }
-                foundExecutable = true;
-                statusMessages += QString("Executable: %1; ").arg(description);
-            }
+        const auto& installation = detectedInstallations.front();
+        _executableLocationEdit->setText(QString::fromStdString(installation.path.string()));
+        if (const auto dataDirectory = util::resolveGameDataRoot(installation.path)) {
+            _dataDirectoryEdit->setText(QString::fromStdString(dataDirectory->string()));
         }
 
-        if (foundSteam && !foundExecutable) {
-            _steamRadio->setChecked(true);
-        } else if (foundExecutable) {
-            _executableRadio->setChecked(true);
-        }
-
-        statusMessages = statusMessages.trimmed();
-        if (statusMessages.endsWith(";")) {
-            statusMessages.chop(1);
-        }
-
-        setStatusMessage(QString("Auto-detected installations: %1").arg(statusMessages), "success");
+        setStatusMessage(QString("Auto-detected installation: %1").arg(QString::fromStdString(installation.description)), "success");
         Q_EMIT configurationChanged();
     } else {
         setStatusMessage("No Fallout 2 game installations detected automatically. Please select the directory manually.", "warning");
@@ -333,14 +228,13 @@ void GameLocationWidget::onAutoDetect() {
 
         const QString manualSelection = _executableLocationEdit->text().trimmed();
         if (!manualSelection.isEmpty()) {
-            _executableRadio->setChecked(true);
-            validateGameLocation(manualSelection, false);
+            validateGameLocation(manualSelection);
             Q_EMIT configurationChanged();
         }
     }
 }
 
-void GameLocationWidget::validateGameLocation(const QString& gamePath, bool isSteam) {
+void GameLocationWidget::validateGameLocation(const QString& gamePath) {
     std::filesystem::path path(gamePath.toStdString());
 
     bool isFile = std::filesystem::is_regular_file(path);
@@ -368,7 +262,7 @@ void GameLocationWidget::validateGameLocation(const QString& gamePath, bool isSt
         bool hasExecutable = std::filesystem::exists(path / "fallout2.exe") || std::filesystem::exists(path / "Fallout2.exe") || std::filesystem::exists(path / "fallout2") || std::filesystem::exists(path / "Fallout2") || std::filesystem::exists(path / "fallout2-ce.exe") || std::filesystem::exists(path / "Fallout2-ce.exe") || std::filesystem::exists(path / "fallout2-ce") || std::filesystem::exists(path / "Fallout2-ce");
 
         if (hasDataDir && hasExecutable) {
-            setStatusMessage(isSteam ? "Valid Steam Fallout 2 installation directory selected." : "Valid Fallout 2 installation directory selected.", "success");
+            setStatusMessage("Valid Fallout 2 installation directory selected.", "success");
         } else {
             setStatusMessage("Warning: Selected directory may not be a valid Fallout 2 installation.", "warning");
         }

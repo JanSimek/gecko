@@ -17,7 +17,7 @@
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
 #include "reader/ReaderFactory.h"
-#include "util/ResourcePaths.h"
+#include "resource/ResourcePaths.h"
 #include "util/Coordinates.h"
 #include "ui/IconHelper.h"
 #include "ui/dialogs/SpatialScriptDialog.h"

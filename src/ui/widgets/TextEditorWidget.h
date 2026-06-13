@@ -8,7 +8,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QGroupBox>
-#include "util/Settings.h"
+#include "ui/Settings.h"
 
 namespace geck {
 

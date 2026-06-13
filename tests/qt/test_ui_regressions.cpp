@@ -37,7 +37,7 @@
 #include "ui/widgets/pro/ProWeaponWidget.h"
 #include "resource/GameResources.h"
 #include "util/FalloutEngineEnums.h"
-#include "util/Settings.h"
+#include "ui/Settings.h"
 
 namespace {
 

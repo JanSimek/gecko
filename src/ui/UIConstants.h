@@ -25,7 +25,6 @@ namespace ui {
         // Widget sizes
         constexpr int LIST_MAX_HEIGHT = 100;
         constexpr int BUTTON_MIN_WIDTH = 80;
-        constexpr int STEAM_APPID_WIDTH = 100;
 
         /**
          * @brief Widget size constants for consistent UI elements
@@ -184,7 +183,6 @@ namespace ui {
 
     namespace defaults {
         // Default values
-        constexpr const char* STEAM_APPID = "38410";
         constexpr const char* READY_STATUS = "Ready";
     }
 

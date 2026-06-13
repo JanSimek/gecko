@@ -3,22 +3,20 @@
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QRadioButton>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
 #include <QGroupBox>
 #include <QProgressBar>
 #include <filesystem>
-#include "util/Settings.h"
 
 namespace geck {
 
 /**
- * @brief Widget for managing game location configuration
+ * @brief Widget for managing the Fallout 2 game location.
  *
- * Provides UI for configuring Steam vs Executable installations,
- * including separate paths for executables and game data directories.
+ * Configures the game executable and its data directory, which the Play feature
+ * uses to launch the game with the currently edited map.
  */
 class GameLocationWidget : public QGroupBox {
     Q_OBJECT
@@ -28,12 +26,6 @@ public:
     ~GameLocationWidget() = default;
 
     // Data access
-    Settings::GameInstallationType getInstallationType() const;
-    void setInstallationType(Settings::GameInstallationType type);
-
-    std::string getSteamAppId() const;
-    void setSteamAppId(const std::string& appId);
-
     std::filesystem::path getExecutableLocation() const;
     void setExecutableLocation(const std::filesystem::path& location);
 
@@ -44,13 +36,10 @@ public:
     void setStatusMessage(const QString& message, const QString& styleClass = "normal");
 
 signals:
-    void installationTypeChanged();
     void configurationChanged();
     void statusChanged(const QString& message, const QString& styleClass);
 
 private slots:
-    void onInstallationTypeChanged();
-    void onSteamAppIdChanged();
     void onExecutableLocationChanged();
     void onDataDirectoryChanged();
     void onBrowseExecutable();
@@ -60,22 +49,14 @@ private slots:
 private:
     void setupUI();
     void setupConnections();
-    void updateControlStates();
-    void validateGameLocation(const QString& gameDir, bool isSteam);
+    void validateGameLocation(const QString& gamePath);
 
     // UI Components
     QVBoxLayout* _layout;
     QLabel* _helpLabel;
 
-    // Steam installation
-    QRadioButton* _steamRadio;
-    QHBoxLayout* _steamLayout;
-    QLabel* _steamAppIdLabel;
-    QLineEdit* _steamAppIdEdit;
-    QLabel* _steamHelpLabel;
-
     // Executable installation
-    QRadioButton* _executableRadio;
+    QLabel* _executableLabel;
     QHBoxLayout* _executableLayout;
     QLineEdit* _executableLocationEdit;
     QPushButton* _browseExecutableButton;

@@ -37,6 +37,7 @@ add_executable(general_tests
     general/test_pattern_stamper.cpp
     general/test_pattern_builder.cpp
     general/test_map_script_api.cpp
+    general/test_resource_repository.cpp
 )
 
 # Tier-2 scripting integration tests: only built when the Luau runtime is compiled in.

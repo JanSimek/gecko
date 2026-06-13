@@ -5,7 +5,7 @@
 #include "resource/GameResources.h"
 #include "ui/viewport/ViewportController.h"
 #include "util/Constants.h"
-#include "util/ResourcePaths.h"
+#include "resource/ResourcePaths.h"
 
 namespace geck {
 

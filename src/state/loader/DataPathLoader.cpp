@@ -1,6 +1,6 @@
 #include "DataPathLoader.h"
 #include "resource/GameResources.h"
-#include "util/ResourceInitializer.h"
+#include "ui/ResourceInitializer.h"
 #include <thread>
 #include <spdlog/spdlog.h>
 

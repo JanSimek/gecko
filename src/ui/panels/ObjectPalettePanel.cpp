@@ -5,7 +5,7 @@
 #include "resource/GameResources.h"
 #include "util/Constants.h"
 #include "util/ColorUtils.h"
-#include "util/FrmThumbnailGenerator.h"
+#include "ui/FrmThumbnailGenerator.h"
 #include "ui/common/BaseWidget.h"
 #include "ui/dragdrop/MimeTypes.h"
 #include "ui/theme/ThemeManager.h"
