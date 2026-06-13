@@ -339,15 +339,11 @@ TEST_CASE("Ctrl+click deselects the selected layer only (single click)", "[selec
         REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().size() == 1);
         REQUIRE(mgr.getCurrentSelection().getFloorTileIndices().size() == 1);
 
-        // Ctrl+click with the roof hidden must only drop the visible floor.
+        // Ctrl+click with the roof hidden must only drop the visible floor; the
+        // hidden roof stays selected (deselecting a roof you can see is covered above).
         mgr.deselectAtPosition(clickPos, SelectionMode::ALL, 0);
         CHECK(mgr.getCurrentSelection().getFloorTileIndices().empty());
         CHECK(mgr.getCurrentSelection().getRoofTileIndices().size() == 1);
-
-        // With the roof shown again, a second Ctrl+click removes it too.
-        mockWidget.roofVisible = true;
-        mgr.deselectAtPosition(clickPos, SelectionMode::ALL, 0);
-        CHECK_FALSE(mgr.hasSelection());
     }
 }
 
