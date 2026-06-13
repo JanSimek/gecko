@@ -1235,7 +1235,7 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
     // Resolve by nearest tile centre (the diamond actually under the cursor) instead of
     // snapping the click to a hex and converting hex->tile, which is imprecise at boundaries.
     const auto tileIndex = screenToTileIndex(worldPos.x, worldPos.y, isRoof);
-    if (!tileIndex) {
+    if (!tileIndex.has_value()) {
         return std::nullopt;
     }
 
