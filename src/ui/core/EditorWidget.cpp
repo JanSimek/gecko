@@ -222,7 +222,7 @@ void EditorWidget::initializeSelectionSystem() {
                         auto screenPos = geck::indexToScreenPosition(tileIndex, true); // true for roof offset
                         sf::Sprite backgroundSprite(_resources.textures().get("art/tiles/blank.frm"));
                         backgroundSprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-                        backgroundSprite.setColor(sf::Color(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B, 128)); // 50% transparency
+                        backgroundSprite.setColor(sf::Color(Colors::SELECTION_R, Colors::SELECTION_G, Colors::SELECTION_B, 128)); // 50% transparency
                         this->_selectedRoofTileBackgroundSprites.push_back(backgroundSprite);
                     }
                     break;
@@ -231,7 +231,7 @@ void EditorWidget::initializeSelectionSystem() {
                 case selection::SelectionType::FLOOR_TILE: {
                     int tileIndex = item.getTileIndex();
                     if (isValidTileIndex(tileIndex)) {
-                        this->_floorSprites.at(tileIndex).setColor(geck::ColorUtils::createErrorIndicatorColor());
+                        this->_floorSprites.at(tileIndex).setColor(geck::ColorUtils::createFloorTileSelectionColor());
                     }
                     break;
                 }
