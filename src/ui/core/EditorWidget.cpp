@@ -1183,7 +1183,7 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
     const pattern::PatternVariant& variant = _stampPattern->variants[_stampVariantIndex];
     const pattern::PatternStamper::Plan plan = pattern::PatternStamper::plan(variant, hex);
 
-    const auto ghostAlpha = sf::Color(255, 255, 255, 140);
+    const auto ghostAlpha = sf::Color(255, 255, 255, ui::constants::sfml::DRAG_PREVIEW_ALPHA);
     for (const pattern::PatternStamper::TilePlacement& tp : plan.tiles) {
         if (auto sprite = pattern::buildTileSprite(_resources, tp.tileIndex, tp.isRoof, tp.tileId)) {
             sprite->setColor(ghostAlpha);
