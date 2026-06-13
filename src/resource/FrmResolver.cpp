@@ -139,7 +139,7 @@ std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
 
     for (size_t typeIndex = 0; typeIndex < frmTypeDescriptions.size(); ++typeIndex) {
         const auto& description = frmTypeDescriptions[typeIndex];
-        if (normalized.find(description.prefixPath) != 0) {
+        if (!normalized.starts_with(description.prefixPath)) {
             continue;
         }
 
