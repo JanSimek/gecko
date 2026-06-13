@@ -70,6 +70,7 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
         if (canDragObject && _callbacks.onObjectDragStart) {
             if (_callbacks.onObjectDragStart(worldPos)) {
                 _currentAction = EditorAction::OBJECT_MOVING;
+                _dragStartWorldPos = worldPos;
                 _isDragging = false;
             }
             return;
@@ -169,8 +170,19 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
                 break;
 
             case EditorAction::OBJECT_MOVING:
-                if (_callbacks.onObjectDragEnd) {
-                    _callbacks.onObjectDragEnd(worldPos);
+                if (_isDragging) {
+                    if (_callbacks.onObjectDragEnd) {
+                        _callbacks.onObjectDragEnd(worldPos);
+                    }
+                } else {
+                    // No movement: this was a click on an already-selected object, not a drag.
+                    // Cancel the (no-op) move and cycle the selection to the item underneath.
+                    if (_callbacks.onObjectDragCancel) {
+                        _callbacks.onObjectDragCancel();
+                    }
+                    if (_callbacks.onSelectionClick) {
+                        _callbacks.onSelectionClick(worldPos, SelectionModifier::NONE);
+                    }
                 }
                 break;
 
@@ -240,9 +252,13 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
 
         case EditorAction::OBJECT_MOVING:
             if (!_isDragging) {
-                _isDragging = true;
+                sf::Vector2f dragDelta = worldPos - _dragStartWorldPos;
+                float dragDistance = std::sqrt(dragDelta.x * dragDelta.x + dragDelta.y * dragDelta.y);
+                if (dragDistance > 5.0f) { // 5 pixel drag threshold (matches drag-select)
+                    _isDragging = true;
+                }
             }
-            if (_callbacks.onObjectDragUpdate) {
+            if (_isDragging && _callbacks.onObjectDragUpdate) {
                 _callbacks.onObjectDragUpdate(worldPos);
             }
             break;
