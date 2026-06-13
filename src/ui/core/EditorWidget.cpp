@@ -2,6 +2,7 @@
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/input/InputHandler.h"
 #include "ui/rendering/MapSpriteLoader.h"
+#include "ui/rendering/ObjectVisibility.h"
 #include "ui/rendering/RenderingEngine.h"
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
@@ -473,75 +474,24 @@ void EditorWidget::loadSprites() {
 std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vector2f worldPos) {
     std::vector<std::shared_ptr<Object>> objectsAtPos;
 
+    // Only objects that are actually drawn are selectable: a click must never land on a
+    // hidden object (e.g. a scroll blocker on a hidden layer) and produce an invisible
+    // selection. isObjectVisible is the same rule RenderingEngine::renderObjects applies.
     std::ranges::copy_if(_objects, std::back_inserter(objectsAtPos),
         [this, worldPos](const auto& object) {
-            return isPointInSpritePixel(worldPos, object->getSprite());
+            return isObjectVisible(object->getMapObject(), _visibility)
+                && isPointInSpritePixel(worldPos, object->getSprite());
         });
 
-    // Sort by map position (z-order) - higher positions are "in front"
-    // For objects with same position, prioritize by object type (scenery > wall > others)
-    std::sort(objectsAtPos.begin(), objectsAtPos.end(),
-        [](const std::shared_ptr<Object>& a, const std::shared_ptr<Object>& b) {
-            auto posA = a->getMapObject().position;
-            auto posB = b->getMapObject().position;
-
-            if (posA != posB) {
-                return posA > posB; // Higher position = front
-            }
-
-            // Same position - break ties by object type priority
-            auto getTypePriority = [](uint32_t pid) -> int {
-                unsigned int typeId = pid >> FileFormat::TYPE_MASK_SHIFT;
-                switch (static_cast<Pro::OBJECT_TYPE>(typeId)) {
-                    case Pro::OBJECT_TYPE::SCENERY:
-                        return 3; // Highest priority
-                    case Pro::OBJECT_TYPE::WALL:
-                        return 2;
-                    case Pro::OBJECT_TYPE::ITEM:
-                        return 1;
-                    case Pro::OBJECT_TYPE::CRITTER:
-                        return 1;
-                    case Pro::OBJECT_TYPE::TILE:
-                        return 1;
-                    case Pro::OBJECT_TYPE::MISC:
-                        return 1;
-                    default:
-                        return 0;
-                }
-            };
-
-            return getTypePriority(a->getMapObject().pro_pid) > getTypePriority(b->getMapObject().pro_pid);
-        });
+    // Objects are drawn in _objects order (see RenderingEngine::renderObjects), so the object
+    // drawn last is the one visually on top. copy_if preserved that draw order, so reverse it to
+    // put the topmost-drawn object first: the pick then matches exactly what the user sees, and
+    // repeated clicks cycle stacked objects from top to bottom.
+    std::ranges::reverse(objectsAtPos);
 
     if (objectsAtPos.size() > 1) {
-        spdlog::debug("getObjectsAtPosition: Found {} overlapping objects:", objectsAtPos.size());
-        for (size_t i = 0; i < objectsAtPos.size(); i++) {
-            uint32_t pid = objectsAtPos[i]->getMapObject().pro_pid;
-            unsigned int typeId = pid >> FileFormat::TYPE_MASK_SHIFT;
-            const char* typeName = "UNKNOWN";
-            switch (static_cast<Pro::OBJECT_TYPE>(typeId)) {
-                case Pro::OBJECT_TYPE::ITEM:
-                    typeName = "ITEM";
-                    break;
-                case Pro::OBJECT_TYPE::CRITTER:
-                    typeName = "CRITTER";
-                    break;
-                case Pro::OBJECT_TYPE::SCENERY:
-                    typeName = "SCENERY";
-                    break;
-                case Pro::OBJECT_TYPE::WALL:
-                    typeName = "WALL";
-                    break;
-                case Pro::OBJECT_TYPE::TILE:
-                    typeName = "TILE";
-                    break;
-                case Pro::OBJECT_TYPE::MISC:
-                    typeName = "MISC";
-                    break;
-            }
-            spdlog::debug("  [{}] PID: {}, Position: {}, Type: {}", i,
-                pid, objectsAtPos[i]->getMapObject().position, typeName);
-        }
+        spdlog::debug("getObjectsAtPosition: {} overlapping objects under cursor (topmost first)",
+            objectsAtPos.size());
     }
 
     return objectsAtPos;
@@ -1287,45 +1237,31 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
         return std::nullopt;
     }
 
-    // FIXME: this is inaccurate and we should not use hex-to-tile conversion in the future.
-    // Hex-based selection keeps tile selection consistent with the hex highlights users see.
-
-    // The roof offset + hex->tile lookup lives in ViewportController::worldPosToTileIndex.
-    const int tileIndex = _viewportController->worldPosToTileIndex(worldPos, isRoof);
-    if (tileIndex < 0) {
+    // Resolve by nearest tile centre (the diamond actually under the cursor) instead of
+    // snapping the click to a hex and converting hex->tile, which is imprecise at boundaries.
+    const auto tileIndex = screenToTileIndex(worldPos.x, worldPos.y, isRoof);
+    if (!tileIndex.has_value()) {
         return std::nullopt;
     }
 
     // Editor-specific guard: a roof selection only counts on a non-empty roof tile.
-    if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(tileIndex).getRoof() == Map::EMPTY_TILE) {
+    if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(*tileIndex).getRoof() == Map::EMPTY_TILE) {
         spdlog::debug("EditorWidget::getTileAtPosition: Empty roof tile at index {} [worldPos: ({:.1f}, {:.1f})]",
-            tileIndex, worldPos.x, worldPos.y);
-        return std::nullopt;
-    }
-
-    return tileIndex;
-}
-
-std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
-    // Includes empty roof tiles in the selection, using the F2 Mapper algorithm
-    if (!_map || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
-        return std::nullopt;
-    }
-
-    sf::Vector2f adjustedWorldPos = worldPos;
-    adjustedWorldPos.y += ROOF_OFFSET; // Roof tiles are visually offset upward
-
-    int hexIndex = _viewportController->worldPosToHexIndex(adjustedWorldPos);
-    if (hexIndex < 0) {
-        return std::nullopt;
-    }
-
-    auto tileIndex = _hexgrid.tileIndexForPosition(hexIndex);
-    if (!tileIndex.has_value() || *tileIndex < 0 || *tileIndex >= TILES_PER_ELEVATION) {
+            *tileIndex, worldPos.x, worldPos.y);
         return std::nullopt;
     }
 
     return *tileIndex;
+}
+
+std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
+    // Includes empty roof tiles in the selection. Resolves by nearest roof-tile centre
+    // (screenToTileIndex applies the roof offset) for accuracy at tile boundaries.
+    if (!_map || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
+        return std::nullopt;
+    }
+
+    return screenToTileIndex(worldPos.x, worldPos.y, true);
 }
 
 selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f worldPos) {

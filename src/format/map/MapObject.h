@@ -95,7 +95,7 @@ struct MapObject {
         return fidBaseId() == 1 && flags & 0x00000010;
     }
 
-    bool isScrollBlocker() {
+    bool isScrollBlocker() const {
         // Scroll blockers are visual indicators only (FRM-based, not proto-based)
         // They use scrblk.frm (FRM baseId == 1)
         return fidBaseId() == 1;

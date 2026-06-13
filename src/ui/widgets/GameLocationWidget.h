@@ -50,6 +50,8 @@ private:
     void setupUI();
     void setupConnections();
     void validateGameLocation(const QString& gamePath);
+    void validateExecutableFile(const std::filesystem::path& path);
+    void validateInstallDirectory(const std::filesystem::path& path);
 
     // UI Components
     QVBoxLayout* _layout;

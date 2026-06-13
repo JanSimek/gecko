@@ -225,6 +225,38 @@ TEST_CASE("SelectionManager drives provider-backed selection paths", "[selection
 }
 
 //==============================================================================
+// REGRESSION: clicking the same spot in ALL mode must cycle through the stack and
+// finally deselect ("click again -> select the item underneath"). The input layer
+// is what was broken (a click on a selected object did a no-op move instead of
+// cycling), but the cycle-advance contract this depends on lives here, so guard it.
+// No objects are placed (Object needs a graphics context), so the stack is the
+// always-present roof -> floor pair the mock fabricates, then empty.
+//==============================================================================
+TEST_CASE("ALL-mode click cycles the stack then deselects", "[selection_manager_real][regression]") {
+    MockEditorWidget mockWidget;
+    geck::selection::SelectionManager mgr(mockWidget);
+
+    // Mock maps worldPos (col*32, row*24) -> tile row*MAP_WIDTH + col.
+    const sf::Vector2f clickPos{ 32.0f, 24.0f };
+    const int tileIndex = 1 * MAP_WIDTH + 1;
+
+    // 1st click: nothing selected -> top of the stack (roof).
+    mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+    REQUIRE(mgr.getCurrentSelection().count() == 1);
+    REQUIRE(mgr.getCurrentSelection().getRoofTileIndices() == std::vector<int>{ tileIndex });
+
+    // 2nd click: advances to the item underneath (floor).
+    mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+    REQUIRE(mgr.getCurrentSelection().count() == 1);
+    REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().empty());
+    REQUIRE(mgr.getCurrentSelection().getFloorTileIndices() == std::vector<int>{ tileIndex });
+
+    // 3rd click: nothing left underneath -> deselect.
+    mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+    REQUIRE_FALSE(mgr.hasSelection());
+}
+
+//==============================================================================
 // SECTION: Elevation regression for finishAreaSelection()
 //
 // REGRESSION TEST for the elevation bug fixed in the manager-decoupling work:

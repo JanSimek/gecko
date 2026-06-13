@@ -31,6 +31,9 @@ Detailed progress dialog with task descriptions and completion estimates for lon
 
 - [ ] Ctrl+C - copy object, Ctrl+V paste object
 - [ ] Proto view
+- [ ] Ctrl-toggle deselection: Ctrl+clicking an already-selected item, or Ctrl+dragging an
+      area that covers already-selected items, should *remove* those items from the selection
+      (toggle them off) instead of re-adding them. Today Ctrl only adds to the selection.
 
 ### Hex palette
 

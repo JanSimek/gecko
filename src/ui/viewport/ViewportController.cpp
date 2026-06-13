@@ -63,7 +63,7 @@ void ViewportController::setZoomLevel(float zoom) {
     }
 }
 
-int ViewportController::updateHoverHex(sf::Vector2f worldPos) {
+int ViewportController::updateHoverHex(sf::Vector2f worldPos) const {
     return worldPosToHexIndex(worldPos);
 }
 
@@ -88,31 +88,6 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
     }
 
     return -1;
-}
-
-int ViewportController::worldPosToTileIndex(sf::Vector2f worldPos, bool isRoof) const {
-    // Hex-based lookup for consistency with tile selection
-    sf::Vector2f adjustedWorldPos = worldPos;
-    if (isRoof) {
-        adjustedWorldPos.y += ROOF_OFFSET; // Roof tiles are visually offset upward
-    }
-
-    int hexIndex = worldPosToHexIndex(adjustedWorldPos);
-    if (hexIndex < 0) {
-        spdlog::debug("ViewportController::worldPosToTileIndex: No hex found at world({:.1f}, {:.1f}) adjusted({:.1f}, {:.1f}) [roof: {}]",
-            worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, isRoof);
-        return -1;
-    }
-
-    auto tileIndex = _hexGrid->tileIndexForPosition(hexIndex);
-    if (!tileIndex.has_value()) {
-        return -1;
-    }
-
-    spdlog::debug("ViewportController::worldPosToTileIndex: world({:.1f}, {:.1f}) adjusted({:.1f}, {:.1f}) -> hex({}) -> tile({}) [roof: {}]",
-        worldPos.x, worldPos.y, adjustedWorldPos.x, adjustedWorldPos.y, hexIndex, *tileIndex, isRoof);
-
-    return *tileIndex;
 }
 
 bool ViewportController::isHexVisible(int hexWorldX, int hexWorldY, const sf::View& view) {

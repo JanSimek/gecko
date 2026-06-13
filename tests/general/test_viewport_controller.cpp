@@ -5,7 +5,6 @@
 #include "editor/Hex.h"
 #include "editor/HexagonGrid.h"
 #include "ui/viewport/ViewportController.h"
-#include "util/Constants.h"
 
 using namespace geck;
 
@@ -40,31 +39,4 @@ TEST_CASE("ViewportController rejects out-of-map world positions", "[viewport][h
 
     CHECK(viewport.worldPosToHexIndex(sf::Vector2f(-100000.f, -100000.f)) == -1);
     CHECK(viewport.worldPosToHexIndex(sf::Vector2f(100000.f, 100000.f)) == -1);
-}
-
-TEST_CASE("ViewportController tile lookup matches the grid's tile", "[viewport][tile]") {
-    HexagonGrid grid;
-    ViewportController viewport(&grid);
-
-    const int position = 20000;
-    const auto expectedTile = grid.tileIndexForPosition(position);
-    REQUIRE(expectedTile.has_value());
-
-    CHECK(viewport.worldPosToTileIndex(hexCentre(grid, position), /*isRoof=*/false) == *expectedTile);
-}
-
-TEST_CASE("ViewportController roof tiles apply ROOF_OFFSET", "[viewport][tile]") {
-    HexagonGrid grid;
-    ViewportController viewport(&grid);
-
-    const sf::Vector2f centre = hexCentre(grid, 20000);
-
-    // A roof lookup shifts the sample point down by ROOF_OFFSET before resolving the
-    // hex, so sampling ROOF_OFFSET *above* the centre as a roof hits the same tile as
-    // sampling the centre itself as a floor.
-    const int floorTile = viewport.worldPosToTileIndex(centre, /*isRoof=*/false);
-    const int roofTile = viewport.worldPosToTileIndex(sf::Vector2f(centre.x, centre.y - ROOF_OFFSET), /*isRoof=*/true);
-
-    CHECK(floorTile >= 0);
-    CHECK(roofTile == floorTile);
 }

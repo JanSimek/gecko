@@ -55,7 +55,7 @@ public:
      * @param worldPos World position to check
      * @return The hex index under the position, -1 if none
      */
-    int updateHoverHex(sf::Vector2f worldPos);
+    int updateHoverHex(sf::Vector2f worldPos) const;
 
     /**
      * @brief Convert world position to hex grid index (accurate algorithm)
@@ -63,14 +63,6 @@ public:
      * @return Hex index, -1 if invalid
      */
     int worldPosToHexIndex(sf::Vector2f worldPos) const;
-
-    /**
-     * @brief Convert world position to tile index (pixel-perfect algorithm)
-     * @param worldPos World position to convert
-     * @param isRoof Whether this is for roof tile selection
-     * @return Tile index (0-9999), -1 if invalid
-     */
-    int worldPosToTileIndex(sf::Vector2f worldPos, bool isRoof = false) const;
 
     /**
      * @brief Whether a hex at the given world coordinates is within `view`.

@@ -11,7 +11,28 @@
 #include <QFileInfo>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <array>
+
 namespace geck {
+
+namespace {
+
+    bool looksLikeFalloutExecutable(const QString& lowercaseFileName) {
+        return lowercaseFileName.contains("fallout2") || lowercaseFileName.contains("fallout 2")
+            || lowercaseFileName.endsWith(".app");
+    }
+
+    bool directoryHasFalloutExecutable(const std::filesystem::path& dir) {
+        static constexpr std::array<const char*, 8> kExecutableNames = {
+            "fallout2.exe", "Fallout2.exe", "fallout2", "Fallout2",
+            "fallout2-ce.exe", "Fallout2-ce.exe", "fallout2-ce", "Fallout2-ce"
+        };
+        return std::ranges::any_of(kExecutableNames,
+            [&dir](const char* name) { return std::filesystem::exists(dir / name); });
+    }
+
+} // namespace
 
 GameLocationWidget::GameLocationWidget(QWidget* parent)
     : QGroupBox("Fallout 2 Game Location", parent)
@@ -235,39 +256,45 @@ void GameLocationWidget::onAutoDetect() {
 }
 
 void GameLocationWidget::validateGameLocation(const QString& gamePath) {
-    std::filesystem::path path(gamePath.toStdString());
+    const std::filesystem::path path(gamePath.toStdString());
 
-    bool isFile = std::filesystem::is_regular_file(path);
-    bool isDirectory = std::filesystem::is_directory(path);
-
-    if (isFile) {
-        QString fileName = QString::fromStdString(path.filename().string()).toLower();
-        bool isValidExecutable = fileName.contains("fallout2") || fileName.contains("fallout 2") || fileName.endsWith(".app");
-
-        if (isValidExecutable) {
-            setStatusMessage("Valid Fallout 2 executable selected.", "success");
-
-            std::filesystem::path dataDir(_dataDirectoryEdit->text().toStdString());
-            if (!dataDir.empty() && std::filesystem::exists(dataDir / "data")) {
-                setStatusMessage("Valid Fallout 2 executable and data directory selected.", "success");
-            } else if (!dataDir.empty()) {
-                setStatusMessage("Executable selected. Warning: Data directory may not contain game files.", "warning");
-            }
-        } else {
-            setStatusMessage("Warning: Selected file may not be a valid Fallout 2 executable.", "warning");
-        }
-    } else if (isDirectory) {
-        // User selected a directory (legacy behavior for compatibility)
-        bool hasDataDir = std::filesystem::exists(path / "data");
-        bool hasExecutable = std::filesystem::exists(path / "fallout2.exe") || std::filesystem::exists(path / "Fallout2.exe") || std::filesystem::exists(path / "fallout2") || std::filesystem::exists(path / "Fallout2") || std::filesystem::exists(path / "fallout2-ce.exe") || std::filesystem::exists(path / "Fallout2-ce.exe") || std::filesystem::exists(path / "fallout2-ce") || std::filesystem::exists(path / "Fallout2-ce");
-
-        if (hasDataDir && hasExecutable) {
-            setStatusMessage("Valid Fallout 2 installation directory selected.", "success");
-        } else {
-            setStatusMessage("Warning: Selected directory may not be a valid Fallout 2 installation.", "warning");
-        }
+    if (std::filesystem::is_regular_file(path)) {
+        validateExecutableFile(path);
+    } else if (std::filesystem::is_directory(path)) {
+        validateInstallDirectory(path);
     } else {
         setStatusMessage("Warning: Selected path does not exist.", "error");
+    }
+}
+
+void GameLocationWidget::validateExecutableFile(const std::filesystem::path& path) {
+    const QString fileName = QString::fromStdString(path.filename().string()).toLower();
+    if (!looksLikeFalloutExecutable(fileName)) {
+        setStatusMessage("Warning: Selected file may not be a valid Fallout 2 executable.", "warning");
+        return;
+    }
+
+    setStatusMessage("Valid Fallout 2 executable selected.", "success");
+
+    const std::filesystem::path dataDir(_dataDirectoryEdit->text().toStdString());
+    if (dataDir.empty()) {
+        return;
+    }
+    if (std::filesystem::exists(dataDir / "data")) {
+        setStatusMessage("Valid Fallout 2 executable and data directory selected.", "success");
+    } else {
+        setStatusMessage("Executable selected. Warning: Data directory may not contain game files.", "warning");
+    }
+}
+
+void GameLocationWidget::validateInstallDirectory(const std::filesystem::path& path) {
+    // Legacy behaviour: accept a directory that looks like a Fallout 2 install.
+    const bool hasDataDir = std::filesystem::exists(path / "data");
+    const bool hasExecutable = directoryHasFalloutExecutable(path);
+    if (hasDataDir && hasExecutable) {
+        setStatusMessage("Valid Fallout 2 installation directory selected.", "success");
+    } else {
+        setStatusMessage("Warning: Selected directory may not be a valid Fallout 2 installation.", "warning");
     }
 }
 

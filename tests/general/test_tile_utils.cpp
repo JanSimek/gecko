@@ -130,6 +130,68 @@ TEST_CASE("Screen position calculation", "[tile_utils]") {
     }
 }
 
+TEST_CASE("screenToTileIndex resolves clicks to the tile under them", "[tile_utils]") {
+    // The centre of tile `index`'s 80x36 sprite in world space.
+    auto floorCentre = [](int index) {
+        auto sp = indexToScreenPosition(index, false);
+        return sf::Vector2f(static_cast<float>(sp.x) + TILE_WIDTH / 2.0f,
+            static_cast<float>(sp.y) + TILE_HEIGHT / 2.0f);
+    };
+
+    const std::vector<int> samples = { 0, 99, 100, 150, 1234, 5050, TILES_PER_ELEVATION - 1 };
+
+    SECTION("a click on a tile centre resolves to that tile") {
+        for (int index : samples) {
+            const auto c = floorCentre(index);
+            const auto result = screenToTileIndex(c.x, c.y, false);
+            REQUIRE(result.has_value());
+            CHECK(*result == index);
+        }
+    }
+
+    SECTION("clicks anywhere inside a tile still resolve to it") {
+        // Offsets well within the diamond (half-extent is 40x18) must not spill to a neighbour.
+        for (int index : { 150, 5050 }) {
+            const auto c = floorCentre(index);
+            for (auto [dx, dy] : { std::pair{ 10.0f, 4.0f }, std::pair{ -10.0f, -4.0f },
+                     std::pair{ 0.0f, 8.0f }, std::pair{ 18.0f, 0.0f } }) {
+                const auto result = screenToTileIndex(c.x + dx, c.y + dy, false);
+                REQUIRE(result.has_value());
+                CHECK(*result == index);
+            }
+        }
+    }
+
+    SECTION("roof clicks resolve against the roof layer (roof offset applied)") {
+        for (int index : { 1234, 5050 }) {
+            const auto c = floorCentre(index);
+            // Roof tiles are drawn ROOF_OFFSET higher, so a roof click sits that much higher.
+            const auto result = screenToTileIndex(c.x, c.y - ROOF_OFFSET, true);
+            REQUIRE(result.has_value());
+            CHECK(*result == index);
+        }
+    }
+
+    SECTION("the nearer tile centre wins at a boundary") {
+        // Two horizontally adjacent tiles (same row) differ by one column.
+        const int a = 5050;
+        const int b = 5051;
+        const auto ca = floorCentre(a);
+        const auto cb = floorCentre(b);
+        const sf::Vector2f mid((ca.x + cb.x) / 2.0f, (ca.y + cb.y) / 2.0f);
+
+        // Nudge a few px toward each centre; the closer centre must win.
+        const sf::Vector2f toward = sf::Vector2f(cb.x - ca.x, cb.y - ca.y) / 20.0f;
+        CHECK(screenToTileIndex(mid.x - toward.x, mid.y - toward.y, false) == a);
+        CHECK(screenToTileIndex(mid.x + toward.x, mid.y + toward.y, false) == b);
+    }
+
+    SECTION("a click far off the grid resolves to nothing") {
+        CHECK_FALSE(screenToTileIndex(-100000.0f, -100000.0f, false).has_value());
+        CHECK_FALSE(screenToTileIndex(100000.0f, 100000.0f, false).has_value());
+    }
+}
+
 TEST_CASE("Color utilities", "[tile_utils]") {
     SECTION("Preview colors") {
         auto preview_fill = TileColors::previewFill();
