@@ -33,51 +33,55 @@ SelectionResult SelectionManager::selectAtPosition(sf::Vector2f worldPos, Select
     }
 }
 
+void SelectionManager::appendTilesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, bool roof, int elevation, bool includeEmpty) const {
+    const auto tiles = includeEmpty ? getTilesInAreaIncludingEmpty(area, roof, elevation)
+                                    : getTilesInArea(area, roof, elevation);
+    const SelectionType type = roof ? SelectionType::ROOF_TILE : SelectionType::FLOOR_TILE;
+    for (int tileIndex : tiles) {
+        items.emplace_back(type, tileIndex);
+    }
+}
+
+void SelectionManager::appendObjectsInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, int elevation) const {
+    for (auto& object : getObjectsInArea(area, elevation)) {
+        items.emplace_back(SelectionType::OBJECT, object);
+    }
+}
+
+void SelectionManager::appendHexesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area) const {
+    for (int hexIndex : getHexesInArea(area)) {
+        items.emplace_back(SelectionType::HEX, hexIndex);
+    }
+}
+
 std::vector<SelectedItem> SelectionManager::collectItemsInArea(const sf::FloatRect& area, SelectionMode mode, int elevation) const {
-    using enum SelectionType;
     std::vector<SelectedItem> items;
 
     switch (mode) {
         case SelectionMode::FLOOR_TILES:
-            for (int tileIndex : getTilesInArea(area, false, elevation)) {
-                items.emplace_back(FLOOR_TILE, tileIndex);
-            }
+            appendTilesInArea(items, area, false, elevation, false);
             break;
 
         case SelectionMode::ROOF_TILES:
-            for (int tileIndex : getTilesInArea(area, true, elevation)) {
-                items.emplace_back(ROOF_TILE, tileIndex);
-            }
+            appendTilesInArea(items, area, true, elevation, false);
             break;
 
         case SelectionMode::ROOF_TILES_ALL:
-            for (int tileIndex : getTilesInAreaIncludingEmpty(area, true, elevation)) {
-                items.emplace_back(ROOF_TILE, tileIndex);
-            }
+            appendTilesInArea(items, area, true, elevation, true);
             break;
 
         case SelectionMode::OBJECTS:
-            for (auto& object : getObjectsInArea(area, elevation)) {
-                items.emplace_back(OBJECT, object);
-            }
+            appendObjectsInArea(items, area, elevation);
             break;
 
         case SelectionMode::ALL:
-            for (auto& object : getObjectsInArea(area, elevation)) {
-                items.emplace_back(OBJECT, object);
-            }
-            for (int tileIndex : getTilesInArea(area, false, elevation)) {
-                items.emplace_back(FLOOR_TILE, tileIndex);
-            }
-            for (int tileIndex : getTilesInArea(area, true, elevation)) {
-                items.emplace_back(ROOF_TILE, tileIndex);
-            }
+            appendObjectsInArea(items, area, elevation);
+            appendTilesInArea(items, area, false, elevation, false);
+            appendTilesInArea(items, area, true, elevation, false);
             break;
 
         case SelectionMode::HEXES:
-            for (int hexIndex : getHexesInArea(area)) {
-                items.emplace_back(HEX, hexIndex);
-            }
+            appendHexesInArea(items, area);
             break;
 
         default:

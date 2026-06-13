@@ -119,6 +119,11 @@ private:
     // Collects the items a drag-area covers for the given mode (shared by selectArea/toggleArea).
     std::vector<SelectedItem> collectItemsInArea(const sf::FloatRect& area, SelectionMode mode, int elevation) const;
 
+    // Per-category appenders used by collectItemsInArea (keep its branching shallow).
+    void appendTilesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, bool roof, int elevation, bool includeEmpty) const;
+    void appendObjectsInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, int elevation) const;
+    void appendHexesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area) const;
+
     // Selection helpers
     void addItemToSelection(const SelectedItem& item);
     void removeItemFromSelection(const SelectedItem& item);
