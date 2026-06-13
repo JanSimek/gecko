@@ -63,7 +63,7 @@ void ViewportController::setZoomLevel(float zoom) {
     }
 }
 
-int ViewportController::updateHoverHex(sf::Vector2f worldPos) {
+int ViewportController::updateHoverHex(sf::Vector2f worldPos) const {
     return worldPosToHexIndex(worldPos);
 }
 

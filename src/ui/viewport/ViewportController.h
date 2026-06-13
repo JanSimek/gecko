@@ -55,7 +55,7 @@ public:
      * @param worldPos World position to check
      * @return The hex index under the position, -1 if none
      */
-    int updateHoverHex(sf::Vector2f worldPos);
+    int updateHoverHex(sf::Vector2f worldPos) const;
 
     /**
      * @brief Convert world position to hex grid index (accurate algorithm)
