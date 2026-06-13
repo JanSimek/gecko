@@ -33,73 +33,78 @@ SelectionResult SelectionManager::selectAtPosition(sf::Vector2f worldPos, Select
     }
 }
 
-SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) {
-    clearSelection();
+std::vector<SelectedItem> SelectionManager::collectItemsInArea(const sf::FloatRect& area, SelectionMode mode, int elevation) const {
+    std::vector<SelectedItem> items;
 
     switch (mode) {
-        case SelectionMode::FLOOR_TILES: {
-            auto tiles = getTilesInArea(area, false, currentElevation);
-            std::ranges::for_each(tiles, [this](int tileIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::FLOOR_TILE, tileIndex });
-            });
-            break;
-        }
-
-        case SelectionMode::ROOF_TILES: {
-            auto tiles = getTilesInArea(area, true, currentElevation);
-            std::ranges::for_each(tiles, [this](int tileIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
-            });
-            break;
-        }
-
-        case SelectionMode::ROOF_TILES_ALL: {
-            auto tiles = getTilesInAreaIncludingEmpty(area, true, currentElevation);
-            std::ranges::for_each(tiles, [this](int tileIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
-            });
-            break;
-        }
-
-        case SelectionMode::OBJECTS: {
-            auto objects = getObjectsInArea(area, currentElevation);
-            for (auto& object : objects) {
-                SelectedItem item{ SelectionType::OBJECT, object };
-                addItemToSelection(item);
+        case SelectionMode::FLOOR_TILES:
+            for (int tileIndex : getTilesInArea(area, false, elevation)) {
+                items.push_back(SelectedItem{ SelectionType::FLOOR_TILE, tileIndex });
             }
             break;
-        }
 
-        case SelectionMode::ALL: {
-            auto objects = getObjectsInArea(area, currentElevation);
-            std::ranges::for_each(objects, [this](auto& object) {
-                addItemToSelection(SelectedItem{ SelectionType::OBJECT, object });
-            });
-
-            auto floorTiles = getTilesInArea(area, false, currentElevation);
-            std::ranges::for_each(floorTiles, [this](int tileIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::FLOOR_TILE, tileIndex });
-            });
-
-            auto roofTiles = getTilesInArea(area, true, currentElevation);
-            std::ranges::for_each(roofTiles, [this](int tileIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
-            });
+        case SelectionMode::ROOF_TILES:
+            for (int tileIndex : getTilesInArea(area, true, elevation)) {
+                items.push_back(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
+            }
             break;
-        }
 
-        case SelectionMode::HEXES: {
-            auto hexIndices = getHexesInArea(area);
-            std::ranges::for_each(hexIndices, [this](int hexIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::HEX, hexIndex });
-            });
+        case SelectionMode::ROOF_TILES_ALL:
+            for (int tileIndex : getTilesInAreaIncludingEmpty(area, true, elevation)) {
+                items.push_back(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
+            }
             break;
-        }
+
+        case SelectionMode::OBJECTS:
+            for (auto& object : getObjectsInArea(area, elevation)) {
+                items.push_back(SelectedItem{ SelectionType::OBJECT, object });
+            }
+            break;
+
+        case SelectionMode::ALL:
+            for (auto& object : getObjectsInArea(area, elevation)) {
+                items.push_back(SelectedItem{ SelectionType::OBJECT, object });
+            }
+            for (int tileIndex : getTilesInArea(area, false, elevation)) {
+                items.push_back(SelectedItem{ SelectionType::FLOOR_TILE, tileIndex });
+            }
+            for (int tileIndex : getTilesInArea(area, true, elevation)) {
+                items.push_back(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
+            }
+            break;
+
+        case SelectionMode::HEXES:
+            for (int hexIndex : getHexesInArea(area)) {
+                items.push_back(SelectedItem{ SelectionType::HEX, hexIndex });
+            }
+            break;
 
         default:
-            return SelectionResult::createError("Invalid selection mode");
+            break;
     }
 
+    return items;
+}
+
+SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) {
+    clearSelection();
+    for (const auto& item : collectItemsInArea(area, mode, currentElevation)) {
+        addItemToSelection(item);
+    }
+    _state.mode = mode;
+    notifySelectionChanged();
+    return SelectionResult::createSuccess("");
+}
+
+SelectionResult SelectionManager::toggleArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) {
+    // Ctrl+drag: flip each covered item — drop selected ones, add unselected ones.
+    for (const auto& item : collectItemsInArea(area, mode, currentElevation)) {
+        if (isItemSelected(item)) {
+            removeItemFromSelection(item);
+        } else {
+            addItemToSelection(item);
+        }
+    }
     _state.mode = mode;
     notifySelectionChanged();
     return SelectionResult::createSuccess("");

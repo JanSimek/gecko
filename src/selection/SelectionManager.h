@@ -48,6 +48,8 @@ public:
     // Selection operations
     SelectionResult selectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
     SelectionResult selectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);
+    // Toggles every item in the area: selected ones are removed, unselected ones added (Ctrl+drag).
+    SelectionResult toggleArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);
     SelectionResult addToSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
     SelectionResult toggleSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
 
@@ -113,6 +115,9 @@ private:
 
     // Cycling logic for ALL mode (current behavior)
     SelectionResult cycleThroughItemsAtPosition(sf::Vector2f worldPos, int elevation);
+
+    // Collects the items a drag-area covers for the given mode (shared by selectArea/toggleArea).
+    std::vector<SelectedItem> collectItemsInArea(const sf::FloatRect& area, SelectionMode mode, int elevation) const;
 
     // Selection helpers
     void addItemToSelection(const SelectedItem& item);

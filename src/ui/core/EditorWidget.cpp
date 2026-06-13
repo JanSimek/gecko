@@ -622,7 +622,7 @@ void EditorWidget::setupInputCallbacks() {
         updateDragSelectionPreview(startPos, currentPos);
     };
 
-    callbacks.onDragSelection = [this](sf::Vector2f startPos, sf::Vector2f endPos) {
+    callbacks.onDragSelection = [this](sf::Vector2f startPos, sf::Vector2f endPos, InputHandler::SelectionModifier modifier) {
         float left = std::min(startPos.x, endPos.x);
         float top = std::min(startPos.y, endPos.y);
         float width = std::abs(endPos.x - startPos.x);
@@ -632,6 +632,9 @@ void EditorWidget::setupInputCallbacks() {
         if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
             auto borderHexes = calculateRectangleBorderHexes(selectionArea);
             createScrollBlockersFromHexes(borderHexes);
+        } else if (modifier == InputHandler::SelectionModifier::TOGGLE) {
+            // Ctrl+drag removes the covered already-selected items (and adds unselected ones).
+            _selectionManager->toggleArea(selectionArea, _currentSelectionMode, _currentElevation);
         } else {
             auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
             if (result.success) {

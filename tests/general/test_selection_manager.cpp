@@ -256,6 +256,32 @@ TEST_CASE("ALL-mode click cycles the stack then deselects", "[selection_manager_
     REQUIRE_FALSE(mgr.hasSelection());
 }
 
+// Ctrl+drag toggles the covered items: an area over already-selected items deselects them.
+// Uses HEXES mode (the hex grid is pure geometry — no graphics context needed).
+TEST_CASE("toggleArea flips the covered items (Ctrl+drag)", "[selection_manager_real][regression]") {
+    MockEditorWidget mockWidget;
+    geck::selection::SelectionManager mgr(mockWidget);
+
+    // Build a drag rectangle around a known hex so the covered set is stable and non-empty.
+    auto hex = mockWidget.hexGrid.getHexByPosition(20000);
+    REQUIRE(hex.has_value());
+    const sf::FloatRect area({ static_cast<float>(hex->get().x()) - 40.0f, static_cast<float>(hex->get().y()) - 40.0f },
+        { 80.0f, 80.0f });
+
+    SECTION("toggle on an empty selection adds the covered items") {
+        mgr.toggleArea(area, SelectionMode::HEXES, 0);
+        CHECK_FALSE(mgr.getCurrentSelection().getHexIndices().empty());
+    }
+
+    SECTION("toggle over an already-selected area removes those items") {
+        mgr.selectArea(area, SelectionMode::HEXES, 0);
+        REQUIRE_FALSE(mgr.getCurrentSelection().getHexIndices().empty());
+
+        mgr.toggleArea(area, SelectionMode::HEXES, 0);
+        CHECK(mgr.getCurrentSelection().getHexIndices().empty());
+    }
+}
+
 //==============================================================================
 // SECTION: Elevation regression for finishAreaSelection()
 //
