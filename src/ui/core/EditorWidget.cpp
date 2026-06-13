@@ -2,6 +2,7 @@
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/input/InputHandler.h"
 #include "ui/rendering/MapSpriteLoader.h"
+#include "ui/rendering/ObjectVisibility.h"
 #include "ui/rendering/RenderingEngine.h"
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
@@ -473,9 +474,13 @@ void EditorWidget::loadSprites() {
 std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vector2f worldPos) {
     std::vector<std::shared_ptr<Object>> objectsAtPos;
 
+    // Only objects that are actually drawn are selectable: a click must never land on a
+    // hidden object (e.g. a scroll blocker on a hidden layer) and produce an invisible
+    // selection. isObjectVisible is the same rule RenderingEngine::renderObjects applies.
     std::ranges::copy_if(_objects, std::back_inserter(objectsAtPos),
         [this, worldPos](const auto& object) {
-            return isPointInSpritePixel(worldPos, object->getSprite());
+            return isObjectVisible(object->getMapObject(), _visibility)
+                && isPointInSpritePixel(worldPos, object->getSprite());
         });
 
     // Objects are drawn in _objects order (see RenderingEngine::renderObjects), so the object

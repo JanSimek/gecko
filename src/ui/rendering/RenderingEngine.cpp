@@ -1,6 +1,7 @@
 #include "RenderingEngine.h"
 #include "editor/Object.h"
 #include "editor/Hex.h"
+#include "ui/rendering/ObjectVisibility.h"
 #include "ui/viewport/ViewportController.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
@@ -104,11 +105,9 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
     }
 
     for (const auto& object : *renderData.objects) {
-        if (!visibility.showWalls && object->getMapObject().isWallObject()) {
-            continue;
-        }
-
-        if (!visibility.showScrollBlockers && object->getMapObject().isScrollBlocker()) {
+        // Shared with picking (EditorWidget::getObjectsAtPosition) via isObjectVisible so a
+        // hidden object is never drawn nor selectable.
+        if (!isObjectVisible(object->getMapObject(), visibility)) {
             continue;
         }
 
