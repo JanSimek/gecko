@@ -51,6 +51,9 @@ public:
     // Ctrl+drag: removes the covered items that are already selected; never adds. Hidden
     // roof tiles are kept (a layer you cannot see must not be deselected).
     SelectionResult deselectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);
+    // The covered items a Ctrl+drag would remove (selected and on a visible layer). Lets the
+    // editor preview the deselection live without mutating the selection.
+    std::vector<SelectedItem> itemsToDeselectInArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) const;
     SelectionResult addToSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
     // Ctrl+click: removes the topmost visible selected layer under the cursor; never adds.
     SelectionResult deselectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);

@@ -269,8 +269,18 @@ private:
     selection::SelectionResult handleRangeSelection(sf::Vector2f worldPos);
 
     void clearAllVisualSelections();
+    // Paints the selection highlight for the given state (does not clear first).
+    void applySelectionVisuals(const selection::SelectionState& selection);
+    void applyRoofTileSelectionVisual(int tileIndex);
+    // Repaints the live selection highlight from the manager's current selection.
+    void refreshSelectionVisuals();
     void clearDragPreview();
-    void updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
+    // isDeselect = true for a Ctrl+drag: the covered selected items un-highlight live
+    // (preview of removal) instead of the area being tinted as an add preview.
+    void updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos, bool isDeselect);
+    // Add-preview helpers: tint the covered tiles/objects and record them for clearDragPreview.
+    void previewAreaTiles(const sf::FloatRect& area, bool roof, bool includeEmpty);
+    void previewAreaObjects(const sf::FloatRect& area);
     void updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
 

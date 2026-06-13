@@ -43,7 +43,7 @@ public:
         // Mouse events
         std::function<void(sf::Vector2f worldPos, SelectionModifier modifier)> onSelectionClick;
         std::function<void(sf::Vector2f startPos, sf::Vector2f endPos, SelectionModifier modifier)> onDragSelection;
-        std::function<void(sf::Vector2f startPos, sf::Vector2f currentPos)> onDragSelectionPreview;
+        std::function<void(sf::Vector2f startPos, sf::Vector2f currentPos, SelectionModifier modifier)> onDragSelectionPreview;
         std::function<void(sf::Vector2f worldPos)> onTilePlacement;
         std::function<void(sf::Vector2f startPos, sf::Vector2f endPos, bool isRoof)> onTileAreaFill;
         std::function<void(sf::Vector2f delta)> onPan;

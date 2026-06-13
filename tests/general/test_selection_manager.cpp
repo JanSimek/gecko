@@ -282,6 +282,19 @@ TEST_CASE("deselectArea removes only selected covered items (Ctrl+drag)", "[sele
         mgr.deselectArea(area, SelectionMode::HEXES, 0);
         CHECK(mgr.getCurrentSelection().getHexIndices().empty());
     }
+
+    SECTION("itemsToDeselectInArea previews exactly what a deselect would remove") {
+        // Drives the live Ctrl+drag preview: it must report the covered selected items
+        // (and nothing when the area covers no selection) without mutating state.
+        CHECK(mgr.itemsToDeselectInArea(area, SelectionMode::HEXES, 0).empty());
+
+        mgr.selectArea(area, SelectionMode::HEXES, 0);
+        const auto selectedCount = mgr.getCurrentSelection().getHexIndices().size();
+        const auto toRemove = mgr.itemsToDeselectInArea(area, SelectionMode::HEXES, 0);
+        CHECK(toRemove.size() == selectedCount);
+        // Querying the preview must not change the selection.
+        CHECK(mgr.getCurrentSelection().getHexIndices().size() == selectedCount);
+    }
 }
 
 // REGRESSION: a Ctrl+click on a selected tile must DESELECT it, and a Ctrl+click outside the

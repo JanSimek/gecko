@@ -236,7 +236,7 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
                 if (_markExitsMode && _callbacks.onMarkExitsPreview) {
                     _callbacks.onMarkExitsPreview(_dragStartWorldPos, worldPos);
                 } else if (_callbacks.onDragSelectionPreview) {
-                    _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos);
+                    _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos, _dragSelectionModifier);
                 }
             }
             break;
@@ -250,7 +250,7 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
                 }
             }
             if (_isDragging && _callbacks.onDragSelectionPreview) {
-                _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos);
+                _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos, SelectionModifier::NONE);
             }
             break;
 
