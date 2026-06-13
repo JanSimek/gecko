@@ -159,8 +159,12 @@ inline std::optional<int> screenToTileIndex(float worldX, float worldY, bool isR
             if (row < 0 || row >= MAP_HEIGHT || col < 0 || col >= MAP_WIDTH) {
                 continue;
             }
-            const float cx = static_cast<float>(MAP_WIDTH - 1 - col) * X + L * static_cast<float>(row) + halfW;
-            const float cy = S * static_cast<float>(row) + T * static_cast<float>(col) + T + halfH;
+            // Use the authoritative forward projection for the tile centre (in floor
+            // space — py already carries the roof offset) rather than re-deriving it here.
+            const auto topLeft = coordinatesToScreenPosition(
+                TileCoordinates(static_cast<unsigned int>(row), static_cast<unsigned int>(col)));
+            const float cx = static_cast<float>(topLeft.x) + halfW;
+            const float cy = static_cast<float>(topLeft.y) + halfH;
             const float dx = worldX - cx;
             const float dy = py - cy;
             const float distSq = dx * dx + dy * dy;
