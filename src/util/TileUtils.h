@@ -246,15 +246,15 @@ namespace TileColors {
         return sf::Color(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B, Colors::ERROR_OUTLINE_ALPHA);
     }
 
-    // Selection rectangle colors
+    // Selection rectangle colors (shared selection accent)
     inline sf::Color selectionFill() {
-        return sf::Color(Colors::SELECTION_RECT_R, Colors::SELECTION_RECT_G,
-            Colors::SELECTION_RECT_B, Colors::SELECTION_RECT_FILL_ALPHA);
+        return sf::Color(Colors::SELECTION_R, Colors::SELECTION_G,
+            Colors::SELECTION_B, Colors::SELECTION_RECT_FILL_ALPHA);
     }
 
     inline sf::Color selectionOutline() {
-        return sf::Color(Colors::SELECTION_RECT_R, Colors::SELECTION_RECT_G,
-            Colors::SELECTION_RECT_B, Colors::SELECTION_RECT_OUTLINE_ALPHA);
+        return sf::Color(Colors::SELECTION_R, Colors::SELECTION_G,
+            Colors::SELECTION_B, Colors::SELECTION_RECT_OUTLINE_ALPHA);
     }
 
     // Standard colors

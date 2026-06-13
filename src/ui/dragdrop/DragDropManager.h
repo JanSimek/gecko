@@ -1,5 +1,6 @@
 #pragma once
 
+#include <SFML/Graphics/Color.hpp>
 #include <SFML/Graphics/View.hpp>
 #include <SFML/System/Vector2.hpp>
 #include <functional>
@@ -68,6 +69,7 @@ private:
     bool _isDraggingObjects = false;
     std::vector<std::shared_ptr<Object>> _draggedObjects;
     std::vector<sf::Vector2f> _objectDragStartPositions;
+    std::vector<sf::Color> _objectDragStartColors; // pre-drag tint, restored after the ghost preview
     sf::Vector2f _dragStartWorldPos;
     sf::Vector2f _objectDragOffset;
 

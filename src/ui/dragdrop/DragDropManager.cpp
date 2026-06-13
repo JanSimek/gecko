@@ -56,6 +56,7 @@ bool DragDropManager::startObjectDrag(sf::Vector2f worldPos) {
     const auto& selection = _context.getSelectionManager()->getCurrentSelection();
     _draggedObjects.clear();
     _objectDragStartPositions.clear();
+    _objectDragStartColors.clear();
 
     for (const auto& item : selection.items) {
         if (item.type == selection::SelectionType::OBJECT) {
@@ -63,15 +64,21 @@ bool DragDropManager::startObjectDrag(sf::Vector2f worldPos) {
             if (object) {
                 _draggedObjects.push_back(object);
 
-                // Store original position for potential cancel
-                sf::Vector2f originalPos = object->getSprite().getPosition();
-                _objectDragStartPositions.push_back(originalPos);
+                // Store original position/color so the drag can be cancelled or finished cleanly.
+                _objectDragStartPositions.push_back(object->getSprite().getPosition());
+                _objectDragStartColors.push_back(object->getSprite().getColor());
             }
         }
     }
 
     if (_draggedObjects.empty()) {
         return false;
+    }
+
+    // Show the dragged objects as a translucent ghost (same alpha as the palette drag preview),
+    // so it's clear they sit at a preview position until dropped.
+    for (const auto& object : _draggedObjects) {
+        object->getSprite().setColor(sf::Color(255, 255, 255, ui::constants::sfml::DRAG_PREVIEW_ALPHA));
     }
 
     _isDraggingObjects = true;
@@ -166,9 +173,15 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
         _context.registerObjectMove(_draggedObjects, movedObjects);
     }
 
+    // End the ghost preview: restore each object's pre-drag (selection) tint.
+    for (size_t i = 0; i < _draggedObjects.size(); ++i) {
+        _draggedObjects[i]->getSprite().setColor(_objectDragStartColors[i]);
+    }
+
     _isDraggingObjects = false;
     _draggedObjects.clear();
     _objectDragStartPositions.clear();
+    _objectDragStartColors.clear();
     _objectDragOffset = sf::Vector2f(0, 0);
 
     _context.getCurrentHoverHex() = -1;
@@ -181,14 +194,16 @@ void DragDropManager::cancelObjectDrag() {
         return;
     }
 
-    // Restore original hex positions
+    // Restore original hex positions and the pre-drag (selection) tint.
     for (size_t i = 0; i < _draggedObjects.size(); ++i) {
         _draggedObjects[i]->getSprite().setPosition(_objectDragStartPositions[i]);
+        _draggedObjects[i]->getSprite().setColor(_objectDragStartColors[i]);
     }
 
     _isDraggingObjects = false;
     _draggedObjects.clear();
     _objectDragStartPositions.clear();
+    _objectDragStartColors.clear();
     _objectDragOffset = sf::Vector2f(0, 0);
 
     _context.getCurrentHoverHex() = -1;

@@ -48,10 +48,14 @@ constexpr float AREA_SELECTION_Y_TOTAL_PADDING = 36.0f; ///< Total Y padding (to
 
 // Color constants (RGBA values)
 namespace Colors {
-    // Selection rectangle colors
-    constexpr int SELECTION_RECT_R = 100;
-    constexpr int SELECTION_RECT_G = 150;
-    constexpr int SELECTION_RECT_B = 255;
+    // Unified selection accent — the theme PRIMARY (#4A90E2). Every selection visual (objects,
+    // floor/roof tiles, hexes, the marquee) uses this one accent; the ERROR_* red below is
+    // reserved strictly for errors/invalid states.
+    constexpr int SELECTION_R = 74;
+    constexpr int SELECTION_G = 144;
+    constexpr int SELECTION_B = 226;
+
+    // Selection rectangle (marquee) alphas (RGB comes from the accent above).
     constexpr int SELECTION_RECT_FILL_ALPHA = 50;
     constexpr int SELECTION_RECT_OUTLINE_ALPHA = 200;
 
@@ -69,8 +73,8 @@ namespace Colors {
     constexpr int ERROR_ALPHA = 150;
     constexpr int ERROR_OUTLINE_ALPHA = 255;
 
-    // Roof tile selection colors (higher visibility)
-    constexpr int ROOF_SELECTION_ALPHA = 220;
+    // Tile selection overlay alpha (floor + roof) — higher visibility.
+    constexpr int SELECTION_TILE_ALPHA = 220;
 
     // Standard alpha values
     constexpr int FULLY_OPAQUE = 255;
@@ -186,9 +190,7 @@ namespace PlayerColors {
 }
 
 namespace SelectionColors {
-    constexpr int HEX_R = 100;     ///< Hex selection red
-    constexpr int HEX_G = 150;     ///< Hex selection green
-    constexpr int HEX_B = 255;     ///< Hex selection blue
+    // Hex selection uses the shared Colors::SELECTION_* accent; only the alpha is hex-specific.
     constexpr int HEX_ALPHA = 200; ///< Hex selection alpha
 
     constexpr int SCROLL_BLOCKER_R = 100;             ///< Scroll blocker rectangle red

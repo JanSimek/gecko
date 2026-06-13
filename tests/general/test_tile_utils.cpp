@@ -223,15 +223,15 @@ TEST_CASE("Color utilities", "[tile_utils]") {
 
     SECTION("Selection colors") {
         auto selection_fill = TileColors::selectionFill();
-        REQUIRE(selection_fill.r == Colors::SELECTION_RECT_R);
-        REQUIRE(selection_fill.g == Colors::SELECTION_RECT_G);
-        REQUIRE(selection_fill.b == Colors::SELECTION_RECT_B);
+        REQUIRE(selection_fill.r == Colors::SELECTION_R);
+        REQUIRE(selection_fill.g == Colors::SELECTION_G);
+        REQUIRE(selection_fill.b == Colors::SELECTION_B);
         REQUIRE(selection_fill.a == Colors::SELECTION_RECT_FILL_ALPHA);
 
         auto selection_outline = TileColors::selectionOutline();
-        REQUIRE(selection_outline.r == Colors::SELECTION_RECT_R);
-        REQUIRE(selection_outline.g == Colors::SELECTION_RECT_G);
-        REQUIRE(selection_outline.b == Colors::SELECTION_RECT_B);
+        REQUIRE(selection_outline.r == Colors::SELECTION_R);
+        REQUIRE(selection_outline.g == Colors::SELECTION_G);
+        REQUIRE(selection_outline.b == Colors::SELECTION_B);
         REQUIRE(selection_outline.a == Colors::SELECTION_RECT_OUTLINE_ALPHA);
     }
 
