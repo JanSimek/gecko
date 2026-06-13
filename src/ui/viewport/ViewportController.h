@@ -65,14 +65,6 @@ public:
     int worldPosToHexIndex(sf::Vector2f worldPos) const;
 
     /**
-     * @brief Convert world position to tile index (pixel-perfect algorithm)
-     * @param worldPos World position to convert
-     * @param isRoof Whether this is for roof tile selection
-     * @return Tile index (0-9999), -1 if invalid
-     */
-    int worldPosToTileIndex(sf::Vector2f worldPos, bool isRoof = false) const;
-
-    /**
      * @brief Whether a hex at the given world coordinates is within `view`.
      *
      * The viewport owns this cull/projection math; the renderers delegate here so

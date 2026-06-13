@@ -1287,45 +1287,31 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
         return std::nullopt;
     }
 
-    // FIXME: this is inaccurate and we should not use hex-to-tile conversion in the future.
-    // Hex-based selection keeps tile selection consistent with the hex highlights users see.
-
-    // The roof offset + hex->tile lookup lives in ViewportController::worldPosToTileIndex.
-    const int tileIndex = _viewportController->worldPosToTileIndex(worldPos, isRoof);
-    if (tileIndex < 0) {
+    // Resolve by nearest tile centre (the diamond actually under the cursor) instead of
+    // snapping the click to a hex and converting hex->tile, which is imprecise at boundaries.
+    const auto tileIndex = screenToTileIndex(worldPos.x, worldPos.y, isRoof);
+    if (!tileIndex) {
         return std::nullopt;
     }
 
     // Editor-specific guard: a roof selection only counts on a non-empty roof tile.
-    if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(tileIndex).getRoof() == Map::EMPTY_TILE) {
+    if (isRoof && _map->getMapFile().tiles.at(_currentElevation).at(*tileIndex).getRoof() == Map::EMPTY_TILE) {
         spdlog::debug("EditorWidget::getTileAtPosition: Empty roof tile at index {} [worldPos: ({:.1f}, {:.1f})]",
-            tileIndex, worldPos.x, worldPos.y);
-        return std::nullopt;
-    }
-
-    return tileIndex;
-}
-
-std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
-    // Includes empty roof tiles in the selection, using the F2 Mapper algorithm
-    if (!_map || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
-        return std::nullopt;
-    }
-
-    sf::Vector2f adjustedWorldPos = worldPos;
-    adjustedWorldPos.y += ROOF_OFFSET; // Roof tiles are visually offset upward
-
-    int hexIndex = _viewportController->worldPosToHexIndex(adjustedWorldPos);
-    if (hexIndex < 0) {
-        return std::nullopt;
-    }
-
-    auto tileIndex = _hexgrid.tileIndexForPosition(hexIndex);
-    if (!tileIndex.has_value() || *tileIndex < 0 || *tileIndex >= TILES_PER_ELEVATION) {
+            *tileIndex, worldPos.x, worldPos.y);
         return std::nullopt;
     }
 
     return *tileIndex;
+}
+
+std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
+    // Includes empty roof tiles in the selection. Resolves by nearest roof-tile centre
+    // (screenToTileIndex applies the roof offset) for accuracy at tile boundaries.
+    if (!_map || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
+        return std::nullopt;
+    }
+
+    return screenToTileIndex(worldPos.x, worldPos.y, true);
 }
 
 selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f worldPos) {

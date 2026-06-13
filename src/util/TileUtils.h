@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+#include <optional>
 #include <tuple>
 #include <SFML/Graphics.hpp>
 #include "Constants.h"
@@ -108,6 +110,71 @@ inline ScreenPosition coordinatesToScreenPosition(const TileCoordinates& coords,
  */
 inline ScreenPosition indexToScreenPosition(int tileIndex, bool isRoof = false) {
     return coordinatesToScreenPosition(indexToCoordinates(tileIndex), isRoof);
+}
+
+/**
+ * @brief Resolve a world/screen point to the tile under it (inverse of indexToScreenPosition).
+ *
+ * Tile centres form a sheared lattice, so the click is resolved by solving the projection's
+ * linear system for a fractional (row, col) estimate, then choosing the Euclidean-nearest tile
+ * centre in the surrounding 3x3 neighbourhood — i.e. the diamond the point actually falls in.
+ * Unlike snapping the click to a hex and converting hex->tile, this stays accurate right at
+ * tile boundaries.
+ *
+ * @param worldX,worldY Click position in the same world space as the tile sprites.
+ * @param isRoof Resolve against the roof layer (applies the roof offset).
+ * @return Tile index in [0, TILES_PER_ELEVATION), or std::nullopt if the point is off the grid.
+ */
+inline std::optional<int> screenToTileIndex(float worldX, float worldY, bool isRoof = false) {
+    constexpr float X = static_cast<float>(TILE_X_OFFSET);       // column x-step
+    constexpr float L = static_cast<float>(TILE_Y_OFFSET_LARGE); // row x-step
+    constexpr float S = static_cast<float>(TILE_Y_OFFSET_SMALL); // row y-step
+    constexpr float T = static_cast<float>(TILE_Y_OFFSET_TINY);  // column y-step
+    constexpr float halfW = TILE_WIDTH / 2.0f;
+    constexpr float halfH = TILE_HEIGHT / 2.0f;
+
+    // Roof tiles are drawn ROOF_OFFSET higher; map the click back into floor space.
+    const float py = worldY + (isRoof ? static_cast<float>(ROOF_OFFSET) : 0.0f);
+
+    // Tile centre: cx = (W-1-col)*X + L*row + halfW ;  cy = S*row + T*col + T + halfH.
+    // Rearranged:  P = L*row - X*col ;  Q = S*row + T*col. Solve the 2x2 system for (row, col).
+    const float P = (worldX - halfW) - static_cast<float>(MAP_WIDTH - 1) * X;
+    const float Q = py - T - halfH;
+    constexpr float det = L * T + X * S;
+    const float rowF = (T * P + X * Q) / det;
+    const float colF = (L * Q - S * P) / det;
+
+    // Reject points clearly off the grid (allow ~half a tile of margin).
+    if (rowF < -1.0f || rowF > MAP_HEIGHT || colF < -1.0f || colF > MAP_WIDTH) {
+        return std::nullopt;
+    }
+
+    const int rowEstimate = static_cast<int>(std::lround(rowF));
+    const int colEstimate = static_cast<int>(std::lround(colF));
+
+    int best = -1;
+    float bestDistSq = 0.0f;
+    for (int row = rowEstimate - 1; row <= rowEstimate + 1; ++row) {
+        for (int col = colEstimate - 1; col <= colEstimate + 1; ++col) {
+            if (row < 0 || row >= MAP_HEIGHT || col < 0 || col >= MAP_WIDTH) {
+                continue;
+            }
+            const float cx = static_cast<float>(MAP_WIDTH - 1 - col) * X + L * static_cast<float>(row) + halfW;
+            const float cy = S * static_cast<float>(row) + T * static_cast<float>(col) + T + halfH;
+            const float dx = worldX - cx;
+            const float dy = py - cy;
+            const float distSq = dx * dx + dy * dy;
+            if (best < 0 || distSq < bestDistSq) {
+                best = row * MAP_WIDTH + col;
+                bestDistSq = distSq;
+            }
+        }
+    }
+
+    if (best < 0) {
+        return std::nullopt;
+    }
+    return best;
 }
 
 /**
