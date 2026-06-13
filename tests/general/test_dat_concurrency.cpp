@@ -45,30 +45,25 @@ TEST_CASE("DAT2 archive serves concurrent reads without corruption", "[dat][vfs]
     const uint64_t expectedSum = byteSum(*expected);
     REQUIRE(expectedSize == 307274);
 
-    constexpr int kThreads = 8;
-    constexpr int kReadsPerThread = 25;
-    std::atomic<int> mismatches{ 0 };
+    constexpr int kThreads = 16;
+    constexpr int kReadsPerThread = 60;
+    std::atomic mismatches{ 0 };
 
-    std::vector<std::thread> workers;
-    workers.reserve(kThreads);
-    for (int t = 0; t < kThreads; ++t) {
-        workers.emplace_back([&] {
-            for (int i = 0; i < kReadsPerThread; ++i) {
-                try {
+    {
+        std::vector<std::jthread> workers; // join on scope exit, before the check below
+        workers.reserve(kThreads);
+        for (int t = 0; t < kThreads; ++t) {
+            workers.emplace_back([&dfs, &path, expectedSize, expectedSum, &mismatches] {
+                for (int i = 0; i < kReadsPerThread; ++i) {
+                    // readRawBytes catches read failures and returns nullopt, so a corrupted
+                    // concurrent read surfaces as missing/short/wrong data rather than a throw.
                     const auto data = dfs.readRawBytes(path);
                     if (!data || data->size() != expectedSize || byteSum(*data) != expectedSum) {
-                        mismatches.fetch_add(1, std::memory_order_relaxed);
+                        ++mismatches;
                     }
-                } catch (...) {
-                    // A corrupted concurrent read throws; count it rather than letting it
-                    // escape the thread and abort the process (which is the bug being fixed).
-                    mismatches.fetch_add(1, std::memory_order_relaxed);
                 }
-            }
-        });
-    }
-    for (auto& worker : workers) {
-        worker.join();
+            });
+        }
     }
 
     CHECK(mismatches.load() == 0);

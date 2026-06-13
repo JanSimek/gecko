@@ -197,9 +197,10 @@ private:
     std::string m_DatPath;
     std::shared_ptr<geck::Dat> m_DatArchive;
     std::shared_ptr<geck::DatReader> m_datReader;
-    // Shared with every Dat2File this archive hands out; serialises seek+read on m_datReader
-    // so background map loading and UI-thread thumbnail rendering don't corrupt each other.
-    std::shared_ptr<std::mutex> m_readerMutex{ std::make_shared<std::mutex>() };
+    // Passed by reference to every Dat2File this archive hands out; serialises seek+read on
+    // m_datReader so background map loading and UI-thread thumbnail rendering don't corrupt
+    // each other. The filesystem outlives the file handles it creates.
+    std::mutex m_readerMutex;
     bool m_IsInitialized = false;
     std::unordered_map<std::string, FileEntry> m_Files;
     mutable std::mutex m_Mutex;

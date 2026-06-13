@@ -1,6 +1,7 @@
 #include "DataFileSystem.h"
 
 #include "util/GameDataPathResolver.h"
+#include "reader/ReaderExceptions.h"
 #include "resource/PathUtils.h"
 #include "resource/ResourcePaths.h"
 #include "vfs/Dat2FileSystem.hpp"
@@ -96,7 +97,7 @@ std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::file
         }
 
         return data;
-    } catch (const std::exception& e) {
+    } catch (const FileReaderException& e) {
         // A corrupt/truncated archive entry (e.g. a failed zlib inflate) must not crash the
         // app: surface it as "no data" so callers (thumbnail rendering, map loading) can
         // degrade gracefully instead of letting the throw reach an abort().

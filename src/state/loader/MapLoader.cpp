@@ -6,6 +6,7 @@
 #include "util/Constants.h"
 #include "resource/ResourcePaths.h"
 
+#include "reader/ReaderExceptions.h"
 #include "reader/ReaderFactory.h"
 #include "reader/map/MapReader.h"
 
@@ -57,7 +58,7 @@ void MapLoader::load() {
             spdlog::info("MapLoader: Attempting VFS loading first");
             loadFromVFS();
         }
-    } catch (const std::exception& e) {
+    } catch (const FileReaderException& e) {
         spdlog::error("MapLoader: failed to load '{}': {}", _mapPath.string(), e.what());
         _errorMessage = std::string("Failed to load map: ") + e.what();
         _hasError = true;

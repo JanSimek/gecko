@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <memory>
+#include <mutex>
 #include <span>
 #include <string>
 #include <vector>
@@ -26,7 +28,7 @@ public:
     Dat2File(const vfspp::FileInfo& fileInfo,
         const std::shared_ptr<geck::DatEntry>& datEntry,
         const std::shared_ptr<geck::DatReader>& datReader,
-        const std::shared_ptr<std::mutex>& readerMutex)
+        std::mutex& readerMutex)
         : m_FileInfo(fileInfo)
         , m_datEntry(datEntry)
         , m_datReader(datReader)
@@ -121,7 +123,9 @@ private:
         // seek on another thread would corrupt this read and fail the inflate below.
         std::vector<uint8_t> packed;
         {
-            std::scoped_lock readerLock(*m_readerMutex);
+            // Seek + read must be atomic on the shared reader, so the whole critical section
+            // (including sizing the packed buffer for the read) is held under the lock.
+            std::scoped_lock readerLock(m_readerMutex);
             m_datReader->setPosition(m_datEntry->getOffset());
             if (m_datEntry->getCompressed()) {
                 packed.resize(m_datEntry->getPackedSize());
@@ -167,12 +171,13 @@ private:
             return 0;
         }
 
+        using enum IFile::Origin;
         const uint64_t size = m_Data.size();
-        if (origin == IFile::Origin::Begin) {
+        if (origin == Begin) {
             m_SeekPos = offset;
-        } else if (origin == IFile::Origin::End) {
+        } else if (origin == End) {
             m_SeekPos = (offset <= size) ? size - offset : 0;
-        } else if (origin == IFile::Origin::Set) {
+        } else if (origin == Set) {
             m_SeekPos += offset;
         }
         m_SeekPos = std::min(m_SeekPos, size);
@@ -201,7 +206,7 @@ private:
     std::vector<uint8_t> m_Data;
     std::shared_ptr<geck::DatEntry> m_datEntry;
     std::shared_ptr<geck::DatReader> m_datReader;
-    std::shared_ptr<std::mutex> m_readerMutex; // shared across all entries; guards m_datReader I/O
+    std::mutex& m_readerMutex; // owned by the filesystem; guards the shared m_datReader I/O
     bool m_IsOpened = false;
     uint64_t m_SeekPos = 0;
     mutable std::mutex m_Mutex;
