@@ -282,6 +282,48 @@ TEST_CASE("toggleArea flips the covered items (Ctrl+drag)", "[selection_manager_
     }
 }
 
+// REGRESSION: a Ctrl+click on a selected tile must DESELECT it. toggleSelection used to
+// apply a fixed roof->object->floor priority and act on whichever layer it found first,
+// so in ALL mode with a roof above a selected floor it ADDED the roof instead of removing
+// the floor — to the user, "Ctrl+click on a selected tile does nothing". It now removes
+// whichever layer under the cursor is actually selected. The mock fabricates a roof+floor
+// pair at every position, so the ALL-mode floor case below reproduces "floor selected with
+// a roof above it" exactly.
+TEST_CASE("Ctrl+click toggles the selected layer off (single click)", "[selection_manager_real][regression]") {
+    MockEditorWidget mockWidget;
+    geck::selection::SelectionManager mgr(mockWidget);
+
+    const sf::Vector2f clickPos{ 32.0f, 24.0f };
+
+    SECTION("FLOOR_TILES: Ctrl+click on the selected tile deselects it") {
+        mgr.selectAtPosition(clickPos, SelectionMode::FLOOR_TILES, 0);
+        REQUIRE(mgr.getCurrentSelection().count() == 1);
+
+        mgr.toggleSelection(clickPos, SelectionMode::FLOOR_TILES, 0);
+        CHECK_FALSE(mgr.hasSelection());
+    }
+
+    SECTION("ALL: Ctrl+click on the selected roof deselects it") {
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0); // selects roof (top of stack)
+        REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().size() == 1);
+
+        mgr.toggleSelection(clickPos, SelectionMode::ALL, 0);
+        CHECK_FALSE(mgr.hasSelection());
+    }
+
+    SECTION("ALL: Ctrl+click deselects a selected floor even with a roof above it") {
+        // Cycle to the floor underneath (1st click roof, 2nd click floor).
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+        REQUIRE(mgr.getCurrentSelection().getFloorTileIndices().size() == 1);
+        REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().empty());
+
+        mgr.toggleSelection(clickPos, SelectionMode::ALL, 0);
+        // Must remove the floor, NOT add the roof on top of it.
+        CHECK_FALSE(mgr.hasSelection());
+    }
+}
+
 //==============================================================================
 // SECTION: Elevation regression for finishAreaSelection()
 //

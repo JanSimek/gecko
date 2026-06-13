@@ -206,80 +206,93 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
     return SelectionResult::createNoChange();
 }
 
-SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
-    std::optional<SelectedItem> itemAtPosition;
+namespace {
+    // Appends a tile candidate when the hit-test found one at the position.
+    void appendTileCandidate(std::vector<SelectedItem>& candidates, std::optional<int> tileIndex, SelectionType type) {
+        if (tileIndex) {
+            candidates.emplace_back(type, tileIndex.value());
+        }
+    }
+} // namespace
+
+void SelectionManager::appendObjectCandidates(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos, int elevation) const {
+    for (auto& object : getObjectsAtPosition(worldPos, elevation)) {
+        candidates.emplace_back(SelectionType::OBJECT, object);
+    }
+}
+
+void SelectionManager::appendHexCandidate(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos) const {
+    auto* viewport = _provider.getViewportController();
+    const auto* hexGrid = _provider.getHexagonGrid();
+    if (viewport && hexGrid) {
+        int hexIndex = viewport->worldPosToHexIndex(worldPos);
+        if (hexGrid->containsPosition(hexIndex)) {
+            candidates.emplace_back(SelectionType::HEX, hexIndex);
+        }
+    }
+}
+
+std::vector<SelectedItem> SelectionManager::collectTogglableAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation) const {
+    std::vector<SelectedItem> candidates;
 
     switch (mode) {
-        case SelectionMode::FLOOR_TILES: {
-            auto tileIndex = getFloorTileAtPosition(worldPos, currentElevation);
-            if (tileIndex) {
-                itemAtPosition = SelectedItem{ SelectionType::FLOOR_TILE, tileIndex.value() };
-            }
+        case SelectionMode::FLOOR_TILES:
+            appendTileCandidate(candidates, getFloorTileAtPosition(worldPos, elevation), SelectionType::FLOOR_TILE);
             break;
-        }
 
-        case SelectionMode::ROOF_TILES: {
-            auto tileIndex = getRoofTileAtPosition(worldPos, currentElevation);
-            if (tileIndex) {
-                itemAtPosition = SelectedItem{ SelectionType::ROOF_TILE, tileIndex.value() };
-            }
+        case SelectionMode::ROOF_TILES:
+            appendTileCandidate(candidates, getRoofTileAtPosition(worldPos, elevation), SelectionType::ROOF_TILE);
             break;
-        }
 
-        case SelectionMode::ROOF_TILES_ALL: {
-            auto tileIndex = getRoofTileAtPositionIncludingEmpty(worldPos, currentElevation);
-            if (tileIndex) {
-                itemAtPosition = SelectedItem{ SelectionType::ROOF_TILE, tileIndex.value() };
-            }
+        case SelectionMode::ROOF_TILES_ALL:
+            appendTileCandidate(candidates, getRoofTileAtPositionIncludingEmpty(worldPos, elevation), SelectionType::ROOF_TILE);
             break;
-        }
 
-        case SelectionMode::OBJECTS: {
-            auto objects = getObjectsAtPosition(worldPos, currentElevation);
-            if (!objects.empty()) {
-                itemAtPosition = SelectedItem{ SelectionType::OBJECT, objects[0] };
-            }
+        case SelectionMode::OBJECTS:
+            appendObjectCandidates(candidates, worldPos, elevation);
             break;
-        }
 
-        case SelectionMode::ALL: {
-            // Priority order: roof -> objects -> floor
-            auto roofTileIndex = getRoofTileAtPosition(worldPos, currentElevation);
-            if (roofTileIndex) {
-                itemAtPosition = SelectedItem{ SelectionType::ROOF_TILE, roofTileIndex.value() };
-            } else {
-                auto objects = getObjectsAtPosition(worldPos, currentElevation);
-                if (!objects.empty()) {
-                    itemAtPosition = SelectedItem{ SelectionType::OBJECT, objects[0] };
-                } else {
-                    auto floorTileIndex = getFloorTileAtPosition(worldPos, currentElevation);
-                    if (floorTileIndex) {
-                        itemAtPosition = SelectedItem{ SelectionType::FLOOR_TILE, floorTileIndex.value() };
-                    }
-                }
-            }
+        case SelectionMode::ALL:
+            // Priority order matches single-click selection: roof -> objects -> floor.
+            appendTileCandidate(candidates, getRoofTileAtPosition(worldPos, elevation), SelectionType::ROOF_TILE);
+            appendObjectCandidates(candidates, worldPos, elevation);
+            appendTileCandidate(candidates, getFloorTileAtPosition(worldPos, elevation), SelectionType::FLOOR_TILE);
             break;
-        }
+
+        case SelectionMode::HEXES:
+            appendHexCandidate(candidates, worldPos);
+            break;
 
         default:
-            return SelectionResult::createError("Invalid selection mode");
+            break;
     }
 
-    if (itemAtPosition) {
-        if (isItemSelected(itemAtPosition.value())) {
-            removeItemFromSelection(itemAtPosition.value());
+    return candidates;
+}
+
+SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
+    const auto candidates = collectTogglableAtPosition(worldPos, mode, currentElevation);
+    if (candidates.empty()) {
+        return SelectionResult::createNoChange();
+    }
+
+    // Ctrl+click toggles. If any layer under the cursor is already selected, remove
+    // it (deselect) rather than blindly acting on the top-priority layer; otherwise
+    // add the top-priority candidate. This keeps Ctrl+click on a selected tile from
+    // silently adding a different layer instead of deselecting.
+    for (const auto& candidate : candidates) {
+        if (isItemSelected(candidate)) {
+            removeItemFromSelection(candidate);
             _state.mode = mode;
             notifySelectionChanged();
             return SelectionResult::createSuccess("Item removed from selection");
-        } else {
-            addItemToSelection(itemAtPosition.value());
-            _state.mode = mode;
-            notifySelectionChanged();
-            return SelectionResult::createSuccess("Item added to selection");
         }
     }
 
-    return SelectionResult::createNoChange();
+    addItemToSelection(candidates.front());
+    _state.mode = mode;
+    notifySelectionChanged();
+    return SelectionResult::createSuccess("Item added to selection");
 }
 
 bool SelectionManager::startDrag(sf::Vector2f worldPos) {

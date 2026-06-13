@@ -124,6 +124,16 @@ private:
     void appendObjectsInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, int elevation) const;
     void appendHexesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area) const;
 
+    // Items at a point that a single click could target, in priority order
+    // (roof -> objects -> floor for ALL mode). Shared by toggleSelection so a
+    // Ctrl+click removes whichever layer is actually selected, not just the
+    // top-priority one.
+    std::vector<SelectedItem> collectTogglableAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation) const;
+
+    // Per-category appenders used by collectTogglableAtPosition (keep its branching shallow).
+    void appendObjectCandidates(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos, int elevation) const;
+    void appendHexCandidate(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos) const;
+
     // Selection helpers
     void addItemToSelection(const SelectedItem& item);
     void removeItemFromSelection(const SelectedItem& item);
