@@ -48,10 +48,12 @@ public:
     // Selection operations
     SelectionResult selectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
     SelectionResult selectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);
-    // Toggles every item in the area: selected ones are removed, unselected ones added (Ctrl+drag).
-    SelectionResult toggleArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);
+    // Ctrl+drag: removes the covered items that are already selected; never adds. Hidden
+    // roof tiles are kept (a layer you cannot see must not be deselected).
+    SelectionResult deselectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);
     SelectionResult addToSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
-    SelectionResult toggleSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
+    // Ctrl+click: removes the topmost visible selected layer under the cursor; never adds.
+    SelectionResult deselectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
 
     // Drag and drop preparation
     bool startDrag(sf::Vector2f worldPos);
@@ -116,7 +118,7 @@ private:
     // Cycling logic for ALL mode (current behavior)
     SelectionResult cycleThroughItemsAtPosition(sf::Vector2f worldPos, int elevation);
 
-    // Collects the items a drag-area covers for the given mode (shared by selectArea/toggleArea).
+    // Collects the items a drag-area covers for the given mode (shared by selectArea/deselectArea).
     std::vector<SelectedItem> collectItemsInArea(const sf::FloatRect& area, SelectionMode mode, int elevation) const;
 
     // Per-category appenders used by collectItemsInArea (keep its branching shallow).
@@ -124,13 +126,14 @@ private:
     void appendObjectsInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, int elevation) const;
     void appendHexesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area) const;
 
-    // Items at a point that a single click could target, in priority order
-    // (roof -> objects -> floor for ALL mode). Shared by toggleSelection so a
-    // Ctrl+click removes whichever layer is actually selected, not just the
-    // top-priority one.
-    std::vector<SelectedItem> collectTogglableAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation) const;
+    // Visible, selectable layers at a point in priority order (roof -> objects -> floor
+    // for ALL mode). Used by deselectAtPosition so a Ctrl+click removes whichever visible
+    // layer is actually selected. Hidden roofs are skipped so they stay selected.
+    std::vector<SelectedItem> collectDeselectableAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation) const;
 
-    // Per-category appenders used by collectTogglableAtPosition (keep its branching shallow).
+    // Per-category appenders used by collectDeselectableAtPosition (keep its branching shallow).
+    // appendRoofCandidate is a no-op while the roof layer is hidden so hidden roofs stay selected.
+    void appendRoofCandidate(std::vector<SelectedItem>& candidates, std::optional<int> tileIndex) const;
     void appendObjectCandidates(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos, int elevation) const;
     void appendHexCandidate(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos) const;
 

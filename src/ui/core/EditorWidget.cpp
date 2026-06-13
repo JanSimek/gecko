@@ -633,8 +633,8 @@ void EditorWidget::setupInputCallbacks() {
             auto borderHexes = calculateRectangleBorderHexes(selectionArea);
             createScrollBlockersFromHexes(borderHexes);
         } else if (modifier == InputHandler::SelectionModifier::TOGGLE) {
-            // Ctrl+drag removes the covered already-selected items (and adds unselected ones).
-            _selectionManager->toggleArea(selectionArea, _currentSelectionMode, _currentElevation);
+            // Ctrl+drag only removes already-selected items in the area; it never adds.
+            _selectionManager->deselectArea(selectionArea, _currentSelectionMode, _currentElevation);
         } else {
             auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
             if (result.success) {
@@ -883,8 +883,8 @@ bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier mod
             break;
 
         case SelectionModifier::TOGGLE:
-            result = _selectionManager->toggleSelection(worldPos, _currentSelectionMode, _currentElevation);
-            spdlog::debug("Toggle selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
+            result = _selectionManager->deselectAtPosition(worldPos, _currentSelectionMode, _currentElevation);
+            spdlog::debug("Deselect at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
 
         case SelectionModifier::RANGE:

@@ -34,6 +34,7 @@ using namespace geck::selection;
 class MockEditorWidget : public geck::selection::SelectionDataProvider {
 public:
     int currentElevation = 0;
+    bool roofVisible = true; // flip to simulate the roof layer being hidden
     sf::Vector2u windowSize{ 800, 600 };
 
     // Backing data for the interface accessors.
@@ -54,6 +55,7 @@ public:
     const Map::MapFile& getMapFile() const override { return mapFile; }
     int getCurrentElevation() const override { return currentElevation; }
     ViewportController* getViewportController() const override { return nullptr; }
+    bool isRoofVisible() const override { return roofVisible; }
 
     // --- SelectionDataProvider: hit tests ---
     std::optional<int> getTileAtPosition(sf::Vector2f worldPos, [[maybe_unused]] bool isRoof) override {
@@ -256,9 +258,9 @@ TEST_CASE("ALL-mode click cycles the stack then deselects", "[selection_manager_
     REQUIRE_FALSE(mgr.hasSelection());
 }
 
-// Ctrl+drag toggles the covered items: an area over already-selected items deselects them.
+// Ctrl+drag is deselect-only: it removes already-selected covered items but never adds.
 // Uses HEXES mode (the hex grid is pure geometry — no graphics context needed).
-TEST_CASE("toggleArea flips the covered items (Ctrl+drag)", "[selection_manager_real][regression]") {
+TEST_CASE("deselectArea removes only selected covered items (Ctrl+drag)", "[selection_manager_real][regression]") {
     MockEditorWidget mockWidget;
     geck::selection::SelectionManager mgr(mockWidget);
 
@@ -268,28 +270,28 @@ TEST_CASE("toggleArea flips the covered items (Ctrl+drag)", "[selection_manager_
     const sf::FloatRect area({ static_cast<float>(hex->get().x()) - 40.0f, static_cast<float>(hex->get().y()) - 40.0f },
         { 80.0f, 80.0f });
 
-    SECTION("toggle on an empty selection adds the covered items") {
-        mgr.toggleArea(area, SelectionMode::HEXES, 0);
-        CHECK_FALSE(mgr.getCurrentSelection().getHexIndices().empty());
+    SECTION("deselect over an empty selection adds nothing") {
+        mgr.deselectArea(area, SelectionMode::HEXES, 0);
+        CHECK(mgr.getCurrentSelection().getHexIndices().empty());
     }
 
-    SECTION("toggle over an already-selected area removes those items") {
+    SECTION("deselect over an already-selected area removes those items") {
         mgr.selectArea(area, SelectionMode::HEXES, 0);
         REQUIRE_FALSE(mgr.getCurrentSelection().getHexIndices().empty());
 
-        mgr.toggleArea(area, SelectionMode::HEXES, 0);
+        mgr.deselectArea(area, SelectionMode::HEXES, 0);
         CHECK(mgr.getCurrentSelection().getHexIndices().empty());
     }
 }
 
-// REGRESSION: a Ctrl+click on a selected tile must DESELECT it. toggleSelection used to
-// apply a fixed roof->object->floor priority and act on whichever layer it found first,
-// so in ALL mode with a roof above a selected floor it ADDED the roof instead of removing
-// the floor — to the user, "Ctrl+click on a selected tile does nothing". It now removes
-// whichever layer under the cursor is actually selected. The mock fabricates a roof+floor
-// pair at every position, so the ALL-mode floor case below reproduces "floor selected with
-// a roof above it" exactly.
-TEST_CASE("Ctrl+click toggles the selected layer off (single click)", "[selection_manager_real][regression]") {
+// REGRESSION: a Ctrl+click on a selected tile must DESELECT it, and a Ctrl+click outside the
+// selection must NOT add anything (deselect-only). The earlier toggle applied a fixed
+// roof->object->floor priority and acted on whichever layer it found first, so in ALL mode
+// with a roof above a selected floor it ADDED the roof instead of removing the floor — to the
+// user, "Ctrl+click does nothing". It now removes whichever VISIBLE layer under the cursor is
+// actually selected. The mock fabricates a roof+floor pair at every position, so the ALL-mode
+// floor case reproduces "floor selected with a roof above it" exactly.
+TEST_CASE("Ctrl+click deselects the selected layer only (single click)", "[selection_manager_real][regression]") {
     MockEditorWidget mockWidget;
     geck::selection::SelectionManager mgr(mockWidget);
 
@@ -299,7 +301,13 @@ TEST_CASE("Ctrl+click toggles the selected layer off (single click)", "[selectio
         mgr.selectAtPosition(clickPos, SelectionMode::FLOOR_TILES, 0);
         REQUIRE(mgr.getCurrentSelection().count() == 1);
 
-        mgr.toggleSelection(clickPos, SelectionMode::FLOOR_TILES, 0);
+        mgr.deselectAtPosition(clickPos, SelectionMode::FLOOR_TILES, 0);
+        CHECK_FALSE(mgr.hasSelection());
+    }
+
+    SECTION("FLOOR_TILES: Ctrl+click outside the selection adds nothing") {
+        // Nothing selected -> a deselect click must stay a no-op (no add).
+        mgr.deselectAtPosition(clickPos, SelectionMode::FLOOR_TILES, 0);
         CHECK_FALSE(mgr.hasSelection());
     }
 
@@ -307,7 +315,7 @@ TEST_CASE("Ctrl+click toggles the selected layer off (single click)", "[selectio
         mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0); // selects roof (top of stack)
         REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().size() == 1);
 
-        mgr.toggleSelection(clickPos, SelectionMode::ALL, 0);
+        mgr.deselectAtPosition(clickPos, SelectionMode::ALL, 0);
         CHECK_FALSE(mgr.hasSelection());
     }
 
@@ -318,8 +326,27 @@ TEST_CASE("Ctrl+click toggles the selected layer off (single click)", "[selectio
         REQUIRE(mgr.getCurrentSelection().getFloorTileIndices().size() == 1);
         REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().empty());
 
-        mgr.toggleSelection(clickPos, SelectionMode::ALL, 0);
+        mgr.deselectAtPosition(clickPos, SelectionMode::ALL, 0);
         // Must remove the floor, NOT add the roof on top of it.
+        CHECK_FALSE(mgr.hasSelection());
+    }
+
+    SECTION("ALL: a hidden roof stays selected; only the visible floor is removed") {
+        // Select both layers (roof while visible, then the floor underneath).
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0); // roof
+        mockWidget.roofVisible = false;                        // hide the roof, re-select adds floor
+        mgr.addToSelection(clickPos, SelectionMode::FLOOR_TILES, 0);
+        REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().size() == 1);
+        REQUIRE(mgr.getCurrentSelection().getFloorTileIndices().size() == 1);
+
+        // Ctrl+click with the roof hidden must only drop the visible floor.
+        mgr.deselectAtPosition(clickPos, SelectionMode::ALL, 0);
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().empty());
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices().size() == 1);
+
+        // With the roof shown again, a second Ctrl+click removes it too.
+        mockWidget.roofVisible = true;
+        mgr.deselectAtPosition(clickPos, SelectionMode::ALL, 0);
         CHECK_FALSE(mgr.hasSelection());
     }
 }

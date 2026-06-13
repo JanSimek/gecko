@@ -101,13 +101,16 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
     return SelectionResult::createSuccess("");
 }
 
-SelectionResult SelectionManager::toggleArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) {
-    // Ctrl+drag: flip each covered item — drop selected ones, add unselected ones.
+SelectionResult SelectionManager::deselectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) {
+    // Ctrl+drag: remove the covered items that are already selected; never add. Skip hidden
+    // roof tiles so a roof layer you cannot see is not silently deselected.
+    const bool roofVisible = _provider.isRoofVisible();
     for (const auto& item : collectItemsInArea(area, mode, currentElevation)) {
+        if (item.type == SelectionType::ROOF_TILE && !roofVisible) {
+            continue;
+        }
         if (isItemSelected(item)) {
             removeItemFromSelection(item);
-        } else {
-            addItemToSelection(item);
         }
     }
     _state.mode = mode;
@@ -215,6 +218,13 @@ namespace {
     }
 } // namespace
 
+void SelectionManager::appendRoofCandidate(std::vector<SelectedItem>& candidates, std::optional<int> tileIndex) const {
+    // A hidden roof must not be deselectable, so it is never offered as a candidate.
+    if (_provider.isRoofVisible()) {
+        appendTileCandidate(candidates, tileIndex, SelectionType::ROOF_TILE);
+    }
+}
+
 void SelectionManager::appendObjectCandidates(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos, int elevation) const {
     for (auto& object : getObjectsAtPosition(worldPos, elevation)) {
         candidates.emplace_back(SelectionType::OBJECT, object);
@@ -232,7 +242,7 @@ void SelectionManager::appendHexCandidate(std::vector<SelectedItem>& candidates,
     }
 }
 
-std::vector<SelectedItem> SelectionManager::collectTogglableAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation) const {
+std::vector<SelectedItem> SelectionManager::collectDeselectableAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation) const {
     std::vector<SelectedItem> candidates;
 
     switch (mode) {
@@ -241,11 +251,11 @@ std::vector<SelectedItem> SelectionManager::collectTogglableAtPosition(sf::Vecto
             break;
 
         case SelectionMode::ROOF_TILES:
-            appendTileCandidate(candidates, getRoofTileAtPosition(worldPos, elevation), SelectionType::ROOF_TILE);
+            appendRoofCandidate(candidates, getRoofTileAtPosition(worldPos, elevation));
             break;
 
         case SelectionMode::ROOF_TILES_ALL:
-            appendTileCandidate(candidates, getRoofTileAtPositionIncludingEmpty(worldPos, elevation), SelectionType::ROOF_TILE);
+            appendRoofCandidate(candidates, getRoofTileAtPositionIncludingEmpty(worldPos, elevation));
             break;
 
         case SelectionMode::OBJECTS:
@@ -254,7 +264,7 @@ std::vector<SelectedItem> SelectionManager::collectTogglableAtPosition(sf::Vecto
 
         case SelectionMode::ALL:
             // Priority order matches single-click selection: roof -> objects -> floor.
-            appendTileCandidate(candidates, getRoofTileAtPosition(worldPos, elevation), SelectionType::ROOF_TILE);
+            appendRoofCandidate(candidates, getRoofTileAtPosition(worldPos, elevation));
             appendObjectCandidates(candidates, worldPos, elevation);
             appendTileCandidate(candidates, getFloorTileAtPosition(worldPos, elevation), SelectionType::FLOOR_TILE);
             break;
@@ -270,17 +280,11 @@ std::vector<SelectedItem> SelectionManager::collectTogglableAtPosition(sf::Vecto
     return candidates;
 }
 
-SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
-    const auto candidates = collectTogglableAtPosition(worldPos, mode, currentElevation);
-    if (candidates.empty()) {
-        return SelectionResult::createNoChange();
-    }
-
-    // Ctrl+click toggles. If any layer under the cursor is already selected, remove
-    // it (deselect) rather than blindly acting on the top-priority layer; otherwise
-    // add the top-priority candidate. This keeps Ctrl+click on a selected tile from
-    // silently adding a different layer instead of deselecting.
-    for (const auto& candidate : candidates) {
+SelectionResult SelectionManager::deselectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
+    // Ctrl+click is deselect-only: remove the topmost visible layer under the cursor that is
+    // already selected, and never add. Clicking outside the selection leaves it untouched.
+    // collectDeselectableAtPosition already drops hidden roofs, so they stay selected.
+    for (const auto& candidate : collectDeselectableAtPosition(worldPos, mode, currentElevation)) {
         if (isItemSelected(candidate)) {
             removeItemFromSelection(candidate);
             _state.mode = mode;
@@ -289,10 +293,7 @@ SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, Selecti
         }
     }
 
-    addItemToSelection(candidates.front());
-    _state.mode = mode;
-    notifySelectionChanged();
-    return SelectionResult::createSuccess("Item added to selection");
+    return SelectionResult::createNoChange();
 }
 
 bool SelectionManager::startDrag(sf::Vector2f worldPos) {

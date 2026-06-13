@@ -40,6 +40,12 @@ public:
     virtual int getCurrentElevation() const = 0;
     virtual ViewportController* getViewportController() const = 0;
 
+    // Whether the roof layer is currently shown. A hidden roof must not be
+    // deselected by a Ctrl+click/drag, so the manager skips roof candidates when
+    // this is false. (Objects are already filtered by getObjectsAtPosition; floors
+    // are always visible.)
+    virtual bool isRoofVisible() const = 0;
+
     // --- Hit tests ---
     // SelectionManager wraps these in its own elevation-aware private helpers.
     virtual std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) = 0;

@@ -160,6 +160,8 @@ public:
     const std::vector<sf::Sprite>& getFloorSprites() const override { return _floorSprites; }
     const std::vector<sf::Sprite>& getRoofSprites() const override { return _roofSprites; }
 
+    bool isRoofVisible() const override { return _visibility.showRoof; }
+
     // Access to current elevation and map data
     int getCurrentElevation() const override { return _currentElevation; }
     Map::MapFile& getMapFile() override { return _map->getMapFile(); }
