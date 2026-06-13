@@ -112,6 +112,43 @@ inline ScreenPosition indexToScreenPosition(int tileIndex, bool isRoof = false) 
     return coordinatesToScreenPosition(indexToCoordinates(tileIndex), isRoof);
 }
 
+inline bool isTileRowColInGrid(int row, int col) {
+    return row >= 0 && row < MAP_HEIGHT && col >= 0 && col < MAP_WIDTH;
+}
+
+/**
+ * @brief Index of the tile whose centre is Euclidean-nearest @p (worldX, py) within the 3x3
+ * neighbourhood of (@p rowEstimate, @p colEstimate). Centres are compared in floor space
+ * (py already carries any roof offset). Returns std::nullopt if the neighbourhood is off-grid.
+ */
+inline std::optional<int> nearestTileCentreIndex(float worldX, float py, int rowEstimate, int colEstimate) {
+    constexpr float halfW = TILE_WIDTH / 2.0f;
+    constexpr float halfH = TILE_HEIGHT / 2.0f;
+
+    int best = -1;
+    float bestDistSq = 0.0f;
+    for (int row = rowEstimate - 1; row <= rowEstimate + 1; ++row) {
+        for (int col = colEstimate - 1; col <= colEstimate + 1; ++col) {
+            if (!isTileRowColInGrid(row, col)) {
+                continue;
+            }
+            // Use the authoritative forward projection for the tile centre rather than
+            // re-deriving it here.
+            const auto topLeft = coordinatesToScreenPosition(
+                TileCoordinates(static_cast<unsigned int>(row), static_cast<unsigned int>(col)));
+            const float dx = worldX - (static_cast<float>(topLeft.x) + halfW);
+            const float dy = py - (static_cast<float>(topLeft.y) + halfH);
+            const float distSq = dx * dx + dy * dy;
+            if (best < 0 || distSq < bestDistSq) {
+                best = row * MAP_WIDTH + col;
+                bestDistSq = distSq;
+            }
+        }
+    }
+
+    return best < 0 ? std::nullopt : std::optional<int>(best);
+}
+
 /**
  * @brief Resolve a world/screen point to the tile under it (inverse of indexToScreenPosition).
  *
@@ -149,36 +186,8 @@ inline std::optional<int> screenToTileIndex(float worldX, float worldY, bool isR
         return std::nullopt;
     }
 
-    const int rowEstimate = static_cast<int>(std::lround(rowF));
-    const int colEstimate = static_cast<int>(std::lround(colF));
-
-    int best = -1;
-    float bestDistSq = 0.0f;
-    for (int row = rowEstimate - 1; row <= rowEstimate + 1; ++row) {
-        for (int col = colEstimate - 1; col <= colEstimate + 1; ++col) {
-            if (row < 0 || row >= MAP_HEIGHT || col < 0 || col >= MAP_WIDTH) {
-                continue;
-            }
-            // Use the authoritative forward projection for the tile centre (in floor
-            // space — py already carries the roof offset) rather than re-deriving it here.
-            const auto topLeft = coordinatesToScreenPosition(
-                TileCoordinates(static_cast<unsigned int>(row), static_cast<unsigned int>(col)));
-            const float cx = static_cast<float>(topLeft.x) + halfW;
-            const float cy = static_cast<float>(topLeft.y) + halfH;
-            const float dx = worldX - cx;
-            const float dy = py - cy;
-            const float distSq = dx * dx + dy * dy;
-            if (best < 0 || distSq < bestDistSq) {
-                best = row * MAP_WIDTH + col;
-                bestDistSq = distSq;
-            }
-        }
-    }
-
-    if (best < 0) {
-        return std::nullopt;
-    }
-    return best;
+    return nearestTileCentreIndex(worldX, py,
+        static_cast<int>(std::lround(rowF)), static_cast<int>(std::lround(colF)));
 }
 
 /**
