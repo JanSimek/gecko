@@ -35,7 +35,7 @@ std::string applyStartingMapToDdrawIni(const std::string& iniContent, const std:
  * @brief Service that launches Fallout 2 with the currently edited map.
  *
  * Extracted from MainWindow. Handles validation, saving the map into the game data
- * directory, modifying ddraw.ini and launching the game (directly or via Steam).
+ * directory, modifying ddraw.ini and launching the game executable.
  */
 class GameLauncher : public QObject {
     Q_OBJECT
@@ -50,7 +50,6 @@ public:
 private:
     bool modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const std::string& mapFilename);
     void launchGame(const std::filesystem::path& gameLocation);
-    void launchGameViaSteam(const std::string& appId);
 
     resource::GameResources& _resources;
     std::shared_ptr<Settings> _settings;

@@ -76,20 +76,9 @@ public:
     void setCustomEditorPath(const QString& path);
 
     // Game location configuration
-    enum class GameInstallationType {
-        STEAM,
-        EXECUTABLE
-    };
-
     std::filesystem::path getGameLocation() const;
     bool isGameLocationValid() const;
     void autoDetectGameLocation();
-
-    GameInstallationType getGameInstallationType() const;
-    void setGameInstallationType(GameInstallationType type);
-
-    std::string getSteamAppId() const;
-    void setSteamAppId(const std::string& appId);
 
     std::filesystem::path getExecutableGameLocation() const;
     void setExecutableGameLocation(const std::filesystem::path& location);
@@ -99,11 +88,9 @@ public:
 
     // Auto-detection helpers
     static std::vector<std::filesystem::path> detectFallout2Installations();
-    static std::vector<std::filesystem::path> detectSteamLibraries();
 
     struct DetectedInstallation {
         std::filesystem::path path;
-        GameInstallationType type;
         std::string description;
     };
 
@@ -133,8 +120,6 @@ private:
     QString _customEditorPath;
 
     // Game location configuration
-    GameInstallationType _gameInstallationType = GameInstallationType::EXECUTABLE;
-    std::string _steamAppId = "38410"; // Default Fallout 2 Steam App ID
     std::filesystem::path _executableGameLocation;
     std::filesystem::path _gameDataDirectory;
 

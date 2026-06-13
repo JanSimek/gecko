@@ -41,12 +41,6 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
         return;
     }
 
-    // Steam installs launch via App ID and don't need the map file copied
-    if (settings.getGameInstallationType() == Settings::GameInstallationType::STEAM) {
-        launchGameViaSteam(settings.getSteamAppId());
-        return;
-    }
-
     std::filesystem::path gameDataDir = settings.getGameLocation(); // Returns data directory for executable installs
     if (gameDataDir.empty()) {
         QtDialogs::showError(_dialogParent, "Play Failed",
@@ -241,41 +235,6 @@ void GameLauncher::launchGame(const std::filesystem::path& executablePath) {
 
     _showStatus("Game launched successfully!");
     spdlog::info("Game launched successfully");
-}
-
-void GameLauncher::launchGameViaSteam(const std::string& appId) {
-    spdlog::info("Launching Fallout 2 via Steam with App ID: {}", appId);
-
-    QProcess* steamProcess = new QProcess(this);
-
-    connect(steamProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-        [steamProcess](int exitCode, [[maybe_unused]] QProcess::ExitStatus exitStatus) {
-            spdlog::info("Steam launch finished with exit code: {}", exitCode);
-            steamProcess->deleteLater();
-        });
-
-    connect(steamProcess, &QProcess::errorOccurred,
-        [this, steamProcess, appId]([[maybe_unused]] QProcess::ProcessError error) {
-            QString errorMsg = QString("Failed to launch Fallout 2 via Steam (App ID: %1).\n\n"
-                                       "Please ensure Steam is installed and Fallout 2 is available in your Steam library.")
-                                   .arg(QString::fromStdString(appId));
-            QtDialogs::showError(_dialogParent, "Steam Launch Error", errorMsg);
-            spdlog::error("Failed to launch game via Steam: App ID {}", appId);
-            steamProcess->deleteLater();
-        });
-
-    QString steamUrl = QString("steam://run/%1").arg(QString::fromStdString(appId));
-
-#ifdef __APPLE__
-    steamProcess->start("open", QStringList() << steamUrl);
-#elif defined(_WIN32)
-    steamProcess->start("cmd", QStringList() << "/c" << "start" << steamUrl);
-#else
-    // Linux - try xdg-open first, then steam directly
-    steamProcess->start("xdg-open", QStringList() << steamUrl);
-#endif
-
-    _showStatus(QString("Launching Fallout 2 via Steam (App ID: %1)...").arg(QString::fromStdString(appId)));
 }
 
 } // namespace geck
