@@ -1389,7 +1389,11 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
 
         case SelectionMode::ALL:
             previewAreaTiles(selectionArea, false, false);
-            previewAreaTiles(selectionArea, true, false);
+            // Match collectItemsInArea: in ALL mode a hidden roof is not selectable, so do
+            // not preview-tint roof tiles the commit would skip.
+            if (isRoofVisible()) {
+                previewAreaTiles(selectionArea, true, false);
+            }
             previewAreaObjects(selectionArea);
             break;
 

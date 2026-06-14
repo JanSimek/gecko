@@ -77,7 +77,11 @@ std::vector<SelectedItem> SelectionManager::collectItemsInArea(const sf::FloatRe
         case SelectionMode::ALL:
             appendObjectsInArea(items, area, elevation);
             appendTilesInArea(items, area, false, elevation, false);
-            appendTilesInArea(items, area, true, elevation, false);
+            // In mixed (ALL) mode you should only select roofs you can see. The explicit
+            // ROOF_TILES modes above still select roofs regardless of the layer toggle.
+            if (_provider.isRoofVisible()) {
+                appendTilesInArea(items, area, true, elevation, false);
+            }
             break;
 
         case SelectionMode::HEXES:

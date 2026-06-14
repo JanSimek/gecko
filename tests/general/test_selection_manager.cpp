@@ -490,4 +490,20 @@ TEST_CASE("SelectionManager area selection honors host elevation (regression)", 
         // proves finishAreaSelection() uses the host's elevation rather than a constant.
         REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().empty());
     }
+
+    SECTION("ALL mode skips a hidden roof; explicit ROOF_TILES still selects it (visibility parity)") {
+        mockWidget.currentElevation = 2;
+        mockWidget.roofVisible = false;
+        const sf::FloatRect area({ areaStart.x, areaStart.y }, { areaEnd.x - areaStart.x, areaEnd.y - areaStart.y });
+
+        // ALL mode must not grab a roof whose layer is hidden (you can't see it).
+        REQUIRE(mgr.selectArea(area, SelectionMode::ALL, 2).success);
+        auto allRoofs = mgr.getCurrentSelection().getRoofTileIndices();
+        CHECK(std::find(allRoofs.begin(), allRoofs.end(), TARGET_ROOF_TILE) == allRoofs.end());
+
+        // The explicit roof mode is a deliberate roof-editing mode, unaffected by the toggle.
+        REQUIRE(mgr.selectArea(area, SelectionMode::ROOF_TILES, 2).success);
+        auto roofModeRoofs = mgr.getCurrentSelection().getRoofTileIndices();
+        CHECK(std::find(roofModeRoofs.begin(), roofModeRoofs.end(), TARGET_ROOF_TILE) != roofModeRoofs.end());
+    }
 }
