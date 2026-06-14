@@ -22,6 +22,8 @@ struct VisibilitySettings {
     bool showHexGrid = UI::DEFAULT_SHOW_HEX_GRID;
     bool showLightOverlays = false;
     bool showExitGrids = false;
+    // Merge touching same-category selected objects into one union outline (vs. one per object).
+    bool mergeSelectionOutlines = true;
 };
 
 } // namespace geck

@@ -435,6 +435,17 @@ void MainWindow::setupMenuBar() {
 
     _viewMenu->addSeparator();
 
+    _mergeOutlinesAction = _viewMenu->addAction("&Merge Adjacent Selection Outlines");
+    _mergeOutlinesAction->setCheckable(true);
+    _mergeOutlinesAction->setChecked(true);
+    _mergeOutlinesAction->setStatusTip("Merge touching selected objects of the same type into a single outline");
+    connect(_mergeOutlinesAction, &QAction::toggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setMergeSelectionOutlines(enabled);
+    });
+
+    _viewMenu->addSeparator();
+
     _panelsMenu = _viewMenu->addMenu("&Panels");
 
     _viewMenu->addSeparator();
@@ -1272,6 +1283,7 @@ void MainWindow::syncMenuStateToEditorWidget() {
     _currentEditorWidget->setShowHexGrid(_showHexGridAction->isChecked());
     _currentEditorWidget->setShowLightOverlays(_showLightOverlaysAction->isChecked());
     _currentEditorWidget->setShowExitGrids(_showExitGridsAction->isChecked());
+    _currentEditorWidget->setMergeSelectionOutlines(_mergeOutlinesAction->isChecked());
     updateUndoRedoActions();
 
     // Reset selection mode to the default (ALL)

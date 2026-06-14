@@ -13,25 +13,25 @@
 #include "util/TileUtils.h"
 #include <spdlog/spdlog.h>
 #include <cstdint>
+#include <map>
 #include <unordered_set>
 
 namespace geck {
 
 namespace {
-    // Fragment shader that emits the outline colour only at the sprite's silhouette EDGE — an
-    // opaque pixel that has a transparent neighbour — and is transparent everywhere else. Drawing
-    // the sprite through this on top of the scene yields a thin 1px outline that does not fill (so
-    // it never hides foreground objects). Samples that fall OUTSIDE the sprite's atlas sub-rect are
-    // treated as transparent: this both avoids bleeding into adjacent sprites in the sheet AND lets
-    // the silhouette be outlined where the art runs to the cell edge (e.g. a wall filling its cell
-    // width). SFML gives normalised gl_TexCoord[0] via its texture matrix.
+    // Fragment shader that emits the outline colour only at a silhouette EDGE — an opaque texel with
+    // a transparent neighbour — and is transparent elsewhere. Run over the offscreen selection mask
+    // it yields a thin 1px outline that never fills, so the scene underneath stays visible. `rect`
+    // bounds the region to sample (the mask, in texcoords); neighbour samples outside it count as
+    // transparent, so a silhouette touching the mask edge is still outlined and no edge is invented
+    // beyond it. SFML gives normalised gl_TexCoord[0] via its texture matrix.
     constexpr const char* kOutlineFragmentShader = R"(
 uniform sampler2D texture;
 uniform vec4 outlineColor;
 uniform vec2 texel; // one-texel step in texcoord units
-uniform vec4 rect;  // sprite sub-rect in texcoords: (minX, minY, maxX, maxY)
+uniform vec4 rect;  // region to sample, in texcoords: (minX, minY, maxX, maxY)
 float sampleAlpha(vec2 p) {
-    vec2 inside = step(rect.xy, p) * step(p, rect.zw); // 0 outside the sub-rect on each axis
+    vec2 inside = step(rect.xy, p) * step(p, rect.zw); // 0 outside the sample region on each axis
     return inside.x * inside.y * texture2D(texture, p).a;
 }
 void main() {
@@ -170,41 +170,97 @@ void RenderingEngine::ensureOutlineShader() {
     }
 }
 
-void RenderingEngine::drawObjectOutline(sf::RenderTarget& target, const Object& object) {
+void RenderingEngine::drawSelectedObjectOutlines(sf::RenderTarget& target,
+    const RenderData& renderData,
+    const VisibilitySettings& visibility) {
+    if (!renderData.objects) {
+        return;
+    }
     ensureOutlineShader();
 
-    const sf::Color outlineColor = objectOutlineColor(object);
-    const sf::Sprite& source = object.getSprite();
-
-    if (!_outlineShaderOk) {
-        // Fallback when shaders are unavailable: a simple bounding-box outline.
-        const sf::FloatRect bounds = source.getGlobalBounds();
-        sf::RectangleShape box(bounds.size);
-        box.setPosition(bounds.position);
-        box.setFillColor(sf::Color::Transparent);
-        box.setOutlineColor(outlineColor);
-        box.setOutlineThickness(1.0f);
-        target.draw(box);
+    // Group selected, visible objects by outline colour (wall/critter/object). Edge-detecting a
+    // sprite inside the shared texture atlas missed sides where its art butts against an opaque
+    // neighbour in the sheet (e.g. a wall next to another wall); rendering the sprites alone into
+    // the offscreen mask first and edge-detecting that gives a clean outline on every side.
+    std::map<std::uint32_t, std::vector<const Object*>> groups;
+    for (const auto& object : *renderData.objects) {
+        if (!object->isSelected() || !isObjectVisible(object->getMapObject(), visibility)) {
+            continue;
+        }
+        groups[objectOutlineColor(*object).toInteger()].push_back(object.get());
+    }
+    if (groups.empty()) {
         return;
     }
 
-    // Edge-detect the silhouette in the sprite's atlas sub-rect (normalised texcoords).
-    const auto atlas = source.getTexture().getSize();
-    const auto texRect = source.getTextureRect();
-    const auto aw = static_cast<float>(atlas.x);
-    const auto ah = static_cast<float>(atlas.y);
+    if (!_outlineShaderOk) {
+        // Fallback when shaders are unavailable: a per-object bounding-box outline.
+        for (const auto& [colorValue, objects] : groups) {
+            const sf::Color color(colorValue);
+            for (const Object* object : objects) {
+                const sf::FloatRect bounds = object->getSprite().getGlobalBounds();
+                sf::RectangleShape box(bounds.size);
+                box.setPosition(bounds.position);
+                box.setFillColor(sf::Color::Transparent);
+                box.setOutlineColor(color);
+                box.setOutlineThickness(1.0f);
+                target.draw(box);
+            }
+        }
+        return;
+    }
 
-    _outlineShader.setUniform("outlineColor", sf::Glsl::Vec4(outlineColor));
-    _outlineShader.setUniform("texel", sf::Glsl::Vec2(kOutlineThickness / aw, kOutlineThickness / ah));
-    _outlineShader.setUniform("rect",
-        sf::Glsl::Vec4(static_cast<float>(texRect.position.x) / aw,
-            static_cast<float>(texRect.position.y) / ah,
-            static_cast<float>(texRect.position.x + texRect.size.x) / aw,
-            static_cast<float>(texRect.position.y + texRect.size.y) / ah));
+    const sf::Vector2u size = target.getSize();
+    if (size.x == 0 || size.y == 0) {
+        return;
+    }
+    if (_outlineMask.getSize() != size && !_outlineMask.resize(size)) {
+        spdlog::warn("Selection outline: could not allocate {}x{} mask; skipping outlines", size.x, size.y);
+        return;
+    }
 
+    const auto width = static_cast<float>(size.x);
+    const auto height = static_cast<float>(size.y);
+    // The mask is at screen resolution, so a one-texel edge is a constant 1px outline at any zoom.
+    _outlineShader.setUniform("texel", sf::Glsl::Vec2(kOutlineThickness / width, kOutlineThickness / height));
+    _outlineShader.setUniform("rect", sf::Glsl::Vec4(0.f, 0.f, 1.f, 1.f));
+
+    const sf::View sceneView = target.getView();                               // align silhouettes with the scene
+    const sf::View screenView(sf::FloatRect({ 0.f, 0.f }, { width, height })); // map the mask 1:1 onto the target
+
+    for (const auto& [colorValue, objects] : groups) {
+        const sf::Color color(colorValue);
+        if (visibility.mergeSelectionOutlines) {
+            // One mask for the whole colour group: touching silhouettes union into a single outline.
+            strokeOutlineGroup(target, sceneView, screenView, color, objects);
+        } else {
+            // One mask per object: every sprite is outlined on its own, so shared edges show too.
+            for (const Object* object : objects) {
+                strokeOutlineGroup(target, sceneView, screenView, color, { object });
+            }
+        }
+    }
+    target.setView(sceneView);
+}
+
+void RenderingEngine::strokeOutlineGroup(sf::RenderTarget& target,
+    const sf::View& sceneView,
+    const sf::View& screenView,
+    sf::Color color,
+    const std::vector<const Object*>& objects) {
+    _outlineMask.setView(sceneView);
+    _outlineMask.clear(sf::Color::Transparent);
+    for (const Object* object : objects) {
+        _outlineMask.draw(object->getSprite());
+    }
+    _outlineMask.display();
+
+    _outlineShader.setUniform("outlineColor", sf::Glsl::Vec4(color));
+    sf::Sprite maskSprite(_outlineMask.getTexture());
     sf::RenderStates states;
     states.shader = &_outlineShader;
-    target.draw(source, states); // shader emits only the silhouette edge
+    target.setView(screenView);
+    target.draw(maskSprite, states); // shader emits only the silhouette edge of the mask
 }
 
 void RenderingEngine::renderObjects(sf::RenderTarget& target,
@@ -233,24 +289,6 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
         for (const auto& overlay : *renderData.wallBlockerOverlays) {
             target.draw(overlay);
         }
-    }
-}
-
-void RenderingEngine::drawSelectedObjectOutlines(sf::RenderTarget& target,
-    const RenderData& renderData,
-    const VisibilitySettings& visibility) {
-    if (!renderData.objects) {
-        return;
-    }
-
-    // Draw each selected object's silhouette outline after everything else, so the full outline
-    // shows even where a neighbour (e.g. a wall between two other walls) overlaps it. The edge
-    // shader only paints the thin outline, so foreground objects stay visible underneath.
-    for (const auto& object : *renderData.objects) {
-        if (!object->isSelected() || !isObjectVisible(object->getMapObject(), visibility)) {
-            continue;
-        }
-        drawObjectOutline(target, *object);
     }
 }
 

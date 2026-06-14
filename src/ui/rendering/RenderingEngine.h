@@ -39,6 +39,9 @@ public:
         bool showHexGrid = false;
         bool showLightOverlays = false;
         bool showExitGrids = false;
+        // Merge touching selected objects of the same category into one union outline (true), or
+        // outline every selected object individually so shared edges show too (false).
+        bool mergeSelectionOutlines = true;
     };
 
     /**
@@ -145,19 +148,23 @@ private:
         const VisibilitySettings& visibility);
 
     /**
-     * @brief Draw a selection outline (silhouette ring) around a selected object.
+     * @brief Outline every selected object on top of the scene, grouped by category colour.
      *
-     * Uses a "flatten to outline colour" fragment shader drawn at small offsets so the
-     * artwork keeps its real colours and only gains a coloured border, the way the Fallout
-     * engine outlines objects. Falls back to a bounding-box outline when shaders are
-     * unavailable on the current GL context.
+     * Renders each colour group's selected sprites alone into an offscreen mask (no atlas
+     * neighbours), then edge-detects the union silhouette so the artwork keeps its real colours
+     * and only gains a clean 1px coloured border on every side — the way the Fallout engine
+     * outlines objects. Falls back to per-object bounding boxes when shaders are unavailable on
+     * the current GL context.
      */
-    void drawObjectOutline(sf::RenderTarget& target, const Object& object);
-    // Second pass: re-draw selected objects (outline + sprite) on top so their outline is not
-    // occluded by neighbouring objects drawn earlier.
     void drawSelectedObjectOutlines(sf::RenderTarget& target,
         const RenderData& renderData,
         const VisibilitySettings& visibility);
+    // Render one batch of sprites into the offscreen mask and stroke its union silhouette in colour.
+    void strokeOutlineGroup(sf::RenderTarget& target,
+        const sf::View& sceneView,
+        const sf::View& screenView,
+        sf::Color color,
+        const std::vector<const Object*>& objects);
     void ensureOutlineShader();
 
     /**
@@ -220,6 +227,10 @@ private:
     sf::Shader _outlineShader;
     bool _outlineShaderTried = false;
     bool _outlineShaderOk = false;
+
+    // Offscreen screen-resolution mask the selected sprites are drawn into before edge detection,
+    // resized to match the render target. Reused across frames to avoid per-frame allocation.
+    sf::RenderTexture _outlineMask;
 };
 
 } // namespace geck

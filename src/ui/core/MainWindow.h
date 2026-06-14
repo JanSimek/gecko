@@ -239,6 +239,7 @@ private:
     QAction* _showHexGridAction;
     QAction* _showLightOverlaysAction;
     QAction* _showExitGridsAction;
+    QAction* _mergeOutlinesAction;
 
     bool _isRunning;
 };

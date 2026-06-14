@@ -851,6 +851,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     visibility.showHexGrid = _visibility.showHexGrid;
     visibility.showLightOverlays = _visibility.showLightOverlays;
     visibility.showExitGrids = _visibility.showExitGrids;
+    visibility.mergeSelectionOutlines = _visibility.mergeSelectionOutlines;
 
     RenderingEngine::RenderData renderData;
     renderData.floorSprites = &_floorSprites;

@@ -71,6 +71,7 @@ public:
     void setShowHexGrid(bool show) { _visibility.showHexGrid = show; }
     void setShowLightOverlays(bool show);
     void setShowExitGrids(bool show) { _visibility.showExitGrids = show; }
+    void setMergeSelectionOutlines(bool merge) { _visibility.mergeSelectionOutlines = merge; }
 
     // User-configured selection highlight colours (from preferences); forwarded to the renderer.
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
