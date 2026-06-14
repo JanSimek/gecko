@@ -123,6 +123,17 @@ private:
         const VisibilitySettings& visibility);
 
     /**
+     * @brief Draw a selection outline (silhouette ring) around a selected object.
+     *
+     * Uses a "flatten to outline colour" fragment shader drawn at small offsets so the
+     * artwork keeps its real colours and only gains a coloured border, the way the Fallout
+     * engine outlines objects. Falls back to a bounding-box outline when shaders are
+     * unavailable on the current GL context.
+     */
+    void drawObjectOutline(sf::RenderTarget& target, const Object& object);
+    void ensureOutlineShader();
+
+    /**
      * @brief Render roof tiles and their selection backgrounds
      */
     void renderRoofTiles(sf::RenderTarget& target,
@@ -166,6 +177,12 @@ private:
 
     resource::GameResources& _resources;
     HexRenderer _hexRenderer;
+
+    // Lazily-loaded silhouette outline shader for selected objects (needs a live GL context,
+    // so it is loaded on first use during rendering rather than in the constructor).
+    sf::Shader _outlineShader;
+    bool _outlineShaderTried = false;
+    bool _outlineShaderOk = false;
 };
 
 } // namespace geck

@@ -11,8 +11,27 @@
 #include "resource/ResourcePaths.h"
 #include "util/Coordinates.h"
 #include <spdlog/spdlog.h>
+#include <array>
 
 namespace geck {
+
+namespace {
+    // Fragment shader that replaces a sprite's RGB with a flat outline colour while keeping its
+    // alpha — i.e. a solid-colour silhouette. Drawing this silhouette at small offsets builds an
+    // outline ring around the real sprite. Legacy GLSL built-ins (texture2D / gl_TexCoord) are
+    // what SFML's fixed-function sprite pipeline provides.
+    constexpr const char* kOutlineFragmentShader = R"(
+uniform sampler2D texture;
+uniform vec4 outlineColor;
+void main() {
+    float alpha = texture2D(texture, gl_TexCoord[0].xy).a;
+    gl_FragColor = vec4(outlineColor.rgb, outlineColor.a * alpha);
+}
+)";
+
+    // Outline thickness in pixels (the silhouette is drawn at these 8 offsets).
+    constexpr float kOutlineThickness = 1.0f;
+} // namespace
 
 RenderingEngine::RenderingEngine(resource::GameResources& resources)
     : _resources(resources)
@@ -97,6 +116,58 @@ void RenderingEngine::renderHexGrid(sf::RenderTarget& target,
     _hexRenderer.renderGrid(target, view, *renderData.hexGrid, renderData.currentHoverHex);
 }
 
+void RenderingEngine::ensureOutlineShader() {
+    if (_outlineShaderTried) {
+        return;
+    }
+    _outlineShaderTried = true;
+
+    if (!sf::Shader::isAvailable()) {
+        spdlog::warn("Selection outline: shaders unavailable on this GL context; using bounding-box fallback");
+        return;
+    }
+    if (_outlineShader.loadFromMemory(kOutlineFragmentShader, sf::Shader::Type::Fragment)) {
+        _outlineShader.setUniform("texture", sf::Shader::CurrentTexture);
+        _outlineShaderOk = true;
+    } else {
+        spdlog::warn("Selection outline: outline shader failed to compile; using bounding-box fallback");
+    }
+}
+
+void RenderingEngine::drawObjectOutline(sf::RenderTarget& target, const Object& object) {
+    ensureOutlineShader();
+
+    const sf::Color outlineColor = ColorUtils::createObjectSelectionColor();
+    const sf::Sprite& source = object.getSprite();
+
+    if (!_outlineShaderOk) {
+        // Fallback when shaders are unavailable: a simple bounding-box outline.
+        const sf::FloatRect bounds = source.getGlobalBounds();
+        sf::RectangleShape box(bounds.size);
+        box.setPosition(bounds.position);
+        box.setFillColor(sf::Color::Transparent);
+        box.setOutlineColor(outlineColor);
+        box.setOutlineThickness(1.0f);
+        target.draw(box);
+        return;
+    }
+
+    _outlineShader.setUniform("outlineColor", sf::Glsl::Vec4(outlineColor));
+
+    sf::Sprite silhouette = source; // same texture, rect and transform
+    sf::RenderStates states;
+    states.shader = &_outlineShader;
+
+    constexpr float t = kOutlineThickness;
+    const std::array<sf::Vector2f, 8> offsets{ { { -t, 0.f }, { t, 0.f }, { 0.f, -t }, { 0.f, t },
+        { -t, -t }, { t, -t }, { -t, t }, { t, t } } };
+    const sf::Vector2f base = silhouette.getPosition();
+    for (const auto& offset : offsets) {
+        silhouette.setPosition(base + offset);
+        target.draw(silhouette, states);
+    }
+}
+
 void RenderingEngine::renderObjects(sf::RenderTarget& target,
     const RenderData& renderData,
     const VisibilitySettings& visibility) {
@@ -109,6 +180,12 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
         // hidden object is never drawn nor selectable.
         if (!isObjectVisible(object->getMapObject(), visibility)) {
             continue;
+        }
+
+        // Selected objects get a silhouette outline behind the sprite so the artwork keeps its
+        // real colours and only gains a coloured border.
+        if (object->isSelected()) {
+            drawObjectOutline(target, *object);
         }
 
         target.draw(object->getSprite());
