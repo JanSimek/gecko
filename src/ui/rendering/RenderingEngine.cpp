@@ -13,6 +13,7 @@
 #include "util/TileUtils.h"
 #include <spdlog/spdlog.h>
 #include <array>
+#include <cstdint>
 #include <unordered_set>
 
 namespace geck {
@@ -234,6 +235,12 @@ void RenderingEngine::renderTileSelectionOutline(sf::RenderTarget& target,
 
     const std::unordered_set<int> selected(selectedTiles.begin(), selectedTiles.end());
     const sf::Color outlineColor = ColorUtils::createObjectSelectionColor();
+    // A slight translucent fill so the selected region reads as a filled shape (not just an
+    // outline). Roof tiles get a marginally different fill so a roof selection is distinguishable
+    // from a floor one. Tweak these two alphas to taste.
+    const sf::Color fillColor(outlineColor.r, outlineColor.g, outlineColor.b,
+        static_cast<std::uint8_t>(roof ? 70 : 45));
+    sf::VertexArray fill(sf::PrimitiveType::Triangles);
     sf::VertexArray edges(sf::PrimitiveType::Lines);
 
     const auto isSelected = [&](int row, int col) {
@@ -245,6 +252,11 @@ void RenderingEngine::renderTileSelectionOutline(sf::RenderTarget& target,
     const auto addEdge = [&](sf::Vector2f a, sf::Vector2f b) {
         edges.append(sf::Vertex{ a, outlineColor });
         edges.append(sf::Vertex{ b, outlineColor });
+    };
+    const auto addFillTriangle = [&](sf::Vector2f a, sf::Vector2f b, sf::Vector2f c) {
+        fill.append(sf::Vertex{ a, fillColor });
+        fill.append(sf::Vertex{ b, fillColor });
+        fill.append(sf::Vertex{ c, fillColor });
     };
 
     for (int index : selectedTiles) {
@@ -260,6 +272,11 @@ void RenderingEngine::renderTileSelectionOutline(sf::RenderTarget& target,
         const sf::Vector2f bottom{ sx + 32.f, sy + 36.f };
         const sf::Vector2f left{ sx, sy + 12.f };
 
+        // Fill the tile parallelogram (two triangles). Tiles tile the plane exactly, so the
+        // covered region fills uniformly with no seams or doubled alpha.
+        addFillTriangle(top, right, bottom);
+        addFillTriangle(top, bottom, left);
+
         // Draw an edge only when the tile sharing it is not selected (union boundary).
         if (!isSelected(row, col - 1))
             addEdge(top, right); // upper-right edge
@@ -271,6 +288,7 @@ void RenderingEngine::renderTileSelectionOutline(sf::RenderTarget& target,
             addEdge(left, top); // upper-left edge
     }
 
+    target.draw(fill); // translucent fill under the crisp boundary
     target.draw(edges);
 }
 
