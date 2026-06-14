@@ -109,6 +109,7 @@ QJsonObject Settings::toJson() const {
         ui["dockState"] = QString::fromLatin1(_dockState.toBase64());
     }
     ui["windowMaximized"] = _windowMaximized;
+    ui["mergeSelectionOutlines"] = _mergeSelectionOutlines;
 
     // Floating dock geometries
     if (!_floatingDockGeometries.isEmpty()) {
@@ -175,6 +176,10 @@ void Settings::fromJson(const QJsonObject& json) {
 
         if (ui.contains("windowMaximized")) {
             _windowMaximized = ui["windowMaximized"].toBool(true); // Default to true
+        }
+
+        if (ui.contains("mergeSelectionOutlines")) {
+            _mergeSelectionOutlines = ui["mergeSelectionOutlines"].toBool(true); // Default to true
         }
 
         if (ui.contains("floatingDockGeometries")) {
@@ -306,6 +311,14 @@ bool Settings::getWindowMaximized() const {
 
 void Settings::setWindowMaximized(bool maximized) {
     _windowMaximized = maximized;
+}
+
+bool Settings::getMergeSelectionOutlines() const {
+    return _mergeSelectionOutlines;
+}
+
+void Settings::setMergeSelectionOutlines(bool merge) {
+    _mergeSelectionOutlines = merge;
 }
 
 QByteArray Settings::getDockState() const {

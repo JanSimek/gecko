@@ -29,7 +29,7 @@
 #include "pattern/Pattern.h"
 #include "ui/tools/ExitGridContext.h"
 #include "ui/dragdrop/DragDropContext.h"
-#include "TileChange.h"
+#include "editor/TileChange.h"
 #include "VisibilitySettings.h"
 
 namespace geck {
@@ -152,6 +152,7 @@ public:
     ViewportController* getViewportController() const override { return _viewportController.get(); }
     int& getCurrentHoverHex() override { return _currentHoverHex; }
     void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves) override;
+    void moveSelectedRoofTilesForDrag(sf::Vector2f dragStart, sf::Vector2f dragEnd) override;
 
     // SelectionManager helpers
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) override;

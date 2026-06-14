@@ -437,11 +437,15 @@ void MainWindow::setupMenuBar() {
 
     _mergeOutlinesAction = _viewMenu->addAction("&Merge Adjacent Selection Outlines");
     _mergeOutlinesAction->setCheckable(true);
-    _mergeOutlinesAction->setChecked(true);
+    _mergeOutlinesAction->setChecked(_settings ? _settings->getMergeSelectionOutlines() : true);
     _mergeOutlinesAction->setStatusTip("Merge touching selected objects of the same type into a single outline");
     connect(_mergeOutlinesAction, &QAction::toggled, this, [this](bool enabled) {
         if (_currentEditorWidget)
             _currentEditorWidget->setMergeSelectionOutlines(enabled);
+        if (_settings) {
+            _settings->setMergeSelectionOutlines(enabled);
+            _settings->save();
+        }
     });
 
     _viewMenu->addSeparator();

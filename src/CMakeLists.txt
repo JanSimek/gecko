@@ -59,7 +59,7 @@ set(GECK_APP_SOURCES
     # Qt6 UI Core
     ui/core/MainWindow.h
     ui/core/MainWindow.cpp
-    ui/core/TileChange.h
+    editor/TileChange.h
     ui/core/VisibilitySettings.h
     ui/core/EditorWidget.h
     ui/core/EditorWidget.cpp

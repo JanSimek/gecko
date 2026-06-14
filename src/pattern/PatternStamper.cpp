@@ -14,7 +14,7 @@
 #include "format/map/Tile.h"
 #include "pattern/PatternSprite.h"
 #include "resource/GameResources.h"
-#include "ui/core/TileChange.h"
+#include "editor/TileChange.h"
 #include "ui/editing/ObjectCommandController.h"
 
 namespace geck::pattern {

@@ -58,6 +58,10 @@ public:
     bool getWindowMaximized() const;
     void setWindowMaximized(bool maximized);
 
+    // Whether touching same-category selected objects merge into one outline (View menu toggle).
+    bool getMergeSelectionOutlines() const;
+    void setMergeSelectionOutlines(bool merge);
+
     // Floating dock geometries
     QByteArray getFloatingDockGeometry(const QString& dockName) const;
     void setFloatingDockGeometry(const QString& dockName, const QByteArray& geometry);
@@ -117,7 +121,8 @@ private:
     std::vector<std::filesystem::path> _dataPaths;
     QByteArray _windowGeometry;
     QByteArray _dockState;
-    bool _windowMaximized = true; // Default to maximized
+    bool _windowMaximized = true;        // Default to maximized
+    bool _mergeSelectionOutlines = true; // Default: merge touching same-category outlines
     QMap<QString, QByteArray> _floatingDockGeometries;
     QMap<QString, bool> _panelVisibilityPreferences;
     QString _version;

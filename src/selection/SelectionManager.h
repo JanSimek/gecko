@@ -11,6 +11,7 @@
 #include "util/SpatialIndex.h"
 #include "format/map/Map.h"
 #include "editor/Object.h"
+#include "editor/TileChange.h"
 #include "SelectionState.h"
 #include "SelectionDataProvider.h"
 
@@ -60,12 +61,6 @@ public:
     // Ctrl+click: removes the topmost visible selected layer under the cursor; never adds.
     SelectionResult deselectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
 
-    // Drag and drop preparation
-    bool startDrag(sf::Vector2f worldPos);
-    void updateDrag(sf::Vector2f currentPos);
-    SelectionResult finishDrag(sf::Vector2f endPos);
-    void cancelDrag();
-
     // Area selection (for tiles in FLOOR/ROOF modes, objects in OBJECTS mode)
     bool startAreaSelection(sf::Vector2f startPos, SelectionMode mode);
     void updateAreaSelection(sf::Vector2f currentPos);
@@ -81,7 +76,6 @@ public:
     const SelectionState& getCurrentSelection() const { return _state; }
     SelectionState& getMutableSelection() { return _state; }
     bool hasSelection() const { return !_state.isEmpty(); }
-    bool isDragging() const { return _state.isDragging; }
     bool isAreaSelecting() const { return _state.isAreaSelecting(); }
 
     // Callback mechanism for UI updates
@@ -99,9 +93,15 @@ public:
     std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area, int elevation) const;
     std::vector<int> getHexesInArea(const sf::FloatRect& area) const;
 
-    // Drag & drop implementation helpers (public for EditorWidget usage)
-    bool moveObject(std::shared_ptr<Object> object, sf::Vector2f offset);
-    bool moveTile(int sourceTileIndex, sf::Vector2f offset, bool isRoof);
+    // Move the selected ROOF tiles by a whole-tile delta, as a set of tile edits (each moved tile
+    // becomes a clear-source + set-target pair) the editor applies through the shared tile-edit undo
+    // path. Empty if there is nothing to move or any tile would leave the map (the block moves as a
+    // whole or not at all). Pure: computes the change set without mutating the map, and is block-safe
+    // — every source is vacated before any target is filled, so overlapping moves never corrupt.
+    // Floor tiles are always present, so they are not moved here.
+    std::vector<TileChange> planRoofTileMove(int deltaRow, int deltaColumn) const;
+    // As above, deriving the whole-tile delta from a drag's start/end world positions.
+    std::vector<TileChange> planRoofMoveForDrag(sf::Vector2f dragStart, sf::Vector2f dragEnd) const;
 
 private:
     SelectionDataProvider& _provider;

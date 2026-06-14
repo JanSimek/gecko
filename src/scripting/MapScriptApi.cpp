@@ -9,7 +9,7 @@
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
 #include "pattern/PatternSprite.h"
-#include "ui/core/TileChange.h"
+#include "editor/TileChange.h"
 #include "ui/editing/ObjectCommandController.h"
 
 namespace geck {

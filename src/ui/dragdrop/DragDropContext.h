@@ -42,6 +42,9 @@ public:
     virtual const HexagonGrid* getHexagonGrid() const = 0;
     virtual selection::SelectionManager* getSelectionManager() const = 0;
     virtual void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves) = 0;
+    // Move the selected roof tiles by the same drag, recorded for undo. Floor tiles are always
+    // present, so they are intentionally left in place.
+    virtual void moveSelectedRoofTilesForDrag(sf::Vector2f dragStart, sf::Vector2f dragEnd) = 0;
     virtual void placeObjectAtPosition(sf::Vector2f worldPos) = 0;
     virtual std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) = 0;
     virtual void clearDragSelectionPreview() = 0;

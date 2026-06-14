@@ -114,8 +114,8 @@ void EditorWidget::removePlacedObject(const std::shared_ptr<MapObject>& mapObjec
     _objectCommandController->removePlacedObject(mapObject, object);
 }
 
-// The register*() helpers below emit undoStackChanged through the controller's
-// onStackChanged callback (wired in the constructor), so they no longer emit here.
+// The register*() helpers below forward to the controller, which emits undoStackChanged
+// through its onStackChanged callback (wired in the constructor).
 void EditorWidget::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
     _objectCommandController->registerObjectPlacement(mapObject, object);
 }
@@ -123,6 +123,14 @@ void EditorWidget::registerObjectPlacement(const std::shared_ptr<MapObject>& map
 void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects,
     const std::vector<std::pair<int, int>>& moves) {
     _objectCommandController->registerObjectMove(objects, moves);
+}
+
+void EditorWidget::moveSelectedRoofTilesForDrag(sf::Vector2f dragStart, sf::Vector2f dragEnd) {
+    if (!_selectionManager) {
+        return;
+    }
+    const auto changes = _selectionManager->planRoofMoveForDrag(dragStart, dragEnd);
+    _objectCommandController->applyTileEdit("Move Roof Tiles", changes);
 }
 
 void EditorWidget::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs) {
@@ -223,8 +231,7 @@ void EditorWidget::applySelectionVisuals(const selection::SelectionState& select
             case selection::SelectionType::FLOOR_TILE: {
                 int tileIndex = item.getTileIndex();
                 if (isValidTileIndex(tileIndex)) {
-                    // Tiles are outlined by the renderer (RenderingEngine::renderTileSelectionOutline),
-                    // not tinted, so just record the index.
+                    // The renderer outlines tiles from their geometry; just record the index.
                     _selectedFloorVisuals.push_back(tileIndex);
                 }
                 break;
@@ -242,9 +249,8 @@ void EditorWidget::applySelectionVisuals(const selection::SelectionState& select
 }
 
 void EditorWidget::applyRoofTileSelectionVisual(int tileIndex) {
-    // Roof tiles are outlined by the renderer (renderTileSelectionOutline), which works from the
-    // tile geometry, so even empty (transparent) roof tiles get a boundary — no tint or blank.frm
-    // background sprite is needed any more.
+    // The renderer outlines roof tiles from their geometry, so even empty (transparent) tiles get
+    // a boundary; just record the index.
     if (isValidTileIndex(tileIndex)) {
         _selectedRoofVisuals.push_back(tileIndex);
     }
@@ -560,15 +566,13 @@ void EditorWidget::clearAllVisualSelections() {
     std::ranges::for_each(_objects, [](auto& object) {
         if (object) {
             object->unselect();
-            // Selection is now an outline, not a sprite tint, but the drag preview still tints
-            // object sprites — reset the colour here so a preview tint never lingers after the
-            // selection visuals are rebuilt.
+            // The drag preview tints object sprites; reset the colour so no preview tint lingers.
             object->getSprite().setColor(sf::Color::White);
         }
     });
 
-    // Tiles are outlined (renderTileSelectionOutline), not tinted, so there is no tile colour to
-    // reset — just drop the tracked selection sets. Preview tints are reset by clearDragPreview.
+    // Tiles are outlined, so there's nothing to un-tint — just drop the tracked sets
+    // (preview tints are cleared by clearDragPreview).
     _selectedFloorVisuals.clear();
     _selectedRoofVisuals.clear();
     _selectedHexPositions.clear();
@@ -1031,8 +1035,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     _mode = mode;
 
     // Single owner of mutual exclusion: deactivate every mode's state across all
-    // components, then activate the target. This replaces the scattered
-    // resetState()/setX(false) calls the individual setters used to make.
+    // components, then activate the target.
     _tilePlacementManager->setTilePlacementMode(false, -1, false);
     _exitGridPlacementManager->setExitGridPlacementMode(false);
     _exitGridPlacementManager->setMarkExitsMode(false);
@@ -1060,7 +1063,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         case EditorMode::PlaceExitGrid:
             _exitGridPlacementManager->setExitGridPlacementMode(true);
             if (_inputHandler) {
-                // Previously skipped: placement clicks never reached the handler.
+                // Without this the input handler never sees placement clicks.
                 _inputHandler->setExitGridPlacementMode(true);
             }
             break;

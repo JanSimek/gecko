@@ -6,6 +6,7 @@
 #include "util/TileUtils.h"
 #include "editor/HexagonGrid.h"
 #include <algorithm>
+#include <unordered_map>
 #include <unordered_set>
 #include <spdlog/spdlog.h>
 
@@ -322,84 +323,6 @@ SelectionResult SelectionManager::deselectAtPosition(sf::Vector2f worldPos, Sele
     return SelectionResult::createNoChange();
 }
 
-bool SelectionManager::startDrag(sf::Vector2f worldPos) {
-    if (_state.isEmpty()) {
-        return false;
-    }
-
-    _state.isDragging = true;
-    _state.dragStartPosition = worldPos;
-
-    spdlog::debug("Started drag operation at ({:.2f}, {:.2f})", worldPos.x, worldPos.y);
-    return true;
-}
-
-void SelectionManager::updateDrag(sf::Vector2f currentPos) {
-    if (!_state.isDragging) {
-        return;
-    }
-
-    spdlog::debug("Updating drag to ({:.2f}, {:.2f})", currentPos.x, currentPos.y);
-}
-
-SelectionResult SelectionManager::finishDrag(sf::Vector2f endPos) {
-    if (!_state.isDragging) {
-        return SelectionResult::createError("No drag operation in progress");
-    }
-
-    _state.isDragging = false;
-
-    sf::Vector2f offset = endPos - _state.dragStartPosition;
-
-    spdlog::info("Drag completed: offset ({:.2f}, {:.2f})", offset.x, offset.y);
-
-    bool hasMovements = false;
-
-    for (const auto& item : _state.items) {
-        switch (item.type) {
-            case SelectionType::OBJECT: {
-                auto object = item.getObject();
-                if (object && moveObject(object, offset)) {
-                    hasMovements = true;
-                }
-                break;
-            }
-
-            case SelectionType::FLOOR_TILE: {
-                int tileIndex = item.getTileIndex();
-                if (moveTile(tileIndex, offset, false)) {
-                    hasMovements = true;
-                }
-                break;
-            }
-
-            case SelectionType::ROOF_TILE: {
-                int tileIndex = item.getTileIndex();
-                if (moveTile(tileIndex, offset, true)) {
-                    hasMovements = true;
-                }
-                break;
-            }
-
-            case SelectionType::HEX:
-                // Hex selections are placement markers and do not move with drag operations.
-                break;
-        }
-    }
-
-    if (hasMovements) {
-        notifySelectionChanged();
-        return SelectionResult::createSuccess("Items moved successfully");
-    } else {
-        return SelectionResult::createNoChange();
-    }
-}
-
-void SelectionManager::cancelDrag() {
-    _state.isDragging = false;
-    spdlog::debug("Drag operation cancelled");
-}
-
 bool SelectionManager::startAreaSelection(sf::Vector2f startPos, SelectionMode mode) {
     _state.selectionArea = sf::FloatRect({ startPos.x, startPos.y }, { 0, 0 });
     _state.mode = mode;
@@ -440,8 +363,7 @@ SelectionResult SelectionManager::finishAreaSelection() {
     // Clear the area selection state but keep the mode
     _state.selectionArea.reset();
 
-    // Bug fix: previously hardcoded elevation 0, which broke area selection on
-    // any elevation other than the ground floor. Use the host's current elevation.
+    // Select on the host's current elevation so area selection works above the ground floor.
     return selectArea(area, mode, _provider.getCurrentElevation());
 }
 
@@ -866,96 +788,65 @@ bool SelectionManager::isItemSelected(const SelectedItem& item) const {
     return _state.hasItem(item);
 }
 
-bool SelectionManager::moveObject(std::shared_ptr<Object> object, sf::Vector2f offset) {
-    if (!object) {
-        return false;
+std::vector<TileChange> SelectionManager::planRoofTileMove(int deltaRow, int deltaColumn) const {
+    std::vector<TileChange> result;
+    if (deltaRow == 0 && deltaColumn == 0) {
+        return result; // no movement
     }
 
-    auto& mapObject = object->getMapObject();
-    int32_t currentPosition = mapObject.position;
+    const int elevation = _provider.getCurrentElevation();
+    const auto& tiles = _provider.getMapFile().tiles.at(elevation);
 
-    auto currentCoords = indexToCoordinates(currentPosition);
-
-    // Approximate screen offset -> hex offset; a full implementation would use proper isometric projection.
-    int deltaX = static_cast<int>(offset.x / TILE_WIDTH);
-    int deltaY = static_cast<int>(offset.y / TILE_HEIGHT);
-
-    int newX = static_cast<int>(currentCoords.x) + deltaY; // Screen Y maps to hex X
-    int newY = static_cast<int>(currentCoords.y) + deltaX; // Screen X maps to hex Y
-
-    if (newX < 0 || newX >= MAP_HEIGHT || newY < 0 || newY >= MAP_WIDTH) {
-        spdlog::debug("Object move out of bounds: ({}, {}) -> ({}, {})",
-            currentCoords.x, currentCoords.y, newX, newY);
-        return false;
+    // Map each selected roof source tile to its target; reject the whole move if any leaves the map.
+    std::vector<std::pair<int, int>> moves; // (source, target)
+    for (const auto& item : _state.items) {
+        if (item.type != SelectionType::ROOF_TILE) {
+            continue;
+        }
+        const int source = item.getTileIndex();
+        const auto coords = indexToCoordinates(source);
+        const int newRow = static_cast<int>(coords.x) + deltaRow;
+        const int newColumn = static_cast<int>(coords.y) + deltaColumn;
+        if (newRow < 0 || newRow >= MAP_HEIGHT || newColumn < 0 || newColumn >= MAP_WIDTH) {
+            return {}; // moving the block off the map is rejected as a whole
+        }
+        moves.emplace_back(source,
+            coordinatesToIndex(TileCoordinates(static_cast<unsigned int>(newRow), static_cast<unsigned int>(newColumn))));
+    }
+    if (moves.empty()) {
+        return result;
     }
 
-    int newPosition = coordinatesToIndex(TileCoordinates(newX, newY));
-    mapObject.position = newPosition;
+    // Block-safe: vacate every source, then fill every target. A tile that is both a source and a
+    // target keeps the moved-in roof, because the target write runs after the vacate.
+    std::unordered_map<int, uint16_t> after;
+    for (const auto& [source, target] : moves) {
+        after[source] = Map::EMPTY_TILE;
+    }
+    for (const auto& [source, target] : moves) {
+        after[target] = tiles.at(source).getRoof();
+    }
 
-    // Object sprite position is updated on the next render cycle.
-
-    spdlog::info("Moved object from tile {} to tile {}", currentPosition, newPosition);
-    return true;
+    for (const auto& [tileIndex, newRoof] : after) {
+        const uint16_t before = tiles.at(tileIndex).getRoof();
+        if (before != newRoof) {
+            result.push_back({ elevation, tileIndex, /*isRoof*/ true, before, newRoof });
+        }
+    }
+    return result;
 }
 
-bool SelectionManager::moveTile(int sourceTileIndex, sf::Vector2f offset, bool isRoof) {
-    if (sourceTileIndex < 0 || sourceTileIndex >= static_cast<int>(Map::TILES_PER_ELEVATION)) {
-        return false;
+std::vector<TileChange> SelectionManager::planRoofMoveForDrag(sf::Vector2f dragStart, sf::Vector2f dragEnd) const {
+    const int elevation = _provider.getCurrentElevation();
+    const auto startTile = getRoofTileAtPositionIncludingEmpty(dragStart, elevation);
+    const auto endTile = getRoofTileAtPositionIncludingEmpty(dragEnd, elevation);
+    if (!startTile || !endTile) {
+        return {};
     }
-
-    auto sourceCoords = indexToCoordinates(sourceTileIndex);
-
-    // Approximate screen offset -> hex offset; screen Y maps to hex X, screen X maps to hex Y.
-    int deltaX = static_cast<int>(offset.x / TILE_WIDTH);
-    int deltaY = static_cast<int>(offset.y / TILE_HEIGHT);
-
-    int newX = static_cast<int>(sourceCoords.x) + deltaY;
-    int newY = static_cast<int>(sourceCoords.y) + deltaX;
-
-    if (newX < 0 || newX >= MAP_HEIGHT || newY < 0 || newY >= MAP_WIDTH) {
-        spdlog::debug("Tile move out of bounds: ({}, {}) -> ({}, {})",
-            sourceCoords.x, sourceCoords.y, newX, newY);
-        return false;
-    }
-
-    int targetTileIndex = coordinatesToIndex(TileCoordinates(newX, newY));
-
-    if (targetTileIndex == sourceTileIndex) {
-        return false;
-    }
-
-    int currentElevation = _provider.getCurrentElevation();
-
-    auto& mapFile = _provider.getMapFile();
-    auto& tiles = mapFile.tiles.at(currentElevation);
-
-    auto& sourceTile = tiles.at(sourceTileIndex);
-    auto& targetTile = tiles.at(targetTileIndex);
-
-    if (isRoof) {
-        uint16_t sourceRoof = sourceTile.getRoof();
-        if (sourceRoof == Map::EMPTY_TILE) {
-            return false; // Nothing to move
-        }
-
-        targetTile.setRoof(sourceRoof);
-        sourceTile.setRoof(Map::EMPTY_TILE);
-
-        spdlog::info("Moved roof tile from {} to {}", sourceTileIndex, targetTileIndex);
-    } else {
-        uint16_t sourceFloor = sourceTile.getFloor();
-        uint16_t targetFloor = targetTile.getFloor();
-
-        // Floor tiles are always present, so swap rather than clear the source.
-        targetTile.setFloor(sourceFloor);
-        sourceTile.setFloor(targetFloor);
-
-        spdlog::info("Swapped floor tiles {} and {}", sourceTileIndex, targetTileIndex);
-    }
-
-    // Tile sprites are updated on the next render cycle.
-
-    return true;
+    const auto startCoords = indexToCoordinates(*startTile);
+    const auto endCoords = indexToCoordinates(*endTile);
+    return planRoofTileMove(static_cast<int>(endCoords.x) - static_cast<int>(startCoords.x),
+        static_cast<int>(endCoords.y) - static_cast<int>(startCoords.y));
 }
 
 std::vector<int> SelectionManager::getHexesInArea(const sf::FloatRect& area) const {
