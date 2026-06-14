@@ -1,5 +1,5 @@
 #include "TilePlacementManager.h"
-#include "ui/core/TileChange.h"
+#include "editor/TileChange.h"
 #include "ui/viewport/ViewportController.h"
 #include "format/map/Map.h"
 #include "format/map/Tile.h"

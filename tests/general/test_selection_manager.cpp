@@ -230,6 +230,102 @@ TEST_CASE("SelectionManager drives provider-backed selection paths", "[selection
 }
 
 //==============================================================================
+// REGRESSION: moving a selected region must carry its roof tiles along (previously
+// only objects moved; selected roofs were left behind). planRoofTileMove computes the
+// block-safe before/after roof set the editor then applies through the tile-edit undo
+// path; planRoofMoveForDrag derives the whole-tile delta from the drag positions.
+//==============================================================================
+
+namespace {
+std::optional<TileChange> findRoofMove(const std::vector<TileChange>& moves, int tileIndex) {
+    for (const auto& move : moves) {
+        if (move.tileIndex == tileIndex) {
+            return move;
+        }
+    }
+    return std::nullopt;
+}
+} // namespace
+
+TEST_CASE("planRoofTileMove moves selected roof tiles as a block", "[selection_manager_real][roof_move]") {
+    MockEditorWidget mockWidget;
+    geck::selection::SelectionManager mgr(mockWidget);
+    mockWidget.seedElevation(0);
+
+    SECTION("a single roof tile vacates its source and fills the target") {
+        mockWidget.setRoofPresent(0, 10, 7); // tile 10 = (row 0, col 10)
+        mgr.selectAll(SelectionMode::ROOF_TILES, 0);
+
+        const auto moves = mgr.planRoofTileMove(1, 0); // down one row -> tile 110
+        REQUIRE(moves.size() == 2);
+
+        const auto source = findRoofMove(moves, 10);
+        const auto target = findRoofMove(moves, 110);
+        REQUIRE(source.has_value());
+        REQUIRE(target.has_value());
+        REQUIRE(source->before == 7);
+        REQUIRE(source->after == Map::EMPTY_TILE);
+        REQUIRE(target->before == Map::EMPTY_TILE);
+        REQUIRE(target->after == 7);
+    }
+
+    SECTION("a zero delta is a no-op") {
+        mockWidget.setRoofPresent(0, 10, 7);
+        mgr.selectAll(SelectionMode::ROOF_TILES, 0);
+        REQUIRE(mgr.planRoofTileMove(0, 0).empty());
+    }
+
+    SECTION("a move that would leave the map is rejected as a whole") {
+        mockWidget.setRoofPresent(0, 9999, 7); // tile 9999 = (row 99, col 99)
+        mgr.selectAll(SelectionMode::ROOF_TILES, 0);
+        REQUIRE(mgr.planRoofTileMove(1, 0).empty()); // row 100 is off the map
+        REQUIRE(mgr.planRoofTileMove(0, 1).empty()); // col 100 is off the map
+    }
+
+    SECTION("overlapping moves are block-safe: a source that is another's target keeps the moved roof") {
+        mockWidget.setRoofPresent(0, 10, 7); // (row 0, col 10)
+        mockWidget.setRoofPresent(0, 11, 8); // (row 0, col 11)
+        mgr.selectAll(SelectionMode::ROOF_TILES, 0);
+
+        const auto moves = mgr.planRoofTileMove(0, 1); // shift right one column: 10->11, 11->12
+        const auto t10 = findRoofMove(moves, 10);
+        const auto t11 = findRoofMove(moves, 11);
+        const auto t12 = findRoofMove(moves, 12);
+        REQUIRE(t10.has_value());
+        REQUIRE(t11.has_value());
+        REQUIRE(t12.has_value());
+        REQUIRE(t10->after == Map::EMPTY_TILE);
+        REQUIRE(t11->after == 7); // block-safe: not emptied by tile 10's vacate
+        REQUIRE(t12->after == 8);
+    }
+
+    SECTION("with no roof tiles selected there is nothing to move") {
+        mgr.selectAll(SelectionMode::ROOF_TILES, 0); // none present -> empty selection
+        REQUIRE(mgr.planRoofTileMove(1, 1).empty());
+    }
+}
+
+TEST_CASE("planRoofMoveForDrag derives the tile delta from drag world positions", "[selection_manager_real][roof_move]") {
+    MockEditorWidget mockWidget;
+    geck::selection::SelectionManager mgr(mockWidget);
+    mockWidget.seedElevation(0);
+    mockWidget.setRoofPresent(0, 10, 7);
+    mgr.selectAll(SelectionMode::ROOF_TILES, 0);
+
+    // Mock world->tile: tile = (y/24)*MAP_WIDTH + (x/32). Start tile 0 (0,0), end tile 1 (32,0):
+    // a one-column shift, so the selected roof tile 10 -> 11.
+    const auto moves = mgr.planRoofMoveForDrag(sf::Vector2f(0.0f, 0.0f), sf::Vector2f(32.0f, 0.0f));
+    REQUIRE(moves.size() == 2);
+
+    const auto source = findRoofMove(moves, 10);
+    const auto target = findRoofMove(moves, 11);
+    REQUIRE(source.has_value());
+    REQUIRE(target.has_value());
+    REQUIRE(source->after == Map::EMPTY_TILE);
+    REQUIRE(target->after == 7);
+}
+
+//==============================================================================
 // REGRESSION: clicking the same spot in ALL mode must cycle through the stack and
 // finally deselect ("click again -> select the item underneath"). The input layer
 // is what was broken (a click on a selected object did a no-op move instead of

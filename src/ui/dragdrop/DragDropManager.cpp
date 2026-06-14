@@ -173,6 +173,9 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
         _context.registerObjectMove(_draggedObjects, movedObjects);
     }
 
+    // Move the selected roof tiles by the same drag so the whole region travels together.
+    _context.moveSelectedRoofTilesForDrag(_dragStartWorldPos, finalWorldPos);
+
     // End the ghost preview: restore each object's pre-drag (selection) tint.
     for (size_t i = 0; i < _draggedObjects.size(); ++i) {
         _draggedObjects[i]->getSprite().setColor(_objectDragStartColors[i]);

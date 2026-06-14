@@ -125,6 +125,14 @@ void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>
     _objectCommandController->registerObjectMove(objects, moves);
 }
 
+void EditorWidget::moveSelectedRoofTilesForDrag(sf::Vector2f dragStart, sf::Vector2f dragEnd) {
+    if (!_selectionManager) {
+        return;
+    }
+    const auto changes = _selectionManager->planRoofMoveForDrag(dragStart, dragEnd);
+    _objectCommandController->applyTileEdit("Move Roof Tiles", changes);
+}
+
 void EditorWidget::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs) {
     _objectCommandController->registerObjectRotation(objects, beforeDirs, afterDirs);
 }
