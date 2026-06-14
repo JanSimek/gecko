@@ -154,6 +154,11 @@ private:
      * unavailable on the current GL context.
      */
     void drawObjectOutline(sf::RenderTarget& target, const Object& object);
+    // Second pass: re-draw selected objects (outline + sprite) on top so their outline is not
+    // occluded by neighbouring objects drawn earlier.
+    void drawSelectedObjectOutlines(sf::RenderTarget& target,
+        const RenderData& renderData,
+        const VisibilitySettings& visibility);
     void ensureOutlineShader();
 
     /**

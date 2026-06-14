@@ -198,12 +198,6 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
             continue;
         }
 
-        // Selected objects get a silhouette outline behind the sprite so the artwork keeps its
-        // real colours and only gains a coloured border.
-        if (object->isSelected()) {
-            drawObjectOutline(target, *object);
-        }
-
         target.draw(object->getSprite());
 
         if (visibility.showLightOverlays && object->hasLight()) {
@@ -216,6 +210,27 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
         for (const auto& overlay : *renderData.wallBlockerOverlays) {
             target.draw(overlay);
         }
+    }
+
+    drawSelectedObjectOutlines(target, renderData, visibility);
+}
+
+void RenderingEngine::drawSelectedObjectOutlines(sf::RenderTarget& target,
+    const RenderData& renderData,
+    const VisibilitySettings& visibility) {
+    if (!renderData.objects) {
+        return;
+    }
+
+    // Re-draw each selected object (outline behind, sprite on top) after everything else, so its
+    // outline is never painted over by neighbouring objects — e.g. a wall between two other walls
+    // would otherwise show only the bottom edge of its outline.
+    for (const auto& object : *renderData.objects) {
+        if (!object->isSelected() || !isObjectVisible(object->getMapObject(), visibility)) {
+            continue;
+        }
+        drawObjectOutline(target, *object);
+        target.draw(object->getSprite());
     }
 }
 
