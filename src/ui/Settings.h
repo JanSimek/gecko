@@ -2,6 +2,8 @@
 
 #include <QString>
 #include <QStringList>
+#include <QColor>
+#include <QMap>
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -75,6 +77,11 @@ public:
     QString getCustomEditorPath() const;
     void setCustomEditorPath(const QString& path);
 
+    // Selection highlight colours (preferences). Keys: "object", "wall", "critter", "tile".
+    // Returns @p fallback when the colour has not been configured.
+    QColor getSelectionColor(const QString& key, const QColor& fallback) const;
+    void setSelectionColor(const QString& key, const QColor& color);
+
     // Game location configuration
     std::filesystem::path getGameLocation() const;
     bool isGameLocationValid() const;
@@ -118,6 +125,9 @@ private:
     // Text editor configuration
     TextEditorMode _textEditorMode = TextEditorMode::SYSTEM_DEFAULT;
     QString _customEditorPath;
+
+    // Selection highlight colour overrides (empty = use the renderer defaults).
+    QMap<QString, QColor> _selectionColors;
 
     // Game location configuration
     std::filesystem::path _executableGameLocation;

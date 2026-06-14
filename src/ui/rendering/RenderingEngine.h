@@ -42,6 +42,20 @@ public:
     };
 
     /**
+     * @brief User-configurable selection highlight colours (set from preferences).
+     *
+     * Object/wall/critter colour the object outline by category; tile colours the
+     * floor/roof selection outline and its translucent fill. Defaults are deliberately
+     * distinct hues so the categories — and tiles vs objects — read apart.
+     */
+    struct SelectionPalette {
+        sf::Color object{ 140, 110, 220 }; // violet
+        sf::Color wall{ 74, 206, 168 };    // teal
+        sf::Color critter{ 224, 180, 96 }; // warm amber
+        sf::Color tile{ 74, 144, 226 };    // blue accent
+    };
+
+    /**
      * @brief Data needed for rendering operations
      */
     struct RenderData {
@@ -104,7 +118,13 @@ public:
     static void applySelectionRectangleColors(sf::RectangleShape& rectangle,
         SelectionMode selectionMode);
 
+    /** @brief Set the user-configured selection highlight colours. */
+    void setSelectionColors(const SelectionPalette& colors) { _selectionColors = colors; }
+
 private:
+    /** @brief Selection outline colour for an object, by its category. */
+    sf::Color objectOutlineColor(const Object& object) const;
+
     /**
      * @brief Render floor tile sprites
      */
@@ -189,6 +209,7 @@ private:
 
     resource::GameResources& _resources;
     HexRenderer _hexRenderer;
+    SelectionPalette _selectionColors;
 
     // Lazily-loaded silhouette outline shader for selected objects (needs a live GL context,
     // so it is loaded on first use during rendering rather than in the constructor).

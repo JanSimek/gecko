@@ -1699,6 +1699,12 @@ void EditorWidget::showLoadingErrorsSummary() {
     QtDialogs::showWarning(this, title, message);
 }
 
+void EditorWidget::setSelectionColors(const RenderingEngine::SelectionPalette& colors) {
+    if (_renderingEngine) {
+        _renderingEngine->setSelectionColors(colors);
+    }
+}
+
 void EditorWidget::setShowLightOverlays(bool show) {
     _visibility.showLightOverlays = show;
 

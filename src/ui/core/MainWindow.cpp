@@ -1231,7 +1231,30 @@ void MainWindow::connectToEditorWidget() {
             });
     }
 
+    applySelectionColorsToEditor();
+
     spdlog::info("Connected EditorWidget instance signals");
+}
+
+void MainWindow::applySelectionColorsToEditor() {
+    if (!_currentEditorWidget || !_settings) {
+        return;
+    }
+
+    const auto toQ = [](const sf::Color& c) { return QColor(c.r, c.g, c.b); };
+    const auto toSf = [](const QColor& c) {
+        return sf::Color(static_cast<std::uint8_t>(c.red()),
+            static_cast<std::uint8_t>(c.green()),
+            static_cast<std::uint8_t>(c.blue()));
+    };
+
+    RenderingEngine::SelectionPalette palette; // renderer defaults; settings only override
+    palette.object = toSf(_settings->getSelectionColor("object", toQ(palette.object)));
+    palette.wall = toSf(_settings->getSelectionColor("wall", toQ(palette.wall)));
+    palette.critter = toSf(_settings->getSelectionColor("critter", toQ(palette.critter)));
+    palette.tile = toSf(_settings->getSelectionColor("tile", toQ(palette.tile)));
+
+    _currentEditorWidget->setSelectionColors(palette);
 }
 
 void MainWindow::syncMenuStateToEditorWidget() {
@@ -1659,6 +1682,7 @@ void MainWindow::showPreferences() {
         if (dataPathsChanged) {
             rebuildGameResourcesFromSettings();
         }
+        applySelectionColorsToEditor();
     });
 
     int result = dialog.exec();

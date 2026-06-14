@@ -60,6 +60,8 @@ public:
     void stopGameLoop();
 
     void connectToEditorWidget();
+    // Push the configured selection highlight colours from Settings into the active editor.
+    void applySelectionColorsToEditor();
 
     // Panel visibility management
     void hideNonEssentialPanels();

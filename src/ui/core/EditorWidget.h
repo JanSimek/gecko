@@ -23,6 +23,7 @@
 #include "util/UndoStack.h"
 #include "ui/editing/ObjectCommandController.h"
 #include "ui/rendering/MapSpriteLoader.h"
+#include "ui/rendering/RenderingEngine.h"
 #include "ui/tiles/TilePlacementContext.h"
 #include "ui/core/EditorMode.h"
 #include "pattern/Pattern.h"
@@ -70,6 +71,9 @@ public:
     void setShowHexGrid(bool show) { _visibility.showHexGrid = show; }
     void setShowLightOverlays(bool show);
     void setShowExitGrids(bool show) { _visibility.showExitGrids = show; }
+
+    // User-configured selection highlight colours (from preferences); forwarded to the renderer.
+    void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
 
     Map* getMap() const override { return _map.get(); }
 

@@ -34,22 +34,20 @@ void main() {
 
     // Outline thickness in pixels (the silhouette is drawn at these 8 offsets).
     constexpr float kOutlineThickness = 1.0f;
-
-    // Selection outline colour by object category. Kept to cool tones for structures/objects and
-    // a warm tone for living things so the palette stays readable rather than noisy. Tweak here.
-    sf::Color selectionOutlineColor(const Object& object) {
-        const auto mapObject = object.getMapObjectPtr();
-        if (mapObject) {
-            if (mapObject->isWallObject()) {
-                return sf::Color(74, 206, 168); // walls: teal
-            }
-            if (mapObject->objectType() == 1u) { // Pro::OBJECT_TYPE::CRITTER
-                return sf::Color(224, 180, 96);  // critters: warm amber
-            }
-        }
-        return ColorUtils::createObjectSelectionColor(); // objects: blue accent
-    }
 } // namespace
+
+sf::Color RenderingEngine::objectOutlineColor(const Object& object) const {
+    const auto mapObject = object.getMapObjectPtr();
+    if (mapObject) {
+        if (mapObject->isWallObject()) {
+            return _selectionColors.wall;
+        }
+        if (mapObject->objectType() == 1u) { // Pro::OBJECT_TYPE::CRITTER
+            return _selectionColors.critter;
+        }
+    }
+    return _selectionColors.object;
+}
 
 RenderingEngine::RenderingEngine(resource::GameResources& resources)
     : _resources(resources)
@@ -155,7 +153,7 @@ void RenderingEngine::ensureOutlineShader() {
 void RenderingEngine::drawObjectOutline(sf::RenderTarget& target, const Object& object) {
     ensureOutlineShader();
 
-    const sf::Color outlineColor = selectionOutlineColor(object);
+    const sf::Color outlineColor = objectOutlineColor(object);
     const sf::Sprite& source = object.getSprite();
 
     if (!_outlineShaderOk) {
@@ -249,7 +247,7 @@ void RenderingEngine::renderTileSelectionOutline(sf::RenderTarget& target,
     }
 
     const std::unordered_set<int> selected(selectedTiles.begin(), selectedTiles.end());
-    const sf::Color outlineColor = ColorUtils::createObjectSelectionColor();
+    const sf::Color outlineColor = _selectionColors.tile;
     // A slight translucent fill so the selected region reads as a filled shape (not just an
     // outline). Roof tiles get a marginally different fill so a roof selection is distinguishable
     // from a floor one. Tweak these two alphas to taste.

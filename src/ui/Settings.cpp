@@ -146,6 +146,12 @@ QJsonObject Settings::toJson() const {
 
     json["gameLocation"] = gameLocation;
 
+    QJsonObject selectionColors;
+    for (auto it = _selectionColors.constBegin(); it != _selectionColors.constEnd(); ++it) {
+        selectionColors[it.key()] = it.value().name(); // "#rrggbb"
+    }
+    json["selectionColors"] = selectionColors;
+
     return json;
 }
 
@@ -212,6 +218,17 @@ void Settings::fromJson(const QJsonObject& json) {
             QString dataDirectory = gameLocation["dataDirectory"].toString();
             if (!dataDirectory.isEmpty()) {
                 _gameDataDirectory = std::filesystem::path(dataDirectory.toStdString());
+            }
+        }
+    }
+
+    _selectionColors.clear();
+    if (json.contains("selectionColors") && json["selectionColors"].isObject()) {
+        QJsonObject selectionColors = json["selectionColors"].toObject();
+        for (auto it = selectionColors.constBegin(); it != selectionColors.constEnd(); ++it) {
+            QColor color(it.value().toString());
+            if (color.isValid()) {
+                _selectionColors[it.key()] = color;
             }
         }
     }
@@ -334,6 +351,14 @@ QString Settings::getCustomEditorPath() const {
 
 void Settings::setCustomEditorPath(const QString& path) {
     _customEditorPath = path;
+}
+
+QColor Settings::getSelectionColor(const QString& key, const QColor& fallback) const {
+    return _selectionColors.value(key, fallback);
+}
+
+void Settings::setSelectionColor(const QString& key, const QColor& color) {
+    _selectionColors[key] = color;
 }
 
 bool Settings::validateDataPath(const std::filesystem::path& path) const {
