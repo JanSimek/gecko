@@ -48,6 +48,8 @@ public:
     // Selection operations
     SelectionResult selectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
     SelectionResult selectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);
+    // Alt+drag: add the covered items to the current selection (does not clear first).
+    SelectionResult addArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);
     // Ctrl+drag: removes the covered items that are already selected; never adds. Hidden
     // roof tiles are kept (a layer you cannot see must not be deselected).
     SelectionResult deselectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);

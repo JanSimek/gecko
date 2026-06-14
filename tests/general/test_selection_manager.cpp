@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <algorithm>
 #include <vector>
 
 using namespace geck;
@@ -297,6 +298,35 @@ TEST_CASE("deselectArea removes only selected covered items (Ctrl+drag)", "[sele
         // Querying the preview must not change the selection.
         CHECK(mgr.getCurrentSelection().getHexIndices().size() == selectedCount);
     }
+}
+
+// Alt+drag adds the covered items to the selection without clearing what is already selected.
+TEST_CASE("addArea accumulates into the selection (Alt+drag)", "[selection_manager_real][regression]") {
+    MockEditorWidget mockWidget;
+    geck::selection::SelectionManager mgr(mockWidget);
+
+    auto hexA = mockWidget.hexGrid.getHexByPosition(20000);
+    auto hexB = mockWidget.hexGrid.getHexByPosition(21000);
+    REQUIRE(hexA.has_value());
+    REQUIRE(hexB.has_value());
+    const sf::FloatRect areaA({ static_cast<float>(hexA->get().x()) - 40.0f, static_cast<float>(hexA->get().y()) - 40.0f }, { 80.0f, 80.0f });
+    const sf::FloatRect areaB({ static_cast<float>(hexB->get().x()) - 40.0f, static_cast<float>(hexB->get().y()) - 40.0f }, { 80.0f, 80.0f });
+
+    mgr.selectArea(areaA, SelectionMode::HEXES, 0);
+    const auto afterA = mgr.getCurrentSelection().getHexIndices();
+    REQUIRE_FALSE(afterA.empty());
+
+    // Alt+drag over a second area keeps the first selection and adds the new hexes.
+    mgr.addArea(areaB, SelectionMode::HEXES, 0);
+    const auto afterAdd = mgr.getCurrentSelection().getHexIndices();
+    CHECK(afterAdd.size() > afterA.size());
+    for (int hex : afterA) {
+        CHECK(std::find(afterAdd.begin(), afterAdd.end(), hex) != afterAdd.end());
+    }
+
+    // Re-adding the same area is idempotent (no duplicates).
+    mgr.addArea(areaB, SelectionMode::HEXES, 0);
+    CHECK(mgr.getCurrentSelection().getHexIndices().size() == afterAdd.size());
 }
 
 // REGRESSION: a Ctrl+click on a selected tile must DESELECT it, and a Ctrl+click outside the

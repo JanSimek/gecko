@@ -101,6 +101,17 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
     return SelectionResult::createSuccess("");
 }
 
+SelectionResult SelectionManager::addArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) {
+    // Alt+drag: add the covered items to the current selection without clearing it.
+    // addItemToSelection ignores items that are already selected, so overlaps are harmless.
+    for (const auto& item : collectItemsInArea(area, mode, currentElevation)) {
+        addItemToSelection(item);
+    }
+    _state.mode = mode;
+    notifySelectionChanged();
+    return SelectionResult::createSuccess("");
+}
+
 std::vector<SelectedItem> SelectionManager::itemsToDeselectInArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) const {
     // The covered items a Ctrl+drag would remove: currently selected and on a visible layer.
     // A roof you cannot see must never be silently deselected, so skip hidden roof tiles.

@@ -260,8 +260,8 @@ private:
     // Selection modifiers for multi-selection
     enum class SelectionModifier {
         NONE,   // Normal single selection (clear and select)
-        ADD,    // Ctrl+Click - add to selection
-        TOGGLE, // Alt+Click - toggle selection
+        ADD,    // Alt+Click / Alt+Drag - add to selection
+        TOGGLE, // Ctrl+Click / Ctrl+Drag - remove from selection
         RANGE   // Shift+Click - range selection for tiles
     };
 
@@ -276,9 +276,10 @@ private:
     // Repaints the live selection highlight from the manager's current selection.
     void refreshSelectionVisuals();
     void clearDragPreview();
-    // isDeselect = true for a Ctrl+drag: the covered selected items un-highlight live
-    // (preview of removal) instead of the area being tinted as an add preview.
-    void updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos, bool isDeselect);
+    // isDeselect (Ctrl+drag): the covered selected items un-highlight live (preview of removal).
+    // isAdditive (Alt+drag): keep the existing selection highlighted while the covered area is
+    // tinted as an add preview. Plain drag (both false) tints the covered area as a replace.
+    void updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos, bool isDeselect, bool isAdditive);
     // Add-preview helpers: tint the covered tiles/objects and record them for clearDragPreview.
     void previewAreaTiles(const sf::FloatRect& area, bool roof, bool includeEmpty);
     void previewAreaObjects(const sf::FloatRect& area);

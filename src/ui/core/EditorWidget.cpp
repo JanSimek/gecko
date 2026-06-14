@@ -634,7 +634,9 @@ void EditorWidget::setupInputCallbacks() {
     };
 
     callbacks.onDragSelectionPreview = [this](sf::Vector2f startPos, sf::Vector2f currentPos, InputHandler::SelectionModifier modifier) {
-        updateDragSelectionPreview(startPos, currentPos, modifier == InputHandler::SelectionModifier::TOGGLE);
+        updateDragSelectionPreview(startPos, currentPos,
+            modifier == InputHandler::SelectionModifier::TOGGLE,
+            modifier == InputHandler::SelectionModifier::ADD);
     };
 
     callbacks.onDragSelection = [this](sf::Vector2f startPos, sf::Vector2f endPos, InputHandler::SelectionModifier modifier) {
@@ -650,6 +652,9 @@ void EditorWidget::setupInputCallbacks() {
         } else if (modifier == InputHandler::SelectionModifier::TOGGLE) {
             // Ctrl+drag only removes already-selected items in the area; it never adds.
             _selectionManager->deselectArea(selectionArea, _currentSelectionMode, _currentElevation);
+        } else if (modifier == InputHandler::SelectionModifier::ADD) {
+            // Alt+drag adds the covered items to the selection, keeping what was already selected.
+            _selectionManager->addArea(selectionArea, _currentSelectionMode, _currentElevation);
         } else {
             auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
             if (result.success) {
@@ -1332,7 +1337,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     return result;
 }
 
-void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos, bool isDeselect) {
+void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos, bool isDeselect, bool isAdditive) {
     clearDragPreview();
 
     float left = std::min(startWorldPos.x, currentWorldPos.x);
@@ -1357,6 +1362,12 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
         clearAllVisualSelections();
         applySelectionVisuals(preview);
         return;
+    }
+
+    if (isAdditive) {
+        // Alt+drag adds to the selection, so keep what is already selected highlighted while the
+        // covered area is tinted below to preview the addition.
+        refreshSelectionVisuals();
     }
 
     switch (_currentSelectionMode) {

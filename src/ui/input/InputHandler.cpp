@@ -83,8 +83,9 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             _immediateSelectionPerformed = false;
             return;
         }
-        // Plain drag-select replaces the selection; Ctrl (TOGGLE) drag flips the covered items.
-        const bool modifierAllowsDragSelect = (modifier == SelectionModifier::NONE || modifier == SelectionModifier::TOGGLE);
+        // Plain drag-select replaces the selection; Ctrl (TOGGLE) drag removes the covered
+        // items; Alt (ADD) drag adds them. A no-drag release falls back to a single click.
+        const bool modifierAllowsDragSelect = (modifier == SelectionModifier::NONE || modifier == SelectionModifier::TOGGLE || modifier == SelectionModifier::ADD);
         bool canDragSelect = modifierAllowsDragSelect && (_selectionMode == SelectionMode::ALL || _selectionMode == SelectionMode::FLOOR_TILES || _selectionMode == SelectionMode::ROOF_TILES || _selectionMode == SelectionMode::ROOF_TILES_ALL || _selectionMode == SelectionMode::OBJECTS || _selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE);
 
         if (canDragSelect) {
