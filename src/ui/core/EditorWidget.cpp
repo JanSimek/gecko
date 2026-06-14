@@ -22,7 +22,6 @@
 #include <unordered_map>
 
 #include "util/Constants.h"
-#include "util/ColorUtils.h"
 #include "ui/ResourceInitializer.h"
 #include "util/TileUtils.h"
 #include "ui/QtDialogs.h"
@@ -224,7 +223,8 @@ void EditorWidget::applySelectionVisuals(const selection::SelectionState& select
             case selection::SelectionType::FLOOR_TILE: {
                 int tileIndex = item.getTileIndex();
                 if (isValidTileIndex(tileIndex)) {
-                    this->_floorSprites.at(tileIndex).setColor(geck::ColorUtils::createFloorTileSelectionColor());
+                    // Tiles are outlined by the renderer (RenderingEngine::renderTileSelectionOutline),
+                    // not tinted, so just record the index.
                     _selectedFloorVisuals.push_back(tileIndex);
                 }
                 break;
@@ -242,18 +242,12 @@ void EditorWidget::applySelectionVisuals(const selection::SelectionState& select
 }
 
 void EditorWidget::applyRoofTileSelectionVisual(int tileIndex) {
-    if (!isValidTileIndex(tileIndex) || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
-        return;
+    // Roof tiles are outlined by the renderer (renderTileSelectionOutline), which works from the
+    // tile geometry, so even empty (transparent) roof tiles get a boundary — no tint or blank.frm
+    // background sprite is needed any more.
+    if (isValidTileIndex(tileIndex)) {
+        _selectedRoofVisuals.push_back(tileIndex);
     }
-    _roofSprites.at(tileIndex).setColor(geck::ColorUtils::createRoofTileSelectionColor());
-    _selectedRoofVisuals.push_back(tileIndex);
-
-    // blank.frm background sprite makes tiles with transparent pixels visible when selected
-    auto screenPos = geck::indexToScreenPosition(tileIndex, true); // true for roof offset
-    sf::Sprite backgroundSprite(_resources.textures().get("art/tiles/blank.frm"));
-    backgroundSprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-    backgroundSprite.setColor(sf::Color(Colors::SELECTION_R, Colors::SELECTION_G, Colors::SELECTION_B, 128)); // 50% transparency
-    _selectedRoofTileBackgroundSprites.push_back(backgroundSprite);
 }
 
 void EditorWidget::refreshSelectionVisuals() {
@@ -573,26 +567,8 @@ void EditorWidget::clearAllVisualSelections() {
         }
     });
 
-    // Reset only the tiles previously tinted for selection (bounded by the selection size),
-    // not the whole 100x100 map — this keeps the live drag-select preview cheap. Preview tints
-    // are tracked and reset separately by clearDragPreview.
-    for (int tileIndex : _selectedFloorVisuals) {
-        if (isValidTileIndex(tileIndex)) {
-            _floorSprites[tileIndex].setColor(sf::Color::White);
-        }
-    }
-
-    const bool hasElevation = _map && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end();
-    for (int tileIndex : _selectedRoofVisuals) {
-        if (!isValidTileIndex(tileIndex)) {
-            continue;
-        }
-        // Empty roof tiles go back to transparent, present ones to white.
-        const bool empty = hasElevation
-            && _map->getMapFile().tiles.at(_currentElevation).at(tileIndex).getRoof() == Map::EMPTY_TILE;
-        _roofSprites[tileIndex].setColor(empty ? geck::TileColors::transparent() : sf::Color::White);
-    }
-
+    // Tiles are outlined (renderTileSelectionOutline), not tinted, so there is no tile colour to
+    // reset — just drop the tracked selection sets. Preview tints are reset by clearDragPreview.
     _selectedFloorVisuals.clear();
     _selectedRoofVisuals.clear();
     _selectedRoofTileBackgroundSprites.clear();
@@ -879,6 +855,8 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.wallBlockerOverlays = &_wallBlockerOverlays;
     renderData.selectedRoofTileBackgroundSprites = &_selectedRoofTileBackgroundSprites;
     renderData.selectedHexPositions = &_selectedHexPositions;
+    renderData.selectedFloorTiles = &_selectedFloorVisuals;
+    renderData.selectedRoofTiles = &_selectedRoofVisuals;
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
     renderData.stampPreviewFloorTiles = &_stampPreviewFloorTiles;

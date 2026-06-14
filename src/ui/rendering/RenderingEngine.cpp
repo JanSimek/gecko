@@ -10,8 +10,10 @@
 #include "util/ColorUtils.h"
 #include "resource/ResourcePaths.h"
 #include "util/Coordinates.h"
+#include "util/TileUtils.h"
 #include <spdlog/spdlog.h>
 #include <array>
+#include <unordered_set>
 
 namespace geck {
 
@@ -224,8 +226,63 @@ void RenderingEngine::renderRoofTiles(sf::RenderTarget& target,
     }
 }
 
+void RenderingEngine::renderTileSelectionOutline(sf::RenderTarget& target,
+    const std::vector<int>& selectedTiles, bool roof) {
+    if (selectedTiles.empty()) {
+        return;
+    }
+
+    const std::unordered_set<int> selected(selectedTiles.begin(), selectedTiles.end());
+    const sf::Color outlineColor = ColorUtils::createObjectSelectionColor();
+    sf::VertexArray edges(sf::PrimitiveType::Lines);
+
+    const auto isSelected = [&](int row, int col) {
+        if (row < 0 || row >= MAP_HEIGHT || col < 0 || col >= MAP_WIDTH) {
+            return false;
+        }
+        return selected.contains(row * MAP_WIDTH + col);
+    };
+    const auto addEdge = [&](sf::Vector2f a, sf::Vector2f b) {
+        edges.append(sf::Vertex{ a, outlineColor });
+        edges.append(sf::Vertex{ b, outlineColor });
+    };
+
+    for (int index : selectedTiles) {
+        const int row = index / MAP_WIDTH;
+        const int col = index % MAP_WIDTH;
+        const auto screen = indexToScreenPosition(index, roof);
+        const float sx = static_cast<float>(screen.x);
+        const float sy = static_cast<float>(screen.y);
+
+        // The four corners of the (sheared) tile parallelogram.
+        const sf::Vector2f top{ sx + 48.f, sy };
+        const sf::Vector2f right{ sx + 80.f, sy + 24.f };
+        const sf::Vector2f bottom{ sx + 32.f, sy + 36.f };
+        const sf::Vector2f left{ sx, sy + 12.f };
+
+        // Draw an edge only when the tile sharing it is not selected (union boundary).
+        if (!isSelected(row, col - 1))
+            addEdge(top, right); // upper-right edge
+        if (!isSelected(row + 1, col))
+            addEdge(right, bottom); // lower-right edge
+        if (!isSelected(row, col + 1))
+            addEdge(bottom, left); // lower-left edge
+        if (!isSelected(row - 1, col))
+            addEdge(left, top); // upper-left edge
+    }
+
+    target.draw(edges);
+}
+
 void RenderingEngine::renderSelectionVisuals(sf::RenderTarget& target,
     const RenderData& renderData) {
+    if (renderData.selectedFloorTiles) {
+        renderTileSelectionOutline(target, *renderData.selectedFloorTiles, false);
+    }
+    if (renderData.selectedRoofTiles) {
+        renderTileSelectionOutline(target, *renderData.selectedRoofTiles, true);
+    }
+
     if (renderData.selectedHexPositions && renderData.hexGrid) {
         _hexRenderer.renderSelection(target, *renderData.hexGrid, *renderData.selectedHexPositions);
     }

@@ -52,6 +52,9 @@ public:
         const std::vector<sf::Sprite>* wallBlockerOverlays = nullptr;
         const std::vector<sf::Sprite>* selectedRoofTileBackgroundSprites = nullptr;
         const std::vector<int>* selectedHexPositions = nullptr;
+        // Selected floor/roof tile indices, outlined as a union boundary (not a tint).
+        const std::vector<int>* selectedFloorTiles = nullptr;
+        const std::vector<int>* selectedRoofTiles = nullptr;
 
         // Drag preview
         const std::shared_ptr<Object>* dragPreviewObject = nullptr;
@@ -132,6 +135,15 @@ private:
      */
     void drawObjectOutline(sf::RenderTarget& target, const Object& object);
     void ensureOutlineShader();
+
+    /**
+     * @brief Outline the outer boundary of a set of selected tiles.
+     *
+     * Each tile is a sheared parallelogram; an edge is drawn only where the tile across it is
+     * not also selected, so a multi-tile selection reads as one clean union outline rather than
+     * a per-cell grid.
+     */
+    void renderTileSelectionOutline(sf::RenderTarget& target, const std::vector<int>& selectedTiles, bool roof);
 
     /**
      * @brief Render roof tiles and their selection backgrounds
