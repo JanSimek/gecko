@@ -12,21 +12,26 @@ namespace geck {
  * This is the single rule shared by RenderingEngine::renderObjects (what gets drawn) and
  * EditorWidget::getObjectsAtPosition (what gets picked), so the two cannot drift apart.
  *
+ * Each layer toggle controls its own category independently: walls follow showWalls, critters
+ * showCritters, scroll blockers showScrollBlockers, and everything else (items, scenery, tiles,
+ * misc) the generic showObjects toggle. showObjects is NOT a master switch over the others.
+ *
  * Templated on the visibility-settings type because the editor and the rendering engine each
- * carry their own struct; both expose the same showObjects/showWalls/showScrollBlockers flags.
+ * carry their own struct; both expose the same show* flags.
  */
 template <typename VisibilitySettingsT>
 bool isObjectVisible(const MapObject& object, const VisibilitySettingsT& visibility) {
-    if (!visibility.showObjects) {
-        return false;
+    // Scroll blockers are identified by their FRM (base id 1), not object type, so check first.
+    if (object.isScrollBlocker()) {
+        return visibility.showScrollBlockers;
     }
-    if (!visibility.showWalls && object.isWallObject()) {
-        return false;
+    if (object.isWallObject()) {
+        return visibility.showWalls;
     }
-    if (!visibility.showScrollBlockers && object.isScrollBlocker()) {
-        return false;
+    if (object.objectType() == 1u /* Pro::OBJECT_TYPE::CRITTER */) {
+        return visibility.showCritters;
     }
-    return true;
+    return visibility.showObjects;
 }
 
 } // namespace geck
