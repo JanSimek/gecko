@@ -18,24 +18,29 @@
 namespace geck {
 
 namespace {
-    // Fragment shader that emits the outline colour only at the sprite's silhouette EDGE — a pixel
-    // whose neighbourhood straddles the alpha=0.5 boundary — and is transparent everywhere else.
-    // Drawing the sprite through this on top of the scene yields a thin outline that does not fill
-    // (so it never hides foreground objects). Neighbour samples are clamped to the sprite's atlas
-    // sub-rect so edge detection doesn't bleed into adjacent sprites in the sheet. SFML gives
-    // normalised gl_TexCoord[0] via its texture matrix.
+    // Fragment shader that emits the outline colour only at the sprite's silhouette EDGE — an
+    // opaque pixel that has a transparent neighbour — and is transparent everywhere else. Drawing
+    // the sprite through this on top of the scene yields a thin 1px outline that does not fill (so
+    // it never hides foreground objects). Samples that fall OUTSIDE the sprite's atlas sub-rect are
+    // treated as transparent: this both avoids bleeding into adjacent sprites in the sheet AND lets
+    // the silhouette be outlined where the art runs to the cell edge (e.g. a wall filling its cell
+    // width). SFML gives normalised gl_TexCoord[0] via its texture matrix.
     constexpr const char* kOutlineFragmentShader = R"(
 uniform sampler2D texture;
 uniform vec4 outlineColor;
 uniform vec2 texel; // one-texel step in texcoord units
 uniform vec4 rect;  // sprite sub-rect in texcoords: (minX, minY, maxX, maxY)
+float sampleAlpha(vec2 p) {
+    vec2 inside = step(rect.xy, p) * step(p, rect.zw); // 0 outside the sub-rect on each axis
+    return inside.x * inside.y * texture2D(texture, p).a;
+}
 void main() {
     vec2 uv = gl_TexCoord[0].xy;
     float a  = texture2D(texture, uv).a;
-    float aL = texture2D(texture, vec2(clamp(uv.x - texel.x, rect.x, rect.z), uv.y)).a;
-    float aR = texture2D(texture, vec2(clamp(uv.x + texel.x, rect.x, rect.z), uv.y)).a;
-    float aU = texture2D(texture, vec2(uv.x, clamp(uv.y - texel.y, rect.y, rect.w))).a;
-    float aD = texture2D(texture, vec2(uv.x, clamp(uv.y + texel.y, rect.y, rect.w))).a;
+    float aL = sampleAlpha(vec2(uv.x - texel.x, uv.y));
+    float aR = sampleAlpha(vec2(uv.x + texel.x, uv.y));
+    float aU = sampleAlpha(vec2(uv.x, uv.y - texel.y));
+    float aD = sampleAlpha(vec2(uv.x, uv.y + texel.y));
     float minN = min(min(aL, aR), min(aU, aD));
     // 1px outline: an opaque pixel that has a transparent neighbour (the silhouette's inner edge).
     float edge = step(0.5, a) * (1.0 - step(0.5, minN));
