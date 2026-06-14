@@ -64,7 +64,6 @@ public:
         const std::vector<sf::Sprite>* roofSprites = nullptr;
         const std::vector<std::shared_ptr<Object>>* objects = nullptr;
         const std::vector<sf::Sprite>* wallBlockerOverlays = nullptr;
-        const std::vector<sf::Sprite>* selectedRoofTileBackgroundSprites = nullptr;
         const std::vector<int>* selectedHexPositions = nullptr;
         // Selected floor/roof tile indices, outlined as a union boundary (not a tint).
         const std::vector<int>* selectedFloorTiles = nullptr;

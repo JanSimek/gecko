@@ -571,7 +571,6 @@ void EditorWidget::clearAllVisualSelections() {
     // reset — just drop the tracked selection sets. Preview tints are reset by clearDragPreview.
     _selectedFloorVisuals.clear();
     _selectedRoofVisuals.clear();
-    _selectedRoofTileBackgroundSprites.clear();
     _selectedHexPositions.clear();
 }
 
@@ -587,6 +586,33 @@ void EditorWidget::handleEvent(const sf::Event& event) {
     if (_inputHandler && _sfmlWidget) {
         if (auto* target = _sfmlWidget->getRenderTarget()) {
             _inputHandler->handleEvent(event, *target, _viewportController->getView());
+        }
+    }
+}
+
+void EditorWidget::commitDragAreaSelection(sf::Vector2f startPos, sf::Vector2f endPos, bool isDeselect, bool isAdditive) {
+    // Tear down the live preview tints first; the selection callback that follows only resets
+    // tracked selection tints, so a leftover preview tint must be cleared here.
+    clearDragPreview();
+
+    const float left = std::min(startPos.x, endPos.x);
+    const float top = std::min(startPos.y, endPos.y);
+    const float width = std::abs(endPos.x - startPos.x);
+    const float height = std::abs(endPos.y - startPos.y);
+    const sf::FloatRect selectionArea({ left, top }, { width, height });
+
+    if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
+        createScrollBlockersFromHexes(calculateRectangleBorderHexes(selectionArea));
+    } else if (isDeselect) {
+        // Ctrl+drag only removes already-selected items in the area; it never adds.
+        _selectionManager->deselectArea(selectionArea, _currentSelectionMode, _currentElevation);
+    } else if (isAdditive) {
+        // Alt+drag adds the covered items to the selection, keeping what was already selected.
+        _selectionManager->addArea(selectionArea, _currentSelectionMode, _currentElevation);
+    } else {
+        const auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
+        if (result.success) {
+            spdlog::debug("Area selection completed: {}", result.message);
         }
     }
 }
@@ -624,31 +650,9 @@ void EditorWidget::setupInputCallbacks() {
     };
 
     callbacks.onDragSelection = [this](sf::Vector2f startPos, sf::Vector2f endPos, InputHandler::SelectionModifier modifier) {
-        // Tear down the live preview tints first; the selection callback that follows only
-        // resets tracked selection tints, so a leftover preview tint must be cleared here.
-        clearDragPreview();
-
-        float left = std::min(startPos.x, endPos.x);
-        float top = std::min(startPos.y, endPos.y);
-        float width = std::abs(endPos.x - startPos.x);
-        float height = std::abs(endPos.y - startPos.y);
-        sf::FloatRect selectionArea({ left, top }, { width, height });
-
-        if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
-            auto borderHexes = calculateRectangleBorderHexes(selectionArea);
-            createScrollBlockersFromHexes(borderHexes);
-        } else if (modifier == InputHandler::SelectionModifier::TOGGLE) {
-            // Ctrl+drag only removes already-selected items in the area; it never adds.
-            _selectionManager->deselectArea(selectionArea, _currentSelectionMode, _currentElevation);
-        } else if (modifier == InputHandler::SelectionModifier::ADD) {
-            // Alt+drag adds the covered items to the selection, keeping what was already selected.
-            _selectionManager->addArea(selectionArea, _currentSelectionMode, _currentElevation);
-        } else {
-            auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
-            if (result.success) {
-                spdlog::debug("Area selection completed: {}", result.message);
-            }
-        }
+        commitDragAreaSelection(startPos, endPos,
+            modifier == InputHandler::SelectionModifier::TOGGLE,
+            modifier == InputHandler::SelectionModifier::ADD);
     };
 
     callbacks.onTilePlacement = [this](sf::Vector2f worldPos) {
@@ -853,7 +857,6 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.roofSprites = &_roofSprites;
     renderData.objects = &_objects;
     renderData.wallBlockerOverlays = &_wallBlockerOverlays;
-    renderData.selectedRoofTileBackgroundSprites = &_selectedRoofTileBackgroundSprites;
     renderData.selectedHexPositions = &_selectedHexPositions;
     renderData.selectedFloorTiles = &_selectedFloorVisuals;
     renderData.selectedRoofTiles = &_selectedRoofVisuals;

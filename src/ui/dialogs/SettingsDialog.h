@@ -53,7 +53,7 @@ private:
     void setupGeneralTab();
     void setupEditorTab();
     void setupColorsTab();
-    void updateColorButton(const QString& key);
+    void updateColorButton(const QString& key) const;
     void setupButtonBox();
 
     void loadSettings();

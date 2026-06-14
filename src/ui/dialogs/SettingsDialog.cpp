@@ -126,7 +126,7 @@ void SettingsDialog::setupColorsTab() {
     _tabWidget->addTab(_colorsTab, "Selection Colours");
 }
 
-void SettingsDialog::updateColorButton(const QString& key) {
+void SettingsDialog::updateColorButton(const QString& key) const {
     auto* swatch = _colorSwatches.value(key, nullptr);
     if (!swatch) {
         return;

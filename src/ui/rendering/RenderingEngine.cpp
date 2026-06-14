@@ -53,8 +53,7 @@ void main() {
 } // namespace
 
 sf::Color RenderingEngine::objectOutlineColor(const Object& object) const {
-    const auto mapObject = object.getMapObjectPtr();
-    if (mapObject) {
+    if (const auto mapObject = object.getMapObjectPtr(); mapObject) {
         if (mapObject->isWallObject()) {
             return _selectionColors.wall;
         }
@@ -190,10 +189,10 @@ void RenderingEngine::drawObjectOutline(sf::RenderTarget& target, const Object& 
     }
 
     // Edge-detect the silhouette in the sprite's atlas sub-rect (normalised texcoords).
-    const sf::Vector2u atlas = source.getTexture().getSize();
-    const sf::IntRect texRect = source.getTextureRect();
-    const float aw = static_cast<float>(atlas.x);
-    const float ah = static_cast<float>(atlas.y);
+    const auto atlas = source.getTexture().getSize();
+    const auto texRect = source.getTextureRect();
+    const auto aw = static_cast<float>(atlas.x);
+    const auto ah = static_cast<float>(atlas.y);
 
     _outlineShader.setUniform("outlineColor", sf::Glsl::Vec4(outlineColor));
     _outlineShader.setUniform("texel", sf::Glsl::Vec2(kOutlineThickness / aw, kOutlineThickness / ah));
@@ -262,13 +261,6 @@ void RenderingEngine::renderRoofTiles(sf::RenderTarget& target,
         return;
     }
 
-    // Background sprites for selected roof tiles must be drawn before the roof sprites on top
-    if (renderData.selectedRoofTileBackgroundSprites) {
-        for (const auto& backgroundSprite : *renderData.selectedRoofTileBackgroundSprites) {
-            target.draw(backgroundSprite);
-        }
-    }
-
     if (renderData.roofSprites) {
         for (const auto& roof : *renderData.roofSprites) {
             target.draw(roof);
@@ -312,8 +304,8 @@ void RenderingEngine::renderTileSelectionOutline(sf::RenderTarget& target,
         const int row = index / MAP_WIDTH;
         const int col = index % MAP_WIDTH;
         const auto screen = indexToScreenPosition(index, roof);
-        const float sx = static_cast<float>(screen.x);
-        const float sy = static_cast<float>(screen.y);
+        const auto sx = static_cast<float>(screen.x);
+        const auto sy = static_cast<float>(screen.y);
 
         // The four corners of the (sheared) tile parallelogram.
         const sf::Vector2f top{ sx + 48.f, sy };

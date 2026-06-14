@@ -289,6 +289,9 @@ private:
     void previewAreaObjects(const sf::FloatRect& area);
     void updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
+    // Commit a finished drag rectangle to the selection (replace/deselect/additive), or build
+    // scroll blockers when in that mode. Extracted from the onDragSelection callback.
+    void commitDragAreaSelection(sf::Vector2f startPos, sf::Vector2f endPos, bool isDeselect, bool isAdditive);
 
     // Scroll blocker rectangle functionality
     std::vector<int> calculateRectangleBorderHexes(sf::FloatRect rectangle);
@@ -355,9 +358,6 @@ private:
 
     // Selection management
     std::unique_ptr<selection::SelectionManager> _selectionManager;
-
-    // Selected roof tile background sprites (blank.frm tiles for transparent pixel visibility)
-    std::vector<sf::Sprite> _selectedRoofTileBackgroundSprites;
 
     std::vector<int> _selectedHexPositions;
 
