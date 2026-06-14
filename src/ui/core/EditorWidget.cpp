@@ -201,53 +201,62 @@ void EditorWidget::initializeSelectionSystem() {
 
     _selectionManager->setSelectionCallback([this](const selection::SelectionState& selection) {
         this->clearAllVisualSelections();
-
-        for (const auto& item : selection.items) {
-            switch (item.type) {
-                case selection::SelectionType::OBJECT: {
-                    auto object = item.getObject();
-                    if (object) {
-                        object->select();
-                    }
-                    break;
-                }
-
-                case selection::SelectionType::ROOF_TILE: {
-                    int tileIndex = item.getTileIndex();
-                    if (isValidTileIndex(tileIndex) && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
-                        [[maybe_unused]] auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
-                        this->_roofSprites.at(tileIndex).setColor(geck::ColorUtils::createRoofTileSelectionColor());
-
-                        // blank.frm background sprite makes tiles with transparent pixels visible when selected
-                        auto screenPos = geck::indexToScreenPosition(tileIndex, true); // true for roof offset
-                        sf::Sprite backgroundSprite(_resources.textures().get("art/tiles/blank.frm"));
-                        backgroundSprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-                        backgroundSprite.setColor(sf::Color(Colors::SELECTION_R, Colors::SELECTION_G, Colors::SELECTION_B, 128)); // 50% transparency
-                        this->_selectedRoofTileBackgroundSprites.push_back(backgroundSprite);
-                    }
-                    break;
-                }
-
-                case selection::SelectionType::FLOOR_TILE: {
-                    int tileIndex = item.getTileIndex();
-                    if (isValidTileIndex(tileIndex)) {
-                        this->_floorSprites.at(tileIndex).setColor(geck::ColorUtils::createFloorTileSelectionColor());
-                    }
-                    break;
-                }
-
-                case selection::SelectionType::HEX: {
-                    int hexIndex = item.getHexIndex();
-                    if (hexIndex >= 0 && hexIndex < static_cast<int>(_hexgrid.size())) {
-                        this->_selectedHexPositions.push_back(hexIndex);
-                    }
-                    break;
-                }
-            }
-        }
-
+        this->applySelectionVisuals(selection);
         Q_EMIT selectionChanged(selection, _currentElevation);
     });
+}
+
+void EditorWidget::applySelectionVisuals(const selection::SelectionState& selection) {
+    for (const auto& item : selection.items) {
+        switch (item.type) {
+            case selection::SelectionType::OBJECT: {
+                auto object = item.getObject();
+                if (object) {
+                    object->select();
+                }
+                break;
+            }
+
+            case selection::SelectionType::ROOF_TILE:
+                applyRoofTileSelectionVisual(item.getTileIndex());
+                break;
+
+            case selection::SelectionType::FLOOR_TILE: {
+                int tileIndex = item.getTileIndex();
+                if (isValidTileIndex(tileIndex)) {
+                    this->_floorSprites.at(tileIndex).setColor(geck::ColorUtils::createFloorTileSelectionColor());
+                }
+                break;
+            }
+
+            case selection::SelectionType::HEX: {
+                int hexIndex = item.getHexIndex();
+                if (hexIndex >= 0 && hexIndex < static_cast<int>(_hexgrid.size())) {
+                    this->_selectedHexPositions.push_back(hexIndex);
+                }
+                break;
+            }
+        }
+    }
+}
+
+void EditorWidget::applyRoofTileSelectionVisual(int tileIndex) {
+    if (!isValidTileIndex(tileIndex) || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
+        return;
+    }
+    _roofSprites.at(tileIndex).setColor(geck::ColorUtils::createRoofTileSelectionColor());
+
+    // blank.frm background sprite makes tiles with transparent pixels visible when selected
+    auto screenPos = geck::indexToScreenPosition(tileIndex, true); // true for roof offset
+    sf::Sprite backgroundSprite(_resources.textures().get("art/tiles/blank.frm"));
+    backgroundSprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
+    backgroundSprite.setColor(sf::Color(Colors::SELECTION_R, Colors::SELECTION_G, Colors::SELECTION_B, 128)); // 50% transparency
+    _selectedRoofTileBackgroundSprites.push_back(backgroundSprite);
+}
+
+void EditorWidget::refreshSelectionVisuals() {
+    clearAllVisualSelections();
+    applySelectionVisuals(_selectionManager->getCurrentSelection());
 }
 
 void EditorWidget::setupUI() {
@@ -471,6 +480,12 @@ void EditorWidget::loadSprites() {
     spdlog::info("Map sprites loaded in {:.3} seconds", sw);
 }
 
+bool EditorWidget::isObjectSelectable(const std::shared_ptr<Object>& object) const {
+    // Same rule getObjectsAtPosition applies for point picks; shared so area and point
+    // selection agree on which objects are interactable.
+    return object && isObjectVisible(object->getMapObject(), _visibility);
+}
+
 std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vector2f worldPos) {
     std::vector<std::shared_ptr<Object>> objectsAtPos;
 
@@ -618,11 +633,13 @@ void EditorWidget::setupInputCallbacks() {
         selectAtPosition(worldPos, selectionModifier);
     };
 
-    callbacks.onDragSelectionPreview = [this](sf::Vector2f startPos, sf::Vector2f currentPos) {
-        updateDragSelectionPreview(startPos, currentPos);
+    callbacks.onDragSelectionPreview = [this](sf::Vector2f startPos, sf::Vector2f currentPos, InputHandler::SelectionModifier modifier) {
+        updateDragSelectionPreview(startPos, currentPos,
+            modifier == InputHandler::SelectionModifier::TOGGLE,
+            modifier == InputHandler::SelectionModifier::ADD);
     };
 
-    callbacks.onDragSelection = [this](sf::Vector2f startPos, sf::Vector2f endPos) {
+    callbacks.onDragSelection = [this](sf::Vector2f startPos, sf::Vector2f endPos, InputHandler::SelectionModifier modifier) {
         float left = std::min(startPos.x, endPos.x);
         float top = std::min(startPos.y, endPos.y);
         float width = std::abs(endPos.x - startPos.x);
@@ -632,6 +649,12 @@ void EditorWidget::setupInputCallbacks() {
         if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
             auto borderHexes = calculateRectangleBorderHexes(selectionArea);
             createScrollBlockersFromHexes(borderHexes);
+        } else if (modifier == InputHandler::SelectionModifier::TOGGLE) {
+            // Ctrl+drag only removes already-selected items in the area; it never adds.
+            _selectionManager->deselectArea(selectionArea, _currentSelectionMode, _currentElevation);
+        } else if (modifier == InputHandler::SelectionModifier::ADD) {
+            // Alt+drag adds the covered items to the selection, keeping what was already selected.
+            _selectionManager->addArea(selectionArea, _currentSelectionMode, _currentElevation);
         } else {
             auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
             if (result.success) {
@@ -880,8 +903,8 @@ bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier mod
             break;
 
         case SelectionModifier::TOGGLE:
-            result = _selectionManager->toggleSelection(worldPos, _currentSelectionMode, _currentElevation);
-            spdlog::debug("Toggle selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
+            result = _selectionManager->deselectAtPosition(worldPos, _currentSelectionMode, _currentElevation);
+            spdlog::debug("Deselect at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
 
         case SelectionModifier::RANGE:
@@ -1314,7 +1337,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     return result;
 }
 
-void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos) {
+void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos, bool isDeselect, bool isAdditive) {
     clearDragPreview();
 
     float left = std::min(startWorldPos.x, currentWorldPos.x);
@@ -1326,76 +1349,79 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
     _selectionRectangle.setPosition({ left, top });
     _selectionRectangle.setSize({ width, height });
 
+    if (isDeselect) {
+        // Ctrl+drag: show the selection with the covered (visible) selected items removed, so
+        // they un-highlight live while everything else stays highlighted. The commit
+        // (deselectArea) and the manager's preview query share the same visibility rules, so
+        // the preview matches exactly what will be deselected.
+        auto toRemove = _selectionManager->itemsToDeselectInArea(selectionArea, _currentSelectionMode, _currentElevation);
+        selection::SelectionState preview = _selectionManager->getCurrentSelection();
+        for (const auto& item : toRemove) {
+            preview.removeItem(item);
+        }
+        clearAllVisualSelections();
+        applySelectionVisuals(preview);
+        return;
+    }
+
+    if (isAdditive) {
+        // Alt+drag adds to the selection, so keep what is already selected highlighted while the
+        // covered area is tinted below to preview the addition.
+        refreshSelectionVisuals();
+    }
+
     switch (_currentSelectionMode) {
-        case SelectionMode::FLOOR_TILES: {
-            _previewTiles = _selectionManager->getTilesInArea(selectionArea, false, _currentElevation);
-            for (int tileIndex : _previewTiles) {
-                if (isValidTileIndex(tileIndex)) {
-                    applyPreviewHighlight(_floorSprites.at(tileIndex));
-                }
-            }
+        case SelectionMode::FLOOR_TILES:
+            previewAreaTiles(selectionArea, false, false);
             break;
-        }
 
-        case SelectionMode::ROOF_TILES: {
-            _previewTiles = _selectionManager->getTilesInArea(selectionArea, true, _currentElevation);
-            for (int tileIndex : _previewTiles) {
-                if (isValidTileIndex(tileIndex)) {
-                    applyPreviewHighlight(_roofSprites.at(tileIndex));
-                }
-            }
+        case SelectionMode::ROOF_TILES:
+            previewAreaTiles(selectionArea, true, false);
             break;
-        }
 
-        case SelectionMode::ROOF_TILES_ALL: {
-            _previewTiles = _selectionManager->getTilesInAreaIncludingEmpty(selectionArea, true, _currentElevation);
-            // Highlight makes empty (transparent) roof tiles visible
-            for (int tileIndex : _previewTiles) {
-                if (isValidTileIndex(tileIndex)) {
-                    applyPreviewHighlight(_roofSprites.at(tileIndex));
-                }
-            }
+        case SelectionMode::ROOF_TILES_ALL:
+            previewAreaTiles(selectionArea, true, true);
             break;
-        }
 
-        case SelectionMode::OBJECTS: {
-            _previewObjects = _selectionManager->getObjectsInArea(selectionArea, _currentElevation);
-            std::ranges::for_each(_previewObjects, [](auto& object) {
-                if (object) {
-                    applyPreviewHighlight(object->getSprite());
-                }
-            });
+        case SelectionMode::OBJECTS:
+            previewAreaObjects(selectionArea);
             break;
-        }
 
-        case SelectionMode::ALL: {
-            _previewTiles = _selectionManager->getTilesInArea(selectionArea, false, _currentElevation);
-            for (int tileIndex : _previewTiles) {
-                if (isValidTileIndex(tileIndex)) {
-                    applyPreviewHighlight(_floorSprites.at(tileIndex));
-                }
+        case SelectionMode::ALL:
+            previewAreaTiles(selectionArea, false, false);
+            // Match collectItemsInArea: in ALL mode a hidden roof is not selectable, so do
+            // not preview-tint roof tiles the commit would skip.
+            if (isRoofVisible()) {
+                previewAreaTiles(selectionArea, true, false);
             }
-
-            auto roofTiles = _selectionManager->getTilesInArea(selectionArea, true, _currentElevation);
-            for (int tileIndex : roofTiles) {
-                if (isValidTileIndex(tileIndex)) {
-                    applyPreviewHighlight(_roofSprites.at(tileIndex));
-                }
-            }
-            _previewTiles.insert(_previewTiles.end(), roofTiles.begin(), roofTiles.end());
-
-            _previewObjects = _selectionManager->getObjectsInArea(selectionArea, _currentElevation);
-            std::ranges::for_each(_previewObjects, [](auto& object) {
-                if (object) {
-                    applyPreviewHighlight(object->getSprite());
-                }
-            });
+            previewAreaObjects(selectionArea);
             break;
-        }
 
         default:
             break;
     }
+}
+
+void EditorWidget::previewAreaTiles(const sf::FloatRect& area, bool roof, bool includeEmpty) {
+    auto tiles = includeEmpty ? _selectionManager->getTilesInAreaIncludingEmpty(area, roof, _currentElevation)
+                              : _selectionManager->getTilesInArea(area, roof, _currentElevation);
+    auto& sprites = roof ? _roofSprites : _floorSprites;
+    for (int tileIndex : tiles) {
+        if (isValidTileIndex(tileIndex)) {
+            applyPreviewHighlight(sprites.at(tileIndex)); // also makes empty (transparent) roof tiles visible
+        }
+    }
+    _previewTiles.insert(_previewTiles.end(), tiles.begin(), tiles.end());
+}
+
+void EditorWidget::previewAreaObjects(const sf::FloatRect& area) {
+    auto objects = _selectionManager->getObjectsInArea(area, _currentElevation);
+    std::ranges::for_each(objects, [](auto& object) {
+        if (object) {
+            applyPreviewHighlight(object->getSprite());
+        }
+    });
+    _previewObjects.insert(_previewObjects.end(), objects.begin(), objects.end());
 }
 
 void EditorWidget::updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos) {
@@ -1701,6 +1727,10 @@ void EditorWidget::setShowLightOverlays(bool show) {
 
 void EditorWidget::clearDragSelectionPreview() {
     clearDragPreview();
+    // A Ctrl+drag preview temporarily un-highlights the covered selected items; restore the
+    // real selection highlight so cancelling the drag (or clearing after another op) leaves
+    // the selection looking correct.
+    refreshSelectionVisuals();
 
     spdlog::debug("EditorWidget::clearDragSelectionPreview() - cleared selection rectangle");
 }

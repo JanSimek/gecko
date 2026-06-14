@@ -42,8 +42,8 @@ public:
     struct Callbacks {
         // Mouse events
         std::function<void(sf::Vector2f worldPos, SelectionModifier modifier)> onSelectionClick;
-        std::function<void(sf::Vector2f startPos, sf::Vector2f endPos)> onDragSelection;
-        std::function<void(sf::Vector2f startPos, sf::Vector2f currentPos)> onDragSelectionPreview;
+        std::function<void(sf::Vector2f startPos, sf::Vector2f endPos, SelectionModifier modifier)> onDragSelection;
+        std::function<void(sf::Vector2f startPos, sf::Vector2f currentPos, SelectionModifier modifier)> onDragSelectionPreview;
         std::function<void(sf::Vector2f worldPos)> onTilePlacement;
         std::function<void(sf::Vector2f startPos, sf::Vector2f endPos, bool isRoof)> onTileAreaFill;
         std::function<void(sf::Vector2f delta)> onPan;
@@ -152,6 +152,7 @@ private:
     sf::Vector2f _dragStartWorldPos;
     bool _isDragging = false;
     bool _immediateSelectionPerformed = false;
+    SelectionModifier _dragSelectionModifier = SelectionModifier::NONE; // modifier held when a drag-select began
 
     // Mode flags
     bool _playerPositionMode = false;

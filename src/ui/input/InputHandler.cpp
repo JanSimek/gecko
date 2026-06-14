@@ -83,13 +83,17 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             _immediateSelectionPerformed = false;
             return;
         }
-        bool canDragSelect = !hasModifiers && (_selectionMode == SelectionMode::ALL || _selectionMode == SelectionMode::FLOOR_TILES || _selectionMode == SelectionMode::ROOF_TILES || _selectionMode == SelectionMode::ROOF_TILES_ALL || _selectionMode == SelectionMode::OBJECTS || _selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE);
+        // Plain drag-select replaces the selection; Ctrl (TOGGLE) drag removes the covered
+        // items; Alt (ADD) drag adds them. A no-drag release falls back to a single click.
+        const bool modifierAllowsDragSelect = (modifier == SelectionModifier::NONE || modifier == SelectionModifier::TOGGLE || modifier == SelectionModifier::ADD);
+        bool canDragSelect = modifierAllowsDragSelect && (_selectionMode == SelectionMode::ALL || _selectionMode == SelectionMode::FLOOR_TILES || _selectionMode == SelectionMode::ROOF_TILES || _selectionMode == SelectionMode::ROOF_TILES_ALL || _selectionMode == SelectionMode::OBJECTS || _selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE);
 
         if (canDragSelect) {
             _currentAction = EditorAction::DRAG_SELECTING;
             _dragStartWorldPos = worldPos;
             _isDragging = false;
             _immediateSelectionPerformed = false;
+            _dragSelectionModifier = modifier;
         } else {
             if (_callbacks.onSelectionClick) {
                 _callbacks.onSelectionClick(worldPos, modifier);
@@ -158,13 +162,14 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
                         sf::FloatRect area({ left, top }, { width, height });
                         _callbacks.onScrollBlockerRectangle(area);
                     } else if (_callbacks.onDragSelection) {
-                        _callbacks.onDragSelection(_dragStartWorldPos, worldPos);
+                        _callbacks.onDragSelection(_dragStartWorldPos, worldPos, _dragSelectionModifier);
                     }
                 } else if (!_immediateSelectionPerformed && _callbacks.onSelectionClick) {
                     if (_markExitsMode && _callbacks.onMarkExitsSelection) {
                         _callbacks.onMarkExitsSelection(worldPos);
                     } else {
-                        _callbacks.onSelectionClick(worldPos, SelectionModifier::NONE);
+                        // A no-drag release on a Ctrl drag is a Ctrl+click, so pass the modifier.
+                        _callbacks.onSelectionClick(worldPos, _dragSelectionModifier);
                     }
                 }
                 break;
@@ -232,7 +237,7 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
                 if (_markExitsMode && _callbacks.onMarkExitsPreview) {
                     _callbacks.onMarkExitsPreview(_dragStartWorldPos, worldPos);
                 } else if (_callbacks.onDragSelectionPreview) {
-                    _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos);
+                    _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos, _dragSelectionModifier);
                 }
             }
             break;
@@ -246,7 +251,7 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
                 }
             }
             if (_isDragging && _callbacks.onDragSelectionPreview) {
-                _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos);
+                _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos, SelectionModifier::NONE);
             }
             break;
 

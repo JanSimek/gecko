@@ -33,73 +33,112 @@ SelectionResult SelectionManager::selectAtPosition(sf::Vector2f worldPos, Select
     }
 }
 
-SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) {
-    clearSelection();
+void SelectionManager::appendTilesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, bool roof, int elevation, bool includeEmpty) const {
+    const auto tiles = includeEmpty ? getTilesInAreaIncludingEmpty(area, roof, elevation)
+                                    : getTilesInArea(area, roof, elevation);
+    const SelectionType type = roof ? SelectionType::ROOF_TILE : SelectionType::FLOOR_TILE;
+    for (int tileIndex : tiles) {
+        items.emplace_back(type, tileIndex);
+    }
+}
+
+void SelectionManager::appendObjectsInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, int elevation) const {
+    for (auto& object : getObjectsInArea(area, elevation)) {
+        items.emplace_back(SelectionType::OBJECT, object);
+    }
+}
+
+void SelectionManager::appendHexesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area) const {
+    for (int hexIndex : getHexesInArea(area)) {
+        items.emplace_back(SelectionType::HEX, hexIndex);
+    }
+}
+
+std::vector<SelectedItem> SelectionManager::collectItemsInArea(const sf::FloatRect& area, SelectionMode mode, int elevation) const {
+    std::vector<SelectedItem> items;
 
     switch (mode) {
-        case SelectionMode::FLOOR_TILES: {
-            auto tiles = getTilesInArea(area, false, currentElevation);
-            std::ranges::for_each(tiles, [this](int tileIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::FLOOR_TILE, tileIndex });
-            });
+        case SelectionMode::FLOOR_TILES:
+            appendTilesInArea(items, area, false, elevation, false);
             break;
-        }
 
-        case SelectionMode::ROOF_TILES: {
-            auto tiles = getTilesInArea(area, true, currentElevation);
-            std::ranges::for_each(tiles, [this](int tileIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
-            });
+        case SelectionMode::ROOF_TILES:
+            appendTilesInArea(items, area, true, elevation, false);
             break;
-        }
 
-        case SelectionMode::ROOF_TILES_ALL: {
-            auto tiles = getTilesInAreaIncludingEmpty(area, true, currentElevation);
-            std::ranges::for_each(tiles, [this](int tileIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
-            });
+        case SelectionMode::ROOF_TILES_ALL:
+            appendTilesInArea(items, area, true, elevation, true);
             break;
-        }
 
-        case SelectionMode::OBJECTS: {
-            auto objects = getObjectsInArea(area, currentElevation);
-            for (auto& object : objects) {
-                SelectedItem item{ SelectionType::OBJECT, object };
-                addItemToSelection(item);
+        case SelectionMode::OBJECTS:
+            appendObjectsInArea(items, area, elevation);
+            break;
+
+        case SelectionMode::ALL:
+            appendObjectsInArea(items, area, elevation);
+            appendTilesInArea(items, area, false, elevation, false);
+            // In mixed (ALL) mode you should only select roofs you can see. The explicit
+            // ROOF_TILES modes above still select roofs regardless of the layer toggle.
+            if (_provider.isRoofVisible()) {
+                appendTilesInArea(items, area, true, elevation, false);
             }
             break;
-        }
 
-        case SelectionMode::ALL: {
-            auto objects = getObjectsInArea(area, currentElevation);
-            std::ranges::for_each(objects, [this](auto& object) {
-                addItemToSelection(SelectedItem{ SelectionType::OBJECT, object });
-            });
-
-            auto floorTiles = getTilesInArea(area, false, currentElevation);
-            std::ranges::for_each(floorTiles, [this](int tileIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::FLOOR_TILE, tileIndex });
-            });
-
-            auto roofTiles = getTilesInArea(area, true, currentElevation);
-            std::ranges::for_each(roofTiles, [this](int tileIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::ROOF_TILE, tileIndex });
-            });
+        case SelectionMode::HEXES:
+            appendHexesInArea(items, area);
             break;
-        }
-
-        case SelectionMode::HEXES: {
-            auto hexIndices = getHexesInArea(area);
-            std::ranges::for_each(hexIndices, [this](int hexIndex) {
-                addItemToSelection(SelectedItem{ SelectionType::HEX, hexIndex });
-            });
-            break;
-        }
 
         default:
-            return SelectionResult::createError("Invalid selection mode");
+            break;
     }
 
+    return items;
+}
+
+SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) {
+    clearSelection();
+    for (const auto& item : collectItemsInArea(area, mode, currentElevation)) {
+        addItemToSelection(item);
+    }
+    _state.mode = mode;
+    notifySelectionChanged();
+    return SelectionResult::createSuccess("");
+}
+
+SelectionResult SelectionManager::addArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) {
+    // Alt+drag: add the covered items to the current selection without clearing it.
+    // addItemToSelection ignores items that are already selected, so overlaps are harmless.
+    for (const auto& item : collectItemsInArea(area, mode, currentElevation)) {
+        addItemToSelection(item);
+    }
+    _state.mode = mode;
+    notifySelectionChanged();
+    return SelectionResult::createSuccess("");
+}
+
+std::vector<SelectedItem> SelectionManager::itemsToDeselectInArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) const {
+    // The covered items a Ctrl+drag would remove: currently selected and on a visible layer.
+    // A roof you cannot see must never be silently deselected, so skip hidden roof tiles.
+    // (Hidden objects are already excluded by collectItemsInArea -> getObjectsInArea; floors
+    // are always visible.)
+    const bool roofVisible = _provider.isRoofVisible();
+    std::vector<SelectedItem> toRemove;
+    for (const auto& item : collectItemsInArea(area, mode, currentElevation)) {
+        if (item.type == SelectionType::ROOF_TILE && !roofVisible) {
+            continue;
+        }
+        if (isItemSelected(item)) {
+            toRemove.push_back(item);
+        }
+    }
+    return toRemove;
+}
+
+SelectionResult SelectionManager::deselectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) {
+    // Ctrl+drag: remove the covered items that are already selected; never add.
+    for (const auto& item : itemsToDeselectInArea(area, mode, currentElevation)) {
+        removeItemFromSelection(item);
+    }
     _state.mode = mode;
     notifySelectionChanged();
     return SelectionResult::createSuccess("");
@@ -196,76 +235,87 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
     return SelectionResult::createNoChange();
 }
 
-SelectionResult SelectionManager::toggleSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
-    std::optional<SelectedItem> itemAtPosition;
+namespace {
+    // Appends a tile candidate when the hit-test found one at the position.
+    void appendTileCandidate(std::vector<SelectedItem>& candidates, std::optional<int> tileIndex, SelectionType type) {
+        if (tileIndex) {
+            candidates.emplace_back(type, tileIndex.value());
+        }
+    }
+} // namespace
+
+void SelectionManager::appendRoofCandidate(std::vector<SelectedItem>& candidates, std::optional<int> tileIndex) const {
+    // A hidden roof must not be deselectable, so it is never offered as a candidate.
+    if (_provider.isRoofVisible()) {
+        appendTileCandidate(candidates, tileIndex, SelectionType::ROOF_TILE);
+    }
+}
+
+void SelectionManager::appendObjectCandidates(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos, int elevation) const {
+    for (auto& object : getObjectsAtPosition(worldPos, elevation)) {
+        candidates.emplace_back(SelectionType::OBJECT, object);
+    }
+}
+
+void SelectionManager::appendHexCandidate(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos) const {
+    auto* viewport = _provider.getViewportController();
+    const auto* hexGrid = _provider.getHexagonGrid();
+    if (viewport && hexGrid) {
+        int hexIndex = viewport->worldPosToHexIndex(worldPos);
+        if (hexGrid->containsPosition(hexIndex)) {
+            candidates.emplace_back(SelectionType::HEX, hexIndex);
+        }
+    }
+}
+
+std::vector<SelectedItem> SelectionManager::collectDeselectableAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation) const {
+    std::vector<SelectedItem> candidates;
 
     switch (mode) {
-        case SelectionMode::FLOOR_TILES: {
-            auto tileIndex = getFloorTileAtPosition(worldPos, currentElevation);
-            if (tileIndex) {
-                itemAtPosition = SelectedItem{ SelectionType::FLOOR_TILE, tileIndex.value() };
-            }
+        case SelectionMode::FLOOR_TILES:
+            appendTileCandidate(candidates, getFloorTileAtPosition(worldPos, elevation), SelectionType::FLOOR_TILE);
             break;
-        }
 
-        case SelectionMode::ROOF_TILES: {
-            auto tileIndex = getRoofTileAtPosition(worldPos, currentElevation);
-            if (tileIndex) {
-                itemAtPosition = SelectedItem{ SelectionType::ROOF_TILE, tileIndex.value() };
-            }
+        case SelectionMode::ROOF_TILES:
+            appendRoofCandidate(candidates, getRoofTileAtPosition(worldPos, elevation));
             break;
-        }
 
-        case SelectionMode::ROOF_TILES_ALL: {
-            auto tileIndex = getRoofTileAtPositionIncludingEmpty(worldPos, currentElevation);
-            if (tileIndex) {
-                itemAtPosition = SelectedItem{ SelectionType::ROOF_TILE, tileIndex.value() };
-            }
+        case SelectionMode::ROOF_TILES_ALL:
+            appendRoofCandidate(candidates, getRoofTileAtPositionIncludingEmpty(worldPos, elevation));
             break;
-        }
 
-        case SelectionMode::OBJECTS: {
-            auto objects = getObjectsAtPosition(worldPos, currentElevation);
-            if (!objects.empty()) {
-                itemAtPosition = SelectedItem{ SelectionType::OBJECT, objects[0] };
-            }
+        case SelectionMode::OBJECTS:
+            appendObjectCandidates(candidates, worldPos, elevation);
             break;
-        }
 
-        case SelectionMode::ALL: {
-            // Priority order: roof -> objects -> floor
-            auto roofTileIndex = getRoofTileAtPosition(worldPos, currentElevation);
-            if (roofTileIndex) {
-                itemAtPosition = SelectedItem{ SelectionType::ROOF_TILE, roofTileIndex.value() };
-            } else {
-                auto objects = getObjectsAtPosition(worldPos, currentElevation);
-                if (!objects.empty()) {
-                    itemAtPosition = SelectedItem{ SelectionType::OBJECT, objects[0] };
-                } else {
-                    auto floorTileIndex = getFloorTileAtPosition(worldPos, currentElevation);
-                    if (floorTileIndex) {
-                        itemAtPosition = SelectedItem{ SelectionType::FLOOR_TILE, floorTileIndex.value() };
-                    }
-                }
-            }
+        case SelectionMode::ALL:
+            // Priority order matches single-click selection: roof -> objects -> floor.
+            appendRoofCandidate(candidates, getRoofTileAtPosition(worldPos, elevation));
+            appendObjectCandidates(candidates, worldPos, elevation);
+            appendTileCandidate(candidates, getFloorTileAtPosition(worldPos, elevation), SelectionType::FLOOR_TILE);
             break;
-        }
+
+        case SelectionMode::HEXES:
+            appendHexCandidate(candidates, worldPos);
+            break;
 
         default:
-            return SelectionResult::createError("Invalid selection mode");
+            break;
     }
 
-    if (itemAtPosition) {
-        if (isItemSelected(itemAtPosition.value())) {
-            removeItemFromSelection(itemAtPosition.value());
+    return candidates;
+}
+
+SelectionResult SelectionManager::deselectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
+    // Ctrl+click is deselect-only: remove the topmost visible layer under the cursor that is
+    // already selected, and never add. Clicking outside the selection leaves it untouched.
+    // collectDeselectableAtPosition already drops hidden roofs, so they stay selected.
+    for (const auto& candidate : collectDeselectableAtPosition(worldPos, mode, currentElevation)) {
+        if (isItemSelected(candidate)) {
+            removeItemFromSelection(candidate);
             _state.mode = mode;
             notifySelectionChanged();
             return SelectionResult::createSuccess("Item removed from selection");
-        } else {
-            addItemToSelection(itemAtPosition.value());
-            _state.mode = mode;
-            notifySelectionChanged();
-            return SelectionResult::createSuccess("Item added to selection");
         }
     }
 
@@ -598,6 +648,13 @@ std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf
     const auto& allObjects = _provider.getObjects();
 
     for (const auto& object : allObjects) {
+        // Only visible objects are selectable, matching getObjectsAtPosition's point-pick
+        // rule. Without this, an area drag selects objects on a hidden layer (e.g. scroll
+        // blockers while their layer is off) that the user cannot see.
+        if (!_provider.isObjectSelectable(object)) {
+            continue;
+        }
+
         const auto& sprite = object->getSprite();
         sf::FloatRect objectBounds = sprite.getGlobalBounds();
 

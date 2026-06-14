@@ -50,7 +50,9 @@ TEST_CASE("DAT2 archive serves concurrent reads without corruption", "[dat][vfs]
     std::atomic mismatches{ 0 };
 
     {
-        std::vector<std::jthread> workers; // join on scope exit, before the check below
+        // std::thread (not std::jthread): jthread is absent from the macOS CI toolchain's
+        // libc++. Join every worker explicitly before the check below.
+        std::vector<std::thread> workers;
         workers.reserve(kThreads);
         for (int t = 0; t < kThreads; ++t) {
             workers.emplace_back([&dfs, &path, expectedSize, expectedSum, &mismatches] {
@@ -63,6 +65,9 @@ TEST_CASE("DAT2 archive serves concurrent reads without corruption", "[dat][vfs]
                     }
                 }
             });
+        }
+        for (auto& worker : workers) {
+            worker.join();
         }
     }
 

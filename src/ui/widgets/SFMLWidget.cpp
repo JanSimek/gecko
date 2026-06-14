@@ -206,6 +206,20 @@ sf::Event SFMLWidget::createMouseEvent(QMouseEvent* qtEvent, bool isPressed) con
             break;
     }
 
+#ifdef Q_OS_MACOS
+    // macOS turns a Control+left-click into a secondary (right) click at the OS level.
+    // The editor uses Control as its toggle-selection modifier, so without this a real
+    // Ctrl+click would arrive as a right-click and never reach the selection path
+    // (it would just look like a no-op pan). Map it back to a left click when Control
+    // is held — Qt swaps the physical Control key to Qt::MetaModifier on macOS by
+    // default — so the left-button selection path runs and getSelectionModifier(),
+    // which reads the physical Control key, applies the toggle. Plain right-clicks
+    // (no Control) keep their panning / mode-cancel behaviour.
+    if (button == sf::Mouse::Button::Right && qtEvent->modifiers().testFlag(Qt::MetaModifier)) {
+        button = sf::Mouse::Button::Left;
+    }
+#endif
+
     sf::Vector2i position{ static_cast<int>(qtEvent->position().x()), static_cast<int>(qtEvent->position().y()) };
     if (isPressed) {
         return sf::Event::MouseButtonPressed{ button, position };
