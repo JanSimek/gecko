@@ -103,15 +103,13 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
 
 std::vector<SelectedItem> SelectionManager::itemsToDeselectInArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) const {
     // The covered items a Ctrl+drag would remove: currently selected and on a visible layer.
-    // A layer you cannot see must never be silently deselected, so skip hidden roof tiles
-    // and hidden objects (floors are always visible).
+    // A roof you cannot see must never be silently deselected, so skip hidden roof tiles.
+    // (Hidden objects are already excluded by collectItemsInArea -> getObjectsInArea; floors
+    // are always visible.)
     const bool roofVisible = _provider.isRoofVisible();
     std::vector<SelectedItem> toRemove;
     for (const auto& item : collectItemsInArea(area, mode, currentElevation)) {
         if (item.type == SelectionType::ROOF_TILE && !roofVisible) {
-            continue;
-        }
-        if (item.type == SelectionType::OBJECT && !_provider.isObjectSelectable(item.getObject())) {
             continue;
         }
         if (isItemSelected(item)) {
@@ -635,6 +633,13 @@ std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf
     const auto& allObjects = _provider.getObjects();
 
     for (const auto& object : allObjects) {
+        // Only visible objects are selectable, matching getObjectsAtPosition's point-pick
+        // rule. Without this, an area drag selects objects on a hidden layer (e.g. scroll
+        // blockers while their layer is off) that the user cannot see.
+        if (!_provider.isObjectSelectable(object)) {
+            continue;
+        }
+
         const auto& sprite = object->getSprite();
         sf::FloatRect objectBounds = sprite.getGlobalBounds();
 
