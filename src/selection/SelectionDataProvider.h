@@ -42,9 +42,13 @@ public:
 
     // Whether the roof layer is currently shown. A hidden roof must not be
     // deselected by a Ctrl+click/drag, so the manager skips roof candidates when
-    // this is false. (Objects are already filtered by getObjectsAtPosition; floors
-    // are always visible.)
+    // this is false. (Floors are always visible.)
     virtual bool isRoofVisible() const = 0;
+
+    // Whether an object is currently drawn (its layer is shown). A hidden object must
+    // not be deselected by a Ctrl+drag, so the manager skips it. Point picks already
+    // filter via getObjectsAtPosition; this covers the area path.
+    virtual bool isObjectSelectable(const std::shared_ptr<Object>& object) const = 0;
 
     // --- Hit tests ---
     // SelectionManager wraps these in its own elevation-aware private helpers.

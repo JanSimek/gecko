@@ -480,6 +480,12 @@ void EditorWidget::loadSprites() {
     spdlog::info("Map sprites loaded in {:.3} seconds", sw);
 }
 
+bool EditorWidget::isObjectSelectable(const std::shared_ptr<Object>& object) const {
+    // Same rule getObjectsAtPosition applies for point picks; shared so area and point
+    // selection agree on which objects are interactable.
+    return object && isObjectVisible(object->getMapObject(), _visibility);
+}
+
 std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vector2f worldPos) {
     std::vector<std::shared_ptr<Object>> objectsAtPos;
 

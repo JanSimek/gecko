@@ -34,7 +34,8 @@ using namespace geck::selection;
 class MockEditorWidget : public geck::selection::SelectionDataProvider {
 public:
     int currentElevation = 0;
-    bool roofVisible = true; // flip to simulate the roof layer being hidden
+    bool roofVisible = true;       // flip to simulate the roof layer being hidden
+    bool objectsSelectable = true; // flip to simulate objects being on a hidden layer
     sf::Vector2u windowSize{ 800, 600 };
 
     // Backing data for the interface accessors.
@@ -56,6 +57,7 @@ public:
     int getCurrentElevation() const override { return currentElevation; }
     ViewportController* getViewportController() const override { return nullptr; }
     bool isRoofVisible() const override { return roofVisible; }
+    bool isObjectSelectable(const std::shared_ptr<Object>&) const override { return objectsSelectable; }
 
     // --- SelectionDataProvider: hit tests ---
     std::optional<int> getTileAtPosition(sf::Vector2f worldPos, [[maybe_unused]] bool isRoof) override {

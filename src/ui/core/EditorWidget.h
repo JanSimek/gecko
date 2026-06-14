@@ -161,6 +161,7 @@ public:
     const std::vector<sf::Sprite>& getRoofSprites() const override { return _roofSprites; }
 
     bool isRoofVisible() const override { return _visibility.showRoof; }
+    bool isObjectSelectable(const std::shared_ptr<Object>& object) const override;
 
     // Access to current elevation and map data
     int getCurrentElevation() const override { return _currentElevation; }

@@ -103,11 +103,15 @@ SelectionResult SelectionManager::selectArea(const sf::FloatRect& area, Selectio
 
 std::vector<SelectedItem> SelectionManager::itemsToDeselectInArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) const {
     // The covered items a Ctrl+drag would remove: currently selected and on a visible layer.
-    // Skip hidden roof tiles so a roof layer you cannot see is never silently deselected.
+    // A layer you cannot see must never be silently deselected, so skip hidden roof tiles
+    // and hidden objects (floors are always visible).
     const bool roofVisible = _provider.isRoofVisible();
     std::vector<SelectedItem> toRemove;
     for (const auto& item : collectItemsInArea(area, mode, currentElevation)) {
         if (item.type == SelectionType::ROOF_TILE && !roofVisible) {
+            continue;
+        }
+        if (item.type == SelectionType::OBJECT && !_provider.isObjectSelectable(item.getObject())) {
             continue;
         }
         if (isItemSelected(item)) {
