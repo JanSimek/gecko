@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <memory>
+#include <mutex>
 #include <span>
 #include <string>
 #include <vector>
@@ -25,94 +27,81 @@ class Dat2File final : public vfspp::IFile {
 public:
     Dat2File(const vfspp::FileInfo& fileInfo,
         const std::shared_ptr<geck::DatEntry>& datEntry,
-        const std::shared_ptr<geck::DatReader>& datReader)
+        const std::shared_ptr<geck::DatReader>& datReader,
+        std::mutex& readerMutex)
         : m_FileInfo(fileInfo)
         , m_datEntry(datEntry)
         , m_datReader(datReader)
-    {
+        , m_readerMutex(readerMutex) {
     }
 
-    ~Dat2File() override
-    {
+    ~Dat2File() override {
         Close();
     }
 
-    [[nodiscard]] const vfspp::FileInfo& GetFileInfo() const override
-    {
+    [[nodiscard]] const vfspp::FileInfo& GetFileInfo() const override {
         [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
         return m_FileInfo;
     }
 
-    [[nodiscard]] uint64_t Size() const override
-    {
+    [[nodiscard]] uint64_t Size() const override {
         [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
         return m_datEntry->getDecompressedSize();
     }
 
-    [[nodiscard]] bool IsReadOnly() const override
-    {
+    [[nodiscard]] bool IsReadOnly() const override {
         return true;
     }
 
-    [[nodiscard]] bool Open(FileMode mode) override
-    {
+    [[nodiscard]] bool Open(FileMode mode) override {
         [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
         return OpenImpl(mode);
     }
 
-    void Close() override
-    {
+    void Close() override {
         [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
         m_IsOpened = false;
         m_SeekPos = 0;
         m_Data.clear();
     }
 
-    [[nodiscard]] bool IsOpened() const override
-    {
+    [[nodiscard]] bool IsOpened() const override {
         [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
         return m_IsOpened;
     }
 
-    uint64_t Seek(uint64_t offset, Origin origin) override
-    {
+    uint64_t Seek(uint64_t offset, Origin origin) override {
         [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
         return SeekImpl(offset, origin);
     }
 
-    [[nodiscard]] uint64_t Tell() const override
-    {
+    [[nodiscard]] uint64_t Tell() const override {
         [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
         return m_SeekPos;
     }
 
-    uint64_t Read(std::span<uint8_t> buffer) override
-    {
+    uint64_t Read(std::span<uint8_t> buffer) override {
         [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
         return ReadImpl(buffer);
     }
 
-    uint64_t Read(std::vector<uint8_t>& buffer, uint64_t size) override
-    {
+    uint64_t Read(std::vector<uint8_t>& buffer, uint64_t size) override {
         [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
         buffer.resize(size);
         return ReadImpl(std::span<uint8_t>(buffer.data(), buffer.size()));
     }
 
     // Read-only filesystem: writes are no-ops.
-    uint64_t Write(std::span<const uint8_t> /*buffer*/) override
-    {
+    uint64_t Write(std::span<const uint8_t> /*buffer*/) override {
         return 0;
     }
 
-    uint64_t Write(const std::vector<uint8_t>& /*buffer*/) override
-    {
+    uint64_t Write(const std::vector<uint8_t>& /*buffer*/) override {
         return 0;
     }
 
 private:
-    bool OpenImpl(FileMode mode)
-    {
+    bool OpenImpl(FileMode mode) {
         if (!IFile::IsModeValid(mode)) {
             return false;
         }
@@ -128,15 +117,29 @@ private:
         m_SeekPos = 0;
         m_Data.resize(m_datEntry->getDecompressedSize());
 
-        m_datReader->setPosition(m_datEntry->getOffset());
-        if (m_datEntry->getCompressed()) {
-            std::vector<uint8_t> packed(m_datEntry->getPackedSize());
-            m_datReader->read_bytes(packed.data(), packed.size());
+        // The reader stream is shared by every entry of this archive, so the seek+read must be
+        // serialised: the editor reads DAT files from several threads (e.g. background map
+        // loading while the map browser renders thumbnails on the UI thread), and an interleaved
+        // seek on another thread would corrupt this read and fail the inflate below.
+        std::vector<uint8_t> packed;
+        {
+            // Seek + read must be atomic on the shared reader, so the whole critical section
+            // (including sizing the packed buffer for the read) is held under the lock.
+            std::scoped_lock readerLock(m_readerMutex);
+            m_datReader->setPosition(m_datEntry->getOffset());
+            if (m_datEntry->getCompressed()) {
+                packed.resize(m_datEntry->getPackedSize());
+                m_datReader->read_bytes(packed.data(), packed.size());
+            } else {
+                m_datReader->read_bytes(m_Data.data(), m_Data.size());
+            }
+        }
 
+        if (m_datEntry->getCompressed()) {
             // zlib inflate the DAT entry into m_Data, with checked returns: a
             // corrupt or truncated archive entry is a real error, not silent
             // success with garbage/partial data.
-            z_stream zStream {};
+            z_stream zStream{};
             zStream.next_in = packed.data();
             zStream.avail_in = static_cast<uInt>(packed.size());
             zStream.next_out = m_Data.data();
@@ -157,26 +160,24 @@ private:
                     "zlib inflate failed for compressed DAT entry (result=" + std::to_string(inflateResult)
                     + ", produced " + std::to_string(producedBytes) + " of " + std::to_string(m_Data.size()) + " bytes)");
             }
-        } else {
-            m_datReader->read_bytes(m_Data.data(), m_Data.size());
         }
 
         m_IsOpened = true;
         return true;
     }
 
-    uint64_t SeekImpl(uint64_t offset, Origin origin)
-    {
+    uint64_t SeekImpl(uint64_t offset, Origin origin) {
         if (!m_IsOpened) {
             return 0;
         }
 
+        using enum IFile::Origin;
         const uint64_t size = m_Data.size();
-        if (origin == IFile::Origin::Begin) {
+        if (origin == Begin) {
             m_SeekPos = offset;
-        } else if (origin == IFile::Origin::End) {
+        } else if (origin == End) {
             m_SeekPos = (offset <= size) ? size - offset : 0;
-        } else if (origin == IFile::Origin::Set) {
+        } else if (origin == Set) {
             m_SeekPos += offset;
         }
         m_SeekPos = std::min(m_SeekPos, size);
@@ -184,8 +185,7 @@ private:
         return m_SeekPos;
     }
 
-    uint64_t ReadImpl(std::span<uint8_t> buffer)
-    {
+    uint64_t ReadImpl(std::span<uint8_t> buffer) {
         if (!m_IsOpened || m_SeekPos >= m_Data.size()) {
             return 0;
         }
@@ -206,6 +206,7 @@ private:
     std::vector<uint8_t> m_Data;
     std::shared_ptr<geck::DatEntry> m_datEntry;
     std::shared_ptr<geck::DatReader> m_datReader;
+    std::mutex& m_readerMutex; // owned by the filesystem; guards the shared m_datReader I/O
     bool m_IsOpened = false;
     uint64_t m_SeekPos = 0;
     mutable std::mutex m_Mutex;

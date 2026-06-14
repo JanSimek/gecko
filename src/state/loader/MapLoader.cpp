@@ -6,6 +6,7 @@
 #include "util/Constants.h"
 #include "resource/ResourcePaths.h"
 
+#include "reader/ReaderExceptions.h"
 #include "reader/ReaderFactory.h"
 #include "reader/map/MapReader.h"
 
@@ -46,12 +47,22 @@ void MapLoader::load() {
     setStatus("Loading map " + _mapPath.filename().string());
     _percentDone = 0;
 
-    if (_forceFilesystem) {
-        spdlog::info("MapLoader: Force filesystem loading requested");
-        loadFromFilesystem();
-    } else {
-        spdlog::info("MapLoader: Attempting VFS loading first");
-        loadFromVFS();
+    // Runs on a background thread (see the std::thread in start()): an exception escaping here
+    // would call std::terminate and abort the app, so a failed/corrupt read must become a
+    // reported error instead.
+    try {
+        if (_forceFilesystem) {
+            spdlog::info("MapLoader: Force filesystem loading requested");
+            loadFromFilesystem();
+        } else {
+            spdlog::info("MapLoader: Attempting VFS loading first");
+            loadFromVFS();
+        }
+    } catch (const FileReaderException& e) {
+        spdlog::error("MapLoader: failed to load '{}': {}", _mapPath.string(), e.what());
+        _errorMessage = std::string("Failed to load map: ") + e.what();
+        _hasError = true;
+        done = true;
     }
 }
 

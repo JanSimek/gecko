@@ -13,11 +13,11 @@
 
 namespace geck {
 
+using ui::inventory::COLUMN_AMOUNT;
 using ui::inventory::COLUMN_ICON;
 using ui::inventory::COLUMN_NAME;
-using ui::inventory::COLUMN_TYPE;
-using ui::inventory::COLUMN_AMOUNT;
 using ui::inventory::COLUMN_PID;
+using ui::inventory::COLUMN_TYPE;
 constexpr int COLUMN_COUNT = ui::inventory::COLUMN_PID + 1;
 
 InventoryViewerDialog::InventoryViewerDialog(resource::GameResources& resources, std::shared_ptr<Object> object, QWidget* parent)
@@ -75,7 +75,8 @@ void InventoryViewerDialog::setupUI() {
     resize(ui::constants::dialog_sizes::LARGE_WIDTH, ui::constants::dialog_sizes::LARGE_HEIGHT);
 
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(8, 8, 8, 4);
+    _mainLayout->setContentsMargins(ui::constants::SPACING_NORMAL, ui::constants::SPACING_NORMAL,
+        ui::constants::SPACING_NORMAL, ui::constants::SPACING_TIGHT);
     _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
 
     _splitter = new QSplitter(Qt::Horizontal);
@@ -168,7 +169,7 @@ void InventoryViewerDialog::setupUI() {
     // === BUTTON PANEL ===
     _buttonPanel = new QWidget();
     _buttonLayout = new QHBoxLayout(_buttonPanel);
-    _buttonLayout->setContentsMargins(0, 4, 0, 0);
+    _buttonLayout->setContentsMargins(0, ui::constants::SPACING_TIGHT, 0, 0);
     _buttonLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     _addButton = new QPushButton("Add Item...");

@@ -28,7 +28,7 @@ HexRenderer::HexRenderer(resource::GameResources& resources)
     _hoverSprite.setColor(sf::Color(Colors::ERROR_R, Colors::ERROR_G, Colors::ERROR_B, Colors::FULLY_OPAQUE));
 
     _selectionSprite.setTextureRect(overlayRect);
-    _selectionSprite.setColor(sf::Color(SelectionColors::HEX_R, SelectionColors::HEX_G, SelectionColors::HEX_B, SelectionColors::HEX_ALPHA));
+    _selectionSprite.setColor(sf::Color(Colors::SELECTION_R, Colors::SELECTION_G, Colors::SELECTION_B, SelectionColors::HEX_ALPHA));
 
     _playerPositionSprite.setTextureRect(overlayRect);
     _playerPositionSprite.setColor(sf::Color(PlayerColors::POSITION_R, PlayerColors::POSITION_G, PlayerColors::POSITION_B, PlayerColors::POSITION_ALPHA));
