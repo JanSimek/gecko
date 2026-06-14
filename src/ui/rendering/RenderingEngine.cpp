@@ -36,9 +36,9 @@ void main() {
     float aR = texture2D(texture, vec2(clamp(uv.x + texel.x, rect.x, rect.z), uv.y)).a;
     float aU = texture2D(texture, vec2(uv.x, clamp(uv.y - texel.y, rect.y, rect.w))).a;
     float aD = texture2D(texture, vec2(uv.x, clamp(uv.y + texel.y, rect.y, rect.w))).a;
-    float maxA = max(a, max(max(aL, aR), max(aU, aD)));
-    float minA = min(a, min(min(aL, aR), min(aU, aD)));
-    float edge = step(0.5, maxA) - step(0.5, minA); // 1 on the silhouette boundary, else 0
+    float minN = min(min(aL, aR), min(aU, aD));
+    // 1px outline: an opaque pixel that has a transparent neighbour (the silhouette's inner edge).
+    float edge = step(0.5, a) * (1.0 - step(0.5, minN));
     gl_FragColor = vec4(outlineColor.rgb, outlineColor.a * edge);
 }
 )";
@@ -113,6 +113,11 @@ void RenderingEngine::render(sf::RenderTarget& target,
 
     // Layer 5: Roof tiles (if enabled)
     renderRoofTiles(target, renderData, visibility.showRoof);
+
+    // Selected object outlines go on top of roofs (like the tile selection outlines) so the whole
+    // outline shows — a roof above a selected wall must not clip it. The edge shader only paints
+    // the thin outline, so the roof/foreground stays visible beneath.
+    drawSelectedObjectOutlines(target, renderData, visibility);
 
     // Layer 6: Selection visuals
     renderSelectionVisuals(target, renderData);
@@ -225,8 +230,6 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
             target.draw(overlay);
         }
     }
-
-    drawSelectedObjectOutlines(target, renderData, visibility);
 }
 
 void RenderingEngine::drawSelectedObjectOutlines(sf::RenderTarget& target,
