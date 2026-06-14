@@ -140,7 +140,12 @@ void RenderingEngine::ensureOutlineShader() {
 void RenderingEngine::drawObjectOutline(sf::RenderTarget& target, const Object& object) {
     ensureOutlineShader();
 
-    const sf::Color outlineColor = ColorUtils::createObjectSelectionColor();
+    // Walls get a slightly different outline tone so a selected wall reads apart from a selected
+    // object. Tweak kWallOutline to taste.
+    const auto mapObject = object.getMapObjectPtr();
+    const bool isWall = mapObject && mapObject->isWallObject();
+    static const sf::Color kWallOutline(74, 206, 168); // teal-ish, vs the blue object accent
+    const sf::Color outlineColor = isWall ? kWallOutline : ColorUtils::createObjectSelectionColor();
     const sf::Sprite& source = object.getSprite();
 
     if (!_outlineShaderOk) {
