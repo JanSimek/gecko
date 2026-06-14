@@ -28,7 +28,7 @@ found, and otherwise downloaded and built automatically by CMake. Qt6 must be in
 ```bash
 # Build tools and dependencies (Ubuntu/Debian)
 sudo apt install cmake g++ git \
-                 qt6-base-dev qt6-base-dev-tools libqt6svg6-dev \
+                 qt6-base-dev qt6-base-dev-tools qt6-svg-dev \
                  libspdlog-dev zlib1g-dev
 
 # Enter the cloned git repo folder
