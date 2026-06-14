@@ -23,6 +23,7 @@
 #include "util/UndoStack.h"
 #include "ui/editing/ObjectCommandController.h"
 #include "ui/rendering/MapSpriteLoader.h"
+#include "ui/rendering/RenderingEngine.h"
 #include "ui/tiles/TilePlacementContext.h"
 #include "ui/core/EditorMode.h"
 #include "pattern/Pattern.h"
@@ -70,6 +71,10 @@ public:
     void setShowHexGrid(bool show) { _visibility.showHexGrid = show; }
     void setShowLightOverlays(bool show);
     void setShowExitGrids(bool show) { _visibility.showExitGrids = show; }
+    void setMergeSelectionOutlines(bool merge) { _visibility.mergeSelectionOutlines = merge; }
+
+    // User-configured selection highlight colours (from preferences); forwarded to the renderer.
+    void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
 
     Map* getMap() const override { return _map.get(); }
 
@@ -285,6 +290,9 @@ private:
     void previewAreaObjects(const sf::FloatRect& area);
     void updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
+    // Commit a finished drag rectangle to the selection (replace/deselect/additive), or build
+    // scroll blockers when in that mode. Extracted from the onDragSelection callback.
+    void commitDragAreaSelection(sf::Vector2f startPos, sf::Vector2f endPos, bool isDeselect, bool isAdditive);
 
     // Scroll blocker rectangle functionality
     std::vector<int> calculateRectangleBorderHexes(sf::FloatRect rectangle);
@@ -352,10 +360,12 @@ private:
     // Selection management
     std::unique_ptr<selection::SelectionManager> _selectionManager;
 
-    // Selected roof tile background sprites (blank.frm tiles for transparent pixel visibility)
-    std::vector<sf::Sprite> _selectedRoofTileBackgroundSprites;
-
     std::vector<int> _selectedHexPositions;
+
+    // Tile indices currently tinted for selection, so clearAllVisualSelections only resets those
+    // (bounded by the selection size) instead of scanning the whole map every drag-preview frame.
+    std::vector<int> _selectedFloorVisuals;
+    std::vector<int> _selectedRoofVisuals;
 
     // Active tool mode (single source of truth; see setMode).
     EditorMode _mode = EditorMode::Select;

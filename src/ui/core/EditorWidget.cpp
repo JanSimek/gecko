@@ -22,7 +22,6 @@
 #include <unordered_map>
 
 #include "util/Constants.h"
-#include "util/ColorUtils.h"
 #include "ui/ResourceInitializer.h"
 #include "util/TileUtils.h"
 #include "ui/QtDialogs.h"
@@ -224,7 +223,9 @@ void EditorWidget::applySelectionVisuals(const selection::SelectionState& select
             case selection::SelectionType::FLOOR_TILE: {
                 int tileIndex = item.getTileIndex();
                 if (isValidTileIndex(tileIndex)) {
-                    this->_floorSprites.at(tileIndex).setColor(geck::ColorUtils::createFloorTileSelectionColor());
+                    // Tiles are outlined by the renderer (RenderingEngine::renderTileSelectionOutline),
+                    // not tinted, so just record the index.
+                    _selectedFloorVisuals.push_back(tileIndex);
                 }
                 break;
             }
@@ -241,17 +242,12 @@ void EditorWidget::applySelectionVisuals(const selection::SelectionState& select
 }
 
 void EditorWidget::applyRoofTileSelectionVisual(int tileIndex) {
-    if (!isValidTileIndex(tileIndex) || _map->getMapFile().tiles.find(_currentElevation) == _map->getMapFile().tiles.end()) {
-        return;
+    // Roof tiles are outlined by the renderer (renderTileSelectionOutline), which works from the
+    // tile geometry, so even empty (transparent) roof tiles get a boundary — no tint or blank.frm
+    // background sprite is needed any more.
+    if (isValidTileIndex(tileIndex)) {
+        _selectedRoofVisuals.push_back(tileIndex);
     }
-    _roofSprites.at(tileIndex).setColor(geck::ColorUtils::createRoofTileSelectionColor());
-
-    // blank.frm background sprite makes tiles with transparent pixels visible when selected
-    auto screenPos = geck::indexToScreenPosition(tileIndex, true); // true for roof offset
-    sf::Sprite backgroundSprite(_resources.textures().get("art/tiles/blank.frm"));
-    backgroundSprite.setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-    backgroundSprite.setColor(sf::Color(Colors::SELECTION_R, Colors::SELECTION_G, Colors::SELECTION_B, 128)); // 50% transparency
-    _selectedRoofTileBackgroundSprites.push_back(backgroundSprite);
 }
 
 void EditorWidget::refreshSelectionVisuals() {
@@ -564,30 +560,17 @@ void EditorWidget::clearAllVisualSelections() {
     std::ranges::for_each(_objects, [](auto& object) {
         if (object) {
             object->unselect();
+            // Selection is now an outline, not a sprite tint, but the drag preview still tints
+            // object sprites — reset the colour here so a preview tint never lingers after the
+            // selection visuals are rebuilt.
+            object->getSprite().setColor(sf::Color::White);
         }
     });
 
-    std::ranges::for_each(_floorSprites, [](auto& sprite) {
-        sprite.setColor(sf::Color::White);
-    });
-
-    // Reset roof sprites: empty tiles back to transparent, others to white
-    if (_map && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
-        for (int i = 0; i < static_cast<int>(_roofSprites.size()); ++i) {
-            auto tile = _map->getMapFile().tiles.at(_currentElevation).at(i);
-            if (tile.getRoof() == Map::EMPTY_TILE) {
-                _roofSprites[i].setColor(geck::TileColors::transparent());
-            } else {
-                _roofSprites[i].setColor(sf::Color::White);
-            }
-        }
-    } else {
-        std::ranges::for_each(_roofSprites, [](auto& sprite) {
-            sprite.setColor(sf::Color::White);
-        });
-    }
-
-    _selectedRoofTileBackgroundSprites.clear();
+    // Tiles are outlined (renderTileSelectionOutline), not tinted, so there is no tile colour to
+    // reset — just drop the tracked selection sets. Preview tints are reset by clearDragPreview.
+    _selectedFloorVisuals.clear();
+    _selectedRoofVisuals.clear();
     _selectedHexPositions.clear();
 }
 
@@ -603,6 +586,33 @@ void EditorWidget::handleEvent(const sf::Event& event) {
     if (_inputHandler && _sfmlWidget) {
         if (auto* target = _sfmlWidget->getRenderTarget()) {
             _inputHandler->handleEvent(event, *target, _viewportController->getView());
+        }
+    }
+}
+
+void EditorWidget::commitDragAreaSelection(sf::Vector2f startPos, sf::Vector2f endPos, bool isDeselect, bool isAdditive) {
+    // Tear down the live preview tints first; the selection callback that follows only resets
+    // tracked selection tints, so a leftover preview tint must be cleared here.
+    clearDragPreview();
+
+    const float left = std::min(startPos.x, endPos.x);
+    const float top = std::min(startPos.y, endPos.y);
+    const float width = std::abs(endPos.x - startPos.x);
+    const float height = std::abs(endPos.y - startPos.y);
+    const sf::FloatRect selectionArea({ left, top }, { width, height });
+
+    if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
+        createScrollBlockersFromHexes(calculateRectangleBorderHexes(selectionArea));
+    } else if (isDeselect) {
+        // Ctrl+drag only removes already-selected items in the area; it never adds.
+        _selectionManager->deselectArea(selectionArea, _currentSelectionMode, _currentElevation);
+    } else if (isAdditive) {
+        // Alt+drag adds the covered items to the selection, keeping what was already selected.
+        _selectionManager->addArea(selectionArea, _currentSelectionMode, _currentElevation);
+    } else {
+        const auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
+        if (result.success) {
+            spdlog::debug("Area selection completed: {}", result.message);
         }
     }
 }
@@ -640,27 +650,9 @@ void EditorWidget::setupInputCallbacks() {
     };
 
     callbacks.onDragSelection = [this](sf::Vector2f startPos, sf::Vector2f endPos, InputHandler::SelectionModifier modifier) {
-        float left = std::min(startPos.x, endPos.x);
-        float top = std::min(startPos.y, endPos.y);
-        float width = std::abs(endPos.x - startPos.x);
-        float height = std::abs(endPos.y - startPos.y);
-        sf::FloatRect selectionArea({ left, top }, { width, height });
-
-        if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
-            auto borderHexes = calculateRectangleBorderHexes(selectionArea);
-            createScrollBlockersFromHexes(borderHexes);
-        } else if (modifier == InputHandler::SelectionModifier::TOGGLE) {
-            // Ctrl+drag only removes already-selected items in the area; it never adds.
-            _selectionManager->deselectArea(selectionArea, _currentSelectionMode, _currentElevation);
-        } else if (modifier == InputHandler::SelectionModifier::ADD) {
-            // Alt+drag adds the covered items to the selection, keeping what was already selected.
-            _selectionManager->addArea(selectionArea, _currentSelectionMode, _currentElevation);
-        } else {
-            auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _currentElevation);
-            if (result.success) {
-                spdlog::debug("Area selection completed: {}", result.message);
-            }
-        }
+        commitDragAreaSelection(startPos, endPos,
+            modifier == InputHandler::SelectionModifier::TOGGLE,
+            modifier == InputHandler::SelectionModifier::ADD);
     };
 
     callbacks.onTilePlacement = [this](sf::Vector2f worldPos) {
@@ -859,14 +851,16 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     visibility.showHexGrid = _visibility.showHexGrid;
     visibility.showLightOverlays = _visibility.showLightOverlays;
     visibility.showExitGrids = _visibility.showExitGrids;
+    visibility.mergeSelectionOutlines = _visibility.mergeSelectionOutlines;
 
     RenderingEngine::RenderData renderData;
     renderData.floorSprites = &_floorSprites;
     renderData.roofSprites = &_roofSprites;
     renderData.objects = &_objects;
     renderData.wallBlockerOverlays = &_wallBlockerOverlays;
-    renderData.selectedRoofTileBackgroundSprites = &_selectedRoofTileBackgroundSprites;
     renderData.selectedHexPositions = &_selectedHexPositions;
+    renderData.selectedFloorTiles = &_selectedFloorVisuals;
+    renderData.selectedRoofTiles = &_selectedRoofVisuals;
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
     renderData.stampPreviewFloorTiles = &_stampPreviewFloorTiles;
@@ -1707,6 +1701,12 @@ void EditorWidget::showLoadingErrorsSummary() {
     message += "The map will continue to work with the objects that loaded successfully.";
 
     QtDialogs::showWarning(this, title, message);
+}
+
+void EditorWidget::setSelectionColors(const RenderingEngine::SelectionPalette& colors) {
+    if (_renderingEngine) {
+        _renderingEngine->setSelectionColors(colors);
+    }
 }
 
 void EditorWidget::setShowLightOverlays(bool show) {

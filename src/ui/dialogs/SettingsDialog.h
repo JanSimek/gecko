@@ -7,6 +7,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QTabWidget>
+#include <QMap>
+#include <QColor>
 #include <filesystem>
 #include <memory>
 #include <vector>
@@ -50,6 +52,8 @@ private:
     void setupTabs();
     void setupGeneralTab();
     void setupEditorTab();
+    void setupColorsTab();
+    void updateColorButton(const QString& key) const;
     void setupButtonBox();
 
     void loadSettings();
@@ -71,6 +75,11 @@ private:
     QWidget* _editorTab;
     QVBoxLayout* _editorTabLayout;
     TextEditorWidget* _textEditorWidget;
+
+    // Selection colours tab
+    QWidget* _colorsTab = nullptr;
+    QMap<QString, QColor> _selectionColors;     // current edited values, keyed by category
+    QMap<QString, QPushButton*> _colorSwatches; // swatch button per category
 
     // Status and Controls
     QLabel* _statusLabel;

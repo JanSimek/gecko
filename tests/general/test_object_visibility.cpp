@@ -29,6 +29,10 @@ TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn",
     wall.pro_pid = typePid(Pro::OBJECT_TYPE::WALL, 5);
     wall.frm_pid = 5;
 
+    MapObject critter;
+    critter.pro_pid = typePid(Pro::OBJECT_TYPE::CRITTER, 50);
+    critter.frm_pid = 50;
+
     // Scroll blockers are identified by FRM base id == 1 (scrblk.frm).
     MapObject blocker;
     blocker.pro_pid = typePid(Pro::OBJECT_TYPE::MISC, 620);
@@ -40,26 +44,39 @@ TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn",
 
     VisibilitySettings vis;
     vis.showObjects = true;
+    vis.showCritters = true;
     vis.showWalls = true;
     vis.showScrollBlockers = true;
 
     SECTION("all layers on -> everything is selectable") {
         CHECK(isObjectVisible(regular, vis));
         CHECK(isObjectVisible(wall, vis));
+        CHECK(isObjectVisible(critter, vis));
         CHECK(isObjectVisible(blocker, vis));
     }
 
-    SECTION("the master objects toggle hides everything") {
+    SECTION("each toggle controls only its own category (not a master switch)") {
+        // showObjects covers only generic objects (items/scenery/misc), not walls/critters/blockers.
         vis.showObjects = false;
         CHECK_FALSE(isObjectVisible(regular, vis));
-        CHECK_FALSE(isObjectVisible(wall, vis));
-        CHECK_FALSE(isObjectVisible(blocker, vis));
+        CHECK(isObjectVisible(wall, vis));
+        CHECK(isObjectVisible(critter, vis));
+        CHECK(isObjectVisible(blocker, vis));
+    }
+
+    SECTION("hiding critters hides only critters") {
+        vis.showCritters = false;
+        CHECK(isObjectVisible(regular, vis));
+        CHECK(isObjectVisible(wall, vis));
+        CHECK_FALSE(isObjectVisible(critter, vis));
+        CHECK(isObjectVisible(blocker, vis));
     }
 
     SECTION("hiding walls hides only walls") {
         vis.showWalls = false;
         CHECK(isObjectVisible(regular, vis));
         CHECK_FALSE(isObjectVisible(wall, vis));
+        CHECK(isObjectVisible(critter, vis));
         CHECK(isObjectVisible(blocker, vis));
     }
 
@@ -67,6 +84,7 @@ TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn",
         vis.showScrollBlockers = false;
         CHECK(isObjectVisible(regular, vis));
         CHECK(isObjectVisible(wall, vis));
+        CHECK(isObjectVisible(critter, vis));
         CHECK_FALSE(isObjectVisible(blocker, vis));
     }
 }

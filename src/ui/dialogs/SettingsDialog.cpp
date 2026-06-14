@@ -9,6 +9,10 @@
 #include <QApplication>
 #include <QStyle>
 #include <QMessageBox>
+#include <QColorDialog>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <array>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -70,8 +74,66 @@ void SettingsDialog::setupTabs() {
 
     setupGeneralTab();
     setupEditorTab();
+    setupColorsTab();
 
     _mainLayout->addWidget(_tabWidget);
+}
+
+void SettingsDialog::setupColorsTab() {
+    _colorsTab = new QWidget();
+    auto* layout = new QVBoxLayout(_colorsTab);
+    layout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
+    layout->setSpacing(SPACING_NORMAL);
+
+    auto* intro = new QLabel("Colours used to highlight the current selection. Click a swatch to change it.");
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+
+    const std::array<std::pair<QString, QString>, 4> rows{ {
+        { "object", "Objects" },
+        { "wall", "Walls" },
+        { "critter", "Critters" },
+        { "tile", "Tiles" },
+    } };
+
+    for (const auto& [key, label] : rows) {
+        auto* row = new QHBoxLayout();
+        auto* name = new QLabel(label + ":");
+        name->setMinimumWidth(90);
+
+        auto* swatch = new QPushButton();
+        swatch->setFixedSize(48, 24);
+        swatch->setCursor(Qt::PointingHandCursor);
+        _colorSwatches[key] = swatch;
+
+        connect(swatch, &QPushButton::clicked, this, [this, key, label]() {
+            const QColor chosen = QColorDialog::getColor(_selectionColors.value(key, Qt::white), this,
+                QString("Select the %1 selection colour").arg(label.toLower()));
+            if (chosen.isValid()) {
+                _selectionColors[key] = chosen;
+                updateColorButton(key);
+                onWidgetChanged();
+            }
+        });
+
+        row->addWidget(name);
+        row->addWidget(swatch);
+        row->addStretch();
+        layout->addLayout(row);
+    }
+
+    layout->addStretch();
+    _tabWidget->addTab(_colorsTab, "Selection Colours");
+}
+
+void SettingsDialog::updateColorButton(const QString& key) const {
+    auto* swatch = _colorSwatches.value(key, nullptr);
+    if (!swatch) {
+        return;
+    }
+    const QColor color = _selectionColors.value(key);
+    swatch->setStyleSheet(QString("background-color: %1; border: 1px solid #555;").arg(color.name()));
+    swatch->setToolTip(color.name());
 }
 
 void SettingsDialog::setupGeneralTab() {
@@ -142,6 +204,18 @@ void SettingsDialog::loadSettings() {
     _gameLocationWidget->setExecutableLocation(settings.getExecutableGameLocation());
     _gameLocationWidget->setDataDirectory(settings.getGameDataDirectory());
 
+    // Selection colours. Defaults mirror RenderingEngine::SelectionPalette — keep in sync.
+    const QMap<QString, QColor> defaults{
+        { "object", QColor(140, 110, 220) },
+        { "wall", QColor(74, 206, 168) },
+        { "critter", QColor(224, 180, 96) },
+        { "tile", QColor(74, 144, 226) },
+    };
+    for (auto it = defaults.constBegin(); it != defaults.constEnd(); ++it) {
+        _selectionColors[it.key()] = settings.getSelectionColor(it.key(), it.value());
+        updateColorButton(it.key());
+    }
+
     _hasChanges = false;
     updateUI();
 }
@@ -162,6 +236,10 @@ void SettingsDialog::saveSettings() {
 
     settings.setExecutableGameLocation(_gameLocationWidget->getExecutableLocation());
     settings.setGameDataDirectory(_gameLocationWidget->getDataDirectory());
+
+    for (auto it = _selectionColors.constBegin(); it != _selectionColors.constEnd(); ++it) {
+        settings.setSelectionColor(it.key(), it.value());
+    }
 
     settings.save();
 

@@ -435,6 +435,17 @@ void MainWindow::setupMenuBar() {
 
     _viewMenu->addSeparator();
 
+    _mergeOutlinesAction = _viewMenu->addAction("&Merge Adjacent Selection Outlines");
+    _mergeOutlinesAction->setCheckable(true);
+    _mergeOutlinesAction->setChecked(true);
+    _mergeOutlinesAction->setStatusTip("Merge touching selected objects of the same type into a single outline");
+    connect(_mergeOutlinesAction, &QAction::toggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setMergeSelectionOutlines(enabled);
+    });
+
+    _viewMenu->addSeparator();
+
     _panelsMenu = _viewMenu->addMenu("&Panels");
 
     _viewMenu->addSeparator();
@@ -1231,7 +1242,30 @@ void MainWindow::connectToEditorWidget() {
             });
     }
 
+    applySelectionColorsToEditor();
+
     spdlog::info("Connected EditorWidget instance signals");
+}
+
+void MainWindow::applySelectionColorsToEditor() {
+    if (!_currentEditorWidget || !_settings) {
+        return;
+    }
+
+    const auto toQ = [](const sf::Color& c) { return QColor(c.r, c.g, c.b); };
+    const auto toSf = [](const QColor& c) {
+        return sf::Color(static_cast<std::uint8_t>(c.red()),
+            static_cast<std::uint8_t>(c.green()),
+            static_cast<std::uint8_t>(c.blue()));
+    };
+
+    RenderingEngine::SelectionPalette palette; // renderer defaults; settings only override
+    palette.object = toSf(_settings->getSelectionColor("object", toQ(palette.object)));
+    palette.wall = toSf(_settings->getSelectionColor("wall", toQ(palette.wall)));
+    palette.critter = toSf(_settings->getSelectionColor("critter", toQ(palette.critter)));
+    palette.tile = toSf(_settings->getSelectionColor("tile", toQ(palette.tile)));
+
+    _currentEditorWidget->setSelectionColors(palette);
 }
 
 void MainWindow::syncMenuStateToEditorWidget() {
@@ -1249,6 +1283,7 @@ void MainWindow::syncMenuStateToEditorWidget() {
     _currentEditorWidget->setShowHexGrid(_showHexGridAction->isChecked());
     _currentEditorWidget->setShowLightOverlays(_showLightOverlaysAction->isChecked());
     _currentEditorWidget->setShowExitGrids(_showExitGridsAction->isChecked());
+    _currentEditorWidget->setMergeSelectionOutlines(_mergeOutlinesAction->isChecked());
     updateUndoRedoActions();
 
     // Reset selection mode to the default (ALL)
@@ -1659,6 +1694,7 @@ void MainWindow::showPreferences() {
         if (dataPathsChanged) {
             rebuildGameResourcesFromSettings();
         }
+        applySelectionColorsToEditor();
     });
 
     int result = dialog.exec();

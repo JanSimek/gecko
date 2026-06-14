@@ -5,7 +5,6 @@
 #include "format/frm/Frame.h"
 #include "format/frm/Frm.h"
 #include "util/Constants.h"
-#include "util/ColorUtils.h"
 #include "util/Exceptions.h"
 #include "util/Coordinates.h"
 #include <spdlog/spdlog.h>
@@ -74,13 +73,9 @@ void Object::setMapObject(std::shared_ptr<MapObject> newMapObject) {
 }
 
 void Object::setSprite(sf::Sprite sprite) {
-    bool wasSelected = _selected;
-    _sprite = sprite;
-
-    // Preserve selection state by re-applying selection color if the object was selected
-    if (wasSelected) {
-        _sprite.setColor(geck::ColorUtils::createObjectSelectionColor());
-    }
+    // Selection is rendered as an outline (not a sprite tint), so the new sprite needs no
+    // colour fix-up; the _selected flag already carries the selection state across sprite swaps.
+    _sprite = std::move(sprite);
 }
 
 const sf::Sprite& Object::getSprite() const noexcept {
@@ -180,12 +175,12 @@ void Object::rotate() {
 }
 
 void Object::select() {
-    _sprite.setColor(geck::ColorUtils::createObjectSelectionColor());
+    // Selection is shown as an outline drawn by the renderer (RenderingEngine::drawObjectOutline),
+    // so the sprite keeps its real colours — only the flag is toggled here.
     _selected = true;
 }
 
 void Object::unselect() {
-    _sprite.setColor(sf::Color::White);
     _selected = false;
 }
 

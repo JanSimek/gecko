@@ -1,6 +1,8 @@
 #pragma once
 
 #include <SFML/Graphics.hpp>
+#include <cstdint>
+#include <map>
 #include <memory>
 #include <vector>
 #include "util/Types.h"
@@ -39,6 +41,23 @@ public:
         bool showHexGrid = false;
         bool showLightOverlays = false;
         bool showExitGrids = false;
+        // Merge touching selected objects of the same category into one union outline (true), or
+        // outline every selected object individually so shared edges show too (false).
+        bool mergeSelectionOutlines = true;
+    };
+
+    /**
+     * @brief User-configurable selection highlight colours (set from preferences).
+     *
+     * Object/wall/critter colour the object outline by category; tile colours the
+     * floor/roof selection outline and its translucent fill. Defaults are deliberately
+     * distinct hues so the categories — and tiles vs objects — read apart.
+     */
+    struct SelectionPalette {
+        sf::Color object{ 140, 110, 220 }; // violet
+        sf::Color wall{ 74, 206, 168 };    // teal
+        sf::Color critter{ 224, 180, 96 }; // warm amber
+        sf::Color tile{ 74, 144, 226 };    // blue accent
     };
 
     /**
@@ -50,8 +69,10 @@ public:
         const std::vector<sf::Sprite>* roofSprites = nullptr;
         const std::vector<std::shared_ptr<Object>>* objects = nullptr;
         const std::vector<sf::Sprite>* wallBlockerOverlays = nullptr;
-        const std::vector<sf::Sprite>* selectedRoofTileBackgroundSprites = nullptr;
         const std::vector<int>* selectedHexPositions = nullptr;
+        // Selected floor/roof tile indices, outlined as a union boundary (not a tint).
+        const std::vector<int>* selectedFloorTiles = nullptr;
+        const std::vector<int>* selectedRoofTiles = nullptr;
 
         // Drag preview
         const std::shared_ptr<Object>* dragPreviewObject = nullptr;
@@ -101,7 +122,13 @@ public:
     static void applySelectionRectangleColors(sf::RectangleShape& rectangle,
         SelectionMode selectionMode);
 
+    /** @brief Set the user-configured selection highlight colours. */
+    void setSelectionColors(const SelectionPalette& colors) { _selectionColors = colors; }
+
 private:
+    /** @brief Selection outline colour for an object, by its category. */
+    sf::Color objectOutlineColor(const Object& object) const;
+
     /**
      * @brief Render floor tile sprites
      */
@@ -121,6 +148,42 @@ private:
     void renderObjects(sf::RenderTarget& target,
         const RenderData& renderData,
         const VisibilitySettings& visibility);
+
+    /**
+     * @brief Outline every selected object on top of the scene, grouped by category colour.
+     *
+     * Renders each colour group's selected sprites alone into an offscreen mask (no atlas
+     * neighbours), then edge-detects the union silhouette so the artwork keeps its real colours
+     * and only gains a clean 1px coloured border on every side — the way the Fallout engine
+     * outlines objects. Falls back to per-object bounding boxes when shaders are unavailable on
+     * the current GL context.
+     */
+    void drawSelectedObjectOutlines(sf::RenderTarget& target,
+        const RenderData& renderData,
+        const VisibilitySettings& visibility);
+    // Collect selected, visible objects grouped by their outline colour (keyed by RGBA integer).
+    std::map<std::uint32_t, std::vector<const Object*>> collectSelectedOutlineGroups(
+        const RenderData& renderData,
+        const VisibilitySettings& visibility) const;
+    // Shaderless fallback: a per-object bounding-box outline in each group's colour.
+    void drawOutlineFallbackBoxes(sf::RenderTarget& target,
+        const std::map<std::uint32_t, std::vector<const Object*>>& groups) const;
+    // Render one batch of sprites into the offscreen mask and stroke its union silhouette in colour.
+    void strokeOutlineGroup(sf::RenderTarget& target,
+        const sf::View& sceneView,
+        const sf::View& screenView,
+        sf::Color color,
+        const std::vector<const Object*>& objects);
+    void ensureOutlineShader();
+
+    /**
+     * @brief Outline the outer boundary of a set of selected tiles.
+     *
+     * Each tile is a sheared parallelogram; an edge is drawn only where the tile across it is
+     * not also selected, so a multi-tile selection reads as one clean union outline rather than
+     * a per-cell grid.
+     */
+    void renderTileSelectionOutline(sf::RenderTarget& target, const std::vector<int>& selectedTiles, bool roof);
 
     /**
      * @brief Render roof tiles and their selection backgrounds
@@ -166,6 +229,17 @@ private:
 
     resource::GameResources& _resources;
     HexRenderer _hexRenderer;
+    SelectionPalette _selectionColors;
+
+    // Lazily-loaded silhouette outline shader for selected objects (needs a live GL context,
+    // so it is loaded on first use during rendering rather than in the constructor).
+    sf::Shader _outlineShader;
+    bool _outlineShaderTried = false;
+    bool _outlineShaderOk = false;
+
+    // Offscreen screen-resolution mask the selected sprites are drawn into before edge detection,
+    // resized to match the render target. Reused across frames to avoid per-frame allocation.
+    sf::RenderTexture _outlineMask;
 };
 
 } // namespace geck
