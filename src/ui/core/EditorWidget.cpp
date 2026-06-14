@@ -225,6 +225,7 @@ void EditorWidget::applySelectionVisuals(const selection::SelectionState& select
                 int tileIndex = item.getTileIndex();
                 if (isValidTileIndex(tileIndex)) {
                     this->_floorSprites.at(tileIndex).setColor(geck::ColorUtils::createFloorTileSelectionColor());
+                    _selectedFloorVisuals.push_back(tileIndex);
                 }
                 break;
             }
@@ -245,6 +246,7 @@ void EditorWidget::applyRoofTileSelectionVisual(int tileIndex) {
         return;
     }
     _roofSprites.at(tileIndex).setColor(geck::ColorUtils::createRoofTileSelectionColor());
+    _selectedRoofVisuals.push_back(tileIndex);
 
     // blank.frm background sprite makes tiles with transparent pixels visible when selected
     auto screenPos = geck::indexToScreenPosition(tileIndex, true); // true for roof offset
@@ -564,29 +566,35 @@ void EditorWidget::clearAllVisualSelections() {
     std::ranges::for_each(_objects, [](auto& object) {
         if (object) {
             object->unselect();
+            // Selection is now an outline, not a sprite tint, but the drag preview still tints
+            // object sprites — reset the colour here so a preview tint never lingers after the
+            // selection visuals are rebuilt.
+            object->getSprite().setColor(sf::Color::White);
         }
     });
 
-    std::ranges::for_each(_floorSprites, [](auto& sprite) {
-        sprite.setColor(sf::Color::White);
-    });
-
-    // Reset roof sprites: empty tiles back to transparent, others to white
-    if (_map && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
-        for (int i = 0; i < static_cast<int>(_roofSprites.size()); ++i) {
-            auto tile = _map->getMapFile().tiles.at(_currentElevation).at(i);
-            if (tile.getRoof() == Map::EMPTY_TILE) {
-                _roofSprites[i].setColor(geck::TileColors::transparent());
-            } else {
-                _roofSprites[i].setColor(sf::Color::White);
-            }
+    // Reset only the tiles previously tinted for selection (bounded by the selection size),
+    // not the whole 100x100 map — this keeps the live drag-select preview cheap. Preview tints
+    // are tracked and reset separately by clearDragPreview.
+    for (int tileIndex : _selectedFloorVisuals) {
+        if (isValidTileIndex(tileIndex)) {
+            _floorSprites[tileIndex].setColor(sf::Color::White);
         }
-    } else {
-        std::ranges::for_each(_roofSprites, [](auto& sprite) {
-            sprite.setColor(sf::Color::White);
-        });
     }
 
+    const bool hasElevation = _map && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end();
+    for (int tileIndex : _selectedRoofVisuals) {
+        if (!isValidTileIndex(tileIndex)) {
+            continue;
+        }
+        // Empty roof tiles go back to transparent, present ones to white.
+        const bool empty = hasElevation
+            && _map->getMapFile().tiles.at(_currentElevation).at(tileIndex).getRoof() == Map::EMPTY_TILE;
+        _roofSprites[tileIndex].setColor(empty ? geck::TileColors::transparent() : sf::Color::White);
+    }
+
+    _selectedFloorVisuals.clear();
+    _selectedRoofVisuals.clear();
     _selectedRoofTileBackgroundSprites.clear();
     _selectedHexPositions.clear();
 }
@@ -640,6 +648,10 @@ void EditorWidget::setupInputCallbacks() {
     };
 
     callbacks.onDragSelection = [this](sf::Vector2f startPos, sf::Vector2f endPos, InputHandler::SelectionModifier modifier) {
+        // Tear down the live preview tints first; the selection callback that follows only
+        // resets tracked selection tints, so a leftover preview tint must be cleared here.
+        clearDragPreview();
+
         float left = std::min(startPos.x, endPos.x);
         float top = std::min(startPos.y, endPos.y);
         float width = std::abs(endPos.x - startPos.x);

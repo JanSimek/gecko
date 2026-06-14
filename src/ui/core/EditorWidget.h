@@ -357,6 +357,11 @@ private:
 
     std::vector<int> _selectedHexPositions;
 
+    // Tile indices currently tinted for selection, so clearAllVisualSelections only resets those
+    // (bounded by the selection size) instead of scanning the whole map every drag-preview frame.
+    std::vector<int> _selectedFloorVisuals;
+    std::vector<int> _selectedRoofVisuals;
+
     // Active tool mode (single source of truth; see setMode).
     EditorMode _mode = EditorMode::Select;
 
