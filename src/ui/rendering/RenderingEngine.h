@@ -1,6 +1,8 @@
 #pragma once
 
 #include <SFML/Graphics.hpp>
+#include <cstdint>
+#include <map>
 #include <memory>
 #include <vector>
 #include "util/Types.h"
@@ -159,6 +161,13 @@ private:
     void drawSelectedObjectOutlines(sf::RenderTarget& target,
         const RenderData& renderData,
         const VisibilitySettings& visibility);
+    // Collect selected, visible objects grouped by their outline colour (keyed by RGBA integer).
+    std::map<std::uint32_t, std::vector<const Object*>> collectSelectedOutlineGroups(
+        const RenderData& renderData,
+        const VisibilitySettings& visibility) const;
+    // Shaderless fallback: a per-object bounding-box outline in each group's colour.
+    void drawOutlineFallbackBoxes(sf::RenderTarget& target,
+        const std::map<std::uint32_t, std::vector<const Object*>>& groups) const;
     // Render one batch of sprites into the offscreen mask and stroke its union silhouette in colour.
     void strokeOutlineGroup(sf::RenderTarget& target,
         const sf::View& sceneView,

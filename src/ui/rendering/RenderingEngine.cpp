@@ -170,43 +170,54 @@ void RenderingEngine::ensureOutlineShader() {
     }
 }
 
-void RenderingEngine::drawSelectedObjectOutlines(sf::RenderTarget& target,
+std::map<std::uint32_t, std::vector<const Object*>> RenderingEngine::collectSelectedOutlineGroups(
     const RenderData& renderData,
-    const VisibilitySettings& visibility) {
-    if (!renderData.objects) {
-        return;
-    }
-    ensureOutlineShader();
-
-    // Group selected, visible objects by outline colour (wall/critter/object). Edge-detecting a
-    // sprite inside the shared texture atlas missed sides where its art butts against an opaque
-    // neighbour in the sheet (e.g. a wall next to another wall); rendering the sprites alone into
-    // the offscreen mask first and edge-detecting that gives a clean outline on every side.
+    const VisibilitySettings& visibility) const {
     std::map<std::uint32_t, std::vector<const Object*>> groups;
+    if (!renderData.objects) {
+        return groups;
+    }
     for (const auto& object : *renderData.objects) {
         if (!object->isSelected() || !isObjectVisible(object->getMapObject(), visibility)) {
             continue;
         }
         groups[objectOutlineColor(*object).toInteger()].push_back(object.get());
     }
+    return groups;
+}
+
+void RenderingEngine::drawOutlineFallbackBoxes(sf::RenderTarget& target,
+    const std::map<std::uint32_t, std::vector<const Object*>>& groups) const {
+    for (const auto& [colorValue, objects] : groups) {
+        const sf::Color color(colorValue);
+        for (const Object* object : objects) {
+            const sf::FloatRect bounds = object->getSprite().getGlobalBounds();
+            sf::RectangleShape box(bounds.size);
+            box.setPosition(bounds.position);
+            box.setFillColor(sf::Color::Transparent);
+            box.setOutlineColor(color);
+            box.setOutlineThickness(1.0f);
+            target.draw(box);
+        }
+    }
+}
+
+void RenderingEngine::drawSelectedObjectOutlines(sf::RenderTarget& target,
+    const RenderData& renderData,
+    const VisibilitySettings& visibility) {
+    ensureOutlineShader();
+
+    // Group selected, visible objects by outline colour (wall/critter/object). Edge-detecting a
+    // sprite inside the shared texture atlas missed sides where its art butts against an opaque
+    // neighbour in the sheet (e.g. a wall next to another wall); rendering the sprites alone into
+    // the offscreen mask first and edge-detecting that gives a clean outline on every side.
+    const auto groups = collectSelectedOutlineGroups(renderData, visibility);
     if (groups.empty()) {
         return;
     }
 
     if (!_outlineShaderOk) {
-        // Fallback when shaders are unavailable: a per-object bounding-box outline.
-        for (const auto& [colorValue, objects] : groups) {
-            const sf::Color color(colorValue);
-            for (const Object* object : objects) {
-                const sf::FloatRect bounds = object->getSprite().getGlobalBounds();
-                sf::RectangleShape box(bounds.size);
-                box.setPosition(bounds.position);
-                box.setFillColor(sf::Color::Transparent);
-                box.setOutlineColor(color);
-                box.setOutlineThickness(1.0f);
-                target.draw(box);
-            }
-        }
+        drawOutlineFallbackBoxes(target, groups);
         return;
     }
 
