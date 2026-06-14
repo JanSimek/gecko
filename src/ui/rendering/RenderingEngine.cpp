@@ -34,6 +34,21 @@ void main() {
 
     // Outline thickness in pixels (the silhouette is drawn at these 8 offsets).
     constexpr float kOutlineThickness = 1.0f;
+
+    // Selection outline colour by object category. Kept to cool tones for structures/objects and
+    // a warm tone for living things so the palette stays readable rather than noisy. Tweak here.
+    sf::Color selectionOutlineColor(const Object& object) {
+        const auto mapObject = object.getMapObjectPtr();
+        if (mapObject) {
+            if (mapObject->isWallObject()) {
+                return sf::Color(74, 206, 168); // walls: teal
+            }
+            if (mapObject->objectType() == 1u) { // Pro::OBJECT_TYPE::CRITTER
+                return sf::Color(224, 180, 96);  // critters: warm amber
+            }
+        }
+        return ColorUtils::createObjectSelectionColor(); // objects: blue accent
+    }
 } // namespace
 
 RenderingEngine::RenderingEngine(resource::GameResources& resources)
@@ -57,10 +72,10 @@ void RenderingEngine::render(sf::RenderTarget& target,
         renderHexGrid(target, view, renderData);
     }
 
-    // Layer 3: Objects (with visibility filtering)
-    if (visibility.showObjects) {
-        renderObjects(target, renderData, visibility);
-    }
+    // Layer 3: Objects. Per-category visibility (objects/critters/walls/scroll blockers) is
+    // handled per object inside renderObjects via isObjectVisible — there is no master gate here,
+    // otherwise turning off "objects" would also hide critters and walls.
+    renderObjects(target, renderData, visibility);
 
     // Layer 4: Drag preview object
     if (renderData.isDraggingFromPalette && renderData.dragPreviewObject && *renderData.dragPreviewObject) {
@@ -140,12 +155,7 @@ void RenderingEngine::ensureOutlineShader() {
 void RenderingEngine::drawObjectOutline(sf::RenderTarget& target, const Object& object) {
     ensureOutlineShader();
 
-    // Walls get a slightly different outline tone so a selected wall reads apart from a selected
-    // object. Tweak kWallOutline to taste.
-    const auto mapObject = object.getMapObjectPtr();
-    const bool isWall = mapObject && mapObject->isWallObject();
-    static const sf::Color kWallOutline(74, 206, 168); // teal-ish, vs the blue object accent
-    const sf::Color outlineColor = isWall ? kWallOutline : ColorUtils::createObjectSelectionColor();
+    const sf::Color outlineColor = selectionOutlineColor(object);
     const sf::Sprite& source = object.getSprite();
 
     if (!_outlineShaderOk) {
