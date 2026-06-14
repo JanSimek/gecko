@@ -440,8 +440,7 @@ SelectionResult SelectionManager::finishAreaSelection() {
     // Clear the area selection state but keep the mode
     _state.selectionArea.reset();
 
-    // Bug fix: previously hardcoded elevation 0, which broke area selection on
-    // any elevation other than the ground floor. Use the host's current elevation.
+    // Select on the host's current elevation so area selection works above the ground floor.
     return selectArea(area, mode, _provider.getCurrentElevation());
 }
 

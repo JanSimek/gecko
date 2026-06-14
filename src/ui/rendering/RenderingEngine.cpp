@@ -113,9 +113,8 @@ void RenderingEngine::render(sf::RenderTarget& target,
     // Layer 5: Roof tiles (if enabled)
     renderRoofTiles(target, renderData, visibility.showRoof);
 
-    // Selected object outlines go on top of roofs (like the tile selection outlines) so the whole
-    // outline shows — a roof above a selected wall must not clip it. The edge shader only paints
-    // the thin outline, so the roof/foreground stays visible beneath.
+    // Outlines draw on top of roofs so a roof above a selected wall can't clip them; the edge
+    // shader paints only the thin border, leaving the scene visible beneath.
     drawSelectedObjectOutlines(target, renderData, visibility);
 
     // Layer 6: Selection visuals
@@ -202,10 +201,8 @@ void RenderingEngine::drawSelectedObjectOutlines(sf::RenderTarget& target,
     const VisibilitySettings& visibility) {
     ensureOutlineShader();
 
-    // Group selected, visible objects by outline colour (wall/critter/object). Edge-detecting a
-    // sprite inside the shared texture atlas missed sides where its art butts against an opaque
-    // neighbour in the sheet (e.g. a wall next to another wall); rendering the sprites alone into
-    // the offscreen mask first and edge-detecting that gives a clean outline on every side.
+    // Group selected, visible objects by outline colour, then draw each group's sprites alone into
+    // the offscreen mask and edge-detect there — a clean silhouette outline on every side.
     const auto groups = collectSelectedOutlineGroups(renderData, visibility);
     if (groups.empty()) {
         return;
@@ -220,13 +217,15 @@ void RenderingEngine::drawSelectedObjectOutlines(sf::RenderTarget& target,
     if (size.x == 0 || size.y == 0) {
         return;
     }
-    if (_outlineMask.getSize() != size && !_outlineMask.resize(size)) {
-        spdlog::warn("Selection outline: could not allocate {}x{} mask; skipping outlines", size.x, size.y);
-        return;
+    if (_outlineMask.getSize() != size) {
+        if (!_outlineMask.resize(size)) {
+            spdlog::warn("Selection outline: could not allocate {}x{} mask; skipping outlines", size.x, size.y);
+            return;
+        }
+        // Clamp-to-edge so the shader's neighbour samples past the mask border read the border
+        // texel (a silhouette running off-screen continues rather than gaining a fake outline).
+        _outlineMask.setRepeated(false);
     }
-    // Clamp-to-edge so the shader's neighbour samples past the mask border read the border texel
-    // (a silhouette running off-screen continues rather than gaining a fake outline at the edge).
-    _outlineMask.setRepeated(false);
 
     const auto width = static_cast<float>(size.x);
     const auto height = static_cast<float>(size.y);
