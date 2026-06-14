@@ -1,6 +1,6 @@
 # Gecko - Fallout 2 map editor
 
-[![Build](https://github.com/JanSimek/geck-map-editor/workflows/Build/badge.svg)](https://github.com/JanSimek/geck-map-editor/actions) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/50b6611a3e2246c6b07282f87aa5940a)](https://www.codacy.com/gh/JanSimek/geck-map-editor/dashboard?utm_source=github.com&utm_medium=referral&utm_content=JanSimek/geck-map-editor&utm_campaign=Badge_Grade)
+[![CI](https://github.com/JanSimek/geck-map-editor/actions/workflows/ci.yml/badge.svg)](https://github.com/JanSimek/geck-map-editor/actions/workflows/ci.yml) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/50b6611a3e2246c6b07282f87aa5940a)](https://www.codacy.com/gh/JanSimek/geck-map-editor/dashboard?utm_source=github.com&utm_medium=referral&utm_content=JanSimek/geck-map-editor&utm_campaign=Badge_Grade)
 
 *Gecko* is a modern cross-platform Fallout 2 map editor.
 
@@ -8,34 +8,46 @@
 
 ## Building from source
 
-This repository contains dependencies as git submodules. When you clone the repository make sure to use the `--recursive` flag or once cloned download submodules with `git submodule update --init --recursive`
+Some dependencies are bundled as git submodules, so clone with `--recursive` — or, if you already cloned, fetch them with `git submodule update --init --recursive`.
 
-**Important**: Use Release build for performance - Debug builds are significantly slower for map loading.
+**Important**: build in Release for performance — Debug builds are significantly slower at loading maps.
 
 ### Dependencies
 
-- **Qt6** (Core, Widgets, Svg) - Primary UI framework
-- **SFML 3+** - 2D graphics rendering
-- **spdlog** - Logging framework
-- **vfspp** - Virtual file system for game archives
-- **ZLIB** - Compression support
+- **Qt6** (Core, Widgets, Svg) — primary UI framework
+- **SFML 3** — 2D graphics rendering
+- **spdlog** — logging framework
+- **ZLIB** — compression support
+- **vfspp** — virtual file system for game archives (bundled as a git submodule)
+
+`SFML`, `spdlog` and `ZLIB` are used from your system when a compatible version is
+found, and otherwise downloaded and built automatically by CMake. Qt6 must be installed.
 
 ### Linux
 
 ```bash
-# Install dependencies (Ubuntu/Debian)
-sudo apt install qtbase6-dev qtbase6-dev-tools libsfml-dev libspdlog-dev
+# Build tools and dependencies (Ubuntu/Debian)
+sudo apt install cmake g++ git \
+                 qt6-base-dev qt6-base-dev-tools libqt6svg6-dev \
+                 libspdlog-dev zlib1g-dev
 
 # Enter the cloned git repo folder
 cd geck-map-editor
-mkdir build && cd build
-cmake ..
-make
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 ```
+
+> **SFML 3 is required.** If your distribution does not package it yet (current
+> Debian/Ubuntu ship SFML 2), CMake downloads and builds SFML automatically. That
+> source build additionally needs the X11/OpenGL/FreeType headers:
+>
+> ```bash
+> sudo apt install libgl1-mesa-dev libxrandr-dev libxcursor-dev libxi-dev libudev-dev libfreetype6-dev
+> ```
 
 ### Windows
 
-The easiest way to build GECK on Windows is to use [vcpkg](https://vcpkg.io/) for dependency management and the latest Visual Studio for compilation.
+The easiest way to build Gecko on Windows is to use [vcpkg](https://vcpkg.io/) for dependency management and the latest Visual Studio for compilation.
 
 ```bash
 vcpkg.exe integrate install
@@ -51,12 +63,11 @@ Install dependencies using Homebrew:
 ```bash
 brew install sfml qt6 spdlog
 
-# Set CMAKE_PREFIX_PATH to Qt6 installation
+# Point CMake at the Homebrew Qt6 installation
 export CMAKE_PREFIX_PATH="/opt/homebrew/opt/qt6:$CMAKE_PREFIX_PATH"
 
-mkdir build && cd build
-cmake ..
-make
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 ```
 
 ## Usage
@@ -80,21 +91,22 @@ The editor supports multiple selection modes accessible via the toolbar:
   - **Priority**: Roof Tiles → Objects → Floor Tiles
   - **Cycling**: Click same position repeatedly to cycle through available elements
 - **OBJECTS**: Select only objects
-- **ROOF_TILES**: Select only roof tiles  
+- **ROOF_TILES**: Select only roof tiles
 - **FLOOR_TILES**: Select only floor tiles
 
 #### Selection Controls
-- **Left mouse click**: Select element at cursor position
-- **Multiple clicks on same position**: Cycle through overlapping elements (in ALL mode)
-- **Right mouse click**: Clear all selections
+- **Left mouse click**: Select the element at the cursor
+- **Multiple clicks on the same position**: Cycle through overlapping elements (ALL mode)
+- **Right mouse click**: Cancel the active placement mode (right-click + drag pans the view)
+- **Esc**: Clear the selection
 
 #### Multi-Selection
-- **Click and Drag**: Area selection (FLOOR_TILES, ROOF_TILES, or OBJECTS modes only)
-- **Ctrl+Click**: Toggle item selection (add if not selected, remove if selected)
-- **Alt+Click** (Option+Click on macOS): Add item to existing selection
-- **Shift+Click**: Range selection for tiles (select area between first selected tile and clicked position)
-- **Ctrl+A**: Select all items of current selection mode type
-- **Ctrl+D**: Deselect all items
+- **Click and Drag**: Area selection (replaces the current selection)
+- **Alt+Click** / **Alt+Drag** (Option on macOS): Add the item / covered area to the existing selection
+- **Ctrl+Click** / **Ctrl+Drag**: Remove items from the selection (deselect only — never adds). Items on hidden layers are left untouched.
+- **Shift+Click**: Range selection for tiles (select the area between the first selected tile and the clicked position)
+- **Ctrl+A**: Select all items of the current selection mode
+- **Ctrl+D**: Deselect everything
 
 #### Object Manipulation
 - **R key** or **Ctrl+R**: Rotate selected object(s) - works with single or multiple selected objects
@@ -114,10 +126,13 @@ The editor supports multiple selection modes accessible via the toolbar:
 
 ### Testing
 ```bash
-# From build directory
-ctest
-# Or run tests executable directly
-./tests
+# Run every suite through CTest (from the build directory)
+ctest --output-on-failure
+
+# …or run a suite directly
+./general_tests       # formats, readers/writers, editor logic
+./performance_tests   # reader benchmarks
+./qt_tests            # Qt UI regressions
 ```
 
 ### Architecture Notes
@@ -137,6 +152,7 @@ Contributions are welcome! Please ensure your code follows the project's coding 
 ## Credits
 
 This project wouldn't be possible without the excellent work from:
+- [Fallout2-ce](https://github.com/fallout2-ce/fallout2-ce) - Fallout 2 Community Edition engine recreation, the reference for engine data and file formats
 - [Falltergeist](https://github.com/falltergeist/falltergeist/) - Fallout engine reimplementation
 - [Klamath](https://github.com/adamkewley/klamath) - Fallout file format library
 - [FRM-Viewer](https://github.com/Primagen/Fallout-FRM-Viewer) - Fallout graphics format viewer
