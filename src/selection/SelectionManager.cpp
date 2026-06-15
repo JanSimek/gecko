@@ -323,6 +323,14 @@ SelectionResult SelectionManager::deselectAtPosition(sf::Vector2f worldPos, Sele
     return SelectionResult::createNoChange();
 }
 
+bool SelectionManager::isPointOnSelection(sf::Vector2f worldPos) const {
+    // The visible, selectable layers under the cursor (roof skipped while hidden, hidden objects
+    // dropped, floor always present) — the same candidates Ctrl+click deselect considers. If any
+    // of them is in the current selection, the point is a valid grab handle for moving it.
+    const auto candidates = collectDeselectableAtPosition(worldPos, SelectionMode::ALL, _provider.getCurrentElevation());
+    return std::ranges::any_of(candidates, [this](const SelectedItem& candidate) { return isItemSelected(candidate); });
+}
+
 bool SelectionManager::startAreaSelection(sf::Vector2f startPos, SelectionMode mode) {
     _state.selectionArea = sf::FloatRect({ startPos.x, startPos.y }, { 0, 0 });
     _state.mode = mode;

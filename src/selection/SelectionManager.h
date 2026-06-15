@@ -79,6 +79,13 @@ public:
     bool hasSelection() const { return !_state.isEmpty(); }
     bool isAreaSelecting() const { return _state.isAreaSelecting(); }
 
+    // True when `worldPos` lands on a currently-selected item that is actually visible there —
+    // any selected floor tile (the floor layer always draws), a selected roof tile while the roof
+    // is shown, or a selected, visible object. Lets the editor grab and move a region by any of
+    // its visible parts, so a selection stays movable even when some of its layers are hidden.
+    // Mirrors the visibility rules of Ctrl+click deselect (collectDeselectableAtPosition).
+    bool isPointOnSelection(sf::Vector2f worldPos) const;
+
     // Replace the selected items wholesale and notify (used to make the selection follow a move).
     void setSelectedItems(std::vector<SelectedItem> items);
 
