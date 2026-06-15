@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <optional>
+#include <utility>
 #include <variant>
 #include <functional>
 
@@ -78,6 +79,9 @@ public:
     bool hasSelection() const { return !_state.isEmpty(); }
     bool isAreaSelecting() const { return _state.isAreaSelecting(); }
 
+    // Replace the selected items wholesale and notify (used to make the selection follow a move).
+    void setSelectedItems(std::vector<SelectedItem> items);
+
     // Callback mechanism for UI updates
     void setSelectionCallback(SelectionCallback callback) { _selectionCallback = callback; }
 
@@ -93,15 +97,24 @@ public:
     std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area, int elevation) const;
     std::vector<int> getHexesInArea(const sf::FloatRect& area) const;
 
-    // Move the selected ROOF tiles by a whole-tile delta, as a set of tile edits (each moved tile
-    // becomes a clear-source + set-target pair) the editor applies through the shared tile-edit undo
-    // path. Empty if there is nothing to move or any tile would leave the map (the block moves as a
-    // whole or not at all). Pure: computes the change set without mutating the map, and is block-safe
-    // — every source is vacated before any target is filled, so overlapping moves never corrupt.
-    // Floor tiles are always present, so they are not moved here.
-    std::vector<TileChange> planRoofTileMove(int deltaRow, int deltaColumn) const;
-    // As above, deriving the whole-tile delta from a drag's start/end world positions.
-    std::vector<TileChange> planRoofMoveForDrag(sf::Vector2f dragStart, sf::Vector2f dragEnd) const;
+    // Move the selected floor and roof tiles by a whole-tile delta, as a set of tile edits (each
+    // moved tile vacates its source to Map::EMPTY_TILE and fills its target) the editor applies
+    // through the shared tile-edit undo path. Empty if there is nothing to move or any tile would
+    // leave the map (the block moves as a whole or not at all). Pure: computes the change set without
+    // mutating the map, and is block-safe — every source is vacated before any target is filled, so
+    // overlapping moves never corrupt.
+    std::vector<TileChange> planSelectionTileMove(int deltaRow, int deltaColumn) const;
+    // As above, deriving the whole-tile delta from a world-space translation (the snapped movement
+    // the dragged objects made), so the tiles land aligned with the objects.
+    std::vector<TileChange> planSelectionMoveForTranslation(sf::Vector2f worldTranslation) const;
+    // The world-space translation of moving the selection by whole tiles nearest rawTranslation.
+    // Moving both the dragged objects and the tiles by this keeps them aligned to the tile grid
+    // (objects snap to a finer hex grid, so an unaligned translation drifts them off the tiles).
+    // nullopt when no tiles are selected (then the caller should keep the raw per-object movement).
+    std::optional<sf::Vector2f> tileAlignedTranslation(sf::Vector2f rawTranslation) const;
+    // The whole-tile (row, column) delta the selection moves by for a world translation; nullopt
+    // when no tiles are selected. Used to shift the selection's tile items so it follows the move.
+    std::optional<std::pair<int, int>> selectionTileDelta(sf::Vector2f worldTranslation) const;
 
 private:
     SelectionDataProvider& _provider;
@@ -116,6 +129,13 @@ private:
     std::optional<int> getRoofTileAtPosition(sf::Vector2f worldPos, int elevation) const;
     std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos, int elevation) const;
     std::optional<int> getFloorTileAtPosition(sf::Vector2f worldPos, int elevation) const;
+
+    // Tile-move helpers (see planSelectionTileMove). A selected tile used as the move reference
+    // (prefer a floor tile): {tileIndex, isRoof}. Its centre round-trips through the tile hit-test.
+    std::optional<std::pair<int, bool>> selectionTileReference() const;
+    // Appends the block-safe tile edits for moving one layer's selected tiles by the delta. roof
+    // picks roof vs floor; returns false (and appends nothing) if any tile would leave the map.
+    bool appendTileLayerMove(std::vector<TileChange>& out, bool roof, int deltaRow, int deltaColumn) const;
 
     // Single item selection logic (current behavior)
     SelectionResult selectSingleAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation);

@@ -381,6 +381,11 @@ void SelectionManager::clearSelection() {
     }
 }
 
+void SelectionManager::setSelectedItems(std::vector<SelectedItem> items) {
+    _state.items = std::move(items);
+    notifySelectionChanged();
+}
+
 void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
     clearSelection();
 
@@ -788,19 +793,16 @@ bool SelectionManager::isItemSelected(const SelectedItem& item) const {
     return _state.hasItem(item);
 }
 
-std::vector<TileChange> SelectionManager::planRoofTileMove(int deltaRow, int deltaColumn) const {
-    std::vector<TileChange> result;
-    if (deltaRow == 0 && deltaColumn == 0) {
-        return result; // no movement
-    }
-
+bool SelectionManager::appendTileLayerMove(std::vector<TileChange>& out, bool roof, int deltaRow, int deltaColumn) const {
     const int elevation = _provider.getCurrentElevation();
     const auto& tiles = _provider.getMapFile().tiles.at(elevation);
+    const SelectionType layer = roof ? SelectionType::ROOF_TILE : SelectionType::FLOOR_TILE;
+    const auto valueAt = [&](int index) { return roof ? tiles.at(index).getRoof() : tiles.at(index).getFloor(); };
 
-    // Map each selected roof source tile to its target; reject the whole move if any leaves the map.
+    // Map each selected source tile of this layer to its target; reject if any leaves the map.
     std::vector<std::pair<int, int>> moves; // (source, target)
     for (const auto& item : _state.items) {
-        if (item.type != SelectionType::ROOF_TILE) {
+        if (item.type != layer) {
             continue;
         }
         const int source = item.getTileIndex();
@@ -808,45 +810,111 @@ std::vector<TileChange> SelectionManager::planRoofTileMove(int deltaRow, int del
         const int newRow = static_cast<int>(coords.x) + deltaRow;
         const int newColumn = static_cast<int>(coords.y) + deltaColumn;
         if (newRow < 0 || newRow >= MAP_HEIGHT || newColumn < 0 || newColumn >= MAP_WIDTH) {
-            return {}; // moving the block off the map is rejected as a whole
+            return false; // moving the block off the map is rejected as a whole
         }
         moves.emplace_back(source,
             coordinatesToIndex(TileCoordinates(static_cast<unsigned int>(newRow), static_cast<unsigned int>(newColumn))));
     }
-    if (moves.empty()) {
-        return result;
-    }
 
     // Block-safe: vacate every source, then fill every target. A tile that is both a source and a
-    // target keeps the moved-in roof, because the target write runs after the vacate.
+    // target keeps the moved-in value, because the target write runs after the vacate.
     std::unordered_map<int, uint16_t> after;
     for (const auto& [source, target] : moves) {
         after[source] = Map::EMPTY_TILE;
     }
     for (const auto& [source, target] : moves) {
-        after[target] = tiles.at(source).getRoof();
+        after[target] = valueAt(source);
     }
 
-    for (const auto& [tileIndex, newRoof] : after) {
-        const uint16_t before = tiles.at(tileIndex).getRoof();
-        if (before != newRoof) {
-            result.push_back({ elevation, tileIndex, /*isRoof*/ true, before, newRoof });
+    for (const auto& [tileIndex, newValue] : after) {
+        const uint16_t before = valueAt(tileIndex);
+        if (before != newValue) {
+            out.push_back({ elevation, tileIndex, roof, before, newValue });
         }
+    }
+    return true;
+}
+
+std::vector<TileChange> SelectionManager::planSelectionTileMove(int deltaRow, int deltaColumn) const {
+    std::vector<TileChange> result;
+    if (deltaRow == 0 && deltaColumn == 0) {
+        return result; // no movement
+    }
+    // Floor and roof move with identical semantics (EMPTY_TILE is the empty value for both). If
+    // either layer would leave the map, reject the whole move so the region stays consistent.
+    if (!appendTileLayerMove(result, /*roof*/ false, deltaRow, deltaColumn)
+        || !appendTileLayerMove(result, /*roof*/ true, deltaRow, deltaColumn)) {
+        return {};
     }
     return result;
 }
 
-std::vector<TileChange> SelectionManager::planRoofMoveForDrag(sf::Vector2f dragStart, sf::Vector2f dragEnd) const {
-    const int elevation = _provider.getCurrentElevation();
-    const auto startTile = getRoofTileAtPositionIncludingEmpty(dragStart, elevation);
-    const auto endTile = getRoofTileAtPositionIncludingEmpty(dragEnd, elevation);
-    if (!startTile || !endTile) {
+std::optional<std::pair<int, bool>> SelectionManager::selectionTileReference() const {
+    // Prefer a floor tile (floors have no roof offset); fall back to a roof tile.
+    int roofReference = -1;
+    for (const auto& item : _state.items) {
+        if (item.type == SelectionType::FLOOR_TILE) {
+            return std::pair<int, bool>{ item.getTileIndex(), false };
+        }
+        if (item.type == SelectionType::ROOF_TILE && roofReference < 0) {
+            roofReference = item.getTileIndex();
+        }
+    }
+    if (roofReference < 0) {
+        return std::nullopt; // no tiles selected
+    }
+    return std::pair<int, bool>{ roofReference, true };
+}
+
+std::optional<std::pair<int, int>> SelectionManager::selectionTileDelta(sf::Vector2f worldTranslation) const {
+    // A tile centre round-trips through the hit-test, so translating it and snapping yields a
+    // whole-tile delta aligned with how the dragged objects move — deriving the delta from the
+    // arbitrary click/drop points double-rounds and lands the tiles off-centre.
+    const auto reference = selectionTileReference();
+    if (!reference.has_value()) {
+        return std::nullopt;
+    }
+    const auto [referenceIndex, roof] = *reference;
+    const auto referenceCoords = indexToCoordinates(referenceIndex);
+    const auto referenceScreen = coordinatesToScreenPosition(referenceCoords, roof);
+    const sf::Vector2f referenceCentre(
+        static_cast<float>(referenceScreen.x) + TILE_WIDTH / 2.0f,
+        static_cast<float>(referenceScreen.y) + TILE_HEIGHT / 2.0f);
+
+    const sf::Vector2f targetPos = referenceCentre + worldTranslation;
+    const auto targetTile = roof ? _provider.getRoofTileAtPositionIncludingEmpty(targetPos)
+                                 : _provider.getTileAtPosition(targetPos, /*isRoof*/ false);
+    if (!targetTile.has_value()) {
+        return std::nullopt;
+    }
+    const auto targetCoords = indexToCoordinates(*targetTile);
+    return std::pair<int, int>{ static_cast<int>(targetCoords.x) - static_cast<int>(referenceCoords.x),
+        static_cast<int>(targetCoords.y) - static_cast<int>(referenceCoords.y) };
+}
+
+std::optional<sf::Vector2f> SelectionManager::tileAlignedTranslation(sf::Vector2f rawTranslation) const {
+    const auto reference = selectionTileReference();
+    const auto delta = selectionTileDelta(rawTranslation);
+    if (!reference.has_value() || !delta.has_value()) {
+        return std::nullopt;
+    }
+    // World vector of moving the reference tile by the whole-tile delta (floor space — a pure
+    // translation carries no roof offset).
+    const auto referenceCoords = indexToCoordinates(reference->first);
+    const TileCoordinates movedCoords(static_cast<unsigned int>(static_cast<int>(referenceCoords.x) + delta->first),
+        static_cast<unsigned int>(static_cast<int>(referenceCoords.y) + delta->second));
+    const auto from = coordinatesToScreenPosition(referenceCoords, /*isRoof*/ false);
+    const auto to = coordinatesToScreenPosition(movedCoords, /*isRoof*/ false);
+    return sf::Vector2f(static_cast<float>(to.x) - static_cast<float>(from.x),
+        static_cast<float>(to.y) - static_cast<float>(from.y));
+}
+
+std::vector<TileChange> SelectionManager::planSelectionMoveForTranslation(sf::Vector2f worldTranslation) const {
+    const auto delta = selectionTileDelta(worldTranslation);
+    if (!delta.has_value()) {
         return {};
     }
-    const auto startCoords = indexToCoordinates(*startTile);
-    const auto endCoords = indexToCoordinates(*endTile);
-    return planRoofTileMove(static_cast<int>(endCoords.x) - static_cast<int>(startCoords.x),
-        static_cast<int>(endCoords.y) - static_cast<int>(startCoords.y));
+    return planSelectionTileMove(delta->first, delta->second);
 }
 
 std::vector<int> SelectionManager::getHexesInArea(const sf::FloatRect& area) const {

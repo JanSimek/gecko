@@ -152,7 +152,13 @@ public:
     ViewportController* getViewportController() const override { return _viewportController.get(); }
     int& getCurrentHoverHex() override { return _currentHoverHex; }
     void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves) override;
-    void moveSelectedRoofTilesForDrag(sf::Vector2f dragStart, sf::Vector2f dragEnd) override;
+    void moveSelectedTilesForDrag(sf::Vector2f worldTranslation) override;
+    void reselectAfterDragMove(sf::Vector2f worldTranslation) override;
+    void beginMoveBatch(const std::string& description) override;
+    void endMoveBatch() override;
+    void beginTileDragPreview() override;
+    void previewTileDrag(sf::Vector2f worldOffset) override;
+    void endTileDragPreview() override;
 
     // SelectionManager helpers
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) override;
@@ -367,6 +373,15 @@ private:
     // (bounded by the selection size) instead of scanning the whole map every drag-preview frame.
     std::vector<int> _selectedFloorVisuals;
     std::vector<int> _selectedRoofVisuals;
+
+    // Base positions of the selected floor/roof sprites captured while a region is being dragged, so
+    // the live preview can offset them and restore them when the drag ends.
+    struct TileDragPreviewBase {
+        bool roof;
+        int tileIndex;
+        sf::Vector2f basePosition;
+    };
+    std::vector<TileDragPreviewBase> _tileDragPreviewBases;
 
     // Active tool mode (single source of truth; see setMode).
     EditorMode _mode = EditorMode::Select;

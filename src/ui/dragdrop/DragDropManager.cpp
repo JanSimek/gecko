@@ -75,18 +75,22 @@ bool DragDropManager::startObjectDrag(sf::Vector2f worldPos) {
         return false;
     }
 
+    _isDraggingObjects = true;
+    _dragStartWorldPos = worldPos;
+    _objectDragOffset = sf::Vector2f(0, 0);
+
+    // Preview the selected floor/roof tiles moving with the objects.
+    _context.beginTileDragPreview();
+
+    // Ensures the selection rectangle doesn't remain visible during object drag. This repaints the
+    // selection visuals (resetting object sprite colours), so the ghost tint below must come after.
+    _context.clearDragSelectionPreview();
+
     // Show the dragged objects as a translucent ghost (same alpha as the palette drag preview),
     // so it's clear they sit at a preview position until dropped.
     for (const auto& object : _draggedObjects) {
         object->getSprite().setColor(sf::Color(255, 255, 255, ui::constants::sfml::DRAG_PREVIEW_ALPHA));
     }
-
-    _isDraggingObjects = true;
-    _dragStartWorldPos = worldPos;
-    _objectDragOffset = sf::Vector2f(0, 0);
-
-    // Ensures the selection rectangle doesn't remain visible during object drag
-    _context.clearDragSelectionPreview();
 
     spdlog::debug("DragDropManager: Started dragging {} objects", _draggedObjects.size());
     return true;
@@ -104,6 +108,9 @@ void DragDropManager::updateObjectDrag(sf::Vector2f currentWorldPos) {
         sf::Vector2f newPos = _objectDragStartPositions[i] + _objectDragOffset;
         _draggedObjects[i]->getSprite().setPosition(newPos);
     }
+
+    // Preview the selected floor/roof tiles moving by the same offset.
+    _context.previewTileDrag(_objectDragOffset);
 
     // Highlight target hex for the first (representative) object
     if (!_draggedObjects.empty()) {
@@ -135,6 +142,16 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
     sf::Vector2f dragOffset = finalWorldPos - _dragStartWorldPos;
     spdlog::debug("DragDropManager::finishObjectDrag - dragOffset({:.1f}, {:.1f})", dragOffset.x, dragOffset.y);
 
+    // For a region drag (tiles selected) align the whole move to the tile grid, so the objects and
+    // tiles travel together and the tiles never land off-centre. A free object drag (no tiles
+    // selected) keeps the finer per-hex offset.
+    sf::Vector2f moveTranslation = dragOffset;
+    if (auto* selectionManager = _context.getSelectionManager()) {
+        if (const auto aligned = selectionManager->tileAlignedTranslation(dragOffset)) {
+            moveTranslation = *aligned;
+        }
+    }
+
     const auto* hexGrid = _context.getHexagonGrid();
 
     // Move each object by the relative offset to maintain spacing
@@ -147,7 +164,7 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
         if (auto originalHex = hexGrid->getHexByPosition(static_cast<uint32_t>(originalHexPosition)); originalHex.has_value()) {
             sf::Vector2f originalWorldPos(static_cast<float>(originalHex->get().x()), static_cast<float>(originalHex->get().y()));
 
-            sf::Vector2f newWorldPos = originalWorldPos + dragOffset;
+            sf::Vector2f newWorldPos = originalWorldPos + moveTranslation;
 
             // Don't manually apply shift offsets here - setHexPosition() will handle them
             sf::Vector2f snappedPos = _context.getViewportController()->snapToHexGrid(newWorldPos);
@@ -169,12 +186,21 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
         spdlog::warn("DragDropManager: Invalid original hex position {}, restored original position", originalHexPosition);
     }
 
+    // Restore the previewed tile sprites; the committed move repositions them for real below.
+    _context.endTileDragPreview();
+
+    // The object move and the tile move from one drag collapse into a single undo entry.
+    _context.beginMoveBatch("Move Selection");
     if (!movedObjects.empty()) {
         _context.registerObjectMove(_draggedObjects, movedObjects);
     }
+    // Move the selected floor/roof tiles by the same translation so the whole region travels together.
+    _context.moveSelectedTilesForDrag(moveTranslation);
+    _context.endMoveBatch();
 
-    // Move the selected roof tiles by the same drag so the whole region travels together.
-    _context.moveSelectedRoofTilesForDrag(_dragStartWorldPos, finalWorldPos);
+    // Keep the selection on the moved content: the move rebuilt the object sprites and shifted the
+    // tiles, so the old selection is stale and would otherwise sit at the original spot.
+    _context.reselectAfterDragMove(moveTranslation);
 
     // End the ghost preview: restore each object's pre-drag (selection) tint.
     for (size_t i = 0; i < _draggedObjects.size(); ++i) {
@@ -196,6 +222,9 @@ void DragDropManager::cancelObjectDrag() {
     if (!_isDraggingObjects || _draggedObjects.empty()) {
         return;
     }
+
+    // Restore the previewed tile sprites to their original positions.
+    _context.endTileDragPreview();
 
     // Restore original hex positions and the pre-drag (selection) tint.
     for (size_t i = 0; i < _draggedObjects.size(); ++i) {

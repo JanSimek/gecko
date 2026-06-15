@@ -2,6 +2,7 @@
 
 #include <SFML/System/Vector2.hpp>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -42,9 +43,20 @@ public:
     virtual const HexagonGrid* getHexagonGrid() const = 0;
     virtual selection::SelectionManager* getSelectionManager() const = 0;
     virtual void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves) = 0;
-    // Move the selected roof tiles by the same drag, recorded for undo. Floor tiles are always
-    // present, so they are intentionally left in place.
-    virtual void moveSelectedRoofTilesForDrag(sf::Vector2f dragStart, sf::Vector2f dragEnd) = 0;
+    // Move the selected floor and roof tiles by the same world-space translation the objects made,
+    // recorded for undo.
+    virtual void moveSelectedTilesForDrag(sf::Vector2f worldTranslation) = 0;
+    // After a move, rebuild the selection so it follows the moved content: re-point objects to their
+    // new sprite instances and shift the selected tiles by the same whole-tile delta.
+    virtual void reselectAfterDragMove(sf::Vector2f worldTranslation) = 0;
+    // Group the object move and the tile move from one drag into a single undo entry.
+    virtual void beginMoveBatch(const std::string& description) = 0;
+    virtual void endMoveBatch() = 0;
+    // Live preview: offset the selected floor/roof tile sprites along with the dragged objects, then
+    // restore them when the drag ends (the committed move repositions them for real).
+    virtual void beginTileDragPreview() = 0;
+    virtual void previewTileDrag(sf::Vector2f worldOffset) = 0;
+    virtual void endTileDragPreview() = 0;
     virtual void placeObjectAtPosition(sf::Vector2f worldPos) = 0;
     virtual std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) = 0;
     virtual void clearDragSelectionPreview() = 0;
