@@ -37,6 +37,11 @@ public:
     /// Floor/roof tile id at `tileIndex` on this elevation, or EMPTY_TILE if out of range.
     uint16_t getFloor(int tileIndex) const;
     uint16_t getRoof(int tileIndex) const;
+    /// Resolve a ground-tile FRM name (e.g. "edg5000" or "edg5000.frm", case-insensitive) to
+    /// its index in art/tiles/tiles.lst — the value paintFloor()/paintRoof() expect. Returns -1
+    /// if the tile list is unavailable or the name is unknown, so scripts address tiles by name
+    /// instead of magic numbers.
+    int tileId(const std::string& name) const;
 
     // --- Undo batching -----------------------------------------------------------
     void beginBatch(const std::string& description);
@@ -46,6 +51,10 @@ public:
     /// Build and place an object at `hex`. Returns false if `hex` is off-grid or the
     /// object's art (`frmPid`) cannot be resolved/loaded (no visual to place).
     bool placeObject(uint32_t proPid, uint32_t frmPid, int hex, uint32_t direction);
+    /// Place a proto by PID alone, resolving its art FID from the proto header — the common
+    /// case, so scripts need not also know the FRM id. Same return contract as placeObject();
+    /// also returns false if the proto cannot be loaded.
+    bool placeProto(uint32_t proPid, int hex, uint32_t direction);
     bool paintFloor(int tileIndex, uint16_t tileId);
     bool paintRoof(int tileIndex, uint16_t tileId);
 

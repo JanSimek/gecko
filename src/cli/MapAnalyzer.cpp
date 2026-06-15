@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <map>
 #include <memory>
@@ -28,6 +29,14 @@ namespace {
     std::string baseName(const std::string& path) {
         const auto slash = path.find_last_of("/\\");
         return slash == std::string::npos ? path : path.substr(slash + 1);
+    }
+
+    // The object's raw engine PID, "0x%08X" — the actual identifier a generator/MCP client
+    // hands back to placeObject(), so surface it alongside the human-readable name.
+    std::string pidHex(uint32_t pid) {
+        char buffer[11];
+        std::snprintf(buffer, sizeof(buffer), "0x%08X", pid);
+        return buffer;
     }
 
     const char* objectTypeName(uint32_t type) {
@@ -201,7 +210,7 @@ int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& option
     }
     out << "Objects by total usage:\n";
     for (const auto& [pid, count] : sortedByCountDesc(aggObjCount)) {
-        out << "  [" << objectTypeName((pid & 0xFF000000u) >> 24) << "] " << protoName(pid)
+        out << "  " << pidHex(pid) << " [" << objectTypeName((pid & 0xFF000000u) >> 24) << "] " << protoName(pid)
             << "  total " << count << ", in " << aggObjMaps[pid] << " maps\n";
     }
     return 0;

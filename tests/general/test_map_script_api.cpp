@@ -122,3 +122,26 @@ TEST_CASE("MapScriptApi placeObject fails gracefully without loadable art", "[sc
     // Off-grid hex is rejected before any art lookup.
     CHECK_FALSE(api.placeObject(33555201u, 16777345u, -5, 0));
 }
+
+TEST_CASE("MapScriptApi name resolvers fail closed without game data", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    SECTION("tileId returns -1 when the tile list is unavailable") {
+        // No data mounted -> tiles.lst can't load -> unknown, not a bogus index.
+        CHECK(api.tileId("edg5000") == -1);
+        CHECK(api.tileId("edg5000.frm") == -1);
+        CHECK(api.tileId("does-not-exist") == -1);
+    }
+
+    SECTION("placeProto rejects an off-grid hex before any proto lookup") {
+        CHECK_FALSE(api.placeProto(0x02000066u, -1, 0));
+        CHECK(api.placedObjects() == 0);
+    }
+
+    SECTION("placeProto returns false when the proto cannot be loaded") {
+        // Valid hex, but headless: the proto (hence its art FID) can't resolve.
+        CHECK_FALSE(api.placeProto(0x02000066u, 20100, 0));
+        CHECK(api.placedObjects() == 0);
+    }
+}

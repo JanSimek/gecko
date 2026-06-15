@@ -67,6 +67,7 @@ target_link_libraries(test_support INTERFACE Catch2::Catch2)
 target_compile_definitions(test_support INTERFACE
     GECK_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
     GECK_TEST_TMP_DIR="${CMAKE_BINARY_DIR}/test-tmp"
+    GECK_SCRIPTS_DIR="${CMAKE_SOURCE_DIR}/scripts"
 )
 
 target_link_libraries(general_tests PRIVATE

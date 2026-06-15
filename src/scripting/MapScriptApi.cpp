@@ -1,16 +1,23 @@
 #include "scripting/MapScriptApi.h"
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
+#include "format/lst/Lst.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
+#include "format/pro/Pro.h"
 #include "pattern/PatternSprite.h"
+#include "resource/GameResources.h"
+#include "resource/ResourcePaths.h"
 #include "ui/core/TileChange.h"
 #include "ui/editing/ObjectCommandController.h"
+#include "util/ProHelper.h"
 
 namespace geck {
 
@@ -66,6 +73,33 @@ uint16_t MapScriptApi::getRoof(int tileIndex) const {
     return it->second[tileIndex].getRoof();
 }
 
+int MapScriptApi::tileId(const std::string& name) const {
+    const Lst* lst = nullptr;
+    try {
+        lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
+    } catch (...) {
+        return -1;
+    }
+    if (lst == nullptr) {
+        return -1;
+    }
+    // tiles.lst entries are already lowercased/trimmed by the reader; normalise the query the
+    // same way so "edg5000", "EDG5000.FRM" and "edg5000.frm" all match.
+    std::string needle = name;
+    std::transform(needle.begin(), needle.end(), needle.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (needle.size() < 4 || needle.compare(needle.size() - 4, 4, ".frm") != 0) {
+        needle += ".frm";
+    }
+    const auto& entries = lst->list();
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        if (entries[i] == needle) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
 void MapScriptApi::beginBatch(const std::string& description) {
     _controller.beginBatch(description);
 }
@@ -101,6 +135,27 @@ bool MapScriptApi::placeObject(uint32_t proPid, uint32_t frmPid, int hex, uint32
         return true;
     }
     return false;
+}
+
+bool MapScriptApi::placeProto(uint32_t proPid, int hex, uint32_t direction) {
+    if (!isValidHex(hex)) {
+        return false;
+    }
+    // The proto header carries the default art FID the engine uses for this object; resolve it
+    // so callers place by PID alone. A proto we can't load has no art to place.
+    uint32_t frmPid = 0;
+    try {
+        if (const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, proPid));
+            pro != nullptr) {
+            frmPid = static_cast<uint32_t>(pro->header.FID);
+        }
+    } catch (...) {
+        return false;
+    }
+    if (frmPid == 0) {
+        return false;
+    }
+    return placeObject(proPid, frmPid, hex, direction);
 }
 
 bool MapScriptApi::paintFloor(int tileIndex, uint16_t tileId) {

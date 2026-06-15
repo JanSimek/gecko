@@ -1,6 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 #include "format/map/Map.h"
 #include "format/map/Tile.h"
@@ -136,6 +139,44 @@ TEST_CASE("Luau-painted tiles survive a map save/reload round-trip", "[scripting
     CHECK(tiles[5].getFloor() == 271);
     CHECK(tiles[6].getFloor() == 272);
     CHECK(tiles[5].getRoof() == 480);
+}
+
+TEST_CASE("Luau can reach the name resolvers", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // tileId and placeProto are bound and callable. Headless they resolve to -1/false (no data),
+    // which is exactly the contract a generator branches on (skip painting an unknown tile).
+    const auto r = rt.run(R"(
+        assert(api:tileId("edg5000") == -1, "expected -1 without data")
+        assert(api:placeProto(0x02000066, 20100, 0) == false, "expected false without data")
+    )",
+        api, fx.controller, "resolvers");
+    INFO("script error: " << r.error);
+    CHECK(r.ok);
+}
+
+TEST_CASE("The shipped desert_terrain.luau compiles and guards on missing data", "[scripting][lua]") {
+    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/desert_terrain.luau");
+    REQUIRE(file.is_open());
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    const std::string source = buffer.str();
+
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // Headless (no data): tileId("edg5000") is -1, so the example must abort cleanly with a
+    // hint rather than paint a bogus tile or error. This keeps the committed script CI-checked
+    // for syntax and its guard path; the live fill/scatter runs in the GUI (needs data + GL).
+    const auto r = rt.run(source, api, fx.controller, "desert");
+    INFO("script error: " << r.error);
+    CHECK(r.ok);
+    CHECK(api.paintedTiles() == 0);
+    CHECK(api.placedObjects() == 0);
+    CHECK(r.output.find("Mount Fallout 2 data") != std::string::npos);
 }
 
 TEST_CASE("Luau print() output is captured for the console", "[scripting][lua]") {

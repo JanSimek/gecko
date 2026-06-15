@@ -61,7 +61,9 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         .addFunction("hexNeighbors", &MapScriptApi::hexNeighbors)
         .addFunction("getFloor", &MapScriptApi::getFloor)
         .addFunction("getRoof", &MapScriptApi::getRoof)
+        .addFunction("tileId", &MapScriptApi::tileId)
         .addFunction("placeObject", &MapScriptApi::placeObject)
+        .addFunction("placeProto", &MapScriptApi::placeProto)
         .addFunction("paintFloor", &MapScriptApi::paintFloor)
         .addFunction("paintRoof", &MapScriptApi::paintRoof)
         .endClass();
