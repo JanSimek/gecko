@@ -13,6 +13,7 @@
 #include "pattern/Pattern.h"
 #include "pattern/PatternSprite.h"
 #include "pattern/PatternStamper.h"
+#include "pattern/ThumbnailComposer.h"
 #include "ui/rendering/ThumbnailRenderer.h"
 
 namespace geck::pattern {

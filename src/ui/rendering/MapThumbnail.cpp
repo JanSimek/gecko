@@ -15,6 +15,7 @@
 #include "format/map/Tile.h"
 #include "format/pro/Pro.h"
 #include "pattern/PatternSprite.h"
+#include "pattern/ThumbnailComposer.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 #include "ui/rendering/ThumbnailRenderer.h"

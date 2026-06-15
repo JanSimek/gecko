@@ -11,7 +11,6 @@
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
 #include "resource/GameResources.h"
-#include "ui/rendering/ThumbnailRenderer.h"
 #include "util/TileUtils.h"
 
 namespace geck::pattern {
@@ -69,23 +68,6 @@ std::optional<sf::Sprite> buildTileSprite(resource::GameResources& resources,
         spdlog::warn("buildTileSprite: tile {} art failed: {}", tileId, e.what());
         return std::nullopt;
     }
-}
-
-QPixmap composeThumbnail(const std::vector<sf::Sprite>& floorSprites,
-    const std::vector<std::shared_ptr<Object>>& objects,
-    const std::vector<sf::Sprite>& roofSprites, int size, const QString& cacheKey) {
-    std::vector<const sf::Sprite*> ordered;
-    ordered.reserve(floorSprites.size() + objects.size() + roofSprites.size());
-    for (const sf::Sprite& sprite : floorSprites) {
-        ordered.push_back(&sprite);
-    }
-    for (const auto& object : objects) {
-        ordered.push_back(&object->getSprite());
-    }
-    for (const sf::Sprite& sprite : roofSprites) {
-        ordered.push_back(&sprite);
-    }
-    return ThumbnailRenderer::render(ordered, size, cacheKey);
 }
 
 } // namespace geck::pattern
