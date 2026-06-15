@@ -137,3 +137,19 @@ TEST_CASE("Luau-painted tiles survive a map save/reload round-trip", "[scripting
     CHECK(tiles[6].getFloor() == 272);
     CHECK(tiles[5].getRoof() == 480);
 }
+
+TEST_CASE("Luau print() output is captured for the console", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // Multiple args are tab-separated, each print() ends with a newline (Lua print semantics).
+    const auto r = rt.run(R"(
+        print("hello", 42)
+        print("done")
+    )",
+        api, fx.controller, "print");
+    INFO("script error: " << r.error);
+    REQUIRE(r.ok);
+    CHECK(r.output == "hello\t42\ndone\n");
+}

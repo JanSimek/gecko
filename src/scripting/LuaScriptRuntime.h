@@ -10,6 +10,8 @@ class ObjectCommandController;
 struct ScriptResult {
     bool ok = false;
     std::string error;
+    /// Captured text from the script's print() calls (newline-separated), shown in the console.
+    std::string output;
 };
 
 /// Runs a sandboxed Luau script with a MapScriptApi bound as the global `api`. The whole

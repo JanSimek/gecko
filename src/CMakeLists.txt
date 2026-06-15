@@ -210,7 +210,9 @@ set(GECK_APP_SOURCES
 if(GECK_ENABLE_SCRIPTING)
     list(APPEND GECK_APP_SOURCES
         scripting/LuaScriptRuntime.h
-        scripting/LuaScriptRuntime.cpp)
+        scripting/LuaScriptRuntime.cpp
+        ui/panels/ScriptConsoleWidget.h
+        ui/panels/ScriptConsoleWidget.cpp)
 endif()
 
 # Reusable application library for the executable and UI tests

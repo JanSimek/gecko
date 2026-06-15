@@ -43,6 +43,7 @@ class MapInfoPanel;
 class TilePalettePanel;
 class ObjectPalettePanel;
 class FileBrowserPanel;
+class ScriptConsoleWidget;
 class Map;
 
 class MainWindow : public QMainWindow {
@@ -202,6 +203,10 @@ private:
     QDockWidget* _tilePaletteDock;
     QDockWidget* _objectPaletteDock;
     QDockWidget* _fileBrowserDock;
+#ifdef GECK_SCRIPTING_ENABLED
+    QDockWidget* _scriptConsoleDock = nullptr;
+    ScriptConsoleWidget* _scriptConsole = nullptr;
+#endif
     std::unordered_map<QDockWidget*, bool> _panelVisibilitySnapshot;
     bool _suppressPanelSnapshotUpdates = false;
     bool _suppressPanelPreferenceUpdates = false;
