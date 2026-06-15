@@ -21,26 +21,21 @@ namespace geck {
 namespace {
     // Fragment shader that emits the outline colour only at a silhouette EDGE — an opaque texel with
     // a transparent neighbour — and is transparent elsewhere. Run over the offscreen selection mask
-    // it yields a thin 1px outline that never fills, so the scene underneath stays visible. `rect`
-    // bounds the region to sample (the mask, in texcoords); neighbour samples outside it count as
-    // transparent, so a silhouette touching the mask edge is still outlined and no edge is invented
-    // beyond it. SFML gives normalised gl_TexCoord[0] via its texture matrix.
+    // it yields a thin 1px outline that never fills, so the scene underneath stays visible. The mask
+    // is clamp-to-edge, so neighbour samples past the mask border read the border texel: a silhouette
+    // running off the viewport edge continues rather than gaining a fake outline along that edge.
+    // SFML gives normalised gl_TexCoord[0] via its texture matrix.
     constexpr const char* kOutlineFragmentShader = R"(
 uniform sampler2D texture;
 uniform vec4 outlineColor;
 uniform vec2 texel; // one-texel step in texcoord units
-uniform vec4 rect;  // region to sample, in texcoords: (minX, minY, maxX, maxY)
-float sampleAlpha(vec2 p) {
-    vec2 inside = step(rect.xy, p) * step(p, rect.zw); // 0 outside the sample region on each axis
-    return inside.x * inside.y * texture2D(texture, p).a;
-}
 void main() {
     vec2 uv = gl_TexCoord[0].xy;
     float a  = texture2D(texture, uv).a;
-    float aL = sampleAlpha(vec2(uv.x - texel.x, uv.y));
-    float aR = sampleAlpha(vec2(uv.x + texel.x, uv.y));
-    float aU = sampleAlpha(vec2(uv.x, uv.y - texel.y));
-    float aD = sampleAlpha(vec2(uv.x, uv.y + texel.y));
+    float aL = texture2D(texture, vec2(uv.x - texel.x, uv.y)).a;
+    float aR = texture2D(texture, vec2(uv.x + texel.x, uv.y)).a;
+    float aU = texture2D(texture, vec2(uv.x, uv.y - texel.y)).a;
+    float aD = texture2D(texture, vec2(uv.x, uv.y + texel.y)).a;
     float minN = min(min(aL, aR), min(aU, aD));
     // 1px outline: an opaque pixel that has a transparent neighbour (the silhouette's inner edge).
     float edge = step(0.5, a) * (1.0 - step(0.5, minN));
@@ -118,9 +113,8 @@ void RenderingEngine::render(sf::RenderTarget& target,
     // Layer 5: Roof tiles (if enabled)
     renderRoofTiles(target, renderData, visibility.showRoof);
 
-    // Selected object outlines go on top of roofs (like the tile selection outlines) so the whole
-    // outline shows — a roof above a selected wall must not clip it. The edge shader only paints
-    // the thin outline, so the roof/foreground stays visible beneath.
+    // Outlines draw on top of roofs so a roof above a selected wall can't clip them; the edge
+    // shader paints only the thin border, leaving the scene visible beneath.
     drawSelectedObjectOutlines(target, renderData, visibility);
 
     // Layer 6: Selection visuals
@@ -207,10 +201,8 @@ void RenderingEngine::drawSelectedObjectOutlines(sf::RenderTarget& target,
     const VisibilitySettings& visibility) {
     ensureOutlineShader();
 
-    // Group selected, visible objects by outline colour (wall/critter/object). Edge-detecting a
-    // sprite inside the shared texture atlas missed sides where its art butts against an opaque
-    // neighbour in the sheet (e.g. a wall next to another wall); rendering the sprites alone into
-    // the offscreen mask first and edge-detecting that gives a clean outline on every side.
+    // Group selected, visible objects by outline colour, then draw each group's sprites alone into
+    // the offscreen mask and edge-detect there — a clean silhouette outline on every side.
     const auto groups = collectSelectedOutlineGroups(renderData, visibility);
     if (groups.empty()) {
         return;
@@ -225,16 +217,20 @@ void RenderingEngine::drawSelectedObjectOutlines(sf::RenderTarget& target,
     if (size.x == 0 || size.y == 0) {
         return;
     }
-    if (_outlineMask.getSize() != size && !_outlineMask.resize(size)) {
-        spdlog::warn("Selection outline: could not allocate {}x{} mask; skipping outlines", size.x, size.y);
-        return;
+    if (_outlineMask.getSize() != size) {
+        if (!_outlineMask.resize(size)) {
+            spdlog::warn("Selection outline: could not allocate {}x{} mask; skipping outlines", size.x, size.y);
+            return;
+        }
+        // Clamp-to-edge so the shader's neighbour samples past the mask border read the border
+        // texel (a silhouette running off-screen continues rather than gaining a fake outline).
+        _outlineMask.setRepeated(false);
     }
 
     const auto width = static_cast<float>(size.x);
     const auto height = static_cast<float>(size.y);
     // The mask is at screen resolution, so a one-texel edge is a constant 1px outline at any zoom.
     _outlineShader.setUniform("texel", sf::Glsl::Vec2(kOutlineThickness / width, kOutlineThickness / height));
-    _outlineShader.setUniform("rect", sf::Glsl::Vec4(0.f, 0.f, 1.f, 1.f));
 
     const sf::View sceneView = target.getView();                               // align silhouettes with the scene
     const sf::View screenView(sf::FloatRect({ 0.f, 0.f }, { width, height })); // map the mask 1:1 onto the target

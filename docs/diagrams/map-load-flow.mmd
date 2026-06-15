@@ -1,0 +1,23 @@
+sequenceDiagram
+    actor User
+    participant MW as MainWindow
+    participant ML as MapLoader (bg thread)
+    participant GR as GameResources
+    participant DFS as DataFileSystem (vfspp/DAT)
+    participant RD as MapReader + ProReader
+    participant EW as EditorWidget
+    participant RE as RenderingEngine (SFML)
+
+    User->>MW: Open map
+    MW->>ML: addLoader(path) via LoadingWidget
+    activate ML
+    ML->>GR: resources
+    GR->>DFS: read .map + referenced .pro bytes
+    DFS-->>GR: bytes (DAT inflate / native folder)
+    ML->>RD: parse .map (proLoadCallback to ProReader)
+    RD-->>ML: Map (objects, tiles, scripts)
+    deactivate ML
+    ML-->>MW: onDone, present errors via hasError()
+    MW->>EW: new EditorWidget(resources, map)
+    EW->>RE: render frame (TextureManager stitches FRM sheets)
+    RE-->>User: rendered map

@@ -8,6 +8,7 @@
 #include <array>
 #include <vector>
 #include <utility>
+#include <unordered_map>
 #include <functional>
 
 #include <QWidget>
@@ -29,7 +30,7 @@
 #include "pattern/Pattern.h"
 #include "ui/tools/ExitGridContext.h"
 #include "ui/dragdrop/DragDropContext.h"
-#include "TileChange.h"
+#include "editor/TileChange.h"
 #include "VisibilitySettings.h"
 
 #ifdef GECK_SCRIPTING_ENABLED
@@ -162,6 +163,13 @@ public:
     ViewportController* getViewportController() const override { return _viewportController.get(); }
     int& getCurrentHoverHex() override { return _currentHoverHex; }
     void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves) override;
+    void moveSelectedTilesForDrag(sf::Vector2f worldTranslation) override;
+    void reselectAfterDragMove(sf::Vector2f worldTranslation) override;
+    void beginMoveBatch(const std::string& description) override;
+    void endMoveBatch() override;
+    void beginTileDragPreview() override;
+    void previewTileDrag(sf::Vector2f worldOffset) override;
+    void endTileDragPreview() override;
 
     // SelectionManager helpers
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) override;
@@ -253,6 +261,13 @@ public slots:
     const UndoStack& getUndoStack() const { return _undoStack; }
 
 private:
+    // One item's new selection entry after a drag-move: objects re-pointed to their refreshed
+    // wrapper (by MapObject identity), tiles shifted by the whole-tile delta; nullopt to drop it.
+    std::optional<selection::SelectedItem> remapSelectedItemAfterMove(
+        const selection::SelectedItem& item,
+        const std::unordered_map<const MapObject*, std::shared_ptr<Object>>& objectsByMapObject,
+        const std::optional<std::pair<int, int>>& tileDelta) const;
+
     // Object management
     void deleteSelectedObjects();
     void registerTileEdit(const QString& description, const std::vector<TileChange>& changes) override;
@@ -376,6 +391,15 @@ private:
     // (bounded by the selection size) instead of scanning the whole map every drag-preview frame.
     std::vector<int> _selectedFloorVisuals;
     std::vector<int> _selectedRoofVisuals;
+
+    // Base positions of the selected floor/roof sprites captured while a region is being dragged, so
+    // the live preview can offset them and restore them when the drag ends.
+    struct TileDragPreviewBase {
+        bool roof;
+        int tileIndex;
+        sf::Vector2f basePosition;
+    };
+    std::vector<TileDragPreviewBase> _tileDragPreviewBases;
 
     // Active tool mode (single source of truth; see setMode).
     EditorMode _mode = EditorMode::Select;

@@ -230,6 +230,114 @@ TEST_CASE("SelectionManager drives provider-backed selection paths", "[selection
 }
 
 //==============================================================================
+// REGRESSION: moving a selected region must carry its roof tiles along (previously
+// only objects moved; selected roofs were left behind). planRoofTileMove computes the
+// block-safe before/after roof set the editor then applies through the tile-edit undo
+// path; planRoofMoveForDrag derives the whole-tile delta from the drag positions.
+//==============================================================================
+
+namespace {
+std::optional<TileChange> findTileChange(const std::vector<TileChange>& changes, int tileIndex) {
+    for (const auto& change : changes) {
+        if (change.tileIndex == tileIndex) {
+            return change;
+        }
+    }
+    return std::nullopt;
+}
+} // namespace
+
+TEST_CASE("planSelectionTileMove moves selected floor and roof tiles as a block", "[selection_manager_real][roof_move]") {
+    MockEditorWidget mockWidget;
+    geck::selection::SelectionManager mgr(mockWidget);
+    mockWidget.seedElevation(0);
+
+    SECTION("a single roof tile vacates its source and fills the target") {
+        mockWidget.setRoofPresent(0, 10, 7); // tile 10 = (row 0, col 10)
+        mgr.selectAll(SelectionMode::ROOF_TILES, 0);
+
+        const auto changes = mgr.planSelectionTileMove(1, 0); // down one row -> tile 110
+        REQUIRE(changes.size() == 2);
+
+        const auto source = findTileChange(changes, 10);
+        const auto target = findTileChange(changes, 110);
+        REQUIRE(source.has_value());
+        REQUIRE(target.has_value());
+        REQUIRE(source->isRoof);
+        REQUIRE(source->before == 7);
+        REQUIRE(source->after == Map::EMPTY_TILE);
+        REQUIRE(target->before == Map::EMPTY_TILE);
+        REQUIRE(target->after == 7);
+    }
+
+    SECTION("a floor tile moves with the same vacate-source/fill-target semantics") {
+        // Seeded floors are all 2; give the source a distinct id so both ends change.
+        mockWidget.mapFile.tiles.at(0).at(10).setFloor(5);
+        mgr.getMutableSelection().items.emplace_back(SelectionType::FLOOR_TILE, 10);
+
+        const auto changes = mgr.planSelectionTileMove(1, 0); // -> tile 110
+        REQUIRE(changes.size() == 2);
+
+        const auto source = findTileChange(changes, 10);
+        const auto target = findTileChange(changes, 110);
+        REQUIRE(source.has_value());
+        REQUIRE(target.has_value());
+        REQUIRE_FALSE(source->isRoof);
+        REQUIRE(source->before == 5);
+        REQUIRE(source->after == Map::EMPTY_TILE);
+        REQUIRE(target->before == 2);
+        REQUIRE(target->after == 5);
+    }
+
+    SECTION("a zero delta is a no-op") {
+        mockWidget.setRoofPresent(0, 10, 7);
+        mgr.selectAll(SelectionMode::ROOF_TILES, 0);
+        REQUIRE(mgr.planSelectionTileMove(0, 0).empty());
+    }
+
+    SECTION("a move that would leave the map is rejected as a whole") {
+        mockWidget.setRoofPresent(0, 9999, 7); // tile 9999 = (row 99, col 99)
+        mgr.selectAll(SelectionMode::ROOF_TILES, 0);
+        REQUIRE(mgr.planSelectionTileMove(1, 0).empty()); // row 100 is off the map
+        REQUIRE(mgr.planSelectionTileMove(0, 1).empty()); // col 100 is off the map
+    }
+
+    SECTION("overlapping moves are block-safe: a source that is another's target keeps the moved roof") {
+        mockWidget.setRoofPresent(0, 10, 7); // (row 0, col 10)
+        mockWidget.setRoofPresent(0, 11, 8); // (row 0, col 11)
+        mgr.selectAll(SelectionMode::ROOF_TILES, 0);
+
+        const auto changes = mgr.planSelectionTileMove(0, 1); // shift right one column: 10->11, 11->12
+        const auto t10 = findTileChange(changes, 10);
+        const auto t11 = findTileChange(changes, 11);
+        const auto t12 = findTileChange(changes, 12);
+        REQUIRE(t10.has_value());
+        REQUIRE(t11.has_value());
+        REQUIRE(t12.has_value());
+        REQUIRE(t10->after == Map::EMPTY_TILE);
+        REQUIRE(t11->after == 7); // block-safe: not emptied by tile 10's vacate
+        REQUIRE(t12->after == 8);
+    }
+
+    SECTION("with nothing selected there is nothing to move") {
+        mgr.selectAll(SelectionMode::ROOF_TILES, 0); // none present -> empty selection
+        REQUIRE(mgr.planSelectionTileMove(1, 1).empty());
+    }
+}
+
+// planSelectionMoveForTranslation's delta comes from the real isometric tile projection
+// (coordinatesToScreenPosition / nearest-centre hit-test), which the abstract mock deliberately
+// does not replicate (see test_viewport_controller.cpp for that). So the positional mapping is
+// covered there and by visual checks; here we only pin the projection-independent contract.
+TEST_CASE("planSelectionMoveForTranslation with nothing selected is a no-op", "[selection_manager_real][roof_move]") {
+    MockEditorWidget mockWidget;
+    geck::selection::SelectionManager mgr(mockWidget);
+    mockWidget.seedElevation(0);
+    mgr.selectAll(SelectionMode::ROOF_TILES, 0); // none present -> empty selection
+    REQUIRE(mgr.planSelectionMoveForTranslation(sf::Vector2f(32.0f, 0.0f)).empty());
+}
+
+//==============================================================================
 // REGRESSION: clicking the same spot in ALL mode must cycle through the stack and
 // finally deselect ("click again -> select the item underneath"). The input layer
 // is what was broken (a click on a selected object did a no-op move instead of

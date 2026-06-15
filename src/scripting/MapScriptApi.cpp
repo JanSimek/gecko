@@ -12,10 +12,10 @@
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
 #include "format/pro/Pro.h"
+#include "editor/TileChange.h"
 #include "pattern/PatternSprite.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
-#include "ui/core/TileChange.h"
 #include "ui/editing/ObjectCommandController.h"
 #include "util/ProHelper.h"
 

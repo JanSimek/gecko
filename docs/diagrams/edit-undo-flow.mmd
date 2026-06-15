@@ -1,0 +1,24 @@
+flowchart LR
+    QT["Qt mouse / key events"] --> SW["SFMLWidget<br/>(Qt&harr;SFML bridge)"]
+    SW --> IH["InputHandler<br/>reads EditorMode"]
+
+    IH -->|Select| SM["SelectionManager"]
+    IH -->|PlaceTile| TPM["TilePlacementManager"]
+    IH -->|MarkExits / ExitGrid| EGM["ExitGridPlacementManager"]
+    IH -->|move / rotate / delete| OBJ["Object edits"]
+
+    SM --> OCC
+    TPM --> OCC
+    EGM --> OCC
+    OBJ --> OCC["ObjectCommandController<br/>register*() &rarr; UndoCommand"]
+
+    OCC --> US["UndoStack (shared)"]
+    OCC -->|onStackChanged| EW["EditorWidget<br/>emit undoStackChanged"]
+    US -.->|undo / redo lambdas| OCC
+
+    EW -->|editorModeChanged| MW["MainWindow<br/>syncs toolbar"]
+
+    classDef ui fill:#E6F2FF,stroke:#4A90E2,color:#1a1a1a;
+    classDef cmd fill:#FFF3E0,stroke:#F57C00,color:#1a1a1a;
+    class QT,SW,IH,SM,TPM,EGM,OBJ,EW,MW ui;
+    class OCC,US cmd;
