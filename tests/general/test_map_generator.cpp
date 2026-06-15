@@ -59,11 +59,15 @@ TEST_CASE("gecko-cli generate runs a tile script and writes a reloadable map", "
 TEST_CASE("gecko-cli generate validates its inputs", "[cli][generate]") {
     geck::resource::GameResources resources;
     std::ostringstream log;
+    // Both cases fail before writing, so the file is never created — but route the out path
+    // through the build-tree temp dir anyway rather than a world-writable location.
+    geck::test::TempFile outFile{ "geck_gen_unused", ".map" };
+    const std::string outPath = outFile.path().string();
 
     SECTION("missing script file is reported") {
         geck::cli::GenerateOptions options;
         options.scriptPath = "/no/such/script.luau";
-        options.outPath = "/tmp/unused.map";
+        options.outPath = outPath;
         CHECK(geck::cli::generateMap(resources, options, log) != 0);
     }
 
@@ -72,7 +76,7 @@ TEST_CASE("gecko-cli generate validates its inputs", "[cli][generate]") {
         writeScript(scriptFile, "api:paintFloor(0, 271)");
         geck::cli::GenerateOptions options;
         options.scriptPath = scriptFile.path().string();
-        options.outPath = "/tmp/unused.map";
+        options.outPath = outPath;
         options.elevation = 3;
         CHECK(geck::cli::generateMap(resources, options, log) == 2);
     }
