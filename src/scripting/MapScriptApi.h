@@ -24,11 +24,17 @@ class MapScriptApi {
 public:
     /// Binds to a live editing session at `elevation`. References are borrowed and must
     /// outlive the api.
+    ///
+    /// `buildSprites` selects how placed objects are recorded. The GUI leaves it true so each
+    /// object also gets an SFML sprite for rendering (needs a GL context). Headless callers
+    /// (gecko-cli, CI) pass false: objects are recorded as map data only — no sprite, no GL —
+    /// which is all the .map format stores anyway.
     MapScriptApi(resource::GameResources& resources,
         const HexagonGrid& hexgrid,
         ObjectCommandController& controller,
         Map& map,
-        int elevation);
+        int elevation,
+        bool buildSprites = true);
 
     // --- Queries (no mutation) ---------------------------------------------------
     bool isValidHex(int hex) const;
@@ -69,6 +75,7 @@ private:
     ObjectCommandController& _controller;
     Map& _map;
     int _elevation;
+    bool _buildSprites;
     int _placedObjects = 0;
     int _paintedTiles = 0;
 };

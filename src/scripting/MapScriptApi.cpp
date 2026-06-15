@@ -22,12 +22,13 @@
 namespace geck {
 
 MapScriptApi::MapScriptApi(resource::GameResources& resources, const HexagonGrid& hexgrid,
-    ObjectCommandController& controller, Map& map, int elevation)
+    ObjectCommandController& controller, Map& map, int elevation, bool buildSprites)
     : _resources(resources)
     , _hexgrid(hexgrid)
     , _controller(controller)
     , _map(map)
-    , _elevation(elevation) {
+    , _elevation(elevation)
+    , _buildSprites(buildSprites) {
 }
 
 bool MapScriptApi::isValidHex(int hex) const {
@@ -123,8 +124,19 @@ bool MapScriptApi::placeObject(uint32_t proPid, uint32_t frmPid, int hex, uint32
     mapObject->pro_pid = proPid;
     mapObject->frm_pid = frmPid;
 
-    // Object requires resolvable art; without it there is nothing to place (the same
-    // skip the prefab stamper makes when a fid can't load).
+    // Headless: record the MapObject as data only. The .map stores just these ids; the engine
+    // and editor resolve the art (frmPid) when the map is loaded, so no sprite or GL is needed
+    // and placement does not require the FRM to be present in the mounted data.
+    if (!_buildSprites) {
+        if (_controller.registerObjectData(mapObject)) {
+            ++_placedObjects;
+            return true;
+        }
+        return false;
+    }
+
+    // GUI: the object draws a sprite, so it requires resolvable art; without it there is
+    // nothing to place (the same skip the prefab stamper makes when a fid can't load).
     auto object = pattern::buildSpriteObject(_resources, _hexgrid, frmPid, hex, direction);
     if (!object) {
         return false;

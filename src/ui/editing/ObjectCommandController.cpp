@@ -99,6 +99,34 @@ void ObjectCommandController::registerTileEdit(const std::string& description, c
     pushCommand(std::move(cmd));
 }
 
+void ObjectCommandController::addObjectData(const std::shared_ptr<MapObject>& mapObject) {
+    if (!mapObject || !_map) {
+        spdlog::warn("addObjectData: Invalid parameters - mapObject:{} map:{}",
+            mapObject != nullptr, _map != nullptr);
+        return;
+    }
+    if (mapObject->elevation >= 3) {
+        spdlog::error("addObjectData: Invalid elevation {}", mapObject->elevation);
+        return;
+    }
+    _map->getMapFile().map_objects[mapObject->elevation].push_back(mapObject);
+}
+
+void ObjectCommandController::removeObjectData(const std::shared_ptr<MapObject>& mapObject) {
+    if (!mapObject || !_map) {
+        spdlog::warn("removeObjectData: Invalid parameters - mapObject:{} map:{}",
+            mapObject != nullptr, _map != nullptr);
+        return;
+    }
+    if (mapObject->elevation >= 3) {
+        spdlog::error("removeObjectData: Invalid elevation {}", mapObject->elevation);
+        return;
+    }
+    auto& elevationObjects = _map->getMapFile().map_objects[mapObject->elevation];
+    elevationObjects.erase(std::remove(elevationObjects.begin(), elevationObjects.end(), mapObject), elevationObjects.end());
+    _refreshObjects();
+}
+
 void ObjectCommandController::addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
     if (!mapObject || !object || !_map) {
         spdlog::warn("addPlacedObject: Invalid parameters - mapObject:{} object:{} map:{}",
@@ -152,6 +180,29 @@ bool ObjectCommandController::registerObjectPlacement(const std::shared_ptr<MapO
     cmd.undo = [this, mapObject, object]() {
         if (mapObject && object) {
             removePlacedObject(mapObject, object);
+        }
+    };
+
+    cmd.redo();
+    return pushCommand(std::move(cmd));
+}
+
+bool ObjectCommandController::registerObjectData(const std::shared_ptr<MapObject>& mapObject) {
+    if (!mapObject) {
+        spdlog::warn("registerObjectData: null mapObject");
+        return false;
+    }
+
+    UndoCommand cmd;
+    cmd.description = "Place Object";
+    cmd.redo = [this, mapObject]() {
+        if (mapObject) {
+            addObjectData(mapObject);
+        }
+    };
+    cmd.undo = [this, mapObject]() {
+        if (mapObject) {
+            removeObjectData(mapObject);
         }
     };
 

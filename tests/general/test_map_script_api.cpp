@@ -4,6 +4,7 @@
 
 #include "editor/HexagonGrid.h"
 #include "format/map/Map.h"
+#include "format/map/MapObject.h"
 #include "scripting/MapScriptApi.h"
 
 #include "support/ControllerFixture.h"
@@ -121,6 +122,36 @@ TEST_CASE("MapScriptApi placeObject fails gracefully without loadable art", "[sc
 
     // Off-grid hex is rejected before any art lookup.
     CHECK_FALSE(api.placeObject(33555201u, 16777345u, -5, 0));
+}
+
+TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "[scripting]") {
+    ControllerFixture fx;
+    // buildSprites = false: the data-only path used by gecko-cli / CI.
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    constexpr uint32_t PRO = 0x02000066; // Scrub (scenery)
+    constexpr uint32_t FRM = 0x02000000; // arbitrary FID; not resolved in data-only mode
+    constexpr int HEX = 20100;
+
+    // No game data and no GL context, yet placement succeeds: it only writes the .map fields.
+    REQUIRE(api.placeObject(PRO, FRM, HEX, 0));
+    CHECK(api.placedObjects() == 1);
+
+    auto& objs = fx.mapFile().map_objects[ELEV];
+    REQUIRE(objs.size() == 1);
+    CHECK(objs[0]->pro_pid == PRO);
+    CHECK(objs[0]->frm_pid == FRM);
+    CHECK(objs[0]->position == HEX);
+    CHECK(fx.objects.empty()); // no sprite was built
+
+    // Off-grid is still rejected before any data is written.
+    CHECK_FALSE(api.placeObject(PRO, FRM, -1, 0));
+    CHECK(api.placedObjects() == 1);
+
+    // The placement is one undo entry.
+    REQUIRE(fx.undoStack.canUndo());
+    fx.undoStack.undo();
+    CHECK(fx.mapFile().map_objects[ELEV].empty());
 }
 
 TEST_CASE("MapScriptApi name resolvers fail closed without game data", "[scripting]") {

@@ -64,6 +64,28 @@ TEST_CASE("clearElevationObjects removes attached scripts and undo restores both
     CHECK(fx.mapFile().map_scripts[ITEM_SECTION].empty());
 }
 
+TEST_CASE("registerObjectData places a MapObject as data only, undoably", "[undo][controller]") {
+    ControllerFixture fx;
+
+    auto obj = std::make_shared<MapObject>();
+    obj->elevation = 0;
+    obj->position = 12345;
+    obj->pro_pid = 0x02000066; // Scrub
+
+    // Records the map data without ever building a sprite (no MapSpriteLoader, no GL).
+    REQUIRE(fx.controller.registerObjectData(obj));
+    REQUIRE(fx.mapFile().map_objects[0].size() == 1);
+    CHECK(fx.mapFile().map_objects[0][0] == obj);
+    CHECK(fx.objects.empty()); // no render-side sprite registered
+
+    REQUIRE(fx.undoStack.undo());
+    CHECK(fx.mapFile().map_objects[0].empty());
+    REQUIRE(fx.undoStack.redo());
+    CHECK(fx.mapFile().map_objects[0].size() == 1);
+
+    CHECK_FALSE(fx.controller.registerObjectData(nullptr));
+}
+
 TEST_CASE("clearElevationObjects returns false for an empty elevation", "[undo][controller]") {
     ControllerFixture fx;
     CHECK_FALSE(fx.controller.clearElevationObjects(0));

@@ -179,6 +179,44 @@ TEST_CASE("The shipped desert_terrain.luau compiles and guards on missing data",
     CHECK(r.output.find("Mount Fallout 2 data") != std::string::npos);
 }
 
+TEST_CASE("Luau places objects headlessly (data only) and they survive save/reload", "[scripting][lua][roundtrip]") {
+    ControllerFixture fx;
+    // Headless data-only mode: no GL, so placeObject records map data without a sprite.
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, /*buildSprites*/ false);
+    LuaScriptRuntime rt;
+
+    // Scrub at two hexes. placeProto needs a proto to read its FID (no data here), so the
+    // generator-style call uses placeObject with explicit ids, which is all the .map stores.
+    const auto r = rt.run(R"(
+        assert(api:placeObject(0x02000066, 0x02000000, 20100, 0))
+        assert(api:placeObject(0x02000066, 0x02000000, 20102, 1))
+    )",
+        api, fx.controller, "scatter");
+    INFO("script error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(fx.mapFile().map_objects.at(ELEV).size() == 2);
+
+    geck::test::StubProvider provider;
+    // Scenery objects read their subtype from the proto during (de)serialization.
+    provider.addScenery(0x02000066u, Pro::SCENERY_TYPE::GENERIC);
+    geck::test::TempFile tmp{ "geck_lua_objects", ".map" };
+    {
+        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        writer.openFile(tmp.path());
+        REQUIRE(writer.write(fx.mapFile()));
+    }
+
+    MapReader reader{ [&provider](uint32_t pid) { return provider.load(pid); } };
+    auto reloaded = reader.openFile(tmp.path());
+    REQUIRE(reloaded != nullptr);
+
+    const auto& objs = reloaded->getMapFile().map_objects.at(ELEV);
+    REQUIRE(objs.size() == 2);
+    CHECK(objs[0]->pro_pid == 0x02000066u);
+    CHECK(objs[0]->position == 20100);
+    CHECK(objs[1]->position == 20102);
+}
+
 TEST_CASE("Luau print() output is captured for the console", "[scripting][lua]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
