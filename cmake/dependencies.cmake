@@ -185,10 +185,13 @@ if(GECK_ENABLE_SCRIPTING)
 
     # LuaBridge3 is header-only; its LUABRIDGE_TESTING auto-disables when consumed as a
     # subproject, so MakeAvailable just exposes the headers (used via its source dir).
+    # GIT_SUBMODULES "" skips its ThirdParty/{luau,ravi} test submodules — we never build its
+    # tests, and cloning those large submodules is slow and the main source of fetch flakiness.
     FetchContent_Declare(
         LuaBridge3
         GIT_REPOSITORY https://github.com/kunitoki/LuaBridge3.git
         GIT_TAG 53e031b7df6a14d43f92a54fd792b76dbadcc970 # 3.0-rc12
+        GIT_SUBMODULES ""
     )
     FetchContent_MakeAvailable(LuaBridge3)
 endif()

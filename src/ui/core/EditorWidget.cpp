@@ -1,6 +1,9 @@
 #include "EditorWidget.h"
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/input/InputHandler.h"
+#ifdef GECK_SCRIPTING_ENABLED
+#include "scripting/MapScriptApi.h"
+#endif
 #include "ui/rendering/MapSpriteLoader.h"
 #include "ui/rendering/ObjectVisibility.h"
 #include "ui/rendering/RenderingEngine.h"
@@ -421,6 +424,18 @@ void EditorWidget::init() {
     }
     _viewportController->initialize(windowSize);
 }
+
+#ifdef GECK_SCRIPTING_ENABLED
+ScriptResult EditorWidget::runScript(const std::string& source) {
+    if (!_map) {
+        return { false, "No map loaded", "" };
+    }
+    MapScriptApi api(_resources, _hexgrid, *_objectCommandController, *_map, _currentElevation);
+    LuaScriptRuntime runtime;
+    // The continuous SFML render loop shows the script's edits on the next frame.
+    return runtime.run(source, api, *_objectCommandController, "Run script");
+}
+#endif
 
 void EditorWidget::saveMap() {
     // Default the save dialog to the current map's file name.

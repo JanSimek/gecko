@@ -12,9 +12,6 @@ set(GECK_APP_SOURCES
     ui/ResourceInitializer.h
     ui/ResourceInitializer.cpp
 
-    util/SpriteFactory.h
-    util/SpriteFactory.cpp
-
     ui/QtDialogs.h
     ui/QtDialogs.cpp
 
@@ -30,8 +27,8 @@ set(GECK_APP_SOURCES
     pattern/PatternBuilder.cpp
     pattern/PatternLibrary.h
     pattern/PatternLibrary.cpp
-    pattern/PatternSprite.h
-    pattern/PatternSprite.cpp
+    pattern/ThumbnailComposer.h
+    pattern/ThumbnailComposer.cpp
     pattern/PatternThumbnail.h
     pattern/PatternThumbnail.cpp
 
@@ -166,20 +163,13 @@ set(GECK_APP_SOURCES
     ui/UIConstants.h
     ui/rendering/HexRenderer.h
     ui/rendering/HexRenderer.cpp
-    ui/rendering/MapSpriteLoader.h
-    ui/rendering/MapSpriteLoader.cpp
     ui/rendering/RenderingEngine.h
     ui/rendering/RenderingEngine.cpp
     ui/rendering/ThumbnailRenderer.h
     ui/rendering/ThumbnailRenderer.cpp
     ui/rendering/MapThumbnail.h
     ui/rendering/MapThumbnail.cpp
-    ui/editing/ObjectCommandController.h
-    ui/editing/ObjectCommandController.cpp
 
-    # Scripting host API (Lua-free façade over ObjectCommandController)
-    scripting/MapScriptApi.h
-    scripting/MapScriptApi.cpp
     ui/input/InputHandler.h
     ui/input/InputHandler.cpp
     ui/dragdrop/DragDropContext.h
@@ -206,31 +196,17 @@ set(GECK_APP_SOURCES
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
 )
 
-# Optional scripting runtime (embeds Luau); only compiled when enabled.
+# Optional scripting console UI (Qt). The Luau runtime itself lives in gecko_editing; this
+# is just the dock widget that drives it, so it stays with the rest of the Qt UI.
 if(GECK_ENABLE_SCRIPTING)
     list(APPEND GECK_APP_SOURCES
-        scripting/LuaScriptRuntime.h
-        scripting/LuaScriptRuntime.cpp)
+        ui/panels/ScriptConsoleWidget.h
+        ui/panels/ScriptConsoleWidget.cpp)
 endif()
 
 # Reusable application library for the executable and UI tests
 add_library(gecko_app STATIC ${GECK_APP_SOURCES})
 add_library(gecko::app ALIAS gecko_app)
-
-if(GECK_ENABLE_SCRIPTING)
-    target_link_libraries(gecko_app PUBLIC
-        Luau.VM Luau.Compiler Luau.Ast Luau.Bytecode Luau.Common)
-    # SYSTEM so the LuaBridge3 headers are external (suppresses their parse-time warnings).
-    target_include_directories(gecko_app SYSTEM PRIVATE ${luabridge3_SOURCE_DIR}/Source)
-    target_compile_definitions(gecko_app PUBLIC GECK_SCRIPTING_ENABLED)
-    if(MSVC)
-        # LuaBridge3's templates trip C4702 (unreachable code) at instantiation — an
-        # optimizer warning emitted in our TU, which /external can't suppress. Allow it
-        # for just this binding file rather than weakening /WX globally.
-        set_source_files_properties(scripting/LuaScriptRuntime.cpp
-            PROPERTIES COMPILE_OPTIONS "/wd4702")
-    endif()
-endif()
 
 # Platform-specific executable settings
 if(WIN32)
@@ -465,6 +441,50 @@ target_link_libraries(gecko_core PUBLIC
     gecko_resource
 )
 
+###################################
+# GECK Editing layer (Qt-free)
+###################################
+# Map mutation that is heavier than the core model but still Qt-free: the undoable command
+# controller, the sprite/object builders and the scripting host API (plus the optional Luau
+# runtime). Sits on gecko_core so the Qt UI (gecko_app) and headless frontends (gecko-cli,
+# a future MCP server) drive the same editing code without any of them pulling in Qt.
+add_library(gecko_editing STATIC
+    util/SpriteFactory.h
+    util/SpriteFactory.cpp
+    pattern/PatternSprite.h
+    pattern/PatternSprite.cpp
+    ui/rendering/MapSpriteLoader.h
+    ui/rendering/MapSpriteLoader.cpp
+    ui/editing/ObjectCommandController.h
+    ui/editing/ObjectCommandController.cpp
+    scripting/MapScriptApi.h
+    scripting/MapScriptApi.cpp
+)
+add_library(gecko::editing ALIAS gecko_editing)
+
+target_link_libraries(gecko_editing PUBLIC gecko_core)
+
+# Optional Luau scripting runtime, compiled into the editing layer so every frontend that
+# links it (the UI and the CLI) can run scripts. GECK_SCRIPTING_ENABLED is PUBLIC so the Qt
+# UI's #ifdef'd console wiring sees it transitively through gecko_app's link to gecko_editing.
+if(GECK_ENABLE_SCRIPTING)
+    target_sources(gecko_editing PRIVATE
+        scripting/LuaScriptRuntime.h
+        scripting/LuaScriptRuntime.cpp)
+    target_link_libraries(gecko_editing PUBLIC
+        Luau.VM Luau.Compiler Luau.Ast Luau.Bytecode Luau.Common)
+    # SYSTEM so the LuaBridge3 headers are external (suppresses their parse-time warnings).
+    target_include_directories(gecko_editing SYSTEM PRIVATE ${luabridge3_SOURCE_DIR}/Source)
+    target_compile_definitions(gecko_editing PUBLIC GECK_SCRIPTING_ENABLED)
+    if(MSVC)
+        # LuaBridge3's templates trip C4702 (unreachable code) at instantiation — an
+        # optimizer warning emitted in our TU, which /external can't suppress. Allow it
+        # for just this binding file rather than weakening /WX globally.
+        set_source_files_properties(scripting/LuaScriptRuntime.cpp
+            PROPERTIES COMPILE_OPTIONS "/wd4702")
+    endif()
+endif()
+
 target_link_libraries(gecko_app PUBLIC
     SFML::System SFML::Graphics SFML::Window
     Qt6::Core
@@ -474,8 +494,24 @@ target_link_libraries(gecko_app PUBLIC
     vfspp
     vault
     gecko_resource
-    gecko_core
+    gecko_editing
 )
+
+# Headless gecko-cli (no Qt, no GL). The analyze/generate logic lives in the gecko_cli library
+# so a future MCP server can reuse it; gecko-cli is just a thin frontend. gecko::editing brings
+# the editing core + scripting runtime (and transitively gecko_core/resource/vault, SFML, the
+# src/ include dir and spdlog) — all Qt-free.
+if(GECK_BUILD_CLI)
+    add_library(gecko_cli STATIC
+        cli/MapAnalyzer.h
+        cli/MapAnalyzer.cpp
+        cli/MapGenerator.h
+        cli/MapGenerator.cpp)
+    target_link_libraries(gecko_cli PUBLIC gecko::editing)
+
+    add_executable(gecko-cli cli/main.cpp)
+    target_link_libraries(gecko-cli PRIVATE gecko_cli)
+endif()
 
 target_include_directories(gecko_app PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

@@ -9,6 +9,10 @@
 #include "ui/panels/TilePalettePanel.h"
 #include "ui/panels/ObjectPalettePanel.h"
 #include "ui/panels/FileBrowserPanel.h"
+#ifdef GECK_SCRIPTING_ENABLED
+#include "ui/panels/ScriptConsoleWidget.h"
+#include "scripting/LuaScriptRuntime.h" // ScriptResult
+#endif
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "ui/dialogs/SettingsDialog.h"
@@ -711,6 +715,26 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
     }
 }
 
+#ifdef GECK_SCRIPTING_ENABLED
+void MainWindow::wireScriptConsole() {
+    connect(_scriptConsole, &ScriptConsoleWidget::runRequested, this, [this](const QString& source) {
+        if (!_currentEditorWidget) {
+            _scriptConsole->showResult(false, QString(), tr("Open a map before running a script."));
+            return;
+        }
+        const ScriptResult result = _currentEditorWidget->runScript(source.toStdString());
+        _scriptConsole->showResult(result.ok, QString::fromStdString(result.output), QString::fromStdString(result.error));
+    });
+
+    if (_viewMenu) {
+        _viewMenu->addSeparator();
+        QAction* consoleAction = _scriptConsoleDock->toggleViewAction();
+        consoleAction->setText(tr("Script &Console"));
+        _viewMenu->addAction(consoleAction);
+    }
+}
+#endif
+
 void MainWindow::setupDockWidgets() {
     auto createDock = [this](const QString& title, const char* objectName, QWidget* panel, Qt::DockWidgetArea area, QSizePolicy::Policy verticalPolicy, int minHeight) {
         QDockWidget* dock = new QDockWidget(title, this);
@@ -741,6 +765,15 @@ void MainWindow::setupDockWidgets() {
     _fileBrowserDock = createDock("Virtual File System Browser", "FileBrowserDock", _fileBrowserPanel, Qt::LeftDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_LARGE);
     connectFileBrowserSignals();
     connectPanelSignals();
+
+#ifdef GECK_SCRIPTING_ENABLED
+    // Script console (Luau): a separate bottom dock, hidden until opened from the View menu. It is
+    // not one of the managed palette docks, so it stays out of the layout-persistence machinery.
+    _scriptConsole = new ScriptConsoleWidget();
+    _scriptConsoleDock = createDock("Script Console", "ScriptConsoleDock", _scriptConsole, Qt::BottomDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_SMALL);
+    _scriptConsoleDock->hide();
+    wireScriptConsole();
+#endif
 
     // MainWindow signals → current editor widget (connected once; both sender
     // and receiver are MainWindow, so these survive for the lifetime of the window)

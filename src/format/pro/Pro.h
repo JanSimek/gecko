@@ -350,6 +350,10 @@ public:
     ITEM_TYPE itemType() const;
 
     const std::string typeToString() const;
+    /// Canonical category name for an object type ("Item", "Critter", "Scenery", ...). The
+    /// instance overload forwards to this, so callers holding only a type (e.g. decoded from a
+    /// PID's high byte) reuse the same mapping instead of duplicating it.
+    static std::string typeToString(OBJECT_TYPE type);
 
     // Allow updating the file path for save operations
     void setPath(const std::filesystem::path& newPath) {

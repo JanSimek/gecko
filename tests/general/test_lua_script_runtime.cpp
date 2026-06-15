@@ -1,6 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 #include "format/map/Map.h"
 #include "format/map/Tile.h"
@@ -136,4 +139,96 @@ TEST_CASE("Luau-painted tiles survive a map save/reload round-trip", "[scripting
     CHECK(tiles[5].getFloor() == 271);
     CHECK(tiles[6].getFloor() == 272);
     CHECK(tiles[5].getRoof() == 480);
+}
+
+TEST_CASE("Luau can reach the name resolvers", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // tileId and placeProto are bound and callable. Headless they resolve to -1/false (no data),
+    // which is exactly the contract a generator branches on (skip painting an unknown tile).
+    const auto r = rt.run(R"(
+        assert(api:tileId("edg5000") == -1, "expected -1 without data")
+        assert(api:placeProto(0x02000066, 20100, 0) == false, "expected false without data")
+    )",
+        api, fx.controller, "resolvers");
+    INFO("script error: " << r.error);
+    CHECK(r.ok);
+}
+
+TEST_CASE("The shipped desert_terrain.luau compiles and guards on missing data", "[scripting][lua]") {
+    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/desert_terrain.luau");
+    REQUIRE(file.is_open());
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    const std::string source = buffer.str();
+
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // Headless (no data): tileId("edg5000") is -1, so the example must abort cleanly with a
+    // hint rather than paint a bogus tile or error. This keeps the committed script CI-checked
+    // for syntax and its guard path; the live fill/scatter runs in the GUI (needs data + GL).
+    const auto r = rt.run(source, api, fx.controller, "desert");
+    INFO("script error: " << r.error);
+    CHECK(r.ok);
+    CHECK(api.paintedTiles() == 0);
+    CHECK(api.placedObjects() == 0);
+    CHECK(r.output.find("Mount Fallout 2 data") != std::string::npos);
+}
+
+TEST_CASE("Luau places objects headlessly (data only) and they survive save/reload", "[scripting][lua][roundtrip]") {
+    ControllerFixture fx;
+    // Headless data-only mode: no GL, so placeObject records map data without a sprite.
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, /*buildSprites*/ false);
+    LuaScriptRuntime rt;
+
+    // Scrub at two hexes. placeProto needs a proto to read its FID (no data here), so the
+    // generator-style call uses placeObject with explicit ids, which is all the .map stores.
+    const auto r = rt.run(R"(
+        assert(api:placeObject(0x02000066, 0x02000000, 20100, 0))
+        assert(api:placeObject(0x02000066, 0x02000000, 20102, 1))
+    )",
+        api, fx.controller, "scatter");
+    INFO("script error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(fx.mapFile().map_objects.at(ELEV).size() == 2);
+
+    geck::test::StubProvider provider;
+    // Scenery objects read their subtype from the proto during (de)serialization.
+    provider.addScenery(0x02000066u, Pro::SCENERY_TYPE::GENERIC);
+    geck::test::TempFile tmp{ "geck_lua_objects", ".map" };
+    {
+        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        writer.openFile(tmp.path());
+        REQUIRE(writer.write(fx.mapFile()));
+    }
+
+    MapReader reader{ [&provider](uint32_t pid) { return provider.load(pid); } };
+    auto reloaded = reader.openFile(tmp.path());
+    REQUIRE(reloaded != nullptr);
+
+    const auto& objs = reloaded->getMapFile().map_objects.at(ELEV);
+    REQUIRE(objs.size() == 2);
+    CHECK(objs[0]->pro_pid == 0x02000066u);
+    CHECK(objs[0]->position == 20100);
+    CHECK(objs[1]->position == 20102);
+}
+
+TEST_CASE("Luau print() output is captured for the console", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // Multiple args are tab-separated, each print() ends with a newline (Lua print semantics).
+    const auto r = rt.run(R"(
+        print("hello", 42)
+        print("done")
+    )",
+        api, fx.controller, "print");
+    INFO("script error: " << r.error);
+    REQUIRE(r.ok);
+    CHECK(r.output == "hello\t42\ndone\n");
 }

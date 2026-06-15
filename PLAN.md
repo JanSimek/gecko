@@ -143,10 +143,13 @@ Adopt **C as the core**, structured so **B** falls out for free and **A** remain
 
 # Scripting & Automation Layer (Patterns / Prefabs + Procedural Generation)
 
-> Status: **Tier-2 scripting (procedural generation) is the remaining work** — the rest of
-> this section. Tier-1 prefabs shipped (`src/pattern/`: format + JSON serializer, hex cube
-> geometry, `PatternStamper`/`PatternBuilder`, undo-batching, and the pattern browser), which
-> is the reusable foundation Tier-2's host API binds to.
+> Status: **Tier-1 prefabs and the Tier-2 scripting core both shipped.** Tier-1
+> (`src/pattern/`: format + JSON serializer, hex cube geometry, `PatternStamper`/`PatternBuilder`,
+> undo-batching, pattern browser). Tier-2: the Luau runtime + sandbox + Script Console, the
+> `MapScriptApi` façade, the headless `gecko-cli map analyze`/`map generate` commands, and a
+> Qt-free `gecko_editing` library so the GUI, the CLI and a future MCP server drive the same
+> editing code. See **§10 (what shipped)** and **§11 (improvement backlog)** for the current
+> state and the remaining procedural-generation work (the generators themselves are still basic).
 >
 > **Caveat for the design below:** orientation is a **variant set** (pre-authored
 > direction-specific variants the editor cycles through), **not** geometric rotation — F2
@@ -384,14 +387,14 @@ the user to press Ctrl-Z thousands of times. Therefore:
 
 ## 8. Suggested sequencing
 
-1. **Host API skeleton** (`MapScriptApi`) over `ObjectCommandController` so any multi-edit is
-   one undo step — the `beginBatch/endBatch` + `ScopedUndoBatch` foundation it sits on already
-   exists. Unit-testable headless.
-2. **Tier 2 Lua**: integrate Lua 5.4 + sol2 via FetchContent, sandboxed state, bind the
-   *same* host API, add a script console/runner. Start with area-fill generators
-   (desert+rocks, acid lake + shore border).
-3. **Full-map generator** as a Lua entry point consuming a definition file, reusing
-   `stampPattern` for set-pieces.
+1. ✅ **Host API skeleton** (`MapScriptApi`) over `ObjectCommandController`, one undo step via
+   `ScopedUndoBatch`. Done; unit-tested headless.
+2. ✅ **Tier 2 Luau** (not sol2 — see §2 decision): FetchContent Luau + LuaBridge3, sandboxed
+   state, the same host API bound, a Script Console, and a headless `gecko-cli`. Done.
+3. ➡️ **Make the generators good and the API human-friendly** — §11. Start with P1
+   (proto-by-name, human coordinates, params), then P2 (autotiling from `analyze`, statistical
+   scatter). The "full-map generator from a definition" endgame falls out of P2 + the biome
+   library (§11 P3).
 
 ## 9. Open questions
 
@@ -399,6 +402,114 @@ the user to press Ctrl-Z thousands of times. Therefore:
 - Collision policy on stamp (overwrite vs skip vs error when target hexes are occupied).
 - Scripts in patterns (object scripts via `programIndex`; spatial scripts) — deferred; see
   the script-model notes (programIndex is portable, SID/OID re-allocated at stamp).
+
+## 10. What shipped (Tier-2 scripting + headless generation)
+
+The scripting core and a first procedural generator are in. Concretely:
+
+- **Luau runtime + sandbox** behind `GECK_ENABLE_SCRIPTING` (OFF by default, ON in every CI
+  job). `print()` is captured for the console. (`src/scripting/LuaScriptRuntime`.)
+- **`MapScriptApi`** — the Lua-free host façade, always compiled. Current surface:
+  `isValidHex`, `hexNeighbors`, `getFloor`/`getRoof`, **`tileId(name)`** (FRM name →
+  `tiles.lst` index), `paintFloor`/`paintRoof`, `placeObject(proPid, frmPid, hex, dir)`,
+  **`placeProto(proPid, hex, dir)`** (resolves the art FID from the proto header). The whole
+  run is one undo entry via `ScopedUndoBatch`.
+- **Script Console** dock (`View → Script Console`), wired to the current map/elevation.
+- **`gecko-cli`** (Qt-free): `map analyze` (per-map + aggregate ground-tile and object usage,
+  with raw engine PIDs and proto names from the `.msg` files) and `map generate --script
+  <file> --out <map>` (runs a Luau script against an empty map and writes a `.map`).
+- **`gecko_editing`** — a Qt-free library (command controller, sprite/object builders, the
+  script API and the Luau runtime) on top of `gecko_core`, linked by both `gecko_app` and
+  `gecko-cli`, so the editor and headless tools share one editing implementation.
+- **Headless object placement.** `ObjectCommandController::registerObjectData` + the
+  `MapScriptApi(..., buildSprites=false)` mode record a `MapObject` as map data without
+  building a sprite — so the CLI generates **terrain *and* scenery** with no GL context. The
+  GUI keeps building sprites (default `buildSprites=true`).
+- **Worked example:** `scripts/desert_terrain.luau` (fill `edg5000` + scatter vegetation) and
+  `scripts/README.md` documenting the `api` surface and both run paths (console / `gecko-cli`).
+
+The generators themselves are still proofs of concept (flat fill, uniform-random scatter,
+PIDs hardcoded as hex literals). §11 is the backlog to make them good and the API human-friendly.
+
+## 11. Improvement backlog (procedural generation & scripting)
+
+Ordered by value; the lower tiers build on the upper ones. None requires Qt, and only the
+last item needs a GL context.
+
+### P1 — Ergonomics: make scripts human-writable
+
+1. **Proto-by-name resolution — `api:findProtos("Scrub")`.** Today a script must spell out raw
+   PID literals (`local VEGETATION = { 0x02000066, 0x02000067, ... }`) — opaque and unmaintainable.
+   Add a resolver that maps a readable proto name (from the type's proto `.msg`, the same lookup
+   `SelectionPanel` uses) to its PIDs, cached. Names aren't unique (four "Scrub" protos, three
+   "Tree"…), so it returns a **list** — which is exactly what "scatter a random scrub" wants:
+   ```lua
+   local VEGETATION = {}
+   for _, name in ipairs({ "Scrub", "Weed", "Plant", "Rocks", "Tree" }) do
+       for _, pid in ipairs(api:findProtos(name)) do table.insert(VEGETATION, pid) end
+   end
+   ```
+   Mirrors the existing `tileId(name)`, and is engine-data-driven (no hardcoded label tables,
+   per the fidelity rule). Builds a name→[pid] index by scanning the proto `.lst`s once and
+   caching; document the one-time scan cost (Pro loads are repository-cached). *This is the
+   top quick win — it removes the hex-PID literals users objected to.*
+
+2. **Human coordinates.** Addressing by linear index (`hex = row*200 + col`, tiles `row*100 + col`)
+   is unintuitive, and the two grids differ (200×200 hexes vs 100×100 tiles). Add `(col, row)`
+   variants of the common ops (`paintFloorXY`, `placeProtoXY`, `getFloorXY`) plus index↔(col,row)
+   converters (`hexIndex(col,row)`/`tileIndex(col,row)` + inverses) and a **tile↔hex bridge** (a
+   tile covers ~2×2 hexes) so "paint this tile and put a tree on it" is one step. Reuse the engine
+   geometry (`hexgrid::offsetToCube`/`columnOf`/`rowOf`). Optionally add normalized `[0,1]`
+   helpers (`hexAt(fx, fy)`) so "centre"/"scatter across the map" are grid-size-agnostic. Decide
+   and **document the orientation** so `(col,row)` matches what the editor displays (Fallout's hex
+   numbering has a right-to-left quirk).
+
+3. **Script parameters & seed.** `gecko-cli map generate --arg density=300 --arg seed=42` (and a
+   console params field) exposed as a global table, so one script produces reproducible variants
+   without editing it.
+
+### P2 — Generation quality
+
+4. **Analyze → generate model (autotiling).** `edg*` is a hand-authored *blend set* (~49 variants
+   per desert map for edges/corners), not one flat texture. Extend `map analyze` to record tile
+   **adjacency** (which tiles border which), and have the generator pick the right edge/corner
+   variant at biome boundaries (Wang/blob tiling) instead of a uniform fill. Biggest visual jump,
+   pure data, derived from the shipped maps — closes the analyze→generate loop (analyze currently
+   *learns* the palette but the generator *hardcodes* it).
+5. **Statistical scatter.** Co-occurrence + per-biome density from `analyze` → scatter scenery in
+   the proportions/clustering the real maps use, vs today's uniform random.
+6. **Noise-based distribution.** Perlin/simplex for natural clumping; expose `api:noise2d(x, y)`.
+7. **Enclosures / autowalling + roofs.** A helper that rings a region with correctly-oriented
+   wall protos (the analyze output is full of left/right/corner `Wall` variants) unlocks the cave
+   and town biomes; generate a **roof** layer for enclosed areas (`paintRoof` already exists).
+
+### P3 — Reach & tooling
+
+8. **`--in <map>`** for `generate` — decorate/edit an existing map, not just an empty one (the GUI
+   console already runs against the current map).
+9. **Fill/region/query helpers** — `fillRect`, `fillRegion`, `tilesByPrefix("cav")`, region and
+   neighbour queries — small, composable, make scripts read like intent.
+10. **Biome script library** — `cave.luau`, `town.luau`, `coast.luau` beside the desert one; each
+    a worked example. Expand the `scripts/README.md` table.
+11. **Batch generation** — produce N maps with varying seeds in one `gecko-cli` invocation.
+
+### P4 — AI & visual (ties into the MCP section below)
+
+12. **MCP server** wrapping `gecko_cli`'s `analyze`/`generate` plus a `palette` tool, so an agent
+    can inspect and generate maps conversationally. The `gecko_editing` extraction + the existing
+    `gecko-cli` already de-risk this — see the MCP section.
+13. **Headless render / PNG export.** The one genuine GL case (offscreen `sf::RenderTexture`),
+    needed only to *preview* a generated map. Everything else above is GL-free. Shares the Qt-free
+    render-library extraction noted under the MCP "visual analysis" item.
+
+### Open questions
+
+- **`findProtos` scope/cost:** scan all proto types into one cached index, or per-type
+  (`findScenery`/`findWall`) to bound the first-call scan? Lean: one cached index, documented.
+- **Coordinate convention:** expose `(col,row)` as the engine's storage layout or remap to
+  match the editor's on-screen/displayed coordinates? Pick one and document it.
+- **Collision policy** when a generator targets an occupied hex/tile (overwrite / skip / error).
+- **Multi-elevation generation** (run a script across all three elevations in one invocation).
 
 ---
 
@@ -554,9 +665,15 @@ and probably not worth chasing for a map editor.
 
 # MCP server for AI-assisted map analysis & editing (future)
 
-> Status: idea / scoping. Expose the editor's map model as an MCP (Model Context Protocol)
-> server so an AI assistant can analyze a map, describe it, add/move objects, change scripts,
-> and (eventually) understand it visually and via its scripts/NPC dialogs.
+> Status: idea / scoping — **now substantially de-risked.** Expose the editor's map model as an
+> MCP (Model Context Protocol) server so an AI assistant can analyze a map, describe it, add/move
+> objects, change scripts, and (eventually) understand it visually and via its scripts/NPC dialogs.
+>
+> **Foundations already in place** (see the scripting §10): the Qt-free **`gecko_editing`** library
+> (controller + script API + Luau runtime) and a headless **`gecko-cli`** with `map analyze` and
+> `map generate`. The "build a headless CLI over the libs first, then wrap it in MCP" plan below is
+> now half-done — the MCP server is largely a JSON-RPC shim over `gecko_cli`'s existing entry points
+> plus the read/describe tools.
 
 ## Why it's cheap here
 

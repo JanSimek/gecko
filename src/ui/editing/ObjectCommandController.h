@@ -74,6 +74,12 @@ public:
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
 
+    /// Add/remove a MapObject in the map data only — no sprite, no MapSpriteLoader. The
+    /// headless counterpart to add/removePlacedObject: usable without a GL context (CLI,
+    /// scripts), since a MapObject is pure data the engine renders at load time.
+    void addObjectData(const std::shared_ptr<MapObject>& mapObject);
+    void removeObjectData(const std::shared_ptr<MapObject>& mapObject);
+
     /// Pushes a command onto the shared undo stack and notifies (the single owner
     /// of "a command was recorded"). All register*() helpers funnel through here.
     /// While a batch is open (see beginBatch), commands are buffered instead of
@@ -100,6 +106,10 @@ public:
     bool isBatching() const { return _batchDepth > 0; }
 
     bool registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
+    /// Undoable placement that records the MapObject data only (no sprite). For headless
+    /// callers (gecko-cli, generation scripts run without a GL context); the GUI uses
+    /// registerObjectPlacement so the object is also drawn.
+    bool registerObjectData(const std::shared_ptr<MapObject>& mapObject);
     bool registerObjectDeletion(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& removedObjects);
     bool registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
     bool registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);

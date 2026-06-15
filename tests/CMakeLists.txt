@@ -45,6 +45,12 @@ add_executable(general_tests
 # Tier-2 scripting integration tests: only built when the Luau runtime is compiled in.
 if(GECK_ENABLE_SCRIPTING)
     target_sources(general_tests PRIVATE general/test_lua_script_runtime.cpp)
+    # The headless map generator lives in gecko_cli and drives the Luau runtime, so its test
+    # needs both the CLI library and scripting.
+    if(TARGET gecko_cli)
+        target_sources(general_tests PRIVATE general/test_map_generator.cpp)
+        target_link_libraries(general_tests PRIVATE gecko_cli)
+    endif()
 endif()
 
 # Performance tests (Catch2 with benchmarking) - Reader performance tests
@@ -67,6 +73,7 @@ target_link_libraries(test_support INTERFACE Catch2::Catch2)
 target_compile_definitions(test_support INTERFACE
     GECK_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
     GECK_TEST_TMP_DIR="${CMAKE_BINARY_DIR}/test-tmp"
+    GECK_SCRIPTS_DIR="${CMAKE_SOURCE_DIR}/scripts"
 )
 
 target_link_libraries(general_tests PRIVATE

@@ -33,6 +33,10 @@
 #include "editor/TileChange.h"
 #include "VisibilitySettings.h"
 
+#ifdef GECK_SCRIPTING_ENABLED
+#include "scripting/LuaScriptRuntime.h" // ScriptResult
+#endif
+
 namespace geck {
 
 namespace resource {
@@ -61,6 +65,12 @@ public:
     void createNewMap();
     void openMap();
     void saveMap();
+
+#ifdef GECK_SCRIPTING_ENABLED
+    // Runs a Luau generation script against the current map at the current elevation. The whole run
+    // is one undo entry; returns the script's print() output plus any compile/runtime error.
+    ScriptResult runScript(const std::string& source);
+#endif
 
     // Qt6 menu integration - visibility controls
     void setShowObjects(bool show) { _visibility.showObjects = show; }

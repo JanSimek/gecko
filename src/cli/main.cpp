@@ -1,0 +1,132 @@
+#include "cli/MapAnalyzer.h"
+#include "cli/MapGenerator.h"
+#include "resource/GameResources.h"
+
+#include <spdlog/spdlog.h>
+
+#include <iostream>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace {
+
+struct CliArgs {
+    bool generate = false;
+    std::vector<std::string> dataPaths;
+    geck::cli::AnalyzeOptions analyze;
+    geck::cli::GenerateOptions gen;
+};
+
+void printUsage(const char* program) {
+    std::cerr << "Usage:\n"
+              << "  " << program << " map analyze --data <dir-or-.dat> [--data <...>] [map ...]\n"
+              << "      Reports ground-tile and object (scenery/wall/critter/...) usage across maps,\n"
+              << "      per map and aggregated. With no map arguments, every map under maps/ is analysed.\n"
+              << "  " << program << " map generate --script <file.luau> --out <file.map>\n"
+              << "      [--elevation 0|1|2] --data <dir-or-.dat> [--data <...>]\n"
+              << "      Runs a Luau generation script against an empty map and writes the result.\n"
+              << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
+}
+
+bool isKnownSubcommand(const std::vector<std::string>& args) {
+    return args.size() >= 2 && args[0] == "map" && (args[1] == "analyze" || args[1] == "generate");
+}
+
+bool generateMissingRequired(const CliArgs& cli) {
+    return cli.generate && (cli.gen.scriptPath.empty() || cli.gen.outPath.empty());
+}
+
+// Consume the argument(s) starting at args[i]. Returns how many tokens were consumed (1 for a
+// flag-less map/positional, 2 for a flag + its value), or 0 on error (after printing the reason).
+// Keeping the token count explicit lets the caller advance the index instead of mutating it here.
+int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
+    const std::string& arg = args[i];
+    const bool valueFlag = arg == "--data"
+        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation"));
+
+    if (valueFlag && i + 1 >= args.size()) {
+        std::cerr << "error: " << arg << " needs a value\n";
+        printUsage(program);
+        return 0;
+    }
+
+    if (arg == "--data") {
+        out.dataPaths.push_back(args[i + 1]);
+        return 2;
+    }
+    if (out.generate && arg == "--script") {
+        out.gen.scriptPath = args[i + 1];
+        return 2;
+    }
+    if (out.generate && arg == "--out") {
+        out.gen.outPath = args[i + 1];
+        return 2;
+    }
+    if (out.generate && arg == "--elevation") {
+        out.gen.elevation = std::stoi(args[i + 1]);
+        return 2;
+    }
+    if (out.generate) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
+    out.analyze.maps.push_back(arg);
+    return 1;
+}
+
+// Parse argv into `out`. Returns an exit code to return from main, or nullopt to proceed.
+std::optional<int> parseArgs(const std::vector<std::string>& args, const char* program, CliArgs& out) {
+    if (!isKnownSubcommand(args)) {
+        printUsage(program);
+        return 2;
+    }
+    out.generate = args[1] == "generate";
+
+    for (std::size_t i = 2; i < args.size();) {
+        const int consumed = consumeArg(args, i, out, program);
+        if (consumed == 0) {
+            return 2;
+        }
+        i += static_cast<std::size_t>(consumed);
+    }
+
+    if (out.dataPaths.empty()) {
+        std::cerr << "error: at least one --data <path> is required\n";
+        printUsage(program);
+        return 2;
+    }
+    if (generateMissingRequired(out)) {
+        std::cerr << "error: generate requires --script and --out\n";
+        printUsage(program);
+        return 2;
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    const std::vector<std::string> args(argv + 1, argv + argc);
+
+    CliArgs cli;
+    if (const auto exitCode = parseArgs(args, argv[0], cli); exitCode.has_value()) {
+        return *exitCode;
+    }
+
+    // Keep stdout clean: the resource/reader layers log to the default (stderr) sink, including
+    // an [error] for every unknown script PID encountered while parsing maps — expected noise
+    // here, so silence all levels.
+    spdlog::set_level(spdlog::level::off);
+
+    geck::resource::GameResources resources;
+    for (const auto& path : cli.dataPaths) {
+        resources.files().addDataPath(path);
+    }
+
+    if (cli.generate) {
+        return geck::cli::generateMap(resources, cli.gen, std::cout);
+    }
+    return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
+}
