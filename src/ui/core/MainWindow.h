@@ -131,6 +131,10 @@ private:
     void setupToolModeActions();
     void syncToolModeActions(EditorMode mode);
     void setupDockWidgets();
+#ifdef GECK_SCRIPTING_ENABLED
+    // Connects the script console's Run signal to the editor and adds its View-menu toggle.
+    void wireScriptConsole();
+#endif
     void setupStatusBar();
     void setupPanelsMenu();
     void connectMenuSignals();

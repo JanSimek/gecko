@@ -37,8 +37,9 @@ ScriptConsoleWidget::ScriptConsoleWidget(QWidget* parent)
 
     connect(_runButton, &QPushButton::clicked, this, &ScriptConsoleWidget::onRun);
 
-    // Ctrl+Return runs the script straight from the editor.
-    auto* runShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), _input);
+    // Ctrl+Return runs the script straight from the editor. The shortcut is owned by _input (its
+    // parent); we only connect to it, so a pointer-to-const suffices.
+    const auto* runShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), _input);
     connect(runShortcut, &QShortcut::activated, this, &ScriptConsoleWidget::onRun);
 }
 

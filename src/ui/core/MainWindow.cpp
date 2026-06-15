@@ -711,6 +711,26 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
     }
 }
 
+#ifdef GECK_SCRIPTING_ENABLED
+void MainWindow::wireScriptConsole() {
+    connect(_scriptConsole, &ScriptConsoleWidget::runRequested, this, [this](const QString& source) {
+        if (!_currentEditorWidget) {
+            _scriptConsole->showResult(false, QString(), tr("Open a map before running a script."));
+            return;
+        }
+        const ScriptResult result = _currentEditorWidget->runScript(source.toStdString());
+        _scriptConsole->showResult(result.ok, QString::fromStdString(result.output), QString::fromStdString(result.error));
+    });
+
+    if (_viewMenu) {
+        _viewMenu->addSeparator();
+        QAction* consoleAction = _scriptConsoleDock->toggleViewAction();
+        consoleAction->setText(tr("Script &Console"));
+        _viewMenu->addAction(consoleAction);
+    }
+}
+#endif
+
 void MainWindow::setupDockWidgets() {
     auto createDock = [this](const QString& title, const char* objectName, QWidget* panel, Qt::DockWidgetArea area, QSizePolicy::Policy verticalPolicy, int minHeight) {
         QDockWidget* dock = new QDockWidget(title, this);
@@ -748,20 +768,7 @@ void MainWindow::setupDockWidgets() {
     _scriptConsole = new ScriptConsoleWidget();
     _scriptConsoleDock = createDock("Script Console", "ScriptConsoleDock", _scriptConsole, Qt::BottomDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_SMALL);
     _scriptConsoleDock->hide();
-    connect(_scriptConsole, &ScriptConsoleWidget::runRequested, this, [this](const QString& source) {
-        if (!_currentEditorWidget) {
-            _scriptConsole->showResult(false, QString(), tr("Open a map before running a script."));
-            return;
-        }
-        const ScriptResult result = _currentEditorWidget->runScript(source.toStdString());
-        _scriptConsole->showResult(result.ok, QString::fromStdString(result.output), QString::fromStdString(result.error));
-    });
-    if (_viewMenu) {
-        _viewMenu->addSeparator();
-        QAction* consoleAction = _scriptConsoleDock->toggleViewAction();
-        consoleAction->setText(tr("Script &Console"));
-        _viewMenu->addAction(consoleAction);
-    }
+    wireScriptConsole();
 #endif
 
     // MainWindow signals → current editor widget (connected once; both sender
