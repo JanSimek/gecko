@@ -76,11 +76,16 @@ std::vector<SelectedItem> SelectionManager::collectItemsInArea(const sf::FloatRe
             break;
 
         case SelectionMode::ALL:
-            appendObjectsInArea(items, area, elevation);
-            appendTilesInArea(items, area, false, elevation, false);
-            // In mixed (ALL) mode you should only select roofs you can see. The explicit
-            // ROOF_TILES modes above still select roofs regardless of the layer toggle.
-            if (_provider.isRoofVisible()) {
+            // Mixed mode selects the user-enabled layers (the toolbar's combinable checkboxes).
+            if (_layers.objects) {
+                appendObjectsInArea(items, area, elevation);
+            }
+            if (_layers.floorTiles) {
+                appendTilesInArea(items, area, false, elevation, false);
+            }
+            // Roofs: only when the layer is enabled AND you can see them. The explicit ROOF_TILES
+            // modes above still select roofs regardless of the layer toggle / visibility.
+            if (_layers.roofTiles && _provider.isRoofVisible()) {
                 appendTilesInArea(items, area, true, elevation, false);
             }
             break;
@@ -196,8 +201,9 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
         }
 
         case SelectionMode::ALL:
-            // ALL mode adds the first available item in priority order (roof, object, floor) without cycling.
-            {
+            // ALL mode adds the first available item in priority order (roof, object, floor)
+            // without cycling, restricted to the user-enabled layers.
+            if (_layers.roofTiles) {
                 auto tileIndex = getRoofTileAtPosition(worldPos, currentElevation);
                 if (tileIndex) {
                     SelectedItem item{ SelectionType::ROOF_TILE, tileIndex.value() };
@@ -207,7 +213,7 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                     return SelectionResult::createSuccess("");
                 }
             }
-            {
+            if (_layers.objects) {
                 auto objects = getObjectsAtPosition(worldPos, currentElevation);
                 if (!objects.empty()) {
                     SelectedItem item{ SelectionType::OBJECT, objects[0] };
@@ -217,7 +223,7 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
                     return SelectionResult::createSuccess("");
                 }
             }
-            {
+            if (_layers.floorTiles) {
                 auto tileIndex = getFloorTileAtPosition(worldPos, currentElevation);
                 if (tileIndex) {
                     SelectedItem item{ SelectionType::FLOOR_TILE, tileIndex.value() };
@@ -290,10 +296,17 @@ std::vector<SelectedItem> SelectionManager::collectDeselectableAtPosition(sf::Ve
             break;
 
         case SelectionMode::ALL:
-            // Priority order matches single-click selection: roof -> objects -> floor.
-            appendRoofCandidate(candidates, getRoofTileAtPosition(worldPos, elevation));
-            appendObjectCandidates(candidates, worldPos, elevation);
-            appendTileCandidate(candidates, getFloorTileAtPosition(worldPos, elevation), SelectionType::FLOOR_TILE);
+            // Priority order matches single-click selection: roof -> objects -> floor. Only the
+            // user-enabled layers are candidates (a disabled layer is treated as absent).
+            if (_layers.roofTiles) {
+                appendRoofCandidate(candidates, getRoofTileAtPosition(worldPos, elevation));
+            }
+            if (_layers.objects) {
+                appendObjectCandidates(candidates, worldPos, elevation);
+            }
+            if (_layers.floorTiles) {
+                appendTileCandidate(candidates, getFloorTileAtPosition(worldPos, elevation), SelectionType::FLOOR_TILE);
+            }
             break;
 
         case SelectionMode::HEXES:
@@ -446,24 +459,31 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
             break;
 
         case SelectionMode::ALL:
-            // Inlined rather than recursing to avoid the clearSelection() conflicts that nested calls would cause.
-            for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
-                SelectedItem item{ SelectionType::FLOOR_TILE, i };
-                addItemToSelection(item);
-            }
-
-            // Roof tiles: only those with textures
-            for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
-                auto tile = _provider.getMapFile().tiles.at(currentElevation).at(i);
-                if (tile.getRoof() != Map::EMPTY_TILE) {
-                    SelectedItem item{ SelectionType::ROOF_TILE, i };
+            // Inlined rather than recursing to avoid the clearSelection() conflicts that nested
+            // calls would cause. Select-all honours the user-enabled layers.
+            if (_layers.floorTiles) {
+                for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
+                    SelectedItem item{ SelectionType::FLOOR_TILE, i };
                     addItemToSelection(item);
                 }
             }
 
-            for (auto& object : _provider.getObjects()) {
-                SelectedItem item{ SelectionType::OBJECT, object };
-                addItemToSelection(item);
+            // Roof tiles: only those with textures
+            if (_layers.roofTiles) {
+                for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
+                    auto tile = _provider.getMapFile().tiles.at(currentElevation).at(i);
+                    if (tile.getRoof() != Map::EMPTY_TILE) {
+                        SelectedItem item{ SelectionType::ROOF_TILE, i };
+                        addItemToSelection(item);
+                    }
+                }
+            }
+
+            if (_layers.objects) {
+                for (auto& object : _provider.getObjects()) {
+                    SelectedItem item{ SelectionType::OBJECT, object };
+                    addItemToSelection(item);
+                }
             }
             break;
 
@@ -675,9 +695,12 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
 }
 
 SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f worldPos, int elevation) {
-    auto objectsAtPos = getObjectsAtPosition(worldPos, elevation);
-    auto roofTileIndex = getRoofTileAtPosition(worldPos, elevation);
-    auto floorTileIndex = getFloorTileAtPosition(worldPos, elevation);
+    // A disabled layer is treated as absent here, so the roof -> object -> floor cycle skips it
+    // and only walks the user-enabled layers.
+    auto objectsAtPos = _layers.objects ? getObjectsAtPosition(worldPos, elevation)
+                                        : std::vector<std::shared_ptr<Object>>{};
+    auto roofTileIndex = _layers.roofTiles ? getRoofTileAtPosition(worldPos, elevation) : std::nullopt;
+    auto floorTileIndex = _layers.floorTiles ? getFloorTileAtPosition(worldPos, elevation) : std::nullopt;
 
     bool roofSelected = false;
     bool floorSelected = false;

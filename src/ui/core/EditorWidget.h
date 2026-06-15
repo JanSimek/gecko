@@ -93,6 +93,10 @@ public:
     void cycleSelectionMode();
     void setSelectionMode(SelectionMode mode);
     SelectionMode getCurrentSelectionMode() const { return _currentSelectionMode; }
+    // Combinable-layer selection: pick which layers a mixed (ALL-mode) selection considers
+    // (floor / roof / objects). Switches to ALL mode and keeps the current selection intact.
+    void setActiveSelectionLayers(SelectionLayers layers);
+    SelectionLayers getActiveSelectionLayers() const;
     void rotateSelectedObject();
     void changeElevation(int elevation);
     void toggleScrollBlockerRectangleMode();

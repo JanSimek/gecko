@@ -1055,8 +1055,8 @@ void EditorWidget::cycleSelectionMode() {
         _inputHandler->setSelectionMode(_currentSelectionMode);
     }
 
-    _selectionManager->clearSelection();
-
+    // Changing the selection type keeps the current selection; subsequent clicks/drags then add to
+    // or subtract from it under the new type (the add/deselect paths are already mode-aware).
     spdlog::info("Selection mode changed to: {}", selectionModeToString(_currentSelectionMode));
 }
 
@@ -1071,9 +1071,24 @@ void EditorWidget::setSelectionMode(SelectionMode mode) {
         _inputHandler->setSelectionMode(_currentSelectionMode);
     }
 
-    _selectionManager->clearSelection();
-
+    // Keep the current selection across a type change (see cycleSelectionMode).
     spdlog::info("Selection mode set to: {}", selectionModeToString(_currentSelectionMode));
+}
+
+void EditorWidget::setActiveSelectionLayers(SelectionLayers layers) {
+    // Combinable-layer selection is the ALL mode restricted to the chosen layers. Switch to ALL
+    // and apply the layer set; the selection itself is left untouched (additive/subtractive).
+    _currentSelectionMode = SelectionMode::ALL;
+    if (_inputHandler) {
+        _inputHandler->setSelectionMode(_currentSelectionMode);
+    }
+    _selectionManager->setActiveLayers(layers);
+    spdlog::info("Selection layers set to: floor={} roof={} objects={}",
+        layers.floorTiles, layers.roofTiles, layers.objects);
+}
+
+SelectionLayers EditorWidget::getActiveSelectionLayers() const {
+    return _selectionManager->activeLayers();
 }
 
 void EditorWidget::toggleScrollBlockerRectangleMode() {

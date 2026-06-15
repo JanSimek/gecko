@@ -558,6 +558,38 @@ void MainWindow::setupMenuBar() {
     connect(aboutAction, &QAction::triggered, this, &MainWindow::showAbout);
 }
 
+void MainWindow::applySelectionLayersFromMenu() {
+    if (!_currentEditorWidget || !_floorLayerAction) {
+        return;
+    }
+
+    SelectionLayers layers;
+    layers.floorTiles = _floorLayerAction->isChecked();
+    layers.roofTiles = _roofLayerAction->isChecked();
+    layers.objects = _objectsLayerAction->isChecked();
+
+    // A layer combination is exclusive with the special tools below the separator.
+    for (QAction* menuAction : _selectionModeMenu->actions()) {
+        if (menuAction->data().isValid()) {
+            menuAction->setChecked(false);
+        }
+    }
+
+    _currentEditorWidget->setActiveSelectionLayers(layers);
+
+    QStringList parts;
+    if (layers.floorTiles) {
+        parts << "Floor";
+    }
+    if (layers.roofTiles) {
+        parts << "Roof";
+    }
+    if (layers.objects) {
+        parts << "Objects";
+    }
+    _selectionModeAction->setText(layers.all() ? "All" : (parts.isEmpty() ? "None" : parts.join(" + ")));
+}
+
 void MainWindow::setupToolBar() {
     _mainToolBar = addToolBar("Main");
     _mainToolBar->setObjectName("MainToolBar");
@@ -601,30 +633,47 @@ void MainWindow::setupToolBar() {
 
     _mainToolBar->addSeparator();
 
-    // Selection mode action with dropdown menu
+    // Selection mode action with dropdown menu. The three layers (floor / roof / objects) are
+    // combinable checkboxes; the tools below them are exclusive single modes.
     _selectionModeAction = _mainToolBar->addAction(createIcon(":/icons/actions/select.svg"), "All");
-    _selectionModeAction->setToolTip("Select the current selection mode");
+    _selectionModeAction->setToolTip("Choose which layers to select (combine floor / roof / objects)");
 
     _selectionModeMenu = new QMenu(this);
-    for (int i = 0; i < static_cast<int>(SelectionMode::NUM_SELECTION_TYPES); ++i) {
-        SelectionMode mode = static_cast<SelectionMode>(i);
+
+    // Combinable layer checkboxes (non-exclusive). Default: all on, i.e. classic "All".
+    auto addLayerAction = [this](const QString& label) {
+        QAction* action = _selectionModeMenu->addAction(label);
+        action->setCheckable(true);
+        action->setChecked(true);
+        connect(action, &QAction::toggled, this, [this](bool) { applySelectionLayersFromMenu(); });
+        return action;
+    };
+    _floorLayerAction = addLayerAction("Floor Tiles");
+    _roofLayerAction = addLayerAction("Roof Tiles");
+    _objectsLayerAction = addLayerAction("Objects");
+
+    _selectionModeMenu->addSeparator();
+
+    // Exclusive special tools — picking one clears the layer checkboxes (and the other tools).
+    for (SelectionMode mode : { SelectionMode::ROOF_TILES_ALL, SelectionMode::HEXES, SelectionMode::SCROLL_BLOCKER_RECTANGLE }) {
         QAction* action = _selectionModeMenu->addAction(selectionModeToString(mode));
         action->setData(static_cast<int>(mode));
         action->setCheckable(true);
-
-        if (mode == SelectionMode::ALL) {
-            action->setChecked(true); // ALL is the default mode
-        }
-
         connect(action, &QAction::triggered, this, [this, mode]() {
-            if (_currentEditorWidget) {
-                _currentEditorWidget->setSelectionMode(mode);
-                _selectionModeAction->setText(selectionModeToString(mode));
-
-                for (QAction* menuAction : _selectionModeMenu->actions()) {
+            if (!_currentEditorWidget) {
+                return;
+            }
+            _currentEditorWidget->setSelectionMode(mode);
+            for (QAction* layer : { _floorLayerAction, _roofLayerAction, _objectsLayerAction }) {
+                const QSignalBlocker block(layer); // don't re-run applySelectionLayersFromMenu
+                layer->setChecked(false);
+            }
+            for (QAction* menuAction : _selectionModeMenu->actions()) {
+                if (menuAction->data().isValid()) {
                     menuAction->setChecked(menuAction->data().toInt() == static_cast<int>(mode));
                 }
             }
+            _selectionModeAction->setText(selectionModeToString(mode));
         });
     }
 
@@ -1323,17 +1372,13 @@ void MainWindow::syncMenuStateToEditorWidget() {
     _currentEditorWidget->setMergeSelectionOutlines(_mergeOutlinesAction->isChecked());
     updateUndoRedoActions();
 
-    // Reset selection mode to the default (ALL)
-    if (_currentEditorWidget) {
-        _currentEditorWidget->setSelectionMode(SelectionMode::ALL);
-        if (_selectionModeAction) {
-            _selectionModeAction->setText("All");
+    // Reset selection to the default: all layers on (classic "All"), no special tool active.
+    if (_currentEditorWidget && _floorLayerAction) {
+        for (QAction* layer : { _floorLayerAction, _roofLayerAction, _objectsLayerAction }) {
+            const QSignalBlocker block(layer); // apply once, below, rather than per toggle
+            layer->setChecked(true);
         }
-        if (_selectionModeMenu) {
-            for (QAction* menuAction : _selectionModeMenu->actions()) {
-                menuAction->setChecked(menuAction->data().toInt() == static_cast<int>(SelectionMode::ALL));
-            }
-        }
+        applySelectionLayersFromMenu();
     }
 }
 

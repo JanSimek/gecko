@@ -128,6 +128,9 @@ private:
     void setupUI();
     void setupMenuBar();
     void setupToolBar();
+    // Apply the selection-mode dropdown's layer checkboxes to the editor (combinable floor / roof
+    // / objects), clearing any exclusive special mode and refreshing the toolbar button text.
+    void applySelectionLayersFromMenu();
     void setupToolModeActions();
     void syncToolModeActions(EditorMode mode);
     void setupDockWidgets();
@@ -232,6 +235,10 @@ private:
     // Toolbar actions
     QAction* _selectionModeAction;
     QMenu* _selectionModeMenu;
+    // Combinable layer checkboxes in the selection-mode dropdown (floor / roof / objects).
+    QAction* _floorLayerAction = nullptr;
+    QAction* _roofLayerAction = nullptr;
+    QAction* _objectsLayerAction = nullptr;
 
     // Elevation menu actions
     QAction* _elevation1Action;

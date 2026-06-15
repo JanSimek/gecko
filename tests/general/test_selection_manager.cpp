@@ -265,6 +265,49 @@ TEST_CASE("isPointOnSelection gates the grab handle by layer visibility", "[sele
     SECTION("an empty selection is never a grab handle") {
         CHECK_FALSE(mgr.isPointOnSelection(onTile));
     }
+
+    SECTION("disabling a layer drops its grab handle even when selected") {
+        mgr.setSelectedItems({ SelectedItem{ SelectionType::FLOOR_TILE, tileIndex } });
+        CHECK(mgr.isPointOnSelection(onTile)); // floor layer on by default
+
+        mgr.setActiveLayers({ .floorTiles = false, .roofTiles = true, .objects = true });
+        CHECK_FALSE(mgr.isPointOnSelection(onTile)); // floor no longer a candidate
+    }
+}
+
+//==============================================================================
+// Combinable selection layers: in ALL mode, only the user-enabled layers are
+// selected. Exercised through selectAll, which reads tiles straight from the
+// provider (no spatial index / hit-test setup needed).
+//==============================================================================
+
+TEST_CASE("active selection layers gate ALL-mode selection", "[selection_manager_real]") {
+    MockEditorWidget mockWidget;
+    mockWidget.seedElevation(0);
+    mockWidget.setRoofPresent(0, 5);
+    mockWidget.setRoofPresent(0, 6);
+    geck::selection::SelectionManager mgr(mockWidget);
+
+    SECTION("floor only") {
+        mgr.setActiveLayers({ .floorTiles = true, .roofTiles = false, .objects = false });
+        mgr.selectAll(SelectionMode::ALL, 0);
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(TILES_PER_ELEVATION));
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices().empty());
+    }
+
+    SECTION("roof only — just the present roof tiles") {
+        mgr.setActiveLayers({ .floorTiles = false, .roofTiles = true, .objects = false });
+        mgr.selectAll(SelectionMode::ALL, 0);
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().empty());
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices().size() == 2);
+    }
+
+    SECTION("floor + roof combined") {
+        mgr.setActiveLayers({ .floorTiles = true, .roofTiles = true, .objects = false });
+        mgr.selectAll(SelectionMode::ALL, 0);
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(TILES_PER_ELEVATION));
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices().size() == 2);
+    }
 }
 
 //==============================================================================
