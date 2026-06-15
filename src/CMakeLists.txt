@@ -504,7 +504,9 @@ target_link_libraries(gecko_app PUBLIC
 if(GECK_BUILD_CLI)
     add_library(gecko_cli STATIC
         cli/MapAnalyzer.h
-        cli/MapAnalyzer.cpp)
+        cli/MapAnalyzer.cpp
+        cli/MapGenerator.h
+        cli/MapGenerator.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing)
 
     add_executable(gecko-cli cli/main.cpp)

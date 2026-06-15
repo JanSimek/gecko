@@ -6,6 +6,15 @@ currently shown elevation through the global `api` and collapses into one undo e
 To run one: open the console, paste the script, press **Run** (Ctrl+Return). Fallout 2
 data (master.dat) must be loaded so tile and proto names resolve.
 
+Or run it headlessly with gecko-cli (a scripting-enabled build) — no editor, no GL:
+
+```
+gecko-cli map generate --script scripts/desert_terrain.luau --out out.map --data <master.dat>
+```
+
+This drives the same `api` in data-only mode: it paints tiles and places objects as map
+data and writes a .map. (`gecko-cli map analyze` can read the result back.)
+
 | Script | What it does |
 |--------|--------------|
 | [`desert_terrain.luau`](desert_terrain.luau) | Fills the floor with the wasteland tileset and scatters vegetation, reproducing the shipped desert-encounter palette. |
