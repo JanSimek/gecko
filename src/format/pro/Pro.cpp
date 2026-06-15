@@ -45,25 +45,23 @@ Pro::ITEM_TYPE Pro::itemType() const {
 }
 
 const std::string Pro::typeToString() const {
-    switch (type()) {
-        case OBJECT_TYPE::ITEM: {
+    return typeToString(type());
+}
+
+std::string Pro::typeToString(OBJECT_TYPE type) {
+    switch (type) {
+        case OBJECT_TYPE::ITEM:
             return "Item";
-        } break;
-        case OBJECT_TYPE::CRITTER: {
+        case OBJECT_TYPE::CRITTER:
             return "Critter";
-        } break;
-        case OBJECT_TYPE::SCENERY: {
+        case OBJECT_TYPE::SCENERY:
             return "Scenery";
-        } break;
-        case OBJECT_TYPE::WALL: {
+        case OBJECT_TYPE::WALL:
             return "Wall";
-        } break;
-        case OBJECT_TYPE::TILE: {
+        case OBJECT_TYPE::TILE:
             return "Tile";
-        } break;
-        case OBJECT_TYPE::MISC: {
+        case OBJECT_TYPE::MISC:
             return "Misc";
-        } break;
     }
     return "Unknown proto";
 }

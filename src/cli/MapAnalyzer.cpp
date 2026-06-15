@@ -10,10 +10,12 @@
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
-#include <cstdio>
+#include <format>
 #include <functional>
 #include <map>
 #include <memory>
@@ -34,35 +36,19 @@ namespace {
     // The object's raw engine PID, "0x%08X" — the actual identifier a generator/MCP client
     // hands back to placeObject(), so surface it alongside the human-readable name.
     std::string pidHex(uint32_t pid) {
-        char buffer[11];
-        std::snprintf(buffer, sizeof(buffer), "0x%08X", pid);
-        return buffer;
+        return std::format("0x{:08X}", pid);
     }
 
-    const char* objectTypeName(uint32_t pid) {
-        switch ((pid & 0xFF000000u) >> 24) {
-            case 0:
-                return "item";
-            case 1:
-                return "critter";
-            case 2:
-                return "scenery";
-            case 3:
-                return "wall";
-            case 4:
-                return "tile";
-            case 5:
-                return "misc";
-            default:
-                return "other";
-        }
+    // Category label for a PID's type byte, via the canonical Pro mapping (no local table).
+    std::string typeLabel(uint32_t pid) {
+        return Pro::typeToString(static_cast<Pro::OBJECT_TYPE>((pid & 0xFF000000u) >> 24));
     }
 
     // Histogram entries sorted by count (descending), then by key for a stable order.
     template <typename K>
     std::vector<std::pair<K, int>> sortedByCountDesc(const std::map<K, int>& histogram) {
         std::vector<std::pair<K, int>> entries(histogram.begin(), histogram.end());
-        std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) {
+        std::ranges::sort(entries, [](const auto& a, const auto& b) {
             return a.second != b.second ? a.second > b.second : a.first < b.first;
         });
         return entries;
@@ -97,7 +83,7 @@ namespace {
             if (_tilesLst != nullptr && id < _tilesLst->list().size()) {
                 return _tilesLst->list()[id];
             }
-            return "tile#" + std::to_string(id);
+            return std::format("tile#{}", id);
         }
 
         std::string protoName(uint32_t pid) {
@@ -116,18 +102,18 @@ namespace {
             try {
                 const std::string proPath = ProHelper::basePath(_resources, pid);
                 file = baseName(proPath);
-                if (Pro* pro = _resources.repository().load<Pro>(proPath); pro != nullptr) {
+                if (const Pro* pro = _resources.repository().load<Pro>(proPath); pro != nullptr) {
                     if (Msg* msg = ProHelper::msgFile(_resources, pro->type()); msg != nullptr) {
                         engineName = msg->message(pro->header.message_id).text;
                     }
                 }
-            } catch (...) {
-                // fall through to whatever we resolved
+            } catch (const std::exception& e) {
+                spdlog::debug("protoName: could not resolve pid {}: {}", pid, e.what());
             }
             if (!engineName.empty()) {
-                return engineName + " (" + file + ")";
+                return std::format("{} ({})", engineName, file);
             }
-            return file.empty() ? "pid#" + std::to_string(pid) : file;
+            return file.empty() ? std::format("pid#{}", pid) : file;
         }
 
         resource::GameResources& _resources;
@@ -137,7 +123,7 @@ namespace {
 
     // List everything and keep the .map files, case-insensitively — more robust than a glob
     // against the raw VFS keys (whose case and leading "/" depend on the DAT/mount).
-    std::vector<std::string> collectMapPaths(resource::DataFileSystem& files, const AnalyzeOptions& options, std::ostream& out) {
+    std::vector<std::string> collectMapPaths(const resource::DataFileSystem& files, const AnalyzeOptions& options, std::ostream& out) {
         if (!options.maps.empty()) {
             return options.maps;
         }
@@ -145,13 +131,13 @@ namespace {
         std::vector<std::string> mapPaths;
         for (const auto& path : allFiles) {
             std::string ext = path.extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(),
+            std::ranges::transform(ext, ext.begin(),
                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             if (ext == ".map") {
                 mapPaths.push_back(path.generic_string());
             }
         }
-        std::sort(mapPaths.begin(), mapPaths.end());
+        std::ranges::sort(mapPaths);
         if (mapPaths.empty()) {
             out << "No .map files found among " << allFiles.size() << " mounted files.\n";
         }
@@ -190,8 +176,8 @@ namespace {
         try {
             MapReader reader(proLoad);
             map = reader.openFile(mapPath, *bytes);
-        } catch (...) {
-            map = nullptr;
+        } catch (const std::exception& e) {
+            spdlog::debug("reportMap: parse failed for {}: {}", mapPath, e.what());
         }
         if (!map) {
             out << "skip (parse failed): " << mapPath << "\n";
@@ -208,7 +194,7 @@ namespace {
         }
         out << "  objects (" << usage.objects.size() << " protos):\n";
         for (const auto& [pid, count] : sortedByCountDesc(usage.objects)) {
-            out << "    [" << objectTypeName(pid) << "] " << names.protoName(pid) << "  x" << count << "\n";
+            out << "    [" << typeLabel(pid) << "] " << names.protoName(pid) << "  x" << count << "\n";
             agg.objCount[pid] += count;
             agg.objMaps[pid]++;
         }
@@ -224,7 +210,7 @@ namespace {
         }
         out << "Objects by total usage:\n";
         for (const auto& [pid, count] : sortedByCountDesc(agg.objCount)) {
-            out << "  " << pidHex(pid) << " [" << objectTypeName(pid) << "] " << names.protoName(pid)
+            out << "  " << pidHex(pid) << " [" << typeLabel(pid) << "] " << names.protoName(pid)
                 << "  total " << count << ", in " << agg.objMaps.at(pid) << " maps\n";
         }
     }
@@ -241,7 +227,8 @@ int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& option
     const std::function<Pro*(uint32_t)> proLoad = [&resources](uint32_t pid) -> Pro* {
         try {
             return resources.repository().load<Pro>(ProHelper::basePath(resources, pid));
-        } catch (...) {
+        } catch (const std::exception& e) {
+            spdlog::debug("proLoad: pid {} failed: {}", pid, e.what());
             return nullptr;
         }
     };

@@ -131,7 +131,7 @@ void ObjectCommandController::removeObjectData(const std::shared_ptr<MapObject>&
         return;
     }
     auto& elevationObjects = _map->getMapFile().map_objects[mapObject->elevation];
-    elevationObjects.erase(std::remove(elevationObjects.begin(), elevationObjects.end(), mapObject), elevationObjects.end());
+    std::erase(elevationObjects, mapObject);
     _refreshObjects();
 }
 

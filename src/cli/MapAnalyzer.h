@@ -4,16 +4,14 @@
 #include <string>
 #include <vector>
 
-namespace geck {
-namespace resource {
-    class GameResources;
-}
+namespace geck::resource {
+class GameResources;
 }
 
 namespace geck::cli {
 
 struct AnalyzeOptions {
-    // Maps to analyse (VFS paths, e.g. "maps/arroyo.map"). Empty = every maps/*.map in the
+    // Maps to analyse (VFS paths, e.g. "maps/arroyo.map"). Empty = every map under maps/ in the
     // mounted data.
     std::vector<std::string> maps;
 };

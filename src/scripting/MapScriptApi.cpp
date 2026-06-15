@@ -78,7 +78,7 @@ int MapScriptApi::tileId(const std::string& name) const {
     const Lst* lst = nullptr;
     try {
         lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
-    } catch (...) {
+    } catch (const std::exception&) {
         return -1;
     }
     if (lst == nullptr) {
@@ -87,7 +87,7 @@ int MapScriptApi::tileId(const std::string& name) const {
     // tiles.lst entries are already lowercased/trimmed by the reader; normalise the query the
     // same way so "edg5000", "EDG5000.FRM" and "edg5000.frm" all match.
     std::string needle = name;
-    std::transform(needle.begin(), needle.end(), needle.begin(),
+    std::ranges::transform(needle, needle.begin(),
         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (needle.size() < 4 || needle.compare(needle.size() - 4, 4, ".frm") != 0) {
         needle += ".frm";
@@ -161,7 +161,7 @@ bool MapScriptApi::placeProto(uint32_t proPid, int hex, uint32_t direction) {
             pro != nullptr) {
             frmPid = static_cast<uint32_t>(pro->header.FID);
         }
-    } catch (...) {
+    } catch (const std::exception&) {
         return false;
     }
     if (frmPid == 0) {

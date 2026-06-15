@@ -3,10 +3,8 @@
 #include <iosfwd>
 #include <string>
 
-namespace geck {
-namespace resource {
-    class GameResources;
-}
+namespace geck::resource {
+class GameResources;
 }
 
 namespace geck::cli {

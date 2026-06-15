@@ -102,7 +102,7 @@ int generateMap(resource::GameResources& resources, const GenerateOptions& optio
     const std::function<Pro*(int32_t)> proLoad = [&resources](int32_t pid) -> Pro* {
         try {
             return resources.repository().load<Pro>(ProHelper::basePath(resources, static_cast<uint32_t>(pid)));
-        } catch (...) {
+        } catch (const std::exception&) {
             return nullptr;
         }
     };

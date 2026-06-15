@@ -22,7 +22,7 @@ void printUsage(const char* program) {
     std::cerr << "Usage:\n"
               << "  " << program << " map analyze --data <dir-or-.dat> [--data <...>] [map ...]\n"
               << "      Reports ground-tile and object (scenery/wall/critter/...) usage across maps,\n"
-              << "      per map and aggregated. With no map arguments, every maps/*.map is analysed.\n"
+              << "      per map and aggregated. With no map arguments, every map under maps/ is analysed.\n"
               << "  " << program << " map generate --script <file.luau> --out <file.map>\n"
               << "      [--elevation 0|1|2] --data <dir-or-.dat> [--data <...>]\n"
               << "      Runs a Luau generation script against an empty map and writes the result.\n"
@@ -33,38 +33,47 @@ bool isKnownSubcommand(const std::vector<std::string>& args) {
     return args.size() >= 2 && args[0] == "map" && (args[1] == "analyze" || args[1] == "generate");
 }
 
-// Pulls the value following `flag` out of args at index i (which must point at the flag),
-// advancing i past the value. Returns false (and prints) if the value is missing.
-bool takeValue(const std::vector<std::string>& args, std::size_t& i, const char* flag, std::string& outValue) {
-    if (i + 1 >= args.size()) {
-        std::cerr << "error: " << flag << " needs a value\n";
-        return false;
-    }
-    outValue = args[++i];
-    return true;
-}
-
-// Handle a generate-only flag at args[i]: 1 = consumed, 0 = not a generate flag, -1 = error.
-int takeGenerateFlag(const std::vector<std::string>& args, std::size_t& i, geck::cli::GenerateOptions& gen) {
-    if (args[i] == "--script") {
-        return takeValue(args, i, "--script", gen.scriptPath) ? 1 : -1;
-    }
-    if (args[i] == "--out") {
-        return takeValue(args, i, "--out", gen.outPath) ? 1 : -1;
-    }
-    if (args[i] == "--elevation") {
-        std::string value;
-        if (!takeValue(args, i, "--elevation", value)) {
-            return -1;
-        }
-        gen.elevation = std::stoi(value);
-        return 1;
-    }
-    return 0;
-}
-
 bool generateMissingRequired(const CliArgs& cli) {
     return cli.generate && (cli.gen.scriptPath.empty() || cli.gen.outPath.empty());
+}
+
+// Consume the argument(s) starting at args[i]. Returns how many tokens were consumed (1 for a
+// flag-less map/positional, 2 for a flag + its value), or 0 on error (after printing the reason).
+// Keeping the token count explicit lets the caller advance the index instead of mutating it here.
+int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
+    const std::string& arg = args[i];
+    const bool valueFlag = arg == "--data"
+        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation"));
+
+    if (valueFlag && i + 1 >= args.size()) {
+        std::cerr << "error: " << arg << " needs a value\n";
+        printUsage(program);
+        return 0;
+    }
+
+    if (arg == "--data") {
+        out.dataPaths.push_back(args[i + 1]);
+        return 2;
+    }
+    if (out.generate && arg == "--script") {
+        out.gen.scriptPath = args[i + 1];
+        return 2;
+    }
+    if (out.generate && arg == "--out") {
+        out.gen.outPath = args[i + 1];
+        return 2;
+    }
+    if (out.generate && arg == "--elevation") {
+        out.gen.elevation = std::stoi(args[i + 1]);
+        return 2;
+    }
+    if (out.generate) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
+    out.analyze.maps.push_back(arg);
+    return 1;
 }
 
 // Parse argv into `out`. Returns an exit code to return from main, or nullopt to proceed.
@@ -75,26 +84,12 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     }
     out.generate = args[1] == "generate";
 
-    for (std::size_t i = 2; i < args.size(); ++i) {
-        if (args[i] == "--data") {
-            std::string value;
-            if (!takeValue(args, i, "--data", value)) {
-                printUsage(program);
-                return 2;
-            }
-            out.dataPaths.push_back(value);
-        } else if (out.generate) {
-            const int consumed = takeGenerateFlag(args, i, out.gen);
-            if (consumed <= 0) {
-                if (consumed == 0) {
-                    std::cerr << "error: unexpected argument: " << args[i] << "\n";
-                }
-                printUsage(program);
-                return 2;
-            }
-        } else {
-            out.analyze.maps.push_back(args[i]);
+    for (std::size_t i = 2; i < args.size();) {
+        const int consumed = consumeArg(args, i, out, program);
+        if (consumed == 0) {
+            return 2;
         }
+        i += static_cast<std::size_t>(consumed);
     }
 
     if (out.dataPaths.empty()) {
