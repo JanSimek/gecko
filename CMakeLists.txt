@@ -41,6 +41,11 @@ configure_file(
 option(GECK_USE_SYSTEM_LIBS "Use system libraries when available" ON)
 option(GECK_BUILD_TESTS "Build tests" ON)
 option(GECK_ENABLE_SANITIZERS "Enable sanitizer builds for debugging" OFF)
+# Headless gecko-cli tool. Default ON: it only links the already-built core/resource/vault
+# libraries (no Qt, no GL, no extra deps), so it adds nothing to fetch — the flag just lets
+# minimal builds opt out, like GECK_BUILD_TESTS. (Contrast GECK_ENABLE_SCRIPTING, OFF because
+# it downloads Luau.)
+option(GECK_BUILD_CLI "Build the headless gecko-cli tool" ON)
 # Tier-2 scripting (embeds Luau + LuaBridge3). OFF by default so a normal build never
 # downloads or compiles Luau; CI builds it ON. See PLAN.md "Optional, compile-flag-gated".
 option(GECK_ENABLE_SCRIPTING "Build the optional Luau scripting runtime" OFF)

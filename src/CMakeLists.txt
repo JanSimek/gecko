@@ -479,6 +479,19 @@ target_link_libraries(gecko_app PUBLIC
     gecko_core
 )
 
+# Headless gecko-cli (no Qt, no GL). The analysis logic lives in the gecko_cli library so a future
+# MCP server can reuse it; gecko-cli is just a thin frontend. gecko::core transitively provides the
+# resource/vault libs, the src/ include dir, SFML, and spdlog.
+if(GECK_BUILD_CLI)
+    add_library(gecko_cli STATIC
+        cli/MapAnalyzer.h
+        cli/MapAnalyzer.cpp)
+    target_link_libraries(gecko_cli PUBLIC gecko::core)
+
+    add_executable(gecko-cli cli/main.cpp)
+    target_link_libraries(gecko-cli PRIVATE gecko_cli)
+endif()
+
 target_include_directories(gecko_app PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     "${CMAKE_BINARY_DIR}/generated"
