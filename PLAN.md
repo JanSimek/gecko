@@ -513,6 +513,69 @@ last item needs a GL context.
 
 ---
 
+# Selection type toolbar — combinable layers & non-destructive switching
+
+> Status: idea / scoping. Two related improvements to how the selection *type* works. Today the
+> type is a single `SelectionMode` (`src/util/Types.h`: `ALL`, `FLOOR_TILES`, `ROOF_TILES`,
+> `ROOF_TILES_ALL`, `OBJECTS`, `HEXES`, `SCROLL_BLOCKER_RECTANGLE`) that the toolbar cycles through
+> (`EditorWidget::cycleSelectionMode`/`setSelectionMode`).
+
+## 1. Let the user combine layers (checkboxes instead of one hardcoded type)
+
+**Goal:** instead of one mode at a time, let the user pick a *combination* of layers to select —
+e.g. roof + floor tiles, or floor + objects — via a set of checkboxes on the toolbar.
+
+**Difficulty: moderate, and lower than it first looks**, because the selection code is already
+decomposed per category — the single-mode `switch`es just fan out to per-category helpers that a
+combined model would call directly:
+
+- `SelectionManager::collectItemsInArea` already delegates to `appendObjectsInArea` /
+  `appendTilesInArea(roof=false)` / `appendTilesInArea(roof=true)` / `appendHexesInArea`, and the
+  `ALL` case already calls several of them (objects + floor + roof-if-visible). A combined selection
+  is "call the appenders for each *enabled* category" — `ALL` is just "all enabled".
+- `collectDeselectableAtPosition` (Ctrl+click) and `selectAtPosition` are similarly per-category
+  (`appendRoofCandidate` / `appendObjectCandidates` / `appendTileCandidate` / `appendHexCandidate`).
+- `RenderData.currentSelectionMode` only drives the selection-rectangle colour
+  (`applySelectionRectangleColors`) — cosmetic.
+
+**Work involved:**
+- **Model:** replace the single `SelectionMode` with a set/bitmask of selectable categories
+  (Floor, Roof, Objects — the layer-like ones). Keep `HEXES` and `SCROLL_BLOCKER_RECTANGLE` as
+  distinct *tools* (they aren't "layers" and shouldn't combine), so this is really "generalise the
+  ALL/tile/object modes into a category set" rather than touching every mode.
+- **Dispatch:** rewrite the three `switch (mode)` sites in `SelectionManager` to iterate the enabled
+  categories and call the existing appenders. Mechanical, since the appenders already exist.
+- **UI:** swap the cycle-button for a few checkboxes (Floor / Roof / Objects), wired to the category
+  set. The `selectionModeToString` / cycling logic and the `NUM_SELECTION_TYPES` enum sentinel go
+  away or shrink.
+- **Edge cases:** `ROOF_TILES_ALL` (include-empty) is a roof variant — fold it into a roof option
+  (e.g. a modifier) rather than a separate category; decide how the rect colour reads for a mix.
+
+Risk is low (no new hit-testing; reuses tested per-category helpers and the `SelectionDataProvider`
+seam covered by `MockEditorWidget`). The bulk is the model swap + the toolbar widget.
+
+## 2. Don't clear the selection when the type changes (additive / subtractive)
+
+**Current behaviour:** `EditorWidget::cycleSelectionMode` and `setSelectionMode` both call
+`_selectionManager->clearSelection()`, so changing the type throws away the current selection.
+
+**Goal:** changing the type keeps the existing selection; subsequent clicks/drags then **add to** or
+**subtract from** it under the new type (e.g. select floor tiles, switch to roof, add roof tiles to
+the same selection; Ctrl-drag to remove). This is the natural companion to #1 — with checkboxes,
+"changing the type" becomes "toggling a category", and persistence is expected.
+
+**Work involved (small):**
+- Drop the `clearSelection()` calls from the two mode setters.
+- The add/subtract paths are already mode-aware and additive: `addArea`/`addToSelection` (don't
+  clear), `deselectArea`/`deselectAtPosition` (remove, visibility-respecting), and the selection
+  state already holds **mixed** item types (that's what `ALL` produces), so a persisted floor+roof
+  selection is already a valid state.
+- Verify the move/region code and the selection visuals handle a mixed selection built up across
+  type switches (they should, since `ALL` already yields mixed selections), and that `_state.mode`
+  isn't relied on anywhere as "the one true type" in a way that a persisted mixed selection breaks.
+
+---
+
 # Map loader panel — remaining enhancements
 
 The visual map picker shipped (`MapBrowserDialog`, File → Browse Maps…: thumbnail grid + filter
