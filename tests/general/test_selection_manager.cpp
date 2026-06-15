@@ -273,7 +273,7 @@ TEST_CASE("planSelectionTileMove moves selected floor and roof tiles as a block"
     SECTION("a floor tile moves with the same vacate-source/fill-target semantics") {
         // Seeded floors are all 2; give the source a distinct id so both ends change.
         mockWidget.mapFile.tiles.at(0).at(10).setFloor(5);
-        mgr.getMutableSelection().items.push_back(SelectedItem{ SelectionType::FLOOR_TILE, 10 });
+        mgr.getMutableSelection().items.emplace_back(SelectionType::FLOOR_TILE, 10);
 
         const auto changes = mgr.planSelectionTileMove(1, 0); // -> tile 110
         REQUIRE(changes.size() == 2);

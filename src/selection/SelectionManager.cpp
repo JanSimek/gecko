@@ -809,7 +809,7 @@ bool SelectionManager::appendTileLayerMove(std::vector<TileChange>& out, bool ro
         const auto coords = indexToCoordinates(source);
         const int newRow = static_cast<int>(coords.x) + deltaRow;
         const int newColumn = static_cast<int>(coords.y) + deltaColumn;
-        if (newRow < 0 || newRow >= MAP_HEIGHT || newColumn < 0 || newColumn >= MAP_WIDTH) {
+        if (!isTileRowColInGrid(newRow, newColumn)) {
             return false; // moving the block off the map is rejected as a whole
         }
         moves.emplace_back(source,

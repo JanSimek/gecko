@@ -133,6 +133,44 @@ void EditorWidget::moveSelectedTilesForDrag(sf::Vector2f worldTranslation) {
     _objectCommandController->applyTileEdit("Move Tiles", changes);
 }
 
+std::optional<selection::SelectedItem> EditorWidget::remapSelectedItemAfterMove(
+    const selection::SelectedItem& item,
+    const std::unordered_map<const MapObject*, std::shared_ptr<Object>>& objectsByMapObject,
+    const std::optional<std::pair<int, int>>& tileDelta) const {
+    using enum selection::SelectionType;
+    switch (item.type) {
+        case OBJECT: {
+            // The MapObject survived the move; find its refreshed wrapper.
+            const auto oldObject = item.getObject();
+            if (!oldObject || !oldObject->hasMapObject()) {
+                return std::nullopt;
+            }
+            const auto found = objectsByMapObject.find(oldObject->getMapObjectPtr().get());
+            if (found == objectsByMapObject.end()) {
+                return std::nullopt;
+            }
+            return selection::SelectedItem{ OBJECT, found->second };
+        }
+        case FLOOR_TILE:
+        case ROOF_TILE: {
+            if (!tileDelta.has_value()) {
+                return item; // no tile movement; keep as-is
+            }
+            const auto coords = indexToCoordinates(item.getTileIndex());
+            const int newRow = static_cast<int>(coords.x) + tileDelta->first;
+            const int newColumn = static_cast<int>(coords.y) + tileDelta->second;
+            if (!isTileRowColInGrid(newRow, newColumn)) {
+                return std::nullopt;
+            }
+            return selection::SelectedItem{ item.type,
+                coordinatesToIndex(TileCoordinates(static_cast<unsigned int>(newRow), static_cast<unsigned int>(newColumn))) };
+        }
+        case HEX:
+            return item; // hex markers don't move with a region drag
+    }
+    return std::nullopt;
+}
+
 void EditorWidget::reselectAfterDragMove(sf::Vector2f worldTranslation) {
     if (!_selectionManager) {
         return;
@@ -146,46 +184,20 @@ void EditorWidget::reselectAfterDragMove(sf::Vector2f worldTranslation) {
     // orphaning the selection's old wrappers; the tile items still hold pre-move indices. Rebuild the
     // selection so it follows the move: re-point objects by MapObject identity, and shift the tile
     // items by the same whole-tile delta the move used.
-    const auto delta = _selectionManager->selectionTileDelta(worldTranslation);
+    const auto tileDelta = _selectionManager->selectionTileDelta(worldTranslation);
 
-    std::unordered_map<const MapObject*, std::shared_ptr<Object>> byMapObject;
+    std::unordered_map<const MapObject*, std::shared_ptr<Object>> objectsByMapObject;
     for (const auto& object : _objects) {
         if (object && object->hasMapObject()) {
-            byMapObject[object->getMapObjectPtr().get()] = object;
+            objectsByMapObject[object->getMapObjectPtr().get()] = object;
         }
     }
 
     std::vector<selection::SelectedItem> rebuilt;
     rebuilt.reserve(current.items.size());
     for (const auto& item : current.items) {
-        switch (item.type) {
-            case selection::SelectionType::OBJECT: {
-                const auto oldObject = item.getObject();
-                if (oldObject && oldObject->hasMapObject()) {
-                    if (auto found = byMapObject.find(oldObject->getMapObjectPtr().get()); found != byMapObject.end()) {
-                        rebuilt.push_back({ selection::SelectionType::OBJECT, found->second });
-                    }
-                }
-                break;
-            }
-            case selection::SelectionType::FLOOR_TILE:
-            case selection::SelectionType::ROOF_TILE: {
-                if (!delta.has_value()) {
-                    rebuilt.push_back(item);
-                    break;
-                }
-                const auto coords = indexToCoordinates(item.getTileIndex());
-                const int newRow = static_cast<int>(coords.x) + delta->first;
-                const int newColumn = static_cast<int>(coords.y) + delta->second;
-                if (isTileRowColInGrid(newRow, newColumn)) {
-                    rebuilt.push_back({ item.type,
-                        coordinatesToIndex(TileCoordinates(static_cast<unsigned int>(newRow), static_cast<unsigned int>(newColumn))) });
-                }
-                break;
-            }
-            case selection::SelectionType::HEX:
-                rebuilt.push_back(item);
-                break;
+        if (auto remapped = remapSelectedItemAfterMove(item, objectsByMapObject, tileDelta)) {
+            rebuilt.push_back(std::move(*remapped));
         }
     }
 

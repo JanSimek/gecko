@@ -8,6 +8,7 @@
 #include <array>
 #include <vector>
 #include <utility>
+#include <unordered_map>
 #include <functional>
 
 #include <QWidget>
@@ -250,6 +251,13 @@ public slots:
     const UndoStack& getUndoStack() const { return _undoStack; }
 
 private:
+    // One item's new selection entry after a drag-move: objects re-pointed to their refreshed
+    // wrapper (by MapObject identity), tiles shifted by the whole-tile delta; nullopt to drop it.
+    std::optional<selection::SelectedItem> remapSelectedItemAfterMove(
+        const selection::SelectedItem& item,
+        const std::unordered_map<const MapObject*, std::shared_ptr<Object>>& objectsByMapObject,
+        const std::optional<std::pair<int, int>>& tileDelta) const;
+
     // Object management
     void deleteSelectedObjects();
     void registerTileEdit(const QString& description, const std::vector<TileChange>& changes) override;

@@ -146,7 +146,7 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
     // tiles travel together and the tiles never land off-centre. A free object drag (no tiles
     // selected) keeps the finer per-hex offset.
     sf::Vector2f moveTranslation = dragOffset;
-    if (auto* selectionManager = _context.getSelectionManager()) {
+    if (const auto* selectionManager = _context.getSelectionManager()) {
         if (const auto aligned = selectionManager->tileAlignedTranslation(dragOffset)) {
             moveTranslation = *aligned;
         }
