@@ -152,11 +152,10 @@ private:
     /**
      * @brief Outline every selected object on top of the scene, grouped by category colour.
      *
-     * Renders each colour group's selected sprites alone into an offscreen mask (no atlas
-     * neighbours), then edge-detects the union silhouette so the artwork keeps its real colours
-     * and only gains a clean 1px coloured border on every side — the way the Fallout engine
-     * outlines objects. Falls back to per-object bounding boxes when shaders are unavailable on
-     * the current GL context.
+     * Renders each colour group's selected sprites into an offscreen mask, then edge-detects the
+     * union silhouette so the artwork keeps its real colours and only gains a clean 1px coloured
+     * border on every side — the way the Fallout engine outlines objects. Falls back to per-object
+     * bounding boxes when shaders are unavailable on the current GL context.
      */
     void drawSelectedObjectOutlines(sf::RenderTarget& target,
         const RenderData& renderData,
@@ -186,7 +185,7 @@ private:
     void renderTileSelectionOutline(sf::RenderTarget& target, const std::vector<int>& selectedTiles, bool roof);
 
     /**
-     * @brief Render roof tiles and their selection backgrounds
+     * @brief Render roof tiles
      */
     void renderRoofTiles(sf::RenderTarget& target,
         const RenderData& renderData,

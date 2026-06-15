@@ -73,8 +73,7 @@ void Object::setMapObject(std::shared_ptr<MapObject> newMapObject) {
 }
 
 void Object::setSprite(sf::Sprite sprite) {
-    // Selection is rendered as an outline (not a sprite tint), so the new sprite needs no
-    // colour fix-up; the _selected flag already carries the selection state across sprite swaps.
+    // Selection is drawn as an outline keyed off _selected, so a swapped-in sprite needs no colour fix-up.
     _sprite = std::move(sprite);
 }
 

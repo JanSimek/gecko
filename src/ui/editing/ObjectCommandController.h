@@ -125,6 +125,8 @@ public:
     void applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState);
     /// Records an undoable tile edit (the change was already applied by the caller).
     void registerTileEdit(const std::string& description, const std::vector<TileChange>& changes);
+    /// Applies a tile edit now (refreshing sprites) and records it for undo/redo.
+    void applyTileEdit(const std::string& description, const std::vector<TileChange>& changes);
 
     /// Deep-clones a container/critter inventory into a detached snapshot (the
     /// inventory holds unique_ptrs, so a snapshot must clone).

@@ -114,8 +114,8 @@ void EditorWidget::removePlacedObject(const std::shared_ptr<MapObject>& mapObjec
     _objectCommandController->removePlacedObject(mapObject, object);
 }
 
-// The register*() helpers below emit undoStackChanged through the controller's
-// onStackChanged callback (wired in the constructor), so they no longer emit here.
+// The register*() helpers below forward to the controller, which emits undoStackChanged
+// through its onStackChanged callback (wired in the constructor).
 void EditorWidget::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
     _objectCommandController->registerObjectPlacement(mapObject, object);
 }
@@ -123,6 +123,124 @@ void EditorWidget::registerObjectPlacement(const std::shared_ptr<MapObject>& map
 void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects,
     const std::vector<std::pair<int, int>>& moves) {
     _objectCommandController->registerObjectMove(objects, moves);
+}
+
+void EditorWidget::moveSelectedTilesForDrag(sf::Vector2f worldTranslation) {
+    if (!_selectionManager) {
+        return;
+    }
+    const auto changes = _selectionManager->planSelectionMoveForTranslation(worldTranslation);
+    _objectCommandController->applyTileEdit("Move Tiles", changes);
+}
+
+std::optional<selection::SelectedItem> EditorWidget::remapSelectedItemAfterMove(
+    const selection::SelectedItem& item,
+    const std::unordered_map<const MapObject*, std::shared_ptr<Object>>& objectsByMapObject,
+    const std::optional<std::pair<int, int>>& tileDelta) const {
+    using enum selection::SelectionType;
+    switch (item.type) {
+        case OBJECT: {
+            // The MapObject survived the move; find its refreshed wrapper.
+            const auto oldObject = item.getObject();
+            if (!oldObject || !oldObject->hasMapObject()) {
+                return std::nullopt;
+            }
+            const auto found = objectsByMapObject.find(oldObject->getMapObjectPtr().get());
+            if (found == objectsByMapObject.end()) {
+                return std::nullopt;
+            }
+            return selection::SelectedItem{ OBJECT, found->second };
+        }
+        case FLOOR_TILE:
+        case ROOF_TILE: {
+            if (!tileDelta.has_value()) {
+                return item; // no tile movement; keep as-is
+            }
+            const auto coords = indexToCoordinates(item.getTileIndex());
+            const int newRow = static_cast<int>(coords.x) + tileDelta->first;
+            const int newColumn = static_cast<int>(coords.y) + tileDelta->second;
+            if (!isTileRowColInGrid(newRow, newColumn)) {
+                return std::nullopt;
+            }
+            return selection::SelectedItem{ item.type,
+                coordinatesToIndex(TileCoordinates(static_cast<unsigned int>(newRow), static_cast<unsigned int>(newColumn))) };
+        }
+        case HEX:
+            return item; // hex markers don't move with a region drag
+    }
+    return std::nullopt;
+}
+
+void EditorWidget::reselectAfterDragMove(sf::Vector2f worldTranslation) {
+    if (!_selectionManager) {
+        return;
+    }
+    const auto& current = _selectionManager->getCurrentSelection();
+    if (current.items.empty()) {
+        return;
+    }
+
+    // The object move rebuilt _objects (fresh wrappers around the same, now-moved MapObjects),
+    // orphaning the selection's old wrappers; the tile items still hold pre-move indices. Rebuild the
+    // selection so it follows the move: re-point objects by MapObject identity, and shift the tile
+    // items by the same whole-tile delta the move used.
+    const auto tileDelta = _selectionManager->selectionTileDelta(worldTranslation);
+
+    std::unordered_map<const MapObject*, std::shared_ptr<Object>> objectsByMapObject;
+    for (const auto& object : _objects) {
+        if (object && object->hasMapObject()) {
+            objectsByMapObject[object->getMapObjectPtr().get()] = object;
+        }
+    }
+
+    std::vector<selection::SelectedItem> rebuilt;
+    rebuilt.reserve(current.items.size());
+    for (const auto& item : current.items) {
+        if (auto remapped = remapSelectedItemAfterMove(item, objectsByMapObject, tileDelta)) {
+            rebuilt.push_back(std::move(*remapped));
+        }
+    }
+
+    _selectionManager->setSelectedItems(std::move(rebuilt));
+}
+
+void EditorWidget::beginMoveBatch(const std::string& description) {
+    _objectCommandController->beginBatch(description);
+}
+
+void EditorWidget::endMoveBatch() {
+    _objectCommandController->endBatch();
+}
+
+void EditorWidget::beginTileDragPreview() {
+    _tileDragPreviewBases.clear();
+
+    const auto capture = [this](bool roof, const std::vector<int>& indices, const std::vector<sf::Sprite>& sprites) {
+        for (int tileIndex : indices) {
+            if (tileIndex >= 0 && tileIndex < static_cast<int>(sprites.size())) {
+                _tileDragPreviewBases.push_back({ roof, tileIndex, sprites[tileIndex].getPosition() });
+            }
+        }
+    };
+    capture(false, _selectedFloorVisuals, _floorSprites);
+    if (_visibility.showRoof) {
+        capture(true, _selectedRoofVisuals, _roofSprites);
+    }
+}
+
+void EditorWidget::previewTileDrag(sf::Vector2f worldOffset) {
+    for (const auto& base : _tileDragPreviewBases) {
+        auto& sprites = base.roof ? _roofSprites : _floorSprites;
+        sprites[base.tileIndex].setPosition(base.basePosition + worldOffset);
+    }
+}
+
+void EditorWidget::endTileDragPreview() {
+    for (const auto& base : _tileDragPreviewBases) {
+        auto& sprites = base.roof ? _roofSprites : _floorSprites;
+        sprites[base.tileIndex].setPosition(base.basePosition);
+    }
+    _tileDragPreviewBases.clear();
 }
 
 void EditorWidget::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs) {
@@ -223,8 +341,7 @@ void EditorWidget::applySelectionVisuals(const selection::SelectionState& select
             case selection::SelectionType::FLOOR_TILE: {
                 int tileIndex = item.getTileIndex();
                 if (isValidTileIndex(tileIndex)) {
-                    // Tiles are outlined by the renderer (RenderingEngine::renderTileSelectionOutline),
-                    // not tinted, so just record the index.
+                    // The renderer outlines tiles from their geometry; just record the index.
                     _selectedFloorVisuals.push_back(tileIndex);
                 }
                 break;
@@ -242,9 +359,8 @@ void EditorWidget::applySelectionVisuals(const selection::SelectionState& select
 }
 
 void EditorWidget::applyRoofTileSelectionVisual(int tileIndex) {
-    // Roof tiles are outlined by the renderer (renderTileSelectionOutline), which works from the
-    // tile geometry, so even empty (transparent) roof tiles get a boundary — no tint or blank.frm
-    // background sprite is needed any more.
+    // The renderer outlines roof tiles from their geometry, so even empty (transparent) tiles get
+    // a boundary; just record the index.
     if (isValidTileIndex(tileIndex)) {
         _selectedRoofVisuals.push_back(tileIndex);
     }
@@ -560,15 +676,13 @@ void EditorWidget::clearAllVisualSelections() {
     std::ranges::for_each(_objects, [](auto& object) {
         if (object) {
             object->unselect();
-            // Selection is now an outline, not a sprite tint, but the drag preview still tints
-            // object sprites — reset the colour here so a preview tint never lingers after the
-            // selection visuals are rebuilt.
+            // The drag preview tints object sprites; reset the colour so no preview tint lingers.
             object->getSprite().setColor(sf::Color::White);
         }
     });
 
-    // Tiles are outlined (renderTileSelectionOutline), not tinted, so there is no tile colour to
-    // reset — just drop the tracked selection sets. Preview tints are reset by clearDragPreview.
+    // Tiles are outlined, so there's nothing to un-tint — just drop the tracked sets
+    // (preview tints are cleared by clearDragPreview).
     _selectedFloorVisuals.clear();
     _selectedRoofVisuals.clear();
     _selectedHexPositions.clear();
@@ -1031,8 +1145,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     _mode = mode;
 
     // Single owner of mutual exclusion: deactivate every mode's state across all
-    // components, then activate the target. This replaces the scattered
-    // resetState()/setX(false) calls the individual setters used to make.
+    // components, then activate the target.
     _tilePlacementManager->setTilePlacementMode(false, -1, false);
     _exitGridPlacementManager->setExitGridPlacementMode(false);
     _exitGridPlacementManager->setMarkExitsMode(false);
@@ -1060,7 +1173,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         case EditorMode::PlaceExitGrid:
             _exitGridPlacementManager->setExitGridPlacementMode(true);
             if (_inputHandler) {
-                // Previously skipped: placement clicks never reached the handler.
+                // Without this the input handler never sees placement clicks.
                 _inputHandler->setExitGridPlacementMode(true);
             }
             break;

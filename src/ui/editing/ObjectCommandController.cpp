@@ -6,7 +6,7 @@
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
 #include "resource/GameResources.h"
-#include "ui/core/TileChange.h"
+#include "editor/TileChange.h"
 #include "util/TileUtils.h"
 #include "util/UndoStack.h"
 #include "ui/rendering/MapSpriteLoader.h"
@@ -97,6 +97,14 @@ void ObjectCommandController::registerTileEdit(const std::string& description, c
         applyTileChanges(changes, true);
     };
     pushCommand(std::move(cmd));
+}
+
+void ObjectCommandController::applyTileEdit(const std::string& description, const std::vector<TileChange>& changes) {
+    if (changes.empty()) {
+        return;
+    }
+    applyTileChanges(changes, true); // apply the move now and refresh the affected tile sprites
+    registerTileEdit(description, changes);
 }
 
 void ObjectCommandController::addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
