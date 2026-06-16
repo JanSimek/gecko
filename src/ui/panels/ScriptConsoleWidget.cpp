@@ -1,11 +1,14 @@
 #include "ScriptConsoleWidget.h"
 
+#include "ui/IconHelper.h"
+
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QKeySequence>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QShortcut>
+#include <QTextCursor>
 #include <QVBoxLayout>
 
 namespace geck {
@@ -28,6 +31,8 @@ ScriptConsoleWidget::ScriptConsoleWidget(QWidget* parent)
     auto* layout = new QVBoxLayout(this);
     layout->addWidget(_input, 3);
 
+    _runButton->setIcon(createIcon(":/icons/actions/play.svg"));
+
     auto* buttons = new QHBoxLayout();
     buttons->addStretch();
     buttons->addWidget(_runButton);
@@ -49,6 +54,12 @@ void ScriptConsoleWidget::onRun() {
         return;
     }
     Q_EMIT runRequested(source);
+}
+
+void ScriptConsoleWidget::setSource(const QString& source) {
+    _input->setPlainText(source);
+    _input->setFocus();
+    _input->moveCursor(QTextCursor::End);
 }
 
 void ScriptConsoleWidget::showResult(bool ok, const QString& output, const QString& error) {

@@ -1,11 +1,17 @@
 #pragma once
 
+#include <map>
 #include <string>
 
 namespace geck {
 
 class MapScriptApi;
 class ObjectCommandController;
+
+/// Caller-supplied script parameters, exposed to the script as the global table `args` (string
+/// keys -> string values; a script does `tonumber(args.seed)` as needed). Lets one generation
+/// script produce reproducible variants without editing it (gecko-cli `--arg key=value`).
+using ScriptArgs = std::map<std::string, std::string>;
 
 struct ScriptResult {
     bool ok = false;
@@ -28,7 +34,8 @@ public:
     ScriptResult run(const std::string& source,
         MapScriptApi& api,
         ObjectCommandController& controller,
-        const std::string& description = "Run script");
+        const std::string& description = "Run script",
+        const ScriptArgs& args = {});
 };
 
 } // namespace geck

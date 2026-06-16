@@ -632,3 +632,27 @@ TEST_CASE("DataPathsWidget shows highest priority on top and preserves stored or
     CHECK(table->item(2, 1)->text().toStdString() == "/data/base.dat");  // bottom row = lowest
     CHECK(table->item(0, 0)->text().startsWith("1"));                    // priority counts from 1 at the top
 }
+
+#ifdef GECK_SCRIPTING_ENABLED
+#include "ui/panels/ScriptConsoleWidget.h"
+#include <QPlainTextEdit>
+#include <QPushButton>
+
+TEST_CASE("Script console setSource loads the editor and feeds Run", "[qt][scripting]") {
+    geck::ScriptConsoleWidget console;
+
+    // setSource is what "Execute script" in the file browser uses to drop a .luau into the console.
+    const QString src = "api:paintFloor(0, 271)";
+    console.setSource(src);
+
+    QString runSource;
+    QObject::connect(&console, &geck::ScriptConsoleWidget::runRequested,
+        [&runSource](const QString& s) { runSource = s; });
+
+    // Pressing Run hands back exactly what setSource put in the editor.
+    const auto buttons = console.findChildren<QPushButton*>();
+    REQUIRE_FALSE(buttons.isEmpty());
+    buttons.first()->click();
+    CHECK(runSource == src);
+}
+#endif

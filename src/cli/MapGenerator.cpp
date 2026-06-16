@@ -84,7 +84,7 @@ int generateMap(resource::GameResources& resources, const GenerateOptions& optio
     // Data-only mode: objects are recorded as map data without building sprites (no GL).
     MapScriptApi api(resources, hexgrid, controller, *map, options.elevation, /*buildSprites*/ false);
     LuaScriptRuntime runtime;
-    const ScriptResult result = runtime.run(source, api, controller, "generate");
+    const ScriptResult result = runtime.run(source, api, controller, "generate", options.args);
     if (!result.output.empty()) {
         out << result.output;
         if (result.output.back() != '\n') {

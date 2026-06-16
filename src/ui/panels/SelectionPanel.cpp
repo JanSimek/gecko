@@ -1315,7 +1315,7 @@ void SelectionPanel::onAddInventoryClicked() {
         return;
     }
 
-    const uint32_t itemPid = (static_cast<uint32_t>(Pro::OBJECT_TYPE::ITEM) << 24) | static_cast<uint32_t>(index);
+    const uint32_t itemPid = Pro::makePid(Pro::OBJECT_TYPE::ITEM, static_cast<uint32_t>(index));
 
     Pro* pro = nullptr;
     try {

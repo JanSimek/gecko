@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iosfwd>
+#include <map>
 #include <string>
 
 namespace geck::resource {
@@ -10,9 +11,10 @@ class GameResources;
 namespace geck::cli {
 
 struct GenerateOptions {
-    std::string scriptPath; // Luau generation script to run
-    std::string outPath;    // .map file to write
-    int elevation = 0;      // elevation (0-2) the script edits
+    std::string scriptPath;                  // Luau generation script to run
+    std::string outPath;                     // .map file to write
+    int elevation = 0;                       // elevation (0-2) the script edits
+    std::map<std::string, std::string> args; // parameters exposed to the script as `args`
 };
 
 // Run a Luau generation script headlessly against a fresh empty map and write the result to

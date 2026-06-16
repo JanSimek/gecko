@@ -154,25 +154,63 @@ TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "
     CHECK(fx.mapFile().map_objects[ELEV].empty());
 }
 
-TEST_CASE("MapScriptApi name resolvers fail closed without game data", "[scripting]") {
+TEST_CASE("MapScriptApi::proto builds a PID from a readable type name and id", "[scripting]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
 
-    SECTION("tileId returns -1 when the tile list is unavailable") {
-        // No data mounted -> tiles.lst can't load -> unknown, not a bogus index.
-        CHECK(api.tileId("edg5000") == -1);
-        CHECK(api.tileId("edg5000.frm") == -1);
-        CHECK(api.tileId("does-not-exist") == -1);
+    // Pure (type << 24) | id; produces exactly the hex a script would otherwise hand-write.
+    CHECK(api.proto("scenery", 102) == 0x02000066u); // Scrub
+    CHECK(api.proto("item", 1) == 0x00000001u);
+    CHECK(api.proto("critter", 1) == 0x01000001u);
+    CHECK(api.proto("misc", 16) == 0x05000010u); // exit-grid range is MISC 16..23
+
+    // Case-insensitive, singular or plural.
+    CHECK(api.proto("Scenery", 102) == api.proto("scenery", 102));
+    CHECK(api.proto("items", 1) == api.proto("item", 1));
+
+    // Raises on an unknown type or an out-of-range id (not a silent bogus PID).
+    CHECK_THROWS(api.proto("vehicle", 1));
+    CHECK_THROWS(api.proto("scenery", 0));
+    CHECK_THROWS(api.proto("scenery", -1));
+    CHECK_THROWS(api.proto("scenery", 0x1000000));
+}
+
+TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    SECTION("data-dependent queries throw when no data is mounted (no silent empty)") {
+        // These can't produce a real answer without game data, so they raise rather than hand back
+        // an empty result indistinguishable from a valid "nothing here".
+        CHECK_THROWS(api.tileId("edg5000"));
+        CHECK_THROWS(api.mapScenery("maps/desert1.map"));
+        CHECK_THROWS(api.mapScenery("no/such/map.map"));
+        CHECK_THROWS(api.mapSceneryHistogram("maps/desert1.map"));
+        CHECK_THROWS(api.mapFloorTiles("maps/desert1.map"));
+        CHECK_THROWS(api.protoName(0x02000066));
     }
 
-    SECTION("placeProto rejects an off-grid hex before any proto lookup") {
-        CHECK_FALSE(api.placeProto(0x02000066u, -1, 0));
+    SECTION("listMaps is a graceful enumeration -> empty (no maps is a valid answer)") {
+        CHECK(api.listMaps().empty());
+    }
+
+    SECTION("placeProto stays a status return (skip), not a throw") {
+        CHECK_FALSE(api.placeProto(0x02000066u, -1, 0));    // off-grid hex
+        CHECK_FALSE(api.placeProto(0x02000066u, 20100, 0)); // valid hex, but the proto art can't load
         CHECK(api.placedObjects() == 0);
     }
 
-    SECTION("placeProto returns false when the proto cannot be loaded") {
-        // Valid hex, but headless: the proto (hence its art FID) can't resolve.
-        CHECK_FALSE(api.placeProto(0x02000066u, 20100, 0));
-        CHECK(api.placedObjects() == 0);
+    SECTION("noise2d is pure: in [0,1] and deterministic") {
+        for (int xi = 0; xi < 4; ++xi) {
+            for (int yi = 0; yi < 4; ++yi) {
+                const double x = xi * 1.3;
+                const double y = yi * 1.7;
+                const double n = api.noise2d(x, y);
+                CHECK(n >= 0.0);
+                CHECK(n <= 1.0);
+                CHECK(api.noise2d(x, y) == n); // same input -> same output
+            }
+        }
+        CHECK(api.noise2d(1.5, 2.5) != api.noise2d(40.5, 80.5)); // varies across the field
     }
 }

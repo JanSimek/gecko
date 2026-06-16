@@ -1,13 +1,18 @@
 #include "scripting/LuaScriptRuntime.h"
 
+#include <atomic>
+#include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <random>
+#include <string>
 
 #include <lua.h>
 #include <lualib.h>
 #include <luacode.h>
 
 #include <LuaBridge/LuaBridge.h>
+#include <LuaBridge/Map.h>    // std::map <-> Lua table (for mapSceneryHistogram)
 #include <LuaBridge/Vector.h> // std::vector <-> Lua table (for hexNeighbors)
 
 #include "scripting/MapScriptApi.h"
@@ -39,7 +44,7 @@ namespace {
 }
 
 ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
-    ObjectCommandController& controller, const std::string& description) {
+    ObjectCommandController& controller, const std::string& description, const ScriptArgs& args) {
     ScriptResult result;
 
     lua_State* L = luaL_newstate();
@@ -62,6 +67,13 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         .addFunction("getFloor", &MapScriptApi::getFloor)
         .addFunction("getRoof", &MapScriptApi::getRoof)
         .addFunction("tileId", &MapScriptApi::tileId)
+        .addFunction("mapScenery", &MapScriptApi::mapScenery)
+        .addFunction("mapSceneryHistogram", &MapScriptApi::mapSceneryHistogram)
+        .addFunction("mapFloorTiles", &MapScriptApi::mapFloorTiles)
+        .addFunction("listMaps", &MapScriptApi::listMaps)
+        .addFunction("noise2d", &MapScriptApi::noise2d)
+        .addFunction("protoName", &MapScriptApi::protoName)
+        .addFunction("proto", &MapScriptApi::proto)
         .addFunction("placeObject", &MapScriptApi::placeObject)
         .addFunction("placeProto", &MapScriptApi::placeProto)
         .addFunction("paintFloor", &MapScriptApi::paintFloor)
@@ -69,7 +81,55 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         .endClass();
     luabridge::setGlobal(L, &api, "api");
 
+    // Resolve this run's RNG seed: use --arg seed=N when it parses, otherwise pick a fresh one so
+    // each run differs (every run() builds a new lua_State, so re-running a generator in the Script
+    // Console gives a new layout). Luau's math.randomseed truncates to a 32-bit *signed* int, so the
+    // seed is kept in that range; the random path mixes in a per-process counter so two runs never
+    // collide even if random_device repeats.
+    int seed = 0;
+    {
+        static std::atomic<uint32_t> runCounter{ 0 };
+        const auto it = args.find("seed");
+        bool fromArg = false;
+        if (it != args.end()) {
+            try {
+                seed = static_cast<int>(std::stol(it->second));
+                fromArg = true;
+            } catch (const std::exception&) {
+                fromArg = false; // not a number -> fall through to a random seed
+            }
+        }
+        if (!fromArg) {
+            std::random_device rd;
+            seed = static_cast<int>((rd() ^ runCounter.fetch_add(1)) & 0x7FFFFFFF);
+        }
+    }
+
+    // Expose caller parameters as the global table `args` (string -> string), and always publish
+    // the resolved seed as args.seed so a script can report it ("re-run with --arg seed=N"). Must
+    // precede luaL_sandbox(), which makes globals read-only.
+    {
+        auto argsTable = luabridge::newTable(L);
+        for (const auto& [key, value] : args) {
+            argsTable[key] = value;
+        }
+        argsTable["seed"] = std::to_string(seed);
+        luabridge::setGlobal(L, argsTable, "args");
+    }
+
     luaL_sandbox(L);
+
+    // Seed math.random from the resolved seed, so the run is reproducible: the same --arg seed
+    // gives the same layout. (A script may still call math.randomseed itself to override.)
+    {
+        lua_getglobal(L, "math");          // [math]
+        lua_getfield(L, -1, "randomseed"); // [math, randomseed]
+        lua_pushinteger(L, seed);
+        if (lua_pcall(L, 1, 0, 0) != 0) { // success: [math]; error: [math, err]
+            lua_pop(L, 1);                // discard error; seeding is best-effort
+        }
+        lua_pop(L, 1); // pop math
+    }
 
     // Luau has no source loader: compile to bytecode, then load it. luau_compile mallocs
     // the buffer, so own it with a free-deleter rather than a manual free.

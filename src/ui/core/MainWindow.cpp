@@ -182,13 +182,25 @@ void MainWindow::setupUI() {
 void MainWindow::connectMenuSignals() {
     // MainWindow menu signals - these work regardless of EditorWidget state
     connect(this, &MainWindow::newMapRequested, [this]() {
-        if (_currentEditorWidget) {
-            _currentEditorWidget->createNewMap();
-        } else {
-            // Create an EditorWidget with an empty map, then populate it
-            auto editorWidget = std::make_unique<EditorWidget>(*_resourcesShared, nullptr);
-            setEditorWidget(std::move(editorWidget));
-            _currentEditorWidget->createNewMap();
+        // Building the editor loads essential art (the hex-grid overlay, etc.); if Fallout 2 data
+        // isn't configured those files are missing and the load throws. Surface that as a "Missing
+        // Game Files" dialog — the same way a failed map load does — instead of letting the
+        // exception abort the app.
+        try {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->createNewMap();
+            } else {
+                // Create an EditorWidget with an empty map, then populate it
+                auto editorWidget = std::make_unique<EditorWidget>(*_resourcesShared, nullptr);
+                setEditorWidget(std::move(editorWidget));
+                _currentEditorWidget->createNewMap();
+            }
+        } catch (const std::exception& e) {
+            spdlog::error("Failed to create a new map: {}", e.what());
+            QtDialogs::showError(this, "Missing Game Files",
+                QString("Could not create a new map:\n%1\n\nConfigure the Fallout 2 data files "
+                        "(master.dat) in Preferences and try again.")
+                    .arg(e.what()));
         }
     });
     connect(this, &MainWindow::openMapRequested, [this]() {
@@ -902,6 +914,19 @@ void MainWindow::connectFileBrowserSignals() {
                 QString("File type not supported for opening: %1\n\nYou can export the file using the right-click context menu.").arg(filePath));
         }
     });
+
+#ifdef GECK_SCRIPTING_ENABLED
+    // "Execute script" in the file browser loads the .luau source into the Script Console and
+    // reveals it, ready to Run. (The console dock only exists in a scripting-enabled build.)
+    connect(_fileBrowserPanel, &FileBrowserPanel::executeScriptRequested, this, [this](const QString& source) {
+        if (!_scriptConsole || !_scriptConsoleDock) {
+            return;
+        }
+        _scriptConsole->setSource(source);
+        _scriptConsoleDock->show();
+        _scriptConsoleDock->raise();
+    });
+#endif
 }
 
 void MainWindow::replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSizePolicy::Policy verticalPolicy) {

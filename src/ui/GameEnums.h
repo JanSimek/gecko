@@ -116,7 +116,7 @@ QStringList sceneryTypes(geck::resource::GameResources& resources);
  * @brief Text file extensions (for syntax highlighting)
  */
 inline QStringList textFileExtensions() {
-    return { "cfg", "txt", "gam", "msg", "lst", "int", "ssl", "ini" };
+    return { "cfg", "txt", "gam", "msg", "lst", "int", "ssl", "ini", "luau", "lua" };
 }
 
 } // namespace geck::game::enums

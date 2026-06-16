@@ -391,10 +391,11 @@ the user to press Ctrl-Z thousands of times. Therefore:
    `ScopedUndoBatch`. Done; unit-tested headless.
 2. ✅ **Tier 2 Luau** (not sol2 — see §2 decision): FetchContent Luau + LuaBridge3, sandboxed
    state, the same host API bound, a Script Console, and a headless `gecko-cli`. Done.
-3. ➡️ **Make the generators good and the API human-friendly** — §11. Start with P1
-   (proto-by-name, human coordinates, params), then P2 (autotiling from `analyze`, statistical
-   scatter). The "full-map generator from a definition" endgame falls out of P2 + the biome
-   library (§11 P3).
+3. ➡️ **Curated generators + the MCP as the intelligence layer** — §11. Blind statistical
+   generation was tried and abandoned (it scatters structural objects). Curated palettes + clumped
+   `noise2d` placement and the unified error model are in; the open items are the **seamless
+   multi-tile floor** (`autotile_floor`, P2 §4) and the **MCP server** with high-level tools
+   (P4 §12) that lets an agent curate and place with judgment.
 
 ## 9. Open questions
 
@@ -412,12 +413,24 @@ The scripting core and a first procedural generator are in. Concretely:
 - **`MapScriptApi`** — the Lua-free host façade, always compiled. Current surface:
   `isValidHex`, `hexNeighbors`, `getFloor`/`getRoof`, **`tileId(name)`** (FRM name →
   `tiles.lst` index), `paintFloor`/`paintRoof`, `placeObject(proPid, frmPid, hex, dir)`,
-  **`placeProto(proPid, hex, dir)`** (resolves the art FID from the proto header). The whole
-  run is one undo entry via `ScopedUndoBatch`.
+  **`placeProto(proPid, hex, dir)`** (resolves the art FID from the proto header),
+  **`noise2d(x, y)`** (coherent value noise for non-uniform placement) and **`protoName(pid)`**
+  (engine display name). The whole run is one undo entry via `ScopedUndoBatch`.
+  - **Unified error model:** genuine failures (no data, unreadable/typo'd map path, unloadable
+    proto) **raise** — surfaced as the run's error, `pcall`-able by a script — rather than returning
+    a silently-empty result. "Not applicable" stays a value (`placeProto` → `false`, `tileId` →
+    `-1` for an unknown name, `listMaps` → `{}`).
 - **Script Console** dock (`View → Script Console`), wired to the current map/elevation.
 - **`gecko-cli`** (Qt-free): `map analyze` (per-map + aggregate ground-tile and object usage,
   with raw engine PIDs and proto names from the `.msg` files) and `map generate --script
-  <file> --out <map>` (runs a Luau script against an empty map and writes a `.map`).
+  <file> --out <map> [--arg key=value …]` (runs a Luau script against an empty map and writes
+  a `.map`; `--arg`s are exposed to the script as the global `args` table).
+- **Reference-map analysis tools.** `MapScriptApi` exposes `mapScenery(mapPath)` (the unique
+  scenery PIDs a reference map uses — blockers filtered out via `OBJECT_FLAT`),
+  `mapSceneryHistogram(mapPath)` (`{pid → count}`), `mapFloorTiles(mapPath)` (floor-tile ids,
+  most-used first) and `listMaps()` (every map in the data), all keyed by **PID** (the unique proto
+  id). These were the basis of the abandoned blind generator; they live on as *analysis* tools an
+  MCP agent reads to understand a reference before curating — see §11.
 - **`gecko_editing`** — a Qt-free library (command controller, sprite/object builders, the
   script API and the Luau runtime) on top of `gecko_core`, linked by both `gecko_app` and
   `gecko-cli`, so the editor and headless tools share one editing implementation.
@@ -425,36 +438,83 @@ The scripting core and a first procedural generator are in. Concretely:
   `MapScriptApi(..., buildSprites=false)` mode record a `MapObject` as map data without
   building a sprite — so the CLI generates **terrain *and* scenery** with no GL context. The
   GUI keeps building sprites (default `buildSprites=true`).
-- **Worked example:** `scripts/desert_terrain.luau` (fill `edg5000` + scatter vegetation) and
-  `scripts/README.md` documenting the `api` surface and both run paths (console / `gecko-cli`).
+- **Worked example:** `scripts/editor/terrain.luau` — a **curated** desert generator: a hand-picked
+  vegetation palette over wasteland sand, scattered in natural clumps via the `noise2d` density
+  field. `scripts/README.md` documents the `api` surface and error model; `scripts/` ships under
+  `resources/scripts` (CMake copies it recursively on build + install).
 
-The generators themselves are still proofs of concept (flat fill, uniform-random scatter,
-PIDs hardcoded as hex literals). §11 is the backlog to make them good and the API human-friendly.
+The remaining weakness is the **floor**: it's still a single uniform tile (seamless multi-tile
+terrain — `autotile_floor` — is the headline open item, **§11 P2 §4**). The scatter is now curated
+and clumped, not uniform-random. Blind statistical generation was tried and abandoned (it scatters
+structural objects); the path forward is curated palettes + an MCP agent's judgment — see §11.
 
 ## 11. Improvement backlog (procedural generation & scripting)
 
 Ordered by value; the lower tiers build on the upper ones. None requires Qt, and only the
 last item needs a GL context.
 
-### P1 — Ergonomics: make scripts human-writable
+### Procedural generation — direction (revised after the blind-generation dead end)
 
-1. **Proto-by-name resolution — `api:findProtos("Scrub")`.** Today a script must spell out raw
-   PID literals (`local VEGETATION = { 0x02000066, 0x02000067, ... }`) — opaque and unmaintainable.
-   Add a resolver that maps a readable proto name (from the type's proto `.msg`, the same lookup
-   `SelectionPanel` uses) to its PIDs, cached. Names aren't unique (four "Scrub" protos, three
-   "Tree"…), so it returns a **list** — which is exactly what "scatter a random scrub" wants:
-   ```lua
-   local VEGETATION = {}
-   for _, name in ipairs({ "Scrub", "Weed", "Plant", "Rocks", "Tree" }) do
-       for _, pid in ipairs(api:findProtos(name)) do table.insert(VEGETATION, pid) end
-   end
-   ```
-   Mirrors the existing `tileId(name)`, and is engine-data-driven (no hardcoded label tables,
-   per the fidelity rule). Builds a name→[pid] index by scanning the proto `.lst`s once and
-   caching; document the one-time scan cost (Pro loads are repository-cached). *This is the
-   top quick win — it removes the hex-PID literals users objected to.*
+**Blind statistical generation is a dead end for coherent maps.** The first desert generator looked
+right because it was *curated* (a hand-picked list of small vegetation PIDs over sand). Generalising
+to "scatter whatever a reference map uses" — even **weighted by real frequency** (`mapSceneryHistogram`)
+— still drops structural objects (a vault door, a car, rock-formation pieces) at random hexes,
+because the gap is **semantic**: *which* objects are scatter-able and *where* they belong is authorial
+intent statistics can't reverse-engineer. Frequency only lowers a structural object's count, never to
+zero, and "place at a random hex" has no notion that a vault door is an entrance. So clustering/WFC
+would only fix *the arrangement of the right objects*, never *wrong objects appearing at all*.
 
-2. **Human coordinates.** Addressing by linear index (`hex = row*200 + col`, tiles `row*100 + col`)
+The direction instead:
+
+1. **Curated palettes are the reliable scatter primitive.** Curation *is* the semantic knowledge
+   ("these are decorations"), encoded cheaply. Per-biome hand-picked lists, like the shipped
+   `scripts/editor/terrain.luau`.
+2. **An AI agent over MCP is the intelligence layer.** Coherent authoring needs judgment — which
+   objects, density, clearings, where the structural pieces go — which an LLM agent supplies and a
+   blind algorithm can't. The MCP exposes the map model + analyze/generate so the agent curates and
+   places with world knowledge, and iterates against feedback.
+3. **The MCP must expose high-level tools, not just `place_object`.** The agent shouldn't place
+   10 000 floor tiles or 250 bushes one call at a time. Tools: `autotile_floor(from_reference)` /
+   `paint_region` (floor seamlessness still needs a real algorithm — WFC / patch-sampling — as a
+   tool the agent *drives*), `scatter(palette, area, density, clustering)`, `place_feature(pid, hex)`,
+   plus analyze/inspect (`mapSceneryHistogram`, `protoName`, …) so the agent *understands* a
+   reference before curating.
+
+**Shipped.**
+- Curated, **clumped** generator (`scripts/editor/terrain.luau`): hand-picked desert palette over
+  sand, scattered via a `noise2d` density field (natural patches/clearings, not an even sprinkle).
+- **`api:noise2d(x, y)`** — coherent value noise in `[0,1]`, the non-uniform-placement primitive
+  (**P2 §6** below); reusable by the MCP.
+- **`api:protoName(pid)`** — engine display name, so a caller (or the agent) can tell a decoration
+  from a structural feature.
+- **`api:mapScenery` / `mapSceneryHistogram` / `mapFloorTiles`** are kept as *analysis* tools (read
+  to understand a reference), not as a blind generator.
+- **Unified error model:** genuine failures (no data, unreadable/typo'd map path, unloadable proto)
+  **raise** — surfaced as a Lua error the runtime reports, `pcall`-able by a script — instead of a
+  silently-empty result. "Not applicable" stays a value (`placeProto` → `false`, `tileId` → `-1` for
+  an unknown name, `listMaps` → `{}`).
+
+**Still open.**
+- **Seamless multi-tile floor** — the headline visual gap. A C++ terrain synthesiser
+  (image-quilting / patch-sampling from a reference grid first, WFC with learned adjacency later)
+  exposed as `autotile_floor` — the principled form of the autotiling item (**P2 §4**). Naive
+  per-cell weighted-random is *not* this; arbitrary FO2 tiles don't blend.
+- **The MCP server** (the intelligence layer) with the high-level tool surface above — see the MCP
+  section and **P4 §12**.
+- Placement polish for the curated scripts/tools: footprint-aware, iso-diamond-masked placement;
+  recurring multi-object clusters extracted as **prefabs** (place a rock formation as one unit).
+
+### P1 — Ergonomics: make scripts human-writable — ✅ done
+
+1. ✅ **Palette by PID from a reference map** (not by name). The first attempt resolved a readable
+   proto name → PIDs (`findProtos`), but display names are **not unique** (a `.msg` has several
+   "Scrub" entries) and match game-wide, so the palette was ambiguous and uncurated. Replaced with
+   **`api:mapScenery(mapPath)`** — the exact, unique scenery PIDs a real map is built from (a PID is
+   the engine's unique id; names are not). Flat marker scenery (`OBJECT_FLAT`, e.g. `block.frm`) is
+   excluded so a generator never scatters an invisible blocker. Companion: `mapFloorTiles`,
+   `listMaps`.
+
+2. **Human coordinates.** *(still open.)* Addressing by linear index (`hex = row*200 + col`, tiles `row*100 + col`)
    is unintuitive, and the two grids differ (200×200 hexes vs 100×100 tiles). Add `(col, row)`
    variants of the common ops (`paintFloorXY`, `placeProtoXY`, `getFloorXY`) plus index↔(col,row)
    converters (`hexIndex(col,row)`/`tileIndex(col,row)` + inverses) and a **tile↔hex bridge** (a
@@ -476,9 +536,13 @@ last item needs a GL context.
    variant at biome boundaries (Wang/blob tiling) instead of a uniform fill. Biggest visual jump,
    pure data, derived from the shipped maps — closes the analyze→generate loop (analyze currently
    *learns* the palette but the generator *hardcodes* it).
-5. **Statistical scatter.** Co-occurrence + per-biome density from `analyze` → scatter scenery in
-   the proportions/clustering the real maps use, vs today's uniform random.
-6. **Noise-based distribution.** Perlin/simplex for natural clumping; expose `api:noise2d(x, y)`.
+5. **Statistical scatter.** ⚠️ *Superseded — see "Procedural generation — direction" above.*
+   Frequency-weighting (`mapSceneryHistogram`) was tried and still scattered structural objects
+   (vault doors, cars), because choosing *what* is scatter-able is semantic, not statistical. The
+   reliable path is **curated palettes** + an MCP agent's judgment; the histogram lives on as an
+   *analysis* tool, not the generator.
+6. ✅ **Noise-based distribution.** `api:noise2d(x, y)` (coherent value noise in `[0,1]`) is in;
+   `scripts/editor/terrain.luau` uses it as a density field for natural clumping.
 7. **Enclosures / autowalling + roofs.** A helper that rings a region with correctly-oriented
    wall protos (the analyze output is full of left/right/corner `Wall` variants) unlocks the cave
    and town biomes; generate a **roof** layer for enclosed areas (`paintRoof` already exists).
@@ -764,13 +828,15 @@ rules (hex 0–39999, 3-elevation framing, exit-grid PIDs 16–23).
 
 ## Deeper understanding (the longer-term goals)
 
-- **Script & NPC-dialog analysis — Medium.** "Understand the scripts" pairs the **`.int`
-  metadata reader** (procedure names, exported/imported procs, string table — see the SSL/INT
-  notes; the `.int` has no description) with the **`.msg`** file of the same basename (we already
-  have an `Msg` reader), which holds the NPC's dialogue/display lines. So `describe_script(index)`
-  → proc list + the linked `.msg` text gives an AI the conversation tree and behaviour surface
-  without running the game. Cross-reference `scripts.lst` (index→name) and the map's
-  `MapScript`/object `sid` to answer "what does the NPC on this hex say/do?".
+- **Script & NPC-dialog analysis — Medium.** "Understand the scripts" means reading the **real
+  `.ssl` source** the map's scripts compile from (we usually have it — see the deep-understanding
+  section below), indexed by the **`.int` metadata reader** (procedure names, exported/imported
+  procs, string table — see the SSL/INT notes) and paired with the **`.msg`** file of the same
+  basename (we already have an `Msg` reader), which holds the NPC's dialogue/display lines. So
+  `describe_script(index)` → SSL source + proc list + the linked `.msg` text gives an AI the actual
+  behaviour and conversation tree without running the game. Cross-reference `scripts.lst`
+  (index→name) and the map's `MapScript`/object `sid` to answer "what does the NPC on this hex
+  say/do?".
 - **Visual analysis — Small–Medium (a refactor, not a rewrite).** To let the AI *see* the map
   (rendered screenshot per elevation/region), reuse the **existing** SFML renderer:
   `RenderingEngine`/`MapSpriteLoader` already have **zero Qt includes** and `render()` already
@@ -781,6 +847,61 @@ rules (hex 0–39999, 3-elevation framing, exit-grid PIDs 16–23).
   `copyToImage()` → PNG — the same draw code the editor runs each frame, **no duplication**.
   *Caveat:* `sf::RenderTexture` needs an OpenGL context — automatic on a desktop, but a headless
   box (Docker/CI) needs `xvfb`/EGL. No Qt event loop is involved.
+
+## Deep map understanding (the powerful-server goal)
+
+The end state is a server that can answer *"what is on this map, what is each thing for, and how
+does it all connect?"* — not just dump object rows. That means walking every layer of the data the
+engine itself uses, all of which `vault`/`gecko_resource` can already read (or read with a small
+addition). Each item below is a tool (or a field on `describe_map`) and the data path it stands on:
+
+- **Per-object semantic dump (all types) — Small.** For every `MapObject`, resolve `pro_pid` →
+  the `.pro` (already loaded for analyze), and emit the *type-specific* proto body, not just the
+  display name: flags (`OBJECT_FLAT`, `NO_BLOCK`, shootable, light-emitting + radius/intensity),
+  the `script_id`/`sid` link, frame/orientation, and elevation. PID encoding (`(type<<24)|id`) and
+  the `.lst`/`.msg` lookups are already done in `map analyze`; this just stops collapsing them to a
+  count. Output keyed by `[Item]/[Critter]/[Scenery]/[Wall]/[Misc]` so the AI sees the inventory of
+  the world by role.
+- **Critters & their purpose — Medium.** A critter's purpose lives in its **critter `.pro`** plus
+  its **script**. From the proto: base **SPECIAL** stats, HP/AC/derived stats, **team** and
+  **kill-type**, the **AI packet number**, body type, and the **inventory** (`MapObject` carries
+  child objects — guns/ammo/armor the NPC spawns with). The AI packet number indexes
+  **`data/ai.txt`** (aggression, morale, `run_away_mode`, preferred-weapon distance, chem use,
+  area-attack flags) — a new but tiny INI-style reader gives "this critter is a cowardly melee
+  raider who flees at 25% HP." Team + kill-type + AI packet together answer *"is this a friendly,
+  a guard, or an ambush?"* without running the game.
+- **Scripts, AI behaviour & dialogue — Medium.** The goal is the **real SSL source**, not a
+  metadata summary. In practice we usually *have* the `.ssl` source for the compiled `.int` a map
+  references (it ships alongside `scripts/`, or is fetched from the script source tree), so the
+  server should **resolve `sid`/`script_id` → `scripts.lst` row → basename → the `.ssl` file** and
+  hand the AI the actual code — the authoritative behaviour, comments and original names intact.
+  The `.int` and friends are the **index and fallback** around that source: the **`.int` metadata
+  reader** (procedure table — `start`/`map_enter_p_proc`/`talk_p_proc`/`destroy_p_proc`, plus
+  imported/exported procs and the string table) confirms which proc hooks exist and *when* they
+  run; the **`.msg`** of the same basename (existing `Msg` reader) supplies the NPC's dialogue
+  lines; and only when the source is genuinely missing does the server fall back to **`int2ssl`
+  decompilation** (lossy — see "SSL Script Editing Integration" for the toolchain/licensing). So
+  `describe_script(sid)` returns the SSL source + proc hooks + linked dialogue, letting the AI read
+  and reason about what an NPC actually does, not just summarize it.
+- **Pathing, blocking & reachability — Medium.** Build a walkability view of each elevation: a hex
+  is blocked if it holds a `NO_BLOCK`-clear object, with the **invisible movement blockers**
+  (`OBJECT_FLAT` scenery over `block.frm`, the same signal the generator filters on) called out
+  separately from real cover. Surface the **exit grids** (scenery PIDs **16–23**) and their
+  destination map/elevation/hex as the map's connectivity graph, and flood-fill from each exit /
+  player-start to report **reachable vs. walled-off regions** and orphaned objects. This is what
+  turns "a list of hexes" into "you enter here, the locked room in the NE is unreachable without the
+  key, and this exit leads to the world map."
+- **Map framing & globals — Small.** Header-level context the AI needs to reason about the rest:
+  enabled elevations, **player start position/elevation/orientation**, map flags
+  (save/`pipboy`/elevation flags), **local/map variables** (`.gam`/`MAP_VARS` counts and the LVAR
+  block), and the map's own script. Cheap — it's all in the `MAP` header already parsed.
+
+Together these let the server answer open-ended questions ("who guards the entrance?", "can the
+player reach the vault?", "what does this terminal say?") by cross-referencing **proto + SSL
+source + `.msg` + `ai.txt` + exit graph** — the same sources the engine (and a script author)
+consults. Every reader needed is either already in `vault` (`Pro`, `Msg`, `Map`, `.lst`), the
+plain-text `.ssl` source itself, or a small INI/metadata addition (`ai.txt`, `.int` header); none
+requires the Qt layer or a running game.
 
 ## Estimate
 

@@ -355,6 +355,13 @@ public:
     /// PID's high byte) reuse the same mapping instead of duplicating it.
     static std::string typeToString(OBJECT_TYPE type);
 
+    /// A proto PID packs the object type in the high byte and the proto id in the low 24 bits.
+    /// These are the one place that bit layout lives, so callers don't re-derive `>> 24` / `<< 24`.
+    static OBJECT_TYPE typeOfPid(uint32_t pid) { return static_cast<OBJECT_TYPE>((pid >> 24) & 0xFFu); }
+    static uint32_t makePid(OBJECT_TYPE type, uint32_t id) {
+        return (static_cast<uint32_t>(type) << 24) | (id & 0x00FFFFFFu);
+    }
+
     // Allow updating the file path for save operations
     void setPath(const std::filesystem::path& newPath) {
         _path = newPath;

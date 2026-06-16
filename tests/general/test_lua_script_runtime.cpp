@@ -141,24 +141,98 @@ TEST_CASE("Luau-painted tiles survive a map save/reload round-trip", "[scripting
     CHECK(tiles[5].getRoof() == 480);
 }
 
-TEST_CASE("Luau can reach the name resolvers", "[scripting][lua]") {
+TEST_CASE("Luau surfaces genuine failures as errors, not-applicable as values", "[scripting][lua]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
     LuaScriptRuntime rt;
 
-    // tileId and placeProto are bound and callable. Headless they resolve to -1/false (no data),
-    // which is exactly the contract a generator branches on (skip painting an unknown tile).
+    // Unified error model: a genuine failure (here, no data mounted) RAISES, so a script can pcall
+    // to handle it and the run otherwise reports it — instead of a silently-empty result. Things
+    // that are merely "not applicable" stay ordinary return values: placeProto -> false (skip the
+    // hex), listMaps -> {} (no maps is a valid answer), noise2d is pure.
     const auto r = rt.run(R"(
-        assert(api:tileId("edg5000") == -1, "expected -1 without data")
-        assert(api:placeProto(0x02000066, 20100, 0) == false, "expected false without data")
+        assert(not pcall(function() return api:tileId("edg5000") end), "tileId should raise without data")
+        assert(not pcall(function() return api:mapScenery("maps/desert1.map") end), "mapScenery should raise")
+        assert(not pcall(function() return api:mapSceneryHistogram("maps/desert1.map") end), "histogram should raise")
+        assert(not pcall(function() return api:mapFloorTiles("maps/desert1.map") end), "floorTiles should raise")
+        assert(not pcall(function() return api:protoName(0x02000066) end), "protoName should raise without data")
+        assert(#api:listMaps() == 0, "listMaps is graceful -> empty")
+        assert(api:placeProto(0x02000066, 20100, 0) == false, "placeProto returns false, not raise")
+        local n = api:noise2d(1.5, 2.5)
+        assert(n >= 0 and n <= 1, "noise2d in [0,1]")
+        assert(api:proto("scenery", 102) == 0x02000066, "proto builds the right PID")
+        assert(not pcall(function() return api:proto("nope", 1) end), "proto raises on unknown type")
     )",
         api, fx.controller, "resolvers");
     INFO("script error: " << r.error);
     CHECK(r.ok);
 }
 
-TEST_CASE("The shipped desert_terrain.luau compiles and guards on missing data", "[scripting][lua]") {
-    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/desert_terrain.luau");
+TEST_CASE("Luau exposes caller args as the global table", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    const ScriptArgs args{ { "seed", "42" }, { "tile", "edg5000" } };
+    const auto r = rt.run(R"(
+        assert(args ~= nil, "args table missing")
+        assert(tonumber(args.seed) == 42, "args.seed wrong")
+        assert(args.tile == "edg5000", "args.tile wrong")
+        assert(args.missing == nil, "absent arg should be nil")
+    )",
+        api, fx.controller, "args", args);
+    INFO("script error: " << r.error);
+    CHECK(r.ok);
+}
+
+TEST_CASE("Each run is randomly seeded, but an explicit seed reproduces", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // Eight draws make an accidental collision between two independently-seeded runs astronomically
+    // unlikely, so this reliably proves the host seeds math.random with fresh entropy each run.
+    const std::string draw = "for i = 1, 8 do print(math.random(1, 1000000)) end";
+
+    const auto a = rt.run(draw, api, fx.controller, "rng");
+    const auto b = rt.run(draw, api, fx.controller, "rng");
+    REQUIRE(a.ok);
+    REQUIRE(b.ok);
+    CHECK(a.output != b.output); // default: a different layout every run (the Script Console fix)
+
+    // A script that seeds itself is reproducible (gecko-cli --arg seed=N relies on this).
+    const std::string seeded = "math.randomseed(123)\n" + draw;
+    const auto c = rt.run(seeded, api, fx.controller, "rng");
+    const auto d = rt.run(seeded, api, fx.controller, "rng");
+    REQUIRE(c.ok);
+    REQUIRE(d.ok);
+    CHECK(c.output == d.output);
+}
+
+TEST_CASE("The run's seed is published as args.seed", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    const std::string echo = "print(args.seed)";
+
+    // Without --arg seed the host fills args.seed with a fresh value, so it is present and two runs
+    // report different seeds — letting a script print "re-run with --arg seed=N".
+    const auto a = rt.run(echo, api, fx.controller, "seed");
+    const auto b = rt.run(echo, api, fx.controller, "seed");
+    REQUIRE(a.ok);
+    REQUIRE(b.ok);
+    CHECK_FALSE(a.output.empty());
+    CHECK(a.output != b.output);
+
+    // An explicit seed is echoed back verbatim, so a layout can be reproduced from what was printed.
+    const auto c = rt.run(echo, api, fx.controller, "seed", ScriptArgs{ { "seed", "12345" } });
+    REQUIRE(c.ok);
+    CHECK(c.output == "12345\n");
+}
+
+TEST_CASE("The shipped terrain.luau fails clearly when data is missing", "[scripting][lua]") {
+    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/editor/terrain.luau");
     REQUIRE(file.is_open());
     std::stringstream buffer;
     buffer << file.rdbuf();
@@ -168,15 +242,14 @@ TEST_CASE("The shipped desert_terrain.luau compiles and guards on missing data",
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
     LuaScriptRuntime rt;
 
-    // Headless (no data): tileId("edg5000") is -1, so the example must abort cleanly with a
-    // hint rather than paint a bogus tile or error. This keeps the committed script CI-checked
-    // for syntax and its guard path; the live fill/scatter runs in the GUI (needs data + GL).
-    const auto r = rt.run(source, api, fx.controller, "desert");
-    INFO("script error: " << r.error);
-    CHECK(r.ok);
+    // Headless (no data): tileId raises, so the run fails with a clear message instead of silently
+    // producing an empty map — and nothing was painted/placed. CI-checks the script compiles and
+    // that the error surfaces; the live fill/scatter runs against real data (GUI / gecko-cli).
+    const auto r = rt.run(source, api, fx.controller, "terrain");
+    CHECK_FALSE(r.ok);
+    CHECK(r.error.find("tiles.lst") != std::string::npos);
     CHECK(api.paintedTiles() == 0);
     CHECK(api.placedObjects() == 0);
-    CHECK(r.output.find("Mount Fallout 2 data") != std::string::npos);
 }
 
 TEST_CASE("Luau places objects headlessly (data only) and they survive save/reload", "[scripting][lua][roundtrip]") {

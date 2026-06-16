@@ -1,6 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -12,6 +15,14 @@ class ObjectCommandController;
 namespace resource {
     class GameResources;
 }
+
+/// Raised by the query/builder methods on a genuine failure (no data mounted, an unreadable map
+/// path, an unknown proto type/id). A dedicated type so callers can catch it specifically; it still
+/// derives from std::exception, so LuaBridge converts it to a Lua error the runtime reports.
+class ScriptError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
 
 /// Host API for editing the map: queries plus undoable mutators that route through
 /// ObjectCommandController. Pure C++ with no scripting-runtime dependency, so it is usable
@@ -48,6 +59,44 @@ public:
     /// if the tile list is unavailable or the name is unknown, so scripts address tiles by name
     /// instead of magic numbers.
     int tileId(const std::string& name) const;
+    /// The distinct scenery proto PIDs used by a reference map (e.g. "maps/desert1.map") — the
+    /// curated palette that map is actually built from, ready to hand to placeProto(). A PID is the
+    /// engine's unique proto identifier ((type << 24) | index), so this is exact, unlike resolving
+    /// by the non-unique display name. Use it to scatter the same scenery a shipped map does.
+    /// Empty if the map can't be read (unknown path or no data mounted). Scenery only — walls and
+    /// the MISC markers (scroll blockers / exit grids) are excluded by type, and flat scenery
+    /// (invisible movement-blockers / floor markers, which carry OBJECT_FLAT) is excluded too, so
+    /// only upright decorations remain and a generator never scatters a blocker.
+    std::vector<int> mapScenery(const std::string& mapPath) const;
+    /// Like mapScenery(), but keyed by PID with the *number of times* the reference map places each
+    /// proto — its real frequency. A generator scatters proportional to these counts (so common
+    /// vegetation dominates and a rare car stays rare) and can match the reference's object density,
+    /// instead of picking uniformly among distinct PIDs. Same scenery / non-flat filtering as
+    /// mapScenery(); empty if the map can't be read.
+    std::map<int, int> mapSceneryHistogram(const std::string& mapPath) const;
+    /// The distinct floor-tile ids a reference map uses (the values paintFloor() expects), most-used
+    /// first — so a generator can fill with that map's dominant ground (e.g. cave rock for a cave,
+    /// sand for a desert). Empty floors are skipped; empty if the map can't be read.
+    std::vector<int> mapFloorTiles(const std::string& mapPath) const;
+    /// Every map file in the mounted data (VFS paths, e.g. "maps/desert1.map"), sorted. Lets a
+    /// generator pick a reference map at random when none was given.
+    std::vector<std::string> listMaps() const;
+    /// Coherent 2D value noise in [0,1] at (x, y): smooth and deterministic (same input -> same
+    /// output). Sample it as a density field to scatter objects in natural clumps and clearings
+    /// instead of an even sprinkle — scale the coordinates to set the clump size and offset them
+    /// by a per-run amount for variation. A general primitive the MCP can drive too.
+    double noise2d(double x, double y) const;
+    /// The proto's engine display name (from the type's .msg, keyed by the proto's message_id),
+    /// e.g. "Scrub". Empty if the proto or its message can't be resolved (no data / unknown pid).
+    /// Lets a caller identify what a PID *is* — e.g. tell a decoration from a structural feature —
+    /// which is what the MCP needs to curate a palette rather than scatter blindly.
+    std::string protoName(int pid) const;
+    /// Build a proto PID from a readable type name ("item"/"critter"/"scenery"/"wall"/"tile"/"misc",
+    /// singular or plural) and the proto's id `number` — the value `map analyze` reports and the
+    /// low part of the PID (e.g. proto("scenery", 102) == 0x02000066). A pure constructor (no data
+    /// needed), so a script can name its protos — `SCRUB = 102 ... api:proto("scenery", SCRUB)` —
+    /// instead of writing opaque hex. Raises on an unknown type or an out-of-range number.
+    uint32_t proto(const std::string& typeName, int number) const;
 
     // --- Undo batching -----------------------------------------------------------
     void beginBatch(const std::string& description);
@@ -69,6 +118,13 @@ public:
 
 private:
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
+    // Parse a reference map headlessly (GL-free) for the palette queries; nullptr if unreadable.
+    std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;
+    // pid -> placement count for the scatter-eligible scenery in `map` (scenery type, non-flat).
+    // Shared by mapScenery (keys) and mapSceneryHistogram (the counts).
+    std::map<int, int> sceneryCounts(Map& map) const;
+    // Whether a scenery proto belongs in a scatter palette (upright decoration, not a flat blocker).
+    bool isScatterableScenery(uint32_t pid) const;
 
     resource::GameResources& _resources;
     const HexagonGrid& _hexgrid;
