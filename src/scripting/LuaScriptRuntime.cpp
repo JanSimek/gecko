@@ -12,6 +12,7 @@
 #include <luacode.h>
 
 #include <LuaBridge/LuaBridge.h>
+#include <LuaBridge/Map.h>    // std::map <-> Lua table (for mapSceneryHistogram)
 #include <LuaBridge/Vector.h> // std::vector <-> Lua table (for hexNeighbors)
 
 #include "scripting/MapScriptApi.h"
@@ -67,6 +68,7 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         .addFunction("getRoof", &MapScriptApi::getRoof)
         .addFunction("tileId", &MapScriptApi::tileId)
         .addFunction("mapScenery", &MapScriptApi::mapScenery)
+        .addFunction("mapSceneryHistogram", &MapScriptApi::mapSceneryHistogram)
         .addFunction("mapFloorTiles", &MapScriptApi::mapFloorTiles)
         .addFunction("listMaps", &MapScriptApi::listMaps)
         .addFunction("placeObject", &MapScriptApi::placeObject)

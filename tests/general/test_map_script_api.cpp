@@ -169,6 +169,8 @@ TEST_CASE("MapScriptApi name resolvers fail closed without game data", "[scripti
         // No data -> the reference map can't be loaded and no maps exist -> empty, not a crash.
         CHECK(api.mapScenery("maps/desert1.map").empty());
         CHECK(api.mapScenery("no/such/map.map").empty());
+        CHECK(api.mapSceneryHistogram("maps/desert1.map").empty());
+        CHECK(api.mapSceneryHistogram("no/such/map.map").empty());
         CHECK(api.mapFloorTiles("maps/desert1.map").empty());
         CHECK(api.listMaps().empty());
     }

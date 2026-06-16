@@ -445,6 +445,45 @@ the headline next step; P1 (data-driven, human-writable scripts) is done.
 Ordered by value; the lower tiers build on the upper ones. None requires Qt, and only the
 last item needs a GL context.
 
+### Robust procedural generation — the plan
+
+The first desert generator looked right because it was **curated**: a hand-picked list of small
+vegetation PIDs, frequency-biased by repetition, scattered over a seamless sand tile. Generalising
+it to "any reference map" regressed the quality: `mapScenery()` returns *every distinct* scenery PID
+with **no counts and no roles** (so cars and rock-formation pieces sit beside bushes and get picked
+uniformly — "dozens of cars"), and the floor collapsed to a single tile. The fix is to stop sampling
+palettes and instead **profile a reference map's statistics, then synthesise a statistically similar
+map** — "reproduce a shipped map's terrain" means *match its distributions*, not copy its palette.
+
+Heavy algorithms live in C++ (`gecko_editing`), exposed to Lua as a few high-level calls plus the
+low-level data primitives, so the `.luau` stays a thin, moddable orchestrator. Everything is seeded.
+
+- **Phase 0 — faithful quantities (✅ done, this PR).** `api:mapSceneryHistogram(mapPath)` returns
+  `{pid → count}` (same scenery / non-flat filter as `mapScenery`). `terrain.luau` now samples
+  scenery **proportional to count** (common bushes dominate; a 2-of-500 car stays a ~1-in-500 pick)
+  and scatters the reference's **actual object count** by default (`--arg density=N` overrides).
+  This alone removes the random-car spam, and frequency gives a cheap role split (placed many times
+  = scatter; 1–3× = feature, to cap/exclude later). Implements the core of **P2 §5**.
+- **Phase 1 — coherent scatter.** New `mapObjects(mapPath, elev)` (positions+PIDs) and
+  `protoRenderSize(pid)` (FRM dims) → cluster via a noise **density field** (**P2 §6**) with
+  footprint-aware, iso-diamond-masked placement; learn clustering strength from the reference's
+  nearest-neighbour stats. Blockers already excluded (`OBJECT_FLAT`).
+- **Phase 2 — seamless multi-tile floor.** New `mapFloorGrid(mapPath, elev)` (the reference's full
+  tile array) → a C++ terrain synthesiser exposed as `api:synthesizeFloor(reference, seed)`:
+  image-quilting / patch-sampling first (seamless *by construction* — it only ever reproduces
+  adjacencies that exist in the shipped map), Wave Function Collapse with learned adjacency as the
+  advanced option. This is the principled form of the autotiling item (**P2 §4**) and the headline
+  fix for the single-texture floor. Naive per-cell weighted-random is *not* this — arbitrary FO2
+  tiles don't blend.
+- **Phase 3 — structure & features.** Noise **region map** (sand vs rock zones) driving floor +
+  scatter; extract recurring multi-object clusters as **prefabs** (place a rock formation as one
+  unit, not scattered pieces); enclosures/roofs (**P2 §7**) and exit grids for playability; the
+  biome script library (**P3 §10**).
+
+A `BiomeProfile` struct is the shared abstraction (`map analyze` could emit one to disk for
+generation to consume). Headless tests: generated histogram ≈ reference's; no illegal floor
+adjacencies; no overlapping footprints; round-trip through `map analyze`.
+
 ### P1 — Ergonomics: make scripts human-writable — ✅ done
 
 1. ✅ **Palette by PID from a reference map** (not by name). The first attempt resolved a readable
@@ -478,7 +517,9 @@ last item needs a GL context.
    pure data, derived from the shipped maps — closes the analyze→generate loop (analyze currently
    *learns* the palette but the generator *hardcodes* it).
 5. **Statistical scatter.** Co-occurrence + per-biome density from `analyze` → scatter scenery in
-   the proportions/clustering the real maps use, vs today's uniform random.
+   the proportions/clustering the real maps use, vs today's uniform random. *(Phase 0 done:
+   frequency-weighted, count-matched via `mapSceneryHistogram`. Clustering/co-occurrence pending —
+   Phase 1.)*
 6. **Noise-based distribution.** Perlin/simplex for natural clumping; expose `api:noise2d(x, y)`.
 7. **Enclosures / autowalling + roofs.** A helper that rings a region with correctly-oriented
    wall protos (the analyze output is full of left/right/corner `Wall` variants) unlocks the cave

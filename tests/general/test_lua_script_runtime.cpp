@@ -151,6 +151,7 @@ TEST_CASE("Luau can reach the name resolvers", "[scripting][lua]") {
     const auto r = rt.run(R"(
         assert(api:tileId("edg5000") == -1, "expected -1 without data")
         assert(#api:mapScenery("maps/desert1.map") == 0, "expected no scenery without data")
+        assert(next(api:mapSceneryHistogram("maps/desert1.map")) == nil, "expected empty histogram without data")
         assert(#api:mapFloorTiles("maps/desert1.map") == 0, "expected no floor tiles without data")
         assert(#api:listMaps() == 0, "expected no maps without data")
         assert(api:placeProto(0x02000066, 20100, 0) == false, "expected false without data")

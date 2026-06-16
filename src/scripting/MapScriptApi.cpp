@@ -6,7 +6,6 @@
 #include <functional>
 #include <memory>
 #include <unordered_map>
-#include <unordered_set>
 
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
@@ -128,15 +127,10 @@ std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) 
     }
 }
 
-std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
-    std::vector<int> palette;
-    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath);
-    if (!reference) {
-        return palette;
-    }
-
-    std::unordered_set<int> seen;
-    for (const auto& [elevation, objects] : reference->getMapFile().map_objects) {
+std::map<int, int> MapScriptApi::sceneryCounts(Map& map) const {
+    std::map<int, int> counts;
+    std::unordered_map<int, bool> eligible; // pid -> belongs in a scatter palette (cached decision)
+    for (const auto& [elevation, objects] : map.getMapFile().map_objects) {
         for (const auto& object : objects) {
             if (!object) {
                 continue;
@@ -146,25 +140,52 @@ std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
                 continue;
             }
             const int pid = static_cast<int>(object->pro_pid);
-            if (!seen.insert(pid).second) {
-                continue; // already decided this proto
+            auto cached = eligible.find(pid);
+            if (cached == eligible.end()) {
+                // Skip flat scenery: the invisible movement-blockers / floor markers (block.frm)
+                // carry OBJECT_FLAT, while upright decorations (scrub, trees, rocks) do not — only
+                // the latter belong in a scatter palette. (A proto we can't load is kept,
+                // best-effort.) Decide once per PID; the proto is cached by the repository anyway.
+                bool include = true;
+                const Pro* pro = nullptr;
+                try {
+                    pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, object->pro_pid));
+                } catch (const std::exception&) {
+                    // best-effort: keep a proto we can't inspect
+                }
+                if (pro != nullptr && Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT)) {
+                    include = false;
+                }
+                cached = eligible.emplace(pid, include).first;
             }
-            // Skip flat scenery: the invisible movement-blockers / floor markers (block.frm) carry
-            // OBJECT_FLAT, while upright decorations (scrub, trees, rocks) do not — only the latter
-            // belong in a scatter palette. (A proto we can't load is kept, best-effort.)
-            const Pro* pro = nullptr;
-            try {
-                pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, object->pro_pid));
-            } catch (const std::exception&) {
-                // best-effort: keep a proto we can't inspect
+            if (cached->second) {
+                ++counts[pid];
             }
-            if (pro != nullptr && Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT)) {
-                continue;
-            }
-            palette.push_back(pid);
         }
     }
+    return counts;
+}
+
+std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
+    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath);
+    if (!reference) {
+        return {};
+    }
+    const auto counts = sceneryCounts(*reference);
+    std::vector<int> palette;
+    palette.reserve(counts.size());
+    for (const auto& [pid, count] : counts) {
+        palette.push_back(pid);
+    }
     return palette;
+}
+
+std::map<int, int> MapScriptApi::mapSceneryHistogram(const std::string& mapPath) const {
+    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath);
+    if (!reference) {
+        return {};
+    }
+    return sceneryCounts(*reference);
 }
 
 std::vector<int> MapScriptApi::mapFloorTiles(const std::string& mapPath) const {

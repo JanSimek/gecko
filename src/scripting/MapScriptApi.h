@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -58,6 +59,12 @@ public:
     /// (invisible movement-blockers / floor markers, which carry OBJECT_FLAT) is excluded too, so
     /// only upright decorations remain and a generator never scatters a blocker.
     std::vector<int> mapScenery(const std::string& mapPath) const;
+    /// Like mapScenery(), but keyed by PID with the *number of times* the reference map places each
+    /// proto — its real frequency. A generator scatters proportional to these counts (so common
+    /// vegetation dominates and a rare car stays rare) and can match the reference's object density,
+    /// instead of picking uniformly among distinct PIDs. Same scenery / non-flat filtering as
+    /// mapScenery(); empty if the map can't be read.
+    std::map<int, int> mapSceneryHistogram(const std::string& mapPath) const;
     /// The distinct floor-tile ids a reference map uses (the values paintFloor() expects), most-used
     /// first — so a generator can fill with that map's dominant ground (e.g. cave rock for a cave,
     /// sand for a desert). Empty floors are skipped; empty if the map can't be read.
@@ -88,6 +95,9 @@ private:
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
     // Parse a reference map headlessly (GL-free) for the palette queries; nullptr if unreadable.
     std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;
+    // pid -> placement count for the scatter-eligible scenery in `map` (scenery type, non-flat).
+    // Shared by mapScenery (keys) and mapSceneryHistogram (the counts).
+    std::map<int, int> sceneryCounts(Map& map) const;
 
     resource::GameResources& _resources;
     const HexagonGrid& _hexgrid;
