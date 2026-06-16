@@ -8,6 +8,9 @@
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QHeaderView>
+#include <QTableWidgetItem>
+#include <QAbstractItemView>
 #include <algorithm>
 #include <spdlog/spdlog.h>
 
@@ -19,7 +22,7 @@ DataPathsWidget::DataPathsWidget(std::shared_ptr<Settings> settings, QWidget* pa
     : QGroupBox("Fallout 2 Data Paths", parent)
     , _layout(nullptr)
     , _helpLabel(nullptr)
-    , _pathsList(nullptr)
+    , _pathsTable(nullptr)
     , _controlLayout(nullptr)
     , _addButton(nullptr)
     , _removeButton(nullptr)
@@ -37,18 +40,28 @@ void DataPathsWidget::setupUI() {
     _layout = new QVBoxLayout(this);
 
     _helpLabel = new QLabel(
-        "Add paths to Fallout 2 data directories or .dat files. These will be searched for game resources.\n"
-        "Sources are applied in list order: later entries override earlier ones when files have the same path.");
+        "Add folders or .dat files containing Fallout 2 game data. Every source is searched together; "
+        "when the same file is present in more than one, the higher-priority source wins.\n"
+        "The top entry has the highest priority and overrides the ones below it — use Move Up / Move "
+        "Down to reorder.");
     _helpLabel->setWordWrap(true);
     _helpLabel->setStyleSheet(ui::theme::styles::helpText());
     _layout->addWidget(_helpLabel);
 
-    _pathsList = new QListWidget();
-    _pathsList->setSelectionMode(QAbstractItemView::SingleSelection);
-    _pathsList->setAlternatingRowColors(true);
-    _pathsList->setMaximumHeight(LIST_MAX_HEIGHT);
-    _pathsList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    _layout->addWidget(_pathsList);
+    _pathsTable = new QTableWidget(0, ColumnCount);
+    _pathsTable->setHorizontalHeaderLabels({ "Priority", "Path" });
+    _pathsTable->horizontalHeaderItem(PriorityColumn)
+        ->setToolTip("1 = highest priority (overrides the sources below it)");
+    _pathsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    _pathsTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    _pathsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    _pathsTable->setAlternatingRowColors(true);
+    _pathsTable->verticalHeader()->setVisible(false);
+    _pathsTable->horizontalHeader()->setSectionResizeMode(PriorityColumn, QHeaderView::ResizeToContents);
+    _pathsTable->horizontalHeader()->setSectionResizeMode(PathColumn, QHeaderView::Stretch);
+    _pathsTable->setMaximumHeight(LIST_MAX_HEIGHT);
+    _pathsTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    _layout->addWidget(_pathsTable);
 
     _controlLayout = new QHBoxLayout();
 
@@ -63,11 +76,13 @@ void DataPathsWidget::setupUI() {
 
     _moveUpButton = new QPushButton("Move Up");
     _moveUpButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ArrowUp));
+    _moveUpButton->setToolTip("Raise priority (closer to the top wins more often)");
     _moveUpButton->setEnabled(false);
     _controlLayout->addWidget(_moveUpButton);
 
     _moveDownButton = new QPushButton("Move Down");
     _moveDownButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ArrowDown));
+    _moveDownButton->setToolTip("Lower priority");
     _moveDownButton->setEnabled(false);
     _controlLayout->addWidget(_moveDownButton);
 
@@ -91,20 +106,24 @@ void DataPathsWidget::setupConnections() {
     connect(_moveUpButton, &QPushButton::clicked, [this]() { moveSelectedPath(-1); });
     connect(_moveDownButton, &QPushButton::clicked, [this]() { moveSelectedPath(1); });
     connect(_autoDetectButton, &QPushButton::clicked, this, &DataPathsWidget::onAutoDetect);
-    connect(_pathsList, &QListWidget::itemSelectionChanged, this, &DataPathsWidget::onSelectionChanged);
-    connect(_pathsList, &QListWidget::itemDoubleClicked, this, &DataPathsWidget::onItemDoubleClicked);
+    connect(_pathsTable, &QTableWidget::itemSelectionChanged, this, &DataPathsWidget::onSelectionChanged);
+    connect(_pathsTable, &QTableWidget::cellDoubleClicked, this, &DataPathsWidget::onCellDoubleClicked);
 }
 
 std::vector<std::filesystem::path> DataPathsWidget::getDataPaths() const {
+    // The table shows the highest priority at the top, but the stored order is lowest-priority-first
+    // (that is the order the loader mounts, where the last-mounted source wins). So read the rows
+    // top-to-bottom and reverse them to recover the stored order.
     std::vector<std::filesystem::path> paths;
 
-    for (int i = 0; i < _pathsList->count(); ++i) {
-        QListWidgetItem* item = _pathsList->item(i);
-        if (item) {
-            const std::filesystem::path normalizedPath = Settings::normalizeDataPath(item->text().toStdString());
-            if (std::find(paths.begin(), paths.end(), normalizedPath) == paths.end()) {
-                paths.emplace_back(normalizedPath);
-            }
+    for (int row = _pathsTable->rowCount() - 1; row >= 0; --row) {
+        QTableWidgetItem* item = _pathsTable->item(row, PathColumn);
+        if (!item) {
+            continue;
+        }
+        const std::filesystem::path normalizedPath = Settings::normalizeDataPath(item->text().toStdString());
+        if (std::find(paths.begin(), paths.end(), normalizedPath) == paths.end()) {
+            paths.emplace_back(normalizedPath);
         }
     }
 
@@ -112,56 +131,98 @@ std::vector<std::filesystem::path> DataPathsWidget::getDataPaths() const {
 }
 
 void DataPathsWidget::setDataPaths(const std::vector<std::filesystem::path>& paths) {
-    _pathsList->clear();
+    _pathsTable->setRowCount(0);
 
-    for (const auto& path : paths) {
-        addPathToList(path);
+    // paths are lowest-priority-first; append them in reverse so the highest priority lands on top.
+    for (auto it = paths.rbegin(); it != paths.rend(); ++it) {
+        addPathRow(*it, /*atTop=*/false);
     }
 
+    renumberPriorities();
     validatePaths();
     updateButtonStates();
 }
 
-void DataPathsWidget::addPathToList(const std::filesystem::path& path) {
+bool DataPathsWidget::addPathRow(const std::filesystem::path& path, bool atTop) {
     const std::filesystem::path normalizedPath = Settings::normalizeDataPath(path);
     QString pathStr = QString::fromStdString(normalizedPath.string());
 
-    for (int i = 0; i < _pathsList->count(); ++i) {
-        QListWidgetItem* existingItem = _pathsList->item(i);
-        if (existingItem && existingItem->text() == pathStr) {
-            return;
+    for (int row = 0; row < _pathsTable->rowCount(); ++row) {
+        QTableWidgetItem* existing = _pathsTable->item(row, PathColumn);
+        if (existing && existing->text() == pathStr) {
+            return false;
         }
     }
 
     bool isDefaultPath = Application::isDefaultResourcesPath(normalizedPath);
 
-    QListWidgetItem* item = new QListWidgetItem(pathStr);
+    auto* priorityItem = new QTableWidgetItem();
+    priorityItem->setTextAlignment(Qt::AlignCenter);
 
-    // Set icon based on path type and validity
+    auto* pathItem = new QTableWidgetItem(pathStr);
+
+    // Icon, tooltip and colour reflect the path type and validity (matches the previous list view).
     auto& settings = *_settings;
     if (settings.validateDataPath(normalizedPath)) {
         if (isDefaultPath) {
-            item->setToolTip("Built-in resources path (cannot be removed)");
+            pathItem->setToolTip("Built-in resources path (cannot be removed)");
             QPalette palette = QApplication::palette();
-            item->setForeground(palette.color(QPalette::Disabled, QPalette::Text));
-            item->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+            pathItem->setForeground(palette.color(QPalette::Disabled, QPalette::Text));
+            pathItem->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
         } else if (std::filesystem::is_directory(normalizedPath)) {
-            item->setToolTip("Valid Fallout 2 data path");
-            item->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+            pathItem->setToolTip("Valid Fallout 2 data path");
+            pathItem->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
         } else {
-            item->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileIcon));
-            item->setToolTip("Valid Fallout 2 data path");
+            pathItem->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileIcon));
+            pathItem->setToolTip("Valid Fallout 2 data path");
         }
     } else {
-        item->setIcon(QApplication::style()->standardIcon(QStyle::SP_MessageBoxWarning));
-        item->setToolTip("Invalid or missing path");
-        item->setForeground(ui::theme::colors::invalidPath());
+        pathItem->setIcon(QApplication::style()->standardIcon(QStyle::SP_MessageBoxWarning));
+        pathItem->setToolTip("Invalid or missing path");
+        pathItem->setForeground(ui::theme::colors::invalidPath());
     }
 
-    item->setData(Qt::UserRole, isDefaultPath);
+    pathItem->setData(Qt::UserRole, isDefaultPath);
 
-    _pathsList->addItem(item);
-    _pathsList->setCurrentItem(item);
+    const int row = atTop ? 0 : _pathsTable->rowCount();
+    _pathsTable->insertRow(row);
+    _pathsTable->setItem(row, PriorityColumn, priorityItem);
+    _pathsTable->setItem(row, PathColumn, pathItem);
+    _pathsTable->setCurrentCell(row, PathColumn);
+
+    return true;
+}
+
+void DataPathsWidget::renumberPriorities() {
+    // Top row is priority 1 (highest); a trailing marker spells out the extremes for the user.
+    const int rows = _pathsTable->rowCount();
+    for (int row = 0; row < rows; ++row) {
+        QTableWidgetItem* item = _pathsTable->item(row, PriorityColumn);
+        if (!item) {
+            item = new QTableWidgetItem();
+            item->setTextAlignment(Qt::AlignCenter);
+            _pathsTable->setItem(row, PriorityColumn, item);
+        }
+        QString text = QString::number(row + 1);
+        if (row == 0) {
+            text += " ▲"; // highest
+        } else if (row == rows - 1 && rows > 1) {
+            text += " ▼"; // lowest
+        }
+        item->setText(text);
+    }
+}
+
+bool DataPathsWidget::isProtectedRow(int row) const {
+    if (row < 0 || row >= _pathsTable->rowCount()) {
+        return false;
+    }
+    QTableWidgetItem* item = _pathsTable->item(row, PathColumn);
+    return item && item->data(Qt::UserRole).toBool();
+}
+
+int DataPathsWidget::selectedRow() const {
+    return _pathsTable->currentRow();
 }
 
 void DataPathsWidget::validatePaths() {
@@ -194,14 +255,11 @@ void DataPathsWidget::setStatusMessage(const QString& message, const QString& st
 }
 
 void DataPathsWidget::updateButtonStates() {
-    QListWidgetItem* currentItem = _pathsList->currentItem();
-    if (currentItem) {
-        bool isProtected = currentItem->data(Qt::UserRole).toBool();
-        _removeButton->setEnabled(!isProtected);
-
-        int currentRow = _pathsList->row(currentItem);
-        _moveUpButton->setEnabled(currentRow > 0);
-        _moveDownButton->setEnabled(currentRow < _pathsList->count() - 1);
+    const int row = selectedRow();
+    if (row >= 0) {
+        _removeButton->setEnabled(!isProtectedRow(row));
+        _moveUpButton->setEnabled(row > 0);
+        _moveDownButton->setEnabled(row < _pathsTable->rowCount() - 1);
     } else {
         _removeButton->setEnabled(false);
         _moveUpButton->setEnabled(false);
@@ -210,20 +268,22 @@ void DataPathsWidget::updateButtonStates() {
 }
 
 void DataPathsWidget::removeSelectedPath() {
-    QListWidgetItem* item = _pathsList->currentItem();
-    if (item) {
-        bool isProtected = item->data(Qt::UserRole).toBool();
-        if (isProtected) {
-            QMessageBox::warning(this, "Cannot Remove Path",
-                "The built-in resources path cannot be removed as it contains essential game assets.");
-            return;
-        }
-
-        delete _pathsList->takeItem(_pathsList->row(item));
-        Q_EMIT dataPathsChanged();
-        validatePaths();
-        updateButtonStates();
+    const int row = selectedRow();
+    if (row < 0) {
+        return;
     }
+
+    if (isProtectedRow(row)) {
+        QMessageBox::warning(this, "Cannot Remove Path",
+            "The built-in resources path cannot be removed as it contains essential game assets.");
+        return;
+    }
+
+    _pathsTable->removeRow(row);
+    Q_EMIT dataPathsChanged();
+    renumberPriorities();
+    validatePaths();
+    updateButtonStates();
 }
 
 void DataPathsWidget::onAddPath() {
@@ -232,10 +292,13 @@ void DataPathsWidget::onAddPath() {
         QStandardPaths::writableLocation(QStandardPaths::HomeLocation));
 
     if (!path.isEmpty()) {
-        addPathToList(std::filesystem::path(path.toStdString()));
-        Q_EMIT dataPathsChanged();
-        validatePaths();
-        updateButtonStates();
+        // A newly added source takes the highest priority (top), matching what a user adding a mod expects.
+        if (addPathRow(std::filesystem::path(path.toStdString()), /*atTop=*/true)) {
+            Q_EMIT dataPathsChanged();
+            renumberPriorities();
+            validatePaths();
+            updateButtonStates();
+        }
     }
 }
 
@@ -258,21 +321,14 @@ void DataPathsWidget::onAutoDetect() {
 
     int addedPaths = 0;
     for (const auto& path : detectedPaths) {
-        bool exists = false;
-        for (int i = 0; i < _pathsList->count(); ++i) {
-            if (_pathsList->item(i)->text() == QString::fromStdString(path.string())) {
-                exists = true;
-                break;
-            }
-        }
-
-        if (!exists) {
-            addPathToList(path);
+        // Detected base-game installs are appended as lower priority; manually added mods stay on top.
+        if (addPathRow(path, /*atTop=*/false)) {
             addedPaths++;
         }
     }
 
     if (addedPaths > 0) {
+        renumberPriorities();
         Q_EMIT dataPathsChanged();
         setStatusMessage(QString("Auto-detection complete. Added %1 new path(s).").arg(addedPaths), "success");
     } else if (detectedPaths.empty()) {
@@ -290,43 +346,52 @@ void DataPathsWidget::onSelectionChanged() {
 }
 
 void DataPathsWidget::moveSelectedPath(int offset) {
-    QListWidgetItem* currentItem = _pathsList->currentItem();
-    if (!currentItem) {
+    const int row = selectedRow();
+    if (row < 0) {
         return;
     }
 
-    int currentRow = _pathsList->row(currentItem);
-    int targetRow = currentRow + offset;
-    if (targetRow < 0 || targetRow >= _pathsList->count()) {
+    const int targetRow = row + offset;
+    if (targetRow < 0 || targetRow >= _pathsTable->rowCount()) {
         return;
     }
 
-    QListWidgetItem* takenItem = _pathsList->takeItem(currentRow);
-    _pathsList->insertItem(targetRow, takenItem);
-    _pathsList->setCurrentItem(takenItem);
+    // Swap the path cells; the priority cells stay put and are renumbered below.
+    QTableWidgetItem* moving = _pathsTable->takeItem(row, PathColumn);
+    QTableWidgetItem* other = _pathsTable->takeItem(targetRow, PathColumn);
+    _pathsTable->setItem(row, PathColumn, other);
+    _pathsTable->setItem(targetRow, PathColumn, moving);
+    _pathsTable->setCurrentCell(targetRow, PathColumn);
 
     Q_EMIT dataPathsChanged();
+    renumberPriorities();
     validatePaths();
     updateButtonStates();
 }
 
-void DataPathsWidget::onItemDoubleClicked(QListWidgetItem* item) {
-    if (item) {
-        bool isProtected = item->data(Qt::UserRole).toBool();
-        if (isProtected) {
-            QMessageBox::information(this, "Cannot Edit Path",
-                "The built-in resources path cannot be modified as it contains essential game assets.");
-            return;
-        }
+void DataPathsWidget::onCellDoubleClicked(int row, int /*column*/) {
+    if (row < 0) {
+        return;
+    }
 
-        QString currentPath = item->text();
-        QString newPath = QFileDialog::getExistingDirectory(this,
-            "Select Fallout 2 Data Directory", currentPath);
-        if (!newPath.isEmpty() && newPath != currentPath) {
-            item->setText(newPath);
-            Q_EMIT dataPathsChanged();
-            validatePaths();
-        }
+    if (isProtectedRow(row)) {
+        QMessageBox::information(this, "Cannot Edit Path",
+            "The built-in resources path cannot be modified as it contains essential game assets.");
+        return;
+    }
+
+    QTableWidgetItem* item = _pathsTable->item(row, PathColumn);
+    if (!item) {
+        return;
+    }
+
+    QString currentPath = item->text();
+    QString newPath = QFileDialog::getExistingDirectory(this,
+        "Select Fallout 2 Data Directory", currentPath);
+    if (!newPath.isEmpty() && newPath != currentPath) {
+        item->setText(newPath);
+        Q_EMIT dataPathsChanged();
+        validatePaths();
     }
 }
 
