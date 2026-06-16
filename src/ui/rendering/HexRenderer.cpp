@@ -7,8 +7,6 @@
 #include "util/Constants.h"
 #include "resource/ResourcePaths.h"
 
-#include <spdlog/spdlog.h>
-
 namespace geck {
 
 namespace {
@@ -82,18 +80,8 @@ void HexRenderer::renderHighlights(sf::RenderTarget& target,
 }
 
 const sf::Texture& HexRenderer::hexTexture() const {
-    // The hex-grid overlay is a non-essential visual aid. If its texture can't be loaded — e.g. a
-    // new map is created before any Fallout 2 data is mounted — degrade gracefully and let the
-    // editor open without the overlay, rather than letting the exception abort editor construction
-    // (this ctor runs while building the EditorWidget). An empty texture renders nothing.
-    try {
-        [[maybe_unused]] auto* hexFrm = _resources.repository().load<Frm>(ResourcePaths::Frm::HEX_GRID);
-        return _resources.textures().get(ResourcePaths::Frm::HEX_GRID);
-    } catch (const std::exception& e) {
-        spdlog::warn("Hex-grid overlay texture unavailable ({}); rendering without it.", e.what());
-        static const sf::Texture empty;
-        return empty;
-    }
+    [[maybe_unused]] auto* hexFrm = _resources.repository().load<Frm>(ResourcePaths::Frm::HEX_GRID);
+    return _resources.textures().get(ResourcePaths::Frm::HEX_GRID);
 }
 
 sf::IntRect HexRenderer::overlayTextureRect(const sf::Texture& texture) {
