@@ -257,6 +257,25 @@ TEST_CASE("The shipped terrain.luau fails clearly when data is missing", "[scrip
     CHECK(api.placedObjects() == 0);
 }
 
+TEST_CASE("The shipped scatter.luau requires a palette and tile", "[scripting][lua]") {
+    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/editor/scatter.luau");
+    REQUIRE(file.is_open());
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    const std::string source = buffer.str();
+
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // No --arg tile: the generic generator fails fast with a clear message (it compiles and its
+    // required-arg guard fires) rather than producing an empty map.
+    const auto r = rt.run(source, api, fx.controller, "scatter");
+    CHECK_FALSE(r.ok);
+    CHECK(r.error.find("tile") != std::string::npos);
+    CHECK(api.paintedTiles() == 0);
+}
+
 TEST_CASE("Luau places objects headlessly (data only) and they survive save/reload", "[scripting][lua][roundtrip]") {
     ControllerFixture fx;
     // Headless data-only mode: no GL, so placeObject records map data without a sprite.
