@@ -260,23 +260,20 @@ double MapScriptApi::noise2d(double x, double y) const {
 }
 
 uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
+    static const std::unordered_map<std::string, Pro::OBJECT_TYPE> kTypes = {
+        { "item", Pro::OBJECT_TYPE::ITEM }, { "items", Pro::OBJECT_TYPE::ITEM },
+        { "critter", Pro::OBJECT_TYPE::CRITTER }, { "critters", Pro::OBJECT_TYPE::CRITTER },
+        { "scenery", Pro::OBJECT_TYPE::SCENERY },
+        { "wall", Pro::OBJECT_TYPE::WALL }, { "walls", Pro::OBJECT_TYPE::WALL },
+        { "tile", Pro::OBJECT_TYPE::TILE }, { "tiles", Pro::OBJECT_TYPE::TILE },
+        { "misc", Pro::OBJECT_TYPE::MISC }
+    };
+
     std::string t = typeName;
     std::ranges::transform(t, t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-    Pro::OBJECT_TYPE type;
-    if (t == "item" || t == "items") {
-        type = Pro::OBJECT_TYPE::ITEM;
-    } else if (t == "critter" || t == "critters") {
-        type = Pro::OBJECT_TYPE::CRITTER;
-    } else if (t == "scenery") {
-        type = Pro::OBJECT_TYPE::SCENERY;
-    } else if (t == "wall" || t == "walls") {
-        type = Pro::OBJECT_TYPE::WALL;
-    } else if (t == "tile" || t == "tiles") {
-        type = Pro::OBJECT_TYPE::TILE;
-    } else if (t == "misc") {
-        type = Pro::OBJECT_TYPE::MISC;
-    } else {
+    const auto it = kTypes.find(t);
+    if (it == kTypes.end()) {
         throw std::runtime_error("unknown proto type '" + typeName + "' (use item/critter/scenery/wall/tile/misc)");
     }
 
@@ -284,7 +281,7 @@ uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
     if (number <= 0 || number > 0x00FFFFFF) {
         throw std::runtime_error("proto number out of range (1..16777215): " + std::to_string(number));
     }
-    return (static_cast<uint32_t>(type) << 24) | static_cast<uint32_t>(number);
+    return (static_cast<uint32_t>(it->second) << 24) | static_cast<uint32_t>(number);
 }
 
 std::string MapScriptApi::protoName(int pid) const {
