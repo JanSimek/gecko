@@ -9,7 +9,7 @@ data (master.dat) must be loaded so tile and proto names resolve.
 Or run it headlessly with gecko-cli (a scripting-enabled build) — no editor, no GL:
 
 ```
-gecko-cli map generate --script scripts/desert_terrain.luau --out out.map \
+gecko-cli map generate --script scripts/terrain.luau --out out.map \
     --arg seed=42 --arg density=300 --data <master.dat>
 ```
 
@@ -17,6 +17,11 @@ This drives the same `api` in data-only mode: it paints tiles and places objects
 data and writes a .map. (`gecko-cli map analyze` can read the result back.) Each `--arg
 key=value` is exposed to the script as `args.key` (a string; use `tonumber` as needed),
 so one script makes reproducible variants.
+
+**Reproducing a run.** Each run is seeded randomly unless you pass `--arg seed=N`, so re-running
+gives a fresh layout. The run's seed is always available to the script as `args.seed` (the host
+fills it in when you don't); `terrain.luau` prints it, so when you get a layout you like, re-run
+with that `--arg seed=<value>` to recreate it exactly.
 
 | Script | What it does |
 |--------|--------------|
@@ -37,7 +42,9 @@ so one script makes reproducible variants.
 | `api:placeObject(proPid, frmPid, hex, dir)` | bool | explicit art |
 | `api:placeProto(proPid, hex, dir)` | bool | resolves the art FID from the proto |
 
-The global `args` table holds the `--arg key=value` parameters (string values).
+The global `args` table holds the `--arg key=value` parameters (string values). `args.seed` is
+always set: the value you passed, or a fresh random one the host chose for this run — seed it back
+with `--arg seed=<value>` to reproduce a layout.
 
 A proto's **PID** is its unique id; its display name is not unique. So a generator borrows a
 palette by reading the actual scenery a shipped map uses (`mapScenery`) rather than guessing by

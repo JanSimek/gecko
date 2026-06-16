@@ -201,6 +201,28 @@ TEST_CASE("Each run is randomly seeded, but an explicit seed reproduces", "[scri
     CHECK(c.output == d.output);
 }
 
+TEST_CASE("The run's seed is published as args.seed", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    const std::string echo = "print(args.seed)";
+
+    // Without --arg seed the host fills args.seed with a fresh value, so it is present and two runs
+    // report different seeds — letting a script print "re-run with --arg seed=N".
+    const auto a = rt.run(echo, api, fx.controller, "seed");
+    const auto b = rt.run(echo, api, fx.controller, "seed");
+    REQUIRE(a.ok);
+    REQUIRE(b.ok);
+    CHECK_FALSE(a.output.empty());
+    CHECK(a.output != b.output);
+
+    // An explicit seed is echoed back verbatim, so a layout can be reproduced from what was printed.
+    const auto c = rt.run(echo, api, fx.controller, "seed", ScriptArgs{ { "seed", "12345" } });
+    REQUIRE(c.ok);
+    CHECK(c.output == "12345\n");
+}
+
 TEST_CASE("The shipped terrain.luau compiles and guards on missing data", "[scripting][lua]") {
     std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/terrain.luau");
     REQUIRE(file.is_open());

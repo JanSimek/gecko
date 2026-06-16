@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <memory>
 #include <random>
+#include <string>
 
 #include <lua.h>
 #include <lualib.h>
@@ -75,30 +76,47 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         .endClass();
     luabridge::setGlobal(L, &api, "api");
 
-    // Expose caller parameters as the global table `args` (string -> string). Must precede
-    // luaL_sandbox(), which makes globals read-only.
+    // Resolve this run's RNG seed: use --arg seed=N when it parses, otherwise pick a fresh one so
+    // each run differs (every run() builds a new lua_State, so re-running a generator in the Script
+    // Console gives a new layout). Luau's math.randomseed truncates to a 32-bit *signed* int, so the
+    // seed is kept in that range; the random path mixes in a per-process counter so two runs never
+    // collide even if random_device repeats.
+    int seed = 0;
+    {
+        static std::atomic<uint32_t> runCounter{ 0 };
+        const auto it = args.find("seed");
+        bool fromArg = false;
+        if (it != args.end()) {
+            try {
+                seed = static_cast<int>(std::stol(it->second));
+                fromArg = true;
+            } catch (const std::exception&) {
+                fromArg = false; // not a number -> fall through to a random seed
+            }
+        }
+        if (!fromArg) {
+            std::random_device rd;
+            seed = static_cast<int>((rd() ^ runCounter.fetch_add(1)) & 0x7FFFFFFF);
+        }
+    }
+
+    // Expose caller parameters as the global table `args` (string -> string), and always publish
+    // the resolved seed as args.seed so a script can report it ("re-run with --arg seed=N"). Must
+    // precede luaL_sandbox(), which makes globals read-only.
     {
         auto argsTable = luabridge::newTable(L);
         for (const auto& [key, value] : args) {
             argsTable[key] = value;
         }
+        argsTable["seed"] = std::to_string(seed);
         luabridge::setGlobal(L, argsTable, "args");
     }
 
     luaL_sandbox(L);
 
-    // Seed math.random with real entropy so each run differs by default — every run() builds a
-    // fresh lua_State, so re-running a generator in the Script Console gives a new layout. A
-    // script that wants a reproducible result reseeds itself (e.g. gecko-cli --arg seed=42),
-    // which overrides this because it runs afterwards.
-    //
-    // Luau's math.randomseed truncates its argument to a 32-bit *signed* int, so a seed above
-    // INT_MAX saturates to one value (collapsing half of a uint32 to the same seed). Keep it in
-    // range, and mix in a per-process counter so two runs never collide even if random_device does.
+    // Seed math.random from the resolved seed, so the run is reproducible: the same --arg seed
+    // gives the same layout. (A script may still call math.randomseed itself to override.)
     {
-        static std::atomic<uint32_t> runCounter{ 0 };
-        std::random_device rd;
-        const int seed = static_cast<int>((rd() ^ runCounter.fetch_add(1)) & 0x7FFFFFFF);
         lua_getglobal(L, "math");          // [math]
         lua_getfield(L, -1, "randomseed"); // [math, randomseed]
         lua_pushinteger(L, seed);

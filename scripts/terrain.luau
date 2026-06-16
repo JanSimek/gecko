@@ -13,18 +13,15 @@
 
 -- ---- parameters (override with --arg key=value) ---------------------------
 local VEG_COUNT   = tonumber(args.density) or 250  -- how many decorations to scatter
-local SEED        = tonumber(args.seed)            -- set for a reproducible layout; omit for a fresh one
 local EDGE_MARGIN = 6                               -- keep scatter this many hexes off the border
 
 -- Grid sizes (see CLAUDE.md): floor/roof tiles are 100x100, hexes are 200x200.
 local TILE_W, TILE_H = 100, 100
 local HEX_W,  HEX_H  = 200, 200
 
--- With no --arg seed, leave the host's per-run random seed in place so each Run picks a different
--- reference map and scatter. Pass --arg seed=N (e.g. from gecko-cli) to reproduce an exact layout.
-if SEED then
-    math.randomseed(SEED)
-end
+-- The host seeds the RNG from args.seed — a fresh value each run when you didn't pass --arg seed.
+-- Echo it so a layout you like can be reproduced exactly with --arg seed=<that value>.
+print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " to reproduce this layout.")
 
 -- ---- choose the reference map ---------------------------------------------
 local reference = args.reference
