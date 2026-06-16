@@ -40,8 +40,9 @@ void DataPathsWidget::setupUI() {
     _layout = new QVBoxLayout(this);
 
     _helpLabel = new QLabel(
-        "Add folders or .dat files containing Fallout 2 game data. Every source is searched together; "
-        "when the same file is present in more than one, the higher-priority source wins.\n"
+        "Add a Fallout 2 folder — its master.dat and critter.dat are loaded automatically. Every "
+        "source is searched together; when the same file is present in more than one, the "
+        "higher-priority source wins.\n"
         "The top entry has the highest priority and overrides the ones below it — use Move Up / Move "
         "Down to reorder.");
     _helpLabel->setWordWrap(true);
@@ -257,9 +258,12 @@ void DataPathsWidget::setStatusMessage(const QString& message, const QString& st
 void DataPathsWidget::updateButtonStates() {
     const int row = selectedRow();
     if (row >= 0) {
-        _removeButton->setEnabled(!isProtectedRow(row));
-        _moveUpButton->setEnabled(row > 0);
-        _moveDownButton->setEnabled(row < _pathsTable->rowCount() - 1);
+        const bool protectedRow = isProtectedRow(row);
+        _removeButton->setEnabled(!protectedRow);
+        // The built-in resources path is pinned to the bottom (lowest priority): it cannot move,
+        // and no other row may be pushed below it.
+        _moveUpButton->setEnabled(row > 0 && !protectedRow && !isProtectedRow(row - 1));
+        _moveDownButton->setEnabled(row < _pathsTable->rowCount() - 1 && !protectedRow && !isProtectedRow(row + 1));
     } else {
         _removeButton->setEnabled(false);
         _moveUpButton->setEnabled(false);
@@ -356,6 +360,12 @@ void DataPathsWidget::moveSelectedPath(int offset) {
         return;
     }
 
+    // Keep the built-in resources path pinned to the bottom: never move it, and never swap a
+    // row into its slot (which would make the built-in outrank a user source).
+    if (isProtectedRow(row) || isProtectedRow(targetRow)) {
+        return;
+    }
+
     // Swap the path cells; the priority cells stay put and are renumbered below.
     QTableWidgetItem* moving = _pathsTable->takeItem(row, PathColumn);
     QTableWidgetItem* other = _pathsTable->takeItem(targetRow, PathColumn);
@@ -385,9 +395,16 @@ void DataPathsWidget::onCellDoubleClicked(int row, int /*column*/) {
         return;
     }
 
-    QString currentPath = item->text();
-    QString newPath = QFileDialog::getExistingDirectory(this,
-        "Select Fallout 2 Data Directory", currentPath);
+    // Re-pick with a dialog that matches the entry's kind: a .dat entry needs a file chooser,
+    // a folder entry a directory chooser.
+    const QString currentPath = item->text();
+    QString newPath;
+    if (currentPath.endsWith(".dat", Qt::CaseInsensitive)) {
+        newPath = QFileDialog::getOpenFileName(this, "Select Fallout 2 Data File",
+            currentPath, "Fallout 2 data (*.dat);;All files (*)");
+    } else {
+        newPath = QFileDialog::getExistingDirectory(this, "Select Fallout 2 Data Directory", currentPath);
+    }
     if (!newPath.isEmpty() && newPath != currentPath) {
         item->setText(newPath);
         Q_EMIT dataPathsChanged();
