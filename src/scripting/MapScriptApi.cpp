@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -111,7 +112,7 @@ std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) 
     // than returning null, so the caller isn't handed a silently-empty result.
     const auto bytes = _resources.files().readRawBytes(mapPath);
     if (!bytes) {
-        throw std::runtime_error("could not read map '" + mapPath + "' — check the path and that Fallout 2 data is mounted");
+        throw std::runtime_error(std::format("could not read map '{}' — check the path and that Fallout 2 data is mounted", mapPath));
     }
     // The reader needs each object's proto for subtype parsing; resolve them GL-free like the
     // analyzer does. A proto that won't load yields nullptr and the reader skips its extra fields
@@ -126,7 +127,7 @@ std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) 
     MapReader reader(proLoad);
     auto map = reader.openFile(mapPath, *bytes); // parse errors propagate
     if (!map) {
-        throw std::runtime_error("could not parse map '" + mapPath + "'");
+        throw std::runtime_error(std::format("could not parse map '{}'", mapPath));
     }
     return map;
 }
@@ -274,12 +275,12 @@ uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
 
     const auto it = kTypes.find(t);
     if (it == kTypes.end()) {
-        throw std::runtime_error("unknown proto type '" + typeName + "' (use item/critter/scenery/wall/tile/misc)");
+        throw std::runtime_error(std::format("unknown proto type '{}' (use item/critter/scenery/wall/tile/misc)", typeName));
     }
 
     // The id occupies the low 24 bits of the PID and is 1-based (proto ids start at 1).
     if (number <= 0 || number > 0x00FFFFFF) {
-        throw std::runtime_error("proto number out of range (1..16777215): " + std::to_string(number));
+        throw std::runtime_error(std::format("proto number out of range (1..16777215): {}", number));
     }
     return (static_cast<uint32_t>(it->second) << 24) | static_cast<uint32_t>(number);
 }
@@ -289,7 +290,7 @@ std::string MapScriptApi::protoName(int pid) const {
     // loads but has no name string is a legitimate empty result.
     const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, static_cast<uint32_t>(pid)));
     if (pro == nullptr) {
-        throw std::runtime_error("proto could not be loaded for pid " + std::to_string(pid));
+        throw std::runtime_error(std::format("proto could not be loaded for pid {}", pid));
     }
     if (Msg* msg = ProHelper::msgFile(_resources, pro->type()); msg != nullptr) {
         return msg->message(pro->header.message_id).text;
