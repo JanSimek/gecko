@@ -6,6 +6,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QShortcut>
+#include <QTextCursor>
 #include <QVBoxLayout>
 
 namespace geck {
@@ -49,6 +50,12 @@ void ScriptConsoleWidget::onRun() {
         return;
     }
     Q_EMIT runRequested(source);
+}
+
+void ScriptConsoleWidget::setSource(const QString& source) {
+    _input->setPlainText(source);
+    _input->setFocus();
+    _input->moveCursor(QTextCursor::End);
 }
 
 void ScriptConsoleWidget::showResult(bool ok, const QString& output, const QString& error) {

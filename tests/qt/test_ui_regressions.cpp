@@ -609,3 +609,27 @@ TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][main
     REQUIRE_FALSE(selectionDock->isVisible());
     REQUIRE_FALSE(selectionAction->isChecked());
 }
+
+#ifdef GECK_SCRIPTING_ENABLED
+#include "ui/panels/ScriptConsoleWidget.h"
+#include <QPlainTextEdit>
+#include <QPushButton>
+
+TEST_CASE("Script console setSource loads the editor and feeds Run", "[qt][scripting]") {
+    geck::ScriptConsoleWidget console;
+
+    // setSource is what "Execute script" in the file browser uses to drop a .luau into the console.
+    const QString src = "api:paintFloor(0, 271)";
+    console.setSource(src);
+
+    QString runSource;
+    QObject::connect(&console, &geck::ScriptConsoleWidget::runRequested,
+        [&runSource](const QString& s) { runSource = s; });
+
+    // Pressing Run hands back exactly what setSource put in the editor.
+    const auto buttons = console.findChildren<QPushButton*>();
+    REQUIRE_FALSE(buttons.isEmpty());
+    buttons.first()->click();
+    CHECK(runSource == src);
+}
+#endif

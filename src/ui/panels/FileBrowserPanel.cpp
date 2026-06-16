@@ -901,6 +901,7 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
 
     QAction* openAction = nullptr;
     QAction* editProAction = nullptr;
+    QAction* executeScriptAction = nullptr;
 
     if (filePath.endsWith(".map", Qt::CaseInsensitive)) {
         openAction = contextMenu.addAction("Open Map");
@@ -911,6 +912,14 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
         contextMenu.addSeparator();
         openAction = contextMenu.addAction("Open");
         openAction->setIcon(createIcon(":/icons/actions/open.svg"));
+#ifdef GECK_SCRIPTING_ENABLED
+    } else if (filePath.endsWith(".luau", Qt::CaseInsensitive) || filePath.endsWith(".lua", Qt::CaseInsensitive)) {
+        executeScriptAction = contextMenu.addAction("Execute script");
+        executeScriptAction->setIcon(createIcon(":/icons/filetypes/luau.svg"));
+        contextMenu.addSeparator();
+        openAction = contextMenu.addAction("Open with System Editor");
+        openAction->setIcon(createIcon(":/icons/filetypes/text.svg"));
+#endif
     } else if (isTextFile(filePath)) {
         openAction = contextMenu.addAction("Open with System Editor");
         openAction->setIcon(createIcon(":/icons/filetypes/text.svg"));
@@ -923,10 +932,16 @@ void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
     exportAction->setIcon(createIcon(":/icons/actions/save.svg"));
 
     QAction* selectedAction = contextMenu.exec(_treeView->viewport()->mapToGlobal(pos));
+    if (!selectedAction) {
+        return; // menu dismissed — guard the nullptr action comparisons below
+    }
 
     if (selectedAction == openAction) {
         spdlog::debug("FileBrowserPanel: Open action triggered for: {}", filePath.toStdString());
         Q_EMIT fileDoubleClicked(filePath);
+    } else if (selectedAction == executeScriptAction) {
+        spdlog::debug("FileBrowserPanel: Execute script action triggered for: {}", filePath.toStdString());
+        executeScript(filePath);
     } else if (selectedAction == editProAction) {
         spdlog::debug("FileBrowserPanel: Edit PRO action triggered for: {}", filePath.toStdString());
         openProEditor(filePath);
@@ -992,6 +1007,20 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
         _statusLabel->setText("Export failed");
         spdlog::error("FileBrowserPanel: Export failed for {}: {}", filePath.toStdString(), e.what());
     }
+}
+
+void FileBrowserPanel::executeScript(const QString& filePath) {
+    auto buffer = _resourcesShared->files().readRawBytes(filePath.toStdString());
+    if (!buffer) {
+        QMessageBox::critical(this, "Execute Script",
+            QString("Failed to read script from data paths: %1").arg(filePath));
+        return;
+    }
+
+    const QString source = QString::fromUtf8(reinterpret_cast<const char*>(buffer->data()),
+        static_cast<qsizetype>(buffer->size()));
+    spdlog::info("FileBrowserPanel: Loading script into the console: {}", filePath.toStdString());
+    Q_EMIT executeScriptRequested(source);
 }
 
 void FileBrowserPanel::resizeNameColumnToContent() {

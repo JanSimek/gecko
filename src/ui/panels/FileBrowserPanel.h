@@ -130,6 +130,8 @@ signals:
     void fileSelected(const QString& filePath);
     void fileDoubleClicked(const QString& filePath);
     void fileExportRequested(const QString& filePath);
+    /// Carries a Luau script's *source* (read from the VFS), to be loaded into the Script Console.
+    void executeScriptRequested(const QString& source);
 
 public slots:
     void onSearchTextChanged(const QString& text);
@@ -166,6 +168,7 @@ private:
     QString getFileSource(const QString& filePath) const;
     QString getFileSource(const QString& filePath, const std::vector<std::filesystem::path>& nativeDirectories) const;
     void exportFile(const QString& filePath);
+    void executeScript(const QString& filePath);
     void openProEditor(const QString& filePath);
     void resizeNameColumnToContent();
     bool isTextFile(const QString& filePath) const;

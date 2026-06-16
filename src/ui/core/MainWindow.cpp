@@ -902,6 +902,19 @@ void MainWindow::connectFileBrowserSignals() {
                 QString("File type not supported for opening: %1\n\nYou can export the file using the right-click context menu.").arg(filePath));
         }
     });
+
+#ifdef GECK_SCRIPTING_ENABLED
+    // "Execute script" in the file browser loads the .luau source into the Script Console and
+    // reveals it, ready to Run. (The console dock only exists in a scripting-enabled build.)
+    connect(_fileBrowserPanel, &FileBrowserPanel::executeScriptRequested, this, [this](const QString& source) {
+        if (!_scriptConsole || !_scriptConsoleDock) {
+            return;
+        }
+        _scriptConsole->setSource(source);
+        _scriptConsoleDock->show();
+        _scriptConsoleDock->raise();
+    });
+#endif
 }
 
 void MainWindow::replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSizePolicy::Policy verticalPolicy) {
