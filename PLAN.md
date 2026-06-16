@@ -391,10 +391,11 @@ the user to press Ctrl-Z thousands of times. Therefore:
    `ScopedUndoBatch`. Done; unit-tested headless.
 2. ✅ **Tier 2 Luau** (not sol2 — see §2 decision): FetchContent Luau + LuaBridge3, sandboxed
    state, the same host API bound, a Script Console, and a headless `gecko-cli`. Done.
-3. ➡️ **Make the generators good and the API human-friendly** — §11. Start with P1
-   (proto-by-name, human coordinates, params), then P2 (autotiling from `analyze`, statistical
-   scatter). The "full-map generator from a definition" endgame falls out of P2 + the biome
-   library (§11 P3).
+3. ➡️ **Curated generators + the MCP as the intelligence layer** — §11. Blind statistical
+   generation was tried and abandoned (it scatters structural objects). Curated palettes + clumped
+   `noise2d` placement and the unified error model are in; the open items are the **seamless
+   multi-tile floor** (`autotile_floor`, P2 §4) and the **MCP server** with high-level tools
+   (P4 §12) that lets an agent curate and place with judgment.
 
 ## 9. Open questions
 
@@ -412,18 +413,24 @@ The scripting core and a first procedural generator are in. Concretely:
 - **`MapScriptApi`** — the Lua-free host façade, always compiled. Current surface:
   `isValidHex`, `hexNeighbors`, `getFloor`/`getRoof`, **`tileId(name)`** (FRM name →
   `tiles.lst` index), `paintFloor`/`paintRoof`, `placeObject(proPid, frmPid, hex, dir)`,
-  **`placeProto(proPid, hex, dir)`** (resolves the art FID from the proto header). The whole
-  run is one undo entry via `ScopedUndoBatch`.
+  **`placeProto(proPid, hex, dir)`** (resolves the art FID from the proto header),
+  **`noise2d(x, y)`** (coherent value noise for non-uniform placement) and **`protoName(pid)`**
+  (engine display name). The whole run is one undo entry via `ScopedUndoBatch`.
+  - **Unified error model:** genuine failures (no data, unreadable/typo'd map path, unloadable
+    proto) **raise** — surfaced as the run's error, `pcall`-able by a script — rather than returning
+    a silently-empty result. "Not applicable" stays a value (`placeProto` → `false`, `tileId` →
+    `-1` for an unknown name, `listMaps` → `{}`).
 - **Script Console** dock (`View → Script Console`), wired to the current map/elevation.
 - **`gecko-cli`** (Qt-free): `map analyze` (per-map + aggregate ground-tile and object usage,
   with raw engine PIDs and proto names from the `.msg` files) and `map generate --script
   <file> --out <map> [--arg key=value …]` (runs a Luau script against an empty map and writes
   a `.map`; `--arg`s are exposed to the script as the global `args` table).
-- **Data-driven palettes (no hardcoded PIDs / no name guessing).** `MapScriptApi` also exposes
-  `mapScenery(mapPath)` (the unique scenery PIDs a reference map uses — blockers filtered out via
-  `OBJECT_FLAT`), `mapFloorTiles(mapPath)` (its floor-tile ids, most-used first) and `listMaps()`
-  (every map in the data). A generator borrows a real map's palette by **PID** (the unique proto
-  id), sidestepping the ambiguity of the non-unique display name.
+- **Reference-map analysis tools.** `MapScriptApi` exposes `mapScenery(mapPath)` (the unique
+  scenery PIDs a reference map uses — blockers filtered out via `OBJECT_FLAT`),
+  `mapSceneryHistogram(mapPath)` (`{pid → count}`), `mapFloorTiles(mapPath)` (floor-tile ids,
+  most-used first) and `listMaps()` (every map in the data), all keyed by **PID** (the unique proto
+  id). These were the basis of the abandoned blind generator; they live on as *analysis* tools an
+  MCP agent reads to understand a reference before curating — see §11.
 - **`gecko_editing`** — a Qt-free library (command controller, sprite/object builders, the
   script API and the Luau runtime) on top of `gecko_core`, linked by both `gecko_app` and
   `gecko-cli`, so the editor and headless tools share one editing implementation.
@@ -431,58 +438,71 @@ The scripting core and a first procedural generator are in. Concretely:
   `MapScriptApi(..., buildSprites=false)` mode record a `MapObject` as map data without
   building a sprite — so the CLI generates **terrain *and* scenery** with no GL context. The
   GUI keeps building sprites (default `buildSprites=true`).
-- **Worked example:** `scripts/terrain.luau` reproduces any shipped map's terrain — fills with its
-  dominant floor tile and scatters its scenery, choosing the reference via `--arg reference=…` or a
-  random map. `scripts/README.md` documents the `api` surface; `scripts/` ships under
-  `resources/scripts` (CMake copies it on build + install).
+- **Worked example:** `scripts/editor/terrain.luau` — a **curated** desert generator: a hand-picked
+  vegetation palette over wasteland sand, scattered in natural clumps via the `noise2d` density
+  field. `scripts/README.md` documents the `api` surface and error model; `scripts/` ships under
+  `resources/scripts` (CMake copies it recursively on build + install).
 
-The remaining weakness is **realism**: the fill is a single uniform tile and the scatter is
-uniform-random — no edge-blending and no spatial structure. §11 P2 (autotiling + noise scatter) is
-the headline next step; P1 (data-driven, human-writable scripts) is done.
+The remaining weakness is the **floor**: it's still a single uniform tile (seamless multi-tile
+terrain — `autotile_floor` — is the headline open item, **§11 P2 §4**). The scatter is now curated
+and clumped, not uniform-random. Blind statistical generation was tried and abandoned (it scatters
+structural objects); the path forward is curated palettes + an MCP agent's judgment — see §11.
 
 ## 11. Improvement backlog (procedural generation & scripting)
 
 Ordered by value; the lower tiers build on the upper ones. None requires Qt, and only the
 last item needs a GL context.
 
-### Robust procedural generation — the plan
+### Procedural generation — direction (revised after the blind-generation dead end)
 
-The first desert generator looked right because it was **curated**: a hand-picked list of small
-vegetation PIDs, frequency-biased by repetition, scattered over a seamless sand tile. Generalising
-it to "any reference map" regressed the quality: `mapScenery()` returns *every distinct* scenery PID
-with **no counts and no roles** (so cars and rock-formation pieces sit beside bushes and get picked
-uniformly — "dozens of cars"), and the floor collapsed to a single tile. The fix is to stop sampling
-palettes and instead **profile a reference map's statistics, then synthesise a statistically similar
-map** — "reproduce a shipped map's terrain" means *match its distributions*, not copy its palette.
+**Blind statistical generation is a dead end for coherent maps.** The first desert generator looked
+right because it was *curated* (a hand-picked list of small vegetation PIDs over sand). Generalising
+to "scatter whatever a reference map uses" — even **weighted by real frequency** (`mapSceneryHistogram`)
+— still drops structural objects (a vault door, a car, rock-formation pieces) at random hexes,
+because the gap is **semantic**: *which* objects are scatter-able and *where* they belong is authorial
+intent statistics can't reverse-engineer. Frequency only lowers a structural object's count, never to
+zero, and "place at a random hex" has no notion that a vault door is an entrance. So clustering/WFC
+would only fix *the arrangement of the right objects*, never *wrong objects appearing at all*.
 
-Heavy algorithms live in C++ (`gecko_editing`), exposed to Lua as a few high-level calls plus the
-low-level data primitives, so the `.luau` stays a thin, moddable orchestrator. Everything is seeded.
+The direction instead:
 
-- **Phase 0 — faithful quantities (✅ done, this PR).** `api:mapSceneryHistogram(mapPath)` returns
-  `{pid → count}` (same scenery / non-flat filter as `mapScenery`). `terrain.luau` now samples
-  scenery **proportional to count** (common bushes dominate; a 2-of-500 car stays a ~1-in-500 pick)
-  and scatters the reference's **actual object count** by default (`--arg density=N` overrides).
-  This alone removes the random-car spam, and frequency gives a cheap role split (placed many times
-  = scatter; 1–3× = feature, to cap/exclude later). Implements the core of **P2 §5**.
-- **Phase 1 — coherent scatter.** New `mapObjects(mapPath, elev)` (positions+PIDs) and
-  `protoRenderSize(pid)` (FRM dims) → cluster via a noise **density field** (**P2 §6**) with
-  footprint-aware, iso-diamond-masked placement; learn clustering strength from the reference's
-  nearest-neighbour stats. Blockers already excluded (`OBJECT_FLAT`).
-- **Phase 2 — seamless multi-tile floor.** New `mapFloorGrid(mapPath, elev)` (the reference's full
-  tile array) → a C++ terrain synthesiser exposed as `api:synthesizeFloor(reference, seed)`:
-  image-quilting / patch-sampling first (seamless *by construction* — it only ever reproduces
-  adjacencies that exist in the shipped map), Wave Function Collapse with learned adjacency as the
-  advanced option. This is the principled form of the autotiling item (**P2 §4**) and the headline
-  fix for the single-texture floor. Naive per-cell weighted-random is *not* this — arbitrary FO2
-  tiles don't blend.
-- **Phase 3 — structure & features.** Noise **region map** (sand vs rock zones) driving floor +
-  scatter; extract recurring multi-object clusters as **prefabs** (place a rock formation as one
-  unit, not scattered pieces); enclosures/roofs (**P2 §7**) and exit grids for playability; the
-  biome script library (**P3 §10**).
+1. **Curated palettes are the reliable scatter primitive.** Curation *is* the semantic knowledge
+   ("these are decorations"), encoded cheaply. Per-biome hand-picked lists, like the shipped
+   `scripts/editor/terrain.luau`.
+2. **An AI agent over MCP is the intelligence layer.** Coherent authoring needs judgment — which
+   objects, density, clearings, where the structural pieces go — which an LLM agent supplies and a
+   blind algorithm can't. The MCP exposes the map model + analyze/generate so the agent curates and
+   places with world knowledge, and iterates against feedback.
+3. **The MCP must expose high-level tools, not just `place_object`.** The agent shouldn't place
+   10 000 floor tiles or 250 bushes one call at a time. Tools: `autotile_floor(from_reference)` /
+   `paint_region` (floor seamlessness still needs a real algorithm — WFC / patch-sampling — as a
+   tool the agent *drives*), `scatter(palette, area, density, clustering)`, `place_feature(pid, hex)`,
+   plus analyze/inspect (`mapSceneryHistogram`, `protoName`, …) so the agent *understands* a
+   reference before curating.
 
-A `BiomeProfile` struct is the shared abstraction (`map analyze` could emit one to disk for
-generation to consume). Headless tests: generated histogram ≈ reference's; no illegal floor
-adjacencies; no overlapping footprints; round-trip through `map analyze`.
+**Shipped.**
+- Curated, **clumped** generator (`scripts/editor/terrain.luau`): hand-picked desert palette over
+  sand, scattered via a `noise2d` density field (natural patches/clearings, not an even sprinkle).
+- **`api:noise2d(x, y)`** — coherent value noise in `[0,1]`, the non-uniform-placement primitive
+  (**P2 §6** below); reusable by the MCP.
+- **`api:protoName(pid)`** — engine display name, so a caller (or the agent) can tell a decoration
+  from a structural feature.
+- **`api:mapScenery` / `mapSceneryHistogram` / `mapFloorTiles`** are kept as *analysis* tools (read
+  to understand a reference), not as a blind generator.
+- **Unified error model:** genuine failures (no data, unreadable/typo'd map path, unloadable proto)
+  **raise** — surfaced as a Lua error the runtime reports, `pcall`-able by a script — instead of a
+  silently-empty result. "Not applicable" stays a value (`placeProto` → `false`, `tileId` → `-1` for
+  an unknown name, `listMaps` → `{}`).
+
+**Still open.**
+- **Seamless multi-tile floor** — the headline visual gap. A C++ terrain synthesiser
+  (image-quilting / patch-sampling from a reference grid first, WFC with learned adjacency later)
+  exposed as `autotile_floor` — the principled form of the autotiling item (**P2 §4**). Naive
+  per-cell weighted-random is *not* this; arbitrary FO2 tiles don't blend.
+- **The MCP server** (the intelligence layer) with the high-level tool surface above — see the MCP
+  section and **P4 §12**.
+- Placement polish for the curated scripts/tools: footprint-aware, iso-diamond-masked placement;
+  recurring multi-object clusters extracted as **prefabs** (place a rock formation as one unit).
 
 ### P1 — Ergonomics: make scripts human-writable — ✅ done
 
@@ -516,11 +536,13 @@ adjacencies; no overlapping footprints; round-trip through `map analyze`.
    variant at biome boundaries (Wang/blob tiling) instead of a uniform fill. Biggest visual jump,
    pure data, derived from the shipped maps — closes the analyze→generate loop (analyze currently
    *learns* the palette but the generator *hardcodes* it).
-5. **Statistical scatter.** Co-occurrence + per-biome density from `analyze` → scatter scenery in
-   the proportions/clustering the real maps use, vs today's uniform random. *(Phase 0 done:
-   frequency-weighted, count-matched via `mapSceneryHistogram`. Clustering/co-occurrence pending —
-   Phase 1.)*
-6. **Noise-based distribution.** Perlin/simplex for natural clumping; expose `api:noise2d(x, y)`.
+5. **Statistical scatter.** ⚠️ *Superseded — see "Procedural generation — direction" above.*
+   Frequency-weighting (`mapSceneryHistogram`) was tried and still scattered structural objects
+   (vault doors, cars), because choosing *what* is scatter-able is semantic, not statistical. The
+   reliable path is **curated palettes** + an MCP agent's judgment; the histogram lives on as an
+   *analysis* tool, not the generator.
+6. ✅ **Noise-based distribution.** `api:noise2d(x, y)` (coherent value noise in `[0,1]`) is in;
+   `scripts/editor/terrain.luau` uses it as a density field for natural clumping.
 7. **Enclosures / autowalling + roofs.** A helper that rings a region with correctly-oriented
    wall protos (the analyze output is full of left/right/corner `Wall` variants) unlocks the cave
    and town biomes; generate a **roof** layer for enclosed areas (`paintRoof` already exists).
