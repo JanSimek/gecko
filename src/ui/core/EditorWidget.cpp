@@ -1082,12 +1082,18 @@ void EditorWidget::setActiveSelectionLayers(SelectionLayers layers) {
     if (_inputHandler) {
         _inputHandler->setSelectionMode(_currentSelectionMode);
     }
+    if (!_selectionManager) {
+        return; // created lazily with the map; a menu sync can run first (first New Map)
+    }
     _selectionManager->setActiveLayers(layers);
     spdlog::info("Selection layers set to: floor={} roof={} objects={}",
         layers.floorTiles, layers.roofTiles, layers.objects);
 }
 
 SelectionLayers EditorWidget::getActiveSelectionLayers() const {
+    if (!_selectionManager) {
+        return {}; // all layers on by default until the selection system is created
+    }
     return _selectionManager->activeLayers();
 }
 
