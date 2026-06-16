@@ -529,12 +529,14 @@ if(WIN32)
     )
 endif()
 
-# Copy resources to appropriate location based on platform
+# Copy resources to appropriate location based on platform. The example generation scripts ship
+# under resources/scripts so the running app can find them next to the rest of the resources.
 if(APPLE)
     # For macOS bundles, copy to Resources directory
     add_custom_command(
         TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/resources
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/scripts $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/resources/scripts
     )
     # Also copy the main icon.png to Resources root for easy access
     add_custom_command(
@@ -546,5 +548,6 @@ else()
     add_custom_command(
         TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/scripts $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/scripts
     )
 endif()

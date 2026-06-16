@@ -154,6 +154,11 @@ install(DIRECTORY resources/
         DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/resources
 )
 
+# Example generation scripts ship alongside the resources (resources/scripts).
+install(DIRECTORY scripts/
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/resources/scripts
+)
+
 # Platform-specific icon installation
 if(UNIX AND NOT APPLE)
     # Install desktop file

@@ -5,6 +5,7 @@
 #include <cctype>
 #include <functional>
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "editor/HexGeometry.h"
@@ -105,15 +106,11 @@ int MapScriptApi::tileId(const std::string& name) const {
     return -1;
 }
 
-std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
-    std::vector<int> palette;
-    std::unordered_set<int> seen;
-
+std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) const {
     const auto bytes = _resources.files().readRawBytes(mapPath);
     if (!bytes) {
-        return palette; // unknown path / no data mounted
+        return nullptr; // unknown path / no data mounted
     }
-
     // The reader needs each object's proto for subtype parsing; resolve them GL-free like the
     // analyzer does. A proto that won't load yields nullptr and the reader skips its extra fields.
     const std::function<Pro*(uint32_t)> proLoad = [this](uint32_t pid) -> Pro* {
@@ -123,18 +120,22 @@ std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
             return nullptr;
         }
     };
-
-    std::unique_ptr<Map> reference;
     try {
         MapReader reader(proLoad);
-        reference = reader.openFile(mapPath, *bytes);
+        return reader.openFile(mapPath, *bytes);
     } catch (const std::exception&) {
-        return palette;
+        return nullptr;
     }
+}
+
+std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
+    std::vector<int> palette;
+    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath);
     if (!reference) {
         return palette;
     }
 
+    std::unordered_set<int> seen;
     for (const auto& [elevation, objects] : reference->getMapFile().map_objects) {
         for (const auto& object : objects) {
             if (!object) {
@@ -151,14 +152,65 @@ std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
             // Skip flat scenery: the invisible movement-blockers / floor markers (block.frm) carry
             // OBJECT_FLAT, while upright decorations (scrub, trees, rocks) do not — only the latter
             // belong in a scatter palette. (A proto we can't load is kept, best-effort.)
-            if (const Pro* pro = proLoad(object->pro_pid);
-                pro != nullptr && Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT)) {
+            const Pro* pro = nullptr;
+            try {
+                pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, object->pro_pid));
+            } catch (const std::exception&) {
+                // best-effort: keep a proto we can't inspect
+            }
+            if (pro != nullptr && Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT)) {
                 continue;
             }
             palette.push_back(pid);
         }
     }
     return palette;
+}
+
+std::vector<int> MapScriptApi::mapFloorTiles(const std::string& mapPath) const {
+    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath);
+    if (!reference) {
+        return {};
+    }
+
+    std::unordered_map<uint16_t, int> counts; // floor tile id -> times used
+    for (const auto& [elevation, tiles] : reference->getMapFile().tiles) {
+        for (const auto& tile : tiles) {
+            if (tile.getFloor() != static_cast<uint16_t>(Map::EMPTY_TILE)) {
+                counts[tile.getFloor()]++;
+            }
+        }
+    }
+
+    std::vector<std::pair<uint16_t, int>> sorted(counts.begin(), counts.end());
+    std::ranges::sort(sorted, [](const auto& a, const auto& b) {
+        return a.second != b.second ? a.second > b.second : a.first < b.first; // most-used first
+    });
+    std::vector<int> result;
+    result.reserve(sorted.size());
+    for (const auto& [id, count] : sorted) {
+        result.push_back(id);
+    }
+    return result;
+}
+
+std::vector<std::string> MapScriptApi::listMaps() const {
+    std::vector<std::string> maps;
+    try {
+        // Keep the .map files case-insensitively (robust against the DAT/mount's key casing).
+        for (const auto& path : _resources.files().list("*")) {
+            std::string ext = path.extension().string();
+            std::ranges::transform(ext, ext.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (ext == ".map") {
+                maps.push_back(path.generic_string());
+            }
+        }
+        std::ranges::sort(maps);
+    } catch (const std::exception&) {
+        // no data mounted -> empty list
+    }
+    return maps;
 }
 
 void MapScriptApi::beginBatch(const std::string& description) {

@@ -165,10 +165,12 @@ TEST_CASE("MapScriptApi name resolvers fail closed without game data", "[scripti
         CHECK(api.tileId("does-not-exist") == -1);
     }
 
-    SECTION("mapScenery returns an empty palette when the reference map can't be read") {
-        // No data mounted -> the reference map can't be loaded -> empty, not a crash.
+    SECTION("the reference-map queries return empty when nothing is mounted") {
+        // No data -> the reference map can't be loaded and no maps exist -> empty, not a crash.
         CHECK(api.mapScenery("maps/desert1.map").empty());
         CHECK(api.mapScenery("no/such/map.map").empty());
+        CHECK(api.mapFloorTiles("maps/desert1.map").empty());
+        CHECK(api.listMaps().empty());
     }
 
     SECTION("placeProto rejects an off-grid hex before any proto lookup") {

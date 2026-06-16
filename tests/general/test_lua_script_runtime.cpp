@@ -146,11 +146,13 @@ TEST_CASE("Luau can reach the name resolvers", "[scripting][lua]") {
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
     LuaScriptRuntime rt;
 
-    // tileId, mapScenery and placeProto are bound and callable. Headless they resolve to
-    // -1/empty/false (no data) — exactly the contract a generator branches on.
+    // The data-driven queries are bound and callable. Headless they all return empty/-1/false
+    // (no data) — exactly the contract a generator branches on.
     const auto r = rt.run(R"(
         assert(api:tileId("edg5000") == -1, "expected -1 without data")
         assert(#api:mapScenery("maps/desert1.map") == 0, "expected no scenery without data")
+        assert(#api:mapFloorTiles("maps/desert1.map") == 0, "expected no floor tiles without data")
+        assert(#api:listMaps() == 0, "expected no maps without data")
         assert(api:placeProto(0x02000066, 20100, 0) == false, "expected false without data")
     )",
         api, fx.controller, "resolvers");
@@ -175,8 +177,8 @@ TEST_CASE("Luau exposes caller args as the global table", "[scripting][lua]") {
     CHECK(r.ok);
 }
 
-TEST_CASE("The shipped desert_terrain.luau compiles and guards on missing data", "[scripting][lua]") {
-    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/desert_terrain.luau");
+TEST_CASE("The shipped terrain.luau compiles and guards on missing data", "[scripting][lua]") {
+    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/terrain.luau");
     REQUIRE(file.is_open());
     std::stringstream buffer;
     buffer << file.rdbuf();
@@ -186,15 +188,15 @@ TEST_CASE("The shipped desert_terrain.luau compiles and guards on missing data",
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
     LuaScriptRuntime rt;
 
-    // Headless (no data): tileId("edg5000") is -1, so the example must abort cleanly with a
-    // hint rather than paint a bogus tile or error. This keeps the committed script CI-checked
-    // for syntax and its guard path; the live fill/scatter runs in the GUI (needs data + GL).
-    const auto r = rt.run(source, api, fx.controller, "desert");
+    // Headless (no data): listMaps() is empty, so the example must abort cleanly with a hint
+    // rather than error. This keeps the committed script CI-checked for syntax and its guard
+    // path; the live fill/scatter runs against real data (GUI, or gecko-cli with --data).
+    const auto r = rt.run(source, api, fx.controller, "terrain");
     INFO("script error: " << r.error);
     CHECK(r.ok);
     CHECK(api.paintedTiles() == 0);
     CHECK(api.placedObjects() == 0);
-    CHECK(r.output.find("Mount Fallout 2 data") != std::string::npos);
+    CHECK(r.output.find("Fallout 2 data") != std::string::npos);
 }
 
 TEST_CASE("Luau places objects headlessly (data only) and they survive save/reload", "[scripting][lua][roundtrip]") {

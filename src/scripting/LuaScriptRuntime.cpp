@@ -63,6 +63,8 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         .addFunction("getRoof", &MapScriptApi::getRoof)
         .addFunction("tileId", &MapScriptApi::tileId)
         .addFunction("mapScenery", &MapScriptApi::mapScenery)
+        .addFunction("mapFloorTiles", &MapScriptApi::mapFloorTiles)
+        .addFunction("listMaps", &MapScriptApi::listMaps)
         .addFunction("placeObject", &MapScriptApi::placeObject)
         .addFunction("placeProto", &MapScriptApi::placeProto)
         .addFunction("paintFloor", &MapScriptApi::paintFloor)

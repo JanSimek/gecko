@@ -20,7 +20,7 @@ so one script makes reproducible variants.
 
 | Script | What it does |
 |--------|--------------|
-| [`desert_terrain.luau`](desert_terrain.luau) | Fills the floor with the wasteland tileset and scatters vegetation, reproducing the shipped desert-encounter palette. |
+| [`terrain.luau`](terrain.luau) | Reproduces a shipped map's terrain — fills the floor with its dominant ground tile and scatters its scenery. Pick the reference with `--arg reference=maps/cave0.map`, or omit for a random map. |
 
 ## The `api` surface
 
@@ -30,7 +30,9 @@ so one script makes reproducible variants.
 | `api:hexNeighbors(hex)` | table | up-to-6 on-grid neighbours |
 | `api:getFloor(tile)` / `api:getRoof(tile)` | tile id | tile grid is 100×100 (0..9999) |
 | `api:tileId(name)` | int | tiles.lst index for e.g. `"edg5000"`; `-1` if unknown |
-| `api:mapScenery(mapPath)` | table | the distinct scenery PIDs a reference map uses (e.g. `"maps/desert1.map"`); a curated, unique-PID palette |
+| `api:mapScenery(mapPath)` | table | the distinct scenery PIDs a reference map uses (e.g. `"maps/desert1.map"`); upright decorations only (blockers excluded) |
+| `api:mapFloorTiles(mapPath)` | table | the floor-tile ids a reference map uses, most-used first |
+| `api:listMaps()` | table | every map path in the mounted data (for a random reference) |
 | `api:paintFloor(tile, id)` / `api:paintRoof(tile, id)` | bool | |
 | `api:placeObject(proPid, frmPid, hex, dir)` | bool | explicit art |
 | `api:placeProto(proPid, hex, dir)` | bool | resolves the art FID from the proto |

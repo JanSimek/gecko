@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -57,6 +58,13 @@ public:
     /// (invisible movement-blockers / floor markers, which carry OBJECT_FLAT) is excluded too, so
     /// only upright decorations remain and a generator never scatters a blocker.
     std::vector<int> mapScenery(const std::string& mapPath) const;
+    /// The distinct floor-tile ids a reference map uses (the values paintFloor() expects), most-used
+    /// first — so a generator can fill with that map's dominant ground (e.g. cave rock for a cave,
+    /// sand for a desert). Empty floors are skipped; empty if the map can't be read.
+    std::vector<int> mapFloorTiles(const std::string& mapPath) const;
+    /// Every map file in the mounted data (VFS paths, e.g. "maps/desert1.map"), sorted. Lets a
+    /// generator pick a reference map at random when none was given.
+    std::vector<std::string> listMaps() const;
 
     // --- Undo batching -----------------------------------------------------------
     void beginBatch(const std::string& description);
@@ -78,6 +86,8 @@ public:
 
 private:
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
+    // Parse a reference map headlessly (GL-free) for the palette queries; nullptr if unreadable.
+    std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;
 
     resource::GameResources& _resources;
     const HexagonGrid& _hexgrid;
