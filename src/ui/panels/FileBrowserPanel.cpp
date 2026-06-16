@@ -187,6 +187,8 @@ QIcon FileTreeItem::getFileIcon(const QString& fileName) {
         { "lst", ":/icons/filetypes/list.svg" },
         { "int", ":/icons/filetypes/script.svg" },
         { "ssl", ":/icons/filetypes/script.svg" },
+        { "luau", ":/icons/filetypes/luau.svg" },
+        { "lua", ":/icons/filetypes/luau.svg" },
         { "txt", ":/icons/filetypes/text.svg" },
         { "cfg", ":/icons/filetypes/text.svg" },
         { "gam", ":/icons/filetypes/text.svg" },

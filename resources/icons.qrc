@@ -41,6 +41,7 @@
         <file alias="filetypes/data.svg">icons/tabler/filetypes/database.svg</file>
         <file alias="filetypes/list.svg">icons/tabler/filetypes/list.svg</file>
         <file alias="filetypes/script.svg">icons/tabler/filetypes/file-code.svg</file>
+        <file alias="filetypes/luau.svg">icons/tabler/filetypes/moon.svg</file>
         <file alias="filetypes/text.svg">icons/tabler/filetypes/file-type-txt.svg</file>
         <file alias="filetypes/palette.svg">icons/tabler/filetypes/palette.svg</file>
         <file alias="filetypes/default.svg">icons/tabler/filetypes/file.svg</file>
