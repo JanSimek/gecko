@@ -35,6 +35,7 @@ with that `--arg seed=<value>` to recreate it exactly.
 | `api:hexNeighbors(hex)` | table | up-to-6 on-grid neighbours |
 | `api:getFloor(tile)` / `api:getRoof(tile)` | tile id | tile grid is 100×100 (0..9999) |
 | `api:tileId(name)` | int | tiles.lst index for e.g. `"edg5000"`; `-1` if the name is unknown (raises if no data) |
+| `api:proto(type, number)` | PID | build a proto PID from a type name (`"scenery"`, `"item"`, `"critter"`, `"wall"`, `"tile"`, `"misc"`) and the id `map analyze` reports — `api:proto("scenery", 102)` == `0x02000066`, no opaque hex |
 | `api:noise2d(x, y)` | number | coherent value noise in `[0,1]`; sample as a density field for clumped, non-uniform placement |
 | `api:protoName(pid)` | string | the proto's engine display name (e.g. `"Scrub"`); lets you tell a decoration from a structural feature |
 | `api:mapScenery(mapPath)` | table | the distinct scenery PIDs a reference map uses (e.g. `"maps/desert1.map"`); upright decorations only (blockers excluded) |
@@ -61,7 +62,14 @@ The global `args` table holds the `--arg key=value` parameters (string values). 
 always set: the value you passed, or a fresh random one the host chose for this run — seed it back
 with `--arg seed=<value>` to reproduce a layout.
 
-A proto's **PID** is its unique id; its display name is not unique. So a generator borrows a
-palette by reading the actual scenery a shipped map uses (`mapScenery`) rather than guessing by
-name. `gecko-cli map analyze --data <master.dat>` lists each map's floor tiles and `[Scenery]`/
-`[Wall]` proto PIDs to explore what's available.
+A proto's **PID** is its unique id; its display name is *not* unique, so a script can't reliably
+address protos by name. The next best thing is to name the **id** yourself and let `api:proto`
+build the PID, so a curated palette reads in words instead of hex:
+
+```lua
+local SCRUB, TREE = 102, 945      -- ids from `gecko-cli map analyze`
+api:placeProto(api:proto("scenery", SCRUB), hex, 0)
+```
+
+`gecko-cli map analyze --data <master.dat>` lists each map's floor tiles and `[Scenery]`/`[Wall]`
+protos (with `api:protoName(pid)` giving the engine display name), to find the ids worth naming.

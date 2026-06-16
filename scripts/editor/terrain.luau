@@ -9,19 +9,27 @@
 --   gecko-cli map generate --script scripts/editor/terrain.luau --out out.map \
 --       --arg seed=42 --arg density=350 --data <master.dat>
 --
--- `api` is the map, `args` the parameters. (To discover a biome's PIDs and tiles, run
+-- `api` is the map, `args` the parameters. (To discover a biome's protos and tiles, run
 --  `gecko-cli map analyze --data <master.dat>`; api:protoName(pid) names one.)
 
--- ---- curated palette (engine PIDs: type << 24 | proto index) ---------------
--- Small desert decorations only; the desert encounter maps (desert1..8) are built from these.
+-- ---- curated palette -------------------------------------------------------
+-- Name each scenery proto by its id (the number `map analyze` reports) so the palette reads in
+-- words, not hex: api:proto("scenery", id) builds the PID. Small desert decorations only — the
+-- desert encounter maps (desert1..8) are built from these.
+local SCRUB1, SCRUB2, SCRUB3, SCRUB4 = 102, 103, 104, 105
+local WEED1, WEED2, WEED3            = 125, 126, 127
+local PLANT1, PLANT2                 = 943, 944
+local ROCK1, ROCK2, ROCK3, ROCK4    = 74, 75, 79, 80
+local TREE1, TREE2, TREE3           = 945, 946, 947
+
 -- Listing a proto more than once weights it up, so common plants dominate.
 local PALETTE = {
-    0x02000066, 0x02000067, 0x02000068, 0x02000069, -- Scrub
-    0x02000066, 0x02000067,                          -- (weighted up: scrub is everywhere)
-    0x0200007D, 0x0200007E, 0x0200007F,              -- Weed
-    0x020003AF, 0x020003B0,                          -- Plant
-    0x0200004A, 0x0200004B, 0x0200004F, 0x02000050,  -- Rocks
-    0x020003B1, 0x020003B2, 0x020003B3,              -- Tree
+    SCRUB1, SCRUB2, SCRUB3, SCRUB4,
+    SCRUB1, SCRUB2, -- weighted up: scrub is everywhere
+    WEED1, WEED2, WEED3,
+    PLANT1, PLANT2,
+    ROCK1, ROCK2, ROCK3, ROCK4,
+    TREE1, TREE2, TREE3,
 }
 local BASE_TILE = args.tile or "edg5000" -- wasteland sand; override with --arg tile=<name>
 
@@ -72,7 +80,8 @@ while placed < DENSITY and attempts < maxAttempts do
     local field = api:noise2d(col * CLUMP_SCALE + ox, row * CLUMP_SCALE + oy) -- [0,1]
     if field > threshold and math.random() < field then
         local hex = row * HEX_W + col
-        if api:placeProto(PALETTE[math.random(#PALETTE)], hex, 0) then
+        local pid = api:proto("scenery", PALETTE[math.random(#PALETTE)])
+        if api:placeProto(pid, hex, 0) then
             placed = placed + 1
         end
     end

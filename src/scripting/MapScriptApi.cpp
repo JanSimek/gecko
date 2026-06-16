@@ -259,6 +259,34 @@ double MapScriptApi::noise2d(double x, double y) const {
     return lerp(lerp(v00, v10, tx), lerp(v01, v11, tx), ty); // bilinear -> [0,1)
 }
 
+uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
+    std::string t = typeName;
+    std::ranges::transform(t, t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    Pro::OBJECT_TYPE type;
+    if (t == "item" || t == "items") {
+        type = Pro::OBJECT_TYPE::ITEM;
+    } else if (t == "critter" || t == "critters") {
+        type = Pro::OBJECT_TYPE::CRITTER;
+    } else if (t == "scenery") {
+        type = Pro::OBJECT_TYPE::SCENERY;
+    } else if (t == "wall" || t == "walls") {
+        type = Pro::OBJECT_TYPE::WALL;
+    } else if (t == "tile" || t == "tiles") {
+        type = Pro::OBJECT_TYPE::TILE;
+    } else if (t == "misc") {
+        type = Pro::OBJECT_TYPE::MISC;
+    } else {
+        throw std::runtime_error("unknown proto type '" + typeName + "' (use item/critter/scenery/wall/tile/misc)");
+    }
+
+    // The id occupies the low 24 bits of the PID and is 1-based (proto ids start at 1).
+    if (number <= 0 || number > 0x00FFFFFF) {
+        throw std::runtime_error("proto number out of range (1..16777215): " + std::to_string(number));
+    }
+    return (static_cast<uint32_t>(type) << 24) | static_cast<uint32_t>(number);
+}
+
 std::string MapScriptApi::protoName(int pid) const {
     // A proto that can't be loaded (no data / bad pid) is a real error and is raised. A proto that
     // loads but has no name string is a legitimate empty result.

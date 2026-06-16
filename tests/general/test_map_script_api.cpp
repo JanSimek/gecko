@@ -154,6 +154,27 @@ TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "
     CHECK(fx.mapFile().map_objects[ELEV].empty());
 }
 
+TEST_CASE("MapScriptApi::proto builds a PID from a readable type name and id", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    // Pure (type << 24) | id; produces exactly the hex a script would otherwise hand-write.
+    CHECK(api.proto("scenery", 102) == 0x02000066u); // Scrub
+    CHECK(api.proto("item", 1) == 0x00000001u);
+    CHECK(api.proto("critter", 1) == 0x01000001u);
+    CHECK(api.proto("misc", 16) == 0x05000010u); // exit-grid range is MISC 16..23
+
+    // Case-insensitive, singular or plural.
+    CHECK(api.proto("Scenery", 102) == api.proto("scenery", 102));
+    CHECK(api.proto("items", 1) == api.proto("item", 1));
+
+    // Raises on an unknown type or an out-of-range id (not a silent bogus PID).
+    CHECK_THROWS(api.proto("vehicle", 1));
+    CHECK_THROWS(api.proto("scenery", 0));
+    CHECK_THROWS(api.proto("scenery", -1));
+    CHECK_THROWS(api.proto("scenery", 0x1000000));
+}
+
 TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[scripting]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);

@@ -160,6 +160,8 @@ TEST_CASE("Luau surfaces genuine failures as errors, not-applicable as values", 
         assert(api:placeProto(0x02000066, 20100, 0) == false, "placeProto returns false, not raise")
         local n = api:noise2d(1.5, 2.5)
         assert(n >= 0 and n <= 1, "noise2d in [0,1]")
+        assert(api:proto("scenery", 102) == 0x02000066, "proto builds the right PID")
+        assert(not pcall(function() return api:proto("nope", 1) end), "proto raises on unknown type")
     )",
         api, fx.controller, "resolvers");
     INFO("script error: " << r.error);

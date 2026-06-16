@@ -73,6 +73,7 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         .addFunction("listMaps", &MapScriptApi::listMaps)
         .addFunction("noise2d", &MapScriptApi::noise2d)
         .addFunction("protoName", &MapScriptApi::protoName)
+        .addFunction("proto", &MapScriptApi::proto)
         .addFunction("placeObject", &MapScriptApi::placeObject)
         .addFunction("placeProto", &MapScriptApi::placeProto)
         .addFunction("paintFloor", &MapScriptApi::paintFloor)
