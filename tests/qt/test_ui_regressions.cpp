@@ -25,6 +25,7 @@
 
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
+#include "ui/core/EditorWidget.h"
 #include "ui/core/MainWindow.h"
 #include "ui/dialogs/InventoryViewerDialog.h"
 #include "ui/widgets/ObjectPreviewWidget.h"
@@ -608,6 +609,21 @@ TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][main
 
     REQUIRE_FALSE(selectionDock->isVisible());
     REQUIRE_FALSE(selectionAction->isChecked());
+}
+
+TEST_CASE("EditorWidget builds and syncs with no map or data (New Map bootstrap)", "[qt][editor]") {
+    auto resources = std::make_shared<geck::resource::GameResources>();
+
+    // The first New Map builds an EditorWidget with a null map before any Fallout 2 data is
+    // mounted. Construction must not throw on the missing hex-grid overlay texture (it used to
+    // abort here), and the menu sync that follows must tolerate the not-yet-created selection
+    // system. Both are the regressions behind the New Map crashes.
+    geck::EditorWidget editor(*resources, nullptr);
+
+    geck::SelectionLayers layers;
+    layers.roofTiles = false;
+    editor.setActiveSelectionLayers(layers);        // must not deref the null selection manager
+    CHECK(editor.getActiveSelectionLayers().all()); // no-op until the manager exists -> defaults
 }
 
 #ifdef GECK_SCRIPTING_ENABLED
