@@ -45,6 +45,11 @@ with that `--arg seed=<value>` to recreate it exactly.
 | `api:paintFloor(tile, id)` / `api:paintRoof(tile, id)` | bool | |
 | `api:placeObject(proPid, frmPid, hex, dir)` | bool | explicit art; `false` skips the hex (art missing / off-grid) |
 | `api:placeProto(proPid, hex, dir)` | bool | resolves the art FID from the proto; `false` skips the hex |
+| `api:hexIndex(col, row)` / `api:tileIndex(col, row)` | int | `(col, row)` → linear index (`row*width+col`); `-1` if off-grid. Hexes 200×200, tiles 100×100 |
+| `api:hexCol(hex)` / `api:hexRow(hex)` / `api:tileCol(t)` / `api:tileRow(t)` | int | the inverse — index → column / row |
+| `api:paintFloorXY(col,row,id)` / `api:paintRoofXY(...)` | bool | `(col,row)` form of the painters (tile grid) |
+| `api:getFloorXY(col,row)` / `api:getRoofXY(col,row)` | tile id | `(col,row)` form of the readers |
+| `api:placeProtoXY(pid,col,row,dir)` / `api:placeObjectXY(pid,frm,col,row,dir)` | bool | `(col,row)` form of the placers (hex grid); off-grid is a no-op |
 
 **Errors.** A genuine failure — no Fallout 2 data mounted, or a wrong `--arg reference=` path —
 **raises**, so the run stops with a clear message instead of silently producing an empty map. Wrap

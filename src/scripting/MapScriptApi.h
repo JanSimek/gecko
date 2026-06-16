@@ -98,6 +98,23 @@ public:
     /// instead of writing opaque hex. Raises on an unknown type or an out-of-range number.
     uint32_t proto(const std::string& typeName, int number) const;
 
+    // --- Coordinates -------------------------------------------------------------
+    // Two grids, both numbered row-major as `position = row * width + col` (the engine's storage
+    // layout): hexes are 200x200 (objects/placement), floor & roof tiles are 100x100. These
+    // convert (col, row) <-> the linear index the other calls take, so scripts read in 2D. An
+    // off-grid (col, row) yields -1 (and the *XY ops below then no-op), so bounds are easy to skip.
+    /// (col, row) -> hex position [0, 40000); -1 if off the 200x200 hex grid.
+    int hexIndex(int col, int row) const;
+    /// (col, row) -> tile index [0, 10000); -1 if off the 100x100 tile grid.
+    int tileIndex(int col, int row) const;
+    int hexCol(int hex) const;   ///< column of a hex position, or -1 if off-grid
+    int hexRow(int hex) const;   ///< row of a hex position, or -1 if off-grid
+    int tileCol(int tile) const; ///< column of a tile index, or -1 if off-grid
+    int tileRow(int tile) const; ///< row of a tile index, or -1 if off-grid
+    /// Floor/roof tile id at (col, row), or EMPTY_TILE if off-grid — the (col, row) form of getFloor.
+    uint16_t getFloorXY(int col, int row) const;
+    uint16_t getRoofXY(int col, int row) const;
+
     // --- Undo batching -----------------------------------------------------------
     void beginBatch(const std::string& description);
     void endBatch();
@@ -112,6 +129,13 @@ public:
     bool placeProto(uint32_t proPid, int hex, uint32_t direction);
     bool paintFloor(int tileIndex, uint16_t tileId);
     bool paintRoof(int tileIndex, uint16_t tileId);
+
+    // (col, row) forms of the placers/painters: place on the hex grid, paint on the tile grid.
+    // An off-grid (col, row) is a no-op returning false (same contract as an out-of-range index).
+    bool placeObjectXY(uint32_t proPid, uint32_t frmPid, int col, int row, uint32_t direction);
+    bool placeProtoXY(uint32_t proPid, int col, int row, uint32_t direction);
+    bool paintFloorXY(int col, int row, uint16_t tileId);
+    bool paintRoofXY(int col, int row, uint16_t tileId);
 
     int placedObjects() const { return _placedObjects; }
     int paintedTiles() const { return _paintedTiles; }

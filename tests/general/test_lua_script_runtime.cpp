@@ -150,7 +150,7 @@ TEST_CASE("Luau surfaces genuine failures as errors, not-applicable as values", 
     // to handle it and the run otherwise reports it — instead of a silently-empty result. Things
     // that are merely "not applicable" stay ordinary return values: placeProto -> false (skip the
     // hex), listMaps -> {} (no maps is a valid answer), noise2d is pure.
-    const auto r = rt.run(R"(
+    const auto r = rt.run(R"lua(
         assert(not pcall(function() return api:tileId("edg5000") end), "tileId should raise without data")
         assert(not pcall(function() return api:mapScenery("maps/desert1.map") end), "mapScenery should raise")
         assert(not pcall(function() return api:mapSceneryHistogram("maps/desert1.map") end), "histogram should raise")
@@ -162,7 +162,12 @@ TEST_CASE("Luau surfaces genuine failures as errors, not-applicable as values", 
         assert(n >= 0 and n <= 1, "noise2d in [0,1]")
         assert(api:proto("scenery", 102) == 0x02000066, "proto builds the right PID")
         assert(not pcall(function() return api:proto("nope", 1) end), "proto raises on unknown type")
-    )",
+        assert(api:hexIndex(5, 3) == 3 * 200 + 5, "hexIndex converts (col,row)")
+        assert(api:tileIndex(5, 3) == 3 * 100 + 5, "tileIndex converts (col,row)")
+        assert(api:paintFloorXY(5, 3, 271), "paintFloorXY paints a tile")
+        assert(api:getFloorXY(5, 3) == 271, "getFloorXY reads it back")
+        assert(api:tileCol(api:tileIndex(5, 3)) == 5, "tile (col,row) round-trips")
+    )lua",
         api, fx.controller, "resolvers");
     INFO("script error: " << r.error);
     CHECK(r.ok);

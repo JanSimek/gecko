@@ -85,6 +85,44 @@ TEST_CASE("MapScriptApi paints tiles undoably", "[scripting]") {
     }
 }
 
+TEST_CASE("MapScriptApi (col,row) helpers convert and paint consistently", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    SECTION("index <-> (col,row) round-trips on both grids") {
+        // position = row * width + col; hexes 200 wide, tiles 100 wide.
+        CHECK(api.hexIndex(5, 3) == 3 * HexagonGrid::GRID_WIDTH + 5);
+        CHECK(api.tileIndex(5, 3) == 3 * HexagonGrid::TILE_GRID_WIDTH + 5);
+
+        const int hex = api.hexIndex(5, 3);
+        CHECK(api.hexCol(hex) == 5);
+        CHECK(api.hexRow(hex) == 3);
+
+        const int tile = api.tileIndex(5, 3);
+        CHECK(api.tileCol(tile) == 5);
+        CHECK(api.tileRow(tile) == 3);
+    }
+
+    SECTION("off-grid (col,row) yields -1 and the XY ops no-op") {
+        CHECK(api.tileIndex(HexagonGrid::TILE_GRID_WIDTH, 0) == -1);
+        CHECK(api.tileIndex(-1, 0) == -1);
+        CHECK(api.hexIndex(HexagonGrid::GRID_WIDTH, 0) == -1);
+        CHECK(api.hexCol(-1) == -1);
+        CHECK(api.hexCol(HexagonGrid::POSITION_COUNT) == -1);
+
+        CHECK_FALSE(api.paintFloorXY(HexagonGrid::TILE_GRID_WIDTH, 0, SOME_TILE)); // off-grid -> no-op
+        CHECK(api.getFloorXY(-1, -1) == EMPTY);
+        CHECK(api.paintedTiles() == 0);
+    }
+
+    SECTION("paintFloorXY targets the same tile as the index form") {
+        REQUIRE(api.paintFloorXY(5, 3, SOME_TILE));
+        CHECK(api.getFloorXY(5, 3) == SOME_TILE);
+        CHECK(api.getFloor(api.tileIndex(5, 3)) == SOME_TILE); // XY and index agree
+        CHECK(api.getRoofXY(5, 3) == EMPTY);                   // floor, not roof
+    }
+}
+
 TEST_CASE("MapScriptApi batches a run into one undo entry", "[scripting]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);

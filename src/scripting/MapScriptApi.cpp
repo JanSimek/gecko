@@ -377,4 +377,59 @@ bool MapScriptApi::paintTile(int tileIndex, uint16_t tileId, bool isRoof) {
     return true;
 }
 
+// --- Coordinates -------------------------------------------------------------
+int MapScriptApi::hexIndex(int col, int row) const {
+    if (col < 0 || col >= HexagonGrid::GRID_WIDTH || row < 0 || row >= HexagonGrid::GRID_HEIGHT) {
+        return -1;
+    }
+    return row * HexagonGrid::GRID_WIDTH + col;
+}
+
+int MapScriptApi::tileIndex(int col, int row) const {
+    if (col < 0 || col >= HexagonGrid::TILE_GRID_WIDTH || row < 0 || row >= HexagonGrid::TILE_GRID_HEIGHT) {
+        return -1;
+    }
+    return row * HexagonGrid::TILE_GRID_WIDTH + col;
+}
+
+int MapScriptApi::hexCol(int hex) const {
+    return (hex >= 0 && hex < HexagonGrid::POSITION_COUNT) ? hex % HexagonGrid::GRID_WIDTH : -1;
+}
+
+int MapScriptApi::hexRow(int hex) const {
+    return (hex >= 0 && hex < HexagonGrid::POSITION_COUNT) ? hex / HexagonGrid::GRID_WIDTH : -1;
+}
+
+int MapScriptApi::tileCol(int tile) const {
+    return (tile >= 0 && tile < HexagonGrid::TILE_COUNT) ? tile % HexagonGrid::TILE_GRID_WIDTH : -1;
+}
+
+int MapScriptApi::tileRow(int tile) const {
+    return (tile >= 0 && tile < HexagonGrid::TILE_COUNT) ? tile / HexagonGrid::TILE_GRID_WIDTH : -1;
+}
+
+uint16_t MapScriptApi::getFloorXY(int col, int row) const {
+    return getFloor(tileIndex(col, row));
+}
+
+uint16_t MapScriptApi::getRoofXY(int col, int row) const {
+    return getRoof(tileIndex(col, row));
+}
+
+bool MapScriptApi::placeObjectXY(uint32_t proPid, uint32_t frmPid, int col, int row, uint32_t direction) {
+    return placeObject(proPid, frmPid, hexIndex(col, row), direction);
+}
+
+bool MapScriptApi::placeProtoXY(uint32_t proPid, int col, int row, uint32_t direction) {
+    return placeProto(proPid, hexIndex(col, row), direction);
+}
+
+bool MapScriptApi::paintFloorXY(int col, int row, uint16_t tileId) {
+    return paintFloor(tileIndex(col, row), tileId);
+}
+
+bool MapScriptApi::paintRoofXY(int col, int row, uint16_t tileId) {
+    return paintRoof(tileIndex(col, row), tileId);
+}
+
 } // namespace geck
