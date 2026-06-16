@@ -141,20 +141,25 @@ TEST_CASE("Luau-painted tiles survive a map save/reload round-trip", "[scripting
     CHECK(tiles[5].getRoof() == 480);
 }
 
-TEST_CASE("Luau can reach the name resolvers", "[scripting][lua]") {
+TEST_CASE("Luau surfaces genuine failures as errors, not-applicable as values", "[scripting][lua]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
     LuaScriptRuntime rt;
 
-    // The data-driven queries are bound and callable. Headless they all return empty/-1/false
-    // (no data) — exactly the contract a generator branches on.
+    // Unified error model: a genuine failure (here, no data mounted) RAISES, so a script can pcall
+    // to handle it and the run otherwise reports it — instead of a silently-empty result. Things
+    // that are merely "not applicable" stay ordinary return values: placeProto -> false (skip the
+    // hex), listMaps -> {} (no maps is a valid answer), noise2d is pure.
     const auto r = rt.run(R"(
-        assert(api:tileId("edg5000") == -1, "expected -1 without data")
-        assert(#api:mapScenery("maps/desert1.map") == 0, "expected no scenery without data")
-        assert(next(api:mapSceneryHistogram("maps/desert1.map")) == nil, "expected empty histogram without data")
-        assert(#api:mapFloorTiles("maps/desert1.map") == 0, "expected no floor tiles without data")
-        assert(#api:listMaps() == 0, "expected no maps without data")
-        assert(api:placeProto(0x02000066, 20100, 0) == false, "expected false without data")
+        assert(not pcall(function() return api:tileId("edg5000") end), "tileId should raise without data")
+        assert(not pcall(function() return api:mapScenery("maps/desert1.map") end), "mapScenery should raise")
+        assert(not pcall(function() return api:mapSceneryHistogram("maps/desert1.map") end), "histogram should raise")
+        assert(not pcall(function() return api:mapFloorTiles("maps/desert1.map") end), "floorTiles should raise")
+        assert(not pcall(function() return api:protoName(0x02000066) end), "protoName should raise without data")
+        assert(#api:listMaps() == 0, "listMaps is graceful -> empty")
+        assert(api:placeProto(0x02000066, 20100, 0) == false, "placeProto returns false, not raise")
+        local n = api:noise2d(1.5, 2.5)
+        assert(n >= 0 and n <= 1, "noise2d in [0,1]")
     )",
         api, fx.controller, "resolvers");
     INFO("script error: " << r.error);
@@ -224,8 +229,8 @@ TEST_CASE("The run's seed is published as args.seed", "[scripting][lua]") {
     CHECK(c.output == "12345\n");
 }
 
-TEST_CASE("The shipped terrain.luau compiles and guards on missing data", "[scripting][lua]") {
-    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/terrain.luau");
+TEST_CASE("The shipped terrain.luau fails clearly when data is missing", "[scripting][lua]") {
+    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/editor/terrain.luau");
     REQUIRE(file.is_open());
     std::stringstream buffer;
     buffer << file.rdbuf();
@@ -235,15 +240,14 @@ TEST_CASE("The shipped terrain.luau compiles and guards on missing data", "[scri
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
     LuaScriptRuntime rt;
 
-    // Headless (no data): listMaps() is empty, so the example must abort cleanly with a hint
-    // rather than error. This keeps the committed script CI-checked for syntax and its guard
-    // path; the live fill/scatter runs against real data (GUI, or gecko-cli with --data).
+    // Headless (no data): tileId raises, so the run fails with a clear message instead of silently
+    // producing an empty map — and nothing was painted/placed. CI-checks the script compiles and
+    // that the error surfaces; the live fill/scatter runs against real data (GUI / gecko-cli).
     const auto r = rt.run(source, api, fx.controller, "terrain");
-    INFO("script error: " << r.error);
-    CHECK(r.ok);
+    CHECK_FALSE(r.ok);
+    CHECK(r.error.find("tiles.lst") != std::string::npos);
     CHECK(api.paintedTiles() == 0);
     CHECK(api.placedObjects() == 0);
-    CHECK(r.output.find("Fallout 2 data") != std::string::npos);
 }
 
 TEST_CASE("Luau places objects headlessly (data only) and they survive save/reload", "[scripting][lua][roundtrip]") {

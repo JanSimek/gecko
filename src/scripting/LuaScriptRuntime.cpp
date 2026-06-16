@@ -71,6 +71,8 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         .addFunction("mapSceneryHistogram", &MapScriptApi::mapSceneryHistogram)
         .addFunction("mapFloorTiles", &MapScriptApi::mapFloorTiles)
         .addFunction("listMaps", &MapScriptApi::listMaps)
+        .addFunction("noise2d", &MapScriptApi::noise2d)
+        .addFunction("protoName", &MapScriptApi::protoName)
         .addFunction("placeObject", &MapScriptApi::placeObject)
         .addFunction("placeProto", &MapScriptApi::placeProto)
         .addFunction("paintFloor", &MapScriptApi::paintFloor)

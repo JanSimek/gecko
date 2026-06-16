@@ -72,6 +72,16 @@ public:
     /// Every map file in the mounted data (VFS paths, e.g. "maps/desert1.map"), sorted. Lets a
     /// generator pick a reference map at random when none was given.
     std::vector<std::string> listMaps() const;
+    /// Coherent 2D value noise in [0,1] at (x, y): smooth and deterministic (same input -> same
+    /// output). Sample it as a density field to scatter objects in natural clumps and clearings
+    /// instead of an even sprinkle — scale the coordinates to set the clump size and offset them
+    /// by a per-run amount for variation. A general primitive the MCP can drive too.
+    double noise2d(double x, double y) const;
+    /// The proto's engine display name (from the type's .msg, keyed by the proto's message_id),
+    /// e.g. "Scrub". Empty if the proto or its message can't be resolved (no data / unknown pid).
+    /// Lets a caller identify what a PID *is* — e.g. tell a decoration from a structural feature —
+    /// which is what the MCP needs to curate a palette rather than scatter blindly.
+    std::string protoName(int pid) const;
 
     // --- Undo batching -----------------------------------------------------------
     void beginBatch(const std::string& description);

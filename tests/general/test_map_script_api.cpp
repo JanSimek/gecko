@@ -154,35 +154,40 @@ TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "
     CHECK(fx.mapFile().map_objects[ELEV].empty());
 }
 
-TEST_CASE("MapScriptApi name resolvers fail closed without game data", "[scripting]") {
+TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[scripting]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
 
-    SECTION("tileId returns -1 when the tile list is unavailable") {
-        // No data mounted -> tiles.lst can't load -> unknown, not a bogus index.
-        CHECK(api.tileId("edg5000") == -1);
-        CHECK(api.tileId("edg5000.frm") == -1);
-        CHECK(api.tileId("does-not-exist") == -1);
+    SECTION("data-dependent queries throw when no data is mounted (no silent empty)") {
+        // These can't produce a real answer without game data, so they raise rather than hand back
+        // an empty result indistinguishable from a valid "nothing here".
+        CHECK_THROWS(api.tileId("edg5000"));
+        CHECK_THROWS(api.mapScenery("maps/desert1.map"));
+        CHECK_THROWS(api.mapScenery("no/such/map.map"));
+        CHECK_THROWS(api.mapSceneryHistogram("maps/desert1.map"));
+        CHECK_THROWS(api.mapFloorTiles("maps/desert1.map"));
+        CHECK_THROWS(api.protoName(0x02000066));
     }
 
-    SECTION("the reference-map queries return empty when nothing is mounted") {
-        // No data -> the reference map can't be loaded and no maps exist -> empty, not a crash.
-        CHECK(api.mapScenery("maps/desert1.map").empty());
-        CHECK(api.mapScenery("no/such/map.map").empty());
-        CHECK(api.mapSceneryHistogram("maps/desert1.map").empty());
-        CHECK(api.mapSceneryHistogram("no/such/map.map").empty());
-        CHECK(api.mapFloorTiles("maps/desert1.map").empty());
+    SECTION("listMaps is a graceful enumeration -> empty (no maps is a valid answer)") {
         CHECK(api.listMaps().empty());
     }
 
-    SECTION("placeProto rejects an off-grid hex before any proto lookup") {
-        CHECK_FALSE(api.placeProto(0x02000066u, -1, 0));
+    SECTION("placeProto stays a status return (skip), not a throw") {
+        CHECK_FALSE(api.placeProto(0x02000066u, -1, 0));    // off-grid hex
+        CHECK_FALSE(api.placeProto(0x02000066u, 20100, 0)); // valid hex, but the proto art can't load
         CHECK(api.placedObjects() == 0);
     }
 
-    SECTION("placeProto returns false when the proto cannot be loaded") {
-        // Valid hex, but headless: the proto (hence its art FID) can't resolve.
-        CHECK_FALSE(api.placeProto(0x02000066u, 20100, 0));
-        CHECK(api.placedObjects() == 0);
+    SECTION("noise2d is pure: in [0,1] and deterministic") {
+        for (double x = 0.0; x < 5.0; x += 1.3) {
+            for (double y = 0.0; y < 5.0; y += 1.7) {
+                const double n = api.noise2d(x, y);
+                CHECK(n >= 0.0);
+                CHECK(n <= 1.0);
+                CHECK(api.noise2d(x, y) == n); // same input -> same output
+            }
+        }
+        CHECK(api.noise2d(1.5, 2.5) != api.noise2d(40.5, 80.5)); // varies across the field
     }
 }

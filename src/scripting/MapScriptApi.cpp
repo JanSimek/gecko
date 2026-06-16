@@ -3,8 +3,11 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <stdexcept>
 #include <unordered_map>
 
 #include "editor/HexGeometry.h"
@@ -14,6 +17,7 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
+#include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
 #include "editor/TileChange.h"
 #include "pattern/PatternSprite.h"
@@ -79,14 +83,11 @@ uint16_t MapScriptApi::getRoof(int tileIndex) const {
 }
 
 int MapScriptApi::tileId(const std::string& name) const {
-    const Lst* lst = nullptr;
-    try {
-        lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
-    } catch (const std::exception&) {
-        return -1;
-    }
+    // A failure to load tiles.lst is a real error (no data mounted) and is raised so the caller
+    // sees it; an unknown name in a *loaded* list is a legitimate "not found" -> -1.
+    const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
     if (lst == nullptr) {
-        return -1;
+        throw std::runtime_error("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
     }
     // tiles.lst entries are already lowercased/trimmed by the reader; normalise the query the
     // same way so "edg5000", "EDG5000.FRM" and "edg5000.frm" all match.
@@ -106,12 +107,15 @@ int MapScriptApi::tileId(const std::string& name) const {
 }
 
 std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) const {
+    // Failing to read/parse the reference is a real error (bad path or no data) — raise it rather
+    // than returning null, so the caller isn't handed a silently-empty result.
     const auto bytes = _resources.files().readRawBytes(mapPath);
     if (!bytes) {
-        return nullptr; // unknown path / no data mounted
+        throw std::runtime_error("could not read map '" + mapPath + "' — check the path and that Fallout 2 data is mounted");
     }
     // The reader needs each object's proto for subtype parsing; resolve them GL-free like the
-    // analyzer does. A proto that won't load yields nullptr and the reader skips its extra fields.
+    // analyzer does. A proto that won't load yields nullptr and the reader skips its extra fields
+    // (best-effort per object — not a fatal error for the whole map).
     const std::function<Pro*(uint32_t)> proLoad = [this](uint32_t pid) -> Pro* {
         try {
             return _resources.repository().load<Pro>(ProHelper::basePath(_resources, pid));
@@ -119,12 +123,12 @@ std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) 
             return nullptr;
         }
     };
-    try {
-        MapReader reader(proLoad);
-        return reader.openFile(mapPath, *bytes);
-    } catch (const std::exception&) {
-        return nullptr;
+    MapReader reader(proLoad);
+    auto map = reader.openFile(mapPath, *bytes); // parse errors propagate
+    if (!map) {
+        throw std::runtime_error("could not parse map '" + mapPath + "'");
     }
+    return map;
 }
 
 std::map<int, int> MapScriptApi::sceneryCounts(Map& map) const {
@@ -167,10 +171,7 @@ std::map<int, int> MapScriptApi::sceneryCounts(Map& map) const {
 }
 
 std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
-    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath);
-    if (!reference) {
-        return {};
-    }
+    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath); // throws if unreadable
     const auto counts = sceneryCounts(*reference);
     std::vector<int> palette;
     palette.reserve(counts.size());
@@ -181,18 +182,12 @@ std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
 }
 
 std::map<int, int> MapScriptApi::mapSceneryHistogram(const std::string& mapPath) const {
-    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath);
-    if (!reference) {
-        return {};
-    }
+    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath); // throws if unreadable
     return sceneryCounts(*reference);
 }
 
 std::vector<int> MapScriptApi::mapFloorTiles(const std::string& mapPath) const {
-    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath);
-    if (!reference) {
-        return {};
-    }
+    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath); // throws if unreadable
 
     std::unordered_map<uint16_t, int> counts; // floor tile id -> times used
     for (const auto& [elevation, tiles] : reference->getMapFile().tiles) {
@@ -232,6 +227,49 @@ std::vector<std::string> MapScriptApi::listMaps() const {
         // no data mounted -> empty list
     }
     return maps;
+}
+
+namespace {
+    // Smootherstep, for C1-continuous interpolation between lattice values.
+    double fade(double t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+    double lerp(double a, double b, double t) { return a + t * (b - a); }
+
+    // Hash a lattice corner to a stable pseudo-random value in [0,1).
+    double latticeValue(int xi, int yi) {
+        uint32_t h = static_cast<uint32_t>(xi) * 374761393u + static_cast<uint32_t>(yi) * 668265263u;
+        h = (h ^ (h >> 13)) * 1274126177u;
+        h ^= h >> 16;
+        return (h & 0xFFFFFFu) / static_cast<double>(0x1000000);
+    }
+} // namespace
+
+double MapScriptApi::noise2d(double x, double y) const {
+    const double xf = std::floor(x);
+    const double yf = std::floor(y);
+    const int xi = static_cast<int>(xf);
+    const int yi = static_cast<int>(yf);
+    const double tx = fade(x - xf);
+    const double ty = fade(y - yf);
+
+    const double v00 = latticeValue(xi, yi);
+    const double v10 = latticeValue(xi + 1, yi);
+    const double v01 = latticeValue(xi, yi + 1);
+    const double v11 = latticeValue(xi + 1, yi + 1);
+
+    return lerp(lerp(v00, v10, tx), lerp(v01, v11, tx), ty); // bilinear -> [0,1)
+}
+
+std::string MapScriptApi::protoName(int pid) const {
+    // A proto that can't be loaded (no data / bad pid) is a real error and is raised. A proto that
+    // loads but has no name string is a legitimate empty result.
+    const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, static_cast<uint32_t>(pid)));
+    if (pro == nullptr) {
+        throw std::runtime_error("proto could not be loaded for pid " + std::to_string(pid));
+    }
+    if (Msg* msg = ProHelper::msgFile(_resources, pro->type()); msg != nullptr) {
+        return msg->message(pro->header.message_id).text;
+    }
+    return {};
 }
 
 void MapScriptApi::beginBatch(const std::string& description) {
