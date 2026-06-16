@@ -25,6 +25,23 @@ enum class SelectionMode : int {
 };
 
 /**
+ * @brief The combinable layer categories of a mixed (ALL-mode) selection.
+ *
+ * Lets the user pick any combination of layers to select (e.g. roof + floor tiles) instead of
+ * one hardcoded SelectionMode at a time. In ALL mode a disabled layer is treated as absent:
+ * area-select, the single-click cycle and Ctrl-deselect all skip it. The dedicated single-layer
+ * modes (FLOOR_TILES/ROOF_TILES/OBJECTS) are unaffected. Default: every layer on (classic ALL).
+ */
+struct SelectionLayers {
+    bool floorTiles = true;
+    bool roofTiles = true;
+    bool objects = true;
+
+    bool any() const { return floorTiles || roofTiles || objects; }
+    bool all() const { return floorTiles && roofTiles && objects; }
+};
+
+/**
  * @brief Convert SelectionMode enum to human-readable string
  * @param mode The selection mode to convert
  * @return String representation of the selection mode

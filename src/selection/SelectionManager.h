@@ -79,8 +79,21 @@ public:
     bool hasSelection() const { return !_state.isEmpty(); }
     bool isAreaSelecting() const { return _state.isAreaSelecting(); }
 
+    // True when `worldPos` lands on a currently-selected item that is actually visible there —
+    // any selected floor tile (the floor layer always draws), a selected roof tile while the roof
+    // is shown, or a selected, visible object. Lets the editor grab and move a region by any of
+    // its visible parts, so a selection stays movable even when some of its layers are hidden.
+    // Mirrors the visibility rules of Ctrl+click deselect (collectDeselectableAtPosition).
+    bool isPointOnSelection(sf::Vector2f worldPos) const;
+
     // Replace the selected items wholesale and notify (used to make the selection follow a move).
     void setSelectedItems(std::vector<SelectedItem> items);
+
+    // The combinable layers an ALL-mode selection considers (floor / roof / objects). A disabled
+    // layer is treated as absent by area-select, the click cycle and Ctrl-deselect; the dedicated
+    // single-layer modes ignore this. Changing it does not touch the current selection.
+    void setActiveLayers(SelectionLayers layers) { _layers = layers; }
+    SelectionLayers activeLayers() const { return _layers; }
 
     // Callback mechanism for UI updates
     void setSelectionCallback(SelectionCallback callback) { _selectionCallback = callback; }
@@ -119,6 +132,7 @@ public:
 private:
     SelectionDataProvider& _provider;
     SelectionState _state;
+    SelectionLayers _layers; // which layers an ALL-mode selection considers (default: all)
     SelectionCallback _selectionCallback;
 
     // Spatial index for efficient area queries

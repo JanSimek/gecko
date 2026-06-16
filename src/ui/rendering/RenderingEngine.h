@@ -192,10 +192,13 @@ private:
         bool showRoof);
 
     /**
-     * @brief Render selection-related visuals
+     * @brief Render selection-related visuals. The roof tile selection outline is drawn only when
+     * the roof layer is visible, so hiding the roof also hides its selection outline (the floor
+     * outline always shows, since the floor layer is always drawn).
      */
     void renderSelectionVisuals(sf::RenderTarget& target,
-        const RenderData& renderData);
+        const RenderData& renderData,
+        bool showRoof);
 
     /**
      * @brief Render hex highlights and markers

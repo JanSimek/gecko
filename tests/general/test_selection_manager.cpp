@@ -230,6 +230,87 @@ TEST_CASE("SelectionManager drives provider-backed selection paths", "[selection
 }
 
 //==============================================================================
+// isPointOnSelection: the grab handle for moving a selection. A region must stay
+// movable when its objects are on hidden layers (grab it by a selected floor tile),
+// and a selected roof tile must only be a grab handle while the roof is shown.
+//==============================================================================
+
+TEST_CASE("isPointOnSelection gates the grab handle by layer visibility", "[selection_manager_real]") {
+    MockEditorWidget mockWidget;
+    mockWidget.seedElevation(0);
+    geck::selection::SelectionManager mgr(mockWidget);
+
+    // Mock maps worldPos -> tile: col = x/32, row = y/24, index = row * MAP_WIDTH + col.
+    const sf::Vector2f onTile(64.0f, 48.0f); // col 2, row 2
+    const int tileIndex = 2 * MAP_WIDTH + 2;
+    const sf::Vector2f elsewhere(0.0f, 0.0f); // tile 0, never selected here
+
+    SECTION("a selected floor tile is a grab handle wherever the floor is drawn") {
+        mgr.setSelectedItems({ SelectedItem{ SelectionType::FLOOR_TILE, tileIndex } });
+        CHECK(mgr.isPointOnSelection(onTile));
+        CHECK_FALSE(mgr.isPointOnSelection(elsewhere));
+    }
+
+    SECTION("a selected roof tile is a grab handle only while the roof layer is shown") {
+        mgr.setSelectedItems({ SelectedItem{ SelectionType::ROOF_TILE, tileIndex } });
+
+        mockWidget.roofVisible = true;
+        CHECK(mgr.isPointOnSelection(onTile));
+
+        // Hiding the roof drops its grab handle (the floor under the cursor isn't selected).
+        mockWidget.roofVisible = false;
+        CHECK_FALSE(mgr.isPointOnSelection(onTile));
+    }
+
+    SECTION("an empty selection is never a grab handle") {
+        CHECK_FALSE(mgr.isPointOnSelection(onTile));
+    }
+
+    SECTION("disabling a layer drops its grab handle even when selected") {
+        mgr.setSelectedItems({ SelectedItem{ SelectionType::FLOOR_TILE, tileIndex } });
+        CHECK(mgr.isPointOnSelection(onTile)); // floor layer on by default
+
+        mgr.setActiveLayers({ .floorTiles = false, .roofTiles = true, .objects = true });
+        CHECK_FALSE(mgr.isPointOnSelection(onTile)); // floor no longer a candidate
+    }
+}
+
+//==============================================================================
+// Combinable selection layers: in ALL mode, only the user-enabled layers are
+// selected. Exercised through selectAll, which reads tiles straight from the
+// provider (no spatial index / hit-test setup needed).
+//==============================================================================
+
+TEST_CASE("active selection layers gate ALL-mode selection", "[selection_manager_real]") {
+    MockEditorWidget mockWidget;
+    mockWidget.seedElevation(0);
+    mockWidget.setRoofPresent(0, 5);
+    mockWidget.setRoofPresent(0, 6);
+    geck::selection::SelectionManager mgr(mockWidget);
+
+    SECTION("floor only") {
+        mgr.setActiveLayers({ .floorTiles = true, .roofTiles = false, .objects = false });
+        mgr.selectAll(SelectionMode::ALL, 0);
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(TILES_PER_ELEVATION));
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices().empty());
+    }
+
+    SECTION("roof only — just the present roof tiles") {
+        mgr.setActiveLayers({ .floorTiles = false, .roofTiles = true, .objects = false });
+        mgr.selectAll(SelectionMode::ALL, 0);
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().empty());
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices().size() == 2);
+    }
+
+    SECTION("floor + roof combined") {
+        mgr.setActiveLayers({ .floorTiles = true, .roofTiles = true, .objects = false });
+        mgr.selectAll(SelectionMode::ALL, 0);
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(TILES_PER_ELEVATION));
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices().size() == 2);
+    }
+}
+
+//==============================================================================
 // REGRESSION: moving a selected region must carry its roof tiles along (previously
 // only objects moved; selected roofs were left behind). planRoofTileMove computes the
 // block-safe before/after roof set the editor then applies through the tile-edit undo

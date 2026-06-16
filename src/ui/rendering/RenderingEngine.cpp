@@ -118,7 +118,7 @@ void RenderingEngine::render(sf::RenderTarget& target,
     drawSelectedObjectOutlines(target, renderData, visibility);
 
     // Layer 6: Selection visuals
-    renderSelectionVisuals(target, renderData);
+    renderSelectionVisuals(target, renderData, visibility.showRoof);
 
     // Layer 7: Exit grids (if enabled)
     if (visibility.showExitGrids && renderData.map) {
@@ -379,11 +379,14 @@ void RenderingEngine::renderTileSelectionOutline(sf::RenderTarget& target,
 }
 
 void RenderingEngine::renderSelectionVisuals(sf::RenderTarget& target,
-    const RenderData& renderData) {
+    const RenderData& renderData,
+    bool showRoof) {
     if (renderData.selectedFloorTiles) {
         renderTileSelectionOutline(target, *renderData.selectedFloorTiles, false);
     }
-    if (renderData.selectedRoofTiles) {
+    // Only outline selected roof tiles while the roof layer is shown, so hiding the roof hides its
+    // outline too (otherwise a roof selection lingers as an outline over the floor-only view).
+    if (showRoof && renderData.selectedRoofTiles) {
         renderTileSelectionOutline(target, *renderData.selectedRoofTiles, true);
     }
 

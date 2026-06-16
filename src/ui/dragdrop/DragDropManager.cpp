@@ -23,29 +23,10 @@ DragDropManager::DragDropManager(DragDropContext& context,
 }
 
 bool DragDropManager::canStartObjectDrag(sf::Vector2f worldPos) const {
-    const auto& selection = _context.getSelectionManager()->getCurrentSelection();
-
-    spdlog::debug("DragDropManager::canStartObjectDrag - worldPos({:.1f}, {:.1f}), selection has {} items",
-        worldPos.x, worldPos.y, selection.items.size());
-
-    auto objectsAtPos = _context.getObjectsAtPosition(worldPos);
-
-    for (const auto& item : selection.items) {
-        if (item.type == selection::SelectionType::OBJECT) {
-            auto selectedObject = item.getObject();
-            if (selectedObject && selectedObject->hasMapObject()) {
-                for (const auto& objectAtPos : objectsAtPos) {
-                    if (selectedObject == objectAtPos) {
-                        spdlog::debug("DragDropManager::canStartObjectDrag - found selected object at clicked position");
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-
-    spdlog::debug("DragDropManager::canStartObjectDrag - no selected objects found at clicked position");
-    return false;
+    // A move can be grabbed from any visible part of the selection — a selected object, or (so a
+    // region stays movable when its objects are on hidden layers) a selected floor/roof tile.
+    // SelectionManager owns that visibility-aware hit test; both selection and drag go through it.
+    return _context.getSelectionManager()->isPointOnSelection(worldPos);
 }
 
 bool DragDropManager::startObjectDrag(sf::Vector2f worldPos) {
@@ -71,7 +52,9 @@ bool DragDropManager::startObjectDrag(sf::Vector2f worldPos) {
         }
     }
 
-    if (_draggedObjects.empty()) {
+    // No selected objects is fine for a tiles-only grab (or one whose objects are all hidden): the
+    // selected floor/roof tiles still move. Only bail if there's nothing under the cursor to grab.
+    if (_draggedObjects.empty() && !_context.getSelectionManager()->isPointOnSelection(worldPos)) {
         return false;
     }
 
@@ -97,7 +80,9 @@ bool DragDropManager::startObjectDrag(sf::Vector2f worldPos) {
 }
 
 void DragDropManager::updateObjectDrag(sf::Vector2f currentWorldPos) {
-    if (!_isDraggingObjects || _draggedObjects.empty()) {
+    // A tiles-only drag has no dragged objects but still moves the selected tiles, so key the
+    // guard off the drag being active rather than off there being objects.
+    if (!_isDraggingObjects) {
         return;
     }
 
@@ -133,7 +118,9 @@ void DragDropManager::updateObjectDrag(sf::Vector2f currentWorldPos) {
 }
 
 void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
-    if (!_isDraggingObjects || _draggedObjects.empty()) {
+    // A tiles-only drag has no dragged objects but still moves the selected tiles, so key the
+    // guard off the drag being active rather than off there being objects.
+    if (!_isDraggingObjects) {
         return;
     }
 
@@ -219,7 +206,9 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
 }
 
 void DragDropManager::cancelObjectDrag() {
-    if (!_isDraggingObjects || _draggedObjects.empty()) {
+    // A tiles-only drag has no dragged objects but still moves the selected tiles, so key the
+    // guard off the drag being active rather than off there being objects.
+    if (!_isDraggingObjects) {
         return;
     }
 
