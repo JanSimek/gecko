@@ -1,5 +1,7 @@
 #include "ScriptConsoleWidget.h"
 
+#include "ui/IconHelper.h"
+
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QKeySequence>
@@ -28,6 +30,8 @@ ScriptConsoleWidget::ScriptConsoleWidget(QWidget* parent)
 
     auto* layout = new QVBoxLayout(this);
     layout->addWidget(_input, 3);
+
+    _runButton->setIcon(createIcon(":/icons/actions/play.svg"));
 
     auto* buttons = new QHBoxLayout();
     buttons->addStretch();
