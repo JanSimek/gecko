@@ -1,7 +1,10 @@
 #include "scripting/LuaScriptRuntime.h"
 
+#include <atomic>
+#include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <random>
 
 #include <lua.h>
 #include <lualib.h>
@@ -83,6 +86,27 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
     }
 
     luaL_sandbox(L);
+
+    // Seed math.random with real entropy so each run differs by default — every run() builds a
+    // fresh lua_State, so re-running a generator in the Script Console gives a new layout. A
+    // script that wants a reproducible result reseeds itself (e.g. gecko-cli --arg seed=42),
+    // which overrides this because it runs afterwards.
+    //
+    // Luau's math.randomseed truncates its argument to a 32-bit *signed* int, so a seed above
+    // INT_MAX saturates to one value (collapsing half of a uint32 to the same seed). Keep it in
+    // range, and mix in a per-process counter so two runs never collide even if random_device does.
+    {
+        static std::atomic<uint32_t> runCounter{ 0 };
+        std::random_device rd;
+        const int seed = static_cast<int>((rd() ^ runCounter.fetch_add(1)) & 0x7FFFFFFF);
+        lua_getglobal(L, "math");          // [math]
+        lua_getfield(L, -1, "randomseed"); // [math, randomseed]
+        lua_pushinteger(L, seed);
+        if (lua_pcall(L, 1, 0, 0) != 0) { // success: [math]; error: [math, err]
+            lua_pop(L, 1);                // discard error; seeding is best-effort
+        }
+        lua_pop(L, 1); // pop math
+    }
 
     // Luau has no source loader: compile to bytecode, then load it. luau_compile mallocs
     // the buffer, so own it with a free-deleter rather than a manual free.

@@ -177,6 +177,30 @@ TEST_CASE("Luau exposes caller args as the global table", "[scripting][lua]") {
     CHECK(r.ok);
 }
 
+TEST_CASE("Each run is randomly seeded, but an explicit seed reproduces", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // Eight draws make an accidental collision between two independently-seeded runs astronomically
+    // unlikely, so this reliably proves the host seeds math.random with fresh entropy each run.
+    const std::string draw = "for i = 1, 8 do print(math.random(1, 1000000)) end";
+
+    const auto a = rt.run(draw, api, fx.controller, "rng");
+    const auto b = rt.run(draw, api, fx.controller, "rng");
+    REQUIRE(a.ok);
+    REQUIRE(b.ok);
+    CHECK(a.output != b.output); // default: a different layout every run (the Script Console fix)
+
+    // A script that seeds itself is reproducible (gecko-cli --arg seed=N relies on this).
+    const std::string seeded = "math.randomseed(123)\n" + draw;
+    const auto c = rt.run(seeded, api, fx.controller, "rng");
+    const auto d = rt.run(seeded, api, fx.controller, "rng");
+    REQUIRE(c.ok);
+    REQUIRE(d.ok);
+    CHECK(c.output == d.output);
+}
+
 TEST_CASE("The shipped terrain.luau compiles and guards on missing data", "[scripting][lua]") {
     std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/terrain.luau");
     REQUIRE(file.is_open());
