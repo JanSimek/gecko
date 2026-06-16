@@ -72,8 +72,8 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         // key=value -> exposed to the script as args.key
         const std::string& kv = args[i + 1];
         const auto eq = kv.find('=');
-        if (eq == std::string::npos) {
-            std::cerr << "error: --arg expects key=value, got: " << kv << "\n";
+        if (eq == std::string::npos || eq == 0) {
+            std::cerr << "error: --arg expects key=value with a non-empty key, got: " << kv << "\n";
             printUsage(program);
             return 0;
         }
