@@ -95,6 +95,24 @@ namespace {
             return label;
         }
 
+        // OBJECT_FLAT marks invisible movement-blockers / floor markers (block.frm). A generator
+        // never scatters these; surfacing the flag lets an MCP client tell structural from decor.
+        bool isFlat(uint32_t pid) {
+            if (const auto it = _flat.find(pid); it != _flat.end()) {
+                return it->second;
+            }
+            bool flat = false;
+            try {
+                if (const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, pid)); pro != nullptr) {
+                    flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
+                }
+            } catch (const std::exception& e) {
+                spdlog::debug("isFlat: could not resolve pid {}: {}", pid, e.what());
+            }
+            _flat[pid] = flat;
+            return flat;
+        }
+
     private:
         std::string resolveProtoName(uint32_t pid) {
             std::string engineName;
@@ -119,7 +137,43 @@ namespace {
         resource::GameResources& _resources;
         const Lst* _tilesLst;
         std::unordered_map<uint32_t, std::string> _protoNames;
+        std::unordered_map<uint32_t, bool> _flat;
     };
+
+    // Minimal JSON string literal (quotes + escapes) — analyze --json builds a fixed schema by
+    // hand, so it needs no JSON library.
+    std::string jsonString(const std::string& s) {
+        std::string out;
+        out.reserve(s.size() + 2);
+        out.push_back('"');
+        for (const char c : s) {
+            switch (c) {
+                case '"':
+                    out += "\\\"";
+                    break;
+                case '\\':
+                    out += "\\\\";
+                    break;
+                case '\n':
+                    out += "\\n";
+                    break;
+                case '\r':
+                    out += "\\r";
+                    break;
+                case '\t':
+                    out += "\\t";
+                    break;
+                default:
+                    if (static_cast<unsigned char>(c) < 0x20) {
+                        out += std::format("\\u{:04x}", static_cast<unsigned char>(c));
+                    } else {
+                        out.push_back(c);
+                    }
+            }
+        }
+        out.push_back('"');
+        return out;
+    }
 
     // List everything and keep the .map files, case-insensitively — more robust than a glob
     // against the raw VFS keys (whose case and leading "/" depend on the DAT/mount).
@@ -163,24 +217,30 @@ namespace {
         return usage;
     }
 
+    // Read + parse a map headlessly; nullptr if it can't be read/parsed. Shared by the text and
+    // JSON paths.
+    std::unique_ptr<Map> loadMapForAnalysis(const std::string& mapPath, resource::GameResources& resources,
+        const std::function<Pro*(uint32_t)>& proLoad) {
+        const auto bytes = resources.files().readRawBytes(mapPath);
+        if (!bytes) {
+            return nullptr;
+        }
+        try {
+            MapReader reader(proLoad);
+            return reader.openFile(mapPath, *bytes);
+        } catch (const std::exception& e) {
+            spdlog::debug("loadMapForAnalysis: parse failed for {}: {}", mapPath, e.what());
+            return nullptr;
+        }
+    }
+
     // Parse one map, print its per-map palette and fold its usage into `agg`. Returns false
     // (with a "skip" line) if the map can't be read or parsed.
     bool reportMap(const std::string& mapPath, resource::GameResources& resources,
         const std::function<Pro*(uint32_t)>& proLoad, NameResolver& names, Aggregate& agg, std::ostream& out) {
-        const auto bytes = resources.files().readRawBytes(mapPath);
-        if (!bytes) {
-            out << "skip (unreadable): " << mapPath << "\n";
-            return false;
-        }
-        std::unique_ptr<Map> map;
-        try {
-            MapReader reader(proLoad);
-            map = reader.openFile(mapPath, *bytes);
-        } catch (const std::exception& e) {
-            spdlog::debug("reportMap: parse failed for {}: {}", mapPath, e.what());
-        }
+        const std::unique_ptr<Map> map = loadMapForAnalysis(mapPath, resources, proLoad);
         if (!map) {
-            out << "skip (parse failed): " << mapPath << "\n";
+            out << "skip (unreadable or parse failed): " << mapPath << "\n";
             return false;
         }
 
@@ -215,6 +275,66 @@ namespace {
         }
     }
 
+    // Machine-readable analyze, for an MCP client: { maps: [{name, path, floor:[{id,name,count}],
+    // objects:[{pid,type,name,count,flat}]}], aggregate: {analysed, floor:[...], objects:[...]} }.
+    // A fixed schema emitted by hand (no JSON library); `flat` is the structural-vs-decoration hint.
+    void emitJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
+        const std::function<Pro*(uint32_t)>& proLoad, NameResolver& names, std::ostream& out) {
+        Aggregate agg;
+        out << "{\"maps\":[";
+        bool firstMap = true;
+        for (const auto& mapPath : mapPaths) {
+            const std::unique_ptr<Map> map = loadMapForAnalysis(mapPath, resources, proLoad);
+            if (!map) {
+                continue; // skipped maps simply don't appear; agg.analysed counts what did
+            }
+            const MapUsage usage = collectUsage(*map);
+            out << (firstMap ? "" : ",");
+            firstMap = false;
+            out << "{\"name\":" << jsonString(baseName(mapPath)) << ",\"path\":" << jsonString(mapPath)
+                << ",\"floor\":[";
+            bool firstFloor = true;
+            for (const auto& [id, count] : sortedByCountDesc(usage.floors)) {
+                out << (firstFloor ? "" : ",");
+                firstFloor = false;
+                out << "{\"id\":" << id << ",\"name\":" << jsonString(names.tileName(id)) << ",\"count\":" << count << "}";
+                agg.floorCount[id] += count;
+                agg.floorMaps[id]++;
+            }
+            out << "],\"objects\":[";
+            bool firstObj = true;
+            for (const auto& [pid, count] : sortedByCountDesc(usage.objects)) {
+                out << (firstObj ? "" : ",");
+                firstObj = false;
+                out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"type\":" << jsonString(typeLabel(pid))
+                    << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"count\":" << count
+                    << ",\"flat\":" << (names.isFlat(pid) ? "true" : "false") << "}";
+                agg.objCount[pid] += count;
+                agg.objMaps[pid]++;
+            }
+            out << "]}";
+            ++agg.analysed;
+        }
+        out << "],\"aggregate\":{\"analysed\":" << agg.analysed << ",\"floor\":[";
+        bool firstAggFloor = true;
+        for (const auto& [id, count] : sortedByCountDesc(agg.floorCount)) {
+            out << (firstAggFloor ? "" : ",");
+            firstAggFloor = false;
+            out << "{\"id\":" << id << ",\"name\":" << jsonString(names.tileName(id)) << ",\"total\":" << count
+                << ",\"maps\":" << agg.floorMaps.at(id) << "}";
+        }
+        out << "],\"objects\":[";
+        bool firstAggObj = true;
+        for (const auto& [pid, count] : sortedByCountDesc(agg.objCount)) {
+            out << (firstAggObj ? "" : ",");
+            firstAggObj = false;
+            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"type\":" << jsonString(typeLabel(pid))
+                << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"total\":" << count
+                << ",\"maps\":" << agg.objMaps.at(pid) << ",\"flat\":" << (names.isFlat(pid) ? "true" : "false") << "}";
+        }
+        out << "]}}\n";
+    }
+
 } // namespace
 
 int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& options, std::ostream& out) {
@@ -232,6 +352,11 @@ int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& option
             return nullptr;
         }
     };
+
+    if (options.json) {
+        emitJson(mapPaths, resources, proLoad, names, out);
+        return 0;
+    }
 
     Aggregate agg;
     for (const auto& mapPath : mapPaths) {

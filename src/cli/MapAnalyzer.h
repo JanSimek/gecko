@@ -14,6 +14,8 @@ struct AnalyzeOptions {
     // Maps to analyse (VFS paths, e.g. "maps/arroyo.map"). Empty = every map under maps/ in the
     // mounted data.
     std::vector<std::string> maps;
+    // Emit machine-readable JSON (for the MCP) instead of the human-readable report.
+    bool json = false;
 };
 
 // Analyse the ground-tile and object (scenery/wall/critter/...) usage across the given maps and
