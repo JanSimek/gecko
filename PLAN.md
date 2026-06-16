@@ -765,13 +765,15 @@ rules (hex 0–39999, 3-elevation framing, exit-grid PIDs 16–23).
 
 ## Deeper understanding (the longer-term goals)
 
-- **Script & NPC-dialog analysis — Medium.** "Understand the scripts" pairs the **`.int`
-  metadata reader** (procedure names, exported/imported procs, string table — see the SSL/INT
-  notes; the `.int` has no description) with the **`.msg`** file of the same basename (we already
-  have an `Msg` reader), which holds the NPC's dialogue/display lines. So `describe_script(index)`
-  → proc list + the linked `.msg` text gives an AI the conversation tree and behaviour surface
-  without running the game. Cross-reference `scripts.lst` (index→name) and the map's
-  `MapScript`/object `sid` to answer "what does the NPC on this hex say/do?".
+- **Script & NPC-dialog analysis — Medium.** "Understand the scripts" means reading the **real
+  `.ssl` source** the map's scripts compile from (we usually have it — see the deep-understanding
+  section below), indexed by the **`.int` metadata reader** (procedure names, exported/imported
+  procs, string table — see the SSL/INT notes) and paired with the **`.msg`** file of the same
+  basename (we already have an `Msg` reader), which holds the NPC's dialogue/display lines. So
+  `describe_script(index)` → SSL source + proc list + the linked `.msg` text gives an AI the actual
+  behaviour and conversation tree without running the game. Cross-reference `scripts.lst`
+  (index→name) and the map's `MapScript`/object `sid` to answer "what does the NPC on this hex
+  say/do?".
 - **Visual analysis — Small–Medium (a refactor, not a rewrite).** To let the AI *see* the map
   (rendered screenshot per elevation/region), reuse the **existing** SFML renderer:
   `RenderingEngine`/`MapSpriteLoader` already have **zero Qt includes** and `render()` already
@@ -805,14 +807,19 @@ addition). Each item below is a tool (or a field on `describe_map`) and the data
   area-attack flags) — a new but tiny INI-style reader gives "this critter is a cowardly melee
   raider who flees at 25% HP." Team + kill-type + AI packet together answer *"is this a friendly,
   a guard, or an ambush?"* without running the game.
-- **Scripts, AI behaviour & dialogue — Medium.** Pair an **`.int` metadata reader** (procedure
-  table — `start`/`map_enter_p_proc`/`talk_p_proc`/`destroy_p_proc` etc., plus imported/exported
-  procs and the string table) with the **`.msg`** of the same basename (existing `Msg` reader),
-  which holds the NPC's dialogue lines. Resolve the script via **`scripts.lst`** (the object's
-  `sid`/`script_id` → row → `.int` basename) and the map's own **`MapScript`** records. Result:
-  `describe_script(sid)` → which proc hooks exist (so *when* the script runs), the linked dialogue
-  tree, and the basename — enough for the AI to summarize behaviour and conversation without an SSL
-  decompiler. (Full SSL→source is out of scope; the proc list + `.msg` is the high-value 80%.)
+- **Scripts, AI behaviour & dialogue — Medium.** The goal is the **real SSL source**, not a
+  metadata summary. In practice we usually *have* the `.ssl` source for the compiled `.int` a map
+  references (it ships alongside `scripts/`, or is fetched from the script source tree), so the
+  server should **resolve `sid`/`script_id` → `scripts.lst` row → basename → the `.ssl` file** and
+  hand the AI the actual code — the authoritative behaviour, comments and original names intact.
+  The `.int` and friends are the **index and fallback** around that source: the **`.int` metadata
+  reader** (procedure table — `start`/`map_enter_p_proc`/`talk_p_proc`/`destroy_p_proc`, plus
+  imported/exported procs and the string table) confirms which proc hooks exist and *when* they
+  run; the **`.msg`** of the same basename (existing `Msg` reader) supplies the NPC's dialogue
+  lines; and only when the source is genuinely missing does the server fall back to **`int2ssl`
+  decompilation** (lossy — see "SSL Script Editing Integration" for the toolchain/licensing). So
+  `describe_script(sid)` returns the SSL source + proc hooks + linked dialogue, letting the AI read
+  and reason about what an NPC actually does, not just summarize it.
 - **Pathing, blocking & reachability — Medium.** Build a walkability view of each elevation: a hex
   is blocked if it holds a `NO_BLOCK`-clear object, with the **invisible movement blockers**
   (`OBJECT_FLAT` scenery over `block.frm`, the same signal the generator filters on) called out
@@ -827,10 +834,11 @@ addition). Each item below is a tool (or a field on `describe_map`) and the data
   block), and the map's own script. Cheap — it's all in the `MAP` header already parsed.
 
 Together these let the server answer open-ended questions ("who guards the entrance?", "can the
-player reach the vault?", "what does this terminal say?") by cross-referencing **proto + script +
-`.msg` + `ai.txt` + exit graph** — the same sources the engine consults. Every reader needed is
-either already in `vault` (`Pro`, `Msg`, `Map`, `.lst`) or a small INI/metadata addition
-(`ai.txt`, `.int` header); none requires the Qt layer or a running game.
+player reach the vault?", "what does this terminal say?") by cross-referencing **proto + SSL
+source + `.msg` + `ai.txt` + exit graph** — the same sources the engine (and a script author)
+consults. Every reader needed is either already in `vault` (`Pro`, `Msg`, `Map`, `.lst`), the
+plain-text `.ssl` source itself, or a small INI/metadata addition (`ai.txt`, `.int` header); none
+requires the Qt layer or a running game.
 
 ## Estimate
 
