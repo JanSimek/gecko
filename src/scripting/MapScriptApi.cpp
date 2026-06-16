@@ -253,28 +253,26 @@ double MapScriptApi::noise2d(double x, double y) const {
 }
 
 uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
-    static const std::unordered_map<std::string, Pro::OBJECT_TYPE> kTypes = {
-        { "item", Pro::OBJECT_TYPE::ITEM }, { "items", Pro::OBJECT_TYPE::ITEM },
-        { "critter", Pro::OBJECT_TYPE::CRITTER }, { "critters", Pro::OBJECT_TYPE::CRITTER },
-        { "scenery", Pro::OBJECT_TYPE::SCENERY },
-        { "wall", Pro::OBJECT_TYPE::WALL }, { "walls", Pro::OBJECT_TYPE::WALL },
-        { "tile", Pro::OBJECT_TYPE::TILE }, { "tiles", Pro::OBJECT_TYPE::TILE },
-        { "misc", Pro::OBJECT_TYPE::MISC }
+    const auto lower = [](std::string s) {
+        std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return s;
     };
+    const std::string wanted = lower(typeName);
 
-    std::string t = typeName;
-    std::ranges::transform(t, t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-    const auto it = kTypes.find(t);
-    if (it == kTypes.end()) {
-        throw ScriptError(std::format("unknown proto type '{}' (use item/critter/scenery/wall/tile/misc)", typeName));
+    // Match against the engine's own type names (Pro::typeToString) rather than a second hardcoded
+    // table — singular ("scenery") or its plural ("walls").
+    using enum Pro::OBJECT_TYPE;
+    for (const Pro::OBJECT_TYPE type : { ITEM, CRITTER, SCENERY, WALL, TILE, MISC }) {
+        const std::string name = lower(Pro::typeToString(type));
+        if (wanted == name || wanted == name + "s") {
+            // The id occupies the low 24 bits of the PID and is 1-based (proto ids start at 1).
+            if (number <= 0 || number > 0x00FFFFFF) {
+                throw ScriptError(std::format("proto number out of range (1..16777215): {}", number));
+            }
+            return (static_cast<uint32_t>(type) << 24) | static_cast<uint32_t>(number);
+        }
     }
-
-    // The id occupies the low 24 bits of the PID and is 1-based (proto ids start at 1).
-    if (number <= 0 || number > 0x00FFFFFF) {
-        throw ScriptError(std::format("proto number out of range (1..16777215): {}", number));
-    }
-    return (static_cast<uint32_t>(it->second) << 24) | static_cast<uint32_t>(number);
+    throw ScriptError(std::format("unknown proto type '{}' (use item/critter/scenery/wall/tile/misc)", typeName));
 }
 
 std::string MapScriptApi::protoName(int pid) const {
