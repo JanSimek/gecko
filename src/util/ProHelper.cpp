@@ -4,9 +4,42 @@
 #include "format/msg/Msg.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
+
+#include <array>
+#include <cstddef>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 
 namespace geck {
+
+namespace {
+    // Where each object type's proto files live — gathered in one table instead of three parallel
+    // switch statements (the proto directory, its .lst index, and the .msg that names its protos).
+    struct ProtoTypePaths {
+        std::string_view directory; // e.g. "proto/items/" (trailing slash)
+        std::string_view lst;       // e.g. "proto/items/items.lst"
+        std::string_view msg;       // e.g. "text/english/game/pro_item.msg"
+    };
+
+    const ProtoTypePaths& protoTypePaths(Pro::OBJECT_TYPE type) {
+        namespace RP = ResourcePaths;
+        // Indexed by the OBJECT_TYPE ordinal (ITEM = 0 .. MISC = 5).
+        static constexpr std::array<ProtoTypePaths, 6> kPaths = { {
+            { RP::Directories::PROTO_ITEMS, RP::Lst::PROTO_ITEMS, RP::Msg::PRO_ITEM },
+            { RP::Directories::PROTO_CRITTERS, RP::Lst::PROTO_CRITTERS, RP::Msg::PRO_CRIT },
+            { RP::Directories::PROTO_SCENERY, RP::Lst::PROTO_SCENERY, RP::Msg::PRO_SCEN },
+            { RP::Directories::PROTO_WALLS, RP::Lst::PROTO_WALLS, RP::Msg::PRO_WALL },
+            { RP::Directories::PROTO_TILES, RP::Lst::PROTO_TILES, RP::Msg::PRO_TILE },
+            { RP::Directories::PROTO_MISC, RP::Lst::PROTO_MISC, RP::Msg::PRO_MISC },
+        } };
+        const auto index = static_cast<std::size_t>(type);
+        if (index >= kPaths.size()) {
+            throw std::runtime_error{ "Invalid PRO type: " + std::to_string(index) };
+        }
+        return kPaths[index];
+    }
+} // namespace
 
 Msg* ProHelper::protoMsgFile(resource::GameResources& resources) {
     return resources.repository().load<Msg>(std::string(ResourcePaths::Msg::PROTO));
@@ -21,103 +54,24 @@ Msg* ProHelper::perkMsgFile(resource::GameResources& resources) {
 }
 
 Msg* ProHelper::msgFile(resource::GameResources& resources, Pro::OBJECT_TYPE type) {
-
-    std::string filename;
-
-    switch (type) {
-        case Pro::OBJECT_TYPE::ITEM: {
-            filename = ResourcePaths::Msg::PRO_ITEM;
-        } break;
-        case Pro::OBJECT_TYPE::CRITTER: {
-            filename = ResourcePaths::Msg::PRO_CRIT;
-        } break;
-        case Pro::OBJECT_TYPE::SCENERY: {
-            filename = ResourcePaths::Msg::PRO_SCEN;
-        } break;
-        case Pro::OBJECT_TYPE::WALL: {
-            filename = ResourcePaths::Msg::PRO_WALL;
-        } break;
-        case Pro::OBJECT_TYPE::TILE: {
-            filename = ResourcePaths::Msg::PRO_TILE;
-        } break;
-        case Pro::OBJECT_TYPE::MISC: {
-            filename = ResourcePaths::Msg::PRO_MISC;
-        } break;
-        default:
-            throw std::runtime_error{ "Invalid PRO type" };
-    }
-
-    return resources.repository().load<Msg>(filename);
+    return resources.repository().load<Msg>(std::string(protoTypePaths(type).msg));
 }
 
 Lst* ProHelper::lstFile(resource::GameResources& resources, uint32_t PID) {
-
-    unsigned int typeId = PID >> 24;
-    std::string filename;
-    switch (static_cast<Pro::OBJECT_TYPE>(typeId)) {
-        case Pro::OBJECT_TYPE::ITEM:
-            filename = ResourcePaths::Lst::PROTO_ITEMS;
-            break;
-        case Pro::OBJECT_TYPE::CRITTER:
-            filename = ResourcePaths::Lst::PROTO_CRITTERS;
-            break;
-        case Pro::OBJECT_TYPE::SCENERY:
-            filename = ResourcePaths::Lst::PROTO_SCENERY;
-            break;
-        case Pro::OBJECT_TYPE::WALL:
-            filename = ResourcePaths::Lst::PROTO_WALLS;
-            break;
-        case Pro::OBJECT_TYPE::TILE:
-            filename = ResourcePaths::Lst::PROTO_TILES;
-            break;
-        case Pro::OBJECT_TYPE::MISC:
-            filename = ResourcePaths::Lst::PROTO_MISC;
-            break;
-        default:
-            throw std::runtime_error{ "Wrong PID: " + std::to_string(PID) };
-    }
-
-    return resources.repository().load<Lst>(filename);
+    return resources.repository().load<Lst>(std::string(protoTypePaths(Pro::typeOfPid(PID)).lst));
 }
 
 std::string ProHelper::basePath(resource::GameResources& resources, uint32_t PID) {
-    std::string pro_basepath = "proto/";
-
-    unsigned int typeId = PID >> 24;
-    switch (static_cast<Pro::OBJECT_TYPE>(typeId)) {
-        case Pro::OBJECT_TYPE::ITEM:
-            pro_basepath += "items";
-            break;
-        case Pro::OBJECT_TYPE::CRITTER:
-            pro_basepath += "critters";
-            break;
-        case Pro::OBJECT_TYPE::SCENERY:
-            pro_basepath += "scenery";
-            break;
-        case Pro::OBJECT_TYPE::WALL:
-            pro_basepath += "walls";
-            break;
-        case Pro::OBJECT_TYPE::TILE:
-            pro_basepath += "tiles";
-            break;
-        case Pro::OBJECT_TYPE::MISC:
-            pro_basepath += "misc";
-            break;
-        default:
-            throw std::runtime_error{ "PID out of range: " + std::to_string(PID) };
-    }
+    const ProtoTypePaths& paths = protoTypePaths(Pro::typeOfPid(PID));
 
     unsigned int index = 0x00000FFF & PID;
-
     auto lst = ProHelper::lstFile(resources, PID);
-
     if (index > lst->list().size()) {
         throw std::runtime_error{ "LST size < PID: " + std::to_string(PID) };
     }
 
     std::string pro_filename = lst->list().at(index - 1);
-
-    return pro_basepath + "/" + pro_filename;
+    return std::string(paths.directory) + pro_filename; // directory carries the trailing slash
 }
 
 } // namespace geck

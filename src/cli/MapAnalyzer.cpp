@@ -41,7 +41,7 @@ namespace {
 
     // Category label for a PID's type byte, via the canonical Pro mapping (no local table).
     std::string typeLabel(uint32_t pid) {
-        return Pro::typeToString(static_cast<Pro::OBJECT_TYPE>((pid & 0xFF000000u) >> 24));
+        return Pro::typeToString(Pro::typeOfPid(pid));
     }
 
     // Histogram entries sorted by count (descending), then by key for a stable order.

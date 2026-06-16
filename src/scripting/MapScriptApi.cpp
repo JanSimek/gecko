@@ -148,7 +148,7 @@ std::map<int, int> MapScriptApi::sceneryCounts(Map& map) const {
     std::unordered_map<int, bool> eligible; // pid -> scatter-eligible (decided once, then cached)
     for (const auto& [elevation, objects] : map.getMapFile().map_objects) {
         for (const auto& object : objects) {
-            if (!object || static_cast<Pro::OBJECT_TYPE>((object->pro_pid >> 24) & 0xFFu) != Pro::OBJECT_TYPE::SCENERY) {
+            if (!object || Pro::typeOfPid(object->pro_pid) != Pro::OBJECT_TYPE::SCENERY) {
                 continue;
             }
             const int pid = static_cast<int>(object->pro_pid);
@@ -269,7 +269,7 @@ uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
             if (number <= 0 || number > 0x00FFFFFF) {
                 throw ScriptError(std::format("proto number out of range (1..16777215): {}", number));
             }
-            return (static_cast<uint32_t>(type) << 24) | static_cast<uint32_t>(number);
+            return Pro::makePid(type, static_cast<uint32_t>(number));
         }
     }
     throw ScriptError(std::format("unknown proto type '{}' (use item/critter/scenery/wall/tile/misc)", typeName));
