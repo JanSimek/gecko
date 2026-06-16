@@ -12,6 +12,7 @@
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QTableWidget>
 #include <QTest>
 #include <QTextStream>
 #include <QTreeWidget>
@@ -27,6 +28,7 @@
 #include "format/pro/Pro.h"
 #include "ui/core/MainWindow.h"
 #include "ui/dialogs/InventoryViewerDialog.h"
+#include "ui/widgets/DataPathsWidget.h"
 #include "ui/widgets/ObjectPreviewWidget.h"
 #include "ui/widgets/ProInfoPanelWidget.h"
 #include "ui/widgets/ProPreviewPanelWidget.h"
@@ -608,6 +610,27 @@ TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][main
 
     REQUIRE_FALSE(selectionDock->isVisible());
     REQUIRE_FALSE(selectionAction->isChecked());
+}
+
+TEST_CASE("DataPathsWidget shows highest priority on top and preserves stored order", "[qt][datapaths]") {
+    auto settings = std::make_shared<geck::Settings>();
+    geck::DataPathsWidget widget(settings);
+
+    // Stored order is lowest-priority-first: the loader mounts in this order and the last-mounted
+    // source wins. (.dat paths normalise to themselves, so the round-trip is exact.)
+    const std::vector<std::filesystem::path> stored{ "/data/base.dat", "/data/patch.dat", "/data/mymod.dat" };
+    widget.setDataPaths(stored);
+
+    // Round-trip: the stored order is preserved exactly, so existing configs load identically.
+    CHECK(widget.getDataPaths() == stored);
+
+    // The table displays it reversed, highest priority first: the stored-last source is the top row.
+    auto* table = widget.findChild<QTableWidget*>();
+    REQUIRE(table != nullptr);
+    REQUIRE(table->rowCount() == 3);
+    CHECK(table->item(0, 1)->text().toStdString() == "/data/mymod.dat"); // top row = highest priority
+    CHECK(table->item(2, 1)->text().toStdString() == "/data/base.dat");  // bottom row = lowest
+    CHECK(table->item(0, 0)->text().startsWith("1"));                    // priority counts from 1 at the top
 }
 
 #ifdef GECK_SCRIPTING_ENABLED
