@@ -146,13 +146,31 @@ TEST_CASE("Luau can reach the name resolvers", "[scripting][lua]") {
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
     LuaScriptRuntime rt;
 
-    // tileId and placeProto are bound and callable. Headless they resolve to -1/false (no data),
-    // which is exactly the contract a generator branches on (skip painting an unknown tile).
+    // tileId, mapScenery and placeProto are bound and callable. Headless they resolve to
+    // -1/empty/false (no data) — exactly the contract a generator branches on.
     const auto r = rt.run(R"(
         assert(api:tileId("edg5000") == -1, "expected -1 without data")
+        assert(#api:mapScenery("maps/desert1.map") == 0, "expected no scenery without data")
         assert(api:placeProto(0x02000066, 20100, 0) == false, "expected false without data")
     )",
         api, fx.controller, "resolvers");
+    INFO("script error: " << r.error);
+    CHECK(r.ok);
+}
+
+TEST_CASE("Luau exposes caller args as the global table", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    const ScriptArgs args{ { "seed", "42" }, { "tile", "edg5000" } };
+    const auto r = rt.run(R"(
+        assert(args ~= nil, "args table missing")
+        assert(tonumber(args.seed) == 42, "args.seed wrong")
+        assert(args.tile == "edg5000", "args.tile wrong")
+        assert(args.missing == nil, "absent arg should be nil")
+    )",
+        api, fx.controller, "args", args);
     INFO("script error: " << r.error);
     CHECK(r.ok);
 }

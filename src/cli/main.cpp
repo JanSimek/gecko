@@ -24,8 +24,9 @@ void printUsage(const char* program) {
               << "      Reports ground-tile and object (scenery/wall/critter/...) usage across maps,\n"
               << "      per map and aggregated. With no map arguments, every map under maps/ is analysed.\n"
               << "  " << program << " map generate --script <file.luau> --out <file.map>\n"
-              << "      [--elevation 0|1|2] --data <dir-or-.dat> [--data <...>]\n"
+              << "      [--elevation 0|1|2] [--arg key=value ...] --data <dir-or-.dat> [--data <...>]\n"
               << "      Runs a Luau generation script against an empty map and writes the result.\n"
+              << "      --arg passes parameters to the script (read as args.key).\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
@@ -43,7 +44,7 @@ bool generateMissingRequired(const CliArgs& cli) {
 int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
     const std::string& arg = args[i];
     const bool valueFlag = arg == "--data"
-        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation"));
+        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation" || arg == "--arg"));
 
     if (valueFlag && i + 1 >= args.size()) {
         std::cerr << "error: " << arg << " needs a value\n";
@@ -65,6 +66,18 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     }
     if (out.generate && arg == "--elevation") {
         out.gen.elevation = std::stoi(args[i + 1]);
+        return 2;
+    }
+    if (out.generate && arg == "--arg") {
+        // key=value -> exposed to the script as args.key
+        const std::string& kv = args[i + 1];
+        const auto eq = kv.find('=');
+        if (eq == std::string::npos) {
+            std::cerr << "error: --arg expects key=value, got: " << kv << "\n";
+            printUsage(program);
+            return 0;
+        }
+        out.gen.args[kv.substr(0, eq)] = kv.substr(eq + 1);
         return 2;
     }
     if (out.generate) {

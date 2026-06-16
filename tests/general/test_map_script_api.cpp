@@ -165,6 +165,12 @@ TEST_CASE("MapScriptApi name resolvers fail closed without game data", "[scripti
         CHECK(api.tileId("does-not-exist") == -1);
     }
 
+    SECTION("mapScenery returns an empty palette when the reference map can't be read") {
+        // No data mounted -> the reference map can't be loaded -> empty, not a crash.
+        CHECK(api.mapScenery("maps/desert1.map").empty());
+        CHECK(api.mapScenery("no/such/map.map").empty());
+    }
+
     SECTION("placeProto rejects an off-grid hex before any proto lookup") {
         CHECK_FALSE(api.placeProto(0x02000066u, -1, 0));
         CHECK(api.placedObjects() == 0);

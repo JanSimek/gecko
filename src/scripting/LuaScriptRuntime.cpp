@@ -39,7 +39,7 @@ namespace {
 }
 
 ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
-    ObjectCommandController& controller, const std::string& description) {
+    ObjectCommandController& controller, const std::string& description, const ScriptArgs& args) {
     ScriptResult result;
 
     lua_State* L = luaL_newstate();
@@ -62,12 +62,23 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         .addFunction("getFloor", &MapScriptApi::getFloor)
         .addFunction("getRoof", &MapScriptApi::getRoof)
         .addFunction("tileId", &MapScriptApi::tileId)
+        .addFunction("mapScenery", &MapScriptApi::mapScenery)
         .addFunction("placeObject", &MapScriptApi::placeObject)
         .addFunction("placeProto", &MapScriptApi::placeProto)
         .addFunction("paintFloor", &MapScriptApi::paintFloor)
         .addFunction("paintRoof", &MapScriptApi::paintRoof)
         .endClass();
     luabridge::setGlobal(L, &api, "api");
+
+    // Expose caller parameters as the global table `args` (string -> string). Must precede
+    // luaL_sandbox(), which makes globals read-only.
+    {
+        auto argsTable = luabridge::newTable(L);
+        for (const auto& [key, value] : args) {
+            argsTable[key] = value;
+        }
+        luabridge::setGlobal(L, argsTable, "args");
+    }
 
     luaL_sandbox(L);
 

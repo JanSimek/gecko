@@ -48,6 +48,15 @@ public:
     /// if the tile list is unavailable or the name is unknown, so scripts address tiles by name
     /// instead of magic numbers.
     int tileId(const std::string& name) const;
+    /// The distinct scenery proto PIDs used by a reference map (e.g. "maps/desert1.map") — the
+    /// curated palette that map is actually built from, ready to hand to placeProto(). A PID is the
+    /// engine's unique proto identifier ((type << 24) | index), so this is exact, unlike resolving
+    /// by the non-unique display name. Use it to scatter the same scenery a shipped map does.
+    /// Empty if the map can't be read (unknown path or no data mounted). Scenery only — walls and
+    /// the MISC markers (scroll blockers / exit grids) are excluded by type, and flat scenery
+    /// (invisible movement-blockers / floor markers, which carry OBJECT_FLAT) is excluded too, so
+    /// only upright decorations remain and a generator never scatters a blocker.
+    std::vector<int> mapScenery(const std::string& mapPath) const;
 
     // --- Undo batching -----------------------------------------------------------
     void beginBatch(const std::string& description);

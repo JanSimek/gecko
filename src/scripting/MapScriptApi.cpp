@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <functional>
+#include <memory>
+#include <unordered_set>
 
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
@@ -14,6 +17,7 @@
 #include "format/pro/Pro.h"
 #include "editor/TileChange.h"
 #include "pattern/PatternSprite.h"
+#include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
 #include "ui/editing/ObjectCommandController.h"
@@ -99,6 +103,62 @@ int MapScriptApi::tileId(const std::string& name) const {
         }
     }
     return -1;
+}
+
+std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
+    std::vector<int> palette;
+    std::unordered_set<int> seen;
+
+    const auto bytes = _resources.files().readRawBytes(mapPath);
+    if (!bytes) {
+        return palette; // unknown path / no data mounted
+    }
+
+    // The reader needs each object's proto for subtype parsing; resolve them GL-free like the
+    // analyzer does. A proto that won't load yields nullptr and the reader skips its extra fields.
+    const std::function<Pro*(uint32_t)> proLoad = [this](uint32_t pid) -> Pro* {
+        try {
+            return _resources.repository().load<Pro>(ProHelper::basePath(_resources, pid));
+        } catch (const std::exception&) {
+            return nullptr;
+        }
+    };
+
+    std::unique_ptr<Map> reference;
+    try {
+        MapReader reader(proLoad);
+        reference = reader.openFile(mapPath, *bytes);
+    } catch (const std::exception&) {
+        return palette;
+    }
+    if (!reference) {
+        return palette;
+    }
+
+    for (const auto& [elevation, objects] : reference->getMapFile().map_objects) {
+        for (const auto& object : objects) {
+            if (!object) {
+                continue;
+            }
+            const auto type = static_cast<Pro::OBJECT_TYPE>((object->pro_pid >> 24) & 0xFFu);
+            if (type != Pro::OBJECT_TYPE::SCENERY) {
+                continue;
+            }
+            const int pid = static_cast<int>(object->pro_pid);
+            if (!seen.insert(pid).second) {
+                continue; // already decided this proto
+            }
+            // Skip flat scenery: the invisible movement-blockers / floor markers (block.frm) carry
+            // OBJECT_FLAT, while upright decorations (scrub, trees, rocks) do not — only the latter
+            // belong in a scatter palette. (A proto we can't load is kept, best-effort.)
+            if (const Pro* pro = proLoad(object->pro_pid);
+                pro != nullptr && Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT)) {
+                continue;
+            }
+            palette.push_back(pid);
+        }
+    }
+    return palette;
 }
 
 void MapScriptApi::beginBatch(const std::string& description) {
