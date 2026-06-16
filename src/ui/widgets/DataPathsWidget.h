@@ -3,7 +3,7 @@
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QListWidget>
+#include <QTableWidget>
 #include <QPushButton>
 #include <QLabel>
 #include <QGroupBox>
@@ -48,20 +48,31 @@ private slots:
     void onRemovePath();
     void onAutoDetect();
     void onSelectionChanged();
-    void onItemDoubleClicked(QListWidgetItem* item);
+    void onCellDoubleClicked(int row, int column);
 
 private:
     void setupUI();
     void setupConnections();
-    void addPathToList(const std::filesystem::path& path);
+    // Insert a path as a table row. atTop=true makes it the highest priority (the first row);
+    // otherwise it is appended as the lowest. Returns false if the path is already present.
+    bool addPathRow(const std::filesystem::path& path, bool atTop);
     void removeSelectedPath();
     void updateButtonStates();
     void moveSelectedPath(int offset);
+    void renumberPriorities();
+    bool isProtectedRow(int row) const;
+    int selectedRow() const;
+
+    // Highest priority is the top row; the stored order is lowest-priority-first, so the table
+    // displays it reversed (see getDataPaths/setDataPaths). Columns:
+    enum Column { PriorityColumn = 0,
+        PathColumn = 1,
+        ColumnCount = 2 };
 
     // UI Components
     QVBoxLayout* _layout;
     QLabel* _helpLabel;
-    QListWidget* _pathsList;
+    QTableWidget* _pathsTable;
     QHBoxLayout* _controlLayout;
     QPushButton* _addButton;
     QPushButton* _removeButton;
