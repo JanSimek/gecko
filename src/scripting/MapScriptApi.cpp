@@ -8,7 +8,6 @@
 #include <format>
 #include <functional>
 #include <memory>
-#include <stdexcept>
 #include <unordered_map>
 
 #include "editor/HexGeometry.h"
@@ -88,7 +87,7 @@ int MapScriptApi::tileId(const std::string& name) const {
     // sees it; an unknown name in a *loaded* list is a legitimate "not found" -> -1.
     const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
     if (lst == nullptr) {
-        throw std::runtime_error("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
+        throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
     }
     // tiles.lst entries are already lowercased/trimmed by the reader; normalise the query the
     // same way so "edg5000", "EDG5000.FRM" and "edg5000.frm" all match.
@@ -112,7 +111,7 @@ std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) 
     // than returning null, so the caller isn't handed a silently-empty result.
     const auto bytes = _resources.files().readRawBytes(mapPath);
     if (!bytes) {
-        throw std::runtime_error(std::format("could not read map '{}' — check the path and that Fallout 2 data is mounted", mapPath));
+        throw ScriptError(std::format("could not read map '{}' — check the path and that Fallout 2 data is mounted", mapPath));
     }
     // The reader needs each object's proto for subtype parsing; resolve them GL-free like the
     // analyzer does. A proto that won't load yields nullptr and the reader skips its extra fields
@@ -127,43 +126,37 @@ std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) 
     MapReader reader(proLoad);
     auto map = reader.openFile(mapPath, *bytes); // parse errors propagate
     if (!map) {
-        throw std::runtime_error(std::format("could not parse map '{}'", mapPath));
+        throw ScriptError(std::format("could not parse map '{}'", mapPath));
     }
     return map;
 }
 
+bool MapScriptApi::isScatterableScenery(uint32_t pid) const {
+    // Flat scenery — the invisible movement-blockers / floor markers (block.frm) carry OBJECT_FLAT,
+    // while upright decorations (scrub, trees, rocks) do not — is excluded from a scatter palette.
+    const Pro* pro = nullptr;
+    try {
+        pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, pid));
+    } catch (const std::exception&) {
+        return true; // best-effort: keep a proto we can't inspect
+    }
+    return pro == nullptr || !Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
+}
+
 std::map<int, int> MapScriptApi::sceneryCounts(Map& map) const {
     std::map<int, int> counts;
-    std::unordered_map<int, bool> eligible; // pid -> belongs in a scatter palette (cached decision)
+    std::unordered_map<int, bool> eligible; // pid -> scatter-eligible (decided once, then cached)
     for (const auto& [elevation, objects] : map.getMapFile().map_objects) {
         for (const auto& object : objects) {
-            if (!object) {
-                continue;
-            }
-            const auto type = static_cast<Pro::OBJECT_TYPE>((object->pro_pid >> 24) & 0xFFu);
-            if (type != Pro::OBJECT_TYPE::SCENERY) {
+            if (!object || static_cast<Pro::OBJECT_TYPE>((object->pro_pid >> 24) & 0xFFu) != Pro::OBJECT_TYPE::SCENERY) {
                 continue;
             }
             const int pid = static_cast<int>(object->pro_pid);
-            auto cached = eligible.find(pid);
-            if (cached == eligible.end()) {
-                // Skip flat scenery: the invisible movement-blockers / floor markers (block.frm)
-                // carry OBJECT_FLAT, while upright decorations (scrub, trees, rocks) do not — only
-                // the latter belong in a scatter palette. (A proto we can't load is kept,
-                // best-effort.) Decide once per PID; the proto is cached by the repository anyway.
-                bool include = true;
-                const Pro* pro = nullptr;
-                try {
-                    pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, object->pro_pid));
-                } catch (const std::exception&) {
-                    // best-effort: keep a proto we can't inspect
-                }
-                if (pro != nullptr && Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT)) {
-                    include = false;
-                }
-                cached = eligible.emplace(pid, include).first;
+            auto [it, inserted] = eligible.try_emplace(pid, false);
+            if (inserted) {
+                it->second = isScatterableScenery(object->pro_pid);
             }
-            if (cached->second) {
+            if (it->second) {
                 ++counts[pid];
             }
         }
@@ -233,7 +226,6 @@ std::vector<std::string> MapScriptApi::listMaps() const {
 namespace {
     // Smootherstep, for C1-continuous interpolation between lattice values.
     double fade(double t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
-    double lerp(double a, double b, double t) { return a + t * (b - a); }
 
     // Hash a lattice corner to a stable pseudo-random value in [0,1).
     double latticeValue(int xi, int yi) {
@@ -257,7 +249,7 @@ double MapScriptApi::noise2d(double x, double y) const {
     const double v01 = latticeValue(xi, yi + 1);
     const double v11 = latticeValue(xi + 1, yi + 1);
 
-    return lerp(lerp(v00, v10, tx), lerp(v01, v11, tx), ty); // bilinear -> [0,1)
+    return std::lerp(std::lerp(v00, v10, tx), std::lerp(v01, v11, tx), ty); // bilinear -> [0,1)
 }
 
 uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
@@ -275,12 +267,12 @@ uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
 
     const auto it = kTypes.find(t);
     if (it == kTypes.end()) {
-        throw std::runtime_error(std::format("unknown proto type '{}' (use item/critter/scenery/wall/tile/misc)", typeName));
+        throw ScriptError(std::format("unknown proto type '{}' (use item/critter/scenery/wall/tile/misc)", typeName));
     }
 
     // The id occupies the low 24 bits of the PID and is 1-based (proto ids start at 1).
     if (number <= 0 || number > 0x00FFFFFF) {
-        throw std::runtime_error(std::format("proto number out of range (1..16777215): {}", number));
+        throw ScriptError(std::format("proto number out of range (1..16777215): {}", number));
     }
     return (static_cast<uint32_t>(it->second) << 24) | static_cast<uint32_t>(number);
 }
@@ -290,7 +282,7 @@ std::string MapScriptApi::protoName(int pid) const {
     // loads but has no name string is a legitimate empty result.
     const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, static_cast<uint32_t>(pid)));
     if (pro == nullptr) {
-        throw std::runtime_error(std::format("proto could not be loaded for pid {}", pid));
+        throw ScriptError(std::format("proto could not be loaded for pid {}", pid));
     }
     if (Msg* msg = ProHelper::msgFile(_resources, pro->type()); msg != nullptr) {
         return msg->message(pro->header.message_id).text;

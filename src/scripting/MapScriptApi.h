@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,14 @@ class ObjectCommandController;
 namespace resource {
     class GameResources;
 }
+
+/// Raised by the query/builder methods on a genuine failure (no data mounted, an unreadable map
+/// path, an unknown proto type/id). A dedicated type so callers can catch it specifically; it still
+/// derives from std::exception, so LuaBridge converts it to a Lua error the runtime reports.
+class ScriptError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
 
 /// Host API for editing the map: queries plus undoable mutators that route through
 /// ObjectCommandController. Pure C++ with no scripting-runtime dependency, so it is usable
@@ -114,6 +123,8 @@ private:
     // pid -> placement count for the scatter-eligible scenery in `map` (scenery type, non-flat).
     // Shared by mapScenery (keys) and mapSceneryHistogram (the counts).
     std::map<int, int> sceneryCounts(Map& map) const;
+    // Whether a scenery proto belongs in a scatter palette (upright decoration, not a flat blocker).
+    bool isScatterableScenery(uint32_t pid) const;
 
     resource::GameResources& _resources;
     const HexagonGrid& _hexgrid;

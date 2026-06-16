@@ -201,8 +201,10 @@ TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[s
     }
 
     SECTION("noise2d is pure: in [0,1] and deterministic") {
-        for (double x = 0.0; x < 5.0; x += 1.3) {
-            for (double y = 0.0; y < 5.0; y += 1.7) {
+        for (int xi = 0; xi < 4; ++xi) {
+            for (int yi = 0; yi < 4; ++yi) {
+                const double x = xi * 1.3;
+                const double y = yi * 1.7;
                 const double n = api.noise2d(x, y);
                 CHECK(n >= 0.0);
                 CHECK(n <= 1.0);
