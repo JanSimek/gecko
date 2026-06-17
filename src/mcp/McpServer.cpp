@@ -50,6 +50,22 @@ namespace {
         const auto it = args.find(key);
         return it != args.end() && it->is_number_integer() ? it->get<int>() : fallback;
     }
+    bool optBool(const json& args, const char* key, bool fallback) {
+        const auto it = args.find(key);
+        return it != args.end() && it->is_boolean() ? it->get<bool>() : fallback;
+    }
+    // Collect the integer entries of an optional `key` array (non-integers ignored) into `out`.
+    void parsePidArray(const json& args, const char* key, std::vector<std::uint32_t>& out) {
+        const auto it = args.find(key);
+        if (it == args.end() || !it->is_array()) {
+            return;
+        }
+        for (const auto& pid : *it) {
+            if (pid.is_number_integer()) {
+                out.push_back(static_cast<std::uint32_t>(pid.get<int64_t>()));
+            }
+        }
+    }
 
     // --- tools -------------------------------------------------------------------
     json toolListMaps(resource::GameResources& resources) {
@@ -182,19 +198,9 @@ namespace {
         opts.elevation = optInt(args, "elevation", opts.elevation);
         opts.anchorHex = optInt(args, "anchorHex", opts.anchorHex);
         opts.radius = optInt(args, "radius", opts.radius);
-        if (const auto it = args.find("includeFloor"); it != args.end() && it->is_boolean()) {
-            opts.includeFloor = it->get<bool>();
-        }
-        if (const auto it = args.find("includeRoof"); it != args.end() && it->is_boolean()) {
-            opts.includeRoof = it->get<bool>();
-        }
-        if (const auto it = args.find("pids"); it != args.end() && it->is_array()) {
-            for (const auto& pid : *it) {
-                if (pid.is_number_integer()) {
-                    opts.pids.push_back(static_cast<uint32_t>(pid.get<int64_t>()));
-                }
-            }
-        }
+        opts.includeFloor = optBool(args, "includeFloor", opts.includeFloor);
+        opts.includeRoof = optBool(args, "includeRoof", opts.includeRoof);
+        parsePidArray(args, "pids", opts.pids);
         if (opts.mapPath.empty() || opts.outPath.empty() || opts.name.empty()) {
             return toolText("extract_pattern requires 'map', 'out' and 'name'", true);
         }
