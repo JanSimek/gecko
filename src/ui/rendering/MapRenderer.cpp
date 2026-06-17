@@ -168,6 +168,22 @@ namespace {
 
     constexpr uint16_t kEmptyTile = static_cast<uint16_t>(Map::EMPTY_TILE);
 
+    // Grow `bounds` to the non-empty tiles of one layer (floor or roof). Empty cells are excluded so
+    // the frame fits the map's actual content — the loader emits a blank sprite for every empty cell
+    // across the full 100x100 grid, and framing to those would shrink the content into a sea of black.
+    void addTileContentBounds(Bounds& bounds, const std::vector<Tile>& tiles, bool roof) {
+        for (std::size_t i = 0; i < tiles.size(); ++i) {
+            const uint16_t id = roof ? tiles[i].getRoof() : tiles[i].getFloor();
+            if (id == kEmptyTile) {
+                continue;
+            }
+            const ScreenPosition pos = indexToScreenPosition(static_cast<int>(i), roof);
+            const auto x = static_cast<float>(pos.x);
+            const auto y = static_cast<float>(pos.y);
+            bounds.add(x, y, x + static_cast<float>(TILE_WIDTH), y + static_cast<float>(TILE_HEIGHT));
+        }
+    }
+
     // A stable, distinct colour per floor-tile id, most-common id first, also recorded in the legend.
     std::unordered_map<uint16_t, sf::Color> assignFloorColors(const std::vector<Tile>& tiles, MapRenderer::Legend* legend) {
         std::map<uint16_t, int> counts;
@@ -281,14 +297,14 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
     std::vector<sf::Sprite> wallBlockerOverlays;
     loader.loadSprites(map, options.elevation, floorSprites, roofSprites, objects, wallBlockerOverlays);
 
-    // Frame the camera to the bounding box of everything we will draw (floor, optional roof, objects).
+    // Frame to the map's *content*: non-empty tiles plus objects. (We still draw the blank sprites the
+    // loader made for empty cells — they just fall outside this frame instead of dominating it.)
     Bounds bounds;
-    for (const auto& sprite : floorSprites) {
-        bounds.add(sprite);
-    }
-    if (options.showRoof) {
-        for (const auto& sprite : roofSprites) {
-            bounds.add(sprite);
+    const auto& allTiles = map.getMapFile().tiles;
+    if (const auto it = allTiles.find(options.elevation); it != allTiles.end()) {
+        addTileContentBounds(bounds, it->second, false);
+        if (options.showRoof) {
+            addTileContentBounds(bounds, it->second, true);
         }
     }
     if (options.showObjects) {

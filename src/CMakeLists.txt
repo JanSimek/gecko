@@ -508,6 +508,8 @@ target_link_libraries(gecko_app PUBLIC
 # it reports an error instead of crashing when none is available (headless without a display).
 if(GECK_BUILD_CLI)
     add_library(gecko_cli STATIC
+        cli/BundledResources.h
+        cli/BundledResources.cpp
         cli/MapLoad.h
         cli/MapLoad.cpp
         cli/MapAnalyzer.h

@@ -1,3 +1,4 @@
+#include "cli/BundledResources.h"
 #include "cli/MapAnalyzer.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
@@ -196,6 +197,11 @@ int main(int argc, char** argv) {
     geck::resource::GameResources resources;
     for (const auto& path : cli.dataPaths) {
         resources.files().addDataPath(path);
+    }
+    // Mount the bundled resources (blank.frm, scripts, …) the way the editor does, so e.g. the
+    // natural map render finds art/tiles/blank.frm even though it isn't in master.dat.
+    if (const auto bundled = geck::cli::findBundledResources(argv[0]); !bundled.empty()) {
+        resources.files().addDataPath(bundled);
     }
 
     if (cli.generate) {
