@@ -278,8 +278,9 @@ namespace {
     // The JSON arrays of emitJson(), one per object below, so emitJson itself stays a flat sketch of
     // the schema. Each prints a comma-separated array body (no brackets) and folds usage into `agg`.
 
-    // Per-map floor array: [{id,name,count}], accumulating totals into agg.
-    void emitMapFloorsJson(const MapUsage& usage, NameResolver& names, Aggregate& agg, std::ostream& out) {
+    // Per-map floor array: [{id,name,count}], accumulating totals into agg. tileName() is const
+    // (pure tiles.lst lookup), unlike the proto helpers which cache, so names is a const ref here.
+    void emitMapFloorsJson(const MapUsage& usage, const NameResolver& names, Aggregate& agg, std::ostream& out) {
         bool first = true;
         for (const auto& [id, count] : sortedByCountDesc(usage.floors)) {
             out << (first ? "" : ",");
@@ -304,8 +305,8 @@ namespace {
         }
     }
 
-    // Aggregate floor array: [{id,name,total,maps}].
-    void emitAggFloorsJson(const Aggregate& agg, NameResolver& names, std::ostream& out) {
+    // Aggregate floor array: [{id,name,total,maps}]. const names, as in emitMapFloorsJson.
+    void emitAggFloorsJson(const Aggregate& agg, const NameResolver& names, std::ostream& out) {
         bool first = true;
         for (const auto& [id, count] : sortedByCountDesc(agg.floorCount)) {
             out << (first ? "" : ",");
