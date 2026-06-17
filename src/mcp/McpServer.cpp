@@ -140,6 +140,9 @@ namespace {
         if (const auto it = args.find("schematic"); it != args.end() && it->is_boolean()) {
             opts.schematic = it->get<bool>();
         }
+        if (const auto it = args.find("showBlockers"); it != args.end() && it->is_boolean()) {
+            opts.showBlockers = it->get<bool>();
+        }
         if (opts.mapPath.empty() || opts.outPath.empty()) {
             return toolText("render_map requires 'map' and 'out' string arguments", true);
         }
@@ -195,8 +198,9 @@ namespace {
                                  "optional schematic. schematic=true flat-colours floor tiles by id "
                                  "and marks objects by category, and returns a colour legend (id/type "
                                  "-> colour -> count) so you can match the picture to the analyze JSON "
-                                 "and read the floor-tile transitions. Needs an off-screen GL context." },
-                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } } } },
+                                 "and read the floor-tile transitions. FLAT objects (invisible engine "
+                                 "blockers) are hidden unless showBlockers. Needs an off-screen GL context." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } } } },
         });
     }
 } // namespace

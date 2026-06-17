@@ -104,10 +104,10 @@ gecko-mcp --data <master.dat>
 | `analyze` | The `analyze --json` report (omit `maps` for all, or scope it): per-map and aggregate floor tiles, objects (with the `flat` palette-curation flag) and `adjacency` — the floor-tile borders (which tile sits next to which different tile, and how often), i.e. the transitions to curate for seamless terrain. |
 | `proto_info` | Resolve a PID to its type, engine display name and `flat` flag. |
 | `generate` | Run a generation script (`script`, `out`, optional `elevation`, optional `args` map) and write a `.map`. Needs a scripting-enabled build. |
-| `render_map` | Render a map to a PNG (`map`, `out`, optional `elevation`, `maxDimension`, `showRoof`, `schematic`) so the agent can *see* it, not just measure it. With `schematic: true` it flat-colours floor tiles by id and marks objects by category, and returns a colour legend (id/type → colour → count) — so the agent can match the picture to the `analyze` JSON and read the floor-tile transitions. Needs an off-screen GL context; reports an error if none is available. |
+| `render_map` | Render a map to a PNG (`map`, `out`, optional `elevation`, `maxDimension`, `showRoof`, `schematic`, `showBlockers`) so the agent can *see* it, not just measure it. With `schematic: true` it flat-colours floor tiles by id and marks objects by category, and returns a colour legend (id/type → colour → count) — so the agent can match the picture to the `analyze` JSON and read the floor-tile transitions. FLAT objects (invisible engine blockers) are hidden unless `showBlockers`. Needs an off-screen GL context; reports an error if none is available. |
 
 The same three actions are on `gecko-cli`: `map analyze [--json]`, `map generate`, and
-`map render --map <f.map> --out <f.png> [--elevation N] [--max-dim N] [--roof] [--schematic]`.
+`map render --map <f.map> --out <f.png> [--elevation N] [--max-dim N] [--roof] [--schematic] [--show-blockers]`.
 
 The **schematic** render is the bridge between the JSON and the image: a raw render shows what the
 map looks like, but the agent can't tell which pixels are tile `220`. In schematic mode the colours

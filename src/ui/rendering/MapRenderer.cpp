@@ -6,9 +6,11 @@
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
 #include "format/pro/Pro.h"
+#include "resource/GameResources.h"
 #include "ui/rendering/MapSpriteLoader.h"
 #include "ui/rendering/RenderingEngine.h"
 #include "util/Constants.h"
+#include "util/ProHelper.h"
 #include "util/TileUtils.h"
 
 #include <SFML/Graphics/CircleShape.hpp>
@@ -140,18 +142,26 @@ namespace {
         }
     }
 
-    // Append a tile-footprint diamond (two triangles) at screen box top-left (x, y).
-    void appendDiamond(sf::VertexArray& vertices, float x, float y, sf::Color color) {
-        const auto halfW = static_cast<float>(TILE_WIDTH) / 2.0f;
-        const auto halfH = static_cast<float>(TILE_HEIGHT) / 2.0f;
-        const sf::Vector2f top{ x + halfW, y };
-        const sf::Vector2f right{ x + static_cast<float>(TILE_WIDTH), y + halfH };
-        const sf::Vector2f bottom{ x + halfW, y + static_cast<float>(TILE_HEIGHT) };
-        const sf::Vector2f left{ x, y + halfH };
-        for (const sf::Vector2f& point : { top, right, bottom }) {
+    // Append one tile cell (two triangles) for the tile whose 80x36 art box has top-left (x, y).
+    // The cell is the iso-lattice parallelogram around the tile centre, spanned by the grid's
+    // half-basis vectors — the screen step for +1 column (u) and +1 row (v). Using these (not an
+    // axis-aligned 80x36 diamond) makes neighbouring cells abut exactly, so regions fill solidly
+    // instead of leaving gaps.
+    void appendCell(sf::VertexArray& vertices, float x, float y, sf::Color color) {
+        const sf::Vector2f center{ x + static_cast<float>(TILE_WIDTH) / 2.0f,
+            y + static_cast<float>(TILE_HEIGHT) / 2.0f };
+        const sf::Vector2f uHalf{ static_cast<float>(TILE_Y_OFFSET_LARGE) / 2.0f,
+            static_cast<float>(TILE_Y_OFFSET_SMALL) / 2.0f }; // +1 column
+        const sf::Vector2f vHalf{ -static_cast<float>(TILE_X_OFFSET) / 2.0f,
+            static_cast<float>(TILE_Y_OFFSET_TINY) / 2.0f }; // +1 row
+        const sf::Vector2f a = center + uHalf + vHalf;
+        const sf::Vector2f b = center + uHalf - vHalf;
+        const sf::Vector2f c = center - uHalf - vHalf;
+        const sf::Vector2f d = center - uHalf + vHalf;
+        for (const sf::Vector2f& point : { a, b, c }) {
             vertices.append(sf::Vertex{ point, color });
         }
-        for (const sf::Vector2f& point : { top, bottom, left }) {
+        for (const sf::Vector2f& point : { a, c, d }) {
             vertices.append(sf::Vertex{ point, color });
         }
     }
@@ -191,20 +201,44 @@ namespace {
             const ScreenPosition pos = indexToScreenPosition(static_cast<int>(i));
             const auto x = static_cast<float>(pos.x);
             const auto y = static_cast<float>(pos.y);
-            appendDiamond(mesh, x, y, colors.at(floorId));
+            appendCell(mesh, x, y, colors.at(floorId));
             bounds.add(x, y, x + static_cast<float>(TILE_WIDTH), y + static_cast<float>(TILE_HEIGHT));
         }
     }
 
+    // Whether a proto is FLAT (the OBJECT_FLAT flag) — the invisible engine blockers (hex/scroll
+    // blockers, exit grids) carry it. Cached per pid since a map repeats the same pids heavily.
+    bool isFlatProto(resource::GameResources& resources, uint32_t pid, std::unordered_map<uint32_t, bool>& cache) {
+        if (const auto it = cache.find(pid); it != cache.end()) {
+            return it->second;
+        }
+        bool flat = false;
+        try {
+            if (const Pro* pro = resources.repository().load<Pro>(ProHelper::basePath(resources, pid)); pro != nullptr) {
+                flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
+            }
+        } catch (const std::exception&) {
+            // unknown proto -> treat as not flat, so it still shows
+        }
+        cache[pid] = flat;
+        return flat;
+    }
+
     // Draw a category-coloured dot at each object's centre, and record the per-category legend.
+    // FLAT objects (invisible engine blockers) are skipped unless showBlockers.
     void drawObjectMarkers(sf::RenderTexture& target, const std::vector<std::shared_ptr<Object>>& objects,
-        MapRenderer::Legend* legend) {
+        resource::GameResources& resources, bool showBlockers, MapRenderer::Legend* legend) {
+        std::unordered_map<uint32_t, bool> flatCache;
         std::map<uint32_t, int> typeCounts; // engine type value -> count
         for (const auto& object : objects) {
             if (!object || !object->hasMapObject()) {
                 continue;
             }
-            const Pro::OBJECT_TYPE type = Pro::typeOfPid(object->getMapObjectPtr()->pro_pid);
+            const uint32_t pid = object->getMapObjectPtr()->pro_pid;
+            if (!showBlockers && isFlatProto(resources, pid, flatCache)) {
+                continue;
+            }
+            const Pro::OBJECT_TYPE type = Pro::typeOfPid(pid);
             typeCounts[static_cast<uint32_t>(type)]++;
             const sf::FloatRect b = object->getSprite().getGlobalBounds();
             constexpr float radius = 5.0f;
@@ -329,7 +363,7 @@ sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend*
     const std::unique_ptr<sf::RenderTexture> target = makeTarget(computeFrame(bounds, options.maxDimension));
     target->clear(options.background);
     target->draw(floor);
-    drawObjectMarkers(*target, objects, legend);
+    drawObjectMarkers(*target, objects, _resources, options.showBlockers, legend);
     target->display();
     return target->getTexture().copyToImage();
 }

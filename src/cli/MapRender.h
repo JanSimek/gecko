@@ -22,6 +22,8 @@ namespace cli {
         /// Schematic style: flat-colour floor tiles by id + mark objects by category, and print the
         /// colour legend so the agent can match the picture to the analyze JSON.
         bool schematic = false;
+        /// Schematic only: also mark FLAT objects (invisible engine blockers); off by default.
+        bool showBlockers = false;
     };
 
     /// Render a map to an image file (format inferred from the extension, e.g. .png). Returns 0 on

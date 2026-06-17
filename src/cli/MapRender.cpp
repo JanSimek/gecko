@@ -45,6 +45,7 @@ int renderMap(resource::GameResources& resources, const RenderOptions& options, 
     renderOptions.maxDimension = options.maxDimension;
     renderOptions.showRoof = options.showRoof;
     renderOptions.showObjects = options.showObjects;
+    renderOptions.showBlockers = options.showBlockers;
     renderOptions.style = options.schematic ? MapRenderer::Style::Schematic : MapRenderer::Style::Natural;
 
     try {

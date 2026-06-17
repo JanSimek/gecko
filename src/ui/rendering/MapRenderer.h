@@ -41,6 +41,9 @@ public:
         /// Roof tiles cover the floor, so they are off by default — a biome view wants the ground.
         bool showRoof = false;
         bool showObjects = true;
+        /// Schematic only: include FLAT objects (invisible engine blockers — scroll/hex blockers,
+        /// exit grids). Off by default so the dots show the real, in-game-visible scenery and walls.
+        bool showBlockers = false;
         sf::Color background{ 0, 0, 0, 255 };
     };
 
