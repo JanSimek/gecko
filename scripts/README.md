@@ -116,15 +116,22 @@ gecko-mcp --data <master.dat>
 | `extract_pattern` | Capture a structure from a real map into a reusable **pattern stamp** (`map`, `out`, `name`, optional `elevation`, `pids`, `anchorHex`, `radius`, `includeFloor`). Locate it with `pids` (the structure's proto PIDs from `analyze`) — their bounding box grown by `radius` hexes is the capture region, so immediate props nearby come along — or pass `anchorHex`. Objects captured verbatim; `includeFloor: true` also captures the floor/roof under the region (for structures whose floor is integral). The stamp JSON loads in the editor's pattern library and can be placed by `generate`. |
 | `script_api` | The generation-script `api` reference (Markdown, generated from the bound surface so it can't drift): every `api:` function with its signature, plus the non-obvious runtime behaviour (runs are **auto-seeded** and **auto-batched**) and the error model. Read it before writing a script for `generate`. |
 
-On `gecko-cli`: `map analyze [--json|--palette]`, `map generate ... [--stamp name=file.json ...]`, and
+On `gecko-cli`: `map analyze [--json|--palette]`, `map generate ... [--stamp name=file.json ...]`,
 `map render --map <f.map> --out <f.png> [--elevation N] [--max-dim N] [--roof] [--schematic|--objects]
-[--show-blockers]`. Pattern *extraction* is the MCP `extract_pattern` tool.
+[--show-blockers]`, and `map extract-pattern --map <f.map> --out <f.json> --name <n> [--pids id,...]
+[--anchor <hex>] [--radius N] [--include-floor]` (also the MCP `extract_pattern` tool).
 
-**Stamps end to end:** `analyze` a reference map → its `clusters` locate a structure (e.g. a tent:
-a `Wall` + furniture cluster) → `extract_pattern` captures it to a `.json` → `generate --stamp
-tent=tent.json` runs a script that calls `api:placeStamp("tent", api:hexIndex(col,row), 0)`
-(`editor/random_camp.luau` is the worked example) and drops it into the new map. So a generator
-scatters the *real* tents the desert maps use, not approximations.
+**Stamps end to end** — `random_camp.luau` needs a stamp; make one first, then pass it:
+```
+# 1. find the structure (its cluster centerHex, or its proto ids) with analyze, then capture it:
+gecko-cli map extract-pattern --map /maps/desert5.map --out tent.json --name tent \
+    --anchor <centerHex> --radius 6  --data <master.dat> [--data <critter.dat>]
+# 2. generate, loading the stamp so api:placeStamp can drop it:
+gecko-cli map generate --script scripts/editor/random_camp.luau --out camp.map \
+    --stamp tent=tent.json --arg tents=3  --data <master.dat> [--data <critter.dat>]
+```
+Run `random_camp.luau` **without** `--stamp` and it generates the desert but skips the tents (a
+warning, not an error). So a generator scatters the *real* tents the desert maps use.
 
 The **schematic** render is the bridge between the JSON and the image: a raw render shows what the
 map looks like, but the agent can't tell which pixels are tile `220`. In schematic mode the colours

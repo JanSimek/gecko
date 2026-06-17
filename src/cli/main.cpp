@@ -2,6 +2,7 @@
 #include "cli/MapAnalyzer.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
+#include "cli/PatternExtract.h"
 #include "resource/GameResources.h"
 
 #include <spdlog/spdlog.h>
@@ -16,10 +17,12 @@ namespace {
 struct CliArgs {
     bool generate = false;
     bool render = false;
+    bool extract = false;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::GenerateOptions gen;
     geck::cli::RenderOptions ren;
+    geck::cli::ExtractOptions ext;
 };
 
 void printUsage(const char* program) {
@@ -43,12 +46,18 @@ void printUsage(const char* program) {
               << "      --schematic flat-colours floor tiles by id + marks objects by category (with a\n"
               << "      colour legend); --objects mutes the floor to grey so the object markers pop\n"
               << "      (for checking scatter); --show-blockers also marks FLAT objects.\n"
+              << "  " << program << " map extract-pattern --map <file.map> --out <file.json> --name <name>\n"
+              << "      [--pids id,id,...] [--anchor <hex>] [--radius N] [--elevation 0|1|2]\n"
+              << "      [--include-floor] --data <dir-or-.dat> [--data <...>]\n"
+              << "      Captures a structure into a reusable stamp. Locate it with --pids (proto ids\n"
+              << "      from analyze) or --anchor <hex>; --radius (default 2) grows the capture region;\n"
+              << "      --include-floor also captures the floor/roof. Feed the .json to generate --stamp.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
 bool isKnownSubcommand(const std::vector<std::string>& args) {
     return args.size() >= 2 && args[0] == "map"
-        && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render");
+        && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -59,6 +68,26 @@ bool renderMissingRequired(const CliArgs& cli) {
     return cli.render && (cli.ren.mapPath.empty() || cli.ren.outPath.empty());
 }
 
+bool extractMissingRequired(const CliArgs& cli) {
+    return cli.extract && (cli.ext.mapPath.empty() || cli.ext.outPath.empty() || cli.ext.name.empty());
+}
+
+// Parse a comma-separated list of proto ids/PIDs into `out` (decimal or 0x-hex).
+void parsePids(const std::string& csv, std::vector<std::uint32_t>& out) {
+    std::size_t start = 0;
+    while (start < csv.size()) {
+        const std::size_t comma = csv.find(',', start);
+        const std::string token = csv.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+        if (!token.empty()) {
+            out.push_back(static_cast<std::uint32_t>(std::stoul(token, nullptr, 0)));
+        }
+        if (comma == std::string::npos) {
+            break;
+        }
+        start = comma + 1;
+    }
+}
+
 // Consume the argument(s) starting at args[i]. Returns how many tokens were consumed (1 for a
 // flag-less map/positional, 2 for a flag + its value), or 0 on error (after printing the reason).
 // Keeping the token count explicit lets the caller advance the index instead of mutating it here.
@@ -66,7 +95,8 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     const std::string& arg = args[i];
     const bool valueFlag = arg == "--data"
         || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation" || arg == "--arg" || arg == "--stamp"))
-        || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim"));
+        || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim"))
+        || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"));
 
     if (valueFlag && i + 1 >= args.size()) {
         std::cerr << "error: " << arg << " needs a value\n";
@@ -156,6 +186,43 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.extract && arg == "--map") {
+        out.ext.mapPath = args[i + 1];
+        return 2;
+    }
+    if (out.extract && arg == "--out") {
+        out.ext.outPath = args[i + 1];
+        return 2;
+    }
+    if (out.extract && arg == "--name") {
+        out.ext.name = args[i + 1];
+        return 2;
+    }
+    if (out.extract && arg == "--elevation") {
+        out.ext.elevation = std::stoi(args[i + 1]);
+        return 2;
+    }
+    if (out.extract && arg == "--pids") {
+        parsePids(args[i + 1], out.ext.pids);
+        return 2;
+    }
+    if (out.extract && arg == "--anchor") {
+        out.ext.anchorHex = std::stoi(args[i + 1]);
+        return 2;
+    }
+    if (out.extract && arg == "--radius") {
+        out.ext.radius = std::stoi(args[i + 1]);
+        return 2;
+    }
+    if (out.extract && arg == "--include-floor") {
+        out.ext.includeFloor = true;
+        return 1;
+    }
+    if (out.extract) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
     if (arg == "--json") { // analyze only: machine-readable output for the MCP
         out.analyze.json = true;
         return 1;
@@ -176,6 +243,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     }
     out.generate = args[1] == "generate";
     out.render = args[1] == "render";
+    out.extract = args[1] == "extract-pattern";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -197,6 +265,11 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     }
     if (renderMissingRequired(out)) {
         std::cerr << "error: render requires --map and --out\n";
+        printUsage(program);
+        return 2;
+    }
+    if (extractMissingRequired(out)) {
+        std::cerr << "error: extract-pattern requires --map, --out and --name\n";
         printUsage(program);
         return 2;
     }
@@ -233,6 +306,9 @@ int main(int argc, char** argv) {
     }
     if (cli.render) {
         return geck::cli::renderMap(resources, cli.ren, std::cout);
+    }
+    if (cli.extract) {
+        return geck::cli::extractPattern(resources, cli.ext, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
 }
