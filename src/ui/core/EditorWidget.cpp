@@ -2,12 +2,14 @@
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/input/InputHandler.h"
 #ifdef GECK_SCRIPTING_ENABLED
+#include "Application.h"
 #include "scripting/MapScriptApi.h"
 #include "pattern/PatternLibrary.h"
 #include "pattern/PatternSerializer.h"
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QStringList>
 #endif
 #include "ui/rendering/MapSpriteLoader.h"
 #include "ui/rendering/ObjectVisibility.h"
@@ -432,18 +434,11 @@ void EditorWidget::init() {
 
 #ifdef GECK_SCRIPTING_ENABLED
 namespace {
-    // Register the user's saved patterns so a Console script can place them by name —
-    // api:placeStamp("tent", ...). The CLI/MCP load stamps via --stamp/the stamps arg; the Console's
-    // equivalent is the pattern library (where the editor's "save pattern" and a captured extract land),
-    // keyed by each pattern's name.
-    //
-    // Returns one diagnostic line per file we couldn't load (unreadable, or rejected by the
-    // deserializer) so the failure shows up in the Console output instead of being silently
-    // swallowed — a script then reports "unknown stamp" with the reason right above it.
-    std::string registerLibraryStamps(MapScriptApi& api) {
-        QStringList notes;
-        QDirIterator it(pattern::PatternLibrary::rootDir(), QStringList{ "*.json" }, QDir::Files,
-            QDirIterator::Subdirectories);
+    // Load every *.json stamp under `dir` into `api`, keyed by each pattern's name. Appends one
+    // diagnostic line per file we couldn't open or that the deserializer rejected, so a bad stamp is
+    // visible in the Console output instead of being silently swallowed. A missing dir is no-op.
+    void loadStampsFromDir(const QString& dir, MapScriptApi& api, QStringList& notes) {
+        QDirIterator it(dir, QStringList{ "*.json" }, QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             const QString path = it.next();
             QFile file(path);
@@ -460,6 +455,19 @@ namespace {
                 notes << QStringLiteral("stamp library: skipped %1 — %2").arg(shown, error);
             }
         }
+    }
+
+    // Register stamps a Console script can place by name — api:placeStamp("tent", ...). The CLI/MCP load
+    // stamps via --stamp/the stamps arg; the Console pulls from two sources, so worked examples like
+    // random_camp.luau find their tent out of the box and a user's own captures are still honoured:
+    //   1. bundled examples shipped with the editor (resources/scripts/stamps/*.json);
+    //   2. the user's pattern library (where "save pattern" and a captured extract land).
+    // The library is scanned last so a user's saved pattern overrides a bundled example of the same name.
+    std::string registerLibraryStamps(MapScriptApi& api) {
+        QStringList notes;
+        const QString bundled = QString::fromStdString((Application::getResourcesPath() / "scripts" / "stamps").string());
+        loadStampsFromDir(bundled, api, notes);
+        loadStampsFromDir(pattern::PatternLibrary::rootDir(), api, notes);
         return notes.join(QLatin1Char('\n')).toStdString();
     }
 } // namespace

@@ -7,6 +7,10 @@
 --       --stamp tent=tent.json --arg tents=3 \
 --       --data <master.dat> [--data <critter.dat>]
 --
+-- In the editor's Script Console there is no --stamp: stamps are auto-registered from the bundled
+-- examples (resources/scripts/stamps/, which ships a "tent") and from your own saved patterns, so
+-- this runs out of the box. Save a pattern named "tent" to override the bundled one.
+--
 -- --arg density   scenery objects to scatter (default 420)
 -- --arg coverage  0..1 share of the map that grows vegetation (default 0.5)
 -- --arg scale     clump-noise frequency; smaller = larger, smoother clumps (default 0.07)

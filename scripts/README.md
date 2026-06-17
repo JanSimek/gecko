@@ -53,7 +53,7 @@ with that `--arg seed=<value>` to recreate it exactly.
 | `api:paintFloorXY(col,row,id)` / `api:paintRoofXY(...)` | bool | `(col,row)` form of the painters (tile grid) |
 | `api:getFloorXY(col,row)` / `api:getRoofXY(col,row)` | tile id | `(col,row)` form of the readers |
 | `api:placeProtoXY(pid,col,row,dir)` / `api:placeObjectXY(pid,frm,col,row,dir)` | bool | `(col,row)` form of the placers (hex grid); off-grid is a no-op |
-| `api:placeStamp(name, anchorHex, variant)` | int | place a pre-loaded stamp (a prefab captured by `extract_pattern`) so its anchor lands near `anchorHex`; returns objects placed. Load the stamp with `--stamp name=file.json` (CLI) / the `stamps` arg (MCP). Raises on an unknown `name`/`variant`. |
+| `api:placeStamp(name, anchorHex, variant)` | int | place a pre-loaded stamp (a prefab captured by `extract_pattern`) so its anchor lands near `anchorHex`; returns objects placed. Load the stamp with `--stamp name=file.json` (CLI) / the `stamps` arg (MCP); in the editor's **Script Console** stamps are auto-registered from the bundled examples (`resources/scripts/stamps/`, which ships a `tent`) and from your saved patterns, so no loading step is needed. Raises on an unknown `name`/`variant`. |
 
 **Errors.** A genuine failure — no Fallout 2 data mounted, or a wrong `--arg reference=` path —
 **raises**, so the run stops with a clear message instead of silently producing an empty map. Wrap
@@ -113,25 +113,29 @@ gecko-mcp --data <master.dat>
 | `proto_info` | Resolve a PID to its type, engine display name and `flat` flag. |
 | `generate` | Run a generation script (`script`, `out`, optional `elevation`, optional `args` map, optional `stamps` name→path map) and write a `.map`. Stamps are pre-loaded so the script places them with `api:placeStamp(name, anchorHex, variant)`. Needs a scripting-enabled build. |
 | `render_map` | Render a map to a PNG (`map`, `out`, optional `elevation`, `maxDimension`, `showRoof`, `schematic`, `objects`, `showBlockers`) so the agent can *see* it. `schematic: true` flat-colours floor tiles by id and marks objects by category, returning a colour legend (id/type → colour → count) — match it to `analyze` and read the transitions. `objects: true` instead mutes the floor to grey so the object markers pop (for checking scatter/clumping). FLAT objects hidden unless `showBlockers`. `map`/`out` are filesystem paths — `out` is written there, and `map` may be a VFS path or any file on disk (e.g. one `generate` just wrote). Needs an off-screen GL context. |
-| `extract_pattern` | Capture a structure from a real map into a reusable **pattern stamp** (`map`, `out`, `name`, optional `elevation`, `pids`, `anchorHex`, `radius`, `includeFloor`). Locate it with `pids` (the structure's proto PIDs from `analyze`) — their bounding box grown by `radius` hexes is the capture region, so immediate props nearby come along — or pass `anchorHex`. Objects captured verbatim; `includeFloor: true` also captures the floor/roof under the region (for structures whose floor is integral). The stamp JSON loads in the editor's pattern library and can be placed by `generate`. |
+| `extract_pattern` | Capture a structure from a real map into a reusable **pattern stamp** (`map`, `out`, `name`, optional `elevation`, `pids`, `anchorHex`, `radius`, `includeFloor`, `includeRoof`). Locate it with `pids` (the structure's proto PIDs from `analyze`) — their bounding box grown by `radius` hexes is the capture region, so immediate props nearby come along — or pass `anchorHex`. Objects captured verbatim; `includeFloor: true` captures the ground and `includeRoof: true` captures the roof layer (a tent/building roof is tiles, not an object — without it the stamp is topless). The stamp JSON loads in the editor's pattern library and can be placed by `generate`. |
 | `script_api` | The generation-script `api` reference (Markdown, generated from the bound surface so it can't drift): every `api:` function with its signature, plus the non-obvious runtime behaviour (runs are **auto-seeded** and **auto-batched**) and the error model. Read it before writing a script for `generate`. |
 
 On `gecko-cli`: `map analyze [--json|--palette]`, `map generate ... [--stamp name=file.json ...]`,
 `map render --map <f.map> --out <f.png> [--elevation N] [--max-dim N] [--roof] [--schematic|--objects]
 [--show-blockers]`, and `map extract-pattern --map <f.map> --out <f.json> --name <n> [--pids id,...]
-[--anchor <hex>] [--radius N] [--include-floor]` (also the MCP `extract_pattern` tool).
+[--anchor <hex>] [--radius N] [--include-floor] [--include-roof]` (also the MCP `extract_pattern` tool).
 
 **Stamps end to end** — `random_camp.luau` needs a stamp; make one first, then pass it:
 ```
-# 1. find the structure (its cluster centerHex, or its proto ids) with analyze, then capture it:
+# 1. find the structure (its cluster centerHex, or its proto ids) with analyze, then capture it.
+#    --include-roof grabs the tent canvas (it lives on the roof layer, not as an object — without
+#    it the tent comes out topless):
 gecko-cli map extract-pattern --map /maps/desert5.map --out tent.json --name tent \
-    --anchor <centerHex> --radius 6  --data <master.dat> [--data <critter.dat>]
+    --anchor <centerHex> --radius 6 --include-roof  --data <master.dat> [--data <critter.dat>]
 # 2. generate, loading the stamp so api:placeStamp can drop it:
 gecko-cli map generate --script scripts/editor/random_camp.luau --out camp.map \
     --stamp tent=tent.json --arg tents=3  --data <master.dat> [--data <critter.dat>]
 ```
 Run `random_camp.luau` **without** `--stamp` and it generates the desert but skips the tents (a
-warning, not an error). So a generator scatters the *real* tents the desert maps use.
+warning, not an error). So a generator scatters the *real* tents the desert maps use. The editor's
+Script Console needs no `--stamp`: it ships a bundled `tent` (in `resources/scripts/stamps/`) and
+also registers your saved patterns, so the worked example runs out of the box.
 
 The **schematic** render is the bridge between the JSON and the image: a raw render shows what the
 map looks like, but the agent can't tell which pixels are tile `220`. In schematic mode the colours
