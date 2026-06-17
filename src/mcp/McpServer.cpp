@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -37,11 +38,20 @@ namespace {
         return json{ { "content", json::array({ { { "type", "text" }, { "text", text } } }) }, { "isError", isError } };
     }
 
+    // --- typed argument access (keeps the tool bodies flat) ----------------------
+    std::string optString(const json& args, const char* key) {
+        const auto it = args.find(key);
+        return it != args.end() && it->is_string() ? it->get<std::string>() : std::string();
+    }
+    int optInt(const json& args, const char* key, int fallback) {
+        const auto it = args.find(key);
+        return it != args.end() && it->is_number_integer() ? it->get<int>() : fallback;
+    }
+
     // --- tools -------------------------------------------------------------------
     json toolListMaps(resource::GameResources& resources) {
-        json maps = json::array();
+        std::vector<std::string> paths;
         try {
-            std::vector<std::string> paths;
             for (const auto& path : resources.files().list("*")) {
                 std::string ext = path.extension().string();
                 std::ranges::transform(ext, ext.begin(),
@@ -51,13 +61,10 @@ namespace {
                 }
             }
             std::ranges::sort(paths);
-            for (const auto& p : paths) {
-                maps.push_back(p);
-            }
         } catch (const std::exception&) {
             // no data mounted -> an empty list is a valid answer (mirrors api:listMaps())
         }
-        return toolText(maps.dump());
+        return toolText(json(paths).dump()); // json(vector<string>) -> a JSON array, "[]" when empty
     }
 
     json toolAnalyze(resource::GameResources& resources, const json& args) {
@@ -104,20 +111,38 @@ namespace {
 
     json toolGenerate(resource::GameResources& resources, const json& args) {
         cli::GenerateOptions opts;
-        opts.scriptPath = args.contains("script") && args["script"].is_string() ? args["script"].get<std::string>() : "";
-        opts.outPath = args.contains("out") && args["out"].is_string() ? args["out"].get<std::string>() : "";
-        opts.elevation = args.contains("elevation") && args["elevation"].is_number_integer() ? args["elevation"].get<int>() : 0;
+        opts.scriptPath = optString(args, "script");
+        opts.outPath = optString(args, "out");
+        opts.elevation = optInt(args, "elevation", 0);
         if (opts.scriptPath.empty() || opts.outPath.empty()) {
             return toolText("generate requires 'script' and 'out' string arguments", true);
         }
-        if (args.contains("args") && args["args"].is_object()) {
-            for (const auto& [key, value] : args["args"].items()) {
+        if (const auto it = args.find("args"); it != args.end() && it->is_object()) {
+            for (const auto& [key, value] : it->items()) {
                 opts.args[key] = value.is_string() ? value.get<std::string>() : value.dump();
             }
         }
         std::ostringstream oss;
         const int rc = cli::generateMap(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
+    }
+
+    // Dispatch a tools/call by name. Returns the tool result, or nullopt for an unknown tool
+    // (which the caller turns into a JSON-RPC method error).
+    std::optional<json> callTool(resource::GameResources& resources, const std::string& name, const json& args) {
+        if (name == "list_maps") {
+            return toolListMaps(resources);
+        }
+        if (name == "analyze") {
+            return toolAnalyze(resources, args);
+        }
+        if (name == "proto_info") {
+            return toolProtoInfo(resources, args);
+        }
+        if (name == "generate") {
+            return toolGenerate(resources, args);
+        }
+        return std::nullopt;
     }
 
     // Tool schemas advertised by tools/list.
@@ -163,17 +188,8 @@ json McpServer::handleMessage(const json& request) {
             const json params = request.contains("params") ? request["params"] : json::object();
             const std::string name = params.value("name", "");
             const json args = params.contains("arguments") ? params["arguments"] : json::object();
-            if (name == "list_maps") {
-                return resultMessage(id, toolListMaps(_resources));
-            }
-            if (name == "analyze") {
-                return resultMessage(id, toolAnalyze(_resources, args));
-            }
-            if (name == "proto_info") {
-                return resultMessage(id, toolProtoInfo(_resources, args));
-            }
-            if (name == "generate") {
-                return resultMessage(id, toolGenerate(_resources, args));
+            if (auto result = callTool(_resources, name, args)) {
+                return resultMessage(id, std::move(*result));
             }
             return errorMessage(id, -32602, "Unknown tool: " + name);
         }
