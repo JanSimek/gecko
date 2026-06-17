@@ -440,7 +440,9 @@ void MapScriptApi::addStamp(const std::string& name, pattern::Pattern pattern) {
 int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant) {
     const auto it = _stamps.find(name);
     if (it == _stamps.end()) {
-        throw ScriptError("placeStamp: unknown stamp '" + name + "' (load it with --stamp " + name + "=<file>)");
+        throw ScriptError("placeStamp: unknown stamp '" + name + "' — register it first: gecko-cli --stamp "
+            + name + "=<file>, the MCP generate 'stamps' arg, or save a pattern named '" + name
+            + "' in the editor's pattern library (for the Script Console)");
     }
     const pattern::Pattern& pattern = it->second;
     if (variant < 0 || variant >= static_cast<int>(pattern.variants.size())) {

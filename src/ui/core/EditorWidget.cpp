@@ -3,6 +3,11 @@
 #include "ui/input/InputHandler.h"
 #ifdef GECK_SCRIPTING_ENABLED
 #include "scripting/MapScriptApi.h"
+#include "pattern/PatternLibrary.h"
+#include "pattern/PatternSerializer.h"
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
 #endif
 #include "ui/rendering/MapSpriteLoader.h"
 #include "ui/rendering/ObjectVisibility.h"
@@ -426,11 +431,33 @@ void EditorWidget::init() {
 }
 
 #ifdef GECK_SCRIPTING_ENABLED
+namespace {
+    // Register the user's saved patterns so a Console script can place them by name —
+    // api:placeStamp("tent", ...). The CLI/MCP load stamps via --stamp/the stamps arg; the Console's
+    // equivalent is the pattern library (where the editor's "save pattern" and a captured extract land),
+    // keyed by each pattern's name.
+    void registerLibraryStamps(MapScriptApi& api) {
+        QDirIterator it(pattern::PatternLibrary::rootDir(), QStringList{ "*.json" }, QDir::Files,
+            QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            QFile file(it.next());
+            if (!file.open(QIODevice::ReadOnly)) {
+                continue;
+            }
+            if (const auto loaded = pattern::PatternSerializer::deserialize(file.readAll())) {
+                const std::string name = loaded->name.empty() ? QFileInfo(file).baseName().toStdString() : loaded->name;
+                api.addStamp(name, *loaded);
+            }
+        }
+    }
+} // namespace
+
 ScriptResult EditorWidget::runScript(const std::string& source) {
     if (!_map) {
         return { false, "No map loaded", "" };
     }
     MapScriptApi api(_resources, _hexgrid, *_objectCommandController, *_map, _currentElevation);
+    registerLibraryStamps(api); // so api:placeStamp(name, ...) finds the user's saved patterns
     LuaScriptRuntime runtime;
     // The continuous SFML render loop shows the script's edits on the next frame.
     return runtime.run(source, api, *_objectCommandController, "Run script");
