@@ -2,6 +2,7 @@
 
 #include "cli/MapAnalyzer.h"
 #include "cli/MapGenerator.h"
+#include "cli/MapRender.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
@@ -127,6 +128,23 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    json toolRender(resource::GameResources& resources, const json& args) {
+        cli::RenderOptions opts;
+        opts.mapPath = optString(args, "map");
+        opts.outPath = optString(args, "out");
+        opts.elevation = optInt(args, "elevation", opts.elevation);
+        opts.maxDimension = static_cast<unsigned int>(optInt(args, "maxDimension", static_cast<int>(opts.maxDimension)));
+        if (const auto it = args.find("showRoof"); it != args.end() && it->is_boolean()) {
+            opts.showRoof = it->get<bool>();
+        }
+        if (opts.mapPath.empty() || opts.outPath.empty()) {
+            return toolText("render_map requires 'map' and 'out' string arguments", true);
+        }
+        std::ostringstream oss;
+        const int rc = cli::renderMap(resources, opts, oss);
+        return toolText(oss.str(), rc != 0); // rc != 0 e.g. unreadable map or no GL context
+    }
+
     // Dispatch a tools/call by name. Returns the tool result, or nullopt for an unknown tool
     // (which the caller turns into a JSON-RPC method error).
     std::optional<json> callTool(resource::GameResources& resources, const std::string& name, const json& args) {
@@ -141,6 +159,9 @@ namespace {
         }
         if (name == "generate") {
             return toolGenerate(resources, args);
+        }
+        if (name == "render_map") {
+            return toolRender(resources, args);
         }
         return std::nullopt;
     }
@@ -164,6 +185,12 @@ namespace {
                                  "Args: script, out, optional elevation, optional args (string map). "
                                  "Needs a scripting-enabled build." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "args", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } } } },
+            { { "name", "render_map" },
+                { "description", "Render a map to a PNG so it can be seen, not just measured. Args: map "
+                                 "(.map path), out (output .png path), optional elevation, optional "
+                                 "maxDimension (longest side in px, default 1600), optional showRoof. "
+                                 "Needs an off-screen GL context; reports an error if none is available." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } } } },
         });
     }
 } // namespace

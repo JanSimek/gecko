@@ -4,24 +4,25 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
+#include "cli/MapLoad.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
-#include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
 
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdint>
 #include <format>
-#include <functional>
 #include <map>
 #include <memory>
 #include <ostream>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace geck::cli {
@@ -55,9 +56,15 @@ namespace {
     }
 
     // Per-map usage histograms: floor-tile id -> count, proto pid -> count.
+    // An unordered pair of floor-tile ids (a <= b) — a border between two tile types.
+    using TilePair = std::pair<uint16_t, uint16_t>;
+
     struct MapUsage {
         std::map<uint16_t, int> floors;
         std::map<uint32_t, int> objects;
+        // Floor-tile borders: how often tile a sits next to a *different* tile b. The data an
+        // agent reads to learn a tileset's transitions before generating seamless terrain.
+        std::map<TilePair, int> floorAdjacency;
     };
 
     // Running totals across every analysed map.
@@ -66,6 +73,7 @@ namespace {
         std::map<uint16_t, int> floorMaps;  // floor tile id -> number of maps using it
         std::map<uint32_t, int> objCount;   // proto pid -> total instances
         std::map<uint32_t, int> objMaps;    // proto pid -> number of maps using it
+        std::map<TilePair, int> adjacency;  // floor-tile border -> total occurrences across maps
         int analysed = 0;
     };
 
@@ -198,6 +206,32 @@ namespace {
         return mapPaths;
     }
 
+    // Tally floor-tile borders within one elevation's tile grid (row-major, Map::COLS wide). For
+    // each non-empty tile only its right and down neighbours are checked, so each adjacent pair is
+    // counted once; same-tile borders are ignored — we want the transitions between tile types.
+    void collectFloorAdjacency(const std::vector<Tile>& tiles, std::map<TilePair, int>& adjacency) {
+        constexpr int width = static_cast<int>(Map::COLS);
+        const auto empty = static_cast<uint16_t>(Map::EMPTY_TILE);
+        const int count = static_cast<int>(tiles.size());
+        for (int i = 0; i < count; ++i) {
+            const uint16_t a = tiles[i].getFloor();
+            if (a == empty) {
+                continue;
+            }
+            const int col = i % width;
+            const std::array<int, 2> neighbours{ col + 1 < width ? i + 1 : -1, i + width < count ? i + width : -1 };
+            for (const int j : neighbours) {
+                if (j < 0) {
+                    continue;
+                }
+                const uint16_t b = tiles[static_cast<std::size_t>(j)].getFloor();
+                if (b != empty && b != a) {
+                    adjacency[std::make_pair(std::min(a, b), std::max(a, b))]++;
+                }
+            }
+        }
+    }
+
     MapUsage collectUsage(Map& map) {
         MapUsage usage;
         for (const auto& [elevation, tiles] : map.getMapFile().tiles) {
@@ -206,6 +240,7 @@ namespace {
                     usage.floors[tile.getFloor()]++;
                 }
             }
+            collectFloorAdjacency(tiles, usage.floorAdjacency);
         }
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
@@ -217,28 +252,11 @@ namespace {
         return usage;
     }
 
-    // Read + parse a map headlessly; nullptr if it can't be read/parsed. Shared by the text and
-    // JSON paths.
-    std::unique_ptr<Map> loadMapForAnalysis(const std::string& mapPath, resource::GameResources& resources,
-        const std::function<Pro*(uint32_t)>& proLoad) {
-        const auto bytes = resources.files().readRawBytes(mapPath);
-        if (!bytes) {
-            return nullptr;
-        }
-        try {
-            MapReader reader(proLoad);
-            return reader.openFile(mapPath, *bytes);
-        } catch (const std::exception& e) {
-            spdlog::debug("loadMapForAnalysis: parse failed for {}: {}", mapPath, e.what());
-            return nullptr;
-        }
-    }
-
     // Parse one map, print its per-map palette and fold its usage into `agg`. Returns false
     // (with a "skip" line) if the map can't be read or parsed.
     bool reportMap(const std::string& mapPath, resource::GameResources& resources,
-        const std::function<Pro*(uint32_t)>& proLoad, NameResolver& names, Aggregate& agg, std::ostream& out) {
-        const std::unique_ptr<Map> map = loadMapForAnalysis(mapPath, resources, proLoad);
+        NameResolver& names, Aggregate& agg, std::ostream& out) {
+        const std::unique_ptr<Map> map = loadMap(resources, mapPath);
         if (!map) {
             out << "skip (unreadable or parse failed): " << mapPath << "\n";
             return false;
@@ -328,16 +346,43 @@ namespace {
         }
     }
 
-    // Machine-readable analyze, for an MCP client: { maps: [{name, path, floor:[{id,name,count}],
-    // objects:[{pid,type,name,count,flat}]}], aggregate: {analysed, floor:[...], objects:[...]} }.
-    // A fixed schema emitted by hand (no JSON library); `flat` is the structural-vs-decoration hint.
+    // Per-map floor-border array: [{a,aName,b,bName,count}], folding totals into agg.adjacency.
+    // const names, as in emitMapFloorsJson (tileName() is the only resolver used).
+    void emitMapAdjacencyJson(const MapUsage& usage, const NameResolver& names, Aggregate& agg, std::ostream& out) {
+        bool first = true;
+        for (const auto& [pair, count] : sortedByCountDesc(usage.floorAdjacency)) {
+            out << (first ? "" : ",");
+            first = false;
+            out << "{\"a\":" << pair.first << ",\"aName\":" << jsonString(names.tileName(pair.first))
+                << ",\"b\":" << pair.second << ",\"bName\":" << jsonString(names.tileName(pair.second))
+                << ",\"count\":" << count << "}";
+            agg.adjacency[pair] += count;
+        }
+    }
+
+    // Aggregate floor-border array: [{a,aName,b,bName,total}], most-frequent border first.
+    void emitAggAdjacencyJson(const Aggregate& agg, const NameResolver& names, std::ostream& out) {
+        bool first = true;
+        for (const auto& [pair, count] : sortedByCountDesc(agg.adjacency)) {
+            out << (first ? "" : ",");
+            first = false;
+            out << "{\"a\":" << pair.first << ",\"aName\":" << jsonString(names.tileName(pair.first))
+                << ",\"b\":" << pair.second << ",\"bName\":" << jsonString(names.tileName(pair.second))
+                << ",\"total\":" << count << "}";
+        }
+    }
+
+    // Machine-readable analyze, for an MCP client: per map { name, path, floor[], objects[],
+    // adjacency[] } and an aggregate { analysed, floor[], objects[], adjacency[] }. `flat` is the
+    // structural-vs-decoration hint; `adjacency` lists floor-tile borders (transitions). A fixed
+    // schema emitted by hand (no JSON library).
     void emitJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
-        const std::function<Pro*(uint32_t)>& proLoad, NameResolver& names, std::ostream& out) {
+        NameResolver& names, std::ostream& out) {
         Aggregate agg;
         out << "{\"maps\":[";
         bool firstMap = true;
         for (const auto& mapPath : mapPaths) {
-            const std::unique_ptr<Map> map = loadMapForAnalysis(mapPath, resources, proLoad);
+            const std::unique_ptr<Map> map = loadMap(resources, mapPath);
             if (!map) {
                 continue; // skipped maps simply don't appear; agg.analysed counts what did
             }
@@ -349,6 +394,8 @@ namespace {
             emitMapFloorsJson(usage, names, agg, out);
             out << "],\"objects\":[";
             emitMapObjectsJson(usage, names, agg, out);
+            out << "],\"adjacency\":[";
+            emitMapAdjacencyJson(usage, names, agg, out);
             out << "]}";
             ++agg.analysed;
         }
@@ -356,6 +403,8 @@ namespace {
         emitAggFloorsJson(agg, names, out);
         out << "],\"objects\":[";
         emitAggObjectsJson(agg, names, out);
+        out << "],\"adjacency\":[";
+        emitAggAdjacencyJson(agg, names, out);
         out << "]}}\n";
     }
 
@@ -368,23 +417,15 @@ int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& option
     }
 
     NameResolver names(resources);
-    const std::function<Pro*(uint32_t)> proLoad = [&resources](uint32_t pid) -> Pro* {
-        try {
-            return resources.repository().load<Pro>(ProHelper::basePath(resources, pid));
-        } catch (const std::exception& e) {
-            spdlog::debug("proLoad: pid {} failed: {}", pid, e.what());
-            return nullptr;
-        }
-    };
 
     if (options.json) {
-        emitJson(mapPaths, resources, proLoad, names, out);
+        emitJson(mapPaths, resources, names, out);
         return 0;
     }
 
     Aggregate agg;
     for (const auto& mapPath : mapPaths) {
-        if (reportMap(mapPath, resources, proLoad, names, agg, out)) {
+        if (reportMap(mapPath, resources, names, agg, out)) {
             ++agg.analysed;
         }
     }

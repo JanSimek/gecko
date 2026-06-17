@@ -429,8 +429,19 @@ The scripting core and a first procedural generator are in. Concretely:
 - **`gecko-mcp`** (Qt-free, `GECK_BUILD_MCP`, default on): a Model Context Protocol server over
   stdio (newline-delimited JSON-RPC 2.0) that reuses the `gecko-cli` logic, so an AI agent can drive
   the inspect→curate→generate loop conversationally. Tools: `list_maps`, `analyze` (the `--json`
-  report), `proto_info` (PID → type/name/`flat`) and `generate`. The dispatch (`McpServer`) is pure
-  and unit-tested without any transport. This is §11's "MCP as the intelligence layer" landing.
+  report), `proto_info` (PID → type/name/`flat`), `generate`, and `render_map`. The dispatch
+  (`McpServer`) is pure and unit-tested without any transport. This is §11's "MCP as the intelligence
+  layer" landing.
+- **Headless map render** (`gecko-cli map render`, MCP `render_map`). `MapRenderer` (Qt-free, in
+  `gecko_editing`) draws a map through the *same* `RenderingEngine` the editor uses — into an
+  off-screen `sf::RenderTexture`, framed to the content bounds — and saves a PNG, so an agent can
+  *see* a generated biome, not just read its stats. `RenderingEngine`/`HexRenderer` moved out of
+  `gecko_app` into `gecko_editing` for this (they were always Qt-free). Needs an off-screen GL
+  context at runtime; reports an error instead of crashing when none is available.
+- **Tile-adjacency analysis.** `analyze --json` now carries `adjacency` per map and aggregated: the
+  floor-tile *borders* (which tile sits next to which different tile, and how often). Since the
+  Fallout engine has no autotiling — mappers place edge tiles by hand — this is the empirical data
+  an agent curates a transition set from before generating **seamless** terrain (the §11 P2 item).
 - **Reference-map analysis tools.** `MapScriptApi` exposes `mapScenery(mapPath)` (the unique
   scenery PIDs a reference map uses — blockers filtered out via `OBJECT_FLAT`),
   `mapSceneryHistogram(mapPath)` (`{pid → count}`), `mapFloorTiles(mapPath)` (floor-tile ids,

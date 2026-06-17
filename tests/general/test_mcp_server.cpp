@@ -27,14 +27,14 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         CHECK(resp["result"]["capabilities"].contains("tools"));
     }
 
-    SECTION("tools/list returns the four tools with input schemas") {
+    SECTION("tools/list returns the tools with input schemas") {
         const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 2 }, { "method", "tools/list" } });
         std::vector<std::string> names;
         for (const auto& tool : resp["result"]["tools"]) {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "proto_info", "generate" }) {
+        for (const char* expected : { "list_maps", "analyze", "proto_info", "generate", "render_map" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }
@@ -71,6 +71,12 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     SECTION("proto_info without a pid is a tool error") {
         const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 7 }, { "method", "tools/call" },
             { "params", { { "name", "proto_info" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == true);
+    }
+
+    SECTION("render_map without map/out is a tool error") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 8 }, { "method", "tools/call" },
+            { "params", { { "name", "render_map" }, { "arguments", json::object() } } } });
         CHECK(resp["result"]["isError"] == true);
     }
 }

@@ -457,6 +457,8 @@ add_library(gecko_editing STATIC
     ui/rendering/HexRenderer.cpp
     ui/rendering/RenderingEngine.h
     ui/rendering/RenderingEngine.cpp
+    ui/rendering/MapRenderer.h
+    ui/rendering/MapRenderer.cpp
     ui/editing/ObjectCommandController.h
     ui/editing/ObjectCommandController.cpp
     scripting/MapScriptApi.h
@@ -499,16 +501,21 @@ target_link_libraries(gecko_app PUBLIC
     gecko_editing
 )
 
-# Headless gecko-cli (no Qt, no GL). The analyze/generate logic lives in the gecko_cli library
-# so a future MCP server can reuse it; gecko-cli is just a thin frontend. gecko::editing brings
-# the editing core + scripting runtime (and transitively gecko_core/resource/vault, SFML, the
-# src/ include dir and spdlog) — all Qt-free.
+# Headless gecko-cli (no Qt). The analyze/generate/render logic lives in the gecko_cli library so
+# the MCP server can reuse it; gecko-cli is just a thin frontend. gecko::editing brings the editing
+# core + scripting runtime (and transitively gecko_core/resource/vault, SFML, the src/ include dir
+# and spdlog) — all Qt-free. `map render` needs an off-screen GL context at runtime (sf::RenderTexture);
+# it reports an error instead of crashing when none is available (headless without a display).
 if(GECK_BUILD_CLI)
     add_library(gecko_cli STATIC
+        cli/MapLoad.h
+        cli/MapLoad.cpp
         cli/MapAnalyzer.h
         cli/MapAnalyzer.cpp
         cli/MapGenerator.h
-        cli/MapGenerator.cpp)
+        cli/MapGenerator.cpp
+        cli/MapRender.h
+        cli/MapRender.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing)
 
     add_executable(gecko-cli cli/main.cpp)

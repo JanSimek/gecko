@@ -1,5 +1,6 @@
 #include "cli/MapAnalyzer.h"
 #include "cli/MapGenerator.h"
+#include "cli/MapRender.h"
 #include "resource/GameResources.h"
 
 #include <spdlog/spdlog.h>
@@ -13,9 +14,11 @@ namespace {
 
 struct CliArgs {
     bool generate = false;
+    bool render = false;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::GenerateOptions gen;
+    geck::cli::RenderOptions ren;
 };
 
 void printUsage(const char* program) {
@@ -28,15 +31,24 @@ void printUsage(const char* program) {
               << "      [--elevation 0|1|2] [--arg key=value ...] --data <dir-or-.dat> [--data <...>]\n"
               << "      Runs a Luau generation script against an empty map and writes the result.\n"
               << "      --arg passes parameters to the script (read as args.key).\n"
+              << "  " << program << " map render --map <file.map> --out <file.png>\n"
+              << "      [--elevation 0|1|2] [--max-dim N] [--roof] --data <dir-or-.dat> [--data <...>]\n"
+              << "      Renders a map to a PNG (needs an off-screen GL context). --max-dim caps the\n"
+              << "      longest side (default 1600); --roof draws the roof layer over the floor.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
 bool isKnownSubcommand(const std::vector<std::string>& args) {
-    return args.size() >= 2 && args[0] == "map" && (args[1] == "analyze" || args[1] == "generate");
+    return args.size() >= 2 && args[0] == "map"
+        && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
     return cli.generate && (cli.gen.scriptPath.empty() || cli.gen.outPath.empty());
+}
+
+bool renderMissingRequired(const CliArgs& cli) {
+    return cli.render && (cli.ren.mapPath.empty() || cli.ren.outPath.empty());
 }
 
 // Consume the argument(s) starting at args[i]. Returns how many tokens were consumed (1 for a
@@ -45,7 +57,8 @@ bool generateMissingRequired(const CliArgs& cli) {
 int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
     const std::string& arg = args[i];
     const bool valueFlag = arg == "--data"
-        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation" || arg == "--arg"));
+        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation" || arg == "--arg"))
+        || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim"));
 
     if (valueFlag && i + 1 >= args.size()) {
         std::cerr << "error: " << arg << " needs a value\n";
@@ -86,6 +99,31 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.render && arg == "--map") {
+        out.ren.mapPath = args[i + 1];
+        return 2;
+    }
+    if (out.render && arg == "--out") {
+        out.ren.outPath = args[i + 1];
+        return 2;
+    }
+    if (out.render && arg == "--elevation") {
+        out.ren.elevation = std::stoi(args[i + 1]);
+        return 2;
+    }
+    if (out.render && arg == "--max-dim") {
+        out.ren.maxDimension = static_cast<unsigned int>(std::stoul(args[i + 1]));
+        return 2;
+    }
+    if (out.render && arg == "--roof") {
+        out.ren.showRoof = true;
+        return 1;
+    }
+    if (out.render) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
     if (arg == "--json") { // analyze only: machine-readable output for the MCP
         out.analyze.json = true;
         return 1;
@@ -101,6 +139,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
         return 2;
     }
     out.generate = args[1] == "generate";
+    out.render = args[1] == "render";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -117,6 +156,11 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     }
     if (generateMissingRequired(out)) {
         std::cerr << "error: generate requires --script and --out\n";
+        printUsage(program);
+        return 2;
+    }
+    if (renderMissingRequired(out)) {
+        std::cerr << "error: render requires --map and --out\n";
         printUsage(program);
         return 2;
     }
@@ -145,6 +189,9 @@ int main(int argc, char** argv) {
 
     if (cli.generate) {
         return geck::cli::generateMap(resources, cli.gen, std::cout);
+    }
+    if (cli.render) {
+        return geck::cli::renderMap(resources, cli.ren, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
 }

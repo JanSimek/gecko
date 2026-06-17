@@ -79,8 +79,9 @@ api:placeProto(api:proto("scenery", SCRUB), hex, 0)
 
 `gecko-cli map analyze --data <master.dat>` lists each map's floor tiles and `[Scenery]`/`[Wall]`
 protos (with `api:protoName(pid)` giving the engine display name), to find the ids worth naming.
-Add `--json` for a machine-readable report (per-map floor/scenery with names, counts, and a `flat`
-structural-vs-decoration flag) — the form an MCP agent reads to pick a biome and curate a palette.
+Add `--json` for a machine-readable report (per-map and aggregate floor/scenery with names, counts,
+a `flat` structural-vs-decoration flag, and `adjacency` — the floor-tile borders that reveal a
+tileset's transitions) — the form an MCP agent reads to pick a biome and curate a palette.
 
 ## MCP server (`gecko-mcp`)
 
@@ -100,9 +101,13 @@ gecko-mcp --data <master.dat>
 | Tool | Purpose |
 |------|---------|
 | `list_maps` | Every `.map` in the mounted data. |
-| `analyze` | The `analyze --json` report (omit `maps` for all, or scope it), incl. the `flat` flag for palette curation. |
+| `analyze` | The `analyze --json` report (omit `maps` for all, or scope it): per-map and aggregate floor tiles, objects (with the `flat` palette-curation flag) and `adjacency` — the floor-tile borders (which tile sits next to which different tile, and how often), i.e. the transitions to curate for seamless terrain. |
 | `proto_info` | Resolve a PID to its type, engine display name and `flat` flag. |
 | `generate` | Run a generation script (`script`, `out`, optional `elevation`, optional `args` map) and write a `.map`. Needs a scripting-enabled build. |
+| `render_map` | Render a map to a PNG (`map`, `out`, optional `elevation`, `maxDimension`, `showRoof`) so the agent can *see* it, not just measure it. Needs an off-screen GL context; reports an error if none is available. |
+
+The same three actions are on `gecko-cli`: `map analyze [--json]`, `map generate`, and
+`map render --map <f.map> --out <f.png> [--elevation N] [--max-dim N] [--roof]`.
 
 Built when `GECK_BUILD_MCP` is on (default; requires `GECK_BUILD_CLI`). To register it with an MCP
 client, point the client at the `gecko-mcp` binary with the `--data` arguments for your install.
