@@ -48,10 +48,12 @@ void printUsage(const char* program) {
               << "      (for checking scatter); --show-blockers also marks FLAT objects.\n"
               << "  " << program << " map extract-pattern --map <file.map> --out <file.json> --name <name>\n"
               << "      [--pids id,id,...] [--anchor <hex>] [--radius N] [--elevation 0|1|2]\n"
-              << "      [--include-floor] --data <dir-or-.dat> [--data <...>]\n"
+              << "      [--include-floor] [--include-roof] --data <dir-or-.dat> [--data <...>]\n"
               << "      Captures a structure into a reusable stamp. Locate it with --pids (proto ids\n"
-              << "      from analyze) or --anchor <hex>; --radius (default 2) grows the capture region;\n"
-              << "      --include-floor also captures the floor/roof. Feed the .json to generate --stamp.\n"
+              << "      from analyze) or --anchor <hex>; --radius (default 2) grows the capture region.\n"
+              << "      --include-floor captures the ground; --include-roof captures the roof layer (a\n"
+              << "      tent/building roof is tiles, not an object — without it the stamp is topless).\n"
+              << "      Feed the .json to generate --stamp.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
@@ -216,6 +218,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     }
     if (out.extract && arg == "--include-floor") {
         out.ext.includeFloor = true;
+        return 1;
+    }
+    if (out.extract && arg == "--include-roof") {
+        out.ext.includeRoof = true;
         return 1;
     }
     if (out.extract) {

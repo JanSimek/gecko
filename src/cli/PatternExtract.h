@@ -26,8 +26,12 @@ namespace cli {
         /// Hexes of padding around the matched objects, so immediate props (campfire, crates, …) that
         /// aren't in `pids` are still captured.
         int radius = 2;
-        /// Capture the floor/roof tiles under the region too (for structures whose floor is integral).
+        /// Capture the floor tiles under the region (for structures whose ground is integral, e.g. a
+        /// building's interior floor). Off by default: a stamp usually sits on whatever the map paints.
         bool includeFloor = false;
+        /// Capture the roof tiles over the region. A tent/building's roof lives on the roof layer, not as
+        /// a scenery object, so without this the structure is captured topless. Independent of the floor.
+        bool includeRoof = false;
     };
 
     /// Capture a region of a real map into a reusable pattern stamp (the JSON the editor's pattern

@@ -185,6 +185,9 @@ namespace {
         if (const auto it = args.find("includeFloor"); it != args.end() && it->is_boolean()) {
             opts.includeFloor = it->get<bool>();
         }
+        if (const auto it = args.find("includeRoof"); it != args.end() && it->is_boolean()) {
+            opts.includeRoof = it->get<bool>();
+        }
         if (const auto it = args.find("pids"); it != args.end() && it->is_array()) {
             for (const auto& pid : *it) {
                 if (pid.is_number_integer()) {
@@ -291,10 +294,11 @@ namespace {
                                  "(proto PIDs from analyze that make up the structure) — their bounding box, grown "
                                  "by 'radius' (default 2) hexes, is the capture region, so immediate props nearby "
                                  "come along — or pass 'anchorHex' directly. Objects are captured verbatim; pass "
-                                 "includeFloor=true to also capture the floor/roof under the region (for structures "
-                                 "whose floor is integral). Args: map, out, name, optional elevation, pids (int "
-                                 "array), anchorHex, radius, includeFloor." },
-                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "name", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "pids", { { "type", "array" }, { "items", { { "type", "integer" } } } } }, { "anchorHex", { { "type", "integer" } } }, { "radius", { { "type", "integer" } } }, { "includeFloor", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out", "name" }) } } } },
+                                 "includeFloor=true to capture the ground and includeRoof=true to capture the roof "
+                                 "layer (a tent/building roof is tiles, not an object — without includeRoof the "
+                                 "stamp is topless). Args: map, out, name, optional elevation, pids (int array), "
+                                 "anchorHex, radius, includeFloor, includeRoof." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "name", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "pids", { { "type", "array" }, { "items", { { "type", "integer" } } } } }, { "anchorHex", { { "type", "integer" } } }, { "radius", { { "type", "integer" } } }, { "includeFloor", { { "type", "boolean" } } }, { "includeRoof", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out", "name" }) } } } },
         });
     }
 } // namespace

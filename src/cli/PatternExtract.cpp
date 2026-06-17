@@ -84,8 +84,9 @@ namespace {
         return 0;
     }
 
-    // Floor/roof tiles whose tile cell falls under the hex region (tile space is hex/2).
-    void captureTiles(Map& map, int elevation, const HexBox& region,
+    // Floor/roof tiles whose tile cell falls under the hex region (tile space is hex/2). Each layer
+    // is captured only when its flag is set, so a stamp can take a roof without the ground beneath it.
+    void captureTiles(Map& map, int elevation, const HexBox& region, bool wantFloor, bool wantRoof,
         std::vector<pattern::PatternBuilder::TileSelection>& floor,
         std::vector<pattern::PatternBuilder::TileSelection>& roof) {
         const auto& tilesByElevation = map.getMapFile().tiles;
@@ -101,10 +102,10 @@ namespace {
             if (tcol < region.minCol / 2 || tcol > region.maxCol / 2 || trow < region.minRow / 2 || trow > region.maxRow / 2) {
                 continue;
             }
-            if (it->second[i].getFloor() != empty) {
+            if (wantFloor && it->second[i].getFloor() != empty) {
                 floor.emplace_back(static_cast<int>(i), it->second[i].getFloor());
             }
-            if (it->second[i].getRoof() != empty) {
+            if (wantRoof && it->second[i].getRoof() != empty) {
                 roof.emplace_back(static_cast<int>(i), it->second[i].getRoof());
             }
         }
@@ -142,8 +143,8 @@ int extractPattern(resource::GameResources& resources, const ExtractOptions& opt
 
     std::vector<pattern::PatternBuilder::TileSelection> floorTiles;
     std::vector<pattern::PatternBuilder::TileSelection> roofTiles;
-    if (options.includeFloor) {
-        captureTiles(*map, options.elevation, region, floorTiles, roofTiles);
+    if (options.includeFloor || options.includeRoof) {
+        captureTiles(*map, options.elevation, region, options.includeFloor, options.includeRoof, floorTiles, roofTiles);
     }
 
     if (captured.empty()) {
