@@ -511,6 +511,20 @@ if(GECK_BUILD_CLI)
 
     add_executable(gecko-cli cli/main.cpp)
     target_link_libraries(gecko-cli PRIVATE gecko_cli)
+
+    # MCP server: a JSON-RPC stdio wrapper over gecko_cli's analyze/generate (so an AI agent can
+    # inspect maps and generate them conversationally). The dispatch lives in a gecko_mcp library
+    # (handleMessage is unit-testable); gecko-mcp is the thin stdio frontend.
+    if(GECK_BUILD_MCP)
+        add_library(gecko_mcp STATIC
+            mcp/McpServer.h
+            mcp/McpServer.cpp)
+        target_link_libraries(gecko_mcp PUBLIC gecko_cli nlohmann_json::nlohmann_json)
+        add_library(gecko::mcp ALIAS gecko_mcp)
+
+        add_executable(gecko-mcp mcp/main.cpp)
+        target_link_libraries(gecko-mcp PRIVATE gecko_mcp)
+    endif()
 endif()
 
 target_include_directories(gecko_app PUBLIC

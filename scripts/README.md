@@ -81,3 +81,28 @@ api:placeProto(api:proto("scenery", SCRUB), hex, 0)
 protos (with `api:protoName(pid)` giving the engine display name), to find the ids worth naming.
 Add `--json` for a machine-readable report (per-map floor/scenery with names, counts, and a `flat`
 structural-vs-decoration flag) — the form an MCP agent reads to pick a biome and curate a palette.
+
+## MCP server (`gecko-mcp`)
+
+`gecko-mcp` exposes the same headless logic to an AI agent over the [Model Context
+Protocol](https://modelcontextprotocol.io): a newline-delimited JSON-RPC 2.0 server on stdio.
+Mount the game data with `--data` (repeatable, dir or `.dat`); an agent can then inspect the
+existing maps, curate a palette, and generate a new one — the loop the analyze/scatter workflow
+above does by hand.
+
+```jsonc
+gecko-mcp --data <master.dat>
+// then on stdin:
+{"jsonrpc":"2.0","id":1,"method":"initialize"}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"analyze","arguments":{}}}
+```
+
+| Tool | Purpose |
+|------|---------|
+| `list_maps` | Every `.map` in the mounted data. |
+| `analyze` | The `analyze --json` report (omit `maps` for all, or scope it), incl. the `flat` flag for palette curation. |
+| `proto_info` | Resolve a PID to its type, engine display name and `flat` flag. |
+| `generate` | Run a generation script (`script`, `out`, optional `elevation`, optional `args` map) and write a `.map`. Needs a scripting-enabled build. |
+
+Built when `GECK_BUILD_MCP` is on (default; requires `GECK_BUILD_CLI`). To register it with an MCP
+client, point the client at the `gecko-mcp` binary with the `--data` arguments for your install.

@@ -422,9 +422,15 @@ The scripting core and a first procedural generator are in. Concretely:
     `-1` for an unknown name, `listMaps` → `{}`).
 - **Script Console** dock (`View → Script Console`), wired to the current map/elevation.
 - **`gecko-cli`** (Qt-free): `map analyze` (per-map + aggregate ground-tile and object usage,
-  with raw engine PIDs and proto names from the `.msg` files) and `map generate --script
+  with raw engine PIDs and proto names from the `.msg` files; `--json` for a machine-readable
+  report carrying a `flat` structural-vs-decoration flag per object) and `map generate --script
   <file> --out <map> [--arg key=value …]` (runs a Luau script against an empty map and writes
   a `.map`; `--arg`s are exposed to the script as the global `args` table).
+- **`gecko-mcp`** (Qt-free, `GECK_BUILD_MCP`, default on): a Model Context Protocol server over
+  stdio (newline-delimited JSON-RPC 2.0) that reuses the `gecko-cli` logic, so an AI agent can drive
+  the inspect→curate→generate loop conversationally. Tools: `list_maps`, `analyze` (the `--json`
+  report), `proto_info` (PID → type/name/`flat`) and `generate`. The dispatch (`McpServer`) is pure
+  and unit-tested without any transport. This is §11's "MCP as the intelligence layer" landing.
 - **Reference-map analysis tools.** `MapScriptApi` exposes `mapScenery(mapPath)` (the unique
   scenery PIDs a reference map uses — blockers filtered out via `OBJECT_FLAT`),
   `mapSceneryHistogram(mapPath)` (`{pid → count}`), `mapFloorTiles(mapPath)` (floor-tile ids,
