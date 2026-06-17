@@ -54,3 +54,22 @@ TEST_CASE("loadPattern fails cleanly on a missing or malformed file", "[pattern]
     CHECK_FALSE(cli::loadPattern("/no/such/stamp.json", &error).has_value());
     CHECK_FALSE(error.empty());
 }
+
+// A stamp the MCP/scripts feed to generate must have its required fields — a missing proPid is
+// rejected as an error, not silently defaulted to PID 0 (which would place a wrong/empty object).
+TEST_CASE("loadPattern rejects a stamp object missing a required field", "[pattern]") {
+    const std::filesystem::path path = std::filesystem::path(GECK_TEST_TMP_DIR) / "stamp_malformed.json";
+    std::filesystem::create_directories(path.parent_path());
+    {
+        std::ofstream file(path, std::ios::binary);
+        // object has dxHex/dyHex/frmPid but no proPid.
+        file << R"({"name":"bad","version":1,"variants":[{"anchorHex":0,)"
+             << R"("objects":[{"dxHex":0,"dyHex":0,"frmPid":123}],"floor":[],"roof":[]}]})";
+    }
+
+    std::string error;
+    const auto loaded = cli::loadPattern(path.string(), &error);
+    CHECK_FALSE(loaded.has_value());
+    INFO("error: " << error);
+    CHECK(error.find("proPid") != std::string::npos);
+}

@@ -2,14 +2,14 @@
 
 #include <nlohmann/json.hpp>
 
-#include <algorithm>
 #include <cstdint>
 #include <exception>
 #include <format>
 #include <fstream>
-#include <iterator>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace geck::cli {
@@ -91,39 +91,118 @@ std::string serializePattern(const pattern::Pattern& pattern) {
 }
 
 namespace {
-    pattern::PatternObject parseObject(const nlohmann::json& json) {
-        return pattern::PatternObject{
-            json.value("dxHex", 0), json.value("dyHex", 0),
-            json.value("proPid", 0U), json.value("frmPid", 0U),
-            json.value("direction", 0U), json.value("flags", 0U)
-        };
+    // Validated reads, mirroring the editor's PatternSerializer: a stamp the MCP/scripts feed to
+    // generate must have its required fields present, integer and in range — a bad stamp fails as an
+    // error rather than silently becoming PID-0 objects or wrapped tile ids.
+    constexpr std::int64_t kI32Lo = INT32_MIN;
+    constexpr std::int64_t kI32Hi = INT32_MAX;
+    constexpr std::int64_t kU32Hi = 0xFFFFFFFFLL;
+    constexpr std::int64_t kU16Hi = 0xFFFFLL;
+
+    bool readInt(const nlohmann::json& obj, const char* key, std::int64_t lo, std::int64_t hi,
+        std::int64_t& out, std::string* error) {
+        const auto it = obj.find(key);
+        if (it == obj.end() || !it->is_number_integer()) {
+            if (error != nullptr) {
+                *error = std::string("missing or non-integer field '") + key + "'";
+            }
+            return false;
+        }
+        const std::int64_t value = it->get<std::int64_t>();
+        if (value < lo || value > hi) {
+            if (error != nullptr) {
+                *error = std::string("field '") + key + "' is out of range";
+            }
+            return false;
+        }
+        out = value;
+        return true;
     }
 
-    pattern::PatternTile parseTile(const nlohmann::json& json) {
-        return pattern::PatternTile{
-            json.value("dxTile", 0), json.value("dyTile", 0),
-            static_cast<uint16_t>(json.value("tileId", 0U))
-        };
+    // Optional int: absent -> default; present -> must be valid.
+    bool readOptInt(const nlohmann::json& obj, const char* key, std::int64_t lo, std::int64_t hi,
+        std::int64_t dflt, std::int64_t& out, std::string* error) {
+        if (obj.find(key) == obj.end()) {
+            out = dflt;
+            return true;
+        }
+        return readInt(obj, key, lo, hi, out, error);
+    }
+
+    bool parseObject(const nlohmann::json& json, pattern::PatternObject& out, std::string* error) {
+        if (!json.is_object()) {
+            if (error != nullptr) {
+                *error = "object entry is not a JSON object";
+            }
+            return false;
+        }
+        std::int64_t dx = 0, dy = 0, pro = 0, frm = 0, dir = 0, flags = 0;
+        if (!readInt(json, "dxHex", kI32Lo, kI32Hi, dx, error) || !readInt(json, "dyHex", kI32Lo, kI32Hi, dy, error)
+            || !readInt(json, "proPid", 0, kU32Hi, pro, error) || !readInt(json, "frmPid", 0, kU32Hi, frm, error)
+            || !readOptInt(json, "direction", 0, kU32Hi, 0, dir, error)
+            || !readOptInt(json, "flags", 0, kU32Hi, 0, flags, error)) {
+            return false;
+        }
+        out = { static_cast<int>(dx), static_cast<int>(dy), static_cast<uint32_t>(pro),
+            static_cast<uint32_t>(frm), static_cast<uint32_t>(dir), static_cast<uint32_t>(flags) };
+        return true;
+    }
+
+    bool parseTile(const nlohmann::json& json, pattern::PatternTile& out, std::string* error) {
+        if (!json.is_object()) {
+            if (error != nullptr) {
+                *error = "tile entry is not a JSON object";
+            }
+            return false;
+        }
+        std::int64_t dx = 0, dy = 0, id = 0;
+        if (!readInt(json, "dxTile", kI32Lo, kI32Hi, dx, error) || !readInt(json, "dyTile", kI32Lo, kI32Hi, dy, error)
+            || !readInt(json, "tileId", 0, kU16Hi, id, error)) {
+            return false;
+        }
+        out = { static_cast<int>(dx), static_cast<int>(dy), static_cast<uint16_t>(id) };
+        return true;
     }
 
     template <typename T, typename Parse>
-    std::vector<T> parseArray(const nlohmann::json& parent, const char* key, Parse parse) {
-        std::vector<T> out;
-        if (const auto it = parent.find(key); it != parent.end() && it->is_array()) {
-            out.reserve(it->size());
-            std::transform(it->begin(), it->end(), std::back_inserter(out), parse);
+    bool parseArray(const nlohmann::json& parent, const char* key, std::vector<T>& out, Parse parse, std::string* error) {
+        const auto it = parent.find(key);
+        if (it == parent.end()) {
+            return true; // absent array -> empty, as the editor's reader allows
         }
-        return out;
+        if (!it->is_array()) {
+            if (error != nullptr) {
+                *error = std::string("field '") + key + "' is not an array";
+            }
+            return false;
+        }
+        out.reserve(it->size());
+        for (const auto& entry : *it) {
+            T item;
+            if (!parse(entry, item, error)) {
+                return false;
+            }
+            out.push_back(item);
+        }
+        return true;
     }
 
-    pattern::PatternVariant parseVariant(const nlohmann::json& json) {
-        pattern::PatternVariant variant;
-        variant.label = json.value("label", std::string("default"));
-        variant.anchorHex = json.value("anchorHex", 0);
-        variant.objects = parseArray<pattern::PatternObject>(json, "objects", parseObject);
-        variant.floor = parseArray<pattern::PatternTile>(json, "floor", parseTile);
-        variant.roof = parseArray<pattern::PatternTile>(json, "roof", parseTile);
-        return variant;
+    bool parseVariant(const nlohmann::json& json, pattern::PatternVariant& out, std::string* error) {
+        if (!json.is_object()) {
+            if (error != nullptr) {
+                *error = "variant entry is not a JSON object";
+            }
+            return false;
+        }
+        std::int64_t anchor = 0;
+        if (!readInt(json, "anchorHex", kI32Lo, kI32Hi, anchor, error)) {
+            return false;
+        }
+        out.anchorHex = static_cast<int>(anchor);
+        out.label = json.value("label", std::string("default"));
+        return parseArray(json, "objects", out.objects, parseObject, error)
+            && parseArray(json, "floor", out.floor, parseTile, error)
+            && parseArray(json, "roof", out.roof, parseTile, error);
     }
 } // namespace
 
@@ -155,7 +234,11 @@ std::optional<pattern::Pattern> loadPattern(const std::string& path, std::string
     pattern.name = root.value("name", std::string());
     pattern.version = root.value("version", pattern::Pattern::CURRENT_VERSION);
     for (const auto& variant : root["variants"]) {
-        pattern.variants.push_back(parseVariant(variant));
+        pattern::PatternVariant parsed;
+        if (!parseVariant(variant, parsed, error)) {
+            return std::nullopt;
+        }
+        pattern.variants.push_back(std::move(parsed));
     }
     return pattern;
 }

@@ -446,7 +446,7 @@ int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant
     if (variant < 0 || variant >= static_cast<int>(pattern.variants.size())) {
         throw ScriptError("placeStamp: variant " + std::to_string(variant) + " out of range for stamp '" + name + "'");
     }
-    pattern::PatternStamper stamper(_resources, _hexgrid, _controller, _map);
+    pattern::PatternStamper stamper(_resources, _hexgrid, _controller, _map, _buildSprites);
     const pattern::PatternStamper::Result result = stamper.stamp(pattern.variants[variant], anchorHex, _elevation);
     _placedObjects += result.objectsPlaced;
     _paintedTiles += result.tilesPainted;

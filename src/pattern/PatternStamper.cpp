@@ -77,11 +77,12 @@ PatternStamper::Plan PatternStamper::plan(const PatternVariant& variant, int tar
 }
 
 PatternStamper::PatternStamper(resource::GameResources& resources, const HexagonGrid& hexgrid,
-    ObjectCommandController& controller, Map& map)
+    ObjectCommandController& controller, Map& map, bool buildSprites)
     : _resources(resources)
     , _hexgrid(hexgrid)
     , _controller(controller)
-    , _map(map) { }
+    , _map(map)
+    , _buildSprites(buildSprites) { }
 
 std::shared_ptr<Object> PatternStamper::buildObject(const std::shared_ptr<MapObject>& mapObject, uint32_t frmPid) const {
     auto object = buildSpriteObject(_resources, _hexgrid, frmPid, mapObject->position, mapObject->direction);
@@ -89,6 +90,57 @@ std::shared_ptr<Object> PatternStamper::buildObject(const std::shared_ptr<MapObj
         object->setMapObject(mapObject);
     }
     return object;
+}
+
+std::shared_ptr<MapObject> PatternStamper::makeMapObject(const ObjectPlacement& placement, int elevation) const {
+    auto mapObject = std::make_shared<MapObject>();
+    mapObject->position = placement.hex;
+    mapObject->elevation = static_cast<uint32_t>(elevation);
+    mapObject->direction = placement.direction;
+    mapObject->frame_number = 0;
+    if (const auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(placement.hex)); hex.has_value()) {
+        mapObject->x = static_cast<uint32_t>(hex->get().x());
+        mapObject->y = static_cast<uint32_t>(hex->get().y());
+    }
+    mapObject->pro_pid = placement.proPid;
+    mapObject->frm_pid = placement.frmPid;
+    mapObject->flags = placement.flags;
+    mapObject->critter_index = -1;
+    mapObject->map_scripts_pid = -1;
+    mapObject->script_id = -1;
+    mapObject->amount = 1;
+    return mapObject;
+}
+
+int PatternStamper::applyTiles(const std::vector<TilePlacement>& tiles, int elevation, const std::string& description) {
+    if (tiles.empty()) {
+        return 0;
+    }
+    std::vector<TileChange> changes;
+    changes.reserve(tiles.size());
+    const auto& tilesByElevation = _map.getMapFile().tiles;
+    const auto it = tilesByElevation.find(elevation);
+    for (const TilePlacement& tp : tiles) {
+        uint16_t before = static_cast<uint16_t>(Map::EMPTY_TILE);
+        if (it != tilesByElevation.end() && tp.tileIndex >= 0 && tp.tileIndex < static_cast<int>(it->second.size())) {
+            before = tp.isRoof ? it->second[tp.tileIndex].getRoof() : it->second[tp.tileIndex].getFloor();
+        }
+        changes.push_back({ elevation, tp.tileIndex, tp.isRoof, before, tp.tileId });
+    }
+    _controller.applyTileChanges(changes, true);
+    _controller.registerTileEdit(description + " (tiles)", changes);
+    return static_cast<int>(changes.size());
+}
+
+bool PatternStamper::registerStampObject(const std::shared_ptr<MapObject>& mapObject, uint32_t frmPid) {
+    // Headless (data-only): record the MapObject without a sprite — the .map stores just these ids,
+    // so a stamp's objects land even with no art or GL. GUI: build the sprite so it draws, which (as
+    // for placeObject) needs resolvable art.
+    if (!_buildSprites) {
+        return _controller.registerObjectData(mapObject);
+    }
+    const auto object = buildObject(mapObject, frmPid);
+    return object != nullptr && _controller.registerObjectPlacement(mapObject, object);
 }
 
 PatternStamper::Result PatternStamper::stamp(const PatternVariant& variant, int targetHex, int elevation) {
@@ -103,48 +155,13 @@ PatternStamper::Result PatternStamper::stamp(const PatternVariant& variant, int 
     ScopedUndoBatch batch(_controller, desc);
 
     for (const ObjectPlacement& op : p.objects) {
-        auto mapObject = std::make_shared<MapObject>();
-        mapObject->position = op.hex;
-        mapObject->elevation = static_cast<uint32_t>(elevation);
-        mapObject->direction = op.direction;
-        mapObject->frame_number = 0;
-        if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(op.hex)); hex.has_value()) {
-            mapObject->x = static_cast<uint32_t>(hex->get().x());
-            mapObject->y = static_cast<uint32_t>(hex->get().y());
-        }
-        mapObject->pro_pid = op.proPid;
-        mapObject->frm_pid = op.frmPid;
-        mapObject->flags = op.flags;
-        mapObject->critter_index = -1;
-        mapObject->map_scripts_pid = -1;
-        mapObject->script_id = -1;
-        mapObject->amount = 1;
-
-        auto object = buildObject(mapObject, op.frmPid);
-        if (object && _controller.registerObjectPlacement(mapObject, object)) {
+        if (registerStampObject(makeMapObject(op, elevation), op.frmPid)) {
             ++r.objectsPlaced;
         } else {
             ++r.objectsFailed;
         }
     }
-
-    if (!p.tiles.empty()) {
-        std::vector<TileChange> changes;
-        changes.reserve(p.tiles.size());
-        const auto& tilesByElevation = _map.getMapFile().tiles;
-        const auto it = tilesByElevation.find(elevation);
-        for (const TilePlacement& tp : p.tiles) {
-            uint16_t before = static_cast<uint16_t>(Map::EMPTY_TILE);
-            if (it != tilesByElevation.end() && tp.tileIndex >= 0
-                && tp.tileIndex < static_cast<int>(it->second.size())) {
-                before = tp.isRoof ? it->second[tp.tileIndex].getRoof() : it->second[tp.tileIndex].getFloor();
-            }
-            changes.push_back({ elevation, tp.tileIndex, tp.isRoof, before, tp.tileId });
-        }
-        _controller.applyTileChanges(changes, true);
-        _controller.registerTileEdit(desc + " (tiles)", changes);
-        r.tilesPainted = static_cast<int>(changes.size());
-    }
+    r.tilesPainted = applyTiles(p.tiles, elevation, desc);
 
     r.success = true;
     return r;

@@ -110,22 +110,38 @@ namespace {
         // OBJECT_FLAT marks invisible movement-blockers / floor markers (block.frm). A generator
         // never scatters these; surfacing the flag lets an MCP client tell structural from decor.
         bool isFlat(uint32_t pid) {
-            if (const auto it = _flat.find(pid); it != _flat.end()) {
-                return it->second;
-            }
-            bool flat = false;
-            try {
-                if (const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, pid)); pro != nullptr) {
-                    flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
-                }
-            } catch (const std::exception& e) {
-                spdlog::debug("isFlat: could not resolve pid {}: {}", pid, e.what());
-            }
-            _flat[pid] = flat;
-            return flat;
+            characterize(pid);
+            return _flat[pid];
+        }
+
+        // Whether the proto actually loads from the mounted data. False means the flag/name reported
+        // for it are not authoritative (incomplete data) — used to keep unplaceable protos out of the
+        // curated palette rather than substituting a guess (engine-data-fidelity rule).
+        bool resolved(uint32_t pid) {
+            characterize(pid);
+            return _resolved[pid];
         }
 
     private:
+        // Load the proto once and cache whether it resolved and its OBJECT_FLAT flag.
+        void characterize(uint32_t pid) {
+            if (_resolved.find(pid) != _resolved.end()) {
+                return;
+            }
+            bool loaded = false;
+            bool flat = false;
+            try {
+                if (const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, pid)); pro != nullptr) {
+                    loaded = true;
+                    flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
+                }
+            } catch (const std::exception& e) {
+                spdlog::debug("characterize: could not resolve pid {}: {}", pid, e.what());
+            }
+            _resolved[pid] = loaded;
+            _flat[pid] = flat;
+        }
+
         std::string resolveProtoName(uint32_t pid) {
             std::string engineName;
             std::string file;
@@ -150,6 +166,7 @@ namespace {
         const Lst* _tilesLst;
         std::unordered_map<uint32_t, std::string> _protoNames;
         std::unordered_map<uint32_t, bool> _flat;
+        std::unordered_map<uint32_t, bool> _resolved;
     };
 
     // Minimal JSON string literal (quotes + escapes) — analyze --json builds a fixed schema by
@@ -495,7 +512,9 @@ namespace {
                 floor[id] += count;
             }
             for (const auto& [pid, count] : usage.objects) {
-                if (Pro::typeOfPid(pid) == Pro::OBJECT_TYPE::SCENERY && !names.isFlat(pid)) {
+                // Curated palette = scatter-eligible scenery the agent can actually place: scenery
+                // type, the proto resolves (no guessing — keep unplaceable protos out), not flat.
+                if (Pro::typeOfPid(pid) == Pro::OBJECT_TYPE::SCENERY && names.resolved(pid) && !names.isFlat(pid)) {
                     scenery[pid] += count;
                 }
             }
