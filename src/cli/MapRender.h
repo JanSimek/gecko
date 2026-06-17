@@ -19,6 +19,9 @@ namespace cli {
         unsigned int maxDimension = 1600;
         bool showRoof = false;
         bool showObjects = true;
+        /// Schematic style: flat-colour floor tiles by id + mark objects by category, and print the
+        /// colour legend so the agent can match the picture to the analyze JSON.
+        bool schematic = false;
     };
 
     /// Render a map to an image file (format inferred from the extension, e.g. .png). Returns 0 on

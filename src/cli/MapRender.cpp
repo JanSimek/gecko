@@ -7,10 +7,31 @@
 #include <SFML/Graphics/Image.hpp>
 
 #include <exception>
+#include <format>
 #include <memory>
 #include <ostream>
 
 namespace geck::cli {
+
+namespace {
+    std::string hexColor(const sf::Color& c) {
+        return std::format("#{:02X}{:02X}{:02X}", c.r, c.g, c.b);
+    }
+
+    // Print the schematic's colour key so an agent can map what it sees to the analyze JSON: floor
+    // entries by raw tile-id (join id -> name via `analyze`), object entries by engine type.
+    void printLegend(const MapRenderer::Legend& legend, std::ostream& out) {
+        out << "schematic legend (join floor id -> name via `analyze`):\n";
+        for (const auto& entry : legend.floors) {
+            out << "  floor   " << hexColor(entry.color) << "  id " << entry.id
+                << "  (" << entry.count << " tiles)\n";
+        }
+        for (const auto& entry : legend.objects) {
+            out << "  object  " << hexColor(entry.color) << "  " << entry.type
+                << "  (" << entry.count << ")\n";
+        }
+    }
+} // namespace
 
 int renderMap(resource::GameResources& resources, const RenderOptions& options, std::ostream& out) {
     const std::unique_ptr<Map> map = loadMap(resources, options.mapPath);
@@ -24,16 +45,21 @@ int renderMap(resource::GameResources& resources, const RenderOptions& options, 
     renderOptions.maxDimension = options.maxDimension;
     renderOptions.showRoof = options.showRoof;
     renderOptions.showObjects = options.showObjects;
+    renderOptions.style = options.schematic ? MapRenderer::Style::Schematic : MapRenderer::Style::Natural;
 
     try {
         MapRenderer renderer(resources);
-        const sf::Image image = renderer.renderToImage(*map, renderOptions);
+        MapRenderer::Legend legend;
+        const sf::Image image = renderer.renderToImage(*map, renderOptions, options.schematic ? &legend : nullptr);
         if (!image.saveToFile(options.outPath)) {
             out << "render: failed to write image: " << options.outPath << "\n";
             return 1;
         }
         const sf::Vector2u size = image.getSize();
         out << "wrote " << options.outPath << " (" << size.x << "x" << size.y << ")\n";
+        if (options.schematic) {
+            printLegend(legend, out);
+        }
     } catch (const std::exception& e) {
         out << "render: " << e.what() << "\n";
         return 1;

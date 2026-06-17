@@ -18,7 +18,21 @@ TEST_CASE("MapRenderer reports an empty map instead of rendering blank", "[rende
     map->setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
 
     MapRenderer renderer(resources);
-    MapRenderer::Options options;
-    options.elevation = 0;
-    CHECK_THROWS_AS(renderer.renderToImage(*map, options), std::runtime_error);
+
+    SECTION("natural style") {
+        MapRenderer::Options options;
+        options.elevation = 0;
+        CHECK_THROWS_AS(renderer.renderToImage(*map, options), std::runtime_error);
+    }
+
+    SECTION("schematic style fills no legend and reports the empty map") {
+        MapRenderer::Options options;
+        options.elevation = 0;
+        options.style = MapRenderer::Style::Schematic;
+        MapRenderer::Legend legend;
+        CHECK_THROWS_AS(renderer.renderToImage(*map, options, &legend), std::runtime_error);
+        // An empty map has no floor ids and no objects, so the legend stays empty.
+        CHECK(legend.floors.empty());
+        CHECK(legend.objects.empty());
+    }
 }

@@ -32,9 +32,11 @@ void printUsage(const char* program) {
               << "      Runs a Luau generation script against an empty map and writes the result.\n"
               << "      --arg passes parameters to the script (read as args.key).\n"
               << "  " << program << " map render --map <file.map> --out <file.png>\n"
-              << "      [--elevation 0|1|2] [--max-dim N] [--roof] --data <dir-or-.dat> [--data <...>]\n"
+              << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic] --data <dir-or-.dat> [...]\n"
               << "      Renders a map to a PNG (needs an off-screen GL context). --max-dim caps the\n"
               << "      longest side (default 1600); --roof draws the roof layer over the floor.\n"
+              << "      --schematic flat-colours floor tiles by id + marks objects by category and\n"
+              << "      prints the colour legend (join with analyze --json to read the picture).\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
@@ -117,6 +119,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     }
     if (out.render && arg == "--roof") {
         out.ren.showRoof = true;
+        return 1;
+    }
+    if (out.render && arg == "--schematic") {
+        out.ren.schematic = true;
         return 1;
     }
     if (out.render) {

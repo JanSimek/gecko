@@ -438,6 +438,11 @@ The scripting core and a first procedural generator are in. Concretely:
   *see* a generated biome, not just read its stats. `RenderingEngine`/`HexRenderer` moved out of
   `gecko_app` into `gecko_editing` for this (they were always Qt-free). Needs an off-screen GL
   context at runtime; reports an error instead of crashing when none is available.
+  - **Schematic style** (`--schematic` / `schematic:true`) flat-colours each floor tile by its id
+    and marks objects by category, returning a colour legend (id/type → colour → count). This
+    *grounds* the analyze JSON to the image — the colours are the ids, colour regions are tiles,
+    and borders between colours are the `adjacency` transitions — so a multimodal agent can match
+    what it sees to the data instead of guessing which pixels are which tile.
 - **Tile-adjacency analysis.** `analyze --json` now carries `adjacency` per map and aggregated: the
   floor-tile *borders* (which tile sits next to which different tile, and how often). Since the
   Fallout engine has no autotiling — mappers place edge tiles by hand — this is the empirical data

@@ -3,30 +3,226 @@
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
 #include "format/map/Map.h"
+#include "format/map/MapObject.h"
+#include "format/map/Tile.h"
+#include "format/pro/Pro.h"
 #include "ui/rendering/MapSpriteLoader.h"
 #include "ui/rendering/RenderingEngine.h"
+#include "util/Constants.h"
+#include "util/TileUtils.h"
 
+#include <SFML/Graphics/CircleShape.hpp>
+#include <SFML/Graphics/PrimitiveType.hpp>
 #include <SFML/Graphics/RenderTexture.hpp>
 #include <SFML/Graphics/Sprite.hpp>
+#include <SFML/Graphics/VertexArray.hpp>
 #include <SFML/Graphics/View.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace geck {
 
 namespace {
-    // Grow the running bounding box to include one sprite's world-space bounds.
-    void expandBounds(const sf::Sprite& sprite, float& minX, float& minY, float& maxX, float& maxY) {
-        const sf::FloatRect b = sprite.getGlobalBounds();
-        minX = std::min(minX, b.position.x);
-        minY = std::min(minY, b.position.y);
-        maxX = std::max(maxX, b.position.x + b.size.x);
-        maxY = std::max(maxY, b.position.y + b.size.y);
+    // A bounding box that grows as content is added; starts inverted so the first point sets it.
+    struct Bounds {
+        float minX = std::numeric_limits<float>::max();
+        float minY = std::numeric_limits<float>::max();
+        float maxX = std::numeric_limits<float>::lowest();
+        float maxY = std::numeric_limits<float>::lowest();
+
+        void add(float x0, float y0, float x1, float y1) {
+            minX = std::min(minX, x0);
+            minY = std::min(minY, y0);
+            maxX = std::max(maxX, x1);
+            maxY = std::max(maxY, y1);
+        }
+        void add(const sf::Sprite& sprite) {
+            const sf::FloatRect b = sprite.getGlobalBounds();
+            add(b.position.x, b.position.y, b.position.x + b.size.x, b.position.y + b.size.y);
+        }
+        [[nodiscard]] bool empty() const { return minX > maxX || minY > maxY; }
+    };
+
+    // Texture size + world-space view that fit `bounds` into `maxDimension` (longest side), padded.
+    struct Frame {
+        unsigned int width = 1;
+        unsigned int height = 1;
+        sf::View view;
+    };
+    Frame computeFrame(Bounds bounds, unsigned int maxDimension) {
+        constexpr float pad = 8.0f;
+        bounds.add(bounds.minX - pad, bounds.minY - pad, bounds.maxX + pad, bounds.maxY + pad);
+        const float bboxWidth = std::max(1.0f, bounds.maxX - bounds.minX);
+        const float bboxHeight = std::max(1.0f, bounds.maxY - bounds.minY);
+        const float maxDim = static_cast<float>(std::max(1u, maxDimension));
+        const float scale = std::min(1.0f, maxDim / std::max(bboxWidth, bboxHeight));
+        Frame frame;
+        frame.width = static_cast<unsigned int>(std::max(1.0f, bboxWidth * scale));
+        frame.height = static_cast<unsigned int>(std::max(1.0f, bboxHeight * scale));
+        frame.view = sf::View(sf::FloatRect({ bounds.minX, bounds.minY }, { bboxWidth, bboxHeight }));
+        return frame;
+    }
+
+    // An off-screen render target sized to `frame`, or a runtime_error when no GL context is available.
+    std::unique_ptr<sf::RenderTexture> makeTarget(const Frame& frame) {
+        auto target = std::make_unique<sf::RenderTexture>();
+        if (!target->resize({ frame.width, frame.height })) {
+            throw std::runtime_error("could not create a " + std::to_string(frame.width) + "x"
+                + std::to_string(frame.height)
+                + " off-screen render target — no GL context (headless without a display?)");
+        }
+        target->setView(frame.view);
+        return target;
+    }
+
+    sf::Color hsvToRgb(float h, float s, float v) {
+        const float sixth = std::floor(h * 6.0f);
+        const float f = h * 6.0f - sixth;
+        const float p = v * (1.0f - s);
+        const float q = v * (1.0f - f * s);
+        const float t = v * (1.0f - (1.0f - f) * s);
+        float r = v;
+        float g = t;
+        float b = p;
+        switch (static_cast<int>(sixth) % 6) {
+            case 1:
+                r = q, g = v, b = p;
+                break;
+            case 2:
+                r = p, g = v, b = t;
+                break;
+            case 3:
+                r = p, g = q, b = v;
+                break;
+            case 4:
+                r = t, g = p, b = v;
+                break;
+            case 5:
+                r = v, g = p, b = q;
+                break;
+            default:
+                break; // case 0
+        }
+        const auto byte = [](float c) { return static_cast<std::uint8_t>(std::lround(c * 255.0f)); };
+        return sf::Color(byte(r), byte(g), byte(b));
+    }
+
+    // Visually distinct colours by index: the golden-ratio hue rotation spreads neighbours apart so
+    // adjacent ranks don't look alike. Stable for a given index, so the same rank is always the same hue.
+    sf::Color distinctColor(int index) {
+        const float hue = std::fmod(static_cast<float>(index) * 0.618033988749895f, 1.0f);
+        return hsvToRgb(hue, 0.62f, 0.95f);
+    }
+
+    // A fixed colour per object category, so the same kind of object always reads the same.
+    sf::Color categoryColor(Pro::OBJECT_TYPE type) {
+        switch (type) {
+            case Pro::OBJECT_TYPE::ITEM:
+                return sf::Color(235, 180, 60);
+            case Pro::OBJECT_TYPE::CRITTER:
+                return sf::Color(224, 80, 80);
+            case Pro::OBJECT_TYPE::SCENERY:
+                return sf::Color(96, 200, 120);
+            case Pro::OBJECT_TYPE::WALL:
+                return sf::Color(96, 150, 235);
+            case Pro::OBJECT_TYPE::MISC:
+                return sf::Color(200, 120, 220);
+            default:
+                return sf::Color(200, 200, 200);
+        }
+    }
+
+    // Append a tile-footprint diamond (two triangles) at screen box top-left (x, y).
+    void appendDiamond(sf::VertexArray& vertices, float x, float y, sf::Color color) {
+        const auto halfW = static_cast<float>(TILE_WIDTH) / 2.0f;
+        const auto halfH = static_cast<float>(TILE_HEIGHT) / 2.0f;
+        const sf::Vector2f top{ x + halfW, y };
+        const sf::Vector2f right{ x + static_cast<float>(TILE_WIDTH), y + halfH };
+        const sf::Vector2f bottom{ x + halfW, y + static_cast<float>(TILE_HEIGHT) };
+        const sf::Vector2f left{ x, y + halfH };
+        for (const sf::Vector2f& point : { top, right, bottom }) {
+            vertices.append(sf::Vertex{ point, color });
+        }
+        for (const sf::Vector2f& point : { top, bottom, left }) {
+            vertices.append(sf::Vertex{ point, color });
+        }
+    }
+
+    constexpr uint16_t kEmptyTile = static_cast<uint16_t>(Map::EMPTY_TILE);
+
+    // A stable, distinct colour per floor-tile id, most-common id first, also recorded in the legend.
+    std::unordered_map<uint16_t, sf::Color> assignFloorColors(const std::vector<Tile>& tiles, MapRenderer::Legend* legend) {
+        std::map<uint16_t, int> counts;
+        for (const auto& tile : tiles) {
+            if (tile.getFloor() != kEmptyTile) {
+                counts[tile.getFloor()]++;
+            }
+        }
+        std::vector<std::pair<uint16_t, int>> ranked(counts.begin(), counts.end());
+        std::ranges::sort(ranked, [](const auto& a, const auto& b) { return a.second > b.second; });
+
+        std::unordered_map<uint16_t, sf::Color> colors;
+        for (std::size_t rank = 0; rank < ranked.size(); ++rank) {
+            const sf::Color color = distinctColor(static_cast<int>(rank));
+            colors[ranked[rank].first] = color;
+            if (legend != nullptr) {
+                legend->floors.push_back({ ranked[rank].first, color, ranked[rank].second });
+            }
+        }
+        return colors;
+    }
+
+    // Build the flat-coloured floor mesh and grow `bounds` to the drawn cells.
+    void appendFloorMesh(sf::VertexArray& mesh, Bounds& bounds, const std::vector<Tile>& tiles,
+        const std::unordered_map<uint16_t, sf::Color>& colors) {
+        for (std::size_t i = 0; i < tiles.size(); ++i) {
+            const uint16_t floorId = tiles[i].getFloor();
+            if (floorId == kEmptyTile) {
+                continue;
+            }
+            const ScreenPosition pos = indexToScreenPosition(static_cast<int>(i));
+            const auto x = static_cast<float>(pos.x);
+            const auto y = static_cast<float>(pos.y);
+            appendDiamond(mesh, x, y, colors.at(floorId));
+            bounds.add(x, y, x + static_cast<float>(TILE_WIDTH), y + static_cast<float>(TILE_HEIGHT));
+        }
+    }
+
+    // Draw a category-coloured dot at each object's centre, and record the per-category legend.
+    void drawObjectMarkers(sf::RenderTexture& target, const std::vector<std::shared_ptr<Object>>& objects,
+        MapRenderer::Legend* legend) {
+        std::map<uint32_t, int> typeCounts; // engine type value -> count
+        for (const auto& object : objects) {
+            if (!object || !object->hasMapObject()) {
+                continue;
+            }
+            const Pro::OBJECT_TYPE type = Pro::typeOfPid(object->getMapObjectPtr()->pro_pid);
+            typeCounts[static_cast<uint32_t>(type)]++;
+            const sf::FloatRect b = object->getSprite().getGlobalBounds();
+            constexpr float radius = 5.0f;
+            sf::CircleShape marker(radius);
+            marker.setOrigin({ radius, radius });
+            marker.setPosition({ b.position.x + b.size.x / 2.0f, b.position.y + b.size.y / 2.0f });
+            marker.setFillColor(categoryColor(type));
+            marker.setOutlineColor(sf::Color(20, 20, 20, 200));
+            marker.setOutlineThickness(1.0f);
+            target.draw(marker);
+        }
+        if (legend != nullptr) {
+            for (const auto& [typeValue, count] : typeCounts) {
+                const auto type = static_cast<Pro::OBJECT_TYPE>(typeValue);
+                legend->objects.push_back({ Pro::typeToString(type), categoryColor(type), count });
+            }
+            std::ranges::sort(legend->objects, [](const auto& a, const auto& b) { return a.count > b.count; });
+        }
     }
 } // namespace
 
@@ -34,7 +230,14 @@ MapRenderer::MapRenderer(resource::GameResources& resources)
     : _resources(resources) {
 }
 
-sf::Image MapRenderer::renderToImage(Map& map, const Options& options) {
+sf::Image MapRenderer::renderToImage(Map& map, const Options& options, Legend* legend) {
+    if (options.style == Style::Schematic) {
+        return renderSchematic(map, options, legend);
+    }
+    return renderNatural(map, options);
+}
+
+sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
     // Build the map's sprites headlessly — the same loader the editor uses.
     HexagonGrid hexgrid;
     MapSpriteLoader loader(_resources, hexgrid);
@@ -45,51 +248,28 @@ sf::Image MapRenderer::renderToImage(Map& map, const Options& options) {
     loader.loadSprites(map, options.elevation, floorSprites, roofSprites, objects, wallBlockerOverlays);
 
     // Frame the camera to the bounding box of everything we will draw (floor, optional roof, objects).
-    float minX = std::numeric_limits<float>::max();
-    float minY = std::numeric_limits<float>::max();
-    float maxX = std::numeric_limits<float>::lowest();
-    float maxY = std::numeric_limits<float>::lowest();
+    Bounds bounds;
     for (const auto& sprite : floorSprites) {
-        expandBounds(sprite, minX, minY, maxX, maxY);
+        bounds.add(sprite);
     }
     if (options.showRoof) {
         for (const auto& sprite : roofSprites) {
-            expandBounds(sprite, minX, minY, maxX, maxY);
+            bounds.add(sprite);
         }
     }
     if (options.showObjects) {
         for (const auto& object : objects) {
             if (object) {
-                expandBounds(object->getSprite(), minX, minY, maxX, maxY);
+                bounds.add(object->getSprite());
             }
         }
     }
-    if (minX > maxX || minY > maxY) {
+    if (bounds.empty()) {
         throw std::runtime_error("map has nothing to render at elevation " + std::to_string(options.elevation));
     }
 
-    constexpr float pad = 8.0f;
-    minX -= pad;
-    minY -= pad;
-    maxX += pad;
-    maxY += pad;
-    const float bboxWidth = std::max(1.0f, maxX - minX);
-    const float bboxHeight = std::max(1.0f, maxY - minY);
-
-    // Fit the (possibly huge) world bounds into maxDimension; the view still covers the full bounds,
-    // so the content is supersampled down into the texture (same approach as ThumbnailRenderer).
-    const float maxDim = static_cast<float>(std::max(1u, options.maxDimension));
-    const float scale = std::min(1.0f, maxDim / std::max(bboxWidth, bboxHeight));
-    const auto width = static_cast<unsigned int>(std::max(1.0f, bboxWidth * scale));
-    const auto height = static_cast<unsigned int>(std::max(1.0f, bboxHeight * scale));
-
-    sf::RenderTexture renderTexture;
-    if (!renderTexture.resize({ width, height })) {
-        throw std::runtime_error("could not create a " + std::to_string(width) + "x" + std::to_string(height)
-            + " off-screen render target — no GL context (headless without a display?)");
-    }
-    renderTexture.setView(sf::View(sf::FloatRect({ minX, minY }, { bboxWidth, bboxHeight })));
-    renderTexture.clear(options.background);
+    const std::unique_ptr<sf::RenderTexture> target = makeTarget(computeFrame(bounds, options.maxDimension));
+    target->clear(options.background);
 
     RenderingEngine engine(_resources);
     RenderingEngine::RenderData data;
@@ -111,9 +291,47 @@ sf::Image MapRenderer::renderToImage(Map& map, const Options& options) {
     visibility.showLightOverlays = false;
     visibility.showExitGrids = false;
 
-    engine.render(renderTexture, renderTexture.getView(), data, visibility);
-    renderTexture.display();
-    return renderTexture.getTexture().copyToImage();
+    engine.render(*target, target->getView(), data, visibility);
+    target->display();
+    return target->getTexture().copyToImage();
+}
+
+sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend* legend) {
+    const auto& allTiles = map.getMapFile().tiles;
+    const auto tilesIt = allTiles.find(options.elevation);
+    const std::vector<Tile> noTiles;
+    const std::vector<Tile>& tiles = tilesIt != allTiles.end() ? tilesIt->second : noTiles;
+
+    const std::unordered_map<uint16_t, sf::Color> floorColor = assignFloorColors(tiles, legend);
+
+    // Objects (markers) — reuse the loader for their screen positions; colour by engine category.
+    HexagonGrid hexgrid;
+    MapSpriteLoader loader(_resources, hexgrid);
+    std::vector<std::shared_ptr<Object>> objects;
+    if (options.showObjects) {
+        std::vector<sf::Sprite> wallBlockerOverlays; // unused for the schematic, but the loader fills it
+        loader.loadObjectSprites(map, options.elevation, objects, wallBlockerOverlays);
+    }
+
+    // Flat-coloured floor mesh, plus the content bounds (floor cells and object sprites).
+    sf::VertexArray floor(sf::PrimitiveType::Triangles);
+    Bounds bounds;
+    appendFloorMesh(floor, bounds, tiles, floorColor);
+    for (const auto& object : objects) {
+        if (object) {
+            bounds.add(object->getSprite());
+        }
+    }
+    if (bounds.empty()) {
+        throw std::runtime_error("map has nothing to render at elevation " + std::to_string(options.elevation));
+    }
+
+    const std::unique_ptr<sf::RenderTexture> target = makeTarget(computeFrame(bounds, options.maxDimension));
+    target->clear(options.background);
+    target->draw(floor);
+    drawObjectMarkers(*target, objects, legend);
+    target->display();
+    return target->getTexture().copyToImage();
 }
 
 } // namespace geck

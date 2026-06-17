@@ -137,6 +137,9 @@ namespace {
         if (const auto it = args.find("showRoof"); it != args.end() && it->is_boolean()) {
             opts.showRoof = it->get<bool>();
         }
+        if (const auto it = args.find("schematic"); it != args.end() && it->is_boolean()) {
+            opts.schematic = it->get<bool>();
+        }
         if (opts.mapPath.empty() || opts.outPath.empty()) {
             return toolText("render_map requires 'map' and 'out' string arguments", true);
         }
@@ -188,9 +191,12 @@ namespace {
             { { "name", "render_map" },
                 { "description", "Render a map to a PNG so it can be seen, not just measured. Args: map "
                                  "(.map path), out (output .png path), optional elevation, optional "
-                                 "maxDimension (longest side in px, default 1600), optional showRoof. "
-                                 "Needs an off-screen GL context; reports an error if none is available." },
-                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } } } },
+                                 "maxDimension (longest side in px, default 1600), optional showRoof, "
+                                 "optional schematic. schematic=true flat-colours floor tiles by id "
+                                 "and marks objects by category, and returns a colour legend (id/type "
+                                 "-> colour -> count) so you can match the picture to the analyze JSON "
+                                 "and read the floor-tile transitions. Needs an off-screen GL context." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } } } },
         });
     }
 } // namespace
