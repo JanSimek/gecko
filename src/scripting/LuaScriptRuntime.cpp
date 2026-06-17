@@ -16,6 +16,7 @@
 #include <LuaBridge/Vector.h> // std::vector <-> Lua table (for hexNeighbors)
 
 #include "scripting/MapScriptApi.h"
+#include "scripting/ScriptApiReference.h"
 #include "ui/editing/ObjectCommandController.h"
 
 namespace geck {
@@ -59,39 +60,15 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
     lua_pushcclosure(L, &capturePrint, "print", 1);
     lua_setglobal(L, "print");
 
-    // Bind the host API. Must precede luaL_sandbox(), which makes globals read-only.
+    // Bind the host API. Must precede luaL_sandbox(), which makes globals read-only. The functions
+    // come from the single GECK_SCRIPT_API list (ScriptApiReference.h) that also drives the
+    // script_api reference, so bindings and docs cannot diverge.
+#define GECK_SCRIPT_API_BIND(name, sig, doc) .addFunction(#name, &MapScriptApi::name)
     luabridge::getGlobalNamespace(L)
         .beginClass<MapScriptApi>("MapScriptApi")
-        .addFunction("isValidHex", &MapScriptApi::isValidHex)
-        .addFunction("hexNeighbors", &MapScriptApi::hexNeighbors)
-        .addFunction("getFloor", &MapScriptApi::getFloor)
-        .addFunction("getRoof", &MapScriptApi::getRoof)
-        .addFunction("tileId", &MapScriptApi::tileId)
-        .addFunction("mapScenery", &MapScriptApi::mapScenery)
-        .addFunction("mapSceneryHistogram", &MapScriptApi::mapSceneryHistogram)
-        .addFunction("mapFloorTiles", &MapScriptApi::mapFloorTiles)
-        .addFunction("listMaps", &MapScriptApi::listMaps)
-        .addFunction("noise2d", &MapScriptApi::noise2d)
-        .addFunction("protoName", &MapScriptApi::protoName)
-        .addFunction("proto", &MapScriptApi::proto)
-        .addFunction("hexIndex", &MapScriptApi::hexIndex)
-        .addFunction("tileIndex", &MapScriptApi::tileIndex)
-        .addFunction("hexCol", &MapScriptApi::hexCol)
-        .addFunction("hexRow", &MapScriptApi::hexRow)
-        .addFunction("tileCol", &MapScriptApi::tileCol)
-        .addFunction("tileRow", &MapScriptApi::tileRow)
-        .addFunction("getFloorXY", &MapScriptApi::getFloorXY)
-        .addFunction("getRoofXY", &MapScriptApi::getRoofXY)
-        .addFunction("placeObjectXY", &MapScriptApi::placeObjectXY)
-        .addFunction("placeProtoXY", &MapScriptApi::placeProtoXY)
-        .addFunction("paintFloorXY", &MapScriptApi::paintFloorXY)
-        .addFunction("paintRoofXY", &MapScriptApi::paintRoofXY)
-        .addFunction("placeObject", &MapScriptApi::placeObject)
-        .addFunction("placeProto", &MapScriptApi::placeProto)
-        .addFunction("paintFloor", &MapScriptApi::paintFloor)
-        .addFunction("paintRoof", &MapScriptApi::paintRoof)
-        .addFunction("placeStamp", &MapScriptApi::placeStamp)
+            GECK_SCRIPT_API(GECK_SCRIPT_API_BIND)
         .endClass();
+#undef GECK_SCRIPT_API_BIND
     luabridge::setGlobal(L, &api, "api");
 
     // Resolve this run's RNG seed: use --arg seed=N when it parses, otherwise pick a fresh one so
