@@ -3,6 +3,7 @@
 #include "cli/MapAnalyzer.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
+#include "cli/PatternExtract.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
@@ -151,6 +152,35 @@ namespace {
         return toolText(oss.str(), rc != 0); // rc != 0 e.g. unreadable map or no GL context
     }
 
+    json toolExtractPattern(resource::GameResources& resources, const json& args) {
+        cli::ExtractOptions opts;
+        opts.mapPath = optString(args, "map");
+        opts.outPath = optString(args, "out");
+        opts.name = optString(args, "name");
+        opts.elevation = optInt(args, "elevation", opts.elevation);
+        opts.anchorHex = optInt(args, "anchorHex", opts.anchorHex);
+        opts.radius = optInt(args, "radius", opts.radius);
+        if (const auto it = args.find("includeFloor"); it != args.end() && it->is_boolean()) {
+            opts.includeFloor = it->get<bool>();
+        }
+        if (const auto it = args.find("pids"); it != args.end() && it->is_array()) {
+            for (const auto& pid : *it) {
+                if (pid.is_number_integer()) {
+                    opts.pids.push_back(static_cast<uint32_t>(pid.get<int64_t>()));
+                }
+            }
+        }
+        if (opts.mapPath.empty() || opts.outPath.empty() || opts.name.empty()) {
+            return toolText("extract_pattern requires 'map', 'out' and 'name'", true);
+        }
+        if (opts.pids.empty() && opts.anchorHex < 0) {
+            return toolText("extract_pattern needs 'pids' (proto PIDs locating the structure) or 'anchorHex'", true);
+        }
+        std::ostringstream oss;
+        const int rc = cli::extractPattern(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
     // Dispatch a tools/call by name. Returns the tool result, or nullopt for an unknown tool
     // (which the caller turns into a JSON-RPC method error).
     std::optional<json> callTool(resource::GameResources& resources, const std::string& name, const json& args) {
@@ -168,6 +198,9 @@ namespace {
         }
         if (name == "render_map") {
             return toolRender(resources, args);
+        }
+        if (name == "extract_pattern") {
+            return toolExtractPattern(resources, args);
         }
         return std::nullopt;
     }
@@ -201,6 +234,16 @@ namespace {
                                  "and read the floor-tile transitions. FLAT objects (invisible engine "
                                  "blockers) are hidden unless showBlockers. Needs an off-screen GL context." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } } } },
+            { { "name", "extract_pattern" },
+                { "description", "Capture a structure from a real map into a reusable pattern stamp (JSON the "
+                                 "editor's pattern library reads, and generate can place). Locate it with 'pids' "
+                                 "(proto PIDs from analyze that make up the structure) — their bounding box, grown "
+                                 "by 'radius' (default 2) hexes, is the capture region, so immediate props nearby "
+                                 "come along — or pass 'anchorHex' directly. Objects are captured verbatim; pass "
+                                 "includeFloor=true to also capture the floor/roof under the region (for structures "
+                                 "whose floor is integral). Args: map, out, name, optional elevation, pids (int "
+                                 "array), anchorHex, radius, includeFloor." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "name", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "pids", { { "type", "array" }, { "items", { { "type", "integer" } } } } }, { "anchorHex", { { "type", "integer" } } }, { "radius", { { "type", "integer" } } }, { "includeFloor", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out", "name" }) } } } },
         });
     }
 } // namespace

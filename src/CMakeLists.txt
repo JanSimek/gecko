@@ -18,13 +18,8 @@ set(GECK_APP_SOURCES
     ui/Settings.h
     ui/Settings.cpp
 
-    pattern/Pattern.h
     pattern/PatternSerializer.h
     pattern/PatternSerializer.cpp
-    pattern/PatternStamper.h
-    pattern/PatternStamper.cpp
-    pattern/PatternBuilder.h
-    pattern/PatternBuilder.cpp
     pattern/PatternLibrary.h
     pattern/PatternLibrary.cpp
     pattern/ThumbnailComposer.h
@@ -449,6 +444,14 @@ add_library(gecko_editing STATIC
     util/SpriteFactory.cpp
     pattern/PatternSprite.h
     pattern/PatternSprite.cpp
+    # Qt-free pattern (prefab/stamp) core: the data model, capture (PatternBuilder) and placement
+    # (PatternStamper). The editor's PatternSerializer/PatternLibrary stay in gecko_app (they use Qt);
+    # headless extract/place use these plus a Qt-free JSON writer in gecko_cli.
+    pattern/Pattern.h
+    pattern/PatternBuilder.h
+    pattern/PatternBuilder.cpp
+    pattern/PatternStamper.h
+    pattern/PatternStamper.cpp
     ui/rendering/MapSpriteLoader.h
     ui/rendering/MapSpriteLoader.cpp
     # SFML map renderer (Qt-free): drives the same drawing for the Qt editor and headless
@@ -517,7 +520,11 @@ if(GECK_BUILD_CLI)
         cli/MapGenerator.h
         cli/MapGenerator.cpp
         cli/MapRender.h
-        cli/MapRender.cpp)
+        cli/MapRender.cpp
+        cli/PatternJson.h
+        cli/PatternJson.cpp
+        cli/PatternExtract.h
+        cli/PatternExtract.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing)
 
     add_executable(gecko-cli cli/main.cpp)

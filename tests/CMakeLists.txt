@@ -73,6 +73,13 @@ add_executable(qt_tests
     qt/test_dat_archive.cpp
 )
 
+# Round-trip the headless pattern writer (gecko_cli) through the editor's Qt PatternSerializer.
+# Only when the CLI lib is built (it owns cli::serializePattern).
+if(TARGET gecko_cli)
+    target_sources(qt_tests PRIVATE qt/test_pattern_extract_roundtrip.cpp)
+    target_link_libraries(qt_tests PRIVATE gecko_cli)
+endif()
+
 # Shared, header-only test support (fixtures, temp files, builders, stub provider).
 # Included as "support/<Header>.h"; fixtures resolve via GECK_TEST_DATA_DIR.
 add_library(test_support INTERFACE)

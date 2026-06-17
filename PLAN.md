@@ -447,6 +447,14 @@ The scripting core and a first procedural generator are in. Concretely:
   floor-tile *borders* (which tile sits next to which different tile, and how often). Since the
   Fallout engine has no autotiling — mappers place edge tiles by hand — this is the empirical data
   an agent curates a transition set from before generating **seamless** terrain (the §11 P2 item).
+- **Pattern-stamp extraction** (`gecko-cli`/MCP `extract_pattern`). Capture a structure from a real
+  map into the editor's prefab/stamp JSON: locate it by its proto PIDs (option A — the agent reads
+  them from `analyze`), grow their bounding box by a `radius` so immediate props come along, and
+  capture the objects (and, with `includeFloor`, the floor/roof) verbatim. The Qt-free pattern core
+  (`Pattern`, `PatternBuilder`, `PatternStamper`) moved into `gecko_editing`; the headless JSON
+  writer (`cli::serializePattern`) matches the editor's Qt `PatternSerializer` exactly — proven by a
+  round-trip test — so extracted stamps load in the editor's pattern library and (next) feed
+  `generate`. This is how an agent builds a library of tents/buildings from the reference maps.
 - **Reference-map analysis tools.** `MapScriptApi` exposes `mapScenery(mapPath)` (the unique
   scenery PIDs a reference map uses — blockers filtered out via `OBJECT_FLAT`),
   `mapSceneryHistogram(mapPath)` (`{pid → count}`), `mapFloorTiles(mapPath)` (floor-tile ids,
