@@ -436,19 +436,31 @@ namespace {
     // api:placeStamp("tent", ...). The CLI/MCP load stamps via --stamp/the stamps arg; the Console's
     // equivalent is the pattern library (where the editor's "save pattern" and a captured extract land),
     // keyed by each pattern's name.
-    void registerLibraryStamps(MapScriptApi& api) {
+    //
+    // Returns one diagnostic line per file we couldn't load (unreadable, or rejected by the
+    // deserializer) so the failure shows up in the Console output instead of being silently
+    // swallowed — a script then reports "unknown stamp" with the reason right above it.
+    std::string registerLibraryStamps(MapScriptApi& api) {
+        QStringList notes;
         QDirIterator it(pattern::PatternLibrary::rootDir(), QStringList{ "*.json" }, QDir::Files,
             QDirIterator::Subdirectories);
         while (it.hasNext()) {
-            QFile file(it.next());
+            const QString path = it.next();
+            QFile file(path);
+            const QString shown = QFileInfo(path).fileName();
             if (!file.open(QIODevice::ReadOnly)) {
+                notes << QStringLiteral("stamp library: could not open %1").arg(shown);
                 continue;
             }
-            if (const auto loaded = pattern::PatternSerializer::deserialize(file.readAll())) {
+            QString error;
+            if (const auto loaded = pattern::PatternSerializer::deserialize(file.readAll(), &error)) {
                 const std::string name = loaded->name.empty() ? QFileInfo(file).baseName().toStdString() : loaded->name;
                 api.addStamp(name, *loaded);
+            } else {
+                notes << QStringLiteral("stamp library: skipped %1 — %2").arg(shown, error);
             }
         }
+        return notes.join(QLatin1Char('\n')).toStdString();
     }
 } // namespace
 
@@ -457,10 +469,15 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
         return { false, "No map loaded", "" };
     }
     MapScriptApi api(_resources, _hexgrid, *_objectCommandController, *_map, _currentElevation);
-    registerLibraryStamps(api); // so api:placeStamp(name, ...) finds the user's saved patterns
+    // so api:placeStamp(name, ...) finds the user's saved patterns; any unloadable file is reported.
+    const std::string stampNotes = registerLibraryStamps(api);
     LuaScriptRuntime runtime;
     // The continuous SFML render loop shows the script's edits on the next frame.
-    return runtime.run(source, api, *_objectCommandController, "Run script");
+    ScriptResult result = runtime.run(source, api, *_objectCommandController, "Run script");
+    if (!stampNotes.empty()) {
+        result.output = result.output.empty() ? stampNotes : stampNotes + "\n" + result.output;
+    }
+    return result;
 }
 #endif
 
