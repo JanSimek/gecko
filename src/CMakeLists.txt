@@ -161,10 +161,6 @@ set(GECK_APP_SOURCES
     ui/GameEnums.h
     ui/GameEnums.cpp
     ui/UIConstants.h
-    ui/rendering/HexRenderer.h
-    ui/rendering/HexRenderer.cpp
-    ui/rendering/RenderingEngine.h
-    ui/rendering/RenderingEngine.cpp
     ui/rendering/ThumbnailRenderer.h
     ui/rendering/ThumbnailRenderer.cpp
     ui/rendering/MapThumbnail.h
@@ -455,6 +451,12 @@ add_library(gecko_editing STATIC
     pattern/PatternSprite.cpp
     ui/rendering/MapSpriteLoader.h
     ui/rendering/MapSpriteLoader.cpp
+    # SFML map renderer (Qt-free): drives the same drawing for the Qt editor and headless
+    # PNG export. ThumbnailRenderer/MapThumbnail stay in gecko_app — they use QImage/QPainter.
+    ui/rendering/HexRenderer.h
+    ui/rendering/HexRenderer.cpp
+    ui/rendering/RenderingEngine.h
+    ui/rendering/RenderingEngine.cpp
     ui/editing/ObjectCommandController.h
     ui/editing/ObjectCommandController.cpp
     scripting/MapScriptApi.h
