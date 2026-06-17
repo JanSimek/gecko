@@ -447,6 +447,11 @@ The scripting core and a first procedural generator are in. Concretely:
   floor-tile *borders* (which tile sits next to which different tile, and how often). Since the
   Fallout engine has no autotiling — mappers place edge tiles by hand — this is the empirical data
   an agent curates a transition set from before generating **seamless** terrain (the §11 P2 item).
+- **Object clustering** in `analyze --json`. Each map carries a `clusters[]` array: nearby objects
+  grouped by proximity (single-linkage, Chebyshev ≤ 3 hexes), each with a centroid `centerHex`, a
+  bounding box and member PIDs. So an agent reading desert5 sees the perimeter blockers as one
+  cluster to ignore and each tent as a `Wall`+furniture cluster to grab — it picks a tent's
+  `centerHex` + a radius (from the bbox) and feeds them to `extract_pattern`.
 - **Pattern-stamp extraction** (`gecko-cli`/MCP `extract_pattern`). Capture a structure from a real
   map into the editor's prefab/stamp JSON: locate it by its proto PIDs (option A — the agent reads
   them from `analyze`), grow their bounding box by a `radius` so immediate props come along, and

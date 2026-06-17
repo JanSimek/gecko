@@ -1,10 +1,12 @@
 #include "cli/MapAnalyzer.h"
 
+#include "cli/MapLoad.h"
+#include "editor/HexGeometry.h"
+#include "editor/HexagonGrid.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
-#include "cli/MapLoad.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
@@ -16,9 +18,11 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <format>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <ostream>
 #include <string>
 #include <unordered_map>
@@ -252,6 +256,109 @@ namespace {
         return usage;
     }
 
+    // --- object clustering: group nearby objects so an agent can spot structures (tents, buildings)
+    // and feed extract_pattern. Objects within kClusterMergeDistance hexes (Chebyshev) are one
+    // cluster; clusters smaller than kMinClusterSize are dropped as decoration noise.
+    constexpr int kClusterMergeDistance = 3;
+    constexpr int kMinClusterSize = 2;
+
+    struct Cluster {
+        int elevation = 0;
+        int centerHex = 0; ///< Centroid hex — a good anchorHex for extract_pattern.
+        int minHex = 0;    ///< Bounding-box corners as hex indices, to size the capture radius.
+        int maxHex = 0;
+        int count = 0;
+        std::map<uint32_t, int> members; ///< proto pid -> count within the cluster.
+    };
+
+    int unionFind(std::vector<int>& parent, int i) {
+        while (parent[i] != i) {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        return i;
+    }
+
+    // Union objects that sit within kClusterMergeDistance hexes of each other (single-linkage).
+    void linkNearbyObjects(const std::vector<const MapObject*>& objects, std::vector<int>& parent) {
+        const int n = static_cast<int>(objects.size());
+        for (int i = 0; i < n; ++i) {
+            const int ci = hexgrid::columnOf(objects[i]->position);
+            const int ri = hexgrid::rowOf(objects[i]->position);
+            for (int j = i + 1; j < n; ++j) {
+                const int dc = std::abs(ci - hexgrid::columnOf(objects[j]->position));
+                const int dr = std::abs(ri - hexgrid::rowOf(objects[j]->position));
+                if (std::max(dc, dr) <= kClusterMergeDistance) {
+                    parent[unionFind(parent, j)] = unionFind(parent, i);
+                }
+            }
+        }
+    }
+
+    struct ClusterAccumulator {
+        int count = 0;
+        long sumCol = 0;
+        long sumRow = 0;
+        int minCol = 0;
+        int maxCol = 0;
+        int minRow = 0;
+        int maxRow = 0;
+        std::map<uint32_t, int> members;
+    };
+
+    void accumulate(ClusterAccumulator& acc, const MapObject& object) {
+        const int col = hexgrid::columnOf(object.position);
+        const int row = hexgrid::rowOf(object.position);
+        if (acc.count == 0) {
+            acc.minCol = acc.maxCol = col;
+            acc.minRow = acc.maxRow = row;
+        }
+        acc.minCol = std::min(acc.minCol, col);
+        acc.maxCol = std::max(acc.maxCol, col);
+        acc.minRow = std::min(acc.minRow, row);
+        acc.maxRow = std::max(acc.maxRow, row);
+        acc.sumCol += col;
+        acc.sumRow += row;
+        acc.members[object.pro_pid]++;
+        acc.count++;
+    }
+
+    Cluster finalizeCluster(const ClusterAccumulator& acc, int elevation) {
+        constexpr int hexWidth = HexagonGrid::GRID_WIDTH;
+        const int centerCol = static_cast<int>(acc.sumCol / acc.count);
+        const int centerRow = static_cast<int>(acc.sumRow / acc.count);
+        return Cluster{ elevation, centerRow * hexWidth + centerCol, acc.minRow * hexWidth + acc.minCol,
+            acc.maxRow * hexWidth + acc.maxCol, acc.count, acc.members };
+    }
+
+    // Cluster the elevation's objects by proximity; keep clusters of at least kMinClusterSize.
+    std::vector<Cluster> collectClusters(Map& map) {
+        std::vector<Cluster> clusters;
+        for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
+            std::vector<const MapObject*> objects;
+            for (const auto& object : mapObjects) {
+                if (object) {
+                    objects.push_back(object.get());
+                }
+            }
+            std::vector<int> parent(objects.size());
+            std::iota(parent.begin(), parent.end(), 0);
+            linkNearbyObjects(objects, parent);
+
+            std::map<int, ClusterAccumulator> byRoot;
+            for (int i = 0; i < static_cast<int>(objects.size()); ++i) {
+                accumulate(byRoot[unionFind(parent, i)], *objects[i]);
+            }
+            for (const auto& [root, acc] : byRoot) {
+                if (acc.count >= kMinClusterSize) {
+                    clusters.push_back(finalizeCluster(acc, elevation));
+                }
+            }
+        }
+        std::ranges::sort(clusters, [](const Cluster& a, const Cluster& b) { return a.count > b.count; });
+        return clusters;
+    }
+
     // Parse one map, print its per-map palette and fold its usage into `agg`. Returns false
     // (with a "skip" line) if the map can't be read or parsed.
     bool reportMap(const std::string& mapPath, resource::GameResources& resources,
@@ -372,10 +479,31 @@ namespace {
         }
     }
 
+    // Per-map cluster array: [{elevation,centerHex,minHex,maxHex,count,members:[{pid,type,name,count}]}].
+    void emitMapClustersJson(const std::vector<Cluster>& clusters, NameResolver& names, std::ostream& out) {
+        bool first = true;
+        for (const auto& cluster : clusters) {
+            out << (first ? "" : ",");
+            first = false;
+            out << "{\"elevation\":" << cluster.elevation << ",\"centerHex\":" << cluster.centerHex
+                << ",\"minHex\":" << cluster.minHex << ",\"maxHex\":" << cluster.maxHex
+                << ",\"count\":" << cluster.count << ",\"members\":[";
+            bool firstMember = true;
+            for (const auto& [pid, count] : sortedByCountDesc(cluster.members)) {
+                out << (firstMember ? "" : ",");
+                firstMember = false;
+                out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"type\":" << jsonString(typeLabel(pid))
+                    << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"count\":" << count << "}";
+            }
+            out << "]}";
+        }
+    }
+
     // Machine-readable analyze, for an MCP client: per map { name, path, floor[], objects[],
-    // adjacency[] } and an aggregate { analysed, floor[], objects[], adjacency[] }. `flat` is the
-    // structural-vs-decoration hint; `adjacency` lists floor-tile borders (transitions). A fixed
-    // schema emitted by hand (no JSON library).
+    // adjacency[], clusters[] } and an aggregate { analysed, floor[], objects[], adjacency[] }.
+    // `flat` is the structural-vs-decoration hint; `adjacency` lists floor-tile borders (transitions);
+    // `clusters` groups nearby objects (structures like tents/buildings) with a centre/bbox an agent
+    // feeds to extract_pattern. A fixed schema emitted by hand (no JSON library).
     void emitJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
         NameResolver& names, std::ostream& out) {
         Aggregate agg;
@@ -396,6 +524,8 @@ namespace {
             emitMapObjectsJson(usage, names, agg, out);
             out << "],\"adjacency\":[";
             emitMapAdjacencyJson(usage, names, agg, out);
+            out << "],\"clusters\":[";
+            emitMapClustersJson(collectClusters(*map), names, out);
             out << "]}";
             ++agg.analysed;
         }
