@@ -458,8 +458,14 @@ The scripting core and a first procedural generator are in. Concretely:
   capture the objects (and, with `includeFloor`, the floor/roof) verbatim. The Qt-free pattern core
   (`Pattern`, `PatternBuilder`, `PatternStamper`) moved into `gecko_editing`; the headless JSON
   writer (`cli::serializePattern`) matches the editor's Qt `PatternSerializer` exactly — proven by a
-  round-trip test — so extracted stamps load in the editor's pattern library and (next) feed
-  `generate`. This is how an agent builds a library of tents/buildings from the reference maps.
+  round-trip test — so extracted stamps load in the editor's pattern library and feed `generate`.
+  This is how an agent builds a library of tents/buildings from the reference maps.
+- **Stamp placement in generation** (`api:placeStamp(name, anchorHex, variant)`). `generate` takes
+  `--stamp name=file.json` (MCP: a `stamps` map), loads each via a Qt-free `cli::loadPattern`
+  (nlohmann, round-trip with the writer) and registers it on the `MapScriptApi`; the script places it
+  through the now-shared `PatternStamper`. Verified end to end: a tent extracted from desert5 placed
+  into a fresh map renders as the intact tent. So the desert-map loop is closed — an agent can
+  `analyze` → cluster → `extract_pattern` the tents and `generate` a new desert map that places them.
 - **Reference-map analysis tools.** `MapScriptApi` exposes `mapScenery(mapPath)` (the unique
   scenery PIDs a reference map uses — blockers filtered out via `OBJECT_FLAT`),
   `mapSceneryHistogram(mapPath)` (`{pid → count}`), `mapFloorTiles(mapPath)` (floor-tile ids,

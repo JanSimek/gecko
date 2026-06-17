@@ -51,6 +51,7 @@ with that `--arg seed=<value>` to recreate it exactly.
 | `api:paintFloorXY(col,row,id)` / `api:paintRoofXY(...)` | bool | `(col,row)` form of the painters (tile grid) |
 | `api:getFloorXY(col,row)` / `api:getRoofXY(col,row)` | tile id | `(col,row)` form of the readers |
 | `api:placeProtoXY(pid,col,row,dir)` / `api:placeObjectXY(pid,frm,col,row,dir)` | bool | `(col,row)` form of the placers (hex grid); off-grid is a no-op |
+| `api:placeStamp(name, anchorHex, variant)` | int | place a pre-loaded stamp (a prefab captured by `extract_pattern`) so its anchor lands near `anchorHex`; returns objects placed. Load the stamp with `--stamp name=file.json` (CLI) / the `stamps` arg (MCP). Raises on an unknown `name`/`variant`. |
 
 **Errors.** A genuine failure — no Fallout 2 data mounted, or a wrong `--arg reference=` path —
 **raises**, so the run stops with a clear message instead of silently producing an empty map. Wrap
@@ -104,12 +105,18 @@ gecko-mcp --data <master.dat>
 | `list_maps` | Every `.map` in the mounted data. |
 | `analyze` | The `analyze --json` report (omit `maps` for all, or scope it): per-map and aggregate floor tiles, objects (with the `flat` palette-curation flag), `adjacency` — the floor-tile borders (which tile sits next to which different tile), i.e. the transitions to curate for seamless terrain — and per-map `clusters`: nearby objects grouped into structures (tents, buildings), each with a `centerHex`, bounding box and member PIDs, so an agent can locate one and feed its anchor/PIDs to `extract_pattern`. |
 | `proto_info` | Resolve a PID to its type, engine display name and `flat` flag. |
-| `generate` | Run a generation script (`script`, `out`, optional `elevation`, optional `args` map) and write a `.map`. Needs a scripting-enabled build. |
+| `generate` | Run a generation script (`script`, `out`, optional `elevation`, optional `args` map, optional `stamps` name→path map) and write a `.map`. Stamps are pre-loaded so the script places them with `api:placeStamp(name, anchorHex, variant)`. Needs a scripting-enabled build. |
 | `render_map` | Render a map to a PNG (`map`, `out`, optional `elevation`, `maxDimension`, `showRoof`, `schematic`, `showBlockers`) so the agent can *see* it, not just measure it. With `schematic: true` it flat-colours floor tiles by id and marks objects by category, and returns a colour legend (id/type → colour → count) — so the agent can match the picture to the `analyze` JSON and read the floor-tile transitions. FLAT objects (invisible engine blockers) are hidden unless `showBlockers`. Needs an off-screen GL context; reports an error if none is available. |
 | `extract_pattern` | Capture a structure from a real map into a reusable **pattern stamp** (`map`, `out`, `name`, optional `elevation`, `pids`, `anchorHex`, `radius`, `includeFloor`). Locate it with `pids` (the structure's proto PIDs from `analyze`) — their bounding box grown by `radius` hexes is the capture region, so immediate props nearby come along — or pass `anchorHex`. Objects captured verbatim; `includeFloor: true` also captures the floor/roof under the region (for structures whose floor is integral). The stamp JSON loads in the editor's pattern library and can be placed by `generate`. |
 
-The same three actions are on `gecko-cli`: `map analyze [--json]`, `map generate`, and
-`map render --map <f.map> --out <f.png> [--elevation N] [--max-dim N] [--roof] [--schematic] [--show-blockers]`.
+On `gecko-cli`: `map analyze [--json]`, `map generate ... [--stamp name=file.json ...]`, and
+`map render --map <f.map> --out <f.png> [--elevation N] [--max-dim N] [--roof] [--schematic]
+[--show-blockers]`. Pattern *extraction* is the MCP `extract_pattern` tool.
+
+**Stamps end to end:** `analyze` a reference map → its `clusters` locate a structure (e.g. a tent:
+a `Wall` + furniture cluster) → `extract_pattern` captures it to a `.json` → `generate --stamp
+tent=tent.json` with a script calling `api:placeStamp("tent", api:hexIndex(col,row), 0)` drops it
+into the new map. So a generator can scatter the *real* tents the desert maps use, not approximations.
 
 The **schematic** render is the bridge between the JSON and the image: a raw render shows what the
 map looks like, but the agent can't tell which pixels are tile `220`. In schematic mode the colours

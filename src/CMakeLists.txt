@@ -525,7 +525,7 @@ if(GECK_BUILD_CLI)
         cli/PatternJson.cpp
         cli/PatternExtract.h
         cli/PatternExtract.cpp)
-    target_link_libraries(gecko_cli PUBLIC gecko::editing)
+    target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)
     target_link_libraries(gecko-cli PRIVATE gecko_cli)

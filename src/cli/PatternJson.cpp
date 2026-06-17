@@ -1,8 +1,16 @@
 #include "cli/PatternJson.h"
 
+#include <nlohmann/json.hpp>
+
+#include <algorithm>
+#include <cstdint>
+#include <exception>
 #include <format>
+#include <fstream>
+#include <iterator>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace geck::cli {
 
@@ -80,6 +88,76 @@ std::string serializePattern(const pattern::Pattern& pattern) {
     }
     out << "]}\n";
     return out.str();
+}
+
+namespace {
+    pattern::PatternObject parseObject(const nlohmann::json& json) {
+        return pattern::PatternObject{
+            json.value("dxHex", 0), json.value("dyHex", 0),
+            json.value("proPid", 0U), json.value("frmPid", 0U),
+            json.value("direction", 0U), json.value("flags", 0U)
+        };
+    }
+
+    pattern::PatternTile parseTile(const nlohmann::json& json) {
+        return pattern::PatternTile{
+            json.value("dxTile", 0), json.value("dyTile", 0),
+            static_cast<uint16_t>(json.value("tileId", 0U))
+        };
+    }
+
+    template <typename T, typename Parse>
+    std::vector<T> parseArray(const nlohmann::json& parent, const char* key, Parse parse) {
+        std::vector<T> out;
+        if (const auto it = parent.find(key); it != parent.end() && it->is_array()) {
+            out.reserve(it->size());
+            std::transform(it->begin(), it->end(), std::back_inserter(out), parse);
+        }
+        return out;
+    }
+
+    pattern::PatternVariant parseVariant(const nlohmann::json& json) {
+        pattern::PatternVariant variant;
+        variant.label = json.value("label", std::string("default"));
+        variant.anchorHex = json.value("anchorHex", 0);
+        variant.objects = parseArray<pattern::PatternObject>(json, "objects", parseObject);
+        variant.floor = parseArray<pattern::PatternTile>(json, "floor", parseTile);
+        variant.roof = parseArray<pattern::PatternTile>(json, "roof", parseTile);
+        return variant;
+    }
+} // namespace
+
+std::optional<pattern::Pattern> loadPattern(const std::string& path, std::string* error) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        if (error != nullptr) {
+            *error = "cannot open stamp file: " + path;
+        }
+        return std::nullopt;
+    }
+    nlohmann::json root;
+    try {
+        file >> root;
+    } catch (const std::exception& e) {
+        if (error != nullptr) {
+            *error = std::string("invalid stamp JSON: ") + e.what();
+        }
+        return std::nullopt;
+    }
+    if (!root.is_object() || !root.contains("variants") || !root["variants"].is_array()) {
+        if (error != nullptr) {
+            *error = "stamp JSON has no 'variants' array";
+        }
+        return std::nullopt;
+    }
+
+    pattern::Pattern pattern;
+    pattern.name = root.value("name", std::string());
+    pattern.version = root.value("version", pattern::Pattern::CURRENT_VERSION);
+    for (const auto& variant : root["variants"]) {
+        pattern.variants.push_back(parseVariant(variant));
+    }
+    return pattern;
 }
 
 } // namespace geck::cli

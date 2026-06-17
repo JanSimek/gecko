@@ -21,6 +21,7 @@
 #include "format/pro/Pro.h"
 #include "editor/TileChange.h"
 #include "pattern/PatternSprite.h"
+#include "pattern/PatternStamper.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
@@ -430,6 +431,26 @@ bool MapScriptApi::paintFloorXY(int col, int row, uint16_t tileId) {
 
 bool MapScriptApi::paintRoofXY(int col, int row, uint16_t tileId) {
     return paintRoof(tileIndex(col, row), tileId);
+}
+
+void MapScriptApi::addStamp(const std::string& name, pattern::Pattern pattern) {
+    _stamps[name] = std::move(pattern);
+}
+
+int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant) {
+    const auto it = _stamps.find(name);
+    if (it == _stamps.end()) {
+        throw ScriptError("placeStamp: unknown stamp '" + name + "' (load it with --stamp " + name + "=<file>)");
+    }
+    const pattern::Pattern& pattern = it->second;
+    if (variant < 0 || variant >= static_cast<int>(pattern.variants.size())) {
+        throw ScriptError("placeStamp: variant " + std::to_string(variant) + " out of range for stamp '" + name + "'");
+    }
+    pattern::PatternStamper stamper(_resources, _hexgrid, _controller, _map);
+    const pattern::PatternStamper::Result result = stamper.stamp(pattern.variants[variant], anchorHex, _elevation);
+    _placedObjects += result.objectsPlaced;
+    _paintedTiles += result.tilesPainted;
+    return result.objectsPlaced;
 }
 
 } // namespace geck

@@ -5,7 +5,10 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+#include "pattern/Pattern.h"
 
 namespace geck {
 
@@ -137,6 +140,15 @@ public:
     bool paintFloorXY(int col, int row, uint16_t tileId);
     bool paintRoofXY(int col, int row, uint16_t tileId);
 
+    // --- Stamps (prefabs captured by extract_pattern) ----------------------------
+    /// Register a pre-loaded stamp under `name` so the script can place it. The host (gecko-cli /
+    /// the MCP) loads the stamp JSON and calls this before running the script.
+    void addStamp(const std::string& name, pattern::Pattern pattern);
+    /// Place a registered stamp's variant so its anchor lands near `anchorHex` (tile-granular, like
+    /// the editor). Returns the number of objects placed. Raises if `name` is unregistered or
+    /// `variant` is out of range — placement of an off-grid entry is simply dropped, not an error.
+    int placeStamp(const std::string& name, int anchorHex, int variant = 0);
+
     int placedObjects() const { return _placedObjects; }
     int paintedTiles() const { return _paintedTiles; }
 
@@ -158,6 +170,7 @@ private:
     bool _buildSprites;
     int _placedObjects = 0;
     int _paintedTiles = 0;
+    std::unordered_map<std::string, pattern::Pattern> _stamps;
 };
 
 } // namespace geck

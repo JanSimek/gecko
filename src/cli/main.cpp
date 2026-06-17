@@ -29,9 +29,11 @@ void printUsage(const char* program) {
               << "      per map and aggregated. With no map arguments, every map under maps/ is analysed.\n"
               << "      --json emits machine-readable output (for the MCP) instead of the human report.\n"
               << "  " << program << " map generate --script <file.luau> --out <file.map>\n"
-              << "      [--elevation 0|1|2] [--arg key=value ...] --data <dir-or-.dat> [--data <...>]\n"
+              << "      [--elevation 0|1|2] [--arg key=value ...] [--stamp name=file.json ...]\n"
+              << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Runs a Luau generation script against an empty map and writes the result.\n"
-              << "      --arg passes parameters to the script (read as args.key).\n"
+              << "      --arg passes parameters to the script (read as args.key); --stamp pre-loads a\n"
+              << "      pattern stamp the script places with api:placeStamp(name, anchorHex, variant).\n"
               << "  " << program << " map render --map <file.map> --out <file.png>\n"
               << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic] --data <dir-or-.dat> [...]\n"
               << "      Renders a map to a PNG (needs an off-screen GL context). --max-dim caps the\n"
@@ -61,7 +63,7 @@ bool renderMissingRequired(const CliArgs& cli) {
 int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
     const std::string& arg = args[i];
     const bool valueFlag = arg == "--data"
-        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation" || arg == "--arg"))
+        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation" || arg == "--arg" || arg == "--stamp"))
         || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim"));
 
     if (valueFlag && i + 1 >= args.size()) {
@@ -96,6 +98,18 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
             return 0;
         }
         out.gen.args[kv.substr(0, eq)] = kv.substr(eq + 1);
+        return 2;
+    }
+    if (out.generate && arg == "--stamp") {
+        // name=path -> loadable in the script via api:placeStamp(name, ...)
+        const std::string& kv = args[i + 1];
+        const auto eq = kv.find('=');
+        if (eq == std::string::npos || eq == 0) {
+            std::cerr << "error: --stamp expects name=path with a non-empty name, got: " << kv << "\n";
+            printUsage(program);
+            return 0;
+        }
+        out.gen.stamps[kv.substr(0, eq)] = kv.substr(eq + 1);
         return 2;
     }
     if (out.generate) {

@@ -196,9 +196,9 @@ if(GECK_ENABLE_SCRIPTING)
     FetchContent_MakeAvailable(LuaBridge3)
 endif()
 
-# Header-only JSON for the MCP server's JSON-RPC (parse + serialize). Only fetched when the MCP
-# server is built (which itself needs the CLI lib). Prefer a system package if present.
-if(GECK_BUILD_CLI AND GECK_BUILD_MCP)
+# Header-only JSON: the MCP server's JSON-RPC and gecko_cli's pattern-stamp loader (parse a stamp
+# JSON back into a Pattern for placeStamp). Fetched whenever the CLI lib is built. System pkg first.
+if(GECK_BUILD_CLI)
     find_package(nlohmann_json 3 QUIET)
     if(NOT nlohmann_json_FOUND)
         set(JSON_BuildTests OFF CACHE INTERNAL "")

@@ -90,6 +90,7 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         .addFunction("placeProto", &MapScriptApi::placeProto)
         .addFunction("paintFloor", &MapScriptApi::paintFloor)
         .addFunction("paintRoof", &MapScriptApi::paintRoof)
+        .addFunction("placeStamp", &MapScriptApi::placeStamp)
         .endClass();
     luabridge::setGlobal(L, &api, "api");
 

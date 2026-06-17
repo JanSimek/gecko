@@ -54,6 +54,13 @@ if(GECK_ENABLE_SCRIPTING)
     endif()
 endif()
 
+# Pattern stamp (de)serialization round-trip — needs gecko_cli (cli::serializePattern/loadPattern),
+# no scripting or game data.
+if(TARGET gecko_cli)
+    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp)
+    target_link_libraries(general_tests PRIVATE gecko_cli)
+endif()
+
 # MCP server dispatch test: only when the MCP server is built (gecko_mcp brings gecko_cli +
 # nlohmann/json). The dispatch is pure, so this needs no scripting and no game data.
 if(TARGET gecko_mcp)

@@ -124,6 +124,13 @@ namespace {
                 opts.args[key] = value.is_string() ? value.get<std::string>() : value.dump();
             }
         }
+        if (const auto it = args.find("stamps"); it != args.end() && it->is_object()) {
+            for (const auto& [key, value] : it->items()) {
+                if (value.is_string()) {
+                    opts.stamps[key] = value.get<std::string>();
+                }
+            }
+        }
         std::ostringstream oss;
         const int rc = cli::generateMap(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
@@ -221,9 +228,10 @@ namespace {
                 { "inputSchema", { { "type", "object" }, { "properties", { { "pid", { { "type", "integer" } } } } }, { "required", json::array({ "pid" }) } } } },
             { { "name", "generate" },
                 { "description", "Run a Luau generation script against a fresh map and write a .map. "
-                                 "Args: script, out, optional elevation, optional args (string map). "
-                                 "Needs a scripting-enabled build." },
-                { "inputSchema", { { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "args", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } } } },
+                                 "Args: script, out, optional elevation, optional args (string map), "
+                                 "optional stamps (name -> stamp .json path, placed by the script with "
+                                 "api:placeStamp(name, anchorHex, variant)). Needs a scripting-enabled build." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } } } },
             { { "name", "render_map" },
                 { "description", "Render a map to a PNG so it can be seen, not just measured. Args: map "
                                  "(.map path), out (output .png path), optional elevation, optional "

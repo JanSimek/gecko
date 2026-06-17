@@ -1,5 +1,7 @@
 #include "cli/MapGenerator.h"
 
+#include "cli/PatternJson.h"
+
 #include <fstream>
 #include <ostream>
 #include <sstream>
@@ -83,6 +85,18 @@ int generateMap(resource::GameResources& resources, const GenerateOptions& optio
 
     // Data-only mode: objects are recorded as map data without building sprites (no GL).
     MapScriptApi api(resources, hexgrid, controller, *map, options.elevation, /*buildSprites*/ false);
+
+    // Pre-load the stamps the script will place (api:placeStamp(name, ...)). Fail early on a bad one.
+    for (const auto& [name, path] : options.stamps) {
+        std::string error;
+        if (const auto stamp = loadPattern(path, &error)) {
+            api.addStamp(name, *stamp);
+        } else {
+            out << "stamp error: " << error << "\n";
+            return 1;
+        }
+    }
+
     LuaScriptRuntime runtime;
     const ScriptResult result = runtime.run(source, api, controller, "generate", options.args);
     if (!result.output.empty()) {
