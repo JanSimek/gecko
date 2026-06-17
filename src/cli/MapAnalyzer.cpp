@@ -275,6 +275,58 @@ namespace {
         }
     }
 
+    // The JSON arrays of emitJson(), one per object below, so emitJson itself stays a flat sketch of
+    // the schema. Each prints a comma-separated array body (no brackets) and folds usage into `agg`.
+
+    // Per-map floor array: [{id,name,count}], accumulating totals into agg.
+    void emitMapFloorsJson(const MapUsage& usage, NameResolver& names, Aggregate& agg, std::ostream& out) {
+        bool first = true;
+        for (const auto& [id, count] : sortedByCountDesc(usage.floors)) {
+            out << (first ? "" : ",");
+            first = false;
+            out << "{\"id\":" << id << ",\"name\":" << jsonString(names.tileName(id)) << ",\"count\":" << count << "}";
+            agg.floorCount[id] += count;
+            agg.floorMaps[id]++;
+        }
+    }
+
+    // Per-map object array: [{pid,type,name,count,flat}], accumulating totals into agg.
+    void emitMapObjectsJson(const MapUsage& usage, NameResolver& names, Aggregate& agg, std::ostream& out) {
+        bool first = true;
+        for (const auto& [pid, count] : sortedByCountDesc(usage.objects)) {
+            out << (first ? "" : ",");
+            first = false;
+            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"type\":" << jsonString(typeLabel(pid))
+                << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"count\":" << count
+                << ",\"flat\":" << (names.isFlat(pid) ? "true" : "false") << "}";
+            agg.objCount[pid] += count;
+            agg.objMaps[pid]++;
+        }
+    }
+
+    // Aggregate floor array: [{id,name,total,maps}].
+    void emitAggFloorsJson(const Aggregate& agg, NameResolver& names, std::ostream& out) {
+        bool first = true;
+        for (const auto& [id, count] : sortedByCountDesc(agg.floorCount)) {
+            out << (first ? "" : ",");
+            first = false;
+            out << "{\"id\":" << id << ",\"name\":" << jsonString(names.tileName(id)) << ",\"total\":" << count
+                << ",\"maps\":" << agg.floorMaps.at(id) << "}";
+        }
+    }
+
+    // Aggregate object array: [{pid,type,name,total,maps,flat}].
+    void emitAggObjectsJson(const Aggregate& agg, NameResolver& names, std::ostream& out) {
+        bool first = true;
+        for (const auto& [pid, count] : sortedByCountDesc(agg.objCount)) {
+            out << (first ? "" : ",");
+            first = false;
+            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"type\":" << jsonString(typeLabel(pid))
+                << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"total\":" << count
+                << ",\"maps\":" << agg.objMaps.at(pid) << ",\"flat\":" << (names.isFlat(pid) ? "true" : "false") << "}";
+        }
+    }
+
     // Machine-readable analyze, for an MCP client: { maps: [{name, path, floor:[{id,name,count}],
     // objects:[{pid,type,name,count,flat}]}], aggregate: {analysed, floor:[...], objects:[...]} }.
     // A fixed schema emitted by hand (no JSON library); `flat` is the structural-vs-decoration hint.
@@ -293,45 +345,16 @@ namespace {
             firstMap = false;
             out << "{\"name\":" << jsonString(baseName(mapPath)) << ",\"path\":" << jsonString(mapPath)
                 << ",\"floor\":[";
-            bool firstFloor = true;
-            for (const auto& [id, count] : sortedByCountDesc(usage.floors)) {
-                out << (firstFloor ? "" : ",");
-                firstFloor = false;
-                out << "{\"id\":" << id << ",\"name\":" << jsonString(names.tileName(id)) << ",\"count\":" << count << "}";
-                agg.floorCount[id] += count;
-                agg.floorMaps[id]++;
-            }
+            emitMapFloorsJson(usage, names, agg, out);
             out << "],\"objects\":[";
-            bool firstObj = true;
-            for (const auto& [pid, count] : sortedByCountDesc(usage.objects)) {
-                out << (firstObj ? "" : ",");
-                firstObj = false;
-                out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"type\":" << jsonString(typeLabel(pid))
-                    << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"count\":" << count
-                    << ",\"flat\":" << (names.isFlat(pid) ? "true" : "false") << "}";
-                agg.objCount[pid] += count;
-                agg.objMaps[pid]++;
-            }
+            emitMapObjectsJson(usage, names, agg, out);
             out << "]}";
             ++agg.analysed;
         }
         out << "],\"aggregate\":{\"analysed\":" << agg.analysed << ",\"floor\":[";
-        bool firstAggFloor = true;
-        for (const auto& [id, count] : sortedByCountDesc(agg.floorCount)) {
-            out << (firstAggFloor ? "" : ",");
-            firstAggFloor = false;
-            out << "{\"id\":" << id << ",\"name\":" << jsonString(names.tileName(id)) << ",\"total\":" << count
-                << ",\"maps\":" << agg.floorMaps.at(id) << "}";
-        }
+        emitAggFloorsJson(agg, names, out);
         out << "],\"objects\":[";
-        bool firstAggObj = true;
-        for (const auto& [pid, count] : sortedByCountDesc(agg.objCount)) {
-            out << (firstAggObj ? "" : ",");
-            firstAggObj = false;
-            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"type\":" << jsonString(typeLabel(pid))
-                << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"total\":" << count
-                << ",\"maps\":" << agg.objMaps.at(pid) << ",\"flat\":" << (names.isFlat(pid) ? "true" : "false") << "}";
-        }
+        emitAggObjectsJson(agg, names, out);
         out << "]}}\n";
     }
 
