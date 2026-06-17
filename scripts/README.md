@@ -27,7 +27,8 @@ with that `--arg seed=<value>` to recreate it exactly.
 |--------|--------------|
 | [`editor/terrain.luau`](editor/terrain.luau) | A curated desert generator: fills the floor with wasteland sand and scatters a **hand-picked palette** of desert vegetation (scrub/weeds/rocks/trees) in **natural clumps** (a `noise2d` density field, not an even sprinkle). Curated so only sensible decorations appear — swap `PALETTE`/`BASE_TILE` to retheme. Tune with `--arg density=N` / `--arg tile=<name>`. |
 | [`editor/scatter.luau`](editor/scatter.luau) | A **parameterized** terrain.luau: the floor tile and scenery palette come from `--arg` (`--arg tile=edg5000 --arg palette=102,103,945`), so any biome generates without editing a script. Curate the palette from `gecko-cli map analyze --json` (pick the small, common, non-`flat` scenery) and pass it in. |
-| [`editor/random_desert.luau`](editor/random_desert.luau) | A **worked template** putting the whole pipeline together: a frequency-**weighted mix** of the desert ground tileset (`edg5000`–`edg5004`, not one flat tile), clumped scrub/weeds, and optional **tents** dropped from an `extract_pattern` stamp via `api:placeStamp`. `--arg tents=2 --stamp tent=tent.json` to place tents; the weights/palette are the values `analyze` reports for `desert1.map`. |
+| [`editor/random_desert.luau`](editor/random_desert.luau) | A **worked template**: a frequency-**weighted mix** of the desert ground tileset (`edg5000`–`edg5007`, not one flat tile) and a weighted scrub/weed/cactus palette scattered in `noise2d` clumps. Weights are the real placement counts `analyze` reports across `desert1`–`desert6`. `--arg density/coverage/scale`; random each run (`--arg seed=N` to reproduce). |
+| [`editor/random_camp.luau`](editor/random_camp.luau) | `random_desert` **plus structures**: scatters the desert, then drops `--arg tents=N` tents (spaced `--arg spacing` hexes apart) from a stamp captured with `extract_pattern`, via `api:placeStamp`. The worked example of the full extract→generate loop: `--stamp tent=tent.json --arg tents=3`. |
 
 ## The `api` surface
 
@@ -116,8 +117,9 @@ On `gecko-cli`: `map analyze [--json]`, `map generate ... [--stamp name=file.jso
 
 **Stamps end to end:** `analyze` a reference map → its `clusters` locate a structure (e.g. a tent:
 a `Wall` + furniture cluster) → `extract_pattern` captures it to a `.json` → `generate --stamp
-tent=tent.json` with a script calling `api:placeStamp("tent", api:hexIndex(col,row), 0)` drops it
-into the new map. So a generator can scatter the *real* tents the desert maps use, not approximations.
+tent=tent.json` runs a script that calls `api:placeStamp("tent", api:hexIndex(col,row), 0)`
+(`editor/random_camp.luau` is the worked example) and drops it into the new map. So a generator
+scatters the *real* tents the desert maps use, not approximations.
 
 The **schematic** render is the bridge between the JSON and the image: a raw render shows what the
 map looks like, but the agent can't tell which pixels are tile `220`. In schematic mode the colours
