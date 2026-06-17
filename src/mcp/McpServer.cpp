@@ -5,6 +5,7 @@
 #include "cli/MapRender.h"
 #include "cli/PatternExtract.h"
 #include "format/msg/Msg.h"
+#include "scripting/ScriptApiReference.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
@@ -202,6 +203,10 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    json toolScriptApi() {
+        return toolText(scriptApiReference());
+    }
+
     // Dispatch a tools/call by name. Returns the tool result, or nullopt for an unknown tool
     // (which the caller turns into a JSON-RPC method error).
     std::optional<json> callTool(resource::GameResources& resources, const std::string& name, const json& args) {
@@ -225,6 +230,9 @@ namespace {
         }
         if (name == "extract_pattern") {
             return toolExtractPattern(resources, args);
+        }
+        if (name == "script_api") {
+            return toolScriptApi();
         }
         return std::nullopt;
     }
@@ -271,6 +279,12 @@ namespace {
                                  "may be a VFS path or any file on disk (e.g. one generate just wrote). Needs "
                                  "an off-screen GL context." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } } } },
+            { { "name", "script_api" },
+                { "description", "The generation-script `api` reference (Markdown): every function a `generate` "
+                                 "Luau script can call on the global `api`, with signatures, plus the non-obvious "
+                                 "runtime behaviour (runs are auto-seeded and auto-batched) and the error model. "
+                                 "Read this before writing a script for `generate`." },
+                { "inputSchema", { { "type", "object" }, { "properties", json::object() } } } },
             { { "name", "extract_pattern" },
                 { "description", "Capture a structure from a real map into a reusable pattern stamp (JSON the "
                                  "editor's pattern library reads, and generate can place). Locate it with 'pids' "

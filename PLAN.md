@@ -455,6 +455,14 @@ The scripting core and a first procedural generator are in. Concretely:
   of `jq`-ing the ~500 KB `analyze` report. `analyze` objects also now carry `number` (the PID's low 24
   bits, what `api:proto` wants — one less than the `00000NNN.pro` filename), fixing an off-by-one trap
   when generating scripts mechanically. (From an agent's MCP-usage retrospective.)
+- **Scripting-API reference** (MCP `script_api`). Returns the generation-script `api:` surface as
+  Markdown — every function + signature, plus the two non-obvious behaviours (runs are auto-seeded and
+  auto-batched) and the error model — generated from an in-code table (`scriptApiEntries`) so it can't
+  drift from a hand-written doc. A `[scripting]` test asserts every documented function is actually
+  bound. (Best practice: the scripting surface is reference *material*, so it's emitted from the
+  single source rather than maintained separately; the MCP *tool* surface is already self-documented
+  by `tools/list`.) Also an **objects** render style and the path-contract docs, from the same agent
+  retrospective.
 - **Object clustering** in `analyze --json`. Each map carries a `clusters[]` array: nearby objects
   grouped by proximity (single-linkage, Chebyshev ≤ 3 hexes), each with a centroid `centerHex`, a
   bounding box and member PIDs. So an agent reading desert5 sees the perimeter blockers as one

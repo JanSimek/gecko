@@ -10,6 +10,7 @@
 #include "reader/map/MapReader.h"
 #include "scripting/LuaScriptRuntime.h"
 #include "scripting/MapScriptApi.h"
+#include "scripting/ScriptApiReference.h"
 #include "writer/map/MapWriter.h"
 
 #include "support/ControllerFixture.h"
@@ -328,4 +329,28 @@ TEST_CASE("Luau print() output is captured for the console", "[scripting][lua]")
     INFO("script error: " << r.error);
     REQUIRE(r.ok);
     CHECK(r.output == "hello\t42\ndone\n");
+}
+
+// Every function in the script_api reference (scriptApiEntries) must actually be bound on `api`, so
+// the agent-facing reference can't claim a function the runtime doesn't provide. (LuaBridge hides the
+// metatable under the Luau sandbox, so we can't enumerate the reverse direction in Lua; the
+// kScriptApiEntries comment keeps additions documented, and this catches a stale/renamed entry.)
+TEST_CASE("every documented script_api function is bound", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    std::ostringstream script;
+    script << "local missing = {}\n";
+    for (const ScriptApiEntry& entry : scriptApiEntries()) {
+        script << "if type(api." << entry.name << ") ~= 'function' then missing[#missing + 1] = '"
+               << entry.name << "' end\n";
+    }
+    script << "print(table.concat(missing, ','))\n";
+
+    const auto r = rt.run(script.str(), api, fx.controller, "check-api");
+    INFO("script error: " << r.error);
+    REQUIRE(r.ok);
+    INFO("documented but not bound: " << r.output);
+    CHECK(r.output == "\n"); // print() of an empty join is just a newline — nothing missing
 }
