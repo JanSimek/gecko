@@ -95,10 +95,11 @@ public:
     /// which is what the MCP needs to curate a palette rather than scatter blindly.
     std::string protoName(int pid) const;
     /// Build a proto PID from a readable type name ("item"/"critter"/"scenery"/"wall"/"tile"/"misc",
-    /// singular or plural) and the proto's id `number` — the value `map analyze` reports and the
-    /// low part of the PID (e.g. proto("scenery", 102) == 0x02000066). A pure constructor (no data
-    /// needed), so a script can name its protos — `SCRUB = 102 ... api:proto("scenery", SCRUB)` —
-    /// instead of writing opaque hex. Raises on an unknown type or an out-of-range number.
+    /// singular or plural) and the proto's id `number` — the `number` field `map analyze --json`
+    /// reports, i.e. the PID's low 24 bits (e.g. proto("scenery", 102) == 0x02000066; note it is one
+    /// less than the NNN in the 00000NNN.pro filename). A pure constructor (no data needed), so a
+    /// script can name its protos — `SCRUB = 102 ... api:proto("scenery", SCRUB)` — instead of
+    /// writing opaque hex. Raises on an unknown type or an out-of-range number.
     uint32_t proto(const std::string& typeName, int number) const;
 
     // --- Coordinates -------------------------------------------------------------

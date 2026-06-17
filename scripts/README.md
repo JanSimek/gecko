@@ -83,9 +83,12 @@ api:placeProto(api:proto("scenery", SCRUB), hex, 0)
 `gecko-cli map analyze --data <master.dat>` lists each map's floor tiles and `[Scenery]`/`[Wall]`
 protos (with `api:protoName(pid)` giving the engine display name), to find the ids worth naming.
 Add `--json` for a machine-readable report (per-map and aggregate floor/scenery with names, counts,
-a `flat` structural-vs-decoration flag, `adjacency` — the floor-tile borders that reveal a tileset's
-transitions — and per-map `clusters` grouping nearby objects into structures) — the form an MCP
-agent reads to pick a biome, curate a palette, and locate structures to extract as stamps.
+each object's `number` for `api:proto`, a `flat` structural-vs-decoration flag, `adjacency` — the
+floor-tile borders that reveal a tileset's transitions — and per-map `clusters` grouping nearby
+objects into structures) — the form an MCP agent reads to pick a biome, curate a palette, and locate
+structures to extract as stamps. For *just* the weighted generation palette, use `--palette` (the
+MCP `palette` tool): `{ floor:[{id,name,weight}], scenery:[{pid,number,name,weight}] }`, aggregated
+across the maps — exactly the input a generator script needs, without the full report.
 
 ## MCP server (`gecko-mcp`)
 
@@ -105,13 +108,14 @@ gecko-mcp --data <master.dat>
 | Tool | Purpose |
 |------|---------|
 | `list_maps` | Every `.map` in the mounted data. |
-| `analyze` | The `analyze --json` report (omit `maps` for all, or scope it): per-map and aggregate floor tiles, objects (with the `flat` palette-curation flag), `adjacency` — the floor-tile borders (which tile sits next to which different tile), i.e. the transitions to curate for seamless terrain — and per-map `clusters`: nearby objects grouped into structures (tents, buildings), each with a `centerHex`, bounding box and member PIDs, so an agent can locate one and feed its anchor/PIDs to `extract_pattern`. |
+| `analyze` | The full `analyze --json` report (omit `maps` for all, or scope it): per-map and aggregate floor tiles, objects (each with `number` = the `api:proto` id, plus the `flat` palette-curation flag), `adjacency` — the floor-tile borders (which tile sits next to which different tile), i.e. the transitions to curate for seamless terrain — and per-map `clusters`: nearby objects grouped into structures (tents, buildings), each with a `centerHex`, bounding box and member PIDs, so an agent can locate one and feed its anchor/PIDs to `extract_pattern`. |
+| `palette` | Just the **weighted generation palette** for the given maps, aggregated: `{ floor:[{id,name,weight}], scenery:[{pid,number,name,weight}] }`. The small input a generator needs — `id` for `api:paintFloor`, `number` for `api:proto`, `weight` = real placement count — without the full (large) `analyze` report. Scenery is scatter-eligible only (scenery type, non-flat). |
 | `proto_info` | Resolve a PID to its type, engine display name and `flat` flag. |
 | `generate` | Run a generation script (`script`, `out`, optional `elevation`, optional `args` map, optional `stamps` name→path map) and write a `.map`. Stamps are pre-loaded so the script places them with `api:placeStamp(name, anchorHex, variant)`. Needs a scripting-enabled build. |
 | `render_map` | Render a map to a PNG (`map`, `out`, optional `elevation`, `maxDimension`, `showRoof`, `schematic`, `showBlockers`) so the agent can *see* it, not just measure it. With `schematic: true` it flat-colours floor tiles by id and marks objects by category, and returns a colour legend (id/type → colour → count) — so the agent can match the picture to the `analyze` JSON and read the floor-tile transitions. FLAT objects (invisible engine blockers) are hidden unless `showBlockers`. Needs an off-screen GL context; reports an error if none is available. |
 | `extract_pattern` | Capture a structure from a real map into a reusable **pattern stamp** (`map`, `out`, `name`, optional `elevation`, `pids`, `anchorHex`, `radius`, `includeFloor`). Locate it with `pids` (the structure's proto PIDs from `analyze`) — their bounding box grown by `radius` hexes is the capture region, so immediate props nearby come along — or pass `anchorHex`. Objects captured verbatim; `includeFloor: true` also captures the floor/roof under the region (for structures whose floor is integral). The stamp JSON loads in the editor's pattern library and can be placed by `generate`. |
 
-On `gecko-cli`: `map analyze [--json]`, `map generate ... [--stamp name=file.json ...]`, and
+On `gecko-cli`: `map analyze [--json|--palette]`, `map generate ... [--stamp name=file.json ...]`, and
 `map render --map <f.map> --out <f.png> [--elevation N] [--max-dim N] [--roof] [--schematic]
 [--show-blockers]`. Pattern *extraction* is the MCP `extract_pattern` tool.
 

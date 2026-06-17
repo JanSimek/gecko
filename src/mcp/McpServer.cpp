@@ -69,9 +69,12 @@ namespace {
         return toolText(json(paths).dump()); // json(vector<string>) -> a JSON array, "[]" when empty
     }
 
-    json toolAnalyze(resource::GameResources& resources, const json& args) {
+    // analyze (full JSON report) and palette (just the weighted generation palette) share the maps
+    // parsing and the same headless analyzeMaps entry.
+    json runAnalyze(resource::GameResources& resources, const json& args, bool paletteOnly) {
         cli::AnalyzeOptions opts;
-        opts.json = true;
+        opts.json = !paletteOnly;
+        opts.palette = paletteOnly;
         if (args.contains("maps") && args["maps"].is_array()) {
             for (const auto& m : args["maps"]) {
                 if (m.is_string()) {
@@ -87,6 +90,14 @@ namespace {
             return toolText(std::string("analyze failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
         }
         return toolText(oss.str(), rc != 0); // rc != 0 e.g. when no maps are found
+    }
+
+    json toolAnalyze(resource::GameResources& resources, const json& args) {
+        return runAnalyze(resources, args, /*paletteOnly*/ false);
+    }
+
+    json toolPalette(resource::GameResources& resources, const json& args) {
+        return runAnalyze(resources, args, /*paletteOnly*/ true);
     }
 
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
@@ -197,6 +208,9 @@ namespace {
         if (name == "analyze") {
             return toolAnalyze(resources, args);
         }
+        if (name == "palette") {
+            return toolPalette(resources, args);
+        }
         if (name == "proto_info") {
             return toolProtoInfo(resources, args);
         }
@@ -222,6 +236,13 @@ namespace {
                 { "description", "Analyze ground-tile and object usage as JSON. Omit 'maps' to analyze "
                                  "every map, or pass it to scope. Each object carries a 'flat' flag "
                                  "(structural blocker vs. decoration) for curating a scatter palette." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } } } },
+            { { "name", "palette" },
+                { "description", "The weighted generation palette for the given maps (omit 'maps' for all), "
+                                 "aggregated: { floor:[{id,name,weight}], scenery:[{pid,number,name,weight}] }. "
+                                 "Just what a generator script needs — floor 'id' for api:paintFloor, scenery "
+                                 "'number' for api:proto, 'weight' = real placement count — without the full "
+                                 "analyze report. scenery is scatter-eligible only (scenery type, non-flat)." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } } } },
             { { "name", "proto_info" },
                 { "description", "Resolve a proto PID to its type, engine display name and 'flat' flag." },

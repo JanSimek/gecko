@@ -16,6 +16,9 @@ struct AnalyzeOptions {
     std::vector<std::string> maps;
     // Emit machine-readable JSON (for the MCP) instead of the human-readable report.
     bool json = false;
+    // Emit only the weighted generation palette ({floor, scenery} with weights), aggregated across
+    // the maps — the small input a generator script needs, instead of the full per-map report.
+    bool palette = false;
 };
 
 // Analyse the ground-tile and object (scenery/wall/critter/...) usage across the given maps and

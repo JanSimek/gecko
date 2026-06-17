@@ -422,7 +422,10 @@ namespace {
         for (const auto& [pid, count] : sortedByCountDesc(usage.objects)) {
             out << (first ? "" : ",");
             first = false;
-            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"type\":" << jsonString(typeLabel(pid))
+            // `number` is the PID's low 24 bits — the value api:proto(type, number) wants (and one
+            // less than the NNN in the 00000NNN.pro filename), so a script can use it verbatim.
+            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"number\":" << (pid & 0xFFFFFFu)
+                << ",\"type\":" << jsonString(typeLabel(pid))
                 << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"count\":" << count
                 << ",\"flat\":" << (names.isFlat(pid) ? "true" : "false") << "}";
             agg.objCount[pid] += count;
@@ -447,10 +450,61 @@ namespace {
         for (const auto& [pid, count] : sortedByCountDesc(agg.objCount)) {
             out << (first ? "" : ",");
             first = false;
-            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"type\":" << jsonString(typeLabel(pid))
+            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"number\":" << (pid & 0xFFFFFFu)
+                << ",\"type\":" << jsonString(typeLabel(pid))
                 << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"total\":" << count
                 << ",\"maps\":" << agg.objMaps.at(pid) << ",\"flat\":" << (names.isFlat(pid) ? "true" : "false") << "}";
         }
+    }
+
+    // --- palette: the small weighted generation input (floor + scatter scenery) -----------------
+    void emitPaletteFloor(const std::map<uint16_t, int>& floor, const NameResolver& names, std::ostream& out) {
+        bool first = true;
+        for (const auto& [id, weight] : sortedByCountDesc(floor)) {
+            out << (first ? "" : ",");
+            first = false;
+            out << "{\"id\":" << id << ",\"name\":" << jsonString(names.tileName(id)) << ",\"weight\":" << weight << "}";
+        }
+    }
+
+    void emitPaletteScenery(const std::map<uint32_t, int>& scenery, NameResolver& names, std::ostream& out) {
+        bool first = true;
+        for (const auto& [pid, weight] : sortedByCountDesc(scenery)) {
+            out << (first ? "" : ",");
+            first = false;
+            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"number\":" << (pid & 0xFFFFFFu)
+                << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"weight\":" << weight << "}";
+        }
+    }
+
+    // The weighted generation palette aggregated across maps: floor tiles, and the scatter-eligible
+    // scenery (scenery type, non-flat — no walls, blockers or flat markers), each with its total
+    // placement count as a weight. The small input a generator script needs (what random_desert.luau
+    // hardcodes), not the full analyze report. `id`/`number` are ready for api:paintFloor/api:proto.
+    void emitPalette(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
+        NameResolver& names, std::ostream& out) {
+        std::map<uint16_t, int> floor;
+        std::map<uint32_t, int> scenery;
+        for (const auto& mapPath : mapPaths) {
+            const std::unique_ptr<Map> map = loadMap(resources, mapPath);
+            if (!map) {
+                continue;
+            }
+            const MapUsage usage = collectUsage(*map);
+            for (const auto& [id, count] : usage.floors) {
+                floor[id] += count;
+            }
+            for (const auto& [pid, count] : usage.objects) {
+                if (Pro::typeOfPid(pid) == Pro::OBJECT_TYPE::SCENERY && !names.isFlat(pid)) {
+                    scenery[pid] += count;
+                }
+            }
+        }
+        out << "{\"floor\":[";
+        emitPaletteFloor(floor, names, out);
+        out << "],\"scenery\":[";
+        emitPaletteScenery(scenery, names, out);
+        out << "]}\n";
     }
 
     // Per-map floor-border array: [{a,aName,b,bName,count}], folding totals into agg.adjacency.
@@ -548,6 +602,10 @@ int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& option
 
     NameResolver names(resources);
 
+    if (options.palette) {
+        emitPalette(mapPaths, resources, names, out);
+        return 0;
+    }
     if (options.json) {
         emitJson(mapPaths, resources, names, out);
         return 0;

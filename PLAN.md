@@ -447,6 +447,12 @@ The scripting core and a first procedural generator are in. Concretely:
   floor-tile *borders* (which tile sits next to which different tile, and how often). Since the
   Fallout engine has no autotiling — mappers place edge tiles by hand — this is the empirical data
   an agent curates a transition set from before generating **seamless** terrain (the §11 P2 item).
+- **Palette tool** (`analyze --palette` / MCP `palette`) + `number` in `analyze`. `palette` returns just
+  the weighted generation input — `{ floor:[{id,name,weight}], scenery:[{pid,number,name,weight}] }`
+  aggregated across the given maps — so an agent gets the exact script input in one small call instead
+  of `jq`-ing the ~500 KB `analyze` report. `analyze` objects also now carry `number` (the PID's low 24
+  bits, what `api:proto` wants — one less than the `00000NNN.pro` filename), fixing an off-by-one trap
+  when generating scripts mechanically. (From an agent's MCP-usage retrospective.)
 - **Object clustering** in `analyze --json`. Each map carries a `clusters[]` array: nearby objects
   grouped by proximity (single-linkage, Chebyshev ≤ 3 hexes), each with a centroid `centerHex`, a
   bounding box and member PIDs. So an agent reading desert5 sees the perimeter blockers as one

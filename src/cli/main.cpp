@@ -24,10 +24,11 @@ struct CliArgs {
 
 void printUsage(const char* program) {
     std::cerr << "Usage:\n"
-              << "  " << program << " map analyze [--json] --data <dir-or-.dat> [--data <...>] [map ...]\n"
+              << "  " << program << " map analyze [--json|--palette] --data <dir-or-.dat> [--data <...>] [map ...]\n"
               << "      Reports ground-tile and object (scenery/wall/critter/...) usage across maps,\n"
               << "      per map and aggregated. With no map arguments, every map under maps/ is analysed.\n"
-              << "      --json emits machine-readable output (for the MCP) instead of the human report.\n"
+              << "      --json emits machine-readable output (for the MCP) instead of the human report;\n"
+              << "      --palette emits just the weighted floor + scenery palette a generator script needs.\n"
               << "  " << program << " map generate --script <file.luau> --out <file.map>\n"
               << "      [--elevation 0|1|2] [--arg key=value ...] [--stamp name=file.json ...]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
@@ -152,6 +153,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     }
     if (arg == "--json") { // analyze only: machine-readable output for the MCP
         out.analyze.json = true;
+        return 1;
+    }
+    if (arg == "--palette") { // analyze only: just the weighted generation palette
+        out.analyze.palette = true;
         return 1;
     }
     out.analyze.maps.push_back(arg);
