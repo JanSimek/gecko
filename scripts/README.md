@@ -27,6 +27,7 @@ with that `--arg seed=<value>` to recreate it exactly.
 |--------|--------------|
 | [`editor/terrain.luau`](editor/terrain.luau) | A curated desert generator: fills the floor with wasteland sand and scatters a **hand-picked palette** of desert vegetation (scrub/weeds/rocks/trees) in **natural clumps** (a `noise2d` density field, not an even sprinkle). Curated so only sensible decorations appear — swap `PALETTE`/`BASE_TILE` to retheme. Tune with `--arg density=N` / `--arg tile=<name>`. |
 | [`editor/scatter.luau`](editor/scatter.luau) | A **parameterized** terrain.luau: the floor tile and scenery palette come from `--arg` (`--arg tile=edg5000 --arg palette=102,103,945`), so any biome generates without editing a script. Curate the palette from `gecko-cli map analyze --json` (pick the small, common, non-`flat` scenery) and pass it in. |
+| [`editor/random_desert.luau`](editor/random_desert.luau) | A **worked template** putting the whole pipeline together: a frequency-**weighted mix** of the desert ground tileset (`edg5000`–`edg5004`, not one flat tile), clumped scrub/weeds, and optional **tents** dropped from an `extract_pattern` stamp via `api:placeStamp`. `--arg tents=2 --stamp tent=tent.json` to place tents; the weights/palette are the values `analyze` reports for `desert1.map`. |
 
 ## The `api` surface
 
