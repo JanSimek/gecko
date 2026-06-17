@@ -46,19 +46,21 @@ int renderMap(resource::GameResources& resources, const RenderOptions& options, 
     renderOptions.showRoof = options.showRoof;
     renderOptions.showObjects = options.showObjects;
     renderOptions.showBlockers = options.showBlockers;
-    renderOptions.style = options.schematic ? MapRenderer::Style::Schematic : MapRenderer::Style::Natural;
+    renderOptions.style = options.objects ? MapRenderer::Style::Objects
+                                          : (options.schematic ? MapRenderer::Style::Schematic : MapRenderer::Style::Natural);
 
+    const bool wantLegend = options.schematic || options.objects;
     try {
         MapRenderer renderer(resources);
         MapRenderer::Legend legend;
-        const sf::Image image = renderer.renderToImage(*map, renderOptions, options.schematic ? &legend : nullptr);
+        const sf::Image image = renderer.renderToImage(*map, renderOptions, wantLegend ? &legend : nullptr);
         if (!image.saveToFile(options.outPath)) {
             out << "render: failed to write image: " << options.outPath << "\n";
             return 1;
         }
         const sf::Vector2u size = image.getSize();
         out << "wrote " << options.outPath << " (" << size.x << "x" << size.y << ")\n";
-        if (options.schematic) {
+        if (wantLegend) {
             printLegend(legend, out);
         }
     } catch (const std::exception& e) {

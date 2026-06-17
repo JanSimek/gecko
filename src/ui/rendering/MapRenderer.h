@@ -31,6 +31,9 @@ public:
     enum class Style {
         Natural,
         Schematic,
+        /// Like Schematic but the floor is one muted grey, so the category-coloured object markers
+        /// pop — for verifying object scatter/clumping without the per-id floor rainbow drowning them.
+        Objects,
     };
 
     struct Options {

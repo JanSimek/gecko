@@ -206,6 +206,19 @@ namespace {
         return colors;
     }
 
+    // Every present floor id mapped to one muted grey — the floor for the Objects style, so the
+    // category-coloured object markers stand out instead of competing with a per-id rainbow.
+    std::unordered_map<uint16_t, sf::Color> uniformFloorColors(const std::vector<Tile>& tiles) {
+        const sf::Color grey(72, 68, 62);
+        std::unordered_map<uint16_t, sf::Color> colors;
+        for (const auto& tile : tiles) {
+            if (tile.getFloor() != kEmptyTile) {
+                colors[tile.getFloor()] = grey;
+            }
+        }
+        return colors;
+    }
+
     // Build the flat-coloured floor mesh and grow `bounds` to the drawn cells.
     void appendFloorMesh(sf::VertexArray& mesh, Bounds& bounds, const std::vector<Tile>& tiles,
         const std::unordered_map<uint16_t, sf::Color>& colors) {
@@ -281,7 +294,7 @@ MapRenderer::MapRenderer(resource::GameResources& resources)
 }
 
 sf::Image MapRenderer::renderToImage(Map& map, const Options& options, Legend* legend) {
-    if (options.style == Style::Schematic) {
+    if (options.style == Style::Schematic || options.style == Style::Objects) {
         return renderSchematic(map, options, legend);
     }
     return renderNatural(map, options);
@@ -352,7 +365,9 @@ sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend*
     const std::vector<Tile> noTiles;
     const std::vector<Tile>& tiles = tilesIt != allTiles.end() ? tilesIt->second : noTiles;
 
-    const std::unordered_map<uint16_t, sf::Color> floorColor = assignFloorColors(tiles, legend);
+    const std::unordered_map<uint16_t, sf::Color> floorColor = options.style == Style::Objects
+        ? uniformFloorColors(tiles)
+        : assignFloorColors(tiles, legend);
 
     // Objects (markers) — reuse the loader for their screen positions; colour by engine category.
     HexagonGrid hexgrid;

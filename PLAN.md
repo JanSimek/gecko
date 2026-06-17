@@ -438,6 +438,8 @@ The scripting core and a first procedural generator are in. Concretely:
   *see* a generated biome, not just read its stats. `RenderingEngine`/`HexRenderer` moved out of
   `gecko_app` into `gecko_editing` for this (they were always Qt-free). Needs an off-screen GL
   context at runtime; reports an error instead of crashing when none is available.
+  - **Objects style** (`--objects` / `objects:true`) mutes the floor to grey so the category-coloured
+    object markers pop — for verifying scatter/clumping without the schematic's per-id floor rainbow.
   - **Schematic style** (`--schematic` / `schematic:true`) flat-colours each floor tile by its id
     and marks objects by category, returning a colour legend (id/type → colour → count). This
     *grounds* the analyze JSON to the image — the colours are the ids, colour regions are tiles,

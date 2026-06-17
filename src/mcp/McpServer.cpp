@@ -159,6 +159,9 @@ namespace {
         if (const auto it = args.find("schematic"); it != args.end() && it->is_boolean()) {
             opts.schematic = it->get<bool>();
         }
+        if (const auto it = args.find("objects"); it != args.end() && it->is_boolean()) {
+            opts.objects = it->get<bool>();
+        }
         if (const auto it = args.find("showBlockers"); it != args.end() && it->is_boolean()) {
             opts.showBlockers = it->get<bool>();
         }
@@ -249,9 +252,10 @@ namespace {
                 { "inputSchema", { { "type", "object" }, { "properties", { { "pid", { { "type", "integer" } } } } }, { "required", json::array({ "pid" }) } } } },
             { { "name", "generate" },
                 { "description", "Run a Luau generation script against a fresh map and write a .map. "
-                                 "Args: script, out, optional elevation, optional args (string map), "
-                                 "optional stamps (name -> stamp .json path, placed by the script with "
-                                 "api:placeStamp(name, anchorHex, variant)). Needs a scripting-enabled build." },
+                                 "Args: script (path to the .luau), out (filesystem path for the .map — "
+                                 "render_map/analyze can read it straight back), optional elevation, optional "
+                                 "args (string map), optional stamps (name -> stamp .json path, placed by the "
+                                 "script with api:placeStamp(name, anchorHex, variant)). Scripting build required." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } } } },
             { { "name", "render_map" },
                 { "description", "Render a map to a PNG so it can be seen, not just measured. Args: map "
@@ -260,9 +264,13 @@ namespace {
                                  "optional schematic. schematic=true flat-colours floor tiles by id "
                                  "and marks objects by category, and returns a colour legend (id/type "
                                  "-> colour -> count) so you can match the picture to the analyze JSON "
-                                 "and read the floor-tile transitions. FLAT objects (invisible engine "
-                                 "blockers) are hidden unless showBlockers. Needs an off-screen GL context." },
-                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } } } },
+                                 "and read the floor-tile transitions. objects=true instead mutes the "
+                                 "floor to grey so the category-coloured object markers pop (for checking "
+                                 "scatter). FLAT objects (invisible engine blockers) are hidden unless "
+                                 "showBlockers. map/out are filesystem paths — out is written there, and map "
+                                 "may be a VFS path or any file on disk (e.g. one generate just wrote). Needs "
+                                 "an off-screen GL context." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } } } },
             { { "name", "extract_pattern" },
                 { "description", "Capture a structure from a real map into a reusable pattern stamp (JSON the "
                                  "editor's pattern library reads, and generate can place). Locate it with 'pids' "
