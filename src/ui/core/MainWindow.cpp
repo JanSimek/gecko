@@ -150,6 +150,8 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, &MainWindow::updateUndoRedoActions);
     // Any edit (or undo/redo) marks the map dirty for the close/title prompts.
     connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, [this]() { setMapModified(true); });
+    // Non-undoable Console-script mutations (newMap/setPlayerStart) flag the map dirty too.
+    connect(_currentEditorWidget, &EditorWidget::mapModifiedByScript, this, [this]() { setMapModified(true); });
 
     syncMenuStateToEditorWidget();
 
@@ -984,6 +986,13 @@ void MainWindow::rebuildResourcePanels() {
 }
 
 void MainWindow::rebuildGameResourcesFromSettings() {
+    // Rebuilding resources closes the current map, so honour the same unsaved-changes prompt the
+    // New/Open/Quit paths use. Cancelling keeps the map (the data-path change just won't take effect
+    // until the next rebuild).
+    if (hasActiveMap() && !maybeSaveChanges()) {
+        return;
+    }
+
     const auto dataPaths = _settings->getDataPaths();
 
     if (hasActiveMap()) {

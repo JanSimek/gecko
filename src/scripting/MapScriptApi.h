@@ -178,6 +178,10 @@ public:
 
     int placedObjects() const { return _placedObjects; }
     int paintedTiles() const { return _paintedTiles; }
+    /// Whether this api changed the map at all (placed/painted anything, or made a non-undoable
+    /// header/map mutation like setPlayerStart/newMap). The host uses it to mark the map modified and
+    /// resync the editor after a run, since those non-undoable mutations push no undo command.
+    bool mutated() const { return _placedObjects > 0 || _paintedTiles > 0 || _mutatedDirectly; }
 
 private:
     // Where an exit grid sends the player (engine fields exit_map/exit_position/exit_elevation/
@@ -216,6 +220,9 @@ private:
     bool _buildSprites;
     int _placedObjects = 0;
     int _paintedTiles = 0;
+    // Set by mutators that change the map without pushing an undo command (setPlayerStart, newMap),
+    // so mutated() reports them even though the placed/painted counters stay at 0.
+    bool _mutatedDirectly = false;
     std::unordered_map<std::string, pattern::Pattern> _stamps;
 };
 

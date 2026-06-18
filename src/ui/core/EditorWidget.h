@@ -252,6 +252,9 @@ signals:
     void statusMessageRequested(const QString& message);
     void statusMessageClearRequested();
     void undoStackChanged();
+    /// A Console script changed the map through a path that records no undo command (e.g.
+    /// setPlayerStart/newMap), so the host must flag the map modified explicitly.
+    void mapModifiedByScript();
     void editorModeChanged(EditorMode mode);
 
 public slots:

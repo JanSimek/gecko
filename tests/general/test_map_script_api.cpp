@@ -217,6 +217,36 @@ TEST_CASE("MapScriptApi newMap resets the bound map to empty", "[scripting]") {
     CHECK(fx.mapFile().map_objects[ELEV].size() == 1);
 }
 
+TEST_CASE("MapScriptApi::mutated reports non-undoable header/map changes", "[scripting]") {
+    // setPlayerStart / newMap change the map without pushing an undo command, so the host can't rely
+    // on undoStackChanged to flag the map dirty — mutated() must report them.
+    SECTION("a fresh api hasn't mutated the map") {
+        ControllerFixture fx;
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+        CHECK_FALSE(api.mutated());
+        (void)api.isValidHex(0); // a pure query is not a mutation
+        CHECK_FALSE(api.mutated());
+    }
+    SECTION("setPlayerStart counts as a mutation") {
+        ControllerFixture fx;
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+        api.setPlayerStart(api.hexIndex(50, 50), 0, 0);
+        CHECK(api.mutated());
+    }
+    SECTION("newMap counts as a mutation") {
+        ControllerFixture fx;
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+        api.newMap();
+        CHECK(api.mutated());
+    }
+    SECTION("placing an object counts as a mutation") {
+        ControllerFixture fx;
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+        REQUIRE(api.placeObject(0x02000066u, 0x02000000u, 20100, 0));
+        CHECK(api.mutated());
+    }
+}
+
 TEST_CASE("MapScriptApi setPlayerStart writes the map header", "[scripting]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);

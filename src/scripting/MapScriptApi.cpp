@@ -465,6 +465,7 @@ int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant
 
 void MapScriptApi::newMap() {
     _controller.newEmptyMap();
+    _mutatedDirectly = true;
 }
 
 void MapScriptApi::setPlayerStart(int hex, int orientation, int elevation) {
@@ -482,6 +483,7 @@ void MapScriptApi::setPlayerStart(int hex, int orientation, int elevation) {
     header.player_default_position = static_cast<uint32_t>(hex);
     header.player_default_orientation = static_cast<uint32_t>(orientation);
     header.player_default_elevation = static_cast<uint32_t>(elevation);
+    _mutatedDirectly = true;
 }
 
 namespace {

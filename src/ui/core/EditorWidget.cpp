@@ -485,6 +485,19 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
     if (!stampNotes.empty()) {
         result.output = result.output.empty() ? stampNotes : stampNotes + "\n" + result.output;
     }
+    if (api.mutated()) {
+        // A script can reset the map (newMap) or change the header (setPlayerStart) without pushing
+        // an undo command, leaving the selection and Map Info panel referencing the pre-run state and
+        // the map unflagged. Drop the selection, refresh the header UI, and flag the map modified.
+        if (_selectionManager) {
+            _selectionManager->clearSelection();
+        }
+        _selectedHexPositions.clear();
+        if (_mainWindow) {
+            _mainWindow->updateMapInfo(_map.get());
+        }
+        Q_EMIT mapModifiedByScript();
+    }
     return result;
 }
 #endif
