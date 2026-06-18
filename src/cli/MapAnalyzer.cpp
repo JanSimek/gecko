@@ -8,11 +8,13 @@
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
+#include "format/map/MapScript.h"
 #include "format/map/Tile.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
 #include "reader/ai/AiTxtReader.h"
 #include "resource/GameResources.h"
+#include "resource/ResourcePaths.h"
 #include "util/ProHelper.h"
 
 #include <nlohmann/json.hpp>
@@ -27,6 +29,7 @@
 #include <map>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <unordered_map>
@@ -202,6 +205,42 @@ namespace {
             }
         }
         return AiTxt{};
+    }
+
+    // The mounted scripts.lst (script_id is a 0-based index into list()), or nullptr if absent.
+    const Lst* loadScriptsLst(resource::GameResources& resources) {
+        try {
+            return resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
+        } catch (const std::exception& e) {
+            spdlog::debug("loadScriptsLst: {}", e.what());
+            return nullptr;
+        }
+    }
+
+    // {programIndex, scripts.lst filename} for an object's attached script — its map_scripts_pid (SID)
+    // matches a MapScript whose script_id is the (0-based) scripts.lst index — or nullopt if it has no
+    // script. Indexes scripts.lst exactly as SelectionPanel/the engine do (directly, no offset).
+    std::optional<std::pair<int, std::string>> resolveObjectScript(Map& map, int32_t mapScriptsPid, const Lst* scriptsLst) {
+        if (mapScriptsPid < 0) {
+            return std::nullopt;
+        }
+        const auto sid = static_cast<uint32_t>(mapScriptsPid);
+        const int section = MapScript::sidSection(sid);
+        const auto& sections = map.getMapFile().map_scripts;
+        if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
+            return std::nullopt;
+        }
+        for (const auto& script : sections[section]) {
+            if (script.pid == sid) {
+                const int programIndex = static_cast<int>(script.script_id);
+                std::string name;
+                if (scriptsLst != nullptr && programIndex >= 0 && programIndex < static_cast<int>(scriptsLst->list().size())) {
+                    name = scriptsLst->at(programIndex);
+                }
+                return std::make_pair(programIndex, name);
+            }
+        }
+        return std::nullopt;
     }
 
     // Ordered so the emitted objects keep the field order below (nlohmann's default json sorts keys).
@@ -514,7 +553,7 @@ namespace {
         ordered_json root;
         root["floor"] = paletteFloorToJson(floor, names);
         root["scenery"] = paletteSceneryToJson(scenery, names);
-        out << root.dump() << "\n";
+        out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     }
 
     // Per-map floor-border array: [{a,aName,b,bName,count}], folding totals into agg.adjacency.
@@ -570,7 +609,7 @@ namespace {
     // the instance group_id; `aiPacket` is the instance ai_packet, falling back to the proto default
     // when it is 0, resolved through ai.txt into the behaviour sub-object. Lets an agent read who is
     // on the map, which side they fight for, and how they behave.
-    ordered_json crittersToJson(Map& map, NameResolver& names, const AiTxt& ai) {
+    ordered_json crittersToJson(Map& map, NameResolver& names, const AiTxt& ai, const Lst* scriptsLst) {
         auto array = ordered_json::array();
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
@@ -579,10 +618,15 @@ namespace {
                 }
                 const uint32_t pid = object->pro_pid;
                 const uint32_t packet = object->ai_packet != 0 ? object->ai_packet : names.critterAiPacket(pid);
+                // The attached script as {programIndex, name} (feed programIndex to describe_script) or null.
+                ordered_json scriptJson = nullptr;
+                if (const auto ref = resolveObjectScript(map, object->map_scripts_pid, scriptsLst); ref.has_value()) {
+                    scriptJson = ordered_json{ { "programIndex", ref->first }, { "name", ref->second } };
+                }
                 array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
                     { "name", names.protoName(pid) }, { "hex", object->position }, { "elevation", elevation },
                     { "team", object->group_id }, { "aiPacket", packet },
-                    { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) } });
+                    { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) }, { "script", scriptJson } });
             }
         }
         return array;
@@ -657,7 +701,7 @@ namespace {
     // One map's full report object, folding its floor/object/adjacency usage into `agg` as a side
     // effect (so the aggregate built afterwards has every map's totals).
     ordered_json mapToJson(const std::string& mapPath, Map& map, resource::GameResources& resources,
-        NameResolver& names, const AiTxt& ai, Aggregate& agg) {
+        NameResolver& names, const AiTxt& ai, const Lst* scriptsLst, Aggregate& agg) {
         const MapUsage usage = collectUsage(map);
         ordered_json entry;
         entry["name"] = baseName(mapPath);
@@ -666,7 +710,7 @@ namespace {
         entry["objects"] = objectsToJson(usage, names, agg);
         entry["adjacency"] = adjacencyToJson(usage, names, agg);
         entry["clusters"] = clustersToJson(collectClusters(map), names);
-        entry["critters"] = crittersToJson(map, names, ai);
+        entry["critters"] = crittersToJson(map, names, ai, scriptsLst);
         entry["header"] = headerToJson(map, loadMapGam(resources, mapPath));
         entry["exits"] = exitsToJson(map);
         return entry;
@@ -680,13 +724,14 @@ namespace {
     void emitJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
         NameResolver& names, const AiTxt& ai, std::ostream& out) {
         Aggregate agg;
+        const Lst* scriptsLst = loadScriptsLst(resources); // shared across maps (cached); names attached scripts
         auto maps = ordered_json::array();
         for (const auto& mapPath : mapPaths) {
             const std::unique_ptr<Map> map = loadMap(resources, mapPath);
             if (!map) {
                 continue; // skipped maps simply don't appear; agg.analysed counts what did
             }
-            maps.push_back(mapToJson(mapPath, *map, resources, names, ai, agg));
+            maps.push_back(mapToJson(mapPath, *map, resources, names, ai, scriptsLst, agg));
             ++agg.analysed;
         }
 
@@ -698,7 +743,9 @@ namespace {
         aggregate["objects"] = aggObjectsToJson(agg, names);
         aggregate["adjacency"] = aggAdjacencyToJson(agg, names);
         root["aggregate"] = std::move(aggregate);
-        out << root.dump() << "\n";
+        // Fallout 2 text (proto/tile/critter names, AI labels) is CP-1252; `replace` keeps dump() from
+        // throwing on stray non-UTF-8 bytes and emits valid JSON (U+FFFD substitutes).
+        out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     }
 
 } // namespace

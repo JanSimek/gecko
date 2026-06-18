@@ -4,6 +4,7 @@
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
 #include "cli/PatternExtract.h"
+#include "cli/ScriptIntrospect.h"
 #include "format/msg/Msg.h"
 #include "scripting/ScriptApiReference.h"
 #include "format/pro/Pro.h"
@@ -115,6 +116,20 @@ namespace {
 
     json toolPalette(resource::GameResources& resources, const json& args) {
         return runAnalyze(resources, args, /*paletteOnly*/ true);
+    }
+
+    json toolDescribeScript(resource::GameResources& resources, const json& args) {
+        cli::DescribeScriptOptions opts;
+        opts.programIndex = optInt(args, "programIndex", opts.programIndex);
+        if (const std::string locale = optString(args, "locale"); !locale.empty()) {
+            opts.locale = locale;
+        }
+        if (opts.programIndex < 0) {
+            return toolText("describe_script requires a non-negative integer 'programIndex' (a 0-based script_id from analyze)", true);
+        }
+        std::ostringstream oss;
+        const int rc = cli::describeScript(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
     }
 
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
@@ -231,6 +246,9 @@ namespace {
         if (name == "proto_info") {
             return toolProtoInfo(resources, args);
         }
+        if (name == "describe_script") {
+            return toolDescribeScript(resources, args);
+        }
         if (name == "generate") {
             return toolGenerate(resources, args);
         }
@@ -256,9 +274,10 @@ namespace {
                 { "description", "Analyze ground-tile and object usage as JSON. Omit 'maps' to analyze "
                                  "every map, or pass it to scope. Each object carries a 'flat' flag "
                                  "(structural blocker vs. decoration) for curating a scatter palette. Each "
-                                 "map also lists 'critters': who is on it, their team (group_id), and their "
+                                 "map also lists 'critters': who is on it, their team (group_id), their "
                                  "AI packet resolved via ai.txt (aggression, disposition, flee/best-weapon/"
-                                 "distance) — so you can read the map's combatants and how they behave." },
+                                 "distance), and the attached 'script' ({programIndex,name}) — pass that "
+                                 "programIndex to describe_script for the script's source and dialog." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } } } },
             { { "name", "palette" },
                 { "description", "The weighted generation palette for the given maps (omit 'maps' for all), "
@@ -270,6 +289,14 @@ namespace {
             { { "name", "proto_info" },
                 { "description", "Resolve a proto PID to its type, engine display name and 'flat' flag." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "pid", { { "type", "integer" } } } } }, { "required", json::array({ "pid" }) } } } },
+            { { "name", "describe_script" },
+                { "description", "Describe a Fallout 2 script by its scripts.lst program index (the 0-based "
+                                 "script_id analyze reports for a critter/object). Returns the filename, the "
+                                 ".ssl source if a script-source tree is mounted (e.g. the FRP scripts_src — "
+                                 "hasSource flags whether it was found), and the dialog .msg lines "
+                                 "([{id,text}]). Lets you read what an NPC does and says. Optional 'locale' picks "
+                                 "the dialog language subdir (default english). Args: programIndex, optional locale." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "required", json::array({ "programIndex" }) } } } },
             { { "name", "generate" },
                 { "description", "Run a Luau generation script against a fresh map and write a .map. "
                                  "Args: script (path to the .luau), out (filesystem path for the .map — "

@@ -59,7 +59,8 @@ std::string serializePattern(const pattern::Pattern& pattern) {
         variants.push_back(std::move(entry));
     }
     root["variants"] = std::move(variants);
-    return root.dump() + "\n"; // compact, matching the editor's reader
+    // compact, matching the editor's reader; `replace` guards against a non-UTF-8 pattern name.
+    return root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) + "\n";
 }
 
 namespace {

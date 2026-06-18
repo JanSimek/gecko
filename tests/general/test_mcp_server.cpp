@@ -34,7 +34,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "generate", "render_map", "extract_pattern", "script_api" }) {
+        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "generate", "render_map", "extract_pattern", "script_api" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }
@@ -77,6 +77,20 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     SECTION("render_map without map/out is a tool error") {
         const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 8 }, { "method", "tools/call" },
             { "params", { { "name", "render_map" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == true);
+    }
+
+    SECTION("describe_script without programIndex is a tool error") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 9 }, { "method", "tools/call" },
+            { "params", { { "name", "describe_script" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == true);
+    }
+
+    SECTION("describe_script accepts index 0 and reports a tool error with no data (not a crash)") {
+        // programIndex is 0-based, so 0 must be accepted (not rejected as the old 1-based guard did);
+        // with no data mounted it fails only for the missing scripts.lst.
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 10 }, { "method", "tools/call" },
+            { "params", { { "name", "describe_script" }, { "arguments", { { "programIndex", 0 } } } } } });
         CHECK(resp["result"]["isError"] == true);
     }
 }

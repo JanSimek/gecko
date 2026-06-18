@@ -3,6 +3,7 @@
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
 #include "cli/PatternExtract.h"
+#include "cli/ScriptIntrospect.h"
 #include "resource/GameResources.h"
 
 #include <spdlog/spdlog.h>
@@ -18,11 +19,13 @@ struct CliArgs {
     bool generate = false;
     bool render = false;
     bool extract = false;
+    bool describeScript = false;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::GenerateOptions gen;
     geck::cli::RenderOptions ren;
     geck::cli::ExtractOptions ext;
+    geck::cli::DescribeScriptOptions desc;
 };
 
 void printUsage(const char* program) {
@@ -54,12 +57,18 @@ void printUsage(const char* program) {
               << "      --include-floor captures the ground; --include-roof captures the roof layer (a\n"
               << "      tent/building roof is tiles, not an object — without it the stamp is topless).\n"
               << "      Feed the .json to generate --stamp.\n"
+              << "  " << program << " map describe-script --index <n> [--locale english]\n"
+              << "      --data <dir-or-.dat> [--data <...>]\n"
+              << "      Describe a script by its scripts.lst program index (the script_id analyze reports):\n"
+              << "      filename, the .ssl source (if a source tree like FRP scripts_src is mounted via\n"
+              << "      --data) and the dialog .msg lines, as JSON.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
 bool isKnownSubcommand(const std::vector<std::string>& args) {
     return args.size() >= 2 && args[0] == "map"
-        && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern");
+        && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
+            || args[1] == "describe-script");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -98,7 +107,8 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     const bool valueFlag = arg == "--data"
         || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation" || arg == "--arg" || arg == "--stamp"))
         || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim"))
-        || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"));
+        || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
+        || (out.describeScript && (arg == "--index" || arg == "--locale"));
 
     if (valueFlag && i + 1 >= args.size()) {
         std::cerr << "error: " << arg << " needs a value\n";
@@ -229,6 +239,19 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.describeScript && arg == "--index") {
+        out.desc.programIndex = std::stoi(args[i + 1]);
+        return 2;
+    }
+    if (out.describeScript && arg == "--locale") {
+        out.desc.locale = args[i + 1];
+        return 2;
+    }
+    if (out.describeScript) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
     if (arg == "--json") { // analyze only: machine-readable output for the MCP
         out.analyze.json = true;
         return 1;
@@ -250,6 +273,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.generate = args[1] == "generate";
     out.render = args[1] == "render";
     out.extract = args[1] == "extract-pattern";
+    out.describeScript = args[1] == "describe-script";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -276,6 +300,11 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     }
     if (extractMissingRequired(out)) {
         std::cerr << "error: extract-pattern requires --map, --out and --name\n";
+        printUsage(program);
+        return 2;
+    }
+    if (out.describeScript && out.desc.programIndex < 0) {
+        std::cerr << "error: describe-script requires --index <n> (a 0-based scripts.lst program index)\n";
         printUsage(program);
         return 2;
     }
@@ -315,6 +344,9 @@ int main(int argc, char** argv) {
     }
     if (cli.extract) {
         return geck::cli::extractPattern(resources, cli.ext, std::cout);
+    }
+    if (cli.describeScript) {
+        return geck::cli::describeScript(resources, cli.desc, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
 }
