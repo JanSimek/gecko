@@ -274,9 +274,10 @@ namespace {
                 { "description", "Analyze ground-tile and object usage as JSON. Omit 'maps' to analyze "
                                  "every map, or pass it to scope. Each object carries a 'flat' flag "
                                  "(structural blocker vs. decoration) for curating a scatter palette. Each "
-                                 "map also lists 'critters': who is on it, their team (group_id), and their "
+                                 "map also lists 'critters': who is on it, their team (group_id), their "
                                  "AI packet resolved via ai.txt (aggression, disposition, flee/best-weapon/"
-                                 "distance) — so you can read the map's combatants and how they behave." },
+                                 "distance), and the attached 'script' ({programIndex,name}) — pass that "
+                                 "programIndex to describe_script for the script's source and dialog." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } } } },
             { { "name", "palette" },
                 { "description", "The weighted generation palette for the given maps (omit 'maps' for all), "
