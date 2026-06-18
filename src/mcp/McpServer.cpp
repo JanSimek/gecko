@@ -124,8 +124,8 @@ namespace {
         if (const std::string locale = optString(args, "locale"); !locale.empty()) {
             opts.locale = locale;
         }
-        if (opts.programIndex < 1) {
-            return toolText("describe_script requires a positive integer 'programIndex' (a script_id from analyze)", true);
+        if (opts.programIndex < 0) {
+            return toolText("describe_script requires a non-negative integer 'programIndex' (a 0-based script_id from analyze)", true);
         }
         std::ostringstream oss;
         const int rc = cli::describeScript(resources, opts, oss);
@@ -290,10 +290,10 @@ namespace {
                 { "description", "Resolve a proto PID to its type, engine display name and 'flat' flag." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "pid", { { "type", "integer" } } } } }, { "required", json::array({ "pid" }) } } } },
             { { "name", "describe_script" },
-                { "description", "Describe a Fallout 2 script by its scripts.lst program index (the script_id "
-                                 "analyze reports for a critter/object). Returns the filename, its scripts.lst "
-                                 "description, the .ssl source if a script-source tree is mounted (e.g. the FRP "
-                                 "scripts_src — hasSource flags whether it was found), and the dialog .msg lines "
+                { "description", "Describe a Fallout 2 script by its scripts.lst program index (the 0-based "
+                                 "script_id analyze reports for a critter/object). Returns the filename, the "
+                                 ".ssl source if a script-source tree is mounted (e.g. the FRP scripts_src — "
+                                 "hasSource flags whether it was found), and the dialog .msg lines "
                                  "([{id,text}]). Lets you read what an NPC does and says. Optional 'locale' picks "
                                  "the dialog language subdir (default english). Args: programIndex, optional locale." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "required", json::array({ "programIndex" }) } } } },

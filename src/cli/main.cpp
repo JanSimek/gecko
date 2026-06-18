@@ -60,8 +60,8 @@ void printUsage(const char* program) {
               << "  " << program << " map describe-script --index <n> [--locale english]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Describe a script by its scripts.lst program index (the script_id analyze reports):\n"
-              << "      filename, description, the .ssl source (if a source tree like FRP scripts_src is\n"
-              << "      mounted via --data) and the dialog .msg lines, as JSON.\n"
+              << "      filename, the .ssl source (if a source tree like FRP scripts_src is mounted via\n"
+              << "      --data) and the dialog .msg lines, as JSON.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
@@ -303,8 +303,8 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
         printUsage(program);
         return 2;
     }
-    if (out.describeScript && out.desc.programIndex < 1) {
-        std::cerr << "error: describe-script requires --index <n> (a 1-based scripts.lst program index)\n";
+    if (out.describeScript && out.desc.programIndex < 0) {
+        std::cerr << "error: describe-script requires --index <n> (a 0-based scripts.lst program index)\n";
         printUsage(program);
         return 2;
     }

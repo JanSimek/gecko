@@ -207,7 +207,7 @@ namespace {
         return AiTxt{};
     }
 
-    // The mounted scripts.lst (program index -> script filename, 1-based via script_id), or nullptr.
+    // The mounted scripts.lst (script_id is a 0-based index into list()), or nullptr if absent.
     const Lst* loadScriptsLst(resource::GameResources& resources) {
         try {
             return resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
@@ -218,7 +218,8 @@ namespace {
     }
 
     // {programIndex, scripts.lst filename} for an object's attached script — its map_scripts_pid (SID)
-    // matches a MapScript whose script_id is the program index — or nullopt if it has no script.
+    // matches a MapScript whose script_id is the (0-based) scripts.lst index — or nullopt if it has no
+    // script. Indexes scripts.lst exactly as SelectionPanel/the engine do (directly, no offset).
     std::optional<std::pair<int, std::string>> resolveObjectScript(Map& map, int32_t mapScriptsPid, const Lst* scriptsLst) {
         if (mapScriptsPid < 0) {
             return std::nullopt;
@@ -233,8 +234,8 @@ namespace {
             if (script.pid == sid) {
                 const int programIndex = static_cast<int>(script.script_id);
                 std::string name;
-                if (scriptsLst != nullptr && programIndex >= 1 && programIndex <= static_cast<int>(scriptsLst->list().size())) {
-                    name = scriptsLst->at(programIndex - 1);
+                if (scriptsLst != nullptr && programIndex >= 0 && programIndex < static_cast<int>(scriptsLst->list().size())) {
+                    name = scriptsLst->at(programIndex);
                 }
                 return std::make_pair(programIndex, name);
             }

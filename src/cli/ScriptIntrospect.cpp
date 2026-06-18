@@ -40,7 +40,7 @@ namespace {
             std::string ext = path.extension().string();
             std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             if (ext == ".ssl") {
-                index.emplace(toLower(stem(path.generic_string())), path.generic_string());
+                index.try_emplace(toLower(stem(path.generic_string())), path.generic_string());
             }
         }
         return index;
@@ -49,8 +49,7 @@ namespace {
     // Attach the .ssl source (from a mounted source tree) to `root`, or flag its absence.
     void attachSource(resource::GameResources& resources, const std::string& basename, ordered_json& root) {
         const auto index = indexSslSources(resources);
-        const auto it = index.find(toLower(basename));
-        if (it != index.end()) {
+        if (const auto it = index.find(toLower(basename)); it != index.end()) {
             if (const auto bytes = resources.files().readRawBytes(it->second); bytes.has_value()) {
                 root["hasSource"] = true;
                 root["sourcePath"] = it->second;
@@ -91,14 +90,16 @@ int describeScript(resource::GameResources& resources, const DescribeScriptOptio
         return 1;
     }
     const auto& list = scripts->list();
-    if (options.programIndex < 1 || options.programIndex > static_cast<int>(list.size())) {
-        out << "describe-script: program index " << options.programIndex << " out of range (1.." << list.size() << ")\n";
+    if (options.programIndex < 0 || options.programIndex >= static_cast<int>(list.size())) {
+        out << "describe-script: program index " << options.programIndex << " out of range (have "
+            << list.size() << " scripts)\n";
         return 1;
     }
 
-    // script_id is 1-based; scripts.lst is stored 0-based (mirrors MapInfoPanel's resolution). The Lst
+    // programIndex is the 0-based scripts.lst index (== a critter/object's MapScript.script_id), which
+    // the engine's scriptsGetFileName and the editor's SelectionPanel both index directly. The Lst
     // reader already strips the trailing comment, so the entry is just the script filename.
-    const std::string& filename = list[static_cast<std::size_t>(options.programIndex) - 1];
+    const std::string& filename = list[static_cast<std::size_t>(options.programIndex)];
     const std::string basename = stem(filename);
 
     ordered_json root;
