@@ -157,6 +157,12 @@ public:
     /// cloned objects are detached from any source scripts.
     bool copyElevation(int fromElevation, int toElevation);
 
+    /// Replaces the bound map with a fresh empty Fallout 2 map (default header, three
+    /// empty elevations, no objects/scripts) and refreshes the view. This is a
+    /// destructive reset — like File > New, it is NOT recorded on the undo stack — so a
+    /// generation script can start from a blank slate regardless of what was loaded.
+    void newEmptyMap();
+
     // Script attachment (undoable). `scriptType` is the MapScript section/type
     // (ITEM for items/scenery/walls, CRITTER for critters); `programIndex` is the
     // scripts.lst line. attachScript replaces any existing script on the object.

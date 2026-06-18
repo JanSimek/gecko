@@ -18,13 +18,8 @@ set(GECK_APP_SOURCES
     ui/Settings.h
     ui/Settings.cpp
 
-    pattern/Pattern.h
     pattern/PatternSerializer.h
     pattern/PatternSerializer.cpp
-    pattern/PatternStamper.h
-    pattern/PatternStamper.cpp
-    pattern/PatternBuilder.h
-    pattern/PatternBuilder.cpp
     pattern/PatternLibrary.h
     pattern/PatternLibrary.cpp
     pattern/ThumbnailComposer.h
@@ -161,10 +156,6 @@ set(GECK_APP_SOURCES
     ui/GameEnums.h
     ui/GameEnums.cpp
     ui/UIConstants.h
-    ui/rendering/HexRenderer.h
-    ui/rendering/HexRenderer.cpp
-    ui/rendering/RenderingEngine.h
-    ui/rendering/RenderingEngine.cpp
     ui/rendering/ThumbnailRenderer.h
     ui/rendering/ThumbnailRenderer.cpp
     ui/rendering/MapThumbnail.h
@@ -453,12 +444,30 @@ add_library(gecko_editing STATIC
     util/SpriteFactory.cpp
     pattern/PatternSprite.h
     pattern/PatternSprite.cpp
+    # Qt-free pattern (prefab/stamp) core: the data model, capture (PatternBuilder) and placement
+    # (PatternStamper). The editor's PatternSerializer/PatternLibrary stay in gecko_app (they use Qt);
+    # headless extract/place use these plus a Qt-free JSON writer in gecko_cli.
+    pattern/Pattern.h
+    pattern/PatternBuilder.h
+    pattern/PatternBuilder.cpp
+    pattern/PatternStamper.h
+    pattern/PatternStamper.cpp
     ui/rendering/MapSpriteLoader.h
     ui/rendering/MapSpriteLoader.cpp
+    # SFML map renderer (Qt-free): drives the same drawing for the Qt editor and headless
+    # PNG export. ThumbnailRenderer/MapThumbnail stay in gecko_app — they use QImage/QPainter.
+    ui/rendering/HexRenderer.h
+    ui/rendering/HexRenderer.cpp
+    ui/rendering/RenderingEngine.h
+    ui/rendering/RenderingEngine.cpp
+    ui/rendering/MapRenderer.h
+    ui/rendering/MapRenderer.cpp
     ui/editing/ObjectCommandController.h
     ui/editing/ObjectCommandController.cpp
     scripting/MapScriptApi.h
     scripting/MapScriptApi.cpp
+    scripting/ScriptApiReference.h
+    scripting/ScriptApiReference.cpp
 )
 add_library(gecko::editing ALIAS gecko_editing)
 
@@ -497,20 +506,45 @@ target_link_libraries(gecko_app PUBLIC
     gecko_editing
 )
 
-# Headless gecko-cli (no Qt, no GL). The analyze/generate logic lives in the gecko_cli library
-# so a future MCP server can reuse it; gecko-cli is just a thin frontend. gecko::editing brings
-# the editing core + scripting runtime (and transitively gecko_core/resource/vault, SFML, the
-# src/ include dir and spdlog) — all Qt-free.
+# Headless gecko-cli (no Qt). The analyze/generate/render logic lives in the gecko_cli library so
+# the MCP server can reuse it; gecko-cli is just a thin frontend. gecko::editing brings the editing
+# core + scripting runtime (and transitively gecko_core/resource/vault, SFML, the src/ include dir
+# and spdlog) — all Qt-free. `map render` needs an off-screen GL context at runtime (sf::RenderTexture);
+# it reports an error instead of crashing when none is available (headless without a display).
 if(GECK_BUILD_CLI)
     add_library(gecko_cli STATIC
+        cli/BundledResources.h
+        cli/BundledResources.cpp
+        cli/MapLoad.h
+        cli/MapLoad.cpp
         cli/MapAnalyzer.h
         cli/MapAnalyzer.cpp
         cli/MapGenerator.h
-        cli/MapGenerator.cpp)
-    target_link_libraries(gecko_cli PUBLIC gecko::editing)
+        cli/MapGenerator.cpp
+        cli/MapRender.h
+        cli/MapRender.cpp
+        cli/PatternJson.h
+        cli/PatternJson.cpp
+        cli/PatternExtract.h
+        cli/PatternExtract.cpp)
+    target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)
     target_link_libraries(gecko-cli PRIVATE gecko_cli)
+
+    # MCP server: a JSON-RPC stdio wrapper over gecko_cli's analyze/generate (so an AI agent can
+    # inspect maps and generate them conversationally). The dispatch lives in a gecko_mcp library
+    # (handleMessage is unit-testable); gecko-mcp is the thin stdio frontend.
+    if(GECK_BUILD_MCP)
+        add_library(gecko_mcp STATIC
+            mcp/McpServer.h
+            mcp/McpServer.cpp)
+        target_link_libraries(gecko_mcp PUBLIC gecko_cli nlohmann_json::nlohmann_json)
+        add_library(gecko::mcp ALIAS gecko_mcp)
+
+        add_executable(gecko-mcp mcp/main.cpp)
+        target_link_libraries(gecko-mcp PRIVATE gecko_mcp)
+    endif()
 endif()
 
 target_include_directories(gecko_app PUBLIC

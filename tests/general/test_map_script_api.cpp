@@ -1,11 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <set>
 
 #include "editor/HexagonGrid.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "scripting/MapScriptApi.h"
+#include "util/Constants.h"
 
 #include "support/ControllerFixture.h"
 
@@ -85,6 +87,44 @@ TEST_CASE("MapScriptApi paints tiles undoably", "[scripting]") {
     }
 }
 
+TEST_CASE("MapScriptApi (col,row) helpers convert and paint consistently", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    SECTION("index <-> (col,row) round-trips on both grids") {
+        // position = row * width + col; hexes 200 wide, tiles 100 wide.
+        CHECK(api.hexIndex(5, 3) == 3 * HexagonGrid::GRID_WIDTH + 5);
+        CHECK(api.tileIndex(5, 3) == 3 * HexagonGrid::TILE_GRID_WIDTH + 5);
+
+        const int hex = api.hexIndex(5, 3);
+        CHECK(api.hexCol(hex) == 5);
+        CHECK(api.hexRow(hex) == 3);
+
+        const int tile = api.tileIndex(5, 3);
+        CHECK(api.tileCol(tile) == 5);
+        CHECK(api.tileRow(tile) == 3);
+    }
+
+    SECTION("off-grid (col,row) yields -1 and the XY ops no-op") {
+        CHECK(api.tileIndex(HexagonGrid::TILE_GRID_WIDTH, 0) == -1);
+        CHECK(api.tileIndex(-1, 0) == -1);
+        CHECK(api.hexIndex(HexagonGrid::GRID_WIDTH, 0) == -1);
+        CHECK(api.hexCol(-1) == -1);
+        CHECK(api.hexCol(HexagonGrid::POSITION_COUNT) == -1);
+
+        CHECK_FALSE(api.paintFloorXY(HexagonGrid::TILE_GRID_WIDTH, 0, SOME_TILE)); // off-grid -> no-op
+        CHECK(api.getFloorXY(-1, -1) == EMPTY);
+        CHECK(api.paintedTiles() == 0);
+    }
+
+    SECTION("paintFloorXY targets the same tile as the index form") {
+        REQUIRE(api.paintFloorXY(5, 3, SOME_TILE));
+        CHECK(api.getFloorXY(5, 3) == SOME_TILE);
+        CHECK(api.getFloor(api.tileIndex(5, 3)) == SOME_TILE); // XY and index agree
+        CHECK(api.getRoofXY(5, 3) == EMPTY);                   // floor, not roof
+    }
+}
+
 TEST_CASE("MapScriptApi batches a run into one undo entry", "[scripting]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
@@ -152,6 +192,145 @@ TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "
     REQUIRE(fx.undoStack.canUndo());
     fx.undoStack.undo();
     CHECK(fx.mapFile().map_objects[ELEV].empty());
+}
+
+TEST_CASE("MapScriptApi newMap resets the bound map to empty", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    // Dirty the map: a tile and an object.
+    REQUIRE(api.paintFloor(42, SOME_TILE));
+    REQUIRE(api.placeObject(0x02000066u, 0x02000000u, 20100, 0));
+    REQUIRE(api.getFloor(42) == SOME_TILE);
+    REQUIRE_FALSE(fx.mapFile().map_objects[ELEV].empty());
+
+    api.newMap();
+
+    // Back to a fresh empty map on every elevation.
+    CHECK(api.getFloor(42) == EMPTY);
+    for (int e = 0; e < Map::ELEVATION_COUNT; ++e) {
+        CHECK(fx.mapFile().map_objects[e].empty());
+    }
+
+    // The api still works on the fresh map — a script can keep building.
+    REQUIRE(api.placeObject(0x02000066u, 0x02000000u, 20100, 0));
+    CHECK(fx.mapFile().map_objects[ELEV].size() == 1);
+}
+
+TEST_CASE("MapScriptApi::mutated reports non-undoable header/map changes", "[scripting]") {
+    // setPlayerStart / newMap change the map without pushing an undo command, so the host can't rely
+    // on undoStackChanged to flag the map dirty — mutated() must report them.
+    SECTION("a fresh api hasn't mutated the map") {
+        ControllerFixture fx;
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+        CHECK_FALSE(api.mutated());
+        (void)api.isValidHex(0); // a pure query is not a mutation
+        CHECK_FALSE(api.mutated());
+    }
+    SECTION("setPlayerStart counts as a mutation") {
+        ControllerFixture fx;
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+        api.setPlayerStart(api.hexIndex(50, 50), 0, 0);
+        CHECK(api.mutated());
+    }
+    SECTION("newMap counts as a mutation") {
+        ControllerFixture fx;
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+        api.newMap();
+        CHECK(api.mutated());
+    }
+    SECTION("placing an object counts as a mutation") {
+        ControllerFixture fx;
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+        REQUIRE(api.placeObject(0x02000066u, 0x02000000u, 20100, 0));
+        CHECK(api.mutated());
+    }
+}
+
+TEST_CASE("MapScriptApi setPlayerStart writes the map header", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    const int hex = api.hexIndex(99, 99);
+    api.setPlayerStart(hex, 2, 0);
+    const auto& header = fx.mapFile().header;
+    CHECK(header.player_default_position == static_cast<uint32_t>(hex));
+    CHECK(header.player_default_orientation == 2u);
+    CHECK(header.player_default_elevation == 0u);
+
+    // Out-of-range values raise rather than write a bogus header.
+    CHECK_THROWS(api.setPlayerStart(-1, 0, 0));                     // off-grid hex
+    CHECK_THROWS(api.setPlayerStart(hex, 6, 0));                    // orientation > 5
+    CHECK_THROWS(api.setPlayerStart(hex, 0, Map::ELEVATION_COUNT)); // elevation out of range
+}
+
+TEST_CASE("MapScriptApi placeExitGrid records a MISC exit-grid object", "[scripting]") {
+    ControllerFixture fx;
+    // data-only: exit-grid art isn't mounted, but the .map fields are what matters here.
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    constexpr int HEX = 20100;
+    // A worldmap exit (destMapId -2): the engine ignores destHex for it.
+    REQUIRE(api.placeExitGrid(HEX, -2, 0, 0, 0));
+    CHECK(api.placedObjects() == 1);
+
+    auto& objs = fx.mapFile().map_objects[ELEV];
+    REQUIRE(objs.size() == 1);
+    const auto& eg = *objs.front();
+    CHECK(eg.position == HEX);
+    CHECK(eg.isExitGridMarker()); // MISC type 0x05, proto index 16..23
+    CHECK(eg.pro_pid == ExitGrid::WORLD_EXIT_PRO_PID);
+    CHECK(eg.exit_map == ExitGrid::WORLD_MAP_EXIT); // -2 stored as 0xFFFFFFFE
+
+    // A map-to-map exit uses the map-exit proto and keeps every destination field.
+    REQUIRE(api.placeExitGrid(20200, 5, 12345, 1, 3));
+    const auto& eg2 = *objs.back();
+    CHECK(eg2.pro_pid == ExitGrid::MAP_EXIT_PRO_PID);
+    CHECK(eg2.exit_map == 5u);
+    CHECK(eg2.exit_position == 12345u);
+    CHECK(eg2.exit_elevation == 1u);
+    CHECK(eg2.exit_orientation == 3u);
+
+    // Invalid inputs raise (not a silently-dropped or bogus object).
+    CHECK_THROWS(api.placeExitGrid(-1, 0, 0, 0, 0));                     // off-grid placement hex
+    CHECK_THROWS(api.placeExitGrid(HEX, -3, 0, 0, 0));                   // bad destMapId
+    CHECK_THROWS(api.placeExitGrid(HEX, 0, -1, 0, 0));                   // destHex out of range
+    CHECK_THROWS(api.placeExitGrid(HEX, 0, 0, Map::ELEVATION_COUNT, 0)); // destElevation out of range
+    CHECK_THROWS(api.placeExitGrid(HEX, 0, 0, 0, 6));                    // orientation > 5
+    CHECK(api.placedObjects() == 2);                                     // the failed calls added nothing
+}
+
+TEST_CASE("MapScriptApi placeExitGridRect frames a rectangle of exit grids", "[scripting]") {
+    ControllerFixture fx;
+    // data-only: exit-grid art isn't mounted, but the placed markers' fields are what matters.
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    const int center = api.hexIndex(100, 100);
+    const int placed = api.placeExitGridRect(center, 600, 400, -2, 0, 0, 0);
+    CHECK(placed > 0);
+    CHECK(api.placedObjects() == placed);
+
+    auto& objs = fx.mapFile().map_objects[ELEV];
+    REQUIRE(objs.size() == static_cast<size_t>(placed));
+
+    std::set<uint32_t> protos;
+    std::set<int> hexes;
+    for (const auto& o : objs) {
+        CHECK(o->isExitGridMarker());                   // every marker is a MISC exit grid
+        CHECK(o->exit_map == ExitGrid::WORLD_MAP_EXIT); // sharing the requested destination
+        CHECK(hexes.insert(o->position).second);        // no hex placed twice (corners are shared)
+        protos.insert(o->pro_pid);
+    }
+    // All four directional edge arts are used.
+    CHECK(protos.count(ExitGrid::RECT_TOP_PRO_PID) == 1);
+    CHECK(protos.count(ExitGrid::RECT_BOTTOM_PRO_PID) == 1);
+    CHECK(protos.count(ExitGrid::RECT_LEFT_PRO_PID) == 1);
+    CHECK(protos.count(ExitGrid::RECT_RIGHT_PRO_PID) == 1);
+
+    // Invalid inputs raise.
+    CHECK_THROWS(api.placeExitGridRect(-1, 600, 400, -2, 0, 0, 0));                        // off-grid centre
+    CHECK_THROWS(api.placeExitGridRect(center, 0, 400, -2, 0, 0, 0));                      // non-positive extent
+    CHECK_THROWS(api.placeExitGridRect(center, 600, 400, -2, 0, Map::ELEVATION_COUNT, 0)); // bad destElevation
 }
 
 TEST_CASE("MapScriptApi::proto builds a PID from a readable type name and id", "[scripting]") {

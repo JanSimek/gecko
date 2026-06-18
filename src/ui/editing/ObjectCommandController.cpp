@@ -573,6 +573,19 @@ bool ObjectCommandController::registerInventoryEdit(const std::shared_ptr<MapObj
     return pushCommand(std::move(cmd));
 }
 
+void ObjectCommandController::newEmptyMap() {
+    if (!_map) {
+        return;
+    }
+    // Swap in a blank MapFile, then drop the cached object/overlay sprites and rebuild the view from
+    // the now-empty map. Intentionally not undoable (a fresh start, like File > New).
+    _map->setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
+    _objects.clear();
+    _wallBlockerOverlays.clear();
+    _refreshObjects();
+    _reloadTiles();
+}
+
 bool ObjectCommandController::clearElevationObjects(int elevation) {
     if (!_map) {
         return false;

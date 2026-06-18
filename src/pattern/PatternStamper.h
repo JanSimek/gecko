@@ -61,10 +61,15 @@ public:
     /// are dropped and counted. Pure.
     static Plan plan(const PatternVariant& variant, int targetHex);
 
+    /// `buildSprites` mirrors MapScriptApi: the GUI leaves it true so each placed object also gets an
+    /// SFML sprite (needs resolvable art + a GL context). Headless callers (gecko-cli / the MCP)
+    /// pass false — objects are recorded as map data only, so a stamp's objects land in the .map even
+    /// with no art or GL (the .map stores only the ids the engine resolves on load).
     PatternStamper(resource::GameResources& resources,
         const HexagonGrid& hexgrid,
         ObjectCommandController& controller,
-        Map& map);
+        Map& map,
+        bool buildSprites = true);
 
     /// Apply `variant` near `targetHex` on `elevation` as one undo entry. `targetHex` is
     /// snapped to the anchor's parity (see plan()), so placement is tile-granular.
@@ -72,11 +77,18 @@ public:
 
 private:
     std::shared_ptr<Object> buildObject(const std::shared_ptr<MapObject>& mapObject, uint32_t frmPid) const;
+    // Build the MapObject for a resolved placement (position/flags/ids verbatim) on `elevation`.
+    std::shared_ptr<MapObject> makeMapObject(const ObjectPlacement& placement, int elevation) const;
+    // Register one stamped object: as map data (buildSprites=false) or with a built sprite (true).
+    bool registerStampObject(const std::shared_ptr<MapObject>& mapObject, uint32_t frmPid);
+    // Apply the plan's tiles as one labelled tile edit; returns how many were painted.
+    int applyTiles(const std::vector<TilePlacement>& tiles, int elevation, const std::string& description);
 
     resource::GameResources& _resources;
     const HexagonGrid& _hexgrid;
     ObjectCommandController& _controller;
     Map& _map;
+    bool _buildSprites;
 };
 
 } // namespace geck::pattern

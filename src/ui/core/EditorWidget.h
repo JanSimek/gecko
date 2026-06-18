@@ -64,7 +64,9 @@ public:
 
     void createNewMap();
     void openMap();
-    void saveMap();
+    /// Save the current map (always prompts for a destination). Returns true on a successful write,
+    /// false if the user cancelled the dialog or the write failed.
+    bool saveMap();
 
 #ifdef GECK_SCRIPTING_ENABLED
     // Runs a Luau generation script against the current map at the current elevation. The whole run
@@ -250,6 +252,9 @@ signals:
     void statusMessageRequested(const QString& message);
     void statusMessageClearRequested();
     void undoStackChanged();
+    /// A Console script changed the map through a path that records no undo command (e.g.
+    /// setPlayerStart/newMap), so the host must flag the map modified explicitly.
+    void mapModifiedByScript();
     void editorModeChanged(EditorMode mode);
 
 public slots:

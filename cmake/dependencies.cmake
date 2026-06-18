@@ -195,3 +195,19 @@ if(GECK_ENABLE_SCRIPTING)
     )
     FetchContent_MakeAvailable(LuaBridge3)
 endif()
+
+# Header-only JSON: the MCP server's JSON-RPC and gecko_cli's pattern-stamp loader (parse a stamp
+# JSON back into a Pattern for placeStamp). Fetched whenever the CLI lib is built. System pkg first.
+if(GECK_BUILD_CLI)
+    find_package(nlohmann_json 3 QUIET)
+    if(NOT nlohmann_json_FOUND)
+        set(JSON_BuildTests OFF CACHE INTERNAL "")
+        FetchContent_Declare(
+            nlohmann_json
+            GIT_REPOSITORY https://github.com/nlohmann/json.git
+            GIT_TAG v3.11.3
+            GIT_SHALLOW TRUE
+        )
+        FetchContent_MakeAvailable(nlohmann_json)
+    endif()
+endif()

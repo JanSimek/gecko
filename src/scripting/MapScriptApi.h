@@ -5,12 +5,16 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+#include "pattern/Pattern.h"
 
 namespace geck {
 
 class HexagonGrid;
 class Map;
+struct MapObject;
 class ObjectCommandController;
 namespace resource {
     class GameResources;
@@ -92,11 +96,29 @@ public:
     /// which is what the MCP needs to curate a palette rather than scatter blindly.
     std::string protoName(int pid) const;
     /// Build a proto PID from a readable type name ("item"/"critter"/"scenery"/"wall"/"tile"/"misc",
-    /// singular or plural) and the proto's id `number` — the value `map analyze` reports and the
-    /// low part of the PID (e.g. proto("scenery", 102) == 0x02000066). A pure constructor (no data
-    /// needed), so a script can name its protos — `SCRUB = 102 ... api:proto("scenery", SCRUB)` —
-    /// instead of writing opaque hex. Raises on an unknown type or an out-of-range number.
+    /// singular or plural) and the proto's id `number` — the `number` field `map analyze --json`
+    /// reports, i.e. the PID's low 24 bits (e.g. proto("scenery", 102) == 0x02000066; note it is one
+    /// less than the NNN in the 00000NNN.pro filename). A pure constructor (no data needed), so a
+    /// script can name its protos — `SCRUB = 102 ... api:proto("scenery", SCRUB)` — instead of
+    /// writing opaque hex. Raises on an unknown type or an out-of-range number.
     uint32_t proto(const std::string& typeName, int number) const;
+
+    // --- Coordinates -------------------------------------------------------------
+    // Two grids, both numbered row-major as `position = row * width + col` (the engine's storage
+    // layout): hexes are 200x200 (objects/placement), floor & roof tiles are 100x100. These
+    // convert (col, row) <-> the linear index the other calls take, so scripts read in 2D. An
+    // off-grid (col, row) yields -1 (and the *XY ops below then no-op), so bounds are easy to skip.
+    /// (col, row) -> hex position [0, 40000); -1 if off the 200x200 hex grid.
+    int hexIndex(int col, int row) const;
+    /// (col, row) -> tile index [0, 10000); -1 if off the 100x100 tile grid.
+    int tileIndex(int col, int row) const;
+    int hexCol(int hex) const;   ///< column of a hex position, or -1 if off-grid
+    int hexRow(int hex) const;   ///< row of a hex position, or -1 if off-grid
+    int tileCol(int tile) const; ///< column of a tile index, or -1 if off-grid
+    int tileRow(int tile) const; ///< row of a tile index, or -1 if off-grid
+    /// Floor/roof tile id at (col, row), or EMPTY_TILE if off-grid — the (col, row) form of getFloor.
+    uint16_t getFloorXY(int col, int row) const;
+    uint16_t getRoofXY(int col, int row) const;
 
     // --- Undo batching -----------------------------------------------------------
     void beginBatch(const std::string& description);
@@ -113,10 +135,74 @@ public:
     bool paintFloor(int tileIndex, uint16_t tileId);
     bool paintRoof(int tileIndex, uint16_t tileId);
 
+    // (col, row) forms of the placers/painters: place on the hex grid, paint on the tile grid.
+    // An off-grid (col, row) is a no-op returning false (same contract as an out-of-range index).
+    bool placeObjectXY(uint32_t proPid, uint32_t frmPid, int col, int row, uint32_t direction);
+    bool placeProtoXY(uint32_t proPid, int col, int row, uint32_t direction);
+    bool paintFloorXY(int col, int row, uint16_t tileId);
+    bool paintRoofXY(int col, int row, uint16_t tileId);
+
+    // --- Stamps (prefabs captured by extract_pattern) ----------------------------
+    /// Register a pre-loaded stamp under `name` so the script can place it. The host (gecko-cli /
+    /// the MCP) loads the stamp JSON and calls this before running the script.
+    void addStamp(const std::string& name, pattern::Pattern pattern);
+    /// Place a registered stamp's variant so its anchor lands near `anchorHex` (tile-granular, like
+    /// the editor). Returns the number of objects placed. Raises if `name` is unregistered or
+    /// `variant` is out of range — placement of an off-grid entry is simply dropped, not an error.
+    int placeStamp(const std::string& name, int anchorHex, int variant = 0);
+
+    // --- Map setup (spawn / exits) -----------------------------------------------
+    /// Replace the bound map with a fresh, empty Fallout 2 map — no objects, empty floor/roof on all
+    /// three elevations, default header. Lets a generation script start from a blank slate (in the
+    /// editor's Script Console this clears whatever map is open). It is a destructive reset, NOT part
+    /// of the undo batch, so call it first, before any placement.
+    void newMap();
+    /// Set the player's spawn in the map header — where they appear when the map loads: hex 0..39999,
+    /// orientation 0..5 (engine hex facings), elevation 0..2. Raises on an out-of-range value. This is
+    /// header state (like the editor's Map Info panel), so it is not part of the undo batch.
+    void setPlayerStart(int hex, int orientation, int elevation);
+    /// Place a map-exit grid at `hex`: stepping onto it sends the player to `destMapId` at `destHex`
+    /// (`destElevation`, facing `orientation`). `destMapId` -2 = the worldmap, -1 = the town map,
+    /// otherwise a map id; a worldmap/townmap exit ignores destHex. Returns false only when the
+    /// exit-grid art can't be loaded (GUI); raises on an off-grid `hex` or an out-of-range destination
+    /// field. Counts toward placedObjects().
+    bool placeExitGrid(int hex, int destMapId, int destHex, int destElevation, int orientation);
+    /// Place a border of exit grids forming a rectangle on screen, centred on `centerHex` and
+    /// `screenHalfWidth`/`screenHalfHeight` pixels to each side (the engine's iso projection, so the
+    /// hex border staircases). Each of the four edges uses its matching directional exit-grid art, as
+    /// shipped maps like bhrnddst.map do; every marker shares the destination (`destMapId`/`destHex`/
+    /// `destElevation`/`orientation`, same meaning as placeExitGrid). Returns the number of markers
+    /// placed. Raises on an off-grid `centerHex`, a non-positive half-extent, or a bad destination.
+    int placeExitGridRect(int centerHex, int screenHalfWidth, int screenHalfHeight,
+        int destMapId, int destHex, int destElevation, int orientation);
+
     int placedObjects() const { return _placedObjects; }
     int paintedTiles() const { return _paintedTiles; }
+    /// Whether this api changed the map at all (placed/painted anything, or made a non-undoable
+    /// header/map mutation like setPlayerStart/newMap). The host uses it to mark the map modified and
+    /// resync the editor after a run, since those non-undoable mutations push no undo command.
+    bool mutated() const { return _placedObjects > 0 || _paintedTiles > 0 || _mutatedDirectly; }
 
 private:
+    // Where an exit grid sends the player (engine fields exit_map/exit_position/exit_elevation/
+    // exit_orientation). Bundled so the exit-grid builders don't take a long parameter list.
+    struct ExitDest {
+        uint32_t map;
+        int hex;
+        int elevation;
+        int orientation;
+    };
+    // Record a freshly-built `mapObject`: data-only when headless (registerObjectData), else build its
+    // sprite from `frmPid` and register the placement so it draws. Returns false when the GUI can't
+    // resolve the art; bumps the placed-objects count on success. Shared by placeObject/placeExitGrid.
+    bool registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction);
+    // Build + register one exit-grid MISC marker at `hex` with the given art and destination. Assumes
+    // `hex` is on-grid (callers validate). Returns registerObject's result.
+    bool placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid, const ExitDest& dest);
+    // A gap-free run of hexes from startHex to endHex: greedily steps to the neighbour whose screen
+    // position is nearest the end, so consecutive hexes are always screen-adjacent (the iso
+    // staircase a straight screen-line walk would skip). Empty if either endpoint is off-grid.
+    std::vector<int> hexLine(int startHex, int endHex) const;
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
     // Parse a reference map headlessly (GL-free) for the palette queries; nullptr if unreadable.
     std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;
@@ -134,6 +220,10 @@ private:
     bool _buildSprites;
     int _placedObjects = 0;
     int _paintedTiles = 0;
+    // Set by mutators that change the map without pushing an undo command (setPlayerStart, newMap),
+    // so mutated() reports them even though the placed/painted counters stay at 0.
+    bool _mutatedDirectly = false;
+    std::unordered_map<std::string, pattern::Pattern> _stamps;
 };
 
 } // namespace geck

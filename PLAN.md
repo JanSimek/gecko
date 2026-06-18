@@ -71,6 +71,33 @@ wiring that one button gives engine-equivalent per-hex marking. Optionally add l
 placement for fast diagonal runs. There is no perimeter/interior distinction to preserve: every
 exit-grid hex is a full, independent exit-grid object.
 
+### Generation-side exit placement — current state & smarter follow-up
+
+**Now:** the generation API exposes `api:placeExitGrid(hex, …)` (one marker) and
+`api:placeExitGridRect(centerHex, screenHalfWidth, screenHalfHeight, …)`, which walks a
+**screen-space rectangle** border (the engine iso projection, so the hex run staircases) and
+places the matching directional edge art on each of the four sides — reproducing the framed
+rectangle shipped maps like **bhrnddst.map** use (`ExitGrid::RECT_*` in `Constants.h`). Every
+marker shares one destination. `random_camp.luau` uses it to frame the playable area with a
+worldmap exit. This is a fixed, centred rectangle — placement is **geometric, not terrain-aware**.
+
+**Smarter placement (follow-up).** Exits should sit where the map actually *leads out*, not on a
+blind rectangle:
+- **At the ends of roads/paths** — once the generator lays roads (or a path graph), drop an exit
+  cluster where a road runs off the playable area, oriented along the road, so the transition
+  reads naturally. Needs the generator to retain road endpoints + headings (it currently keeps no
+  such structure).
+- **Along the real map edge** — trace the iso playable boundary (the diamond, not an axis-aligned
+  box) and place exits on the edge segments the design wants open, leaving the rest walled. Reuse
+  the screen→hex edge walk from `placeExitGridRect`, but follow the diamond boundary and accept a
+  per-edge open/closed mask.
+- **Reachability-gated** — only place an exit on a hex reachable from the player start (flood-fill,
+  cf. the "Pathing, blocking & reachability" analysis item), so generators can't strand an exit
+  behind a wall.
+
+The primitive (`placeExitGridRect`) and the directional-art mapping are the reusable foundation;
+the follow-up is feeding them terrain-derived locations instead of a centred rectangle.
+
 ---
 
 ## SSL Script Editing Integration
@@ -422,9 +449,66 @@ The scripting core and a first procedural generator are in. Concretely:
     `-1` for an unknown name, `listMaps` → `{}`).
 - **Script Console** dock (`View → Script Console`), wired to the current map/elevation.
 - **`gecko-cli`** (Qt-free): `map analyze` (per-map + aggregate ground-tile and object usage,
-  with raw engine PIDs and proto names from the `.msg` files) and `map generate --script
+  with raw engine PIDs and proto names from the `.msg` files; `--json` for a machine-readable
+  report carrying a `flat` structural-vs-decoration flag per object) and `map generate --script
   <file> --out <map> [--arg key=value …]` (runs a Luau script against an empty map and writes
   a `.map`; `--arg`s are exposed to the script as the global `args` table).
+- **`gecko-mcp`** (Qt-free, `GECK_BUILD_MCP`, default on): a Model Context Protocol server over
+  stdio (newline-delimited JSON-RPC 2.0) that reuses the `gecko-cli` logic, so an AI agent can drive
+  the inspect→curate→generate loop conversationally. Tools: `list_maps`, `analyze` (the `--json`
+  report), `proto_info` (PID → type/name/`flat`), `generate`, and `render_map`. The dispatch
+  (`McpServer`) is pure and unit-tested without any transport. This is §11's "MCP as the intelligence
+  layer" landing.
+- **Headless map render** (`gecko-cli map render`, MCP `render_map`). `MapRenderer` (Qt-free, in
+  `gecko_editing`) draws a map through the *same* `RenderingEngine` the editor uses — into an
+  off-screen `sf::RenderTexture`, framed to the content bounds — and saves a PNG, so an agent can
+  *see* a generated biome, not just read its stats. `RenderingEngine`/`HexRenderer` moved out of
+  `gecko_app` into `gecko_editing` for this (they were always Qt-free). Needs an off-screen GL
+  context at runtime; reports an error instead of crashing when none is available.
+  - **Objects style** (`--objects` / `objects:true`) mutes the floor to grey so the category-coloured
+    object markers pop — for verifying scatter/clumping without the schematic's per-id floor rainbow.
+  - **Schematic style** (`--schematic` / `schematic:true`) flat-colours each floor tile by its id
+    and marks objects by category, returning a colour legend (id/type → colour → count). This
+    *grounds* the analyze JSON to the image — the colours are the ids, colour regions are tiles,
+    and borders between colours are the `adjacency` transitions — so a multimodal agent can match
+    what it sees to the data instead of guessing which pixels are which tile.
+- **Tile-adjacency analysis.** `analyze --json` now carries `adjacency` per map and aggregated: the
+  floor-tile *borders* (which tile sits next to which different tile, and how often). Since the
+  Fallout engine has no autotiling — mappers place edge tiles by hand — this is the empirical data
+  an agent curates a transition set from before generating **seamless** terrain (the §11 P2 item).
+- **Palette tool** (`analyze --palette` / MCP `palette`) + `number` in `analyze`. `palette` returns just
+  the weighted generation input — `{ floor:[{id,name,weight}], scenery:[{pid,number,name,weight}] }`
+  aggregated across the given maps — so an agent gets the exact script input in one small call instead
+  of `jq`-ing the ~500 KB `analyze` report. `analyze` objects also now carry `number` (the PID's low 24
+  bits, what `api:proto` wants — one less than the `00000NNN.pro` filename), fixing an off-by-one trap
+  when generating scripts mechanically. (From an agent's MCP-usage retrospective.)
+- **Scripting-API reference** (MCP `script_api`). Returns the generation-script `api:` surface as
+  Markdown — every function + signature, plus the two non-obvious behaviours (runs are auto-seeded and
+  auto-batched) and the error model — generated from an in-code table (`scriptApiEntries`) so it can't
+  drift from a hand-written doc. A `[scripting]` test asserts every documented function is actually
+  bound. (Best practice: the scripting surface is reference *material*, so it's emitted from the
+  single source rather than maintained separately; the MCP *tool* surface is already self-documented
+  by `tools/list`.) Also an **objects** render style and the path-contract docs, from the same agent
+  retrospective.
+- **Object clustering** in `analyze --json`. Each map carries a `clusters[]` array: nearby objects
+  grouped by proximity (single-linkage, Chebyshev ≤ 3 hexes), each with a centroid `centerHex`, a
+  bounding box and member PIDs. So an agent reading desert5 sees the perimeter blockers as one
+  cluster to ignore and each tent as a `Wall`+furniture cluster to grab — it picks a tent's
+  `centerHex` + a radius (from the bbox) and feeds them to `extract_pattern`.
+- **Pattern-stamp extraction** (`gecko-cli`/MCP `extract_pattern`). Capture a structure from a real
+  map into the editor's prefab/stamp JSON: locate it by its proto PIDs (option A — the agent reads
+  them from `analyze`), grow their bounding box by a `radius` so immediate props come along, and
+  capture the objects (and, with `includeFloor`, the floor/roof) verbatim. The Qt-free pattern core
+  (`Pattern`, `PatternBuilder`, `PatternStamper`) moved into `gecko_editing`; the headless JSON
+  writer (`cli::serializePattern`) matches the editor's Qt `PatternSerializer` exactly — proven by a
+  round-trip test — so extracted stamps load in the editor's pattern library and feed `generate`.
+  This is how an agent builds a library of tents/buildings from the reference maps.
+- **Stamp placement in generation** (`api:placeStamp(name, anchorHex, variant)`). `generate` takes
+  `--stamp name=file.json` (MCP: a `stamps` map), loads each via a Qt-free `cli::loadPattern`
+  (nlohmann, round-trip with the writer) and registers it on the `MapScriptApi`; the script places it
+  through the now-shared `PatternStamper`. Verified end to end: a tent extracted from desert5 placed
+  into a fresh map renders as the intact tent. So the desert-map loop is closed — an agent can
+  `analyze` → cluster → `extract_pattern` the tents and `generate` a new desert map that places them.
 - **Reference-map analysis tools.** `MapScriptApi` exposes `mapScenery(mapPath)` (the unique
   scenery PIDs a reference map uses — blockers filtered out via `OBJECT_FLAT`),
   `mapSceneryHistogram(mapPath)` (`{pid → count}`), `mapFloorTiles(mapPath)` (floor-tile ids,

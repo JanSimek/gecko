@@ -10,6 +10,7 @@
 #include "reader/map/MapReader.h"
 #include "scripting/LuaScriptRuntime.h"
 #include "scripting/MapScriptApi.h"
+#include "scripting/ScriptApiReference.h"
 #include "writer/map/MapWriter.h"
 
 #include "support/ControllerFixture.h"
@@ -150,7 +151,7 @@ TEST_CASE("Luau surfaces genuine failures as errors, not-applicable as values", 
     // to handle it and the run otherwise reports it — instead of a silently-empty result. Things
     // that are merely "not applicable" stay ordinary return values: placeProto -> false (skip the
     // hex), listMaps -> {} (no maps is a valid answer), noise2d is pure.
-    const auto r = rt.run(R"(
+    const auto r = rt.run(R"lua(
         assert(not pcall(function() return api:tileId("edg5000") end), "tileId should raise without data")
         assert(not pcall(function() return api:mapScenery("maps/desert1.map") end), "mapScenery should raise")
         assert(not pcall(function() return api:mapSceneryHistogram("maps/desert1.map") end), "histogram should raise")
@@ -162,7 +163,12 @@ TEST_CASE("Luau surfaces genuine failures as errors, not-applicable as values", 
         assert(n >= 0 and n <= 1, "noise2d in [0,1]")
         assert(api:proto("scenery", 102) == 0x02000066, "proto builds the right PID")
         assert(not pcall(function() return api:proto("nope", 1) end), "proto raises on unknown type")
-    )",
+        assert(api:hexIndex(5, 3) == 3 * 200 + 5, "hexIndex converts (col,row)")
+        assert(api:tileIndex(5, 3) == 3 * 100 + 5, "tileIndex converts (col,row)")
+        assert(api:paintFloorXY(5, 3, 271), "paintFloorXY paints a tile")
+        assert(api:getFloorXY(5, 3) == 271, "getFloorXY reads it back")
+        assert(api:tileCol(api:tileIndex(5, 3)) == 5, "tile (col,row) round-trips")
+    )lua",
         api, fx.controller, "resolvers");
     INFO("script error: " << r.error);
     CHECK(r.ok);
@@ -252,6 +258,25 @@ TEST_CASE("The shipped terrain.luau fails clearly when data is missing", "[scrip
     CHECK(api.placedObjects() == 0);
 }
 
+TEST_CASE("The shipped scatter.luau requires a palette and tile", "[scripting][lua]") {
+    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/editor/scatter.luau");
+    REQUIRE(file.is_open());
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    const std::string source = buffer.str();
+
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // No --arg tile: the generic generator fails fast with a clear message (it compiles and its
+    // required-arg guard fires) rather than producing an empty map.
+    const auto r = rt.run(source, api, fx.controller, "scatter");
+    CHECK_FALSE(r.ok);
+    CHECK(r.error.find("tile") != std::string::npos);
+    CHECK(api.paintedTiles() == 0);
+}
+
 TEST_CASE("Luau places objects headlessly (data only) and they survive save/reload", "[scripting][lua][roundtrip]") {
     ControllerFixture fx;
     // Headless data-only mode: no GL, so placeObject records map data without a sprite.
@@ -304,4 +329,28 @@ TEST_CASE("Luau print() output is captured for the console", "[scripting][lua]")
     INFO("script error: " << r.error);
     REQUIRE(r.ok);
     CHECK(r.output == "hello\t42\ndone\n");
+}
+
+// Every function in the script_api reference (scriptApiEntries) must actually be bound on `api`, so
+// the agent-facing reference can't claim a function the runtime doesn't provide. (LuaBridge hides the
+// metatable under the Luau sandbox, so we can't enumerate the reverse direction in Lua; the
+// kScriptApiEntries comment keeps additions documented, and this catches a stale/renamed entry.)
+TEST_CASE("every documented script_api function is bound", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    std::ostringstream script;
+    script << "local missing = {}\n";
+    for (const ScriptApiEntry& entry : scriptApiEntries()) {
+        script << "if type(api." << entry.name << ") ~= 'function' then missing[#missing + 1] = '"
+               << entry.name << "' end\n";
+    }
+    script << "print(table.concat(missing, ','))\n";
+
+    const auto r = rt.run(script.str(), api, fx.controller, "check-api");
+    INFO("script error: " << r.error);
+    REQUIRE(r.ok);
+    INFO("documented but not bound: " << r.output);
+    CHECK(r.output == "\n"); // print() of an empty join is just a newline — nothing missing
 }

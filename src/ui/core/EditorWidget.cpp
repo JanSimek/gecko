@@ -2,7 +2,14 @@
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/input/InputHandler.h"
 #ifdef GECK_SCRIPTING_ENABLED
+#include "Application.h"
 #include "scripting/MapScriptApi.h"
+#include "pattern/PatternLibrary.h"
+#include "pattern/PatternSerializer.h"
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+#include <QStringList>
 #endif
 #include "ui/rendering/MapSpriteLoader.h"
 #include "ui/rendering/ObjectVisibility.h"
@@ -426,25 +433,83 @@ void EditorWidget::init() {
 }
 
 #ifdef GECK_SCRIPTING_ENABLED
+namespace {
+    // Load every *.json stamp under `dir` into `api`, keyed by each pattern's name. Appends one
+    // diagnostic line per file we couldn't open or that the deserializer rejected, so a bad stamp is
+    // visible in the Console output instead of being silently swallowed. A missing dir is no-op.
+    void loadStampsFromDir(const QString& dir, MapScriptApi& api, QStringList& notes) {
+        QDirIterator it(dir, QStringList{ "*.json" }, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            const QString path = it.next();
+            QFile file(path);
+            const QString shown = QFileInfo(path).fileName();
+            if (!file.open(QIODevice::ReadOnly)) {
+                notes << QStringLiteral("stamp library: could not open %1").arg(shown);
+                continue;
+            }
+            QString error;
+            if (const auto loaded = pattern::PatternSerializer::deserialize(file.readAll(), &error)) {
+                const std::string name = loaded->name.empty() ? QFileInfo(file).baseName().toStdString() : loaded->name;
+                api.addStamp(name, *loaded);
+            } else {
+                notes << QStringLiteral("stamp library: skipped %1 — %2").arg(shown, error);
+            }
+        }
+    }
+
+    // Register stamps a Console script can place by name — api:placeStamp("tent", ...). The CLI/MCP load
+    // stamps via --stamp/the stamps arg; the Console pulls from two sources, so worked examples like
+    // random_camp.luau find their tent out of the box and a user's own captures are still honoured:
+    //   1. bundled examples shipped with the editor (resources/scripts/stamps/*.json);
+    //   2. the user's pattern library (where "save pattern" and a captured extract land).
+    // The library is scanned last so a user's saved pattern overrides a bundled example of the same name.
+    std::string registerLibraryStamps(MapScriptApi& api) {
+        QStringList notes;
+        const QString bundled = QString::fromStdString((Application::getResourcesPath() / "scripts" / "stamps").string());
+        loadStampsFromDir(bundled, api, notes);
+        loadStampsFromDir(pattern::PatternLibrary::rootDir(), api, notes);
+        return notes.join(QLatin1Char('\n')).toStdString();
+    }
+} // namespace
+
 ScriptResult EditorWidget::runScript(const std::string& source) {
     if (!_map) {
         return { false, "No map loaded", "" };
     }
     MapScriptApi api(_resources, _hexgrid, *_objectCommandController, *_map, _currentElevation);
+    // so api:placeStamp(name, ...) finds the user's saved patterns; any unloadable file is reported.
+    const std::string stampNotes = registerLibraryStamps(api);
     LuaScriptRuntime runtime;
     // The continuous SFML render loop shows the script's edits on the next frame.
-    return runtime.run(source, api, *_objectCommandController, "Run script");
+    ScriptResult result = runtime.run(source, api, *_objectCommandController, "Run script");
+    if (!stampNotes.empty()) {
+        result.output = result.output.empty() ? stampNotes : stampNotes + "\n" + result.output;
+    }
+    if (api.mutated()) {
+        // A script can reset the map (newMap) or change the header (setPlayerStart) without pushing
+        // an undo command, leaving the selection and Map Info panel referencing the pre-run state and
+        // the map unflagged. Drop the selection, refresh the header UI, and flag the map modified.
+        if (_selectionManager) {
+            _selectionManager->clearSelection();
+        }
+        _selectedHexPositions.clear();
+        if (_mainWindow) {
+            _mainWindow->updateMapInfo(_map.get());
+        }
+        Q_EMIT mapModifiedByScript();
+    }
+    return result;
 }
 #endif
 
-void EditorWidget::saveMap() {
+bool EditorWidget::saveMap() {
     // Default the save dialog to the current map's file name.
     const QString suggestedName = _map ? QString::fromStdString(_map->filename()) : QString();
     QString destinationQString = QtDialogs::saveFile(this, "Save Map",
         "Map Files (*.map);;All Files (*.*)", suggestedName);
 
     if (destinationQString.isEmpty()) {
-        return;
+        return false; // user cancelled the dialog
     }
 
     std::string destination = destinationQString.toStdString();
@@ -457,11 +522,13 @@ void EditorWidget::saveMap() {
         map_writer.openFile(destination);
         if (map_writer.write(_map->getMapFile())) {
             spdlog::info("Saved map {} ({} bytes)", destination, map_writer.getBytesWritten());
-        } else {
-            spdlog::error("Failed to save map {}", destination);
-            QtDialogs::showError(this, "Save Failed",
-                QString("Failed to save map to:\n%1").arg(destinationQString));
+            // Repoint the map at the saved file so the window title reflects the chosen name.
+            _map->setPath(std::filesystem::path(destination));
+            return true;
         }
+        spdlog::error("Failed to save map {}", destination);
+        QtDialogs::showError(this, "Save Failed",
+            QString("Failed to save map to:\n%1").arg(destinationQString));
     } catch (const geck::FileWriterException& e) {
         spdlog::error("Failed to save map {}: {}", destination, e.what());
         QtDialogs::showError(this, "Save Failed",
@@ -469,6 +536,7 @@ void EditorWidget::saveMap() {
     } catch (const std::exception& e) {
         spdlog::error("Unexpected error saving map {}: {}", destination, e.what());
     }
+    return false;
 }
 
 void EditorWidget::openMap() {

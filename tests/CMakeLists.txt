@@ -40,6 +40,7 @@ add_executable(general_tests
     general/test_resource_repository.cpp
     general/test_object_visibility.cpp
     general/test_dat_concurrency.cpp
+    general/test_map_renderer.cpp
 )
 
 # Tier-2 scripting integration tests: only built when the Luau runtime is compiled in.
@@ -53,6 +54,20 @@ if(GECK_ENABLE_SCRIPTING)
     endif()
 endif()
 
+# Pattern stamp (de)serialization round-trip — needs gecko_cli (cli::serializePattern/loadPattern),
+# no scripting or game data.
+if(TARGET gecko_cli)
+    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp)
+    target_link_libraries(general_tests PRIVATE gecko_cli)
+endif()
+
+# MCP server dispatch test: only when the MCP server is built (gecko_mcp brings gecko_cli +
+# nlohmann/json). The dispatch is pure, so this needs no scripting and no game data.
+if(TARGET gecko_mcp)
+    target_sources(general_tests PRIVATE general/test_mcp_server.cpp)
+    target_link_libraries(general_tests PRIVATE gecko_mcp)
+endif()
+
 # Performance tests (Catch2 with benchmarking) - Reader performance tests
 add_executable(performance_tests
     performance/test_reader_performance.cpp
@@ -64,6 +79,13 @@ add_executable(qt_tests
     qt/test_ui_regressions.cpp
     qt/test_dat_archive.cpp
 )
+
+# Round-trip the headless pattern writer (gecko_cli) through the editor's Qt PatternSerializer.
+# Only when the CLI lib is built (it owns cli::serializePattern).
+if(TARGET gecko_cli)
+    target_sources(qt_tests PRIVATE qt/test_pattern_extract_roundtrip.cpp)
+    target_link_libraries(qt_tests PRIVATE gecko_cli)
+endif()
 
 # Shared, header-only test support (fixtures, temp files, builders, stub provider).
 # Included as "support/<Header>.h"; fixtures resolve via GECK_TEST_DATA_DIR.

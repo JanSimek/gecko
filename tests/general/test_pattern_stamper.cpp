@@ -5,6 +5,7 @@
 
 #include "editor/HexGeometry.h"
 #include "format/map/Map.h"
+#include "format/map/MapObject.h"
 #include "format/map/Tile.h"
 #include "pattern/Pattern.h"
 #include "pattern/PatternStamper.h"
@@ -133,4 +134,29 @@ TEST_CASE("PatternStamper::stamp applies a variant as one undo entry", "[pattern
     REQUIRE(fx.undoStack.redo());
     CHECK(fx.mapFile().tiles[0][floorTile].getFloor() == 271);
     CHECK(fx.mapFile().tiles[0][roofTile].getRoof() == 200);
+}
+
+// Headless (buildSprites=false) is the MCP/gecko-cli generate path: a stamp's objects must be
+// recorded as map data even when their art can't be resolved (no GL, or critter.dat absent). With
+// the default buildSprites=true and no art the same objects are skipped (the case above), so this
+// guards the regression the review flagged: generate --stamp silently dropping objects.
+TEST_CASE("PatternStamper records objects as data when buildSprites is false", "[pattern][stamper]") {
+    ControllerFixture fx;
+    fx.mapFile().tiles[0] = std::vector<Tile>(
+        Map::TILES_PER_ELEVATION, Tile(static_cast<uint16_t>(Map::EMPTY_TILE), static_cast<uint16_t>(Map::EMPTY_TILE)));
+
+    PatternStamper stamper(fx.resources, fx.hexgrid, fx.controller, *fx.map, /*buildSprites*/ false);
+    const PatternVariant v = sampleVariant(); // PIDs whose art the fixture can't load
+
+    const auto result = stamper.stamp(v, TARGET, 0);
+    REQUIRE(result.success);
+    CHECK(result.objectsPlaced == 3); // recorded as data despite no resolvable art
+    CHECK(result.objectsFailed == 0);
+
+    // The objects are in the map with their PID/direction/flags verbatim.
+    const auto& objects = fx.mapFile().map_objects.at(0);
+    REQUIRE(objects.size() == 3);
+    CHECK(objects[0]->pro_pid == 33555201u);
+    CHECK(objects[1]->flags == 0x10u);
+    CHECK(objects[1]->direction == 2u);
 }

@@ -50,6 +50,7 @@
 #include <QDockWidget>
 #include <QLabel>
 #include <QCloseEvent>
+#include <QMessageBox>
 #include <QKeyEvent>
 #include <QAction>
 #include <QActionGroup>
@@ -147,6 +148,10 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
 
     connectToEditorWidget();
     connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, &MainWindow::updateUndoRedoActions);
+    // Any edit (or undo/redo) marks the map dirty for the close/title prompts.
+    connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, [this]() { setMapModified(true); });
+    // Non-undoable Console-script mutations (newMap/setPlayerStart) flag the map dirty too.
+    connect(_currentEditorWidget, &EditorWidget::mapModifiedByScript, this, [this]() { setMapModified(true); });
 
     syncMenuStateToEditorWidget();
 
@@ -157,6 +162,10 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
         snapshotPanelVisibility();
         hidePanelsForNoMap();
     }
+
+    // A freshly loaded/created map starts clean; show its name in the title bar.
+    _mapModified = false;
+    updateWindowTitle();
 
     QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
     updateUndoRedoActions();
@@ -182,6 +191,9 @@ void MainWindow::setupUI() {
 void MainWindow::connectMenuSignals() {
     // MainWindow menu signals - these work regardless of EditorWidget state
     connect(this, &MainWindow::newMapRequested, [this]() {
+        if (!maybeSaveChanges()) {
+            return; // user cancelled — keep the current map
+        }
         // Building the editor loads essential art (the hex-grid overlay, etc.); if Fallout 2 data
         // isn't configured those files are missing and the load throws. Surface that as a "Missing
         // Game Files" dialog — the same way a failed map load does — instead of letting the
@@ -195,6 +207,9 @@ void MainWindow::connectMenuSignals() {
                 setEditorWidget(std::move(editorWidget));
                 _currentEditorWidget->createNewMap();
             }
+            // The new map is clean; refresh the title to its name.
+            _mapModified = false;
+            updateWindowTitle();
         } catch (const std::exception& e) {
             spdlog::error("Failed to create a new map: {}", e.what());
             QtDialogs::showError(this, "Missing Game Files",
@@ -215,8 +230,9 @@ void MainWindow::connectMenuSignals() {
         }
     });
     connect(this, &MainWindow::saveMapRequested, [this]() {
-        if (_currentEditorWidget) {
-            _currentEditorWidget->saveMap();
+        if (_currentEditorWidget && _currentEditorWidget->saveMap()) {
+            _mapModified = false;
+            updateWindowTitle(); // clears the "[*]" and reflects any Save As rename
         }
     });
     connect(this, &MainWindow::selectAllRequested, [this]() {
@@ -970,6 +986,13 @@ void MainWindow::rebuildResourcePanels() {
 }
 
 void MainWindow::rebuildGameResourcesFromSettings() {
+    // Rebuilding resources closes the current map, so honour the same unsaved-changes prompt the
+    // New/Open/Quit paths use. Cancelling keeps the map (the data-path change just won't take effect
+    // until the next rebuild).
+    if (hasActiveMap() && !maybeSaveChanges()) {
+        return;
+    }
+
     const auto dataPaths = _settings->getDataPaths();
 
     if (hasActiveMap()) {
@@ -1057,7 +1080,53 @@ void MainWindow::updateAndRender() {
     }
 }
 
+void MainWindow::updateWindowTitle() {
+    const QString base = QStringLiteral("Gecko - Fallout 2 Map Editor");
+    const Map* map = _currentEditorWidget ? _currentEditorWidget->getMap() : nullptr;
+    if (map && !map->filename().empty()) {
+        // Use a literal "*" so the modified marker is visible on every platform (Qt's "[*]" +
+        // setWindowModified shows nothing in the title text on macOS — only a close-button dot).
+        const QString modifiedMark = _mapModified ? QStringLiteral("*") : QString();
+        setWindowTitle(QStringLiteral("%1%2 - %3").arg(QString::fromStdString(map->filename()), modifiedMark, base));
+    } else {
+        setWindowTitle(base);
+    }
+    setWindowModified(_mapModified); // also drive the native indicator (e.g. macOS close-button dot)
+}
+
+void MainWindow::setMapModified(bool modified) {
+    if (_mapModified == modified) {
+        return;
+    }
+    _mapModified = modified;
+    updateWindowTitle(); // refresh the "*" in the title (and the native marker)
+}
+
+bool MainWindow::maybeSaveChanges() {
+    if (!_mapModified || !_currentEditorWidget || !_currentEditorWidget->getMap()) {
+        return true; // nothing unsaved to lose
+    }
+    const QString name = QString::fromStdString(_currentEditorWidget->getMap()->filename());
+    const QMessageBox::StandardButton choice = QMessageBox::warning(this, tr("Unsaved Changes"),
+        tr("\"%1\" has unsaved changes.\n\nSave them before continuing?").arg(name),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
+
+    if (choice == QMessageBox::Save) {
+        if (_currentEditorWidget->saveMap()) {
+            setMapModified(false);
+            updateWindowTitle();
+            return true;
+        }
+        return false; // save cancelled or failed — abort rather than discard
+    }
+    return choice == QMessageBox::Discard; // Discard proceeds; Cancel (or closed) aborts
+}
+
 void MainWindow::closeEvent(QCloseEvent* event) {
+    if (!maybeSaveChanges()) {
+        event->ignore(); // user cancelled the quit to keep their unsaved map
+        return;
+    }
     _suppressPanelPreferenceUpdates = true;
     _suppressPanelSnapshotUpdates = true;
     stopGameLoop();
@@ -1268,6 +1337,7 @@ void MainWindow::connectPanelSignals() {
             this, [this](int elevation) {
                 if (!_currentEditorWidget)
                     return;
+                setMapModified(true);
                 updateElevationMenu(_currentEditorWidget->getMap());
                 if (_currentEditorWidget->getCurrentElevation() == elevation) {
                     _currentEditorWidget->loadTileSprites();
@@ -1278,6 +1348,7 @@ void MainWindow::connectPanelSignals() {
             this, [this](int elevation) {
                 if (!_currentEditorWidget)
                     return;
+                setMapModified(true);
                 updateElevationMenu(_currentEditorWidget->getMap());
                 if (_currentEditorWidget->getCurrentElevation() == elevation) {
                     auto* map = _currentEditorWidget->getMap();
@@ -1308,6 +1379,16 @@ void MainWindow::connectPanelSignals() {
                 if (_currentEditorWidget)
                     _currentEditorWidget->addSpatialScript(static_cast<uint32_t>(programIndex), tile, elevation, radius);
             });
+
+        // Header edits in the Info panel write straight to the map (no undo command), so flag the map
+        // modified here. These also fire while the panel is being populated from a freshly loaded map,
+        // but setEditorWidget()/createNewMap clear the flag right after populating, so that's harmless.
+        connect(_mapInfoPanel, &MapInfoPanel::playerPositionChanged, this, [this](int) { setMapModified(true); });
+        connect(_mapInfoPanel, &MapInfoPanel::playerElevationChanged, this, [this](int) { setMapModified(true); });
+        connect(_mapInfoPanel, &MapInfoPanel::playerOrientationChanged, this, [this](int) { setMapModified(true); });
+        connect(_mapInfoPanel, &MapInfoPanel::mapScriptIdChanged, this, [this](int) { setMapModified(true); });
+        connect(_mapInfoPanel, &MapInfoPanel::darknessChanged, this, [this](int) { setMapModified(true); });
+        connect(_mapInfoPanel, &MapInfoPanel::timestampChanged, this, [this](int) { setMapModified(true); });
     }
 }
 
@@ -1472,6 +1553,9 @@ void MainWindow::updateElevationMenu(Map* map) {
 }
 
 void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem) {
+    if (!maybeSaveChanges()) {
+        return; // user cancelled — keep the current map instead of loading over it
+    }
     spdlog::info("MainWindow: Handling request to load map: {} (filesystem: {})", mapPath, forceFilesystem);
 
     auto loadingWidget = std::make_unique<LoadingWidget>(this);
