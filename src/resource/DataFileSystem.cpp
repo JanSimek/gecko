@@ -19,10 +19,12 @@ DataFileSystem::DataFileSystem()
 }
 
 void DataFileSystem::clear() {
+    const std::lock_guard<std::recursive_mutex> lock(_mutex);
     _vfs = std::make_shared<vfspp::VirtualFileSystem>();
 }
 
 void DataFileSystem::addDataPath(const std::filesystem::path& path) {
+    const std::lock_guard<std::recursive_mutex> lock(_mutex);
     std::filesystem::path mountRoot;
     if (path.extension() == ".dat") {
         mountRoot = path;
@@ -79,6 +81,7 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
 }
 
 std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::filesystem::path& path) const {
+    const std::lock_guard<std::recursive_mutex> lock(_mutex);
     if (!_vfs) {
         return std::nullopt;
     }
@@ -107,6 +110,7 @@ std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::file
 }
 
 bool DataFileSystem::exists(const std::filesystem::path& path) const {
+    const std::lock_guard<std::recursive_mutex> lock(_mutex);
     if (!_vfs) {
         return false;
     }
@@ -117,6 +121,7 @@ bool DataFileSystem::exists(const std::filesystem::path& path) const {
 }
 
 std::vector<std::filesystem::path> DataFileSystem::list(const std::string& pattern) const {
+    const std::lock_guard<std::recursive_mutex> lock(_mutex);
     if (!_vfs) {
         return {};
     }
@@ -139,6 +144,7 @@ std::vector<std::filesystem::path> DataFileSystem::list(const std::string& patte
 }
 
 std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesystem::path& path) const {
+    const std::lock_guard<std::recursive_mutex> lock(_mutex);
     if (!_vfs) {
         return std::nullopt;
     }

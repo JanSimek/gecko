@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -21,6 +22,16 @@ struct MountedSourceInfo {
     std::string displayLabel;
 };
 
+/**
+ * @brief Thread-safe facade over the vfspp virtual file system.
+ *
+ * Background loaders read game data concurrently with the main thread, but
+ * vfspp's VirtualFileSystem mutates internal state (opened-file tracking, the
+ * mounted-filesystem list) on every OpenFile/AddFileSystem call without any
+ * synchronization of its own. All access therefore goes through _mutex. The
+ * mutex is recursive because addDataPath() mounts nested archives by calling
+ * itself.
+ */
 class DataFileSystem final {
 public:
     DataFileSystem();
@@ -38,6 +49,7 @@ private:
     static std::string globToRegexPattern(const std::string& pattern);
 
     vfspp::VirtualFileSystemPtr _vfs;
+    mutable std::recursive_mutex _mutex;
 };
 
 } // namespace geck::resource
