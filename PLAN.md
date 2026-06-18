@@ -709,9 +709,15 @@ from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
      case; with real `.ssl` we read the source directly. `int2ssl` decompilation stays out of scope.
    Plus a critter/object → `{programIndex, name}` bridge in `analyze`, so the agent reads the roster,
    spots a scripted NPC, and calls `describe_script` for the full who→does→says picture.
-4. **Reachability / connectivity.** Walkability per elevation (existing `blocksMovement`/
-   `ObjectQueries`), exit grids (PIDs 16–23) → destination graph, flood-fill from player-start/each
-   exit → reachable vs walled-off regions + orphaned objects. **Phase 2.**
+4. **Reachability / connectivity — `reachability` (Phase 2, done).** Per-elevation walkable
+   flood-fill (reusing `object_query::blocksMovement` + the parity-correct `HexGeometry` neighbours)
+   seeded from the entry points (player start + exit grids). **Doors count as passable** (the player
+   opens them — `pro->objectSubtypeId() == SCENERY_TYPE::DOOR`), which is essential: otherwise every
+   room behind a closed door looks sealed. Reports `walkableHexes`/`reachableHexes` and
+   `orphanedObjects` — critters/items cut off from the entry-reachable area. Elevations with no entry
+   (reached via stairs/elevators) report `reachableHexes: null` + a note. Optimistic on doors, so it
+   under-reports rather than crying wolf. Verified: artemple/denbus1/newr1 clean (0 orphans),
+   vctydwtn flags a real isolated servant/slave cluster.
 5. **Semantic render overlay** (extends the schematic): colour critters by team, mark exits,
    highlight scripted objects, shade unreachable regions, so the agent can *see* purpose and tie it
    to the JSON via the legend. **Phase 3.**
