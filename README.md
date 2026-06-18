@@ -152,7 +152,7 @@ Contributions are welcome! Please ensure your code follows the project's coding 
 ## Credits
 
 This project wouldn't be possible without the excellent work from:
-- [Fallout2-ce](https://github.com/fallout2-ce/fallout2-ce) - Fallout 2 Community Edition engine recreation, the reference for engine data and file formats
+- [Fallout2-ce](https://github.com/fallout2-ce/fallout2-ce) - Fallout 2 Community Edition engine recreation, the reference for engine data and file formats (originally created by [@alexbatalov](https://github.com/alexbatalov))
 - [Falltergeist](https://github.com/falltergeist/falltergeist/) - Fallout engine reimplementation
 - [Klamath](https://github.com/adamkewley/klamath) - Fallout file format library
 - [FRM-Viewer](https://github.com/Primagen/Fallout-FRM-Viewer) - Fallout graphics format viewer
