@@ -136,3 +136,14 @@ if TENTS > 0 then
     end
     print(string.format("Placed %d / %d '%s' stamps.", dropped, TENTS, STAMP))
 end
+
+-- ---- 4. make the map playable: a spawn and a way out ------------------------
+-- A generated map otherwise loads with the player at the hard-coded centre and no exit. Spawn them
+-- in the middle of the field, and drop a worldmap exit grid near the south edge so they can leave
+-- (destMapId -2 = the worldmap; -1 would be the town map, or pass a real map id to chain maps).
+local START = api:hexIndex(100, 100)
+api:setPlayerStart(START, 0, 0)
+
+local EXIT = api:hexIndex(100, HEX_H - 12)
+api:placeExitGrid(EXIT, -2, 0, 0, 0)
+print(string.format("Set the player spawn (hex %d) and a worldmap exit (hex %d).", START, EXIT))

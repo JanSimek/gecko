@@ -6,6 +6,7 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "scripting/MapScriptApi.h"
+#include "util/Constants.h"
 
 #include "support/ControllerFixture.h"
 
@@ -190,6 +191,59 @@ TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "
     REQUIRE(fx.undoStack.canUndo());
     fx.undoStack.undo();
     CHECK(fx.mapFile().map_objects[ELEV].empty());
+}
+
+TEST_CASE("MapScriptApi setPlayerStart writes the map header", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    const int hex = api.hexIndex(99, 99);
+    api.setPlayerStart(hex, 2, 0);
+    const auto& header = fx.mapFile().header;
+    CHECK(header.player_default_position == static_cast<uint32_t>(hex));
+    CHECK(header.player_default_orientation == 2u);
+    CHECK(header.player_default_elevation == 0u);
+
+    // Out-of-range values raise rather than write a bogus header.
+    CHECK_THROWS(api.setPlayerStart(-1, 0, 0));                     // off-grid hex
+    CHECK_THROWS(api.setPlayerStart(hex, 6, 0));                    // orientation > 5
+    CHECK_THROWS(api.setPlayerStart(hex, 0, Map::ELEVATION_COUNT)); // elevation out of range
+}
+
+TEST_CASE("MapScriptApi placeExitGrid records a MISC exit-grid object", "[scripting]") {
+    ControllerFixture fx;
+    // data-only: exit-grid art isn't mounted, but the .map fields are what matters here.
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    constexpr int HEX = 20100;
+    // A worldmap exit (destMapId -2): the engine ignores destHex for it.
+    REQUIRE(api.placeExitGrid(HEX, -2, 0, 0, 0));
+    CHECK(api.placedObjects() == 1);
+
+    auto& objs = fx.mapFile().map_objects[ELEV];
+    REQUIRE(objs.size() == 1);
+    const auto& eg = *objs.front();
+    CHECK(eg.position == HEX);
+    CHECK(eg.isExitGridMarker()); // MISC type 0x05, proto index 16..23
+    CHECK(eg.pro_pid == ExitGrid::WORLD_EXIT_PRO_PID);
+    CHECK(eg.exit_map == ExitGrid::WORLD_MAP_EXIT); // -2 stored as 0xFFFFFFFE
+
+    // A map-to-map exit uses the map-exit proto and keeps every destination field.
+    REQUIRE(api.placeExitGrid(20200, 5, 12345, 1, 3));
+    const auto& eg2 = *objs.back();
+    CHECK(eg2.pro_pid == ExitGrid::MAP_EXIT_PRO_PID);
+    CHECK(eg2.exit_map == 5u);
+    CHECK(eg2.exit_position == 12345u);
+    CHECK(eg2.exit_elevation == 1u);
+    CHECK(eg2.exit_orientation == 3u);
+
+    // Invalid inputs raise (not a silently-dropped or bogus object).
+    CHECK_THROWS(api.placeExitGrid(-1, 0, 0, 0, 0));                     // off-grid placement hex
+    CHECK_THROWS(api.placeExitGrid(HEX, -3, 0, 0, 0));                   // bad destMapId
+    CHECK_THROWS(api.placeExitGrid(HEX, 0, -1, 0, 0));                   // destHex out of range
+    CHECK_THROWS(api.placeExitGrid(HEX, 0, 0, Map::ELEVATION_COUNT, 0)); // destElevation out of range
+    CHECK_THROWS(api.placeExitGrid(HEX, 0, 0, 0, 6));                    // orientation > 5
+    CHECK(api.placedObjects() == 2);                                     // the failed calls added nothing
 }
 
 TEST_CASE("MapScriptApi::proto builds a PID from a readable type name and id", "[scripting]") {

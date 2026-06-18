@@ -54,6 +54,8 @@ with that `--arg seed=<value>` to recreate it exactly.
 | `api:getFloorXY(col,row)` / `api:getRoofXY(col,row)` | tile id | `(col,row)` form of the readers |
 | `api:placeProtoXY(pid,col,row,dir)` / `api:placeObjectXY(pid,frm,col,row,dir)` | bool | `(col,row)` form of the placers (hex grid); off-grid is a no-op |
 | `api:placeStamp(name, anchorHex, variant)` | int | place a pre-loaded stamp (a prefab captured by `extract_pattern`) so its anchor lands near `anchorHex`; returns objects placed. Load the stamp with `--stamp name=file.json` (CLI) / the `stamps` arg (MCP); in the editor's **Script Console** stamps are auto-registered from the bundled examples (`resources/scripts/stamps/`, which ships a `tent`) and from your saved patterns, so no loading step is needed. Raises on an unknown `name`/`variant`. |
+| `api:setPlayerStart(hex, orientation, elevation)` | nil | set the player spawn in the map header (where the engine drops the player on load). `orientation` 0..5, `elevation` 0..2. Raises on an out-of-range value. Header state, so it is not part of the undo batch. |
+| `api:placeExitGrid(hex, destMapId, destHex, destElevation, orientation)` | bool | place a map-exit grid at `hex`; stepping onto it sends the player to `destMapId` at `destHex` (`destElevation`, facing `orientation`). `destMapId` **-2** = worldmap, **-1** = town map, else a map id (a world/town exit ignores `destHex`). Returns false only if the exit-grid art can't load (GUI); raises on an off-grid `hex` or out-of-range destination. Without an exit a generated map has no way out. |
 
 **Errors.** A genuine failure — no Fallout 2 data mounted, or a wrong `--arg reference=` path —
 **raises**, so the run stops with a clear message instead of silently producing an empty map. Wrap

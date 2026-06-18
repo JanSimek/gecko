@@ -26,6 +26,7 @@
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
 #include "ui/editing/ObjectCommandController.h"
+#include "util/Constants.h"
 #include "util/ProHelper.h"
 
 namespace geck {
@@ -297,21 +298,7 @@ void MapScriptApi::endBatch() {
     _controller.endBatch();
 }
 
-bool MapScriptApi::placeObject(uint32_t proPid, uint32_t frmPid, int hex, uint32_t direction) {
-    if (!isValidHex(hex)) {
-        return false;
-    }
-    auto mapObject = std::make_shared<MapObject>();
-    mapObject->position = hex;
-    mapObject->elevation = static_cast<uint32_t>(_elevation);
-    mapObject->direction = direction;
-    if (auto h = _hexgrid.getHexByPosition(static_cast<uint32_t>(hex)); h.has_value()) {
-        mapObject->x = static_cast<uint32_t>(h->get().x());
-        mapObject->y = static_cast<uint32_t>(h->get().y());
-    }
-    mapObject->pro_pid = proPid;
-    mapObject->frm_pid = frmPid;
-
+bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction) {
     // Headless: record the MapObject as data only. The .map stores just these ids; the engine
     // and editor resolve the art (frmPid) when the map is loaded, so no sprite or GL is needed
     // and placement does not require the FRM to be present in the mounted data.
@@ -335,6 +322,24 @@ bool MapScriptApi::placeObject(uint32_t proPid, uint32_t frmPid, int hex, uint32
         return true;
     }
     return false;
+}
+
+bool MapScriptApi::placeObject(uint32_t proPid, uint32_t frmPid, int hex, uint32_t direction) {
+    if (!isValidHex(hex)) {
+        return false;
+    }
+    auto mapObject = std::make_shared<MapObject>();
+    mapObject->position = hex;
+    mapObject->elevation = static_cast<uint32_t>(_elevation);
+    mapObject->direction = direction;
+    if (auto h = _hexgrid.getHexByPosition(static_cast<uint32_t>(hex)); h.has_value()) {
+        mapObject->x = static_cast<uint32_t>(h->get().x());
+        mapObject->y = static_cast<uint32_t>(h->get().y());
+    }
+    mapObject->pro_pid = proPid;
+    mapObject->frm_pid = frmPid;
+
+    return registerObject(mapObject, hex, frmPid, direction);
 }
 
 bool MapScriptApi::placeProto(uint32_t proPid, int hex, uint32_t direction) {
@@ -453,6 +458,84 @@ int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant
     _placedObjects += result.objectsPlaced;
     _paintedTiles += result.tilesPainted;
     return result.objectsPlaced;
+}
+
+void MapScriptApi::setPlayerStart(int hex, int orientation, int elevation) {
+    if (!isValidHex(hex)) {
+        throw ScriptError("setPlayerStart: hex " + std::to_string(hex) + " is off the 200x200 hex grid");
+    }
+    if (orientation < 0 || orientation > 5) {
+        throw ScriptError("setPlayerStart: orientation must be 0..5, got " + std::to_string(orientation));
+    }
+    if (elevation < 0 || elevation >= Map::ELEVATION_COUNT) {
+        throw ScriptError("setPlayerStart: elevation must be 0.." + std::to_string(Map::ELEVATION_COUNT - 1)
+            + ", got " + std::to_string(elevation));
+    }
+    auto& header = _map.getMapFile().header;
+    header.player_default_position = static_cast<uint32_t>(hex);
+    header.player_default_orientation = static_cast<uint32_t>(orientation);
+    header.player_default_elevation = static_cast<uint32_t>(elevation);
+}
+
+namespace {
+    // The destination fields of an exit grid (hex is validated by the caller via isValidHex). Throws
+    // ScriptError on any out-of-range value, so a bad exit can't be written silently.
+    void validateExitGridDest(int destMapId, int destHex, int destElevation, int orientation) {
+        // -2 (worldmap) and -1 (town map) are the engine's special destinations; a real map id is >= 0.
+        if (destMapId < -2) {
+            throw ScriptError("placeExitGrid: destMapId must be a map id, -1 (town map) or -2 (worldmap), got "
+                + std::to_string(destMapId));
+        }
+        if (destHex < 0 || destHex >= HexagonGrid::POSITION_COUNT) {
+            throw ScriptError("placeExitGrid: destHex must be 0..39999, got " + std::to_string(destHex));
+        }
+        if (destElevation < 0 || destElevation >= Map::ELEVATION_COUNT) {
+            throw ScriptError("placeExitGrid: destElevation must be 0.." + std::to_string(Map::ELEVATION_COUNT - 1)
+                + ", got " + std::to_string(destElevation));
+        }
+        if (orientation < 0 || orientation > 5) {
+            throw ScriptError("placeExitGrid: orientation must be 0..5, got " + std::to_string(orientation));
+        }
+    }
+
+    struct ExitGridArt {
+        uint32_t proPid;
+        uint32_t frmPid;
+    };
+    // Exit grids are MISC markers; the world/town variants use a different proto+art than a map exit.
+    ExitGridArt exitGridArt(uint32_t dest) {
+        if (dest == ExitGrid::WORLD_MAP_EXIT || dest == ExitGrid::TOWN_MAP_EXIT) {
+            return { ExitGrid::WORLD_EXIT_PRO_PID, ExitGrid::WORLD_EXIT_FRM_PID };
+        }
+        return { ExitGrid::MAP_EXIT_PRO_PID, ExitGrid::MAP_EXIT_FRM_PID };
+    }
+} // namespace
+
+bool MapScriptApi::placeExitGrid(int hex, int destMapId, int destHex, int destElevation, int orientation) {
+    if (!isValidHex(hex)) {
+        throw ScriptError("placeExitGrid: hex " + std::to_string(hex) + " is off the 200x200 hex grid");
+    }
+    validateExitGridDest(destMapId, destHex, destElevation, orientation);
+
+    const auto dest = static_cast<uint32_t>(destMapId);
+    const ExitGridArt art = exitGridArt(dest);
+
+    auto mapObject = std::make_shared<MapObject>();
+    mapObject->position = hex;
+    mapObject->elevation = static_cast<uint32_t>(_elevation);
+    mapObject->direction = 0;
+    if (auto h = _hexgrid.getHexByPosition(static_cast<uint32_t>(hex)); h.has_value()) {
+        mapObject->x = static_cast<uint32_t>(h->get().x());
+        mapObject->y = static_cast<uint32_t>(h->get().y());
+    }
+    mapObject->pro_pid = art.proPid;
+    mapObject->frm_pid = art.frmPid;
+    mapObject->exit_map = dest;
+    mapObject->exit_position = static_cast<uint32_t>(destHex);
+    mapObject->exit_elevation = static_cast<uint32_t>(destElevation);
+    mapObject->exit_orientation = static_cast<uint32_t>(orientation);
+
+    return registerObject(mapObject, hex, art.frmPid, 0);
 }
 
 } // namespace geck

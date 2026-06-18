@@ -14,6 +14,7 @@ namespace geck {
 
 class HexagonGrid;
 class Map;
+class MapObject;
 class ObjectCommandController;
 namespace resource {
     class GameResources;
@@ -150,10 +151,26 @@ public:
     /// `variant` is out of range — placement of an off-grid entry is simply dropped, not an error.
     int placeStamp(const std::string& name, int anchorHex, int variant = 0);
 
+    // --- Map setup (spawn / exits) -----------------------------------------------
+    /// Set the player's spawn in the map header — where they appear when the map loads: hex 0..39999,
+    /// orientation 0..5 (engine hex facings), elevation 0..2. Raises on an out-of-range value. This is
+    /// header state (like the editor's Map Info panel), so it is not part of the undo batch.
+    void setPlayerStart(int hex, int orientation, int elevation);
+    /// Place a map-exit grid at `hex`: stepping onto it sends the player to `destMapId` at `destHex`
+    /// (`destElevation`, facing `orientation`). `destMapId` -2 = the worldmap, -1 = the town map,
+    /// otherwise a map id; a worldmap/townmap exit ignores destHex. Returns false only when the
+    /// exit-grid art can't be loaded (GUI); raises on an off-grid `hex` or an out-of-range destination
+    /// field. Counts toward placedObjects().
+    bool placeExitGrid(int hex, int destMapId, int destHex, int destElevation, int orientation);
+
     int placedObjects() const { return _placedObjects; }
     int paintedTiles() const { return _paintedTiles; }
 
 private:
+    // Record a freshly-built `mapObject`: data-only when headless (registerObjectData), else build its
+    // sprite from `frmPid` and register the placement so it draws. Returns false when the GUI can't
+    // resolve the art; bumps the placed-objects count on success. Shared by placeObject/placeExitGrid.
+    bool registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction);
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
     // Parse a reference map headlessly (GL-free) for the palette queries; nullptr if unreadable.
     std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;
