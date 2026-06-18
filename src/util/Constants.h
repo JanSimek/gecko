@@ -145,6 +145,17 @@ namespace ExitGrid {
     // World map exit grid
     constexpr uint32_t WORLD_EXIT_PRO_PID = 0x05000012; ///< Proto for worldmap exit (index 18)
     constexpr uint32_t WORLD_EXIT_FRM_PID = 0x05000023; ///< FRM for worldmap exit (index 35) -> ext2grd3.frm
+
+    // The four directional art pieces of a screen-space exit-grid rectangle, as used by e.g.
+    // bhrnddst.map. {proto, frm} per edge; the destination is stored per-object, independent of art.
+    constexpr uint32_t RECT_TOP_PRO_PID = 0x05000013;
+    constexpr uint32_t RECT_TOP_FRM_PID = 0x05000024;
+    constexpr uint32_t RECT_BOTTOM_PRO_PID = 0x05000012;
+    constexpr uint32_t RECT_BOTTOM_FRM_PID = 0x05000023;
+    constexpr uint32_t RECT_LEFT_PRO_PID = 0x05000010;
+    constexpr uint32_t RECT_LEFT_FRM_PID = 0x05000021;
+    constexpr uint32_t RECT_RIGHT_PRO_PID = 0x05000011;
+    constexpr uint32_t RECT_RIGHT_FRM_PID = 0x05000022;
 }
 
 // Map defaults

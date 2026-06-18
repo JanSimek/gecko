@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <set>
 
 #include "editor/HexagonGrid.h"
 #include "format/map/Map.h"
@@ -244,6 +245,39 @@ TEST_CASE("MapScriptApi placeExitGrid records a MISC exit-grid object", "[script
     CHECK_THROWS(api.placeExitGrid(HEX, 0, 0, Map::ELEVATION_COUNT, 0)); // destElevation out of range
     CHECK_THROWS(api.placeExitGrid(HEX, 0, 0, 0, 6));                    // orientation > 5
     CHECK(api.placedObjects() == 2);                                     // the failed calls added nothing
+}
+
+TEST_CASE("MapScriptApi placeExitGridRect frames a rectangle of exit grids", "[scripting]") {
+    ControllerFixture fx;
+    // data-only: exit-grid art isn't mounted, but the placed markers' fields are what matters.
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    const int center = api.hexIndex(100, 100);
+    const int placed = api.placeExitGridRect(center, 600, 400, -2, 0, 0, 0);
+    CHECK(placed > 0);
+    CHECK(api.placedObjects() == placed);
+
+    auto& objs = fx.mapFile().map_objects[ELEV];
+    REQUIRE(objs.size() == static_cast<size_t>(placed));
+
+    std::set<uint32_t> protos;
+    std::set<int> hexes;
+    for (const auto& o : objs) {
+        CHECK(o->isExitGridMarker());                   // every marker is a MISC exit grid
+        CHECK(o->exit_map == ExitGrid::WORLD_MAP_EXIT); // sharing the requested destination
+        CHECK(hexes.insert(o->position).second);        // no hex placed twice (corners are shared)
+        protos.insert(o->pro_pid);
+    }
+    // All four directional edge arts are used.
+    CHECK(protos.count(ExitGrid::RECT_TOP_PRO_PID) == 1);
+    CHECK(protos.count(ExitGrid::RECT_BOTTOM_PRO_PID) == 1);
+    CHECK(protos.count(ExitGrid::RECT_LEFT_PRO_PID) == 1);
+    CHECK(protos.count(ExitGrid::RECT_RIGHT_PRO_PID) == 1);
+
+    // Invalid inputs raise.
+    CHECK_THROWS(api.placeExitGridRect(-1, 600, 400, -2, 0, 0, 0));                        // off-grid centre
+    CHECK_THROWS(api.placeExitGridRect(center, 0, 400, -2, 0, 0, 0));                      // non-positive extent
+    CHECK_THROWS(api.placeExitGridRect(center, 600, 400, -2, 0, Map::ELEVATION_COUNT, 0)); // bad destElevation
 }
 
 TEST_CASE("MapScriptApi::proto builds a PID from a readable type name and id", "[scripting]") {

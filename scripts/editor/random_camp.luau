@@ -139,11 +139,13 @@ end
 
 -- ---- 4. make the map playable: a spawn and a way out ------------------------
 -- A generated map otherwise loads with the player at the hard-coded centre and no exit. Spawn them
--- in the middle of the field, and drop a worldmap exit grid near the south edge so they can leave
--- (destMapId -2 = the worldmap; -1 would be the town map, or pass a real map id to chain maps).
+-- in the middle, then frame the playable area with a rectangle of exit grids the way shipped desert
+-- maps (e.g. bhrnddst.map) do: walking off any edge leaves to the worldmap (destMapId -2; -1 would
+-- be the town map, or pass a real map id to chain maps). The rectangle is sized in *screen* pixels
+-- (the engine's iso projection) and centred on the map centre; these half-extents match bhrnddst.
 local START = api:hexIndex(100, 100)
 api:setPlayerStart(START, 0, 0)
 
-local EXIT = api:hexIndex(100, HEX_H - 12)
-api:placeExitGrid(EXIT, -2, 0, 0, 0)
-print(string.format("Set the player spawn (hex %d) and a worldmap exit (hex %d).", START, EXIT))
+local EXIT_HALF_W, EXIT_HALF_H = 1264, 672
+local markers = api:placeExitGridRect(START, EXIT_HALF_W, EXIT_HALF_H, -2, 0, 0, 0)
+print(string.format("Set the player spawn (hex %d) and a %d-marker worldmap exit rectangle.", START, markers))

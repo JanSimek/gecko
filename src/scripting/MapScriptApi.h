@@ -162,15 +162,34 @@ public:
     /// exit-grid art can't be loaded (GUI); raises on an off-grid `hex` or an out-of-range destination
     /// field. Counts toward placedObjects().
     bool placeExitGrid(int hex, int destMapId, int destHex, int destElevation, int orientation);
+    /// Place a border of exit grids forming a rectangle on screen, centred on `centerHex` and
+    /// `screenHalfWidth`/`screenHalfHeight` pixels to each side (the engine's iso projection, so the
+    /// hex border staircases). Each of the four edges uses its matching directional exit-grid art, as
+    /// shipped maps like bhrnddst.map do; every marker shares the destination (`destMapId`/`destHex`/
+    /// `destElevation`/`orientation`, same meaning as placeExitGrid). Returns the number of markers
+    /// placed. Raises on an off-grid `centerHex`, a non-positive half-extent, or a bad destination.
+    int placeExitGridRect(int centerHex, int screenHalfWidth, int screenHalfHeight,
+        int destMapId, int destHex, int destElevation, int orientation);
 
     int placedObjects() const { return _placedObjects; }
     int paintedTiles() const { return _paintedTiles; }
 
 private:
+    // Where an exit grid sends the player (engine fields exit_map/exit_position/exit_elevation/
+    // exit_orientation). Bundled so the exit-grid builders don't take a long parameter list.
+    struct ExitDest {
+        uint32_t map;
+        int hex;
+        int elevation;
+        int orientation;
+    };
     // Record a freshly-built `mapObject`: data-only when headless (registerObjectData), else build its
     // sprite from `frmPid` and register the placement so it draws. Returns false when the GUI can't
     // resolve the art; bumps the placed-objects count on success. Shared by placeObject/placeExitGrid.
     bool registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction);
+    // Build + register one exit-grid MISC marker at `hex` with the given art and destination. Assumes
+    // `hex` is on-grid (callers validate). Returns registerObject's result.
+    bool placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid, const ExitDest& dest);
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
     // Parse a reference map headlessly (GL-free) for the palette queries; nullptr if unreadable.
     std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;

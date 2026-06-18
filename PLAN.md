@@ -71,6 +71,33 @@ wiring that one button gives engine-equivalent per-hex marking. Optionally add l
 placement for fast diagonal runs. There is no perimeter/interior distinction to preserve: every
 exit-grid hex is a full, independent exit-grid object.
 
+### Generation-side exit placement — current state & smarter follow-up
+
+**Now:** the generation API exposes `api:placeExitGrid(hex, …)` (one marker) and
+`api:placeExitGridRect(centerHex, screenHalfWidth, screenHalfHeight, …)`, which walks a
+**screen-space rectangle** border (the engine iso projection, so the hex run staircases) and
+places the matching directional edge art on each of the four sides — reproducing the framed
+rectangle shipped maps like **bhrnddst.map** use (`ExitGrid::RECT_*` in `Constants.h`). Every
+marker shares one destination. `random_camp.luau` uses it to frame the playable area with a
+worldmap exit. This is a fixed, centred rectangle — placement is **geometric, not terrain-aware**.
+
+**Smarter placement (follow-up).** Exits should sit where the map actually *leads out*, not on a
+blind rectangle:
+- **At the ends of roads/paths** — once the generator lays roads (or a path graph), drop an exit
+  cluster where a road runs off the playable area, oriented along the road, so the transition
+  reads naturally. Needs the generator to retain road endpoints + headings (it currently keeps no
+  such structure).
+- **Along the real map edge** — trace the iso playable boundary (the diamond, not an axis-aligned
+  box) and place exits on the edge segments the design wants open, leaving the rest walled. Reuse
+  the screen→hex edge walk from `placeExitGridRect`, but follow the diamond boundary and accept a
+  per-edge open/closed mask.
+- **Reachability-gated** — only place an exit on a hex reachable from the player start (flood-fill,
+  cf. the "Pathing, blocking & reachability" analysis item), so generators can't strand an exit
+  behind a wall.
+
+The primitive (`placeExitGridRect`) and the directional-art mapping are the reusable foundation;
+the follow-up is feeding them terrain-derived locations instead of a centred rectangle.
+
 ---
 
 ## SSL Script Editing Integration

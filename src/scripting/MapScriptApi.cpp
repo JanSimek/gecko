@@ -8,8 +8,10 @@
 #include <format>
 #include <functional>
 #include <memory>
+#include <set>
 #include <unordered_map>
 
+#include "editor/Hex.h"
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
@@ -509,7 +511,52 @@ namespace {
         }
         return { ExitGrid::MAP_EXIT_PRO_PID, ExitGrid::MAP_EXIT_FRM_PID };
     }
+
+    constexpr int EDGE_STEP = 6; // px; finer than the hex screen pitch, so a walked edge has no gaps.
+
+    // The hexes whose screen position lies along the straight screen segment (x0,y0)->(x1,y1), in
+    // order and de-duplicated. Steps in screen space and snaps each point to its nearest hex, so the
+    // returned run is contiguous (matching the engine's iso staircase). Points off the map are skipped.
+    std::vector<int> hexesAlongEdge(const HexagonGrid& grid, int x0, int y0, int x1, int y1) {
+        std::vector<int> out;
+        const int dx = x1 - x0;
+        const int dy = y1 - y0;
+        const int steps = std::max(1, std::max(std::abs(dx), std::abs(dy)) / EDGE_STEP);
+        int last = -1;
+        for (int i = 0; i <= steps; ++i) {
+            const int sx = x0 + dx * i / steps;
+            const int sy = y0 + dy * i / steps;
+            if (sx < 0 || sy < 0) {
+                continue;
+            }
+            const uint32_t pos = grid.positionAt(static_cast<uint32_t>(sx), static_cast<uint32_t>(sy));
+            if (pos == Hex::HEX_OUT_OF_MAP || static_cast<int>(pos) == last) {
+                continue;
+            }
+            last = static_cast<int>(pos);
+            out.push_back(last);
+        }
+        return out;
+    }
 } // namespace
+
+bool MapScriptApi::placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid, const ExitDest& dest) {
+    auto mapObject = std::make_shared<MapObject>();
+    mapObject->position = hex;
+    mapObject->elevation = static_cast<uint32_t>(_elevation);
+    mapObject->direction = 0;
+    if (auto h = _hexgrid.getHexByPosition(static_cast<uint32_t>(hex)); h.has_value()) {
+        mapObject->x = static_cast<uint32_t>(h->get().x());
+        mapObject->y = static_cast<uint32_t>(h->get().y());
+    }
+    mapObject->pro_pid = proPid;
+    mapObject->frm_pid = frmPid;
+    mapObject->exit_map = dest.map;
+    mapObject->exit_position = static_cast<uint32_t>(dest.hex);
+    mapObject->exit_elevation = static_cast<uint32_t>(dest.elevation);
+    mapObject->exit_orientation = static_cast<uint32_t>(dest.orientation);
+    return registerObject(mapObject, hex, frmPid, 0);
+}
 
 bool MapScriptApi::placeExitGrid(int hex, int destMapId, int destHex, int destElevation, int orientation) {
     if (!isValidHex(hex)) {
@@ -519,23 +566,53 @@ bool MapScriptApi::placeExitGrid(int hex, int destMapId, int destHex, int destEl
 
     const auto dest = static_cast<uint32_t>(destMapId);
     const ExitGridArt art = exitGridArt(dest);
+    return placeExitGridMarker(hex, art.proPid, art.frmPid, { dest, destHex, destElevation, orientation });
+}
 
-    auto mapObject = std::make_shared<MapObject>();
-    mapObject->position = hex;
-    mapObject->elevation = static_cast<uint32_t>(_elevation);
-    mapObject->direction = 0;
-    if (auto h = _hexgrid.getHexByPosition(static_cast<uint32_t>(hex)); h.has_value()) {
-        mapObject->x = static_cast<uint32_t>(h->get().x());
-        mapObject->y = static_cast<uint32_t>(h->get().y());
+int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int screenHalfHeight,
+    int destMapId, int destHex, int destElevation, int orientation) {
+    if (!isValidHex(centerHex)) {
+        throw ScriptError("placeExitGridRect: centerHex " + std::to_string(centerHex) + " is off the 200x200 hex grid");
     }
-    mapObject->pro_pid = art.proPid;
-    mapObject->frm_pid = art.frmPid;
-    mapObject->exit_map = dest;
-    mapObject->exit_position = static_cast<uint32_t>(destHex);
-    mapObject->exit_elevation = static_cast<uint32_t>(destElevation);
-    mapObject->exit_orientation = static_cast<uint32_t>(orientation);
+    if (screenHalfWidth <= 0 || screenHalfHeight <= 0) {
+        throw ScriptError("placeExitGridRect: screenHalfWidth/Height must be positive");
+    }
+    validateExitGridDest(destMapId, destHex, destElevation, orientation);
 
-    return registerObject(mapObject, hex, art.frmPid, 0);
+    const auto centre = _hexgrid.getHexByPosition(static_cast<uint32_t>(centerHex));
+    if (!centre.has_value()) {
+        return 0;
+    }
+    const int cx = centre->get().x();
+    const int cy = centre->get().y();
+    const int left = cx - screenHalfWidth;
+    const int right = cx + screenHalfWidth;
+    const int top = cy - screenHalfHeight;
+    const int bottom = cy + screenHalfHeight;
+    const ExitDest dest{ static_cast<uint32_t>(destMapId), destHex, destElevation, orientation };
+
+    // The four screen edges, each with its matching directional art (see ExitGrid::RECT_* in Constants).
+    struct Edge {
+        int x0, y0, x1, y1;
+        uint32_t proPid, frmPid;
+    };
+    const std::array<Edge, 4> edges{ {
+        { left, top, right, top, ExitGrid::RECT_TOP_PRO_PID, ExitGrid::RECT_TOP_FRM_PID },
+        { left, bottom, right, bottom, ExitGrid::RECT_BOTTOM_PRO_PID, ExitGrid::RECT_BOTTOM_FRM_PID },
+        { left, top, left, bottom, ExitGrid::RECT_LEFT_PRO_PID, ExitGrid::RECT_LEFT_FRM_PID },
+        { right, top, right, bottom, ExitGrid::RECT_RIGHT_PRO_PID, ExitGrid::RECT_RIGHT_FRM_PID },
+    } };
+
+    std::set<int> placedHexes; // corners are shared between two edges — place each hex once.
+    int placed = 0;
+    for (const Edge& edge : edges) {
+        for (const int hex : hexesAlongEdge(_hexgrid, edge.x0, edge.y0, edge.x1, edge.y1)) {
+            if (placedHexes.insert(hex).second && placeExitGridMarker(hex, edge.proPid, edge.frmPid, dest)) {
+                ++placed;
+            }
+        }
+    }
+    return placed;
 }
 
 } // namespace geck
