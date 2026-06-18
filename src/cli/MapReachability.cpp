@@ -2,7 +2,6 @@
 
 #include "cli/MapLoad.h"
 #include "editor/HexGeometry.h"
-#include "editor/helper/ObjectQueries.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/msg/Msg.h"
@@ -60,27 +59,36 @@ namespace {
         return false;
     }
 
-    // Walls and most scenery are *meant* to sit in/among blocked space; only critters and items being
-    // cut off from the playable area is a meaningful "orphan".
+    // Only critters and items are gameplay content worth flagging as "orphaned" if cut off.
     bool isGameplayObject(const MapObject& object) {
         const auto type = object.objectType();
         return type == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)
             || type == static_cast<uint32_t>(Pro::OBJECT_TYPE::ITEM);
     }
 
-    // Impassable-hex mask for one elevation: an object blocks movement and is not a (openable) door.
+    // Impassable-hex mask for one elevation, using the engine's instance-flag rule, then treating
+    // (openable) doors as passable. Multihex blockers also seal their neighbours.
     std::vector<char> blockedMask(resource::GameResources& resources, const std::vector<std::shared_ptr<MapObject>>& objects) {
         std::vector<char> blocked(kHexCount, 0);
         for (const auto& object : objects) {
-            if (object && object->position >= 0 && object->position < kHexCount
-                && object_query::blocksMovement(*object, resources) && !isDoor(resources, *object)) {
-                blocked[object->position] = 1;
+            if (!object || object->position < 0 || object->position >= kHexCount) {
+                continue;
+            }
+            if (!blocksMovementByInstance(object->objectType(), object->flags) || isDoor(resources, *object)) {
+                continue;
+            }
+            blocked[object->position] = 1;
+            if (Pro::hasFlag(object->flags, Pro::ObjectFlags::OBJECT_MULTIHEX)) {
+                for (const int neighbour : hexNeighbors(object->position)) {
+                    blocked[neighbour] = 1;
+                }
             }
         }
         return blocked;
     }
 
-    // Entry hexes for an elevation: the player start (if it loads here) plus every exit-grid marker.
+    // Where the player can enter this elevation: the player start (if they spawn here) plus every exit
+    // grid (you arrive at an exit's position when entering from the adjacent map).
     std::vector<int> entryHexes(const Map::MapHeader& header, int elevation, const std::vector<std::shared_ptr<MapObject>>& objects) {
         std::vector<int> seeds;
         if (static_cast<int>(header.player_default_elevation) == elevation) {
@@ -94,30 +102,27 @@ namespace {
         return seeds;
     }
 
-    // Which walkable components the entry seeds land in (a seed on a blocked hex still "enters" via an
-    // adjacent walkable hex). seedFlags is indexed by component id.
+    // Which walkable components the given seeds land in (a seed on a blocked hex still enters via a
+    // walkable neighbour). seedFlags is indexed by component id.
     std::vector<char> seedComponentFlags(const std::vector<int>& seeds, const std::vector<char>& blocked,
         const std::vector<int>& component, std::size_t componentCount) {
         std::vector<char> seedFlags(componentCount, 0);
-        const auto mark = [&](int hex) {
-            if (hex >= 0 && hex < kHexCount && !blocked[hex]) {
-                seedFlags[component[hex]] = 1;
-            }
-        };
         for (const int seed : seeds) {
             if (seed >= 0 && seed < kHexCount && !blocked[seed]) {
                 seedFlags[component[seed]] = 1;
             } else {
                 for (const int neighbour : hexNeighbors(seed)) {
-                    mark(neighbour);
+                    if (!blocked[neighbour]) {
+                        seedFlags[component[neighbour]] = 1;
+                    }
                 }
             }
         }
         return seedFlags;
     }
 
-    // The walkable component a marker hex sits in (or, if the marker is on a blocked hex, its first
-    // walkable neighbour's). -1 if it touches no walkable hex.
+    // The walkable component a marker hex sits in (or, if on a blocked hex, its first walkable
+    // neighbour's). -1 if it touches no walkable hex.
     int componentOf(int hex, const std::vector<char>& blocked, const std::vector<int>& component) {
         if (hex < 0 || hex >= kHexCount) {
             return -1;
@@ -133,35 +138,8 @@ namespace {
         return -1;
     }
 
-    // Per exit grid on this elevation, whether the player can walk to it from the start (same walkable
-    // component). null when the player starts on a different elevation (the route is via stairs).
-    ordered_json exitsJson(const Map::MapHeader& header, int elevation, const std::vector<std::shared_ptr<MapObject>>& objects,
-        const std::vector<char>& blocked, const std::vector<int>& component) {
-        const bool playerHere = static_cast<int>(header.player_default_elevation) == elevation;
-        const int playerComponent = playerHere
-            ? componentOf(static_cast<int>(header.player_default_position), blocked, component)
-            : -1;
-        auto array = ordered_json::array();
-        for (const auto& object : objects) {
-            if (!object || !object->isExitGridMarker() || object->position < 0 || object->position >= kHexCount) {
-                continue;
-            }
-            ordered_json exit;
-            exit["hex"] = object->position;
-            if (!playerHere) {
-                exit["reachableFromPlayerStart"] = nullptr;
-            } else {
-                const int exitComponent = componentOf(object->position, blocked, component);
-                exit["reachableFromPlayerStart"] = playerComponent >= 0 && exitComponent == playerComponent;
-            }
-            array.push_back(exit);
-        }
-        return array;
-    }
-
-    // A hex reaches the player-accessible area if it (or, for a hex an object stands on, a neighbour)
-    // is a walkable hex in a component the entry seeds reached.
-    bool reachesEntry(int hex, const std::vector<char>& blocked, const std::vector<int>& component, const std::vector<char>& seedFlags) {
+    // Whether a hex is in (or borders) a seed-reachable component.
+    bool reaches(int hex, const std::vector<char>& blocked, const std::vector<int>& component, const std::vector<char>& seedFlags) {
         if (hex < 0 || hex >= kHexCount) {
             return false;
         }
@@ -176,16 +154,38 @@ namespace {
         return false;
     }
 
-    // Critters/items whose hex is cut off from the entry-reachable area.
+    // Per exit grid, whether the player can walk to it *from the start specifically* (same component as
+    // the player start). null when the player spawns on another elevation.
+    ordered_json exitsJson(const std::vector<std::shared_ptr<MapObject>>& objects, const std::vector<char>& blocked,
+        const std::vector<int>& component, const std::vector<char>& playerStartFlags, bool playerHere) {
+        auto array = ordered_json::array();
+        for (const auto& object : objects) {
+            if (!object || !object->isExitGridMarker() || object->position < 0 || object->position >= kHexCount) {
+                continue;
+            }
+            ordered_json exit;
+            exit["hex"] = object->position;
+            if (!playerHere) {
+                exit["reachableFromPlayerStart"] = nullptr;
+            } else {
+                const int comp = componentOf(object->position, blocked, component);
+                exit["reachableFromPlayerStart"] = comp >= 0 && playerStartFlags[comp] != 0;
+            }
+            array.push_back(exit);
+        }
+        return array;
+    }
+
+    // Critters/items cut off from every entry point.
     ordered_json orphanedObjectsJson(resource::GameResources& resources, const std::vector<std::shared_ptr<MapObject>>& objects,
-        const std::vector<char>& blocked, const std::vector<int>& component, const std::vector<char>& seedFlags, std::size_t& totalOut) {
+        const std::vector<char>& blocked, const std::vector<int>& component, const std::vector<char>& entryFlags, std::size_t& totalOut) {
         auto array = ordered_json::array();
         std::size_t total = 0;
         for (const auto& object : objects) {
             if (!object || !isGameplayObject(*object) || object->position < 0 || object->position >= kHexCount) {
                 continue;
             }
-            if (reachesEntry(object->position, blocked, component, seedFlags)) {
+            if (reaches(object->position, blocked, component, entryFlags)) {
                 continue;
             }
             ++total;
@@ -215,31 +215,40 @@ namespace {
         entry["walkableHexes"] = walkable;
         entry["blockedHexes"] = kHexCount - walkable;
 
-        const std::vector<int> seeds = entryHexes(header, elevation, objects);
-        entry["entryPointHexes"] = static_cast<int>(seeds.size());
-        if (seeds.empty()) {
-            // No player start or exit grid here — this elevation is entered via stairs/elevators, which
-            // the hex flood-fill doesn't model, so reachability can't be determined.
+        const bool playerHere = static_cast<int>(header.player_default_elevation) == elevation;
+        entry["playerStartHex"] = playerHere ? ordered_json(static_cast<int>(header.player_default_position)) : ordered_json(nullptr);
+
+        const std::vector<int> entrySeeds = entryHexes(header, elevation, objects);
+        entry["entryPointHexes"] = static_cast<int>(entrySeeds.size());
+        if (entrySeeds.empty()) {
+            // No player start and no exit grid here — entered via stairs/elevators, which the hex flood
+            // doesn't model, so reachability can't be determined.
             entry["reachableHexes"] = nullptr;
+            entry["exits"] = ordered_json::array();
             entry["orphanedObjects"] = ordered_json::array();
             entry["orphanedObjectCount"] = 0;
             entry["note"] = "no entry point on this elevation (reached via stairs/elevators, not modeled)";
             return entry;
         }
 
-        const std::vector<char> seedFlags = seedComponentFlags(seeds, blocked, component, sizes.size());
+        // Reachability/orphans use every entry point (the player can arrive at the start *or* at an
+        // exit grid coming from the adjacent map); the per-exit flag below is start-only.
+        const std::vector<char> entryFlags = seedComponentFlags(entrySeeds, blocked, component, sizes.size());
         int reachable = 0;
         for (std::size_t id = 0; id < sizes.size(); ++id) {
-            if (seedFlags[id]) {
+            if (entryFlags[id]) {
                 reachable += sizes[id];
             }
         }
         entry["reachableHexes"] = reachable;
 
-        entry["exits"] = exitsJson(header, elevation, objects, blocked, component);
+        const std::vector<char> playerStartFlags = playerHere
+            ? seedComponentFlags({ static_cast<int>(header.player_default_position) }, blocked, component, sizes.size())
+            : std::vector<char>{};
+        entry["exits"] = exitsJson(objects, blocked, component, playerStartFlags, playerHere);
 
         std::size_t orphanTotal = 0;
-        entry["orphanedObjects"] = orphanedObjectsJson(resources, objects, blocked, component, seedFlags, orphanTotal);
+        entry["orphanedObjects"] = orphanedObjectsJson(resources, objects, blocked, component, entryFlags, orphanTotal);
         entry["orphanedObjectCount"] = static_cast<int>(orphanTotal);
         if (orphanTotal > kMaxReported) {
             spdlog::info("reachability {} elev {}: reporting {} of {} orphaned objects", mapName, elevation, kMaxReported, orphanTotal);
@@ -247,6 +256,17 @@ namespace {
         return entry;
     }
 } // namespace
+
+bool blocksMovementByInstance(uint32_t objectType, uint32_t flags) {
+    const bool blockingType = objectType == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)
+        || objectType == static_cast<uint32_t>(Pro::OBJECT_TYPE::SCENERY)
+        || objectType == static_cast<uint32_t>(Pro::OBJECT_TYPE::WALL);
+    if (!blockingType) {
+        return false;
+    }
+    return !Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_HIDDEN)
+        && !Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK);
+}
 
 std::vector<int> hexNeighbors(int hex) {
     using namespace hexgrid;

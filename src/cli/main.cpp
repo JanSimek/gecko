@@ -66,8 +66,8 @@ void printUsage(const char* program) {
               << "      filename, the .ssl source (if a source tree like FRP scripts_src is mounted via\n"
               << "      --data) and the dialog .msg lines, as JSON.\n"
               << "  " << program << " map reachability --map <path> --data <dir-or-.dat> [--data <...>]\n"
-              << "      Per-elevation reachability from the entry points (player start + exit grids, doors\n"
-              << "      passable): reachable vs walkable hexes and any critters/items cut off (orphaned).\n"
+              << "      Per-elevation reachability from the entry points (player start + exit grids;\n"
+              << "      optimistic: doors passable): reachable/walkable hexes, exits, orphaned content.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 

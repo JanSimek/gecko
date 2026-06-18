@@ -5,6 +5,7 @@
 
 #include "cli/MapReachability.h"
 #include "editor/HexGeometry.h"
+#include "format/pro/Pro.h"
 
 using namespace geck;
 
@@ -12,6 +13,30 @@ namespace {
 constexpr int kCount = hexgrid::WIDTH * hexgrid::HEIGHT;
 constexpr int kCenter = 100 * hexgrid::WIDTH + 100; // a comfortably interior hex
 } // namespace
+
+TEST_CASE("blocksMovementByInstance mirrors the engine's instance-flag rule", "[reachability]") {
+    using OT = geck::Pro::OBJECT_TYPE;
+    constexpr uint32_t kWall = static_cast<uint32_t>(OT::WALL);
+    constexpr uint32_t kScenery = static_cast<uint32_t>(OT::SCENERY);
+    constexpr uint32_t kCritter = static_cast<uint32_t>(OT::CRITTER);
+    constexpr uint32_t kItem = static_cast<uint32_t>(OT::ITEM);
+    constexpr uint32_t kMisc = static_cast<uint32_t>(OT::MISC);
+    constexpr uint32_t kHidden = static_cast<uint32_t>(geck::Pro::ObjectFlags::OBJECT_HIDDEN);
+    constexpr uint32_t kNoBlock = static_cast<uint32_t>(geck::Pro::ObjectFlags::OBJECT_NO_BLOCK);
+
+    // Walls, scenery and critters block by default.
+    CHECK(cli::blocksMovementByInstance(kWall, 0));
+    CHECK(cli::blocksMovementByInstance(kScenery, 0));
+    CHECK(cli::blocksMovementByInstance(kCritter, 0));
+
+    // Items, misc and tiles never block (the engine's type filter) — this is the key fix.
+    CHECK_FALSE(cli::blocksMovementByInstance(kItem, 0));
+    CHECK_FALSE(cli::blocksMovementByInstance(kMisc, 0));
+
+    // Per-instance flags override: hidden or explicitly no-block objects don't block.
+    CHECK_FALSE(cli::blocksMovementByInstance(kWall, kHidden));
+    CHECK_FALSE(cli::blocksMovementByInstance(kScenery, kNoBlock));
+}
 
 TEST_CASE("hexNeighbors yields parity-correct, symmetric neighbours", "[reachability]") {
     // An interior hex has all six neighbours.

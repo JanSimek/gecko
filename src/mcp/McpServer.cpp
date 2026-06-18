@@ -318,14 +318,14 @@ namespace {
                                  "the dialog language subdir (default english). Args: programIndex, optional locale." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "required", json::array({ "programIndex" }) } } } },
             { { "name", "reachability" },
-                { "description", "Per-elevation reachability for one map. Floods the walkable hexes (doors "
-                                 "count as passable) outward from the entry points (player start + exit grids): "
-                                 "'reachableHexes' of 'walkableHexes' are reachable, and 'orphanedObjects' "
-                                 "([{pid,name,hex}], with 'orphanedObjectCount') are critters/items the player "
-                                 "can't reach — usually a sealed-off area or a map bug. 'exits' lists each exit "
-                                 "grid with 'reachableFromPlayerStart' (can the player walk start->exit; null if "
-                                 "the player starts on another elevation). Elevations with no entry point (reached "
-                                 "via stairs) report reachableHexes=null + a note. Args: map (path)." },
+                { "description", "Per-elevation reachability for one map. Floods walkable hexes from the entry "
+                                 "points (player start + exit grids — you can arrive at an exit coming from the "
+                                 "adjacent map): 'reachableHexes' of 'walkableHexes'; 'orphanedObjects' "
+                                 "([{pid,name,hex}], with 'orphanedObjectCount') are critters/items cut off from "
+                                 "every entry — usually a sealed-off area or a map bug. 'exits' lists each exit "
+                                 "grid with 'reachableFromPlayerStart' (walk-connected to the spawn specifically; "
+                                 "null if the player spawns elsewhere). OPTIMISTIC, not exact pathfinding: doors "
+                                 "(incl. locked) are passable, so it over-estimates rather than crying wolf. Args: map." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } } } },
             { { "name", "generate" },
                 { "description", "Run a Luau generation script against a fresh map and write a .map. "
