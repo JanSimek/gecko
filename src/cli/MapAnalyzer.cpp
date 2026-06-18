@@ -4,6 +4,7 @@
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
 #include "format/ai/AiPacket.h"
+#include "format/gam/Gam.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
@@ -646,6 +647,71 @@ namespace {
         }
     }
 
+    // The map's companion .gam (same basename), which names its map variables, or nullptr if absent.
+    const Gam* loadMapGam(resource::GameResources& resources, const std::string& mapPath) {
+        const auto dot = mapPath.find_last_of('.');
+        const std::string gamPath = (dot == std::string::npos ? mapPath : mapPath.substr(0, dot)) + ".gam";
+        try {
+            return resources.repository().load<Gam>(gamPath);
+        } catch (const std::exception& e) {
+            spdlog::debug("loadMapGam: no .gam for {}: {}", mapPath, e.what());
+            return nullptr;
+        }
+    }
+
+    // Per-map header digest: player spawn, which elevations are enabled, darkness, the map script id,
+    // the local-var pool size, and the map variables (MVARS) — each with its name from the .gam (the
+    // .map stores only the value) so an agent reads the map's tracked state, not just a count.
+    void emitMapHeaderJson(Map& map, const Gam* gam, std::ostream& out) {
+        const auto& header = map.getMapFile().header;
+        out << "{\"version\":" << header.version << ",\"player\":{\"position\":" << header.player_default_position
+            << ",\"elevation\":" << header.player_default_elevation
+            << ",\"orientation\":" << header.player_default_orientation << "},\"elevations\":[";
+        bool firstElevation = true;
+        for (int elevation = 0; elevation < Map::ELEVATION_COUNT; ++elevation) {
+            if (Map::elevationIsPresent(header.flags, elevation)) {
+                out << (firstElevation ? "" : ",") << elevation;
+                firstElevation = false;
+            }
+        }
+        out << "],\"darkness\":" << header.darkness << ",\"scriptId\":" << header.script_id
+            << ",\"localVarCount\":" << header.num_local_vars << ",\"mapVars\":[";
+        const auto& mapVars = map.getMapFile().map_global_vars;
+        for (std::size_t i = 0; i < mapVars.size(); ++i) {
+            std::string name = "MVAR#" + std::to_string(i);
+            if (gam != nullptr) {
+                try {
+                    name = gam->mvarKey(i);
+                } catch (const std::exception&) { // .gam shorter than the value block — fall back to the index
+                }
+            }
+            out << (i == 0 ? "" : ",") << "{\"index\":" << i << ",\"name\":" << jsonString(name)
+                << ",\"value\":" << mapVars[i] << "}";
+        }
+        out << "]}";
+    }
+
+    // Per-map exit graph: [{hex,elevation,destMap,destHex,destElevation,orientation}] from the
+    // exit-grid markers. destMap is signed (-1 = town map, -2 = worldmap, else a map id) — the map's
+    // connectivity, so an agent sees where each edge leads.
+    void emitMapExitsJson(Map& map, std::ostream& out) {
+        bool first = true;
+        for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
+            for (const auto& object : mapObjects) {
+                if (!object || !object->isExitGridMarker()) {
+                    continue;
+                }
+                out << (first ? "" : ",");
+                first = false;
+                out << "{\"hex\":" << object->position << ",\"elevation\":" << elevation
+                    << ",\"destMap\":" << static_cast<int32_t>(object->exit_map)
+                    << ",\"destHex\":" << static_cast<int32_t>(object->exit_position) // -1 = unused (world/town exit)
+                    << ",\"destElevation\":" << object->exit_elevation
+                    << ",\"orientation\":" << object->exit_orientation << "}";
+            }
+        }
+    }
+
     // Machine-readable analyze, for an MCP client: per map { name, path, floor[], objects[],
     // adjacency[], clusters[] } and an aggregate { analysed, floor[], objects[], adjacency[] }.
     // `flat` is the structural-vs-decoration hint; `adjacency` lists floor-tile borders (transitions);
@@ -675,6 +741,10 @@ namespace {
             emitMapClustersJson(collectClusters(*map), names, out);
             out << "],\"critters\":[";
             emitMapCrittersJson(*map, names, ai, out);
+            out << "],\"header\":";
+            emitMapHeaderJson(*map, loadMapGam(resources, mapPath), out);
+            out << ",\"exits\":[";
+            emitMapExitsJson(*map, out);
             out << "]}";
             ++agg.analysed;
         }

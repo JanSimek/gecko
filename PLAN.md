@@ -663,7 +663,10 @@ The direction instead:
 
 # Map semantics & intelligence (analysis MCP roadmap)
 
-> Status: scoping; **Phase 1 in progress**. Today the MCP *perceives geometry* — tiles, objects,
+> Status: scoping; **Phase 1 done** (ai.txt reader; `analyze` now reports per-map `critters` with
+> team + ai.txt-resolved AI, a `header` digest with player spawn / enabled elevations / darkness /
+> map script / named map variables, and an `exits` connectivity graph). Today the MCP *perceives
+> geometry* — tiles, objects,
 > clusters, palette, render, extract/generate. It cannot read the map's **semantic** layer: AI
 > packet is a raw number (no `ai.txt` reader), scripts are referenced by `scripts.lst` index/name
 > only (no `.ssl`/`.int` reading), `analyze` treats critters as generic objects, and there is no
