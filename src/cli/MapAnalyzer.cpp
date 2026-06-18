@@ -3,12 +3,14 @@
 #include "cli/MapLoad.h"
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
+#include "format/ai/AiPacket.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
+#include "reader/ai/AiTxtReader.h"
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
 
@@ -122,6 +124,25 @@ namespace {
             return _resolved[pid];
         }
 
+        // The critter proto's default AI packet (CritterData.aiPacket), cached. 0 if the pid isn't a
+        // resolvable critter. Used as the fallback when a map instance leaves ai_packet at 0.
+        uint32_t critterAiPacket(uint32_t pid) {
+            if (const auto it = _critterAiPackets.find(pid); it != _critterAiPackets.end()) {
+                return it->second;
+            }
+            uint32_t packet = 0;
+            try {
+                const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, pid));
+                if (pro != nullptr && pro->type() == Pro::OBJECT_TYPE::CRITTER) {
+                    packet = pro->critterData.aiPacket;
+                }
+            } catch (const std::exception& e) {
+                spdlog::debug("critterAiPacket: could not resolve pid {}: {}", pid, e.what());
+            }
+            _critterAiPackets[pid] = packet;
+            return packet;
+        }
+
     private:
         // Load the proto once and cache whether it resolved and its OBJECT_FLAT flag.
         void characterize(uint32_t pid) {
@@ -167,7 +188,19 @@ namespace {
         std::unordered_map<uint32_t, std::string> _protoNames;
         std::unordered_map<uint32_t, bool> _flat;
         std::unordered_map<uint32_t, bool> _resolved;
+        std::unordered_map<uint32_t, uint32_t> _critterAiPackets;
     };
+
+    // Load data/ai.txt from the mounted data (empty AiTxt if absent — critters then report just the
+    // raw packet number). Tries the canonical path and a bare fallback for odd mounts.
+    AiTxt loadAiTxt(resource::GameResources& resources) {
+        for (const char* path : { "data/ai.txt", "ai.txt" }) {
+            if (const auto bytes = resources.files().readRawBytes(path); bytes.has_value()) {
+                return parseAiTxt(std::string(bytes->begin(), bytes->end()));
+            }
+        }
+        return AiTxt{};
+    }
 
     // Minimal JSON string literal (quotes + escapes) — analyze --json builds a fixed schema by
     // hand, so it needs no JSON library.
@@ -572,13 +605,54 @@ namespace {
         }
     }
 
+    // The resolved AI behaviour sub-object for a packet, or null when ai.txt defines no such packet.
+    // Engine labels are kept verbatim (no remapping).
+    void emitCritterAi(const AiPacket* packet, std::ostream& out) {
+        if (packet == nullptr) {
+            out << "null";
+            return;
+        }
+        out << "{\"name\":" << jsonString(packet->name) << ",\"aggression\":" << packet->aggression
+            << ",\"disposition\":" << jsonString(packet->disposition)
+            << ",\"runAwayMode\":" << jsonString(packet->runAwayMode)
+            << ",\"bestWeapon\":" << jsonString(packet->bestWeapon)
+            << ",\"distance\":" << jsonString(packet->distance)
+            << ",\"areaAttackMode\":" << jsonString(packet->areaAttackMode)
+            << ",\"secondaryFreq\":" << packet->secondaryFreq << "}";
+    }
+
+    // Per-map critter array: [{pid,number,name,hex,elevation,team,aiPacket,ai:{...}|null}]. `team` is
+    // the instance group_id; `aiPacket` is the instance ai_packet, falling back to the proto default
+    // when it is 0, resolved through ai.txt into the behaviour sub-object. Lets an agent read who is
+    // on the map, which side they fight for, and how they behave.
+    void emitMapCrittersJson(Map& map, NameResolver& names, const AiTxt& ai, std::ostream& out) {
+        bool first = true;
+        for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
+            for (const auto& object : mapObjects) {
+                if (!object || object->objectType() != static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)) {
+                    continue;
+                }
+                const uint32_t pid = object->pro_pid;
+                const uint32_t packet = object->ai_packet != 0 ? object->ai_packet : names.critterAiPacket(pid);
+                out << (first ? "" : ",");
+                first = false;
+                out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"number\":" << (pid & 0xFFFFFFu)
+                    << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"hex\":" << object->position
+                    << ",\"elevation\":" << elevation << ",\"team\":" << object->group_id
+                    << ",\"aiPacket\":" << packet << ",\"ai\":";
+                emitCritterAi(ai.byPacketNum(static_cast<int>(packet)), out);
+                out << "}";
+            }
+        }
+    }
+
     // Machine-readable analyze, for an MCP client: per map { name, path, floor[], objects[],
     // adjacency[], clusters[] } and an aggregate { analysed, floor[], objects[], adjacency[] }.
     // `flat` is the structural-vs-decoration hint; `adjacency` lists floor-tile borders (transitions);
     // `clusters` groups nearby objects (structures like tents/buildings) with a centre/bbox an agent
     // feeds to extract_pattern. A fixed schema emitted by hand (no JSON library).
     void emitJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
-        NameResolver& names, std::ostream& out) {
+        NameResolver& names, const AiTxt& ai, std::ostream& out) {
         Aggregate agg;
         out << "{\"maps\":[";
         bool firstMap = true;
@@ -599,6 +673,8 @@ namespace {
             emitMapAdjacencyJson(usage, names, agg, out);
             out << "],\"clusters\":[";
             emitMapClustersJson(collectClusters(*map), names, out);
+            out << "],\"critters\":[";
+            emitMapCrittersJson(*map, names, ai, out);
             out << "]}";
             ++agg.analysed;
         }
@@ -626,7 +702,7 @@ int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& option
         return 0;
     }
     if (options.json) {
-        emitJson(mapPaths, resources, names, out);
+        emitJson(mapPaths, resources, names, loadAiTxt(resources), out);
         return 0;
     }
 

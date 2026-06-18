@@ -255,7 +255,10 @@ namespace {
             { { "name", "analyze" },
                 { "description", "Analyze ground-tile and object usage as JSON. Omit 'maps' to analyze "
                                  "every map, or pass it to scope. Each object carries a 'flat' flag "
-                                 "(structural blocker vs. decoration) for curating a scatter palette." },
+                                 "(structural blocker vs. decoration) for curating a scatter palette. Each "
+                                 "map also lists 'critters': who is on it, their team (group_id), and their "
+                                 "AI packet resolved via ai.txt (aggression, disposition, flee/best-weapon/"
+                                 "distance) — so you can read the map's combatants and how they behave." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } } } },
             { { "name", "palette" },
                 { "description", "The weighted generation palette for the given maps (omit 'maps' for all), "
