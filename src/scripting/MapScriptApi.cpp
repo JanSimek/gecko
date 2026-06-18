@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <format>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <set>
 #include <unordered_map>
@@ -512,31 +513,24 @@ namespace {
         return { ExitGrid::MAP_EXIT_PRO_PID, ExitGrid::MAP_EXIT_FRM_PID };
     }
 
-    constexpr int EDGE_STEP = 6; // px; finer than the hex screen pitch, so a walked edge has no gaps.
-
-    // The hexes whose screen position lies along the straight screen segment (x0,y0)->(x1,y1), in
-    // order and de-duplicated. Steps in screen space and snaps each point to its nearest hex, so the
-    // returned run is contiguous (matching the engine's iso staircase). Points off the map are skipped.
-    std::vector<int> hexesAlongEdge(const HexagonGrid& grid, int x0, int y0, int x1, int y1) {
-        std::vector<int> out;
-        const int dx = x1 - x0;
-        const int dy = y1 - y0;
-        const int steps = std::max(1, std::max(std::abs(dx), std::abs(dy)) / EDGE_STEP);
-        int last = -1;
-        for (int i = 0; i <= steps; ++i) {
-            const int sx = x0 + dx * i / steps;
-            const int sy = y0 + dy * i / steps;
-            if (sx < 0 || sy < 0) {
-                continue;
-            }
-            const uint32_t pos = grid.positionAt(static_cast<uint32_t>(sx), static_cast<uint32_t>(sy));
-            if (pos == Hex::HEX_OUT_OF_MAP || static_cast<int>(pos) == last) {
-                continue;
-            }
-            last = static_cast<int>(pos);
-            out.push_back(last);
+    // The on-grid hex whose screen position is nearest (sx, sy), or -1 if off the map.
+    int nearestHex(const HexagonGrid& grid, int sx, int sy) {
+        if (sx < 0 || sy < 0) {
+            return -1;
         }
-        return out;
+        const uint32_t pos = grid.positionAt(static_cast<uint32_t>(sx), static_cast<uint32_t>(sy));
+        return pos == Hex::HEX_OUT_OF_MAP ? -1 : static_cast<int>(pos);
+    }
+
+    // Squared screen distance from `hex` to the point (ex, ey); max if `hex` is off-grid.
+    long screenDistSq(const HexagonGrid& grid, int hex, int ex, int ey) {
+        const auto h = grid.getHexByPosition(static_cast<uint32_t>(hex));
+        if (!h.has_value()) {
+            return std::numeric_limits<long>::max();
+        }
+        const long dx = h->get().x() - ex;
+        const long dy = h->get().y() - ey;
+        return dx * dx + dy * dy;
     }
 } // namespace
 
@@ -569,6 +563,41 @@ bool MapScriptApi::placeExitGrid(int hex, int destMapId, int destHex, int destEl
     return placeExitGridMarker(hex, art.proPid, art.frmPid, { dest, destHex, destElevation, orientation });
 }
 
+std::vector<int> MapScriptApi::hexLine(int startHex, int endHex) const {
+    std::vector<int> line;
+    if (!isValidHex(startHex) || !isValidHex(endHex)) {
+        return line;
+    }
+    const auto endRef = _hexgrid.getHexByPosition(static_cast<uint32_t>(endHex));
+    if (!endRef.has_value()) {
+        return line;
+    }
+    const int ex = endRef->get().x();
+    const int ey = endRef->get().y();
+
+    int cur = startHex;
+    line.push_back(cur);
+    // A straight screen edge needs at most a grid span's worth of steps; the bound also stops a
+    // pathological non-converging walk.
+    const int maxSteps = 2 * (HexagonGrid::GRID_WIDTH + HexagonGrid::GRID_HEIGHT);
+    for (int step = 0; step < maxSteps && cur != endHex; ++step) {
+        long best = screenDistSq(_hexgrid, cur, ex, ey);
+        int next = -1;
+        for (const int neighbour : hexNeighbors(cur)) {
+            if (const long d = screenDistSq(_hexgrid, neighbour, ex, ey); d < best) {
+                best = d;
+                next = neighbour;
+            }
+        }
+        if (next < 0) {
+            break; // no neighbour is closer to the end — straight edges never hit this
+        }
+        cur = next;
+        line.push_back(cur);
+    }
+    return line;
+}
+
 int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int screenHalfHeight,
     int destMapId, int destHex, int destElevation, int orientation) {
     if (!isValidHex(centerHex)) {
@@ -591,22 +620,28 @@ int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int scre
     const int bottom = cy + screenHalfHeight;
     const ExitDest dest{ static_cast<uint32_t>(destMapId), destHex, destElevation, orientation };
 
-    // The four screen edges, each with its matching directional art (see ExitGrid::RECT_* in Constants).
+    // The four screen corners; each edge is the gap-free hex line between two of them, walked along
+    // the iso staircase so the vertical sides are continuous (not a sparse single column).
+    const int tl = nearestHex(_hexgrid, left, top);
+    const int tr = nearestHex(_hexgrid, right, top);
+    const int bl = nearestHex(_hexgrid, left, bottom);
+    const int br = nearestHex(_hexgrid, right, bottom);
+
     struct Edge {
-        int x0, y0, x1, y1;
+        int from, to;
         uint32_t proPid, frmPid;
     };
     const std::array<Edge, 4> edges{ {
-        { left, top, right, top, ExitGrid::RECT_TOP_PRO_PID, ExitGrid::RECT_TOP_FRM_PID },
-        { left, bottom, right, bottom, ExitGrid::RECT_BOTTOM_PRO_PID, ExitGrid::RECT_BOTTOM_FRM_PID },
-        { left, top, left, bottom, ExitGrid::RECT_LEFT_PRO_PID, ExitGrid::RECT_LEFT_FRM_PID },
-        { right, top, right, bottom, ExitGrid::RECT_RIGHT_PRO_PID, ExitGrid::RECT_RIGHT_FRM_PID },
+        { tl, tr, ExitGrid::RECT_TOP_PRO_PID, ExitGrid::RECT_TOP_FRM_PID },
+        { bl, br, ExitGrid::RECT_BOTTOM_PRO_PID, ExitGrid::RECT_BOTTOM_FRM_PID },
+        { tl, bl, ExitGrid::RECT_LEFT_PRO_PID, ExitGrid::RECT_LEFT_FRM_PID },
+        { tr, br, ExitGrid::RECT_RIGHT_PRO_PID, ExitGrid::RECT_RIGHT_FRM_PID },
     } };
 
     std::set<int> placedHexes; // corners are shared between two edges — place each hex once.
     int placed = 0;
     for (const Edge& edge : edges) {
-        for (const int hex : hexesAlongEdge(_hexgrid, edge.x0, edge.y0, edge.x1, edge.y1)) {
+        for (const int hex : hexLine(edge.from, edge.to)) {
             if (placedHexes.insert(hex).second && placeExitGridMarker(hex, edge.proPid, edge.frmPid, dest)) {
                 ++placed;
             }
