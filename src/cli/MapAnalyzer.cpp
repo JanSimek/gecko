@@ -15,6 +15,7 @@
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
 
+#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -203,40 +204,8 @@ namespace {
         return AiTxt{};
     }
 
-    // Minimal JSON string literal (quotes + escapes) — analyze --json builds a fixed schema by
-    // hand, so it needs no JSON library.
-    std::string jsonString(const std::string& s) {
-        std::string out;
-        out.reserve(s.size() + 2);
-        out.push_back('"');
-        for (const char c : s) {
-            switch (c) {
-                case '"':
-                    out += "\\\"";
-                    break;
-                case '\\':
-                    out += "\\\\";
-                    break;
-                case '\n':
-                    out += "\\n";
-                    break;
-                case '\r':
-                    out += "\\r";
-                    break;
-                case '\t':
-                    out += "\\t";
-                    break;
-                default:
-                    if (static_cast<unsigned char>(c) < 0x20) {
-                        out += std::format("\\u{:04x}", static_cast<unsigned char>(c));
-                    } else {
-                        out.push_back(c);
-                    }
-            }
-        }
-        out.push_back('"');
-        return out;
-    }
+    // Ordered so the emitted objects keep the field order below (nlohmann's default json sorts keys).
+    using ordered_json = nlohmann::ordered_json;
 
     // List everything and keep the .map files, case-insensitively — more robust than a glob
     // against the raw VFS keys (whose case and leading "/" depend on the DAT/mount).
@@ -451,81 +420,70 @@ namespace {
         }
     }
 
-    // The JSON arrays of emitJson(), one per object below, so emitJson itself stays a flat sketch of
-    // the schema. Each prints a comma-separated array body (no brackets) and folds usage into `agg`.
+    // Each helper below returns a JSON array/object for emitJson()/emitPalette() to assemble; the
+    // per-map ones also fold usage into `agg`. ordered_json keeps the documented field order.
 
     // Per-map floor array: [{id,name,count}], accumulating totals into agg. tileName() is const
     // (pure tiles.lst lookup), unlike the proto helpers which cache, so names is a const ref here.
-    void emitMapFloorsJson(const MapUsage& usage, const NameResolver& names, Aggregate& agg, std::ostream& out) {
-        bool first = true;
+    ordered_json floorsToJson(const MapUsage& usage, const NameResolver& names, Aggregate& agg) {
+        auto array = ordered_json::array();
         for (const auto& [id, count] : sortedByCountDesc(usage.floors)) {
-            out << (first ? "" : ",");
-            first = false;
-            out << "{\"id\":" << id << ",\"name\":" << jsonString(names.tileName(id)) << ",\"count\":" << count << "}";
+            array.push_back({ { "id", id }, { "name", names.tileName(id) }, { "count", count } });
             agg.floorCount[id] += count;
             agg.floorMaps[id]++;
         }
+        return array;
     }
 
-    // Per-map object array: [{pid,type,name,count,flat}], accumulating totals into agg.
-    void emitMapObjectsJson(const MapUsage& usage, NameResolver& names, Aggregate& agg, std::ostream& out) {
-        bool first = true;
+    // Per-map object array: [{pid,number,type,name,count,flat}], accumulating totals into agg.
+    // `number` is the PID's low 24 bits — the value api:proto(type, number) wants (one less than the
+    // NNN in the 00000NNN.pro filename), so a script can use it verbatim.
+    ordered_json objectsToJson(const MapUsage& usage, NameResolver& names, Aggregate& agg) {
+        auto array = ordered_json::array();
         for (const auto& [pid, count] : sortedByCountDesc(usage.objects)) {
-            out << (first ? "" : ",");
-            first = false;
-            // `number` is the PID's low 24 bits — the value api:proto(type, number) wants (and one
-            // less than the NNN in the 00000NNN.pro filename), so a script can use it verbatim.
-            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"number\":" << (pid & 0xFFFFFFu)
-                << ",\"type\":" << jsonString(typeLabel(pid))
-                << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"count\":" << count
-                << ",\"flat\":" << (names.isFlat(pid) ? "true" : "false") << "}";
+            array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu }, { "type", typeLabel(pid) },
+                { "name", names.protoName(pid) }, { "count", count }, { "flat", names.isFlat(pid) } });
             agg.objCount[pid] += count;
             agg.objMaps[pid]++;
         }
+        return array;
     }
 
-    // Aggregate floor array: [{id,name,total,maps}]. const names, as in emitMapFloorsJson.
-    void emitAggFloorsJson(const Aggregate& agg, const NameResolver& names, std::ostream& out) {
-        bool first = true;
+    // Aggregate floor array: [{id,name,total,maps}].
+    ordered_json aggFloorsToJson(const Aggregate& agg, const NameResolver& names) {
+        auto array = ordered_json::array();
         for (const auto& [id, count] : sortedByCountDesc(agg.floorCount)) {
-            out << (first ? "" : ",");
-            first = false;
-            out << "{\"id\":" << id << ",\"name\":" << jsonString(names.tileName(id)) << ",\"total\":" << count
-                << ",\"maps\":" << agg.floorMaps.at(id) << "}";
+            array.push_back({ { "id", id }, { "name", names.tileName(id) }, { "total", count }, { "maps", agg.floorMaps.at(id) } });
         }
+        return array;
     }
 
-    // Aggregate object array: [{pid,type,name,total,maps,flat}].
-    void emitAggObjectsJson(const Aggregate& agg, NameResolver& names, std::ostream& out) {
-        bool first = true;
+    // Aggregate object array: [{pid,number,type,name,total,maps,flat}].
+    ordered_json aggObjectsToJson(const Aggregate& agg, NameResolver& names) {
+        auto array = ordered_json::array();
         for (const auto& [pid, count] : sortedByCountDesc(agg.objCount)) {
-            out << (first ? "" : ",");
-            first = false;
-            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"number\":" << (pid & 0xFFFFFFu)
-                << ",\"type\":" << jsonString(typeLabel(pid))
-                << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"total\":" << count
-                << ",\"maps\":" << agg.objMaps.at(pid) << ",\"flat\":" << (names.isFlat(pid) ? "true" : "false") << "}";
+            array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu }, { "type", typeLabel(pid) },
+                { "name", names.protoName(pid) }, { "total", count }, { "maps", agg.objMaps.at(pid) }, { "flat", names.isFlat(pid) } });
         }
+        return array;
     }
 
     // --- palette: the small weighted generation input (floor + scatter scenery) -----------------
-    void emitPaletteFloor(const std::map<uint16_t, int>& floor, const NameResolver& names, std::ostream& out) {
-        bool first = true;
+    ordered_json paletteFloorToJson(const std::map<uint16_t, int>& floor, const NameResolver& names) {
+        auto array = ordered_json::array();
         for (const auto& [id, weight] : sortedByCountDesc(floor)) {
-            out << (first ? "" : ",");
-            first = false;
-            out << "{\"id\":" << id << ",\"name\":" << jsonString(names.tileName(id)) << ",\"weight\":" << weight << "}";
+            array.push_back({ { "id", id }, { "name", names.tileName(id) }, { "weight", weight } });
         }
+        return array;
     }
 
-    void emitPaletteScenery(const std::map<uint32_t, int>& scenery, NameResolver& names, std::ostream& out) {
-        bool first = true;
+    ordered_json paletteSceneryToJson(const std::map<uint32_t, int>& scenery, NameResolver& names) {
+        auto array = ordered_json::array();
         for (const auto& [pid, weight] : sortedByCountDesc(scenery)) {
-            out << (first ? "" : ",");
-            first = false;
-            out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"number\":" << (pid & 0xFFFFFFu)
-                << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"weight\":" << weight << "}";
+            array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+                { "name", names.protoName(pid) }, { "weight", weight } });
         }
+        return array;
     }
 
     // The weighted generation palette aggregated across maps: floor tiles, and the scatter-eligible
@@ -553,81 +511,67 @@ namespace {
                 }
             }
         }
-        out << "{\"floor\":[";
-        emitPaletteFloor(floor, names, out);
-        out << "],\"scenery\":[";
-        emitPaletteScenery(scenery, names, out);
-        out << "]}\n";
+        ordered_json root;
+        root["floor"] = paletteFloorToJson(floor, names);
+        root["scenery"] = paletteSceneryToJson(scenery, names);
+        out << root.dump() << "\n";
     }
 
     // Per-map floor-border array: [{a,aName,b,bName,count}], folding totals into agg.adjacency.
-    // const names, as in emitMapFloorsJson (tileName() is the only resolver used).
-    void emitMapAdjacencyJson(const MapUsage& usage, const NameResolver& names, Aggregate& agg, std::ostream& out) {
-        bool first = true;
+    ordered_json adjacencyToJson(const MapUsage& usage, const NameResolver& names, Aggregate& agg) {
+        auto array = ordered_json::array();
         for (const auto& [pair, count] : sortedByCountDesc(usage.floorAdjacency)) {
-            out << (first ? "" : ",");
-            first = false;
-            out << "{\"a\":" << pair.first << ",\"aName\":" << jsonString(names.tileName(pair.first))
-                << ",\"b\":" << pair.second << ",\"bName\":" << jsonString(names.tileName(pair.second))
-                << ",\"count\":" << count << "}";
+            array.push_back({ { "a", pair.first }, { "aName", names.tileName(pair.first) },
+                { "b", pair.second }, { "bName", names.tileName(pair.second) }, { "count", count } });
             agg.adjacency[pair] += count;
         }
+        return array;
     }
 
     // Aggregate floor-border array: [{a,aName,b,bName,total}], most-frequent border first.
-    void emitAggAdjacencyJson(const Aggregate& agg, const NameResolver& names, std::ostream& out) {
-        bool first = true;
+    ordered_json aggAdjacencyToJson(const Aggregate& agg, const NameResolver& names) {
+        auto array = ordered_json::array();
         for (const auto& [pair, count] : sortedByCountDesc(agg.adjacency)) {
-            out << (first ? "" : ",");
-            first = false;
-            out << "{\"a\":" << pair.first << ",\"aName\":" << jsonString(names.tileName(pair.first))
-                << ",\"b\":" << pair.second << ",\"bName\":" << jsonString(names.tileName(pair.second))
-                << ",\"total\":" << count << "}";
+            array.push_back({ { "a", pair.first }, { "aName", names.tileName(pair.first) },
+                { "b", pair.second }, { "bName", names.tileName(pair.second) }, { "total", count } });
         }
+        return array;
     }
 
     // Per-map cluster array: [{elevation,centerHex,minHex,maxHex,count,members:[{pid,type,name,count}]}].
-    void emitMapClustersJson(const std::vector<Cluster>& clusters, NameResolver& names, std::ostream& out) {
-        bool first = true;
+    ordered_json clustersToJson(const std::vector<Cluster>& clusters, NameResolver& names) {
+        auto array = ordered_json::array();
         for (const auto& cluster : clusters) {
-            out << (first ? "" : ",");
-            first = false;
-            out << "{\"elevation\":" << cluster.elevation << ",\"centerHex\":" << cluster.centerHex
-                << ",\"minHex\":" << cluster.minHex << ",\"maxHex\":" << cluster.maxHex
-                << ",\"count\":" << cluster.count << ",\"members\":[";
-            bool firstMember = true;
+            auto members = ordered_json::array();
             for (const auto& [pid, count] : sortedByCountDesc(cluster.members)) {
-                out << (firstMember ? "" : ",");
-                firstMember = false;
-                out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"type\":" << jsonString(typeLabel(pid))
-                    << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"count\":" << count << "}";
+                members.push_back({ { "pid", pidHex(pid) }, { "type", typeLabel(pid) },
+                    { "name", names.protoName(pid) }, { "count", count } });
             }
-            out << "]}";
+            array.push_back({ { "elevation", cluster.elevation }, { "centerHex", cluster.centerHex },
+                { "minHex", cluster.minHex }, { "maxHex", cluster.maxHex }, { "count", cluster.count },
+                { "members", std::move(members) } });
         }
+        return array;
     }
 
-    // The resolved AI behaviour sub-object for a packet, or null when ai.txt defines no such packet.
+    // The resolved AI behaviour sub-object for a packet, or JSON null when ai.txt defines none.
     // Engine labels are kept verbatim (no remapping).
-    void emitCritterAi(const AiPacket* packet, std::ostream& out) {
+    ordered_json critterAiToJson(const AiPacket* packet) {
         if (packet == nullptr) {
-            out << "null";
-            return;
+            return nullptr;
         }
-        out << "{\"name\":" << jsonString(packet->name) << ",\"aggression\":" << packet->aggression
-            << ",\"disposition\":" << jsonString(packet->disposition)
-            << ",\"runAwayMode\":" << jsonString(packet->runAwayMode)
-            << ",\"bestWeapon\":" << jsonString(packet->bestWeapon)
-            << ",\"distance\":" << jsonString(packet->distance)
-            << ",\"areaAttackMode\":" << jsonString(packet->areaAttackMode)
-            << ",\"secondaryFreq\":" << packet->secondaryFreq << "}";
+        return { { "name", packet->name }, { "aggression", packet->aggression },
+            { "disposition", packet->disposition }, { "runAwayMode", packet->runAwayMode },
+            { "bestWeapon", packet->bestWeapon }, { "distance", packet->distance },
+            { "areaAttackMode", packet->areaAttackMode }, { "secondaryFreq", packet->secondaryFreq } };
     }
 
     // Per-map critter array: [{pid,number,name,hex,elevation,team,aiPacket,ai:{...}|null}]. `team` is
     // the instance group_id; `aiPacket` is the instance ai_packet, falling back to the proto default
     // when it is 0, resolved through ai.txt into the behaviour sub-object. Lets an agent read who is
     // on the map, which side they fight for, and how they behave.
-    void emitMapCrittersJson(Map& map, NameResolver& names, const AiTxt& ai, std::ostream& out) {
-        bool first = true;
+    ordered_json crittersToJson(Map& map, NameResolver& names, const AiTxt& ai) {
+        auto array = ordered_json::array();
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
                 if (!object || object->objectType() != static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)) {
@@ -635,16 +579,13 @@ namespace {
                 }
                 const uint32_t pid = object->pro_pid;
                 const uint32_t packet = object->ai_packet != 0 ? object->ai_packet : names.critterAiPacket(pid);
-                out << (first ? "" : ",");
-                first = false;
-                out << "{\"pid\":" << jsonString(pidHex(pid)) << ",\"number\":" << (pid & 0xFFFFFFu)
-                    << ",\"name\":" << jsonString(names.protoName(pid)) << ",\"hex\":" << object->position
-                    << ",\"elevation\":" << elevation << ",\"team\":" << object->group_id
-                    << ",\"aiPacket\":" << packet << ",\"ai\":";
-                emitCritterAi(ai.byPacketNum(static_cast<int>(packet)), out);
-                out << "}";
+                array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+                    { "name", names.protoName(pid) }, { "hex", object->position }, { "elevation", elevation },
+                    { "team", object->group_id }, { "aiPacket", packet },
+                    { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) } });
             }
         }
+        return array;
     }
 
     // The map's companion .gam (same basename), which names its map variables, or nullptr if absent.
@@ -662,20 +603,23 @@ namespace {
     // Per-map header digest: player spawn, which elevations are enabled, darkness, the map script id,
     // the local-var pool size, and the map variables (MVARS) — each with its name from the .gam (the
     // .map stores only the value) so an agent reads the map's tracked state, not just a count.
-    void emitMapHeaderJson(Map& map, const Gam* gam, std::ostream& out) {
+    ordered_json headerToJson(Map& map, const Gam* gam) {
         const auto& header = map.getMapFile().header;
-        out << "{\"version\":" << header.version << ",\"player\":{\"position\":" << header.player_default_position
-            << ",\"elevation\":" << header.player_default_elevation
-            << ",\"orientation\":" << header.player_default_orientation << "},\"elevations\":[";
-        bool firstElevation = true;
+        ordered_json root;
+        root["version"] = header.version;
+        root["player"] = { { "position", header.player_default_position },
+            { "elevation", header.player_default_elevation }, { "orientation", header.player_default_orientation } };
+        auto elevations = ordered_json::array();
         for (int elevation = 0; elevation < Map::ELEVATION_COUNT; ++elevation) {
             if (Map::elevationIsPresent(header.flags, elevation)) {
-                out << (firstElevation ? "" : ",") << elevation;
-                firstElevation = false;
+                elevations.push_back(elevation);
             }
         }
-        out << "],\"darkness\":" << header.darkness << ",\"scriptId\":" << header.script_id
-            << ",\"localVarCount\":" << header.num_local_vars << ",\"mapVars\":[";
+        root["elevations"] = std::move(elevations);
+        root["darkness"] = header.darkness;
+        root["scriptId"] = header.script_id;
+        root["localVarCount"] = header.num_local_vars;
+        auto mapVarsJson = ordered_json::array();
         const auto& mapVars = map.getMapFile().map_global_vars;
         for (std::size_t i = 0; i < mapVars.size(); ++i) {
             std::string name = "MVAR#" + std::to_string(i);
@@ -685,76 +629,76 @@ namespace {
                 } catch (const std::exception&) { // .gam shorter than the value block — fall back to the index
                 }
             }
-            out << (i == 0 ? "" : ",") << "{\"index\":" << i << ",\"name\":" << jsonString(name)
-                << ",\"value\":" << mapVars[i] << "}";
+            mapVarsJson.push_back({ { "index", i }, { "name", name }, { "value", mapVars[i] } });
         }
-        out << "]}";
+        root["mapVars"] = std::move(mapVarsJson);
+        return root;
     }
 
     // Per-map exit graph: [{hex,elevation,destMap,destHex,destElevation,orientation}] from the
-    // exit-grid markers. destMap is signed (-1 = town map, -2 = worldmap, else a map id) — the map's
-    // connectivity, so an agent sees where each edge leads.
-    void emitMapExitsJson(Map& map, std::ostream& out) {
-        bool first = true;
+    // exit-grid markers. destMap/destHex are signed (-1 = town map / unused, -2 = worldmap, else a
+    // map id) — the map's connectivity, so an agent sees where each edge leads.
+    ordered_json exitsToJson(Map& map) {
+        auto array = ordered_json::array();
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
                 if (!object || !object->isExitGridMarker()) {
                     continue;
                 }
-                out << (first ? "" : ",");
-                first = false;
-                out << "{\"hex\":" << object->position << ",\"elevation\":" << elevation
-                    << ",\"destMap\":" << static_cast<int32_t>(object->exit_map)
-                    << ",\"destHex\":" << static_cast<int32_t>(object->exit_position) // -1 = unused (world/town exit)
-                    << ",\"destElevation\":" << object->exit_elevation
-                    << ",\"orientation\":" << object->exit_orientation << "}";
+                array.push_back({ { "hex", object->position }, { "elevation", elevation },
+                    { "destMap", static_cast<int32_t>(object->exit_map) },
+                    { "destHex", static_cast<int32_t>(object->exit_position) },
+                    { "destElevation", object->exit_elevation }, { "orientation", object->exit_orientation } });
             }
         }
+        return array;
+    }
+
+    // One map's full report object, folding its floor/object/adjacency usage into `agg` as a side
+    // effect (so the aggregate built afterwards has every map's totals).
+    ordered_json mapToJson(const std::string& mapPath, Map& map, resource::GameResources& resources,
+        NameResolver& names, const AiTxt& ai, Aggregate& agg) {
+        const MapUsage usage = collectUsage(map);
+        ordered_json entry;
+        entry["name"] = baseName(mapPath);
+        entry["path"] = mapPath;
+        entry["floor"] = floorsToJson(usage, names, agg);
+        entry["objects"] = objectsToJson(usage, names, agg);
+        entry["adjacency"] = adjacencyToJson(usage, names, agg);
+        entry["clusters"] = clustersToJson(collectClusters(map), names);
+        entry["critters"] = crittersToJson(map, names, ai);
+        entry["header"] = headerToJson(map, loadMapGam(resources, mapPath));
+        entry["exits"] = exitsToJson(map);
+        return entry;
     }
 
     // Machine-readable analyze, for an MCP client: per map { name, path, floor[], objects[],
-    // adjacency[], clusters[] } and an aggregate { analysed, floor[], objects[], adjacency[] }.
-    // `flat` is the structural-vs-decoration hint; `adjacency` lists floor-tile borders (transitions);
-    // `clusters` groups nearby objects (structures like tents/buildings) with a centre/bbox an agent
-    // feeds to extract_pattern. A fixed schema emitted by hand (no JSON library).
+    // adjacency[], clusters[], critters[], header{}, exits[] } and an aggregate { analysed, floor[],
+    // objects[], adjacency[] }. `flat` is the structural-vs-decoration hint; `adjacency` lists
+    // floor-tile borders (transitions); `clusters` groups nearby objects (structures) with a
+    // centre/bbox an agent feeds to extract_pattern. Built with nlohmann ordered_json.
     void emitJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
         NameResolver& names, const AiTxt& ai, std::ostream& out) {
         Aggregate agg;
-        out << "{\"maps\":[";
-        bool firstMap = true;
+        auto maps = ordered_json::array();
         for (const auto& mapPath : mapPaths) {
             const std::unique_ptr<Map> map = loadMap(resources, mapPath);
             if (!map) {
                 continue; // skipped maps simply don't appear; agg.analysed counts what did
             }
-            const MapUsage usage = collectUsage(*map);
-            out << (firstMap ? "" : ",");
-            firstMap = false;
-            out << "{\"name\":" << jsonString(baseName(mapPath)) << ",\"path\":" << jsonString(mapPath)
-                << ",\"floor\":[";
-            emitMapFloorsJson(usage, names, agg, out);
-            out << "],\"objects\":[";
-            emitMapObjectsJson(usage, names, agg, out);
-            out << "],\"adjacency\":[";
-            emitMapAdjacencyJson(usage, names, agg, out);
-            out << "],\"clusters\":[";
-            emitMapClustersJson(collectClusters(*map), names, out);
-            out << "],\"critters\":[";
-            emitMapCrittersJson(*map, names, ai, out);
-            out << "],\"header\":";
-            emitMapHeaderJson(*map, loadMapGam(resources, mapPath), out);
-            out << ",\"exits\":[";
-            emitMapExitsJson(*map, out);
-            out << "]}";
+            maps.push_back(mapToJson(mapPath, *map, resources, names, ai, agg));
             ++agg.analysed;
         }
-        out << "],\"aggregate\":{\"analysed\":" << agg.analysed << ",\"floor\":[";
-        emitAggFloorsJson(agg, names, out);
-        out << "],\"objects\":[";
-        emitAggObjectsJson(agg, names, out);
-        out << "],\"adjacency\":[";
-        emitAggAdjacencyJson(agg, names, out);
-        out << "]}}\n";
+
+        ordered_json root;
+        root["maps"] = std::move(maps);
+        ordered_json aggregate;
+        aggregate["analysed"] = agg.analysed;
+        aggregate["floor"] = aggFloorsToJson(agg, names);
+        aggregate["objects"] = aggObjectsToJson(agg, names);
+        aggregate["adjacency"] = aggAdjacencyToJson(agg, names);
+        root["aggregate"] = std::move(aggregate);
+        out << root.dump() << "\n";
     }
 
 } // namespace
