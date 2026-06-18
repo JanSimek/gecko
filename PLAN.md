@@ -661,6 +661,58 @@ The direction instead:
 
 ---
 
+# Map semantics & intelligence (analysis MCP roadmap)
+
+> Status: scoping; **Phase 1 done** (ai.txt reader; `analyze` now reports per-map `critters` with
+> team + ai.txt-resolved AI, a `header` digest with player spawn / enabled elevations / darkness /
+> map script / named map variables, and an `exits` connectivity graph). Today the MCP *perceives
+> geometry* — tiles, objects,
+> clusters, palette, render, extract/generate. It cannot read the map's **semantic** layer: AI
+> packet is a raw number (no `ai.txt` reader), scripts are referenced by `scripts.lst` index/name
+> only (no `.ssl`/`.int` reading), `analyze` treats critters as generic objects, and there is no
+> reachability/connectivity. The goal is to let an agent reason about a map's **purpose**, its
+> **critters' AI**, and its **scripts**.
+
+**Guiding principle.** Don't hardcode classification heuristics ("N critters ⇒ a fight"). Surface
+the engine's own semantic sources faithfully and **cross-referenced**, and let the model infer
+purpose from the evidence — the same data a designer reads. This is MCP best practice (small
+composable tools + one orchestrator, structured join-able output) and the repo's engine-fidelity
+rule (no invented label tables). Every result should carry the join keys (`pid`↔proto.msg,
+`script_id`↔`scripts.lst`↔`.ssl`↔`.msg`, `ai_packet`↔`ai.txt`) and cite which file each fact came
+from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
+
+**Capabilities (each notes the reader it needs):**
+
+1. **`describe_map` — purpose synthesis (orchestrator).** One structured digest: dimensions /
+   elevations, dominant biome (floor), structures (clusters), critter roster by team/role, exits +
+   reachable regions, attached scripts + hooks, darkness, map vars. Composes the tools below;
+   returns evidence, the model writes the conclusion.
+2. **Critters + AI — `critters` tool + new `ai.txt` reader.** Per critter: name (`pro_critters.msg`),
+   hex, **team (`group_id`)**, **AI packet resolved via `ai.txt`** (aggression, disposition,
+   `run_away_mode`, `area_attack_mode`, `best_weapon`, `distance`, `secondary_freq`), equipped
+   weapon + inventory, attached script. `ai.txt` is INI (one section per packet; section header =
+   name; `packet_num` = the critter's `ai_packet`). **Phase 1.**
+3. **Scripts + behavior — `describe_script(sid)`.** `script_id` → `scripts.lst` row → basename →
+   **`.ssl` source** (authoritative) + **`.int` procedure-hook metadata** (`map_enter`/`talk`/
+   `timer`/`destroy`/`use`/`look` p_procs) + linked **`.msg` dialog** (reuses the `Msg` reader).
+   Fall back to `int2ssl` only if source is absent. **Phase 2.**
+4. **Reachability / connectivity.** Walkability per elevation (existing `blocksMovement`/
+   `ObjectQueries`), exit grids (PIDs 16–23) → destination graph, flood-fill from player-start/each
+   exit → reachable vs walled-off regions + orphaned objects. **Phase 2.**
+5. **Semantic render overlay** (extends the schematic): colour critters by team, mark exits,
+   highlight scripted objects, shade unreachable regions, so the agent can *see* purpose and tie it
+   to the JSON via the legend. **Phase 3.**
+
+**Corpus angle (multiplier):** index `analyze` + these semantic facts across all shipped maps so
+the agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improving
+generation, not just analysis.
+
+**Phasing.** Phase 1 (small/high-value): `ai.txt` reader + critters-with-AI in `analyze`/a
+`critters` tool + header/globals + exits-as-graph. Phase 2 (medium): reachability flood-fill +
+`describe_script`. Phase 3 (synthesis): `describe_map` digest + semantic render overlay.
+
+---
+
 # Selection type toolbar — combinable layers & non-destructive switching
 
 > Status: idea / scoping. Two related improvements to how the selection *type* works. Today the

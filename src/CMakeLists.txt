@@ -269,6 +269,9 @@ add_library(vault STATIC
     format/lst/Lst.h
     format/lst/Lst.cpp
 
+    # AI (ai.txt — critter AI packets)
+    format/ai/AiPacket.h
+
     # PRO
     format/pro/Pro.h
     format/pro/Pro.cpp
@@ -319,6 +322,9 @@ add_library(vault STATIC
 
     reader/lst/LstReader.h
     reader/lst/LstReader.cpp
+
+    reader/ai/AiTxtReader.h
+    reader/ai/AiTxtReader.cpp
 
     reader/pro/ProReader.h
     reader/pro/ProReader.cpp
