@@ -2,6 +2,7 @@
 
 #include "cli/MapAnalyzer.h"
 #include "cli/MapGenerator.h"
+#include "cli/MapReachability.h"
 #include "cli/MapRender.h"
 #include "cli/PatternExtract.h"
 #include "cli/ScriptIntrospect.h"
@@ -132,6 +133,22 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    json toolReachability(resource::GameResources& resources, const json& args) {
+        cli::ReachabilityOptions opts;
+        opts.mapPath = optString(args, "map");
+        if (opts.mapPath.empty()) {
+            return toolText("reachability requires a 'map' path argument", true);
+        }
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::analyzeReachability(resources, opts, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("reachability failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
         if (!args.contains("pid") || !args["pid"].is_number_integer()) {
             return toolText("proto_info requires an integer 'pid' argument", true);
@@ -249,6 +266,9 @@ namespace {
         if (name == "describe_script") {
             return toolDescribeScript(resources, args);
         }
+        if (name == "reachability") {
+            return toolReachability(resources, args);
+        }
         if (name == "generate") {
             return toolGenerate(resources, args);
         }
@@ -297,6 +317,16 @@ namespace {
                                  "([{id,text}]). Lets you read what an NPC does and says. Optional 'locale' picks "
                                  "the dialog language subdir (default english). Args: programIndex, optional locale." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "required", json::array({ "programIndex" }) } } } },
+            { { "name", "reachability" },
+                { "description", "Per-elevation reachability for one map. Floods walkable hexes from the entry "
+                                 "points (player start + exit grids — you can arrive at an exit coming from the "
+                                 "adjacent map): 'reachableHexes' of 'walkableHexes'; 'orphanedObjects' "
+                                 "([{pid,name,hex}], with 'orphanedObjectCount') are critters/items cut off from "
+                                 "every entry — usually a sealed-off area or a map bug. 'exits' lists each exit "
+                                 "grid with 'reachableFromPlayerStart' (walk-connected to the spawn specifically; "
+                                 "null if the player spawns elsewhere). OPTIMISTIC, not exact pathfinding: doors "
+                                 "(incl. locked) are passable, so it over-estimates rather than crying wolf. Args: map." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } } } },
             { { "name", "generate" },
                 { "description", "Run a Luau generation script against a fresh map and write a .map. "
                                  "Args: script (path to the .luau), out (filesystem path for the .map — "

@@ -2,6 +2,7 @@
 #include "cli/MapAnalyzer.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
+#include "cli/MapReachability.h"
 #include "cli/PatternExtract.h"
 #include "cli/ScriptIntrospect.h"
 #include "resource/GameResources.h"
@@ -20,12 +21,14 @@ struct CliArgs {
     bool render = false;
     bool extract = false;
     bool describeScript = false;
+    bool reachability = false;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::GenerateOptions gen;
     geck::cli::RenderOptions ren;
     geck::cli::ExtractOptions ext;
     geck::cli::DescribeScriptOptions desc;
+    geck::cli::ReachabilityOptions reach;
 };
 
 void printUsage(const char* program) {
@@ -62,13 +65,16 @@ void printUsage(const char* program) {
               << "      Describe a script by its scripts.lst program index (the script_id analyze reports):\n"
               << "      filename, the .ssl source (if a source tree like FRP scripts_src is mounted via\n"
               << "      --data) and the dialog .msg lines, as JSON.\n"
+              << "  " << program << " map reachability --map <path> --data <dir-or-.dat> [--data <...>]\n"
+              << "      Per-elevation reachability from the entry points (player start + exit grids;\n"
+              << "      optimistic: doors passable): reachable/walkable hexes, exits, orphaned content.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
 bool isKnownSubcommand(const std::vector<std::string>& args) {
     return args.size() >= 2 && args[0] == "map"
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
-            || args[1] == "describe-script");
+            || args[1] == "describe-script" || args[1] == "reachability");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -108,7 +114,8 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation" || arg == "--arg" || arg == "--stamp"))
         || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim"))
         || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
-        || (out.describeScript && (arg == "--index" || arg == "--locale"));
+        || (out.describeScript && (arg == "--index" || arg == "--locale"))
+        || (out.reachability && arg == "--map");
 
     if (valueFlag && i + 1 >= args.size()) {
         std::cerr << "error: " << arg << " needs a value\n";
@@ -252,6 +259,15 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.reachability && arg == "--map") {
+        out.reach.mapPath = args[i + 1];
+        return 2;
+    }
+    if (out.reachability) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
     if (arg == "--json") { // analyze only: machine-readable output for the MCP
         out.analyze.json = true;
         return 1;
@@ -274,6 +290,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.render = args[1] == "render";
     out.extract = args[1] == "extract-pattern";
     out.describeScript = args[1] == "describe-script";
+    out.reachability = args[1] == "reachability";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -305,6 +322,11 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     }
     if (out.describeScript && out.desc.programIndex < 0) {
         std::cerr << "error: describe-script requires --index <n> (a 0-based scripts.lst program index)\n";
+        printUsage(program);
+        return 2;
+    }
+    if (out.reachability && out.reach.mapPath.empty()) {
+        std::cerr << "error: reachability requires --map <path>\n";
         printUsage(program);
         return 2;
     }
@@ -347,6 +369,9 @@ int main(int argc, char** argv) {
     }
     if (cli.describeScript) {
         return geck::cli::describeScript(resources, cli.desc, std::cout);
+    }
+    if (cli.reachability) {
+        return geck::cli::analyzeReachability(resources, cli.reach, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
 }

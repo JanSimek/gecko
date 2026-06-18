@@ -58,7 +58,7 @@ endif()
 # Pattern stamp (de)serialization round-trip — needs gecko_cli (cli::serializePattern/loadPattern),
 # no scripting or game data.
 if(TARGET gecko_cli)
-    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp)
+    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp general/test_map_reachability.cpp)
     target_link_libraries(general_tests PRIVATE gecko_cli)
 endif()
 
