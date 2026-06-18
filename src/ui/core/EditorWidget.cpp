@@ -489,14 +489,14 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
 }
 #endif
 
-void EditorWidget::saveMap() {
+bool EditorWidget::saveMap() {
     // Default the save dialog to the current map's file name.
     const QString suggestedName = _map ? QString::fromStdString(_map->filename()) : QString();
     QString destinationQString = QtDialogs::saveFile(this, "Save Map",
         "Map Files (*.map);;All Files (*.*)", suggestedName);
 
     if (destinationQString.isEmpty()) {
-        return;
+        return false; // user cancelled the dialog
     }
 
     std::string destination = destinationQString.toStdString();
@@ -509,11 +509,13 @@ void EditorWidget::saveMap() {
         map_writer.openFile(destination);
         if (map_writer.write(_map->getMapFile())) {
             spdlog::info("Saved map {} ({} bytes)", destination, map_writer.getBytesWritten());
-        } else {
-            spdlog::error("Failed to save map {}", destination);
-            QtDialogs::showError(this, "Save Failed",
-                QString("Failed to save map to:\n%1").arg(destinationQString));
+            // Repoint the map at the saved file so the window title reflects the chosen name.
+            _map->setPath(std::filesystem::path(destination));
+            return true;
         }
+        spdlog::error("Failed to save map {}", destination);
+        QtDialogs::showError(this, "Save Failed",
+            QString("Failed to save map to:\n%1").arg(destinationQString));
     } catch (const geck::FileWriterException& e) {
         spdlog::error("Failed to save map {}: {}", destination, e.what());
         QtDialogs::showError(this, "Save Failed",
@@ -521,6 +523,7 @@ void EditorWidget::saveMap() {
     } catch (const std::exception& e) {
         spdlog::error("Unexpected error saving map {}: {}", destination, e.what());
     }
+    return false;
 }
 
 void EditorWidget::openMap() {

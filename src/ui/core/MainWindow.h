@@ -146,6 +146,13 @@ private:
     void syncMenuStateToEditorWidget();
     void snapshotPanelVisibility();
     void updateUndoRedoActions();
+    /// Sets the window title to the current map's name (plus the modified "[*]" marker).
+    void updateWindowTitle();
+    /// Records whether the current map has unsaved edits and reflects it in the title bar.
+    void setMapModified(bool modified);
+    /// If the current map has unsaved edits, prompts Save/Discard/Cancel. Returns true if it is safe
+    /// to discard the map (saved or explicitly discarded), false if the user cancelled.
+    bool maybeSaveChanges();
     QIcon themedIcon(const QString& iconPath) const;
     void restorePanelVisibilitySnapshot();
     void hidePanelsForNoMap();
@@ -217,6 +224,7 @@ private:
     std::unordered_map<QDockWidget*, bool> _panelVisibilitySnapshot;
     bool _suppressPanelSnapshotUpdates = false;
     bool _suppressPanelPreferenceUpdates = false;
+    bool _mapModified = false; // current map has edits not yet written to disk
 
     // Panel widgets
     SelectionPanel* _selectionPanel;

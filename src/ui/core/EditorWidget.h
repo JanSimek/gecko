@@ -64,7 +64,9 @@ public:
 
     void createNewMap();
     void openMap();
-    void saveMap();
+    /// Save the current map (always prompts for a destination). Returns true on a successful write,
+    /// false if the user cancelled the dialog or the write failed.
+    bool saveMap();
 
 #ifdef GECK_SCRIPTING_ENABLED
     // Runs a Luau generation script against the current map at the current elevation. The whole run
