@@ -4,6 +4,7 @@
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
 #include "cli/PatternExtract.h"
+#include "cli/ScriptIntrospect.h"
 #include "format/msg/Msg.h"
 #include "scripting/ScriptApiReference.h"
 #include "format/pro/Pro.h"
@@ -115,6 +116,20 @@ namespace {
 
     json toolPalette(resource::GameResources& resources, const json& args) {
         return runAnalyze(resources, args, /*paletteOnly*/ true);
+    }
+
+    json toolDescribeScript(resource::GameResources& resources, const json& args) {
+        cli::DescribeScriptOptions opts;
+        opts.programIndex = optInt(args, "programIndex", opts.programIndex);
+        if (const std::string locale = optString(args, "locale"); !locale.empty()) {
+            opts.locale = locale;
+        }
+        if (opts.programIndex < 1) {
+            return toolText("describe_script requires a positive integer 'programIndex' (a script_id from analyze)", true);
+        }
+        std::ostringstream oss;
+        const int rc = cli::describeScript(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
     }
 
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
@@ -231,6 +246,9 @@ namespace {
         if (name == "proto_info") {
             return toolProtoInfo(resources, args);
         }
+        if (name == "describe_script") {
+            return toolDescribeScript(resources, args);
+        }
         if (name == "generate") {
             return toolGenerate(resources, args);
         }
@@ -270,6 +288,14 @@ namespace {
             { { "name", "proto_info" },
                 { "description", "Resolve a proto PID to its type, engine display name and 'flat' flag." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "pid", { { "type", "integer" } } } } }, { "required", json::array({ "pid" }) } } } },
+            { { "name", "describe_script" },
+                { "description", "Describe a Fallout 2 script by its scripts.lst program index (the script_id "
+                                 "analyze reports for a critter/object). Returns the filename, its scripts.lst "
+                                 "description, the .ssl source if a script-source tree is mounted (e.g. the FRP "
+                                 "scripts_src — hasSource flags whether it was found), and the dialog .msg lines "
+                                 "([{id,text}]). Lets you read what an NPC does and says. Optional 'locale' picks "
+                                 "the dialog language subdir (default english). Args: programIndex, optional locale." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "required", json::array({ "programIndex" }) } } } },
             { { "name", "generate" },
                 { "description", "Run a Luau generation script against a fresh map and write a .map. "
                                  "Args: script (path to the .luau), out (filesystem path for the .map — "

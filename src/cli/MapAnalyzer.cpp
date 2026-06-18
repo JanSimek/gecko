@@ -514,7 +514,7 @@ namespace {
         ordered_json root;
         root["floor"] = paletteFloorToJson(floor, names);
         root["scenery"] = paletteSceneryToJson(scenery, names);
-        out << root.dump() << "\n";
+        out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     }
 
     // Per-map floor-border array: [{a,aName,b,bName,count}], folding totals into agg.adjacency.
@@ -698,7 +698,9 @@ namespace {
         aggregate["objects"] = aggObjectsToJson(agg, names);
         aggregate["adjacency"] = aggAdjacencyToJson(agg, names);
         root["aggregate"] = std::move(aggregate);
-        out << root.dump() << "\n";
+        // Fallout 2 text (proto/tile/critter names, AI labels) is CP-1252; `replace` keeps dump() from
+        // throwing on stray non-UTF-8 bytes and emits valid JSON (U+FFFD substitutes).
+        out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     }
 
 } // namespace

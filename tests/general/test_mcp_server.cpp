@@ -34,7 +34,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "generate", "render_map", "extract_pattern", "script_api" }) {
+        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "generate", "render_map", "extract_pattern", "script_api" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }

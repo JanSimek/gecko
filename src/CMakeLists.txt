@@ -532,7 +532,9 @@ if(GECK_BUILD_CLI)
         cli/PatternJson.h
         cli/PatternJson.cpp
         cli/PatternExtract.h
-        cli/PatternExtract.cpp)
+        cli/PatternExtract.cpp
+        cli/ScriptIntrospect.h
+        cli/ScriptIntrospect.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)

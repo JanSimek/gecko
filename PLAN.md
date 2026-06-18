@@ -692,10 +692,23 @@ from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
    `run_away_mode`, `area_attack_mode`, `best_weapon`, `distance`, `secondary_freq`), equipped
    weapon + inventory, attached script. `ai.txt` is INI (one section per packet; section header =
    name; `packet_num` = the critter's `ai_packet`). **Phase 1.**
-3. **Scripts + behavior — `describe_script(sid)`.** `script_id` → `scripts.lst` row → basename →
-   **`.ssl` source** (authoritative) + **`.int` procedure-hook metadata** (`map_enter`/`talk`/
-   `timer`/`destroy`/`use`/`look` p_procs) + linked **`.msg` dialog** (reuses the `Msg` reader).
-   Fall back to `int2ssl` only if source is absent. **Phase 2.**
+3. **Scripts + behavior — `describe_script` (Phase 2, in progress).** An object's `map_scripts_pid`
+   (SID) → the map's `MapScript` with that pid → its `script_id` = the program index → `scripts.lst`
+   row → the **filename** (e.g. `ncProsti.int`). Resolution keys off that **filename basename**
+   (extension stripped), matched **case-insensitively** — *not* `SCRIPT_REALNAME`, which is only a
+   source-side debug string (`define.h`: `ndebug` prefixes log lines with it); the engine itself
+   loads `dialog\<filename>.msg` from the scripts.lst name (`scripts.cc:2740`), so the filename is
+   authoritative. From the basename:
+   - **`.ssl` source from the VFS.** Shipped DATs hold only the compiled `.int`; the source comes
+     from a community patch (e.g. BGforge's Fallout 2 Restoration Project, which ships ~1500 `.ssl`
+     under `scripts_src/<area>/`). The user mounts that source tree as a data path; since it is
+     subdir-organized, build a **basename→path index** once (`list("*.ssl")`) and look up by
+     basename. `hasSource:false` (+ a hint to mount a source patch) when absent.
+   - **`.msg` dialog** at `text/<locale>/dialog/<basename>.msg` via the existing `Msg` reader.
+   - The `.int` procedure-hook reader is **optional/deferred** — only a fallback for the no-source
+     case; with real `.ssl` we read the source directly. `int2ssl` decompilation stays out of scope.
+   Plus a critter/object → `{programIndex, name}` bridge in `analyze`, so the agent reads the roster,
+   spots a scripted NPC, and calls `describe_script` for the full who→does→says picture.
 4. **Reachability / connectivity.** Walkability per elevation (existing `blocksMovement`/
    `ObjectQueries`), exit grids (PIDs 16–23) → destination graph, flood-fill from player-start/each
    exit → reachable vs walled-off regions + orphaned objects. **Phase 2.**
