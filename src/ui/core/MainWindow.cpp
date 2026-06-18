@@ -1075,12 +1075,14 @@ void MainWindow::updateWindowTitle() {
     const QString base = QStringLiteral("Gecko - Fallout 2 Map Editor");
     const Map* map = _currentEditorWidget ? _currentEditorWidget->getMap() : nullptr;
     if (map && !map->filename().empty()) {
-        // The "[*]" placeholder is replaced by the platform's modified marker when windowModified is set.
-        setWindowTitle(QStringLiteral("%1[*] - %2").arg(QString::fromStdString(map->filename()), base));
+        // Use a literal "*" so the modified marker is visible on every platform (Qt's "[*]" +
+        // setWindowModified shows nothing in the title text on macOS — only a close-button dot).
+        const QString modifiedMark = _mapModified ? QStringLiteral("*") : QString();
+        setWindowTitle(QStringLiteral("%1%2 - %3").arg(QString::fromStdString(map->filename()), modifiedMark, base));
     } else {
         setWindowTitle(base);
     }
-    setWindowModified(_mapModified);
+    setWindowModified(_mapModified); // also drive the native indicator (e.g. macOS close-button dot)
 }
 
 void MainWindow::setMapModified(bool modified) {
@@ -1088,7 +1090,7 @@ void MainWindow::setMapModified(bool modified) {
         return;
     }
     _mapModified = modified;
-    setWindowModified(modified);
+    updateWindowTitle(); // refresh the "*" in the title (and the native marker)
 }
 
 bool MainWindow::maybeSaveChanges() {
