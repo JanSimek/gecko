@@ -14,7 +14,7 @@ namespace geck {
 
 class HexagonGrid;
 class Map;
-class MapObject;
+struct MapObject;
 class ObjectCommandController;
 namespace resource {
     class GameResources;
