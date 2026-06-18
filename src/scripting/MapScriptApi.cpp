@@ -463,6 +463,10 @@ int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant
     return result.objectsPlaced;
 }
 
+void MapScriptApi::newMap() {
+    _controller.newEmptyMap();
+}
+
 void MapScriptApi::setPlayerStart(int hex, int orientation, int elevation) {
     if (!isValidHex(hex)) {
         throw ScriptError("setPlayerStart: hex " + std::to_string(hex) + " is off the 200x200 hex grid");

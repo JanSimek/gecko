@@ -152,6 +152,11 @@ public:
     int placeStamp(const std::string& name, int anchorHex, int variant = 0);
 
     // --- Map setup (spawn / exits) -----------------------------------------------
+    /// Replace the bound map with a fresh, empty Fallout 2 map — no objects, empty floor/roof on all
+    /// three elevations, default header. Lets a generation script start from a blank slate (in the
+    /// editor's Script Console this clears whatever map is open). It is a destructive reset, NOT part
+    /// of the undo batch, so call it first, before any placement.
+    void newMap();
     /// Set the player's spawn in the map header — where they appear when the map loads: hex 0..39999,
     /// orientation 0..5 (engine hex facings), elevation 0..2. Raises on an out-of-range value. This is
     /// header state (like the editor's Map Info panel), so it is not part of the undo batch.

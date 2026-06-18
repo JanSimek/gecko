@@ -194,6 +194,29 @@ TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "
     CHECK(fx.mapFile().map_objects[ELEV].empty());
 }
 
+TEST_CASE("MapScriptApi newMap resets the bound map to empty", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    // Dirty the map: a tile and an object.
+    REQUIRE(api.paintFloor(42, SOME_TILE));
+    REQUIRE(api.placeObject(0x02000066u, 0x02000000u, 20100, 0));
+    REQUIRE(api.getFloor(42) == SOME_TILE);
+    REQUIRE_FALSE(fx.mapFile().map_objects[ELEV].empty());
+
+    api.newMap();
+
+    // Back to a fresh empty map on every elevation.
+    CHECK(api.getFloor(42) == EMPTY);
+    for (int e = 0; e < Map::ELEVATION_COUNT; ++e) {
+        CHECK(fx.mapFile().map_objects[e].empty());
+    }
+
+    // The api still works on the fresh map — a script can keep building.
+    REQUIRE(api.placeObject(0x02000066u, 0x02000000u, 20100, 0));
+    CHECK(fx.mapFile().map_objects[ELEV].size() == 1);
+}
+
 TEST_CASE("MapScriptApi setPlayerStart writes the map header", "[scripting]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);

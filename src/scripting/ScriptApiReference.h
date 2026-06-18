@@ -44,6 +44,7 @@ namespace geck {
     X(placeProtoXY, "(proPid, col, row, dir) -> bool", "placeProto at a (col, row) hex.")                                                                              \
     X(placeStamp, "(name, anchorHex, variant) -> int", "Place a pre-loaded stamp (extract_pattern prefab); returns objects placed.")                                   \
     /* Map setup (spawn / exits) */                                                                                                                                    \
+    X(newMap, "() -> nil", "Reset the bound map to a fresh empty Fallout 2 map (destructive, not undoable). Call first to start from a blank slate.")                   \
     X(setPlayerStart, "(hex, orientation, elevation) -> nil", "Set the player spawn in the map header (hex, orientation 0..5, elevation 0..2).")                       \
     X(placeExitGrid, "(hex, destMapId, destHex, destElevation, orientation) -> bool", "Place a map-exit grid; destMapId -2 = worldmap, -1 = town map, else a map id.") \
     X(placeExitGridRect, "(centerHex, screenHalfWidth, screenHalfHeight, destMapId, destHex, destElevation, orientation) -> int", "Place a screen-space rectangle border of exit grids around centerHex; returns markers placed.")
