@@ -116,6 +116,49 @@ namespace {
         return seedFlags;
     }
 
+    // The walkable component a marker hex sits in (or, if the marker is on a blocked hex, its first
+    // walkable neighbour's). -1 if it touches no walkable hex.
+    int componentOf(int hex, const std::vector<char>& blocked, const std::vector<int>& component) {
+        if (hex < 0 || hex >= kHexCount) {
+            return -1;
+        }
+        if (!blocked[hex]) {
+            return component[hex];
+        }
+        for (const int neighbour : hexNeighbors(hex)) {
+            if (!blocked[neighbour]) {
+                return component[neighbour];
+            }
+        }
+        return -1;
+    }
+
+    // Per exit grid on this elevation, whether the player can walk to it from the start (same walkable
+    // component). null when the player starts on a different elevation (the route is via stairs).
+    ordered_json exitsJson(const Map::MapHeader& header, int elevation, const std::vector<std::shared_ptr<MapObject>>& objects,
+        const std::vector<char>& blocked, const std::vector<int>& component) {
+        const bool playerHere = static_cast<int>(header.player_default_elevation) == elevation;
+        const int playerComponent = playerHere
+            ? componentOf(static_cast<int>(header.player_default_position), blocked, component)
+            : -1;
+        auto array = ordered_json::array();
+        for (const auto& object : objects) {
+            if (!object || !object->isExitGridMarker() || object->position < 0 || object->position >= kHexCount) {
+                continue;
+            }
+            ordered_json exit;
+            exit["hex"] = object->position;
+            if (!playerHere) {
+                exit["reachableFromPlayerStart"] = nullptr;
+            } else {
+                const int exitComponent = componentOf(object->position, blocked, component);
+                exit["reachableFromPlayerStart"] = playerComponent >= 0 && exitComponent == playerComponent;
+            }
+            array.push_back(exit);
+        }
+        return array;
+    }
+
     // A hex reaches the player-accessible area if it (or, for a hex an object stands on, a neighbour)
     // is a walkable hex in a component the entry seeds reached.
     bool reachesEntry(int hex, const std::vector<char>& blocked, const std::vector<int>& component, const std::vector<char>& seedFlags) {
@@ -192,6 +235,8 @@ namespace {
             }
         }
         entry["reachableHexes"] = reachable;
+
+        entry["exits"] = exitsJson(header, elevation, objects, blocked, component);
 
         std::size_t orphanTotal = 0;
         entry["orphanedObjects"] = orphanedObjectsJson(resources, objects, blocked, component, seedFlags, orphanTotal);

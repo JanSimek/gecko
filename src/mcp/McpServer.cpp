@@ -322,8 +322,10 @@ namespace {
                                  "count as passable) outward from the entry points (player start + exit grids): "
                                  "'reachableHexes' of 'walkableHexes' are reachable, and 'orphanedObjects' "
                                  "([{pid,name,hex}], with 'orphanedObjectCount') are critters/items the player "
-                                 "can't reach — usually a sealed-off area or a map bug. Elevations with no entry "
-                                 "point (reached via stairs) report reachableHexes=null + a note. Args: map (path)." },
+                                 "can't reach — usually a sealed-off area or a map bug. 'exits' lists each exit "
+                                 "grid with 'reachableFromPlayerStart' (can the player walk start->exit; null if "
+                                 "the player starts on another elevation). Elevations with no entry point (reached "
+                                 "via stairs) report reachableHexes=null + a note. Args: map (path)." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } } } },
             { { "name", "generate" },
                 { "description", "Run a Luau generation script against a fresh map and write a .map. "
