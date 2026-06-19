@@ -1,6 +1,7 @@
 #include "ProWriter.h"
 
 #include <spdlog/spdlog.h>
+#include "format/pro/ProHeaderFields.h"
 #include "writer/WriterExceptions.h"
 
 namespace geck {
@@ -75,13 +76,11 @@ bool ProWriter::write(const Pro& pro) {
 void ProWriter::writeHeader(const Pro& pro) {
     auto& utils = getBinaryUtils();
 
-    // Write PRO header (all fields are big-endian)
-    utils.writeBE32Signed(pro.header.PID);
-    utils.writeBE32(pro.header.message_id);
-    utils.writeBE32Signed(pro.header.FID);
-    utils.writeBE32(pro.header.light_distance);
-    utils.writeBE32(pro.header.light_intensity);
-    utils.writeBE32(pro.header.flags);
+    // Common header (layout shared with ProReader via the visitor); each field is
+    // emitted as a big-endian 32-bit word.
+    visitProHeaderFields(pro, [&utils](const auto& field) {
+        utils.writeBE32(static_cast<uint32_t>(field));
+    });
 
     spdlog::trace("ProWriter: Wrote header for PID {}", pro.header.PID);
 }

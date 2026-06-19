@@ -1,8 +1,10 @@
 #include "ProReader.h"
 
 #include <spdlog/spdlog.h>
+#include <type_traits>
 
 #include "format/pro/Pro.h"
+#include "format/pro/ProHeaderFields.h"
 #include "reader/ErrorMessages.h"
 
 namespace geck {
@@ -19,12 +21,11 @@ std::unique_ptr<Pro> ProReader::read() {
 
         auto pro = std::make_unique<Pro>(_path);
 
-        pro->header.PID = utils.readBE32Signed();
-        pro->header.message_id = utils.readBE32();
-        pro->header.FID = utils.readBE32Signed();
-        pro->header.light_distance = utils.readBE32();
-        pro->header.light_intensity = utils.readBE32();
-        pro->header.flags = utils.readBE32();
+        // Common header (layout shared with ProWriter via the visitor). Each field
+        // is a big-endian 32-bit word; its own type decides the interpretation.
+        visitProHeaderFields(*pro, [&utils](auto& field) {
+            field = static_cast<std::remove_reference_t<decltype(field)>>(utils.readBE32());
+        });
 
         switch (pro->type()) {
             case Pro::OBJECT_TYPE::TILE:

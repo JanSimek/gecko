@@ -5,8 +5,10 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #include "format/map/Map.h"
+#include "format/map/MapObjectFields.h"
 #include "format/msg/Msg.h"
 #include "format/map/Tile.h"
 #include "format/pro/Pro.h"
@@ -27,28 +29,12 @@ MapReader::MapReader(std::function<Pro*(uint32_t)> proLoadCallback)
 std::unique_ptr<MapObject> MapReader::readMapObject() {
     auto object = std::make_unique<MapObject>();
 
-    object->unknown0 = read_be_u32();
-    object->position = read_be_i32();
-    object->x = read_be_u32();
-    object->y = read_be_u32();
-    object->sx = read_be_u32();
-    object->sy = read_be_u32();
-    object->frame_number = read_be_u32();
-    object->direction = read_be_u32();
-    object->frm_pid = read_be_u32();
-    object->flags = read_be_u32();
-    object->elevation = read_be_u32();
-    object->pro_pid = read_be_u32();
-    object->critter_index = read_be_u32();
-    object->light_radius = read_be_u32();
-    object->light_intensity = read_be_u32();
-    object->outline_color = read_be_u32();
-    object->map_scripts_pid = read_be_i32();
-    object->script_id = read_be_i32();
-    object->objects_in_inventory = read_be_u32();
-    object->max_inventory_size = read_be_u32();
-    object->unknown10 = read_be_u32();
-    object->unknown11 = read_be_u32();
+    // Read the common-field block (layout shared with MapWriter via the visitor).
+    // Every field is a big-endian 32-bit word; the field's own type (signed or
+    // unsigned) decides how those bits are interpreted on assignment.
+    visitMapObjectCommonFields(*object, [this](auto& field) {
+        field = static_cast<std::remove_reference_t<decltype(field)>>(read_be_u32());
+    });
 
     uint32_t objectTypeId = object->objectType();
 
