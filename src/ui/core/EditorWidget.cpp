@@ -60,22 +60,22 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
     , _mainWindow(nullptr)
     , _resources(resources)
     , _map(std::move(map)) {
-    _floorSprites.reserve(Map::TILES_PER_ELEVATION);
-    _roofSprites.reserve(Map::TILES_PER_ELEVATION);
+    _session.floorSprites().reserve(Map::TILES_PER_ELEVATION);
+    _session.roofSprites().reserve(Map::TILES_PER_ELEVATION);
 
     if (_map) {
         initializeSelectionSystem();
     }
 
     _renderingEngine = std::make_unique<RenderingEngine>(_resources);
-    _mapSpriteLoader = std::make_unique<MapSpriteLoader>(_resources, _hexgrid);
+    _mapSpriteLoader = std::make_unique<MapSpriteLoader>(_resources, _session.hexgrid());
     _objectCommandController = std::make_unique<ObjectCommandController>(
         _resources,
         _map,
-        _hexgrid,
+        _session.hexgrid(),
         *_mapSpriteLoader,
-        _objects,
-        _wallBlockerOverlays,
+        _session.objects(),
+        _session.wallBlockerOverlays(),
         _session.undoStack(),
         [this]() { refreshObjects(); },
         [this]() { Q_EMIT undoStackChanged(); },
@@ -98,7 +98,7 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
             if (auto* mw = getMainWindow())
                 mw->showStatusMessage(m);
         });
-    _viewportController = std::make_unique<ViewportController>(&_hexgrid);
+    _viewportController = std::make_unique<ViewportController>(&_session.hexgrid());
     setupInputCallbacks();
 
     setupUI();
@@ -190,14 +190,14 @@ void EditorWidget::reselectAfterDragMove(sf::Vector2f worldTranslation) {
         return;
     }
 
-    // The object move rebuilt _objects (fresh wrappers around the same, now-moved MapObjects),
+    // The object move rebuilt _session.objects() (fresh wrappers around the same, now-moved MapObjects),
     // orphaning the selection's old wrappers; the tile items still hold pre-move indices. Rebuild the
     // selection so it follows the move: re-point objects by MapObject identity, and shift the tile
     // items by the same whole-tile delta the move used.
     const auto tileDelta = _selectionManager->selectionTileDelta(worldTranslation);
 
     std::unordered_map<const MapObject*, std::shared_ptr<Object>> objectsByMapObject;
-    for (const auto& object : _objects) {
+    for (const auto& object : _session.objects()) {
         if (object && object->hasMapObject()) {
             objectsByMapObject[object->getMapObjectPtr().get()] = object;
         }
@@ -232,22 +232,22 @@ void EditorWidget::beginTileDragPreview() {
             }
         }
     };
-    capture(false, _selectedFloorVisuals, _floorSprites);
+    capture(false, _selectedFloorVisuals, _session.floorSprites());
     if (_session.visibility().showRoof) {
-        capture(true, _selectedRoofVisuals, _roofSprites);
+        capture(true, _selectedRoofVisuals, _session.roofSprites());
     }
 }
 
 void EditorWidget::previewTileDrag(sf::Vector2f worldOffset) {
     for (const auto& base : _tileDragPreviewBases) {
-        auto& sprites = base.roof ? _roofSprites : _floorSprites;
+        auto& sprites = base.roof ? _session.roofSprites() : _session.floorSprites();
         sprites[base.tileIndex].setPosition(base.basePosition + worldOffset);
     }
 }
 
 void EditorWidget::endTileDragPreview() {
     for (const auto& base : _tileDragPreviewBases) {
-        auto& sprites = base.roof ? _roofSprites : _floorSprites;
+        auto& sprites = base.roof ? _session.roofSprites() : _session.floorSprites();
         sprites[base.tileIndex].setPosition(base.basePosition);
     }
     _tileDragPreviewBases.clear();
@@ -359,7 +359,7 @@ void EditorWidget::applySelectionVisuals(const selection::SelectionState& select
 
             case selection::SelectionType::HEX: {
                 int hexIndex = item.getHexIndex();
-                if (hexIndex >= 0 && hexIndex < static_cast<int>(_hexgrid.size())) {
+                if (hexIndex >= 0 && hexIndex < static_cast<int>(_session.hexgrid().size())) {
                     this->_selectedHexPositions.push_back(hexIndex);
                 }
                 break;
@@ -476,7 +476,7 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
     if (!_map) {
         return { false, "No map loaded", "" };
     }
-    MapScriptApi api(_resources, _hexgrid, *_objectCommandController, *_map, _currentElevation);
+    MapScriptApi api(_resources, _session.hexgrid(), *_objectCommandController, *_map, _currentElevation);
     // so api:placeStamp(name, ...) finds the user's saved patterns; any unloadable file is reported.
     const std::string stampNotes = registerLibraryStamps(api);
     LuaScriptRuntime runtime;
@@ -564,10 +564,10 @@ void EditorWidget::createNewMap() {
 
     _currentElevation = 0;
 
-    _objects.clear();
-    _floorSprites.clear();
-    _roofSprites.clear();
-    _wallBlockerOverlays.clear();
+    _session.objects().clear();
+    _session.floorSprites().clear();
+    _session.roofSprites().clear();
+    _session.wallBlockerOverlays().clear();
     _selectedHexPositions.clear();
 
     // Load the core helper textures needed by an empty map.
@@ -605,15 +605,15 @@ std::vector<int> EditorWidget::calculateRectangleBorderHexes(sf::FloatRect recta
     int bottomLeftHex = _viewportController->worldPosToHexIndex(bottomLeft);
     int bottomRightHex = _viewportController->worldPosToHexIndex(bottomRight);
 
-    if (!_hexgrid.containsPosition(topLeftHex)
-        || !_hexgrid.containsPosition(topRightHex)
-        || !_hexgrid.containsPosition(bottomLeftHex)
-        || !_hexgrid.containsPosition(bottomRightHex)) {
+    if (!_session.hexgrid().containsPosition(topLeftHex)
+        || !_session.hexgrid().containsPosition(topRightHex)
+        || !_session.hexgrid().containsPosition(bottomLeftHex)
+        || !_session.hexgrid().containsPosition(bottomRightHex)) {
         spdlog::warn("Rectangle contains invalid hex positions, skipping border calculation");
         return {};
     }
 
-    auto borderHexes = _hexgrid.rectangleBorderPositions(topLeftHex, topRightHex, bottomLeftHex, bottomRightHex);
+    auto borderHexes = _session.hexgrid().rectangleBorderPositions(topLeftHex, topRightHex, bottomLeftHex, bottomRightHex);
 
     spdlog::debug("Calculated {} border hexes for rectangle ({}, {}, {}, {})",
         borderHexes.size(), rectangle.position.x, rectangle.position.y, rectangle.size.x, rectangle.size.y);
@@ -663,12 +663,12 @@ void EditorWidget::loadTileSprites() {
         return;
     }
 
-    _mapSpriteLoader->loadTileSprites(*_map, _currentElevation, _floorSprites, _roofSprites);
+    _mapSpriteLoader->loadTileSprites(*_map, _currentElevation, _session.floorSprites(), _session.roofSprites());
 }
 
 void EditorWidget::loadSprites() {
     spdlog::stopwatch sw;
-    _mapSpriteLoader->loadSprites(*_map, _currentElevation, _floorSprites, _roofSprites, _objects, _wallBlockerOverlays);
+    _mapSpriteLoader->loadSprites(*_map, _currentElevation, _session.floorSprites(), _session.roofSprites(), _session.objects(), _session.wallBlockerOverlays());
 
     _selectionManager->initializeSpatialIndex();
 
@@ -687,13 +687,13 @@ std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vect
     // Only objects that are actually drawn are selectable: a click must never land on a
     // hidden object (e.g. a scroll blocker on a hidden layer) and produce an invisible
     // selection. isObjectVisible is the same rule RenderingEngine::renderObjects applies.
-    std::ranges::copy_if(_objects, std::back_inserter(objectsAtPos),
+    std::ranges::copy_if(_session.objects(), std::back_inserter(objectsAtPos),
         [this, worldPos](const auto& object) {
             return isObjectVisible(object->getMapObject(), _session.visibility())
                 && isPointInSpritePixel(worldPos, object->getSprite());
         });
 
-    // Objects are drawn in _objects order (see RenderingEngine::renderObjects), so the object
+    // Objects are drawn in _session.objects() order (see RenderingEngine::renderObjects), so the object
     // drawn last is the one visually on top. copy_if preserved that draw order, so reverse it to
     // put the topmost-drawn object first: the pick then matches exactly what the user sees, and
     // repeated clicks cycle stacked objects from top to bottom.
@@ -756,7 +756,7 @@ bool EditorWidget::isDoubleClick(sf::Vector2f worldPos) {
 }
 
 void EditorWidget::clearAllVisualSelections() {
-    std::ranges::for_each(_objects, [](auto& object) {
+    std::ranges::for_each(_session.objects(), [](auto& object) {
         if (object) {
             object->unselect();
             // The drag preview tints object sprites; reset the colour so no preview tint lingers.
@@ -1013,11 +1013,11 @@ void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderH
                 sf::Sprite sprite{ _resources.textures().get(frmPath) };
                 object->setSprite(std::move(sprite));
                 object->setDirection(static_cast<ObjectDirection>(scrollBlockerObject->direction));
-                if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(hexPos)); hex.has_value()) {
+                if (auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexPos)); hex.has_value()) {
                     object->setHexPosition(hex->get());
                 }
                 object->setMapObject(scrollBlockerObject);
-                _objects.push_back(object);
+                _session.objects().push_back(object);
                 scrollBlockersCreated++;
             }
         } catch (const std::exception& e) {
@@ -1051,10 +1051,10 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     visibility.mergeSelectionOutlines = _session.visibility().mergeSelectionOutlines;
 
     RenderingEngine::RenderData renderData;
-    renderData.floorSprites = &_floorSprites;
-    renderData.roofSprites = &_roofSprites;
-    renderData.objects = &_objects;
-    renderData.wallBlockerOverlays = &_wallBlockerOverlays;
+    renderData.floorSprites = &_session.floorSprites();
+    renderData.roofSprites = &_session.roofSprites();
+    renderData.objects = &_session.objects();
+    renderData.wallBlockerOverlays = &_session.wallBlockerOverlays();
     renderData.selectedHexPositions = &_selectedHexPositions;
     renderData.selectedFloorTiles = &_selectedFloorVisuals;
     renderData.selectedRoofTiles = &_selectedRoofVisuals;
@@ -1067,7 +1067,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     // Use InputHandler state for drag selection rendering
     renderData.isDragSelecting = _inputHandler && _inputHandler->isDragging();
     renderData.currentSelectionMode = _currentSelectionMode;
-    renderData.hexGrid = &_hexgrid;
+    renderData.hexGrid = &_session.hexgrid();
     renderData.currentHoverHex = _currentHoverHex;
     renderData.playerPositionHex = _map ? static_cast<int>(_map->getMapFile().header.player_default_position) : -1;
     renderData.map = _map.get();
@@ -1358,7 +1358,7 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
         return;
     }
     const int hex = _viewportController->worldPosToHexIndex(worldPos);
-    if (!_hexgrid.containsPosition(hex)) {
+    if (!_session.hexgrid().containsPosition(hex)) {
         return;
     }
     if (_stampVariantIndex < 0 || _stampVariantIndex >= static_cast<int>(_stampPattern->variants.size())) {
@@ -1366,7 +1366,7 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
     }
     const pattern::PatternVariant& variant = _stampPattern->variants[_stampVariantIndex];
 
-    pattern::PatternStamper stamper(_resources, _hexgrid, *_objectCommandController, *_map);
+    pattern::PatternStamper stamper(_resources, _session.hexgrid(), *_objectCommandController, *_map);
     const pattern::PatternStamper::Result result = stamper.stamp(variant, hex, _currentElevation);
 
     // PatternStamper appends object sprites and applies tile sprites incrementally
@@ -1399,7 +1399,7 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
         return;
     }
     const int hex = _viewportController->worldPosToHexIndex(worldPos);
-    if (!_hexgrid.containsPosition(hex)) {
+    if (!_session.hexgrid().containsPosition(hex)) {
         clearStampPreview();
         return;
     }
@@ -1426,7 +1426,7 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
     }
 
     for (const pattern::PatternStamper::ObjectPlacement& op : plan.objects) {
-        auto object = pattern::buildSpriteObject(_resources, _hexgrid, op.frmPid, op.hex, op.direction);
+        auto object = pattern::buildSpriteObject(_resources, _session.hexgrid(), op.frmPid, op.hex, op.direction);
         if (!object) {
             continue;
         }
@@ -1444,7 +1444,7 @@ void EditorWidget::refreshObjects() {
         return;
     }
 
-    _mapSpriteLoader->loadObjectSprites(*_map, _currentElevation, _objects, _wallBlockerOverlays);
+    _mapSpriteLoader->loadObjectSprites(*_map, _currentElevation, _session.objects(), _session.wallBlockerOverlays());
 
     spdlog::debug("Refreshed objects for current elevation");
 }
@@ -1459,7 +1459,7 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof, int elevation) {
     }
 
     const auto& elevationTiles = ensureElevationTiles(elevation);
-    _mapSpriteLoader->updateTileSprite(hexIndex, isRoof, elevation, elevationTiles, _floorSprites, _roofSprites);
+    _mapSpriteLoader->updateTileSprite(hexIndex, isRoof, elevation, elevationTiles, _session.floorSprites(), _session.roofSprites());
 }
 
 bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) {
@@ -1616,7 +1616,7 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
 void EditorWidget::previewAreaTiles(const sf::FloatRect& area, bool roof, bool includeEmpty) {
     auto tiles = includeEmpty ? _selectionManager->getTilesInAreaIncludingEmpty(area, roof, _currentElevation)
                               : _selectionManager->getTilesInArea(area, roof, _currentElevation);
-    auto& sprites = roof ? _roofSprites : _floorSprites;
+    auto& sprites = roof ? _session.roofSprites() : _session.floorSprites();
     for (int tileIndex : tiles) {
         if (isValidTileIndex(tileIndex)) {
             applyPreviewHighlight(sprites.at(tileIndex)); // also makes empty (transparent) roof tiles visible
@@ -1647,7 +1647,7 @@ void EditorWidget::updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vec
     bool isRoof = _tilePlacementManager->getTilePlacementIsRoof();
     _previewTiles = _selectionManager->getTilesInArea(selectionArea, isRoof, _currentElevation);
 
-    auto& sprites = isRoof ? _roofSprites : _floorSprites;
+    auto& sprites = isRoof ? _session.roofSprites() : _session.floorSprites();
     for (int tileIndex : _previewTiles) {
         if (isValidTileIndex(tileIndex)) {
             applyPreviewHighlight(sprites.at(tileIndex));
@@ -1661,18 +1661,18 @@ void EditorWidget::clearDragPreview() {
 
     for (int tileIndex : _previewTiles) {
         if (isValidTileIndex(tileIndex)) {
-            removePreviewHighlight(_floorSprites.at(tileIndex));
+            removePreviewHighlight(_session.floorSprites().at(tileIndex));
 
             // Empty roof sprites must go back to transparent, not white
             if (_map && _map->getMapFile().tiles.find(_currentElevation) != _map->getMapFile().tiles.end()) {
                 auto tile = _map->getMapFile().tiles.at(_currentElevation).at(tileIndex);
                 if (tile.getRoof() == Map::EMPTY_TILE) {
-                    _roofSprites.at(tileIndex).setColor(geck::TileColors::transparent());
+                    _session.roofSprites().at(tileIndex).setColor(geck::TileColors::transparent());
                 } else {
-                    removePreviewHighlight(_roofSprites.at(tileIndex));
+                    removePreviewHighlight(_session.roofSprites().at(tileIndex));
                 }
             } else {
-                removePreviewHighlight(_roofSprites.at(tileIndex));
+                removePreviewHighlight(_session.roofSprites().at(tileIndex));
             }
         }
     }
@@ -1709,7 +1709,7 @@ void EditorWidget::updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector
     _selectionRectangle.setSize({ width, height });
 
     // Highlight only exit grid objects
-    for (auto& object : _objects) {
+    for (auto& object : _session.objects()) {
         if (!object || !object->getMapObjectPtr() || !object->getMapObjectPtr()->isExitGridMarker()) {
             continue;
         }
@@ -1733,7 +1733,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     }
 
     int hexPosition = _viewportController->worldPosToHexIndex(worldPos);
-    if (!_hexgrid.containsPosition(hexPosition)) {
+    if (!_session.hexgrid().containsPosition(hexPosition)) {
         spdlog::warn("EditorWidget: Invalid hex position {} for object placement", hexPosition);
         return;
     }
@@ -1745,7 +1745,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     mapObject->direction = 0;
     mapObject->frame_number = 0;
 
-    auto hexCoords = _hexgrid.getHexByPosition(static_cast<uint32_t>(hexPosition));
+    auto hexCoords = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexPosition));
     if (hexCoords) {
         mapObject->x = static_cast<uint32_t>(hexCoords->get().x());
         mapObject->y = static_cast<uint32_t>(hexCoords->get().y());
@@ -1791,7 +1791,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
             object->setDirection(static_cast<ObjectDirection>(0));
         }
 
-        if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(hexPosition)); hex.has_value()) {
+        if (auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexPosition)); hex.has_value()) {
             object->setHexPosition(hex->get());
         }
 
@@ -1865,7 +1865,7 @@ void EditorWidget::centerViewOnPlayerPosition() {
 
     uint32_t playerHexPosition = _map->getMapFile().header.player_default_position;
 
-    auto hex = _hexgrid.getHexByPosition(playerHexPosition);
+    auto hex = _session.hexgrid().getHexByPosition(playerHexPosition);
     if (!hex) {
         spdlog::warn("EditorWidget::centerViewOnPlayerPosition: Invalid player hex position {}", playerHexPosition);
         return;
@@ -1930,7 +1930,7 @@ void EditorWidget::setShowLightOverlays(bool show) {
     _session.visibility().showLightOverlays = show;
 
     int lightObjectCount = 0;
-    std::ranges::for_each(_objects, [&lightObjectCount, show](auto& object) {
+    std::ranges::for_each(_session.objects(), [&lightObjectCount, show](auto& object) {
         if (object->hasLight()) {
             lightObjectCount++;
             spdlog::debug("EditorWidget: Found light source object with light_radius={}, light_intensity={}",

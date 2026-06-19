@@ -187,8 +187,8 @@ public:
     std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) override;
 
     // Access to sprite vectors for SelectionManager
-    const std::vector<sf::Sprite>& getFloorSprites() const override { return _floorSprites; }
-    const std::vector<sf::Sprite>& getRoofSprites() const override { return _roofSprites; }
+    const std::vector<sf::Sprite>& getFloorSprites() const override { return _session.floorSprites(); }
+    const std::vector<sf::Sprite>& getRoofSprites() const override { return _session.roofSprites(); }
 
     bool isRoofVisible() const override { return _session.visibility().showRoof; }
     bool isObjectSelectable(const std::shared_ptr<Object>& object) const override;
@@ -199,10 +199,10 @@ public:
     const Map::MapFile& getMapFile() const override { return _map->getMapFile(); }
 
     // Access to objects for SelectionManager
-    const std::vector<std::shared_ptr<Object>>& getObjects() const override { return _objects; }
+    const std::vector<std::shared_ptr<Object>>& getObjects() const override { return _session.objects(); }
 
     // Access to hex grid for SelectionManager
-    const HexagonGrid* getHexagonGrid() const override { return &_hexgrid; }
+    const HexagonGrid* getHexagonGrid() const override { return &_session.hexgrid(); }
     resource::GameResources& resources() const override { return _resources; }
 
     // Helper methods for extracted managers (made public)
@@ -358,17 +358,6 @@ private:
 
     // Game/Editor State
     SelectionMode _currentSelectionMode = SelectionMode::ALL;
-
-    HexagonGrid _hexgrid;
-    // Note: Using std::vector instead of std::array because SFML 3 sf::Sprite
-    // requires a texture in constructor and is not default-constructible
-    std::vector<sf::Sprite> _floorSprites;
-    std::vector<sf::Sprite> _roofSprites;
-
-    std::vector<std::shared_ptr<Object>> _objects;
-
-    // Wall blocker overlay sprites (rendered on top of regular objects)
-    std::vector<sf::Sprite> _wallBlockerOverlays;
 
     int _currentElevation = 0;
     resource::GameResources& _resources;
