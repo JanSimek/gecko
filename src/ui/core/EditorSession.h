@@ -32,6 +32,9 @@ public:
     [[nodiscard]] UndoStack& undoStack() { return _undoStack; }
     [[nodiscard]] const UndoStack& undoStack() const { return _undoStack; }
 
+    [[nodiscard]] int currentElevation() const { return _currentElevation; }
+    void setCurrentElevation(int elevation) { _currentElevation = elevation; }
+
     [[nodiscard]] HexagonGrid& hexgrid() { return _hexgrid; }
     [[nodiscard]] const HexagonGrid& hexgrid() const { return _hexgrid; }
 
@@ -50,6 +53,8 @@ public:
 private:
     VisibilitySettings _visibility;
     UndoStack _undoStack{ 100 };
+
+    int _currentElevation = 0;
 
     HexagonGrid _hexgrid;
 

@@ -194,7 +194,7 @@ public:
     bool isObjectSelectable(const std::shared_ptr<Object>& object) const override;
 
     // Access to current elevation and map data
-    int getCurrentElevation() const override { return _currentElevation; }
+    int getCurrentElevation() const override { return _session.currentElevation(); }
     Map::MapFile& getMapFile() override { return _map->getMapFile(); }
     const Map::MapFile& getMapFile() const override { return _map->getMapFile(); }
 
@@ -359,7 +359,6 @@ private:
     // Game/Editor State
     SelectionMode _currentSelectionMode = SelectionMode::ALL;
 
-    int _currentElevation = 0;
     resource::GameResources& _resources;
     std::unique_ptr<Map> _map;
 
