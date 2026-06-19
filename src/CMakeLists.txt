@@ -478,6 +478,8 @@ add_library(gecko_editing STATIC
     ui/editing/InventoryEditService.cpp
     ui/editing/ScriptEditService.h
     ui/editing/ScriptEditService.cpp
+    ui/editing/MapEditService.h
+    ui/editing/MapEditService.cpp
     scripting/MapScriptApi.h
     scripting/MapScriptApi.cpp
     scripting/ScriptApiReference.h

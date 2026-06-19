@@ -14,6 +14,7 @@
 #include "ui/editing/TileEditService.h"
 #include "ui/editing/InventoryEditService.h"
 #include "ui/editing/ScriptEditService.h"
+#include "ui/editing/MapEditService.h"
 
 namespace geck {
 
@@ -187,6 +188,7 @@ private:
     ScriptEditService _scriptService;
     std::function<void()> _refreshObjects;
     std::function<void()> _reloadTiles;
+    MapEditService _mapService;
 };
 
 /// RAII guard that opens an undo batch for its lifetime: collapses every edit made
