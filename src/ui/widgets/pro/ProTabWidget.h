@@ -121,6 +121,15 @@ protected:
     QGroupBox* createStandardGroupBox(const QString& title);
 
     /**
+     * @brief Create a bold-titled group box wrapping an already-populated layout.
+     *
+     * Replaces the repeated `new QGroupBox(title); setStyleSheet(boldGroupBox());
+     * setLayout(layout);` boilerplate in the subtype widgets. Distinct from
+     * createStandardGroupBox(), which builds an unstyled box with its own QVBoxLayout.
+     */
+    QGroupBox* createBoldGroupBox(const QString& title, QLayout* contentLayout);
+
+    /**
      * @brief Attach a child layout to a standard group box
      */
     void addLayoutToGroupBox(QGroupBox* groupBox, QLayout* layout);

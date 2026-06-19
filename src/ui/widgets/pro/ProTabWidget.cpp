@@ -1,6 +1,7 @@
 #include "ProTabWidget.h"
 #include "ui/GameEnums.h"
 #include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 
 namespace geck {
 
@@ -61,6 +62,13 @@ QGroupBox* ProTabWidget::createStandardGroupBox(const QString& title) {
     QVBoxLayout* layout = new QVBoxLayout(groupBox);
     layout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
     layout->setSpacing(FORM_SPACING);
+    return groupBox;
+}
+
+QGroupBox* ProTabWidget::createBoldGroupBox(const QString& title, QLayout* contentLayout) {
+    QGroupBox* groupBox = new QGroupBox(title);
+    groupBox->setStyleSheet(ui::theme::styles::boldGroupBox());
+    groupBox->setLayout(contentLayout);
     return groupBox;
 }
 
