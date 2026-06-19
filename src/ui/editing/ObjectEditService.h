@@ -101,6 +101,8 @@ private:
     // undo and redo halves of registerObjectMove / registerObjectRotation.
     void applyObjectPositions(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& positions);
     static void applyObjectDirections(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& directions);
+    // Applies one exit-grid state snapshot to an object (shared by the undo/redo halves).
+    static void applyExitGridState(MapObject& exitGrid, const ExitGridCommandState& state);
 
     resource::GameResources& _resources;
     std::unique_ptr<Map>& _map;

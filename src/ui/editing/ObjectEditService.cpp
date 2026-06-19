@@ -4,6 +4,7 @@
 #include "editor/Object.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
+#include "format/map/MapObjectViews.h"
 #include "resource/GameResources.h"
 #include "ui/editing/UndoBatcher.h"
 #include "ui/rendering/MapSpriteLoader.h"
@@ -350,34 +351,33 @@ bool ObjectEditService::registerExitGridEdit(const std::vector<std::shared_ptr<M
     cmd.description = exitGrids.size() == 1 ? "Edit Exit Grid" : "Edit Exit Grids";
     cmd.undo = [this, exitGrids, beforeStates]() {
         for (size_t i = 0; i < exitGrids.size(); ++i) {
-            if (!exitGrids[i]) {
-                continue;
+            if (exitGrids[i]) {
+                applyExitGridState(*exitGrids[i], beforeStates[i]);
             }
-            exitGrids[i]->exit_map = beforeStates[i].exitMap;
-            exitGrids[i]->exit_position = beforeStates[i].exitPosition;
-            exitGrids[i]->exit_elevation = beforeStates[i].exitElevation;
-            exitGrids[i]->exit_orientation = beforeStates[i].exitOrientation;
-            exitGrids[i]->frm_pid = beforeStates[i].frmPid;
-            exitGrids[i]->pro_pid = beforeStates[i].proPid;
         }
         _refreshObjects();
     };
     cmd.redo = [this, exitGrids, afterStates]() {
         for (size_t i = 0; i < exitGrids.size(); ++i) {
-            if (!exitGrids[i]) {
-                continue;
+            if (exitGrids[i]) {
+                applyExitGridState(*exitGrids[i], afterStates[i]);
             }
-            exitGrids[i]->exit_map = afterStates[i].exitMap;
-            exitGrids[i]->exit_position = afterStates[i].exitPosition;
-            exitGrids[i]->exit_elevation = afterStates[i].exitElevation;
-            exitGrids[i]->exit_orientation = afterStates[i].exitOrientation;
-            exitGrids[i]->frm_pid = afterStates[i].frmPid;
-            exitGrids[i]->pro_pid = afterStates[i].proPid;
         }
         _refreshObjects();
     };
 
     return _batcher.push(std::move(cmd));
+}
+
+void ObjectEditService::applyExitGridState(MapObject& exitGrid, const ExitGridCommandState& state) {
+    ExitGridInstance view{ exitGrid };
+    view.setDestinationMap(state.exitMap);
+    view.setDestinationPosition(state.exitPosition);
+    view.setDestinationElevation(state.exitElevation);
+    view.setOrientation(state.exitOrientation);
+    // frm_pid/pro_pid are the object's art/proto, not exit-grid destination fields.
+    exitGrid.frm_pid = state.frmPid;
+    exitGrid.pro_pid = state.proPid;
 }
 
 MapObjectInstanceState ObjectEditService::captureInstanceState(const MapObject& o) {

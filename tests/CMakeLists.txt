@@ -18,6 +18,7 @@ add_executable(general_tests
     general/test_tile_hex_conversion.cpp
     general/test_game_data_path_resolver.cpp
     general/test_map_object_defaults.cpp
+    general/test_map_object_views.cpp
     general/test_frm_resolver.cpp
     general/test_viewport_controller.cpp
     general/test_map_factory.cpp
