@@ -1222,12 +1222,7 @@ void MainWindow::connectPanelSignals() {
     // Connections from panel signals to lambdas that resolve _currentEditorWidget
     // at call time. Called from setupDockWidgets() and rebuildResourcePanels()
     // (panel recreation destroys old connections automatically).
-    connectSelectionPanelSignals();
-    connectTilePalettePanelSignals();
-    connectMapInfoPanelSignals();
-}
 
-void MainWindow::connectSelectionPanelSignals() {
     // SelectionPanel signals → MainWindow / current editor widget
     if (_selectionPanel) {
         connect(_selectionPanel, &SelectionPanel::objectFrmChanged,
@@ -1296,9 +1291,7 @@ void MainWindow::connectSelectionPanelSignals() {
                 }
             });
     }
-}
 
-void MainWindow::connectTilePalettePanelSignals() {
     // TilePalettePanel signals → current editor widget
     if (_tilePalettePanel) {
         connect(_tilePalettePanel, &TilePalettePanel::tileSelected,
@@ -1327,9 +1320,7 @@ void MainWindow::connectTilePalettePanelSignals() {
                     _currentEditorWidget->replaceSelectedTiles(newTileIndex);
             });
     }
-}
 
-void MainWindow::connectMapInfoPanelSignals() {
     // MapInfoPanel signals → current editor widget
     if (_mapInfoPanel) {
         connect(_mapInfoPanel, &MapInfoPanel::selectPlayerPositionRequested,
