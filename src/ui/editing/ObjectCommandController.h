@@ -12,6 +12,7 @@
 
 #include "util/UndoStack.h"
 #include "ui/editing/UndoBatcher.h"
+#include "ui/editing/TileEditService.h"
 #include "format/map/MapScript.h"
 
 namespace geck {
@@ -204,10 +205,8 @@ private:
     std::vector<std::shared_ptr<Object>>& _objects;
     std::vector<sf::Sprite>& _wallBlockerOverlays;
     UndoBatcher _batcher;
+    TileEditService _tileService;
     std::function<void()> _refreshObjects;
-    std::function<std::vector<Tile>&(int)> _ensureElevationTiles;
-    std::function<int()> _getCurrentElevation;
-    std::function<void(int, bool, int)> _updateTileSprite;
     std::function<void()> _reloadTiles;
 };
 
