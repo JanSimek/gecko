@@ -11,6 +11,7 @@
 #include <QFileInfo>
 #include <QStringList>
 #endif
+#include "editing/commands/ObjectCommandController.h"
 #include "rendering/MapSpriteLoader.h"
 #include "rendering/RenderingEngine.h"
 #include "ui/dragdrop/DragDropManager.h"
@@ -67,21 +68,15 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
     }
 
     _renderingEngine = std::make_unique<RenderingEngine>(_resources);
-    _mapSpriteLoader = std::make_unique<MapSpriteLoader>(_resources, _session.hexgrid());
-    _objectCommandController = std::make_unique<ObjectCommandController>(
-        _resources,
-        _session.mapPtr(),
-        _session.hexgrid(),
-        *_mapSpriteLoader,
-        _session.objects(),
-        _session.wallBlockerOverlays(),
-        _session.undoStack(),
-        [this]() { refreshObjects(); },
-        [this]() { Q_EMIT undoStackChanged(); },
-        [this](int elevation) -> std::vector<Tile>& { return ensureElevationTiles(elevation); },
-        [this]() { return _session.currentElevation(); },
-        [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); },
-        [this]() { loadTileSprites(); });
+    _controller.initEditingCore(_resources,
+        EditorController::EditingCoreCallbacks{
+            .refreshObjects = [this]() { refreshObjects(); },
+            .undoStackChanged = [this]() { Q_EMIT undoStackChanged(); },
+            .ensureElevationTiles = [this](int elevation) -> std::vector<Tile>& { return ensureElevationTiles(elevation); },
+            .currentElevation = [this]() { return _session.currentElevation(); },
+            .updateTileSprite = [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); },
+            .loadTileSprites = [this]() { loadTileSprites(); },
+        });
     _inputHandler = std::make_unique<InputHandler>();
     _dragDropManager = std::make_unique<DragDropManager>(
         *this,
@@ -108,30 +103,30 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
 // owner); these are thin TilePlacementContext delegators. The controller invokes
 // ensureElevationTiles/updateTileSprite/getCurrentElevation back through callbacks.
 void EditorWidget::applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState) {
-    _objectCommandController->applyTileChanges(changes, applyAfterState);
+    _controller.commandController().applyTileChanges(changes, applyAfterState);
 }
 
 void EditorWidget::registerTileEdit(const QString& description, const std::vector<TileChange>& changes) {
-    _objectCommandController->registerTileEdit(description.toStdString(), changes);
+    _controller.commandController().registerTileEdit(description.toStdString(), changes);
 }
 
 void EditorWidget::addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
-    _objectCommandController->addPlacedObject(mapObject, object);
+    _controller.commandController().addPlacedObject(mapObject, object);
 }
 
 void EditorWidget::removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
-    _objectCommandController->removePlacedObject(mapObject, object);
+    _controller.commandController().removePlacedObject(mapObject, object);
 }
 
 // The register*() helpers below forward to the controller, which emits undoStackChanged
 // through its onStackChanged callback (wired in the constructor).
 void EditorWidget::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
-    _objectCommandController->registerObjectPlacement(mapObject, object);
+    _controller.commandController().registerObjectPlacement(mapObject, object);
 }
 
 void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects,
     const std::vector<std::pair<int, int>>& moves) {
-    _objectCommandController->registerObjectMove(objects, moves);
+    _controller.commandController().registerObjectMove(objects, moves);
 }
 
 void EditorWidget::moveSelectedTilesForDrag(sf::Vector2f worldTranslation) {
@@ -139,7 +134,7 @@ void EditorWidget::moveSelectedTilesForDrag(sf::Vector2f worldTranslation) {
         return;
     }
     const auto changes = _session.selectionManager()->planSelectionMoveForTranslation(worldTranslation);
-    _objectCommandController->applyTileEdit("Move Tiles", changes);
+    _controller.commandController().applyTileEdit("Move Tiles", changes);
 }
 
 std::optional<selection::SelectedItem> EditorWidget::remapSelectedItemAfterMove(
@@ -214,11 +209,11 @@ void EditorWidget::reselectAfterDragMove(sf::Vector2f worldTranslation) {
 }
 
 void EditorWidget::beginMoveBatch(const std::string& description) {
-    _objectCommandController->beginBatch(description);
+    _controller.commandController().beginBatch(description);
 }
 
 void EditorWidget::endMoveBatch() {
-    _objectCommandController->endBatch();
+    _controller.commandController().endBatch();
 }
 
 void EditorWidget::beginTileDragPreview() {
@@ -253,58 +248,58 @@ void EditorWidget::endTileDragPreview() {
 }
 
 void EditorWidget::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs) {
-    _objectCommandController->registerObjectRotation(objects, beforeDirs, afterDirs);
+    _controller.commandController().registerObjectRotation(objects, beforeDirs, afterDirs);
 }
 
 void EditorWidget::applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath) {
-    _objectCommandController->applyFrmToObject(object, frmPid, frmPath);
+    _controller.commandController().applyFrmToObject(object, frmPid, frmPath);
 }
 
 void EditorWidget::registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath) {
-    _objectCommandController->registerObjectFrmChange(object, oldFrmPid, oldFrmPath, newFrmPid, newFrmPath);
+    _controller.commandController().registerObjectFrmChange(object, oldFrmPid, oldFrmPath, newFrmPid, newFrmPath);
 }
 
 void EditorWidget::registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation) {
-    _objectCommandController->registerExitGridCreation(exitGrids, elevation);
+    _controller.commandController().registerExitGridCreation(exitGrids, elevation);
 }
 
 void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
     const std::vector<ExitGridState>& beforeStates,
     const std::vector<ExitGridState>& afterStates) {
-    _objectCommandController->registerExitGridEdit(exitGrids, beforeStates, afterStates);
+    _controller.commandController().registerExitGridEdit(exitGrids, beforeStates, afterStates);
 }
 
 void EditorWidget::registerInstanceEdit(const std::shared_ptr<MapObject>& mapObject,
     const MapObjectInstanceState& before,
     const MapObjectInstanceState& after,
     const std::string& description) {
-    _objectCommandController->registerInstanceEdit(mapObject, before, after, description);
+    _controller.commandController().registerInstanceEdit(mapObject, before, after, description);
 }
 
 void EditorWidget::clearElevationObjects(int elevation) {
-    _objectCommandController->clearElevationObjects(elevation);
+    _controller.commandController().clearElevationObjects(elevation);
 }
 
 void EditorWidget::copyElevation(int fromElevation, int toElevation) {
-    _objectCommandController->copyElevation(fromElevation, toElevation);
+    _controller.commandController().copyElevation(fromElevation, toElevation);
 }
 
 void EditorWidget::registerInventoryEdit(const std::shared_ptr<MapObject>& container,
     std::vector<std::shared_ptr<MapObject>> before,
     std::vector<std::shared_ptr<MapObject>> after) {
-    _objectCommandController->registerInventoryEdit(container, std::move(before), std::move(after));
+    _controller.commandController().registerInventoryEdit(container, std::move(before), std::move(after));
 }
 
 void EditorWidget::attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex) {
-    _objectCommandController->attachScript(object, scriptType, programIndex);
+    _controller.commandController().attachScript(object, scriptType, programIndex);
 }
 
 void EditorWidget::detachScript(const std::shared_ptr<MapObject>& object) {
-    _objectCommandController->detachScript(object);
+    _controller.commandController().detachScript(object);
 }
 
 void EditorWidget::addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius) {
-    _objectCommandController->addSpatialScript(programIndex, tile, elevation, radius);
+    _controller.commandController().addSpatialScript(programIndex, tile, elevation, radius);
 }
 
 EditorWidget::~EditorWidget() {
@@ -427,12 +422,12 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
     if (!_session.map()) {
         return { false, "No map loaded", "" };
     }
-    MapScriptApi api(_resources, _session.hexgrid(), *_objectCommandController, *_session.map(), _session.currentElevation());
+    MapScriptApi api(_resources, _session.hexgrid(), _controller.commandController(), *_session.map(), _session.currentElevation());
     // so api:placeStamp(name, ...) finds the user's saved patterns; any unloadable file is reported.
     const std::string stampNotes = registerLibraryStamps(api);
     LuaScriptRuntime runtime;
     // The continuous SFML render loop shows the script's edits on the next frame.
-    ScriptResult result = runtime.run(source, api, *_objectCommandController, "Run script");
+    ScriptResult result = runtime.run(source, api, _controller.commandController(), "Run script");
     if (!stampNotes.empty()) {
         result.output = result.output.empty() ? stampNotes : stampNotes + "\n" + result.output;
     }
@@ -614,12 +609,12 @@ void EditorWidget::loadTileSprites() {
         return;
     }
 
-    _mapSpriteLoader->loadTileSprites(*_session.map(), _session.currentElevation(), _session.floorSprites(), _session.roofSprites());
+    _controller.spriteLoader().loadTileSprites(*_session.map(), _session.currentElevation(), _session.floorSprites(), _session.roofSprites());
 }
 
 void EditorWidget::loadSprites() {
     spdlog::stopwatch sw;
-    _mapSpriteLoader->loadSprites(*_session.map(), _session.currentElevation(), _session.floorSprites(), _session.roofSprites(), _session.objects(), _session.wallBlockerOverlays());
+    _controller.spriteLoader().loadSprites(*_session.map(), _session.currentElevation(), _session.floorSprites(), _session.roofSprites(), _session.objects(), _session.wallBlockerOverlays());
 
     _session.selectionManager()->initializeSpatialIndex();
 
@@ -1249,7 +1244,7 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
     }
     const pattern::PatternVariant& variant = _stampPattern->variants[_stampVariantIndex];
 
-    pattern::PatternStamper stamper(_resources, _session.hexgrid(), *_objectCommandController, *_session.map());
+    pattern::PatternStamper stamper(_resources, _session.hexgrid(), _controller.commandController(), *_session.map());
     const pattern::PatternStamper::Result result = stamper.stamp(variant, hex, _session.currentElevation());
 
     // PatternStamper appends object sprites and applies tile sprites incrementally
@@ -1327,7 +1322,7 @@ void EditorWidget::refreshObjects() {
         return;
     }
 
-    _mapSpriteLoader->loadObjectSprites(*_session.map(), _session.currentElevation(), _session.objects(), _session.wallBlockerOverlays());
+    _controller.spriteLoader().loadObjectSprites(*_session.map(), _session.currentElevation(), _session.objects(), _session.wallBlockerOverlays());
 
     spdlog::debug("Refreshed objects for current elevation");
 }
@@ -1342,7 +1337,7 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof, int elevation) {
     }
 
     const auto& elevationTiles = ensureElevationTiles(elevation);
-    _mapSpriteLoader->updateTileSprite(hexIndex, isRoof, elevation, elevationTiles, _session.floorSprites(), _session.roofSprites());
+    _controller.spriteLoader().updateTileSprite(hexIndex, isRoof, elevation, elevationTiles, _session.floorSprites(), _session.roofSprites());
 }
 
 bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) {
@@ -1764,7 +1759,7 @@ void EditorWidget::centerViewOnPlayerPosition() {
 }
 
 void EditorWidget::showLoadingErrorsSummary() {
-    const auto& loadingErrors = _mapSpriteLoader->lastLoadErrors();
+    const auto& loadingErrors = _controller.spriteLoader().lastLoadErrors();
     if (!loadingErrors.hasErrors()) {
         return;
     }
@@ -1916,7 +1911,7 @@ void EditorWidget::deleteSelectedObjects() {
         }
     }
 
-    _objectCommandController->registerObjectDeletion(removedObjects);
+    _controller.commandController().registerObjectDeletion(removedObjects);
 
     _session.selectionManager()->clearSelection();
 

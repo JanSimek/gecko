@@ -22,8 +22,6 @@
 #include "selection/SelectionDataProvider.h"
 #include "util/Constants.h"
 #include "util/UndoStack.h"
-#include "editing/commands/ObjectCommandController.h"
-#include "rendering/MapSpriteLoader.h"
 #include "rendering/RenderingEngine.h"
 #include "ui/tiles/TilePlacementContext.h"
 #include "ui/input/InputHandler.h"
@@ -351,8 +349,8 @@ private:
     // Input, rendering, drag/drop, tile placement, and viewport systems
     std::unique_ptr<InputHandler> _inputHandler;
     std::unique_ptr<RenderingEngine> _renderingEngine;
-    std::unique_ptr<MapSpriteLoader> _mapSpriteLoader;
-    std::unique_ptr<ObjectCommandController> _objectCommandController;
+    // MapSpriteLoader + ObjectCommandController now live in _controller (their lifetimes
+    // are coupled — the command controller references the loader).
     std::unique_ptr<DragDropManager> _dragDropManager;
     std::unique_ptr<TilePlacementManager> _tilePlacementManager;
     std::unique_ptr<ExitGridPlacementManager> _exitGridPlacementManager;
