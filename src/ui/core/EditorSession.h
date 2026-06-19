@@ -8,6 +8,7 @@
 #include "VisibilitySettings.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
+#include "format/map/Map.h"
 #include "selection/SelectionManager.h"
 #include "util/UndoStack.h"
 
@@ -16,17 +17,22 @@ namespace geck {
 /**
  * @brief Mutable editing state for one open map.
  *
- * Holds the per-session state the editor mutates while a map is open: the hex
- * grid, the live object model and its rendered sprite caches, the undo history,
- * and the layer-visibility settings. The remaining document data (the Map, the
- * current elevation, the selection) migrates here incrementally as part of the
- * EditorWidget/MainWindow orchestration split.
+ * Holds the per-session state the editor mutates while a map is open: the map
+ * document and current elevation, the hex grid, the live object model and its
+ * rendered sprite caches, the selection manager, the undo history, and the
+ * layer-visibility settings.
  *
  * EditorSession is Qt-free: EditorWidget owns one and hands references to it (or
  * to the data it holds) to the rendering, selection, and command collaborators.
  */
 class EditorSession final {
 public:
+    // The open map. map() is the common accessor; mapPtr() exposes the owning
+    // pointer for collaborators that must observe reassignment (new/load map).
+    [[nodiscard]] Map* map() const { return _map.get(); }
+    [[nodiscard]] std::unique_ptr<Map>& mapPtr() { return _map; }
+    void setMap(std::unique_ptr<Map> map) { _map = std::move(map); }
+
     [[nodiscard]] VisibilitySettings& visibility() { return _visibility; }
     [[nodiscard]] const VisibilitySettings& visibility() const { return _visibility; }
 
@@ -55,6 +61,8 @@ public:
     [[nodiscard]] const std::vector<sf::Sprite>& wallBlockerOverlays() const { return _wallBlockerOverlays; }
 
 private:
+    std::unique_ptr<Map> _map;
+
     VisibilitySettings _visibility;
     UndoStack _undoStack{ 100 };
 

@@ -90,7 +90,7 @@ public:
     // User-configured selection highlight colours (from preferences); forwarded to the renderer.
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
 
-    Map* getMap() const override { return _map.get(); }
+    Map* getMap() const override { return _session.map(); }
 
     // Qt6 toolbar actions
     void cycleSelectionMode();
@@ -195,8 +195,8 @@ public:
 
     // Access to current elevation and map data
     int getCurrentElevation() const override { return _session.currentElevation(); }
-    Map::MapFile& getMapFile() override { return _map->getMapFile(); }
-    const Map::MapFile& getMapFile() const override { return _map->getMapFile(); }
+    Map::MapFile& getMapFile() override { return _session.map()->getMapFile(); }
+    const Map::MapFile& getMapFile() const override { return _session.map()->getMapFile(); }
 
     // Access to objects for SelectionManager
     const std::vector<std::shared_ptr<Object>>& getObjects() const override { return _session.objects(); }
@@ -360,7 +360,6 @@ private:
     SelectionMode _currentSelectionMode = SelectionMode::ALL;
 
     resource::GameResources& _resources;
-    std::unique_ptr<Map> _map;
 
     // Double-click detection for object cycling
     sf::Clock _lastClickTime;

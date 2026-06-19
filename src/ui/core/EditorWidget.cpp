@@ -58,12 +58,12 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
     , _layout(nullptr)
     , _sfmlWidget(nullptr)
     , _mainWindow(nullptr)
-    , _resources(resources)
-    , _map(std::move(map)) {
+    , _resources(resources) {
+    _session.setMap(std::move(map));
     _session.floorSprites().reserve(Map::TILES_PER_ELEVATION);
     _session.roofSprites().reserve(Map::TILES_PER_ELEVATION);
 
-    if (_map) {
+    if (_session.map()) {
         initializeSelectionSystem();
     }
 
@@ -71,7 +71,7 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
     _mapSpriteLoader = std::make_unique<MapSpriteLoader>(_resources, _session.hexgrid());
     _objectCommandController = std::make_unique<ObjectCommandController>(
         _resources,
-        _map,
+        _session.mapPtr(),
         _session.hexgrid(),
         *_mapSpriteLoader,
         _session.objects(),
@@ -409,7 +409,7 @@ void EditorWidget::setupUI() {
 }
 
 void EditorWidget::init() {
-    if (_map) {
+    if (_session.map()) {
         loadSprites();
         showLoadingErrorsSummary();
 
@@ -473,10 +473,10 @@ namespace {
 } // namespace
 
 ScriptResult EditorWidget::runScript(const std::string& source) {
-    if (!_map) {
+    if (!_session.map()) {
         return { false, "No map loaded", "" };
     }
-    MapScriptApi api(_resources, _session.hexgrid(), *_objectCommandController, *_map, _session.currentElevation());
+    MapScriptApi api(_resources, _session.hexgrid(), *_objectCommandController, *_session.map(), _session.currentElevation());
     // so api:placeStamp(name, ...) finds the user's saved patterns; any unloadable file is reported.
     const std::string stampNotes = registerLibraryStamps(api);
     LuaScriptRuntime runtime;
@@ -494,7 +494,7 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
         }
         _selectedHexPositions.clear();
         if (_mainWindow) {
-            _mainWindow->updateMapInfo(_map.get());
+            _mainWindow->updateMapInfo(_session.map());
         }
         Q_EMIT mapModifiedByScript();
     }
@@ -504,7 +504,7 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
 
 bool EditorWidget::saveMap() {
     // Default the save dialog to the current map's file name.
-    const QString suggestedName = _map ? QString::fromStdString(_map->filename()) : QString();
+    const QString suggestedName = _session.map() ? QString::fromStdString(_session.map()->filename()) : QString();
     QString destinationQString = QtDialogs::saveFile(this, "Save Map",
         "Map Files (*.map);;All Files (*.*)", suggestedName);
 
@@ -520,10 +520,10 @@ bool EditorWidget::saveMap() {
         } };
 
         map_writer.openFile(destination);
-        if (map_writer.write(_map->getMapFile())) {
+        if (map_writer.write(_session.map()->getMapFile())) {
             spdlog::info("Saved map {} ({} bytes)", destination, map_writer.getBytesWritten());
             // Repoint the map at the saved file so the window title reflects the chosen name.
-            _map->setPath(std::filesystem::path(destination));
+            _session.map()->setPath(std::filesystem::path(destination));
             return true;
         }
         spdlog::error("Failed to save map {}", destination);
@@ -559,8 +559,8 @@ void EditorWidget::createNewMap() {
 
     auto newMapFile = std::make_unique<Map::MapFile>(Map::createEmptyMapFile());
 
-    _map = std::make_unique<Map>(std::filesystem::path("newmap.map"));
-    _map->setMapFile(std::move(newMapFile));
+    _session.setMap(std::make_unique<Map>(std::filesystem::path("newmap.map")));
+    _session.map()->setMapFile(std::move(newMapFile));
 
     _session.setCurrentElevation(0);
 
@@ -588,7 +588,7 @@ void EditorWidget::createNewMap() {
     _viewportController->centerViewOnMap();
 
     if (_mainWindow) {
-        _mainWindow->updateMapInfo(_map.get());
+        _mainWindow->updateMapInfo(_session.map());
     }
 
     spdlog::info("Created new empty map with {} tiles per elevation", Map::TILES_PER_ELEVATION);
@@ -659,16 +659,16 @@ std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPositi
 }
 
 void EditorWidget::loadTileSprites() {
-    if (!_map) {
+    if (!_session.map()) {
         return;
     }
 
-    _mapSpriteLoader->loadTileSprites(*_map, _session.currentElevation(), _session.floorSprites(), _session.roofSprites());
+    _mapSpriteLoader->loadTileSprites(*_session.map(), _session.currentElevation(), _session.floorSprites(), _session.roofSprites());
 }
 
 void EditorWidget::loadSprites() {
     spdlog::stopwatch sw;
-    _mapSpriteLoader->loadSprites(*_map, _session.currentElevation(), _session.floorSprites(), _session.roofSprites(), _session.objects(), _session.wallBlockerOverlays());
+    _mapSpriteLoader->loadSprites(*_session.map(), _session.currentElevation(), _session.floorSprites(), _session.roofSprites(), _session.objects(), _session.wallBlockerOverlays());
 
     _session.selectionManager()->initializeSpatialIndex();
 
@@ -998,7 +998,7 @@ void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderH
     for (int hexPos : borderHexes) {
         auto scrollBlockerObject = createScrollBlockerObject(hexPos);
 
-        _map->getMapFile().map_objects[_session.currentElevation()].push_back(scrollBlockerObject);
+        _session.map()->getMapFile().map_objects[_session.currentElevation()].push_back(scrollBlockerObject);
 
         // Create visual object for immediate display
         try {
@@ -1069,8 +1069,8 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.currentSelectionMode = _currentSelectionMode;
     renderData.hexGrid = &_session.hexgrid();
     renderData.currentHoverHex = _currentHoverHex;
-    renderData.playerPositionHex = _map ? static_cast<int>(_map->getMapFile().header.player_default_position) : -1;
-    renderData.map = _map.get();
+    renderData.playerPositionHex = _session.map() ? static_cast<int>(_session.map()->getMapFile().header.player_default_position) : -1;
+    renderData.map = _session.map();
     renderData.currentElevation = _session.currentElevation();
 
     _renderingEngine->render(target, _viewportController->getView(), renderData, visibility);
@@ -1354,7 +1354,7 @@ void EditorWidget::cycleStampVariant() {
 }
 
 void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
-    if (!_stampPattern || !_map || _stampPattern->variants.empty()) {
+    if (!_stampPattern || !_session.map() || _stampPattern->variants.empty()) {
         return;
     }
     const int hex = _viewportController->worldPosToHexIndex(worldPos);
@@ -1366,7 +1366,7 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
     }
     const pattern::PatternVariant& variant = _stampPattern->variants[_stampVariantIndex];
 
-    pattern::PatternStamper stamper(_resources, _session.hexgrid(), *_objectCommandController, *_map);
+    pattern::PatternStamper stamper(_resources, _session.hexgrid(), *_objectCommandController, *_session.map());
     const pattern::PatternStamper::Result result = stamper.stamp(variant, hex, _session.currentElevation());
 
     // PatternStamper appends object sprites and applies tile sprites incrementally
@@ -1440,11 +1440,11 @@ bool EditorWidget::isTilePlacementMode() const {
 }
 
 void EditorWidget::refreshObjects() {
-    if (!_map) {
+    if (!_session.map()) {
         return;
     }
 
-    _mapSpriteLoader->loadObjectSprites(*_map, _session.currentElevation(), _session.objects(), _session.wallBlockerOverlays());
+    _mapSpriteLoader->loadObjectSprites(*_session.map(), _session.currentElevation(), _session.objects(), _session.wallBlockerOverlays());
 
     spdlog::debug("Refreshed objects for current elevation");
 }
@@ -1454,7 +1454,7 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
 }
 
 void EditorWidget::updateTileSprite(int hexIndex, bool isRoof, int elevation) {
-    if (!_map || !isValidHexPosition(hexIndex)) {
+    if (!_session.map() || !isValidHexPosition(hexIndex)) {
         return;
     }
 
@@ -1467,7 +1467,7 @@ bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& spri
 }
 
 std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool isRoof) {
-    if (!_map || _map->getMapFile().tiles.find(_session.currentElevation()) == _map->getMapFile().tiles.end()) {
+    if (!_session.map() || _session.map()->getMapFile().tiles.find(_session.currentElevation()) == _session.map()->getMapFile().tiles.end()) {
         return std::nullopt;
     }
 
@@ -1479,7 +1479,7 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
     }
 
     // Editor-specific guard: a roof selection only counts on a non-empty roof tile.
-    if (isRoof && _map->getMapFile().tiles.at(_session.currentElevation()).at(*tileIndex).getRoof() == Map::EMPTY_TILE) {
+    if (isRoof && _session.map()->getMapFile().tiles.at(_session.currentElevation()).at(*tileIndex).getRoof() == Map::EMPTY_TILE) {
         spdlog::debug("EditorWidget::getTileAtPosition: Empty roof tile at index {} [worldPos: ({:.1f}, {:.1f})]",
             *tileIndex, worldPos.x, worldPos.y);
         return std::nullopt;
@@ -1491,7 +1491,7 @@ std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool i
 std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) {
     // Includes empty roof tiles in the selection. Resolves by nearest roof-tile centre
     // (screenToTileIndex applies the roof offset) for accuracy at tile boundaries.
-    if (!_map || _map->getMapFile().tiles.find(_session.currentElevation()) == _map->getMapFile().tiles.end()) {
+    if (!_session.map() || _session.map()->getMapFile().tiles.find(_session.currentElevation()) == _session.map()->getMapFile().tiles.end()) {
         return std::nullopt;
     }
 
@@ -1664,8 +1664,8 @@ void EditorWidget::clearDragPreview() {
             removePreviewHighlight(_session.floorSprites().at(tileIndex));
 
             // Empty roof sprites must go back to transparent, not white
-            if (_map && _map->getMapFile().tiles.find(_session.currentElevation()) != _map->getMapFile().tiles.end()) {
-                auto tile = _map->getMapFile().tiles.at(_session.currentElevation()).at(tileIndex);
+            if (_session.map() && _session.map()->getMapFile().tiles.find(_session.currentElevation()) != _session.map()->getMapFile().tiles.end()) {
+                auto tile = _session.map()->getMapFile().tiles.at(_session.currentElevation()).at(tileIndex);
                 if (tile.getRoof() == Map::EMPTY_TILE) {
                     _session.roofSprites().at(tileIndex).setColor(geck::TileColors::transparent());
                 } else {
@@ -1688,7 +1688,7 @@ void EditorWidget::clearDragPreview() {
 }
 
 std::vector<Tile>& EditorWidget::ensureElevationTiles(int elevation) {
-    auto& mapFile = _map->getMapFile();
+    auto& mapFile = _session.map()->getMapFile();
     auto& tilesVec = mapFile.tiles[elevation];
     if (tilesVec.size() < Map::TILES_PER_ELEVATION) {
         tilesVec.resize(Map::TILES_PER_ELEVATION, Tile(Map::EMPTY_TILE, Map::EMPTY_TILE));
@@ -1727,7 +1727,7 @@ void EditorWidget::updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector
 }
 
 void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
-    if (!_map) {
+    if (!_session.map()) {
         spdlog::warn("EditorWidget: Cannot place object - no map loaded");
         return;
     }
@@ -1858,12 +1858,12 @@ void EditorWidget::enterPlayerPositionSelectionMode() {
 }
 
 void EditorWidget::centerViewOnPlayerPosition() {
-    if (!_map) {
+    if (!_session.map()) {
         spdlog::warn("EditorWidget::centerViewOnPlayerPosition: No map loaded");
         return;
     }
 
-    uint32_t playerHexPosition = _map->getMapFile().header.player_default_position;
+    uint32_t playerHexPosition = _session.map()->getMapFile().header.player_default_position;
 
     auto hex = _session.hexgrid().getHexByPosition(playerHexPosition);
     if (!hex) {
@@ -2000,7 +2000,7 @@ void EditorWidget::onObjectFrmPathChanged(std::shared_ptr<Object> object, const 
 }
 
 void EditorWidget::deleteSelectedObjects() {
-    if (!_map) {
+    if (!_session.map()) {
         return;
     }
 
