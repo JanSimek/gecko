@@ -291,7 +291,12 @@ std::unique_ptr<Pro> ProReader::read() {
                 break;
             }
             case Pro::OBJECT_TYPE::MISC: {
-                utils.skipWithLog(Pro::FIELD_SIZE_BYTES, "misc unknown field");
+                // MISC's only type-specific field is its extended flags. The common
+                // prefix above skips flagsExt for MISC, so the proto's final field is
+                // its extendedFlags (Fallout 2 CE reads exactly lightDistance/
+                // lightIntensity/flags/extendedFlags for OBJ_TYPE_MISC). Preserve it
+                // rather than discarding it, so a written MISC round-trips.
+                pro->commonItemData.flagsExt = utils.readBE32();
                 break;
             }
         }

@@ -312,3 +312,33 @@ TEST_CASE("PRO tile round-trip omits the common header prefix", "[pro][roundtrip
     REQUIRE(got.header.flags == 0x00000002);
     REQUIRE(got.tileData.materialId == 3);
 }
+
+TEST_CASE("PRO misc round-trip carries no trailing field", "[pro][roundtrip][misc]") {
+    TempFile tmpFile{ "test_pro_roundtrip_misc", ".pro" };
+    const auto& tempPath = tmpFile.path();
+
+    // MISC carries no type-specific data: the record ends at flagsExt, matching
+    // Fallout 2 CE (proto.cc OBJ_TYPE_MISC reads/writes only through extendedFlags).
+    geck::Pro misc{ tempPath };
+    misc.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::MISC) << 24) | 0x11u);
+    misc.header.message_id = 654;
+    misc.header.light_distance = 7;
+    misc.header.light_intensity = 0x10000;
+    misc.header.flags = 0x00000004;
+    misc.commonItemData.flagsExt = 0x0000ABCD;
+
+    const geck::Pro got = proRoundTrip(misc, tempPath);
+
+    REQUIRE(got.type() == geck::Pro::OBJECT_TYPE::MISC);
+    REQUIRE(got.header.PID == misc.header.PID);
+    REQUIRE(got.header.message_id == 654);
+    REQUIRE(got.header.light_distance == 7);
+    REQUIRE(got.header.light_intensity == 0x10000);
+    REQUIRE(got.header.flags == 0x00000004);
+    REQUIRE(got.commonItemData.flagsExt == 0x0000ABCD);
+
+    // Exactly 7 BE32 fields (PID, message_id, FID, light_distance, light_intensity,
+    // flags, flagsExt) = 28 bytes — not 32 with a phantom trailing field.
+    REQUIRE(std::filesystem::file_size(tempPath) == 28);
+}
