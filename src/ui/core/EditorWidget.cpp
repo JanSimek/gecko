@@ -76,7 +76,7 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
         *_mapSpriteLoader,
         _objects,
         _wallBlockerOverlays,
-        _undoStack,
+        _session.undoStack(),
         [this]() { refreshObjects(); },
         [this]() { Q_EMIT undoStackChanged(); },
         [this](int elevation) -> std::vector<Tile>& { return ensureElevationTiles(elevation); },
@@ -233,7 +233,7 @@ void EditorWidget::beginTileDragPreview() {
         }
     };
     capture(false, _selectedFloorVisuals, _floorSprites);
-    if (_visibility.showRoof) {
+    if (_session.visibility().showRoof) {
         capture(true, _selectedRoofVisuals, _roofSprites);
     }
 }
@@ -312,13 +312,13 @@ EditorWidget::~EditorWidget() {
 }
 
 bool EditorWidget::undoLastEdit() {
-    bool result = _undoStack.undo();
+    bool result = _session.undoStack().undo();
     Q_EMIT undoStackChanged();
     return result;
 }
 
 bool EditorWidget::redoLastEdit() {
-    bool result = _undoStack.redo();
+    bool result = _session.undoStack().redo();
     Q_EMIT undoStackChanged();
     return result;
 }
@@ -678,7 +678,7 @@ void EditorWidget::loadSprites() {
 bool EditorWidget::isObjectSelectable(const std::shared_ptr<Object>& object) const {
     // Same rule getObjectsAtPosition applies for point picks; shared so area and point
     // selection agree on which objects are interactable.
-    return object && isObjectVisible(object->getMapObject(), _visibility);
+    return object && isObjectVisible(object->getMapObject(), _session.visibility());
 }
 
 std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vector2f worldPos) {
@@ -689,7 +689,7 @@ std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vect
     // selection. isObjectVisible is the same rule RenderingEngine::renderObjects applies.
     std::ranges::copy_if(_objects, std::back_inserter(objectsAtPos),
         [this, worldPos](const auto& object) {
-            return isObjectVisible(object->getMapObject(), _visibility)
+            return isObjectVisible(object->getMapObject(), _session.visibility())
                 && isPointInSpritePixel(worldPos, object->getSprite());
         });
 
@@ -1039,16 +1039,16 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     }
 
     RenderingEngine::VisibilitySettings visibility;
-    visibility.showObjects = _visibility.showObjects;
-    visibility.showCritters = _visibility.showCritters;
-    visibility.showWalls = _visibility.showWalls;
-    visibility.showRoof = _visibility.showRoof;
-    visibility.showScrollBlockers = _visibility.showScrollBlockers;
-    visibility.showWallBlockers = _visibility.showWallBlockers;
-    visibility.showHexGrid = _visibility.showHexGrid;
-    visibility.showLightOverlays = _visibility.showLightOverlays;
-    visibility.showExitGrids = _visibility.showExitGrids;
-    visibility.mergeSelectionOutlines = _visibility.mergeSelectionOutlines;
+    visibility.showObjects = _session.visibility().showObjects;
+    visibility.showCritters = _session.visibility().showCritters;
+    visibility.showWalls = _session.visibility().showWalls;
+    visibility.showRoof = _session.visibility().showRoof;
+    visibility.showScrollBlockers = _session.visibility().showScrollBlockers;
+    visibility.showWallBlockers = _session.visibility().showWallBlockers;
+    visibility.showHexGrid = _session.visibility().showHexGrid;
+    visibility.showLightOverlays = _session.visibility().showLightOverlays;
+    visibility.showExitGrids = _session.visibility().showExitGrids;
+    visibility.mergeSelectionOutlines = _session.visibility().mergeSelectionOutlines;
 
     RenderingEngine::RenderData renderData;
     renderData.floorSprites = &_floorSprites;
@@ -1172,8 +1172,8 @@ void EditorWidget::toggleScrollBlockerRectangleMode() {
     } else {
         _currentSelectionMode = SelectionMode::SCROLL_BLOCKER_RECTANGLE;
         // Auto-enable scroll blocker visibility so the user can see what they are placing
-        if (!_visibility.showScrollBlockers) {
-            _visibility.showScrollBlockers = true;
+        if (!_session.visibility().showScrollBlockers) {
+            _session.visibility().showScrollBlockers = true;
             spdlog::info("Automatically enabled scroll blocker visibility");
         }
         spdlog::info("Scroll blocker rectangle mode enabled");
@@ -1927,7 +1927,7 @@ void EditorWidget::setSelectionColors(const RenderingEngine::SelectionPalette& c
 }
 
 void EditorWidget::setShowLightOverlays(bool show) {
-    _visibility.showLightOverlays = show;
+    _session.visibility().showLightOverlays = show;
 
     int lightObjectCount = 0;
     std::ranges::for_each(_objects, [&lightObjectCount, show](auto& object) {

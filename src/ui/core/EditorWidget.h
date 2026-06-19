@@ -27,6 +27,7 @@
 #include "ui/rendering/RenderingEngine.h"
 #include "ui/tiles/TilePlacementContext.h"
 #include "ui/core/EditorMode.h"
+#include "ui/core/EditorSession.h"
 #include "pattern/Pattern.h"
 #include "ui/tools/ExitGridContext.h"
 #include "ui/dragdrop/DragDropContext.h"
@@ -75,16 +76,16 @@ public:
 #endif
 
     // Qt6 menu integration - visibility controls
-    void setShowObjects(bool show) { _visibility.showObjects = show; }
-    void setShowCritters(bool show) { _visibility.showCritters = show; }
-    void setShowWalls(bool show) { _visibility.showWalls = show; }
-    void setShowRoof(bool show) { _visibility.showRoof = show; }
-    void setShowScrollBlk(bool show) { _visibility.showScrollBlockers = show; }
-    void setShowWallBlockers(bool show) { _visibility.showWallBlockers = show; }
-    void setShowHexGrid(bool show) { _visibility.showHexGrid = show; }
+    void setShowObjects(bool show) { _session.visibility().showObjects = show; }
+    void setShowCritters(bool show) { _session.visibility().showCritters = show; }
+    void setShowWalls(bool show) { _session.visibility().showWalls = show; }
+    void setShowRoof(bool show) { _session.visibility().showRoof = show; }
+    void setShowScrollBlk(bool show) { _session.visibility().showScrollBlockers = show; }
+    void setShowWallBlockers(bool show) { _session.visibility().showWallBlockers = show; }
+    void setShowHexGrid(bool show) { _session.visibility().showHexGrid = show; }
     void setShowLightOverlays(bool show);
-    void setShowExitGrids(bool show) { _visibility.showExitGrids = show; }
-    void setMergeSelectionOutlines(bool merge) { _visibility.mergeSelectionOutlines = merge; }
+    void setShowExitGrids(bool show) { _session.visibility().showExitGrids = show; }
+    void setMergeSelectionOutlines(bool merge) { _session.visibility().mergeSelectionOutlines = merge; }
 
     // User-configured selection highlight colours (from preferences); forwarded to the renderer.
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
@@ -189,7 +190,7 @@ public:
     const std::vector<sf::Sprite>& getFloorSprites() const override { return _floorSprites; }
     const std::vector<sf::Sprite>& getRoofSprites() const override { return _roofSprites; }
 
-    bool isRoofVisible() const override { return _visibility.showRoof; }
+    bool isRoofVisible() const override { return _session.visibility().showRoof; }
     bool isObjectSelectable(const std::shared_ptr<Object>& object) const override;
 
     // Access to current elevation and map data
@@ -267,7 +268,7 @@ public slots:
     // Undo/redo
     bool undoLastEdit();
     bool redoLastEdit();
-    const UndoStack& getUndoStack() const { return _undoStack; }
+    const UndoStack& getUndoStack() const { return _session.undoStack(); }
 
 private:
     // One item's new selection entry after a drag-move: objects re-pointed to their refreshed
@@ -341,6 +342,10 @@ private:
     SFMLWidget* _sfmlWidget;
     class MainWindow* _mainWindow;
 
+    // Mutable editing state for the open map. Declared before the managers below
+    // so it outlives them: several hold references into it (e.g. the undo stack).
+    EditorSession _session;
+
     // Input, rendering, drag/drop, tile placement, and viewport systems
     std::unique_ptr<InputHandler> _inputHandler;
     std::unique_ptr<RenderingEngine> _renderingEngine;
@@ -368,8 +373,6 @@ private:
     int _currentElevation = 0;
     resource::GameResources& _resources;
     std::unique_ptr<Map> _map;
-
-    VisibilitySettings _visibility;
 
     // Double-click detection for object cycling
     sf::Clock _lastClickTime;
@@ -429,9 +432,6 @@ private:
 
     // Player position selection state
     bool _playerPositionSelectionMode = false;
-
-    // Undo/redo
-    UndoStack _undoStack{ 100 };
 };
 
 } // namespace geck
