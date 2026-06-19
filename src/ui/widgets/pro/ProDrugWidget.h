@@ -52,6 +52,9 @@ private:
 
     // Constants
     static constexpr int NUM_DRUG_STATS = 3;
+    // Drug-stat combos bind each item to its engine stat id via itemData; "no stat"
+    // is -1 here (stored as 0xFFFFFFFF on disk).
+    static constexpr int STAT_NONE_VALUE = -1;
 };
 
 } // namespace geck
