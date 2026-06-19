@@ -2,7 +2,6 @@
 
 #include <SFML/Graphics.hpp>
 
-#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -14,7 +13,7 @@
 #include "ui/editing/UndoBatcher.h"
 #include "ui/editing/TileEditService.h"
 #include "ui/editing/InventoryEditService.h"
-#include "format/map/MapScript.h"
+#include "ui/editing/ScriptEditService.h"
 
 namespace geck {
 
@@ -174,29 +173,6 @@ public:
     bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
 
 private:
-    // Number of map_scripts sections; mirrors Map::SCRIPT_SECTIONS (asserted in .cpp).
-    static constexpr int SCRIPT_SECTIONS = 5;
-
-    /// Snapshot of all map_scripts sections and their counts, for undoing bulk
-    /// edits that touch scripts across sections (e.g. clearing an elevation).
-    struct ScriptSections {
-        std::array<std::vector<MapScript>, SCRIPT_SECTIONS> sections;
-        std::array<int, SCRIPT_SECTIONS> counts{};
-    };
-
-    ScriptSections snapshotScripts() const;
-    void restoreScripts(const ScriptSections& snapshot);
-    /// Removes the script whose pid == sid from its section, updating the count.
-    void eraseScript(uint32_t sid);
-    uint32_t allocateScriptId(int section) const;
-    uint32_t allocateObjectId() const;
-    void removeObjectScript(MapObject& object);
-    void applyScriptSnapshot(int section, const std::shared_ptr<MapObject>& object,
-        const std::vector<MapScript>& sectionScripts, uint32_t oid, int32_t sid);
-    bool recordScriptEdit(const std::string& description, int section,
-        const std::shared_ptr<MapObject>& object,
-        std::vector<MapScript> beforeSection, uint32_t beforeOid, int32_t beforeSid);
-
     static void applyInstanceState(MapObject& object, const MapObjectInstanceState& state);
 
     resource::GameResources& _resources;
@@ -208,6 +184,7 @@ private:
     UndoBatcher _batcher;
     TileEditService _tileService;
     InventoryEditService _inventoryService;
+    ScriptEditService _scriptService;
     std::function<void()> _refreshObjects;
     std::function<void()> _reloadTiles;
 };
