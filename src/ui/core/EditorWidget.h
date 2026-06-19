@@ -29,6 +29,7 @@
 #include "ui/input/InputHandler.h"
 #include "ui/core/EditorMode.h"
 #include "ui/core/EditorSession.h"
+#include "ui/core/ObjectPicker.h"
 #include "pattern/Pattern.h"
 #include "ui/tools/ExitGridContext.h"
 #include "ui/dragdrop/DragDropContext.h"
@@ -293,8 +294,6 @@ private:
     void showLoadingErrorsSummary();
 
     // Object selection methods (moved to public)
-    bool isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
-    bool isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
     bool isDoubleClick(sf::Vector2f worldPos);
 
     // Selection modifiers for multi-selection
@@ -350,6 +349,9 @@ private:
     // Mutable editing state for the open map. Declared before the managers below
     // so it outlives them: several hold references into it (e.g. the undo stack).
     EditorSession _session;
+    // Pixel-perfect object picking over the session's objects (backs the
+    // SelectionDataProvider getObjectsAtPosition()/isObjectSelectable() overrides).
+    ObjectPicker _objectPicker{ _session };
 
     // Input, rendering, drag/drop, tile placement, and viewport systems
     std::unique_ptr<InputHandler> _inputHandler;

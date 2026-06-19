@@ -55,6 +55,8 @@ set(GECK_APP_SOURCES
     ui/core/VisibilitySettings.h
     ui/core/EditorWidget.h
     ui/core/EditorWidget.cpp
+    ui/core/ObjectPicker.h
+    ui/core/ObjectPicker.cpp
 
     # Qt6 UI Panels
     ui/panels/TilePalettePanel.h
