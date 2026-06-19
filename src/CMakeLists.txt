@@ -55,6 +55,7 @@ set(GECK_APP_SOURCES
     ui/core/VisibilitySettings.h
     ui/core/EditorWidget.h
     ui/core/EditorWidget.cpp
+    ui/core/EditorController.h
     ui/core/ObjectPicker.h
     ui/core/ObjectPicker.cpp
     ui/core/SelectionVisualizer.h

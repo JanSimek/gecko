@@ -28,9 +28,8 @@
 #include "ui/tiles/TilePlacementContext.h"
 #include "ui/input/InputHandler.h"
 #include "ui/core/EditorMode.h"
+#include "ui/core/EditorController.h"
 #include "ui/core/EditorSession.h"
-#include "ui/core/ObjectPicker.h"
-#include "ui/core/SelectionVisualizer.h"
 #include "pattern/Pattern.h"
 #include "ui/tools/ExitGridContext.h"
 #include "ui/dragdrop/DragDropContext.h"
@@ -341,15 +340,13 @@ private:
     SFMLWidget* _sfmlWidget;
     class MainWindow* _mainWindow;
 
-    // Mutable editing state for the open map. Declared before the managers below
-    // so it outlives them: several hold references into it (e.g. the undo stack).
-    EditorSession _session;
-    // Pixel-perfect object picking over the session's objects (backs the
-    // SelectionDataProvider getObjectsAtPosition()/isObjectSelectable() overrides).
-    ObjectPicker _objectPicker{ _session };
-    // Visual-selection state (object highlights + tile/hex outline index lists) the renderer
-    // reads; fed by the selection callback.
-    SelectionVisualizer _selectionVisualizer{ _session };
+    // Owns the editor's per-map state and the Qt-free helpers that act on it (object
+    // picking, selection visuals). Declared before the managers below so it outlives
+    // them: several hold references into the session (e.g. the undo stack).
+    EditorController _controller;
+    // Reference into the controller's session so the many _session.x() call sites stay
+    // unchanged while the controller owns the storage.
+    EditorSession& _session{ _controller.session() };
 
     // Input, rendering, drag/drop, tile placement, and viewport systems
     std::unique_ptr<InputHandler> _inputHandler;

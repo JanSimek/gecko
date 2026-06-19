@@ -231,9 +231,9 @@ void EditorWidget::beginTileDragPreview() {
             }
         }
     };
-    capture(false, _selectionVisualizer.floorVisuals(), _session.floorSprites());
+    capture(false, _controller.visualizer().floorVisuals(), _session.floorSprites());
     if (_session.visibility().showRoof) {
-        capture(true, _selectionVisualizer.roofVisuals(), _session.roofSprites());
+        capture(true, _controller.visualizer().roofVisuals(), _session.roofSprites());
     }
 }
 
@@ -326,8 +326,8 @@ void EditorWidget::initializeSelectionSystem() {
     _session.setSelectionManager(std::make_unique<selection::SelectionManager>(*this));
 
     _session.selectionManager()->setSelectionCallback([this](const selection::SelectionState& selection) {
-        _selectionVisualizer.clear();
-        _selectionVisualizer.apply(selection);
+        _controller.visualizer().clear();
+        _controller.visualizer().apply(selection);
         Q_EMIT selectionChanged(selection, _session.currentElevation());
     });
 }
@@ -443,7 +443,7 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
         if (_session.selectionManager()) {
             _session.selectionManager()->clearSelection();
         }
-        _selectionVisualizer.clearHexPositions();
+        _controller.visualizer().clearHexPositions();
         if (_mainWindow) {
             _mainWindow->updateMapInfo(_session.map());
         }
@@ -519,7 +519,7 @@ void EditorWidget::createNewMap() {
     _session.floorSprites().clear();
     _session.roofSprites().clear();
     _session.wallBlockerOverlays().clear();
-    _selectionVisualizer.clearHexPositions();
+    _controller.visualizer().clearHexPositions();
 
     // Load the core helper textures needed by an empty map.
     // Resource lists are bootstrapped once during startup.
@@ -627,11 +627,11 @@ void EditorWidget::loadSprites() {
 }
 
 bool EditorWidget::isObjectSelectable(const std::shared_ptr<Object>& object) const {
-    return _objectPicker.isSelectable(object);
+    return _controller.picker().isSelectable(object);
 }
 
 std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vector2f worldPos) {
-    return _objectPicker.objectsAtPosition(worldPos);
+    return _controller.picker().objectsAtPosition(worldPos);
 }
 
 bool EditorWidget::isDoubleClick(sf::Vector2f worldPos) {
@@ -938,9 +938,9 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.roofSprites = &_session.roofSprites();
     renderData.objects = &_session.objects();
     renderData.wallBlockerOverlays = &_session.wallBlockerOverlays();
-    renderData.selectedHexPositions = &_selectionVisualizer.hexPositions();
-    renderData.selectedFloorTiles = &_selectionVisualizer.floorVisuals();
-    renderData.selectedRoofTiles = &_selectionVisualizer.roofVisuals();
+    renderData.selectedHexPositions = &_controller.visualizer().hexPositions();
+    renderData.selectedFloorTiles = &_controller.visualizer().floorVisuals();
+    renderData.selectedRoofTiles = &_controller.visualizer().roofVisuals();
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
     renderData.stampPreviewFloorTiles = &_stampPreviewFloorTiles;
@@ -1453,15 +1453,15 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
         for (const auto& item : toRemove) {
             preview.removeItem(item);
         }
-        _selectionVisualizer.clear();
-        _selectionVisualizer.apply(preview);
+        _controller.visualizer().clear();
+        _controller.visualizer().apply(preview);
         return;
     }
 
     if (isAdditive) {
         // Alt+drag adds to the selection, so keep what is already selected highlighted while the
         // covered area is tinted below to preview the addition.
-        _selectionVisualizer.refresh();
+        _controller.visualizer().refresh();
     }
 
     switch (_currentSelectionMode) {
@@ -1830,7 +1830,7 @@ void EditorWidget::clearDragSelectionPreview() {
     // A Ctrl+drag preview temporarily un-highlights the covered selected items; restore the
     // real selection highlight so cancelling the drag (or clearing after another op) leaves
     // the selection looking correct.
-    _selectionVisualizer.refresh();
+    _controller.visualizer().refresh();
 
     spdlog::debug("EditorWidget::clearDragSelectionPreview() - cleared selection rectangle");
 }
