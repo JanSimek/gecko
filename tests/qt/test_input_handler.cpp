@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstdlib>
+#include <QtGlobal>
 
 #include <SFML/Graphics/RenderTexture.hpp>
 #include <SFML/Window/Event.hpp>
@@ -18,7 +18,9 @@ namespace {
 // a GL context exists) and skip in CI; they exist to characterise the per-mode
 // dispatch and pin it across refactors.
 bool glContextUnavailable() {
-    return std::getenv("CI") != nullptr || std::getenv("GITHUB_ACTIONS") != nullptr;
+    // qEnvironmentVariableIsSet is cross-platform and avoids MSVC's C4996 getenv
+    // warning (which /WX turns into a hard error).
+    return qEnvironmentVariableIsSet("CI") || qEnvironmentVariableIsSet("GITHUB_ACTIONS");
 }
 
 struct Harness {
