@@ -36,6 +36,7 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     , _wallBlockerOverlays(wallBlockerOverlays)
     , _batcher(undoStack, std::move(onStackChanged))
     , _tileService(map, _batcher, std::move(ensureElevationTiles), std::move(getCurrentElevation), std::move(updateTileSprite))
+    , _inventoryService(_batcher)
     , _refreshObjects(std::move(refreshObjects))
     , _reloadTiles(std::move(reloadTiles)) {
 }
@@ -480,42 +481,13 @@ bool ObjectCommandController::registerInstanceEdit(const std::shared_ptr<MapObje
 
 std::vector<std::shared_ptr<MapObject>> ObjectCommandController::cloneInventory(
     const std::vector<std::unique_ptr<MapObject>>& inventory) {
-    std::vector<std::shared_ptr<MapObject>> out;
-    out.reserve(inventory.size());
-    for (const auto& item : inventory) {
-        if (item) {
-            out.push_back(std::shared_ptr<MapObject>(item->cloneDeep()));
-        }
-    }
-    return out;
+    return InventoryEditService::cloneInventory(inventory);
 }
-
-namespace {
-    void restoreInventory(MapObject& container, const std::vector<std::shared_ptr<MapObject>>& snapshot) {
-        container.inventory.clear();
-        container.inventory.reserve(snapshot.size());
-        for (const auto& item : snapshot) {
-            if (item) {
-                container.inventory.push_back(item->cloneDeep());
-            }
-        }
-        container.objects_in_inventory = static_cast<uint32_t>(container.inventory.size());
-    }
-} // namespace
 
 bool ObjectCommandController::registerInventoryEdit(const std::shared_ptr<MapObject>& container,
     std::vector<std::shared_ptr<MapObject>> before,
     std::vector<std::shared_ptr<MapObject>> after) {
-    if (!container) {
-        return false;
-    }
-
-    UndoCommand cmd;
-    cmd.description = "Edit Inventory";
-    cmd.undo = [container, before = std::move(before)]() { restoreInventory(*container, before); };
-    cmd.redo = [container, after = std::move(after)]() { restoreInventory(*container, after); };
-    // The caller already applied the edit, so do not run redo() here.
-    return pushCommand(std::move(cmd));
+    return _inventoryService.registerInventoryEdit(container, std::move(before), std::move(after));
 }
 
 void ObjectCommandController::newEmptyMap() {
