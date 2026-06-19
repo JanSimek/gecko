@@ -7,9 +7,37 @@
 #include "util/TileUtils.h"
 #include "util/UndoStack.h"
 
+#include <cstddef>
 #include <unordered_map>
 
 namespace geck {
+
+namespace {
+
+    void applyChangesToTiles(std::vector<Tile>& tiles, const std::vector<const TileChange*>& changes, bool applyAfterState) {
+        for (const auto* change : changes) {
+            if (change->tileIndex < 0 || change->tileIndex >= static_cast<int>(tiles.size())) {
+                continue;
+            }
+            uint16_t value = applyAfterState ? change->after : change->before;
+            if (change->isRoof) {
+                tiles[change->tileIndex].setRoof(value);
+            } else {
+                tiles[change->tileIndex].setFloor(value);
+            }
+        }
+    }
+
+    void refreshChangedSprites(const std::vector<const TileChange*>& changes, int elevation, std::size_t tileCount,
+        const std::function<void(int, bool, int)>& updateTileSprite) {
+        for (const auto* change : changes) {
+            if (change->tileIndex >= 0 && change->tileIndex < static_cast<int>(tileCount)) {
+                updateTileSprite(tileIndexToHexIndex(change->tileIndex), change->isRoof, elevation);
+            }
+        }
+    }
+
+} // namespace
 
 TileEditService::TileEditService(std::unique_ptr<Map>& map,
     UndoBatcher& batcher,
@@ -36,27 +64,10 @@ void TileEditService::applyTileChanges(const std::vector<TileChange>& changes, b
     // Apply all changes first, then update sprites in batch.
     for (const auto& [elevation, elevChanges] : changesByElevation) {
         auto& elevationTiles = _ensureElevationTiles(elevation);
-
-        for (const auto* change : elevChanges) {
-            if (change->tileIndex < 0 || change->tileIndex >= static_cast<int>(elevationTiles.size())) {
-                continue;
-            }
-
-            uint16_t value = applyAfterState ? change->after : change->before;
-            if (change->isRoof) {
-                elevationTiles[change->tileIndex].setRoof(value);
-            } else {
-                elevationTiles[change->tileIndex].setFloor(value);
-            }
-        }
+        applyChangesToTiles(elevationTiles, elevChanges, applyAfterState);
 
         if (elevation == _getCurrentElevation()) {
-            for (const auto* change : elevChanges) {
-                if (change->tileIndex >= 0 && change->tileIndex < static_cast<int>(elevationTiles.size())) {
-                    int hexIndex = tileIndexToHexIndex(change->tileIndex);
-                    _updateTileSprite(hexIndex, change->isRoof, elevation);
-                }
-            }
+            refreshChangedSprites(elevChanges, elevation, elevationTiles.size(), _updateTileSprite);
         }
     }
 }
