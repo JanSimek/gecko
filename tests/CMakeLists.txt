@@ -83,6 +83,8 @@ add_executable(qt_tests
     qt/test_ddraw_ini.cpp
     # PatternSerializer is the editor's Qt (QByteArray/QString) serializer.
     qt/test_pattern_serializer.cpp
+    # InputHandler is Qt-free but lives in gecko_app; its dispatch test needs SFML.
+    qt/test_input_handler.cpp
 )
 
 # Round-trip the headless pattern writer (gecko_cli) through the editor's Qt PatternSerializer.
