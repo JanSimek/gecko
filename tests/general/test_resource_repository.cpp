@@ -118,10 +118,11 @@ TEST_CASE("ResourceRepository load is thread-safe and deduplicates under content
     std::atomic sawMismatch{ false }; // load() and a same-key find() disagreed
 
     // Note: Catch2 assertion macros are not thread-safe, so workers only set
-    // atomics; all assertions run on the main thread once the jthreads join at
-    // the end of this scope.
+    // atomics; all assertions run on the main thread once the threads join at
+    // the end of this scope. (std::thread + explicit join, not std::jthread, for
+    // macOS/AppleClang libc++ compatibility.)
     {
-        std::vector<std::jthread> threads;
+        std::vector<std::thread> threads;
         threads.reserve(kThreads);
         for (int t = 0; t < kThreads; ++t) {
             threads.emplace_back([&repo, &keys, &sawNull, &sawMismatch, t] {
@@ -137,6 +138,9 @@ TEST_CASE("ResourceRepository load is thread-safe and deduplicates under content
                     }
                 }
             });
+        }
+        for (auto& thread : threads) {
+            thread.join();
         }
     }
 
