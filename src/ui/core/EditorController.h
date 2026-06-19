@@ -19,6 +19,14 @@ class EditorController {
 public:
     EditorController() = default;
 
+    // Non-copyable / non-movable: _picker and _visualizer hold references into _session,
+    // so any copy/move would leave them dangling or pointing at the wrong session.
+    // (Held only as a direct member of EditorWidget, never copied/moved.)
+    EditorController(const EditorController&) = delete;
+    EditorController& operator=(const EditorController&) = delete;
+    EditorController(EditorController&&) = delete;
+    EditorController& operator=(EditorController&&) = delete;
+
     EditorSession& session() { return _session; }
     const EditorSession& session() const { return _session; }
 
