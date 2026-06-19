@@ -80,6 +80,43 @@ bool MapEditService::clearElevationObjects(int elevation) {
     return _batcher.push(std::move(cmd));
 }
 
+std::vector<std::shared_ptr<MapObject>> MapEditService::cloneElevationObjects(int fromElevation, int toElevation) {
+    std::vector<std::shared_ptr<MapObject>> clones;
+    auto& mapFile = _map->getMapFile();
+    auto it = mapFile.map_objects.find(fromElevation);
+    if (it == mapFile.map_objects.end()) {
+        return clones;
+    }
+    clones.reserve(it->second.size());
+    for (const auto& o : it->second) {
+        if (!o) {
+            continue;
+        }
+        auto clone = std::shared_ptr<MapObject>(o->cloneDeep());
+        clone->elevation = static_cast<uint32_t>(toElevation);
+        // Scripts are not copied, so detach the clone's linkage; otherwise it would
+        // duplicate the source object's OID and share its SID/script.
+        clone->map_scripts_pid = -1;
+        clone->script_id = -1;
+        clone->unknown0 = 0;
+        clones.push_back(std::move(clone));
+    }
+    return clones;
+}
+
+void MapEditService::applyElevationSnapshot(int elevation, const std::vector<std::shared_ptr<MapObject>>& objects,
+    const std::vector<Tile>& tiles, bool haveTiles) {
+    auto& mapFile = _map->getMapFile();
+    mapFile.map_objects[elevation] = objects;
+    if (haveTiles) {
+        mapFile.tiles[elevation] = tiles;
+    }
+    _refreshObjects();
+    if (_reloadTiles) {
+        _reloadTiles();
+    }
+}
+
 bool MapEditService::copyElevation(int fromElevation, int toElevation) {
     if (!_map || fromElevation == toElevation) {
         return false;
@@ -99,23 +136,7 @@ bool MapEditService::copyElevation(int fromElevation, int toElevation) {
     }
 
     // Destination "after": deep-cloned source objects (retargeted) + source tiles.
-    std::vector<std::shared_ptr<MapObject>> afterObjects;
-    if (auto it = mapFile.map_objects.find(fromElevation); it != mapFile.map_objects.end()) {
-        afterObjects.reserve(it->second.size());
-        for (const auto& o : it->second) {
-            if (!o) {
-                continue;
-            }
-            auto clone = std::shared_ptr<MapObject>(o->cloneDeep());
-            clone->elevation = static_cast<uint32_t>(toElevation);
-            // Scripts are not copied, so detach the clone's linkage; otherwise it
-            // would duplicate the source object's OID and share its SID/script.
-            clone->map_scripts_pid = -1;
-            clone->script_id = -1;
-            clone->unknown0 = 0;
-            afterObjects.push_back(std::move(clone));
-        }
-    }
+    std::vector<std::shared_ptr<MapObject>> afterObjects = cloneElevationObjects(fromElevation, toElevation);
     std::vector<Tile> afterTiles;
     bool haveAfterTiles = false;
     if (auto it = mapFile.tiles.find(fromElevation); it != mapFile.tiles.end()) {
@@ -126,26 +147,10 @@ bool MapEditService::copyElevation(int fromElevation, int toElevation) {
     UndoCommand cmd;
     cmd.description = "Copy Elevation";
     cmd.undo = [this, toElevation, beforeObjects, beforeTiles, haveBeforeTiles]() {
-        auto& mf = _map->getMapFile();
-        mf.map_objects[toElevation] = beforeObjects;
-        if (haveBeforeTiles) {
-            mf.tiles[toElevation] = beforeTiles;
-        }
-        _refreshObjects();
-        if (_reloadTiles) {
-            _reloadTiles();
-        }
+        applyElevationSnapshot(toElevation, beforeObjects, beforeTiles, haveBeforeTiles);
     };
     cmd.redo = [this, toElevation, afterObjects, afterTiles, haveAfterTiles]() {
-        auto& mf = _map->getMapFile();
-        mf.map_objects[toElevation] = afterObjects;
-        if (haveAfterTiles) {
-            mf.tiles[toElevation] = afterTiles;
-        }
-        _refreshObjects();
-        if (_reloadTiles) {
-            _reloadTiles();
-        }
+        applyElevationSnapshot(toElevation, afterObjects, afterTiles, haveAfterTiles);
     };
     cmd.redo();
     return _batcher.push(std::move(cmd));

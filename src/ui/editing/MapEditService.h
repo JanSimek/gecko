@@ -10,6 +10,8 @@ namespace geck {
 
 class Map;
 class Object;
+class Tile;
+struct MapObject;
 class ScriptEditService;
 class UndoBatcher;
 
@@ -44,6 +46,14 @@ public:
     bool copyElevation(int fromElevation, int toElevation);
 
 private:
+    // Deep-clones an elevation's objects, retargeted to toElevation with their
+    // script linkage detached (scripts are not copied).
+    std::vector<std::shared_ptr<MapObject>> cloneElevationObjects(int fromElevation, int toElevation);
+    // Replaces an elevation's objects (and optionally tiles) and refreshes the view.
+    // Shared by the undo and redo halves of copyElevation.
+    void applyElevationSnapshot(int elevation, const std::vector<std::shared_ptr<MapObject>>& objects,
+        const std::vector<Tile>& tiles, bool haveTiles);
+
     std::unique_ptr<Map>& _map;
     std::vector<std::shared_ptr<Object>>& _objects;
     std::vector<sf::Sprite>& _wallBlockerOverlays;
