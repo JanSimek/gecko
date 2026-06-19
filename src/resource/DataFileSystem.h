@@ -49,6 +49,10 @@ private:
     // entry point and this is what the nested-archive recursion calls.
     void addDataPathLocked(const std::filesystem::path& path);
 
+    // Mounts master.dat / critter.dat sitting next to a game directory, if present.
+    // _mutex must be held.
+    void mountNestedArchivesLocked(const std::filesystem::path& directory);
+
     static std::filesystem::path normalizeVfsPath(const std::filesystem::path& path);
     static std::string globToRegexPattern(const std::string& pattern);
 

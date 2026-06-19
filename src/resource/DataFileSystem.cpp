@@ -28,60 +28,77 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
     addDataPathLocked(path);
 }
 
-void DataFileSystem::addDataPathLocked(const std::filesystem::path& path) {
-    std::filesystem::path mountRoot;
-    if (path.extension() == ".dat") {
-        mountRoot = path;
-    } else if (auto resolved = util::resolveGameDataRoot(path)) {
-        mountRoot = *resolved;
-    } else {
-        // resolveGameDataRoot returns nullopt for macOS .app bundles without a
-        // valid GOG wrapper.  Do not fall through to mounting the raw .app root
-        // (NativeFileSystem would traverse Wine dosdevices symlinks).
+namespace {
+
+    // Resolves a user-supplied data path to the actual directory or archive to mount.
+    // Returns nullopt when the path cannot be used: a macOS .app bundle without a
+    // recognized Fallout 2 layout, or an empty/unresolvable path.
+    std::optional<std::filesystem::path> resolveMountRoot(const std::filesystem::path& path) {
+        if (path.extension() == ".dat") {
+            return path;
+        }
+        if (auto resolved = util::resolveGameDataRoot(path); resolved && !resolved->empty()) {
+            return *resolved;
+        }
+        // resolveGameDataRoot returns nullopt for macOS .app bundles without a valid GOG
+        // wrapper. Do not fall through to mounting the raw .app root (NativeFileSystem
+        // would traverse Wine dosdevices symlinks).
         if (path.extension() == ".app") {
             spdlog::warn("macOS bundle '{}' does not contain a recognized Fallout 2 data layout", path.string());
-            return;
+            return std::nullopt;
         }
-        mountRoot = path;
+        if (path.empty()) {
+            spdlog::warn("Skipping unresolvable data path: {}", path.string());
+            return std::nullopt;
+        }
+        return path;
     }
 
-    if (mountRoot.empty()) {
-        spdlog::warn("Skipping unresolvable data path: {}", path.string());
+} // namespace
+
+void DataFileSystem::mountNestedArchivesLocked(const std::filesystem::path& directory) {
+    // A game directory typically ships master.dat and critter.dat alongside it; mount
+    // whichever are present so their contents are reachable through the same VFS.
+    std::error_code ec;
+    const std::filesystem::path masterDat = directory / ResourcePaths::Dat::MASTER;
+    if (std::filesystem::exists(masterDat, ec) && std::filesystem::is_regular_file(masterDat, ec)) {
+        addDataPathLocked(masterDat);
+    }
+
+    const std::filesystem::path critterDat = directory / ResourcePaths::Dat::CRITTER;
+    if (std::filesystem::exists(critterDat, ec) && std::filesystem::is_regular_file(critterDat, ec)) {
+        addDataPathLocked(critterDat);
+    }
+}
+
+void DataFileSystem::addDataPathLocked(const std::filesystem::path& path) {
+    const auto mountRoot = resolveMountRoot(path);
+    if (!mountRoot) {
         return;
     }
-    if (mountRoot != path) {
-        spdlog::info("Resolved data path '{}' to '{}'", path.string(), mountRoot.string());
+    if (*mountRoot != path) {
+        spdlog::info("Resolved data path '{}' to '{}'", path.string(), mountRoot->string());
     }
 
     std::error_code ec;
     vfspp::IFileSystemPtr fileSystem;
-
-    if (std::filesystem::is_directory(mountRoot, ec)) {
-        fileSystem = std::make_shared<vfspp::NativeFileSystem>("/", mountRoot.string());
-
-        const std::filesystem::path masterDat = mountRoot / ResourcePaths::Dat::MASTER;
-        if (std::filesystem::exists(masterDat, ec) && std::filesystem::is_regular_file(masterDat, ec)) {
-            addDataPathLocked(masterDat);
-        }
-
-        const std::filesystem::path critterDat = mountRoot / ResourcePaths::Dat::CRITTER;
-        if (std::filesystem::exists(critterDat, ec) && std::filesystem::is_regular_file(critterDat, ec)) {
-            addDataPathLocked(critterDat);
-        }
-    } else if (mountRoot.extension() == ".dat") {
-        fileSystem = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem("/", mountRoot.string()));
+    if (std::filesystem::is_directory(*mountRoot, ec)) {
+        fileSystem = std::make_shared<vfspp::NativeFileSystem>("/", mountRoot->string());
+        mountNestedArchivesLocked(*mountRoot);
+    } else if (mountRoot->extension() == ".dat") {
+        fileSystem = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem("/", mountRoot->string()));
     } else {
-        spdlog::error("Unsupported data location: {}", mountRoot.string());
+        spdlog::error("Unsupported data location: {}", mountRoot->string());
         return;
     }
 
     if (!fileSystem->Initialize() || !fileSystem->IsInitialized()) {
-        spdlog::error("Failed to initialize data path: {}", mountRoot.string());
+        spdlog::error("Failed to initialize data path: {}", mountRoot->string());
         return;
     }
 
     _vfs->AddFileSystem("/", fileSystem);
-    spdlog::info("Location '{}' was added to the data path", mountRoot.string());
+    spdlog::info("Location '{}' was added to the data path", mountRoot->string());
 }
 
 std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::filesystem::path& path) const {
