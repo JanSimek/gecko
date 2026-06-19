@@ -148,10 +148,6 @@ public:
     groupFilesByFormat(const std::vector<std::filesystem::path>& filePaths);
 
 private:
-    // Generic reader creation (legacy interface support)
-    static void* createGenericReader(const std::filesystem::path& filePath, Format& detectedFormat);
-    static void* createGenericReader(const std::vector<uint8_t>& data, const std::string& filename, Format& detectedFormat);
-
     // Format info maps
     static const std::map<Format, FormatInfo> format_info_map;
     static const std::map<std::string, Format> extension_format_map;
