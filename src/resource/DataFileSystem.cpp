@@ -19,12 +19,16 @@ DataFileSystem::DataFileSystem()
 }
 
 void DataFileSystem::clear() {
-    const std::lock_guard<std::recursive_mutex> lock(_mutex);
+    const std::scoped_lock lock(_mutex);
     _vfs = std::make_shared<vfspp::VirtualFileSystem>();
 }
 
 void DataFileSystem::addDataPath(const std::filesystem::path& path) {
-    const std::lock_guard<std::recursive_mutex> lock(_mutex);
+    const std::scoped_lock lock(_mutex);
+    addDataPathLocked(path);
+}
+
+void DataFileSystem::addDataPathLocked(const std::filesystem::path& path) {
     std::filesystem::path mountRoot;
     if (path.extension() == ".dat") {
         mountRoot = path;
@@ -57,12 +61,12 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
 
         const std::filesystem::path masterDat = mountRoot / ResourcePaths::Dat::MASTER;
         if (std::filesystem::exists(masterDat, ec) && std::filesystem::is_regular_file(masterDat, ec)) {
-            addDataPath(masterDat);
+            addDataPathLocked(masterDat);
         }
 
         const std::filesystem::path critterDat = mountRoot / ResourcePaths::Dat::CRITTER;
         if (std::filesystem::exists(critterDat, ec) && std::filesystem::is_regular_file(critterDat, ec)) {
-            addDataPath(critterDat);
+            addDataPathLocked(critterDat);
         }
     } else if (mountRoot.extension() == ".dat") {
         fileSystem = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem("/", mountRoot.string()));
@@ -81,7 +85,7 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
 }
 
 std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::filesystem::path& path) const {
-    const std::lock_guard<std::recursive_mutex> lock(_mutex);
+    const std::scoped_lock lock(_mutex);
     if (!_vfs) {
         return std::nullopt;
     }
@@ -110,7 +114,7 @@ std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::file
 }
 
 bool DataFileSystem::exists(const std::filesystem::path& path) const {
-    const std::lock_guard<std::recursive_mutex> lock(_mutex);
+    const std::scoped_lock lock(_mutex);
     if (!_vfs) {
         return false;
     }
@@ -121,7 +125,7 @@ bool DataFileSystem::exists(const std::filesystem::path& path) const {
 }
 
 std::vector<std::filesystem::path> DataFileSystem::list(const std::string& pattern) const {
-    const std::lock_guard<std::recursive_mutex> lock(_mutex);
+    const std::scoped_lock lock(_mutex);
     if (!_vfs) {
         return {};
     }
@@ -144,7 +148,7 @@ std::vector<std::filesystem::path> DataFileSystem::list(const std::string& patte
 }
 
 std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesystem::path& path) const {
-    const std::lock_guard<std::recursive_mutex> lock(_mutex);
+    const std::scoped_lock lock(_mutex);
     if (!_vfs) {
         return std::nullopt;
     }

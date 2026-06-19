@@ -20,6 +20,11 @@ class ResourceRepository;
 /// Returns nullopt for paths that are not under a known art/ directory.
 [[nodiscard]] std::optional<Frm::FRM_TYPE> frmTypeForArtPath(std::string_view path);
 
+/// True if the filename ends in a Fallout FRM extension: the standard ".frm" or a
+/// directional ".fr0"-".fr5" (used by split critter animations). This is the
+/// canonical FRM-extension test; reuse it instead of re-deriving the extension set.
+[[nodiscard]] bool hasFrmExtension(std::string_view filename);
+
 class FrmResolver final {
 public:
     explicit FrmResolver(ResourceRepository& repository);

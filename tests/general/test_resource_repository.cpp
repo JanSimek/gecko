@@ -114,30 +114,30 @@ TEST_CASE("ResourceRepository load is thread-safe and deduplicates under content
     constexpr int kThreads = 16;
     constexpr int kIterations = 250;
 
-    std::atomic<bool> sawNull{ false };
-    std::atomic<bool> sawMismatch{ false }; // load() and a same-key find() disagreed
-    std::vector<std::thread> threads;
-    threads.reserve(kThreads);
+    std::atomic sawNull{ false };
+    std::atomic sawMismatch{ false }; // load() and a same-key find() disagreed
 
     // Note: Catch2 assertion macros are not thread-safe, so workers only set
-    // atomics; all assertions run on the main thread after join().
-    for (int t = 0; t < kThreads; ++t) {
-        threads.emplace_back([&, t] {
-            for (int i = 0; i < kIterations; ++i) {
-                const char* key = keys[static_cast<size_t>(t + i) % keys.size()];
-                Lst* loaded = repo.load<Lst>(key);
-                if (loaded == nullptr) {
-                    sawNull = true;
-                    continue;
+    // atomics; all assertions run on the main thread once the jthreads join at
+    // the end of this scope.
+    {
+        std::vector<std::jthread> threads;
+        threads.reserve(kThreads);
+        for (int t = 0; t < kThreads; ++t) {
+            threads.emplace_back([&repo, &keys, &sawNull, &sawMismatch, t] {
+                for (int i = 0; i < kIterations; ++i) {
+                    const char* key = keys[static_cast<size_t>(t + i) % keys.size()];
+                    const Lst* loaded = repo.load<Lst>(key);
+                    if (loaded == nullptr) {
+                        sawNull = true;
+                        continue;
+                    }
+                    if (repo.find<Lst>(key) != loaded) {
+                        sawMismatch = true;
+                    }
                 }
-                if (repo.find<Lst>(key) != loaded) {
-                    sawMismatch = true;
-                }
-            }
-        });
-    }
-    for (auto& thread : threads) {
-        thread.join();
+            });
+        }
     }
 
     CHECK_FALSE(sawNull.load());

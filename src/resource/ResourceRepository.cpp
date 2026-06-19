@@ -7,7 +7,7 @@ ResourceRepository::ResourceRepository(DataFileSystem& files)
 }
 
 void ResourceRepository::clear() {
-    const std::lock_guard<std::mutex> lock(_mutex);
+    const std::scoped_lock lock(_mutex);
     _resources.clear();
 }
 

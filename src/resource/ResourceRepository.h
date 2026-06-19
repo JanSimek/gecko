@@ -37,7 +37,7 @@ public:
         static_assert(std::is_base_of<IFile, T>::value, "Resource must derive from IFile");
 
         const std::string key = normalizeKey(path);
-        const std::lock_guard<std::mutex> lock(_mutex);
+        const std::scoped_lock lock(_mutex);
         return findLocked<T>(key);
     }
 
@@ -48,7 +48,7 @@ public:
         const std::string key = normalizeKey(path);
 
         {
-            const std::lock_guard<std::mutex> lock(_mutex);
+            const std::scoped_lock lock(_mutex);
             if (auto* resource = findLocked<T>(key)) {
                 return resource;
             }
@@ -62,7 +62,7 @@ public:
         }
         auto resource = ReaderFactory::readFileFromMemory<T>(*rawData, key);
 
-        const std::lock_guard<std::mutex> lock(_mutex);
+        const std::scoped_lock lock(_mutex);
         // Another thread may have cached the same key while we parsed; keep the
         // existing entry and drop our duplicate to preserve pointer stability.
         if (auto* existing = findLocked<T>(key)) {

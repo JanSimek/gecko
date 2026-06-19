@@ -1,6 +1,7 @@
 #include "TextureManager.h"
 
 #include "DataFileSystem.h"
+#include "FrmResolver.h"
 #include "ResourceRepository.h"
 
 #include "format/frm/Direction.h"
@@ -9,9 +10,6 @@
 #include "format/pal/Pal.h"
 #include "util/Exceptions.h"
 #include "resource/ResourcePaths.h"
-
-#include <algorithm>
-#include <cctype>
 
 namespace geck::resource {
 
@@ -33,11 +31,9 @@ void TextureManager::store(std::string_view key, std::unique_ptr<sf::Texture> te
 }
 
 bool TextureManager::isFrmPath(const std::filesystem::path& path) {
-    std::string extension = path.extension().string();
-    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char value) {
-        return static_cast<char>(std::tolower(value));
-    });
-    return extension.rfind(".frm", 0) == 0;
+    // Reuse the canonical FRM-extension test (.frm plus directional .fr0-.fr5)
+    // rather than re-deriving the set here.
+    return hasFrmExtension(path.generic_string());
 }
 
 void TextureManager::preload(const std::filesystem::path& path) {
@@ -59,10 +55,11 @@ const sf::Texture& TextureManager::get(const std::filesystem::path& path) {
 
     // Creating an sf::Texture uploads to the GL context, so this must run on the
     // main thread (see the class threading contract).
-    return isFrmPath(path) ? createFrmTexture(path, key) : createImageTexture(path, key);
+    return isFrmPath(path) ? createFrmTexture(path) : createImageTexture(path);
 }
 
-const sf::Texture& TextureManager::createFrmTexture(const std::filesystem::path& path, const std::string& key) {
+const sf::Texture& TextureManager::createFrmTexture(const std::filesystem::path& path) {
+    const std::string key = path.generic_string();
     Frm* frm = _repository.find<Frm>(path);
     if (!frm) {
         frm = _repository.load<Frm>(path);
@@ -90,7 +87,8 @@ const sf::Texture& TextureManager::createFrmTexture(const std::filesystem::path&
     return *storedIter->second;
 }
 
-const sf::Texture& TextureManager::createImageTexture(const std::filesystem::path& path, const std::string& key) {
+const sf::Texture& TextureManager::createImageTexture(const std::filesystem::path& path) {
+    const std::string key = path.generic_string();
     // Load image bytes through the VFS rather than the OS filesystem directly,
     // so DAT-archived and directory-mounted assets are both reachable.
     const auto bytes = _files.readRawBytes(path);

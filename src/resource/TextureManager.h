@@ -45,8 +45,8 @@ public:
 
 private:
     [[nodiscard]] static bool isFrmPath(const std::filesystem::path& path);
-    [[nodiscard]] const sf::Texture& createFrmTexture(const std::filesystem::path& path, const std::string& key);
-    [[nodiscard]] const sf::Texture& createImageTexture(const std::filesystem::path& path, const std::string& key);
+    [[nodiscard]] const sf::Texture& createFrmTexture(const std::filesystem::path& path);
+    [[nodiscard]] const sf::Texture& createImageTexture(const std::filesystem::path& path);
     [[nodiscard]] static sf::Image imageFromFrm(const Frm& frm, Pal& pal);
 
     ResourceRepository& _repository;
