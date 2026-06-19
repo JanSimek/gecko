@@ -1,6 +1,6 @@
 #include "SelectionManager.h"
 #include "SelectionDataProvider.h"
-#include "ui/viewport/ViewportController.h"
+#include "viewport/ViewportController.h"
 #include "format/map/MapObject.h"
 #include "util/Constants.h"
 #include "util/TileUtils.h"

@@ -4,7 +4,7 @@
 
 #include "editor/Hex.h"
 #include "editor/HexagonGrid.h"
-#include "ui/viewport/ViewportController.h"
+#include "viewport/ViewportController.h"
 
 using namespace geck;
 

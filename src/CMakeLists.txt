@@ -406,8 +406,8 @@ add_library(gecko_core STATIC
     util/SpatialIndex.h
     util/SpatialIndex.cpp
 
-    ui/viewport/ViewportController.h
-    ui/viewport/ViewportController.cpp
+    viewport/ViewportController.h
+    viewport/ViewportController.cpp
 
     selection/SelectionDataProvider.h
     selection/SelectionState.h

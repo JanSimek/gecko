@@ -2,7 +2,7 @@
 #include "editor/Object.h"
 #include "editor/Hex.h"
 #include "ui/rendering/ObjectVisibility.h"
-#include "ui/viewport/ViewportController.h"
+#include "viewport/ViewportController.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "resource/GameResources.h"

@@ -17,7 +17,7 @@
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
-#include "ui/viewport/ViewportController.h"
+#include "viewport/ViewportController.h"
 #include "ui/panels/ObjectPalettePanel.h"
 #include "ui/panels/TilePalettePanel.h"
 #include "MainWindow.h"

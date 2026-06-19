@@ -1,7 +1,7 @@
 #include "ExitGridPlacementManager.h"
 #include "ExitGridContext.h"
 #include "ui/widgets/SFMLWidget.h"
-#include "ui/viewport/ViewportController.h"
+#include "viewport/ViewportController.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "util/Coordinates.h"
