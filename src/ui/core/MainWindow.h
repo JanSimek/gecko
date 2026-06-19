@@ -165,6 +165,9 @@ private:
     void applyDefaultPanelDockLayout();
     void connectFileBrowserSignals();
     void connectPanelSignals();
+    void connectSelectionPanelSignals();
+    void connectTilePalettePanelSignals();
+    void connectMapInfoPanelSignals();
     void replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSizePolicy::Policy verticalPolicy);
     void rebuildResourcePanels();
     void rebuildGameResourcesFromSettings();
