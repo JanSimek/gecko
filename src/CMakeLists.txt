@@ -55,6 +55,10 @@ set(GECK_APP_SOURCES
     ui/core/VisibilitySettings.h
     ui/core/EditorWidget.h
     ui/core/EditorWidget.cpp
+    ui/core/ObjectPicker.h
+    ui/core/ObjectPicker.cpp
+    ui/core/SelectionVisualizer.h
+    ui/core/SelectionVisualizer.cpp
 
     # Qt6 UI Panels
     ui/panels/TilePalettePanel.h
@@ -406,8 +410,8 @@ add_library(gecko_core STATIC
     util/SpatialIndex.h
     util/SpatialIndex.cpp
 
-    ui/viewport/ViewportController.h
-    ui/viewport/ViewportController.cpp
+    viewport/ViewportController.h
+    viewport/ViewportController.cpp
 
     selection/SelectionDataProvider.h
     selection/SelectionState.h
@@ -458,18 +462,30 @@ add_library(gecko_editing STATIC
     pattern/PatternBuilder.cpp
     pattern/PatternStamper.h
     pattern/PatternStamper.cpp
-    ui/rendering/MapSpriteLoader.h
-    ui/rendering/MapSpriteLoader.cpp
+    rendering/MapSpriteLoader.h
+    rendering/MapSpriteLoader.cpp
     # SFML map renderer (Qt-free): drives the same drawing for the Qt editor and headless
     # PNG export. ThumbnailRenderer/MapThumbnail stay in gecko_app — they use QImage/QPainter.
-    ui/rendering/HexRenderer.h
-    ui/rendering/HexRenderer.cpp
-    ui/rendering/RenderingEngine.h
-    ui/rendering/RenderingEngine.cpp
-    ui/rendering/MapRenderer.h
-    ui/rendering/MapRenderer.cpp
-    ui/editing/ObjectCommandController.h
-    ui/editing/ObjectCommandController.cpp
+    rendering/HexRenderer.h
+    rendering/HexRenderer.cpp
+    rendering/RenderingEngine.h
+    rendering/RenderingEngine.cpp
+    rendering/MapRenderer.h
+    rendering/MapRenderer.cpp
+    editing/commands/ObjectCommandController.h
+    editing/commands/ObjectCommandController.cpp
+    editing/commands/UndoBatcher.h
+    editing/commands/UndoBatcher.cpp
+    editing/commands/TileEditService.h
+    editing/commands/TileEditService.cpp
+    editing/commands/InventoryEditService.h
+    editing/commands/InventoryEditService.cpp
+    editing/commands/ScriptEditService.h
+    editing/commands/ScriptEditService.cpp
+    editing/commands/MapEditService.h
+    editing/commands/MapEditService.cpp
+    editing/commands/ObjectEditService.h
+    editing/commands/ObjectEditService.cpp
     scripting/MapScriptApi.h
     scripting/MapScriptApi.cpp
     scripting/ScriptApiReference.h

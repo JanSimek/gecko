@@ -20,7 +20,7 @@
 #include "editor/Object.h"
 #include "format/map/Tile.h"
 #include "selection/SelectionState.h"
-#include "ui/editing/ObjectCommandController.h"
+#include "editing/commands/ObjectCommandController.h"
 
 namespace geck {
 

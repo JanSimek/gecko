@@ -135,3 +135,22 @@ TEST_CASE("resolveFid resolves critters by base name", "[resource][frm]") {
     REQUIRE(fid.has_value());
     CHECK(typeByte(*fid) == static_cast<uint32_t>(Frm::FRM_TYPE::CRITTER)); // 1
 }
+
+TEST_CASE("hasFrmExtension recognizes .frm and directional .fr0-.fr5", "[resource][frm]") {
+    using geck::resource::hasFrmExtension;
+
+    // The standard single-file FRM and the split critter directional frames.
+    CHECK(hasFrmExtension("art/critters/hmwarraa.frm"));
+    CHECK(hasFrmExtension("HMWARRAA.FRM")); // case-insensitive
+    for (const char* ext : { ".fr0", ".fr1", ".fr2", ".fr3", ".fr4", ".fr5" }) {
+        CHECK(hasFrmExtension(std::string("art/critters/hmwarr") + ext));
+    }
+
+    // Not FRM: a prefix match would wrongly accept ".frm1"; .fr6 and other
+    // formats must be rejected.
+    CHECK_FALSE(hasFrmExtension("art/x.frm1"));
+    CHECK_FALSE(hasFrmExtension("art/x.fr6"));
+    CHECK_FALSE(hasFrmExtension("art/tiles/x.png"));
+    CHECK_FALSE(hasFrmExtension("art/x.lst"));
+    CHECK_FALSE(hasFrmExtension("frm")); // too short, no dot
+}

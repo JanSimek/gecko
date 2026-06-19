@@ -1,4 +1,4 @@
-#include "ui/rendering/MapRenderer.h"
+#include "rendering/MapRenderer.h"
 
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
@@ -7,8 +7,8 @@
 #include "format/map/Tile.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
-#include "ui/rendering/MapSpriteLoader.h"
-#include "ui/rendering/RenderingEngine.h"
+#include "rendering/MapSpriteLoader.h"
+#include "rendering/RenderingEngine.h"
 #include "util/Constants.h"
 #include "util/ProHelper.h"
 #include "util/TileUtils.h"

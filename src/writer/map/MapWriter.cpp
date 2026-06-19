@@ -4,6 +4,7 @@
 
 #include "format/pro/Pro.h"
 #include "format/map/MapScript.h"
+#include "format/map/MapObjectFields.h"
 #include "format/map/Tile.h"
 
 namespace geck {
@@ -222,29 +223,11 @@ void MapWriter::writeScript(const MapScript& script) {
 void MapWriter::writeObject(const MapObject& object) {
     auto& utils = getBinaryUtils();
 
-    // Write basic object fields
-    utils.writeBE32(object.unknown0);
-    utils.writeBE32(object.position);
-    utils.writeBE32(object.x);
-    utils.writeBE32(object.y);
-    utils.writeBE32(object.sx);
-    utils.writeBE32(object.sy);
-    utils.writeBE32(object.frame_number);
-    utils.writeBE32(object.direction);
-    utils.writeBE32(object.frm_pid);
-    utils.writeBE32(object.flags);
-    utils.writeBE32(object.elevation);
-    utils.writeBE32(object.pro_pid);
-    utils.writeBE32(object.critter_index);
-    utils.writeBE32(object.light_radius);
-    utils.writeBE32(object.light_intensity);
-    utils.writeBE32(object.outline_color);
-    utils.writeBE32(object.map_scripts_pid);
-    utils.writeBE32(object.script_id);
-    utils.writeBE32(object.objects_in_inventory);
-    utils.writeBE32(object.max_inventory_size);
-    utils.writeBE32(object.unknown10);
-    utils.writeBE32(object.unknown11);
+    // Write the common-field block (layout shared with MapReader via the visitor).
+    // Every field is emitted as a big-endian 32-bit word.
+    visitMapObjectCommonFields(object, [&utils](const auto& field) {
+        utils.writeBE32(static_cast<uint32_t>(field));
+    });
 
     uint32_t objectTypeId = object.objectType();
 

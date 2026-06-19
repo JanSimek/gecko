@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -21,6 +22,16 @@ struct MountedSourceInfo {
     std::string displayLabel;
 };
 
+/**
+ * @brief Thread-safe facade over the vfspp virtual file system.
+ *
+ * Background loaders read game data concurrently with the main thread, but
+ * vfspp's VirtualFileSystem mutates internal state (opened-file tracking, the
+ * mounted-filesystem list) on every OpenFile/AddFileSystem call without any
+ * synchronization of its own. All access therefore goes through _mutex. Mounting
+ * a directory also mounts its nested archives; that recursion runs through the
+ * private addDataPathLocked() helper so the public lock is taken exactly once.
+ */
 class DataFileSystem final {
 public:
     DataFileSystem();
@@ -34,10 +45,19 @@ public:
     std::optional<MountedSourceInfo> sourceInfo(const std::filesystem::path& path) const;
 
 private:
+    // Mounts a path with _mutex already held; addDataPath() is the public locking
+    // entry point and this is what the nested-archive recursion calls.
+    void addDataPathLocked(const std::filesystem::path& path);
+
+    // Mounts master.dat / critter.dat sitting next to a game directory, if present.
+    // _mutex must be held.
+    void mountNestedArchivesLocked(const std::filesystem::path& directory);
+
     static std::filesystem::path normalizeVfsPath(const std::filesystem::path& path);
     static std::string globToRegexPattern(const std::string& pattern);
 
     vfspp::VirtualFileSystemPtr _vfs;
+    mutable std::mutex _mutex;
 };
 
 } // namespace geck::resource

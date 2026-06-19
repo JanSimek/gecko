@@ -31,15 +31,15 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
     sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
 
     if (event.button == sf::Mouse::Button::Left) {
-        if (_playerPositionMode) {
+        if (_mode == EditorMode::SetPlayerPosition) {
             if (_callbacks.onPlayerPositionSelect) {
                 _callbacks.onPlayerPositionSelect(worldPos);
             }
-            _playerPositionMode = false; // Exit mode after selection
+            _mode = EditorMode::Select; // Exit mode after selection
             return;
         }
 
-        if (_tilePlacementMode && _tilePlacementIndex >= 0) {
+        if (_mode == EditorMode::PlaceTile && _tilePlacementIndex >= 0) {
             _currentAction = EditorAction::TILE_PLACING;
             _dragStartWorldPos = worldPos;
             _isDragging = false;
@@ -47,14 +47,14 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             return;
         }
 
-        if (_exitGridPlacementMode) {
+        if (_mode == EditorMode::PlaceExitGrid) {
             if (_callbacks.onExitGridPlacement) {
                 _callbacks.onExitGridPlacement(worldPos);
             }
             return;
         }
 
-        if (_stampPatternMode) {
+        if (_mode == EditorMode::StampPattern) {
             if (_callbacks.onStampPattern) {
                 _callbacks.onStampPattern(worldPos);
             }
@@ -76,7 +76,7 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             return;
         }
         // Mark exits mode only does exit grid selection.
-        if (_markExitsMode) {
+        if (_mode == EditorMode::MarkExits) {
             _currentAction = EditorAction::DRAG_SELECTING;
             _dragStartWorldPos = worldPos;
             _isDragging = false;
@@ -101,24 +101,24 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             _immediateSelectionPerformed = true;
         }
     } else if (event.button == sf::Mouse::Button::Right) {
-        if (_tilePlacementMode) {
-            _tilePlacementMode = false;
+        if (_mode == EditorMode::PlaceTile) {
+            _mode = EditorMode::Select;
             _tilePlacementIndex = -1;
             if (_callbacks.onTilePlacementCancel) {
                 _callbacks.onTilePlacementCancel();
             }
             spdlog::info("Tile placement mode cancelled with right-click");
-        } else if (_exitGridPlacementMode) {
-            _exitGridPlacementMode = false;
+        } else if (_mode == EditorMode::PlaceExitGrid) {
+            _mode = EditorMode::Select;
             spdlog::info("Exit grid placement mode cancelled with right-click");
-        } else if (_markExitsMode) {
-            _markExitsMode = false;
+        } else if (_mode == EditorMode::MarkExits) {
+            _mode = EditorMode::Select;
             if (_callbacks.onMarkExitsModeCancelled) {
                 _callbacks.onMarkExitsModeCancelled();
             }
             spdlog::info("Mark exits mode cancelled with right-click");
-        } else if (_stampPatternMode) {
-            _stampPatternMode = false;
+        } else if (_mode == EditorMode::StampPattern) {
+            _mode = EditorMode::Select;
             if (_callbacks.onStampPatternCancel) {
                 _callbacks.onStampPatternCancel();
             }
@@ -137,22 +137,22 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
     sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
 
     if (event.button == sf::Mouse::Button::Left) {
-        if (_playerPositionMode) {
+        if (_mode == EditorMode::SetPlayerPosition) {
             return;
         }
 
         switch (_currentAction) {
             case EditorAction::TILE_PLACING:
-                if (_isDragging && _tilePlacementMode && _callbacks.onTileAreaFill) {
+                if (_isDragging && _mode == EditorMode::PlaceTile && _callbacks.onTileAreaFill) {
                     _callbacks.onTileAreaFill(_dragStartWorldPos, worldPos, _tilePlacementIsRoof);
-                } else if (_tilePlacementMode && _tilePlacementIndex >= 0 && _callbacks.onTilePlacement) {
+                } else if (_mode == EditorMode::PlaceTile && _tilePlacementIndex >= 0 && _callbacks.onTilePlacement) {
                     _callbacks.onTilePlacement(worldPos);
                 }
                 break;
 
             case EditorAction::DRAG_SELECTING:
                 if (_isDragging) {
-                    if (_markExitsMode && _callbacks.onMarkExitsAreaSelection) {
+                    if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsAreaSelection) {
                         _callbacks.onMarkExitsAreaSelection(_dragStartWorldPos, worldPos);
                     } else if (_selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE && _callbacks.onScrollBlockerRectangle) {
                         float left = std::min(_dragStartWorldPos.x, worldPos.x);
@@ -165,7 +165,7 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
                         _callbacks.onDragSelection(_dragStartWorldPos, worldPos, _dragSelectionModifier);
                     }
                 } else if (!_immediateSelectionPerformed && _callbacks.onSelectionClick) {
-                    if (_markExitsMode && _callbacks.onMarkExitsSelection) {
+                    if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsSelection) {
                         _callbacks.onMarkExitsSelection(worldPos);
                     } else {
                         // A no-drag release on a Ctrl drag is a Ctrl+click, so pass the modifier.
@@ -234,7 +234,7 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
                 }
             }
             if (_isDragging) {
-                if (_markExitsMode && _callbacks.onMarkExitsPreview) {
+                if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsPreview) {
                     _callbacks.onMarkExitsPreview(_dragStartWorldPos, worldPos);
                 } else if (_callbacks.onDragSelectionPreview) {
                     _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos, _dragSelectionModifier);
@@ -295,7 +295,7 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
     } else if (event.code == sf::Keyboard::Key::R) {
         // In stamp mode, R cycles the pattern's orientation variants (the Rotate toolbar
         // shortcut is disabled by the editor while stamping, so the key reaches us here).
-        if (_stampPatternMode && _callbacks.onStampCycleVariant) {
+        if (_mode == EditorMode::StampPattern && _callbacks.onStampCycleVariant) {
             _callbacks.onStampCycleVariant();
         }
     }
@@ -306,7 +306,7 @@ void InputHandler::handleKeyReleased(const sf::Event::KeyReleased&) {
 }
 
 void InputHandler::setTilePlacementMode(bool enabled, int tileIndex, bool replaceMode) {
-    _tilePlacementMode = enabled;
+    setActiveMode(enabled, EditorMode::PlaceTile);
     _tilePlacementIndex = tileIndex;
     _tilePlacementReplaceMode = replaceMode;
 }

@@ -495,6 +495,41 @@ void FileBrowserPanel::updateFileTypeComboBox() {
     }
 }
 
+void FileBrowserPanel::insertFileRow(FileTreeItem* rootItem, const std::string& file,
+    const std::vector<std::filesystem::path>& nativeDirectories) {
+    QString qFile = QString::fromStdString(file);
+
+    QString normalizedPath = normalizeDisplayPath(qFile);
+    QStringList pathComponents = normalizedPath.split('/', Qt::SkipEmptyParts);
+    if (pathComponents.isEmpty())
+        return;
+
+    FileTreeItem* currentParent = rootItem;
+    for (int i = 0; i < pathComponents.size() - 1; ++i) {
+        currentParent = findOrCreateDirectory(currentParent, pathComponents[i]);
+    }
+
+    QString fileName = pathComponents.last();
+    FileTreeItem* fileItem = new FileTreeItem(fileName, FileTreeItem::File);
+    fileItem->setFilePath(qFile);
+
+    QString extension = getFileExtension(fileName);
+    QStandardItem* typeItem = new QStandardItem(extension);
+    typeItem->setEditable(false);
+
+    QStandardItem* sourceItem = new QStandardItem(getFileSource(qFile, nativeDirectories));
+    sourceItem->setEditable(false);
+
+    QStandardItem* pathItem = new QStandardItem(normalizeDisplayPath(qFile));
+    pathItem->setEditable(false);
+
+    QString proName = (extension.toLower() == ".pro") ? getProName(qFile) : QString();
+    QStandardItem* proNameItem = new QStandardItem(proName);
+    proNameItem->setEditable(false);
+
+    currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << sourceItem << pathItem << proNameItem);
+}
+
 void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
     _treeModel->clear();
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
@@ -526,40 +561,7 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
     const auto nativeDirectories = _nativeDirectoriesForSources.empty() ? getNativeDirectoryPaths() : _nativeDirectoriesForSources;
 
     for (const auto& file : filteredFiles) {
-        QString qFile = QString::fromStdString(file);
-
-        QString normalizedPath = normalizeDisplayPath(qFile);
-        QStringList pathComponents = normalizedPath.split('/', Qt::SkipEmptyParts);
-        if (pathComponents.isEmpty())
-            continue;
-
-        FileTreeItem* currentParent = rootItem;
-        QString currentPath = "";
-
-        for (int i = 0; i < pathComponents.size() - 1; ++i) {
-            currentPath += "/" + pathComponents[i];
-            currentParent = findOrCreateDirectory(currentParent, pathComponents[i]);
-        }
-
-        QString fileName = pathComponents.last();
-        FileTreeItem* fileItem = new FileTreeItem(fileName, FileTreeItem::File);
-        fileItem->setFilePath(qFile);
-
-        QString extension = getFileExtension(fileName);
-        QStandardItem* typeItem = new QStandardItem(extension);
-        typeItem->setEditable(false);
-
-        QStandardItem* sourceItem = new QStandardItem(getFileSource(qFile, nativeDirectories));
-        sourceItem->setEditable(false);
-
-        QStandardItem* pathItem = new QStandardItem(normalizeDisplayPath(qFile));
-        pathItem->setEditable(false);
-
-        QString proName = (extension.toLower() == ".pro") ? getProName(qFile) : QString();
-        QStandardItem* proNameItem = new QStandardItem(proName);
-        proNameItem->setEditable(false);
-
-        currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << sourceItem << pathItem << proNameItem);
+        insertFileRow(rootItem, file, nativeDirectories);
     }
 
     for (int i = 0; i < _treeModel->rowCount(); ++i) {
@@ -833,41 +835,7 @@ void FileBrowserPanel::processNextChunk() {
             QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
         }
 
-        const auto& file = _pendingFiles[i];
-        QString qFile = QString::fromStdString(file);
-
-        QString normalizedPath = normalizeDisplayPath(qFile);
-        QStringList pathComponents = normalizedPath.split('/', Qt::SkipEmptyParts);
-        if (pathComponents.isEmpty())
-            continue;
-
-        FileTreeItem* currentParent = rootItem;
-        QString currentPath = "";
-
-        for (int j = 0; j < pathComponents.size() - 1; ++j) {
-            currentPath += "/" + pathComponents[j];
-            currentParent = findOrCreateDirectory(currentParent, pathComponents[j]);
-        }
-
-        QString fileName = pathComponents.last();
-        FileTreeItem* fileItem = new FileTreeItem(fileName, FileTreeItem::File);
-        fileItem->setFilePath(qFile);
-
-        QString extension = getFileExtension(fileName);
-        QStandardItem* typeItem = new QStandardItem(extension);
-        typeItem->setEditable(false);
-
-        QStandardItem* sourceItem = new QStandardItem(getFileSource(qFile, nativeDirectories));
-        sourceItem->setEditable(false);
-
-        QStandardItem* pathItem = new QStandardItem(normalizeDisplayPath(qFile));
-        pathItem->setEditable(false);
-
-        QString proName = (extension.toLower() == ".pro") ? getProName(qFile) : QString();
-        QStandardItem* proNameItem = new QStandardItem(proName);
-        proNameItem->setEditable(false);
-
-        currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << sourceItem << pathItem << proNameItem);
+        insertFileRow(rootItem, _pendingFiles[i], nativeDirectories);
     }
 
     _currentChunkIndex = endIndex;

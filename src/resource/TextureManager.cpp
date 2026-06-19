@@ -1,5 +1,7 @@
 #include "TextureManager.h"
 
+#include "DataFileSystem.h"
+#include "FrmResolver.h"
 #include "ResourceRepository.h"
 
 #include "format/frm/Direction.h"
@@ -9,13 +11,11 @@
 #include "util/Exceptions.h"
 #include "resource/ResourcePaths.h"
 
-#include <algorithm>
-#include <cctype>
-
 namespace geck::resource {
 
-TextureManager::TextureManager(ResourceRepository& repository)
-    : _repository(repository) {
+TextureManager::TextureManager(ResourceRepository& repository, DataFileSystem& files)
+    : _repository(repository)
+    , _files(files) {
 }
 
 void TextureManager::clear() {
@@ -30,48 +30,42 @@ void TextureManager::store(std::string_view key, std::unique_ptr<sf::Texture> te
     _textures.try_emplace(std::string(key), std::move(texture));
 }
 
+bool TextureManager::isFrmPath(const std::filesystem::path& path) {
+    // Reuse the canonical FRM-extension test (.frm plus directional .fr0-.fr5)
+    // rather than re-deriving the set here.
+    return hasFrmExtension(path.generic_string());
+}
+
 void TextureManager::preload(const std::filesystem::path& path) {
-    const std::string key = path.generic_string();
-    if (_textures.contains(key)) {
+    // Parse-only: warm the parsed-resource cache so the expensive decode happens
+    // off the main thread. The sf::Texture itself is created lazily in get(),
+    // which must run on the GL-owning main thread. Non-FRM textures have no
+    // parsed form to cache, so there is nothing to preload for them.
+    if (!isFrmPath(path)) {
         return;
     }
-
-    std::string extension = path.extension().string();
-    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char value) {
-        return static_cast<char>(std::tolower(value));
-    });
-
-    if (extension.rfind(".frm", 0) == 0) {
-        [[maybe_unused]] auto* frm = _repository.load<Frm>(path);
-        return;
-    }
-
-    auto texture = std::make_unique<sf::Texture>();
-    if (!texture->loadFromFile(key)) {
-        throw ResourceException("Failed to load texture with extension: " + extension, key);
-    }
-
-    _textures.try_emplace(key, std::move(texture));
+    [[maybe_unused]] auto* frm = _repository.load<Frm>(path);
 }
 
 const sf::Texture& TextureManager::get(const std::filesystem::path& path) {
     const std::string key = path.generic_string();
-    auto iter = _textures.find(key);
-    if (iter != _textures.end()) {
+    if (auto iter = _textures.find(key); iter != _textures.end()) {
         return *iter->second;
     }
 
+    // Creating an sf::Texture uploads to the GL context, so this must run on the
+    // main thread (see the class threading contract).
+    return isFrmPath(path) ? createFrmTexture(path) : createImageTexture(path);
+}
+
+const sf::Texture& TextureManager::createFrmTexture(const std::filesystem::path& path) {
+    const std::string key = path.generic_string();
     Frm* frm = _repository.find<Frm>(path);
     if (!frm) {
-        preload(path);
-        frm = _repository.find<Frm>(path);
-        if (!frm) {
-            auto textureIter = _textures.find(key);
-            if (textureIter != _textures.end()) {
-                return *textureIter->second;
-            }
-            throw ResourceException("Texture does not exist", key);
-        }
+        frm = _repository.load<Frm>(path);
+    }
+    if (!frm) {
+        throw ResourceException("Texture does not exist", key);
     }
 
     Pal* palette = _repository.load<Pal>(ResourcePaths::Pal::COLOR);
@@ -83,6 +77,28 @@ const sf::Texture& TextureManager::get(const std::filesystem::path& path) {
     const sf::Image image = imageFromFrm(*frm, *palette);
     if (!texture->loadFromImage(image)) {
         throw SpriteException("Failed to load texture from FRM image", key);
+    }
+
+    const auto [storedIter, inserted] = _textures.try_emplace(key, std::move(texture));
+    if (!inserted) {
+        throw ResourceException("Failed to cache texture", key);
+    }
+
+    return *storedIter->second;
+}
+
+const sf::Texture& TextureManager::createImageTexture(const std::filesystem::path& path) {
+    const std::string key = path.generic_string();
+    // Load image bytes through the VFS rather than the OS filesystem directly,
+    // so DAT-archived and directory-mounted assets are both reachable.
+    const auto bytes = _files.readRawBytes(path);
+    if (!bytes) {
+        throw ResourceException("Texture does not exist", key);
+    }
+
+    auto texture = std::make_unique<sf::Texture>();
+    if (!texture->loadFromMemory(bytes->data(), bytes->size())) {
+        throw ResourceException("Failed to load texture from data", key);
     }
 
     const auto [storedIter, inserted] = _textures.try_emplace(key, std::move(texture));

@@ -113,58 +113,6 @@ std::unique_ptr<FileParser<Lst>> ReaderFactory::createReader<Lst>(Format format)
     }
 }
 
-// Map reader is intentionally absent: MapReader requires a callback parameter
-// and must be constructed directly.
-void* ReaderFactory::createGenericReader(const std::filesystem::path& filePath, Format& detectedFormat) {
-    detectedFormat = detectFormat(filePath);
-
-    switch (detectedFormat) {
-        case Format::DAT:
-            return createReader<Dat>(detectedFormat).release();
-        case Format::PRO:
-            return createReader<Pro>(detectedFormat).release();
-        case Format::FRM:
-            return createReader<Frm>(detectedFormat).release();
-        case Format::PAL:
-            return createReader<Pal>(detectedFormat).release();
-        case Format::GAM:
-            return createReader<Gam>(detectedFormat).release();
-        case Format::MSG:
-            return createReader<Msg>(detectedFormat).release();
-        case Format::LST:
-            return createReader<Lst>(detectedFormat).release();
-        case Format::MAP:
-            throw UnsupportedFormatException("Map reader requires callback - use MapReader constructor directly");
-        default:
-            throw UnsupportedFormatException("Unsupported file format: " + filePath.filename().string());
-    }
-}
-
-void* ReaderFactory::createGenericReader(const std::vector<uint8_t>& data, const std::string& filename, Format& detectedFormat) {
-    detectedFormat = detectFormat(data, filename);
-
-    switch (detectedFormat) {
-        case Format::DAT:
-            return createReader<Dat>(detectedFormat).release();
-        case Format::PRO:
-            return createReader<Pro>(detectedFormat).release();
-        case Format::FRM:
-            return createReader<Frm>(detectedFormat).release();
-        case Format::PAL:
-            return createReader<Pal>(detectedFormat).release();
-        case Format::GAM:
-            return createReader<Gam>(detectedFormat).release();
-        case Format::MSG:
-            return createReader<Msg>(detectedFormat).release();
-        case Format::LST:
-            return createReader<Lst>(detectedFormat).release();
-        case Format::MAP:
-            throw UnsupportedFormatException("Map reader requires callback - use MapReader constructor directly");
-        default:
-            throw UnsupportedFormatException("Unsupported file format: " + filename);
-    }
-}
-
 // Format detection methods
 ReaderFactory::Format ReaderFactory::detectFormat(const std::filesystem::path& filePath) {
     // First try extension-based detection

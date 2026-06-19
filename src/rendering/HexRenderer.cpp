@@ -3,7 +3,7 @@
 #include "editor/HexagonGrid.h"
 #include "format/frm/Frm.h"
 #include "resource/GameResources.h"
-#include "ui/viewport/ViewportController.h"
+#include "viewport/ViewportController.h"
 #include "util/Constants.h"
 #include "resource/ResourcePaths.h"
 

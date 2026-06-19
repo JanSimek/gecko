@@ -6,7 +6,7 @@ GameResources::GameResources()
     : _files()
     , _repository(_files)
     , _frmResolver(_repository)
-    , _textures(_repository) {
+    , _textures(_repository, _files) {
 }
 
 DataFileSystem& GameResources::files() {

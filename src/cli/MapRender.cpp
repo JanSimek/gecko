@@ -2,7 +2,7 @@
 
 #include "cli/MapLoad.h"
 #include "format/map/Map.h"
-#include "ui/rendering/MapRenderer.h"
+#include "rendering/MapRenderer.h"
 
 #include <SFML/Graphics/Image.hpp>
 

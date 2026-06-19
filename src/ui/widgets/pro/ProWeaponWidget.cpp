@@ -49,8 +49,6 @@ void ProWeaponWidget::setupUI() {
 
     // === LEFT COLUMN: Damage & Attack ===
 
-    QGroupBox* basicGroup = new QGroupBox("Weapon Param");
-    basicGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* basicLayout = createStandardFormLayout();
 
     _weaponAnimationCombo = createComboBox(game::enums::weaponAnimations(), "Weapon animation type");
@@ -71,11 +69,8 @@ void ProWeaponWidget::setupUI() {
     _weaponDamageTypeCombo = createComboBox(game::enums::damageTypes7(_resources), "Damage type");
     basicLayout->addRow("Damage Type:", _weaponDamageTypeCombo);
 
-    basicGroup->setLayout(basicLayout);
-    leftLayout->addWidget(basicGroup);
+    leftLayout->addWidget(createBoldGroupBox("Weapon Param", basicLayout));
 
-    QGroupBox* apGroup = new QGroupBox("AP Cost Attack");
-    apGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* apLayout = createStandardFormLayout();
 
     _weaponAPPrimaryEdit = createSpinBox(0, 99, "Action points for primary attack");
@@ -84,11 +79,8 @@ void ProWeaponWidget::setupUI() {
     _weaponAPSecondaryEdit = createSpinBox(0, 99, "Action points for secondary attack");
     apLayout->addRow("AP Secondary:", _weaponAPSecondaryEdit);
 
-    apGroup->setLayout(apLayout);
-    leftLayout->addWidget(apGroup);
+    leftLayout->addWidget(createBoldGroupBox("AP Cost Attack", apLayout));
 
-    QGroupBox* rangeGroup = new QGroupBox("Range Attack");
-    rangeGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* rangeLayout = createStandardFormLayout();
 
     _weaponRangePrimaryEdit = createSpinBox(0, 999, "Primary attack range");
@@ -97,14 +89,11 @@ void ProWeaponWidget::setupUI() {
     _weaponRangeSecondaryEdit = createSpinBox(0, 999, "Secondary attack range");
     rangeLayout->addRow("Range Secondary:", _weaponRangeSecondaryEdit);
 
-    rangeGroup->setLayout(rangeLayout);
-    leftLayout->addWidget(rangeGroup);
+    leftLayout->addWidget(createBoldGroupBox("Range Attack", rangeLayout));
     leftLayout->addStretch();
 
     // === RIGHT COLUMN: Advanced Properties ===
 
-    QGroupBox* reqGroup = new QGroupBox("Requirements & Special");
-    reqGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* reqLayout = createStandardFormLayout();
 
     _weaponMinStrengthEdit = createSpinBox(0, 10, "Minimum strength required");
@@ -120,11 +109,8 @@ void ProWeaponWidget::setupUI() {
         "Special perk associated with weapon");
     reqLayout->addRow("Perk:", _weaponPerkCombo);
 
-    reqGroup->setLayout(reqLayout);
-    rightLayout->addWidget(reqGroup);
+    rightLayout->addWidget(createBoldGroupBox("Requirements & Special", reqLayout));
 
-    QGroupBox* ammoGroup = new QGroupBox("Ammo & Burst");
-    ammoGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QFormLayout* ammoLayout = createStandardFormLayout();
 
     _weaponBurstRoundsEdit = createSpinBox(0, 99, "Number of rounds per burst");
@@ -140,8 +126,7 @@ void ProWeaponWidget::setupUI() {
     _weaponAmmoCapacityEdit = createSpinBox(0, 999, "Maximum ammunition capacity");
     ammoLayout->addRow("Ammo Capacity:", _weaponAmmoCapacityEdit);
 
-    ammoGroup->setLayout(ammoLayout);
-    rightLayout->addWidget(ammoGroup);
+    rightLayout->addWidget(createBoldGroupBox("Ammo & Burst", ammoLayout));
 
     QGroupBox* miscGroup = createStandardGroupBox("Misc Properties");
     QFormLayout* miscLayout = createStandardFormLayout();

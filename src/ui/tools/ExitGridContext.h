@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 
-#include "ui/editing/ObjectCommandController.h"
+#include "editing/commands/ObjectCommandController.h"
 
 class QWidget;
 

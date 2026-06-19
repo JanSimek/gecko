@@ -5,6 +5,7 @@
 #include <SFML/Graphics/View.hpp>
 #include <functional>
 #include <spdlog/spdlog.h>
+#include "ui/core/EditorMode.h"
 #include "util/Types.h"
 
 namespace geck {
@@ -102,21 +103,22 @@ public:
      */
     EditorAction getCurrentAction() const { return _currentAction; }
     bool isDragging() const { return _isDragging; }
-    bool isInPlayerPositionMode() const { return _playerPositionMode; }
-    bool isInTilePlacementMode() const { return _tilePlacementMode; }
-    bool isInExitGridPlacementMode() const { return _exitGridPlacementMode; }
-    bool isInMarkExitsMode() const { return _markExitsMode; }
+    bool isInPlayerPositionMode() const { return _mode == EditorMode::SetPlayerPosition; }
+    bool isInTilePlacementMode() const { return _mode == EditorMode::PlaceTile; }
+    bool isInExitGridPlacementMode() const { return _mode == EditorMode::PlaceExitGrid; }
+    bool isInMarkExitsMode() const { return _mode == EditorMode::MarkExits; }
 
     /**
      * @brief Mode setters
+     *
+     * The active tool is a single EditorMode value, mutually exclusive by
+     * construction. Each bool setter enables its mode or falls back to Select.
      */
-    void setPlayerPositionMode(bool enabled) { _playerPositionMode = enabled; }
-    void setExitGridPlacementMode(bool enabled) { _exitGridPlacementMode = enabled; }
-    void setStampPatternMode(bool enabled) { _stampPatternMode = enabled; }
-    bool isInStampPatternMode() const { return _stampPatternMode; }
-    void setMarkExitsMode(bool enabled) {
-        _markExitsMode = enabled;
-    }
+    void setPlayerPositionMode(bool enabled) { setActiveMode(enabled, EditorMode::SetPlayerPosition); }
+    void setExitGridPlacementMode(bool enabled) { setActiveMode(enabled, EditorMode::PlaceExitGrid); }
+    void setStampPatternMode(bool enabled) { setActiveMode(enabled, EditorMode::StampPattern); }
+    bool isInStampPatternMode() const { return _mode == EditorMode::StampPattern; }
+    void setMarkExitsMode(bool enabled) { setActiveMode(enabled, EditorMode::MarkExits); }
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool replaceMode = false);
     void setSelectionMode(SelectionMode mode) { _selectionMode = mode; }
 
@@ -139,6 +141,7 @@ private:
     SelectionModifier getSelectionModifier() const;
     sf::Vector2f pixelToWorld(sf::Vector2i pixelPos, sf::RenderTarget& target, const sf::View& view);
     bool isShiftPressed() const;
+    void setActiveMode(bool enabled, EditorMode mode) { _mode = enabled ? mode : EditorMode::Select; }
 
     // State
     Callbacks _callbacks;
@@ -154,13 +157,10 @@ private:
     bool _immediateSelectionPerformed = false;
     SelectionModifier _dragSelectionModifier = SelectionModifier::NONE; // modifier held when a drag-select began
 
-    // Mode flags
-    bool _playerPositionMode = false;
-    bool _tilePlacementMode = false;
+    // Active tool mode — a single value, mutually exclusive by construction
+    // (replaces the former bank of per-mode bools).
+    EditorMode _mode = EditorMode::Select;
     bool _tilePlacementReplaceMode = false;
-    bool _exitGridPlacementMode = false;
-    bool _markExitsMode = false;
-    bool _stampPatternMode = false;
     int _tilePlacementIndex = -1;
     bool _tilePlacementIsRoof = false;
 };

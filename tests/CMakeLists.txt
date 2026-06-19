@@ -9,6 +9,7 @@ add_executable(general_tests
     general/test_reading_msg.cpp
     general/test_reading_pro_drug.cpp
     general/test_pro_roundtrip.cpp
+    general/test_pro_helper.cpp
     general/test_tile_utils.cpp
     general/test_reader_factory.cpp
     general/test_selection_system.cpp
@@ -16,8 +17,8 @@ add_executable(general_tests
     general/test_selection_manager.cpp
     general/test_tile_hex_conversion.cpp
     general/test_game_data_path_resolver.cpp
-    general/test_ddraw_ini.cpp
     general/test_map_object_defaults.cpp
+    general/test_map_object_views.cpp
     general/test_frm_resolver.cpp
     general/test_viewport_controller.cpp
     general/test_map_factory.cpp
@@ -33,7 +34,6 @@ add_executable(general_tests
     general/test_object_queries.cpp
     general/test_reading_dat.cpp
     general/test_reading_map.cpp
-    general/test_pattern_serializer.cpp
     general/test_hex_geometry.cpp
     general/test_pattern_stamper.cpp
     general/test_pattern_builder.cpp
@@ -79,6 +79,12 @@ add_executable(qt_tests
     qt/test_data_path_resolution.cpp
     qt/test_ui_regressions.cpp
     qt/test_dat_archive.cpp
+    # GameLauncher is an app-layer Qt class, so its ddraw.ini test links gecko::app.
+    qt/test_ddraw_ini.cpp
+    # PatternSerializer is the editor's Qt (QByteArray/QString) serializer.
+    qt/test_pattern_serializer.cpp
+    # InputHandler is Qt-free but lives in gecko_app; its dispatch test needs SFML.
+    qt/test_input_handler.cpp
 )
 
 # Round-trip the headless pattern writer (gecko_cli) through the editor's Qt PatternSerializer.
@@ -99,13 +105,14 @@ target_compile_definitions(test_support INTERFACE
     GECK_SCRIPTS_DIR="${CMAKE_SOURCE_DIR}/scripts"
 )
 
+# general_tests is pure C++/SFML logic: link the top Qt-free layer (gecko::editing),
+# which PUBLIC-chains gecko::core -> gecko::resource -> vault plus SFML/spdlog. It must
+# NOT link gecko::app, so Qt/UI coupling can't sneak into a "logic" test — those cases
+# belong in qt_tests.
 target_link_libraries(general_tests PRIVATE
     Catch2::Catch2WithMain
     test_support
-    gecko::spdlog
-    gecko::app
-    vault
-    SFML::System SFML::Graphics
+    gecko::editing
 )
 
 target_include_directories(general_tests PRIVATE

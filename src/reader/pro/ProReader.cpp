@@ -1,8 +1,10 @@
 #include "ProReader.h"
 
 #include <spdlog/spdlog.h>
+#include <type_traits>
 
 #include "format/pro/Pro.h"
+#include "format/pro/ProHeaderFields.h"
 #include "reader/ErrorMessages.h"
 
 namespace geck {
@@ -19,12 +21,11 @@ std::unique_ptr<Pro> ProReader::read() {
 
         auto pro = std::make_unique<Pro>(_path);
 
-        pro->header.PID = utils.readBE32Signed();
-        pro->header.message_id = utils.readBE32();
-        pro->header.FID = utils.readBE32Signed();
-        pro->header.light_distance = utils.readBE32();
-        pro->header.light_intensity = utils.readBE32();
-        pro->header.flags = utils.readBE32();
+        // Common header (layout shared with ProWriter via the visitor). Each field
+        // is a big-endian 32-bit word; its own type decides the interpretation.
+        visitProHeaderFields(*pro, [&utils](auto& field) {
+            field = static_cast<std::remove_reference_t<decltype(field)>>(utils.readBE32());
+        });
 
         switch (pro->type()) {
             case Pro::OBJECT_TYPE::TILE:
@@ -291,7 +292,12 @@ std::unique_ptr<Pro> ProReader::read() {
                 break;
             }
             case Pro::OBJECT_TYPE::MISC: {
-                utils.skipWithLog(Pro::FIELD_SIZE_BYTES, "misc unknown field");
+                // MISC's only type-specific field is its extended flags. The common
+                // prefix above skips flagsExt for MISC, so the proto's final field is
+                // its extendedFlags (Fallout 2 CE reads exactly lightDistance/
+                // lightIntensity/flags/extendedFlags for OBJ_TYPE_MISC). Preserve it
+                // rather than discarding it, so a written MISC round-trips.
+                pro->commonItemData.flagsExt = utils.readBE32();
                 break;
             }
         }

@@ -49,18 +49,18 @@ namespace {
                });
     }
 
-    bool hasFrmExtension(std::string_view filename) {
-        if (filename.size() < 4) {
-            return false;
-        }
-        std::string ext = trimmed(filename.substr(filename.size() - 4));
-        std::transform(ext.begin(), ext.end(), ext.begin(),
-            [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
-        return ext == ".frm" || ext == ".fr0" || ext == ".fr1" || ext == ".fr2"
-            || ext == ".fr3" || ext == ".fr4" || ext == ".fr5";
-    }
-
 } // namespace
+
+bool hasFrmExtension(std::string_view filename) {
+    if (filename.size() < 4) {
+        return false;
+    }
+    std::string ext = trimmed(filename.substr(filename.size() - 4));
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+        [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+    return ext == ".frm" || ext == ".fr0" || ext == ".fr1" || ext == ".fr2"
+        || ext == ".fr3" || ext == ".fr4" || ext == ".fr5";
+}
 
 std::optional<Frm::FRM_TYPE> frmTypeForArtPath(std::string_view path) {
     // frmTypeDescriptions is indexed in FRM_TYPE enum order, so the index is the type.

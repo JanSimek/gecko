@@ -2,7 +2,6 @@
 
 #include <SFML/Graphics.hpp>
 
-#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -11,7 +10,12 @@
 #include <vector>
 
 #include "util/UndoStack.h"
-#include "format/map/MapScript.h"
+#include "editing/commands/UndoBatcher.h"
+#include "editing/commands/TileEditService.h"
+#include "editing/commands/InventoryEditService.h"
+#include "editing/commands/ScriptEditService.h"
+#include "editing/commands/MapEditService.h"
+#include "editing/commands/ObjectEditService.h"
 
 namespace geck {
 
@@ -27,33 +31,8 @@ namespace resource {
     class GameResources;
 }
 
-struct ExitGridCommandState {
-    uint32_t exitMap;
-    uint32_t exitPosition;
-    uint32_t exitElevation;
-    uint32_t exitOrientation;
-    uint32_t frmPid;
-    uint32_t proPid;
-};
-
-/// Snapshot of a MapObject's UI-editable per-instance fields, shared by the
-/// flag/light/destination/interaction/critter editors via registerInstanceEdit.
-struct MapObjectInstanceState {
-    uint32_t flags = 0;
-    uint32_t dataFlags = 0; // MapObject.unknown11 == engine obj->data.flags (container lock/jam)
-    uint32_t lightRadius = 0;
-    uint32_t lightIntensity = 0;
-    uint32_t walkthrough = 0; // doors: engine obj->data.scenery.door.openFlags (lock/jam)
-    uint32_t map = 0;
-    uint32_t elevhex = 0;
-    uint32_t elevtype = 0;
-    uint32_t elevlevel = 0;
-    uint32_t aiPacket = 0;
-    uint32_t groupId = 0;
-    uint32_t currentHp = 0;
-    uint32_t currentRad = 0;
-    uint32_t currentPoison = 0;
-};
+// ExitGridCommandState and MapObjectInstanceState are defined in ObjectEditService.h
+// (the aggregate that owns exit-grid and per-instance editing) and re-exported here.
 
 class ObjectCommandController {
 public:
@@ -103,7 +82,7 @@ public:
     bool endBatch();
 
     /// True while at least one beginBatch() is open.
-    bool isBatching() const { return _batchDepth > 0; }
+    bool isBatching() const { return _batcher.isBatching(); }
 
     bool registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     /// Undoable placement that records the MapObject data only (no sprite). For headless
@@ -171,50 +150,20 @@ public:
     bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
 
 private:
-    // Number of map_scripts sections; mirrors Map::SCRIPT_SECTIONS (asserted in .cpp).
-    static constexpr int SCRIPT_SECTIONS = 5;
-
-    /// Snapshot of all map_scripts sections and their counts, for undoing bulk
-    /// edits that touch scripts across sections (e.g. clearing an elevation).
-    struct ScriptSections {
-        std::array<std::vector<MapScript>, SCRIPT_SECTIONS> sections;
-        std::array<int, SCRIPT_SECTIONS> counts{};
-    };
-
-    ScriptSections snapshotScripts() const;
-    void restoreScripts(const ScriptSections& snapshot);
-    /// Removes the script whose pid == sid from its section, updating the count.
-    void eraseScript(uint32_t sid);
-    uint32_t allocateScriptId(int section) const;
-    uint32_t allocateObjectId() const;
-    void removeObjectScript(MapObject& object);
-    void applyScriptSnapshot(int section, const std::shared_ptr<MapObject>& object,
-        const std::vector<MapScript>& sectionScripts, uint32_t oid, int32_t sid);
-    bool recordScriptEdit(const std::string& description, int section,
-        const std::shared_ptr<MapObject>& object,
-        std::vector<MapScript> beforeSection, uint32_t beforeOid, int32_t beforeSid);
-
-    static void applyInstanceState(MapObject& object, const MapObjectInstanceState& state);
-
     resource::GameResources& _resources;
     std::unique_ptr<Map>& _map;
     const HexagonGrid& _hexgrid;
     MapSpriteLoader& _mapSpriteLoader;
     std::vector<std::shared_ptr<Object>>& _objects;
     std::vector<sf::Sprite>& _wallBlockerOverlays;
-    UndoStack& _undoStack;
+    UndoBatcher _batcher;
+    TileEditService _tileService;
+    InventoryEditService _inventoryService;
+    ScriptEditService _scriptService;
     std::function<void()> _refreshObjects;
-    std::function<void()> _onStackChanged;
-    std::function<std::vector<Tile>&(int)> _ensureElevationTiles;
-    std::function<int()> _getCurrentElevation;
-    std::function<void(int, bool, int)> _updateTileSprite;
     std::function<void()> _reloadTiles;
-
-    // Undo-batch state. While _batchDepth > 0, pushCommand() appends to
-    // _batchedCommands instead of touching _undoStack; endBatch() collapses them.
-    int _batchDepth = 0;
-    std::string _batchDescription;
-    std::vector<UndoCommand> _batchedCommands;
+    MapEditService _mapService;
+    ObjectEditService _objectService;
 };
 
 /// RAII guard that opens an undo batch for its lifetime: collapses every edit made

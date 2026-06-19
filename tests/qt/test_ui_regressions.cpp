@@ -439,6 +439,39 @@ TEST_CASE("Drug widget loads stat and perk options from message files", "[qt][pr
     REQUIRE(perkCombo->itemText(addictionIndex) == "Jet Addiction");
 }
 
+TEST_CASE("Drug widget round-trips stat ids through value mapping, including None", "[qt][pro]") {
+    ResourceDataScope resources;
+    resources.writeGameMessageFile("text/english/game/stat.msg", buildStatMsg());
+    resources.writeGameMessageFile("text/english/game/perk.msg",
+        buildPerkMsg({ { geck::fallout::PerkId::JetAddiction, "Jet Addiction" } }, true));
+    resources.mount();
+
+    geck::ProDrugWidget widget(resources.resources());
+
+    auto pro = makeItemPro(geck::Pro::ITEM_TYPE::DRUG);
+    // stat0 = Perception, stat1 = "no stat" (0xFFFFFFFF sentinel), stat2 = Strength.
+    pro->drugData.stat0 = static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception));
+    pro->drugData.stat1 = 0xFFFFFFFFu;
+    pro->drugData.stat2 = static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Strength));
+
+    widget.loadFromPro(pro);
+
+    auto* stat0Combo = findComboBoxByToolTip(widget, "Stat 1 to modify (None=no effect)");
+    auto* stat1Combo = findComboBoxByToolTip(widget, "Stat 2 to modify (None=no effect)");
+    REQUIRE(stat0Combo != nullptr);
+    REQUIRE(stat1Combo != nullptr);
+    // Selection is bound to the engine stat id (itemData), not the list position.
+    REQUIRE(stat0Combo->currentData().toInt() == geck::fallout::enumValue(geck::fallout::StatId::Perception));
+    REQUIRE(stat1Combo->currentText() == "None");
+
+    auto out = makeItemPro(geck::Pro::ITEM_TYPE::DRUG);
+    widget.saveToPro(out);
+
+    REQUIRE(out->drugData.stat0 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception)));
+    REQUIRE(out->drugData.stat1 == 0xFFFFFFFFu);
+    REQUIRE(out->drugData.stat2 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Strength)));
+}
+
 TEST_CASE("Scenery widget switches subtype editors and preserves subtype values", "[qt][pro]") {
     ResourceDataScope resources;
     resources.writeGameMessageFile("text/english/game/proto.msg", buildProtoMsg());

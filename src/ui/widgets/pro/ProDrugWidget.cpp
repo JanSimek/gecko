@@ -137,9 +137,9 @@ void ProDrugWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
 
     for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         if (_drugStatCombos[i]) {
-            // Convert stat ID: -1/0xFFFF means "None" (index 0), otherwise stat ID + 1
-            int comboIndex = (stats[i] == 0xFFFFFFFF) ? 0 : static_cast<int>(stats[i]) + 1;
-            _drugStatCombos[i]->setCurrentIndex(comboIndex);
+            // 0xFFFFFFFF on disk means "no stat"; otherwise it is the engine stat id.
+            const int statValue = (stats[i] == 0xFFFFFFFFu) ? STAT_NONE_VALUE : static_cast<int>(stats[i]);
+            setComboValue(_drugStatCombos[i], statValue);
         }
         if (_drugStatAmountEdits[i])
             _drugStatAmountEdits[i]->setValue(static_cast<int>(amounts[i]));
@@ -171,9 +171,8 @@ void ProDrugWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 
     for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         if (_drugStatCombos[i]) {
-            // Convert combo index: 0 means "None" (-1/0xFFFF), otherwise index - 1
-            int comboIndex = _drugStatCombos[i]->currentIndex();
-            stats[i] = (comboIndex == 0) ? 0xFFFFFFFF : static_cast<uint32_t>(comboIndex - 1);
+            const int statValue = getComboValue(_drugStatCombos[i], STAT_NONE_VALUE);
+            stats[i] = (statValue == STAT_NONE_VALUE) ? 0xFFFFFFFFu : static_cast<uint32_t>(statValue);
         }
         if (_drugStatAmountEdits[i])
             amounts[i] = static_cast<int32_t>(_drugStatAmountEdits[i]->value());
@@ -219,16 +218,19 @@ QString ProDrugWidget::getTabLabel() const {
 
 void ProDrugWidget::populateStatOptions() {
     const QStringList statNames = game::enums::statNames(_resources);
-    QStringList comboItems;
-    comboItems << "None";
-    comboItems << statNames;
 
     for (int i = 0; i < NUM_DRUG_STATS; ++i) {
         if (_drugStatCombos[i]) {
-            int currentIndex = _drugStatCombos[i]->currentIndex();
+            // Preserve the selection by value, not by list position.
+            const int currentValue = getComboValue(_drugStatCombos[i], STAT_NONE_VALUE);
             _drugStatCombos[i]->clear();
-            _drugStatCombos[i]->addItems(comboItems);
-            _drugStatCombos[i]->setCurrentIndex(currentIndex);
+            // Bind each item to its engine stat id so loads/saves go through value
+            // mapping (set/getComboValue) instead of assuming index == stat id.
+            _drugStatCombos[i]->addItem("None", STAT_NONE_VALUE);
+            for (int stat = 0; stat < statNames.size(); ++stat) {
+                _drugStatCombos[i]->addItem(statNames[stat], stat);
+            }
+            setComboValue(_drugStatCombos[i], currentValue);
         }
     }
 }

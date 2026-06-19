@@ -22,11 +22,15 @@
 #include "selection/SelectionDataProvider.h"
 #include "util/Constants.h"
 #include "util/UndoStack.h"
-#include "ui/editing/ObjectCommandController.h"
-#include "ui/rendering/MapSpriteLoader.h"
-#include "ui/rendering/RenderingEngine.h"
+#include "editing/commands/ObjectCommandController.h"
+#include "rendering/MapSpriteLoader.h"
+#include "rendering/RenderingEngine.h"
 #include "ui/tiles/TilePlacementContext.h"
+#include "ui/input/InputHandler.h"
 #include "ui/core/EditorMode.h"
+#include "ui/core/EditorSession.h"
+#include "ui/core/ObjectPicker.h"
+#include "ui/core/SelectionVisualizer.h"
 #include "pattern/Pattern.h"
 #include "ui/tools/ExitGridContext.h"
 #include "ui/dragdrop/DragDropContext.h"
@@ -45,7 +49,6 @@ namespace resource {
 
 // Forward declarations
 class RenderingEngine;
-class InputHandler;
 class DragDropManager;
 class TilePlacementManager;
 class ExitGridPlacementManager;
@@ -75,21 +78,21 @@ public:
 #endif
 
     // Qt6 menu integration - visibility controls
-    void setShowObjects(bool show) { _visibility.showObjects = show; }
-    void setShowCritters(bool show) { _visibility.showCritters = show; }
-    void setShowWalls(bool show) { _visibility.showWalls = show; }
-    void setShowRoof(bool show) { _visibility.showRoof = show; }
-    void setShowScrollBlk(bool show) { _visibility.showScrollBlockers = show; }
-    void setShowWallBlockers(bool show) { _visibility.showWallBlockers = show; }
-    void setShowHexGrid(bool show) { _visibility.showHexGrid = show; }
+    void setShowObjects(bool show) { _session.visibility().showObjects = show; }
+    void setShowCritters(bool show) { _session.visibility().showCritters = show; }
+    void setShowWalls(bool show) { _session.visibility().showWalls = show; }
+    void setShowRoof(bool show) { _session.visibility().showRoof = show; }
+    void setShowScrollBlk(bool show) { _session.visibility().showScrollBlockers = show; }
+    void setShowWallBlockers(bool show) { _session.visibility().showWallBlockers = show; }
+    void setShowHexGrid(bool show) { _session.visibility().showHexGrid = show; }
     void setShowLightOverlays(bool show);
-    void setShowExitGrids(bool show) { _visibility.showExitGrids = show; }
-    void setMergeSelectionOutlines(bool merge) { _visibility.mergeSelectionOutlines = merge; }
+    void setShowExitGrids(bool show) { _session.visibility().showExitGrids = show; }
+    void setMergeSelectionOutlines(bool merge) { _session.visibility().mergeSelectionOutlines = merge; }
 
     // User-configured selection highlight colours (from preferences); forwarded to the renderer.
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
 
-    Map* getMap() const override { return _map.get(); }
+    Map* getMap() const override { return _session.map(); }
 
     // Qt6 toolbar actions
     void cycleSelectionMode();
@@ -163,7 +166,7 @@ public:
     class MainWindow* getMainWindow() const { return _mainWindow; }
 
     // Access to internal components for extracted managers
-    selection::SelectionManager* getSelectionManager() const override { return _selectionManager.get(); }
+    selection::SelectionManager* getSelectionManager() const override { return _session.selectionManager(); }
     TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
     ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
     ViewportController* getViewportController() const override { return _viewportController.get(); }
@@ -186,22 +189,22 @@ public:
     std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) override;
 
     // Access to sprite vectors for SelectionManager
-    const std::vector<sf::Sprite>& getFloorSprites() const override { return _floorSprites; }
-    const std::vector<sf::Sprite>& getRoofSprites() const override { return _roofSprites; }
+    const std::vector<sf::Sprite>& getFloorSprites() const override { return _session.floorSprites(); }
+    const std::vector<sf::Sprite>& getRoofSprites() const override { return _session.roofSprites(); }
 
-    bool isRoofVisible() const override { return _visibility.showRoof; }
+    bool isRoofVisible() const override { return _session.visibility().showRoof; }
     bool isObjectSelectable(const std::shared_ptr<Object>& object) const override;
 
     // Access to current elevation and map data
-    int getCurrentElevation() const override { return _currentElevation; }
-    Map::MapFile& getMapFile() override { return _map->getMapFile(); }
-    const Map::MapFile& getMapFile() const override { return _map->getMapFile(); }
+    int getCurrentElevation() const override { return _session.currentElevation(); }
+    Map::MapFile& getMapFile() override { return _session.map()->getMapFile(); }
+    const Map::MapFile& getMapFile() const override { return _session.map()->getMapFile(); }
 
     // Access to objects for SelectionManager
-    const std::vector<std::shared_ptr<Object>>& getObjects() const override { return _objects; }
+    const std::vector<std::shared_ptr<Object>>& getObjects() const override { return _session.objects(); }
 
     // Access to hex grid for SelectionManager
-    const HexagonGrid* getHexagonGrid() const override { return &_hexgrid; }
+    const HexagonGrid* getHexagonGrid() const override { return &_session.hexgrid(); }
     resource::GameResources& resources() const override { return _resources; }
 
     // Helper methods for extracted managers (made public)
@@ -267,7 +270,7 @@ public slots:
     // Undo/redo
     bool undoLastEdit();
     bool redoLastEdit();
-    const UndoStack& getUndoStack() const { return _undoStack; }
+    const UndoStack& getUndoStack() const { return _session.undoStack(); }
 
 private:
     // One item's new selection entry after a drag-move: objects re-pointed to their refreshed
@@ -292,8 +295,6 @@ private:
     void showLoadingErrorsSummary();
 
     // Object selection methods (moved to public)
-    bool isPointInSpritePixel(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
-    bool isPointInSpriteBounds(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
     bool isDoubleClick(sf::Vector2f worldPos);
 
     // Selection modifiers for multi-selection
@@ -308,12 +309,6 @@ private:
     bool selectAtPosition(sf::Vector2f worldPos, SelectionModifier modifier);
     selection::SelectionResult handleRangeSelection(sf::Vector2f worldPos);
 
-    void clearAllVisualSelections();
-    // Paints the selection highlight for the given state (does not clear first).
-    void applySelectionVisuals(const selection::SelectionState& selection);
-    void applyRoofTileSelectionVisual(int tileIndex);
-    // Repaints the live selection highlight from the manager's current selection.
-    void refreshSelectionVisuals();
     void clearDragPreview();
     // isDeselect (Ctrl+drag): the covered selected items un-highlight live (preview of removal).
     // isAdditive (Alt+drag): keep the existing selection highlighted while the covered area is
@@ -333,13 +328,28 @@ private:
     std::shared_ptr<MapObject> createScrollBlockerObject(int hexPosition);
     void createScrollBlockersFromHexes(const std::vector<int>& borderHexes);
 
-    // Input system setup
+    // Input system setup. setupInputCallbacks() builds the callback struct from these
+    // cohesive groups; each populates its slice (lambdas capture this and drive the
+    // relevant managers/selection/mode logic).
     void setupInputCallbacks();
+    void bindSelectionCallbacks(InputHandler::Callbacks& callbacks);
+    void bindInteractionCallbacks(InputHandler::Callbacks& callbacks);
+    void bindToolModeCallbacks(InputHandler::Callbacks& callbacks);
 
     // UI Components
     QVBoxLayout* _layout;
     SFMLWidget* _sfmlWidget;
     class MainWindow* _mainWindow;
+
+    // Mutable editing state for the open map. Declared before the managers below
+    // so it outlives them: several hold references into it (e.g. the undo stack).
+    EditorSession _session;
+    // Pixel-perfect object picking over the session's objects (backs the
+    // SelectionDataProvider getObjectsAtPosition()/isObjectSelectable() overrides).
+    ObjectPicker _objectPicker{ _session };
+    // Visual-selection state (object highlights + tile/hex outline index lists) the renderer
+    // reads; fed by the selection callback.
+    SelectionVisualizer _selectionVisualizer{ _session };
 
     // Input, rendering, drag/drop, tile placement, and viewport systems
     std::unique_ptr<InputHandler> _inputHandler;
@@ -354,22 +364,7 @@ private:
     // Game/Editor State
     SelectionMode _currentSelectionMode = SelectionMode::ALL;
 
-    HexagonGrid _hexgrid;
-    // Note: Using std::vector instead of std::array because SFML 3 sf::Sprite
-    // requires a texture in constructor and is not default-constructible
-    std::vector<sf::Sprite> _floorSprites;
-    std::vector<sf::Sprite> _roofSprites;
-
-    std::vector<std::shared_ptr<Object>> _objects;
-
-    // Wall blocker overlay sprites (rendered on top of regular objects)
-    std::vector<sf::Sprite> _wallBlockerOverlays;
-
-    int _currentElevation = 0;
     resource::GameResources& _resources;
-    std::unique_ptr<Map> _map;
-
-    VisibilitySettings _visibility;
 
     // Double-click detection for object cycling
     sf::Clock _lastClickTime;
@@ -390,16 +385,6 @@ private:
     const ObjectInfo* _previewObjectInfo = nullptr; // Object info from palette
 
     int _currentHoverHex = -1;
-
-    // Selection management
-    std::unique_ptr<selection::SelectionManager> _selectionManager;
-
-    std::vector<int> _selectedHexPositions;
-
-    // Tile indices currently tinted for selection, so clearAllVisualSelections only resets those
-    // (bounded by the selection size) instead of scanning the whole map every drag-preview frame.
-    std::vector<int> _selectedFloorVisuals;
-    std::vector<int> _selectedRoofVisuals;
 
     // Base positions of the selected floor/roof sprites captured while a region is being dragged, so
     // the live preview can offset them and restore them when the drag ends.
@@ -429,9 +414,6 @@ private:
 
     // Player position selection state
     bool _playerPositionSelectionMode = false;
-
-    // Undo/redo
-    UndoStack _undoStack{ 100 };
 };
 
 } // namespace geck

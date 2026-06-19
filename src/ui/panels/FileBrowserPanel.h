@@ -161,6 +161,11 @@ private:
     void startProgressiveTreeBuild(const std::vector<std::string>& filteredFiles);
     FileTreeItem* createDirectoryStructure(const QString& path);
     FileTreeItem* findOrCreateDirectory(FileTreeItem* parent, const QString& dirName);
+    // Builds the directory path + 5-column row for a single file and appends it under
+    // rootItem. Shared by the one-shot (buildFileTree) and progressive (processNextChunk)
+    // tree builders so the row layout stays in one place.
+    void insertFileRow(FileTreeItem* rootItem, const std::string& file,
+        const std::vector<std::filesystem::path>& nativeDirectories);
     QString getFileExtension(const QString& filePath) const;
     QString getFileIcon(const QString& extension) const;
     void updateFileCount();

@@ -3,7 +3,7 @@
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
 #include "ui/core/VisibilitySettings.h"
-#include "ui/rendering/ObjectVisibility.h"
+#include "rendering/ObjectVisibility.h"
 #include "util/Constants.h"
 
 using namespace geck;

@@ -9,7 +9,7 @@
 
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
-#include "ui/editing/ObjectCommandController.h"
+#include "editing/commands/ObjectCommandController.h"
 
 #include "support/ControllerFixture.h"
 
