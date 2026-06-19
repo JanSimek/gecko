@@ -30,6 +30,7 @@
 #include "ui/core/EditorMode.h"
 #include "ui/core/EditorSession.h"
 #include "ui/core/ObjectPicker.h"
+#include "ui/core/SelectionVisualizer.h"
 #include "pattern/Pattern.h"
 #include "ui/tools/ExitGridContext.h"
 #include "ui/dragdrop/DragDropContext.h"
@@ -308,12 +309,6 @@ private:
     bool selectAtPosition(sf::Vector2f worldPos, SelectionModifier modifier);
     selection::SelectionResult handleRangeSelection(sf::Vector2f worldPos);
 
-    void clearAllVisualSelections();
-    // Paints the selection highlight for the given state (does not clear first).
-    void applySelectionVisuals(const selection::SelectionState& selection);
-    void applyRoofTileSelectionVisual(int tileIndex);
-    // Repaints the live selection highlight from the manager's current selection.
-    void refreshSelectionVisuals();
     void clearDragPreview();
     // isDeselect (Ctrl+drag): the covered selected items un-highlight live (preview of removal).
     // isAdditive (Alt+drag): keep the existing selection highlighted while the covered area is
@@ -352,6 +347,9 @@ private:
     // Pixel-perfect object picking over the session's objects (backs the
     // SelectionDataProvider getObjectsAtPosition()/isObjectSelectable() overrides).
     ObjectPicker _objectPicker{ _session };
+    // Visual-selection state (object highlights + tile/hex outline index lists) the renderer
+    // reads; fed by the selection callback.
+    SelectionVisualizer _selectionVisualizer{ _session };
 
     // Input, rendering, drag/drop, tile placement, and viewport systems
     std::unique_ptr<InputHandler> _inputHandler;
@@ -387,13 +385,6 @@ private:
     const ObjectInfo* _previewObjectInfo = nullptr; // Object info from palette
 
     int _currentHoverHex = -1;
-
-    std::vector<int> _selectedHexPositions;
-
-    // Tile indices currently tinted for selection, so clearAllVisualSelections only resets those
-    // (bounded by the selection size) instead of scanning the whole map every drag-preview frame.
-    std::vector<int> _selectedFloorVisuals;
-    std::vector<int> _selectedRoofVisuals;
 
     // Base positions of the selected floor/roof sprites captured while a region is being dragged, so
     // the live preview can offset them and restore them when the drag ends.

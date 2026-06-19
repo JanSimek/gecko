@@ -231,9 +231,9 @@ void EditorWidget::beginTileDragPreview() {
             }
         }
     };
-    capture(false, _selectedFloorVisuals, _session.floorSprites());
+    capture(false, _selectionVisualizer.floorVisuals(), _session.floorSprites());
     if (_session.visibility().showRoof) {
-        capture(true, _selectedRoofVisuals, _session.roofSprites());
+        capture(true, _selectionVisualizer.roofVisuals(), _session.roofSprites());
     }
 }
 
@@ -326,58 +326,10 @@ void EditorWidget::initializeSelectionSystem() {
     _session.setSelectionManager(std::make_unique<selection::SelectionManager>(*this));
 
     _session.selectionManager()->setSelectionCallback([this](const selection::SelectionState& selection) {
-        this->clearAllVisualSelections();
-        this->applySelectionVisuals(selection);
+        _selectionVisualizer.clear();
+        _selectionVisualizer.apply(selection);
         Q_EMIT selectionChanged(selection, _session.currentElevation());
     });
-}
-
-void EditorWidget::applySelectionVisuals(const selection::SelectionState& selection) {
-    for (const auto& item : selection.items) {
-        switch (item.type) {
-            case selection::SelectionType::OBJECT: {
-                auto object = item.getObject();
-                if (object) {
-                    object->select();
-                }
-                break;
-            }
-
-            case selection::SelectionType::ROOF_TILE:
-                applyRoofTileSelectionVisual(item.getTileIndex());
-                break;
-
-            case selection::SelectionType::FLOOR_TILE: {
-                int tileIndex = item.getTileIndex();
-                if (isValidTileIndex(tileIndex)) {
-                    // The renderer outlines tiles from their geometry; just record the index.
-                    _selectedFloorVisuals.push_back(tileIndex);
-                }
-                break;
-            }
-
-            case selection::SelectionType::HEX: {
-                int hexIndex = item.getHexIndex();
-                if (hexIndex >= 0 && hexIndex < static_cast<int>(_session.hexgrid().size())) {
-                    this->_selectedHexPositions.push_back(hexIndex);
-                }
-                break;
-            }
-        }
-    }
-}
-
-void EditorWidget::applyRoofTileSelectionVisual(int tileIndex) {
-    // The renderer outlines roof tiles from their geometry, so even empty (transparent) tiles get
-    // a boundary; just record the index.
-    if (isValidTileIndex(tileIndex)) {
-        _selectedRoofVisuals.push_back(tileIndex);
-    }
-}
-
-void EditorWidget::refreshSelectionVisuals() {
-    clearAllVisualSelections();
-    applySelectionVisuals(_session.selectionManager()->getCurrentSelection());
 }
 
 void EditorWidget::setupUI() {
@@ -491,7 +443,7 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
         if (_session.selectionManager()) {
             _session.selectionManager()->clearSelection();
         }
-        _selectedHexPositions.clear();
+        _selectionVisualizer.clearHexPositions();
         if (_mainWindow) {
             _mainWindow->updateMapInfo(_session.map());
         }
@@ -567,7 +519,7 @@ void EditorWidget::createNewMap() {
     _session.floorSprites().clear();
     _session.roofSprites().clear();
     _session.wallBlockerOverlays().clear();
-    _selectedHexPositions.clear();
+    _selectionVisualizer.clearHexPositions();
 
     // Load the core helper textures needed by an empty map.
     // Resource lists are bootstrapped once during startup.
@@ -692,22 +644,6 @@ bool EditorWidget::isDoubleClick(sf::Vector2f worldPos) {
     _lastClickPosition = worldPos;
 
     return isDouble;
-}
-
-void EditorWidget::clearAllVisualSelections() {
-    std::ranges::for_each(_session.objects(), [](auto& object) {
-        if (object) {
-            object->unselect();
-            // The drag preview tints object sprites; reset the colour so no preview tint lingers.
-            object->getSprite().setColor(sf::Color::White);
-        }
-    });
-
-    // Tiles are outlined, so there's nothing to un-tint — just drop the tracked sets
-    // (preview tints are cleared by clearDragPreview).
-    _selectedFloorVisuals.clear();
-    _selectedRoofVisuals.clear();
-    _selectedHexPositions.clear();
 }
 
 // SFML event handling interface (called by SFMLWidget)
@@ -1002,9 +938,9 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.roofSprites = &_session.roofSprites();
     renderData.objects = &_session.objects();
     renderData.wallBlockerOverlays = &_session.wallBlockerOverlays();
-    renderData.selectedHexPositions = &_selectedHexPositions;
-    renderData.selectedFloorTiles = &_selectedFloorVisuals;
-    renderData.selectedRoofTiles = &_selectedRoofVisuals;
+    renderData.selectedHexPositions = &_selectionVisualizer.hexPositions();
+    renderData.selectedFloorTiles = &_selectionVisualizer.floorVisuals();
+    renderData.selectedRoofTiles = &_selectionVisualizer.roofVisuals();
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
     renderData.stampPreviewFloorTiles = &_stampPreviewFloorTiles;
@@ -1517,15 +1453,15 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
         for (const auto& item : toRemove) {
             preview.removeItem(item);
         }
-        clearAllVisualSelections();
-        applySelectionVisuals(preview);
+        _selectionVisualizer.clear();
+        _selectionVisualizer.apply(preview);
         return;
     }
 
     if (isAdditive) {
         // Alt+drag adds to the selection, so keep what is already selected highlighted while the
         // covered area is tinted below to preview the addition.
-        refreshSelectionVisuals();
+        _selectionVisualizer.refresh();
     }
 
     switch (_currentSelectionMode) {
@@ -1894,7 +1830,7 @@ void EditorWidget::clearDragSelectionPreview() {
     // A Ctrl+drag preview temporarily un-highlights the covered selected items; restore the
     // real selection highlight so cancelling the drag (or clearing after another op) leaves
     // the selection looking correct.
-    refreshSelectionVisuals();
+    _selectionVisualizer.refresh();
 
     spdlog::debug("EditorWidget::clearDragSelectionPreview() - cleared selection rectangle");
 }
