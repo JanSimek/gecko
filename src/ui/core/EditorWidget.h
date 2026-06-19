@@ -164,7 +164,7 @@ public:
     class MainWindow* getMainWindow() const { return _mainWindow; }
 
     // Access to internal components for extracted managers
-    selection::SelectionManager* getSelectionManager() const override { return _selectionManager.get(); }
+    selection::SelectionManager* getSelectionManager() const override { return _session.selectionManager(); }
     TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
     ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
     ViewportController* getViewportController() const override { return _viewportController.get(); }
@@ -381,9 +381,6 @@ private:
     const ObjectInfo* _previewObjectInfo = nullptr; // Object info from palette
 
     int _currentHoverHex = -1;
-
-    // Selection management
-    std::unique_ptr<selection::SelectionManager> _selectionManager;
 
     std::vector<int> _selectedHexPositions;
 

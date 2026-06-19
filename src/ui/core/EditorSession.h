@@ -8,6 +8,7 @@
 #include "VisibilitySettings.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
+#include "selection/SelectionManager.h"
 #include "util/UndoStack.h"
 
 namespace geck {
@@ -35,6 +36,9 @@ public:
     [[nodiscard]] int currentElevation() const { return _currentElevation; }
     void setCurrentElevation(int elevation) { _currentElevation = elevation; }
 
+    [[nodiscard]] selection::SelectionManager* selectionManager() const { return _selectionManager.get(); }
+    void setSelectionManager(std::unique_ptr<selection::SelectionManager> manager) { _selectionManager = std::move(manager); }
+
     [[nodiscard]] HexagonGrid& hexgrid() { return _hexgrid; }
     [[nodiscard]] const HexagonGrid& hexgrid() const { return _hexgrid; }
 
@@ -55,6 +59,8 @@ private:
     UndoStack _undoStack{ 100 };
 
     int _currentElevation = 0;
+
+    std::unique_ptr<selection::SelectionManager> _selectionManager;
 
     HexagonGrid _hexgrid;
 

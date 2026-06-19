@@ -136,10 +136,10 @@ void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>
 }
 
 void EditorWidget::moveSelectedTilesForDrag(sf::Vector2f worldTranslation) {
-    if (!_selectionManager) {
+    if (!_session.selectionManager()) {
         return;
     }
-    const auto changes = _selectionManager->planSelectionMoveForTranslation(worldTranslation);
+    const auto changes = _session.selectionManager()->planSelectionMoveForTranslation(worldTranslation);
     _objectCommandController->applyTileEdit("Move Tiles", changes);
 }
 
@@ -182,10 +182,10 @@ std::optional<selection::SelectedItem> EditorWidget::remapSelectedItemAfterMove(
 }
 
 void EditorWidget::reselectAfterDragMove(sf::Vector2f worldTranslation) {
-    if (!_selectionManager) {
+    if (!_session.selectionManager()) {
         return;
     }
-    const auto& current = _selectionManager->getCurrentSelection();
+    const auto& current = _session.selectionManager()->getCurrentSelection();
     if (current.items.empty()) {
         return;
     }
@@ -194,7 +194,7 @@ void EditorWidget::reselectAfterDragMove(sf::Vector2f worldTranslation) {
     // orphaning the selection's old wrappers; the tile items still hold pre-move indices. Rebuild the
     // selection so it follows the move: re-point objects by MapObject identity, and shift the tile
     // items by the same whole-tile delta the move used.
-    const auto tileDelta = _selectionManager->selectionTileDelta(worldTranslation);
+    const auto tileDelta = _session.selectionManager()->selectionTileDelta(worldTranslation);
 
     std::unordered_map<const MapObject*, std::shared_ptr<Object>> objectsByMapObject;
     for (const auto& object : _session.objects()) {
@@ -211,7 +211,7 @@ void EditorWidget::reselectAfterDragMove(sf::Vector2f worldTranslation) {
         }
     }
 
-    _selectionManager->setSelectedItems(std::move(rebuilt));
+    _session.selectionManager()->setSelectedItems(std::move(rebuilt));
 }
 
 void EditorWidget::beginMoveBatch(const std::string& description) {
@@ -324,9 +324,9 @@ bool EditorWidget::redoLastEdit() {
 }
 
 void EditorWidget::initializeSelectionSystem() {
-    _selectionManager = std::make_unique<selection::SelectionManager>(*this);
+    _session.setSelectionManager(std::make_unique<selection::SelectionManager>(*this));
 
-    _selectionManager->setSelectionCallback([this](const selection::SelectionState& selection) {
+    _session.selectionManager()->setSelectionCallback([this](const selection::SelectionState& selection) {
         this->clearAllVisualSelections();
         this->applySelectionVisuals(selection);
         Q_EMIT selectionChanged(selection, _session.currentElevation());
@@ -378,7 +378,7 @@ void EditorWidget::applyRoofTileSelectionVisual(int tileIndex) {
 
 void EditorWidget::refreshSelectionVisuals() {
     clearAllVisualSelections();
-    applySelectionVisuals(_selectionManager->getCurrentSelection());
+    applySelectionVisuals(_session.selectionManager()->getCurrentSelection());
 }
 
 void EditorWidget::setupUI() {
@@ -414,8 +414,8 @@ void EditorWidget::init() {
         showLoadingErrorsSummary();
 
         // Spatial index gives O(1) area selection
-        if (_selectionManager) {
-            _selectionManager->initializeSpatialIndex();
+        if (_session.selectionManager()) {
+            _session.selectionManager()->initializeSpatialIndex();
         }
     }
 
@@ -489,8 +489,8 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
         // A script can reset the map (newMap) or change the header (setPlayerStart) without pushing
         // an undo command, leaving the selection and Map Info panel referencing the pre-run state and
         // the map unflagged. Drop the selection, refresh the header UI, and flag the map modified.
-        if (_selectionManager) {
-            _selectionManager->clearSelection();
+        if (_session.selectionManager()) {
+            _session.selectionManager()->clearSelection();
         }
         _selectedHexPositions.clear();
         if (_mainWindow) {
@@ -578,13 +578,13 @@ void EditorWidget::createNewMap() {
         spdlog::warn("Failed to load some essential resources for new map: {}", e.what());
     }
 
-    if (!_selectionManager) {
+    if (!_session.selectionManager()) {
         initializeSelectionSystem();
     }
 
     loadSprites();
 
-    _selectionManager->clearSelection();
+    _session.selectionManager()->clearSelection();
     _viewportController->centerViewOnMap();
 
     if (_mainWindow) {
@@ -670,7 +670,7 @@ void EditorWidget::loadSprites() {
     spdlog::stopwatch sw;
     _mapSpriteLoader->loadSprites(*_map, _session.currentElevation(), _session.floorSprites(), _session.roofSprites(), _session.objects(), _session.wallBlockerOverlays());
 
-    _selectionManager->initializeSpatialIndex();
+    _session.selectionManager()->initializeSpatialIndex();
 
     spdlog::info("Map sprites loaded in {:.3} seconds", sw);
 }
@@ -802,12 +802,12 @@ void EditorWidget::commitDragAreaSelection(sf::Vector2f startPos, sf::Vector2f e
         createScrollBlockersFromHexes(calculateRectangleBorderHexes(selectionArea));
     } else if (isDeselect) {
         // Ctrl+drag only removes already-selected items in the area; it never adds.
-        _selectionManager->deselectArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        _session.selectionManager()->deselectArea(selectionArea, _currentSelectionMode, _session.currentElevation());
     } else if (isAdditive) {
         // Alt+drag adds the covered items to the selection, keeping what was already selected.
-        _selectionManager->addArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        _session.selectionManager()->addArea(selectionArea, _currentSelectionMode, _session.currentElevation());
     } else {
-        const auto result = _selectionManager->selectArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        const auto result = _session.selectionManager()->selectArea(selectionArea, _currentSelectionMode, _session.currentElevation());
         if (result.success) {
             spdlog::debug("Area selection completed: {}", result.message);
         }
@@ -860,8 +860,8 @@ void EditorWidget::setupInputCallbacks() {
 
     callbacks.onTileAreaFill = [this](sf::Vector2f startPos, sf::Vector2f endPos, bool isRoof) {
         _tilePlacementManager->handleTileAreaFill(startPos, endPos, isRoof);
-        clearDragSelectionPreview();         // Clear yellow selection tint after area fill
-        _selectionManager->clearSelection(); // Clear selection so it doesn't interfere with next tile selection
+        clearDragSelectionPreview();                   // Clear yellow selection tint after area fill
+        _session.selectionManager()->clearSelection(); // Clear selection so it doesn't interfere with next tile selection
     };
 
     callbacks.onPan = [this](sf::Vector2f delta) {
@@ -1085,16 +1085,16 @@ bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier mod
 
     switch (modifier) {
         case SelectionModifier::NONE:
-            result = _selectionManager->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+            result = _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
             break;
 
         case SelectionModifier::ADD:
-            result = _selectionManager->addToSelection(worldPos, _currentSelectionMode, _session.currentElevation());
+            result = _session.selectionManager()->addToSelection(worldPos, _currentSelectionMode, _session.currentElevation());
             spdlog::debug("Add to selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
 
         case SelectionModifier::TOGGLE:
-            result = _selectionManager->deselectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+            result = _session.selectionManager()->deselectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
             spdlog::debug("Deselect at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
 
@@ -1105,7 +1105,7 @@ bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier mod
     }
 
     if (result.success && result.selectionChanged) {
-        const auto& selection = _selectionManager->getCurrentSelection();
+        const auto& selection = _session.selectionManager()->getCurrentSelection();
         if (selection.count() > 1) {
             spdlog::info("Multi-selection: {} items selected", selection.count());
         }
@@ -1150,19 +1150,19 @@ void EditorWidget::setActiveSelectionLayers(SelectionLayers layers) {
     if (_inputHandler) {
         _inputHandler->setSelectionMode(_currentSelectionMode);
     }
-    if (!_selectionManager) {
+    if (!_session.selectionManager()) {
         return; // created lazily with the map; a menu sync can run first (first New Map)
     }
-    _selectionManager->setActiveLayers(layers);
+    _session.selectionManager()->setActiveLayers(layers);
     spdlog::info("Selection layers set to: floor={} roof={} objects={}",
         layers.floorTiles, layers.roofTiles, layers.objects);
 }
 
 SelectionLayers EditorWidget::getActiveSelectionLayers() const {
-    if (!_selectionManager) {
+    if (!_session.selectionManager()) {
         return {}; // all layers on by default until the selection system is created
     }
-    return _selectionManager->activeLayers();
+    return _session.selectionManager()->activeLayers();
 }
 
 void EditorWidget::toggleScrollBlockerRectangleMode() {
@@ -1183,11 +1183,11 @@ void EditorWidget::toggleScrollBlockerRectangleMode() {
         _inputHandler->setSelectionMode(_currentSelectionMode);
     }
 
-    _selectionManager->clearSelection();
+    _session.selectionManager()->clearSelection();
 }
 
 void EditorWidget::rotateSelectedObject() {
-    const auto& selection = _selectionManager->getCurrentSelection();
+    const auto& selection = _session.selectionManager()->getCurrentSelection();
     auto objects = selection.getObjects();
 
     if (!objects.empty()) {
@@ -1234,14 +1234,14 @@ void EditorWidget::replaceSelectedTiles(int newTileIndex) {
 }
 
 void EditorWidget::selectAll() {
-    if (_selectionManager) {
-        _selectionManager->selectAll(_currentSelectionMode, _session.currentElevation());
+    if (_session.selectionManager()) {
+        _session.selectionManager()->selectAll(_currentSelectionMode, _session.currentElevation());
     }
 }
 
 void EditorWidget::clearSelection() {
-    if (_selectionManager) {
-        _selectionManager->clearSelection();
+    if (_session.selectionManager()) {
+        _session.selectionManager()->clearSelection();
     }
 }
 
@@ -1501,10 +1501,10 @@ std::optional<int> EditorWidget::getRoofTileAtPositionIncludingEmpty(sf::Vector2
 selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f worldPos) {
     // Range selection is primarily for tiles. It needs a starting point, so if
     // nothing is selected, fall back to a normal single selection.
-    const auto& currentSelection = _selectionManager->getCurrentSelection();
+    const auto& currentSelection = _session.selectionManager()->getCurrentSelection();
 
     if (currentSelection.isEmpty()) {
-        return _selectionManager->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+        return _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
     }
 
     // First selected tile becomes the range start point
@@ -1522,7 +1522,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     }
 
     if (!hasStartTile) {
-        return _selectionManager->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+        return _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
     }
 
     float left = std::min(startPos.x, worldPos.x);
@@ -1540,7 +1540,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
         areaMode = SelectionMode::FLOOR_TILES; // ALL mode defaults to floor tiles for range selection
     }
 
-    auto result = _selectionManager->selectArea(selectionArea, areaMode, _session.currentElevation());
+    auto result = _session.selectionManager()->selectArea(selectionArea, areaMode, _session.currentElevation());
 
     spdlog::info("Range selection: area ({:.1f}, {:.1f}, {:.1f}, {:.1f})",
         selectionArea.position.x, selectionArea.position.y, selectionArea.size.x, selectionArea.size.y);
@@ -1565,8 +1565,8 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
         // they un-highlight live while everything else stays highlighted. The commit
         // (deselectArea) and the manager's preview query share the same visibility rules, so
         // the preview matches exactly what will be deselected.
-        auto toRemove = _selectionManager->itemsToDeselectInArea(selectionArea, _currentSelectionMode, _session.currentElevation());
-        selection::SelectionState preview = _selectionManager->getCurrentSelection();
+        auto toRemove = _session.selectionManager()->itemsToDeselectInArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        selection::SelectionState preview = _session.selectionManager()->getCurrentSelection();
         for (const auto& item : toRemove) {
             preview.removeItem(item);
         }
@@ -1614,8 +1614,8 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
 }
 
 void EditorWidget::previewAreaTiles(const sf::FloatRect& area, bool roof, bool includeEmpty) {
-    auto tiles = includeEmpty ? _selectionManager->getTilesInAreaIncludingEmpty(area, roof, _session.currentElevation())
-                              : _selectionManager->getTilesInArea(area, roof, _session.currentElevation());
+    auto tiles = includeEmpty ? _session.selectionManager()->getTilesInAreaIncludingEmpty(area, roof, _session.currentElevation())
+                              : _session.selectionManager()->getTilesInArea(area, roof, _session.currentElevation());
     auto& sprites = roof ? _session.roofSprites() : _session.floorSprites();
     for (int tileIndex : tiles) {
         if (isValidTileIndex(tileIndex)) {
@@ -1626,7 +1626,7 @@ void EditorWidget::previewAreaTiles(const sf::FloatRect& area, bool roof, bool i
 }
 
 void EditorWidget::previewAreaObjects(const sf::FloatRect& area) {
-    auto objects = _selectionManager->getObjectsInArea(area, _session.currentElevation());
+    auto objects = _session.selectionManager()->getObjectsInArea(area, _session.currentElevation());
     std::ranges::for_each(objects, [](auto& object) {
         if (object) {
             applyPreviewHighlight(object->getSprite());
@@ -1645,7 +1645,7 @@ void EditorWidget::updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vec
     sf::FloatRect selectionArea({ left, top }, { width, height });
 
     bool isRoof = _tilePlacementManager->getTilePlacementIsRoof();
-    _previewTiles = _selectionManager->getTilesInArea(selectionArea, isRoof, _session.currentElevation());
+    _previewTiles = _session.selectionManager()->getTilesInArea(selectionArea, isRoof, _session.currentElevation());
 
     auto& sprites = isRoof ? _session.roofSprites() : _session.floorSprites();
     for (int tileIndex : _previewTiles) {
@@ -2004,7 +2004,7 @@ void EditorWidget::deleteSelectedObjects() {
         return;
     }
 
-    auto& selectionState = _selectionManager->getCurrentSelection();
+    auto& selectionState = _session.selectionManager()->getCurrentSelection();
     const auto& selectedObjects = selectionState.getObjects();
 
     if (selectedObjects.empty()) {
@@ -2035,9 +2035,9 @@ void EditorWidget::deleteSelectedObjects() {
 
     _objectCommandController->registerObjectDeletion(removedObjects);
 
-    _selectionManager->clearSelection();
+    _session.selectionManager()->clearSelection();
 
-    Q_EMIT selectionChanged(_selectionManager->getCurrentSelection(), _session.currentElevation());
+    Q_EMIT selectionChanged(_session.selectionManager()->getCurrentSelection(), _session.currentElevation());
 
     spdlog::info("EditorWidget::deleteSelectedObjects - Successfully deleted {} objects", removedObjects.size());
 }
