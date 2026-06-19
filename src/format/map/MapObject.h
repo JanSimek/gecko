@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include "util/Constants.h"
+#include "format/pro/Pro.h"
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -91,10 +92,6 @@ struct MapObject {
     /// Art index: the FID's (frm_pid) low 24 bits.
     uint32_t fidBaseId() const { return frm_pid & FileFormat::BASE_ID_MASK; }
 
-    bool isBlocker() {
-        return fidBaseId() == 1 && flags & 0x00000010;
-    }
-
     bool isScrollBlocker() const {
         // Scroll blockers are visual indicators only (FRM-based, not proto-based)
         // They use scrblk.frm (FRM baseId == 1)
@@ -121,9 +118,18 @@ struct MapObject {
         return objectType() == 0 && protoId() == 140;
     }
 
-    /// True for exit-grid markers: MISC objects (type 0x05) with PID index 16-23 (matches legacy F2 Mapper: misc_ID && nID 16..23).
+    // Exit-grid markers are MISC protos whose PID index falls in 16..23, matching
+    // Fallout 2 CE's FIRST_EXIT_GRID_PID (0x5000010) .. LAST_EXIT_GRID_PID (0x5000017)
+    // and the legacy F2 Mapper (misc_ID && nID 16..23). CE exposes no gecko-side
+    // constant for the index range, so it is named here.
+    static constexpr uint32_t EXIT_GRID_PID_INDEX_FIRST = 16;
+    static constexpr uint32_t EXIT_GRID_PID_INDEX_LAST = 23;
+
+    /// True for exit-grid markers (MISC type, PID index EXIT_GRID_PID_INDEX_FIRST..LAST).
     bool isExitGridMarker() const {
-        return (objectType() == 0x05) && (protoId() >= 16) && (protoId() <= 23);
+        return objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::MISC)
+            && protoId() >= EXIT_GRID_PID_INDEX_FIRST
+            && protoId() <= EXIT_GRID_PID_INDEX_LAST;
     }
 };
 

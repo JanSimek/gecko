@@ -30,9 +30,8 @@ bool blocksMovement(const MapObject& object, resource::GameResources& resources)
         return false;
     }
 
-    // Objects WITHOUT the NoBlock flag (0x00000010) block movement.
-    const uint32_t NO_BLOCK_FLAG = 0x00000010;
-    bool hasNoBlockFlag = (pro->header.flags & NO_BLOCK_FLAG) != 0;
+    // Objects WITHOUT the NoBlock flag block movement.
+    bool hasNoBlockFlag = (pro->header.flags & static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK)) != 0;
 
     spdlog::debug("Object PID {} has flags 0x{:08X}, NoBlock flag: {}, blocks movement: {}",
         object.pro_pid, pro->header.flags, hasNoBlockFlag, !hasNoBlockFlag);
@@ -51,8 +50,7 @@ bool isShootThroughWallBlocker(const MapObject& object, resource::GameResources&
         return false;
     }
 
-    const uint32_t SHOOT_THROUGH_FLAG = 0x80000000;
-    return (pro->header.flags & SHOOT_THROUGH_FLAG) != 0;
+    return (pro->header.flags & static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_SHOOT_THRU)) != 0;
 }
 
 } // namespace geck::object_query
