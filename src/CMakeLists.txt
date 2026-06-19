@@ -458,16 +458,16 @@ add_library(gecko_editing STATIC
     pattern/PatternBuilder.cpp
     pattern/PatternStamper.h
     pattern/PatternStamper.cpp
-    ui/rendering/MapSpriteLoader.h
-    ui/rendering/MapSpriteLoader.cpp
+    rendering/MapSpriteLoader.h
+    rendering/MapSpriteLoader.cpp
     # SFML map renderer (Qt-free): drives the same drawing for the Qt editor and headless
     # PNG export. ThumbnailRenderer/MapThumbnail stay in gecko_app — they use QImage/QPainter.
-    ui/rendering/HexRenderer.h
-    ui/rendering/HexRenderer.cpp
-    ui/rendering/RenderingEngine.h
-    ui/rendering/RenderingEngine.cpp
-    ui/rendering/MapRenderer.h
-    ui/rendering/MapRenderer.cpp
+    rendering/HexRenderer.h
+    rendering/HexRenderer.cpp
+    rendering/RenderingEngine.h
+    rendering/RenderingEngine.cpp
+    rendering/MapRenderer.h
+    rendering/MapRenderer.cpp
     editing/commands/ObjectCommandController.h
     editing/commands/ObjectCommandController.cpp
     editing/commands/UndoBatcher.h

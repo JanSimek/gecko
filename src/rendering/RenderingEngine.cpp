@@ -1,7 +1,7 @@
 #include "RenderingEngine.h"
 #include "editor/Object.h"
 #include "editor/Hex.h"
-#include "ui/rendering/ObjectVisibility.h"
+#include "rendering/ObjectVisibility.h"
 #include "viewport/ViewportController.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"

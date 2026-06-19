@@ -11,7 +11,7 @@
 #include "format/map/Tile.h"
 #include "resource/GameResources.h"
 #include "editing/commands/ObjectCommandController.h"
-#include "ui/rendering/MapSpriteLoader.h"
+#include "rendering/MapSpriteLoader.h"
 #include "util/UndoStack.h"
 
 namespace geck::test {

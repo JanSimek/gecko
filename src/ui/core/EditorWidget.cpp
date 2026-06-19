@@ -11,9 +11,9 @@
 #include <QFileInfo>
 #include <QStringList>
 #endif
-#include "ui/rendering/MapSpriteLoader.h"
-#include "ui/rendering/ObjectVisibility.h"
-#include "ui/rendering/RenderingEngine.h"
+#include "rendering/MapSpriteLoader.h"
+#include "rendering/ObjectVisibility.h"
+#include "rendering/RenderingEngine.h"
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"

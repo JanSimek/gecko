@@ -4,7 +4,7 @@
 
 #include "format/map/Map.h"
 #include "resource/GameResources.h"
-#include "ui/rendering/MapRenderer.h"
+#include "rendering/MapRenderer.h"
 
 using namespace geck;
 

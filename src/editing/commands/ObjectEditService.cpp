@@ -7,7 +7,7 @@
 #include "format/map/MapObjectViews.h"
 #include "resource/GameResources.h"
 #include "editing/commands/UndoBatcher.h"
-#include "ui/rendering/MapSpriteLoader.h"
+#include "rendering/MapSpriteLoader.h"
 #include "util/UndoStack.h"
 
 #include <algorithm>
