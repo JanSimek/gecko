@@ -15,6 +15,7 @@
 #include "ui/editing/InventoryEditService.h"
 #include "ui/editing/ScriptEditService.h"
 #include "ui/editing/MapEditService.h"
+#include "ui/editing/ObjectEditService.h"
 
 namespace geck {
 
@@ -30,33 +31,8 @@ namespace resource {
     class GameResources;
 }
 
-struct ExitGridCommandState {
-    uint32_t exitMap;
-    uint32_t exitPosition;
-    uint32_t exitElevation;
-    uint32_t exitOrientation;
-    uint32_t frmPid;
-    uint32_t proPid;
-};
-
-/// Snapshot of a MapObject's UI-editable per-instance fields, shared by the
-/// flag/light/destination/interaction/critter editors via registerInstanceEdit.
-struct MapObjectInstanceState {
-    uint32_t flags = 0;
-    uint32_t dataFlags = 0; // MapObject.unknown11 == engine obj->data.flags (container lock/jam)
-    uint32_t lightRadius = 0;
-    uint32_t lightIntensity = 0;
-    uint32_t walkthrough = 0; // doors: engine obj->data.scenery.door.openFlags (lock/jam)
-    uint32_t map = 0;
-    uint32_t elevhex = 0;
-    uint32_t elevtype = 0;
-    uint32_t elevlevel = 0;
-    uint32_t aiPacket = 0;
-    uint32_t groupId = 0;
-    uint32_t currentHp = 0;
-    uint32_t currentRad = 0;
-    uint32_t currentPoison = 0;
-};
+// ExitGridCommandState and MapObjectInstanceState are defined in ObjectEditService.h
+// (the aggregate that owns exit-grid and per-instance editing) and re-exported here.
 
 class ObjectCommandController {
 public:
@@ -174,8 +150,6 @@ public:
     bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
 
 private:
-    static void applyInstanceState(MapObject& object, const MapObjectInstanceState& state);
-
     resource::GameResources& _resources;
     std::unique_ptr<Map>& _map;
     const HexagonGrid& _hexgrid;
@@ -189,6 +163,7 @@ private:
     std::function<void()> _refreshObjects;
     std::function<void()> _reloadTiles;
     MapEditService _mapService;
+    ObjectEditService _objectService;
 };
 
 /// RAII guard that opens an undo batch for its lifetime: collapses every edit made
