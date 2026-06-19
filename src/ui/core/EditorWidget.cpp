@@ -819,7 +819,15 @@ void EditorWidget::setupInputCallbacks() {
         return;
 
     InputHandler::Callbacks callbacks;
+    bindSelectionCallbacks(callbacks);
+    bindInteractionCallbacks(callbacks);
+    bindToolModeCallbacks(callbacks);
 
+    _inputHandler->setCallbacks(callbacks);
+    _inputHandler->setSelectionMode(_currentSelectionMode);
+}
+
+void EditorWidget::bindSelectionCallbacks(InputHandler::Callbacks& callbacks) {
     // Mouse events
     callbacks.onSelectionClick = [this](sf::Vector2f worldPos, InputHandler::SelectionModifier modifier) {
         SelectionModifier selectionModifier;
@@ -851,7 +859,9 @@ void EditorWidget::setupInputCallbacks() {
             modifier == InputHandler::SelectionModifier::TOGGLE,
             modifier == InputHandler::SelectionModifier::ADD);
     };
+}
 
+void EditorWidget::bindInteractionCallbacks(InputHandler::Callbacks& callbacks) {
     callbacks.onTilePlacement = [this](sf::Vector2f worldPos) {
         bool isRoof = _inputHandler->isInTilePlacementMode() && sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift);
         _tilePlacementManager->handleTilePlacement(worldPos, isRoof);
@@ -898,7 +908,9 @@ void EditorWidget::setupInputCallbacks() {
             _dragDropManager->cancelObjectDrag();
         }
     };
+}
 
+void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     callbacks.onPlayerPositionSelect = [this](sf::Vector2f worldPos) {
         int hexPosition = _viewportController->worldPosToHexIndex(worldPos);
         if (hexPosition >= 0) {
@@ -982,10 +994,6 @@ void EditorWidget::setupInputCallbacks() {
             _mainWindow->deselectMarkExitsMode();
         }
     };
-
-    _inputHandler->setCallbacks(callbacks);
-
-    _inputHandler->setSelectionMode(_currentSelectionMode);
 }
 
 void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderHexes) {

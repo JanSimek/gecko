@@ -26,6 +26,7 @@
 #include "rendering/MapSpriteLoader.h"
 #include "rendering/RenderingEngine.h"
 #include "ui/tiles/TilePlacementContext.h"
+#include "ui/input/InputHandler.h"
 #include "ui/core/EditorMode.h"
 #include "ui/core/EditorSession.h"
 #include "pattern/Pattern.h"
@@ -46,7 +47,6 @@ namespace resource {
 
 // Forward declarations
 class RenderingEngine;
-class InputHandler;
 class DragDropManager;
 class TilePlacementManager;
 class ExitGridPlacementManager;
@@ -334,8 +334,13 @@ private:
     std::shared_ptr<MapObject> createScrollBlockerObject(int hexPosition);
     void createScrollBlockersFromHexes(const std::vector<int>& borderHexes);
 
-    // Input system setup
+    // Input system setup. setupInputCallbacks() builds the callback struct from these
+    // cohesive groups; each populates its slice (lambdas capture this and drive the
+    // relevant managers/selection/mode logic).
     void setupInputCallbacks();
+    void bindSelectionCallbacks(InputHandler::Callbacks& callbacks);
+    void bindInteractionCallbacks(InputHandler::Callbacks& callbacks);
+    void bindToolModeCallbacks(InputHandler::Callbacks& callbacks);
 
     // UI Components
     QVBoxLayout* _layout;
