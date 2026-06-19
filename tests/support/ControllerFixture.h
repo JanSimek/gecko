@@ -10,7 +10,7 @@
 #include "format/map/Map.h"
 #include "format/map/Tile.h"
 #include "resource/GameResources.h"
-#include "ui/editing/ObjectCommandController.h"
+#include "editing/commands/ObjectCommandController.h"
 #include "ui/rendering/MapSpriteLoader.h"
 #include "util/UndoStack.h"
 

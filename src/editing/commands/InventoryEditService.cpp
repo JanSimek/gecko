@@ -1,7 +1,7 @@
 #include "InventoryEditService.h"
 
 #include "format/map/MapObject.h"
-#include "ui/editing/UndoBatcher.h"
+#include "editing/commands/UndoBatcher.h"
 #include "util/UndoStack.h"
 
 namespace geck {

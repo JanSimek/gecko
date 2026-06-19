@@ -468,20 +468,20 @@ add_library(gecko_editing STATIC
     ui/rendering/RenderingEngine.cpp
     ui/rendering/MapRenderer.h
     ui/rendering/MapRenderer.cpp
-    ui/editing/ObjectCommandController.h
-    ui/editing/ObjectCommandController.cpp
-    ui/editing/UndoBatcher.h
-    ui/editing/UndoBatcher.cpp
-    ui/editing/TileEditService.h
-    ui/editing/TileEditService.cpp
-    ui/editing/InventoryEditService.h
-    ui/editing/InventoryEditService.cpp
-    ui/editing/ScriptEditService.h
-    ui/editing/ScriptEditService.cpp
-    ui/editing/MapEditService.h
-    ui/editing/MapEditService.cpp
-    ui/editing/ObjectEditService.h
-    ui/editing/ObjectEditService.cpp
+    editing/commands/ObjectCommandController.h
+    editing/commands/ObjectCommandController.cpp
+    editing/commands/UndoBatcher.h
+    editing/commands/UndoBatcher.cpp
+    editing/commands/TileEditService.h
+    editing/commands/TileEditService.cpp
+    editing/commands/InventoryEditService.h
+    editing/commands/InventoryEditService.cpp
+    editing/commands/ScriptEditService.h
+    editing/commands/ScriptEditService.cpp
+    editing/commands/MapEditService.h
+    editing/commands/MapEditService.cpp
+    editing/commands/ObjectEditService.h
+    editing/commands/ObjectEditService.cpp
     scripting/MapScriptApi.h
     scripting/MapScriptApi.cpp
     scripting/ScriptApiReference.h

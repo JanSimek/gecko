@@ -17,7 +17,7 @@
 
 #include "scripting/MapScriptApi.h"
 #include "scripting/ScriptApiReference.h"
-#include "ui/editing/ObjectCommandController.h"
+#include "editing/commands/ObjectCommandController.h"
 
 namespace geck {
 

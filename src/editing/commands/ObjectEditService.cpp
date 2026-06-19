@@ -6,7 +6,7 @@
 #include "format/map/MapObject.h"
 #include "format/map/MapObjectViews.h"
 #include "resource/GameResources.h"
-#include "ui/editing/UndoBatcher.h"
+#include "editing/commands/UndoBatcher.h"
 #include "ui/rendering/MapSpriteLoader.h"
 #include "util/UndoStack.h"
 

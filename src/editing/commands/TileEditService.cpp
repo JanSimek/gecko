@@ -3,7 +3,7 @@
 #include "editor/TileChange.h"
 #include "format/map/Map.h"
 #include "format/map/Tile.h"
-#include "ui/editing/UndoBatcher.h"
+#include "editing/commands/UndoBatcher.h"
 #include "util/TileUtils.h"
 #include "util/UndoStack.h"
 

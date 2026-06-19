@@ -22,7 +22,7 @@
 #include "format/pro/Pro.h"
 #include "scripting/LuaScriptRuntime.h"
 #include "scripting/MapScriptApi.h"
-#include "ui/editing/ObjectCommandController.h"
+#include "editing/commands/ObjectCommandController.h"
 #include "ui/rendering/MapSpriteLoader.h"
 #include "util/ProHelper.h"
 #include "util/UndoStack.h"

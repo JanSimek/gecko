@@ -22,7 +22,7 @@
 #include "selection/SelectionDataProvider.h"
 #include "util/Constants.h"
 #include "util/UndoStack.h"
-#include "ui/editing/ObjectCommandController.h"
+#include "editing/commands/ObjectCommandController.h"
 #include "ui/rendering/MapSpriteLoader.h"
 #include "ui/rendering/RenderingEngine.h"
 #include "ui/tiles/TilePlacementContext.h"

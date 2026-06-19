@@ -10,12 +10,12 @@
 #include <vector>
 
 #include "util/UndoStack.h"
-#include "ui/editing/UndoBatcher.h"
-#include "ui/editing/TileEditService.h"
-#include "ui/editing/InventoryEditService.h"
-#include "ui/editing/ScriptEditService.h"
-#include "ui/editing/MapEditService.h"
-#include "ui/editing/ObjectEditService.h"
+#include "editing/commands/UndoBatcher.h"
+#include "editing/commands/TileEditService.h"
+#include "editing/commands/InventoryEditService.h"
+#include "editing/commands/ScriptEditService.h"
+#include "editing/commands/MapEditService.h"
+#include "editing/commands/ObjectEditService.h"
 
 namespace geck {
 

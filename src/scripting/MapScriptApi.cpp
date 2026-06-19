@@ -28,7 +28,7 @@
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
-#include "ui/editing/ObjectCommandController.h"
+#include "editing/commands/ObjectCommandController.h"
 #include "util/Constants.h"
 #include "util/ProHelper.h"
 

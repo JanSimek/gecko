@@ -15,7 +15,7 @@
 #include "pattern/PatternSprite.h"
 #include "resource/GameResources.h"
 #include "editor/TileChange.h"
-#include "ui/editing/ObjectCommandController.h"
+#include "editing/commands/ObjectCommandController.h"
 
 namespace geck::pattern {
 
