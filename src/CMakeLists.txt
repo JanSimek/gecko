@@ -470,6 +470,8 @@ add_library(gecko_editing STATIC
     ui/rendering/MapRenderer.cpp
     ui/editing/ObjectCommandController.h
     ui/editing/ObjectCommandController.cpp
+    ui/editing/UndoBatcher.h
+    ui/editing/UndoBatcher.cpp
     scripting/MapScriptApi.h
     scripting/MapScriptApi.cpp
     scripting/ScriptApiReference.h

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "util/UndoStack.h"
+#include "ui/editing/UndoBatcher.h"
 #include "format/map/MapScript.h"
 
 namespace geck {
@@ -103,7 +104,7 @@ public:
     bool endBatch();
 
     /// True while at least one beginBatch() is open.
-    bool isBatching() const { return _batchDepth > 0; }
+    bool isBatching() const { return _batcher.isBatching(); }
 
     bool registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     /// Undoable placement that records the MapObject data only (no sprite). For headless
@@ -202,19 +203,12 @@ private:
     MapSpriteLoader& _mapSpriteLoader;
     std::vector<std::shared_ptr<Object>>& _objects;
     std::vector<sf::Sprite>& _wallBlockerOverlays;
-    UndoStack& _undoStack;
+    UndoBatcher _batcher;
     std::function<void()> _refreshObjects;
-    std::function<void()> _onStackChanged;
     std::function<std::vector<Tile>&(int)> _ensureElevationTiles;
     std::function<int()> _getCurrentElevation;
     std::function<void(int, bool, int)> _updateTileSprite;
     std::function<void()> _reloadTiles;
-
-    // Undo-batch state. While _batchDepth > 0, pushCommand() appends to
-    // _batchedCommands instead of touching _undoStack; endBatch() collapses them.
-    int _batchDepth = 0;
-    std::string _batchDescription;
-    std::vector<UndoCommand> _batchedCommands;
 };
 
 /// RAII guard that opens an undo batch for its lifetime: collapses every edit made
