@@ -251,21 +251,11 @@ namespace {
         opts.outPath = requireString(args, "out");
         opts.elevation = static_cast<int>(optInt(args, "elevation", opts.elevation, 0, 2));
         opts.maxDimension = static_cast<unsigned int>(optInt(args, "maxDimension", opts.maxDimension, 1, 100000));
-        if (const auto it = args.find("showRoof"); it != args.end() && it->is_boolean()) {
-            opts.showRoof = it->get<bool>();
-        }
-        if (const auto it = args.find("schematic"); it != args.end() && it->is_boolean()) {
-            opts.schematic = it->get<bool>();
-        }
-        if (const auto it = args.find("objects"); it != args.end() && it->is_boolean()) {
-            opts.objects = it->get<bool>();
-        }
-        if (const auto it = args.find("semantic"); it != args.end() && it->is_boolean()) {
-            opts.semantic = it->get<bool>();
-        }
-        if (const auto it = args.find("showBlockers"); it != args.end() && it->is_boolean()) {
-            opts.showBlockers = it->get<bool>();
-        }
+        opts.showRoof = optBool(args, "showRoof", opts.showRoof);
+        opts.schematic = optBool(args, "schematic", opts.schematic);
+        opts.objects = optBool(args, "objects", opts.objects);
+        opts.semantic = optBool(args, "semantic", opts.semantic);
+        opts.showBlockers = optBool(args, "showBlockers", opts.showBlockers);
         std::ostringstream oss;
         const int rc = cli::renderMap(resources, opts, oss);
         return toolText(oss.str(), rc != 0); // rc != 0 e.g. unreadable map or no GL context
@@ -434,30 +424,12 @@ namespace {
         }
         return tools;
     }
-} // namespace
 
-McpServer::McpServer(resource::GameResources& resources)
-    : _resources(resources) {
-}
-
-json McpServer::handleMessage(const json& request) {
-    const bool isNotification = !request.contains("id");
-    const json id = isNotification ? json(nullptr) : request["id"];
-    try {
+    // Route a JSON-RPC *request* (already known to have an id and jsonrpc 2.0) to its result. Kept
+    // out of McpServer::handleMessage so that stays a thin envelope (notification + version guards +
+    // try/catch) and neither function is over-complex.
+    json dispatchRequest(resource::GameResources& resources, const json& request, const json& id) {
         const std::string method = request.value("method", "");
-
-        // A notification (no id) takes no response, and we never run a request method (initialize,
-        // tools/*, ping) as one — executing a tool with no id to return its result is meaningless. So
-        // any no-id message is acknowledged silently regardless of method (e.g. notifications/initialized).
-        if (isNotification) {
-            return json(nullptr);
-        }
-
-        // Past here we owe a response, so the request must declare JSON-RPC 2.0.
-        if (request.value("jsonrpc", std::string()) != "2.0") {
-            return errorMessage(id, -32600, "Invalid Request: 'jsonrpc' must be \"2.0\"");
-        }
-
         if (method == "initialize") {
             // We speak exactly one protocol version, so negotiation is just declaring it: return
             // kProtocolVersion regardless of what the client asked for, and the client decides whether
@@ -474,12 +446,34 @@ json McpServer::handleMessage(const json& request) {
             const json params = request.contains("params") ? request["params"] : json::object();
             const std::string name = params.value("name", "");
             const json args = params.contains("arguments") ? params["arguments"] : json::object();
-            if (auto result = callTool(_resources, name, args)) {
+            if (auto result = callTool(resources, name, args)) {
                 return resultMessage(id, std::move(*result));
             }
             return errorMessage(id, -32602, "Unknown tool: " + name);
         }
         return errorMessage(id, -32601, "Method not found: " + method);
+    }
+} // namespace
+
+McpServer::McpServer(resource::GameResources& resources)
+    : _resources(resources) {
+}
+
+json McpServer::handleMessage(const json& request) {
+    const bool isNotification = !request.contains("id");
+    const json id = isNotification ? json(nullptr) : request["id"];
+    try {
+        // A notification (no id) takes no response, and we never run a request method (initialize,
+        // tools/*, ping) as one — executing a tool with no id to return its result is meaningless. So
+        // any no-id message is acknowledged silently regardless of method (e.g. notifications/initialized).
+        if (isNotification) {
+            return json(nullptr);
+        }
+        // Past here we owe a response, so the request must declare JSON-RPC 2.0.
+        if (request.value("jsonrpc", std::string()) != "2.0") {
+            return errorMessage(id, -32600, "Invalid Request: 'jsonrpc' must be \"2.0\"");
+        }
+        return dispatchRequest(_resources, request, id);
     } catch (const std::exception& e) {
         if (isNotification) {
             return json(nullptr);
