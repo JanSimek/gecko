@@ -2,6 +2,7 @@
 
 #include "editing/commands/ObjectCommandController.h"
 #include "rendering/MapSpriteLoader.h"
+#include "rendering/RenderingEngine.h"
 #include "viewport/ViewportController.h"
 
 namespace geck {
@@ -13,6 +14,7 @@ EditorController::EditorController()
 EditorController::~EditorController() = default;
 
 void EditorController::initEditingCore(resource::GameResources& resources, EditingCoreCallbacks callbacks) {
+    _renderingEngine = std::make_unique<RenderingEngine>(resources);
     _spriteLoader = std::make_unique<MapSpriteLoader>(resources, _session.hexgrid());
     _commandController = std::make_unique<ObjectCommandController>(
         resources,

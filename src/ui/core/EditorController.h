@@ -13,6 +13,7 @@ namespace geck {
 class ObjectCommandController;
 class MapSpriteLoader;
 class ViewportController;
+class RenderingEngine;
 class Tile;
 
 namespace resource {
@@ -75,12 +76,19 @@ public:
     // reference, matching the prior getViewportController() const accessor.
     ViewportController& viewport() const { return *_viewport; }
 
+    // The rendering engine is built in initEditingCore(); hasRenderingEngine() guards the
+    // render/setSelectionColors paths that can fire before the editing core is initialised.
+    RenderingEngine& renderingEngine() { return *_renderingEngine; }
+    bool hasRenderingEngine() const { return _renderingEngine != nullptr; }
+
 private:
     EditorSession _session;
     ObjectPicker _picker{ _session };
     SelectionVisualizer _visualizer{ _session };
     // Constructed in the EditorController constructor from _session.hexgrid().
     std::unique_ptr<ViewportController> _viewport;
+    // Built in initEditingCore() (needs GameResources).
+    std::unique_ptr<RenderingEngine> _renderingEngine;
     // Declared after the loader so the command controller (which references the loader)
     // is destroyed first.
     std::unique_ptr<MapSpriteLoader> _spriteLoader;

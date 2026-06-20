@@ -67,7 +67,6 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
         initializeSelectionSystem();
     }
 
-    _renderingEngine = std::make_unique<RenderingEngine>(_resources);
     _controller.initEditingCore(_resources,
         EditorController::EditingCoreCallbacks{
             .refreshObjects = [this]() { refreshObjects(); },
@@ -909,7 +908,7 @@ void EditorWidget::update([[maybe_unused]] const float dt) {
 
 void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float dt) {
     // Called by the SFMLWidget's render loop
-    if (!_renderingEngine) {
+    if (!_controller.hasRenderingEngine()) {
         return;
     }
 
@@ -948,7 +947,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.map = _session.map();
     renderData.currentElevation = _session.currentElevation();
 
-    _renderingEngine->render(target, _controller.viewport().getView(), renderData, visibility);
+    _controller.renderingEngine().render(target, _controller.viewport().getView(), renderData, visibility);
 }
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
@@ -1796,8 +1795,8 @@ void EditorWidget::showLoadingErrorsSummary() {
 }
 
 void EditorWidget::setSelectionColors(const RenderingEngine::SelectionPalette& colors) {
-    if (_renderingEngine) {
-        _renderingEngine->setSelectionColors(colors);
+    if (_controller.hasRenderingEngine()) {
+        _controller.renderingEngine().setSelectionColors(colors);
     }
 }
 

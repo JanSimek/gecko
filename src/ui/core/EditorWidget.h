@@ -346,11 +346,10 @@ private:
     // unchanged while the controller owns the storage.
     EditorSession& _session{ _controller.session() };
 
-    // Input, rendering, drag/drop, tile placement, and viewport systems
+    // Input + drag/drop + tile/exit-grid placement systems (the Qt-coupled managers).
     std::unique_ptr<InputHandler> _inputHandler;
-    std::unique_ptr<RenderingEngine> _renderingEngine;
-    // MapSpriteLoader + ObjectCommandController now live in _controller (their lifetimes
-    // are coupled — the command controller references the loader).
+    // RenderingEngine, MapSpriteLoader, ObjectCommandController and ViewportController now live
+    // in _controller (the Qt-free editor core).
     std::unique_ptr<DragDropManager> _dragDropManager;
     std::unique_ptr<TilePlacementManager> _tilePlacementManager;
     std::unique_ptr<ExitGridPlacementManager> _exitGridPlacementManager;
