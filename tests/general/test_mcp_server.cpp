@@ -121,4 +121,22 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         // A negative entry in a pid array would have wrapped too.
         CHECK(call("extract_pattern", { { "map", "m" }, { "out", "o" }, { "name", "n" }, { "pids", json::array({ -1 }) } }, 24)["result"]["isError"] == true);
     }
+
+    SECTION("ping is answered promptly with an empty result") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 30 }, { "method", "ping" } });
+        CHECK(resp["id"] == 30);
+        CHECK(resp["result"].is_object());
+        CHECK(!resp.contains("error"));
+    }
+
+    SECTION("a request method sent as a notification (no id) does not run and gets no response") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "method", "tools/call" },
+            { "params", { { "name", "list_maps" }, { "arguments", json::object() } } } });
+        CHECK(resp.is_null());
+    }
+
+    SECTION("a request that isn't JSON-RPC 2.0 is rejected with -32600") {
+        const json resp = server.handleMessage({ { "id", 31 }, { "method", "tools/list" } });
+        CHECK(resp["error"]["code"] == -32600);
+    }
 }

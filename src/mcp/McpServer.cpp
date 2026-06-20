@@ -446,8 +446,26 @@ json McpServer::handleMessage(const json& request) {
     try {
         const std::string method = request.value("method", "");
 
+        // A notification (no id) takes no response, and we never run a request method (initialize,
+        // tools/*, ping) as one — executing a tool with no id to return its result is meaningless. So
+        // any no-id message is acknowledged silently regardless of method (e.g. notifications/initialized).
+        if (isNotification) {
+            return json(nullptr);
+        }
+
+        // Past here we owe a response, so the request must declare JSON-RPC 2.0.
+        if (request.value("jsonrpc", std::string()) != "2.0") {
+            return errorMessage(id, -32600, "Invalid Request: 'jsonrpc' must be \"2.0\"");
+        }
+
         if (method == "initialize") {
+            // We speak exactly one protocol version, so negotiation is just declaring it: return
+            // kProtocolVersion regardless of what the client asked for, and the client decides whether
+            // it can proceed (per the lifecycle spec). Multi-version support would branch here.
             return resultMessage(id, { { "protocolVersion", kProtocolVersion }, { "capabilities", { { "tools", json::object() } } }, { "serverInfo", { { "name", kServerName }, { "version", kServerVersion } } } });
+        }
+        if (method == "ping") {
+            return resultMessage(id, json::object()); // MCP ping -> empty result, answered promptly
         }
         if (method == "tools/list") {
             return resultMessage(id, { { "tools", toolDefinitions() } });
@@ -460,9 +478,6 @@ json McpServer::handleMessage(const json& request) {
                 return resultMessage(id, std::move(*result));
             }
             return errorMessage(id, -32602, "Unknown tool: " + name);
-        }
-        if (isNotification) {
-            return json(nullptr); // e.g. notifications/initialized — no response
         }
         return errorMessage(id, -32601, "Method not found: " + method);
     } catch (const std::exception& e) {

@@ -980,6 +980,27 @@ and probably not worth chasing for a map editor.
 > now half-done — the MCP server is largely a JSON-RPC shim over `gecko_cli`'s existing entry points
 > plus the read/describe tools.
 
+## MCP server hardening — done, and one deferred follow-up
+
+**Done** (a code-review pass): a **table-driven tool registry** (one `ToolSpec` list — name,
+description, schema, handler — that both `tools/call` dispatch and `tools/list` derive from, so they
+can't drift); **argument validation** (typed `requireString`/`requireInt(min,max)`/bounded
+`optInt`/strict `optBool`, surfaced as `isError` — no more negative-pid-wraps-to-huge-uint or
+negative-`maxDimension`); and **protocol edge cases** (a `ping` handler, no-id request methods no
+longer execute as notifications, `jsonrpc:"2.0"` validated → `-32600`).
+
+**Deferred — richer tool output/metadata (MCP 2025-06).** Worth doing some day, not now:
+- **`structuredContent`** on the JSON-emitting tools (analyze/describe_map/palette/proto_info/…) —
+  return the parsed object alongside the text block, so clients get typed data instead of re-parsing
+  a string.
+- **Tool annotations** — `readOnlyHint` (everything except generate/render/extract is read-only),
+  `destructiveHint`, `openWorldHint:false` (all data is local). Cheap to add to each `ToolSpec` now
+  that the registry carries per-tool metadata.
+- **`render_map` as an image/resource** — return an embedded image or a resource link rather than the
+  written path (more idiomatic; the path works fine for a local agent).
+- *(Not planned: per-call cancellation / progress notifications — the stdio loop is deliberately
+  synchronous and tool calls are short, so the threading cost isn't justified.)*
+
 ## Why it's cheap here
 
 The four-library split already makes the model, formats, and resources **Qt-free and
