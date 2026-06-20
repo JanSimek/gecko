@@ -65,7 +65,7 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
         }
 
         const auto bytesWritten = saveMapToFile(_resources, *mapFile, mapDestination);
-        if (!bytesWritten) {
+        if (!bytesWritten.has_value()) {
             QtDialogs::showError(_dialogParent, "Save Failed",
                 QString("Failed to save map to game directory: %1").arg(QString::fromStdString(mapDestination.string())));
             return;

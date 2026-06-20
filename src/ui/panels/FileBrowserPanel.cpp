@@ -242,7 +242,7 @@ FileBrowserPanel::FileBrowserPanel(std::shared_ptr<resource::GameResources> reso
     _statusLabel->setText("Ready - Click Refresh to load files");
 }
 
-void FileBrowserPanel::stopAndDestroyLoader() {
+void FileBrowserPanel::stopAndDestroyLoader() noexcept {
     if (!_loaderThread) {
         return;
     }

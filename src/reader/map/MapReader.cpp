@@ -253,8 +253,8 @@ std::unique_ptr<Map> MapReader::read() {
 
                 // Fixed trailer (layout shared with MapWriter via the visitor); each field is a
                 // big-endian 32-bit word, interpreted per its own (signed/unsigned) type.
-                visitMapScriptTrailerFields(map_script, [this](auto& field) {
-                    field = static_cast<std::remove_reference_t<decltype(field)>>(read_be_u32());
+                visitMapScriptTrailerFields(map_script, [this]<class T>(T& field) {
+                    field = static_cast<T>(read_be_u32());
                 });
 
                 if (j < script_section_count) {

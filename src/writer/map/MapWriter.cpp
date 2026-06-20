@@ -207,7 +207,7 @@ void MapWriter::writeScript(const MapScript& script) {
 
     // Fixed trailer (layout shared with MapReader via the visitor); each field is emitted as a
     // big-endian 32-bit word.
-    visitMapScriptTrailerFields(script, [&utils](const auto& field) {
+    visitMapScriptTrailerFields(script, [&utils]<class T>(const T& field) {
         utils.writeBE32(static_cast<uint32_t>(field));
     });
 }
