@@ -46,10 +46,12 @@ int renderMap(resource::GameResources& resources, const RenderOptions& options, 
     renderOptions.showRoof = options.showRoof;
     renderOptions.showObjects = options.showObjects;
     renderOptions.showBlockers = options.showBlockers;
-    renderOptions.style = options.objects ? MapRenderer::Style::Objects
-                                          : (options.schematic ? MapRenderer::Style::Schematic : MapRenderer::Style::Natural);
+    renderOptions.style = options.semantic ? MapRenderer::Style::Semantic
+        : options.objects                  ? MapRenderer::Style::Objects
+        : options.schematic                ? MapRenderer::Style::Schematic
+                                           : MapRenderer::Style::Natural;
 
-    const bool wantLegend = options.schematic || options.objects;
+    const bool wantLegend = options.schematic || options.objects || options.semantic;
     try {
         MapRenderer renderer(resources);
         MapRenderer::Legend legend;

@@ -674,9 +674,12 @@ The direction instead:
 
 # Map semantics & intelligence (analysis MCP roadmap)
 
-> Status: scoping; **Phase 1 done** (ai.txt reader; `analyze` now reports per-map `critters` with
-> team + ai.txt-resolved AI, a `header` digest with player spawn / enabled elevations / darkness /
-> map script / named map variables, and an `exits` connectivity graph). Today the MCP *perceives
+> Status: **Phases 1–2 done + the `describe_map` orchestrator (capability 1) shipped.** Phase 1:
+> ai.txt reader; `analyze` reports per-map `critters` (team + ai.txt-resolved AI), a `header` digest
+> (player spawn / enabled elevations / darkness / map script / named map variables) and an `exits`
+> connectivity graph. Phase 2: `describe_script` (.ssl source + dialog) and `reachability`.
+> `describe_map` now composes analyze + reachability into one cross-referenced digest (capability 1
+> below). Remaining: the Phase-3 semantic render overlay (capability 5). Today the MCP *perceives
 > geometry* — tiles, objects,
 > clusters, palette, render, extract/generate. It cannot read the map's **semantic** layer: AI
 > packet is a raw number (no `ai.txt` reader), scripts are referenced by `scripts.lst` index/name
@@ -694,10 +697,15 @@ from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
 
 **Capabilities (each notes the reader it needs):**
 
-1. **`describe_map` — purpose synthesis (orchestrator).** One structured digest: dimensions /
-   elevations, dominant biome (floor), structures (clusters), critter roster by team/role, exits +
-   reachable regions, attached scripts + hooks, darkness, map vars. Composes the tools below;
-   returns evidence, the model writes the conclusion.
+1. **`describe_map` — purpose synthesis (orchestrator). ✅ Done.** One structured digest per map:
+   the `analyze` per-map report (header — enabled elevations / darkness / player start / map script /
+   map vars; floor/biome; object `clusters` = structures; `critters` roster with ai.txt-resolved AI
+   and each one's attached `{programIndex, name}`; `exits` graph) **plus** a `reachability` field
+   (per-elevation walkable/reachable hexes + entry-orphaned objects). Composes `analyzeMaps` +
+   `analyzeReachability` (`cli::describeMap`, MCP `describe_map`, CLI `map describe-map`); returns the
+   engine's own evidence with join keys preserved (pid, script_id, ai_packet) — the model writes the
+   conclusion, no baked-in heuristics. Verified: artemple clean (0 orphans), vctydwtn surfaces the 9
+   orphaned servant/slave objects inline with the roster.
 2. **Critters + AI — `critters` tool + new `ai.txt` reader.** Per critter: name (`pro_critters.msg`),
    hex, **team (`group_id`)**, **AI packet resolved via `ai.txt`** (aggression, disposition,
    `run_away_mode`, `area_attack_mode`, `best_weapon`, `distance`, `secondary_freq`), equipped
@@ -729,9 +737,13 @@ from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
    (reached via stairs/elevators) report `reachableHexes: null` + a note. Optimistic on doors, so it
    under-reports rather than crying wolf. Verified: artemple/denbus1/newr1 clean (0 orphans),
    vctydwtn flags a real isolated servant/slave cluster.
-5. **Semantic render overlay** (extends the schematic): colour critters by team, mark exits,
-   highlight scripted objects, shade unreachable regions, so the agent can *see* purpose and tie it
-   to the JSON via the legend. **Phase 3.**
+5. **Semantic render overlay** (extends the schematic). **Object roles done:** a `Semantic` render
+   style (`render_map semantic:true` / CLI `--semantic`) greys the floor and colours object markers
+   by role — exit grids highlighted, critters by team (`group_id`), scripted objects (`map_scripts_pid`)
+   ringed — with a role-keyed legend that joins back to `describe_map`. **Still open:** *shading the
+   unreachable regions* `reachability`/`describe_map` identify, which needs a per-hex reachable mask
+   exposed from `MapReachability` and a hex→world tint in the renderer (the object-marker path here is
+   sprite-bounds-based and doesn't map arbitrary hexes). **Phase 3.**
 
 **Corpus angle (multiplier):** index `analyze` + these semantic facts across all shipped maps so
 the agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improving
@@ -967,6 +979,27 @@ and probably not worth chasing for a map editor.
 > `map generate`. The "build a headless CLI over the libs first, then wrap it in MCP" plan below is
 > now half-done — the MCP server is largely a JSON-RPC shim over `gecko_cli`'s existing entry points
 > plus the read/describe tools.
+
+## MCP server hardening — done, and one deferred follow-up
+
+**Done** (a code-review pass): a **table-driven tool registry** (one `ToolSpec` list — name,
+description, schema, handler — that both `tools/call` dispatch and `tools/list` derive from, so they
+can't drift); **argument validation** (typed `requireString`/`requireInt(min,max)`/bounded
+`optInt`/strict `optBool`, surfaced as `isError` — no more negative-pid-wraps-to-huge-uint or
+negative-`maxDimension`); and **protocol edge cases** (a `ping` handler, no-id request methods no
+longer execute as notifications, `jsonrpc:"2.0"` validated → `-32600`).
+
+**Deferred — richer tool output/metadata (MCP 2025-06).** Worth doing some day, not now:
+- **`structuredContent`** on the JSON-emitting tools (analyze/describe_map/palette/proto_info/…) —
+  return the parsed object alongside the text block, so clients get typed data instead of re-parsing
+  a string.
+- **Tool annotations** — `readOnlyHint` (everything except generate/render/extract is read-only),
+  `destructiveHint`, `openWorldHint:false` (all data is local). Cheap to add to each `ToolSpec` now
+  that the registry carries per-tool metadata.
+- **`render_map` as an image/resource** — return an embedded image or a resource link rather than the
+  written path (more idiomatic; the path works fine for a local agent).
+- *(Not planned: per-call cancellation / progress notifications — the stdio loop is deliberately
+  synchronous and tool calls are short, so the threading cost isn't justified.)*
 
 ## Why it's cheap here
 

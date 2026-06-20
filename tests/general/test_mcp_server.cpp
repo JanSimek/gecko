@@ -34,7 +34,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "generate", "render_map", "extract_pattern", "script_api" }) {
+        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "generate", "render_map", "extract_pattern", "script_api" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }
@@ -98,5 +98,45 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 11 }, { "method", "tools/call" },
             { "params", { { "name", "reachability" }, { "arguments", json::object() } } } });
         CHECK(resp["result"]["isError"] == true);
+    }
+
+    SECTION("describe_map without a map is a tool error") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 12 }, { "method", "tools/call" },
+            { "params", { { "name", "describe_map" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == true);
+    }
+
+    SECTION("bad argument types and out-of-range numbers are tool errors, not silent casts") {
+        auto call = [&](const char* tool, json toolArgs, int id) {
+            return server.handleMessage({ { "jsonrpc", "2.0" }, { "id", id }, { "method", "tools/call" },
+                { "params", { { "name", tool }, { "arguments", std::move(toolArgs) } } } });
+        };
+        // A negative pid would have wrapped to a huge uint32; a string pid was silently ignored.
+        CHECK(call("proto_info", { { "pid", -5 } }, 20)["result"]["isError"] == true);
+        CHECK(call("proto_info", { { "pid", "nope" } }, 21)["result"]["isError"] == true);
+        // A negative maxDimension would have become an enormous unsigned value.
+        CHECK(call("render_map", { { "map", "m.map" }, { "out", "o.png" }, { "maxDimension", -1 } }, 22)["result"]["isError"] == true);
+        // A non-string required arg used to slip through as an empty string.
+        CHECK(call("render_map", { { "map", 123 }, { "out", "o.png" } }, 23)["result"]["isError"] == true);
+        // A negative entry in a pid array would have wrapped too.
+        CHECK(call("extract_pattern", { { "map", "m" }, { "out", "o" }, { "name", "n" }, { "pids", json::array({ -1 }) } }, 24)["result"]["isError"] == true);
+    }
+
+    SECTION("ping is answered promptly with an empty result") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 30 }, { "method", "ping" } });
+        CHECK(resp["id"] == 30);
+        CHECK(resp["result"].is_object());
+        CHECK(!resp.contains("error"));
+    }
+
+    SECTION("a request method sent as a notification (no id) does not run and gets no response") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "method", "tools/call" },
+            { "params", { { "name", "list_maps" }, { "arguments", json::object() } } } });
+        CHECK(resp.is_null());
+    }
+
+    SECTION("a request that isn't JSON-RPC 2.0 is rejected with -32600") {
+        const json resp = server.handleMessage({ { "id", 31 }, { "method", "tools/list" } });
+        CHECK(resp["error"]["code"] == -32600);
     }
 }

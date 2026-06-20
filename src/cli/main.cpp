@@ -1,5 +1,6 @@
 #include "cli/BundledResources.h"
 #include "cli/MapAnalyzer.h"
+#include "cli/MapDescribe.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
 #include "cli/MapReachability.h"
@@ -22,6 +23,7 @@ struct CliArgs {
     bool extract = false;
     bool describeScript = false;
     bool reachability = false;
+    bool describeMap = false;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::GenerateOptions gen;
@@ -29,6 +31,7 @@ struct CliArgs {
     geck::cli::ExtractOptions ext;
     geck::cli::DescribeScriptOptions desc;
     geck::cli::ReachabilityOptions reach;
+    geck::cli::DescribeMapOptions describeMapOpts;
 };
 
 void printUsage(const char* program) {
@@ -45,13 +48,14 @@ void printUsage(const char* program) {
               << "      --arg passes parameters to the script (read as args.key); --stamp pre-loads a\n"
               << "      pattern stamp the script places with api:placeStamp(name, anchorHex, variant).\n"
               << "  " << program << " map render --map <file.map> --out <file.png>\n"
-              << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic|--objects]\n"
+              << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic|--objects|--semantic]\n"
               << "      [--show-blockers] --data <dir-or-.dat> [...]\n"
               << "      Renders a map to a PNG (needs an off-screen GL context). --max-dim caps the\n"
               << "      longest side (default 1600); --roof draws the roof layer over the floor.\n"
               << "      --schematic flat-colours floor tiles by id + marks objects by category (with a\n"
               << "      colour legend); --objects mutes the floor to grey so the object markers pop\n"
-              << "      (for checking scatter); --show-blockers also marks FLAT objects.\n"
+              << "      (for checking scatter); --semantic greys the floor and colours markers by role\n"
+              << "      (exit grids, critters by team, scripted ringed); --show-blockers also marks FLAT.\n"
               << "  " << program << " map extract-pattern --map <file.map> --out <file.json> --name <name>\n"
               << "      [--pids id,id,...] [--anchor <hex>] [--radius N] [--elevation 0|1|2]\n"
               << "      [--include-floor] [--include-roof] --data <dir-or-.dat> [--data <...>]\n"
@@ -68,13 +72,16 @@ void printUsage(const char* program) {
               << "  " << program << " map reachability --map <path> --data <dir-or-.dat> [--data <...>]\n"
               << "      Per-elevation reachability from the entry points (player start + exit grids;\n"
               << "      optimistic: doors passable): reachable/walkable hexes, exits, orphaned content.\n"
+              << "  " << program << " map describe-map --map <path> --data <dir-or-.dat> [--data <...>]\n"
+              << "      One digest composing analyze + reachability for a map (header, biome, structures,\n"
+              << "      critter roster with AI + scripts, exits, reachability), as JSON.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
 bool isKnownSubcommand(const std::vector<std::string>& args) {
     return args.size() >= 2 && args[0] == "map"
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
-            || args[1] == "describe-script" || args[1] == "reachability");
+            || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -115,7 +122,8 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim"))
         || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
         || (out.describeScript && (arg == "--index" || arg == "--locale"))
-        || (out.reachability && arg == "--map");
+        || (out.reachability && arg == "--map")
+        || (out.describeMap && arg == "--map");
 
     if (valueFlag && i + 1 >= args.size()) {
         std::cerr << "error: " << arg << " needs a value\n";
@@ -196,6 +204,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         out.ren.objects = true;
         return 1;
     }
+    if (out.render && arg == "--semantic") {
+        out.ren.semantic = true;
+        return 1;
+    }
     if (out.render && arg == "--show-blockers") {
         out.ren.showBlockers = true;
         return 1;
@@ -268,6 +280,15 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.describeMap && arg == "--map") {
+        out.describeMapOpts.mapPath = args[i + 1];
+        return 2;
+    }
+    if (out.describeMap) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
     if (arg == "--json") { // analyze only: machine-readable output for the MCP
         out.analyze.json = true;
         return 1;
@@ -291,6 +312,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.extract = args[1] == "extract-pattern";
     out.describeScript = args[1] == "describe-script";
     out.reachability = args[1] == "reachability";
+    out.describeMap = args[1] == "describe-map";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -372,6 +394,9 @@ int main(int argc, char** argv) {
     }
     if (cli.reachability) {
         return geck::cli::analyzeReachability(resources, cli.reach, std::cout);
+    }
+    if (cli.describeMap) {
+        return geck::cli::describeMap(resources, cli.describeMapOpts, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
 }

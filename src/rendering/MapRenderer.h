@@ -34,6 +34,11 @@ public:
         /// Like Schematic but the floor is one muted grey, so the category-coloured object markers
         /// pop — for verifying object scatter/clumping without the per-id floor rainbow drowning them.
         Objects,
+        /// Semantic overlay (grey floor): object markers coloured by *role* rather than category —
+        /// exit grids highlighted, critters coloured by team (group_id), and scripted objects ringed —
+        /// so the map's purpose layer (where you leave, where the NPCs/teams are, what's scripted) is
+        /// visible. The Legend maps each role to its colour. Pairs with describe_map's JSON evidence.
+        Semantic,
     };
 
     struct Options {
