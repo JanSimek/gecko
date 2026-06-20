@@ -10,9 +10,11 @@
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
 #include "format/map/Tile.h"
+#include "format/maps/MapsTxt.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
 #include "reader/ai/AiTxtReader.h"
+#include "reader/maps/MapsTxtReader.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
 #include "util/ProHelper.h"
@@ -32,7 +34,6 @@
 #include <optional>
 #include <ostream>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -713,59 +714,22 @@ namespace {
         return root;
     }
 
-    // Per-map exit graph: [{hex,elevation,destMap,destHex,destElevation,orientation}] from the
-    // exit-grid markers. destMap/destHex are signed (-1 = town map / unused, -2 = worldmap, else a
-    // map id) — the map's connectivity, so an agent sees where each edge leads.
-    // data/maps.txt is the engine's index -> map list: `[Map NNN]` sections each with a `map_name`
-    // (the .map filename, lowercased by the engine). An exit grid's destination map is that index,
-    // so this lets us name "destMap 3" as the actual map file. Returns {} if maps.txt isn't mounted.
-    std::map<int, std::string> loadMapNames(resource::GameResources& resources) {
-        std::map<int, std::string> names;
-        auto bytes = resources.files().readRawBytes("data/maps.txt");
-        if (!bytes) {
-            bytes = resources.files().readRawBytes("maps.txt");
-        }
-        if (!bytes) {
-            return names;
-        }
-        const std::string text(bytes->begin(), bytes->end());
-        std::istringstream stream(text);
-        std::string line;
-        int current = -1;
-        while (std::getline(stream, line)) {
-            const auto begin = line.find_first_not_of(" \t\r");
-            if (begin == std::string::npos) {
-                continue;
-            }
-            if (line[begin] == '[') {
-                current = -1;
-                static constexpr std::string_view kMapPrefix = "[Map "; // sections are "[Map NNN]"
-                if (line.compare(begin, kMapPrefix.size(), kMapPrefix) == 0) {
-                    try {
-                        current = std::stoi(line.substr(begin + kMapPrefix.size())); // stops at the ']'
-                    } catch (const std::exception&) {
-                        current = -1;
-                    }
-                }
-            } else if (current >= 0) {
-                const auto eq = line.find('=');
-                if (eq != std::string::npos && line.compare(begin, 8, "map_name") == 0) {
-                    std::string value = line.substr(eq + 1);
-                    const auto v0 = value.find_first_not_of(" \t");
-                    const auto v1 = value.find_last_not_of(" \t\r");
-                    if (v0 != std::string::npos) {
-                        value = value.substr(v0, v1 - v0 + 1);
-                        std::ranges::transform(value, value.begin(),
-                            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-                        names[current] = value;
-                    }
-                }
+    // data/maps.txt is the engine's index -> map registry; parse it into a MapsTxt (vault) once so an
+    // exit's bare destination index can be named. Empty MapsTxt when the file isn't mounted.
+    MapsTxt loadMapsTxt(resource::GameResources& resources) {
+        for (const char* path : { "data/maps.txt", "maps.txt" }) {
+            if (const auto bytes = resources.files().readRawBytes(path); bytes.has_value()) {
+                return parseMapsTxt(std::string(bytes->begin(), bytes->end()));
             }
         }
-        return names;
+        return MapsTxt{};
     }
 
-    ordered_json exitsToJson(Map& map, const std::map<int, std::string>& mapNames) {
+    // Per-map exit graph: [{hex,elevation,destMap,destMapName,destHex,destElevation,orientation}] from
+    // the exit-grid markers. destMap/destHex are signed (-1 = town map / unused, -2 = worldmap, else a
+    // map id); destMapName resolves that id to its .map filename via maps.txt (null when unknown). The
+    // map's connectivity, so an agent sees where each edge leads.
+    ordered_json exitsToJson(Map& map, const MapsTxt& mapsTxt) {
         auto array = ordered_json::array();
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
@@ -773,10 +737,10 @@ namespace {
                     continue;
                 }
                 const auto destMap = static_cast<int32_t>(object->exit_map);
-                const auto it = mapNames.find(destMap);
+                const MapInfo* dest = mapsTxt.find(destMap);
                 array.push_back({ { "hex", object->position }, { "elevation", elevation },
                     { "destMap", destMap },
-                    { "destMapName", it != mapNames.end() ? ordered_json(it->second) : ordered_json(nullptr) },
+                    { "destMapName", dest != nullptr ? ordered_json(dest->mapName) : ordered_json(nullptr) },
                     { "destHex", static_cast<int32_t>(object->exit_position) },
                     { "destElevation", object->exit_elevation }, { "orientation", object->exit_orientation } });
             }
@@ -784,22 +748,30 @@ namespace {
         return array;
     }
 
+    // The shared, per-run inputs every map's JSON needs: engine resources, the name/tile resolver,
+    // ai.txt, scripts.lst and maps.txt. Bundled so mapToJson takes a handful of arguments, not a dozen.
+    struct AnalyzeContext {
+        resource::GameResources& resources;
+        NameResolver& names;
+        const AiTxt& ai;
+        const Lst* scriptsLst;
+        const MapsTxt& mapsTxt;
+    };
+
     // One map's full report object, folding its floor/object/adjacency usage into `agg` as a side
     // effect (so the aggregate built afterwards has every map's totals).
-    ordered_json mapToJson(const std::string& mapPath, Map& map, resource::GameResources& resources,
-        NameResolver& names, const AiTxt& ai, const Lst* scriptsLst, Aggregate& agg,
-        const std::map<int, std::string>& mapNames) {
+    ordered_json mapToJson(const std::string& mapPath, Map& map, const AnalyzeContext& ctx, Aggregate& agg) {
         const MapUsage usage = collectUsage(map);
         ordered_json entry;
         entry["name"] = baseName(mapPath);
         entry["path"] = mapPath;
-        entry["floor"] = floorsToJson(usage, names, agg);
-        entry["objects"] = objectsToJson(usage, names, agg);
-        entry["adjacency"] = adjacencyToJson(usage, names, agg);
-        entry["clusters"] = clustersToJson(collectClusters(map), names);
-        entry["critters"] = crittersToJson(map, names, ai, scriptsLst);
-        entry["header"] = headerToJson(map, loadMapGam(resources, mapPath), scriptsLst, resources);
-        entry["exits"] = exitsToJson(map, mapNames);
+        entry["floor"] = floorsToJson(usage, ctx.names, agg);
+        entry["objects"] = objectsToJson(usage, ctx.names, agg);
+        entry["adjacency"] = adjacencyToJson(usage, ctx.names, agg);
+        entry["clusters"] = clustersToJson(collectClusters(map), ctx.names);
+        entry["critters"] = crittersToJson(map, ctx.names, ctx.ai, ctx.scriptsLst);
+        entry["header"] = headerToJson(map, loadMapGam(ctx.resources, mapPath), ctx.scriptsLst, ctx.resources);
+        entry["exits"] = exitsToJson(map, ctx.mapsTxt);
         return entry;
     }
 
@@ -811,15 +783,16 @@ namespace {
     void emitJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
         NameResolver& names, const AiTxt& ai, std::ostream& out) {
         Aggregate agg;
-        const Lst* scriptsLst = loadScriptsLst(resources);                   // shared across maps (cached); names attached scripts
-        const std::map<int, std::string> mapNames = loadMapNames(resources); // index -> .map filename (once)
+        const Lst* scriptsLst = loadScriptsLst(resources); // shared across maps (cached); names attached scripts
+        const MapsTxt mapsTxt = loadMapsTxt(resources);    // the engine's index -> map registry (once)
+        const AnalyzeContext ctx{ resources, names, ai, scriptsLst, mapsTxt };
         auto maps = ordered_json::array();
         for (const auto& mapPath : mapPaths) {
             const std::unique_ptr<Map> map = loadMap(resources, mapPath);
             if (!map) {
                 continue; // skipped maps simply don't appear; agg.analysed counts what did
             }
-            maps.push_back(mapToJson(mapPath, *map, resources, names, ai, scriptsLst, agg, mapNames));
+            maps.push_back(mapToJson(mapPath, *map, ctx, agg));
             ++agg.analysed;
         }
 
