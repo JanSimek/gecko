@@ -296,106 +296,117 @@ namespace {
         std::function<json(resource::GameResources&, const json&)> handler;
     };
 
+    // Read-only / inspection tools (no files written). Split from the mutating tools so neither
+    // builder is over-long and so a future pass can tag this group readOnlyHint=true en masse.
+    void addReadOnlyTools(std::vector<ToolSpec>& t) {
+        t.push_back({ "list_maps",
+            "List every .map file in the mounted Fallout 2 data.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json&) { return toolListMaps(r); } });
+        t.push_back({ "analyze",
+            "Analyze ground-tile and object usage as JSON. Omit 'maps' to analyze every map, or "
+            "pass it to scope. Each object carries a 'flat' flag (structural blocker vs. decoration) "
+            "for curating a scatter palette. Each map also lists 'critters': who is on it, their team "
+            "(group_id), their AI packet resolved via ai.txt (aggression, disposition, flee/best-weapon/"
+            "distance), and the attached 'script' ({programIndex,name}) — pass that programIndex to "
+            "describe_script for the script's source and dialog.",
+            json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
+            [](resource::GameResources& r, const json& a) { return toolAnalyze(r, a); } });
+        t.push_back({ "palette",
+            "The weighted generation palette for the given maps (omit 'maps' for all), aggregated: "
+            "{ floor:[{id,name,weight}], scenery:[{pid,number,name,weight}] }. Just what a generator "
+            "script needs — floor 'id' for api:paintFloor, scenery 'number' for api:proto, 'weight' = "
+            "real placement count — without the full analyze report. scenery is scatter-eligible only "
+            "(scenery type, non-flat).",
+            json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
+            [](resource::GameResources& r, const json& a) { return toolPalette(r, a); } });
+        t.push_back({ "proto_info",
+            "Resolve a proto PID to its type, engine display name and 'flat' flag.",
+            json({ { "type", "object" }, { "properties", { { "pid", { { "type", "integer" } } } } }, { "required", json::array({ "pid" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolProtoInfo(r, a); } });
+        t.push_back({ "describe_script",
+            "Describe a Fallout 2 script by its scripts.lst program index (the 0-based script_id "
+            "analyze reports for a critter/object). Returns the filename, the .ssl source if a "
+            "script-source tree is mounted (e.g. the FRP scripts_src — hasSource flags whether it was "
+            "found), and the dialog .msg lines ([{id,text}]). Lets you read what an NPC does and says. "
+            "Optional 'locale' picks the dialog language subdir (default english). Args: programIndex, "
+            "optional locale.",
+            json({ { "type", "object" }, { "properties", { { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "required", json::array({ "programIndex" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolDescribeScript(r, a); } });
+        t.push_back({ "reachability",
+            "Per-elevation reachability for one map. Floods walkable hexes from the entry points "
+            "(player start + exit grids — you can arrive at an exit coming from the adjacent map): "
+            "'reachableHexes' of 'walkableHexes'; 'orphanedObjects' ([{pid,name,hex}], with "
+            "'orphanedObjectCount') are critters/items cut off from every entry — usually a sealed-off "
+            "area or a map bug. 'exits' lists each exit grid with 'reachableFromPlayerStart' "
+            "(walk-connected to the spawn specifically; null if the player spawns elsewhere). "
+            "OPTIMISTIC, not exact pathfinding: doors (incl. locked) are passable, so it over-estimates "
+            "rather than crying wolf. Args: map.",
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolReachability(r, a); } });
+        t.push_back({ "describe_map",
+            "One structured digest for a single map, composed from analyze + reachability: the header "
+            "(elevations, darkness, player start, map script, map variables), floor usage (biome), "
+            "object 'clusters' (structures), the 'critters' roster with ai.txt-resolved AI and each "
+            "one's attached {programIndex,name} script, the 'exits' graph, and a 'reachability' field "
+            "(per-elevation walkable/reachable hexes + entry-orphaned objects). Gathers the engine's "
+            "own semantic evidence in one call — join keys (pid, script_id, ai_packet) are preserved — "
+            "so you can infer the map's purpose and follow up with describe_script on any roster entry. "
+            "Args: map.",
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolDescribeMap(r, a); } });
+        t.push_back({ "script_api",
+            "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
+            "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "
+            "are auto-seeded and auto-batched) and the error model. Read this before writing a script "
+            "for `generate`.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources&, const json&) { return toolScriptApi(); } });
+    }
+
+    // Tools that write files or do heavy work (generation, rendering, pattern extraction).
+    void addMutatingTools(std::vector<ToolSpec>& t) {
+        t.push_back({ "generate",
+            "Run a Luau generation script against a fresh map and write a .map. Args: script (path to "
+            "the .luau), out (filesystem path for the .map — render_map/analyze can read it straight "
+            "back), optional elevation, optional args (string map), optional stamps (name -> stamp "
+            ".json path, placed by the script with api:placeStamp(name, anchorHex, variant)). Scripting "
+            "build required.",
+            json({ { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolGenerate(r, a); } });
+        t.push_back({ "render_map",
+            "Render a map to a PNG so it can be seen, not just measured. Args: map (.map path), out "
+            "(output .png path), optional elevation, optional maxDimension (longest side in px, default "
+            "1600), optional showRoof, optional schematic. schematic=true flat-colours floor tiles by "
+            "id and marks objects by category, and returns a colour legend (id/type -> colour -> count) "
+            "so you can match the picture to the analyze JSON and read the floor-tile transitions. "
+            "objects=true instead mutes the floor to grey so the category-coloured object markers pop "
+            "(for checking scatter). semantic=true also greys the floor but colours markers by role — "
+            "exit grids highlighted, critters by team, scripted objects ringed (legend keyed by role) — "
+            "the purpose layer that pairs with describe_map. FLAT objects (invisible engine blockers) "
+            "are hidden unless showBlockers. map/out are filesystem paths — out is written there, and "
+            "map may be a VFS path or any file on disk (e.g. one generate just wrote). Needs an "
+            "off-screen GL context.",
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "semantic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolRender(r, a); } });
+        t.push_back({ "extract_pattern",
+            "Capture a structure from a real map into a reusable pattern stamp (JSON the editor's "
+            "pattern library reads, and generate can place). Locate it with 'pids' (proto PIDs from "
+            "analyze that make up the structure) — their bounding box, grown by 'radius' (default 2) "
+            "hexes, is the capture region, so immediate props nearby come along — or pass 'anchorHex' "
+            "directly. Objects are captured verbatim; pass includeFloor=true to capture the ground and "
+            "includeRoof=true to capture the roof layer (a tent/building roof is tiles, not an object — "
+            "without includeRoof the stamp is topless). Args: map, out, name, optional elevation, pids "
+            "(int array), anchorHex, radius, includeFloor, includeRoof.",
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "name", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "pids", { { "type", "array" }, { "items", { { "type", "integer" } } } } }, { "anchorHex", { { "type", "integer" } } }, { "radius", { { "type", "integer" } } }, { "includeFloor", { { "type", "boolean" } } }, { "includeRoof", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out", "name" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolExtractPattern(r, a); } });
+    }
+
     const std::vector<ToolSpec>& toolRegistry() {
         static const std::vector<ToolSpec> tools = [] {
             std::vector<ToolSpec> t;
-            t.push_back({ "list_maps",
-                "List every .map file in the mounted Fallout 2 data.",
-                json({ { "type", "object" }, { "properties", json::object() } }),
-                [](resource::GameResources& r, const json&) { return toolListMaps(r); } });
-            t.push_back({ "analyze",
-                "Analyze ground-tile and object usage as JSON. Omit 'maps' to analyze every map, or "
-                "pass it to scope. Each object carries a 'flat' flag (structural blocker vs. decoration) "
-                "for curating a scatter palette. Each map also lists 'critters': who is on it, their team "
-                "(group_id), their AI packet resolved via ai.txt (aggression, disposition, flee/best-weapon/"
-                "distance), and the attached 'script' ({programIndex,name}) — pass that programIndex to "
-                "describe_script for the script's source and dialog.",
-                json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
-                [](resource::GameResources& r, const json& a) { return toolAnalyze(r, a); } });
-            t.push_back({ "palette",
-                "The weighted generation palette for the given maps (omit 'maps' for all), aggregated: "
-                "{ floor:[{id,name,weight}], scenery:[{pid,number,name,weight}] }. Just what a generator "
-                "script needs — floor 'id' for api:paintFloor, scenery 'number' for api:proto, 'weight' = "
-                "real placement count — without the full analyze report. scenery is scatter-eligible only "
-                "(scenery type, non-flat).",
-                json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
-                [](resource::GameResources& r, const json& a) { return toolPalette(r, a); } });
-            t.push_back({ "proto_info",
-                "Resolve a proto PID to its type, engine display name and 'flat' flag.",
-                json({ { "type", "object" }, { "properties", { { "pid", { { "type", "integer" } } } } }, { "required", json::array({ "pid" }) } }),
-                [](resource::GameResources& r, const json& a) { return toolProtoInfo(r, a); } });
-            t.push_back({ "describe_script",
-                "Describe a Fallout 2 script by its scripts.lst program index (the 0-based script_id "
-                "analyze reports for a critter/object). Returns the filename, the .ssl source if a "
-                "script-source tree is mounted (e.g. the FRP scripts_src — hasSource flags whether it was "
-                "found), and the dialog .msg lines ([{id,text}]). Lets you read what an NPC does and says. "
-                "Optional 'locale' picks the dialog language subdir (default english). Args: programIndex, "
-                "optional locale.",
-                json({ { "type", "object" }, { "properties", { { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "required", json::array({ "programIndex" }) } }),
-                [](resource::GameResources& r, const json& a) { return toolDescribeScript(r, a); } });
-            t.push_back({ "reachability",
-                "Per-elevation reachability for one map. Floods walkable hexes from the entry points "
-                "(player start + exit grids — you can arrive at an exit coming from the adjacent map): "
-                "'reachableHexes' of 'walkableHexes'; 'orphanedObjects' ([{pid,name,hex}], with "
-                "'orphanedObjectCount') are critters/items cut off from every entry — usually a sealed-off "
-                "area or a map bug. 'exits' lists each exit grid with 'reachableFromPlayerStart' "
-                "(walk-connected to the spawn specifically; null if the player spawns elsewhere). "
-                "OPTIMISTIC, not exact pathfinding: doors (incl. locked) are passable, so it over-estimates "
-                "rather than crying wolf. Args: map.",
-                json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
-                [](resource::GameResources& r, const json& a) { return toolReachability(r, a); } });
-            t.push_back({ "describe_map",
-                "One structured digest for a single map, composed from analyze + reachability: the header "
-                "(elevations, darkness, player start, map script, map variables), floor usage (biome), "
-                "object 'clusters' (structures), the 'critters' roster with ai.txt-resolved AI and each "
-                "one's attached {programIndex,name} script, the 'exits' graph, and a 'reachability' field "
-                "(per-elevation walkable/reachable hexes + entry-orphaned objects). Gathers the engine's "
-                "own semantic evidence in one call — join keys (pid, script_id, ai_packet) are preserved — "
-                "so you can infer the map's purpose and follow up with describe_script on any roster entry. "
-                "Args: map.",
-                json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
-                [](resource::GameResources& r, const json& a) { return toolDescribeMap(r, a); } });
-            t.push_back({ "generate",
-                "Run a Luau generation script against a fresh map and write a .map. Args: script (path to "
-                "the .luau), out (filesystem path for the .map — render_map/analyze can read it straight "
-                "back), optional elevation, optional args (string map), optional stamps (name -> stamp "
-                ".json path, placed by the script with api:placeStamp(name, anchorHex, variant)). Scripting "
-                "build required.",
-                json({ { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } }),
-                [](resource::GameResources& r, const json& a) { return toolGenerate(r, a); } });
-            t.push_back({ "render_map",
-                "Render a map to a PNG so it can be seen, not just measured. Args: map (.map path), out "
-                "(output .png path), optional elevation, optional maxDimension (longest side in px, default "
-                "1600), optional showRoof, optional schematic. schematic=true flat-colours floor tiles by "
-                "id and marks objects by category, and returns a colour legend (id/type -> colour -> count) "
-                "so you can match the picture to the analyze JSON and read the floor-tile transitions. "
-                "objects=true instead mutes the floor to grey so the category-coloured object markers pop "
-                "(for checking scatter). semantic=true also greys the floor but colours markers by role — "
-                "exit grids highlighted, critters by team, scripted objects ringed (legend keyed by role) — "
-                "the purpose layer that pairs with describe_map. FLAT objects (invisible engine blockers) "
-                "are hidden unless showBlockers. map/out are filesystem paths — out is written there, and "
-                "map may be a VFS path or any file on disk (e.g. one generate just wrote). Needs an "
-                "off-screen GL context.",
-                json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "semantic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } }),
-                [](resource::GameResources& r, const json& a) { return toolRender(r, a); } });
-            t.push_back({ "script_api",
-                "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
-                "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "
-                "are auto-seeded and auto-batched) and the error model. Read this before writing a script "
-                "for `generate`.",
-                json({ { "type", "object" }, { "properties", json::object() } }),
-                [](resource::GameResources&, const json&) { return toolScriptApi(); } });
-            t.push_back({ "extract_pattern",
-                "Capture a structure from a real map into a reusable pattern stamp (JSON the editor's "
-                "pattern library reads, and generate can place). Locate it with 'pids' (proto PIDs from "
-                "analyze that make up the structure) — their bounding box, grown by 'radius' (default 2) "
-                "hexes, is the capture region, so immediate props nearby come along — or pass 'anchorHex' "
-                "directly. Objects are captured verbatim; pass includeFloor=true to capture the ground and "
-                "includeRoof=true to capture the roof layer (a tent/building roof is tiles, not an object — "
-                "without includeRoof the stamp is topless). Args: map, out, name, optional elevation, pids "
-                "(int array), anchorHex, radius, includeFloor, includeRoof.",
-                json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "name", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "pids", { { "type", "array" }, { "items", { { "type", "integer" } } } } }, { "anchorHex", { { "type", "integer" } } }, { "radius", { { "type", "integer" } } }, { "includeFloor", { { "type", "boolean" } } }, { "includeRoof", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out", "name" }) } }),
-                [](resource::GameResources& r, const json& a) { return toolExtractPattern(r, a); } });
+            addReadOnlyTools(t);
+            addMutatingTools(t);
             return t;
         }();
         return tools;
