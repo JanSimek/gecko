@@ -228,6 +228,9 @@ namespace {
         if (const auto it = args.find("objects"); it != args.end() && it->is_boolean()) {
             opts.objects = it->get<bool>();
         }
+        if (const auto it = args.find("semantic"); it != args.end() && it->is_boolean()) {
+            opts.semantic = it->get<bool>();
+        }
         if (const auto it = args.find("showBlockers"); it != args.end() && it->is_boolean()) {
             opts.showBlockers = it->get<bool>();
         }
@@ -373,11 +376,14 @@ namespace {
                                  "-> colour -> count) so you can match the picture to the analyze JSON "
                                  "and read the floor-tile transitions. objects=true instead mutes the "
                                  "floor to grey so the category-coloured object markers pop (for checking "
-                                 "scatter). FLAT objects (invisible engine blockers) are hidden unless "
-                                 "showBlockers. map/out are filesystem paths — out is written there, and map "
-                                 "may be a VFS path or any file on disk (e.g. one generate just wrote). Needs "
-                                 "an off-screen GL context." },
-                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } } } },
+                                 "scatter). semantic=true also greys the floor but colours markers by "
+                                 "role — exit grids highlighted, critters by team, scripted objects ringed "
+                                 "(legend keyed by role) — the purpose layer that pairs with describe_map. "
+                                 "FLAT objects (invisible engine blockers) are hidden unless showBlockers. "
+                                 "map/out are filesystem paths — out is written there, and map may be a VFS "
+                                 "path or any file on disk (e.g. one generate just wrote). Needs an "
+                                 "off-screen GL context." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "semantic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } } } },
             { { "name", "script_api" },
                 { "description", "The generation-script `api` reference (Markdown): every function a `generate` "
                                  "Luau script can call on the global `api`, with signatures, plus the non-obvious "

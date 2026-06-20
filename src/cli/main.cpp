@@ -48,13 +48,14 @@ void printUsage(const char* program) {
               << "      --arg passes parameters to the script (read as args.key); --stamp pre-loads a\n"
               << "      pattern stamp the script places with api:placeStamp(name, anchorHex, variant).\n"
               << "  " << program << " map render --map <file.map> --out <file.png>\n"
-              << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic|--objects]\n"
+              << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic|--objects|--semantic]\n"
               << "      [--show-blockers] --data <dir-or-.dat> [...]\n"
               << "      Renders a map to a PNG (needs an off-screen GL context). --max-dim caps the\n"
               << "      longest side (default 1600); --roof draws the roof layer over the floor.\n"
               << "      --schematic flat-colours floor tiles by id + marks objects by category (with a\n"
               << "      colour legend); --objects mutes the floor to grey so the object markers pop\n"
-              << "      (for checking scatter); --show-blockers also marks FLAT objects.\n"
+              << "      (for checking scatter); --semantic greys the floor and colours markers by role\n"
+              << "      (exit grids, critters by team, scripted ringed); --show-blockers also marks FLAT.\n"
               << "  " << program << " map extract-pattern --map <file.map> --out <file.json> --name <name>\n"
               << "      [--pids id,id,...] [--anchor <hex>] [--radius N] [--elevation 0|1|2]\n"
               << "      [--include-floor] [--include-roof] --data <dir-or-.dat> [--data <...>]\n"
@@ -201,6 +202,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     }
     if (out.render && arg == "--objects") {
         out.ren.objects = true;
+        return 1;
+    }
+    if (out.render && arg == "--semantic") {
+        out.ren.semantic = true;
         return 1;
     }
     if (out.render && arg == "--show-blockers") {

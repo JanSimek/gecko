@@ -24,6 +24,9 @@ namespace cli {
         bool schematic = false;
         /// Objects style: muted-grey floor + category-coloured object markers, for verifying scatter.
         bool objects = false;
+        /// Semantic style: grey floor + markers coloured by role (exit grids highlighted, critters by
+        /// team, scripted objects ringed) — the map's purpose layer, paired with describe_map.
+        bool semantic = false;
         /// Schematic/objects only: also mark FLAT objects (invisible engine blockers); off by default.
         bool showBlockers = false;
     };

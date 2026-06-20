@@ -737,9 +737,13 @@ from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
    (reached via stairs/elevators) report `reachableHexes: null` + a note. Optimistic on doors, so it
    under-reports rather than crying wolf. Verified: artemple/denbus1/newr1 clean (0 orphans),
    vctydwtn flags a real isolated servant/slave cluster.
-5. **Semantic render overlay** (extends the schematic): colour critters by team, mark exits,
-   highlight scripted objects, shade unreachable regions, so the agent can *see* purpose and tie it
-   to the JSON via the legend. **Phase 3.**
+5. **Semantic render overlay** (extends the schematic). **Object roles done:** a `Semantic` render
+   style (`render_map semantic:true` / CLI `--semantic`) greys the floor and colours object markers
+   by role — exit grids highlighted, critters by team (`group_id`), scripted objects (`map_scripts_pid`)
+   ringed — with a role-keyed legend that joins back to `describe_map`. **Still open:** *shading the
+   unreachable regions* `reachability`/`describe_map` identify, which needs a per-hex reachable mask
+   exposed from `MapReachability` and a hex→world tint in the renderer (the object-marker path here is
+   sprite-bounds-based and doesn't map arbitrary hexes). **Phase 3.**
 
 **Corpus angle (multiplier):** index `analyze` + these semantic facts across all shipped maps so
 the agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improving

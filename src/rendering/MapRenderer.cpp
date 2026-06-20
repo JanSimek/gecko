@@ -286,6 +286,81 @@ namespace {
             std::ranges::sort(legend->objects, [](const auto& a, const auto& b) { return a.count > b.count; });
         }
     }
+
+    // Semantic overlay: colour each object marker by its *role* — exit grids highlighted (and always
+    // shown, though flat), critters by team (group_id), everything else by category — and ring any
+    // object that carries a map script. The legend keys on the role so it joins back to describe_map.
+    void drawSemanticMarkers(sf::RenderTexture& target, const std::vector<std::shared_ptr<Object>>& objects,
+        resource::GameResources& resources, bool showBlockers, MapRenderer::Legend* legend) {
+        std::unordered_map<uint32_t, bool> flatCache;
+        std::map<std::string, std::pair<sf::Color, int>> roles; // role -> {colour, count}
+        int scriptedCount = 0;
+        for (const auto& object : objects) {
+            if (!object || !object->hasMapObject()) {
+                continue;
+            }
+            const auto mo = object->getMapObjectPtr();
+            const uint32_t pid = mo->pro_pid;
+            const bool exitGrid = mo->isExitGridMarker();
+            // Exit grids are flat (engine blockers) but semantically important, so show them even
+            // when other flat objects are hidden.
+            if (!showBlockers && !exitGrid && isFlatProto(resources, pid, flatCache)) {
+                continue;
+            }
+
+            const sf::FloatRect b = object->getSprite().getGlobalBounds();
+            const sf::Vector2f center{ b.position.x + b.size.x / 2.0f, b.position.y + b.size.y / 2.0f };
+            const Pro::OBJECT_TYPE type = Pro::typeOfPid(pid);
+
+            sf::Color fill;
+            std::string role;
+            float radius = 5.0f;
+            if (exitGrid) {
+                fill = sf::Color(64, 210, 235);
+                role = "exit grid";
+                radius = 6.0f;
+            } else if (type == Pro::OBJECT_TYPE::CRITTER) {
+                fill = distinctColor(static_cast<int>(mo->group_id));
+                role = "critter team " + std::to_string(mo->group_id);
+            } else {
+                fill = categoryColor(type);
+                role = Pro::typeToString(type);
+            }
+
+            sf::CircleShape marker(radius);
+            marker.setOrigin({ radius, radius });
+            marker.setPosition(center);
+            marker.setFillColor(fill);
+            marker.setOutlineColor(sf::Color(20, 20, 20, 200));
+            marker.setOutlineThickness(1.0f);
+            target.draw(marker);
+
+            if (mo->map_scripts_pid >= 0) { // has an attached map script
+                const float ringRadius = radius + 3.0f;
+                sf::CircleShape ring(ringRadius);
+                ring.setOrigin({ ringRadius, ringRadius });
+                ring.setPosition(center);
+                ring.setFillColor(sf::Color::Transparent);
+                ring.setOutlineColor(sf::Color(245, 225, 70));
+                ring.setOutlineThickness(1.5f);
+                target.draw(ring);
+                ++scriptedCount;
+            }
+
+            auto& entry = roles[role];
+            entry.first = fill;
+            ++entry.second;
+        }
+        if (legend != nullptr) {
+            for (const auto& [role, colorCount] : roles) {
+                legend->objects.push_back({ role, colorCount.first, colorCount.second });
+            }
+            if (scriptedCount > 0) {
+                legend->objects.push_back({ "scripted (yellow ring)", sf::Color(245, 225, 70), scriptedCount });
+            }
+            std::ranges::sort(legend->objects, [](const auto& a, const auto& b) { return a.count > b.count; });
+        }
+    }
 } // namespace
 
 MapRenderer::MapRenderer(resource::GameResources& resources)
@@ -293,7 +368,7 @@ MapRenderer::MapRenderer(resource::GameResources& resources)
 }
 
 sf::Image MapRenderer::renderToImage(Map& map, const Options& options, Legend* legend) {
-    if (options.style == Style::Schematic || options.style == Style::Objects) {
+    if (options.style == Style::Schematic || options.style == Style::Objects || options.style == Style::Semantic) {
         return renderSchematic(map, options, legend);
     }
     return renderNatural(map, options);
@@ -364,7 +439,8 @@ sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend*
     const std::vector<Tile> noTiles;
     const std::vector<Tile>& tiles = tilesIt != allTiles.end() ? tilesIt->second : noTiles;
 
-    const std::unordered_map<uint16_t, sf::Color> floorColor = options.style == Style::Objects
+    const bool semantic = options.style == Style::Semantic;
+    const std::unordered_map<uint16_t, sf::Color> floorColor = (options.style == Style::Objects || semantic)
         ? uniformFloorColors(tiles)
         : assignFloorColors(tiles, legend);
 
@@ -393,7 +469,11 @@ sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend*
     const std::unique_ptr<sf::RenderTexture> target = makeTarget(computeFrame(bounds, options.maxDimension));
     target->clear(options.background);
     target->draw(floor);
-    drawObjectMarkers(*target, objects, _resources, options.showBlockers, legend);
+    if (semantic) {
+        drawSemanticMarkers(*target, objects, _resources, options.showBlockers, legend);
+    } else {
+        drawObjectMarkers(*target, objects, _resources, options.showBlockers, legend);
+    }
     target->display();
     return target->getTexture().copyToImage();
 }
