@@ -46,6 +46,17 @@ live with their library (`src/resource/`, `src/ui/`).
     preview ignores them, so frames with slightly different centres wobble. **Fix:** position
     each preview frame by its FRM offset relative to a fixed anchor (mirror how the map
     renderer/`Object` applies `shiftX/shiftY`) instead of re-centering per frame.
+11. **Keybindings are hardcoded — no user remapping.** Shortcuts are scattered and fixed: the
+    menu/toolbar `QKeySequence`s in `MainWindow::setupMenuBar()`/`setupToolBar()` (New/Open/Save,
+    Select All `Ctrl+A`, scroll-blocker `B`, exit grids `Ctrl+E`, undo/redo, …), the editor-mode
+    keys in `InputHandler::handleKeyPressed` (`R` cycles a stamp variant, `Esc` cancels, `Delete`/
+    `Backspace` deletes), and a few ad-hoc ones (F11 spatial-script, F16). There is no central
+    registry or any UI to view or change them. **Add configurable keybindings:** a single
+    command/action table (stable action id → default `QKeySequence` + human label/category), a
+    Preferences page to rebind with live conflict detection, and persistence via `Settings`. Drive
+    the menu/toolbar `QAction`s *and* the `InputHandler` dispatch from that table instead of
+    literals, so a rebind takes effect everywhere and the bindings stay discoverable. Engine-fidelity
+    note: this is editor UX only — it changes no map/format data.
 
 ### Exit-grid shapes (rectangle-only) — limitation #2 in detail
 

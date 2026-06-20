@@ -22,15 +22,12 @@
 #include "selection/SelectionDataProvider.h"
 #include "util/Constants.h"
 #include "util/UndoStack.h"
-#include "editing/commands/ObjectCommandController.h"
-#include "rendering/MapSpriteLoader.h"
 #include "rendering/RenderingEngine.h"
 #include "ui/tiles/TilePlacementContext.h"
 #include "ui/input/InputHandler.h"
 #include "ui/core/EditorMode.h"
+#include "ui/core/EditorController.h"
 #include "ui/core/EditorSession.h"
-#include "ui/core/ObjectPicker.h"
-#include "ui/core/SelectionVisualizer.h"
 #include "pattern/Pattern.h"
 #include "ui/tools/ExitGridContext.h"
 #include "ui/dragdrop/DragDropContext.h"
@@ -169,7 +166,7 @@ public:
     selection::SelectionManager* getSelectionManager() const override { return _session.selectionManager(); }
     TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
     ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
-    ViewportController* getViewportController() const override { return _viewportController.get(); }
+    ViewportController* getViewportController() const override { return &_controller.viewport(); }
     int& getCurrentHoverHex() override { return _currentHoverHex; }
     void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves) override;
     void moveSelectedTilesForDrag(sf::Vector2f worldTranslation) override;
@@ -341,25 +338,22 @@ private:
     SFMLWidget* _sfmlWidget;
     class MainWindow* _mainWindow;
 
-    // Mutable editing state for the open map. Declared before the managers below
-    // so it outlives them: several hold references into it (e.g. the undo stack).
-    EditorSession _session;
-    // Pixel-perfect object picking over the session's objects (backs the
-    // SelectionDataProvider getObjectsAtPosition()/isObjectSelectable() overrides).
-    ObjectPicker _objectPicker{ _session };
-    // Visual-selection state (object highlights + tile/hex outline index lists) the renderer
-    // reads; fed by the selection callback.
-    SelectionVisualizer _selectionVisualizer{ _session };
+    // Owns the editor's per-map state and the Qt-free helpers that act on it (object
+    // picking, selection visuals). Declared before the managers below so it outlives
+    // them: several hold references into the session (e.g. the undo stack).
+    EditorController _controller;
+    // Reference into the controller's session so the many _session.x() call sites stay
+    // unchanged while the controller owns the storage.
+    EditorSession& _session{ _controller.session() };
 
-    // Input, rendering, drag/drop, tile placement, and viewport systems
+    // Input + drag/drop + tile/exit-grid placement systems (the Qt-coupled managers).
     std::unique_ptr<InputHandler> _inputHandler;
-    std::unique_ptr<RenderingEngine> _renderingEngine;
-    std::unique_ptr<MapSpriteLoader> _mapSpriteLoader;
-    std::unique_ptr<ObjectCommandController> _objectCommandController;
+    // RenderingEngine, MapSpriteLoader, ObjectCommandController and ViewportController now live
+    // in _controller (the Qt-free editor core).
     std::unique_ptr<DragDropManager> _dragDropManager;
     std::unique_ptr<TilePlacementManager> _tilePlacementManager;
     std::unique_ptr<ExitGridPlacementManager> _exitGridPlacementManager;
-    std::unique_ptr<ViewportController> _viewportController;
+    // ViewportController now lives in _controller.
 
     // Game/Editor State
     SelectionMode _currentSelectionMode = SelectionMode::ALL;

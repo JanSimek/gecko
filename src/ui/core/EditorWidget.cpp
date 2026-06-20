@@ -11,6 +11,7 @@
 #include <QFileInfo>
 #include <QStringList>
 #endif
+#include "editing/commands/ObjectCommandController.h"
 #include "rendering/MapSpriteLoader.h"
 #include "rendering/RenderingEngine.h"
 #include "ui/dragdrop/DragDropManager.h"
@@ -66,22 +67,15 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
         initializeSelectionSystem();
     }
 
-    _renderingEngine = std::make_unique<RenderingEngine>(_resources);
-    _mapSpriteLoader = std::make_unique<MapSpriteLoader>(_resources, _session.hexgrid());
-    _objectCommandController = std::make_unique<ObjectCommandController>(
-        _resources,
-        _session.mapPtr(),
-        _session.hexgrid(),
-        *_mapSpriteLoader,
-        _session.objects(),
-        _session.wallBlockerOverlays(),
-        _session.undoStack(),
-        [this]() { refreshObjects(); },
-        [this]() { Q_EMIT undoStackChanged(); },
-        [this](int elevation) -> std::vector<Tile>& { return ensureElevationTiles(elevation); },
-        [this]() { return _session.currentElevation(); },
-        [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); },
-        [this]() { loadTileSprites(); });
+    _controller.initEditingCore(_resources,
+        EditorController::EditingCoreCallbacks{
+            .refreshObjects = [this]() { refreshObjects(); },
+            .undoStackChanged = [this]() { Q_EMIT undoStackChanged(); },
+            .ensureElevationTiles = [this](int elevation) -> std::vector<Tile>& { return ensureElevationTiles(elevation); },
+            .currentElevation = [this]() { return _session.currentElevation(); },
+            .updateTileSprite = [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); },
+            .loadTileSprites = [this]() { loadTileSprites(); },
+        });
     _inputHandler = std::make_unique<InputHandler>();
     _dragDropManager = std::make_unique<DragDropManager>(
         *this,
@@ -97,41 +91,40 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
             if (auto* mw = getMainWindow())
                 mw->showStatusMessage(m);
         });
-    _viewportController = std::make_unique<ViewportController>(&_session.hexgrid());
     setupInputCallbacks();
 
     setupUI();
-    _viewportController->centerViewOnMap();
+    _controller.viewport().centerViewOnMap();
 }
 
 // Tile-edit command logic lives in ObjectCommandController (the single command
 // owner); these are thin TilePlacementContext delegators. The controller invokes
 // ensureElevationTiles/updateTileSprite/getCurrentElevation back through callbacks.
 void EditorWidget::applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState) {
-    _objectCommandController->applyTileChanges(changes, applyAfterState);
+    _controller.commandController().applyTileChanges(changes, applyAfterState);
 }
 
 void EditorWidget::registerTileEdit(const QString& description, const std::vector<TileChange>& changes) {
-    _objectCommandController->registerTileEdit(description.toStdString(), changes);
+    _controller.commandController().registerTileEdit(description.toStdString(), changes);
 }
 
 void EditorWidget::addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
-    _objectCommandController->addPlacedObject(mapObject, object);
+    _controller.commandController().addPlacedObject(mapObject, object);
 }
 
 void EditorWidget::removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
-    _objectCommandController->removePlacedObject(mapObject, object);
+    _controller.commandController().removePlacedObject(mapObject, object);
 }
 
 // The register*() helpers below forward to the controller, which emits undoStackChanged
 // through its onStackChanged callback (wired in the constructor).
 void EditorWidget::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
-    _objectCommandController->registerObjectPlacement(mapObject, object);
+    _controller.commandController().registerObjectPlacement(mapObject, object);
 }
 
 void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects,
     const std::vector<std::pair<int, int>>& moves) {
-    _objectCommandController->registerObjectMove(objects, moves);
+    _controller.commandController().registerObjectMove(objects, moves);
 }
 
 void EditorWidget::moveSelectedTilesForDrag(sf::Vector2f worldTranslation) {
@@ -139,7 +132,7 @@ void EditorWidget::moveSelectedTilesForDrag(sf::Vector2f worldTranslation) {
         return;
     }
     const auto changes = _session.selectionManager()->planSelectionMoveForTranslation(worldTranslation);
-    _objectCommandController->applyTileEdit("Move Tiles", changes);
+    _controller.commandController().applyTileEdit("Move Tiles", changes);
 }
 
 std::optional<selection::SelectedItem> EditorWidget::remapSelectedItemAfterMove(
@@ -214,11 +207,11 @@ void EditorWidget::reselectAfterDragMove(sf::Vector2f worldTranslation) {
 }
 
 void EditorWidget::beginMoveBatch(const std::string& description) {
-    _objectCommandController->beginBatch(description);
+    _controller.commandController().beginBatch(description);
 }
 
 void EditorWidget::endMoveBatch() {
-    _objectCommandController->endBatch();
+    _controller.commandController().endBatch();
 }
 
 void EditorWidget::beginTileDragPreview() {
@@ -231,9 +224,9 @@ void EditorWidget::beginTileDragPreview() {
             }
         }
     };
-    capture(false, _selectionVisualizer.floorVisuals(), _session.floorSprites());
+    capture(false, _controller.visualizer().floorVisuals(), _session.floorSprites());
     if (_session.visibility().showRoof) {
-        capture(true, _selectionVisualizer.roofVisuals(), _session.roofSprites());
+        capture(true, _controller.visualizer().roofVisuals(), _session.roofSprites());
     }
 }
 
@@ -253,58 +246,58 @@ void EditorWidget::endTileDragPreview() {
 }
 
 void EditorWidget::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs) {
-    _objectCommandController->registerObjectRotation(objects, beforeDirs, afterDirs);
+    _controller.commandController().registerObjectRotation(objects, beforeDirs, afterDirs);
 }
 
 void EditorWidget::applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath) {
-    _objectCommandController->applyFrmToObject(object, frmPid, frmPath);
+    _controller.commandController().applyFrmToObject(object, frmPid, frmPath);
 }
 
 void EditorWidget::registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath) {
-    _objectCommandController->registerObjectFrmChange(object, oldFrmPid, oldFrmPath, newFrmPid, newFrmPath);
+    _controller.commandController().registerObjectFrmChange(object, oldFrmPid, oldFrmPath, newFrmPid, newFrmPath);
 }
 
 void EditorWidget::registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation) {
-    _objectCommandController->registerExitGridCreation(exitGrids, elevation);
+    _controller.commandController().registerExitGridCreation(exitGrids, elevation);
 }
 
 void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
     const std::vector<ExitGridState>& beforeStates,
     const std::vector<ExitGridState>& afterStates) {
-    _objectCommandController->registerExitGridEdit(exitGrids, beforeStates, afterStates);
+    _controller.commandController().registerExitGridEdit(exitGrids, beforeStates, afterStates);
 }
 
 void EditorWidget::registerInstanceEdit(const std::shared_ptr<MapObject>& mapObject,
     const MapObjectInstanceState& before,
     const MapObjectInstanceState& after,
     const std::string& description) {
-    _objectCommandController->registerInstanceEdit(mapObject, before, after, description);
+    _controller.commandController().registerInstanceEdit(mapObject, before, after, description);
 }
 
 void EditorWidget::clearElevationObjects(int elevation) {
-    _objectCommandController->clearElevationObjects(elevation);
+    _controller.commandController().clearElevationObjects(elevation);
 }
 
 void EditorWidget::copyElevation(int fromElevation, int toElevation) {
-    _objectCommandController->copyElevation(fromElevation, toElevation);
+    _controller.commandController().copyElevation(fromElevation, toElevation);
 }
 
 void EditorWidget::registerInventoryEdit(const std::shared_ptr<MapObject>& container,
     std::vector<std::shared_ptr<MapObject>> before,
     std::vector<std::shared_ptr<MapObject>> after) {
-    _objectCommandController->registerInventoryEdit(container, std::move(before), std::move(after));
+    _controller.commandController().registerInventoryEdit(container, std::move(before), std::move(after));
 }
 
 void EditorWidget::attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex) {
-    _objectCommandController->attachScript(object, scriptType, programIndex);
+    _controller.commandController().attachScript(object, scriptType, programIndex);
 }
 
 void EditorWidget::detachScript(const std::shared_ptr<MapObject>& object) {
-    _objectCommandController->detachScript(object);
+    _controller.commandController().detachScript(object);
 }
 
 void EditorWidget::addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius) {
-    _objectCommandController->addSpatialScript(programIndex, tile, elevation, radius);
+    _controller.commandController().addSpatialScript(programIndex, tile, elevation, radius);
 }
 
 EditorWidget::~EditorWidget() {
@@ -326,8 +319,8 @@ void EditorWidget::initializeSelectionSystem() {
     _session.setSelectionManager(std::make_unique<selection::SelectionManager>(*this));
 
     _session.selectionManager()->setSelectionCallback([this](const selection::SelectionState& selection) {
-        _selectionVisualizer.clear();
-        _selectionVisualizer.apply(selection);
+        _controller.visualizer().clear();
+        _controller.visualizer().apply(selection);
         Q_EMIT selectionChanged(selection, _session.currentElevation());
     });
 }
@@ -380,7 +373,7 @@ void EditorWidget::init() {
             static_cast<unsigned int>(_sfmlWidget->width()),
             static_cast<unsigned int>(_sfmlWidget->height()));
     }
-    _viewportController->initialize(windowSize);
+    _controller.viewport().initialize(windowSize);
 }
 
 #ifdef GECK_SCRIPTING_ENABLED
@@ -427,12 +420,12 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
     if (!_session.map()) {
         return { false, "No map loaded", "" };
     }
-    MapScriptApi api(_resources, _session.hexgrid(), *_objectCommandController, *_session.map(), _session.currentElevation());
+    MapScriptApi api(_resources, _session.hexgrid(), _controller.commandController(), *_session.map(), _session.currentElevation());
     // so api:placeStamp(name, ...) finds the user's saved patterns; any unloadable file is reported.
     const std::string stampNotes = registerLibraryStamps(api);
     LuaScriptRuntime runtime;
     // The continuous SFML render loop shows the script's edits on the next frame.
-    ScriptResult result = runtime.run(source, api, *_objectCommandController, "Run script");
+    ScriptResult result = runtime.run(source, api, _controller.commandController(), "Run script");
     if (!stampNotes.empty()) {
         result.output = result.output.empty() ? stampNotes : stampNotes + "\n" + result.output;
     }
@@ -443,7 +436,7 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
         if (_session.selectionManager()) {
             _session.selectionManager()->clearSelection();
         }
-        _selectionVisualizer.clearHexPositions();
+        _controller.visualizer().clearHexPositions();
         if (_mainWindow) {
             _mainWindow->updateMapInfo(_session.map());
         }
@@ -519,7 +512,7 @@ void EditorWidget::createNewMap() {
     _session.floorSprites().clear();
     _session.roofSprites().clear();
     _session.wallBlockerOverlays().clear();
-    _selectionVisualizer.clearHexPositions();
+    _controller.visualizer().clearHexPositions();
 
     // Load the core helper textures needed by an empty map.
     // Resource lists are bootstrapped once during startup.
@@ -536,7 +529,7 @@ void EditorWidget::createNewMap() {
     loadSprites();
 
     _session.selectionManager()->clearSelection();
-    _viewportController->centerViewOnMap();
+    _controller.viewport().centerViewOnMap();
 
     if (_mainWindow) {
         _mainWindow->updateMapInfo(_session.map());
@@ -551,10 +544,10 @@ std::vector<int> EditorWidget::calculateRectangleBorderHexes(sf::FloatRect recta
     sf::Vector2f bottomLeft = sf::Vector2f(rectangle.position.x, rectangle.position.y + rectangle.size.y);
     sf::Vector2f bottomRight = sf::Vector2f(rectangle.position.x + rectangle.size.x, rectangle.position.y + rectangle.size.y);
 
-    int topLeftHex = _viewportController->worldPosToHexIndex(topLeft);
-    int topRightHex = _viewportController->worldPosToHexIndex(topRight);
-    int bottomLeftHex = _viewportController->worldPosToHexIndex(bottomLeft);
-    int bottomRightHex = _viewportController->worldPosToHexIndex(bottomRight);
+    int topLeftHex = _controller.viewport().worldPosToHexIndex(topLeft);
+    int topRightHex = _controller.viewport().worldPosToHexIndex(topRight);
+    int bottomLeftHex = _controller.viewport().worldPosToHexIndex(bottomLeft);
+    int bottomRightHex = _controller.viewport().worldPosToHexIndex(bottomRight);
 
     if (!_session.hexgrid().containsPosition(topLeftHex)
         || !_session.hexgrid().containsPosition(topRightHex)
@@ -614,12 +607,12 @@ void EditorWidget::loadTileSprites() {
         return;
     }
 
-    _mapSpriteLoader->loadTileSprites(*_session.map(), _session.currentElevation(), _session.floorSprites(), _session.roofSprites());
+    _controller.spriteLoader().loadTileSprites(*_session.map(), _session.currentElevation(), _session.floorSprites(), _session.roofSprites());
 }
 
 void EditorWidget::loadSprites() {
     spdlog::stopwatch sw;
-    _mapSpriteLoader->loadSprites(*_session.map(), _session.currentElevation(), _session.floorSprites(), _session.roofSprites(), _session.objects(), _session.wallBlockerOverlays());
+    _controller.spriteLoader().loadSprites(*_session.map(), _session.currentElevation(), _session.floorSprites(), _session.roofSprites(), _session.objects(), _session.wallBlockerOverlays());
 
     _session.selectionManager()->initializeSpatialIndex();
 
@@ -627,11 +620,11 @@ void EditorWidget::loadSprites() {
 }
 
 bool EditorWidget::isObjectSelectable(const std::shared_ptr<Object>& object) const {
-    return _objectPicker.isSelectable(object);
+    return _controller.picker().isSelectable(object);
 }
 
 std::vector<std::shared_ptr<Object>> EditorWidget::getObjectsAtPosition(sf::Vector2f worldPos) {
-    return _objectPicker.objectsAtPosition(worldPos);
+    return _controller.picker().objectsAtPosition(worldPos);
 }
 
 bool EditorWidget::isDoubleClick(sf::Vector2f worldPos) {
@@ -649,15 +642,13 @@ bool EditorWidget::isDoubleClick(sf::Vector2f worldPos) {
 // SFML event handling interface (called by SFMLWidget)
 void EditorWidget::handleEvent(const sf::Event& event) {
     if (const auto* resized = event.getIf<sf::Event::Resized>()) {
-        if (_viewportController) {
-            _viewportController->updateViewForWindowSize(sf::Vector2u(resized->size.x, resized->size.y));
-            spdlog::debug("EditorWidget: Handled window resize to {}x{}", resized->size.x, resized->size.y);
-        }
+        _controller.viewport().updateViewForWindowSize(sf::Vector2u(resized->size.x, resized->size.y));
+        spdlog::debug("EditorWidget: Handled window resize to {}x{}", resized->size.x, resized->size.y);
     }
 
     if (_inputHandler && _sfmlWidget) {
         if (auto* target = _sfmlWidget->getRenderTarget()) {
-            _inputHandler->handleEvent(event, *target, _viewportController->getView());
+            _inputHandler->handleEvent(event, *target, _controller.viewport().getView());
         }
     }
 }
@@ -750,12 +741,12 @@ void EditorWidget::bindInteractionCallbacks(InputHandler::Callbacks& callbacks) 
     };
 
     callbacks.onPan = [this](sf::Vector2f delta) {
-        sf::Vector2f center = _viewportController->getView().getCenter();
-        _viewportController->getView().setCenter(center + delta);
+        sf::Vector2f center = _controller.viewport().getView().getCenter();
+        _controller.viewport().getView().setCenter(center + delta);
     };
 
     callbacks.onZoom = [this](float direction) {
-        _viewportController->zoomView(direction);
+        _controller.viewport().zoomView(direction);
     };
 
     callbacks.canStartObjectDrag = [this](sf::Vector2f worldPos) {
@@ -787,7 +778,7 @@ void EditorWidget::bindInteractionCallbacks(InputHandler::Callbacks& callbacks) 
 
 void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     callbacks.onPlayerPositionSelect = [this](sf::Vector2f worldPos) {
-        int hexPosition = _viewportController->worldPosToHexIndex(worldPos);
+        int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
         if (hexPosition >= 0) {
             Q_EMIT playerPositionSelected(hexPosition);
             spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
@@ -838,7 +829,7 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     };
 
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
-        _currentHoverHex = _viewportController->updateHoverHex(worldPos);
+        _currentHoverHex = _controller.viewport().updateHoverHex(worldPos);
         Q_EMIT hexHoverChanged(_currentHoverHex);
         if (_mode == EditorMode::StampPattern) {
             updateStampPreview(worldPos);
@@ -917,7 +908,7 @@ void EditorWidget::update([[maybe_unused]] const float dt) {
 
 void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float dt) {
     // Called by the SFMLWidget's render loop
-    if (!_renderingEngine) {
+    if (!_controller.hasRenderingEngine()) {
         return;
     }
 
@@ -938,9 +929,9 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.roofSprites = &_session.roofSprites();
     renderData.objects = &_session.objects();
     renderData.wallBlockerOverlays = &_session.wallBlockerOverlays();
-    renderData.selectedHexPositions = &_selectionVisualizer.hexPositions();
-    renderData.selectedFloorTiles = &_selectionVisualizer.floorVisuals();
-    renderData.selectedRoofTiles = &_selectionVisualizer.roofVisuals();
+    renderData.selectedHexPositions = &_controller.visualizer().hexPositions();
+    renderData.selectedFloorTiles = &_controller.visualizer().floorVisuals();
+    renderData.selectedRoofTiles = &_controller.visualizer().roofVisuals();
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
     renderData.stampPreviewFloorTiles = &_stampPreviewFloorTiles;
@@ -956,7 +947,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.map = _session.map();
     renderData.currentElevation = _session.currentElevation();
 
-    _renderingEngine->render(target, _viewportController->getView(), renderData, visibility);
+    _controller.renderingEngine().render(target, _controller.viewport().getView(), renderData, visibility);
 }
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
@@ -1240,7 +1231,7 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
     if (!_stampPattern || !_session.map() || _stampPattern->variants.empty()) {
         return;
     }
-    const int hex = _viewportController->worldPosToHexIndex(worldPos);
+    const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
     if (!_session.hexgrid().containsPosition(hex)) {
         return;
     }
@@ -1249,7 +1240,7 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
     }
     const pattern::PatternVariant& variant = _stampPattern->variants[_stampVariantIndex];
 
-    pattern::PatternStamper stamper(_resources, _session.hexgrid(), *_objectCommandController, *_session.map());
+    pattern::PatternStamper stamper(_resources, _session.hexgrid(), _controller.commandController(), *_session.map());
     const pattern::PatternStamper::Result result = stamper.stamp(variant, hex, _session.currentElevation());
 
     // PatternStamper appends object sprites and applies tile sprites incrementally
@@ -1281,7 +1272,7 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
         clearStampPreview();
         return;
     }
-    const int hex = _viewportController->worldPosToHexIndex(worldPos);
+    const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
     if (!_session.hexgrid().containsPosition(hex)) {
         clearStampPreview();
         return;
@@ -1327,7 +1318,7 @@ void EditorWidget::refreshObjects() {
         return;
     }
 
-    _mapSpriteLoader->loadObjectSprites(*_session.map(), _session.currentElevation(), _session.objects(), _session.wallBlockerOverlays());
+    _controller.spriteLoader().loadObjectSprites(*_session.map(), _session.currentElevation(), _session.objects(), _session.wallBlockerOverlays());
 
     spdlog::debug("Refreshed objects for current elevation");
 }
@@ -1342,7 +1333,7 @@ void EditorWidget::updateTileSprite(int hexIndex, bool isRoof, int elevation) {
     }
 
     const auto& elevationTiles = ensureElevationTiles(elevation);
-    _mapSpriteLoader->updateTileSprite(hexIndex, isRoof, elevation, elevationTiles, _session.floorSprites(), _session.roofSprites());
+    _controller.spriteLoader().updateTileSprite(hexIndex, isRoof, elevation, elevationTiles, _session.floorSprites(), _session.roofSprites());
 }
 
 bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) {
@@ -1453,15 +1444,15 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
         for (const auto& item : toRemove) {
             preview.removeItem(item);
         }
-        _selectionVisualizer.clear();
-        _selectionVisualizer.apply(preview);
+        _controller.visualizer().clear();
+        _controller.visualizer().apply(preview);
         return;
     }
 
     if (isAdditive) {
         // Alt+drag adds to the selection, so keep what is already selected highlighted while the
         // covered area is tinted below to preview the addition.
-        _selectionVisualizer.refresh();
+        _controller.visualizer().refresh();
     }
 
     switch (_currentSelectionMode) {
@@ -1615,7 +1606,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
         return;
     }
 
-    int hexPosition = _viewportController->worldPosToHexIndex(worldPos);
+    int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
     if (!_session.hexgrid().containsPosition(hexPosition)) {
         spdlog::warn("EditorWidget: Invalid hex position {} for object placement", hexPosition);
         return;
@@ -1757,14 +1748,14 @@ void EditorWidget::centerViewOnPlayerPosition() {
     float screenX = static_cast<float>(hex->get().x());
     float screenY = static_cast<float>(hex->get().y());
 
-    _viewportController->getView().setCenter(sf::Vector2f(screenX, screenY));
+    _controller.viewport().getView().setCenter(sf::Vector2f(screenX, screenY));
 
     spdlog::debug("EditorWidget::centerViewOnPlayerPosition: Centered view on player position {} at screen ({}, {})",
         playerHexPosition, screenX, screenY);
 }
 
 void EditorWidget::showLoadingErrorsSummary() {
-    const auto& loadingErrors = _mapSpriteLoader->lastLoadErrors();
+    const auto& loadingErrors = _controller.spriteLoader().lastLoadErrors();
     if (!loadingErrors.hasErrors()) {
         return;
     }
@@ -1804,8 +1795,8 @@ void EditorWidget::showLoadingErrorsSummary() {
 }
 
 void EditorWidget::setSelectionColors(const RenderingEngine::SelectionPalette& colors) {
-    if (_renderingEngine) {
-        _renderingEngine->setSelectionColors(colors);
+    if (_controller.hasRenderingEngine()) {
+        _controller.renderingEngine().setSelectionColors(colors);
     }
 }
 
@@ -1830,7 +1821,7 @@ void EditorWidget::clearDragSelectionPreview() {
     // A Ctrl+drag preview temporarily un-highlights the covered selected items; restore the
     // real selection highlight so cancelling the drag (or clearing after another op) leaves
     // the selection looking correct.
-    _selectionVisualizer.refresh();
+    _controller.visualizer().refresh();
 
     spdlog::debug("EditorWidget::clearDragSelectionPreview() - cleared selection rectangle");
 }
@@ -1916,7 +1907,7 @@ void EditorWidget::deleteSelectedObjects() {
         }
     }
 
-    _objectCommandController->registerObjectDeletion(removedObjects);
+    _controller.commandController().registerObjectDeletion(removedObjects);
 
     _session.selectionManager()->clearSelection();
 
