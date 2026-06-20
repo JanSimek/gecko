@@ -45,29 +45,75 @@ namespace {
         return json{ { "content", json::array({ { { "type", "text" }, { "text", text } } }) }, { "isError", isError } };
     }
 
-    // --- typed argument access (keeps the tool bodies flat) ----------------------
+    // --- typed argument access --------------------------------------------------
+    // A bad tool argument: thrown by the require*/checked accessors and turned into an isError tool
+    // result by callTool, so the handlers can validate as straight-line code.
+    struct ToolError {
+        std::string message;
+    };
+
     std::string optString(const json& args, const char* key) {
         const auto it = args.find(key);
         return it != args.end() && it->is_string() ? it->get<std::string>() : std::string();
     }
-    int optInt(const json& args, const char* key, int fallback) {
+    // A required, non-empty string argument.
+    std::string requireString(const json& args, const char* key) {
         const auto it = args.find(key);
-        return it != args.end() && it->is_number_integer() ? it->get<int>() : fallback;
+        if (it == args.end() || !it->is_string() || it->get<std::string>().empty()) {
+            throw ToolError{ std::string("argument '") + key + "' must be a non-empty string" };
+        }
+        return it->get<std::string>();
+    }
+    // Optional integer in [min, max]: absent -> fallback (unvalidated), but a present value must be a
+    // genuine in-range integer — no silently-ignored wrong type, no negative wrapping to a huge
+    // unsigned downstream.
+    int64_t optInt(const json& args, const char* key, int64_t fallback, int64_t min, int64_t max) {
+        const auto it = args.find(key);
+        if (it == args.end()) {
+            return fallback;
+        }
+        if (!it->is_number_integer()) {
+            throw ToolError{ std::string("argument '") + key + "' must be an integer" };
+        }
+        const int64_t value = it->get<int64_t>();
+        if (value < min || value > max) {
+            throw ToolError{ std::string("argument '") + key + "' must be in ["
+                + std::to_string(min) + ", " + std::to_string(max) + "]" };
+        }
+        return value;
+    }
+    // A required integer in [min, max].
+    int64_t requireInt(const json& args, const char* key, int64_t min, int64_t max) {
+        if (args.find(key) == args.end()) {
+            throw ToolError{ std::string("argument '") + key + "' is required" };
+        }
+        return optInt(args, key, 0, min, max);
     }
     bool optBool(const json& args, const char* key, bool fallback) {
         const auto it = args.find(key);
-        return it != args.end() && it->is_boolean() ? it->get<bool>() : fallback;
+        if (it == args.end()) {
+            return fallback;
+        }
+        if (!it->is_boolean()) {
+            throw ToolError{ std::string("argument '") + key + "' must be a boolean" };
+        }
+        return it->get<bool>();
     }
-    // Collect the integer entries of an optional `key` array (non-integers ignored) into `out`.
+    // Collect the integer entries of an optional `key` array into `out`, rejecting non-integers and
+    // negatives (a negative would wrap to a huge PID).
     void parsePidArray(const json& args, const char* key, std::vector<std::uint32_t>& out) {
         const auto it = args.find(key);
-        if (it == args.end() || !it->is_array()) {
+        if (it == args.end()) {
             return;
         }
+        if (!it->is_array()) {
+            throw ToolError{ std::string("argument '") + key + "' must be an array of non-negative integers" };
+        }
         for (const auto& pid : *it) {
-            if (pid.is_number_integer()) {
-                out.push_back(static_cast<std::uint32_t>(pid.get<int64_t>()));
+            if (!pid.is_number_integer() || pid.get<int64_t>() < 0) {
+                throw ToolError{ std::string("argument '") + key + "' must contain only non-negative integers" };
             }
+            out.push_back(static_cast<std::uint32_t>(pid.get<int64_t>()));
         }
     }
 
@@ -123,12 +169,9 @@ namespace {
 
     json toolDescribeScript(resource::GameResources& resources, const json& args) {
         cli::DescribeScriptOptions opts;
-        opts.programIndex = optInt(args, "programIndex", opts.programIndex);
+        opts.programIndex = static_cast<int>(requireInt(args, "programIndex", 0, INT32_MAX));
         if (const std::string locale = optString(args, "locale"); !locale.empty()) {
             opts.locale = locale;
-        }
-        if (opts.programIndex < 0) {
-            return toolText("describe_script requires a non-negative integer 'programIndex' (a 0-based script_id from analyze)", true);
         }
         std::ostringstream oss;
         const int rc = cli::describeScript(resources, opts, oss);
@@ -137,10 +180,7 @@ namespace {
 
     json toolReachability(resource::GameResources& resources, const json& args) {
         cli::ReachabilityOptions opts;
-        opts.mapPath = optString(args, "map");
-        if (opts.mapPath.empty()) {
-            return toolText("reachability requires a 'map' path argument", true);
-        }
+        opts.mapPath = requireString(args, "map");
         std::ostringstream oss;
         int rc = 0;
         try {
@@ -153,10 +193,7 @@ namespace {
 
     json toolDescribeMap(resource::GameResources& resources, const json& args) {
         cli::DescribeMapOptions opts;
-        opts.mapPath = optString(args, "map");
-        if (opts.mapPath.empty()) {
-            return toolText("describe_map requires a 'map' path argument", true);
-        }
+        opts.mapPath = requireString(args, "map");
         std::ostringstream oss;
         int rc = 0;
         try {
@@ -168,10 +205,7 @@ namespace {
     }
 
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
-        if (!args.contains("pid") || !args["pid"].is_number_integer()) {
-            return toolText("proto_info requires an integer 'pid' argument", true);
-        }
-        const auto pid = static_cast<uint32_t>(args["pid"].get<int64_t>());
+        const auto pid = static_cast<uint32_t>(requireInt(args, "pid", 0, UINT32_MAX));
         try {
             std::string name;
             bool flat = false;
@@ -191,12 +225,9 @@ namespace {
 
     json toolGenerate(resource::GameResources& resources, const json& args) {
         cli::GenerateOptions opts;
-        opts.scriptPath = optString(args, "script");
-        opts.outPath = optString(args, "out");
-        opts.elevation = optInt(args, "elevation", 0);
-        if (opts.scriptPath.empty() || opts.outPath.empty()) {
-            return toolText("generate requires 'script' and 'out' string arguments", true);
-        }
+        opts.scriptPath = requireString(args, "script");
+        opts.outPath = requireString(args, "out");
+        opts.elevation = static_cast<int>(optInt(args, "elevation", 0, 0, 2));
         if (const auto it = args.find("args"); it != args.end() && it->is_object()) {
             for (const auto& [key, value] : it->items()) {
                 opts.args[key] = value.is_string() ? value.get<std::string>() : value.dump();
@@ -216,10 +247,10 @@ namespace {
 
     json toolRender(resource::GameResources& resources, const json& args) {
         cli::RenderOptions opts;
-        opts.mapPath = optString(args, "map");
-        opts.outPath = optString(args, "out");
-        opts.elevation = optInt(args, "elevation", opts.elevation);
-        opts.maxDimension = static_cast<unsigned int>(optInt(args, "maxDimension", static_cast<int>(opts.maxDimension)));
+        opts.mapPath = requireString(args, "map");
+        opts.outPath = requireString(args, "out");
+        opts.elevation = static_cast<int>(optInt(args, "elevation", opts.elevation, 0, 2));
+        opts.maxDimension = static_cast<unsigned int>(optInt(args, "maxDimension", opts.maxDimension, 1, 100000));
         if (const auto it = args.find("showRoof"); it != args.end() && it->is_boolean()) {
             opts.showRoof = it->get<bool>();
         }
@@ -235,9 +266,6 @@ namespace {
         if (const auto it = args.find("showBlockers"); it != args.end() && it->is_boolean()) {
             opts.showBlockers = it->get<bool>();
         }
-        if (opts.mapPath.empty() || opts.outPath.empty()) {
-            return toolText("render_map requires 'map' and 'out' string arguments", true);
-        }
         std::ostringstream oss;
         const int rc = cli::renderMap(resources, opts, oss);
         return toolText(oss.str(), rc != 0); // rc != 0 e.g. unreadable map or no GL context
@@ -245,18 +273,15 @@ namespace {
 
     json toolExtractPattern(resource::GameResources& resources, const json& args) {
         cli::ExtractOptions opts;
-        opts.mapPath = optString(args, "map");
-        opts.outPath = optString(args, "out");
-        opts.name = optString(args, "name");
-        opts.elevation = optInt(args, "elevation", opts.elevation);
-        opts.anchorHex = optInt(args, "anchorHex", opts.anchorHex);
-        opts.radius = optInt(args, "radius", opts.radius);
+        opts.mapPath = requireString(args, "map");
+        opts.outPath = requireString(args, "out");
+        opts.name = requireString(args, "name");
+        opts.elevation = static_cast<int>(optInt(args, "elevation", opts.elevation, 0, 2));
+        opts.anchorHex = static_cast<int>(optInt(args, "anchorHex", opts.anchorHex, 0, 39999));
+        opts.radius = static_cast<int>(optInt(args, "radius", opts.radius, 0, 10000));
         opts.includeFloor = optBool(args, "includeFloor", opts.includeFloor);
         opts.includeRoof = optBool(args, "includeRoof", opts.includeRoof);
         parsePidArray(args, "pids", opts.pids);
-        if (opts.mapPath.empty() || opts.outPath.empty() || opts.name.empty()) {
-            return toolText("extract_pattern requires 'map', 'out' and 'name'", true);
-        }
         if (opts.pids.empty() && opts.anchorHex < 0) {
             return toolText("extract_pattern needs 'pids' (proto PIDs locating the structure) or 'anchorHex'", true);
         }
@@ -392,7 +417,13 @@ namespace {
         if (it == tools.end()) {
             return std::nullopt;
         }
-        return it->handler(resources, args);
+        try {
+            return it->handler(resources, args);
+        } catch (const ToolError& e) {
+            // Bad arguments are a tool-result error (the call was well-formed; the input wasn't),
+            // not a JSON-RPC protocol error.
+            return toolText(e.message, /*isError*/ true);
+        }
     }
 
     // Tool schemas advertised by tools/list.
