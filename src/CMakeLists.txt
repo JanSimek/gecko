@@ -606,10 +606,15 @@ if(APPLE)
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/resources/icon.png $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/icon.png
     )
 else()
-    # For other platforms, copy to executable directory
-    add_custom_command(
-        TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/scripts $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/scripts
-    )
+    # For other platforms, stage resources next to the executable. Single-config builds share one
+    # copy target (avoids the parallel-build copy race); multi-config builds copy per-config here.
+    if(TARGET copy_runtime_resources)
+        add_dependencies(${PROJECT_NAME} copy_runtime_resources)
+    else()
+        add_custom_command(
+            TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/scripts $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/scripts
+        )
+    endif()
 endif()
