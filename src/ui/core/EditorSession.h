@@ -2,6 +2,7 @@
 
 #include <SFML/Graphics.hpp>
 
+#include <filesystem>
 #include <memory>
 #include <vector>
 
@@ -32,6 +33,19 @@ public:
     [[nodiscard]] Map* map() const { return _map.get(); }
     [[nodiscard]] std::unique_ptr<Map>& mapPtr() { return _map; }
     void setMap(std::unique_ptr<Map> map) { _map = std::move(map); }
+
+    /// Replaces the open map with a fresh empty one and clears all per-map session state
+    /// (objects, floor/roof sprites, wall-blocker overlays, elevation). The view-side concerns
+    /// — sprite reload, selection, camera, MainWindow refresh — remain the caller's (File > New).
+    void resetToEmptyMap() {
+        setMap(std::make_unique<Map>(std::filesystem::path("newmap.map")));
+        _map->setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
+        setCurrentElevation(0);
+        _objects.clear();
+        _floorSprites.clear();
+        _roofSprites.clear();
+        _wallBlockerOverlays.clear();
+    }
 
     [[nodiscard]] VisibilitySettings& visibility() { return _visibility; }
     [[nodiscard]] const VisibilitySettings& visibility() const { return _visibility; }

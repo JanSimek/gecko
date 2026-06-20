@@ -497,17 +497,7 @@ void EditorWidget::openMap() {
 void EditorWidget::createNewMap() {
     spdlog::info("Creating new empty map");
 
-    auto newMapFile = std::make_unique<Map::MapFile>(Map::createEmptyMapFile());
-
-    _session.setMap(std::make_unique<Map>(std::filesystem::path("newmap.map")));
-    _session.map()->setMapFile(std::move(newMapFile));
-
-    _session.setCurrentElevation(0);
-
-    _session.objects().clear();
-    _session.floorSprites().clear();
-    _session.roofSprites().clear();
-    _session.wallBlockerOverlays().clear();
+    _session.resetToEmptyMap();
     _controller.visualizer().clearHexPositions();
 
     // Load the core helper textures needed by an empty map.
