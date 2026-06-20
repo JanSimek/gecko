@@ -49,6 +49,7 @@
 #include "format/map/MapObject.h"
 #include "resource/GameResources.h"
 
+#include "state/MapSaveService.h"
 #include "writer/map/MapWriter.h"
 
 namespace geck {
@@ -459,13 +460,8 @@ bool EditorWidget::saveMap() {
     std::string destination = destinationQString.toStdString();
 
     try {
-        MapWriter map_writer{ [this](int32_t PID) {
-            return _resources.repository().load<Pro>(ProHelper::basePath(_resources, PID));
-        } };
-
-        map_writer.openFile(destination);
-        if (map_writer.write(_session.map()->getMapFile())) {
-            spdlog::info("Saved map {} ({} bytes)", destination, map_writer.getBytesWritten());
+        if (const auto bytesWritten = saveMapToFile(_resources, _session.map()->getMapFile(), destination)) {
+            spdlog::info("Saved map {} ({} bytes)", destination, *bytesWritten);
             // Repoint the map at the saved file so the window title reflects the chosen name.
             _session.map()->setPath(std::filesystem::path(destination));
             return true;

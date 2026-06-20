@@ -187,6 +187,10 @@ set(GECK_APP_SOURCES
     state/GameLauncher.cpp
     state/GameLauncher.h
 
+    # Map save service (Qt-free MapWriter + proto-resolver core)
+    state/MapSaveService.cpp
+    state/MapSaveService.h
+
     # Qt Resource files
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
 )
