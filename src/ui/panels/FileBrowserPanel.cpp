@@ -242,6 +242,41 @@ FileBrowserPanel::FileBrowserPanel(std::shared_ptr<resource::GameResources> reso
     _statusLabel->setText("Ready - Click Refresh to load files");
 }
 
+void FileBrowserPanel::stopAndDestroyLoader() {
+    if (!_loaderThread) {
+        return;
+    }
+
+    if (_loaderWorker) {
+        // loadFiles() polls _shouldStop, so cancelling it lets the worker's loop exit and the
+        // thread's event loop quit — wait() then returns promptly. Disconnect first so a late
+        // queued signal can't reach a half-torn-down panel.
+        _loaderWorker->_shouldStop.store(true);
+        disconnect(_loaderWorker, nullptr, this, nullptr);
+    }
+    disconnect(_loaderThread, nullptr, this, nullptr);
+
+    if (_loaderThread->isRunning()) {
+        _loaderThread->quit();
+        if (!_loaderThread->wait(3000)) {
+            // Only reachable if the worker is stuck in the one step it cannot poll _shouldStop
+            // from — the initial VFS files().list(). Force-stop as a last resort (there is no
+            // other cancellation path there) so the worker can be freed without a data race.
+            spdlog::warn("FileBrowserPanel: loader thread didn't stop within 3s, forcing termination");
+            _loaderThread->terminate();
+            _loaderThread->wait();
+        }
+    }
+
+    // The thread is stopped now, so the worker is no longer running and is deleted directly:
+    // deleteLater() would never run here, because the worker lives in a thread whose event loop
+    // has already exited (and it is not parented to the QThread). delete nullptr is a safe no-op.
+    delete _loaderWorker;
+    _loaderWorker = nullptr;
+    delete _loaderThread;
+    _loaderThread = nullptr;
+}
+
 FileBrowserPanel::~FileBrowserPanel() {
     spdlog::debug("FileBrowserPanel: Destructor called, cleaning up threads...");
 
@@ -257,29 +292,7 @@ FileBrowserPanel::~FileBrowserPanel() {
         _searchTimer->stop();
     }
 
-    if (_loaderThread) {
-        if (_loaderWorker) {
-            disconnect(_loaderWorker, nullptr, this, nullptr);
-        }
-        disconnect(_loaderThread, nullptr, this, nullptr);
-
-        if (_loaderThread->isRunning()) {
-            _loaderThread->quit();
-            if (!_loaderThread->wait(2000)) {
-                spdlog::warn("FileBrowserPanel: Thread didn't finish within 2 seconds, forcing termination");
-                _loaderThread->terminate();
-                _loaderThread->wait(500);
-            }
-        }
-
-        delete _loaderThread;
-        _loaderThread = nullptr;
-    }
-
-    if (_loaderWorker) {
-        delete _loaderWorker;
-        _loaderWorker = nullptr;
-    }
+    stopAndDestroyLoader();
 
     spdlog::debug("FileBrowserPanel: Destructor completed");
 }
@@ -410,24 +423,7 @@ void FileBrowserPanel::loadFiles() {
     _progressBar->setValue(0);
     _statusLabel->setText("Starting file loading...");
 
-    if (_loaderThread) {
-        if (_loaderWorker) {
-            _loaderWorker->_shouldStop.store(true);
-        }
-
-        if (_loaderThread->isRunning()) {
-            _loaderThread->quit();
-            _loaderThread->wait(3000);
-        }
-
-        if (_loaderWorker) {
-            _loaderWorker->deleteLater();
-            _loaderWorker = nullptr;
-        }
-
-        _loaderThread->deleteLater();
-        _loaderThread = nullptr;
-    }
+    stopAndDestroyLoader();
 
     _loaderThread = new QThread(this);
     _loaderWorker = new FileLoaderWorker(_resourcesShared);

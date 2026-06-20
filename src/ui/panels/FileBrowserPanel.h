@@ -121,6 +121,9 @@ public:
     void refreshFileList();
     void loadFiles();
     void stopLoading();
+    // Cooperatively cancels and tears down the background loader thread + worker (shared by the
+    // destructor and the reload path).
+    void stopAndDestroyLoader();
 
     // Search and filtering
     void setSearchFilter(const QString& filter);
