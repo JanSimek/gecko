@@ -290,6 +290,40 @@ namespace {
     // Semantic overlay: colour each object marker by its *role* — exit grids highlighted (and always
     // shown, though flat), critters by team (group_id), everything else by category — and ring any
     // object that carries a map script. The legend keys on the role so it joins back to describe_map.
+    struct SemanticRole {
+        sf::Color color;
+        std::string label;
+        float radius;
+    };
+
+    SemanticRole semanticRoleFor(const MapObject& mo, Pro::OBJECT_TYPE type) {
+        if (mo.isExitGridMarker()) {
+            return { sf::Color(64, 210, 235), "exit grid", 6.0f };
+        }
+        if (type == Pro::OBJECT_TYPE::CRITTER) {
+            return { distinctColor(static_cast<int>(mo.group_id)), "critter team " + std::to_string(mo.group_id), 5.0f };
+        }
+        return { categoryColor(type), Pro::typeToString(type), 5.0f };
+    }
+
+    // Exit grids are flat (engine blockers) but semantically important, so they show even when other
+    // flat objects are hidden.
+    bool isHiddenFlatObject(const MapObject& mo, bool showBlockers, resource::GameResources& resources,
+        std::unordered_map<uint32_t, bool>& flatCache) {
+        return !showBlockers && !mo.isExitGridMarker() && isFlatProto(resources, mo.pro_pid, flatCache);
+    }
+
+    void fillSemanticLegend(MapRenderer::Legend& legend,
+        const std::map<std::string, std::pair<sf::Color, int>>& roles, int scriptedCount) {
+        for (const auto& [role, colorCount] : roles) {
+            legend.objects.push_back({ role, colorCount.first, colorCount.second });
+        }
+        if (scriptedCount > 0) {
+            legend.objects.push_back({ "scripted (yellow ring)", sf::Color(245, 225, 70), scriptedCount });
+        }
+        std::ranges::sort(legend.objects, [](const auto& a, const auto& b) { return a.count > b.count; });
+    }
+
     void drawSemanticMarkers(sf::RenderTexture& target, const std::vector<std::shared_ptr<Object>>& objects,
         resource::GameResources& resources, bool showBlockers, MapRenderer::Legend* legend) {
         std::unordered_map<uint32_t, bool> flatCache;
@@ -300,43 +334,24 @@ namespace {
                 continue;
             }
             const auto mo = object->getMapObjectPtr();
-            const uint32_t pid = mo->pro_pid;
-            const bool exitGrid = mo->isExitGridMarker();
-            // Exit grids are flat (engine blockers) but semantically important, so show them even
-            // when other flat objects are hidden.
-            if (!showBlockers && !exitGrid && isFlatProto(resources, pid, flatCache)) {
+            if (isHiddenFlatObject(*mo, showBlockers, resources, flatCache)) {
                 continue;
             }
 
             const sf::FloatRect b = object->getSprite().getGlobalBounds();
             const sf::Vector2f center{ b.position.x + b.size.x / 2.0f, b.position.y + b.size.y / 2.0f };
-            const Pro::OBJECT_TYPE type = Pro::typeOfPid(pid);
+            const SemanticRole role = semanticRoleFor(*mo, Pro::typeOfPid(mo->pro_pid));
 
-            sf::Color fill;
-            std::string role;
-            float radius = 5.0f;
-            if (exitGrid) {
-                fill = sf::Color(64, 210, 235);
-                role = "exit grid";
-                radius = 6.0f;
-            } else if (type == Pro::OBJECT_TYPE::CRITTER) {
-                fill = distinctColor(static_cast<int>(mo->group_id));
-                role = "critter team " + std::to_string(mo->group_id);
-            } else {
-                fill = categoryColor(type);
-                role = Pro::typeToString(type);
-            }
-
-            sf::CircleShape marker(radius);
-            marker.setOrigin({ radius, radius });
+            sf::CircleShape marker(role.radius);
+            marker.setOrigin({ role.radius, role.radius });
             marker.setPosition(center);
-            marker.setFillColor(fill);
+            marker.setFillColor(role.color);
             marker.setOutlineColor(sf::Color(20, 20, 20, 200));
             marker.setOutlineThickness(1.0f);
             target.draw(marker);
 
-            if (mo->map_scripts_pid >= 0) { // has an attached map script
-                const float ringRadius = radius + 3.0f;
+            if (mo->map_scripts_pid >= 0) { // has an attached map script — ring it
+                const float ringRadius = role.radius + 3.0f;
                 sf::CircleShape ring(ringRadius);
                 ring.setOrigin({ ringRadius, ringRadius });
                 ring.setPosition(center);
@@ -347,18 +362,12 @@ namespace {
                 ++scriptedCount;
             }
 
-            auto& entry = roles[role];
-            entry.first = fill;
+            auto& entry = roles[role.label];
+            entry.first = role.color;
             ++entry.second;
         }
         if (legend != nullptr) {
-            for (const auto& [role, colorCount] : roles) {
-                legend->objects.push_back({ role, colorCount.first, colorCount.second });
-            }
-            if (scriptedCount > 0) {
-                legend->objects.push_back({ "scripted (yellow ring)", sf::Color(245, 225, 70), scriptedCount });
-            }
-            std::ranges::sort(legend->objects, [](const auto& a, const auto& b) { return a.count > b.count; });
+            fillSemanticLegend(*legend, roles, scriptedCount);
         }
     }
 } // namespace
