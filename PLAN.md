@@ -753,6 +753,55 @@ generation, not just analysis.
 `critters` tool + header/globals + exits-as-graph. Phase 2 (medium): reachability flood-fill +
 `describe_script`. Phase 3 (synthesis): `describe_map` digest + semantic render overlay.
 
+## Next capabilities (post-`describe_map`)
+
+These extend the roadmap above and all follow one **data-fidelity + layering rule**: parse engine
+data in the **vault** library (a `format/…` object + a `reader/…`, like `MapsTxt` and `AiTxt`),
+never inline in the cli/MCP layer. The MCP composes the structured objects into JSON; it does no
+file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set this precedent.)
+
+6. **`engine_reference` — ground answers in the engine source.** A read-only MCP tool that searches
+   a mounted `fallout2-ce` checkout (grep + bounded file read) and returns `file:line` + snippets.
+   The map-script 1-based rule (`scriptIndex - 1`) and the `scrname.msg[programIndex + 101]` /
+   `map.msg[map*3 + elev + 200]` index formulas were all answered by *reading the engine*; this tool
+   lets a **shell-less** MCP agent do the same instead of guessing format details. Config: an
+   engine-source path (like `--data`); cap results (top-N matches, small snippets) so it can't flood
+   context. *Lower priority when the agent already has filesystem/grep tools — then just mounting the
+   source is enough; this earns its keep specifically for headless/sandboxed agents.*
+
+7. **Whole-game map-connectivity graph — `map_graph`.** Walk every shipped map, collect the exit
+   grids (already `{destMap, destMapName, destHex, destElevation}`) into a directed map→map graph;
+   cross with `reachability` to flag one-way edges and unreachable maps. The foundation is in
+   (`exitsToJson` + `MapsTxt`). Answers "how is the world wired" and, spatially, "can the player get
+   from the first map to map X" — bounded, buildable, high value.
+
+8. **Corpus / world index — evidence, not a solver.** Join, across all maps, the connectivity graph
+   + each map's scripts (`describe_script` source/dialog) + the quest/gvar data (below) into one
+   queryable index, so the agent can *reason* about progression ("which script sets the gvar that
+   gates map Y?"). Deliberately **not** a computed "critical path to the ending": `.ssl` is
+   imperative quest logic and static extraction of a win-path would be brittle and over-claim. The
+   MCP supplies ground truth; the model infers the route. (Expands the "Corpus angle" note above.)
+
+### Data-extraction roadmap (engine data files → vault readers)
+
+Surveyed from `fallout2-ce` (`configRead` / `messageListLoad`). Each becomes a vault reader + object,
+then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority order:
+
+- **`map.msg` display names** *(high value, low effort — the obvious next step).* `mapGetName` =
+  `map.msg[mapIndex*3 + elevation + 200]`; city names = `map.msg[1500 + city]`. Gives each map (and
+  every `destMap` exit) a friendly per-elevation name ("Arroyo", "Temple of Trials") alongside the
+  `.map` filename `MapsTxt` already resolves. Pairs directly with `MapsTxt`.
+- **`data/quests.txt` + `game/quests.msg`** *(the progression spine).* Each quest's location, the
+  **gvar** that tracks it, and its description text — this is what turns capability 8 from a map
+  graph into a *quest* graph, since the gvar links a quest to the scripts that set it.
+- **`data/city.txt`** — worldmap areas/towns and their map entrances; bridges the worldmap to the
+  per-map exit graph (capability 7).
+- **`data/worldmap.txt`** — worldmap tiles, terrain and random-encounter tables (the macro layer).
+- **`data/endgame.txt` / `enddeath.txt`** — ending slides and their gvar/condition triggers: the
+  literal "how the game ends" for the corpus angle.
+- **`data/party.txt`** (companions), **`holodisk.txt`**, **`karmavar.txt`** — lore/state, lower
+  priority.
+
 ---
 
 # Selection type toolbar — combinable layers & non-destructive switching
