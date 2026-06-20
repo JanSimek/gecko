@@ -5,6 +5,7 @@
 #include "format/pro/Pro.h"
 #include "format/map/MapScript.h"
 #include "format/map/MapObjectFields.h"
+#include "format/map/MapScriptFields.h"
 #include "format/map/Tile.h"
 
 namespace geck {
@@ -204,20 +205,11 @@ void MapWriter::writeScript(const MapScript& script) {
                 "script PID " + std::to_string((script.pid & 0xFF000000) >> 24));
     }
 
-    utils.writeBE32(script.flags);
-    utils.writeBE32(script.script_id);
-    utils.writeBE32(script.unknown5);
-    utils.writeBE32(script.script_oid);
-    utils.writeBE32(script.local_var_offset);
-    utils.writeBE32(script.local_var_count);
-    utils.writeBE32(script.unknown9);
-    utils.writeBE32(script.unknown10);
-    utils.writeBE32(script.unknown11);
-    utils.writeBE32(script.unknown12);
-    utils.writeBE32(script.unknown13);
-    utils.writeBE32(script.unknown14);
-    utils.writeBE32(script.unknown15);
-    utils.writeBE32(script.unknown16);
+    // Fixed trailer (layout shared with MapReader via the visitor); each field is emitted as a
+    // big-endian 32-bit word.
+    visitMapScriptTrailerFields(script, [&utils](const auto& field) {
+        utils.writeBE32(static_cast<uint32_t>(field));
+    });
 }
 
 void MapWriter::writeObject(const MapObject& object) {

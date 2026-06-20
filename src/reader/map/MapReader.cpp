@@ -9,6 +9,7 @@
 
 #include "format/map/Map.h"
 #include "format/map/MapObjectFields.h"
+#include "format/map/MapScriptFields.h"
 #include "format/msg/Msg.h"
 #include "format/map/Tile.h"
 #include "format/pro/Pro.h"
@@ -250,20 +251,11 @@ std::unique_ptr<Map> MapReader::read() {
                         break;
                 }
 
-                map_script.flags = read_be_u32();            // flags
-                map_script.script_id = read_be_i32();        // scriptId (?)
-                map_script.unknown5 = read_be_u32();         // unknown 5
-                map_script.script_oid = read_be_u32();       // oid == object->OID
-                map_script.local_var_offset = read_be_u32(); // local var offset
-                map_script.local_var_count = read_be_u32();  // loal var cnt
-                map_script.unknown9 = read_be_u32();         // unknown 9
-                map_script.unknown10 = read_be_u32();        // unknown 10
-                map_script.unknown11 = read_be_u32();        // unknown 11
-                map_script.unknown12 = read_be_u32();        // unknown 12
-                map_script.unknown13 = read_be_u32();        // unknown 13
-                map_script.unknown14 = read_be_u32();        // unknown 14
-                map_script.unknown15 = read_be_u32();        // unknown 15
-                map_script.unknown16 = read_be_u32();        // unknown 16
+                // Fixed trailer (layout shared with MapWriter via the visitor); each field is a
+                // big-endian 32-bit word, interpreted per its own (signed/unsigned) type.
+                visitMapScriptTrailerFields(map_script, [this](auto& field) {
+                    field = static_cast<std::remove_reference_t<decltype(field)>>(read_be_u32());
+                });
 
                 if (j < script_section_count) {
                     map_file->map_scripts[script_section].push_back(map_script);
