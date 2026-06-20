@@ -475,6 +475,7 @@ add_library(gecko_editing STATIC
     rendering/RenderingEngine.cpp
     rendering/MapRenderer.h
     rendering/MapRenderer.cpp
+    editing/commands/CommandHost.h
     editing/commands/ObjectCommandController.h
     editing/commands/ObjectCommandController.cpp
     editing/commands/UndoBatcher.h

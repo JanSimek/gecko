@@ -1,8 +1,12 @@
 #include "ObjectCommandController.h"
 
+#include "editing/commands/CommandHost.h"
+
 // ObjectCommandController is a thin facade: its constructor wires up the editing
 // services and every method delegates to one of them, so only the service/param
-// types (forward-declared via the header) are needed here.
+// types (forward-declared via the header) are needed here. The host's hooks are
+// adapted to the services' std::function parameters by the bridging lambdas below;
+// each captures `this` and forwards to _host, which the caller guarantees outlives us.
 
 namespace geck {
 
@@ -13,24 +17,20 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     std::vector<std::shared_ptr<Object>>& objects,
     std::vector<sf::Sprite>& wallBlockerOverlays,
     UndoStack& undoStack,
-    std::function<void()> refreshObjects,
-    std::function<void()> onStackChanged,
-    std::function<std::vector<Tile>&(int)> ensureElevationTiles,
-    std::function<int()> getCurrentElevation,
-    std::function<void(int, bool, int)> updateTileSprite,
-    std::function<void()> reloadTiles)
+    CommandHost& host)
     : _resources(resources)
     , _map(map)
     , _hexgrid(hexgrid)
     , _mapSpriteLoader(mapSpriteLoader)
     , _objects(objects)
     , _wallBlockerOverlays(wallBlockerOverlays)
-    , _batcher(undoStack, std::move(onStackChanged))
-    , _tileService(map, _batcher, std::move(ensureElevationTiles), std::move(getCurrentElevation), std::move(updateTileSprite))
+    , _host(host)
+    , _batcher(undoStack, [this] { _host.undoStackChanged(); })
+    , _tileService(map, _batcher, [this](int elevation) -> std::vector<Tile>& { return _host.ensureElevationTiles(elevation); }, [this] { return _host.getCurrentElevation(); }, [this](int hexIndex, bool isRoof, int elevation) { _host.updateTileSprite(hexIndex, isRoof, elevation); })
     , _inventoryService(_batcher)
     , _scriptService(map, _batcher)
-    , _refreshObjects(std::move(refreshObjects))
-    , _reloadTiles(std::move(reloadTiles))
+    , _refreshObjects([this] { _host.refreshObjects(); })
+    , _reloadTiles([this] { _host.reloadTiles(); })
     , _mapService(map, objects, wallBlockerOverlays, _scriptService, _batcher, _refreshObjects, _reloadTiles)
     , _objectService(resources, map, hexgrid, mapSpriteLoader, objects, wallBlockerOverlays, _batcher, _refreshObjects) {
 }
