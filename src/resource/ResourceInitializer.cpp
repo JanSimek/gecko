@@ -1,4 +1,4 @@
-#include "ResourceInitializer.h"
+#include "resource/ResourceInitializer.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
 #include "format/lst/Lst.h"

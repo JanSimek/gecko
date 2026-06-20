@@ -19,7 +19,7 @@
 
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
-#include "ui/ResourceInitializer.h"
+#include "resource/ResourceInitializer.h"
 
 namespace geck {
 

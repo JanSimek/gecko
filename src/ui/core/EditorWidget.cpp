@@ -32,7 +32,7 @@
 #include <unordered_map>
 
 #include "util/Constants.h"
-#include "ui/ResourceInitializer.h"
+#include "resource/ResourceInitializer.h"
 #include "util/TileUtils.h"
 #include "ui/QtDialogs.h"
 #include "util/ProHelper.h"

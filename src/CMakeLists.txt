@@ -9,8 +9,6 @@ set(GECK_APP_SOURCES
     Application.cpp
 
     util/FalloutEngineEnums.h
-    ui/ResourceInitializer.h
-    ui/ResourceInitializer.cpp
 
     ui/QtDialogs.h
     ui/QtDialogs.cpp
@@ -384,6 +382,9 @@ add_library(gecko_resource STATIC
     resource/TextureManager.cpp
     resource/GameResources.h
     resource/GameResources.cpp
+
+    resource/ResourceInitializer.h
+    resource/ResourceInitializer.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 
