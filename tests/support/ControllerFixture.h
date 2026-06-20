@@ -10,6 +10,7 @@
 #include "format/map/Map.h"
 #include "format/map/Tile.h"
 #include "resource/GameResources.h"
+#include "editing/commands/CommandHost.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "rendering/MapSpriteLoader.h"
 #include "util/UndoStack.h"
@@ -28,18 +29,20 @@ struct ControllerFixture {
     std::vector<sf::Sprite> overlays;
     UndoStack undoStack;
     std::unique_ptr<Map> map;
+    CallbackCommandHost host;
     ObjectCommandController controller;
 
     ControllerFixture()
         : map(std::make_unique<Map>("test.map"))
-        , controller(
-              resources, map, hexgrid, spriteLoader, objects, overlays, undoStack,
+        , host(
               [] { /* refreshObjects: no rendering in tests */ },
-              [] { /* onStackChanged: no UI to notify */ },
+              [] { /* undoStackChanged: no UI to notify */ },
               [this](int elevation) -> std::vector<Tile>& { return map->getMapFile().tiles[elevation]; },
               [] { return 0; },
               [](int, bool, int) { /* updateTileSprite: no rendering in tests */ },
-              [] { /* reloadTiles: no rendering in tests */ }) {
+              [] { /* reloadTiles: no rendering in tests */ })
+        , controller(
+              resources, map, hexgrid, spriteLoader, objects, overlays, undoStack, host) {
         map->setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
     }
 

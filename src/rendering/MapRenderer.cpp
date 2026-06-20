@@ -10,7 +10,6 @@
 #include "rendering/MapSpriteLoader.h"
 #include "rendering/RenderingEngine.h"
 #include "util/Constants.h"
-#include "util/ProHelper.h"
 #include "util/TileUtils.h"
 
 #include <SFML/Graphics/CircleShape.hpp>
@@ -243,7 +242,7 @@ namespace {
         }
         bool flat = false;
         try {
-            if (const Pro* pro = resources.repository().load<Pro>(ProHelper::basePath(resources, pid)); pro != nullptr) {
+            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
                 flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
             }
         } catch (const std::exception&) {

@@ -512,7 +512,7 @@ void SelectionPanel::updateObjectInfo() {
         auto& selectedMapObject = _selectedObject.value()->getMapObject();
         int32_t PID = selectedMapObject.pro_pid;
 
-        auto pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, PID));
+        auto pro = _resources.loadPro(PID);
 
         if (pro) {
             auto msg = ProHelper::msgFile(_resources, pro->type());
@@ -1081,7 +1081,7 @@ void SelectionPanel::onEditDestinationClicked() {
 
     Pro::SCENERY_TYPE sceneryType = Pro::SCENERY_TYPE::GENERIC;
     try {
-        auto pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, mapObject->pro_pid));
+        auto pro = _resources.loadPro(mapObject->pro_pid);
         if (!pro || pro->type() != Pro::OBJECT_TYPE::SCENERY) {
             return;
         }
@@ -1122,7 +1122,7 @@ void SelectionPanel::onEditInteractionClicked() {
 
     bool isDoor = false;
     try {
-        auto pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, mapObject->pro_pid));
+        auto pro = _resources.loadPro(mapObject->pro_pid);
         if (!pro) {
             return;
         }
@@ -1319,7 +1319,7 @@ void SelectionPanel::onAddInventoryClicked() {
 
     Pro* pro = nullptr;
     try {
-        pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, itemPid));
+        pro = _resources.loadPro(itemPid);
     } catch (const std::exception& e) {
         spdlog::warn("onAddInventoryClicked: failed to load proto for pid {}: {}", itemPid, e.what());
     }
@@ -1556,7 +1556,7 @@ void SelectionPanel::updateInventorySection() {
 
     // Only containers and critters can hold inventory.
     try {
-        auto pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, mapObject->pro_pid));
+        auto pro = _resources.loadPro(mapObject->pro_pid);
         if (pro) {
             bool hasInventory = (pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::CONTAINER) || pro->type() == Pro::OBJECT_TYPE::CRITTER;
 

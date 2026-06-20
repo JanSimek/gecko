@@ -3,7 +3,6 @@
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
-#include "util/ProHelper.h"
 
 #include <spdlog/spdlog.h>
 
@@ -13,7 +12,7 @@ namespace {
     /// Loads the object's PRO data on demand (not cached).
     Pro* getProData(const MapObject& object, resource::GameResources& resources) {
         try {
-            return resources.repository().load<Pro>(ProHelper::basePath(resources, object.pro_pid));
+            return resources.loadPro(object.pro_pid);
         } catch (const std::exception& e) {
             spdlog::warn("Failed to load PRO file for PID {}: {}", object.pro_pid, e.what());
             return nullptr;

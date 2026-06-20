@@ -1,11 +1,9 @@
 #include "GameLauncher.h"
 
 #include "resource/GameResources.h"
+#include "state/MapSaveService.h"
 #include "ui/Settings.h"
 #include "ui/QtDialogs.h"
-#include "util/ProHelper.h"
-#include "format/pro/Pro.h"
-#include "writer/map/MapWriter.h"
 
 #include <fstream>
 #include <sstream>
@@ -66,18 +64,14 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
             std::filesystem::create_directories(mapsDir);
         }
 
-        MapWriter mapWriter{ [this](int32_t PID) {
-            return _resources.repository().load<Pro>(ProHelper::basePath(_resources, PID));
-        } };
-        mapWriter.openFile(mapDestination.string());
-
-        if (!mapWriter.write(*mapFile)) {
+        const auto bytesWritten = saveMapToFile(_resources, *mapFile, mapDestination);
+        if (!bytesWritten.has_value()) {
             QtDialogs::showError(_dialogParent, "Save Failed",
                 QString("Failed to save map to game directory: %1").arg(QString::fromStdString(mapDestination.string())));
             return;
         }
 
-        spdlog::info("Saved map to game directory: {} ({} bytes)", mapDestination.string(), mapWriter.getBytesWritten());
+        spdlog::info("Saved map to game directory: {} ({} bytes)", mapDestination.string(), *bytesWritten);
 
         // 2. Modify ddraw.ini
         std::filesystem::path ddrawIniPath = gameDataDir / "ddraw.ini";

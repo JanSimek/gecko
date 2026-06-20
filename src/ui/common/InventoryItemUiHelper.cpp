@@ -30,7 +30,7 @@ namespace {
     }
 
     Pro* loadPro(resource::GameResources& resources, uint32_t pid) {
-        return resources.repository().load<Pro>(ProHelper::basePath(resources, pid));
+        return resources.loadPro(pid);
     }
 
     bool isAmmoItem(const Pro& pro) {

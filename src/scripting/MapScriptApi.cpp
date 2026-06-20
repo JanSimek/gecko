@@ -123,7 +123,7 @@ std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) 
     // (best-effort per object — not a fatal error for the whole map).
     const std::function<Pro*(uint32_t)> proLoad = [this](uint32_t pid) -> Pro* {
         try {
-            return _resources.repository().load<Pro>(ProHelper::basePath(_resources, pid));
+            return _resources.loadPro(pid);
         } catch (const std::exception&) {
             return nullptr;
         }
@@ -141,7 +141,7 @@ bool MapScriptApi::isScatterableScenery(uint32_t pid) const {
     // while upright decorations (scrub, trees, rocks) do not — is excluded from a scatter palette.
     const Pro* pro = nullptr;
     try {
-        pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, pid));
+        pro = _resources.loadPro(pid);
     } catch (const std::exception&) {
         return true; // best-effort: keep a proto we can't inspect
     }
@@ -283,7 +283,7 @@ uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
 std::string MapScriptApi::protoName(int pid) const {
     // A proto that can't be loaded (no data / bad pid) is a real error and is raised. A proto that
     // loads but has no name string is a legitimate empty result.
-    const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, static_cast<uint32_t>(pid)));
+    const Pro* pro = _resources.loadPro(static_cast<uint32_t>(pid));
     if (pro == nullptr) {
         throw ScriptError(std::format("proto could not be loaded for pid {}", pid));
     }
@@ -353,7 +353,7 @@ bool MapScriptApi::placeProto(uint32_t proPid, int hex, uint32_t direction) {
     // so callers place by PID alone. A proto we can't load has no art to place.
     uint32_t frmPid = 0;
     try {
-        if (const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, proPid));
+        if (const Pro* pro = _resources.loadPro(proPid);
             pro != nullptr) {
             frmPid = static_cast<uint32_t>(pro->header.FID);
         }

@@ -32,7 +32,7 @@
 #include <unordered_map>
 
 #include "util/Constants.h"
-#include "ui/ResourceInitializer.h"
+#include "resource/ResourceInitializer.h"
 #include "util/TileUtils.h"
 #include "ui/QtDialogs.h"
 #include "util/ProHelper.h"
@@ -49,6 +49,7 @@
 #include "format/map/MapObject.h"
 #include "resource/GameResources.h"
 
+#include "state/MapSaveService.h"
 #include "writer/map/MapWriter.h"
 
 namespace geck {
@@ -459,13 +460,9 @@ bool EditorWidget::saveMap() {
     std::string destination = destinationQString.toStdString();
 
     try {
-        MapWriter map_writer{ [this](int32_t PID) {
-            return _resources.repository().load<Pro>(ProHelper::basePath(_resources, PID));
-        } };
-
-        map_writer.openFile(destination);
-        if (map_writer.write(_session.map()->getMapFile())) {
-            spdlog::info("Saved map {} ({} bytes)", destination, map_writer.getBytesWritten());
+        if (const auto bytesWritten = saveMapToFile(_resources, _session.map()->getMapFile(), destination);
+            bytesWritten.has_value()) {
+            spdlog::info("Saved map {} ({} bytes)", destination, *bytesWritten);
             // Repoint the map at the saved file so the window title reflects the chosen name.
             _session.map()->setPath(std::filesystem::path(destination));
             return true;
@@ -501,17 +498,7 @@ void EditorWidget::openMap() {
 void EditorWidget::createNewMap() {
     spdlog::info("Creating new empty map");
 
-    auto newMapFile = std::make_unique<Map::MapFile>(Map::createEmptyMapFile());
-
-    _session.setMap(std::make_unique<Map>(std::filesystem::path("newmap.map")));
-    _session.map()->setMapFile(std::move(newMapFile));
-
-    _session.setCurrentElevation(0);
-
-    _session.objects().clear();
-    _session.floorSprites().clear();
-    _session.roofSprites().clear();
-    _session.wallBlockerOverlays().clear();
+    _session.resetToEmptyMap();
     _controller.visualizer().clearHexPositions();
 
     // Load the core helper textures needed by an empty map.

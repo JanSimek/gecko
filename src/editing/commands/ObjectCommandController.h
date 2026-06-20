@@ -19,6 +19,7 @@
 
 namespace geck {
 
+class CommandHost;
 class HexagonGrid;
 class Map;
 class MapSpriteLoader;
@@ -36,6 +37,8 @@ namespace resource {
 
 class ObjectCommandController {
 public:
+    /// @param host presentation/event sink notified as edits are applied (see CommandHost).
+    ///        Must outlive this controller.
     ObjectCommandController(resource::GameResources& resources,
         std::unique_ptr<Map>& map,
         const HexagonGrid& hexgrid,
@@ -43,12 +46,7 @@ public:
         std::vector<std::shared_ptr<Object>>& objects,
         std::vector<sf::Sprite>& wallBlockerOverlays,
         UndoStack& undoStack,
-        std::function<void()> refreshObjects,
-        std::function<void()> onStackChanged,
-        std::function<std::vector<Tile>&(int)> ensureElevationTiles,
-        std::function<int()> getCurrentElevation,
-        std::function<void(int, bool, int)> updateTileSprite,
-        std::function<void()> reloadTiles);
+        CommandHost& host);
 
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
@@ -156,6 +154,7 @@ private:
     MapSpriteLoader& _mapSpriteLoader;
     std::vector<std::shared_ptr<Object>>& _objects;
     std::vector<sf::Sprite>& _wallBlockerOverlays;
+    CommandHost& _host;
     UndoBatcher _batcher;
     TileEditService _tileService;
     InventoryEditService _inventoryService;

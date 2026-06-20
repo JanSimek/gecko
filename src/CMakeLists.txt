@@ -9,8 +9,6 @@ set(GECK_APP_SOURCES
     Application.cpp
 
     util/FalloutEngineEnums.h
-    ui/ResourceInitializer.h
-    ui/ResourceInitializer.cpp
 
     ui/QtDialogs.h
     ui/QtDialogs.cpp
@@ -188,6 +186,10 @@ set(GECK_APP_SOURCES
     # Game launch service
     state/GameLauncher.cpp
     state/GameLauncher.h
+
+    # Map save service (Qt-free MapWriter + proto-resolver core)
+    state/MapSaveService.cpp
+    state/MapSaveService.h
 
     # Qt Resource files
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
@@ -384,6 +386,9 @@ add_library(gecko_resource STATIC
     resource/TextureManager.cpp
     resource/GameResources.h
     resource/GameResources.cpp
+
+    resource/ResourceInitializer.h
+    resource/ResourceInitializer.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 
@@ -474,6 +479,7 @@ add_library(gecko_editing STATIC
     rendering/RenderingEngine.cpp
     rendering/MapRenderer.h
     rendering/MapRenderer.cpp
+    editing/commands/CommandHost.h
     editing/commands/ObjectCommandController.h
     editing/commands/ObjectCommandController.cpp
     editing/commands/UndoBatcher.h

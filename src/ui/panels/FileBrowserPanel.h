@@ -121,6 +121,10 @@ public:
     void refreshFileList();
     void loadFiles();
     void stopLoading();
+    // Cooperatively cancels and tears down the background loader thread + worker (shared by the
+    // destructor and the reload path). noexcept: it runs from ~FileBrowserPanel, and its steps
+    // (atomic store, Qt disconnect/quit/wait, delete) do not throw.
+    void stopAndDestroyLoader() noexcept;
 
     // Search and filtering
     void setSearchFilter(const QString& filter);

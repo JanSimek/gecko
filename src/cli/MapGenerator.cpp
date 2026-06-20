@@ -22,9 +22,9 @@
 #include "format/pro/Pro.h"
 #include "scripting/LuaScriptRuntime.h"
 #include "scripting/MapScriptApi.h"
+#include "editing/commands/CommandHost.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "rendering/MapSpriteLoader.h"
-#include "util/ProHelper.h"
 #include "util/UndoStack.h"
 #include "writer/map/MapWriter.h"
 #endif
@@ -74,14 +74,18 @@ int generateMap(resource::GameResources& resources, const GenerateOptions& optio
     auto map = std::make_unique<Map>(options.outPath);
     map->setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
 
-    ObjectCommandController controller(
-        resources, map, hexgrid, spriteLoader, objects, overlays, undoStack,
+    // Headless host: no rendering/UI, just the trivial tile/elevation accessors. Outlives
+    // `controller`, which holds a reference to it.
+    CallbackCommandHost host(
         [] { /* refreshObjects: nothing to render */ },
-        [] { /* onStackChanged: no UI */ },
+        [] { /* undoStackChanged: no UI */ },
         [&map](int elevation) -> std::vector<Tile>& { return map->getMapFile().tiles[elevation]; },
         [&options] { return options.elevation; },
         [](int, bool, int) { /* updateTileSprite: no rendering */ },
         [] { /* reloadTiles: no rendering */ });
+
+    ObjectCommandController controller(
+        resources, map, hexgrid, spriteLoader, objects, overlays, undoStack, host);
 
     // Data-only mode: objects are recorded as map data without building sprites (no GL).
     MapScriptApi api(resources, hexgrid, controller, *map, options.elevation, /*buildSprites*/ false);
@@ -115,7 +119,7 @@ int generateMap(resource::GameResources& resources, const GenerateOptions& optio
     // writer needs the same proto provider the reader uses.
     const std::function<Pro*(int32_t)> proLoad = [&resources](int32_t pid) -> Pro* {
         try {
-            return resources.repository().load<Pro>(ProHelper::basePath(resources, static_cast<uint32_t>(pid)));
+            return resources.loadPro(static_cast<uint32_t>(pid));
         } catch (const std::exception&) {
             return nullptr;
         }

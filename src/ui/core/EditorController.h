@@ -11,6 +11,7 @@
 namespace geck {
 
 class ObjectCommandController;
+class CallbackCommandHost;
 class MapSpriteLoader;
 class ViewportController;
 class RenderingEngine;
@@ -92,6 +93,9 @@ private:
     // Declared after the loader so the command controller (which references the loader)
     // is destroyed first.
     std::unique_ptr<MapSpriteLoader> _spriteLoader;
+    // The host the command controller notifies; declared before it so it outlives the
+    // controller's reference to it.
+    std::unique_ptr<CallbackCommandHost> _commandHost;
     std::unique_ptr<ObjectCommandController> _commandController;
 };
 
