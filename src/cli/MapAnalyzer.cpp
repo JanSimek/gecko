@@ -32,6 +32,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -738,9 +739,13 @@ namespace {
             }
             if (line[begin] == '[') {
                 current = -1;
-                int idx = 0;
-                if (std::sscanf(line.c_str() + begin, "[Map %d]", &idx) == 1) { // "[Map NNN]"
-                    current = idx;
+                static constexpr std::string_view kMapPrefix = "[Map "; // sections are "[Map NNN]"
+                if (line.compare(begin, kMapPrefix.size(), kMapPrefix) == 0) {
+                    try {
+                        current = std::stoi(line.substr(begin + kMapPrefix.size())); // stops at the ']'
+                    } catch (const std::exception&) {
+                        current = -1;
+                    }
                 }
             } else if (current >= 0) {
                 const auto eq = line.find('=');
