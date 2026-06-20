@@ -1,5 +1,8 @@
 #include "GameResources.h"
 
+#include "format/pro/Pro.h"
+#include "util/ProHelper.h"
+
 namespace geck::resource {
 
 GameResources::GameResources()
@@ -15,6 +18,10 @@ DataFileSystem& GameResources::files() {
 
 ResourceRepository& GameResources::repository() {
     return _repository;
+}
+
+Pro* GameResources::loadPro(uint32_t pid) {
+    return _repository.load<Pro>(ProHelper::basePath(*this, pid));
 }
 
 FrmResolver& GameResources::frmResolver() {

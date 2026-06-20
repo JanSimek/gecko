@@ -25,7 +25,6 @@
 #include "editing/commands/CommandHost.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "rendering/MapSpriteLoader.h"
-#include "util/ProHelper.h"
 #include "util/UndoStack.h"
 #include "writer/map/MapWriter.h"
 #endif
@@ -120,7 +119,7 @@ int generateMap(resource::GameResources& resources, const GenerateOptions& optio
     // writer needs the same proto provider the reader uses.
     const std::function<Pro*(int32_t)> proLoad = [&resources](int32_t pid) -> Pro* {
         try {
-            return resources.repository().load<Pro>(ProHelper::basePath(resources, static_cast<uint32_t>(pid)));
+            return resources.loadPro(static_cast<uint32_t>(pid));
         } catch (const std::exception&) {
             return nullptr;
         }

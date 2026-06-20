@@ -19,7 +19,6 @@
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 #include "ui/rendering/ThumbnailRenderer.h"
-#include "util/ProHelper.h"
 
 namespace geck {
 
@@ -39,7 +38,7 @@ QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& re
     std::unique_ptr<Map> map;
     try {
         const auto proLoad = [&resources](uint32_t pid) {
-            return resources.repository().load<Pro>(ProHelper::basePath(resources, pid));
+            return resources.loadPro(pid);
         };
         MapReader reader(proLoad);
         map = reader.openFile(path.string(), *bytes);

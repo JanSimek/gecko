@@ -4,7 +4,6 @@
 #include "format/pro/Pro.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
-#include "util/ProHelper.h"
 
 #include <spdlog/spdlog.h>
 
@@ -21,7 +20,7 @@ namespace geck::cli {
 std::function<Pro*(std::uint32_t)> makeProtoLoader(resource::GameResources& resources) {
     return [&resources](std::uint32_t pid) -> Pro* {
         try {
-            return resources.repository().load<Pro>(ProHelper::basePath(resources, pid));
+            return resources.loadPro(pid);
         } catch (const std::exception& e) {
             spdlog::debug("proLoad: pid {} failed: {}", pid, e.what());
             return nullptr;

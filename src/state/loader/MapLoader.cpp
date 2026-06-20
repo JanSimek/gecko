@@ -18,7 +18,6 @@
 #include "format/frm/Direction.h"
 
 #include "resource/GameResources.h"
-#include "util/ProHelper.h"
 #include "resource/ResourceInitializer.h"
 
 namespace geck {
@@ -87,7 +86,7 @@ void MapLoader::loadFromVFS() {
         }
 
         auto proLoadCallback = [&](uint32_t PID) {
-            return _resources->repository().load<Pro>(ProHelper::basePath(*_resources, PID));
+            return _resources->loadPro(PID);
         };
         MapReader mapReader(proLoadCallback);
 
@@ -133,7 +132,7 @@ void MapLoader::loadFromFilesystem() {
     // MapReader requires callback in constructor, so we need to create it directly
     try {
         auto proLoadCallback = [&](uint32_t PID) {
-            return _resources->repository().load<Pro>(ProHelper::basePath(*_resources, PID));
+            return _resources->loadPro(PID);
         };
         MapReader map_reader{ proLoadCallback };
         _map = map_reader.openFile(_mapPath);

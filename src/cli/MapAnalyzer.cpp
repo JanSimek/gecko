@@ -137,7 +137,7 @@ namespace {
             }
             uint32_t packet = 0;
             try {
-                const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, pid));
+                const Pro* pro = _resources.loadPro(pid);
                 if (pro != nullptr && pro->type() == Pro::OBJECT_TYPE::CRITTER) {
                     packet = pro->critterData.aiPacket;
                 }
@@ -157,7 +157,7 @@ namespace {
             bool loaded = false;
             bool flat = false;
             try {
-                if (const Pro* pro = _resources.repository().load<Pro>(ProHelper::basePath(_resources, pid)); pro != nullptr) {
+                if (const Pro* pro = _resources.loadPro(pid); pro != nullptr) {
                     loaded = true;
                     flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
                 }

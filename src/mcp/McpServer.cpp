@@ -157,7 +157,7 @@ namespace {
         try {
             std::string name;
             bool flat = false;
-            if (const Pro* pro = resources.repository().load<Pro>(ProHelper::basePath(resources, pid)); pro != nullptr) {
+            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
                 flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
                 if (Msg* msg = ProHelper::msgFile(resources, pro->type()); msg != nullptr) {
                     name = msg->message(pro->header.message_id).text;

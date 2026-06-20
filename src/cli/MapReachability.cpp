@@ -37,7 +37,7 @@ namespace {
 
     std::string protoName(resource::GameResources& resources, uint32_t pid) {
         try {
-            if (const Pro* pro = resources.repository().load<Pro>(ProHelper::basePath(resources, pid)); pro != nullptr) {
+            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
                 if (Msg* msg = ProHelper::msgFile(resources, pro->type()); msg != nullptr) {
                     return msg->message(pro->header.message_id).text;
                 }
@@ -50,7 +50,7 @@ namespace {
     // A door blocks only until opened; for reachability the player can open it, so doors are passable.
     bool isDoor(resource::GameResources& resources, const MapObject& object) {
         try {
-            if (const Pro* pro = resources.repository().load<Pro>(ProHelper::basePath(resources, object.pro_pid)); pro != nullptr) {
+            if (const Pro* pro = resources.loadPro(object.pro_pid); pro != nullptr) {
                 return pro->type() == Pro::OBJECT_TYPE::SCENERY
                     && static_cast<Pro::SCENERY_TYPE>(pro->objectSubtypeId()) == Pro::SCENERY_TYPE::DOOR;
             }
