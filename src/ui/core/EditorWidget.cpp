@@ -460,8 +460,8 @@ bool EditorWidget::saveMap() {
     std::string destination = destinationQString.toStdString();
 
     try {
-        const auto bytesWritten = saveMapToFile(_resources, _session.map()->getMapFile(), destination);
-        if (bytesWritten.has_value()) {
+        if (const auto bytesWritten = saveMapToFile(_resources, _session.map()->getMapFile(), destination);
+            bytesWritten.has_value()) {
             spdlog::info("Saved map {} ({} bytes)", destination, *bytesWritten);
             // Repoint the map at the saved file so the window title reflects the chosen name.
             _session.map()->setPath(std::filesystem::path(destination));
