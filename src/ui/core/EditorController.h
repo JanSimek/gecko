@@ -12,6 +12,7 @@ namespace geck {
 
 class ObjectCommandController;
 class MapSpriteLoader;
+class ViewportController;
 class Tile;
 
 namespace resource {
@@ -70,10 +71,16 @@ public:
     ObjectCommandController& commandController() { return *_commandController; }
     const ObjectCommandController& commandController() const { return *_commandController; }
 
+    // Owns the viewport (camera/coordinate mapping). Const-callable returning a mutable
+    // reference, matching the prior getViewportController() const accessor.
+    ViewportController& viewport() const { return *_viewport; }
+
 private:
     EditorSession _session;
     ObjectPicker _picker{ _session };
     SelectionVisualizer _visualizer{ _session };
+    // Constructed in the EditorController constructor from _session.hexgrid().
+    std::unique_ptr<ViewportController> _viewport;
     // Declared after the loader so the command controller (which references the loader)
     // is destroyed first.
     std::unique_ptr<MapSpriteLoader> _spriteLoader;

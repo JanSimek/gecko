@@ -166,7 +166,7 @@ public:
     selection::SelectionManager* getSelectionManager() const override { return _session.selectionManager(); }
     TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
     ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
-    ViewportController* getViewportController() const override { return _viewportController.get(); }
+    ViewportController* getViewportController() const override { return &_controller.viewport(); }
     int& getCurrentHoverHex() override { return _currentHoverHex; }
     void registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves) override;
     void moveSelectedTilesForDrag(sf::Vector2f worldTranslation) override;
@@ -354,7 +354,7 @@ private:
     std::unique_ptr<DragDropManager> _dragDropManager;
     std::unique_ptr<TilePlacementManager> _tilePlacementManager;
     std::unique_ptr<ExitGridPlacementManager> _exitGridPlacementManager;
-    std::unique_ptr<ViewportController> _viewportController;
+    // ViewportController now lives in _controller.
 
     // Game/Editor State
     SelectionMode _currentSelectionMode = SelectionMode::ALL;

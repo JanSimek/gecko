@@ -2,10 +2,14 @@
 
 #include "editing/commands/ObjectCommandController.h"
 #include "rendering/MapSpriteLoader.h"
+#include "viewport/ViewportController.h"
 
 namespace geck {
 
-EditorController::EditorController() = default;
+EditorController::EditorController()
+    : _viewport(std::make_unique<ViewportController>(&_session.hexgrid())) {
+}
+
 EditorController::~EditorController() = default;
 
 void EditorController::initEditingCore(resource::GameResources& resources, EditingCoreCallbacks callbacks) {

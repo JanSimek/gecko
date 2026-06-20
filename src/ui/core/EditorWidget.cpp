@@ -92,11 +92,10 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
             if (auto* mw = getMainWindow())
                 mw->showStatusMessage(m);
         });
-    _viewportController = std::make_unique<ViewportController>(&_session.hexgrid());
     setupInputCallbacks();
 
     setupUI();
-    _viewportController->centerViewOnMap();
+    _controller.viewport().centerViewOnMap();
 }
 
 // Tile-edit command logic lives in ObjectCommandController (the single command
@@ -375,7 +374,7 @@ void EditorWidget::init() {
             static_cast<unsigned int>(_sfmlWidget->width()),
             static_cast<unsigned int>(_sfmlWidget->height()));
     }
-    _viewportController->initialize(windowSize);
+    _controller.viewport().initialize(windowSize);
 }
 
 #ifdef GECK_SCRIPTING_ENABLED
@@ -531,7 +530,7 @@ void EditorWidget::createNewMap() {
     loadSprites();
 
     _session.selectionManager()->clearSelection();
-    _viewportController->centerViewOnMap();
+    _controller.viewport().centerViewOnMap();
 
     if (_mainWindow) {
         _mainWindow->updateMapInfo(_session.map());
@@ -546,10 +545,10 @@ std::vector<int> EditorWidget::calculateRectangleBorderHexes(sf::FloatRect recta
     sf::Vector2f bottomLeft = sf::Vector2f(rectangle.position.x, rectangle.position.y + rectangle.size.y);
     sf::Vector2f bottomRight = sf::Vector2f(rectangle.position.x + rectangle.size.x, rectangle.position.y + rectangle.size.y);
 
-    int topLeftHex = _viewportController->worldPosToHexIndex(topLeft);
-    int topRightHex = _viewportController->worldPosToHexIndex(topRight);
-    int bottomLeftHex = _viewportController->worldPosToHexIndex(bottomLeft);
-    int bottomRightHex = _viewportController->worldPosToHexIndex(bottomRight);
+    int topLeftHex = _controller.viewport().worldPosToHexIndex(topLeft);
+    int topRightHex = _controller.viewport().worldPosToHexIndex(topRight);
+    int bottomLeftHex = _controller.viewport().worldPosToHexIndex(bottomLeft);
+    int bottomRightHex = _controller.viewport().worldPosToHexIndex(bottomRight);
 
     if (!_session.hexgrid().containsPosition(topLeftHex)
         || !_session.hexgrid().containsPosition(topRightHex)
@@ -644,15 +643,13 @@ bool EditorWidget::isDoubleClick(sf::Vector2f worldPos) {
 // SFML event handling interface (called by SFMLWidget)
 void EditorWidget::handleEvent(const sf::Event& event) {
     if (const auto* resized = event.getIf<sf::Event::Resized>()) {
-        if (_viewportController) {
-            _viewportController->updateViewForWindowSize(sf::Vector2u(resized->size.x, resized->size.y));
-            spdlog::debug("EditorWidget: Handled window resize to {}x{}", resized->size.x, resized->size.y);
-        }
+        _controller.viewport().updateViewForWindowSize(sf::Vector2u(resized->size.x, resized->size.y));
+        spdlog::debug("EditorWidget: Handled window resize to {}x{}", resized->size.x, resized->size.y);
     }
 
     if (_inputHandler && _sfmlWidget) {
         if (auto* target = _sfmlWidget->getRenderTarget()) {
-            _inputHandler->handleEvent(event, *target, _viewportController->getView());
+            _inputHandler->handleEvent(event, *target, _controller.viewport().getView());
         }
     }
 }
@@ -745,12 +742,12 @@ void EditorWidget::bindInteractionCallbacks(InputHandler::Callbacks& callbacks) 
     };
 
     callbacks.onPan = [this](sf::Vector2f delta) {
-        sf::Vector2f center = _viewportController->getView().getCenter();
-        _viewportController->getView().setCenter(center + delta);
+        sf::Vector2f center = _controller.viewport().getView().getCenter();
+        _controller.viewport().getView().setCenter(center + delta);
     };
 
     callbacks.onZoom = [this](float direction) {
-        _viewportController->zoomView(direction);
+        _controller.viewport().zoomView(direction);
     };
 
     callbacks.canStartObjectDrag = [this](sf::Vector2f worldPos) {
@@ -782,7 +779,7 @@ void EditorWidget::bindInteractionCallbacks(InputHandler::Callbacks& callbacks) 
 
 void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     callbacks.onPlayerPositionSelect = [this](sf::Vector2f worldPos) {
-        int hexPosition = _viewportController->worldPosToHexIndex(worldPos);
+        int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
         if (hexPosition >= 0) {
             Q_EMIT playerPositionSelected(hexPosition);
             spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
@@ -833,7 +830,7 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     };
 
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
-        _currentHoverHex = _viewportController->updateHoverHex(worldPos);
+        _currentHoverHex = _controller.viewport().updateHoverHex(worldPos);
         Q_EMIT hexHoverChanged(_currentHoverHex);
         if (_mode == EditorMode::StampPattern) {
             updateStampPreview(worldPos);
@@ -951,7 +948,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.map = _session.map();
     renderData.currentElevation = _session.currentElevation();
 
-    _renderingEngine->render(target, _viewportController->getView(), renderData, visibility);
+    _renderingEngine->render(target, _controller.viewport().getView(), renderData, visibility);
 }
 
 bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
@@ -1235,7 +1232,7 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
     if (!_stampPattern || !_session.map() || _stampPattern->variants.empty()) {
         return;
     }
-    const int hex = _viewportController->worldPosToHexIndex(worldPos);
+    const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
     if (!_session.hexgrid().containsPosition(hex)) {
         return;
     }
@@ -1276,7 +1273,7 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
         clearStampPreview();
         return;
     }
-    const int hex = _viewportController->worldPosToHexIndex(worldPos);
+    const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
     if (!_session.hexgrid().containsPosition(hex)) {
         clearStampPreview();
         return;
@@ -1610,7 +1607,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
         return;
     }
 
-    int hexPosition = _viewportController->worldPosToHexIndex(worldPos);
+    int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
     if (!_session.hexgrid().containsPosition(hexPosition)) {
         spdlog::warn("EditorWidget: Invalid hex position {} for object placement", hexPosition);
         return;
@@ -1752,7 +1749,7 @@ void EditorWidget::centerViewOnPlayerPosition() {
     float screenX = static_cast<float>(hex->get().x());
     float screenY = static_cast<float>(hex->get().y());
 
-    _viewportController->getView().setCenter(sf::Vector2f(screenX, screenY));
+    _controller.viewport().getView().setCenter(sf::Vector2f(screenX, screenY));
 
     spdlog::debug("EditorWidget::centerViewOnPlayerPosition: Centered view on player position {} at screen ({}, {})",
         playerHexPosition, screenX, screenY);
