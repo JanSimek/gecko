@@ -647,7 +647,7 @@ namespace {
     // Per-map header digest: player spawn, which elevations are enabled, darkness, the map script id,
     // the local-var pool size, and the map variables (MVARS) — each with its name from the .gam (the
     // .map stores only the value) so an agent reads the map's tracked state, not just a count.
-    ordered_json headerToJson(Map& map, const Gam* gam) {
+    ordered_json headerToJson(Map& map, const Gam* gam, const Lst* scriptsLst) {
         const auto& header = map.getMapFile().header;
         ordered_json root;
         root["version"] = header.version;
@@ -661,7 +661,21 @@ namespace {
         }
         root["elevations"] = std::move(elevations);
         root["darkness"] = header.darkness;
+        // The header's script_id is **1-based**: the engine runs the map's SYSTEM script from
+        // scripts.lst[script_id - 1] (fallout2-ce map.cc: `script->index = scriptIndex - 1`, only
+        // when scriptIndex > 0). Resolve to that 0-based programIndex + name so describe_script can be
+        // fed it directly; null when the map has no script (script_id <= 0).
         root["scriptId"] = header.script_id;
+        if (header.script_id > 0) {
+            const int programIndex = header.script_id - 1;
+            std::string name;
+            if (scriptsLst != nullptr && programIndex < static_cast<int>(scriptsLst->list().size())) {
+                name = scriptsLst->at(programIndex);
+            }
+            root["mapScript"] = { { "programIndex", programIndex }, { "name", name } };
+        } else {
+            root["mapScript"] = nullptr;
+        }
         root["localVarCount"] = header.num_local_vars;
         auto mapVarsJson = ordered_json::array();
         const auto& mapVars = map.getMapFile().map_global_vars;
@@ -760,7 +774,7 @@ namespace {
         entry["adjacency"] = adjacencyToJson(usage, names, agg);
         entry["clusters"] = clustersToJson(collectClusters(map), names);
         entry["critters"] = crittersToJson(map, names, ai, scriptsLst);
-        entry["header"] = headerToJson(map, loadMapGam(resources, mapPath));
+        entry["header"] = headerToJson(map, loadMapGam(resources, mapPath), scriptsLst);
         entry["exits"] = exitsToJson(map, mapNames);
         return entry;
     }
