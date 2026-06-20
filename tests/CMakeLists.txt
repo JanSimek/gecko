@@ -158,24 +158,9 @@ endif()
 add_test(NAME qt_tests COMMAND qt_tests)
 
 
-# copy shared external libraries to the build directory for Windows builds
-if(WIN32)
-    add_custom_command(
-        TARGET general_tests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:general_tests> $<TARGET_FILE_DIR:general_tests>
-        COMMAND_EXPAND_LISTS
-    )
-    add_custom_command(
-        TARGET performance_tests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:performance_tests> $<TARGET_FILE_DIR:performance_tests>
-        COMMAND_EXPAND_LISTS
-    )
-    add_custom_command(
-        TARGET qt_tests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:qt_tests> $<TARGET_FILE_DIR:qt_tests>
-        COMMAND_EXPAND_LISTS
-    )
-endif()
+# Windows runtime DLLs for the test executables are staged by copy_runtime_dlls (top-level
+# CMakeLists), which copies the union of every executable's DLLs once — doing it per-target here
+# raced with gecko's identical copies into the shared output dir.
 
 # general_tests / performance_tests resolve fixtures by absolute path
 # (GECK_TEST_DATA_DIR via test_support), so no tests/data copy is needed for them.

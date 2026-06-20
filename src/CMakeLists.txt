@@ -590,14 +590,9 @@ target_include_directories(gecko_app PUBLIC
 
 target_link_libraries(${PROJECT_NAME} PRIVATE gecko_app)
 
-# copy shared external libraries to the build directory for Windows builds
-if(WIN32)
-    add_custom_command(
-        TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}> $<TARGET_FILE_DIR:${PROJECT_NAME}>
-        COMMAND_EXPAND_LISTS
-    )
-endif()
+# Windows runtime DLLs are staged by the single copy_runtime_dlls target (top-level CMakeLists),
+# which copies the union of every executable's runtime DLLs once. Doing it per-target here raced
+# with the test executables' identical copies into the shared output dir.
 
 # Copy resources to appropriate location based on platform. The example generation scripts ship
 # under resources/scripts so the running app can find them next to the rest of the resources.

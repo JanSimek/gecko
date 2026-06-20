@@ -139,6 +139,27 @@ if(GECK_BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
     enable_testing()
 endif()
 
+# Windows: one target stages the runtime DLLs into the shared output dir. Each executable used to
+# copy its own $<TARGET_RUNTIME_DLLS> in a POST_BUILD step, and those steps raced on the Qt/SFML
+# DLLs they share (intermittent, then persistent, "Error copying ...sfml-window-3.dll" on the
+# Windows build). Copying the *union* of every executable's runtime DLLs from a single target makes
+# it one sequential operation — no race. copy_if_different tolerates the DLLs shared across targets.
+if(WIN32)
+    set(_runtime_dll_targets ${PROJECT_NAME})
+    if(GECK_BUILD_TESTS AND TARGET general_tests)
+        list(APPEND _runtime_dll_targets general_tests performance_tests qt_tests)
+    endif()
+    set(_runtime_dll_genexprs "")
+    foreach(_t IN LISTS _runtime_dll_targets)
+        list(APPEND _runtime_dll_genexprs "$<TARGET_RUNTIME_DLLS:${_t}>")
+    endforeach()
+    add_custom_target(copy_runtime_dlls ALL
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_runtime_dll_genexprs} $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        COMMAND_EXPAND_LISTS
+        DEPENDS ${_runtime_dll_targets}
+        COMMENT "Staging runtime DLLs into the build tree")
+endif()
+
 ##################################################
 # Configuration summary
 ##################################################
