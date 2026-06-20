@@ -1,6 +1,7 @@
 #include "mcp/McpServer.h"
 
 #include "cli/MapAnalyzer.h"
+#include "cli/MapDescribe.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapReachability.h"
 #include "cli/MapRender.h"
@@ -149,6 +150,22 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    json toolDescribeMap(resource::GameResources& resources, const json& args) {
+        cli::DescribeMapOptions opts;
+        opts.mapPath = optString(args, "map");
+        if (opts.mapPath.empty()) {
+            return toolText("describe_map requires a 'map' path argument", true);
+        }
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::describeMap(resources, opts, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("describe_map failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
         if (!args.contains("pid") || !args["pid"].is_number_integer()) {
             return toolText("proto_info requires an integer 'pid' argument", true);
@@ -269,6 +286,9 @@ namespace {
         if (name == "reachability") {
             return toolReachability(resources, args);
         }
+        if (name == "describe_map") {
+            return toolDescribeMap(resources, args);
+        }
         if (name == "generate") {
             return toolGenerate(resources, args);
         }
@@ -326,6 +346,16 @@ namespace {
                                  "grid with 'reachableFromPlayerStart' (walk-connected to the spawn specifically; "
                                  "null if the player spawns elsewhere). OPTIMISTIC, not exact pathfinding: doors "
                                  "(incl. locked) are passable, so it over-estimates rather than crying wolf. Args: map." },
+                { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } } } },
+            { { "name", "describe_map" },
+                { "description", "One structured digest for a single map, composed from analyze + reachability: the "
+                                 "header (elevations, darkness, player start, map script, map variables), floor usage "
+                                 "(biome), object 'clusters' (structures), the 'critters' roster with ai.txt-resolved "
+                                 "AI and each one's attached {programIndex,name} script, the 'exits' graph, and a "
+                                 "'reachability' field (per-elevation walkable/reachable hexes + entry-orphaned "
+                                 "objects). Gathers the engine's own semantic evidence in one call — join keys (pid, "
+                                 "script_id, ai_packet) are preserved — so you can infer the map's purpose and follow "
+                                 "up with describe_script on any roster entry. Args: map." },
                 { "inputSchema", { { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } } } },
             { { "name", "generate" },
                 { "description", "Run a Luau generation script against a fresh map and write a .map. "

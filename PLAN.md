@@ -674,9 +674,12 @@ The direction instead:
 
 # Map semantics & intelligence (analysis MCP roadmap)
 
-> Status: scoping; **Phase 1 done** (ai.txt reader; `analyze` now reports per-map `critters` with
-> team + ai.txt-resolved AI, a `header` digest with player spawn / enabled elevations / darkness /
-> map script / named map variables, and an `exits` connectivity graph). Today the MCP *perceives
+> Status: **Phases 1–2 done + the `describe_map` orchestrator (capability 1) shipped.** Phase 1:
+> ai.txt reader; `analyze` reports per-map `critters` (team + ai.txt-resolved AI), a `header` digest
+> (player spawn / enabled elevations / darkness / map script / named map variables) and an `exits`
+> connectivity graph. Phase 2: `describe_script` (.ssl source + dialog) and `reachability`.
+> `describe_map` now composes analyze + reachability into one cross-referenced digest (capability 1
+> below). Remaining: the Phase-3 semantic render overlay (capability 5). Today the MCP *perceives
 > geometry* — tiles, objects,
 > clusters, palette, render, extract/generate. It cannot read the map's **semantic** layer: AI
 > packet is a raw number (no `ai.txt` reader), scripts are referenced by `scripts.lst` index/name
@@ -694,10 +697,15 @@ from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
 
 **Capabilities (each notes the reader it needs):**
 
-1. **`describe_map` — purpose synthesis (orchestrator).** One structured digest: dimensions /
-   elevations, dominant biome (floor), structures (clusters), critter roster by team/role, exits +
-   reachable regions, attached scripts + hooks, darkness, map vars. Composes the tools below;
-   returns evidence, the model writes the conclusion.
+1. **`describe_map` — purpose synthesis (orchestrator). ✅ Done.** One structured digest per map:
+   the `analyze` per-map report (header — enabled elevations / darkness / player start / map script /
+   map vars; floor/biome; object `clusters` = structures; `critters` roster with ai.txt-resolved AI
+   and each one's attached `{programIndex, name}`; `exits` graph) **plus** a `reachability` field
+   (per-elevation walkable/reachable hexes + entry-orphaned objects). Composes `analyzeMaps` +
+   `analyzeReachability` (`cli::describeMap`, MCP `describe_map`, CLI `map describe-map`); returns the
+   engine's own evidence with join keys preserved (pid, script_id, ai_packet) — the model writes the
+   conclusion, no baked-in heuristics. Verified: artemple clean (0 orphans), vctydwtn surfaces the 9
+   orphaned servant/slave objects inline with the roster.
 2. **Critters + AI — `critters` tool + new `ai.txt` reader.** Per critter: name (`pro_critters.msg`),
    hex, **team (`group_id`)**, **AI packet resolved via `ai.txt`** (aggression, disposition,
    `run_away_mode`, `area_attack_mode`, `best_weapon`, `distance`, `secondary_freq`), equipped

@@ -560,7 +560,9 @@ if(GECK_BUILD_CLI)
         cli/ScriptIntrospect.h
         cli/ScriptIntrospect.cpp
         cli/MapReachability.h
-        cli/MapReachability.cpp)
+        cli/MapReachability.cpp
+        cli/MapDescribe.h
+        cli/MapDescribe.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)
