@@ -395,6 +395,9 @@ add_library(gecko_resource STATIC
 
     resource/ResourceInitializer.h
     resource/ResourceInitializer.cpp
+
+    resource/MapNameResolver.h
+    resource/MapNameResolver.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 

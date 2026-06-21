@@ -4,6 +4,7 @@
 #include "ui/GameEnums.h"
 #include "util/Constants.h"
 #include "editor/HexagonGrid.h"
+#include "resource/MapNameResolver.h"
 
 #include <QApplication>
 #include <QStyle>
@@ -14,7 +15,7 @@ namespace geck {
 
 using namespace ui::constants;
 
-ExitGridPropertiesDialog::ExitGridPropertiesDialog(QWidget* parent)
+ExitGridPropertiesDialog::ExitGridPropertiesDialog(QWidget* parent, const resource::MapNameResolver* names)
     : QDialog(parent)
     , _mainLayout(nullptr)
     , _formLayout(nullptr)
@@ -23,7 +24,9 @@ ExitGridPropertiesDialog::ExitGridPropertiesDialog(QWidget* parent)
     , _positionSpinBox(nullptr)
     , _elevationComboBox(nullptr)
     , _orientationComboBox(nullptr)
-    , _statusLabel(nullptr) {
+    , _mapNameLabel(nullptr)
+    , _statusLabel(nullptr)
+    , _names(names) {
 
     setWindowTitle("Exit Grid Properties");
     setModal(true);
@@ -33,8 +36,9 @@ ExitGridPropertiesDialog::ExitGridPropertiesDialog(QWidget* parent)
     setupUI();
 }
 
-ExitGridPropertiesDialog::ExitGridPropertiesDialog(const ExitGridProperties& properties, QWidget* parent)
-    : ExitGridPropertiesDialog(parent) {
+ExitGridPropertiesDialog::ExitGridPropertiesDialog(const ExitGridProperties& properties, QWidget* parent,
+    const resource::MapNameResolver* names)
+    : ExitGridPropertiesDialog(parent, names) {
     setProperties(properties);
 }
 
@@ -79,6 +83,13 @@ void ExitGridPropertiesDialog::setupFormLayout() {
     _mapIdSpinBox->setToolTip("Destination map ID (-2 = worldmap, 0-999999 = specific map)");
     _formLayout->addRow("Destination Map ID:", _mapIdSpinBox);
 
+    // Resolved destination-map name (filename · friendly map.msg name), shown under the map ID when a
+    // MapNameResolver is supplied; stays hidden otherwise (e.g. no game data mounted).
+    _mapNameLabel = new QLabel(this);
+    _mapNameLabel->setStyleSheet(ui::theme::styles::mutedText());
+    _mapNameLabel->hide();
+    _formLayout->addRow("", _mapNameLabel);
+
     // Position input (hex coordinate)
     _positionSpinBox = new QSpinBox(this);
     _positionSpinBox->setRange(0, HexagonGrid::POSITION_COUNT - 1);
@@ -114,6 +125,12 @@ void ExitGridPropertiesDialog::setupFormLayout() {
         this, &ExitGridPropertiesDialog::validateInput);
     connect(_orientationComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, &ExitGridPropertiesDialog::validateInput);
+
+    // Keep the resolved destination-map name in sync with the map ID and elevation
+    connect(_mapIdSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+        this, &ExitGridPropertiesDialog::updateMapName);
+    connect(_elevationComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        this, &ExitGridPropertiesDialog::updateMapName);
 }
 
 void ExitGridPropertiesDialog::setupButtonBox() {
@@ -159,6 +176,7 @@ void ExitGridPropertiesDialog::updateUI() {
     }
 
     updateMapControlsEnabled();
+    updateMapName();
 
     // Run validation to enable/disable the OK button
     validateInput();
@@ -189,6 +207,34 @@ void ExitGridPropertiesDialog::accept() {
 
 void ExitGridPropertiesDialog::onPositionChanged() {
     validateInput();
+}
+
+void ExitGridPropertiesDialog::updateMapName() {
+    if (_names == nullptr) {
+        return; // no resolver (e.g. no game data mounted) -> leave the label hidden
+    }
+
+    const int mapId = _mapIdSpinBox->value();
+    QString text;
+    if (mapId == -2) { // ExitGrid::WORLD_MAP_EXIT, as the spin box represents it
+        text = "→ world map";
+    } else if (mapId == -1) { // ExitGrid::TOWN_MAP_EXIT
+        text = "→ town map";
+    } else {
+        const int elevation = _elevationComboBox->currentData().toInt();
+        const std::string file = _names->fileNameOf(mapId);
+        const std::string display = _names->displayName(mapId, elevation);
+        if (file.empty() && display.empty()) {
+            text = QString("→ map %1 (not in maps.txt)").arg(mapId);
+        } else {
+            text = "→ " + QString::fromStdString(file.empty() ? ("map " + std::to_string(mapId)) : file);
+            if (!display.empty()) {
+                text += " · " + QString::fromStdString(display);
+            }
+        }
+    }
+    _mapNameLabel->setText(text);
+    _mapNameLabel->show();
 }
 
 void ExitGridPropertiesDialog::validateInput() {
