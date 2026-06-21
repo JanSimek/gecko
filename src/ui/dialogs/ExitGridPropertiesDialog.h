@@ -14,6 +14,10 @@
 
 namespace geck {
 
+namespace resource {
+    class MapNameResolver;
+}
+
 /**
  * @brief Properties dialog for exit grid configuration
  *
@@ -22,6 +26,10 @@ namespace geck {
  * - Player spawn position (hex coordinate)
  * - Destination elevation level
  * - Player orientation/direction
+ *
+ * When a MapNameResolver is supplied, the destination map ID is annotated with the resolved .map
+ * filename and friendly map.msg name (from maps.txt / map.msg), so the editor shows "arcaves.map ·
+ * Temple: Foyer" instead of a bare number.
  */
 class ExitGridPropertiesDialog : public QDialog {
     Q_OBJECT
@@ -34,8 +42,9 @@ public:
         uint32_t exitOrientation = 0; // Player direction (0-5)
     };
 
-    explicit ExitGridPropertiesDialog(QWidget* parent = nullptr);
-    explicit ExitGridPropertiesDialog(const ExitGridProperties& properties, QWidget* parent = nullptr);
+    explicit ExitGridPropertiesDialog(QWidget* parent = nullptr, const resource::MapNameResolver* names = nullptr);
+    explicit ExitGridPropertiesDialog(const ExitGridProperties& properties, QWidget* parent = nullptr,
+        const resource::MapNameResolver* names = nullptr);
     ~ExitGridPropertiesDialog() = default;
 
     ExitGridProperties getProperties() const;
@@ -47,6 +56,7 @@ public slots:
 private slots:
     void onPositionChanged();
     void validateInput();
+    void updateMapName();
     void onExitToWorldmapToggled(bool checked);
     void onTownMapToggled(bool checked);
 
@@ -71,8 +81,14 @@ private:
     QComboBox* _elevationComboBox;
     QComboBox* _orientationComboBox;
 
+    // Resolved destination-map name shown under the map ID (filename · friendly name)
+    QLabel* _mapNameLabel;
+
     // Status
     QLabel* _statusLabel;
+
+    // Resolves a map ID to its .map filename + map.msg name (not owned; may be null)
+    const resource::MapNameResolver* _names;
 
     // Properties
     ExitGridProperties _properties;

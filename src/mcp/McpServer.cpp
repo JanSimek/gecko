@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <optional>
 #include <sstream>
@@ -77,8 +78,7 @@ namespace {
         }
         const int64_t value = it->get<int64_t>();
         if (value < min || value > max) {
-            throw ToolError{ std::string("argument '") + key + "' must be in ["
-                + std::to_string(min) + ", " + std::to_string(max) + "]" };
+            throw ToolError{ std::format("argument '{}' must be in [{}, {}]", key, min, max) };
         }
         return value;
     }

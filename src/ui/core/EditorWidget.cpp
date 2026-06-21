@@ -88,6 +88,7 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
     _tilePlacementManager = std::make_unique<TilePlacementManager>(*this);
     _exitGridPlacementManager = std::make_unique<ExitGridPlacementManager>(
         *this,
+        _resources,
         [this](const QString& m) {
             if (auto* mw = getMainWindow())
                 mw->showStatusMessage(m);

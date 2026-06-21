@@ -10,6 +10,7 @@
 #include "editor/HexagonGrid.h"
 #include "selection/SelectionManager.h"
 #include "selection/SelectionState.h"
+#include "resource/MapNameResolver.h"
 
 #include <QApplication>
 #include <QMessageBox>
@@ -17,8 +18,10 @@
 
 namespace geck {
 
-ExitGridPlacementManager::ExitGridPlacementManager(ExitGridContext& context, std::function<void(const QString&)> showStatus)
+ExitGridPlacementManager::ExitGridPlacementManager(ExitGridContext& context, resource::GameResources& resources,
+    std::function<void(const QString&)> showStatus)
     : _context(context)
+    , _resources(resources)
     , _showStatus(std::move(showStatus)) {
 }
 
@@ -200,7 +203,10 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
 }
 
 bool ExitGridPlacementManager::showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing) {
-    ExitGridPropertiesDialog dialog(existing ? *existing : ExitGridPropertiesDialog::ExitGridProperties{}, _context.getDialogParent());
+    // maps.txt is small; build the resolver per dialog so it reflects the currently-mounted data.
+    const resource::MapNameResolver mapNames(_resources);
+    ExitGridPropertiesDialog dialog(existing ? *existing : ExitGridPropertiesDialog::ExitGridProperties{},
+        _context.getDialogParent(), &mapNames);
 
     if (!existing) {
         ExitGridPropertiesDialog::ExitGridProperties defaults;

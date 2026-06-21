@@ -280,6 +280,9 @@ add_library(vault STATIC
     # AI (ai.txt — critter AI packets)
     format/ai/AiPacket.h
 
+    # Maps (maps.txt — the engine's index->map registry)
+    format/maps/MapsTxt.h
+
     # PRO
     format/pro/Pro.h
     format/pro/Pro.cpp
@@ -307,6 +310,7 @@ add_library(vault STATIC
 
     # Parser superclass
     reader/FileParser.h
+    reader/TextParsing.h
     reader/ReaderFactory.h
     reader/ReaderFactory.cpp
 
@@ -333,6 +337,9 @@ add_library(vault STATIC
 
     reader/ai/AiTxtReader.h
     reader/ai/AiTxtReader.cpp
+
+    reader/maps/MapsTxtReader.h
+    reader/maps/MapsTxtReader.cpp
 
     reader/pro/ProReader.h
     reader/pro/ProReader.cpp
@@ -389,6 +396,9 @@ add_library(gecko_resource STATIC
 
     resource/ResourceInitializer.h
     resource/ResourceInitializer.cpp
+
+    resource/MapNameResolver.h
+    resource/MapNameResolver.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 

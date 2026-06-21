@@ -15,6 +15,10 @@ namespace geck {
 class Map;
 struct MapObject;
 
+namespace resource {
+    class GameResources;
+}
+
 /**
  * @brief Manages exit grid placement operations for the map editor
  *
@@ -26,7 +30,8 @@ struct MapObject;
  */
 class ExitGridPlacementManager {
 public:
-    ExitGridPlacementManager(ExitGridContext& context, std::function<void(const QString&)> showStatus);
+    ExitGridPlacementManager(ExitGridContext& context, resource::GameResources& resources,
+        std::function<void(const QString&)> showStatus);
     ~ExitGridPlacementManager() = default;
 
     // Exit grid placement operations
@@ -62,6 +67,7 @@ private:
     bool showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing = nullptr);
 
     ExitGridContext& _context;
+    resource::GameResources& _resources;
     std::function<void(const QString&)> _showStatus;
 
     // State
