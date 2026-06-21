@@ -9,23 +9,15 @@
 #include <QSize>
 #include <spdlog/spdlog.h>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
+#include <optional>
 
 #include "format/map/Map.h"
 #include "format/map/MapScript.h"
-#include "format/maps/MapsTxtDocument.h"
-#include "format/msg/MsgDocument.h"
 #include "format/gam/Gam.h"
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
-#include "resource/WritableDataRoot.h"
-#include "reader/maps/MapsTxtDocumentReader.h"
-#include "reader/msg/MsgDocumentReader.h"
-#include "writer/maps/MapsTxtSerializer.h"
-#include "writer/maps/MapsTxtValidator.h"
-#include "writer/msg/MsgSerializer.h"
+#include "resource/MapNameEditor.h"
 #include "ui/Settings.h"
 #include "reader/ReaderFactory.h"
 #include "resource/ResourcePaths.h"
@@ -34,61 +26,6 @@
 #include "ui/dialogs/SpatialScriptDialog.h"
 
 namespace geck {
-
-namespace {
-
-    // Read/write the writable copy by its native path (NOT the VFS: the just-written overlay file isn't
-    // visible through vfspp until the root is re-mounted). Binary, so CRLF is preserved on read.
-    std::string readNativeFile(const std::filesystem::path& path) {
-        std::ifstream in(path, std::ios::binary);
-        return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-    }
-
-    void writeNativeFile(const std::filesystem::path& path, const std::string& content) {
-        std::ofstream out(path, std::ios::binary | std::ios::trunc);
-        out.write(content.data(), static_cast<std::streamsize>(content.size()));
-    }
-
-    QString formatMapsTxtErrors(const std::vector<writer::MapsTxtIssue>& issues) {
-        QString text;
-        for (const writer::MapsTxtIssue& issue : issues) {
-            if (issue.severity == writer::MapsTxtIssue::Severity::Error) {
-                text += QString("• [Map %1] %2\n").arg(issue.section).arg(QString::fromStdString(issue.message));
-            }
-        }
-        return text;
-    }
-
-    // Load data/maps.txt into the comprehensive document, set the map's lookup_name, validate the whole
-    // file, and write it back. Returns false (after showing a message) if the field is absent or the
-    // result would be invalid — the save is hard-blocked.
-    bool saveLookupName(QWidget* parent, resource::GameResources& resources,
-        const std::filesystem::path& writableRoot, int index, const std::string& value) {
-        const std::filesystem::path path = resource::ensureWritableCopy(resources.files(), writableRoot, "data/maps.txt");
-        MapsTxtDocument doc = parseMapsTxtDocument(readNativeFile(path));
-        if (!writer::setField(doc, index, "lookup_name", value)) {
-            QMessageBox::warning(parent, "Save Names", "Could not find this map's lookup_name in maps.txt.");
-            return false;
-        }
-        const auto issues = writer::validateMapsTxt(doc);
-        if (writer::hasErrors(issues)) { // a broken registry would corrupt the game -> never save it
-            QMessageBox::warning(parent, "Save Names", "Refusing to save: maps.txt would be invalid.\n\n" + formatMapsTxtErrors(issues));
-            return false;
-        }
-        writeNativeFile(path, writer::serializeMapsTxt(doc));
-        return true;
-    }
-
-    // Load map.msg into the document, upsert the per-elevation display message, and write it back.
-    void saveDisplayName(resource::GameResources& resources, const std::filesystem::path& writableRoot,
-        int messageId, const std::string& text) {
-        const std::filesystem::path path = resource::ensureWritableCopy(resources.files(), writableRoot, "text/english/game/map.msg");
-        MsgDocument doc = parseMsgDocument(readNativeFile(path));
-        writer::setMessageText(doc, messageId, text);
-        writeNativeFile(path, writer::serializeMsg(doc));
-    }
-
-} // namespace
 
 MapInfoPanel::MapInfoPanel(resource::GameResources& resources, std::shared_ptr<Settings> settings, QWidget* parent)
     : QWidget(parent)
@@ -1040,30 +977,31 @@ void MapInfoPanel::onSaveNamesClicked() {
     const int elevation = static_cast<int>(header.player_default_elevation);
     const std::filesystem::path writableRoot = _settings->getWritableDataRoot();
 
+    // Persist only the field the user actually edited (QLineEdit tracks isModified since setText).
+    std::optional<std::string> lookup;
+    std::optional<std::string> display;
+    if (_lookupNameEdit->isModified()) {
+        lookup = _lookupNameEdit->text().toStdString();
+    }
+    if (_displayNameEdit->isModified()) {
+        display = _displayNameEdit->text().toStdString();
+    }
+    if (!lookup.has_value() && !display.has_value()) {
+        return; // nothing changed
+    }
+
     try {
-        bool wrote = false;
-        // Only persist the field the user actually edited (QLineEdit tracks isModified since setText).
-        // Each edit is a full load -> set -> validate -> serialize cycle on the comprehensive document,
-        // so the whole file is preserved (comments, order, unmodelled keys) and validated as a unit.
-        if (_lookupNameEdit->isModified()) {
-            if (!saveLookupName(this, _resources, writableRoot, index, _lookupNameEdit->text().toStdString())) {
-                return; // hard-blocked (message already shown)
-            }
-            wrote = true;
-        }
-        if (_displayNameEdit->isModified()) {
-            saveDisplayName(_resources, writableRoot, index * 3 + elevation + 200, _displayNameEdit->text().toStdString());
-            wrote = true;
-        }
-        if (!wrote) {
-            return; // nothing changed
+        // The whole load -> set -> validate -> serialize -> write cycle (with the hard-block) lives in
+        // resource::saveMapNames, so it is unit-testable without this widget.
+        const auto result = resource::saveMapNames(_resources.files(), writableRoot, index, elevation, lookup, display);
+        if (!result.ok) {
+            QMessageBox::warning(this, "Save Names", QString::fromStdString(result.error));
+            return;
         }
 
         // Reflect the edit this session: re-mount the writable root so the VFS's file listing includes
-        // the freshly-copied file (vfspp caches the listing at mount time, so a just-created overlay
-        // file is otherwise invisible). The re-mount is last, so the patched copy shadows the original.
-        // Saving names is a rare manual action and the overlay holds only maps.txt/map.msg, so the
-        // extra mount is negligible. Then drop the cached map.msg and rebuild the resolver.
+        // the freshly-written overlay file (vfspp caches the listing at mount time). The re-mount is
+        // last, so the copy shadows the original. Then drop the cached map.msg and rebuild the resolver.
         _resources.files().addDataPath(writableRoot);
         _resources.repository().clear();
         _mapNames = std::make_unique<resource::MapNameResolver>(_resources);

@@ -767,17 +767,30 @@ TEST_CASE("MapInfoPanel saves an edited map name to the writable root and reflec
     REQUIRE(saveButton != nullptr);
     REQUIRE(lookupEdit->text() == QStringLiteral("Test Town"));
 
+    auto* displayEdit = panel.findChild<QLineEdit*>("mapDisplayName");
+    REQUIRE(displayEdit != nullptr);
+
+    // Edit BOTH the lookup name (maps.txt) and the display name (map.msg) and save them together.
     lookupEdit->setText("Renamed Town");
     lookupEdit->setModified(true);
+    displayEdit->setText("New Display");
+    displayEdit->setModified(true);
     saveButton->click();
 
-    // Persisted: the patched copy lives under the writable root with the new lookup_name.
-    const std::filesystem::path savedMaps = writableRoot / "data" / "maps.txt";
-    REQUIRE(std::filesystem::exists(savedMaps));
-    std::ifstream in(savedMaps, std::ios::binary);
-    const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    CHECK(content.find("lookup_name=Renamed Town") != std::string::npos);
+    auto readAll = [](const std::filesystem::path& p) {
+        std::ifstream in(p, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    };
 
-    // Reflected: after the re-mount + resolver rebuild, the panel shows the new name.
+    // Persisted: the writable copies carry both edits.
+    const std::filesystem::path savedMaps = writableRoot / "data" / "maps.txt";
+    const std::filesystem::path savedMsg = writableRoot / "text" / "english" / "game" / "map.msg";
+    REQUIRE(std::filesystem::exists(savedMaps));
+    REQUIRE(std::filesystem::exists(savedMsg));
+    CHECK(readAll(savedMaps).find("lookup_name=Renamed Town") != std::string::npos);
+    CHECK(readAll(savedMsg).find("{200}{}{New Display}") != std::string::npos);
+
+    // Reflected: after the re-mount + resolver rebuild, the panel shows both new names.
     CHECK(lookupEdit->text() == QStringLiteral("Renamed Town"));
+    CHECK(displayEdit->text() == QStringLiteral("New Display"));
 }

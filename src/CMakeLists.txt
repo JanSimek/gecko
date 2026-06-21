@@ -440,6 +440,8 @@ add_library(gecko_resource STATIC
     resource/MapNameResolver.cpp
     resource/WritableDataRoot.h
     resource/WritableDataRoot.cpp
+    resource/MapNameEditor.h
+    resource/MapNameEditor.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 
