@@ -1,7 +1,10 @@
 #include "writer/msg/MsgSerializer.h"
 
-#include <cstddef>
+#include "reader/TextParsing.h"
+
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace geck::writer {
 
@@ -12,14 +15,12 @@ namespace {
 } // namespace
 
 std::string serializeMsg(const MsgDocument& doc) {
-    std::string out;
-    for (std::size_t i = 0; i < doc.lines.size(); ++i) {
-        out += doc.lines[i].raw;
-        if (i + 1 < doc.lines.size() || doc.finalNewline) {
-            out += '\n';
-        }
+    std::vector<std::string> raws;
+    raws.reserve(doc.lines.size());
+    for (const MsgLine& line : doc.lines) {
+        raws.push_back(line.raw);
     }
-    return out;
+    return geck::text::joinLinesLf(raws, doc.finalNewline);
 }
 
 std::optional<std::string> findMessageText(const MsgDocument& doc, int id) {

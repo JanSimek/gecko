@@ -9,32 +9,8 @@ namespace geck {
 
 namespace {
 
+    using geck::text::splitLines;
     using geck::text::trim;
-
-    std::vector<std::string> splitLines(const std::string& content, bool& finalNewline) {
-        std::vector<std::string> lines;
-        std::size_t start = 0;
-        while (start < content.size()) {
-            const std::size_t nl = content.find('\n', start);
-            if (nl == std::string::npos) {
-                std::string line = content.substr(start);
-                if (!line.empty() && line.back() == '\r') {
-                    line.pop_back();
-                }
-                lines.push_back(std::move(line));
-                finalNewline = false;
-                return lines;
-            }
-            std::string line = content.substr(start, nl - start);
-            if (!line.empty() && line.back() == '\r') {
-                line.pop_back();
-            }
-            lines.push_back(std::move(line));
-            start = nl + 1;
-        }
-        finalNewline = !content.empty();
-        return lines;
-    }
 
     // Parse `{id}{audio}{text}` by reading the three brace groups (the engine ends `text` at the first
     // '}' after the third '{', so a message text never contains '}'). Anything after the third '}' is

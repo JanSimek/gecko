@@ -9,36 +9,9 @@ namespace geck {
 
 namespace {
 
+    using geck::text::splitLines;
     using geck::text::toLower;
     using geck::text::trim;
-
-    // Split into per-line content (EOL removed; a trailing '\r' stripped). Sets finalNewline = did the
-    // content end with a newline. Rejoining with '\n' (+ a trailing '\n' iff finalNewline) reproduces
-    // the input modulo CRLF->LF normalisation.
-    std::vector<std::string> splitLines(const std::string& content, bool& finalNewline) {
-        std::vector<std::string> lines;
-        std::size_t start = 0;
-        while (start < content.size()) {
-            const std::size_t nl = content.find('\n', start);
-            if (nl == std::string::npos) {
-                std::string line = content.substr(start);
-                if (!line.empty() && line.back() == '\r') {
-                    line.pop_back();
-                }
-                lines.push_back(std::move(line));
-                finalNewline = false;
-                return lines;
-            }
-            std::string line = content.substr(start, nl - start);
-            if (!line.empty() && line.back() == '\r') {
-                line.pop_back();
-            }
-            lines.push_back(std::move(line));
-            start = nl + 1;
-        }
-        finalNewline = !content.empty(); // content empty -> no lines; ended with '\n' -> trailing newline
-        return lines;
-    }
 
     // "Map NNN" (the text inside the brackets) -> NNN, or -1; mirrors MapsTxtReader::parseSectionIndex.
     int sectionIndex(const std::string& inner) {

@@ -3,7 +3,6 @@
 #include "reader/TextParsing.h"
 
 #include <algorithm>
-#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -20,25 +19,17 @@ namespace {
 } // namespace
 
 std::string serializeMapsTxt(const MapsTxtDocument& doc) {
-    std::vector<const std::string*> raws;
+    std::vector<std::string> raws;
     for (const MapsTxtLine& line : doc.preamble) {
-        raws.push_back(&line.raw);
+        raws.push_back(line.raw);
     }
     for (const MapsTxtSection& section : doc.sections) {
-        raws.push_back(&section.headerRaw);
+        raws.push_back(section.headerRaw);
         for (const MapsTxtLine& line : section.lines) {
-            raws.push_back(&line.raw);
+            raws.push_back(line.raw);
         }
     }
-
-    std::string out;
-    for (std::size_t i = 0; i < raws.size(); ++i) {
-        out += *raws[i];
-        if (i + 1 < raws.size() || doc.finalNewline) {
-            out += '\n';
-        }
-    }
-    return out;
+    return geck::text::joinLinesLf(raws, doc.finalNewline);
 }
 
 std::optional<std::string> findField(const MapsTxtDocument& doc, int sectionIndex, const std::string& key) {
