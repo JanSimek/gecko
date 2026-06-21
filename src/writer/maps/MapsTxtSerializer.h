@@ -20,4 +20,13 @@ std::optional<std::string> findField(const MapsTxtDocument& doc, int sectionInde
 /// comment. Returns false if the section or key is absent (the caller decides whether to add it).
 bool setField(MapsTxtDocument& doc, int sectionIndex, const std::string& key, const std::string& value);
 
+/// Insert a new `[Map index]` section (zero-padded header) with `lookup_name` + `map_name` lines, in
+/// index order. Returns false if a section with that index already exists. The caller should keep the
+/// run gapless (see validateMapsTxt) — append at max+1.
+bool addSection(MapsTxtDocument& doc, int index, const std::string& lookupName, const std::string& mapName);
+
+/// Remove the `[Map index]` section. Returns false if absent. Does NOT renumber the remaining
+/// sections — removing a non-last section leaves a gap that validateMapsTxt reports as an error.
+bool removeSection(MapsTxtDocument& doc, int index);
+
 } // namespace geck::writer

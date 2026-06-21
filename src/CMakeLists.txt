@@ -359,6 +359,8 @@ add_library(vault STATIC
 
     writer/maps/MapsTxtSerializer.h
     writer/maps/MapsTxtSerializer.cpp
+    writer/maps/MapsTxtValidator.h
+    writer/maps/MapsTxtValidator.cpp
 
     reader/city/CityTxtReader.h
     reader/city/CityTxtReader.cpp
