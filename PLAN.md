@@ -828,12 +828,15 @@ file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set th
    `[Tile NN]` sub-tile grid (per-position terrain → terrain-weighted travel cost, geographic
    encounter placement) and `worldmap.msg` localized names.
 
-8. **Corpus / world index — evidence, not a solver.** Join, across all maps, the connectivity graph
-   + each map's scripts (`describe_script` source/dialog) + the quest/gvar data (below) into one
-   queryable index, so the agent can *reason* about progression ("which script sets the gvar that
-   gates map Y?"). Deliberately **not** a computed "critical path to the ending": `.ssl` is
-   imperative quest logic and static extraction of a win-path would be brittle and over-claim. The
-   MCP supplies ground truth; the model infers the route. (Expands the "Corpus angle" note above.)
+8. **Corpus / world index — evidence, not a solver.** The evidence layer now largely exists: the
+   `map_graph`↔`world_map` join (`area`/`mapFile`/`lookupName`), the `quests` tool (each quest's area +
+   tracking gvar + thresholds + text) and the `gvars` dictionary (gvar index → `GVAR_*` name) — so an
+   agent can already *reason* about progression ("which script sets the gvar that gates quest Y?": read
+   the quest's gvar → name via `gvars`, then `describe_script` for the scripts that touch it).
+   Deliberately still **not** a computed "critical path to the ending": `.ssl` is imperative quest
+   logic and static extraction of a win-path would be brittle. The MCP supplies ground truth; the
+   model infers the route. **Remaining for the full loop:** an `endings` tool (endgame.txt: gvar==value
+   → ending) so the agent has the win-conditions, and a game-start marker.
 
 ### Data-extraction roadmap (engine data files → vault readers)
 
@@ -844,9 +847,15 @@ then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority ord
   `map.msg[mapIndex*3 + elevation + 200]`; city names = `map.msg[1500 + city]`. Gives each map (and
   every `destMap` exit) a friendly per-elevation name ("Arroyo", "Temple of Trials") alongside the
   `.map` filename `MapsTxt` already resolves. Pairs directly with `MapsTxt`.
-- **`data/quests.txt` + `game/quests.msg`** *(the progression spine).* Each quest's location, the
-  **gvar** that tracks it, and its description text — this is what turns capability 8 from a map
-  graph into a *quest* graph, since the gvar links a quest to the scripts that set it.
+- **`data/quests.txt` + `game/quests.msg`** ✅ **done** — `QuestsTxt` vault reader + the `quests` tool:
+  each quest's area (map.msg location name), tracking **gvar** (index + `GVAR_*` name + default via
+  vault13.gam), display/completed thresholds, and quests.msg description. The progression spine.
+- **`data/vault13.gam` global variables** ✅ **done** — the `gvars` tool (gvar index → `GVAR_*` name +
+  default), reusing the `Gam` reader (fixed to read negative-default gvars, which were shifting
+  ordinals). The dictionary that makes quests and scripts legible.
+- **map_graph ↔ world_map join** ✅ **done** — `MapsTxt::findByLookupName` + `MapNameResolver`; world_map
+  entrances carry `mapFile` and map_graph nodes carry `area` + `lookupName`, so the world layer and the
+  exit-grid layer cross-reference in both directions.
 - **`data/city.txt`** ✅ **done** — `CityTxt` vault reader + the `world_map` tool (areas, world
   positions, sizes, the maps each area contains, pairwise distances). The inter-city layer.
 - **`data/worldmap.txt`** ✅ **partly done** — `WorldmapTxt` vault reader + the `world_encounters`
@@ -857,8 +866,10 @@ then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority ord
 - **`game/worldmap.msg`** *(follow-up, small)* — localized area/terrain/encounter names to enrich
   `world_map` / `world_encounters` (city.txt `area_name` and the encounter section names are the
   internal labels).
-- **`data/endgame.txt` / `enddeath.txt`** — ending slides and their gvar/condition triggers: the
-  literal "how the game ends" for the corpus angle.
+- **`data/endgame.txt` / `enddeath.txt`** *(next — the win-condition table)* — ending slides keyed by
+  `gvar==value`. Now that the `gvars` dictionary exists, an `endings` tool can render each condition
+  human-readably ("how the game / each town ends"). `enddeath.txt` lives in master.dat (a VFS path,
+  not loose). This is the natural next step to close the start→objectives→ending loop.
 - **`data/party.txt`** (companions), **`holodisk.txt`**, **`karmavar.txt`** — lore/state, lower
   priority.
 

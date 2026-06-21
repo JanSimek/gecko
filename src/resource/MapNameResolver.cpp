@@ -58,4 +58,14 @@ int MapNameResolver::indexOf(const std::string& mapFileName) const {
     return info != nullptr ? info->index : -1;
 }
 
+std::string MapNameResolver::fileNameOfLookup(const std::string& lookupName) const {
+    const MapInfo* info = _mapsTxt.findByLookupName(lookupName);
+    return info != nullptr ? info->mapName : std::string{};
+}
+
+std::string MapNameResolver::lookupNameOf(const std::string& mapFileName) const {
+    const MapInfo* info = _mapsTxt.findByName(toLower(mapFileName));
+    return info != nullptr ? info->lookupName : std::string{};
+}
+
 } // namespace geck::resource

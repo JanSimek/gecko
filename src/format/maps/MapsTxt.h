@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <utility>
 #include <vector>
@@ -61,6 +63,24 @@ struct MapsTxt {
     const MapInfo* findByName(const std::string& mapName) const {
         for (const auto& map : maps) {
             if (map.mapName == mapName) {
+                return &map;
+            }
+        }
+        return nullptr;
+    }
+
+    /// The section whose lookup_name matches `lookupName` (case-insensitively — the engine matches
+    /// city.txt entrance map names to maps.txt this way), or nullptr. This is the join between the
+    /// worldmap layer (city.txt entrances reference maps by lookup_name) and the .map files /
+    /// exit-grid graph (keyed by map_name).
+    const MapInfo* findByLookupName(const std::string& lookupName) const {
+        const auto ieq = [](const std::string& a, const std::string& b) {
+            return a.size() == b.size()
+                && std::equal(a.begin(), a.end(), b.begin(),
+                    [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
+        };
+        for (const auto& map : maps) {
+            if (ieq(map.lookupName, lookupName)) {
                 return &map;
             }
         }

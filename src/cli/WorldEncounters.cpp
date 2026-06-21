@@ -1,5 +1,6 @@
 #include "cli/WorldEncounters.h"
 
+#include "cli/ConfigLoad.h"
 #include "format/worldmap/WorldmapTxt.h"
 #include "reader/worldmap/WorldmapTxtReader.h"
 #include "resource/GameResources.h"
@@ -14,15 +15,6 @@ namespace geck::cli {
 namespace {
 
     using ordered_json = nlohmann::ordered_json;
-
-    WorldmapTxt loadWorldmapTxt(resource::GameResources& resources) {
-        for (const char* path : { "data/worldmap.txt", "worldmap.txt" }) {
-            if (const auto bytes = resources.files().readRawBytes(path); bytes.has_value()) {
-                return parseWorldmapTxt(std::string(bytes->begin(), bytes->end()));
-            }
-        }
-        return WorldmapTxt{};
-    }
 
     ordered_json terrainsToJson(const WorldmapTxt& world) {
         auto terrains = ordered_json::array();
@@ -48,7 +40,8 @@ namespace {
 } // namespace
 
 int buildWorldEncounters(resource::GameResources& resources, std::ostream& out) {
-    const WorldmapTxt world = loadWorldmapTxt(resources);
+    const WorldmapTxt world = loadConfig<WorldmapTxt>(resources, { "data/worldmap.txt", "worldmap.txt" },
+        [](const std::string& text) { return parseWorldmapTxt(text); });
     if (world.terrains.empty() && world.encounters.empty()) {
         out << "{\"terrains\":[],\"encounters\":[],\"stats\":{\"terrains\":0,\"encounters\":0}}\n";
         return 1;

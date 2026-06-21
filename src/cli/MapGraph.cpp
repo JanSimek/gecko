@@ -1,8 +1,11 @@
 #include "cli/MapGraph.h"
 
+#include "cli/ConfigLoad.h"
 #include "cli/MapAnalyzer.h" // collectMapExits, listMapPaths, MapExit
 #include "cli/MapLoad.h"     // loadMap
+#include "format/city/CityTxt.h"
 #include "format/map/Map.h"
+#include "reader/city/CityTxtReader.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
 
@@ -51,6 +54,21 @@ namespace {
 
     using Nodes = std::map<std::string, NodeInfo>;
     using Edges = std::map<std::pair<std::string, std::string>, EdgeInfo>;
+
+    // .map filename -> owning worldmap area name, from city.txt entrances (resolved lookup_name ->
+    // file). Gives each map_graph node its area, the reverse of world_map's area.maps[].mapFile.
+    std::map<std::string, std::string> mapToArea(const CityTxt& city, const resource::MapNameResolver& names) {
+        std::map<std::string, std::string> areaOf;
+        for (const CityArea& area : city.areas) {
+            for (const CityEntrance& entrance : area.entrances) {
+                const std::string file = names.fileNameOfLookup(entrance.map);
+                if (!file.empty()) {
+                    areaOf.emplace(file, area.name); // first area wins if a map is shared
+                }
+            }
+        }
+        return areaOf;
+    }
 
     // Classify one exit's destination and fold it into the node/edge maps.
     void addExit(const resource::MapNameResolver& names, const std::string& fromFile, const MapExit& exit,
@@ -139,10 +157,16 @@ namespace {
             { "deadEnds", std::move(deadEnds) }, { "noIncoming", std::move(noIncoming) } };
     }
 
-    ordered_json graphToJson(const Nodes& nodes, const Edges& edges, int analysed) {
+    ordered_json graphToJson(const Nodes& nodes, const Edges& edges, int analysed,
+        const resource::MapNameResolver& names, const std::map<std::string, std::string>& areaOf) {
         auto nodesJson = ordered_json::array();
         for (const auto& [file, info] : nodes) {
-            nodesJson.push_back({ { "file", file }, { "displayName", orNull(info.displayName) }, { "analysed", info.analysed } });
+            const std::string lookupName = names.lookupNameOf(file); // maps.txt key (world_map's entrance name)
+            const auto area = areaOf.find(file);                     // owning city.txt area (the reverse join)
+            nodesJson.push_back({ { "file", file }, { "displayName", orNull(info.displayName) },
+                { "lookupName", orNull(lookupName) },
+                { "area", area != areaOf.end() ? ordered_json(area->second) : ordered_json(nullptr) },
+                { "analysed", info.analysed } });
         }
         auto edgesJson = ordered_json::array();
         for (const auto& [key, info] : edges) {
@@ -168,10 +192,13 @@ int buildMapGraph(resource::GameResources& resources, const MapGraphOptions& opt
         return 1;
     }
 
+    const CityTxt city = loadConfig<CityTxt>(resources, { "data/city.txt", "city.txt" },
+        [](const std::string& text) { return parseCityTxt(text); });
+    const std::map<std::string, std::string> areaOf = mapToArea(city, names);
     Nodes nodes;
     Edges edges;
     const int analysed = buildGraph(resources, names, mapPaths, nodes, edges);
-    out << graphToJson(nodes, edges, analysed).dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";
+    out << graphToJson(nodes, edges, analysed, names, areaOf).dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     return 0;
 }
 

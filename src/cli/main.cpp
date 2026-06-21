@@ -4,6 +4,8 @@
 #include "cli/MapGraph.h"
 #include "cli/WorldMap.h"
 #include "cli/WorldEncounters.h"
+#include "cli/GlobalVars.h"
+#include "cli/Quests.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
 #include "cli/MapReachability.h"
@@ -30,6 +32,8 @@ struct CliArgs {
     bool graph = false;
     bool world = false;
     bool encounters = false;
+    bool gvars = false;
+    bool quests = false;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::GenerateOptions gen;
@@ -91,6 +95,10 @@ void printUsage(const char* program) {
               << "      size, the maps it contains, and the straight-line distances between all areas.\n"
               << "  " << program << " map encounters --data <dir-or-.dat> [--data <...>]\n"
               << "      The worldmap terrain types and random-encounter group tables from worldmap.txt.\n"
+              << "  " << program << " map gvars --data <dir-or-.dat> [--data <...>]\n"
+              << "      The global-variable dictionary (vault13.gam): each GVAR index -> name + default.\n"
+              << "  " << program << " map quests --data <dir-or-.dat> [--data <...>]\n"
+              << "      The quest registry (quests.txt): each quest's area, tracking gvar, thresholds, text.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
@@ -98,7 +106,8 @@ bool isKnownSubcommand(const std::vector<std::string>& args) {
     return args.size() >= 2 && args[0] == "map"
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
             || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map"
-            || args[1] == "graph" || args[1] == "world" || args[1] == "encounters");
+            || args[1] == "graph" || args[1] == "world" || args[1] == "encounters"
+            || args[1] == "gvars" || args[1] == "quests");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -320,6 +329,11 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.gvars || out.quests) { // gvars/quests take no arguments beyond --data (handled above)
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
     if (arg == "--json") { // analyze only: machine-readable output for the MCP
         out.analyze.json = true;
         return 1;
@@ -347,6 +361,8 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.graph = args[1] == "graph";
     out.world = args[1] == "world";
     out.encounters = args[1] == "encounters";
+    out.gvars = args[1] == "gvars";
+    out.quests = args[1] == "quests";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -440,6 +456,12 @@ int main(int argc, char** argv) {
     }
     if (cli.encounters) {
         return geck::cli::buildWorldEncounters(resources, std::cout);
+    }
+    if (cli.gvars) {
+        return geck::cli::buildGlobalVars(resources, std::cout);
+    }
+    if (cli.quests) {
+        return geck::cli::buildQuests(resources, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
 }

@@ -289,6 +289,9 @@ add_library(vault STATIC
     # Worldmap (worldmap.txt — terrain types + encounter tables)
     format/worldmap/WorldmapTxt.h
 
+    # Quests (quests.txt — the quest registry)
+    format/quests/QuestsTxt.h
+
     # PRO
     format/pro/Pro.h
     format/pro/Pro.cpp
@@ -353,6 +356,9 @@ add_library(vault STATIC
 
     reader/worldmap/WorldmapTxtReader.h
     reader/worldmap/WorldmapTxtReader.cpp
+
+    reader/quests/QuestsTxtReader.h
+    reader/quests/QuestsTxtReader.cpp
 
     reader/pro/ProReader.h
     reader/pro/ProReader.cpp
@@ -591,7 +597,12 @@ if(GECK_BUILD_CLI)
         cli/WorldMap.h
         cli/WorldMap.cpp
         cli/WorldEncounters.h
-        cli/WorldEncounters.cpp)
+        cli/WorldEncounters.cpp
+        cli/ConfigLoad.h
+        cli/GlobalVars.h
+        cli/GlobalVars.cpp
+        cli/Quests.h
+        cli/Quests.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)

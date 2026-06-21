@@ -1,8 +1,10 @@
 #include "cli/WorldMap.h"
 
+#include "cli/ConfigLoad.h"
 #include "format/city/CityTxt.h"
 #include "reader/city/CityTxtReader.h"
 #include "resource/GameResources.h"
+#include "resource/MapNameResolver.h"
 
 #include <nlohmann/json.hpp>
 
@@ -17,21 +19,16 @@ namespace {
 
     using ordered_json = nlohmann::ordered_json;
 
-    CityTxt loadCityTxt(resource::GameResources& resources) {
-        for (const char* path : { "data/city.txt", "city.txt" }) {
-            if (const auto bytes = resources.files().readRawBytes(path); bytes.has_value()) {
-                return parseCityTxt(std::string(bytes->begin(), bytes->end()));
-            }
-        }
-        return CityTxt{};
-    }
-
-    ordered_json areasToJson(const CityTxt& city) {
+    ordered_json areasToJson(const CityTxt& city, const resource::MapNameResolver& names) {
         auto areas = ordered_json::array();
         for (const auto& area : city.areas) {
             auto maps = ordered_json::array();
             for (const auto& entrance : area.entrances) {
-                maps.push_back({ { "map", entrance.map }, { "on", entrance.on } });
+                // mapFile resolves the entrance lookup_name to the .map filename, which is the join key
+                // to map_graph nodes (null when the lookup_name has no maps.txt entry).
+                const std::string mapFile = names.fileNameOfLookup(entrance.map);
+                maps.push_back({ { "map", entrance.map }, { "on", entrance.on },
+                    { "mapFile", mapFile.empty() ? ordered_json(nullptr) : ordered_json(mapFile) } });
             }
             areas.push_back({ { "index", area.index }, { "name", area.name },
                 { "worldPos", { { "x", area.worldX }, { "y", area.worldY } } },
@@ -60,7 +57,8 @@ namespace {
 } // namespace
 
 int buildWorldMap(resource::GameResources& resources, std::ostream& out) {
-    const CityTxt city = loadCityTxt(resources);
+    const CityTxt city = loadConfig<CityTxt>(resources, { "data/city.txt", "city.txt" },
+        [](const std::string& text) { return parseCityTxt(text); });
     if (city.areas.empty()) {
         out << "{\"areas\":[],\"distances\":[],\"stats\":{\"areas\":0}}\n";
         return 1;
@@ -73,8 +71,9 @@ int buildWorldMap(resource::GameResources& resources, std::ostream& out) {
         }
     }
 
+    const resource::MapNameResolver names(resources); // resolves entrance lookup_names -> .map files
     ordered_json root;
-    root["areas"] = areasToJson(city);
+    root["areas"] = areasToJson(city, names);
     root["distances"] = distancesToJson(city);
     root["stats"] = { { "areas", city.areas.size() }, { "knownAtStart", knownAtStart } };
     out << root.dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";

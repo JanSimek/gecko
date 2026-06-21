@@ -5,6 +5,8 @@
 #include "cli/MapGraph.h"
 #include "cli/WorldMap.h"
 #include "cli/WorldEncounters.h"
+#include "cli/GlobalVars.h"
+#include "cli/Quests.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapReachability.h"
 #include "cli/MapRender.h"
@@ -250,6 +252,28 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    json toolGlobalVars(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildGlobalVars(resources, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("gvars failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolQuests(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildQuests(resources, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("quests failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
         const auto pid = static_cast<uint32_t>(requireInt(args, "pid", 0, UINT32_MAX));
         try {
@@ -407,8 +431,10 @@ namespace {
             "Arroyo village<->bridge) and where a map hands off to the world map (edges with "
             "kind=worldmap). NOT inter-city travel: cities are reached across the world map, not by exit "
             "grids, so this graph is connected only within a location — for the world layer (areas, "
-            "positions, distances) use city.txt. 'nodes' (maps, each with the map.msg displayName and "
-            "'analysed' = loaded vs only seen as an exit target); 'edges' ({from,to,kind,destMap,"
+            "positions, distances) use city.txt / world_map. 'nodes' (maps, each with: 'file' = the "
+            ".map filename — the JOIN KEY to world_map's area.maps[].mapFile; the map.msg 'displayName'; "
+            "the owning world_map 'area' and its city.txt 'lookupName' (so you can go map->area, the "
+            "reverse of world_map's area->map); and 'analysed'); 'edges' ({from,to,kind,destMap,"
             "toName,exits}) where 'exits' counts the exit-grid hexes and 'kind' is "
             "map/worldmap/townmap/unknown; 'stats' flags 'deadEnds' (no outgoing map edge) and "
             "'noIncoming' (no map exits to it — a location's entry points or orphans). Omit 'maps' for "
@@ -418,11 +444,13 @@ namespace {
         t.push_back({ "world_map",
             "The WORLDMAP layer from city.txt — the inter-city travel layer that map_graph does not "
             "cover. 'areas': every location (city/town/encounter site) with its 'name', 'worldPos' "
-            "{x,y} on the world map, 'size', 'knownAtStart', and 'maps' (the maps it contains, by "
-            "lookup_name, each with an 'on' flag). 'distances': the straight-line distance between "
-            "every pair of areas (worldmap units) — how far apart places are. Use this for 'how does "
-            "the player get from city A to city B' (they cross the world map); use map_graph for travel "
-            "by exit grids within one location. No arguments.",
+            "{x,y} on the world map, 'size', 'knownAtStart', and 'maps' (the maps it contains — each "
+            "{map (the lookup_name), on, mapFile}). 'mapFile' is the .map filename, the JOIN KEY to "
+            "map_graph: world_map.areas[].maps[].mapFile == map_graph.nodes[].file (null when the "
+            "lookup_name has no maps.txt entry, e.g. a disabled entrance). 'distances': the "
+            "straight-line distance between every pair of areas (worldmap units) — how far apart places "
+            "are. Use this for 'how does the player get from city A to city B' (they cross the world "
+            "map); use map_graph for travel by exit grids within one location. No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolWorldMap(r, a); } });
         t.push_back({ "world_encounters",
@@ -434,6 +462,21 @@ namespace {
             "parsed.) No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolWorldEncounters(r, a); } });
+        t.push_back({ "quests",
+            "The quest registry from quests.txt — what the player has to DO. Each quest: 'area' (the "
+            "location name, joins to world_map area names), 'gvar' + 'gvarName' (GVAR_*) + 'gvarStart' "
+            "(the global variable that tracks it, via vault13.gam — scripts set/check this same gvar), "
+            "'displayThreshold'/'completedThreshold' (the gvar values that reveal/complete it), and "
+            "'description' (the objective text). The spine for reasoning about progression: read what "
+            "must be done, where, and which world-state flag proves it. No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolQuests(r, a); } });
+        t.push_back({ "gvars",
+            "The global-variable dictionary from vault13.gam: every GVAR by 'index' -> 'name' (GVAR_*) "
+            "+ 'default'. Global variables are the engine's progression state machine, so this decodes "
+            "a gvar index (from quests, or a script) to a human-readable name. No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolGlobalVars(r, a); } });
         t.push_back({ "script_api",
             "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
             "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "
