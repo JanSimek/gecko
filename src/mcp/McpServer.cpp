@@ -4,6 +4,7 @@
 #include "cli/MapDescribe.h"
 #include "cli/MapGraph.h"
 #include "cli/WorldMap.h"
+#include "cli/WorldEncounters.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapReachability.h"
 #include "cli/MapRender.h"
@@ -238,6 +239,17 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    json toolWorldEncounters(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildWorldEncounters(resources, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("world_encounters failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
         const auto pid = static_cast<uint32_t>(requireInt(args, "pid", 0, UINT32_MAX));
         try {
@@ -413,6 +425,15 @@ namespace {
             "by exit grids within one location. No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolWorldMap(r, a); } });
+        t.push_back({ "world_encounters",
+            "The worldmap's terrain types and random-encounter group tables, from worldmap.txt. "
+            "'terrains' (name, shortName, draw weight) and 'encounters' — each [Encounter: NAME] group "
+            "with its spawn 'entries' ({pid, ratioPercent, dead, script, items}). The shipped encounter "
+            "names are region-prefixed (ARRO_*, KLA_*, …), so they map to areas. Critter pids are raw — "
+            "resolve them with proto_info. (The geographic per-tile placement of encounters is not yet "
+            "parsed.) No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolWorldEncounters(r, a); } });
         t.push_back({ "script_api",
             "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
             "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "

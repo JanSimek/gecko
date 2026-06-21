@@ -4,6 +4,26 @@
 #include <utility>
 #include <vector>
 
+/// @file
+/// @brief Model for Fallout 2's `data/maps.txt` — the engine's index→map registry.
+///
+/// `maps.txt` is an INI-style file with one `[Map NNN]` section per map; the zero-padded `NNN` is the
+/// map's index — the number an exit grid's `destMap` references (so `destMap` 3 is `[Map 003]`).
+/// Recognized keys (the engine reads more; `map_name` is stored without an extension and lowercased):
+///
+/// @verbatim
+/// [Map 003]
+/// lookup_name=Arroyo Caves   ; internal area key (city.txt entrances match maps by this)
+/// map_name=arcaves           ; the .map filename (no extension in the file)
+/// music=02Desert
+/// ambient_sfx=brmnwind:35, coyote:10   ; sound:chance pairs
+/// saved=No
+/// pipboy_active=Yes
+/// @endverbatim
+///
+/// @see fallout2-ce `worldmap.cc` (`wmConfigInit`)
+/// @see https://fallout.wiki/wiki/MAPS.TXT_File_Format
+
 namespace geck {
 
 /// One `[Map NNN]` section of Fallout 2's `data/maps.txt` — the engine's index→map registry that an

@@ -286,6 +286,9 @@ add_library(vault STATIC
     # City (city.txt — worldmap areas / locations)
     format/city/CityTxt.h
 
+    # Worldmap (worldmap.txt — terrain types + encounter tables)
+    format/worldmap/WorldmapTxt.h
+
     # PRO
     format/pro/Pro.h
     format/pro/Pro.cpp
@@ -346,6 +349,9 @@ add_library(vault STATIC
 
     reader/city/CityTxtReader.h
     reader/city/CityTxtReader.cpp
+
+    reader/worldmap/WorldmapTxtReader.h
+    reader/worldmap/WorldmapTxtReader.cpp
 
     reader/pro/ProReader.h
     reader/pro/ProReader.cpp
@@ -582,7 +588,9 @@ if(GECK_BUILD_CLI)
         cli/MapGraph.h
         cli/MapGraph.cpp
         cli/WorldMap.h
-        cli/WorldMap.cpp)
+        cli/WorldMap.cpp
+        cli/WorldEncounters.h
+        cli/WorldEncounters.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)

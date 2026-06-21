@@ -823,9 +823,10 @@ file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set th
 7b. **Worldmap layer — `world_map` (city.txt). ✅ Done.** The inter-city layer `map_graph` doesn't
    cover: a vault `CityTxt` reader (`data/city.txt`) → areas (name, `world_pos`, size, known-at-start,
    the maps each contains via its entrances) + the straight-line distance between every pair of areas.
-   This is the actual "map of the world + distances between places." **Follow-ups:** `worldmap.msg`
-   for localized area names; `worldmap.txt` for terrain + random-encounter tables (so distances can be
-   terrain-weighted travel cost, not just straight-line) — the big, complex one.
+   This is the actual "map of the world + distances between places." Terrain types + encounter group
+   tables are now also covered (`worldmap.txt` → `world_encounters`). **Remaining:** the `worldmap.txt`
+   `[Tile NN]` sub-tile grid (per-position terrain → terrain-weighted travel cost, geographic
+   encounter placement) and `worldmap.msg` localized names.
 
 8. **Corpus / world index — evidence, not a solver.** Join, across all maps, the connectivity graph
    + each map's scripts (`describe_script` source/dialog) + the quest/gvar data (below) into one
@@ -848,11 +849,14 @@ then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority ord
   graph into a *quest* graph, since the gvar links a quest to the scripts that set it.
 - **`data/city.txt`** ✅ **done** — `CityTxt` vault reader + the `world_map` tool (areas, world
   positions, sizes, the maps each area contains, pairwise distances). The inter-city layer.
-- **`data/worldmap.txt`** *(follow-up, large)* — worldmap tiles, terrain and random-encounter tables.
-  Lets the `world_map` distances become terrain-weighted travel cost instead of straight-line, and
-  surfaces the encounter tables. Complex (big encounter/tile tables) — its own effort.
-- **`game/worldmap.msg`** *(follow-up, small)* — localized area/terrain names to enrich `world_map`
-  (city.txt's `area_name` is the internal label).
+- **`data/worldmap.txt`** ✅ **partly done** — `WorldmapTxt` vault reader + the `world_encounters`
+  tool cover the `[Data]` terrain types and the `[Encounter: NAME]` group tables (region-prefixed, so
+  they map to areas). **Still deferred (large):** the `[Tile NN]` sub-tile grid (per-position terrain
+  + encounter placement), which would let `world_map` distances become terrain-weighted travel cost
+  and place encounters geographically.
+- **`game/worldmap.msg`** *(follow-up, small)* — localized area/terrain/encounter names to enrich
+  `world_map` / `world_encounters` (city.txt `area_name` and the encounter section names are the
+  internal labels).
 - **`data/endgame.txt` / `enddeath.txt`** — ending slides and their gvar/condition triggers: the
   literal "how the game ends" for the corpus angle.
 - **`data/party.txt`** (companions), **`holodisk.txt`**, **`karmavar.txt`** — lore/state, lower

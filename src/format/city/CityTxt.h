@@ -3,6 +3,27 @@
 #include <string>
 #include <vector>
 
+/// @file
+/// @brief Model for Fallout 2's `data/city.txt` — the worldmap area (location) registry.
+///
+/// `city.txt` is an INI-style file with one `[Area NN]` section per worldmap location; the
+/// zero-padded `NN` fixes the area's index (an exit grid's "town map" / the worldmap reference it).
+/// Inline `;` comments may appear on any line, **including section headers**, so a parser must strip
+/// them first. Recognized keys:
+///
+/// @verbatim
+/// [Area 00]                ; Arroyo
+/// area_name=Arroyo         ; internal name (the displayed name may also live in worldmap.msg)
+/// world_pos=184,133        ; x,y on the worldmap — the basis for distances between places
+/// start_state=On           ; On = known/visible at game start
+/// size=Medium              ; Small / Medium / Large
+/// entrance_0=On,350,275,Arroyo Bridge,-1,-1,3
+/// ;           state, x, y, map (a maps.txt lookup_name), elevation, tile, orientation
+/// @endverbatim
+///
+/// @see fallout2-ce `worldmap.cc` (`wmAreaInit`)
+/// @see https://fallout.wiki/wiki/CITY.TXT_File_Format
+
 namespace geck {
 
 /// One entrance of a worldmap area (city.txt `entrance_N = state, x, y, map, elevation, tile,
