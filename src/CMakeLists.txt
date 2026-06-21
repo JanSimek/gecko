@@ -271,6 +271,7 @@ add_library(vault STATIC
 
     # MSG
     format/msg/Msg.h
+    format/msg/MsgDocument.h
     format/msg/Msg.cpp
 
     # LST
@@ -345,6 +346,8 @@ add_library(vault STATIC
 
     reader/msg/MsgReader.h
     reader/msg/MsgReader.cpp
+    reader/msg/MsgDocumentReader.h
+    reader/msg/MsgDocumentReader.cpp
 
     reader/lst/LstReader.h
     reader/lst/LstReader.cpp
@@ -361,6 +364,9 @@ add_library(vault STATIC
     writer/maps/MapsTxtSerializer.cpp
     writer/maps/MapsTxtValidator.h
     writer/maps/MapsTxtValidator.cpp
+
+    writer/msg/MsgSerializer.h
+    writer/msg/MsgSerializer.cpp
 
     reader/city/CityTxtReader.h
     reader/city/CityTxtReader.cpp
