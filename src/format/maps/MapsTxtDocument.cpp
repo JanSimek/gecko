@@ -1,30 +1,20 @@
 #include "format/maps/MapsTxtDocument.h"
 
-#include <algorithm>
-#include <cctype>
+#include "reader/TextParsing.h"
+
 #include <string>
 
 namespace geck {
 
 namespace {
 
-    std::string toLower(std::string s) {
-        std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return s;
-    }
-
-    std::string trimmed(const std::string& s) {
-        const auto begin = s.find_first_not_of(" \t\r\n");
-        if (begin == std::string::npos) {
-            return {};
-        }
-        return s.substr(begin, s.find_last_not_of(" \t\r\n") - begin + 1);
-    }
+    using geck::text::toLower;
+    using geck::text::trim;
 
     // The value of `key` (lowercase) in a section, or "" — keys may carry original case/spacing.
     std::string fieldValue(const MapsTxtSection& section, const std::string& key) {
         for (const MapsTxtLine& line : section.lines) {
-            if (line.kind == MapsTxtLine::Kind::KeyValue && toLower(trimmed(line.key)) == key) {
+            if (line.kind == MapsTxtLine::Kind::KeyValue && toLower(trim(line.key)) == key) {
                 return line.value; // already trimmed (see MapsTxtLine)
             }
         }
