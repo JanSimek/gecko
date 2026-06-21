@@ -42,6 +42,10 @@
 #include "ui/Settings.h"
 #include "ui/panels/MapInfoPanel.h"
 #include "format/map/Map.h"
+#include <QLineEdit>
+#include <QPushButton>
+#include <fstream>
+#include <iterator>
 
 namespace {
 
@@ -694,34 +698,83 @@ TEST_CASE("Script console setSource loads the editor and feeds Run", "[qt][scrip
 
 // Phase A of the map-info editor work: the Map Info panel resolves the current map's friendly names
 // (maps.txt lookup_name + the per-elevation map.msg display name) read-only, reusing MapNameResolver.
+namespace {
+
+// A map whose header points at `mapName.map`, with an in-memory MapFile so the panel can resolve it.
+std::unique_ptr<geck::Map> makeMap(const std::string& mapName, int elevation = 0) {
+    auto map = std::make_unique<geck::Map>(mapName);
+    auto mapFile = std::make_unique<geck::Map::MapFile>(geck::Map::createEmptyMapFile());
+    mapFile->header.filename = mapName;
+    mapFile->header.player_default_elevation = static_cast<uint32_t>(elevation);
+    map->setMapFile(std::move(mapFile));
+    return map;
+}
+
+} // namespace
+
 TEST_CASE("MapInfoPanel shows resolved map.msg display name and maps.txt lookup name", "[qt][mapinfo]") {
     ResourceDataScope data;
-    data.writeGameMessageFile("maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
+    data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
     // displayName(index 0, elevation 0) reads map.msg[0*3 + 0 + 200] = 200.
     data.writeGameMessageFile("text/english/game/map.msg", messageLine(200, QStringLiteral("Test Display")));
     data.mount();
 
-    geck::Map map("testmap.map");
-    auto mapFile = std::make_unique<geck::Map::MapFile>(geck::Map::createEmptyMapFile());
-    mapFile->header.filename = "testmap.map";
-    mapFile->header.player_default_elevation = 0;
-    map.setMapFile(std::move(mapFile));
+    auto settings = std::make_shared<geck::Settings>();
+    auto map = makeMap("testmap.map");
 
-    geck::MapInfoPanel panel(data.resources());
-    panel.setMap(&map);
+    geck::MapInfoPanel panel(data.resources(), settings);
+    panel.setMap(map.get());
 
-    auto* displayLabel = panel.findChild<QLabel*>("mapDisplayName");
-    auto* lookupLabel = panel.findChild<QLabel*>("mapLookupName");
-    REQUIRE(displayLabel != nullptr);
-    REQUIRE(lookupLabel != nullptr);
-    CHECK(displayLabel->text() == QStringLiteral("Test Display"));
-    CHECK(lookupLabel->text() == QStringLiteral("Test Town"));
+    auto* displayEdit = panel.findChild<QLineEdit*>("mapDisplayName");
+    auto* lookupEdit = panel.findChild<QLineEdit*>("mapLookupName");
+    REQUIRE(displayEdit != nullptr);
+    REQUIRE(lookupEdit != nullptr);
+    CHECK(displayEdit->text() == QStringLiteral("Test Display"));
+    CHECK(lookupEdit->text() == QStringLiteral("Test Town"));
 
-    // A map not listed in maps.txt resolves to placeholders, not a crash.
-    geck::Map unknown("nosuch.map");
-    auto unknownFile = std::make_unique<geck::Map::MapFile>(geck::Map::createEmptyMapFile());
-    unknownFile->header.filename = "nosuch.map";
-    unknown.setMapFile(std::move(unknownFile));
-    panel.setMap(&unknown);
-    CHECK(lookupLabel->text() == QStringLiteral("(not in maps.txt)"));
+    // A map not listed in maps.txt resolves to a placeholder (read-only), not a crash.
+    auto unknown = makeMap("nosuch.map");
+    panel.setMap(unknown.get());
+    CHECK(lookupEdit->text() == QStringLiteral("(not in maps.txt)"));
+    CHECK(lookupEdit->isReadOnly());
+}
+
+TEST_CASE("MapInfoPanel saves an edited map name to the writable root and reflects it", "[qt][mapinfo]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
+    data.writeGameMessageFile("text/english/game/map.msg", messageLine(200, QStringLiteral("Test Display")));
+    data.mount();
+
+    // A writable overlay mounted LAST so its edited copy shadows the source.
+    QTemporaryDir writableDir;
+    REQUIRE(writableDir.isValid());
+    const std::filesystem::path writableRoot = writableDir.path().toStdString();
+    data.resources().files().addDataPath(writableRoot.string());
+
+    auto settings = std::make_shared<geck::Settings>();
+    settings->setWritableDataRoot(writableRoot);
+
+    auto map = makeMap("testmap.map");
+    geck::MapInfoPanel panel(data.resources(), settings);
+    panel.setMap(map.get());
+
+    auto* lookupEdit = panel.findChild<QLineEdit*>("mapLookupName");
+    auto* saveButton = panel.findChild<QPushButton*>("saveNamesButton");
+    REQUIRE(lookupEdit != nullptr);
+    REQUIRE(saveButton != nullptr);
+    REQUIRE(lookupEdit->text() == QStringLiteral("Test Town"));
+
+    lookupEdit->setText("Renamed Town");
+    lookupEdit->setModified(true);
+    saveButton->click();
+
+    // Persisted: the patched copy lives under the writable root with the new lookup_name.
+    const std::filesystem::path savedMaps = writableRoot / "data" / "maps.txt";
+    REQUIRE(std::filesystem::exists(savedMaps));
+    std::ifstream in(savedMaps, std::ios::binary);
+    const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    CHECK(content.find("lookup_name=Renamed Town") != std::string::npos);
+
+    // Reflected: after the re-mount + resolver rebuild, the panel shows the new name.
+    CHECK(lookupEdit->text() == QStringLiteral("Renamed Town"));
 }

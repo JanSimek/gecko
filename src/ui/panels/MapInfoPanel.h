@@ -19,6 +19,7 @@
 namespace geck {
 
 class Map;
+class Settings;
 namespace resource {
     class GameResources;
     class MapNameResolver;
@@ -29,7 +30,7 @@ class MapInfoPanel : public QWidget {
     Q_OBJECT
 
 public:
-    explicit MapInfoPanel(resource::GameResources& resources, QWidget* parent = nullptr);
+    explicit MapInfoPanel(resource::GameResources& resources, std::shared_ptr<Settings> settings, QWidget* parent = nullptr);
     ~MapInfoPanel() override; // out-of-line for the unique_ptr<MapNameResolver> member
 
     void setMap(Map* map);
@@ -64,6 +65,7 @@ private slots:
     void onClearElevationClicked();
     void onCopyElevationClicked();
     void onAddSpatialScriptClicked();
+    void onSaveNamesClicked();
 
 private:
     void setupUI();
@@ -83,8 +85,9 @@ private:
     // Map header group
     QGroupBox* _mapHeaderGroup;
     QLineEdit* _filenameEdit;
-    QLabel* _displayNameLabel; // resolved map.msg display name (per current elevation)
-    QLabel* _lookupNameLabel;  // maps.txt lookup_name
+    QLineEdit* _displayNameEdit; // editable map.msg display name (per current elevation)
+    QLineEdit* _lookupNameEdit;  // editable maps.txt lookup_name
+    QPushButton* _saveNamesButton;
     QCheckBox* _elevation1Check;
     QCheckBox* _elevation2Check;
     QCheckBox* _elevation3Check;
@@ -117,6 +120,7 @@ private:
     QComboBox* _copyToCombo;
 
     resource::GameResources& _resources;
+    std::shared_ptr<Settings> _settings;                  // for the writable data root used when editing names
     std::unique_ptr<resource::MapNameResolver> _mapNames; // built lazily; reads maps.txt/map.msg once
     Map* _map;
     std::string _mapScriptName;

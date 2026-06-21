@@ -147,6 +147,10 @@ QJsonObject Settings::toJson() const {
 
     json["gameLocation"] = gameLocation;
 
+    // Unconditional (empty when unset) to keep this hot serializer branch-free; getWritableDataRoot()
+    // supplies the default when the stored value is empty.
+    json["writableDataRoot"] = QString::fromStdString(_writableDataRoot.string());
+
     QJsonObject selectionColors;
     for (auto it = _selectionColors.constBegin(); it != _selectionColors.constEnd(); ++it) {
         selectionColors[it.key()] = it.value().name(); // "#rrggbb"
@@ -226,6 +230,10 @@ void Settings::fromJson(const QJsonObject& json) {
             }
         }
     }
+
+    // Branch-free: a missing/empty key yields an empty path, and getWritableDataRoot() falls back to
+    // the default location.
+    _writableDataRoot = std::filesystem::path(json.value("writableDataRoot").toString().toStdString());
 
     _selectionColors.clear();
     if (json.contains("selectionColors") && json["selectionColors"].isObject()) {
@@ -557,6 +565,19 @@ std::filesystem::path Settings::getGameDataDirectory() const {
 void Settings::setGameDataDirectory(const std::filesystem::path& location) {
     _gameDataDirectory = location;
     spdlog::info("Game data directory set to: {}", location.string());
+}
+
+std::filesystem::path Settings::getWritableDataRoot() const {
+    if (!_writableDataRoot.empty()) {
+        return _writableDataRoot;
+    }
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    return std::filesystem::path(base.toStdString()) / "writable-data";
+}
+
+void Settings::setWritableDataRoot(const std::filesystem::path& location) {
+    _writableDataRoot = location;
+    spdlog::info("Writable data root set to: {}", location.string());
 }
 
 bool Settings::isGameLocationValid() const {

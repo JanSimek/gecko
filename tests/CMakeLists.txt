@@ -13,6 +13,7 @@ add_executable(general_tests
     general/test_endgame_txt.cpp
     general/test_gvar_refs.cpp
     general/test_map_registry_writer.cpp
+    general/test_writable_data_root.cpp
     general/test_reading_msg.cpp
     general/test_reading_pro_drug.cpp
     general/test_pro_roundtrip.cpp
