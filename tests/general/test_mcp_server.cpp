@@ -34,7 +34,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "map_graph", "generate", "render_map", "extract_pattern", "script_api" }) {
+        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "map_graph", "world_map", "generate", "render_map", "extract_pattern", "script_api" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }
@@ -109,6 +109,12 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     SECTION("map_graph with no data mounted reports a tool error (no maps found)") {
         const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 13 }, { "method", "tools/call" },
             { "params", { { "name", "map_graph" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == true);
+    }
+
+    SECTION("world_map with no data mounted reports a tool error (no city.txt)") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 14 }, { "method", "tools/call" },
+            { "params", { { "name", "world_map" }, { "arguments", json::object() } } } });
         CHECK(resp["result"]["isError"] == true);
     }
 

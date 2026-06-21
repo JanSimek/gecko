@@ -3,6 +3,7 @@
 #include "cli/MapAnalyzer.h"
 #include "cli/MapDescribe.h"
 #include "cli/MapGraph.h"
+#include "cli/WorldMap.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapReachability.h"
 #include "cli/MapRender.h"
@@ -226,6 +227,17 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    json toolWorldMap(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildWorldMap(resources, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("world_map failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
         const auto pid = static_cast<uint32_t>(requireInt(args, "pid", 0, UINT32_MAX));
         try {
@@ -391,6 +403,16 @@ namespace {
             "every map, or pass it to scope (e.g. one town's maps).",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolMapGraph(r, a); } });
+        t.push_back({ "world_map",
+            "The WORLDMAP layer from city.txt — the inter-city travel layer that map_graph does not "
+            "cover. 'areas': every location (city/town/encounter site) with its 'name', 'worldPos' "
+            "{x,y} on the world map, 'size', 'knownAtStart', and 'maps' (the maps it contains, by "
+            "lookup_name, each with an 'on' flag). 'distances': the straight-line distance between "
+            "every pair of areas (worldmap units) — how far apart places are. Use this for 'how does "
+            "the player get from city A to city B' (they cross the world map); use map_graph for travel "
+            "by exit grids within one location. No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolWorldMap(r, a); } });
         t.push_back({ "script_api",
             "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
             "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "

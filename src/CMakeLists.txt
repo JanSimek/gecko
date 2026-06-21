@@ -283,6 +283,9 @@ add_library(vault STATIC
     # Maps (maps.txt — the engine's index->map registry)
     format/maps/MapsTxt.h
 
+    # City (city.txt — worldmap areas / locations)
+    format/city/CityTxt.h
+
     # PRO
     format/pro/Pro.h
     format/pro/Pro.cpp
@@ -340,6 +343,9 @@ add_library(vault STATIC
 
     reader/maps/MapsTxtReader.h
     reader/maps/MapsTxtReader.cpp
+
+    reader/city/CityTxtReader.h
+    reader/city/CityTxtReader.cpp
 
     reader/pro/ProReader.h
     reader/pro/ProReader.cpp
@@ -574,7 +580,9 @@ if(GECK_BUILD_CLI)
         cli/MapDescribe.h
         cli/MapDescribe.cpp
         cli/MapGraph.h
-        cli/MapGraph.cpp)
+        cli/MapGraph.cpp
+        cli/WorldMap.h
+        cli/WorldMap.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)

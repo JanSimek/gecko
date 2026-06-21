@@ -7,6 +7,7 @@ add_executable(general_tests
     general/test_reading_gam.cpp
     general/test_ai_txt.cpp
     general/test_maps_txt.cpp
+    general/test_city_txt.cpp
     general/test_reading_msg.cpp
     general/test_reading_pro_drug.cpp
     general/test_pro_roundtrip.cpp

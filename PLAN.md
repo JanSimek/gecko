@@ -812,11 +812,20 @@ file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set th
    context. *Lower priority when the agent already has filesystem/grep tools — then just mounting the
    source is enough; this earns its keep specifically for headless/sandboxed agents.*
 
-7. **Whole-game map-connectivity graph — `map_graph`.** Walk every shipped map, collect the exit
-   grids (already `{destMap, destMapName, destHex, destElevation}`) into a directed map→map graph;
-   cross with `reachability` to flag one-way edges and unreachable maps. The foundation is in
-   (`exitsToJson` + `MapsTxt`). Answers "how is the world wired" and, spatially, "can the player get
-   from the first map to map X" — bounded, buildable, high value.
+7. **Exit-grid connectivity graph — `map_graph`. ✅ Done.** Walks every map's exit grids into a
+   directed map→map graph (`{destMap, destMapName, destHex, destElevation}` + a per-edge hex count),
+   with stats flagging dead-ends and maps with no incoming edge. **Scope correction:** this is only
+   the exit-grid layer — how a *location's* maps link (intramap elevation changes + intermap edges
+   within a town) and where they hand off to the world map (`kind=worldmap`). It is **not** inter-city
+   travel; cities are crossed on the world map, so the graph is connected only within a location.
+   Follow-up: cross with `reachability` to flag one-way edges.
+
+7b. **Worldmap layer — `world_map` (city.txt). ✅ Done.** The inter-city layer `map_graph` doesn't
+   cover: a vault `CityTxt` reader (`data/city.txt`) → areas (name, `world_pos`, size, known-at-start,
+   the maps each contains via its entrances) + the straight-line distance between every pair of areas.
+   This is the actual "map of the world + distances between places." **Follow-ups:** `worldmap.msg`
+   for localized area names; `worldmap.txt` for terrain + random-encounter tables (so distances can be
+   terrain-weighted travel cost, not just straight-line) — the big, complex one.
 
 8. **Corpus / world index — evidence, not a solver.** Join, across all maps, the connectivity graph
    + each map's scripts (`describe_script` source/dialog) + the quest/gvar data (below) into one
@@ -837,9 +846,13 @@ then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority ord
 - **`data/quests.txt` + `game/quests.msg`** *(the progression spine).* Each quest's location, the
   **gvar** that tracks it, and its description text — this is what turns capability 8 from a map
   graph into a *quest* graph, since the gvar links a quest to the scripts that set it.
-- **`data/city.txt`** — worldmap areas/towns and their map entrances; bridges the worldmap to the
-  per-map exit graph (capability 7).
-- **`data/worldmap.txt`** — worldmap tiles, terrain and random-encounter tables (the macro layer).
+- **`data/city.txt`** ✅ **done** — `CityTxt` vault reader + the `world_map` tool (areas, world
+  positions, sizes, the maps each area contains, pairwise distances). The inter-city layer.
+- **`data/worldmap.txt`** *(follow-up, large)* — worldmap tiles, terrain and random-encounter tables.
+  Lets the `world_map` distances become terrain-weighted travel cost instead of straight-line, and
+  surfaces the encounter tables. Complex (big encounter/tile tables) — its own effort.
+- **`game/worldmap.msg`** *(follow-up, small)* — localized area/terrain names to enrich `world_map`
+  (city.txt's `area_name` is the internal label).
 - **`data/endgame.txt` / `enddeath.txt`** — ending slides and their gvar/condition triggers: the
   literal "how the game ends" for the corpus angle.
 - **`data/party.txt`** (companions), **`holodisk.txt`**, **`karmavar.txt`** — lore/state, lower
