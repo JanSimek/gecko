@@ -6,6 +6,7 @@
 #include "cli/WorldEncounters.h"
 #include "cli/GlobalVars.h"
 #include "cli/Quests.h"
+#include "cli/Endings.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
 #include "cli/MapReachability.h"
@@ -34,6 +35,7 @@ struct CliArgs {
     bool encounters = false;
     bool gvars = false;
     bool quests = false;
+    bool endings = false;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::GenerateOptions gen;
@@ -99,6 +101,8 @@ void printUsage(const char* program) {
               << "      The global-variable dictionary (vault13.gam): each GVAR index -> name + default.\n"
               << "  " << program << " map quests --data <dir-or-.dat> [--data <...>]\n"
               << "      The quest registry (quests.txt): each quest's area, tracking gvar, thresholds, text.\n"
+              << "  " << program << " map endings --data <dir-or-.dat> [--data <...>]\n"
+              << "      The endgame win-condition table (endgame.txt): each slide's gvar==value, art, narrator.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
@@ -107,7 +111,7 @@ bool isKnownSubcommand(const std::vector<std::string>& args) {
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
             || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map"
             || args[1] == "graph" || args[1] == "world" || args[1] == "encounters"
-            || args[1] == "gvars" || args[1] == "quests");
+            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -329,7 +333,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
-    if (out.gvars || out.quests) { // gvars/quests take no arguments beyond --data (handled above)
+    if (out.gvars || out.quests || out.endings) { // these take no arguments beyond --data (handled above)
         std::cerr << "error: unexpected argument: " << arg << "\n";
         printUsage(program);
         return 0;
@@ -363,6 +367,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.encounters = args[1] == "encounters";
     out.gvars = args[1] == "gvars";
     out.quests = args[1] == "quests";
+    out.endings = args[1] == "endings";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -462,6 +467,9 @@ int main(int argc, char** argv) {
     }
     if (cli.quests) {
         return geck::cli::buildQuests(resources, std::cout);
+    }
+    if (cli.endings) {
+        return geck::cli::buildEndings(resources, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
 }

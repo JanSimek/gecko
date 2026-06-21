@@ -835,8 +835,9 @@ file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set th
    the quest's gvar → name via `gvars`, then `describe_script` for the scripts that touch it).
    Deliberately still **not** a computed "critical path to the ending": `.ssl` is imperative quest
    logic and static extraction of a win-path would be brittle. The MCP supplies ground truth; the
-   model infers the route. **Remaining for the full loop:** an `endings` tool (endgame.txt: gvar==value
-   → ending) so the agent has the win-conditions, and a game-start marker.
+   model infers the route. The `endings` tool (endgame.txt: gvar==value → ending slide) now supplies
+   the win-conditions too, so the start→objectives→ending loop is readable end to end; a game-start
+   marker (fold into world_map) is the small remaining piece.
 
 ### Data-extraction roadmap (engine data files → vault readers)
 
@@ -866,10 +867,12 @@ then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority ord
 - **`game/worldmap.msg`** *(follow-up, small)* — localized area/terrain/encounter names to enrich
   `world_map` / `world_encounters` (city.txt `area_name` and the encounter section names are the
   internal labels).
-- **`data/endgame.txt` / `enddeath.txt`** *(next — the win-condition table)* — ending slides keyed by
-  `gvar==value`. Now that the `gvars` dictionary exists, an `endings` tool can render each condition
-  human-readably ("how the game / each town ends"). `enddeath.txt` lives in master.dat (a VFS path,
-  not loose). This is the natural next step to close the start→objectives→ending loop.
+- **`data/endgame.txt`** ✅ **done** — `EndgameTxt` vault reader + the `endings` tool: each ending slide
+  keyed by `gvar == value` (gvar resolved to its `GVAR_ENDGAME_MOVIE_*` name + a readable condition),
+  the slide art, and the narrator/subtitle base name. Slides sharing a gvar at different values are a
+  location's branching outcomes (e.g. Gecko has 5). Closes the start→objectives→ending loop with quests
+  + gvars. **Follow-ups:** `enddeath.txt` death endings (in master.dat) and the narration subtitle text
+  (`text/<lang>/cuts/<narrator>.txt`).
 - **`data/party.txt`** (companions), **`holodisk.txt`**, **`karmavar.txt`** — lore/state, lower
   priority.
 

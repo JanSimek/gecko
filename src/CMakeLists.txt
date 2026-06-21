@@ -292,6 +292,9 @@ add_library(vault STATIC
     # Quests (quests.txt — the quest registry)
     format/quests/QuestsTxt.h
 
+    # Endgame (endgame.txt — the ending slideshow win-condition table)
+    format/endgame/EndgameTxt.h
+
     # PRO
     format/pro/Pro.h
     format/pro/Pro.cpp
@@ -359,6 +362,9 @@ add_library(vault STATIC
 
     reader/quests/QuestsTxtReader.h
     reader/quests/QuestsTxtReader.cpp
+
+    reader/endgame/EndgameTxtReader.h
+    reader/endgame/EndgameTxtReader.cpp
 
     reader/pro/ProReader.h
     reader/pro/ProReader.cpp
@@ -602,7 +608,9 @@ if(GECK_BUILD_CLI)
         cli/GlobalVars.h
         cli/GlobalVars.cpp
         cli/Quests.h
-        cli/Quests.cpp)
+        cli/Quests.cpp
+        cli/Endings.h
+        cli/Endings.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)

@@ -7,6 +7,7 @@
 #include "cli/WorldEncounters.h"
 #include "cli/GlobalVars.h"
 #include "cli/Quests.h"
+#include "cli/Endings.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapReachability.h"
 #include "cli/MapRender.h"
@@ -274,6 +275,17 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    json toolEndings(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildEndings(resources, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("endings failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
         const auto pid = static_cast<uint32_t>(requireInt(args, "pid", 0, UINT32_MAX));
         try {
@@ -477,6 +489,15 @@ namespace {
             "a gvar index (from quests, or a script) to a human-readable name. No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolGlobalVars(r, a); } });
+        t.push_back({ "endings",
+            "The endgame slideshow's win-condition table from endgame.txt: each ending slide with the "
+            "global variable + value that triggers it ('gvar' + 'gvarName' via vault13.gam + a readable "
+            "'condition'), the slide 'art', and the 'narrator' subtitle base name. Slides sharing a gvar "
+            "at different values are a location's branching outcomes — so this answers 'what world state "
+            "produces each ending'. With quests + gvars it closes the start->objectives->ending loop. "
+            "No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolEndings(r, a); } });
         t.push_back({ "script_api",
             "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
             "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "
