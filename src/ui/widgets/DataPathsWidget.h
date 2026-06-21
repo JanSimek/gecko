@@ -44,7 +44,8 @@ signals:
     void statusChanged(const QString& message, const QString& styleClass);
 
 private slots:
-    void onAddPath();
+    void onAddFolder(); // pick a folder; its master.dat/critter.dat are added as explicit entries too
+    void onAddDat();    // pick a single .dat file
     void onRemovePath();
     void onAutoDetect();
     void onSelectionChanged();

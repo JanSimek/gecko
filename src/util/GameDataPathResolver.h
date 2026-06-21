@@ -2,12 +2,20 @@
 
 #include <filesystem>
 #include <optional>
+#include <vector>
 
 namespace geck::util {
 
 /// Check whether a directory contains at least one Fallout 2 data marker
 /// (data/ subdirectory, master.dat, critter.dat, or patch000.dat).
 bool hasFallout2DataLayout(const std::filesystem::path& path);
+
+/// Expand each directory that ships master.dat / critter.dat into the directory followed by those DATs,
+/// so every mounted archive is an explicit data-path entry rather than a silent nested mount. Order is
+/// preserved — the directory precedes its DATs, matching the legacy mount order so priority is
+/// unchanged. `.dat` entries and DAT-less directories pass through untouched; an already-listed path is
+/// never duplicated. Used to migrate older folder-only settings and when adding a folder in the UI.
+std::vector<std::filesystem::path> expandDataPaths(const std::vector<std::filesystem::path>& dataPaths);
 
 /// Attempt to resolve a user-supplied path to a Fallout 2 game data root.
 ///
