@@ -5,39 +5,16 @@
 #include <cstddef>
 #include <sstream>
 #include <string>
-#include <vector>
 
 namespace geck {
 
 namespace {
 
+    using geck::text::intOr;
+    using geck::text::splitCsv;
+    using geck::text::stripComment;
     using geck::text::toLower;
     using geck::text::trim;
-
-    // worldmap.txt uses inline ';' comments throughout (even on section headers), so drop the comment
-    // before any other parsing.
-    std::string stripComment(const std::string& line) {
-        return line.substr(0, line.find(';'));
-    }
-
-    std::vector<std::string> splitCsv(const std::string& s) {
-        std::vector<std::string> out;
-        std::istringstream stream(s);
-        std::string item;
-        while (std::getline(stream, item, ',')) {
-            out.push_back(trim(item));
-        }
-        return out;
-    }
-
-    // stoi that stops at the first non-digit, so "35%" -> 35 and "8{Wielded}" -> 8; fallback on junk.
-    int intOr(const std::string& s, int fallback) {
-        try {
-            return std::stoi(s);
-        } catch (const std::exception&) {
-            return fallback;
-        }
-    }
 
     // [Data]: terrain_types = "Desert:1, Mountain:2, …"; terrain_short_names = "DES, MNT, …" (aligned
     // to terrain_types by position).
