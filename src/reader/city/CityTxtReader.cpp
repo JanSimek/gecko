@@ -1,5 +1,6 @@
 #include "reader/city/CityTxtReader.h"
 
+#include "reader/IniParser.h"
 #include "reader/TextParsing.h"
 
 #include <sstream>
@@ -11,9 +12,7 @@ namespace {
 
     using geck::text::intOr;
     using geck::text::splitCsv;
-    using geck::text::stripComment;
     using geck::text::toLower;
-    using geck::text::trim;
 
     // "[Area NN]" section name -> NN, or -1 if it isn't an area section.
     int parseAreaIndex(const std::string& section) {
@@ -83,28 +82,15 @@ CityTxt parseCityTxt(std::istream& in) {
         }
     };
 
-    std::string line;
-    while (std::getline(in, line)) {
-        const std::string content = trim(stripComment(line));
-        if (content.empty()) {
-            continue;
-        }
-        if (content.front() == '[' && content.back() == ']') {
+    ini::parse(
+        in,
+        [&](const std::string& section) {
             flush();
             current = CityArea{};
-            current.index = parseAreaIndex(trim(content.substr(1, content.size() - 2)));
+            current.index = parseAreaIndex(section);
             inSection = true;
-            continue;
-        }
-        if (!inSection) {
-            continue;
-        }
-        const auto eq = content.find('=');
-        if (eq == std::string::npos) {
-            continue;
-        }
-        applyField(current, toLower(trim(content.substr(0, eq))), trim(content.substr(eq + 1)));
-    }
+        },
+        [&](const std::string& key, const std::string& value) { applyField(current, key, value); });
     flush();
     return out;
 }

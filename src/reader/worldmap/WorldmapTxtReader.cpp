@@ -1,5 +1,6 @@
 #include "reader/worldmap/WorldmapTxtReader.h"
 
+#include "reader/IniParser.h"
 #include "reader/TextParsing.h"
 
 #include <cstddef>
@@ -12,7 +13,6 @@ namespace {
 
     using geck::text::intOr;
     using geck::text::splitCsv;
-    using geck::text::stripComment;
     using geck::text::toLower;
     using geck::text::trim;
 
@@ -81,15 +81,10 @@ WorldmapTxt parseWorldmapTxt(std::istream& in) {
         }
     };
 
-    std::string line;
-    while (std::getline(in, line)) {
-        const std::string content = trim(stripComment(line));
-        if (content.empty()) {
-            continue;
-        }
-        if (content.front() == '[' && content.back() == ']') {
+    ini::parse(
+        in,
+        [&](const std::string& section) {
             flushEncounter();
-            const std::string section = trim(content.substr(1, content.size() - 2));
             const std::string lower = toLower(section);
             if (lower == "data") {
                 mode = Mode::Data;
@@ -100,20 +95,14 @@ WorldmapTxt parseWorldmapTxt(std::istream& in) {
             } else {
                 mode = Mode::Other; // [Random Maps: …], [Tile Data], [Tile NN], … are not parsed
             }
-            continue;
-        }
-        const auto eq = content.find('=');
-        if (eq == std::string::npos) {
-            continue;
-        }
-        const std::string key = toLower(trim(content.substr(0, eq)));
-        const std::string value = trim(content.substr(eq + 1));
-        if (mode == Mode::Data) {
-            applyDataField(out, key, value);
-        } else if (mode == Mode::Encounter && key.rfind("type_", 0) == 0) {
-            current.entries.push_back(parseEncounterEntry(value));
-        }
-    }
+        },
+        [&](const std::string& key, const std::string& value) {
+            if (mode == Mode::Data) {
+                applyDataField(out, key, value);
+            } else if (mode == Mode::Encounter && key.rfind("type_", 0) == 0) {
+                current.entries.push_back(parseEncounterEntry(value));
+            }
+        });
     flushEncounter();
     return out;
 }
