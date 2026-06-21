@@ -37,7 +37,7 @@ MapInfoPanel::MapInfoPanel(resource::GameResources& resources, std::shared_ptr<S
     , _filenameEdit(nullptr)
     , _displayNameEdit(nullptr)
     , _lookupNameEdit(nullptr)
-    , _saveNamesButton(nullptr)
+    , _overlayHintLabel(nullptr)
     , _elevation1Check(nullptr)
     , _elevation2Check(nullptr)
     , _elevation3Check(nullptr)
@@ -106,8 +106,9 @@ void MapInfoPanel::setupUI() {
     _filenameEdit = new QLineEdit();
     headerLayout->addRow("Filename:", _filenameEdit);
 
-    // Editable friendly names from maps.txt / map.msg (blank + disabled when game data is unmounted or
-    // the map isn't registered). Edits are saved to a writable copy via "Save names" below.
+    // Editable friendly names from maps.txt / map.msg (blank + read-only when game data is unmounted or
+    // the map isn't registered). Editing a name marks the map modified; the value is written to a
+    // writable copy when the map is saved (see persistMapNames).
     _displayNameEdit = new QLineEdit();
     _displayNameEdit->setObjectName("mapDisplayName");
     headerLayout->addRow("Map name:", _displayNameEdit);
@@ -116,12 +117,17 @@ void MapInfoPanel::setupUI() {
     _lookupNameEdit->setObjectName("mapLookupName");
     headerLayout->addRow("Lookup name:", _lookupNameEdit);
 
-    _saveNamesButton = new QPushButton("Save names");
-    _saveNamesButton->setObjectName("saveNamesButton");
-    _saveNamesButton->setToolTip("Write the edited map name / lookup name to maps.txt and map.msg "
-                                 "(copied out of the DAT to a writable location first).");
-    headerLayout->addRow("", _saveNamesButton);
-    connect(_saveNamesButton, &QPushButton::clicked, this, &MapInfoPanel::onSaveNamesClicked);
+    connect(_displayNameEdit, &QLineEdit::textEdited, this, [this]() { Q_EMIT mapNamesChanged(); });
+    connect(_lookupNameEdit, &QLineEdit::textEdited, this, [this]() { Q_EMIT mapNamesChanged(); });
+
+    // Appears once maps.txt/map.msg have been extracted to the writable copy; tells the user where the
+    // edited files live (the originals in the game archive are read-only).
+    _overlayHintLabel = new QLabel();
+    _overlayHintLabel->setObjectName("mapNamesOverlayHint");
+    _overlayHintLabel->setWordWrap(true);
+    _overlayHintLabel->setVisible(false);
+    _overlayHintLabel->setStyleSheet(QString("color: %1; font-size: 11px;").arg(ui::theme::colors::TEXT_SECONDARY));
+    headerLayout->addRow("", _overlayHintLabel);
 
     QWidget* elevationsWidget = new QWidget();
     QVBoxLayout* elevationsLayout = new QVBoxLayout(elevationsWidget);
@@ -397,9 +403,7 @@ void MapInfoPanel::updateMapNameDisplay() {
     if (!_map) {
         _displayNameEdit->clear();
         _lookupNameEdit->clear();
-        if (_saveNamesButton) {
-            _saveNamesButton->setEnabled(false);
-        }
+        updateOverlayHint();
         return;
     }
 
@@ -426,8 +430,22 @@ void MapInfoPanel::updateMapNameDisplay() {
     _lookupNameEdit->setText(registered ? QString::fromStdString(lookup) : QStringLiteral("(not in maps.txt)"));
     _displayNameEdit->setReadOnly(!registered);
     _lookupNameEdit->setReadOnly(!registered);
-    if (_saveNamesButton) {
-        _saveNamesButton->setEnabled(registered);
+    updateOverlayHint();
+}
+
+void MapInfoPanel::updateOverlayHint() {
+    if (!_overlayHintLabel) {
+        return;
+    }
+    // Show the hint once maps.txt has been extracted to the writable copy (any name edit triggers it),
+    // so the user knows the edits live in a writable location, not the read-only game archive.
+    const bool extracted = _settings
+        && std::filesystem::exists(_settings->getWritableDataRoot() / "data" / "maps.txt");
+    _overlayHintLabel->setVisible(extracted);
+    if (extracted) {
+        _overlayHintLabel->setText(
+            QStringLiteral("Map names are saved to an editable copy extracted from the game archive:\n%1")
+                .arg(QString::fromStdString(_settings->getWritableDataRoot().string())));
     }
 }
 
@@ -514,9 +532,7 @@ void MapInfoPanel::clearMapInfo() {
     if (_lookupNameEdit) {
         _lookupNameEdit->clear();
     }
-    if (_saveNamesButton) {
-        _saveNamesButton->setEnabled(false);
-    }
+    updateOverlayHint();
 
     _globalVarsTree->clear();
 
@@ -961,23 +977,13 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
     updateMapScriptsDisplay();
 }
 
-void MapInfoPanel::onSaveNamesClicked() {
-    if (!_map || !_mapNames || !_settings) {
+void MapInfoPanel::persistMapNames() {
+    if (!_map || !_mapNames || !_settings || !_displayNameEdit || !_lookupNameEdit) {
         return;
     }
 
-    const auto& header = _map->getMapFile().header;
-    const std::string file = _map->filename(); // the path basename, not the NUL-padded header field
-    const int index = _mapNames->indexOf(file);
-    if (index < 0) {
-        QMessageBox::warning(this, "Save Names",
-            "This map has no entry in maps.txt, so its names can't be edited here.");
-        return;
-    }
-    const int elevation = static_cast<int>(header.player_default_elevation);
-    const std::filesystem::path writableRoot = _settings->getWritableDataRoot();
-
-    // Persist only the field the user actually edited (QLineEdit tracks isModified since setText).
+    // Persist only the field the user actually edited (QLineEdit tracks isModified since setText). This
+    // is the common fast path on a map save: nothing edited -> nothing to do.
     std::optional<std::string> lookup;
     std::optional<std::string> display;
     if (_lookupNameEdit->isModified()) {
@@ -987,15 +993,26 @@ void MapInfoPanel::onSaveNamesClicked() {
         display = _displayNameEdit->text().toStdString();
     }
     if (!lookup.has_value() && !display.has_value()) {
-        return; // nothing changed
+        return; // no name edits to save
     }
 
+    const int index = _mapNames->indexOf(_map->filename()); // by basename, not the NUL-padded header field
+    if (index < 0) {
+        return; // not in maps.txt -> the fields are read-only, so there is nothing to persist
+    }
+    const int elevation = static_cast<int>(_map->getMapFile().header.player_default_elevation);
+    writeNameEdits(index, elevation, lookup, display);
+}
+
+void MapInfoPanel::writeNameEdits(int index, int elevation,
+    const std::optional<std::string>& lookup, const std::optional<std::string>& display) {
+    const std::filesystem::path writableRoot = _settings->getWritableDataRoot();
     try {
         // The whole load -> set -> validate -> serialize -> write cycle (with the hard-block) lives in
         // resource::saveMapNames, so it is unit-testable without this widget.
         const auto result = resource::saveMapNames(_resources.files(), writableRoot, index, elevation, lookup, display);
         if (!result.ok) {
-            QMessageBox::warning(this, "Save Names", QString::fromStdString(result.error));
+            QMessageBox::warning(this, "Save Map Names", QString::fromStdString(result.error));
             return;
         }
 
@@ -1006,9 +1023,9 @@ void MapInfoPanel::onSaveNamesClicked() {
         _resources.repository().clear();
         _mapNames = std::make_unique<resource::MapNameResolver>(_resources);
         updateMapNameDisplay();
-        spdlog::info("MapInfoPanel: saved map names for '{}' to {}", file, writableRoot.string());
+        spdlog::info("MapInfoPanel: saved map names to {}", writableRoot.string());
     } catch (const std::exception& e) {
-        QMessageBox::warning(this, "Save Names", QString("Failed to save map names:\n%1").arg(e.what()));
+        QMessageBox::warning(this, "Save Map Names", QString("Failed to save map names:\n%1").arg(e.what()));
     }
 }
 

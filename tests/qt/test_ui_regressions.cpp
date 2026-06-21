@@ -10,6 +10,7 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QStackedWidget>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTableWidget>
@@ -761,20 +762,25 @@ TEST_CASE("MapInfoPanel saves an edited map name to the writable root and reflec
     panel.setMap(map.get());
 
     auto* lookupEdit = panel.findChild<QLineEdit*>("mapLookupName");
-    auto* saveButton = panel.findChild<QPushButton*>("saveNamesButton");
-    REQUIRE(lookupEdit != nullptr);
-    REQUIRE(saveButton != nullptr);
-    REQUIRE(lookupEdit->text() == QStringLiteral("Test Town"));
-
     auto* displayEdit = panel.findChild<QLineEdit*>("mapDisplayName");
+    auto* hint = panel.findChild<QLabel*>("mapNamesOverlayHint");
+    REQUIRE(lookupEdit != nullptr);
     REQUIRE(displayEdit != nullptr);
+    REQUIRE(hint != nullptr);
+    REQUIRE(lookupEdit->text() == QStringLiteral("Test Town"));
+    CHECK(hint->isHidden()); // nothing extracted to the writable copy yet
 
-    // Edit BOTH the lookup name (maps.txt) and the display name (map.msg) and save them together.
+    // Editing a name emits mapNamesChanged — the signal the main window turns into "map modified".
+    QSignalSpy modifiedSpy(&panel, &geck::MapInfoPanel::mapNamesChanged);
+    QTest::keyClicks(lookupEdit, "Z"); // user input fires textEdited -> mapNamesChanged
+    CHECK(modifiedSpy.count() >= 1);
+
+    // Set the final values and persist — what the main window calls after writing the .map.
     lookupEdit->setText("Renamed Town");
     lookupEdit->setModified(true);
     displayEdit->setText("New Display");
     displayEdit->setModified(true);
-    saveButton->click();
+    panel.persistMapNames();
 
     // Persisted: the writable copies carry both edits.
     const std::filesystem::path savedMaps = writableRoot / "data" / "maps.txt";
@@ -787,4 +793,8 @@ TEST_CASE("MapInfoPanel saves an edited map name to the writable root and reflec
     // Reflected: after the re-mount + resolver rebuild, the panel shows both new names.
     CHECK(lookupEdit->text() == QStringLiteral("Renamed Town"));
     CHECK(displayEdit->text() == QStringLiteral("New Display"));
+
+    // The hint now appears and points at the writable copy the files were extracted to.
+    CHECK_FALSE(hint->isHidden());
+    CHECK(hint->text().contains(QString::fromStdString(writableRoot.string())));
 }

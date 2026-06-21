@@ -231,6 +231,9 @@ void MainWindow::connectMenuSignals() {
     });
     connect(this, &MainWindow::saveMapRequested, [this]() {
         if (_currentEditorWidget && _currentEditorWidget->saveMap()) {
+            if (_mapInfoPanel) {
+                _mapInfoPanel->persistMapNames(); // flush any edited Map name / Lookup name alongside the .map
+            }
             _mapModified = false;
             updateWindowTitle(); // clears the "[*]" and reflects any Save As rename
         }
@@ -1113,6 +1116,9 @@ bool MainWindow::maybeSaveChanges() {
 
     if (choice == QMessageBox::Save) {
         if (_currentEditorWidget->saveMap()) {
+            if (_mapInfoPanel) {
+                _mapInfoPanel->persistMapNames(); // flush any edited Map name / Lookup name alongside the .map
+            }
             setMapModified(false);
             updateWindowTitle();
             return true;
@@ -1389,6 +1395,9 @@ void MainWindow::connectPanelSignals() {
         connect(_mapInfoPanel, &MapInfoPanel::mapScriptIdChanged, this, [this](int) { setMapModified(true); });
         connect(_mapInfoPanel, &MapInfoPanel::darknessChanged, this, [this](int) { setMapModified(true); });
         connect(_mapInfoPanel, &MapInfoPanel::timestampChanged, this, [this](int) { setMapModified(true); });
+        // Editing a Map name / Lookup name marks the map modified; the value is written to the writable
+        // copy when the map is saved (see the saveMap handlers, which call persistMapNames()).
+        connect(_mapInfoPanel, &MapInfoPanel::mapNamesChanged, this, [this]() { setMapModified(true); });
     }
 }
 
