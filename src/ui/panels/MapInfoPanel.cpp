@@ -18,6 +18,7 @@
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
 #include "resource/MapNameEditor.h"
+#include "resource/WritableDataRoot.h"
 #include "ui/Settings.h"
 #include "reader/ReaderFactory.h"
 #include "resource/ResourcePaths.h"
@@ -434,18 +435,20 @@ void MapInfoPanel::updateMapNameDisplay() {
 }
 
 void MapInfoPanel::updateOverlayHint() {
-    if (!_overlayHintLabel) {
+    if (!_overlayHintLabel || !_displayNameEdit) {
         return;
     }
-    // Show the hint once maps.txt has been extracted to the writable copy (any name edit triggers it),
-    // so the user knows the edits live in a writable location, not the read-only game archive.
-    const bool extracted = _settings
-        && std::filesystem::exists(_settings->getWritableDataRoot() / "data" / "maps.txt");
-    _overlayHintLabel->setVisible(extracted);
-    if (extracted) {
-        _overlayHintLabel->setText(
-            QStringLiteral("Map names are saved to an editable copy extracted from the game archive:\n%1")
-                .arg(QString::fromStdString(_settings->getWritableDataRoot().string())));
+    // The names are editable only for a registered map. When they are, but there is no writable folder
+    // in the Data Paths to save them to (every path is a read-only archive), hint the user to add one —
+    // the editor never creates or mounts a hidden writable location.
+    const bool editable = !_displayNameEdit->isReadOnly();
+    const bool hasWritablePath = _settings && resource::findWritableDataPath(_settings->getDataPaths()).has_value();
+    const bool needsWritablePath = editable && !hasWritablePath;
+    _overlayHintLabel->setVisible(needsWritablePath);
+    if (needsWritablePath) {
+        _overlayHintLabel->setText(QStringLiteral(
+            "To save Map name / Lookup name edits, add a writable folder to your Data Paths "
+            "(all current data paths are read-only archives)."));
     }
 }
 
@@ -978,8 +981,8 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
 }
 
 void MapInfoPanel::persistMapNames() {
-    if (!_map || !_mapNames || !_settings || !_displayNameEdit || !_lookupNameEdit) {
-        return;
+    if (!_map || !_mapNames || !_settings) {
+        return; // (_displayNameEdit/_lookupNameEdit are created in setupUI and always present)
     }
 
     // Persist only the field the user actually edited (QLineEdit tracks isModified since setText). This
@@ -1000,13 +1003,22 @@ void MapInfoPanel::persistMapNames() {
     if (index < 0) {
         return; // not in maps.txt -> the fields are read-only, so there is nothing to persist
     }
+
+    // Write into a writable folder from the user's Data Paths (no hidden location). If there's none, the
+    // edit can't be saved -> tell the user to add one. updateOverlayHint() already shows the same hint.
+    const auto target = resource::findWritableDataPath(_settings->getDataPaths());
+    if (!target.has_value()) {
+        QMessageBox::warning(this, "Save Map Names",
+            "These map name edits can't be saved: add a writable folder to your Data Paths "
+            "(all current data paths are read-only archives).");
+        return;
+    }
     const int elevation = static_cast<int>(_map->getMapFile().header.player_default_elevation);
-    writeNameEdits(index, elevation, lookup, display);
+    writeNameEdits(*target, index, elevation, lookup, display);
 }
 
-void MapInfoPanel::writeNameEdits(int index, int elevation,
+void MapInfoPanel::writeNameEdits(const std::filesystem::path& writableRoot, int index, int elevation,
     const std::optional<std::string>& lookup, const std::optional<std::string>& display) {
-    const std::filesystem::path writableRoot = _settings->getWritableDataRoot();
     try {
         // The whole load -> set -> validate -> serialize -> write cycle (with the hard-block) lives in
         // resource::saveMapNames, so it is unit-testable without this widget.
@@ -1016,9 +1028,9 @@ void MapInfoPanel::writeNameEdits(int index, int elevation,
             return;
         }
 
-        // Reflect the edit this session: re-mount the writable root so the VFS's file listing includes
-        // the freshly-written overlay file (vfspp caches the listing at mount time). The re-mount is
-        // last, so the copy shadows the original. Then drop the cached map.msg and rebuild the resolver.
+        // Reflect the edit this session: re-mount the target so the VFS's file listing includes the
+        // freshly-written file (vfspp caches the listing at mount time). Re-mounted last, the copy
+        // shadows the archives. Then drop the cached map.msg and rebuild the resolver.
         _resources.files().addDataPath(writableRoot);
         _resources.repository().clear();
         _mapNames = std::make_unique<resource::MapNameResolver>(_resources);

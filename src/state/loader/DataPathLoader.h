@@ -3,7 +3,6 @@
 #include "Loader.h"
 #include <filesystem>
 #include <vector>
-#include <functional>
 
 namespace geck {
 
@@ -19,10 +18,8 @@ namespace resource {
  */
 class DataPathLoader : public Loader {
 public:
-    /// @param writableRoot a per-user overlay dir mounted LAST (after all data paths) so loose, edited
-    ///        copies shadow the archived originals; created if missing, ignored when empty.
     explicit DataPathLoader(std::shared_ptr<resource::GameResources> resources,
-        const std::vector<std::filesystem::path>& dataPaths, std::filesystem::path writableRoot = {});
+        const std::vector<std::filesystem::path>& dataPaths);
     ~DataPathLoader() override;
 
     void init() override;
@@ -35,7 +32,6 @@ public:
 private:
     std::shared_ptr<resource::GameResources> _resources;
     std::vector<std::filesystem::path> _dataPaths;
-    std::filesystem::path _writableRoot;
     std::atomic<bool> _done{ false };
     bool _hasError{ false };
     std::string _errorMessage;

@@ -97,12 +97,6 @@ public:
     std::filesystem::path getGameDataDirectory() const;
     void setGameDataDirectory(const std::filesystem::path& location);
 
-    /// Writable overlay root for editing game data that ships inside read-only DATs: files are copied
-    /// here and mounted LAST so the loose copy shadows the archived original. Defaults to a per-user
-    /// app-data location when unset.
-    std::filesystem::path getWritableDataRoot() const;
-    void setWritableDataRoot(const std::filesystem::path& location);
-
     // Auto-detection helpers
     static std::vector<std::filesystem::path> detectFallout2Installations();
 
@@ -143,7 +137,6 @@ private:
     // Game location configuration
     std::filesystem::path _executableGameLocation;
     std::filesystem::path _gameDataDirectory;
-    std::filesystem::path _writableDataRoot;
 
     // Constants
     static constexpr const char* SETTINGS_VERSION = "1.0";

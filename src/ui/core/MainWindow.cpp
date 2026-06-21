@@ -1006,7 +1006,7 @@ void MainWindow::rebuildGameResourcesFromSettings() {
     auto loadingWidget = std::make_unique<LoadingWidget>(this);
     loadingWidget->setWindowTitle("Reloading Game Data");
 
-    auto loader = std::make_unique<DataPathLoader>(newResources, dataPaths, _settings->getWritableDataRoot());
+    auto loader = std::make_unique<DataPathLoader>(newResources, dataPaths);
     DataPathLoader* loaderPtr = loader.get();
     loadingWidget->addLoader(std::move(loader));
     loadingWidget->exec();

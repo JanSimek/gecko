@@ -13,6 +13,7 @@
 #include <QTreeWidgetItem>
 #include <QComboBox>
 #include <QPushButton>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -82,9 +83,9 @@ private:
     void updateMapScriptsDisplay();
     void updateMapNameDisplay();
     void updateOverlayHint(); // show/hide the "extracted to <path>" hint based on the writable copy
-    // Write the gathered name edits via resource::saveMapNames, then re-mount + rebuild the resolver +
-    // refresh. Split out of persistMapNames to keep each within the complexity budget.
-    void writeNameEdits(int index, int elevation,
+    // Write the gathered name edits to `writableRoot` (a writable Data Path) via resource::saveMapNames,
+    // then re-mount + rebuild the resolver + refresh. Split out of persistMapNames for the complexity budget.
+    void writeNameEdits(const std::filesystem::path& writableRoot, int index, int elevation,
         const std::optional<std::string>& lookup, const std::optional<std::string>& display);
     void updateElevationCheckboxStates();
     void setElevationCheckboxesBlocked(bool blocked);

@@ -45,3 +45,30 @@ TEST_CASE("ensureWritableCopy throws when the file is not in the mounted data", 
     resource::DataFileSystem files; // nothing mounted
     CHECK_THROWS(resource::ensureWritableCopy(files, root, "data/nope.txt"));
 }
+
+TEST_CASE("findWritableDataPath returns the last directory, skipping archives", "[writableroot]") {
+    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "fwdp";
+    fs::remove_all(base);
+    const fs::path dirA = base / "a";
+    const fs::path dirB = base / "b";
+    fs::create_directories(dirA);
+    fs::create_directories(dirB);
+    const fs::path fakeDat = base / "master.dat";
+    writeFile(fakeDat, "not a real dat"); // a file, not a directory
+
+    SECTION("last directory wins; archive files are skipped") {
+        const auto target = resource::findWritableDataPath({ dirA, fakeDat, dirB });
+        REQUIRE(target.has_value());
+        CHECK(*target == dirB);
+    }
+    SECTION("a trailing archive is skipped for the last directory before it") {
+        const auto target = resource::findWritableDataPath({ dirA, dirB, fakeDat });
+        REQUIRE(target.has_value());
+        CHECK(*target == dirB);
+    }
+    SECTION("no directory among the data paths -> nullopt") {
+        CHECK_FALSE(resource::findWritableDataPath({ fakeDat }).has_value());
+        CHECK_FALSE(resource::findWritableDataPath({}).has_value());
+    }
+    fs::remove_all(base);
+}

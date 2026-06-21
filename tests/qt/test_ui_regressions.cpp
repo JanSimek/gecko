@@ -742,20 +742,20 @@ TEST_CASE("MapInfoPanel shows resolved map.msg display name and maps.txt lookup 
     CHECK(lookupEdit->isReadOnly());
 }
 
-TEST_CASE("MapInfoPanel saves an edited map name to the writable root and reflects it", "[qt][mapinfo]") {
+TEST_CASE("MapInfoPanel persists edited map names to a writable Data Path and reflects them", "[qt][mapinfo]") {
     ResourceDataScope data;
     data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
     data.writeGameMessageFile("text/english/game/map.msg", messageLine(200, QStringLiteral("Test Display")));
     data.mount();
 
-    // A writable overlay mounted LAST so its edited copy shadows the source.
+    // A writable folder, mounted after the source so its edited copy shadows the source.
     QTemporaryDir writableDir;
     REQUIRE(writableDir.isValid());
     const std::filesystem::path writableRoot = writableDir.path().toStdString();
     data.resources().files().addDataPath(writableRoot.string());
 
     auto settings = std::make_shared<geck::Settings>();
-    settings->setWritableDataRoot(writableRoot);
+    settings->setDataPaths({ writableRoot }); // the writable folder IS the visible Data Path edits go to
 
     auto map = makeMap("testmap.map");
     geck::MapInfoPanel panel(data.resources(), settings);
@@ -768,7 +768,7 @@ TEST_CASE("MapInfoPanel saves an edited map name to the writable root and reflec
     REQUIRE(displayEdit != nullptr);
     REQUIRE(hint != nullptr);
     REQUIRE(lookupEdit->text() == QStringLiteral("Test Town"));
-    CHECK(hint->isHidden()); // nothing extracted to the writable copy yet
+    CHECK(hint->isHidden()); // there is a writable Data Path -> no "add a folder" hint
 
     // Editing a name emits mapNamesChanged — the signal the main window turns into "map modified".
     QSignalSpy modifiedSpy(&panel, &geck::MapInfoPanel::mapNamesChanged);
@@ -782,7 +782,7 @@ TEST_CASE("MapInfoPanel saves an edited map name to the writable root and reflec
     displayEdit->setModified(true);
     panel.persistMapNames();
 
-    // Persisted: the writable copies carry both edits.
+    // Persisted: the writable Data Path carries both edits.
     const std::filesystem::path savedMaps = writableRoot / "data" / "maps.txt";
     const std::filesystem::path savedMsg = writableRoot / "text" / "english" / "game" / "map.msg";
     REQUIRE(std::filesystem::exists(savedMaps));
@@ -793,8 +793,29 @@ TEST_CASE("MapInfoPanel saves an edited map name to the writable root and reflec
     // Reflected: after the re-mount + resolver rebuild, the panel shows both new names.
     CHECK(lookupEdit->text() == QStringLiteral("Renamed Town"));
     CHECK(displayEdit->text() == QStringLiteral("New Display"));
+    CHECK(hint->isHidden()); // still a writable Data Path -> still no hint
+}
 
-    // The hint now appears and points at the writable copy the files were extracted to.
+TEST_CASE("MapInfoPanel hints to add a writable Data Path when none is configured", "[qt][mapinfo]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
+    data.writeGameMessageFile("text/english/game/map.msg", messageLine(200, QStringLiteral("Test Display")));
+    data.mount();
+
+    auto settings = std::make_shared<geck::Settings>(); // no writable folder in the Data Paths
+
+    auto map = makeMap("testmap.map");
+    geck::MapInfoPanel panel(data.resources(), settings);
+    panel.setMap(map.get());
+
+    auto* lookupEdit = panel.findChild<QLineEdit*>("mapLookupName");
+    auto* hint = panel.findChild<QLabel*>("mapNamesOverlayHint");
+    REQUIRE(lookupEdit != nullptr);
+    REQUIRE(hint != nullptr);
+    REQUIRE(lookupEdit->text() == QStringLiteral("Test Town")); // registered -> the name fields are editable
+
+    // With no writable folder in Data Paths, the panel hints the user to add one instead of saving
+    // anywhere hidden.
     CHECK_FALSE(hint->isHidden());
-    CHECK(hint->text().contains(QString::fromStdString(writableRoot.string())));
+    CHECK(hint->text().contains("writable folder"));
 }

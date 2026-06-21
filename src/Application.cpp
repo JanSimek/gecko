@@ -193,7 +193,7 @@ void Application::loadDataPaths() {
     // creation all need access to FRM/tile/object assets from the DAT files.
     auto loadingWidget = std::make_unique<LoadingWidget>(_mainWindow.get());
     loadingWidget->setWindowTitle("Loading Game Data");
-    loadingWidget->addLoader(std::make_unique<DataPathLoader>(_resources, dataPaths, settings.getWritableDataRoot()));
+    loadingWidget->addLoader(std::make_unique<DataPathLoader>(_resources, dataPaths));
 
     loadingWidget->exec();
 

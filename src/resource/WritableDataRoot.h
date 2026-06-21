@@ -1,11 +1,19 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace geck::resource {
 
 class DataFileSystem;
+
+/// The data path edited copies should be written to: the last entry in `dataPaths` that is an existing
+/// directory (DAT/archive paths are read-only and skipped), or nullopt if there is none. Editing writes
+/// into a folder the user can see and manage in their Data Paths — there is no hidden auto-mounted
+/// location. Being last means its copies shadow the archives mounted before it.
+std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std::filesystem::path>& dataPaths);
 
 /// Ensure a loose, writable copy of a VFS file exists under `writableRoot`, and return its native path.
 ///

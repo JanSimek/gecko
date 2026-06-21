@@ -7,6 +7,16 @@
 
 namespace geck::resource {
 
+std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std::filesystem::path>& dataPaths) {
+    for (auto it = dataPaths.rbegin(); it != dataPaths.rend(); ++it) {
+        std::error_code ec;
+        if (std::filesystem::is_directory(*it, ec)) {
+            return *it; // last directory wins, so its copies shadow archives mounted before it
+        }
+    }
+    return std::nullopt;
+}
+
 std::filesystem::path ensureWritableCopy(const DataFileSystem& files,
     const std::filesystem::path& writableRoot, const std::string& vfsRelPath) {
     const std::filesystem::path dest = writableRoot / vfsRelPath;
