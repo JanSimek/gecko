@@ -310,6 +310,7 @@ add_library(vault STATIC
 
     # Parser superclass
     reader/FileParser.h
+    reader/TextParsing.h
     reader/ReaderFactory.h
     reader/ReaderFactory.cpp
 

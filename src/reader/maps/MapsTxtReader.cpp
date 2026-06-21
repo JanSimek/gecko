@@ -1,7 +1,7 @@
 #include "reader/maps/MapsTxtReader.h"
 
-#include <algorithm>
-#include <cctype>
+#include "reader/TextParsing.h"
+
 #include <sstream>
 #include <utility>
 
@@ -9,19 +9,8 @@ namespace geck {
 
 namespace {
 
-    std::string trim(const std::string& s) {
-        const auto begin = s.find_first_not_of(" \t\r\n");
-        if (begin == std::string::npos) {
-            return {};
-        }
-        const auto end = s.find_last_not_of(" \t\r\n");
-        return s.substr(begin, end - begin + 1);
-    }
-
-    std::string toLower(std::string s) {
-        std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return s;
-    }
+    using geck::text::toLower;
+    using geck::text::trim;
 
     // The engine treats the first word as a yes/no flag (wmYesNoStrs); be lenient about 1/true too.
     bool parseYesNo(const std::string& value) {
