@@ -2,6 +2,7 @@
 
 #include "cli/MapAnalyzer.h"
 #include "cli/MapDescribe.h"
+#include "cli/MapGraph.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapReachability.h"
 #include "cli/MapRender.h"
@@ -136,19 +137,27 @@ namespace {
         return toolText(json(paths).dump()); // json(vector<string>) -> a JSON array, "[]" when empty
     }
 
+    // Optional "maps" string array -> the maps list (empty = every map). Shared by analyze, palette
+    // and map_graph; non-string entries are ignored.
+    std::vector<std::string> optMaps(const json& args) {
+        std::vector<std::string> maps;
+        if (args.contains("maps") && args.at("maps").is_array()) {
+            for (const auto& m : args.at("maps")) {
+                if (m.is_string()) {
+                    maps.push_back(m.get<std::string>());
+                }
+            }
+        }
+        return maps;
+    }
+
     // analyze (full JSON report) and palette (just the weighted generation palette) share the maps
     // parsing and the same headless analyzeMaps entry.
     json runAnalyze(resource::GameResources& resources, const json& args, bool paletteOnly) {
         cli::AnalyzeOptions opts;
         opts.json = !paletteOnly;
         opts.palette = paletteOnly;
-        if (args.contains("maps") && args["maps"].is_array()) {
-            for (const auto& m : args["maps"]) {
-                if (m.is_string()) {
-                    opts.maps.push_back(m.get<std::string>());
-                }
-            }
-        }
+        opts.maps = optMaps(args);
         std::ostringstream oss;
         int rc = 0;
         try {
@@ -200,6 +209,19 @@ namespace {
             rc = cli::describeMap(resources, opts, oss);
         } catch (const std::exception& e) {
             return toolText(std::string("describe_map failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolMapGraph(resource::GameResources& resources, const json& args) {
+        cli::MapGraphOptions opts;
+        opts.maps = optMaps(args);
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildMapGraph(resources, opts, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("map_graph failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
         }
         return toolText(oss.str(), rc != 0);
     }
@@ -355,6 +377,20 @@ namespace {
             "Args: map.",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeMap(r, a); } });
+        t.push_back({ "map_graph",
+            "The EXIT-GRID connectivity graph — how maps link via exit grids: within a location "
+            "(intramap self-edges for elevation changes, and intermap edges between a town's maps, e.g. "
+            "Arroyo village<->bridge) and where a map hands off to the world map (edges with "
+            "kind=worldmap). NOT inter-city travel: cities are reached across the world map, not by exit "
+            "grids, so this graph is connected only within a location — for the world layer (areas, "
+            "positions, distances) use city.txt. 'nodes' (maps, each with the map.msg displayName and "
+            "'analysed' = loaded vs only seen as an exit target); 'edges' ({from,to,kind,destMap,"
+            "toName,exits}) where 'exits' counts the exit-grid hexes and 'kind' is "
+            "map/worldmap/townmap/unknown; 'stats' flags 'deadEnds' (no outgoing map edge) and "
+            "'noIncoming' (no map exits to it — a location's entry points or orphans). Omit 'maps' for "
+            "every map, or pass it to scope (e.g. one town's maps).",
+            json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
+            [](resource::GameResources& r, const json& a) { return toolMapGraph(r, a); } });
         t.push_back({ "script_api",
             "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
             "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "

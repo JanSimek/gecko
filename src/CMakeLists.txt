@@ -572,7 +572,9 @@ if(GECK_BUILD_CLI)
         cli/MapReachability.h
         cli/MapReachability.cpp
         cli/MapDescribe.h
-        cli/MapDescribe.cpp)
+        cli/MapDescribe.cpp
+        cli/MapGraph.h
+        cli/MapGraph.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)

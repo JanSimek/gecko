@@ -1,6 +1,7 @@
 #include "cli/BundledResources.h"
 #include "cli/MapAnalyzer.h"
 #include "cli/MapDescribe.h"
+#include "cli/MapGraph.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
 #include "cli/MapReachability.h"
@@ -24,6 +25,7 @@ struct CliArgs {
     bool describeScript = false;
     bool reachability = false;
     bool describeMap = false;
+    bool graph = false;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::GenerateOptions gen;
@@ -32,6 +34,7 @@ struct CliArgs {
     geck::cli::DescribeScriptOptions desc;
     geck::cli::ReachabilityOptions reach;
     geck::cli::DescribeMapOptions describeMapOpts;
+    geck::cli::MapGraphOptions graphOpts;
 };
 
 void printUsage(const char* program) {
@@ -75,13 +78,18 @@ void printUsage(const char* program) {
               << "  " << program << " map describe-map --map <path> --data <dir-or-.dat> [--data <...>]\n"
               << "      One digest composing analyze + reachability for a map (header, biome, structures,\n"
               << "      critter roster with AI + scripts, exits, reachability), as JSON.\n"
+              << "  " << program << " map graph [map ...] --data <dir-or-.dat> [--data <...>]\n"
+              << "      The exit-grid connectivity graph: how maps link via exit grids WITHIN a location\n"
+              << "      (+ worldmap hand-off edges), named via maps.txt/map.msg. Not inter-city travel\n"
+              << "      (that's the world map / city.txt). No map arguments = every map.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
 bool isKnownSubcommand(const std::vector<std::string>& args) {
     return args.size() >= 2 && args[0] == "map"
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
-            || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map");
+            || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map"
+            || args[1] == "graph");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -289,6 +297,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.graph) { // trailing positional args are the maps to include (empty = all)
+        out.graphOpts.maps.push_back(arg);
+        return 1;
+    }
     if (arg == "--json") { // analyze only: machine-readable output for the MCP
         out.analyze.json = true;
         return 1;
@@ -313,6 +325,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.describeScript = args[1] == "describe-script";
     out.reachability = args[1] == "reachability";
     out.describeMap = args[1] == "describe-map";
+    out.graph = args[1] == "graph";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -397,6 +410,9 @@ int main(int argc, char** argv) {
     }
     if (cli.describeMap) {
         return geck::cli::describeMap(resources, cli.describeMapOpts, std::cout);
+    }
+    if (cli.graph) {
+        return geck::cli::buildMapGraph(resources, cli.graphOpts, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
 }
