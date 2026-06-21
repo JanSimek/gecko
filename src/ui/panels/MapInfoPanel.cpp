@@ -11,11 +11,11 @@
 #include <filesystem>
 
 #include "format/map/Map.h"
-#include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
 #include "format/gam/Gam.h"
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
+#include "resource/MapNameResolver.h"
 #include "reader/ReaderFactory.h"
 #include "resource/ResourcePaths.h"
 #include "util/Coordinates.h"
@@ -32,6 +32,8 @@ MapInfoPanel::MapInfoPanel(resource::GameResources& resources, QWidget* parent)
     , _contentLayout(nullptr)
     , _mapHeaderGroup(nullptr)
     , _filenameEdit(nullptr)
+    , _displayNameLabel(nullptr)
+    , _lookupNameLabel(nullptr)
     , _elevation1Check(nullptr)
     , _elevation2Check(nullptr)
     , _elevation3Check(nullptr)
@@ -66,6 +68,8 @@ MapInfoPanel::MapInfoPanel(resource::GameResources& resources, QWidget* parent)
     setupUI();
 }
 
+MapInfoPanel::~MapInfoPanel() = default;
+
 QSize MapInfoPanel::sizeHint() const {
     return QSize(ui::constants::sizes::PANEL_PREFERRED_WIDTH, ui::constants::sizes::PANEL_PREFERRED_HEIGHT);
 }
@@ -96,6 +100,19 @@ void MapInfoPanel::setupUI() {
 
     _filenameEdit = new QLineEdit();
     headerLayout->addRow("Filename:", _filenameEdit);
+
+    // Friendly names resolved from maps.txt / map.msg (read-only; blank when game data is unmounted).
+    _displayNameLabel = new QLabel();
+    _displayNameLabel->setObjectName("mapDisplayName");
+    _displayNameLabel->setWordWrap(true);
+    _displayNameLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    headerLayout->addRow("Map name:", _displayNameLabel);
+
+    _lookupNameLabel = new QLabel();
+    _lookupNameLabel->setObjectName("mapLookupName");
+    _lookupNameLabel->setWordWrap(true);
+    _lookupNameLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    headerLayout->addRow("Lookup name:", _lookupNameLabel);
 
     QWidget* elevationsWidget = new QWidget();
     QVBoxLayout* elevationsLayout = new QVBoxLayout(elevationsWidget);
@@ -314,6 +331,8 @@ void MapInfoPanel::updateMapInfo() {
         loadScriptVars();
         _mapScriptEdit->setText(QString::fromStdString(_mapScriptName));
 
+        updateMapNameDisplay();
+
         _globalVarsTree->clear();
 
         if (_mvars.empty() && mapInfo.header.num_global_vars > 0) {
@@ -359,6 +378,38 @@ void MapInfoPanel::updateMapInfo() {
     } catch (const std::exception& e) {
         spdlog::error("Error updating map info: {}", e.what());
         clearMapInfo();
+    }
+}
+
+void MapInfoPanel::updateMapNameDisplay() {
+    if (!_displayNameLabel || !_lookupNameLabel) {
+        return;
+    }
+    if (!_map) {
+        _displayNameLabel->clear();
+        _lookupNameLabel->clear();
+        return;
+    }
+
+    // Built lazily: maps.txt / map.msg are read once, and by the time a map is open the game data is
+    // mounted. Resolution degrades to blank when the data is missing (resolver returns "").
+    if (!_mapNames) {
+        _mapNames = std::make_unique<resource::MapNameResolver>(_resources);
+    }
+
+    const auto& header = _map->getMapFile().header;
+    const std::string file = header.filename;
+    const int index = _mapNames->indexOf(file); // by filename, not header.map_id
+    const int elevation = static_cast<int>(header.player_default_elevation);
+
+    const std::string display = (index >= 0) ? _mapNames->displayName(index, elevation) : std::string();
+    const std::string lookup = _mapNames->lookupNameOf(file);
+
+    _displayNameLabel->setText(display.empty() ? QStringLiteral("—") : QString::fromStdString(display));
+    if (!lookup.empty()) {
+        _lookupNameLabel->setText(QString::fromStdString(lookup));
+    } else {
+        _lookupNameLabel->setText(index < 0 ? QStringLiteral("(not in maps.txt)") : QStringLiteral("—"));
     }
 }
 
@@ -439,6 +490,13 @@ void MapInfoPanel::clearMapInfo() {
     _mapScriptEdit->clear();
     _mapScriptEdit->setPlaceholderText("No script");
 
+    if (_displayNameLabel) {
+        _displayNameLabel->clear();
+    }
+    if (_lookupNameLabel) {
+        _lookupNameLabel->clear();
+    }
+
     _globalVarsTree->clear();
 
     _mvars.clear();
@@ -471,6 +529,7 @@ void MapInfoPanel::onFieldChanged() {
     if (sender == _playerPositionSpin) {
         Q_EMIT playerPositionChanged(_playerPositionSpin->value());
     } else if (sender == _playerElevationSpin) {
+        updateMapNameDisplay(); // the map.msg display name is per-elevation
         Q_EMIT playerElevationChanged(_playerElevationSpin->value());
     } else if (sender == _mapScriptIdSpin) {
         Q_EMIT mapScriptIdChanged(_mapScriptIdSpin->value());

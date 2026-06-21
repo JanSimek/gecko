@@ -13,6 +13,7 @@
 #include <QTreeWidgetItem>
 #include <QComboBox>
 #include <QPushButton>
+#include <memory>
 #include <unordered_map>
 
 namespace geck {
@@ -20,6 +21,7 @@ namespace geck {
 class Map;
 namespace resource {
     class GameResources;
+    class MapNameResolver;
 }
 
 /// @brief Qt6 widget for displaying properties from the current MAP file.
@@ -28,6 +30,7 @@ class MapInfoPanel : public QWidget {
 
 public:
     explicit MapInfoPanel(resource::GameResources& resources, QWidget* parent = nullptr);
+    ~MapInfoPanel() override; // out-of-line for the unique_ptr<MapNameResolver> member
 
     void setMap(Map* map);
     void setPlayerPosition(int hexPosition, int elevation);
@@ -68,6 +71,7 @@ private:
     void loadScriptVars();
     void clearMapInfo();
     void updateMapScriptsDisplay();
+    void updateMapNameDisplay();
     void updateElevationCheckboxStates();
     void setElevationCheckboxesBlocked(bool blocked);
 
@@ -79,6 +83,8 @@ private:
     // Map header group
     QGroupBox* _mapHeaderGroup;
     QLineEdit* _filenameEdit;
+    QLabel* _displayNameLabel; // resolved map.msg display name (per current elevation)
+    QLabel* _lookupNameLabel;  // maps.txt lookup_name
     QCheckBox* _elevation1Check;
     QCheckBox* _elevation2Check;
     QCheckBox* _elevation3Check;
@@ -111,6 +117,7 @@ private:
     QComboBox* _copyToCombo;
 
     resource::GameResources& _resources;
+    std::unique_ptr<resource::MapNameResolver> _mapNames; // built lazily; reads maps.txt/map.msg once
     Map* _map;
     std::string _mapScriptName;
     std::unordered_map<std::string, uint32_t> _mvars;

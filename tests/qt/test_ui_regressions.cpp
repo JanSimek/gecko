@@ -40,6 +40,8 @@
 #include "resource/GameResources.h"
 #include "util/FalloutEngineEnums.h"
 #include "ui/Settings.h"
+#include "ui/panels/MapInfoPanel.h"
+#include "format/map/Map.h"
 
 namespace {
 
@@ -689,3 +691,37 @@ TEST_CASE("Script console setSource loads the editor and feeds Run", "[qt][scrip
     CHECK(runSource == src);
 }
 #endif
+
+// Phase A of the map-info editor work: the Map Info panel resolves the current map's friendly names
+// (maps.txt lookup_name + the per-elevation map.msg display name) read-only, reusing MapNameResolver.
+TEST_CASE("MapInfoPanel shows resolved map.msg display name and maps.txt lookup name", "[qt][mapinfo]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
+    // displayName(index 0, elevation 0) reads map.msg[0*3 + 0 + 200] = 200.
+    data.writeGameMessageFile("text/english/game/map.msg", messageLine(200, QStringLiteral("Test Display")));
+    data.mount();
+
+    geck::Map map("testmap.map");
+    auto mapFile = std::make_unique<geck::Map::MapFile>(geck::Map::createEmptyMapFile());
+    mapFile->header.filename = "testmap.map";
+    mapFile->header.player_default_elevation = 0;
+    map.setMapFile(std::move(mapFile));
+
+    geck::MapInfoPanel panel(data.resources());
+    panel.setMap(&map);
+
+    auto* displayLabel = panel.findChild<QLabel*>("mapDisplayName");
+    auto* lookupLabel = panel.findChild<QLabel*>("mapLookupName");
+    REQUIRE(displayLabel != nullptr);
+    REQUIRE(lookupLabel != nullptr);
+    CHECK(displayLabel->text() == QStringLiteral("Test Display"));
+    CHECK(lookupLabel->text() == QStringLiteral("Test Town"));
+
+    // A map not listed in maps.txt resolves to placeholders, not a crash.
+    geck::Map unknown("nosuch.map");
+    auto unknownFile = std::make_unique<geck::Map::MapFile>(geck::Map::createEmptyMapFile());
+    unknownFile->header.filename = "nosuch.map";
+    unknown.setMapFile(std::move(unknownFile));
+    panel.setMap(&unknown);
+    CHECK(lookupLabel->text() == QStringLiteral("(not in maps.txt)"));
+}
