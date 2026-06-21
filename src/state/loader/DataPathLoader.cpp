@@ -1,14 +1,17 @@
 #include "DataPathLoader.h"
 #include "resource/GameResources.h"
 #include "resource/ResourceInitializer.h"
+#include <system_error>
 #include <thread>
 #include <spdlog/spdlog.h>
 
 namespace geck {
 
-DataPathLoader::DataPathLoader(std::shared_ptr<resource::GameResources> resources, const std::vector<std::filesystem::path>& dataPaths)
+DataPathLoader::DataPathLoader(std::shared_ptr<resource::GameResources> resources,
+    const std::vector<std::filesystem::path>& dataPaths, std::filesystem::path writableRoot)
     : _resources(std::move(resources))
-    , _dataPaths(dataPaths) {
+    , _dataPaths(dataPaths)
+    , _writableRoot(std::move(writableRoot)) {
 }
 
 DataPathLoader::~DataPathLoader() {
@@ -48,6 +51,18 @@ void DataPathLoader::load() {
             _errorMessage = "Failed to load data path: " + path.string() + "\nError: " + e.what();
             _hasError = true;
             // Continue loading the remaining paths despite this failure.
+        }
+    }
+
+    // Mount the writable overlay LAST so loose, edited copies shadow the archived (DAT) originals.
+    if (!_writableRoot.empty()) {
+        try {
+            std::error_code ec;
+            std::filesystem::create_directories(_writableRoot, ec); // a native mount needs the dir to exist
+            _resources->files().addDataPath(_writableRoot);
+            spdlog::info("DataPathLoader: mounted writable data root: {}", _writableRoot.string());
+        } catch (const std::exception& e) {
+            spdlog::warn("DataPathLoader: could not mount writable data root {}: {}", _writableRoot.string(), e.what());
         }
     }
 

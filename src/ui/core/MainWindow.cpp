@@ -826,7 +826,7 @@ void MainWindow::setupDockWidgets() {
         return dock;
     };
 
-    _mapInfoPanel = new MapInfoPanel(*_resourcesShared);
+    _mapInfoPanel = new MapInfoPanel(*_resourcesShared, _settings);
     _mapInfoDock = createDock("Map Information", "MapInfoDock", _mapInfoPanel, Qt::RightDockWidgetArea, QSizePolicy::Preferred, ui::constants::dock::MIN_HEIGHT_SMALL);
 
     _selectionPanel = new SelectionPanel(*_resourcesShared);
@@ -962,7 +962,7 @@ void MainWindow::replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSize
 }
 
 void MainWindow::rebuildResourcePanels() {
-    _mapInfoPanel = new MapInfoPanel(*_resourcesShared);
+    _mapInfoPanel = new MapInfoPanel(*_resourcesShared, _settings);
     replaceDockPanelWidget(_mapInfoDock, _mapInfoPanel, QSizePolicy::Preferred);
 
     _selectionPanel = new SelectionPanel(*_resourcesShared);
@@ -1003,7 +1003,7 @@ void MainWindow::rebuildGameResourcesFromSettings() {
     auto loadingWidget = std::make_unique<LoadingWidget>(this);
     loadingWidget->setWindowTitle("Reloading Game Data");
 
-    auto loader = std::make_unique<DataPathLoader>(newResources, dataPaths);
+    auto loader = std::make_unique<DataPathLoader>(newResources, dataPaths, _settings->getWritableDataRoot());
     DataPathLoader* loaderPtr = loader.get();
     loadingWidget->addLoader(std::move(loader));
     loadingWidget->exec();
