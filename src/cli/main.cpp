@@ -344,6 +344,11 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         return 0;
     }
     if (out.findGvar) { // a single positional: the GVAR_* name to search for
+        if (arg.rfind("--", 0) == 0 || !out.findGvarName.empty()) {
+            std::cerr << "error: find-gvar takes exactly one GVAR name: " << arg << "\n";
+            printUsage(program);
+            return 0;
+        }
         out.findGvarName = arg;
         return 1;
     }
@@ -482,6 +487,10 @@ int main(int argc, char** argv) {
         return geck::cli::buildEndings(resources, std::cout);
     }
     if (cli.findGvar) {
+        if (cli.findGvarName.empty()) {
+            std::cerr << "error: find-gvar requires a GVAR name (e.g. find-gvar GVAR_ARROYO_RETURN_GECK)\n";
+            return 2;
+        }
         return geck::cli::findGvarRefs(resources, cli.findGvarName, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);

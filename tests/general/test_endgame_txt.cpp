@@ -25,7 +25,7 @@ TEST_CASE("parseEndgameTxt reads ending slides, skipping comments and short line
     CHECK(endgame.endings[0].value == 1);
     CHECK(endgame.endings[0].art == 440);
     CHECK(endgame.endings[0].narrator == "nar_ar1");
-    CHECK(endgame.endings[0].direction == 0);
+    CHECK(endgame.endings[0].direction == 1); // no 5th field -> engine default 1 (not 0)
 
     CHECK(endgame.endings[1].narrator == "nar_eldr"); // inline '#' comment stripped
     CHECK(endgame.endings[2].direction == 1);         // optional 5th field (panning-desert art)

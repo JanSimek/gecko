@@ -6,6 +6,8 @@
 #include <nlohmann/json.hpp>
 
 #include <cctype>
+#include <filesystem>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -48,10 +50,11 @@ namespace {
         int lineNo = 0;
         while (std::getline(stream, line)) {
             ++lineNo;
-            if (!referencesWord(line, gvarName)) {
+            const std::string code = line.substr(0, line.find("//")); // ignore // line comments
+            if (!referencesWord(code, gvarName)) {
                 continue;
             }
-            const bool isSet = line.find("set_global_var") != std::string::npos;
+            const bool isSet = code.find("set_global_var") != std::string::npos;
             if (isSet) {
                 ++setters;
             }
@@ -63,6 +66,22 @@ namespace {
             }
         }
         return true;
+    }
+
+    // The source text of `path` if it is a scannable script (.ssl/.h) and readable, else nullopt.
+    // Headers are included because many gvars are only touched via macro aliases defined there.
+    std::optional<std::string> readScript(resource::GameResources& resources, const std::filesystem::path& path) {
+        std::string ext = path.extension().string();
+        std::ranges::transform(ext, ext.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (ext != ".ssl" && ext != ".h") {
+            return std::nullopt;
+        }
+        const auto bytes = resources.files().readRawBytes(path);
+        if (!bytes.has_value()) {
+            return std::nullopt;
+        }
+        return std::string(bytes->begin(), bytes->end());
     }
 
 } // namespace
@@ -77,21 +96,16 @@ int findGvarRefs(resource::GameResources& resources, const std::string& gvarName
     int setters = 0;
     std::set<std::string> scripts;
     bool capped = false;
+    bool scannedAny = false; // did we read at least one source file?
 
     try {
         for (const auto& path : resources.files().list("*")) {
-            std::string ext = path.extension().string();
-            std::ranges::transform(ext, ext.begin(),
-                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (ext != ".ssl") {
+            const auto text = readScript(resources, path);
+            if (!text.has_value()) {
                 continue;
             }
-            const auto bytes = resources.files().readRawBytes(path);
-            if (!bytes.has_value()) {
-                continue;
-            }
-            if (!scanScript(std::string(bytes->begin(), bytes->end()), gvarName, baseName(path.generic_string()),
-                    refs, setters, scripts)) {
+            scannedAny = true;
+            if (!scanScript(*text, gvarName, baseName(path.generic_string()), refs, setters, scripts)) {
                 capped = true;
                 break;
             }
@@ -103,7 +117,9 @@ int findGvarRefs(resource::GameResources& resources, const std::string& gvarName
     if (refs.empty()) {
         out << "{\"gvar\":" << ordered_json(gvarName).dump()
             << ",\"refs\":[],\"stats\":{\"refs\":0,\"setters\":0,\"scripts\":0}}\n";
-        return 1; // unused, or no .ssl source tree mounted
+        // scanned sources but found nothing = a valid "unused" answer (success); nothing scanned =
+        // no source tree mounted (error, so the MCP flags isError).
+        return scannedAny ? 0 : 1;
     }
 
     ordered_json root;

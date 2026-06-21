@@ -31,7 +31,7 @@ struct Ending {
     int value = 0;        ///< the gvar value that triggers the slide
     int art = -1;         ///< intrface.lst line of the slide image
     std::string narrator; ///< base filename for the voice-over / subtitle
-    int direction = 0;    ///< pan direction for the panning-desert art (327); 0 if unused
+    int direction = 1;    ///< pan direction for the panning-desert art (327); engine default is 1
 };
 
 /// Parsed `data/endgame.txt`: the ending slides, in file order.

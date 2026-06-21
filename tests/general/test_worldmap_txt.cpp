@@ -21,11 +21,11 @@ terrain_short_names=DES, MNT, CTY, OCN ; WIP
 map_00=desert1
 
 [Encounter: Raiders]  ; WIP!
-type_00=Ratio:35%, pid:16777252, Item:8{Wielded}, Item:40, Script:255
+type_00=Ratio:35%, pid:16777252, Item:8{Wielded}, Item:40, Script:255, Distance:7
 type_01=Dead, pid:16777220, Item:40, Script:256
 
 [Encounter: ARRO_Rats]
-type_00=Ratio:100%, pid:16777276
+type_00=ratio:100%, pid:16777276, Distance:3
 )";
 } // namespace
 
@@ -48,15 +48,18 @@ TEST_CASE("parseWorldmapTxt reads terrain types and encounter groups", "[worldma
     CHECK(raiders->entries[0].ratioPercent == 35); // "35%" parsed
     CHECK(raiders->entries[0].dead == false);
     CHECK(raiders->entries[0].script == 255);
+    CHECK(raiders->entries[0].distance == 7);                      // Distance:NN branch
     CHECK(raiders->entries[0].items == std::vector<int>{ 8, 40 }); // "8{Wielded}" -> 8
     CHECK(raiders->entries[1].dead == true);                       // bare "Dead" flag
     CHECK(raiders->entries[1].pid == 16777220);
+    CHECK(raiders->entries[1].distance == -1); // absent -> default
 
     const Encounter* rats = world.findEncounter("ARRO_Rats");
     REQUIRE(rats != nullptr);
     REQUIRE(rats->entries.size() == 1);
     CHECK(rats->entries[0].pid == 16777276);
-    CHECK(rats->entries[0].ratioPercent == 100);
+    CHECK(rats->entries[0].ratioPercent == 100); // lowercase "ratio:" key still parsed
+    CHECK(rats->entries[0].distance == 3);
 
     CHECK(world.findEncounter("Nope") == nullptr);
 }

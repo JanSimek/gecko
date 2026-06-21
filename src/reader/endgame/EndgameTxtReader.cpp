@@ -31,7 +31,7 @@ EndgameTxt parseEndgameTxt(std::istream& in) {
         ending.art = intOr(fields[2], -1);
         ending.narrator = fields[3];
         if (fields.size() > 4) {
-            ending.direction = intOr(fields[4], 0);
+            ending.direction = intOr(fields[4], 1); // engine default is 1 (endgame.cc)
         }
         out.endings.push_back(ending);
     }
