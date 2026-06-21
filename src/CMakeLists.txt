@@ -316,6 +316,9 @@ add_library(vault STATIC
     writer/pro/ProWriter.h
     writer/pro/ProWriter.cpp
 
+    writer/maps/MapRegistryWriter.h
+    writer/maps/MapRegistryWriter.cpp
+
     #
     # FILE LOADERS
     #
