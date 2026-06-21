@@ -32,17 +32,22 @@ TEST_CASE("GamReader parses gvars and mvars, skipping comments and blanks", "[ga
                                                       "// a comment\n"
                                                       "GVAR_FOO := 5 ;\n"
                                                       "\n"
+                                                      "GVAR_NEG := -1 ;\n" // negative default must be read, not skipped
                                                       "GVAR_BAR := 10 ;\n"
                                                       "MAP_GLOBAL_VARS:\n"
                                                       "MVAR_BAZ := 7 ;\n"));
 
     REQUIRE(gam != nullptr);
     CHECK(gam->gvarValue("GVAR_FOO") == 5);
+    CHECK(gam->gvarValue("GVAR_NEG") == -1);
     CHECK(gam->gvarValue("GVAR_BAR") == 10);
     CHECK(gam->mvarValue("MVAR_BAZ") == 7);
-    // Variables keep their file order.
+    // Variables keep their file order — a negative-default gvar must not be dropped, or every later
+    // gvar's ordinal shifts (gvar ordinals are how quests.txt / scripts reference them).
+    CHECK(gam->gvarCount() == 3);
     CHECK(gam->gvarKey(0) == "GVAR_FOO");
-    CHECK(gam->gvarValue(1) == 10);
+    CHECK(gam->gvarKey(1) == "GVAR_NEG");
+    CHECK(gam->gvarValue(2) == 10); // GVAR_BAR keeps ordinal 2, not shifted to 1
     CHECK(gam->mvarValue(0) == 7);
 }
 
