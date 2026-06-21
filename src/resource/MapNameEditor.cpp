@@ -5,12 +5,11 @@
 #include "reader/maps/MapsTxtDocumentReader.h"
 #include "reader/msg/MsgDocumentReader.h"
 #include "resource/WritableDataRoot.h"
+#include "util/FileIo.h"
 #include "writer/maps/MapsTxtSerializer.h"
 #include "writer/maps/MapsTxtValidator.h"
 #include "writer/msg/MsgSerializer.h"
 
-#include <fstream>
-#include <iterator>
 #include <utility>
 #include <vector>
 
@@ -18,18 +17,11 @@ namespace geck::resource {
 
 namespace {
 
+    using geck::io::readFile;
+    using geck::io::writeFile;
+
     constexpr const char* kMapsTxt = "data/maps.txt";
     constexpr const char* kMapMsg = "text/english/game/map.msg";
-
-    std::string readFile(const std::filesystem::path& path) {
-        std::ifstream in(path, std::ios::binary);
-        return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-    }
-
-    void writeFile(const std::filesystem::path& path, const std::string& content) {
-        std::ofstream out(path, std::ios::binary | std::ios::trunc);
-        out.write(content.data(), static_cast<std::streamsize>(content.size()));
-    }
 
     std::string formatErrors(const std::vector<writer::MapsTxtIssue>& issues) {
         std::string text = "Refusing to save: maps.txt would be invalid.\n";

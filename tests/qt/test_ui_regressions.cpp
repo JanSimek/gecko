@@ -39,13 +39,12 @@
 #include "ui/widgets/pro/ProWeaponWidget.h"
 #include "resource/GameResources.h"
 #include "util/FalloutEngineEnums.h"
+#include "util/FileIo.h"
 #include "ui/Settings.h"
 #include "ui/panels/MapInfoPanel.h"
 #include "format/map/Map.h"
 #include <QLineEdit>
 #include <QPushButton>
-#include <fstream>
-#include <iterator>
 
 namespace {
 
@@ -777,18 +776,13 @@ TEST_CASE("MapInfoPanel saves an edited map name to the writable root and reflec
     displayEdit->setModified(true);
     saveButton->click();
 
-    auto readAll = [](const std::filesystem::path& p) {
-        std::ifstream in(p, std::ios::binary);
-        return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-    };
-
     // Persisted: the writable copies carry both edits.
     const std::filesystem::path savedMaps = writableRoot / "data" / "maps.txt";
     const std::filesystem::path savedMsg = writableRoot / "text" / "english" / "game" / "map.msg";
     REQUIRE(std::filesystem::exists(savedMaps));
     REQUIRE(std::filesystem::exists(savedMsg));
-    CHECK(readAll(savedMaps).find("lookup_name=Renamed Town") != std::string::npos);
-    CHECK(readAll(savedMsg).find("{200}{}{New Display}") != std::string::npos);
+    CHECK(geck::io::readFile(savedMaps).find("lookup_name=Renamed Town") != std::string::npos);
+    CHECK(geck::io::readFile(savedMsg).find("{200}{}{New Display}") != std::string::npos);
 
     // Reflected: after the re-mount + resolver rebuild, the panel shows both new names.
     CHECK(lookupEdit->text() == QStringLiteral("Renamed Town"));

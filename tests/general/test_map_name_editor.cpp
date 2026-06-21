@@ -2,10 +2,9 @@
 
 #include "resource/DataFileSystem.h"
 #include "resource/MapNameEditor.h"
+#include "util/FileIo.h"
 
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <optional>
 #include <string>
 
@@ -16,20 +15,8 @@
 using namespace geck;
 namespace fs = std::filesystem;
 
-namespace {
-
-void writeFile(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
-}
-
-std::string readAll(const fs::path& path) {
-    std::ifstream in(path, std::ios::binary);
-    return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-}
-
-} // namespace
+using geck::io::readFile;
+using geck::io::writeFile;
 
 TEST_CASE("saveMapNames writes lookup_name and/or display name to the writable overlay", "[mapnameeditor]") {
     const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "mne_ok";
@@ -46,18 +33,18 @@ TEST_CASE("saveMapNames writes lookup_name and/or display name to the writable o
     SECTION("lookup name only -> maps.txt") {
         const auto r = resource::saveMapNames(files, root, 0, 0, std::optional<std::string>{ "New A" }, std::nullopt);
         CHECK(r.ok);
-        CHECK(readAll(root / "data" / "maps.txt").find("lookup_name=New A") != std::string::npos);
+        CHECK(readFile(root / "data" / "maps.txt").find("lookup_name=New A") != std::string::npos);
     }
     SECTION("display name only -> map.msg (id = 0*3+0+200)") {
         const auto r = resource::saveMapNames(files, root, 0, 0, std::nullopt, std::optional<std::string>{ "Wasteland" });
         CHECK(r.ok);
-        CHECK(readAll(root / "text" / "english" / "game" / "map.msg").find("{200}{}{Wasteland}") != std::string::npos);
+        CHECK(readFile(root / "text" / "english" / "game" / "map.msg").find("{200}{}{Wasteland}") != std::string::npos);
     }
     SECTION("both fields") {
         const auto r = resource::saveMapNames(files, root, 0, 0, std::optional<std::string>{ "New A" }, std::optional<std::string>{ "Wasteland" });
         CHECK(r.ok);
-        CHECK(readAll(root / "data" / "maps.txt").find("lookup_name=New A") != std::string::npos);
-        CHECK(readAll(root / "text" / "english" / "game" / "map.msg").find("{200}{}{Wasteland}") != std::string::npos);
+        CHECK(readFile(root / "data" / "maps.txt").find("lookup_name=New A") != std::string::npos);
+        CHECK(readFile(root / "text" / "english" / "game" / "map.msg").find("{200}{}{Wasteland}") != std::string::npos);
     }
     fs::remove_all(base);
 }
@@ -79,7 +66,7 @@ TEST_CASE("saveMapNames hard-blocks an edit that would make maps.txt invalid, wr
     CHECK_FALSE(r.error.empty());
     const fs::path written = root / "data" / "maps.txt";
     if (fs::exists(written)) {
-        CHECK(readAll(written).find("Renamed A") == std::string::npos); // the edit was not persisted
+        CHECK(readFile(written).find("Renamed A") == std::string::npos); // the edit was not persisted
     }
     fs::remove_all(base);
 }

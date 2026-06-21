@@ -464,6 +464,7 @@ add_library(gecko_core STATIC
     util/ProHelper.h
     util/ProHelper.cpp
     util/Coordinates.h
+    util/FileIo.h
     util/Coordinates.cpp
     util/SpatialIndex.h
     util/SpatialIndex.cpp

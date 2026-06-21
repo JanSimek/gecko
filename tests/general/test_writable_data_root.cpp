@@ -2,10 +2,9 @@
 
 #include "resource/DataFileSystem.h"
 #include "resource/WritableDataRoot.h"
+#include "util/FileIo.h"
 
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <string>
 
 #ifndef GECK_TEST_TMP_DIR
@@ -13,22 +12,9 @@
 #endif
 
 using namespace geck;
+using geck::io::readFile;
+using geck::io::writeFile;
 namespace fs = std::filesystem;
-
-namespace {
-
-void writeFile(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
-}
-
-std::string readAll(const fs::path& path) {
-    std::ifstream in(path, std::ios::binary);
-    return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-}
-
-} // namespace
 
 TEST_CASE("ensureWritableCopy copies a mounted file out (CRLF preserved) and is idempotent", "[writableroot]") {
     const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "wr_test";
@@ -42,13 +28,13 @@ TEST_CASE("ensureWritableCopy copies a mounted file out (CRLF preserved) and is 
 
     const fs::path dest = resource::ensureWritableCopy(files, root, "data/maps.txt");
     CHECK(dest == root / "data" / "maps.txt");
-    CHECK(readAll(dest) == "HELLO\r\nWORLD\r\n"); // bytes, including CRLF, verbatim
+    CHECK(readFile(dest) == "HELLO\r\nWORLD\r\n"); // bytes, including CRLF, verbatim
 
     // Idempotent: an existing (edited) copy is returned untouched, not re-copied from the source.
     writeFile(dest, "EDITED\r\n");
     const fs::path again = resource::ensureWritableCopy(files, root, "data/maps.txt");
     CHECK(again == dest);
-    CHECK(readAll(again) == "EDITED\r\n");
+    CHECK(readFile(again) == "EDITED\r\n");
 
     fs::remove_all(base);
 }
