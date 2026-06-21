@@ -1,16 +1,18 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
 /// @file
-/// @brief Lossless, round-trippable document model for Fallout 2's `data/maps.txt`.
+/// @brief The model for Fallout 2's `data/maps.txt` — the engine's index→map registry.
 ///
-/// Unlike @ref MapsTxt (a lossy, query-oriented view that keeps only the modelled fields), this model
-/// preserves the *whole* file so it can be edited and written back without losing anything: the
-/// preamble, every `[Map NNN]` section in order, and within each section every line — blank lines,
-/// `;` comments, commented-out keys, repeated keys (`random_start_point_N`), multi-value keys
-/// (`ambient_sfx`, `can_rest_here`), and keys the typed reader never modelled.
+/// This is the single representation of `maps.txt`. It is lossless and round-trippable — it preserves
+/// the *whole* file so it can be edited and written back without losing anything: the preamble, every
+/// `[Map NNN]` section in order, and within each section every line — blank lines, `;` comments,
+/// commented-out keys, repeated keys (`random_start_point_N`), multi-value keys (`ambient_sfx`,
+/// `can_rest_here`), and keys nothing models — and it also exposes the typed lookups consumers need
+/// (@ref MapInfo, derived on demand from the sections).
 ///
 /// Each line keeps its **raw content** (sans line ending) as the canonical form, so an unchanged line
 /// serialises byte-for-byte; editing a field rebuilds only that one line. Line endings are *not*
@@ -40,6 +42,14 @@ struct MapsTxtSection {
     std::vector<MapsTxtLine> lines;
 };
 
+/// The typed view of one `[Map NNN]` section — what consumers actually query for. Derived from a
+/// section on demand (see MapsTxtDocument::find); the section keeps the full, lossless data.
+struct MapInfo {
+    int index = -1;         ///< the NNN in `[Map NNN]`; the number an exit grid's destMap references
+    std::string lookupName; ///< lookup_name — the engine's internal area key (city.txt entrances match by this)
+    std::string mapName;    ///< map_name normalized to a lowercase, loadable "<name>.map" filename
+};
+
 /// The whole `data/maps.txt`, in file order.
 struct MapsTxtDocument {
     std::vector<MapsTxtLine> preamble; ///< lines before the first `[...]` section
@@ -63,6 +73,17 @@ struct MapsTxtDocument {
         }
         return nullptr;
     }
+
+    /// The map at index `index`, or nullopt if absent.
+    std::optional<MapInfo> find(int index) const;
+
+    /// The map whose (normalized) map_name matches `mapFileName` — any case, with or without ".map" —
+    /// or nullopt. Used to find a .map's own registry index.
+    std::optional<MapInfo> findByName(const std::string& mapFileName) const;
+
+    /// The map whose lookup_name matches `lookupName` case-insensitively, or nullopt. The join from the
+    /// worldmap layer (city.txt entrances reference maps by lookup_name) to the .map files.
+    std::optional<MapInfo> findByLookupName(const std::string& lookupName) const;
 };
 
 } // namespace geck
