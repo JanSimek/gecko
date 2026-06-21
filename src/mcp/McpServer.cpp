@@ -8,6 +8,7 @@
 #include "cli/GlobalVars.h"
 #include "cli/Quests.h"
 #include "cli/Endings.h"
+#include "cli/GvarRefs.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapReachability.h"
 #include "cli/MapRender.h"
@@ -286,6 +287,18 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    json toolFindGvar(resource::GameResources& resources, const json& args) {
+        const std::string gvarName = requireString(args, "gvar");
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::findGvarRefs(resources, gvarName, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("find_gvar failed: ") + e.what(), true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
         const auto pid = static_cast<uint32_t>(requireInt(args, "pid", 0, UINT32_MAX));
         try {
@@ -498,6 +511,14 @@ namespace {
             "No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolEndings(r, a); } });
+        t.push_back({ "find_gvar",
+            "Find where a global variable is used in the mounted .ssl script sources: every script that "
+            "reads or writes 'gvar', with line, source text, and kind 'set' (set_global_var — the action "
+            "that advances/gates a quest) or 'get' (a check). The causal link: a quest's gvar (from "
+            "quests) -> the scripts that change it -> describe_script for the logic. Needs a script-source "
+            "tree (e.g. FRP scripts_src) mounted. Args: gvar (the GVAR_* name).",
+            json({ { "type", "object" }, { "properties", { { "gvar", { { "type", "string" } } } } }, { "required", json::array({ "gvar" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolFindGvar(r, a); } });
         t.push_back({ "script_api",
             "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
             "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "

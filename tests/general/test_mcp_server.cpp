@@ -34,7 +34,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "generate", "render_map", "extract_pattern", "script_api" }) {
+        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "find_gvar", "generate", "render_map", "extract_pattern", "script_api" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }
@@ -150,6 +150,8 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         CHECK(call("render_map", { { "map", 123 }, { "out", "o.png" } }, 23)["result"]["isError"] == true);
         // A negative entry in a pid array would have wrapped too.
         CHECK(call("extract_pattern", { { "map", "m" }, { "out", "o" }, { "name", "n" }, { "pids", json::array({ -1 }) } }, 24)["result"]["isError"] == true);
+        // find_gvar requires a non-empty gvar name (empty would match every line).
+        CHECK(call("find_gvar", json::object(), 25)["result"]["isError"] == true);
     }
 
     SECTION("ping is answered promptly with an empty result") {

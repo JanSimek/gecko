@@ -37,6 +37,25 @@ namespace {
         return areas;
     }
 
+    // Where a new game begins. The engine hard-codes the first map (fallout2-ce main.cc:
+    // `_mainMap = "artemple.map"`); resolve which worldmap area owns it + its map.msg name, so an
+    // agent has the entry point of the start->objectives->ending chain.
+    ordered_json startToJson(const CityTxt& city, const resource::MapNameResolver& names) {
+        constexpr const char* kStartMap = "artemple.map";
+        std::string area;
+        for (const CityArea& a : city.areas) {
+            for (const CityEntrance& entrance : a.entrances) {
+                if (names.fileNameOfLookup(entrance.map) == kStartMap) {
+                    area = a.name;
+                }
+            }
+        }
+        const std::string display = names.displayName(names.indexOf(kStartMap), 0);
+        return { { "map", kStartMap },
+            { "displayName", display.empty() ? ordered_json(nullptr) : ordered_json(display) },
+            { "area", area.empty() ? ordered_json(nullptr) : ordered_json(area) } };
+    }
+
     // Straight-line distance (in worldmap units) between every pair of areas. Terrain-weighted travel
     // cost would need worldmap.txt; this is the as-the-crow-flies "distance between places".
     ordered_json distancesToJson(const CityTxt& city) {
@@ -73,6 +92,7 @@ int buildWorldMap(resource::GameResources& resources, std::ostream& out) {
 
     const resource::MapNameResolver names(resources); // resolves entrance lookup_names -> .map files
     ordered_json root;
+    root["start"] = startToJson(city, names);
     root["areas"] = areasToJson(city, names);
     root["distances"] = distancesToJson(city);
     root["stats"] = { { "areas", city.areas.size() }, { "knownAtStart", knownAtStart } };

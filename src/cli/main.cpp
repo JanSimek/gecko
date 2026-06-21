@@ -7,6 +7,7 @@
 #include "cli/GlobalVars.h"
 #include "cli/Quests.h"
 #include "cli/Endings.h"
+#include "cli/GvarRefs.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
 #include "cli/MapReachability.h"
@@ -36,6 +37,8 @@ struct CliArgs {
     bool gvars = false;
     bool quests = false;
     bool endings = false;
+    bool findGvar = false;
+    std::string findGvarName;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::GenerateOptions gen;
@@ -103,6 +106,8 @@ void printUsage(const char* program) {
               << "      The quest registry (quests.txt): each quest's area, tracking gvar, thresholds, text.\n"
               << "  " << program << " map endings --data <dir-or-.dat> [--data <...>]\n"
               << "      The endgame win-condition table (endgame.txt): each slide's gvar==value, art, narrator.\n"
+              << "  " << program << " map find-gvar <GVAR_NAME> --data <dir-or-.dat> [--data <...>]\n"
+              << "      Scripts that read/write a global variable (needs an .ssl source tree mounted): set vs get.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
@@ -111,7 +116,7 @@ bool isKnownSubcommand(const std::vector<std::string>& args) {
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
             || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map"
             || args[1] == "graph" || args[1] == "world" || args[1] == "encounters"
-            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings");
+            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings" || args[1] == "find-gvar");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -338,6 +343,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.findGvar) { // a single positional: the GVAR_* name to search for
+        out.findGvarName = arg;
+        return 1;
+    }
     if (arg == "--json") { // analyze only: machine-readable output for the MCP
         out.analyze.json = true;
         return 1;
@@ -368,6 +377,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.gvars = args[1] == "gvars";
     out.quests = args[1] == "quests";
     out.endings = args[1] == "endings";
+    out.findGvar = args[1] == "find-gvar";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -470,6 +480,9 @@ int main(int argc, char** argv) {
     }
     if (cli.endings) {
         return geck::cli::buildEndings(resources, std::cout);
+    }
+    if (cli.findGvar) {
+        return geck::cli::findGvarRefs(resources, cli.findGvarName, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
 }

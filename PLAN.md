@@ -835,9 +835,11 @@ file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set th
    the quest's gvar → name via `gvars`, then `describe_script` for the scripts that touch it).
    Deliberately still **not** a computed "critical path to the ending": `.ssl` is imperative quest
    logic and static extraction of a win-path would be brittle. The MCP supplies ground truth; the
-   model infers the route. The `endings` tool (endgame.txt: gvar==value → ending slide) now supplies
-   the win-conditions too, so the start→objectives→ending loop is readable end to end; a game-start
-   marker (fold into world_map) is the small remaining piece.
+   model infers the route. The `endings` tool (endgame.txt: gvar==value → ending slide) supplies the
+   win-conditions, `world_map.start` marks the entry map (artemple.map / Arroyo), and `find_gvar` gives
+   the causal link — a quest's gvar → the .ssl scripts that set it (the action that advances it) vs
+   check it — so the start→objectives→ending loop is readable end to end (quest → gvar → find_gvar →
+   describe_script).
 
 ### Data-extraction roadmap (engine data files → vault readers)
 

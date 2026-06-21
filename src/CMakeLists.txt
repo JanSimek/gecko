@@ -610,7 +610,9 @@ if(GECK_BUILD_CLI)
         cli/Quests.h
         cli/Quests.cpp
         cli/Endings.h
-        cli/Endings.cpp)
+        cli/Endings.cpp
+        cli/GvarRefs.h
+        cli/GvarRefs.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)
