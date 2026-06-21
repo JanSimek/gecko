@@ -69,6 +69,13 @@ TEST_CASE("parseMapsTxt reads map sections keyed by their [Map NNN] index", "[ma
     CHECK(maps.findByName("artemple.map")->index == 3);
     CHECK(maps.findByName("desert1.map") == maps.find(0));
     CHECK(maps.findByName("nosuch.map") == nullptr);
+
+    // Lookup by lookup_name, case-insensitive (the join from city.txt entrances to .map files).
+    REQUIRE(maps.findByLookupName("Temple") != nullptr);
+    CHECK(maps.findByLookupName("Temple")->mapName == "artemple.map");
+    CHECK(maps.findByLookupName("temple") == maps.find(3)); // case-insensitive
+    CHECK(maps.findByLookupName("Desert Encounter") == maps.find(0));
+    CHECK(maps.findByLookupName("nope") == nullptr);
 }
 
 TEST_CASE("parseMapsTxt tolerates empty / section-less input", "[maps]") {

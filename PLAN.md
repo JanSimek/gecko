@@ -812,18 +812,34 @@ file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set th
    context. *Lower priority when the agent already has filesystem/grep tools — then just mounting the
    source is enough; this earns its keep specifically for headless/sandboxed agents.*
 
-7. **Whole-game map-connectivity graph — `map_graph`.** Walk every shipped map, collect the exit
-   grids (already `{destMap, destMapName, destHex, destElevation}`) into a directed map→map graph;
-   cross with `reachability` to flag one-way edges and unreachable maps. The foundation is in
-   (`exitsToJson` + `MapsTxt`). Answers "how is the world wired" and, spatially, "can the player get
-   from the first map to map X" — bounded, buildable, high value.
+7. **Exit-grid connectivity graph — `map_graph`. ✅ Done.** Walks every map's exit grids into a
+   directed map→map graph (`{destMap, destMapName, destHex, destElevation}` + a per-edge hex count),
+   with stats flagging dead-ends and maps with no incoming edge. **Scope correction:** this is only
+   the exit-grid layer — how a *location's* maps link (intramap elevation changes + intermap edges
+   within a town) and where they hand off to the world map (`kind=worldmap`). It is **not** inter-city
+   travel; cities are crossed on the world map, so the graph is connected only within a location.
+   Follow-up: cross with `reachability` to flag one-way edges.
 
-8. **Corpus / world index — evidence, not a solver.** Join, across all maps, the connectivity graph
-   + each map's scripts (`describe_script` source/dialog) + the quest/gvar data (below) into one
-   queryable index, so the agent can *reason* about progression ("which script sets the gvar that
-   gates map Y?"). Deliberately **not** a computed "critical path to the ending": `.ssl` is
-   imperative quest logic and static extraction of a win-path would be brittle and over-claim. The
-   MCP supplies ground truth; the model infers the route. (Expands the "Corpus angle" note above.)
+7b. **Worldmap layer — `world_map` (city.txt). ✅ Done.** The inter-city layer `map_graph` doesn't
+   cover: a vault `CityTxt` reader (`data/city.txt`) → areas (name, `world_pos`, size, known-at-start,
+   the maps each contains via its entrances) + the straight-line distance between every pair of areas.
+   This is the actual "map of the world + distances between places." Terrain types + encounter group
+   tables are now also covered (`worldmap.txt` → `world_encounters`). **Remaining:** the `worldmap.txt`
+   `[Tile NN]` sub-tile grid (per-position terrain → terrain-weighted travel cost, geographic
+   encounter placement) and `worldmap.msg` localized names.
+
+8. **Corpus / world index — evidence, not a solver.** The evidence layer now largely exists: the
+   `map_graph`↔`world_map` join (`area`/`mapFile`/`lookupName`), the `quests` tool (each quest's area +
+   tracking gvar + thresholds + text) and the `gvars` dictionary (gvar index → `GVAR_*` name) — so an
+   agent can already *reason* about progression ("which script sets the gvar that gates quest Y?": read
+   the quest's gvar → name via `gvars`, then `describe_script` for the scripts that touch it).
+   Deliberately still **not** a computed "critical path to the ending": `.ssl` is imperative quest
+   logic and static extraction of a win-path would be brittle. The MCP supplies ground truth; the
+   model infers the route. The `endings` tool (endgame.txt: gvar==value → ending slide) supplies the
+   win-conditions, `world_map.start` marks the entry map (artemple.map / Arroyo), and `find_gvar` gives
+   the causal link — a quest's gvar → the .ssl scripts that set it (the action that advances it) vs
+   check it — so the start→objectives→ending loop is readable end to end (quest → gvar → find_gvar →
+   describe_script).
 
 ### Data-extraction roadmap (engine data files → vault readers)
 
@@ -834,14 +850,32 @@ then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority ord
   `map.msg[mapIndex*3 + elevation + 200]`; city names = `map.msg[1500 + city]`. Gives each map (and
   every `destMap` exit) a friendly per-elevation name ("Arroyo", "Temple of Trials") alongside the
   `.map` filename `MapsTxt` already resolves. Pairs directly with `MapsTxt`.
-- **`data/quests.txt` + `game/quests.msg`** *(the progression spine).* Each quest's location, the
-  **gvar** that tracks it, and its description text — this is what turns capability 8 from a map
-  graph into a *quest* graph, since the gvar links a quest to the scripts that set it.
-- **`data/city.txt`** — worldmap areas/towns and their map entrances; bridges the worldmap to the
-  per-map exit graph (capability 7).
-- **`data/worldmap.txt`** — worldmap tiles, terrain and random-encounter tables (the macro layer).
-- **`data/endgame.txt` / `enddeath.txt`** — ending slides and their gvar/condition triggers: the
-  literal "how the game ends" for the corpus angle.
+- **`data/quests.txt` + `game/quests.msg`** ✅ **done** — `QuestsTxt` vault reader + the `quests` tool:
+  each quest's area (map.msg location name), tracking **gvar** (index + `GVAR_*` name + default via
+  vault13.gam), display/completed thresholds, and quests.msg description. The progression spine.
+- **`data/vault13.gam` global variables** ✅ **done** — the `gvars` tool (gvar index → `GVAR_*` name +
+  default), reusing the `Gam` reader (fixed to read negative-default gvars, which were shifting
+  ordinals). The dictionary that makes quests and scripts legible.
+- **map_graph ↔ world_map join** ✅ **done** — `MapsTxt::findByLookupName` + `MapNameResolver`; world_map
+  entrances carry `mapFile` and map_graph nodes carry `area` + `lookupName`, so the world layer and the
+  exit-grid layer cross-reference in both directions.
+- **`data/city.txt`** ✅ **done** — `CityTxt` vault reader + the `world_map` tool (areas, world
+  positions, sizes, the maps each area contains, pairwise distances). The inter-city layer.
+- **`data/worldmap.txt`** ✅ **done** — `WorldmapTxt` vault reader + the `world_encounters` tool
+  (`[Data]` terrain types — `difficulty`, not "weight" — and `[Encounter: NAME]` group tables) **and**
+  the `[Tile NN]` sub-tile grid: `WorldmapTxt::terrainAt(x,y)` mirrors the engine's
+  `wmFindCurSubTileFromPos`, so `world_map` now reports each area's `terrain` and a terrain-weighted
+  `travelCost` between areas. **Follow-up (minor):** per-position *encounter* placement (the subtile
+  encounter chances) is still unparsed — only the terrain field is kept.
+- **`game/worldmap.msg`** *(follow-up, small)* — localized area/terrain/encounter names to enrich
+  `world_map` / `world_encounters` (city.txt `area_name` and the encounter section names are the
+  internal labels).
+- **`data/endgame.txt`** ✅ **done** — `EndgameTxt` vault reader + the `endings` tool: each ending slide
+  keyed by `gvar == value` (gvar resolved to its `GVAR_ENDGAME_MOVIE_*` name + a readable condition),
+  the slide art, and the narrator/subtitle base name. Slides sharing a gvar at different values are a
+  location's branching outcomes (e.g. Gecko has 5). Closes the start→objectives→ending loop with quests
+  + gvars. **Follow-ups:** `enddeath.txt` death endings (in master.dat) and the narration subtitle text
+  (`text/<lang>/cuts/<narrator>.txt`).
 - **`data/party.txt`** (companions), **`holodisk.txt`**, **`karmavar.txt`** — lore/state, lower
   priority.
 

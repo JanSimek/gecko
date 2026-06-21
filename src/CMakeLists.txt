@@ -283,6 +283,18 @@ add_library(vault STATIC
     # Maps (maps.txt — the engine's index->map registry)
     format/maps/MapsTxt.h
 
+    # City (city.txt — worldmap areas / locations)
+    format/city/CityTxt.h
+
+    # Worldmap (worldmap.txt — terrain types + encounter tables)
+    format/worldmap/WorldmapTxt.h
+
+    # Quests (quests.txt — the quest registry)
+    format/quests/QuestsTxt.h
+
+    # Endgame (endgame.txt — the ending slideshow win-condition table)
+    format/endgame/EndgameTxt.h
+
     # PRO
     format/pro/Pro.h
     format/pro/Pro.cpp
@@ -311,6 +323,7 @@ add_library(vault STATIC
     # Parser superclass
     reader/FileParser.h
     reader/TextParsing.h
+    reader/IniParser.h
     reader/ReaderFactory.h
     reader/ReaderFactory.cpp
 
@@ -340,6 +353,18 @@ add_library(vault STATIC
 
     reader/maps/MapsTxtReader.h
     reader/maps/MapsTxtReader.cpp
+
+    reader/city/CityTxtReader.h
+    reader/city/CityTxtReader.cpp
+
+    reader/worldmap/WorldmapTxtReader.h
+    reader/worldmap/WorldmapTxtReader.cpp
+
+    reader/quests/QuestsTxtReader.h
+    reader/quests/QuestsTxtReader.cpp
+
+    reader/endgame/EndgameTxtReader.h
+    reader/endgame/EndgameTxtReader.cpp
 
     reader/pro/ProReader.h
     reader/pro/ProReader.cpp
@@ -572,7 +597,22 @@ if(GECK_BUILD_CLI)
         cli/MapReachability.h
         cli/MapReachability.cpp
         cli/MapDescribe.h
-        cli/MapDescribe.cpp)
+        cli/MapDescribe.cpp
+        cli/MapGraph.h
+        cli/MapGraph.cpp
+        cli/WorldMap.h
+        cli/WorldMap.cpp
+        cli/WorldEncounters.h
+        cli/WorldEncounters.cpp
+        cli/ConfigLoad.h
+        cli/GlobalVars.h
+        cli/GlobalVars.cpp
+        cli/Quests.h
+        cli/Quests.cpp
+        cli/Endings.h
+        cli/Endings.cpp
+        cli/GvarRefs.h
+        cli/GvarRefs.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)

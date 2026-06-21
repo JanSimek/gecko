@@ -1,8 +1,30 @@
 #pragma once
 
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <utility>
 #include <vector>
+
+/// @file
+/// @brief Model for Fallout 2's `data/maps.txt` — the engine's index→map registry.
+///
+/// `maps.txt` is an INI-style file with one `[Map NNN]` section per map; the zero-padded `NNN` is the
+/// map's index — the number an exit grid's `destMap` references (so `destMap` 3 is `[Map 003]`).
+/// Recognized keys (the engine reads more; `map_name` is stored without an extension and lowercased):
+///
+/// @verbatim
+/// [Map 003]
+/// lookup_name=Arroyo Caves   ; internal area key (city.txt entrances match maps by this)
+/// map_name=arcaves           ; the .map filename (no extension in the file)
+/// music=02Desert
+/// ambient_sfx=brmnwind:35, coyote:10   ; sound:chance pairs
+/// saved=No
+/// pipboy_active=Yes
+/// @endverbatim
+///
+/// @see fallout2-ce `worldmap.cc` (`wmConfigInit`)
+/// @see https://fallout.wiki/wiki/MAPS.TXT_File_Format
 
 namespace geck {
 
@@ -41,6 +63,24 @@ struct MapsTxt {
     const MapInfo* findByName(const std::string& mapName) const {
         for (const auto& map : maps) {
             if (map.mapName == mapName) {
+                return &map;
+            }
+        }
+        return nullptr;
+    }
+
+    /// The section whose lookup_name matches `lookupName` (case-insensitively — the engine matches
+    /// city.txt entrance map names to maps.txt this way), or nullptr. This is the join between the
+    /// worldmap layer (city.txt entrances reference maps by lookup_name) and the .map files /
+    /// exit-grid graph (keyed by map_name).
+    const MapInfo* findByLookupName(const std::string& lookupName) const {
+        const auto ieq = [](const std::string& a, const std::string& b) {
+            return a.size() == b.size()
+                && std::equal(a.begin(), a.end(), b.begin(),
+                    [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
+        };
+        for (const auto& map : maps) {
+            if (ieq(map.lookupName, lookupName)) {
                 return &map;
             }
         }

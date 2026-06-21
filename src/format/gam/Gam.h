@@ -14,10 +14,12 @@ public:
     const std::string& gvarKey(size_t index) const;
     int gvarValue(const std::string& key);
     int gvarValue(size_t index);
+    size_t gvarCount() const { return _gvars.size(); }
 
     const std::string& mvarKey(size_t index) const;
     int mvarValue(const std::string& key);
     int mvarValue(size_t index);
+    size_t mvarCount() const { return _mvars.size(); }
 
     void addMvar(const std::string& key, int value);
     void addGvar(const std::string& key, int value);

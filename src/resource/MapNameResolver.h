@@ -32,6 +32,15 @@ public:
     /// The maps.txt index for a .map filename (basename, any case), or -1 if absent.
     int indexOf(const std::string& mapFileName) const;
 
+    /// The .map filename for a maps.txt lookup_name (city.txt's entrance map key, e.g. "Arroyo
+    /// Bridge"), case-insensitive, or "" if no map has that lookup_name. The join from the worldmap
+    /// layer (city.txt areas) to the .map files / exit-grid graph.
+    std::string fileNameOfLookup(const std::string& lookupName) const;
+
+    /// The lookup_name for a .map filename (basename, any case), or "" if absent. The reverse join,
+    /// from a .map file to the worldmap key city.txt uses.
+    std::string lookupNameOf(const std::string& mapFileName) const;
+
 private:
     GameResources& _resources;
     MapsTxt _mapsTxt;

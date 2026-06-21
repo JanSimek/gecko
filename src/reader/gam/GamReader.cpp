@@ -1,6 +1,5 @@
 #include "GamReader.h"
 
-#include <iostream>
 #include <regex>
 #include <spdlog/spdlog.h>
 
@@ -25,7 +24,10 @@ std::unique_ptr<Gam> GamReader::read() {
 
         auto gam = std::make_unique<Gam>(_path);
 
-        const std::regex regex_key_value(R"~(^\s*(\w+)\s*:=\s*(\d+)\s*;)~");
+        // Value may be negative (e.g. GVAR_*_PRICE := -1), so accept a leading '-'. With (\d+) those
+        // gvars were silently dropped, shifting every later gvar's ordinal — and gvar ordinals are how
+        // quests.txt / scripts reference them, so the shift mis-resolved gvar names.
+        const std::regex regex_key_value(R"~(^\s*(\w+)\s*:=\s*(-?\d+)\s*;)~");
         const std::regex regex_gvars_start(R"~(^\s*GAME_GLOBAL_VARS:)~");
         const std::regex regex_mvars_start(R"~(^\s*MAP_GLOBAL_VARS:)~");
         const std::regex regex_comment(R"~(^\s*//.*$)~");

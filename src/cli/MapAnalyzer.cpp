@@ -253,19 +253,9 @@ namespace {
         if (!options.maps.empty()) {
             return options.maps;
         }
-        const auto allFiles = files.list("*");
-        std::vector<std::string> mapPaths;
-        for (const auto& path : allFiles) {
-            std::string ext = path.extension().string();
-            std::ranges::transform(ext, ext.begin(),
-                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (ext == ".map") {
-                mapPaths.push_back(path.generic_string());
-            }
-        }
-        std::ranges::sort(mapPaths);
+        std::vector<std::string> mapPaths = listMapPaths(files);
         if (mapPaths.empty()) {
-            out << "No .map files found among " << allFiles.size() << " mounted files.\n";
+            out << "No .map files found in the mounted data.\n";
         }
         return mapPaths;
     }
@@ -720,21 +710,15 @@ namespace {
     // unknown). The map's connectivity, so an agent sees where each edge leads.
     ordered_json exitsToJson(Map& map, const resource::MapNameResolver& mapNames) {
         auto array = ordered_json::array();
-        for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
-            for (const auto& object : mapObjects) {
-                if (!object || !object->isExitGridMarker()) {
-                    continue;
-                }
-                const auto destMap = static_cast<int32_t>(object->exit_map);
-                const std::string file = mapNames.fileNameOf(destMap);
-                const std::string display = mapNames.displayName(destMap, object->exit_elevation);
-                array.push_back({ { "hex", object->position }, { "elevation", elevation },
-                    { "destMap", destMap },
-                    { "destMapName", file.empty() ? ordered_json(nullptr) : ordered_json(file) },
-                    { "destMapDisplayName", display.empty() ? ordered_json(nullptr) : ordered_json(display) },
-                    { "destHex", static_cast<int32_t>(object->exit_position) },
-                    { "destElevation", object->exit_elevation }, { "orientation", object->exit_orientation } });
-            }
+        for (const MapExit& exit : collectMapExits(map)) {
+            const std::string file = mapNames.fileNameOf(exit.destMap);
+            const std::string display = mapNames.displayName(exit.destMap, exit.destElevation);
+            array.push_back({ { "hex", exit.srcHex }, { "elevation", exit.srcElevation },
+                { "destMap", exit.destMap },
+                { "destMapName", file.empty() ? ordered_json(nullptr) : ordered_json(file) },
+                { "destMapDisplayName", display.empty() ? ordered_json(nullptr) : ordered_json(display) },
+                { "destHex", exit.destHex },
+                { "destElevation", exit.destElevation }, { "orientation", exit.orientation } });
         }
         return array;
     }
@@ -814,6 +798,37 @@ namespace {
     }
 
 } // namespace
+
+std::vector<MapExit> collectMapExits(Map& map) {
+    std::vector<MapExit> exits;
+    for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
+        for (const auto& object : mapObjects) {
+            if (!object || !object->isExitGridMarker()) {
+                continue;
+            }
+            exits.push_back({ static_cast<int>(object->position), static_cast<int>(elevation),
+                static_cast<int>(object->exit_map), static_cast<int>(object->exit_position),
+                static_cast<int>(object->exit_elevation), static_cast<int>(object->exit_orientation) });
+        }
+    }
+    return exits;
+}
+
+std::vector<std::string> listMapPaths(const resource::DataFileSystem& files) {
+    // List everything and keep the .map files, case-insensitively — more robust than a glob against
+    // the raw VFS keys (whose case and leading "/" depend on the DAT/mount).
+    std::vector<std::string> mapPaths;
+    for (const auto& path : files.list("*")) {
+        std::string ext = path.extension().string();
+        std::ranges::transform(ext, ext.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (ext == ".map") {
+            mapPaths.push_back(path.generic_string());
+        }
+    }
+    std::ranges::sort(mapPaths);
+    return mapPaths;
+}
 
 int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& options, std::ostream& out) {
     const std::vector<std::string> mapPaths = collectMapPaths(resources.files(), options, out);

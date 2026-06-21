@@ -34,7 +34,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "generate", "render_map", "extract_pattern", "script_api" }) {
+        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "find_gvar", "generate", "render_map", "extract_pattern", "script_api" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }
@@ -106,6 +106,36 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         CHECK(resp["result"]["isError"] == true);
     }
 
+    SECTION("map_graph with no data mounted reports a tool error (no maps found)") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 13 }, { "method", "tools/call" },
+            { "params", { { "name", "map_graph" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == true);
+    }
+
+    SECTION("world_map with no data mounted reports a tool error (no city.txt)") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 14 }, { "method", "tools/call" },
+            { "params", { { "name", "world_map" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == true);
+    }
+
+    SECTION("world_encounters with no data mounted reports a tool error (no worldmap.txt)") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 15 }, { "method", "tools/call" },
+            { "params", { { "name", "world_encounters" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == true);
+    }
+
+    SECTION("quests / gvars with no data mounted report tool errors (no quests.txt / vault13.gam)") {
+        const json q = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 16 }, { "method", "tools/call" },
+            { "params", { { "name", "quests" }, { "arguments", json::object() } } } });
+        CHECK(q["result"]["isError"] == true);
+        const json g = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 17 }, { "method", "tools/call" },
+            { "params", { { "name", "gvars" }, { "arguments", json::object() } } } });
+        CHECK(g["result"]["isError"] == true);
+        const json e = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 18 }, { "method", "tools/call" },
+            { "params", { { "name", "endings" }, { "arguments", json::object() } } } });
+        CHECK(e["result"]["isError"] == true);
+    }
+
     SECTION("bad argument types and out-of-range numbers are tool errors, not silent casts") {
         auto call = [&](const char* tool, json toolArgs, int id) {
             return server.handleMessage({ { "jsonrpc", "2.0" }, { "id", id }, { "method", "tools/call" },
@@ -120,6 +150,8 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         CHECK(call("render_map", { { "map", 123 }, { "out", "o.png" } }, 23)["result"]["isError"] == true);
         // A negative entry in a pid array would have wrapped too.
         CHECK(call("extract_pattern", { { "map", "m" }, { "out", "o" }, { "name", "n" }, { "pids", json::array({ -1 }) } }, 24)["result"]["isError"] == true);
+        // find_gvar requires a non-empty gvar name (empty would match every line).
+        CHECK(call("find_gvar", json::object(), 25)["result"]["isError"] == true);
     }
 
     SECTION("ping is answered promptly with an empty result") {

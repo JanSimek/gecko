@@ -1,6 +1,13 @@
 #include "cli/BundledResources.h"
 #include "cli/MapAnalyzer.h"
 #include "cli/MapDescribe.h"
+#include "cli/MapGraph.h"
+#include "cli/WorldMap.h"
+#include "cli/WorldEncounters.h"
+#include "cli/GlobalVars.h"
+#include "cli/Quests.h"
+#include "cli/Endings.h"
+#include "cli/GvarRefs.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
 #include "cli/MapReachability.h"
@@ -24,6 +31,14 @@ struct CliArgs {
     bool describeScript = false;
     bool reachability = false;
     bool describeMap = false;
+    bool graph = false;
+    bool world = false;
+    bool encounters = false;
+    bool gvars = false;
+    bool quests = false;
+    bool endings = false;
+    bool findGvar = false;
+    std::string findGvarName;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::GenerateOptions gen;
@@ -32,6 +47,7 @@ struct CliArgs {
     geck::cli::DescribeScriptOptions desc;
     geck::cli::ReachabilityOptions reach;
     geck::cli::DescribeMapOptions describeMapOpts;
+    geck::cli::MapGraphOptions graphOpts;
 };
 
 void printUsage(const char* program) {
@@ -75,13 +91,32 @@ void printUsage(const char* program) {
               << "  " << program << " map describe-map --map <path> --data <dir-or-.dat> [--data <...>]\n"
               << "      One digest composing analyze + reachability for a map (header, biome, structures,\n"
               << "      critter roster with AI + scripts, exits, reachability), as JSON.\n"
+              << "  " << program << " map graph [map ...] --data <dir-or-.dat> [--data <...>]\n"
+              << "      The exit-grid connectivity graph: how maps link via exit grids WITHIN a location\n"
+              << "      (+ worldmap hand-off edges), named via maps.txt/map.msg. Not inter-city travel\n"
+              << "      (that's the world map / city.txt). No map arguments = every map.\n"
+              << "  " << program << " map world --data <dir-or-.dat> [--data <...>]\n"
+              << "      The worldmap layer from city.txt: every area (location) with its world position,\n"
+              << "      size, the maps it contains, and the straight-line distances between all areas.\n"
+              << "  " << program << " map encounters --data <dir-or-.dat> [--data <...>]\n"
+              << "      The worldmap terrain types and random-encounter group tables from worldmap.txt.\n"
+              << "  " << program << " map gvars --data <dir-or-.dat> [--data <...>]\n"
+              << "      The global-variable dictionary (vault13.gam): each GVAR index -> name + default.\n"
+              << "  " << program << " map quests --data <dir-or-.dat> [--data <...>]\n"
+              << "      The quest registry (quests.txt): each quest's area, tracking gvar, thresholds, text.\n"
+              << "  " << program << " map endings --data <dir-or-.dat> [--data <...>]\n"
+              << "      The endgame win-condition table (endgame.txt): each slide's gvar==value, art, narrator.\n"
+              << "  " << program << " map find-gvar <GVAR_NAME> --data <dir-or-.dat> [--data <...>]\n"
+              << "      Scripts that read/write a global variable (needs an .ssl source tree mounted): set vs get.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
 bool isKnownSubcommand(const std::vector<std::string>& args) {
     return args.size() >= 2 && args[0] == "map"
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
-            || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map");
+            || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map"
+            || args[1] == "graph" || args[1] == "world" || args[1] == "encounters"
+            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings" || args[1] == "find-gvar");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -289,6 +324,34 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.graph) { // trailing positional args are the maps to include (empty = all)
+        out.graphOpts.maps.push_back(arg);
+        return 1;
+    }
+    if (out.world) { // world takes no arguments beyond --data (handled above)
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
+    if (out.encounters) { // encounters takes no arguments beyond --data (handled above)
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
+    if (out.gvars || out.quests || out.endings) { // these take no arguments beyond --data (handled above)
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
+    if (out.findGvar) { // a single positional: the GVAR_* name to search for
+        if (arg.rfind("--", 0) == 0 || !out.findGvarName.empty()) {
+            std::cerr << "error: find-gvar takes exactly one GVAR name: " << arg << "\n";
+            printUsage(program);
+            return 0;
+        }
+        out.findGvarName = arg;
+        return 1;
+    }
     if (arg == "--json") { // analyze only: machine-readable output for the MCP
         out.analyze.json = true;
         return 1;
@@ -313,6 +376,13 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.describeScript = args[1] == "describe-script";
     out.reachability = args[1] == "reachability";
     out.describeMap = args[1] == "describe-map";
+    out.graph = args[1] == "graph";
+    out.world = args[1] == "world";
+    out.encounters = args[1] == "encounters";
+    out.gvars = args[1] == "gvars";
+    out.quests = args[1] == "quests";
+    out.endings = args[1] == "endings";
+    out.findGvar = args[1] == "find-gvar";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -397,6 +467,31 @@ int main(int argc, char** argv) {
     }
     if (cli.describeMap) {
         return geck::cli::describeMap(resources, cli.describeMapOpts, std::cout);
+    }
+    if (cli.graph) {
+        return geck::cli::buildMapGraph(resources, cli.graphOpts, std::cout);
+    }
+    if (cli.world) {
+        return geck::cli::buildWorldMap(resources, std::cout);
+    }
+    if (cli.encounters) {
+        return geck::cli::buildWorldEncounters(resources, std::cout);
+    }
+    if (cli.gvars) {
+        return geck::cli::buildGlobalVars(resources, std::cout);
+    }
+    if (cli.quests) {
+        return geck::cli::buildQuests(resources, std::cout);
+    }
+    if (cli.endings) {
+        return geck::cli::buildEndings(resources, std::cout);
+    }
+    if (cli.findGvar) {
+        if (cli.findGvarName.empty()) {
+            std::cerr << "error: find-gvar requires a GVAR name (e.g. find-gvar GVAR_ARROYO_RETURN_GECK)\n";
+            return 2;
+        }
+        return geck::cli::findGvarRefs(resources, cli.findGvarName, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
 }

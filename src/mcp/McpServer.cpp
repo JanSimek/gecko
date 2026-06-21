@@ -2,6 +2,13 @@
 
 #include "cli/MapAnalyzer.h"
 #include "cli/MapDescribe.h"
+#include "cli/MapGraph.h"
+#include "cli/WorldMap.h"
+#include "cli/WorldEncounters.h"
+#include "cli/GlobalVars.h"
+#include "cli/Quests.h"
+#include "cli/Endings.h"
+#include "cli/GvarRefs.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapReachability.h"
 #include "cli/MapRender.h"
@@ -136,19 +143,27 @@ namespace {
         return toolText(json(paths).dump()); // json(vector<string>) -> a JSON array, "[]" when empty
     }
 
+    // Optional "maps" string array -> the maps list (empty = every map). Shared by analyze, palette
+    // and map_graph; non-string entries are ignored.
+    std::vector<std::string> optMaps(const json& args) {
+        std::vector<std::string> maps;
+        if (args.contains("maps") && args.at("maps").is_array()) {
+            for (const auto& m : args.at("maps")) {
+                if (m.is_string()) {
+                    maps.push_back(m.get<std::string>());
+                }
+            }
+        }
+        return maps;
+    }
+
     // analyze (full JSON report) and palette (just the weighted generation palette) share the maps
     // parsing and the same headless analyzeMaps entry.
     json runAnalyze(resource::GameResources& resources, const json& args, bool paletteOnly) {
         cli::AnalyzeOptions opts;
         opts.json = !paletteOnly;
         opts.palette = paletteOnly;
-        if (args.contains("maps") && args["maps"].is_array()) {
-            for (const auto& m : args["maps"]) {
-                if (m.is_string()) {
-                    opts.maps.push_back(m.get<std::string>());
-                }
-            }
-        }
+        opts.maps = optMaps(args);
         std::ostringstream oss;
         int rc = 0;
         try {
@@ -200,6 +215,86 @@ namespace {
             rc = cli::describeMap(resources, opts, oss);
         } catch (const std::exception& e) {
             return toolText(std::string("describe_map failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolMapGraph(resource::GameResources& resources, const json& args) {
+        cli::MapGraphOptions opts;
+        opts.maps = optMaps(args);
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildMapGraph(resources, opts, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("map_graph failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolWorldMap(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildWorldMap(resources, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("world_map failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolWorldEncounters(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildWorldEncounters(resources, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("world_encounters failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolGlobalVars(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildGlobalVars(resources, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("gvars failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolQuests(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildQuests(resources, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("quests failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolEndings(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::buildEndings(resources, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("endings failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolFindGvar(resource::GameResources& resources, const json& args) {
+        const std::string gvarName = requireString(args, "gvar");
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::findGvarRefs(resources, gvarName, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("find_gvar failed: ") + e.what(), true);
         }
         return toolText(oss.str(), rc != 0);
     }
@@ -355,6 +450,79 @@ namespace {
             "Args: map.",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeMap(r, a); } });
+        t.push_back({ "map_graph",
+            "The EXIT-GRID connectivity graph — how maps link via exit grids: within a location "
+            "(intramap self-edges for elevation changes, and intermap edges between a town's maps, e.g. "
+            "Arroyo village<->bridge) and where a map hands off to the world map (edges with "
+            "kind=worldmap). NOT inter-city travel: cities are reached across the world map, not by exit "
+            "grids, so this graph is connected only within a location — for the world layer (areas, "
+            "positions, distances) use city.txt / world_map. 'nodes' (maps, each with: 'file' = the "
+            ".map filename — the JOIN KEY to world_map's area.maps[].mapFile; the map.msg 'displayName'; "
+            "the owning world_map 'area' and its city.txt 'lookupName' (so you can go map->area, the "
+            "reverse of world_map's area->map); and 'analysed'); 'edges' ({from,to,kind,destMap,"
+            "toName,exits}) where 'exits' counts the exit-grid hexes and 'kind' is "
+            "map/worldmap/townmap/unknown; 'stats' flags 'deadEnds' (no outgoing map edge) and "
+            "'noIncoming' (no map exits to it — a location's entry points or orphans). Omit 'maps' for "
+            "every map, or pass it to scope (e.g. one town's maps).",
+            json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
+            [](resource::GameResources& r, const json& a) { return toolMapGraph(r, a); } });
+        t.push_back({ "world_map",
+            "The WORLDMAP layer from city.txt — the inter-city travel layer that map_graph does not "
+            "cover. 'start': where a new game begins ({map, displayName, area} = artemple.map / Arroyo). "
+            "'areas': every location (city/town/encounter site) with its 'name', 'worldPos' {x,y} on the "
+            "world map, 'size', 'knownAtStart', 'terrain' (from worldmap.txt's tile grid, null if absent), "
+            "and 'maps' (the maps it contains — each {map (the lookup_name), on, mapFile}). 'mapFile' is "
+            "the .map filename, the JOIN KEY to map_graph: world_map.areas[].maps[].mapFile == "
+            "map_graph.nodes[].file (null when the lookup_name has no maps.txt entry, e.g. a disabled "
+            "entrance). 'distances': between every pair of areas, the straight-line 'distance' (worldmap "
+            "units) and a terrain-weighted 'travelCost' (null without the terrain grid). Use this for "
+            "'how does the player get from city A to city B' (they cross the world map); use map_graph "
+            "for travel by exit grids within one location. No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolWorldMap(r, a); } });
+        t.push_back({ "world_encounters",
+            "The worldmap's terrain types and random-encounter group tables, from worldmap.txt. "
+            "'terrains' (name, shortName, 'difficulty' — the terrain's per-step travel cost) and "
+            "'encounters' — each [Encounter: NAME] group with its spawn 'entries' ({pid, ratioPercent, "
+            "dead, script, items}). The shipped encounter names are region-prefixed (ARRO_*, KLA_*, …), "
+            "so they map to areas. Critter pids are raw — resolve them with proto_info. (Per-position "
+            "encounter placement is not parsed; terrain-at-position is in world_map.) No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolWorldEncounters(r, a); } });
+        t.push_back({ "quests",
+            "The quest registry from quests.txt — what the player has to DO. Each quest: 'area' (the "
+            "location name, joins to world_map area names), 'gvar' + 'gvarName' (GVAR_*) + 'gvarStart' "
+            "(the global variable that tracks it, via vault13.gam — scripts set/check this same gvar), "
+            "'displayThreshold'/'completedThreshold' (the gvar values that reveal/complete it), and "
+            "'description' (the objective text). The spine for reasoning about progression: read what "
+            "must be done, where, and which world-state flag proves it. No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolQuests(r, a); } });
+        t.push_back({ "gvars",
+            "The global-variable dictionary from vault13.gam: every GVAR by 'index' -> 'name' (GVAR_*) "
+            "+ 'default'. Global variables are the engine's progression state machine, so this decodes "
+            "a gvar index (from quests, or a script) to a human-readable name. No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolGlobalVars(r, a); } });
+        t.push_back({ "endings",
+            "The endgame slideshow's win-condition table from endgame.txt: each ending slide with the "
+            "global variable + value that triggers it ('gvar' + 'gvarName' via vault13.gam + a readable "
+            "'condition'), the slide 'art', and the 'narrator' subtitle base name. Slides sharing a gvar "
+            "at different values are a location's branching outcomes — so this answers 'what world state "
+            "produces each ending'. With quests + gvars it closes the start->objectives->ending loop. "
+            "No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolEndings(r, a); } });
+        t.push_back({ "find_gvar",
+            "Find where a global variable is used in the mounted .ssl / .h script sources: every script "
+            "that reads or writes 'gvar', with line, source text, and kind 'set' (set_global_var — the "
+            "action that advances/gates a quest) or 'get' (a check). Headers are scanned too, since many "
+            "gvars are only touched via macro aliases there (e.g. caravan.h). The causal link: a quest's "
+            "gvar (from quests) -> the scripts that change it -> describe_script for the logic. An empty "
+            "result means the gvar is genuinely unused (not an error). Needs a script-source tree (e.g. "
+            "FRP scripts_src) mounted. Args: gvar (the GVAR_* name).",
+            json({ { "type", "object" }, { "properties", { { "gvar", { { "type", "string" } } } } }, { "required", json::array({ "gvar" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolFindGvar(r, a); } });
         t.push_back({ "script_api",
             "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
             "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "
