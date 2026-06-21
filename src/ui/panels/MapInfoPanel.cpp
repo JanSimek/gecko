@@ -473,8 +473,11 @@ void MapInfoPanel::updateMapNameDisplay() {
     }
 
     const auto& header = _map->getMapFile().header;
-    const std::string file = header.filename;
-    const int index = _mapNames->indexOf(file); // by filename, not header.map_id
+    // Resolve by the actual file basename, NOT header.filename: the .map's 16-byte filename field is
+    // upper-cased and NUL-padded (e.g. "ARTEMPLE.MAP\0\0\0\0"), which never matches maps.txt. _map's
+    // path filename ("artemple.map") is what maps.txt uses (and what the CLI/MCP resolve by).
+    const std::string file = _map->filename();
+    const int index = _mapNames->indexOf(file);
     const int elevation = static_cast<int>(header.player_default_elevation);
     const bool registered = index >= 0; // present in maps.txt -> names are editable + persistable
 
@@ -1027,7 +1030,7 @@ void MapInfoPanel::onSaveNamesClicked() {
     }
 
     const auto& header = _map->getMapFile().header;
-    const std::string file = header.filename;
+    const std::string file = _map->filename(); // the path basename, not the NUL-padded header field
     const int index = _mapNames->indexOf(file);
     if (index < 0) {
         QMessageBox::warning(this, "Save Names",

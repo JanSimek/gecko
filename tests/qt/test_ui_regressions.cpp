@@ -700,11 +700,14 @@ TEST_CASE("Script console setSource loads the editor and feeds Run", "[qt][scrip
 // (maps.txt lookup_name + the per-elevation map.msg display name) read-only, reusing MapNameResolver.
 namespace {
 
-// A map whose header points at `mapName.map`, with an in-memory MapFile so the panel can resolve it.
+// A map loaded from `mapName`, with an in-memory MapFile. The header's 16-byte filename field is
+// upper-cased + NUL-padded like real .map files (e.g. "ARTEMPLE.MAP\0\0\0\0"), which does NOT match
+// maps.txt — so the panel must resolve by the file basename (map->filename()), not header.filename.
 std::unique_ptr<geck::Map> makeMap(const std::string& mapName, int elevation = 0) {
     auto map = std::make_unique<geck::Map>(mapName);
     auto mapFile = std::make_unique<geck::Map::MapFile>(geck::Map::createEmptyMapFile());
-    mapFile->header.filename = mapName;
+    QString upper = QString::fromStdString(mapName).toUpper();
+    mapFile->header.filename = upper.toStdString() + std::string(4, '\0'); // mismatched on purpose
     mapFile->header.player_default_elevation = static_cast<uint32_t>(elevation);
     map->setMapFile(std::move(mapFile));
     return map;
