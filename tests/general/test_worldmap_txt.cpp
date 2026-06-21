@@ -35,9 +35,9 @@ TEST_CASE("parseWorldmapTxt reads terrain types and encounter groups", "[worldma
     REQUIRE(world.terrains.size() == 4);
     CHECK(world.terrains[0].name == "Desert");
     CHECK(world.terrains[0].shortName == "DES");
-    CHECK(world.terrains[0].weight == 1);
+    CHECK(world.terrains[0].difficulty == 1);
     CHECK(world.terrains[1].name == "Mountain");
-    CHECK(world.terrains[1].weight == 2);
+    CHECK(world.terrains[1].difficulty == 2);
     CHECK(world.terrains[3].shortName == "OCN");
 
     REQUIRE(world.encounters.size() == 2);
@@ -61,7 +61,36 @@ TEST_CASE("parseWorldmapTxt reads terrain types and encounter groups", "[worldma
     CHECK(world.findEncounter("Nope") == nullptr);
 }
 
+TEST_CASE("parseWorldmapTxt reads the [Tile NN] grid and terrainAt maps pixels to terrain", "[worldmap]") {
+    constexpr const char* kTiles = R"(
+[Data]
+terrain_types=Desert:1, Mountain:4, Ocean:2
+[Tile Data]
+num_horizontal_tiles=2
+[Tile 0]
+0_0=Desert, No_Fill, None, None, None, Desert1
+1_0=Mountain, No_Fill, None, None, None, Mtn
+0_1=Ocean, Fill_W, None, None, None, Fish
+[Tile 1]
+0_0=Mountain, No_Fill, None, None, None, Mtn
+)";
+    const WorldmapTxt world = parseWorldmapTxt(std::string{ kTiles });
+
+    CHECK(world.numHorizontalTiles == 2);
+    REQUIRE(world.tiles.size() == 2);
+    // terrainAt: row = (x%350)/50, col = (y%300)/50, tile = (y/300)*numHoriz + x/350.
+    CHECK(world.terrainAt(0, 0) == "Desert");     // tile 0, row 0, col 0
+    CHECK(world.terrainAt(60, 0) == "Mountain");  // row 1 (60/50)
+    CHECK(world.terrainAt(0, 60) == "Ocean");     // col 1 (60/50)
+    CHECK(world.terrainAt(350, 0) == "Mountain"); // tile 1
+    CHECK(world.terrainAt(99999, 0).empty());     // out of range
+
+    CHECK(world.difficultyOf("Mountain") == 4);
+    CHECK(world.difficultyOf("Nope") == 0);
+}
+
 TEST_CASE("parseWorldmapTxt tolerates empty input", "[worldmap]") {
     CHECK(parseWorldmapTxt(std::string{}).encounters.empty());
     CHECK(parseWorldmapTxt(std::string{}).terrains.empty());
+    CHECK(parseWorldmapTxt(std::string{}).terrainAt(0, 0).empty());
 }

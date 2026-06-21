@@ -468,23 +468,25 @@ namespace {
             [](resource::GameResources& r, const json& a) { return toolMapGraph(r, a); } });
         t.push_back({ "world_map",
             "The WORLDMAP layer from city.txt — the inter-city travel layer that map_graph does not "
-            "cover. 'areas': every location (city/town/encounter site) with its 'name', 'worldPos' "
-            "{x,y} on the world map, 'size', 'knownAtStart', and 'maps' (the maps it contains — each "
-            "{map (the lookup_name), on, mapFile}). 'mapFile' is the .map filename, the JOIN KEY to "
-            "map_graph: world_map.areas[].maps[].mapFile == map_graph.nodes[].file (null when the "
-            "lookup_name has no maps.txt entry, e.g. a disabled entrance). 'distances': the "
-            "straight-line distance between every pair of areas (worldmap units) — how far apart places "
-            "are. Use this for 'how does the player get from city A to city B' (they cross the world "
-            "map); use map_graph for travel by exit grids within one location. No arguments.",
+            "cover. 'start': where a new game begins ({map, displayName, area} = artemple.map / Arroyo). "
+            "'areas': every location (city/town/encounter site) with its 'name', 'worldPos' {x,y} on the "
+            "world map, 'size', 'knownAtStart', 'terrain' (from worldmap.txt's tile grid, null if absent), "
+            "and 'maps' (the maps it contains — each {map (the lookup_name), on, mapFile}). 'mapFile' is "
+            "the .map filename, the JOIN KEY to map_graph: world_map.areas[].maps[].mapFile == "
+            "map_graph.nodes[].file (null when the lookup_name has no maps.txt entry, e.g. a disabled "
+            "entrance). 'distances': between every pair of areas, the straight-line 'distance' (worldmap "
+            "units) and a terrain-weighted 'travelCost' (null without the terrain grid). Use this for "
+            "'how does the player get from city A to city B' (they cross the world map); use map_graph "
+            "for travel by exit grids within one location. No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolWorldMap(r, a); } });
         t.push_back({ "world_encounters",
             "The worldmap's terrain types and random-encounter group tables, from worldmap.txt. "
-            "'terrains' (name, shortName, draw weight) and 'encounters' — each [Encounter: NAME] group "
-            "with its spawn 'entries' ({pid, ratioPercent, dead, script, items}). The shipped encounter "
-            "names are region-prefixed (ARRO_*, KLA_*, …), so they map to areas. Critter pids are raw — "
-            "resolve them with proto_info. (The geographic per-tile placement of encounters is not yet "
-            "parsed.) No arguments.",
+            "'terrains' (name, shortName, 'difficulty' — the terrain's per-step travel cost) and "
+            "'encounters' — each [Encounter: NAME] group with its spawn 'entries' ({pid, ratioPercent, "
+            "dead, script, items}). The shipped encounter names are region-prefixed (ARRO_*, KLA_*, …), "
+            "so they map to areas. Critter pids are raw — resolve them with proto_info. (Per-position "
+            "encounter placement is not parsed; terrain-at-position is in world_map.) No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolWorldEncounters(r, a); } });
         t.push_back({ "quests",

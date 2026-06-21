@@ -19,7 +19,7 @@ namespace {
     ordered_json terrainsToJson(const WorldmapTxt& world) {
         auto terrains = ordered_json::array();
         for (const auto& terrain : world.terrains) {
-            terrains.push_back({ { "name", terrain.name }, { "shortName", terrain.shortName }, { "weight", terrain.weight } });
+            terrains.push_back({ { "name", terrain.name }, { "shortName", terrain.shortName }, { "difficulty", terrain.difficulty } });
         }
         return terrains;
     }

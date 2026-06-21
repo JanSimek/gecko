@@ -861,11 +861,12 @@ then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority ord
   exit-grid layer cross-reference in both directions.
 - **`data/city.txt`** ✅ **done** — `CityTxt` vault reader + the `world_map` tool (areas, world
   positions, sizes, the maps each area contains, pairwise distances). The inter-city layer.
-- **`data/worldmap.txt`** ✅ **partly done** — `WorldmapTxt` vault reader + the `world_encounters`
-  tool cover the `[Data]` terrain types and the `[Encounter: NAME]` group tables (region-prefixed, so
-  they map to areas). **Still deferred (large):** the `[Tile NN]` sub-tile grid (per-position terrain
-  + encounter placement), which would let `world_map` distances become terrain-weighted travel cost
-  and place encounters geographically.
+- **`data/worldmap.txt`** ✅ **done** — `WorldmapTxt` vault reader + the `world_encounters` tool
+  (`[Data]` terrain types — `difficulty`, not "weight" — and `[Encounter: NAME]` group tables) **and**
+  the `[Tile NN]` sub-tile grid: `WorldmapTxt::terrainAt(x,y)` mirrors the engine's
+  `wmFindCurSubTileFromPos`, so `world_map` now reports each area's `terrain` and a terrain-weighted
+  `travelCost` between areas. **Follow-up (minor):** per-position *encounter* placement (the subtile
+  encounter chances) is still unparsed — only the terrain field is kept.
 - **`game/worldmap.msg`** *(follow-up, small)* — localized area/terrain/encounter names to enrich
   `world_map` / `world_encounters` (city.txt `area_name` and the encounter section names are the
   internal labels).
