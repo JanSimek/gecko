@@ -60,7 +60,14 @@ namespace {
         if (key == "lookup_name") {
             map.lookupName = value;
         } else if (key == "map_name") {
-            map.mapName = toLower(value); // the engine lowercases the filename
+            // maps.txt stores the bare name ("arcaves"); the engine lowercases it and appends ".map"
+            // when loading. Normalize to the loadable "<name>.map" so mapName is a real filename that
+            // matches a map path's basename (and can be handed back to load/analyze).
+            std::string name = toLower(value);
+            if (name.find('.') == std::string::npos) {
+                name += ".map";
+            }
+            map.mapName = name;
         } else if (key == "music") {
             map.music = value;
         } else if (key == "saved") {

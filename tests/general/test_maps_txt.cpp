@@ -23,7 +23,7 @@ random_start_point_0=elevation:0, tile_num:20100
 
 [Map 003]
 lookup_name=Temple
-map_name=ARTEMPLE.MAP
+map_name=artemple
 saved=Yes
 automap=Yes
 
@@ -54,7 +54,7 @@ TEST_CASE("parseMapsTxt reads map sections keyed by their [Map NNN] index", "[ma
     const MapInfo* temple = maps.find(3);
     REQUIRE(temple != nullptr);
     CHECK(temple->index == 3);
-    CHECK(temple->mapName == "artemple.map");
+    CHECK(temple->mapName == "artemple.map"); // bare "artemple" normalized to a loadable filename
     CHECK(temple->lookupName == "Temple");
     CHECK(temple->saved == true);
     CHECK(temple->automap == true);
@@ -63,6 +63,12 @@ TEST_CASE("parseMapsTxt reads map sections keyed by their [Map NNN] index", "[ma
     // An index with no section resolves to nullptr (caller falls back to the bare number).
     CHECK(maps.find(1) == nullptr);
     CHECK(maps.find(999) == nullptr);
+
+    // Reverse lookup by .map filename (used to find the analysed map's own index for map.msg).
+    REQUIRE(maps.findByName("artemple.map") != nullptr);
+    CHECK(maps.findByName("artemple.map")->index == 3);
+    CHECK(maps.findByName("desert1.map") == maps.find(0));
+    CHECK(maps.findByName("nosuch.map") == nullptr);
 }
 
 TEST_CASE("parseMapsTxt tolerates empty / section-less input", "[maps]") {

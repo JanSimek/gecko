@@ -12,7 +12,7 @@ namespace geck {
 struct MapInfo {
     int index = -1;             ///< the NNN in `[Map NNN]`
     std::string lookupName;     ///< lookup_name — the engine's internal area key
-    std::string mapName;        ///< map_name — the .map filename (the engine lowercases it)
+    std::string mapName;        ///< map_name normalized to a lowercase, loadable "<name>.map" filename
     std::string music;          ///< music track name
     bool saved = false;         ///< saved — map state persists across visits
     bool deadBodiesAge = false; ///< dead_bodies_age
@@ -30,6 +30,17 @@ struct MapsTxt {
     const MapInfo* find(int index) const {
         for (const auto& map : maps) {
             if (map.index == index) {
+                return &map;
+            }
+        }
+        return nullptr;
+    }
+
+    /// The section whose map_name matches `mapName`, or nullptr. `mapName` must be a lowercase .map
+    /// filename (as the reader stores it) — e.g. the basename of the map being analysed, lowercased.
+    const MapInfo* findByName(const std::string& mapName) const {
+        for (const auto& map : maps) {
+            if (map.mapName == mapName) {
                 return &map;
             }
         }

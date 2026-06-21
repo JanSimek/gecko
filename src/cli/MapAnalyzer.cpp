@@ -725,11 +725,30 @@ namespace {
         return MapsTxt{};
     }
 
-    // Per-map exit graph: [{hex,elevation,destMap,destMapName,destHex,destElevation,orientation}] from
-    // the exit-grid markers. destMap/destHex are signed (-1 = town map / unused, -2 = worldmap, else a
-    // map id); destMapName resolves that id to its .map filename via maps.txt (null when unknown). The
-    // map's connectivity, so an agent sees where each edge leads.
-    ordered_json exitsToJson(Map& map, const MapsTxt& mapsTxt) {
+    // A map's friendly per-elevation name from map.msg, via the engine's mapGetName formula
+    // (map.cc): map.msg[mapIndex*3 + elevation + 200]. mapIndex is the maps.txt index — an exit's
+    // destMap, or MapsTxt::findByName for the map being analysed. "" when map.msg isn't mounted or the
+    // index is out of range, so the caller reports null rather than a guess.
+    std::string mapDisplayName(resource::GameResources& resources, int mapIndex, int elevation) {
+        if (mapIndex < 0 || elevation < 0) {
+            return {};
+        }
+        try {
+            if (Msg* msg = resources.repository().load<Msg>("text/english/game/map.msg"); msg != nullptr) {
+                return msg->message(mapIndex * 3 + elevation + 200).text;
+            }
+        } catch (const std::exception& e) {
+            spdlog::debug("mapDisplayName: map.msg unavailable: {}", e.what());
+        }
+        return {};
+    }
+
+    // Per-map exit graph: [{hex,elevation,destMap,destMapName,destMapDisplayName,destHex,
+    // destElevation,orientation}] from the exit-grid markers. destMap/destHex are signed (-1 = town
+    // map / unused, -2 = worldmap, else a map id); destMapName resolves it to the .map filename via
+    // maps.txt and destMapDisplayName to the friendly map.msg name at the destination elevation (both
+    // null when unknown). The map's connectivity, so an agent sees where each edge leads.
+    ordered_json exitsToJson(Map& map, const MapsTxt& mapsTxt, resource::GameResources& resources) {
         auto array = ordered_json::array();
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
@@ -738,9 +757,11 @@ namespace {
                 }
                 const auto destMap = static_cast<int32_t>(object->exit_map);
                 const MapInfo* dest = mapsTxt.find(destMap);
+                const std::string display = mapDisplayName(resources, destMap, object->exit_elevation);
                 array.push_back({ { "hex", object->position }, { "elevation", elevation },
                     { "destMap", destMap },
                     { "destMapName", dest != nullptr ? ordered_json(dest->mapName) : ordered_json(nullptr) },
+                    { "destMapDisplayName", display.empty() ? ordered_json(nullptr) : ordered_json(display) },
                     { "destHex", static_cast<int32_t>(object->exit_position) },
                     { "destElevation", object->exit_elevation }, { "orientation", object->exit_orientation } });
             }
@@ -758,6 +779,19 @@ namespace {
         const MapsTxt& mapsTxt;
     };
 
+    // The analysed map's own friendly name (map.msg at elevation 0) — found by matching its filename
+    // to a maps.txt section. null when the map isn't in the registry or map.msg isn't mounted.
+    ordered_json selfDisplayName(const std::string& mapPath, const AnalyzeContext& ctx) {
+        std::string file = baseName(mapPath);
+        std::ranges::transform(file, file.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        const MapInfo* self = ctx.mapsTxt.findByName(file);
+        if (self == nullptr) {
+            return nullptr;
+        }
+        const std::string display = mapDisplayName(ctx.resources, self->index, 0);
+        return display.empty() ? ordered_json(nullptr) : ordered_json(display);
+    }
+
     // One map's full report object, folding its floor/object/adjacency usage into `agg` as a side
     // effect (so the aggregate built afterwards has every map's totals).
     ordered_json mapToJson(const std::string& mapPath, Map& map, const AnalyzeContext& ctx, Aggregate& agg) {
@@ -765,13 +799,14 @@ namespace {
         ordered_json entry;
         entry["name"] = baseName(mapPath);
         entry["path"] = mapPath;
+        entry["displayName"] = selfDisplayName(mapPath, ctx);
         entry["floor"] = floorsToJson(usage, ctx.names, agg);
         entry["objects"] = objectsToJson(usage, ctx.names, agg);
         entry["adjacency"] = adjacencyToJson(usage, ctx.names, agg);
         entry["clusters"] = clustersToJson(collectClusters(map), ctx.names);
         entry["critters"] = crittersToJson(map, ctx.names, ctx.ai, ctx.scriptsLst);
         entry["header"] = headerToJson(map, loadMapGam(ctx.resources, mapPath), ctx.scriptsLst, ctx.resources);
-        entry["exits"] = exitsToJson(map, ctx.mapsTxt);
+        entry["exits"] = exitsToJson(map, ctx.mapsTxt, ctx.resources);
         return entry;
     }
 
