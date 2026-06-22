@@ -37,7 +37,6 @@ namespace {
     constexpr int PREVIEW_RENDER_SIZE = 512;
     constexpr int PREVIEW_MIN_SIZE = 160;
     constexpr int CELL_PADDING_W = 24;
-    constexpr int CELL_PADDING_H = 40;
     constexpr int PATH_ROLE = Qt::UserRole + 1;
     constexpr int RENDERED_ROLE = Qt::UserRole + 2;
     constexpr int LOOKUP_NAME_ROLE = Qt::UserRole + 3; // maps.txt lookup_name, or empty if unregistered
@@ -114,7 +113,10 @@ MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources, QWidget* 
     _grid = new QListWidget(this);
     _grid->setViewMode(QListView::IconMode);
     _grid->setIconSize(QSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
-    _grid->setGridSize(QSize(THUMBNAIL_SIZE + CELL_PADDING_W, THUMBNAIL_SIZE + CELL_PADDING_H));
+    // Reserve room below the thumbnail for two caption lines (lookup name + filename) at the current
+    // font, so the filename line isn't clipped on larger fonts / high-DPI displays.
+    const int captionHeight = 2 * _grid->fontMetrics().height() + 12;
+    _grid->setGridSize(QSize(THUMBNAIL_SIZE + CELL_PADDING_W, THUMBNAIL_SIZE + captionHeight));
     _grid->setResizeMode(QListView::Adjust);
     _grid->setMovement(QListView::Static);
     _grid->setUniformItemSizes(true);
