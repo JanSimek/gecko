@@ -139,7 +139,9 @@ private:
     std::filesystem::path _gameDataDirectory;
 
     // Constants
-    static constexpr const char* SETTINGS_VERSION = "1.0";
+    // 1.1: data paths store each DAT as an explicit entry (no silent nested-mounting). fromJson
+    // migrates older "1.0" settings by expanding folders into folder + master.dat/critter.dat.
+    static constexpr const char* SETTINGS_VERSION = "1.1";
     static constexpr const char* SETTINGS_FILENAME = "settings.json";
     static constexpr const char* ORGANIZATION_NAME = "gecko";
     static constexpr const char* APPLICATION_NAME = "editor";

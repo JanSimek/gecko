@@ -10,6 +10,7 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QStackedWidget>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTableWidget>
@@ -39,7 +40,12 @@
 #include "ui/widgets/pro/ProWeaponWidget.h"
 #include "resource/GameResources.h"
 #include "util/FalloutEngineEnums.h"
+#include "util/FileIo.h"
 #include "ui/Settings.h"
+#include "ui/panels/MapInfoPanel.h"
+#include "format/map/Map.h"
+#include <QLineEdit>
+#include <QPushButton>
 
 namespace {
 
@@ -689,3 +695,127 @@ TEST_CASE("Script console setSource loads the editor and feeds Run", "[qt][scrip
     CHECK(runSource == src);
 }
 #endif
+
+// Phase A of the map-info editor work: the Map Info panel resolves the current map's friendly names
+// (maps.txt lookup_name + the per-elevation map.msg display name) read-only, reusing MapNameResolver.
+namespace {
+
+// A map loaded from `mapName`, with an in-memory MapFile. The header's 16-byte filename field is
+// upper-cased + NUL-padded like real .map files (e.g. "ARTEMPLE.MAP\0\0\0\0"), which does NOT match
+// maps.txt — so the panel must resolve by the file basename (map->filename()), not header.filename.
+std::unique_ptr<geck::Map> makeMap(const std::string& mapName, int elevation = 0) {
+    auto map = std::make_unique<geck::Map>(mapName);
+    auto mapFile = std::make_unique<geck::Map::MapFile>(geck::Map::createEmptyMapFile());
+    QString upper = QString::fromStdString(mapName).toUpper();
+    mapFile->header.filename = upper.toStdString() + std::string(4, '\0'); // mismatched on purpose
+    mapFile->header.player_default_elevation = static_cast<uint32_t>(elevation);
+    map->setMapFile(std::move(mapFile));
+    return map;
+}
+
+} // namespace
+
+TEST_CASE("MapInfoPanel shows resolved map.msg display name and maps.txt lookup name", "[qt][mapinfo]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
+    // displayName(index 0, elevation 0) reads map.msg[0*3 + 0 + 200] = 200.
+    data.writeGameMessageFile("text/english/game/map.msg", messageLine(200, QStringLiteral("Test Display")));
+    data.mount();
+
+    auto settings = std::make_shared<geck::Settings>();
+    auto map = makeMap("testmap.map");
+
+    geck::MapInfoPanel panel(data.resources(), settings);
+    panel.setMap(map.get());
+
+    auto* displayEdit = panel.findChild<QLineEdit*>("mapDisplayName");
+    auto* lookupEdit = panel.findChild<QLineEdit*>("mapLookupName");
+    REQUIRE(displayEdit != nullptr);
+    REQUIRE(lookupEdit != nullptr);
+    CHECK(displayEdit->text() == QStringLiteral("Test Display"));
+    CHECK(lookupEdit->text() == QStringLiteral("Test Town"));
+
+    // A map not listed in maps.txt resolves to a placeholder (read-only), not a crash.
+    auto unknown = makeMap("nosuch.map");
+    panel.setMap(unknown.get());
+    CHECK(lookupEdit->text() == QStringLiteral("(not in maps.txt)"));
+    CHECK(lookupEdit->isReadOnly());
+}
+
+TEST_CASE("MapInfoPanel persists edited map names to a writable Data Path and reflects them", "[qt][mapinfo]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
+    data.writeGameMessageFile("text/english/game/map.msg", messageLine(200, QStringLiteral("Test Display")));
+    data.mount();
+
+    // A writable folder, mounted after the source so its edited copy shadows the source.
+    QTemporaryDir writableDir;
+    REQUIRE(writableDir.isValid());
+    const std::filesystem::path writableRoot = writableDir.path().toStdString();
+    data.resources().files().addDataPath(writableRoot.string());
+
+    auto settings = std::make_shared<geck::Settings>();
+    settings->setDataPaths({ writableRoot }); // the writable folder IS the visible Data Path edits go to
+
+    auto map = makeMap("testmap.map");
+    geck::MapInfoPanel panel(data.resources(), settings);
+    panel.setMap(map.get());
+
+    auto* lookupEdit = panel.findChild<QLineEdit*>("mapLookupName");
+    auto* displayEdit = panel.findChild<QLineEdit*>("mapDisplayName");
+    auto* hint = panel.findChild<QLabel*>("mapNamesOverlayHint");
+    REQUIRE(lookupEdit != nullptr);
+    REQUIRE(displayEdit != nullptr);
+    REQUIRE(hint != nullptr);
+    REQUIRE(lookupEdit->text() == QStringLiteral("Test Town"));
+    CHECK(hint->isHidden()); // there is a writable Data Path -> no "add a folder" hint
+
+    // Editing a name emits mapNamesChanged — the signal the main window turns into "map modified".
+    QSignalSpy modifiedSpy(&panel, &geck::MapInfoPanel::mapNamesChanged);
+    QTest::keyClicks(lookupEdit, "Z"); // user input fires textEdited -> mapNamesChanged
+    CHECK(modifiedSpy.count() >= 1);
+
+    // Set the final values and persist — what the main window calls after writing the .map.
+    lookupEdit->setText("Renamed Town");
+    lookupEdit->setModified(true);
+    displayEdit->setText("New Display");
+    displayEdit->setModified(true);
+    panel.persistMapNames();
+
+    // Persisted: the writable Data Path carries both edits.
+    const std::filesystem::path savedMaps = writableRoot / "data" / "maps.txt";
+    const std::filesystem::path savedMsg = writableRoot / "text" / "english" / "game" / "map.msg";
+    REQUIRE(std::filesystem::exists(savedMaps));
+    REQUIRE(std::filesystem::exists(savedMsg));
+    CHECK(geck::io::readFile(savedMaps).find("lookup_name=Renamed Town") != std::string::npos);
+    CHECK(geck::io::readFile(savedMsg).find("{200}{}{New Display}") != std::string::npos);
+
+    // Reflected: after the re-mount + resolver rebuild, the panel shows both new names.
+    CHECK(lookupEdit->text() == QStringLiteral("Renamed Town"));
+    CHECK(displayEdit->text() == QStringLiteral("New Display"));
+    CHECK(hint->isHidden()); // still a writable Data Path -> still no hint
+}
+
+TEST_CASE("MapInfoPanel hints to add a writable Data Path when none is configured", "[qt][mapinfo]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
+    data.writeGameMessageFile("text/english/game/map.msg", messageLine(200, QStringLiteral("Test Display")));
+    data.mount();
+
+    auto settings = std::make_shared<geck::Settings>(); // no writable folder in the Data Paths
+
+    auto map = makeMap("testmap.map");
+    geck::MapInfoPanel panel(data.resources(), settings);
+    panel.setMap(map.get());
+
+    auto* lookupEdit = panel.findChild<QLineEdit*>("mapLookupName");
+    auto* hint = panel.findChild<QLabel*>("mapNamesOverlayHint");
+    REQUIRE(lookupEdit != nullptr);
+    REQUIRE(hint != nullptr);
+    REQUIRE(lookupEdit->text() == QStringLiteral("Test Town")); // registered -> the name fields are editable
+
+    // With no writable folder in Data Paths, the panel hints the user to add one instead of saving
+    // anywhere hidden.
+    CHECK_FALSE(hint->isHidden());
+    CHECK(hint->text().contains("writable folder"));
+}

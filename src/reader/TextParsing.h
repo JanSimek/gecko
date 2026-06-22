@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace geck::text {
@@ -49,6 +51,47 @@ inline int intOr(const std::string& s, int fallback) {
     } catch (const std::exception&) {
         return fallback;
     }
+}
+
+/// Split into per-line content with the EOL removed and a trailing '\r' stripped, so a CRLF or LF file
+/// yields the same lines. `finalNewline` is set to whether the content ended with a newline. Rejoining
+/// via joinLinesLf reproduces the input modulo CRLF->LF normalisation. Used by the round-trip document
+/// readers (maps.txt, map.msg).
+inline std::vector<std::string> splitLines(const std::string& content, bool& finalNewline) {
+    std::vector<std::string> lines;
+    std::size_t start = 0;
+    while (start < content.size()) {
+        const std::size_t nl = content.find('\n', start);
+        if (nl == std::string::npos) {
+            std::string line = content.substr(start);
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            lines.push_back(std::move(line));
+            finalNewline = false;
+            return lines;
+        }
+        std::string line = content.substr(start, nl - start);
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        lines.push_back(std::move(line));
+        start = nl + 1;
+    }
+    finalNewline = !content.empty();
+    return lines;
+}
+
+/// Join lines with '\n' (plus a trailing '\n' iff `finalNewline`) — the inverse of splitLines.
+inline std::string joinLinesLf(const std::vector<std::string>& lines, bool finalNewline) {
+    std::string out;
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        out += lines[i];
+        if (i + 1 < lines.size() || finalNewline) {
+            out += '\n';
+        }
+    }
+    return out;
 }
 
 } // namespace geck::text

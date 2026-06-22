@@ -2,11 +2,13 @@
 #include "ui/Settings.h"
 #include "Application.h"
 #include "ui/UIConstants.h"
+#include "util/GameDataPathResolver.h"
 
 #include <QApplication>
 #include <QStyle>
 #include <QStandardPaths>
 #include <QFileDialog>
+#include <QMenu>
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QTableWidgetItem>
@@ -40,9 +42,9 @@ void DataPathsWidget::setupUI() {
     _layout = new QVBoxLayout(this);
 
     _helpLabel = new QLabel(
-        "Add a Fallout 2 folder — its master.dat and critter.dat are loaded automatically. Every "
-        "source is searched together; when the same file is present in more than one, the "
-        "higher-priority source wins.\n"
+        "Add a Fallout 2 folder (its master.dat and critter.dat are added as separate entries you can "
+        "reorder or remove) or a single .dat file. Every source is searched together; when the same "
+        "file is present in more than one, the higher-priority source wins.\n"
         "The top entry has the highest priority and overrides the ones below it — use Move Up / Move "
         "Down to reorder.");
     _helpLabel->setWordWrap(true);
@@ -68,6 +70,10 @@ void DataPathsWidget::setupUI() {
 
     _addButton = new QPushButton("Add Path...");
     _addButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogOpenButton));
+    QMenu* addMenu = new QMenu(_addButton);
+    addMenu->addAction("Add Folder...", this, &DataPathsWidget::onAddFolder);
+    addMenu->addAction("Add DAT File...", this, &DataPathsWidget::onAddDat);
+    _addButton->setMenu(addMenu); // clicking pops the menu; folder vs single .dat
     _controlLayout->addWidget(_addButton);
 
     _removeButton = new QPushButton("Remove");
@@ -102,7 +108,7 @@ void DataPathsWidget::setupUI() {
 }
 
 void DataPathsWidget::setupConnections() {
-    connect(_addButton, &QPushButton::clicked, this, &DataPathsWidget::onAddPath);
+    // _addButton uses a drop-down menu (Add Folder / Add DAT File), wired in setupUI.
     connect(_removeButton, &QPushButton::clicked, this, &DataPathsWidget::onRemovePath);
     connect(_moveUpButton, &QPushButton::clicked, [this]() { moveSelectedPath(-1); });
     connect(_moveDownButton, &QPushButton::clicked, [this]() { moveSelectedPath(1); });
@@ -290,19 +296,54 @@ void DataPathsWidget::removeSelectedPath() {
     updateButtonStates();
 }
 
-void DataPathsWidget::onAddPath() {
-    QString path = QFileDialog::getExistingDirectory(this,
-        "Select Fallout 2 Data Directory",
-        QStandardPaths::writableLocation(QStandardPaths::HomeLocation));
-
-    if (!path.isEmpty()) {
-        // A newly added source takes the highest priority (top), matching what a user adding a mod expects.
-        if (addPathRow(std::filesystem::path(path.toStdString()), /*atTop=*/true)) {
-            Q_EMIT dataPathsChanged();
-            renumberPriorities();
-            validatePaths();
-            updateButtonStates();
+int DataPathsWidget::addFolderExpanded(const std::filesystem::path& folder, bool atTop) {
+    // expandDataPaths returns the folder before its DATs (legacy mount order). Inserting each atTop
+    // reverses that into the table (DATs above the folder); to get the same table layout when appending
+    // at the bottom, append in reverse. Either way the DATs keep their legacy priority over the folder.
+    auto expanded = util::expandDataPaths({ folder });
+    if (!atTop) {
+        std::reverse(expanded.begin(), expanded.end());
+    }
+    int added = 0;
+    for (const auto& entry : expanded) {
+        if (addPathRow(entry, atTop)) {
+            ++added;
         }
+    }
+    return added;
+}
+
+void DataPathsWidget::onAddFolder() {
+    const QString path = QFileDialog::getExistingDirectory(this,
+        "Select Fallout 2 Data Folder",
+        QStandardPaths::writableLocation(QStandardPaths::HomeLocation));
+    if (path.isEmpty()) {
+        return;
+    }
+
+    // A newly added source takes the highest priority (top), matching what a user adding a mod expects.
+    if (addFolderExpanded(std::filesystem::path(path.toStdString()), /*atTop=*/true) > 0) {
+        Q_EMIT dataPathsChanged();
+        renumberPriorities();
+        validatePaths();
+        updateButtonStates();
+    }
+}
+
+void DataPathsWidget::onAddDat() {
+    const QString path = QFileDialog::getOpenFileName(this,
+        "Select Fallout 2 Data File",
+        QStandardPaths::writableLocation(QStandardPaths::HomeLocation),
+        "Fallout 2 data (*.dat);;All files (*)");
+    if (path.isEmpty()) {
+        return;
+    }
+
+    if (addPathRow(std::filesystem::path(path.toStdString()), /*atTop=*/true)) {
+        Q_EMIT dataPathsChanged();
+        renumberPriorities();
+        validatePaths();
+        updateButtonStates();
     }
 }
 
@@ -326,9 +367,8 @@ void DataPathsWidget::onAutoDetect() {
     int addedPaths = 0;
     for (const auto& path : detectedPaths) {
         // Detected base-game installs are appended as lower priority; manually added mods stay on top.
-        if (addPathRow(path, /*atTop=*/false)) {
-            addedPaths++;
-        }
+        // Expand each into the folder + its master.dat/critter.dat so the DATs are mounted and listed.
+        addedPaths += addFolderExpanded(path, /*atTop=*/false);
     }
 
     if (addedPaths > 0) {

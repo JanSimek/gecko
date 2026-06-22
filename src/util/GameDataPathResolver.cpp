@@ -2,6 +2,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+
 namespace geck::util {
 
 namespace {
@@ -27,6 +29,29 @@ bool hasFallout2DataLayout(const std::filesystem::path& path) {
         || isRegularFile(path / "master.dat")
         || isRegularFile(path / "critter.dat")
         || isRegularFile(path / "patch000.dat");
+}
+
+std::vector<std::filesystem::path> expandDataPaths(const std::vector<std::filesystem::path>& dataPaths) {
+    std::vector<std::filesystem::path> out;
+    const auto already = [&out](const std::filesystem::path& p) {
+        return std::find(out.begin(), out.end(), p) != out.end();
+    };
+    for (const std::filesystem::path& path : dataPaths) {
+        if (!already(path)) {
+            out.push_back(path);
+        }
+        if (!isDirectory(path)) {
+            continue; // a .dat (or anything not a directory) stands alone
+        }
+        // Directory before its DATs preserves the legacy nested-mount order (DATs shadow loose files).
+        for (const char* dat : { "master.dat", "critter.dat" }) {
+            const std::filesystem::path datPath = path / dat;
+            if (isRegularFile(datPath) && !already(datPath)) {
+                out.push_back(datPath);
+            }
+        }
+    }
+    return out;
 }
 
 std::optional<std::filesystem::path> resolveGameDataRoot(const std::filesystem::path& path) {

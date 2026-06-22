@@ -6,7 +6,8 @@
 
 namespace geck {
 
-DataPathLoader::DataPathLoader(std::shared_ptr<resource::GameResources> resources, const std::vector<std::filesystem::path>& dataPaths)
+DataPathLoader::DataPathLoader(std::shared_ptr<resource::GameResources> resources,
+    const std::vector<std::filesystem::path>& dataPaths)
     : _resources(std::move(resources))
     , _dataPaths(dataPaths) {
 }

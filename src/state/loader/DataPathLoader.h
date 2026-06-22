@@ -3,7 +3,6 @@
 #include "Loader.h"
 #include <filesystem>
 #include <vector>
-#include <functional>
 
 namespace geck {
 
@@ -19,7 +18,8 @@ namespace resource {
  */
 class DataPathLoader : public Loader {
 public:
-    explicit DataPathLoader(std::shared_ptr<resource::GameResources> resources, const std::vector<std::filesystem::path>& dataPaths);
+    explicit DataPathLoader(std::shared_ptr<resource::GameResources> resources,
+        const std::vector<std::filesystem::path>& dataPaths);
     ~DataPathLoader() override;
 
     void init() override;

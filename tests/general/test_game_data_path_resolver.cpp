@@ -163,6 +163,51 @@ TEST_CASE("pathsEquivalent returns false for unrelated paths", "[paths]") {
 }
 
 // =============================================================================
+// expandDataPaths
+// =============================================================================
+
+TEST_CASE("expandDataPaths makes a folder's DATs explicit, ordered entries", "[paths]") {
+    TempDir tmp;
+    std::ofstream(tmp.root / "master.dat") << "x";
+    std::ofstream(tmp.root / "critter.dat") << "x";
+
+    const auto out = geck::util::expandDataPaths({ tmp.root });
+    REQUIRE(out.size() == 3);
+    CHECK(out[0] == tmp.root); // folder before its DATs preserves the legacy mount order
+    CHECK(out[1] == tmp.root / "master.dat");
+    CHECK(out[2] == tmp.root / "critter.dat");
+}
+
+TEST_CASE("expandDataPaths passes a .dat entry through unchanged", "[paths]") {
+    TempDir tmp;
+    std::ofstream(tmp.root / "master.dat") << "x";
+    const auto datEntry = tmp.root / "master.dat";
+
+    const auto out = geck::util::expandDataPaths({ datEntry });
+    REQUIRE(out.size() == 1);
+    CHECK(out[0] == datEntry);
+}
+
+TEST_CASE("expandDataPaths leaves a DAT-less folder alone", "[paths]") {
+    TempDir tmp;
+    const auto out = geck::util::expandDataPaths({ tmp.root });
+    REQUIRE(out.size() == 1);
+    CHECK(out[0] == tmp.root);
+}
+
+TEST_CASE("expandDataPaths does not duplicate an already-listed DAT", "[paths]") {
+    TempDir tmp;
+    std::ofstream(tmp.root / "master.dat") << "x";
+    std::ofstream(tmp.root / "critter.dat") << "x";
+
+    const auto out = geck::util::expandDataPaths({ tmp.root, tmp.root / "master.dat" });
+    REQUIRE(out.size() == 3);
+    CHECK(out[0] == tmp.root);
+    CHECK(out[1] == tmp.root / "master.dat");
+    CHECK(out[2] == tmp.root / "critter.dat");
+}
+
+// =============================================================================
 // macOS bundle tests
 // =============================================================================
 

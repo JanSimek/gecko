@@ -1,6 +1,6 @@
 #pragma once
 
-#include "format/maps/MapsTxt.h"
+#include "format/maps/MapsTxtDocument.h"
 
 #include <string>
 
@@ -9,7 +9,7 @@ namespace geck::resource {
 class GameResources;
 
 /// Resolves Fallout 2 map identifiers to names, from the mounted game data:
-///  - the **.map filename** for a map index, via the vault `MapsTxt` reader (`data/maps.txt`);
+///  - the **.map filename** for a map index, via the `data/maps.txt` document;
 ///  - the **friendly display name** for `(index, elevation)`, via the engine's mapGetName formula
 ///    `map.msg[index*3 + elevation + 200]` (fallout2-ce map.cc).
 ///
@@ -19,8 +19,6 @@ class GameResources;
 class MapNameResolver {
 public:
     explicit MapNameResolver(GameResources& resources);
-
-    const MapsTxt& mapsTxt() const { return _mapsTxt; }
 
     /// The .map filename for a maps.txt index, or "" when the index is unknown or negative
     /// (e.g. the -1 town-map / -2 worldmap exit sentinels).
@@ -43,7 +41,7 @@ public:
 
 private:
     GameResources& _resources;
-    MapsTxt _mapsTxt;
+    MapsTxtDocument _doc;
 };
 
 } // namespace geck::resource

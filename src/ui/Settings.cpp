@@ -163,6 +163,14 @@ void Settings::fromJson(const QJsonObject& json) {
         setDataPaths(jsonArrayToPathVector(json["dataPaths"].toArray()));
     }
 
+    // One-time migration: settings written before DATs were explicit stored only folders and relied on
+    // silent nested-mounting of master.dat/critter.dat. Expand those folders so the DATs become listed,
+    // manageable entries (matching the order they were mounted in).
+    if (_version != SETTINGS_VERSION) {
+        setDataPaths(util::expandDataPaths(_dataPaths));
+        _version = SETTINGS_VERSION;
+    }
+
     if (json.contains("ui")) {
         QJsonObject ui = json["ui"].toObject();
 

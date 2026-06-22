@@ -271,6 +271,7 @@ add_library(vault STATIC
 
     # MSG
     format/msg/Msg.h
+    format/msg/MsgDocument.h
     format/msg/Msg.cpp
 
     # LST
@@ -281,7 +282,8 @@ add_library(vault STATIC
     format/ai/AiPacket.h
 
     # Maps (maps.txt — the engine's index->map registry)
-    format/maps/MapsTxt.h
+    format/maps/MapsTxtDocument.h
+    format/maps/MapsTxtDocument.cpp
 
     # City (city.txt — worldmap areas / locations)
     format/city/CityTxt.h
@@ -344,6 +346,8 @@ add_library(vault STATIC
 
     reader/msg/MsgReader.h
     reader/msg/MsgReader.cpp
+    reader/msg/MsgDocumentReader.h
+    reader/msg/MsgDocumentReader.cpp
 
     reader/lst/LstReader.h
     reader/lst/LstReader.cpp
@@ -351,8 +355,16 @@ add_library(vault STATIC
     reader/ai/AiTxtReader.h
     reader/ai/AiTxtReader.cpp
 
-    reader/maps/MapsTxtReader.h
-    reader/maps/MapsTxtReader.cpp
+    reader/maps/MapsTxtDocumentReader.h
+    reader/maps/MapsTxtDocumentReader.cpp
+
+    writer/maps/MapsTxtSerializer.h
+    writer/maps/MapsTxtSerializer.cpp
+    writer/maps/MapsTxtValidator.h
+    writer/maps/MapsTxtValidator.cpp
+
+    writer/msg/MsgSerializer.h
+    writer/msg/MsgSerializer.cpp
 
     reader/city/CityTxtReader.h
     reader/city/CityTxtReader.cpp
@@ -424,6 +436,10 @@ add_library(gecko_resource STATIC
 
     resource/MapNameResolver.h
     resource/MapNameResolver.cpp
+    resource/WritableDataRoot.h
+    resource/WritableDataRoot.cpp
+    resource/MapNameEditor.h
+    resource/MapNameEditor.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 
@@ -448,6 +464,7 @@ add_library(gecko_core STATIC
     util/ProHelper.h
     util/ProHelper.cpp
     util/Coordinates.h
+    util/FileIo.h
     util/Coordinates.cpp
     util/SpatialIndex.h
     util/SpatialIndex.cpp

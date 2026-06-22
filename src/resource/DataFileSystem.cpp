@@ -3,7 +3,6 @@
 #include "util/GameDataPathResolver.h"
 #include "reader/ReaderExceptions.h"
 #include "resource/PathUtils.h"
-#include "resource/ResourcePaths.h"
 #include "vfs/Dat2FileSystem.hpp"
 #include "vfs/VfsppNativeFileSystem.h"
 
@@ -56,21 +55,6 @@ namespace {
 
 } // namespace
 
-void DataFileSystem::mountNestedArchivesLocked(const std::filesystem::path& directory) {
-    // A game directory typically ships master.dat and critter.dat alongside it; mount
-    // whichever are present so their contents are reachable through the same VFS.
-    std::error_code ec;
-    const std::filesystem::path masterDat = directory / ResourcePaths::Dat::MASTER;
-    if (std::filesystem::exists(masterDat, ec) && std::filesystem::is_regular_file(masterDat, ec)) {
-        addDataPathLocked(masterDat);
-    }
-
-    const std::filesystem::path critterDat = directory / ResourcePaths::Dat::CRITTER;
-    if (std::filesystem::exists(critterDat, ec) && std::filesystem::is_regular_file(critterDat, ec)) {
-        addDataPathLocked(critterDat);
-    }
-}
-
 void DataFileSystem::addDataPathLocked(const std::filesystem::path& path) {
     const auto mountRoot = resolveMountRoot(path);
     if (!mountRoot) {
@@ -83,8 +67,9 @@ void DataFileSystem::addDataPathLocked(const std::filesystem::path& path) {
     std::error_code ec;
     vfspp::IFileSystemPtr fileSystem;
     if (std::filesystem::is_directory(*mountRoot, ec)) {
+        // Mount only this directory's loose files; its master.dat/critter.dat are explicit data-path
+        // entries of their own (see util::expandDataPaths) rather than silently nested-mounted here.
         fileSystem = std::make_shared<vfspp::NativeFileSystem>("/", mountRoot->string());
-        mountNestedArchivesLocked(*mountRoot);
     } else if (mountRoot->extension() == ".dat") {
         fileSystem = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem("/", mountRoot->string()));
     } else {

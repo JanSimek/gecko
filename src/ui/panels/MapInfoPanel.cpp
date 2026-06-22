@@ -9,13 +9,17 @@
 #include <QSize>
 #include <spdlog/spdlog.h>
 #include <filesystem>
+#include <optional>
 
 #include "format/map/Map.h"
-#include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
 #include "format/gam/Gam.h"
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
+#include "resource/MapNameResolver.h"
+#include "resource/MapNameEditor.h"
+#include "resource/WritableDataRoot.h"
+#include "ui/Settings.h"
 #include "reader/ReaderFactory.h"
 #include "resource/ResourcePaths.h"
 #include "util/Coordinates.h"
@@ -24,7 +28,7 @@
 
 namespace geck {
 
-MapInfoPanel::MapInfoPanel(resource::GameResources& resources, QWidget* parent)
+MapInfoPanel::MapInfoPanel(resource::GameResources& resources, std::shared_ptr<Settings> settings, QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
     , _scrollArea(nullptr)
@@ -32,6 +36,9 @@ MapInfoPanel::MapInfoPanel(resource::GameResources& resources, QWidget* parent)
     , _contentLayout(nullptr)
     , _mapHeaderGroup(nullptr)
     , _filenameEdit(nullptr)
+    , _displayNameEdit(nullptr)
+    , _lookupNameEdit(nullptr)
+    , _overlayHintLabel(nullptr)
     , _elevation1Check(nullptr)
     , _elevation2Check(nullptr)
     , _elevation3Check(nullptr)
@@ -57,6 +64,7 @@ MapInfoPanel::MapInfoPanel(resource::GameResources& resources, QWidget* parent)
     , _copyFromCombo(nullptr)
     , _copyToCombo(nullptr)
     , _resources(resources)
+    , _settings(std::move(settings))
     , _map(nullptr)
     , _mapScriptName("no script") {
 
@@ -65,6 +73,8 @@ MapInfoPanel::MapInfoPanel(resource::GameResources& resources, QWidget* parent)
 
     setupUI();
 }
+
+MapInfoPanel::~MapInfoPanel() = default;
 
 QSize MapInfoPanel::sizeHint() const {
     return QSize(ui::constants::sizes::PANEL_PREFERRED_WIDTH, ui::constants::sizes::PANEL_PREFERRED_HEIGHT);
@@ -96,6 +106,29 @@ void MapInfoPanel::setupUI() {
 
     _filenameEdit = new QLineEdit();
     headerLayout->addRow("Filename:", _filenameEdit);
+
+    // Editable friendly names from maps.txt / map.msg (blank + read-only when game data is unmounted or
+    // the map isn't registered). Editing a name marks the map modified; the value is written to a
+    // writable copy when the map is saved (see persistMapNames).
+    _displayNameEdit = new QLineEdit();
+    _displayNameEdit->setObjectName("mapDisplayName");
+    headerLayout->addRow("Map name:", _displayNameEdit);
+
+    _lookupNameEdit = new QLineEdit();
+    _lookupNameEdit->setObjectName("mapLookupName");
+    headerLayout->addRow("Lookup name:", _lookupNameEdit);
+
+    connect(_displayNameEdit, &QLineEdit::textEdited, this, [this]() { Q_EMIT mapNamesChanged(); });
+    connect(_lookupNameEdit, &QLineEdit::textEdited, this, [this]() { Q_EMIT mapNamesChanged(); });
+
+    // Appears once maps.txt/map.msg have been extracted to the writable copy; tells the user where the
+    // edited files live (the originals in the game archive are read-only).
+    _overlayHintLabel = new QLabel();
+    _overlayHintLabel->setObjectName("mapNamesOverlayHint");
+    _overlayHintLabel->setWordWrap(true);
+    _overlayHintLabel->setVisible(false);
+    _overlayHintLabel->setStyleSheet(QString("color: %1; font-size: 11px;").arg(ui::theme::colors::TEXT_SECONDARY));
+    headerLayout->addRow("", _overlayHintLabel);
 
     QWidget* elevationsWidget = new QWidget();
     QVBoxLayout* elevationsLayout = new QVBoxLayout(elevationsWidget);
@@ -314,6 +347,8 @@ void MapInfoPanel::updateMapInfo() {
         loadScriptVars();
         _mapScriptEdit->setText(QString::fromStdString(_mapScriptName));
 
+        updateMapNameDisplay();
+
         _globalVarsTree->clear();
 
         if (_mvars.empty() && mapInfo.header.num_global_vars > 0) {
@@ -359,6 +394,61 @@ void MapInfoPanel::updateMapInfo() {
     } catch (const std::exception& e) {
         spdlog::error("Error updating map info: {}", e.what());
         clearMapInfo();
+    }
+}
+
+void MapInfoPanel::updateMapNameDisplay() {
+    if (!_displayNameEdit || !_lookupNameEdit) {
+        return;
+    }
+    if (!_map) {
+        _displayNameEdit->clear();
+        _lookupNameEdit->clear();
+        updateOverlayHint();
+        return;
+    }
+
+    // Built lazily: maps.txt / map.msg are read once, and by the time a map is open the game data is
+    // mounted. Resolution degrades to blank when the data is missing (resolver returns "").
+    if (!_mapNames) {
+        _mapNames = std::make_unique<resource::MapNameResolver>(_resources);
+    }
+
+    const auto& header = _map->getMapFile().header;
+    // Resolve by the actual file basename, NOT header.filename: the .map's 16-byte filename field is
+    // upper-cased and NUL-padded (e.g. "ARTEMPLE.MAP\0\0\0\0"), which never matches maps.txt. _map's
+    // path filename ("artemple.map") is what maps.txt uses (and what the CLI/MCP resolve by).
+    const std::string file = _map->filename();
+    const int index = _mapNames->indexOf(file);
+    const int elevation = static_cast<int>(header.player_default_elevation);
+    const bool registered = index >= 0; // present in maps.txt -> names are editable + persistable
+
+    const std::string display = registered ? _mapNames->displayName(index, elevation) : std::string();
+    const std::string lookup = _mapNames->lookupNameOf(file);
+
+    // setText resets QLineEdit::isModified() to false, so populating is not treated as a user edit.
+    _displayNameEdit->setText(QString::fromStdString(display));
+    _lookupNameEdit->setText(registered ? QString::fromStdString(lookup) : QStringLiteral("(not in maps.txt)"));
+    _displayNameEdit->setReadOnly(!registered);
+    _lookupNameEdit->setReadOnly(!registered);
+    updateOverlayHint();
+}
+
+void MapInfoPanel::updateOverlayHint() {
+    if (!_overlayHintLabel || !_displayNameEdit) {
+        return;
+    }
+    // The names are editable only for a registered map. When they are, but there is no writable folder
+    // in the Data Paths to save them to (every path is a read-only archive), hint the user to add one —
+    // the editor never creates or mounts a hidden writable location.
+    const bool editable = !_displayNameEdit->isReadOnly();
+    const bool hasWritablePath = _settings && resource::findWritableDataPath(_settings->getDataPaths()).has_value();
+    const bool needsWritablePath = editable && !hasWritablePath;
+    _overlayHintLabel->setVisible(needsWritablePath);
+    if (needsWritablePath) {
+        _overlayHintLabel->setText(QStringLiteral(
+            "To save Map name / Lookup name edits, add a writable folder to your Data Paths "
+            "(all current data paths are read-only archives)."));
     }
 }
 
@@ -439,6 +529,14 @@ void MapInfoPanel::clearMapInfo() {
     _mapScriptEdit->clear();
     _mapScriptEdit->setPlaceholderText("No script");
 
+    if (_displayNameEdit) {
+        _displayNameEdit->clear();
+    }
+    if (_lookupNameEdit) {
+        _lookupNameEdit->clear();
+    }
+    updateOverlayHint();
+
     _globalVarsTree->clear();
 
     _mvars.clear();
@@ -471,6 +569,7 @@ void MapInfoPanel::onFieldChanged() {
     if (sender == _playerPositionSpin) {
         Q_EMIT playerPositionChanged(_playerPositionSpin->value());
     } else if (sender == _playerElevationSpin) {
+        updateMapNameDisplay(); // the map.msg display name is per-elevation
         Q_EMIT playerElevationChanged(_playerElevationSpin->value());
     } else if (sender == _mapScriptIdSpin) {
         Q_EMIT mapScriptIdChanged(_mapScriptIdSpin->value());
@@ -879,6 +978,67 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
     Q_EMIT addSpatialScriptRequested(dialog.programIndex(), dialog.tile(),
         dialog.elevation(), dialog.radius());
     updateMapScriptsDisplay();
+}
+
+void MapInfoPanel::persistMapNames() {
+    if (!_map || !_mapNames || !_settings) {
+        return; // (_displayNameEdit/_lookupNameEdit are created in setupUI and always present)
+    }
+
+    // Persist only the field the user actually edited (QLineEdit tracks isModified since setText). This
+    // is the common fast path on a map save: nothing edited -> nothing to do.
+    std::optional<std::string> lookup;
+    std::optional<std::string> display;
+    if (_lookupNameEdit->isModified()) {
+        lookup = _lookupNameEdit->text().toStdString();
+    }
+    if (_displayNameEdit->isModified()) {
+        display = _displayNameEdit->text().toStdString();
+    }
+    if (!lookup.has_value() && !display.has_value()) {
+        return; // no name edits to save
+    }
+
+    const int index = _mapNames->indexOf(_map->filename()); // by basename, not the NUL-padded header field
+    if (index < 0) {
+        return; // not in maps.txt -> the fields are read-only, so there is nothing to persist
+    }
+
+    // Write into a writable folder from the user's Data Paths (no hidden location). If there's none, the
+    // edit can't be saved -> tell the user to add one. updateOverlayHint() already shows the same hint.
+    const auto target = resource::findWritableDataPath(_settings->getDataPaths());
+    if (!target.has_value()) {
+        QMessageBox::warning(this, "Save Map Names",
+            "These map name edits can't be saved: add a writable folder to your Data Paths "
+            "(all current data paths are read-only archives).");
+        return;
+    }
+    const int elevation = static_cast<int>(_map->getMapFile().header.player_default_elevation);
+    writeNameEdits(*target, index, elevation, lookup, display);
+}
+
+void MapInfoPanel::writeNameEdits(const std::filesystem::path& writableRoot, int index, int elevation,
+    const std::optional<std::string>& lookup, const std::optional<std::string>& display) {
+    try {
+        // The whole load -> set -> validate -> serialize -> write cycle (with the hard-block) lives in
+        // resource::saveMapNames, so it is unit-testable without this widget.
+        const auto result = resource::saveMapNames(_resources.files(), writableRoot, index, elevation, lookup, display);
+        if (!result.ok) {
+            QMessageBox::warning(this, "Save Map Names", QString::fromStdString(result.error));
+            return;
+        }
+
+        // Reflect the edit this session: re-mount the target so the VFS's file listing includes the
+        // freshly-written file (vfspp caches the listing at mount time). Re-mounted last, the copy
+        // shadows the archives. Then drop the cached map.msg and rebuild the resolver.
+        _resources.files().addDataPath(writableRoot);
+        _resources.repository().clear();
+        _mapNames = std::make_unique<resource::MapNameResolver>(_resources);
+        updateMapNameDisplay();
+        spdlog::info("MapInfoPanel: saved map names to {}", writableRoot.string());
+    } catch (const std::exception& e) {
+        QMessageBox::warning(this, "Save Map Names", QString("Failed to save map names:\n%1").arg(e.what()));
+    }
 }
 
 } // namespace geck

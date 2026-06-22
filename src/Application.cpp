@@ -11,6 +11,7 @@
 #include "version.h"
 #include "resource/GameResources.h"
 #include "state/loader/MapLoader.h"
+#include "util/GameDataPathResolver.h"
 #include "ui/Settings.h"
 #include "ui/QtDialogs.h"
 #include "ui/core/MainWindow.h"
@@ -112,8 +113,11 @@ std::string Application::processCommandLineArgs() {
         QString dataPath = parser.value(dataOption);
         spdlog::info("No data paths in settings, will use command line default: {}", dataPath.toStdString());
 
-        // Add to settings but don't save or load yet
-        settings.addDataPath(dataPath.toStdString());
+        // Expand a folder into the folder + its master.dat/critter.dat so the DATs are explicit,
+        // mounted entries (DataFileSystem no longer nested-mounts them). Add to settings, don't save/load yet.
+        for (const auto& entry : util::expandDataPaths({ std::filesystem::path(dataPath.toStdString()) })) {
+            settings.addDataPath(entry);
+        }
     }
 
     // Data paths will be loaded after settings dialog in checkFirstRun()
