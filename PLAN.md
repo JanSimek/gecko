@@ -57,6 +57,12 @@ live with their library (`src/resource/`, `src/ui/`).
     the menu/toolbar `QAction`s *and* the `InputHandler` dispatch from that table instead of
     literals, so a rebind takes effect everywhere and the bindings stay discoverable. Engine-fidelity
     note: this is editor UX only — it changes no map/format data.
+12. **Toolbar is a fixed button set — not user-customizable.** The primary toolbar (New, Browse Maps,
+    Save, Play) is a hardcoded `primaryToolbarActions` array in `MainWindow::setupToolBar()`. Most
+    editors let users choose which buttons appear and reorder them. **Add a customizable toolbar:**
+    drive it from the same command/action table proposed in #11 (stable action id → icon/label/handler),
+    with a context-menu / Preferences UI to add, remove, and reorder buttons, persisted via `Settings`.
+    Editor UX only; no map/format change.
 
 ### Exit-grid shapes (rectangle-only) — limitation #2 in detail
 

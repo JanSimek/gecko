@@ -3,22 +3,27 @@
 #include <algorithm>
 #include <vector>
 
+#include <QApplication>
 #include <QColor>
 #include <QDialogButtonBox>
 #include <QEvent>
 #include <QFileInfo>
+#include <QFontMetrics>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPainter>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QShowEvent>
 #include <QSplitter>
+#include <QStyledItemDelegate>
 #include <QTimer>
 #include <QVBoxLayout>
 
 #include "editor/HexagonGrid.h"
 #include "resource/GameResources.h"
+#include "resource/MapNameResolver.h"
 #include "ui/rendering/MapThumbnail.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -35,6 +40,7 @@ namespace {
     constexpr int CELL_PADDING_H = 40;
     constexpr int PATH_ROLE = Qt::UserRole + 1;
     constexpr int RENDERED_ROLE = Qt::UserRole + 2;
+    constexpr int LOOKUP_NAME_ROLE = Qt::UserRole + 3; // maps.txt lookup_name, or empty if unregistered
 
     // A neutral fill shown in a cell until its real thumbnail has been rendered, so the
     // grid keeps a uniform layout instead of collapsing empty cells.
@@ -43,6 +49,55 @@ namespace {
         pm.fill(QColor(ui::theme::colors::SURFACE_DARK));
         return pm;
     }
+
+    // Draws each cell as the thumbnail with a two-line caption: the maps.txt lookup name in bold on top,
+    // the .map filename below in a muted colour. When a map has no maps.txt entry, the filename is the
+    // only (bold) line.
+    class MapItemDelegate : public QStyledItemDelegate {
+    public:
+        using QStyledItemDelegate::QStyledItemDelegate;
+
+        void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
+            QStyleOptionViewItem opt = option;
+            initStyleOption(&opt, index);
+
+            // Let the style paint the background/selection and the thumbnail; we draw the caption
+            // ourselves so the map name can be bold and the filename muted.
+            const QString filename = opt.text;
+            opt.text.clear();
+            QStyle* style = opt.widget != nullptr ? opt.widget->style() : QApplication::style();
+            style->drawControl(QStyle::CE_ItemViewItem, &opt, painter, opt.widget);
+
+            const QString name = index.data(LOOKUP_NAME_ROLE).toString();
+            const bool selected = (opt.state & QStyle::State_Selected) != 0;
+
+            QRect textRect = option.rect;
+            textRect.setTop(textRect.top() + opt.decorationSize.height() + 4);
+            textRect.adjust(3, 0, -3, -3);
+
+            painter->save();
+            QFont topFont = opt.font;
+            topFont.setBold(true);
+            const QFontMetrics topMetrics(topFont);
+            painter->setFont(topFont);
+            painter->setPen(opt.palette.color(selected ? QPalette::HighlightedText : QPalette::Text));
+            const QString topText = name.isEmpty() ? filename : name; // no entry -> filename is the title
+            const QRect topRect(textRect.left(), textRect.top(), textRect.width(), topMetrics.height());
+            painter->drawText(topRect, Qt::AlignHCenter | Qt::AlignTop,
+                topMetrics.elidedText(topText, Qt::ElideRight, textRect.width()));
+
+            if (!name.isEmpty()) { // second line: the filename, muted
+                const QFontMetrics subMetrics(opt.font);
+                painter->setFont(opt.font);
+                painter->setPen(selected ? opt.palette.color(QPalette::HighlightedText)
+                                         : QColor(ui::theme::colors::TEXT_MUTED));
+                const QRect subRect(textRect.left(), topRect.bottom() + 1, textRect.width(), subMetrics.height());
+                painter->drawText(subRect, Qt::AlignHCenter | Qt::AlignTop,
+                    subMetrics.elidedText(filename, Qt::ElideRight, textRect.width()));
+            }
+            painter->restore();
+        }
+    };
 } // namespace
 
 MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources, QWidget* parent)
@@ -64,6 +119,7 @@ MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources, QWidget* 
     _grid->setMovement(QListView::Static);
     _grid->setUniformItemSizes(true);
     _grid->setWordWrap(true);
+    _grid->setItemDelegate(new MapItemDelegate(_grid)); // bold map name above the filename
 
     _previewImage = new QLabel(this);
     _previewImage->setAlignment(Qt::AlignCenter);
@@ -128,11 +184,21 @@ void MapBrowserDialog::populate() {
         [](const QString& a, const QString& b) { return a.compare(b, Qt::CaseInsensitive) < 0; });
 
     const QPixmap placeholder = placeholderThumbnail();
+    resource::MapNameResolver resolver(_resources); // resolve the maps.txt lookup names once
     for (const QString& path : mapPaths) {
         auto* item = new QListWidgetItem(QIcon(placeholder), QFileInfo(path).completeBaseName(), _grid);
         item->setData(PATH_ROLE, path);
         item->setData(RENDERED_ROLE, false);
-        item->setToolTip(path);
+
+        // Caption: the maps.txt lookup_name (the registry's area key), when the map is registered.
+        const QString lookupName = QString::fromStdString(
+            resolver.lookupNameOf(QFileInfo(path).fileName().toStdString()));
+        if (!lookupName.isEmpty()) {
+            item->setData(LOOKUP_NAME_ROLE, lookupName);
+            item->setToolTip(lookupName + "\n" + path); // lookup name + path on hover
+        } else {
+            item->setToolTip(path);
+        }
         item->setTextAlignment(Qt::AlignHCenter | Qt::AlignTop);
     }
 }
@@ -173,6 +239,7 @@ void MapBrowserDialog::onFilterChanged(const QString& text) {
         QListWidgetItem* item = _grid->item(i);
         const bool match = needle.isEmpty()
             || item->text().contains(needle, Qt::CaseInsensitive)
+            || item->data(LOOKUP_NAME_ROLE).toString().contains(needle, Qt::CaseInsensitive)
             || item->data(PATH_ROLE).toString().contains(needle, Qt::CaseInsensitive);
         item->setHidden(!match);
     }
@@ -193,7 +260,11 @@ void MapBrowserDialog::updatePreview(const QListWidgetItem* item) {
     }
 
     const QString path = item->data(PATH_ROLE).toString();
-    _previewName->setText(path);
+    const QString lookupName = item->data(LOOKUP_NAME_ROLE).toString();
+    // Lookup name in bold over the path, mirroring the grid caption.
+    _previewName->setText(lookupName.isEmpty()
+            ? path
+            : QString("<b>%1</b><br>%2").arg(lookupName.toHtmlEscaped(), path.toHtmlEscaped()));
     _previewImage->setText("Rendering…");
     // Defer the heavy render so selection stays snappy; bail if the selection has since
     // moved on (the cache makes a later re-selection of the same map instant).

@@ -648,7 +648,7 @@ void MainWindow::setupToolBar() {
 
     const std::array<ToolbarActionSpec, 4> primaryToolbarActions = { {
         { ":/icons/actions/new.svg", "New", "Create a new map", {}, [this]() { newMapRequested(); } },
-        { ":/icons/actions/open.svg", "Open", "Open an existing map", {}, [this]() { openMapRequested(); } },
+        { ":/icons/actions/open.svg", "Browse Maps", "Browse available maps as thumbnails", {}, [this]() { showMapBrowserDialog(); } },
         { ":/icons/actions/save.svg", "Save", "Save the current map", {}, [this]() { saveMapRequested(); } },
         { ":/icons/actions/play.svg", "Play", "Save and play the current map in Fallout 2", QKeySequence("F5"), [this]() { onPlayGame(); } },
     } };
