@@ -448,11 +448,18 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
 }
 #endif
 
+bool EditorWidget::canSaveInPlace(const std::filesystem::path& mapPath) {
+    // Save-in-place is only valid when the map already lives at a real, existing on-disk file (opened
+    // from disk, or saved here before). A map opened from the game data carries a VFS path such as
+    // "/maps/arbridge.map" — which looks absolute but is not a writable filesystem location (writing it
+    // would try to create "/maps" at the filesystem root) — and a brand-new map has no file yet. Both of
+    // those must go to "Save As" instead, which defaults into the writable data path.
+    std::error_code ec;
+    return mapPath.is_absolute() && std::filesystem::exists(mapPath, ec);
+}
+
 bool EditorWidget::saveMap(const std::filesystem::path& defaultDir) {
-    // "Save": once the map points at a real file (saved before, or opened from one), write straight to
-    // it without re-prompting. A map loaded from the game data carries a VFS-relative path, and a new
-    // map has no real target yet, so those fall through to "Save As".
-    if (_session.map() && _session.map()->path().is_absolute()) {
+    if (_session.map() && canSaveInPlace(_session.map()->path())) {
         return writeMapTo(_session.map()->path().string());
     }
     return saveMapAs(defaultDir);
