@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
+#include <cstdlib>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -44,13 +45,12 @@ inline std::vector<std::string> splitCsv(const std::string& s) {
     return out;
 }
 
-/// std::stoi with a fallback; stops at the first non-digit, so "35%" -> 35 and "8{Wielded}" -> 8.
+/// Parse a numeric field the way the engine does — std::atoi: take the leading digits, yield 0 for a
+/// non-numeric value, never error (so "35%" -> 35 and "8{Wielded}" -> 8). An empty (absent) field keeps
+/// `fallback`, which callers set to the field's default — matching the engine's struct default for an
+/// absent field. (A present-but-non-numeric value therefore yields 0, like the engine, not the default.)
 inline int intOr(const std::string& s, int fallback) {
-    try {
-        return std::stoi(s);
-    } catch (const std::exception&) {
-        return fallback;
-    }
+    return s.empty() ? fallback : std::atoi(s.c_str());
 }
 
 /// Split into per-line content with the EOL removed and a trailing '\r' stripped, so a CRLF or LF file
