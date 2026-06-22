@@ -15,7 +15,7 @@ inline void styleActionButton(QPushButton* button) {
         return;
     }
     button->setIconSize(QSize(constants::sizes::ICON_SIZE_SMALL, constants::sizes::ICON_SIZE_SMALL));
-    button->setMinimumHeight(constants::sizes::NAV_BUTTON);
+    button->setMinimumHeight(constants::sizes::ACTION_BUTTON_HEIGHT);
 }
 
 } // namespace geck::ui

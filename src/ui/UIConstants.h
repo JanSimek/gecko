@@ -34,8 +34,9 @@ namespace ui {
             // Button sizes
             constexpr int ICON_BUTTON = 24;
             constexpr int ICON_BUTTON_SMALL = 20;
-            constexpr int ICON_BUTTON_HEIGHT = 22; // Height for small icon buttons
-            constexpr int NAV_BUTTON = 30;         // Navigation/pagination buttons
+            constexpr int ICON_BUTTON_HEIGHT = 22;    // Height for small icon buttons
+            constexpr int NAV_BUTTON = 30;            // Navigation/pagination buttons
+            constexpr int ACTION_BUTTON_HEIGHT = 30;  // Min height for text+icon action buttons (no icon clipping)
 
             // Icon sizes
             constexpr int ICON_SIZE_SMALL = 18; // Compact button icons
