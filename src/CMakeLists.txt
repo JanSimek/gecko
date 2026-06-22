@@ -76,6 +76,8 @@ set(GECK_APP_SOURCES
     # Qt6 UI Dialogs
     ui/dialogs/FrmSelectorDialog.h
     ui/dialogs/FrmSelectorDialog.cpp
+    ui/dialogs/ItemSelectorDialog.h
+    ui/dialogs/ItemSelectorDialog.cpp
     ui/dialogs/SettingsDialog.h
     ui/dialogs/SettingsDialog.cpp
     ui/dialogs/ProEditorDialog.h

@@ -165,6 +165,7 @@ ItemDetails describeItem(resource::GameResources& resources, uint32_t pid) {
     try {
         Pro* pro = loadPro(resources, pid);
         if (!pro) {
+            details.resolved = false;
             return details;
         }
 
@@ -172,6 +173,7 @@ ItemDetails describeItem(resource::GameResources& resources, uint32_t pid) {
         details.typeName = typeNameForPro(resources, *pro);
     } catch (const std::exception& e) {
         spdlog::warn("InventoryItemUiHelper::describeItem: Failed to describe PID {}: {}", pid, e.what());
+        details.resolved = false;
     }
 
     return details;
