@@ -26,10 +26,12 @@
 #include <string_view>
 #include <utility>
 
+#include "format/ai/AiPacket.h"
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
 #include "ui/core/EditorWidget.h"
 #include "ui/core/MainWindow.h"
+#include "ui/dialogs/CritterPropertiesDialog.h"
 #include "ui/dialogs/InventoryViewerDialog.h"
 #include "ui/dialogs/ItemSelectorDialog.h"
 #include "ui/widgets/DataPathsWidget.h"
@@ -611,6 +613,39 @@ TEST_CASE("EditorWidget::canSaveInPlace accepts only real on-disk files, not VFS
         out << "map";
     }
     CHECK(geck::EditorWidget::canSaveInPlace(real));
+}
+
+TEST_CASE("CritterPropertiesDialog names the AI packet from ai.txt and falls back to the raw number", "[qt][critter]") {
+    geck::AiTxt aiTxt;
+    aiTxt.add(geck::AiPacket{ .packetNum = 5, .name = "Coward" });
+    aiTxt.add(geck::AiPacket{ .packetNum = 21, .name = "Berserker" });
+
+    SECTION("current packet is in ai.txt -> shown by name, value round-trips") {
+        geck::CritterPropertiesDialog dialog(21, 1, 100, 0, 0, aiTxt);
+        auto* combo = dialog.findChild<QComboBox*>();
+        REQUIRE(combo != nullptr);
+        CHECK(combo->count() == 2); // the two packets, no raw fallback entry
+        CHECK(combo->currentText().contains("Berserker"));
+        CHECK(dialog.getAiPacket() == 21u);
+    }
+
+    SECTION("current packet not in ai.txt -> a raw fallback entry preserves the value") {
+        geck::CritterPropertiesDialog dialog(99, 1, 100, 0, 0, aiTxt);
+        auto* combo = dialog.findChild<QComboBox*>();
+        REQUIRE(combo != nullptr);
+        CHECK(combo->count() == 3); // two packets + a raw "Packet 99" entry
+        CHECK(combo->currentText().contains("99"));
+        CHECK(dialog.getAiPacket() == 99u);
+    }
+
+    SECTION("an arbitrary number can be typed into the editable combo") {
+        geck::CritterPropertiesDialog dialog(5, 1, 100, 0, 0, aiTxt);
+        auto* combo = dialog.findChild<QComboBox*>();
+        REQUIRE(combo != nullptr);
+        REQUIRE(combo->isEditable());
+        combo->setCurrentText("150"); // not a named packet -> a freely-typed raw number
+        CHECK(dialog.getAiPacket() == 150u);
+    }
 }
 
 TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][inventory]") {
