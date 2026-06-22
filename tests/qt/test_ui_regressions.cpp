@@ -603,8 +603,7 @@ TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][
     REQUIRE(tree->topLevelItemCount() == 3);
 
     // No .pro files are mounted, so describeItem cannot resolve a name; the dialog falls back to the
-    // .pro filename and still stores the correct item PID = makePid(ITEM, 1-based items.lst line).
-    constexpr int PID_ROLE = Qt::UserRole + 1; // mirrors ItemSelectorDialog's internal storage role
+    // .pro filename and shows the item PID = makePid(ITEM, 1-based items.lst line) in the PID column.
     struct Expect {
         const char* name;
         uint32_t pid;
@@ -616,15 +615,16 @@ TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][
     };
     for (int i = 0; i < 3; ++i) {
         QTreeWidgetItem* row = tree->topLevelItem(i); // sorted by name -> aaa, bbb, ccc
-        CHECK(row->text(0).toStdString() == expected[i].name);
-        CHECK(static_cast<uint32_t>(row->data(0, PID_ROLE).toULongLong()) == expected[i].pid);
+        const QString expectedPid = QString("0x%1").arg(expected[i].pid, 8, 16, QChar('0'));
+        CHECK(row->text(0).toStdString() == expected[i].name);          // Name column (filename fallback)
+        CHECK(row->text(2).toStdString() == expectedPid.toStdString()); // PID column (visible)
     }
 
     // Nothing chosen yet; the amount defaults to 1.
     CHECK_FALSE(dialog.selectedPid().has_value());
     CHECK(dialog.selectedAmount() == 1);
 
-    // Selecting a row exposes that row's PID.
+    // Selecting a row exposes that row's PID through the public API.
     tree->setCurrentItem(tree->topLevelItem(0));
     REQUIRE(dialog.selectedPid().has_value());
     CHECK(dialog.selectedPid().value() == expected[0].pid);

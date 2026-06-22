@@ -163,9 +163,13 @@ void ItemSelectorDialog::onSearchTextChanged(const QString& text) {
     const QString needle = text.trimmed();
     for (int i = 0; i < _tree->topLevelItemCount(); ++i) {
         QTreeWidgetItem* item = _tree->topLevelItem(i);
+        const auto pid = static_cast<uint32_t>(item->data(COL_NAME, PID_ROLE).toULongLong());
+        // Match the name, the displayed hex PID, and the decimal PID — the old prompt accepted a PID
+        // in either base, so a pasted hex or decimal value should still find the item.
         const bool match = needle.isEmpty()
             || item->text(COL_NAME).contains(needle, Qt::CaseInsensitive)
-            || item->text(COL_PID).contains(needle, Qt::CaseInsensitive);
+            || item->text(COL_PID).contains(needle, Qt::CaseInsensitive)
+            || QString::number(pid).contains(needle);
         item->setHidden(!match);
     }
 }
