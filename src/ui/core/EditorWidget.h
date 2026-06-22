@@ -277,7 +277,7 @@ public slots:
 private:
     // Write the current map to `destination` (create-or-overwrite) and repoint the map at it; shared by
     // saveMap (direct write) and saveMapAs (after the dialog). Reports errors and returns success.
-    bool writeMapTo(const std::string& destination);
+    bool writeMapTo(const std::filesystem::path& destination);
 
     // One item's new selection entry after a drag-move: objects re-pointed to their refreshed
     // wrapper (by MapObject identity), tiles shifted by the whole-tile delta; nullopt to drop it.

@@ -453,7 +453,7 @@ bool EditorWidget::saveMap(const std::filesystem::path& defaultDir) {
     // it without re-prompting. A map loaded from the game data carries a VFS-relative path, and a new
     // map has no real target yet, so those fall through to "Save As".
     if (_session.map() && _session.map()->path().is_absolute()) {
-        return writeMapTo(_session.map()->path().string());
+        return writeMapTo(_session.map()->path());
     }
     return saveMapAs(defaultDir);
 }
@@ -479,24 +479,25 @@ bool EditorWidget::saveMapAs(const std::filesystem::path& defaultDir) {
     return writeMapTo(destinationQString.toStdString());
 }
 
-bool EditorWidget::writeMapTo(const std::string& destination) {
+bool EditorWidget::writeMapTo(const std::filesystem::path& destination) {
+    const std::string destinationStr = destination.string();
     try {
         if (const auto bytesWritten = saveMapToFile(_resources, _session.map()->getMapFile(), destination);
             bytesWritten.has_value()) {
-            spdlog::info("Saved map {} ({} bytes)", destination, *bytesWritten);
+            spdlog::info("Saved map {} ({} bytes)", destinationStr, *bytesWritten);
             // Repoint the map at the saved file so the title reflects the name and the next Save targets it.
-            _session.map()->setPath(std::filesystem::path(destination));
+            _session.map()->setPath(destination);
             return true;
         }
-        spdlog::error("Failed to save map {}", destination);
+        spdlog::error("Failed to save map {}", destinationStr);
         QtDialogs::showError(this, "Save Failed",
-            QString("Failed to save map to:\n%1").arg(QString::fromStdString(destination)));
+            QString("Failed to save map to:\n%1").arg(QString::fromStdString(destinationStr)));
     } catch (const geck::FileWriterException& e) {
-        spdlog::error("Failed to save map {}: {}", destination, e.what());
+        spdlog::error("Failed to save map {}: {}", destinationStr, e.what());
         QtDialogs::showError(this, "Save Failed",
-            QString("Failed to save map to:\n%1\n\n%2").arg(QString::fromStdString(destination), QString::fromStdString(e.what())));
+            QString("Failed to save map to:\n%1\n\n%2").arg(QString::fromStdString(destinationStr), QString::fromStdString(e.what())));
     } catch (const std::exception& e) {
-        spdlog::error("Unexpected error saving map {}: {}", destination, e.what());
+        spdlog::error("Unexpected error saving map {}: {}", destinationStr, e.what());
     }
     return false;
 }
