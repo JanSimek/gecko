@@ -207,8 +207,17 @@ std::unique_ptr<Map> MapReader::read() {
         }
     }
 
-    // SCRIPTS SECTION
-    // Each section contains 16 slots for scripts
+    // SCRIPTS SECTION. Per section: a count, then the scripts stored in blocks of 16 — the count is
+    // rounded UP to a multiple of 16, so a partial last block is padded out to 16 slots. Every slot,
+    // real or padding, is a full but VARIABLE-SIZE record: pid + next_script, then type-specific fields
+    // keyed off the pid's top byte (SPATIAL adds 2 ints, TIMER adds 1, everything else adds 0), then a
+    // fixed 14-int trailer. After each block of 16 come 2 more ints (per-block count + an unused word).
+    // This mirrors the engine's scriptListExtentRead/scriptRead (scripts.cc) exactly.
+    //
+    // IMPORTANT: a slot's size depends on its OWN pid, so you cannot stride over slots by a fixed size
+    // or by `remaining * sizeof(type)`. Read every slot's pid first — including the padding slots, whose
+    // pids are leftover/garbage that the engine reads back with the same per-type rule (so they round
+    // trip even though they aren't meaningful scripts).
     spdlog::info("Loading map scripts");
     for (unsigned script_section = 0; script_section < Map::SCRIPT_SECTIONS; script_section++) {
         uint32_t script_section_count = read_be_u32();
@@ -247,7 +256,14 @@ std::unique_ptr<Map> MapReader::read() {
                     case MapScript::ScriptType::CRITTER:
                         break;
                     default:
-                        spdlog::error("Unknown script PID = {}", (pid & 0xFF000000) >> 24);
+                        // A pid whose top byte isn't a known script type. For a padding slot
+                        // (j >= count) this is just leftover bytes in the 16-slot block — the engine
+                        // reads them the same way (no type-specific fields), so it's expected, not an
+                        // error. Only surface it for a real (kept) script.
+                        if (j < script_section_count) {
+                            spdlog::warn("Map script {} of section {} has an unknown type (pid top byte {})",
+                                j, script_section, (pid & 0xFF000000) >> 24);
+                        }
                         break;
                 }
 
