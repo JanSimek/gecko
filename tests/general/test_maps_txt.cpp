@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "format/maps/MapsTxtDocument.h"
-#include "reader/maps/MapsTxtDocumentReader.h"
+#include "format/maps/MapsTxt.h"
+#include "reader/maps/MapsTxtReader.h"
 
 using namespace geck;
 
@@ -29,8 +29,8 @@ map_name=ignored.map
 )";
 } // namespace
 
-TEST_CASE("MapsTxtDocument resolves maps by index, filename, and lookup_name", "[maps]") {
-    const MapsTxtDocument doc = parseMapsTxtDocument(std::string{ kMapsTxt });
+TEST_CASE("MapsTxt resolves maps by index, filename, and lookup_name", "[maps]") {
+    const MapsTxt doc = parseMapsTxt(std::string{ kMapsTxt });
 
     // By [Map NNN] index, deriving the typed view (unmodelled keys like music/ambient_sfx are ignored).
     const auto desert = doc.find(0);
@@ -64,9 +64,9 @@ TEST_CASE("MapsTxtDocument resolves maps by index, filename, and lookup_name", "
     CHECK_FALSE(doc.findByLookupName("nope").has_value());
 }
 
-TEST_CASE("MapsTxtDocument tolerates empty / section-less input", "[maps]") {
-    CHECK_FALSE(parseMapsTxtDocument(std::string{}).find(0).has_value());
-    const auto doc = parseMapsTxtDocument(std::string{ "map_name=stray.map\n" }); // keys before any [section]
+TEST_CASE("MapsTxt tolerates empty / section-less input", "[maps]") {
+    CHECK_FALSE(parseMapsTxt(std::string{}).find(0).has_value());
+    const auto doc = parseMapsTxt(std::string{ "map_name=stray.map\n" }); // keys before any [section]
     CHECK(doc.sections.empty());
     CHECK_FALSE(doc.findByName("stray.map").has_value());
 }

@@ -1,8 +1,8 @@
 #include "resource/MapNameEditor.h"
 
-#include "format/maps/MapsTxtDocument.h"
+#include "format/maps/MapsTxt.h"
 #include "format/msg/MsgDocument.h"
-#include "reader/maps/MapsTxtDocumentReader.h"
+#include "reader/maps/MapsTxtReader.h"
 #include "reader/msg/MsgDocumentReader.h"
 #include "resource/WritableDataRoot.h"
 #include "util/FileIo.h"
@@ -44,7 +44,7 @@ MapNameEditResult saveMapNames(DataFileSystem& files, const std::filesystem::pat
 
     if (lookupName.has_value()) {
         const std::filesystem::path path = ensureWritableCopy(files, writableRoot, kMapsTxt);
-        MapsTxtDocument doc = parseMapsTxtDocument(readFile(path));
+        MapsTxt doc = parseMapsTxt(readFile(path));
         if (!writer::setField(doc, mapIndex, "lookup_name", *lookupName)) {
             return { false, "Could not find this map's lookup_name in maps.txt." };
         }

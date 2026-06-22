@@ -282,8 +282,8 @@ add_library(vault STATIC
     format/ai/AiPacket.h
 
     # Maps (maps.txt — the engine's index->map registry)
-    format/maps/MapsTxtDocument.h
-    format/maps/MapsTxtDocument.cpp
+    format/maps/MapsTxt.h
+    format/maps/MapsTxt.cpp
 
     # City (city.txt — worldmap areas / locations)
     format/city/CityTxt.h
@@ -355,8 +355,8 @@ add_library(vault STATIC
     reader/ai/AiTxtReader.h
     reader/ai/AiTxtReader.cpp
 
-    reader/maps/MapsTxtDocumentReader.h
-    reader/maps/MapsTxtDocumentReader.cpp
+    reader/maps/MapsTxtReader.h
+    reader/maps/MapsTxtReader.cpp
 
     writer/maps/MapsTxtSerializer.h
     writer/maps/MapsTxtSerializer.cpp
