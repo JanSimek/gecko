@@ -2,13 +2,13 @@
 #include "editor/Object.h"
 #include "format/map/MapObject.h"
 #include "ui/common/InventoryItemUiHelper.h"
-#include "ui/dialogs/ItemSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/UIConstants.h"
 
 #include <QApplication>
 #include <QHeaderView>
 #include <QMessageBox>
+#include <QInputDialog>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -315,35 +315,53 @@ void InventoryViewerDialog::updateStatusLabel() {
 }
 
 void InventoryViewerDialog::onAddItemClicked() {
-    ItemSelectorDialog dialog(_resources, this);
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-    const auto pid = dialog.selectedPid();
-    if (!pid) {
-        return;
-    }
-    const int amount = dialog.selectedAmount();
+    bool ok;
+    QString pidText = QInputDialog::getText(this, "Add Item", "Enter item PID (hex or decimal):", QLineEdit::Normal, "", &ok);
 
-    // The picker only lists real protos, but guard anyway in case a proto failed to resolve.
-    if (!ui::inventory::itemExists(_resources, *pid)) {
-        QMessageBox::warning(this, "Invalid Item", QString("Item with PID 0x%1 not found in game data.").arg(*pid, 8, 16, QChar('0')));
+    if (!ok || pidText.isEmpty()) {
+        return;
+    }
+
+    // Parse PID (support both hex and decimal)
+    uint32_t pid = 0;
+    if (pidText.startsWith("0x") || pidText.startsWith("0X")) {
+        pid = pidText.mid(2).toUInt(&ok, 16);
+    } else {
+        pid = pidText.toUInt(&ok, 10);
+        if (!ok) {
+            // Try hex if decimal fails
+            pid = pidText.toUInt(&ok, 16);
+        }
+    }
+
+    if (!ok || pid == 0) {
+        QMessageBox::warning(this, "Invalid PID", "Please enter a valid PID in decimal or hex format (e.g., 16777216 or 0x01000000)");
+        return;
+    }
+
+    int amount = QInputDialog::getInt(this, "Add Item", "Enter amount:", 1, 1, 99999, 1, &ok);
+    if (!ok) {
+        return;
+    }
+
+    if (!ui::inventory::itemExists(_resources, pid)) {
+        QMessageBox::warning(this, "Invalid Item", QString("Item with PID 0x%1 not found in game data.").arg(pid, 8, 16, QChar('0')));
         return;
     }
 
     try {
-        auto newItem = ui::inventory::createMapInventoryItem(_resources, *pid, amount);
+        auto newItem = ui::inventory::createMapInventoryItem(_resources, pid, amount);
         _mapObject->inventory.push_back(std::move(newItem));
         _mapObject->objects_in_inventory = static_cast<uint32_t>(_mapObject->inventory.size());
 
         populateInventoryTree();
         updateStatusLabel();
 
-        spdlog::info("InventoryViewerDialog: Added item PID 0x{:08X} with amount {} to inventory", *pid, amount);
+        spdlog::info("InventoryViewerDialog: Added item PID 0x{:08X} with amount {} to inventory", pid, amount);
 
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Error", QString("Failed to add item: %1").arg(e.what()));
-        spdlog::error("InventoryViewerDialog::onAddItemClicked: Error adding item PID {}: {}", *pid, e.what());
+        spdlog::error("InventoryViewerDialog::onAddItemClicked: Error adding item PID {}: {}", pid, e.what());
     }
 }
 
