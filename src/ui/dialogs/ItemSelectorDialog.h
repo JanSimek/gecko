@@ -33,9 +33,9 @@ public:
     int selectedAmount() const;
 
 private slots:
-    void onSearchTextChanged(const QString& text);
+    void onSearchTextChanged(const QString& text) const;
     void onSelectionChanged();
-    void onItemActivated(QTreeWidgetItem* item, int column);
+    void onItemActivated(const QTreeWidgetItem* item, int column);
 
 private:
     void setupUI();

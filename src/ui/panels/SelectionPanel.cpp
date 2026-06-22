@@ -1313,7 +1313,7 @@ void SelectionPanel::onAddInventoryClicked() {
         return;
     }
     const auto itemPid = dialog.selectedPid();
-    if (!itemPid) {
+    if (!itemPid.has_value()) {
         return;
     }
 

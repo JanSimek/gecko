@@ -159,7 +159,7 @@ void ItemSelectorDialog::populate() {
     _tree->sortItems(COL_NAME, Qt::AscendingOrder);
 }
 
-void ItemSelectorDialog::onSearchTextChanged(const QString& text) {
+void ItemSelectorDialog::onSearchTextChanged(const QString& text) const {
     const QString needle = text.trimmed();
     for (int i = 0; i < _tree->topLevelItemCount(); ++i) {
         QTreeWidgetItem* item = _tree->topLevelItem(i);
@@ -182,13 +182,13 @@ void ItemSelectorDialog::onSelectionChanged() {
         updatePreview(nullptr);
         return;
     }
-    QTreeWidgetItem* item = selection.first();
+    const QTreeWidgetItem* item = selection.first();
     _selectedPid = static_cast<uint32_t>(item->data(COL_NAME, PID_ROLE).toULongLong());
     _okButton->setEnabled(true);
     updatePreview(item);
 }
 
-void ItemSelectorDialog::onItemActivated(QTreeWidgetItem* item, int /*column*/) {
+void ItemSelectorDialog::onItemActivated(const QTreeWidgetItem* item, int /*column*/) {
     if (item == nullptr) {
         return;
     }

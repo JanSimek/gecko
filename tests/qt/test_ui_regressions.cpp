@@ -608,13 +608,13 @@ TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][
         const char* name;
         uint32_t pid;
     };
-    const Expect expected[] = {
+    const std::array<Expect, 3> expected = { {
         { "aaa.pro", geck::Pro::makePid(geck::Pro::OBJECT_TYPE::ITEM, 1) },
         { "bbb.pro", geck::Pro::makePid(geck::Pro::OBJECT_TYPE::ITEM, 2) },
         { "ccc.pro", geck::Pro::makePid(geck::Pro::OBJECT_TYPE::ITEM, 3) },
-    };
+    } };
     for (int i = 0; i < 3; ++i) {
-        QTreeWidgetItem* row = tree->topLevelItem(i); // sorted by name -> aaa, bbb, ccc
+        const QTreeWidgetItem* row = tree->topLevelItem(i); // sorted by name -> aaa, bbb, ccc
         const QString expectedPid = QString("0x%1").arg(expected[i].pid, 8, 16, QChar('0'));
         CHECK(row->text(0).toStdString() == expected[i].name);          // Name column (filename fallback)
         CHECK(row->text(2).toStdString() == expectedPid.toStdString()); // PID column (visible)
