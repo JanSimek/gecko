@@ -84,6 +84,7 @@ signals:
     void newMapRequested();
     void openMapRequested();
     void saveMapRequested();
+    void saveMapAsRequested();
     void selectAllRequested();
     void deselectAllRequested();
     void showObjectsToggled(bool enabled);
@@ -168,6 +169,13 @@ private:
     void replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSizePolicy::Policy verticalPolicy);
     void rebuildResourcePanels();
     void rebuildGameResourcesFromSettings();
+
+    // The writable data path's maps/ folder (created if needed), used as the default save target; empty
+    // when no writable Data Path is configured.
+    std::filesystem::path writableMapsDir() const;
+    // Post-save housekeeping shared by Save / Save As: flush map-name edits, clear the modified flag, and
+    // refresh the title (which also picks up a Save As rename).
+    void handleMapSaved();
 
     // Dock widget state management
     void saveDockWidgetState();

@@ -64,9 +64,14 @@ public:
 
     void createNewMap();
     void openMap();
-    /// Save the current map (always prompts for a destination). Returns true on a successful write,
-    /// false if the user cancelled the dialog or the write failed.
-    bool saveMap();
+    /// Save the current map. If it already points at a real file (saved before, or opened from one), it
+    /// writes straight there with no dialog; otherwise it behaves like Save As, defaulting the dialog to
+    /// `defaultDir` (the writable data path's maps/ folder). Returns true on a successful write, false if
+    /// the user cancelled or the write failed.
+    bool saveMap(const std::filesystem::path& defaultDir = {});
+    /// Always prompt for a destination (defaulting to `defaultDir`/<name>), then write and repoint the
+    /// map at the chosen file. Returns true on a successful write.
+    bool saveMapAs(const std::filesystem::path& defaultDir = {});
 
 #ifdef GECK_SCRIPTING_ENABLED
     // Runs a Luau generation script against the current map at the current elevation. The whole run
@@ -270,6 +275,10 @@ public slots:
     const UndoStack& getUndoStack() const { return _session.undoStack(); }
 
 private:
+    // Write the current map to `destination` (create-or-overwrite) and repoint the map at it; shared by
+    // saveMap (direct write) and saveMapAs (after the dialog). Reports errors and returns success.
+    bool writeMapTo(const std::string& destination);
+
     // One item's new selection entry after a drag-move: objects re-pointed to their refreshed
     // wrapper (by MapObject identity), tiles shifted by the whole-tile delta; nullopt to drop it.
     std::optional<selection::SelectedItem> remapSelectedItemAfterMove(

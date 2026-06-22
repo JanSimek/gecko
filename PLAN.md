@@ -63,6 +63,15 @@ live with their library (`src/resource/`, `src/ui/`).
     drive it from the same command/action table proposed in #11 (stable action id → icon/label/handler),
     with a context-menu / Preferences UI to add, remove, and reorder buttons, persisted via `Settings`.
     Editor UX only; no map/format change.
+13. **The writable save target is positional, not chosen.** Saving a map (and map-name edits) writes
+    into the *last folder* in Data Paths — `findWritableDataPath` walks the list from the end and takes
+    the first real directory (archives skipped). That's implicit and order-dependent: reordering Data
+    Paths silently changes where saves land, and nothing in the UI shows which location is the writable
+    one. Map saves now default to that folder's `maps/` (Save / Save As), so the choice matters.
+    **Add an explicit default-writable marker:** a button in Settings → Data Paths to designate the
+    selected folder as the default writable location, shown with a badge in the list and persisted in
+    `Settings`; saves then target that folder regardless of list order. If none is marked, keep the
+    current last-folder fallback and hint the user to pick one. DAT archives can't be marked (read-only).
 
 ### Exit-grid shapes (rectangle-only) — limitation #2 in detail
 
