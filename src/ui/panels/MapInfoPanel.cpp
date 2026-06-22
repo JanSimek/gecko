@@ -1001,7 +1001,13 @@ void MapInfoPanel::persistMapNames() {
 
     const int index = _mapNames->indexOf(_map->filename()); // by basename, not the NUL-padded header field
     if (index < 0) {
-        return; // not in maps.txt -> the fields are read-only, so there is nothing to persist
+        // We only get here with pending edits (checked above). The map's current name isn't in maps.txt
+        // — typically because Save As renamed it to a file with no registry entry — so there's nowhere to
+        // write the edits. Warn rather than dropping them silently.
+        QMessageBox::warning(this, "Save Map Names",
+            QString("Map name edits weren't saved: \"%1\" isn't registered in maps.txt.")
+                .arg(QString::fromStdString(_map->filename())));
+        return;
     }
 
     // Write into a writable folder from the user's Data Paths (no hidden location). If there's none, the
