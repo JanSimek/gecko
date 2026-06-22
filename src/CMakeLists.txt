@@ -272,7 +272,6 @@ add_library(vault STATIC
 
     # MSG
     format/msg/Msg.h
-    format/msg/MsgDocument.h
     format/msg/Msg.cpp
 
     # LST
@@ -347,8 +346,6 @@ add_library(vault STATIC
 
     reader/msg/MsgReader.h
     reader/msg/MsgReader.cpp
-    reader/msg/MsgDocumentReader.h
-    reader/msg/MsgDocumentReader.cpp
 
     reader/lst/LstReader.h
     reader/lst/LstReader.cpp
