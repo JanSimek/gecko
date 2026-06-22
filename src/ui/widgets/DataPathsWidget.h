@@ -57,6 +57,9 @@ private:
     // Insert a path as a table row. atTop=true makes it the highest priority (the first row);
     // otherwise it is appended as the lowest. Returns false if the path is already present.
     bool addPathRow(const std::filesystem::path& path, bool atTop);
+    // Add a folder AND its master.dat/critter.dat as explicit rows (util::expandDataPaths), keeping the
+    // DATs in their legacy priority order regardless of atTop. Returns how many rows were added.
+    int addFolderExpanded(const std::filesystem::path& folder, bool atTop);
     void removeSelectedPath();
     void updateButtonStates();
     void moveSelectedPath(int offset);

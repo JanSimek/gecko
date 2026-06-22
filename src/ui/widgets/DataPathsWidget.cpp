@@ -296,6 +296,23 @@ void DataPathsWidget::removeSelectedPath() {
     updateButtonStates();
 }
 
+int DataPathsWidget::addFolderExpanded(const std::filesystem::path& folder, bool atTop) {
+    // expandDataPaths returns the folder before its DATs (legacy mount order). Inserting each atTop
+    // reverses that into the table (DATs above the folder); to get the same table layout when appending
+    // at the bottom, append in reverse. Either way the DATs keep their legacy priority over the folder.
+    auto expanded = util::expandDataPaths({ folder });
+    if (!atTop) {
+        std::reverse(expanded.begin(), expanded.end());
+    }
+    int added = 0;
+    for (const auto& entry : expanded) {
+        if (addPathRow(entry, atTop)) {
+            ++added;
+        }
+    }
+    return added;
+}
+
 void DataPathsWidget::onAddFolder() {
     const QString path = QFileDialog::getExistingDirectory(this,
         "Select Fallout 2 Data Folder",
@@ -304,17 +321,8 @@ void DataPathsWidget::onAddFolder() {
         return;
     }
 
-    // Expand the folder into the folder + its master.dat/critter.dat, so the DATs are explicit entries.
-    // Added top-first (highest priority), matching what a user adding a mod expects; expandDataPaths
-    // returns folder-before-DATs, and each atTop insert pushes the previous down, so the DATs end up
-    // above the folder (their legacy priority order).
-    bool added = false;
-    for (const auto& entry : util::expandDataPaths({ std::filesystem::path(path.toStdString()) })) {
-        if (addPathRow(entry, /*atTop=*/true)) {
-            added = true;
-        }
-    }
-    if (added) {
+    // A newly added source takes the highest priority (top), matching what a user adding a mod expects.
+    if (addFolderExpanded(std::filesystem::path(path.toStdString()), /*atTop=*/true) > 0) {
         Q_EMIT dataPathsChanged();
         renumberPriorities();
         validatePaths();
@@ -359,9 +367,8 @@ void DataPathsWidget::onAutoDetect() {
     int addedPaths = 0;
     for (const auto& path : detectedPaths) {
         // Detected base-game installs are appended as lower priority; manually added mods stay on top.
-        if (addPathRow(path, /*atTop=*/false)) {
-            addedPaths++;
-        }
+        // Expand each into the folder + its master.dat/critter.dat so the DATs are mounted and listed.
+        addedPaths += addFolderExpanded(path, /*atTop=*/false);
     }
 
     if (addedPaths > 0) {
