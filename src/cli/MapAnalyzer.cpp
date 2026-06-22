@@ -12,7 +12,7 @@
 #include "format/map/Tile.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
-#include "reader/ai/AiTxtReader.h"
+#include "resource/AiTxtLoader.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
 #include "resource/ResourcePaths.h"
@@ -196,17 +196,6 @@ namespace {
         std::unordered_map<uint32_t, bool> _resolved;
         std::unordered_map<uint32_t, uint32_t> _critterAiPackets;
     };
-
-    // Load data/ai.txt from the mounted data (empty AiTxt if absent — critters then report just the
-    // raw packet number). Tries the canonical path and a bare fallback for odd mounts.
-    AiTxt loadAiTxt(resource::GameResources& resources) {
-        for (const char* path : { "data/ai.txt", "ai.txt" }) {
-            if (const auto bytes = resources.files().readRawBytes(path); bytes.has_value()) {
-                return parseAiTxt(std::string(bytes->begin(), bytes->end()));
-            }
-        }
-        return AiTxt{};
-    }
 
     // The mounted scripts.lst (script_id is a 0-based index into list()), or nullptr if absent.
     const Lst* loadScriptsLst(resource::GameResources& resources) {
@@ -843,7 +832,7 @@ int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& option
         return 0;
     }
     if (options.json) {
-        emitJson(mapPaths, resources, names, loadAiTxt(resources), out);
+        emitJson(mapPaths, resources, names, resource::loadAiTxt(resources), out);
         return 0;
     }
 
