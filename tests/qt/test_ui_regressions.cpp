@@ -29,6 +29,7 @@
 #include "format/pro/Pro.h"
 #include "ui/core/MainWindow.h"
 #include "ui/dialogs/InventoryViewerDialog.h"
+#include "ui/dialogs/ItemSelectorDialog.h"
 #include "ui/widgets/DataPathsWidget.h"
 #include "ui/widgets/ObjectPreviewWidget.h"
 #include "ui/widgets/ProInfoPanelWidget.h"
@@ -589,6 +590,44 @@ TEST_CASE("Info panel derives display state from PRO data", "[qt][pro]") {
     REQUIRE(widget.nameText() == "10mm JHP");
     REQUIRE(widget.filenameText() == "00000030.pro");
     REQUIRE(widget.windowTitleText() == "10mm JHP (Ammo) - PRO editor");
+}
+
+TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][inventory]") {
+    ResourceDataScope resources;
+    resources.writeGameMessageFile("proto/items/items.lst", "aaa.pro\nbbb.pro\nccc.pro\n");
+    resources.mount();
+
+    geck::ItemSelectorDialog dialog(resources.resources());
+    auto* tree = dialog.findChild<QTreeWidget*>();
+    REQUIRE(tree != nullptr);
+    REQUIRE(tree->topLevelItemCount() == 3);
+
+    // No .pro files are mounted, so describeItem cannot resolve a name; the dialog falls back to the
+    // .pro filename and shows the item PID = makePid(ITEM, 1-based items.lst line) in the PID column.
+    struct Expect {
+        const char* name;
+        uint32_t pid;
+    };
+    const Expect expected[] = {
+        { "aaa.pro", geck::Pro::makePid(geck::Pro::OBJECT_TYPE::ITEM, 1) },
+        { "bbb.pro", geck::Pro::makePid(geck::Pro::OBJECT_TYPE::ITEM, 2) },
+        { "ccc.pro", geck::Pro::makePid(geck::Pro::OBJECT_TYPE::ITEM, 3) },
+    };
+    for (int i = 0; i < 3; ++i) {
+        QTreeWidgetItem* row = tree->topLevelItem(i); // sorted by name -> aaa, bbb, ccc
+        const QString expectedPid = QString("0x%1").arg(expected[i].pid, 8, 16, QChar('0'));
+        CHECK(row->text(0).toStdString() == expected[i].name);          // Name column (filename fallback)
+        CHECK(row->text(2).toStdString() == expectedPid.toStdString()); // PID column (visible)
+    }
+
+    // Nothing chosen yet; the amount defaults to 1.
+    CHECK_FALSE(dialog.selectedPid().has_value());
+    CHECK(dialog.selectedAmount() == 1);
+
+    // Selecting a row exposes that row's PID through the public API.
+    tree->setCurrentItem(tree->topLevelItem(0));
+    REQUIRE(dialog.selectedPid().has_value());
+    CHECK(dialog.selectedPid().value() == expected[0].pid);
 }
 
 TEST_CASE("Preview panel uses dual item previews and a single object preview", "[qt][pro]") {

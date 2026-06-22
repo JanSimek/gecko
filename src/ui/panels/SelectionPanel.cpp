@@ -8,6 +8,7 @@
 #include "ui/dialogs/InstancePropertiesDialog.h"
 #include "ui/dialogs/CritterPropertiesDialog.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
+#include "ui/dialogs/ItemSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/UIConstants.h"
 #include "resource/ResourcePaths.h"
@@ -22,7 +23,6 @@
 #include <QPainter>
 #include <QHeaderView>
 #include <QMessageBox>
-#include <QInputDialog>
 #include <QSpinBox>
 #include <QEnterEvent>
 #include <spdlog/spdlog.h>
@@ -1308,33 +1308,33 @@ void SelectionPanel::onAddInventoryClicked() {
         return;
     }
 
-    bool ok = false;
-    const int index = QInputDialog::getInt(this, "Add Inventory Item",
-        "Item proto index:", 1, 1, 0x00FFFFFF, 1, &ok);
-    if (!ok) {
+    ItemSelectorDialog dialog(_resources, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    const auto itemPid = dialog.selectedPid();
+    if (!itemPid) {
         return;
     }
 
-    const uint32_t itemPid = Pro::makePid(Pro::OBJECT_TYPE::ITEM, static_cast<uint32_t>(index));
-
     Pro* pro = nullptr;
     try {
-        pro = _resources.loadPro(itemPid);
+        pro = _resources.loadPro(*itemPid);
     } catch (const std::exception& e) {
-        spdlog::warn("onAddInventoryClicked: failed to load proto for pid {}: {}", itemPid, e.what());
+        spdlog::warn("onAddInventoryClicked: failed to load proto for pid {}: {}", *itemPid, e.what());
     }
     if (!pro) {
         QMessageBox::warning(this, "Add Inventory Item",
-            QString("No item prototype found for index %1.").arg(index));
+            QString("No item prototype found for PID 0x%1.").arg(*itemPid, 8, 16, QChar('0')));
         return;
     }
 
     auto before = ObjectCommandController::cloneInventory(holder->inventory);
 
     auto item = std::make_unique<MapObject>();
-    item->pro_pid = itemPid;
+    item->pro_pid = *itemPid;
     item->frm_pid = pro->header.FID;
-    item->amount = 1;
+    item->amount = static_cast<uint32_t>(dialog.selectedAmount());
     item->elevation = holder->elevation;
     item->position = holder->position;
 
