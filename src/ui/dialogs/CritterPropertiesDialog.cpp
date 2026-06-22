@@ -91,8 +91,8 @@ uint32_t CritterPropertiesDialog::getAiPacket() const {
     if (ok && typed >= 0) {
         return static_cast<uint32_t>(typed);
     }
-    const QVariant data = _aiPacketCombo->currentData();
-    return data.isValid() ? static_cast<uint32_t>(data.toInt()) : _originalAiPacket;
+    const QVariant itemData = _aiPacketCombo->currentData();
+    return itemData.isValid() ? static_cast<uint32_t>(itemData.toInt()) : _originalAiPacket;
 }
 uint32_t CritterPropertiesDialog::getTeam() const { return static_cast<uint32_t>(_teamSpin->value()); }
 uint32_t CritterPropertiesDialog::getHp() const { return static_cast<uint32_t>(_hpSpin->value()); }
