@@ -20,6 +20,7 @@
 
 #include <array>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <stdexcept>
 #include <string_view>
@@ -27,6 +28,7 @@
 
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
+#include "ui/core/EditorWidget.h"
 #include "ui/core/MainWindow.h"
 #include "ui/dialogs/InventoryViewerDialog.h"
 #include "ui/dialogs/ItemSelectorDialog.h"
@@ -590,6 +592,25 @@ TEST_CASE("Info panel derives display state from PRO data", "[qt][pro]") {
     REQUIRE(widget.nameText() == "10mm JHP");
     REQUIRE(widget.filenameText() == "00000030.pro");
     REQUIRE(widget.windowTitleText() == "10mm JHP (Ammo) - PRO editor");
+}
+
+TEST_CASE("EditorWidget::canSaveInPlace accepts only real on-disk files, not VFS paths", "[qt][save]") {
+    // A map opened from the game data carries a vfspp path that looks absolute but is not a writable
+    // filesystem location — saving it in place would try to create "/maps" at the root (the reported bug).
+    CHECK_FALSE(geck::EditorWidget::canSaveInPlace("/maps/arbridge.map"));
+    // A brand-new / unsaved map has no real file yet.
+    CHECK_FALSE(geck::EditorWidget::canSaveInPlace("arbridge.map"));
+    CHECK_FALSE(geck::EditorWidget::canSaveInPlace(std::filesystem::path{}));
+
+    // A real, existing file can be saved straight back.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const std::filesystem::path real = std::filesystem::path(dir.path().toStdString()) / "saved.map";
+    {
+        std::ofstream out(real);
+        out << "map";
+    }
+    CHECK(geck::EditorWidget::canSaveInPlace(real));
 }
 
 TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][inventory]") {

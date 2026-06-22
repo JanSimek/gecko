@@ -69,6 +69,11 @@ public:
     /// `defaultDir` (the writable data path's maps/ folder). Returns true on a successful write, false if
     /// the user cancelled or the write failed.
     bool saveMap(const std::filesystem::path& defaultDir = {});
+    /// Whether "Save" may write straight to `mapPath` rather than prompting: true only for a real,
+    /// existing on-disk file. A VFS path from the game data (e.g. "/maps/arbridge.map") looks absolute
+    /// but is not a writable location, and a new map has no file yet — both return false. Static so it is
+    /// unit-testable without a live widget.
+    static bool canSaveInPlace(const std::filesystem::path& mapPath);
     /// Always prompt for a destination (defaulting to `defaultDir`/<name>), then write and repoint the
     /// map at the chosen file. Returns true on a successful write.
     bool saveMapAs(const std::filesystem::path& defaultDir = {});
