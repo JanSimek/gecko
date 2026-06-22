@@ -64,9 +64,10 @@ Lst* ProHelper::lstFile(resource::GameResources& resources, uint32_t PID) {
 std::string ProHelper::basePath(resource::GameResources& resources, uint32_t PID) {
     const ProtoTypePaths& paths = protoTypePaths(Pro::typeOfPid(PID));
 
-    // The low 12 bits of a PID are the 1-based line number in the type's LST, so
-    // index 0 is not a valid proto and would underflow the index - 1 lookup below.
-    unsigned int index = 0x00000FFF & PID;
+    // The low 24 bits of a PID are the 1-based line number in the type's LST (matching the engine's
+    // proto-number decode `pid & 0xFFFFFF` in proto.cc and Pro::makePid); index 0 is not a valid proto
+    // and would underflow the index - 1 lookup below.
+    unsigned int index = 0x00FFFFFF & PID;
     auto lst = ProHelper::lstFile(resources, PID);
     if (index == 0 || index > lst->list().size()) {
         throw std::runtime_error{ "PID index out of range (expected 1.."
