@@ -1119,6 +1119,9 @@ std::filesystem::path MainWindow::writableMapsDir() const {
     const std::filesystem::path mapsDir = *root / "maps";
     std::error_code ec;
     std::filesystem::create_directories(mapsDir, ec); // so the save dialog can default into it
+    if (!std::filesystem::is_directory(mapsDir, ec)) {
+        return {}; // couldn't create/use maps/ (permissions, or it's a file) -> fall back to last-used dir
+    }
     return mapsDir;
 }
 
