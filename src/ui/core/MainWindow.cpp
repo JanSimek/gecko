@@ -32,6 +32,7 @@
 #include "format/map/Map.h"
 #include "util/Types.h"
 #include "ui/Settings.h"
+#include "resource/WritableDataRoot.h"
 #include "ui/QtDialogs.h"
 #include "ui/ExternalEditorLauncher.h"
 #include "reader/lst/LstReader.h"
@@ -230,12 +231,13 @@ void MainWindow::connectMenuSignals() {
         }
     });
     connect(this, &MainWindow::saveMapRequested, [this]() {
-        if (_currentEditorWidget && _currentEditorWidget->saveMap()) {
-            if (_mapInfoPanel) {
-                _mapInfoPanel->persistMapNames(); // flush any edited Map name / Lookup name alongside the .map
-            }
-            _mapModified = false;
-            updateWindowTitle(); // clears the "[*]" and reflects any Save As rename
+        if (_currentEditorWidget && _currentEditorWidget->saveMap(writableMapsDir())) {
+            handleMapSaved();
+        }
+    });
+    connect(this, &MainWindow::saveMapAsRequested, [this]() {
+        if (_currentEditorWidget && _currentEditorWidget->saveMapAs(writableMapsDir())) {
+            handleMapSaved();
         }
     });
     connect(this, &MainWindow::selectAllRequested, [this]() {
@@ -397,6 +399,7 @@ void MainWindow::setupMenuBar() {
     addMenuAction(_fileMenu, ":/icons/actions/open.svg", "&Open Map", &MainWindow::openMapRequested, QKeySequence::Open, "Open an existing map");
     addMenuAction(_fileMenu, ":/icons/actions/open.svg", "&Browse Maps...", &MainWindow::showMapBrowserDialog, QKeySequence("Ctrl+B"), "Browse available maps as thumbnails");
     addMenuAction(_fileMenu, ":/icons/actions/save.svg", "&Save Map", &MainWindow::saveMapRequested, QKeySequence::Save, "Save current map");
+    addMenuAction(_fileMenu, ":/icons/actions/save.svg", "Save Map &As...", &MainWindow::saveMapAsRequested, QKeySequence::SaveAs, "Save the current map to a chosen file");
 
     _fileMenu->addSeparator();
     addMenuAction(_fileMenu, ":/icons/actions/settings.svg", "&Preferences...", &MainWindow::showPreferences, QKeySequence::Preferences, "Open application preferences");
@@ -1105,6 +1108,31 @@ void MainWindow::setMapModified(bool modified) {
     updateWindowTitle(); // refresh the "*" in the title (and the native marker)
 }
 
+std::filesystem::path MainWindow::writableMapsDir() const {
+    if (!_settings) {
+        return {};
+    }
+    const auto root = resource::findWritableDataPath(_settings->getDataPaths());
+    if (!root) {
+        return {}; // no writable Data Path -> the save dialog falls back to its last-used directory
+    }
+    const std::filesystem::path mapsDir = *root / "maps";
+    std::error_code ec;
+    std::filesystem::create_directories(mapsDir, ec); // so the save dialog can default into it
+    if (!std::filesystem::is_directory(mapsDir, ec)) {
+        return {}; // couldn't create/use maps/ (permissions, or it's a file) -> fall back to last-used dir
+    }
+    return mapsDir;
+}
+
+void MainWindow::handleMapSaved() {
+    if (_mapInfoPanel) {
+        _mapInfoPanel->persistMapNames(); // flush any edited Map name / Lookup name alongside the .map
+    }
+    _mapModified = false;
+    updateWindowTitle(); // clear the "[*]" and reflect any Save As rename
+}
+
 bool MainWindow::maybeSaveChanges() {
     if (!_mapModified || !_currentEditorWidget || !_currentEditorWidget->getMap()) {
         return true; // nothing unsaved to lose
@@ -1115,12 +1143,8 @@ bool MainWindow::maybeSaveChanges() {
         QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
 
     if (choice == QMessageBox::Save) {
-        if (_currentEditorWidget->saveMap()) {
-            if (_mapInfoPanel) {
-                _mapInfoPanel->persistMapNames(); // flush any edited Map name / Lookup name alongside the .map
-            }
-            setMapModified(false);
-            updateWindowTitle();
+        if (_currentEditorWidget->saveMap(writableMapsDir())) {
+            handleMapSaved();
             return true;
         }
         return false; // save cancelled or failed — abort rather than discard

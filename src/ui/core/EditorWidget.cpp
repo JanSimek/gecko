@@ -448,33 +448,53 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
 }
 #endif
 
-bool EditorWidget::saveMap() {
-    // Default the save dialog to the current map's file name.
-    const QString suggestedName = _session.map() ? QString::fromStdString(_session.map()->filename()) : QString();
-    QString destinationQString = QtDialogs::saveFile(this, "Save Map",
-        "Map Files (*.map);;All Files (*.*)", suggestedName);
+bool EditorWidget::saveMap(const std::filesystem::path& defaultDir) {
+    // "Save": once the map points at a real file (saved before, or opened from one), write straight to
+    // it without re-prompting. A map loaded from the game data carries a VFS-relative path, and a new
+    // map has no real target yet, so those fall through to "Save As".
+    if (_session.map() && _session.map()->path().is_absolute()) {
+        return writeMapTo(_session.map()->path().string());
+    }
+    return saveMapAs(defaultDir);
+}
 
+bool EditorWidget::saveMapAs(const std::filesystem::path& defaultDir) {
+    if (!_session.map()) {
+        return false;
+    }
+
+    // Default the dialog to <writable data path>/maps/<filename> when a writable location exists;
+    // otherwise just the file name (the dialog then seeds its last-used directory). Passing an absolute
+    // suggestion deliberately overrides that last-used directory.
+    const std::string filename = _session.map()->filename();
+    const QString suggested = defaultDir.empty()
+        ? QString::fromStdString(filename)
+        : QString::fromStdString((defaultDir / filename).string());
+
+    const QString destinationQString = QtDialogs::saveFile(this, "Save Map As",
+        "Map Files (*.map);;All Files (*.*)", suggested);
     if (destinationQString.isEmpty()) {
         return false; // user cancelled the dialog
     }
+    return writeMapTo(destinationQString.toStdString());
+}
 
-    std::string destination = destinationQString.toStdString();
-
+bool EditorWidget::writeMapTo(const std::string& destination) {
     try {
         if (const auto bytesWritten = saveMapToFile(_resources, _session.map()->getMapFile(), destination);
             bytesWritten.has_value()) {
             spdlog::info("Saved map {} ({} bytes)", destination, *bytesWritten);
-            // Repoint the map at the saved file so the window title reflects the chosen name.
+            // Repoint the map at the saved file so the title reflects the name and the next Save targets it.
             _session.map()->setPath(std::filesystem::path(destination));
             return true;
         }
         spdlog::error("Failed to save map {}", destination);
         QtDialogs::showError(this, "Save Failed",
-            QString("Failed to save map to:\n%1").arg(destinationQString));
+            QString("Failed to save map to:\n%1").arg(QString::fromStdString(destination)));
     } catch (const geck::FileWriterException& e) {
         spdlog::error("Failed to save map {}: {}", destination, e.what());
         QtDialogs::showError(this, "Save Failed",
-            QString("Failed to save map to:\n%1\n\n%2").arg(destinationQString, QString::fromStdString(e.what())));
+            QString("Failed to save map to:\n%1\n\n%2").arg(QString::fromStdString(destination), QString::fromStdString(e.what())));
     } catch (const std::exception& e) {
         spdlog::error("Unexpected error saving map {}: {}", destination, e.what());
     }
