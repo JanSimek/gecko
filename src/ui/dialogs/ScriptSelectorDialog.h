@@ -24,12 +24,13 @@ class ScriptSelectorDialog : public BaseDialog {
     Q_OBJECT
 
 public:
-    /// One selectable script: its program index (0-based scripts.lst line), the scripts.lst filename,
-    /// and the scrname.msg description (may be empty).
+    /// One selectable script: its program index (0-based scripts.lst line), the scripts.lst filename, the
+    /// scrname.msg display name, and the scripts.lst ';' comment. `name` and `comment` may each be empty.
     struct Entry {
         int index = 0;
         std::string filename;
         std::string name;
+        std::string comment;
     };
 
     /// @param scripts      the rows to show (one per scripts.lst entry)

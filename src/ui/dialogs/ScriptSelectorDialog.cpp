@@ -17,6 +17,8 @@ namespace {
         COL_INDEX = 0,
         COL_FILENAME = 1,
         COL_NAME = 2,
+        COL_COMMENT = 3,
+        COL_COUNT = 4,
     };
 } // namespace
 
@@ -27,9 +29,12 @@ std::vector<ScriptSelectorDialog::Entry> ScriptSelectorDialog::buildEntries(reso
         return entries;
     }
     const auto& names = lst->list();
+    const auto& comments = lst->comments();
     entries.reserve(names.size());
     for (std::size_t i = 0; i < names.size(); ++i) {
-        entries.push_back({ static_cast<int>(i), names[i], resource::scriptDisplayName(resources, static_cast<int>(i)) });
+        std::string comment = i < comments.size() ? comments[i] : std::string{};
+        entries.push_back({ static_cast<int>(i), names[i],
+            resource::scriptDisplayName(resources, static_cast<int>(i)), std::move(comment) });
     }
     return entries;
 }
@@ -37,7 +42,7 @@ std::vector<ScriptSelectorDialog::Entry> ScriptSelectorDialog::buildEntries(reso
 ScriptSelectorDialog::ScriptSelectorDialog(const std::vector<Entry>& scripts, int currentIndex, QWidget* parent)
     : BaseDialog("Select Script", parent) {
 
-    resize(560, 480);
+    resize(720, 480);
 
     auto* mainLayout = new QVBoxLayout(this);
 
@@ -45,15 +50,17 @@ ScriptSelectorDialog::ScriptSelectorDialog(const std::vector<Entry>& scripts, in
     _filterEdit->setPlaceholderText("Filter scripts...");
     mainLayout->addWidget(_filterEdit);
 
-    _table = new QTableWidget(static_cast<int>(scripts.size()), 3, this);
-    _table->setHorizontalHeaderLabels({ "Index", "Filename", "Name" });
+    _table = new QTableWidget(static_cast<int>(scripts.size()), COL_COUNT, this);
+    _table->setHorizontalHeaderLabels({ "Index", "Filename", "Name", "Comment" });
     _table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     _table->setSelectionBehavior(QAbstractItemView::SelectRows);
     _table->setSelectionMode(QAbstractItemView::SingleSelection);
     _table->verticalHeader()->setVisible(false);
     _table->horizontalHeader()->setSectionResizeMode(COL_INDEX, QHeaderView::ResizeToContents);
     _table->horizontalHeader()->setSectionResizeMode(COL_FILENAME, QHeaderView::ResizeToContents);
+    // Name (scrname.msg) and Comment (scripts.lst) are the two descriptive columns; let them share width.
     _table->horizontalHeader()->setSectionResizeMode(COL_NAME, QHeaderView::Stretch);
+    _table->horizontalHeader()->setSectionResizeMode(COL_COMMENT, QHeaderView::Stretch);
 
     for (int row = 0; row < static_cast<int>(scripts.size()); ++row) {
         const Entry& entry = scripts[static_cast<size_t>(row)];
@@ -65,6 +72,7 @@ ScriptSelectorDialog::ScriptSelectorDialog(const std::vector<Entry>& scripts, in
         _table->setItem(row, COL_INDEX, indexItem);
         _table->setItem(row, COL_FILENAME, new QTableWidgetItem(QString::fromStdString(entry.filename)));
         _table->setItem(row, COL_NAME, new QTableWidgetItem(QString::fromStdString(entry.name)));
+        _table->setItem(row, COL_COMMENT, new QTableWidgetItem(QString::fromStdString(entry.comment)));
     }
     _table->setSortingEnabled(true);
     _table->sortByColumn(COL_INDEX, Qt::AscendingOrder); // sensible default; the user can re-sort by any column
