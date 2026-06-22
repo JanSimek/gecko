@@ -24,6 +24,7 @@ namespace ui {
 
         // Widget sizes
         constexpr int LIST_MAX_HEIGHT = 100;
+        constexpr int LIST_MIN_HEIGHT = 160; // tall enough to show several data-path rows before scrolling
         constexpr int BUTTON_MIN_WIDTH = 80;
 
         /**

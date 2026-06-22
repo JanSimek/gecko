@@ -1,6 +1,7 @@
 #include "GameLocationWidget.h"
 #include "util/GameDataPathResolver.h"
 #include "ui/Settings.h"
+#include "ui/common/ButtonStyle.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QApplication>
@@ -107,6 +108,11 @@ void GameLocationWidget::setupUI() {
     _autoDetectButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ComputerIcon));
     _autoDetectButton->setToolTip("Automatically detect Fallout 2 game installations");
     _controlLayout->addWidget(_autoDetectButton);
+
+    // Consistent icon size + minimum height so the buttons don't shrink and clip their icons on resize.
+    for (QPushButton* btn : { _browseExecutableButton, _browseDataDirectoryButton, _autoDetectButton }) {
+        geck::ui::styleActionButton(btn);
+    }
 
     _layout->addLayout(_controlLayout);
 
