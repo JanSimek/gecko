@@ -1,4 +1,4 @@
-#include "format/maps/MapsTxtDocument.h"
+#include "format/maps/MapsTxt.h"
 
 #include "reader/TextParsing.h"
 
@@ -37,12 +37,12 @@ namespace {
 
 } // namespace
 
-std::optional<MapInfo> MapsTxtDocument::find(int index) const {
+std::optional<MapInfo> MapsTxt::find(int index) const {
     const MapsTxtSection* sec = section(index);
     return sec != nullptr ? std::optional<MapInfo>{ toMapInfo(*sec) } : std::nullopt;
 }
 
-std::optional<MapInfo> MapsTxtDocument::findByName(const std::string& mapFileName) const {
+std::optional<MapInfo> MapsTxt::findByName(const std::string& mapFileName) const {
     const std::string target = normalizedMapName(mapFileName);
     for (const MapsTxtSection& sec : sections) {
         if (sec.index >= 0 && normalizedMapName(fieldValue(sec, "map_name")) == target) {
@@ -52,7 +52,7 @@ std::optional<MapInfo> MapsTxtDocument::findByName(const std::string& mapFileNam
     return std::nullopt;
 }
 
-std::optional<MapInfo> MapsTxtDocument::findByLookupName(const std::string& lookupName) const {
+std::optional<MapInfo> MapsTxt::findByLookupName(const std::string& lookupName) const {
     const std::string target = toLower(lookupName);
     for (const MapsTxtSection& sec : sections) {
         if (sec.index >= 0 && toLower(fieldValue(sec, "lookup_name")) == target) {

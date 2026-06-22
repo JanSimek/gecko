@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "format/maps/MapsTxtDocument.h"
-#include "reader/maps/MapsTxtDocumentReader.h"
+#include "format/maps/MapsTxt.h"
+#include "reader/maps/MapsTxtReader.h"
 #include "writer/maps/MapsTxtSerializer.h"
 #include "writer/maps/MapsTxtValidator.h"
 
@@ -32,8 +32,8 @@ constexpr const char* kMapsTxtLf = "; Map datafile\n"
 
 } // namespace
 
-TEST_CASE("MapsTxtDocument round-trips an LF file byte-for-byte (no trailing newline)", "[maps_roundtrip]") {
-    const MapsTxtDocument doc = parseMapsTxtDocument(std::string{ kMapsTxtLf });
+TEST_CASE("MapsTxt round-trips an LF file byte-for-byte (no trailing newline)", "[maps_roundtrip]") {
+    const MapsTxt doc = parseMapsTxt(std::string{ kMapsTxtLf });
 
     REQUIRE(doc.sections.size() == 2);
     CHECK(doc.sections[0].index == 0);
@@ -43,7 +43,7 @@ TEST_CASE("MapsTxtDocument round-trips an LF file byte-for-byte (no trailing new
     CHECK(writer::serializeMapsTxt(doc) == std::string{ kMapsTxtLf });
 }
 
-TEST_CASE("MapsTxtDocument normalizes CRLF to LF while preserving all data", "[maps_roundtrip]") {
+TEST_CASE("MapsTxt normalizes CRLF to LF while preserving all data", "[maps_roundtrip]") {
     std::string crlf;
     for (const char* p = kMapsTxtLf; *p != '\0'; ++p) {
         if (*p == '\n') {
@@ -52,13 +52,13 @@ TEST_CASE("MapsTxtDocument normalizes CRLF to LF while preserving all data", "[m
         crlf += *p;
     }
 
-    const MapsTxtDocument doc = parseMapsTxtDocument(crlf);
+    const MapsTxt doc = parseMapsTxt(crlf);
     // Round-trips to the LF form: data identical, line endings normalized.
     CHECK(writer::serializeMapsTxt(doc) == std::string{ kMapsTxtLf });
 }
 
-TEST_CASE("MapsTxtDocument edits one field and leaves every other byte untouched", "[maps_roundtrip]") {
-    MapsTxtDocument doc = parseMapsTxtDocument(std::string{ kMapsTxtLf });
+TEST_CASE("MapsTxt edits one field and leaves every other byte untouched", "[maps_roundtrip]") {
+    MapsTxt doc = parseMapsTxt(std::string{ kMapsTxtLf });
 
     REQUIRE(writer::findField(doc, 0, "lookup_name").value_or("") == "Desert Encounter 1");
     REQUIRE(writer::setField(doc, 0, "lookup_name", "New Arroyo"));
@@ -85,25 +85,25 @@ TEST_CASE("validateMapsTxt enforces the engine's hard rules", "[maps_roundtrip]"
     using writer::MapsTxtIssue;
 
     SECTION("a gapless, well-formed registry has no errors") {
-        const auto doc = parseMapsTxtDocument(std::string{ kMapsTxtLf });
+        const auto doc = parseMapsTxt(std::string{ kMapsTxtLf });
         const auto issues = writer::validateMapsTxt(doc);
         CHECK_FALSE(writer::hasErrors(issues));
     }
 
     SECTION("a gap in the [Map N] run is an error") {
-        const auto doc = parseMapsTxtDocument(std::string{
+        const auto doc = parseMapsTxt(std::string{
             "[Map 0]\nlookup_name=A\nmap_name=a\n[Map 2]\nlookup_name=C\nmap_name=c" });
         const auto issues = writer::validateMapsTxt(doc);
         CHECK(writer::hasErrors(issues)); // missing [Map 1]
     }
 
     SECTION("missing lookup_name / map_name is an error") {
-        const auto doc = parseMapsTxtDocument(std::string{ "[Map 0]\nmap_name=a" });
+        const auto doc = parseMapsTxt(std::string{ "[Map 0]\nmap_name=a" });
         CHECK(writer::hasErrors(writer::validateMapsTxt(doc)));
     }
 
     SECTION("an unknown key is reported but not an error") {
-        const auto doc = parseMapsTxtDocument(std::string{
+        const auto doc = parseMapsTxt(std::string{
             "[Map 0]\nlookup_name=A\nmap_name=a\nmystery_key=42" });
         const auto issues = writer::validateMapsTxt(doc);
         CHECK_FALSE(writer::hasErrors(issues));
@@ -113,7 +113,7 @@ TEST_CASE("validateMapsTxt enforces the engine's hard rules", "[maps_roundtrip]"
 }
 
 TEST_CASE("addSection / removeSection edit the registry, keeping it serialisable", "[maps_roundtrip]") {
-    auto doc = parseMapsTxtDocument(std::string{
+    auto doc = parseMapsTxt(std::string{
         "[Map 0]\nlookup_name=A\nmap_name=a\n[Map 1]\nlookup_name=B\nmap_name=b" });
 
     REQUIRE(writer::addSection(doc, 2, "New Town", "newtown"));

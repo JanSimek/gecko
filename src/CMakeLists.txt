@@ -39,6 +39,7 @@ set(GECK_APP_SOURCES
     ui/common/BaseWidget.cpp
     ui/common/BaseDialog.h
     ui/common/BaseDialog.cpp
+    ui/common/ButtonStyle.h
     ui/common/BasePaletteWidget.h
     ui/common/BasePanel.h
     ui/common/GridPalettePanel.h
@@ -271,7 +272,6 @@ add_library(vault STATIC
 
     # MSG
     format/msg/Msg.h
-    format/msg/MsgDocument.h
     format/msg/Msg.cpp
 
     # LST
@@ -282,8 +282,8 @@ add_library(vault STATIC
     format/ai/AiPacket.h
 
     # Maps (maps.txt — the engine's index->map registry)
-    format/maps/MapsTxtDocument.h
-    format/maps/MapsTxtDocument.cpp
+    format/maps/MapsTxt.h
+    format/maps/MapsTxt.cpp
 
     # City (city.txt — worldmap areas / locations)
     format/city/CityTxt.h
@@ -346,8 +346,6 @@ add_library(vault STATIC
 
     reader/msg/MsgReader.h
     reader/msg/MsgReader.cpp
-    reader/msg/MsgDocumentReader.h
-    reader/msg/MsgDocumentReader.cpp
 
     reader/lst/LstReader.h
     reader/lst/LstReader.cpp
@@ -355,8 +353,8 @@ add_library(vault STATIC
     reader/ai/AiTxtReader.h
     reader/ai/AiTxtReader.cpp
 
-    reader/maps/MapsTxtDocumentReader.h
-    reader/maps/MapsTxtDocumentReader.cpp
+    reader/maps/MapsTxtReader.h
+    reader/maps/MapsTxtReader.cpp
 
     writer/maps/MapsTxtSerializer.h
     writer/maps/MapsTxtSerializer.cpp

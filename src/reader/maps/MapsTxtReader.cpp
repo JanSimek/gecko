@@ -1,4 +1,4 @@
-#include "reader/maps/MapsTxtDocumentReader.h"
+#include "reader/maps/MapsTxtReader.h"
 
 #include "reader/TextParsing.h"
 
@@ -62,8 +62,8 @@ namespace {
 
 } // namespace
 
-MapsTxtDocument parseMapsTxtDocument(const std::string& content) {
-    MapsTxtDocument doc;
+MapsTxt parseMapsTxt(const std::string& content) {
+    MapsTxt doc;
     bool finalNewline = true;
     const std::vector<std::string> rawLines = splitLines(content, finalNewline);
     doc.finalNewline = finalNewline;

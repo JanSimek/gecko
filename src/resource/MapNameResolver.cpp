@@ -1,7 +1,7 @@
 #include "resource/MapNameResolver.h"
 
 #include "format/msg/Msg.h"
-#include "reader/maps/MapsTxtDocumentReader.h"
+#include "reader/maps/MapsTxtReader.h"
 #include "resource/GameResources.h"
 
 #include <spdlog/spdlog.h>
@@ -10,13 +10,13 @@ namespace geck::resource {
 
 namespace {
 
-    MapsTxtDocument loadMapsTxt(GameResources& resources) {
+    MapsTxt loadMapsTxt(GameResources& resources) {
         for (const char* path : { "data/maps.txt", "maps.txt" }) {
             if (const auto bytes = resources.files().readRawBytes(path); bytes.has_value()) {
-                return parseMapsTxtDocument(std::string(bytes->begin(), bytes->end()));
+                return parseMapsTxt(std::string(bytes->begin(), bytes->end()));
             }
         }
-        return MapsTxtDocument{};
+        return MapsTxt{};
     }
 
 } // namespace

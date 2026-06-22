@@ -143,12 +143,13 @@ void SettingsDialog::setupGeneralTab() {
     _generalTabLayout->setSpacing(SPACING_LOOSE);
 
     _dataPathsWidget = new DataPathsWidget(_settings);
-    _generalTabLayout->addWidget(_dataPathsWidget);
+    _generalTabLayout->addWidget(_dataPathsWidget, /*stretch=*/1); // grows with the dialog (the data-paths list)
 
     _gameLocationWidget = new GameLocationWidget();
-    _generalTabLayout->addWidget(_gameLocationWidget);
+    _generalTabLayout->addWidget(_gameLocationWidget); // hugs its content; no excess vertical space
 
-    _generalTabLayout->addStretch();
+    // No trailing addStretch(): the data-paths list (stretch 1) absorbs the extra height instead of an
+    // empty gap that pushed the game-location pane up and made it look oversized.
 
     _tabWidget->addTab(_generalTab, "General");
 

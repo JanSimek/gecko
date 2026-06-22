@@ -1,6 +1,6 @@
 #pragma once
 
-#include "format/maps/MapsTxtDocument.h"
+#include "format/maps/MapsTxt.h"
 
 #include <string>
 
@@ -41,7 +41,7 @@ public:
 
 private:
     GameResources& _resources;
-    MapsTxtDocument _doc;
+    MapsTxt _doc;
 };
 
 } // namespace geck::resource

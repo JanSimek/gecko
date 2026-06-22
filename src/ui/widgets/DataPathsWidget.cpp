@@ -2,6 +2,7 @@
 #include "ui/Settings.h"
 #include "Application.h"
 #include "ui/UIConstants.h"
+#include "ui/common/ButtonStyle.h"
 #include "util/GameDataPathResolver.h"
 
 #include <QApplication>
@@ -62,9 +63,11 @@ void DataPathsWidget::setupUI() {
     _pathsTable->verticalHeader()->setVisible(false);
     _pathsTable->horizontalHeader()->setSectionResizeMode(PriorityColumn, QHeaderView::ResizeToContents);
     _pathsTable->horizontalHeader()->setSectionResizeMode(PathColumn, QHeaderView::Stretch);
-    _pathsTable->setMaximumHeight(LIST_MAX_HEIGHT);
-    _pathsTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    _layout->addWidget(_pathsTable);
+    // Grow with the dialog instead of a fixed 100px cap, so the list shows several rows (the full path
+    // for long entries is in each row's tooltip — see addPathRow).
+    _pathsTable->setMinimumHeight(LIST_MIN_HEIGHT);
+    _pathsTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    _layout->addWidget(_pathsTable, /*stretch=*/1);
 
     _controlLayout = new QHBoxLayout();
 
@@ -99,6 +102,11 @@ void DataPathsWidget::setupUI() {
     _autoDetectButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ComputerIcon));
     _autoDetectButton->setToolTip("Automatically detect Fallout 2 installations");
     _controlLayout->addWidget(_autoDetectButton);
+
+    // Consistent icon size + minimum height so the buttons don't shrink and clip their icons on resize.
+    for (QPushButton* btn : { _addButton, _removeButton, _moveUpButton, _moveDownButton, _autoDetectButton }) {
+        geck::ui::styleActionButton(btn);
+    }
 
     _layout->addLayout(_controlLayout);
 
@@ -188,6 +196,10 @@ bool DataPathsWidget::addPathRow(const std::filesystem::path& path, bool atTop) 
         pathItem->setToolTip("Invalid or missing path");
         pathItem->setForeground(ui::theme::colors::invalidPath());
     }
+
+    // Prepend the full path so a long entry that doesn't fit the column is still readable on hover
+    // (the column stretches and elides the text); the status note above stays as a second line.
+    pathItem->setToolTip(pathStr + "\n" + pathItem->toolTip());
 
     pathItem->setData(Qt::UserRole, isDefaultPath);
 

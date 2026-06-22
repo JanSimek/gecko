@@ -1,9 +1,9 @@
 #include "resource/MapNameEditor.h"
 
-#include "format/maps/MapsTxtDocument.h"
-#include "format/msg/MsgDocument.h"
-#include "reader/maps/MapsTxtDocumentReader.h"
-#include "reader/msg/MsgDocumentReader.h"
+#include "format/maps/MapsTxt.h"
+#include "format/msg/Msg.h"
+#include "reader/maps/MapsTxtReader.h"
+#include "reader/msg/MsgReader.h"
 #include "resource/WritableDataRoot.h"
 #include "util/FileIo.h"
 #include "writer/maps/MapsTxtSerializer.h"
@@ -44,7 +44,7 @@ MapNameEditResult saveMapNames(DataFileSystem& files, const std::filesystem::pat
 
     if (lookupName.has_value()) {
         const std::filesystem::path path = ensureWritableCopy(files, writableRoot, kMapsTxt);
-        MapsTxtDocument doc = parseMapsTxtDocument(readFile(path));
+        MapsTxt doc = parseMapsTxt(readFile(path));
         if (!writer::setField(doc, mapIndex, "lookup_name", *lookupName)) {
             return { false, "Could not find this map's lookup_name in maps.txt." };
         }
@@ -56,9 +56,9 @@ MapNameEditResult saveMapNames(DataFileSystem& files, const std::filesystem::pat
 
     if (displayName.has_value()) {
         const std::filesystem::path path = ensureWritableCopy(files, writableRoot, kMapMsg);
-        MsgDocument doc = parseMsgDocument(readFile(path));
-        writer::setMessageText(doc, mapIndex * 3 + elevation + 200, *displayName);
-        pending.emplace_back(path, writer::serializeMsg(doc));
+        Msg msg = parseMsg(path, readFile(path));
+        msg.setMessageText(mapIndex * 3 + elevation + 200, *displayName);
+        pending.emplace_back(path, writer::serializeMsg(msg));
     }
 
     for (const auto& [path, content] : pending) {

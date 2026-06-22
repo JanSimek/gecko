@@ -59,7 +59,7 @@ namespace {
 
 } // namespace
 
-std::vector<MapsTxtIssue> validateMapsTxt(const MapsTxtDocument& doc) {
+std::vector<MapsTxtIssue> validateMapsTxt(const MapsTxt& doc) {
     std::vector<MapsTxtIssue> issues;
 
     std::set<int> seen;

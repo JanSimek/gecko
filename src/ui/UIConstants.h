@@ -24,6 +24,7 @@ namespace ui {
 
         // Widget sizes
         constexpr int LIST_MAX_HEIGHT = 100;
+        constexpr int LIST_MIN_HEIGHT = 160; // tall enough to show several data-path rows before scrolling
         constexpr int BUTTON_MIN_WIDTH = 80;
 
         /**
@@ -33,8 +34,9 @@ namespace ui {
             // Button sizes
             constexpr int ICON_BUTTON = 24;
             constexpr int ICON_BUTTON_SMALL = 20;
-            constexpr int ICON_BUTTON_HEIGHT = 22; // Height for small icon buttons
-            constexpr int NAV_BUTTON = 30;         // Navigation/pagination buttons
+            constexpr int ICON_BUTTON_HEIGHT = 22;    // Height for small icon buttons
+            constexpr int NAV_BUTTON = 30;            // Navigation/pagination buttons
+            constexpr int ACTION_BUTTON_HEIGHT = 30;  // Min height for text+icon action buttons (no icon clipping)
 
             // Icon sizes
             constexpr int ICON_SIZE_SMALL = 18; // Compact button icons

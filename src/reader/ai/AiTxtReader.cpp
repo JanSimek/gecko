@@ -8,26 +8,19 @@ namespace geck {
 
 namespace {
 
+    using geck::text::intOr;
     using geck::text::toLower;
     using geck::text::trim;
-
-    int parseIntOr(const std::string& value, int fallback) {
-        try {
-            return std::stoi(value);
-        } catch (const std::exception&) {
-            return fallback; // a non-numeric value just leaves the field at its default
-        }
-    }
 
     // Apply one key=value to the in-progress packet. Only behaviour-relevant keys are recognized;
     // everything else (animation ranges, fonts, colours, …) is ignored.
     void applyField(AiPacket& packet, const std::string& key, const std::string& value) {
         if (key == "packet_num") {
-            packet.packetNum = parseIntOr(value, packet.packetNum);
+            packet.packetNum = intOr(value, packet.packetNum);
         } else if (key == "aggression") {
-            packet.aggression = parseIntOr(value, packet.aggression);
+            packet.aggression = intOr(value, packet.aggression);
         } else if (key == "secondary_freq") {
-            packet.secondaryFreq = parseIntOr(value, packet.secondaryFreq);
+            packet.secondaryFreq = intOr(value, packet.secondaryFreq);
         } else if (key == "disposition") {
             packet.disposition = value;
         } else if (key == "run_away_mode") {

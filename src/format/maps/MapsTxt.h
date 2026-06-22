@@ -43,7 +43,7 @@ struct MapsTxtSection {
 };
 
 /// The typed view of one `[Map NNN]` section — what consumers actually query for. Derived from a
-/// section on demand (see MapsTxtDocument::find); the section keeps the full, lossless data.
+/// section on demand (see MapsTxt::find); the section keeps the full, lossless data.
 struct MapInfo {
     int index = -1;         ///< the NNN in `[Map NNN]`; the number an exit grid's destMap references
     std::string lookupName; ///< lookup_name — the engine's internal area key (city.txt entrances match by this)
@@ -51,7 +51,7 @@ struct MapInfo {
 };
 
 /// The whole `data/maps.txt`, in file order.
-struct MapsTxtDocument {
+struct MapsTxt {
     std::vector<MapsTxtLine> preamble; ///< lines before the first `[...]` section
     std::vector<MapsTxtSection> sections;
     bool finalNewline = true; ///< did the file end with a newline?

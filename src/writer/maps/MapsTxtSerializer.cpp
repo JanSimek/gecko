@@ -18,7 +18,7 @@ namespace {
     }
 } // namespace
 
-std::string serializeMapsTxt(const MapsTxtDocument& doc) {
+std::string serializeMapsTxt(const MapsTxt& doc) {
     std::vector<std::string> raws;
     for (const MapsTxtLine& line : doc.preamble) {
         raws.push_back(line.raw);
@@ -32,7 +32,7 @@ std::string serializeMapsTxt(const MapsTxtDocument& doc) {
     return geck::text::joinLinesLf(raws, doc.finalNewline);
 }
 
-std::optional<std::string> findField(const MapsTxtDocument& doc, int sectionIndex, const std::string& key) {
+std::optional<std::string> findField(const MapsTxt& doc, int sectionIndex, const std::string& key) {
     const MapsTxtSection* section = doc.section(sectionIndex);
     if (section == nullptr) {
         return std::nullopt;
@@ -45,7 +45,7 @@ std::optional<std::string> findField(const MapsTxtDocument& doc, int sectionInde
     return std::nullopt;
 }
 
-bool setField(MapsTxtDocument& doc, int sectionIndex, const std::string& key, const std::string& value) {
+bool setField(MapsTxt& doc, int sectionIndex, const std::string& key, const std::string& value) {
     MapsTxtSection* section = doc.section(sectionIndex);
     if (section == nullptr) {
         return false;
@@ -79,7 +79,7 @@ namespace {
     }
 } // namespace
 
-bool addSection(MapsTxtDocument& doc, int index, const std::string& lookupName, const std::string& mapName) {
+bool addSection(MapsTxt& doc, int index, const std::string& lookupName, const std::string& mapName) {
     if (index < 0 || doc.section(index) != nullptr) {
         return false;
     }
@@ -96,7 +96,7 @@ bool addSection(MapsTxtDocument& doc, int index, const std::string& lookupName, 
     return true;
 }
 
-bool removeSection(MapsTxtDocument& doc, int index) {
+bool removeSection(MapsTxt& doc, int index) {
     const auto pos = std::find_if(doc.sections.begin(), doc.sections.end(),
         [index](const MapsTxtSection& s) { return s.index == index; });
     if (pos == doc.sections.end()) {
