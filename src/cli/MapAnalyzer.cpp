@@ -16,6 +16,7 @@
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
 #include "resource/ResourcePaths.h"
+#include "resource/ScriptNames.h"
 #include "util/ProHelper.h"
 
 #include <nlohmann/json.hpp>
@@ -638,24 +639,6 @@ namespace {
     // Per-map header digest: player spawn, which elevations are enabled, darkness, the map script id,
     // the local-var pool size, and the map variables (MVARS) — each with its name from the .gam (the
     // .map stores only the value) so an agent reads the map's tracked state, not just a count.
-    // A script's human-readable name from scrname.msg. The display name for the script at 0-based
-    // scripts.lst programIndex is scrname.msg[programIndex + 101] — verified against the data and the
-    // engine's 1-based map script_id (the MAP_File_Format wiki's "[id + 101]" assumes id is already
-    // 0-based; with the raw 1-based header id it lands one entry too far). "" if unavailable.
-    std::string scriptDisplayName(resource::GameResources& resources, int programIndex) {
-        if (programIndex < 0) {
-            return {};
-        }
-        try {
-            if (Msg* msg = resources.repository().load<Msg>("text/english/game/scrname.msg"); msg != nullptr) {
-                return msg->message(programIndex + 101).text;
-            }
-        } catch (const std::exception& e) {
-            spdlog::debug("scriptDisplayName: scrname.msg unavailable: {}", e.what());
-        }
-        return {};
-    }
-
     ordered_json headerToJson(Map& map, const Gam* gam, const Lst* scriptsLst, resource::GameResources& resources) {
         const auto& header = map.getMapFile().header;
         ordered_json root;
@@ -682,7 +665,7 @@ namespace {
                 name = scriptsLst->at(programIndex);
             }
             root["mapScript"] = { { "programIndex", programIndex }, { "name", name },
-                { "displayName", scriptDisplayName(resources, programIndex) } };
+                { "displayName", resource::scriptDisplayName(resources, programIndex) } };
         } else {
             root["mapScript"] = nullptr;
         }

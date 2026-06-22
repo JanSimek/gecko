@@ -12,6 +12,7 @@
 #include "ui/theme/ThemeManager.h"
 #include "ui/UIConstants.h"
 #include "resource/ResourcePaths.h"
+#include "resource/ScriptNames.h"
 #include "format/map/MapScript.h"
 
 #include <algorithm>
@@ -1212,6 +1213,10 @@ void SelectionPanel::updateScriptSection() {
                     auto* lst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
                     if (lst && s.script_id < lst->list().size()) {
                         text = QString::fromStdString(lst->list().at(s.script_id));
+                        const std::string desc = resource::scriptDisplayName(_resources, static_cast<int>(s.script_id));
+                        if (!desc.empty()) {
+                            text += " — " + QString::fromStdString(desc);
+                        }
                     } else {
                         text = QString("Script #%1").arg(s.script_id);
                     }
@@ -1241,7 +1246,7 @@ void SelectionPanel::onAttachScriptClicked() {
         return;
     }
 
-    ScriptSelectorDialog dialog(scriptsLst->list(), -1, this);
+    ScriptSelectorDialog dialog(ScriptSelectorDialog::buildEntries(_resources), -1, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
