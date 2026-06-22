@@ -11,6 +11,7 @@
 #include "ui/dialogs/ItemSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/UIConstants.h"
+#include "resource/AiTxtLoader.h"
 #include "resource/ResourcePaths.h"
 #include "resource/ScriptNames.h"
 #include "format/map/MapScript.h"
@@ -1165,8 +1166,9 @@ void SelectionPanel::onEditCritterClicked() {
         return;
     }
 
+    const AiTxt aiTxt = resource::loadAiTxt(_resources); // names the AI packet combo; empty -> raw number
     CritterPropertiesDialog dialog(mapObject->ai_packet, mapObject->group_id,
-        mapObject->current_hp, mapObject->current_rad, mapObject->current_poison, this);
+        mapObject->current_hp, mapObject->current_rad, mapObject->current_poison, aiTxt, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
