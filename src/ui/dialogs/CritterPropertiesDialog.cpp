@@ -1,9 +1,11 @@
 #include "CritterPropertiesDialog.h"
 
 #include "format/ai/AiPacket.h"
+#include "ui/theme/ThemeManager.h"
 
 #include <QComboBox>
 #include <QFormLayout>
+#include <QLabel>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -58,6 +60,10 @@ CritterPropertiesDialog::CritterPropertiesDialog(uint32_t aiPacket, uint32_t tea
     }
     _aiPacketCombo->setCurrentIndex(currentIndex);
     formLayout->addRow("AI packet:", _aiPacketCombo);
+
+    auto* aiPacketHint = new QLabel("Pick a packet by name, or type a number.", this);
+    aiPacketHint->setStyleSheet(ui::theme::styles::smallLabel());
+    formLayout->addRow("", aiPacketHint);
 
     _teamSpin = makeSpin(this, static_cast<int>(team), 32000);
     formLayout->addRow("Team:", _teamSpin);
