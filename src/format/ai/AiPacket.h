@@ -35,6 +35,9 @@ public:
 
     [[nodiscard]] std::size_t size() const { return _byNum.size(); }
 
+    /// All packets keyed by packet_num — for enumerating them (e.g. populating a picker).
+    [[nodiscard]] const std::unordered_map<int, AiPacket>& packets() const { return _byNum; }
+
 private:
     std::unordered_map<int, AiPacket> _byNum;
 };
