@@ -138,6 +138,10 @@ private:
     Map* _map;
     std::string _mapScriptName;
     std::unordered_map<std::string, uint32_t> _mvars;
+
+    // True while updateMapInfo() populates the widgets from the map, so their change signals don't write
+    // a half-updated widget set back over the map (see onFieldChanged).
+    bool _suppressFieldChanged = false;
 };
 
 } // namespace geck

@@ -22,6 +22,7 @@
 #include "ui/Settings.h"
 #include "reader/ReaderFactory.h"
 #include "resource/ResourcePaths.h"
+#include "resource/ScriptNames.h"
 #include "util/Coordinates.h"
 #include "ui/IconHelper.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
@@ -183,6 +184,7 @@ void MapInfoPanel::setupUI() {
     headerLayout->addRow("Local variables #:", _localVarsSpin);
 
     _mapScriptEdit = new QLineEdit();
+    _mapScriptEdit->setObjectName("mapScript");
     _mapScriptEdit->setReadOnly(true);
     headerLayout->addRow("Map script:", _mapScriptEdit);
 
@@ -317,6 +319,10 @@ void MapInfoPanel::updateMapInfo() {
     try {
         auto& mapInfo = _map->getMapFile();
 
+        // Populating the widgets below emits their change signals; suppress the write-back to the map so
+        // a half-refreshed widget set can't clobber fields that haven't been updated yet.
+        _suppressFieldChanged = true;
+
         // Update elevation checkboxes based on flags (inverted logic: 0 = enabled, 1 = disabled)
         bool hasElevation1 = (mapInfo.header.flags & 0x2) == 0;
         bool hasElevation2 = (mapInfo.header.flags & 0x4) == 0;
@@ -344,6 +350,8 @@ void MapInfoPanel::updateMapInfo() {
 
         bool isSavegame = ((mapInfo.header.flags & 0x1) != 0);
         _savegameCheck->setChecked(isSavegame);
+
+        _suppressFieldChanged = false; // done populating; user edits write back from here on
 
         loadScriptVars();
         _mapScriptEdit->setText(QString::fromStdString(_mapScriptName));
@@ -393,6 +401,7 @@ void MapInfoPanel::updateMapInfo() {
         updateElevationCheckboxStates();
 
     } catch (const std::exception& e) {
+        _suppressFieldChanged = false; // never leave write-back disabled if population threw mid-way
         spdlog::error("Error updating map info: {}", e.what());
         clearMapInfo();
     }
@@ -462,47 +471,41 @@ void MapInfoPanel::loadScriptVars() {
     }
 
     try {
-        std::string mapFilename = _map->filename();
-        std::string baseName = mapFilename.substr(0, mapFilename.find("."));
-        std::string gam_filename = baseName + ".gam";
-        std::string gam_path = "maps/" + gam_filename;
-
-        Gam* gam_file = nullptr;
-        if (_resources.files().exists(gam_path)) {
-            gam_file = _resources.repository().load<Gam>(gam_path);
-            if (gam_file) {
-                spdlog::debug("GAM file loaded from VFS: {}", gam_path);
-            }
-        }
-
-        if (!gam_file) {
-            spdlog::warn("GAM file '{}' not found in VFS", gam_path);
-            _mapScriptName = "GAM file not found";
-            return;
-        }
-
-        for (uint32_t index = 0; index < _map->getMapFile().header.num_global_vars; index++) {
-            _mvars.emplace(gam_file->mvarKey(index), gam_file->mvarValue(index));
-        }
-
-        int map_script_id = _map->getMapFile().header.script_id;
+        // The map's own script (header.script_id, 1-based) names a scripts.lst entry. Resolve its
+        // filename and scrname.msg description independently of the .gam file (which only carries the
+        // map's global variables), so the name shows even for a map that has no .gam.
+        const int map_script_id = _map->getMapFile().header.script_id;
         if (map_script_id > 0) {
             auto scripts = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
             const auto& scriptList = scripts->list();
             if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
                 _mapScriptName = scripts->at(map_script_id - 1); // script id starts at 1
-                spdlog::debug("Script name '{}' found for ID {} in: {}", _mapScriptName, map_script_id, ResourcePaths::Lst::SCRIPTS);
+                // Append the scrname.msg description for the same script (its 0-based index is id - 1),
+                // mirroring how object scripts are named in the script picker.
+                const std::string desc = resource::scriptDisplayName(_resources, map_script_id - 1);
+                if (!desc.empty()) {
+                    _mapScriptName += " — " + desc;
+                }
             } else {
                 _mapScriptName = "invalid script index";
-                spdlog::warn("Script ID {} out of bounds for scripts.lst size {} in: {}", map_script_id, scriptList.size(), ResourcePaths::Lst::SCRIPTS);
+                spdlog::warn("Map script ID {} out of bounds for scripts.lst size {}", map_script_id, scriptList.size());
+            }
+        }
+
+        // Global variables come from the map's optional .gam file.
+        const std::string baseName = _map->filename().substr(0, _map->filename().find("."));
+        const std::string gam_path = "maps/" + baseName + ".gam";
+        if (_resources.files().exists(gam_path)) {
+            if (Gam* gam_file = _resources.repository().load<Gam>(gam_path); gam_file != nullptr) {
+                for (uint32_t index = 0; index < _map->getMapFile().header.num_global_vars; index++) {
+                    _mvars.emplace(gam_file->mvarKey(index), gam_file->mvarValue(index));
+                }
             }
         } else {
-            _mapScriptName = "no script";
+            spdlog::debug("GAM file '{}' not found in VFS; map global variables unavailable", gam_path);
         }
     } catch (const std::exception& e) {
         spdlog::error("Error loading script vars: {}", e.what());
-        _mapScriptName = QString("Error: %1").arg(e.what()).toStdString();
-        // Clear any partial data on error
         _mvars.clear();
     }
 }
@@ -547,7 +550,10 @@ void MapInfoPanel::clearMapInfo() {
 }
 
 void MapInfoPanel::onFieldChanged() {
-    if (!_map) {
+    // Ignore the valueChanged/toggled signals that fire while updateMapInfo() is populating the widgets
+    // from the map; otherwise a half-updated widget set would be written back, corrupting fields that
+    // haven't been refreshed yet (e.g. script_id reset to the stale spin value during load).
+    if (_suppressFieldChanged || !_map) {
         return;
     }
 
