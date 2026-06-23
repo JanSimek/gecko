@@ -79,91 +79,70 @@ void ScriptsPanel::populate() {
 
     const auto& mapFile = _map->getMapFile();
 
-    int row = 0;
     for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
         // The map_scripts section index is the script type (System/Spatial/Timer/Item/Critter).
         const auto type = static_cast<MapScript::ScriptType>(section);
         const QString sectionName = QString::fromUtf8(std::string(MapScript::toString(type)).c_str());
 
         for (const MapScript& script : mapFile.map_scripts[section]) {
-            _table->insertRow(row);
-
-            _table->setItem(row, COL_SECTION, new QTableWidgetItem(sectionName));
-
-            // Numeric display + numeric sort for the program index. The script's own SID (its `pid`) is
-            // stashed in UserRole so a double-click can jump to the owning object (see onCellDoubleClicked).
-            auto* idItem = new QTableWidgetItem;
-            idItem->setData(Qt::DisplayRole, static_cast<int>(script.script_id));
-            idItem->setData(Qt::UserRole, static_cast<qulonglong>(script.pid));
-            _table->setItem(row, COL_SCRIPT_ID, idItem);
-
-            QString filename;
-            if (lst != nullptr && script.script_id < lst->list().size()) {
-                filename = QString::fromStdString(lst->list().at(script.script_id));
-            }
-            _table->setItem(row, COL_FILENAME, new QTableWidgetItem(filename));
-
-            const std::string name = resource::scriptDisplayName(_resources, static_cast<int>(script.script_id));
-            _table->setItem(row, COL_NAME, new QTableWidgetItem(QString::fromStdString(name)));
-
-            // script_oid links the script to its owner object; NONE (-1) or 0 means no owner. Owned rows
-            // carry a numeric DisplayRole so the column sorts numerically (script_oid is uint32_t).
-            auto* ownerItem = new QTableWidgetItem;
-            if (script.script_oid != MapScript::NONE && script.script_oid != 0) {
-                ownerItem->setData(Qt::DisplayRole, static_cast<qulonglong>(script.script_oid));
-            } else {
-                ownerItem->setText(QStringLiteral("—"));
-            }
-            _table->setItem(row, COL_OWNER, ownerItem);
-
             QString detail;
             if (type == MapScript::ScriptType::SPATIAL) {
                 detail = QString("radius %1").arg(script.spatial_radius);
             } else if (type == MapScript::ScriptType::TIMER) {
                 detail = QString("%1 ms").arg(script.timer);
             }
-            _table->setItem(row, COL_DETAIL, new QTableWidgetItem(detail));
-
-            ++row;
+            // The script's own SID (its pid) drives double-click navigation; script_oid is the owner shown.
+            addRow(sectionName, static_cast<int>(script.script_id), static_cast<qulonglong>(script.pid),
+                static_cast<qulonglong>(script.script_oid), detail, lst);
         }
     }
 
     // The map's own script lives in the header (header.script_id), not in any map_scripts section, so it
-    // is listed here as one extra "Map" row. The map script_id is 1-based (unlike section scripts whose
-    // script_id is already a 0-based scripts.lst index), so subtract 1 to resolve it — mirroring how the
-    // Map Info panel resolves the same value. <=0 means no map script.
-    const int mapScriptId = mapFile.header.script_id;
-    if (mapScriptId > 0) {
-        const int programIndex = mapScriptId - 1; // 0-based scripts.lst index
-
-        _table->insertRow(row);
-        _table->setItem(row, COL_SECTION, new QTableWidgetItem(QStringLiteral("Map")));
-
-        auto* idItem = new QTableWidgetItem;
-        idItem->setData(Qt::DisplayRole, programIndex);
-        // The map script has no owning object; mark the row with the NONE sentinel so a double-click
-        // here does nothing (it cannot be navigated to).
-        idItem->setData(Qt::UserRole, static_cast<qulonglong>(MapScript::NONE));
-        _table->setItem(row, COL_SCRIPT_ID, idItem);
-
-        QString filename;
-        if (lst != nullptr && programIndex >= 0 && static_cast<size_t>(programIndex) < lst->list().size()) {
-            filename = QString::fromStdString(lst->list().at(programIndex));
-        }
-        _table->setItem(row, COL_FILENAME, new QTableWidgetItem(filename));
-
-        const std::string name = resource::scriptDisplayName(_resources, programIndex);
-        _table->setItem(row, COL_NAME, new QTableWidgetItem(QString::fromStdString(name)));
-
-        _table->setItem(row, COL_OWNER, new QTableWidgetItem(QStringLiteral("—")));
-        _table->setItem(row, COL_DETAIL, new QTableWidgetItem(QStringLiteral("(map script)")));
-
-        ++row;
+    // is listed as one extra "Map" row. Its id is 1-based (unlike section scripts' 0-based script_id), so
+    // subtract 1 to resolve it — mirroring the Map Info panel. It has no owning object, so the NONE
+    // sentinel makes a double-click here do nothing. <=0 means no map script.
+    if (mapFile.header.script_id > 0) {
+        addRow(QStringLiteral("Map"), mapFile.header.script_id - 1, static_cast<qulonglong>(MapScript::NONE),
+            static_cast<qulonglong>(MapScript::NONE), QStringLiteral("(map script)"), lst);
     }
 
     _table->setSortingEnabled(true);
 
     applyFilter(); // a re-populate (map switch) must honour the filter still shown in the box
+}
+
+void ScriptsPanel::addRow(const QString& section, int programIndex, qulonglong rowSid, qulonglong ownerOid,
+    const QString& detail, const Lst* lst) {
+    const int row = _table->rowCount();
+    _table->insertRow(row);
+
+    _table->setItem(row, COL_SECTION, new QTableWidgetItem(section));
+
+    // Numeric display + numeric sort for the program index; rowSid in UserRole lets a double-click jump
+    // to the owning object (see onCellDoubleClicked).
+    auto* idItem = new QTableWidgetItem;
+    idItem->setData(Qt::DisplayRole, programIndex);
+    idItem->setData(Qt::UserRole, rowSid);
+    _table->setItem(row, COL_SCRIPT_ID, idItem);
+
+    QString filename;
+    if (lst != nullptr && programIndex >= 0 && static_cast<size_t>(programIndex) < lst->list().size()) {
+        filename = QString::fromStdString(lst->list().at(static_cast<size_t>(programIndex)));
+    }
+    _table->setItem(row, COL_FILENAME, new QTableWidgetItem(filename));
+    _table->setItem(row, COL_NAME,
+        new QTableWidgetItem(QString::fromStdString(resource::scriptDisplayName(_resources, programIndex))));
+
+    // Owned rows carry a numeric DisplayRole so the Owner column sorts numerically; NONE/0 shows "—".
+    auto* ownerItem = new QTableWidgetItem;
+    if (ownerOid != MapScript::NONE && ownerOid != 0) {
+        ownerItem->setData(Qt::DisplayRole, ownerOid);
+    } else {
+        ownerItem->setText(QStringLiteral("—"));
+    }
+    _table->setItem(row, COL_OWNER, ownerItem);
+
+    _table->setItem(row, COL_DETAIL, new QTableWidgetItem(detail));
 }
 
 void ScriptsPanel::applyFilter() {

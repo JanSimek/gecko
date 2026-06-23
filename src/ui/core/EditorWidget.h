@@ -285,6 +285,13 @@ public slots:
     const UndoStack& getUndoStack() const { return _session.undoStack(); }
 
 private:
+    // Center the view on a hex position (shared by centerViewOnPlayerPosition and revealScriptObject).
+    void centerViewOnHex(uint32_t hexPosition);
+    // The elevation whose objects own the script with this SID (map_scripts_pid == sid), or -1 if none.
+    int scriptOwnerElevation(int sid) const;
+    // The current elevation's visual Object owning the script with this SID, or nullptr.
+    std::shared_ptr<Object> visualObjectForSid(int sid) const;
+
     // Write the current map to `destination` (create-or-overwrite) and repoint the map at it; shared by
     // saveMap (direct write) and saveMapAs (after the dialog). Reports errors and returns success.
     bool writeMapTo(const std::string& destination);

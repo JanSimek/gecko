@@ -8,6 +8,7 @@ class QLineEdit;
 namespace geck {
 
 class Map;
+class Lst;
 namespace resource {
     class GameResources;
 }
@@ -38,6 +39,10 @@ private slots:
 
 private:
     void populate();
+    // Append one fully-built table row. `rowSid` is stashed in the Script ID cell for double-click
+    // navigation (MapScript::NONE for ownerless rows); `ownerOid` drives the Owner column.
+    void addRow(const QString& section, int programIndex, qulonglong rowSid, qulonglong ownerOid,
+        const QString& detail, const Lst* lst);
 
     resource::GameResources& _resources;
     Map* _map = nullptr;
