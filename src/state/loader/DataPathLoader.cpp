@@ -24,7 +24,7 @@ void DataPathLoader::init() {
 
 void DataPathLoader::load() {
     if (_dataPaths.empty()) {
-        spdlog::warn("DataPathLoader: No data paths to load");
+        spdlog::debug("DataPathLoader: No data paths to load");
         _percentDone = 100;
         _done = true;
         return;
@@ -38,7 +38,7 @@ void DataPathLoader::load() {
         setProgress("Loading: " + path.filename().string());
 
         try {
-            spdlog::info("DataPathLoader: Loading data path: {}", path.string());
+            spdlog::debug("DataPathLoader: Loading data path: {}", path.string());
             _resources->files().addDataPath(path);
 
             _currentPathIndex++;
@@ -79,8 +79,6 @@ void DataPathLoader::load() {
 void DataPathLoader::onDone() {
     if (_hasError) {
         spdlog::warn("DataPathLoader completed with errors: {}", _errorMessage);
-    } else {
-        spdlog::info("DataPathLoader completed successfully, loaded {} data paths", _dataPaths.size());
     }
 }
 

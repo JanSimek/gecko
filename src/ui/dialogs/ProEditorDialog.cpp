@@ -265,7 +265,7 @@ void ProEditorDialog::onAccept() {
         try {
             std::filesystem::copy_file(savePath, backupPath,
                 std::filesystem::copy_options::overwrite_existing);
-            spdlog::info("Created backup: {}", backupPath.string());
+            spdlog::debug("Created backup: {}", backupPath.string());
         } catch (const std::exception& e) {
             spdlog::warn("Failed to create backup: {}", e.what());
         }

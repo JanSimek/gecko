@@ -174,7 +174,7 @@ void TilePalettePanel::loadTiles(const Lst* tileList) {
 
     _tileList = tileList;
 
-    spdlog::info("TilePalettePanel: Loading {} tiles", tileList->list().size());
+    spdlog::debug("TilePalettePanel: Loading {} tiles", tileList->list().size());
 
     int maxTiles = static_cast<int>(tileList->list().size()) - 1;
     _startTileSpinBox->setMaximum(maxTiles);
@@ -320,7 +320,7 @@ void TilePalettePanel::updateTileGrid() {
 
     GridPalettePanel::updatePaginationControls();
 
-    spdlog::info("TilePalettePanel: Loaded {} tile widgets", tilesLoaded);
+    spdlog::debug("TilePalettePanel: Loaded {} tile widgets", tilesLoaded);
 }
 
 void TilePalettePanel::filterTiles() {

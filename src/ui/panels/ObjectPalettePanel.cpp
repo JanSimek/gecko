@@ -79,7 +79,7 @@ ObjectPalettePanel::ObjectPalettePanel(resource::GameResources& resources, QWidg
     : GridPalettePanel("Objects", parent)
     , _resources(resources) {
     setupUI();
-    spdlog::info("ObjectPalettePanel: Created object palette panel");
+    spdlog::debug("ObjectPalettePanel: Created object palette panel");
 }
 
 ObjectPalettePanel::~ObjectPalettePanel() {
@@ -171,7 +171,7 @@ void ObjectPalettePanel::setupPaginationControls() {
 }
 
 void ObjectPalettePanel::loadObjects() {
-    spdlog::info("ObjectPalettePanel: Loading objects from LST files");
+    spdlog::debug("ObjectPalettePanel: Loading objects from LST files");
 
     loadCategoryObjects(_currentCategory);
     updateObjectGrid();
@@ -242,7 +242,7 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
             }
         }
 
-        spdlog::info("ObjectPalettePanel: Loaded {} objects for category {} from {}",
+        spdlog::debug("ObjectPalettePanel: Loaded {} objects for category {} from {}",
             loadedCount, getCategoryDisplayName(category).toStdString(), lstPath.toStdString());
 
     } catch (const std::exception& e) {
@@ -339,7 +339,7 @@ void ObjectPalettePanel::updateObjectGrid() {
 
     GridPalettePanel::updatePaginationControls();
 
-    spdlog::info("ObjectPalettePanel: Loaded {} object widgets for category {}",
+    spdlog::debug("ObjectPalettePanel: Loaded {} object widgets for category {}",
         objectsLoaded, getCategoryDisplayName(_currentCategory).toStdString());
 }
 

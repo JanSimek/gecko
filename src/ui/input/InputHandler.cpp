@@ -107,22 +107,22 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             if (_callbacks.onTilePlacementCancel) {
                 _callbacks.onTilePlacementCancel();
             }
-            spdlog::info("Tile placement mode cancelled with right-click");
+            spdlog::debug("Tile placement mode cancelled with right-click");
         } else if (_mode == EditorMode::PlaceExitGrid) {
             _mode = EditorMode::Select;
-            spdlog::info("Exit grid placement mode cancelled with right-click");
+            spdlog::debug("Exit grid placement mode cancelled with right-click");
         } else if (_mode == EditorMode::MarkExits) {
             _mode = EditorMode::Select;
             if (_callbacks.onMarkExitsModeCancelled) {
                 _callbacks.onMarkExitsModeCancelled();
             }
-            spdlog::info("Mark exits mode cancelled with right-click");
+            spdlog::debug("Mark exits mode cancelled with right-click");
         } else if (_mode == EditorMode::StampPattern) {
             _mode = EditorMode::Select;
             if (_callbacks.onStampPatternCancel) {
                 _callbacks.onStampPatternCancel();
             }
-            spdlog::info("Stamp pattern mode cancelled with right-click");
+            spdlog::debug("Stamp pattern mode cancelled with right-click");
         } else {
             _currentAction = EditorAction::PANNING;
             _mouseStartPos = event.position;

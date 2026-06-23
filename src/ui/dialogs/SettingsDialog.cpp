@@ -248,7 +248,7 @@ void SettingsDialog::saveSettings() {
     _hasChanges = false;
 
     setMainStatus("Settings saved successfully", "success");
-    spdlog::info("Settings saved from preferences dialog");
+    spdlog::debug("Settings saved from preferences dialog");
 
     Q_EMIT settingsSaved(pathsHaveChanged);
 }

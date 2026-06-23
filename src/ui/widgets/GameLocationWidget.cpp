@@ -177,7 +177,7 @@ void GameLocationWidget::onBrowseExecutable() {
         if (_dataDirectoryEdit->text().trimmed().isEmpty()) {
             if (const auto dataDirectory = util::resolveGameDataRoot(std::filesystem::path(selectedFile.toStdString()))) {
                 _dataDirectoryEdit->setText(QString::fromStdString(dataDirectory->string()));
-                spdlog::info("Auto-set data directory to: {}", dataDirectory->string());
+                spdlog::debug("Auto-set data directory to: {}", dataDirectory->string());
             }
         }
 
@@ -207,7 +207,7 @@ void GameLocationWidget::onBrowseExecutable() {
             QFileInfo fileInfo(selectedFile);
             QString parentDir = fileInfo.dir().absolutePath();
             _dataDirectoryEdit->setText(parentDir);
-            spdlog::info("Auto-set data directory to: {}", parentDir.toStdString());
+            spdlog::debug("Auto-set data directory to: {}", parentDir.toStdString());
         }
 
         validateGameLocation(selectedFile);

@@ -518,7 +518,7 @@ void MainWindow::setupMenuBar() {
                 dock->setFloating(false);
             }
         }
-        spdlog::info("Re-docked all floating panels");
+        spdlog::debug("Re-docked all floating panels");
     });
 
     dockLayoutMenu->addSeparator();
@@ -931,7 +931,7 @@ void MainWindow::setupDockWidgets() {
     spdlog::debug("Dock widget setup completed with flexible sizing and state monitoring");
 
     // Qt already renders dock widgets above the central SFML widget, avoiding redraw issues
-    spdlog::info("Dock widgets configured with proper z-order and panel features");
+    spdlog::debug("Dock widgets configured with proper z-order and panel features");
 }
 
 void MainWindow::connectFileBrowserSignals() {
@@ -941,10 +941,10 @@ void MainWindow::connectFileBrowserSignals() {
 
     connect(_fileBrowserPanel, &FileBrowserPanel::fileDoubleClicked, this, [this](const QString& filePath) {
         if (filePath.endsWith(".map", Qt::CaseInsensitive)) {
-            spdlog::info("MainWindow: Opening map from file browser: {}", filePath.toStdString());
+            spdlog::debug("MainWindow: Opening map from file browser: {}", filePath.toStdString());
             handleMapLoadRequest(filePath.toStdString(), false);
         } else if (ExternalEditorLauncher::isTextFile(filePath)) {
-            spdlog::info("MainWindow: Opening text file from file browser: {}", filePath.toStdString());
+            spdlog::debug("MainWindow: Opening text file from file browser: {}", filePath.toStdString());
             _externalEditorLauncher->openFile(filePath);
         } else {
             spdlog::debug("MainWindow: Unsupported file type double-clicked: {}", filePath.toStdString());
@@ -1083,7 +1083,7 @@ void MainWindow::startGameLoop() {
     if (!_isRunning) {
         _isRunning = true;
         _gameLoopTimer->start(16); // ~60 FPS
-        spdlog::info("Qt6 game loop started");
+        spdlog::debug("Qt6 game loop started");
     }
 }
 
@@ -1091,7 +1091,7 @@ void MainWindow::stopGameLoop() {
     if (_isRunning) {
         _isRunning = false;
         _gameLoopTimer->stop();
-        spdlog::info("Qt6 game loop stopped");
+        spdlog::debug("Qt6 game loop stopped");
     }
 }
 
@@ -1390,7 +1390,7 @@ void MainWindow::connectPanelSignals() {
                 updateElevationMenu(_currentEditorWidget->getMap());
                 if (_currentEditorWidget->getCurrentElevation() == elevation) {
                     _currentEditorWidget->loadTileSprites();
-                    spdlog::info("MainWindow: Reloaded sprites for newly added elevation {}", elevation);
+                    spdlog::debug("MainWindow: Reloaded sprites for newly added elevation {}", elevation);
                 }
             });
         connect(_mapInfoPanel, &MapInfoPanel::elevationRemoved,
@@ -1410,7 +1410,7 @@ void MainWindow::connectPanelSignals() {
                         else if ((flags & 0x8) == 0)
                             elevationChanged(ELEVATION_3);
                     }
-                    spdlog::info("MainWindow: Switched away from removed elevation {}", elevation);
+                    spdlog::debug("MainWindow: Switched away from removed elevation {}", elevation);
                 }
             });
         connect(_mapInfoPanel, &MapInfoPanel::clearElevationRequested,
@@ -1505,7 +1505,7 @@ void MainWindow::connectToEditorWidget() {
 
     applySelectionColorsToEditor();
 
-    spdlog::info("Connected EditorWidget instance signals");
+    spdlog::debug("Connected EditorWidget instance signals");
 }
 
 void MainWindow::applySelectionColorsToEditor() {
@@ -1574,7 +1574,7 @@ void MainWindow::updateMapInfo(Map* map) {
 
             if (tileList) {
                 _tilePalettePanel->loadTiles(tileList);
-                spdlog::info("Loaded tiles.lst into palette: {} tiles", tileList->list().size());
+                spdlog::debug("Loaded tiles.lst into palette: {} tiles", tileList->list().size());
             } else {
                 spdlog::error("Failed to get tiles.lst from the resource repository");
             }
@@ -1587,7 +1587,7 @@ void MainWindow::updateMapInfo(Map* map) {
         try {
             _objectPalettePanel->setMap(map);
             _objectPalettePanel->loadObjects();
-            spdlog::info("Loaded objects into ObjectPalettePanel");
+            spdlog::debug("Loaded objects into ObjectPalettePanel");
         } catch (const std::exception& e) {
             spdlog::error("Failed to load objects for palette: {}", e.what());
         }
@@ -1629,7 +1629,7 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFile
     if (!maybeSaveChanges()) {
         return; // user cancelled — keep the current map instead of loading over it
     }
-    spdlog::info("MainWindow: Handling request to load map: {} (filesystem: {})", mapPath, forceFilesystem);
+    spdlog::debug("MainWindow: Handling request to load map: {} (filesystem: {})", mapPath, forceFilesystem);
 
     auto loadingWidget = std::make_unique<LoadingWidget>(this);
     loadingWidget->setWindowTitle("Loading Map");
@@ -1651,7 +1651,7 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFile
 
     loadingWidget->exec();
 
-    spdlog::info("Map loading completed from MainWindow");
+    spdlog::debug("Map loading completed from MainWindow");
 }
 
 void MainWindow::setupPanelsMenu() {
@@ -1932,7 +1932,7 @@ void MainWindow::closeCurrentMap() {
         return;
     }
 
-    spdlog::info("Closing current map due to data path changes");
+    spdlog::debug("Closing current map due to data path changes");
 
     stopGameLoop();
 
@@ -1965,9 +1965,9 @@ void MainWindow::showPreferences() {
     int result = dialog.exec();
 
     if (result == QDialog::Accepted) {
-        spdlog::info("Settings dialog closed with changes");
+        spdlog::debug("Settings dialog closed with changes");
     } else {
-        spdlog::info("Settings dialog cancelled");
+        spdlog::debug("Settings dialog cancelled");
     }
 
     showFileBrowserPanel();

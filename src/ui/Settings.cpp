@@ -57,7 +57,7 @@ void Settings::load() {
     spdlog::debug("Loading settings from configuration path: {}", filePath.toStdString());
 
     if (!QFile::exists(filePath)) {
-        spdlog::info("Settings file not found in {}, using defaults", filePath.toStdString());
+        spdlog::debug("Settings file not found in {}, using defaults", filePath.toStdString());
         return;
     }
 
@@ -77,7 +77,7 @@ void Settings::load() {
     }
 
     fromJson(doc.object());
-    spdlog::info("Settings loaded from: {}", filePath.toStdString());
+    spdlog::debug("Settings loaded from: {}", filePath.toStdString());
 }
 
 void Settings::save() {
@@ -92,7 +92,7 @@ void Settings::save() {
     QJsonDocument doc(toJson());
     file.write(doc.toJson());
 
-    spdlog::info("Settings saved to: {}", filePath.toStdString());
+    spdlog::debug("Settings saved to: {}", filePath.toStdString());
 }
 
 QJsonObject Settings::toJson() const {
@@ -277,7 +277,7 @@ void Settings::addDataPath(const std::filesystem::path& path) {
     }
 
     _dataPaths.push_back(normalizedPath);
-    spdlog::info("Added data path: {}", normalizedPath.string());
+    spdlog::debug("Added data path: {}", normalizedPath.string());
 }
 
 void Settings::removeDataPath(const std::filesystem::path& path) {
@@ -289,7 +289,7 @@ void Settings::removeDataPath(const std::filesystem::path& path) {
 
     if (it != _dataPaths.end()) {
         _dataPaths.erase(it, _dataPaths.end());
-        spdlog::info("Removed data path: {}", normalizedPath.string());
+        spdlog::debug("Removed data path: {}", normalizedPath.string());
     }
 }
 
@@ -422,7 +422,7 @@ std::vector<std::filesystem::path> Settings::detectFallout2Installations() {
         const std::filesystem::path gamePath(gogPath.toStdString());
         if (const auto normalized = util::resolveGameDataRoot(gamePath)) {
             appendUnique(installations, *normalized);
-            spdlog::info("Found GOG Fallout 2 installation: {}", normalized->string());
+            spdlog::debug("Found GOG Fallout 2 installation: {}", normalized->string());
         }
     }
 
@@ -433,7 +433,7 @@ std::vector<std::filesystem::path> Settings::detectFallout2Installations() {
         const std::filesystem::path steamFo2Path = std::filesystem::path(steamPath.toStdString()) / "steamapps" / "common" / "Fallout 2";
         if (const auto normalized = util::resolveGameDataRoot(steamFo2Path)) {
             appendUnique(installations, *normalized);
-            spdlog::info("Found Steam Fallout 2 installation: {}", normalized->string());
+            spdlog::debug("Found Steam Fallout 2 installation: {}", normalized->string());
         }
     }
 
@@ -448,7 +448,7 @@ std::vector<std::filesystem::path> Settings::detectFallout2Installations() {
     for (const auto& path : macPaths) {
         if (const auto normalized = util::resolveGameDataRoot(path)) {
             appendUnique(installations, *normalized);
-            spdlog::info("Found macOS Fallout 2 installation: {}", normalized->string());
+            spdlog::debug("Found macOS Fallout 2 installation: {}", normalized->string());
         }
     }
 
@@ -463,7 +463,7 @@ std::vector<std::filesystem::path> Settings::detectFallout2Installations() {
     for (const auto& path : linuxPaths) {
         if (const auto normalized = util::resolveGameDataRoot(path)) {
             appendUnique(installations, *normalized);
-            spdlog::info("Found Linux Fallout 2 installation: {}", normalized->string());
+            spdlog::debug("Found Linux Fallout 2 installation: {}", normalized->string());
         }
     }
 #endif
@@ -484,7 +484,7 @@ std::vector<Settings::DetectedInstallation> Settings::detectFallout2Installation
         std::filesystem::path gogGamePath = std::filesystem::path(gogPath.toStdString());
         if (util::hasFallout2DataLayout(gogGamePath)) {
             installations.push_back({ gogGamePath, "GOG Installation" });
-            spdlog::info("Found GOG Fallout 2 installation: {}", gogGamePath.string());
+            spdlog::debug("Found GOG Fallout 2 installation: {}", gogGamePath.string());
         }
     }
 
@@ -495,7 +495,7 @@ std::vector<Settings::DetectedInstallation> Settings::detectFallout2Installation
         std::filesystem::path steamGamePath = std::filesystem::path(steamPath.toStdString()) / "steamapps" / "common" / "Fallout 2";
         if (util::hasFallout2DataLayout(steamGamePath)) {
             installations.push_back({ steamGamePath, "Steam Installation" });
-            spdlog::info("Found Steam Fallout 2 installation: {}", steamGamePath.string());
+            spdlog::debug("Found Steam Fallout 2 installation: {}", steamGamePath.string());
         }
     }
 
@@ -509,7 +509,7 @@ std::vector<Settings::DetectedInstallation> Settings::detectFallout2Installation
     for (const auto& [path, description] : macPaths) {
         if (util::resolveGameDataRoot(path).has_value()) {
             installations.push_back({ path, description });
-            spdlog::info("Found macOS Fallout 2 installation: {}", path.string());
+            spdlog::debug("Found macOS Fallout 2 installation: {}", path.string());
         }
     }
 
@@ -517,7 +517,7 @@ std::vector<Settings::DetectedInstallation> Settings::detectFallout2Installation
     std::filesystem::path steamMacPath = std::filesystem::path(QDir::homePath().toStdString()) / "Library/Application Support/Steam/steamapps/common/Fallout 2";
     if (util::hasFallout2DataLayout(steamMacPath)) {
         installations.push_back({ steamMacPath, "Steam Installation (macOS)" });
-        spdlog::info("Found Steam Fallout 2 installation on macOS: {}", steamMacPath.string());
+        spdlog::debug("Found Steam Fallout 2 installation on macOS: {}", steamMacPath.string());
     }
 
 #else
@@ -531,7 +531,7 @@ std::vector<Settings::DetectedInstallation> Settings::detectFallout2Installation
     for (const auto& [path, description] : linuxPaths) {
         if (util::hasFallout2DataLayout(path)) {
             installations.push_back({ path, description });
-            spdlog::info("Found Linux Fallout 2 installation: {}", path.string());
+            spdlog::debug("Found Linux Fallout 2 installation: {}", path.string());
         }
     }
 #endif
@@ -555,7 +555,7 @@ std::filesystem::path Settings::getExecutableGameLocation() const {
 
 void Settings::setExecutableGameLocation(const std::filesystem::path& location) {
     _executableGameLocation = location;
-    spdlog::info("Executable game location set to: {}", location.string());
+    spdlog::debug("Executable game location set to: {}", location.string());
 }
 
 std::filesystem::path Settings::getGameDataDirectory() const {
@@ -564,7 +564,7 @@ std::filesystem::path Settings::getGameDataDirectory() const {
 
 void Settings::setGameDataDirectory(const std::filesystem::path& location) {
     _gameDataDirectory = location;
-    spdlog::info("Game data directory set to: {}", location.string());
+    spdlog::debug("Game data directory set to: {}", location.string());
 }
 
 bool Settings::isGameLocationValid() const {
@@ -595,7 +595,7 @@ void Settings::autoDetectGameLocation() {
         const std::filesystem::path& gameDir = installations[0];
         _executableGameLocation = gameDir;
         _gameDataDirectory = gameDir;
-        spdlog::info("Auto-detected game location: {}", gameDir.string());
+        spdlog::debug("Auto-detected game location: {}", gameDir.string());
     } else {
         spdlog::warn("No Fallout 2 installations detected");
     }

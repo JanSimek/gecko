@@ -71,7 +71,7 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
             return;
         }
 
-        spdlog::info("Saved map to game directory: {} ({} bytes)", mapDestination.string(), *bytesWritten);
+        spdlog::debug("Saved map to game directory: {} ({} bytes)", mapDestination.string(), *bytesWritten);
 
         // 2. Modify ddraw.ini
         std::filesystem::path ddrawIniPath = gameDataDir / "ddraw.ini";
@@ -169,7 +169,7 @@ bool GameLauncher::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, con
         outFile << content;
         outFile.close();
 
-        spdlog::info("Modified {}: set StartingMap to {}", ddrawIniPath.string(), mapFilename);
+        spdlog::debug("Modified {}: set StartingMap to {}", ddrawIniPath.string(), mapFilename);
         return true;
 
     } catch (const std::exception& e) {
@@ -179,7 +179,7 @@ bool GameLauncher::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, con
 }
 
 void GameLauncher::launchGame(const std::filesystem::path& executablePath) {
-    spdlog::info("Launching game executable: {}", executablePath.string());
+    spdlog::debug("Launching game executable: {}", executablePath.string());
 
     QProcess* gameProcess = new QProcess(this);
     gameProcess->setWorkingDirectory(QString::fromStdString(executablePath.parent_path().string()));
@@ -189,7 +189,7 @@ void GameLauncher::launchGame(const std::filesystem::path& executablePath) {
             if (exitStatus == QProcess::CrashExit) {
                 spdlog::warn("Game process crashed with exit code: {}", exitCode);
             } else {
-                spdlog::info("Game process finished with exit code: {}", exitCode);
+                spdlog::debug("Game process finished with exit code: {}", exitCode);
             }
             gameProcess->deleteLater();
         });
@@ -228,7 +228,6 @@ void GameLauncher::launchGame(const std::filesystem::path& executablePath) {
     }
 
     _showStatus("Game launched successfully!");
-    spdlog::info("Game launched successfully");
 }
 
 } // namespace geck

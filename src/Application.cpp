@@ -164,19 +164,12 @@ void Application::checkFirstRun() {
         spdlog::info("First run detected, showing settings dialog");
 
         SettingsDialog dialog(_settings, _mainWindow.get());
-        int result = dialog.exec();
+        dialog.exec();
 
-        // Save even if cancelled so we keep at least the default data path from the command line.
+        // Save and reload data paths whether or not the dialog was accepted, so we keep at least the
+        // default data path from the command line and the app is usable either way.
         settings.save();
-
-        if (result == QDialog::Accepted) {
-            spdlog::info("Settings dialog accepted, configuration saved");
-            loadDataPaths();
-        } else {
-            spdlog::info("Settings dialog cancelled, saving default configuration");
-            // Load data paths even if cancelled, so the app is usable.
-            loadDataPaths();
-        }
+        loadDataPaths();
     } else {
         loadDataPaths();
     }
@@ -206,7 +199,7 @@ void Application::loadDataPaths() {
         _mainWindow->showFileBrowserPanel();
     }
 
-    spdlog::info("Data paths loaded successfully");
+    spdlog::debug("Data paths loaded successfully");
 }
 
 std::filesystem::path Application::getResourcesPath() {

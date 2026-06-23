@@ -83,7 +83,6 @@ void DataFileSystem::addDataPathLocked(const std::filesystem::path& path) {
     }
 
     _vfs->AddFileSystem("/", fileSystem);
-    spdlog::info("Location '{}' was added to the data path", mountRoot->string());
 }
 
 std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::filesystem::path& path) const {

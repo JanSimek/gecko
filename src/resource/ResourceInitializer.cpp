@@ -61,7 +61,6 @@ void ResourceInitializer::loadEssentialLstFiles(resource::GameResources& resourc
             loadLst(path);
         }
 
-        spdlog::info("ResourceInitializer: Loaded all essential LST files");
     } catch (const std::exception& e) {
         spdlog::error("ResourceInitializer: Failed to load essential LST files: {}", e.what());
         throw;
@@ -92,7 +91,6 @@ void ResourceInitializer::loadEssentialTextures(resource::GameResources& resourc
         resources.textures().preload(ResourcePaths::Frm::WALL_BLOCK_FULL);
         resources.textures().preload(ResourcePaths::Frm::EXIT_GRID);
 
-        spdlog::info("ResourceInitializer: Loaded all essential textures");
     } catch (const std::exception& e) {
         spdlog::error("ResourceInitializer: Failed to load essential textures: {}", e.what());
         throw;

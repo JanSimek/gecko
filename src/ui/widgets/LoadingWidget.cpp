@@ -94,7 +94,7 @@ void LoadingWidget::start() {
     // 30 FPS for smooth progress updates
     _updateTimer->start(UI::TIMER_INTERVAL_MS);
 
-    spdlog::info("LoadingWidget started with {} loaders", _loaders.size());
+    spdlog::debug("LoadingWidget started with {} loaders", _loaders.size());
 }
 
 void LoadingWidget::updateProgress() {
@@ -150,7 +150,7 @@ void LoadingWidget::updateProgress() {
         _isLoading = false;
         _progressBar->setValue(100);
         _statusLabel->setText("Complete");
-        spdlog::info("LoadingWidget completed all loaders");
+        spdlog::debug("LoadingWidget completed all loaders");
 
         // Delay so the completed (100%) state is briefly visible before closing
         QTimer::singleShot(200, this, [this]() {
