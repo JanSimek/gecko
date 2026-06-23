@@ -247,7 +247,17 @@ std::unique_ptr<Map> MapReader::read() {
                     case MapScript::ScriptType::CRITTER:
                         break;
                     default:
-                        spdlog::error("Unknown script PID = {}", (pid & 0xFF000000) >> 24);
+                        // Padding slots (j >= script_section_count) hold leftover garbage the original
+                        // mapper never zeroed; an unrecognised type byte there is expected and the slot is
+                        // discarded below, so log it quietly. Only a *real* script (j < count) with an
+                        // unknown type is worth a warning.
+                        if (j < script_section_count) {
+                            spdlog::warn("Unknown script PID type {} for a real script in section {}",
+                                (pid & 0xFF000000) >> 24, script_section);
+                        } else {
+                            spdlog::debug("Skipping padding script slot (garbage PID type {}) in section {}",
+                                (pid & 0xFF000000) >> 24, script_section);
+                        }
                         break;
                 }
 
