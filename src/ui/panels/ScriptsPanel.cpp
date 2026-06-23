@@ -8,7 +8,9 @@
 #include "resource/ScriptNames.h"
 
 #include <QHeaderView>
+#include <QLabel>
 #include <QLineEdit>
+#include <QSplitter>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
@@ -39,7 +41,10 @@ ScriptsPanel::ScriptsPanel(resource::GameResources& resources, QWidget* parent)
     _filterEdit->setPlaceholderText("Filter scripts...");
     mainLayout->addWidget(_filterEdit);
 
+    auto* splitter = new QSplitter(Qt::Vertical, this);
+
     _table = new QTableWidget(0, COL_COUNT, this);
+    _table->setObjectName("scriptsTable");
     _table->setHorizontalHeaderLabels({ "Section", "Script ID", "Filename", "Name", "Owner OID", "Detail" });
     _table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     _table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -51,11 +56,33 @@ ScriptsPanel::ScriptsPanel(resource::GameResources& resources, QWidget* parent)
     _table->horizontalHeader()->setSectionResizeMode(COL_NAME, QHeaderView::Stretch);
     _table->horizontalHeader()->setSectionResizeMode(COL_OWNER, QHeaderView::ResizeToContents);
     _table->horizontalHeader()->setSectionResizeMode(COL_DETAIL, QHeaderView::ResizeToContents);
-    mainLayout->addWidget(_table);
+    splitter->addWidget(_table);
+
+    // The selected script's local variables (its slice of map_local_vars), shown below the list.
+    auto* lvarContainer = new QWidget(this);
+    auto* lvarLayout = new QVBoxLayout(lvarContainer);
+    lvarLayout->setContentsMargins(0, 0, 0, 0);
+    lvarLayout->addWidget(new QLabel("Local variables (selected script)", lvarContainer));
+
+    _localVarsTable = new QTableWidget(0, 2, lvarContainer);
+    _localVarsTable->setObjectName("localVarsTable");
+    _localVarsTable->setHorizontalHeaderLabels({ "#", "Value" });
+    _localVarsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    _localVarsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    _localVarsTable->verticalHeader()->setVisible(false);
+    _localVarsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    _localVarsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    lvarLayout->addWidget(_localVarsTable);
+    splitter->addWidget(lvarContainer);
+
+    splitter->setStretchFactor(0, 3); // the script list gets the bulk of the height
+    splitter->setStretchFactor(1, 1);
+    mainLayout->addWidget(splitter);
 
     connect(_filterEdit, &QLineEdit::textChanged, this, &ScriptsPanel::applyFilter);
     connect(_table, &QTableWidget::cellDoubleClicked, this,
         [this](int row, int /*column*/) { onCellDoubleClicked(row); });
+    connect(_table, &QTableWidget::itemSelectionChanged, this, &ScriptsPanel::onScriptSelectionChanged);
 }
 
 void ScriptsPanel::setMap(Map* map) {
@@ -67,6 +94,7 @@ void ScriptsPanel::populate() {
     // Sorting must be off while inserting, or rows shuffle mid-build and setItem targets the wrong cell.
     _table->setSortingEnabled(false);
     _table->setRowCount(0);
+    _localVarsTable->setRowCount(0); // selection is dropped by the rebuild; clear its detail view too
 
     if (_map == nullptr) {
         _table->setSortingEnabled(true);
@@ -173,6 +201,58 @@ void ScriptsPanel::onCellDoubleClicked(int row) {
     }
 
     Q_EMIT scriptObjectActivated(static_cast<int>(sid));
+}
+
+const MapScript* ScriptsPanel::scriptByPid(qulonglong sid) const {
+    if (_map == nullptr || sid == MapScript::NONE) {
+        return nullptr;
+    }
+    for (const auto& section : _map->getMapFile().map_scripts) {
+        for (const MapScript& script : section) {
+            if (script.pid == sid) {
+                return &script;
+            }
+        }
+    }
+    return nullptr;
+}
+
+void ScriptsPanel::onScriptSelectionChanged() {
+    _localVarsTable->setRowCount(0);
+
+    const int row = _table->currentRow();
+    if (row < 0) {
+        return;
+    }
+    const QTableWidgetItem* idItem = _table->item(row, COL_SCRIPT_ID);
+    if (idItem == nullptr) {
+        return;
+    }
+
+    // Resolve the selected row back to its MapScript and show its slice of map_local_vars
+    // (local_var_offset .. +local_var_count). Ownerless rows (the map-header row) resolve to nullptr.
+    const MapScript* script = scriptByPid(idItem->data(Qt::UserRole).toULongLong());
+    if (script == nullptr || script->local_var_offset == MapScript::NONE) {
+        return;
+    }
+
+    const auto& lvars = _map->getMapFile().map_local_vars;
+    for (uint32_t i = 0; i < script->local_var_count; ++i) {
+        const std::size_t index = static_cast<std::size_t>(script->local_var_offset) + i;
+        if (index >= lvars.size()) {
+            break; // header count outruns the stored array — stop rather than read out of bounds
+        }
+        const int lvarRow = _localVarsTable->rowCount();
+        _localVarsTable->insertRow(lvarRow);
+
+        auto* indexItem = new QTableWidgetItem;
+        indexItem->setData(Qt::DisplayRole, static_cast<int>(i));
+        _localVarsTable->setItem(lvarRow, 0, indexItem);
+
+        auto* valueItem = new QTableWidgetItem;
+        valueItem->setData(Qt::DisplayRole, lvars[index]);
+        _localVarsTable->setItem(lvarRow, 1, valueItem);
+    }
 }
 
 } // namespace geck

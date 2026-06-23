@@ -9,6 +9,7 @@ namespace geck {
 
 class Map;
 class Lst;
+struct MapScript;
 namespace resource {
     class GameResources;
 }
@@ -36,6 +37,7 @@ signals:
 private slots:
     void applyFilter();                // hide rows that don't match _filterEdit; re-applied after every populate()
     void onCellDoubleClicked(int row); // resolve the row's owning SID and emit scriptObjectActivated
+    void onScriptSelectionChanged();   // show the selected script's local variables
 
 private:
     void populate();
@@ -43,12 +45,15 @@ private:
     // navigation (MapScript::NONE for ownerless rows); `ownerOid` drives the Owner column.
     void addRow(const QString& section, int programIndex, qulonglong rowSid, qulonglong ownerOid,
         const QString& detail, const Lst* lst);
+    // The map's script with this SID (its `pid`), or nullptr (e.g. the ownerless map-header row's NONE).
+    const MapScript* scriptByPid(qulonglong sid) const;
 
     resource::GameResources& _resources;
     Map* _map = nullptr;
 
     QLineEdit* _filterEdit;
     QTableWidget* _table;
+    QTableWidget* _localVarsTable; // local variables (LVARs) of the currently selected script
 };
 
 } // namespace geck

@@ -994,7 +994,7 @@ TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name"
     geck::ScriptsPanel panel(data.resources());
     panel.setMap(map.get());
 
-    auto* table = panel.findChild<QTableWidget*>();
+    auto* table = panel.findChild<QTableWidget*>("scriptsTable"); // the script list (not the local-vars table)
     REQUIRE(table != nullptr);
     CHECK(table->rowCount() == 3); // 2 section scripts + the map's own header script
 
@@ -1071,4 +1071,35 @@ TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name"
     // Clearing the map empties the table without crashing.
     panel.setMap(nullptr);
     CHECK(table->rowCount() == 0);
+}
+
+TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scripts]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
+    data.mount();
+
+    auto map = makeMap("testmap.map");
+    auto& mapFile = map->getMapFile();
+
+    // A critter script whose two local variables sit at offset 0 in the map's flat LVAR array.
+    auto script = geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::CRITTER, 0, 0, 42);
+    script.local_var_offset = 0;
+    script.local_var_count = 2;
+    mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::CRITTER)].push_back(script);
+    mapFile.map_local_vars = { 111, 222 };
+
+    geck::ScriptsPanel panel(data.resources());
+    panel.setMap(map.get());
+
+    auto* scriptsTable = panel.findChild<QTableWidget*>("scriptsTable");
+    auto* lvarTable = panel.findChild<QTableWidget*>("localVarsTable");
+    REQUIRE(scriptsTable != nullptr);
+    REQUIRE(lvarTable != nullptr);
+    REQUIRE(scriptsTable->rowCount() == 1);
+    CHECK(lvarTable->rowCount() == 0); // nothing selected yet
+
+    scriptsTable->selectRow(0); // selecting the script reveals its local variables
+    REQUIRE(lvarTable->rowCount() == 2);
+    CHECK(lvarTable->item(0, 1)->data(Qt::DisplayRole).toInt() == 111); // column 1 = Value
+    CHECK(lvarTable->item(1, 1)->data(Qt::DisplayRole).toInt() == 222);
 }
