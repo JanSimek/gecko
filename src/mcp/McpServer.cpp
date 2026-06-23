@@ -403,8 +403,11 @@ namespace {
             "pass it to scope. Each object carries a 'flat' flag (structural blocker vs. decoration) "
             "for curating a scatter palette. Each map also lists 'critters': who is on it, their team "
             "(group_id), their AI packet resolved via ai.txt (aggression, disposition, flee/best-weapon/"
-            "distance), and the attached 'script' ({programIndex,name}) — pass that programIndex to "
-            "describe_script for the script's source and dialog.",
+            "distance), and the attached 'script' ({programIndex,name,localVars}) — pass that "
+            "programIndex to describe_script for the script's source and dialog. Each map also lists "
+            "'scripts': every section's scripts (mirroring the editor's Scripts panel) as "
+            "{section,programIndex,name,filename,ownerObject,localVars}, with spatialRadius on Spatial "
+            "scripts and timerMs on Timer scripts.",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolAnalyze(r, a); } });
         t.push_back({ "palette",

@@ -97,7 +97,7 @@ namespace {
     public:
         explicit NameResolver(resource::GameResources& resources)
             : _resources(resources)
-            , _tilesLst(resources.repository().load<Lst>("art/tiles/tiles.lst")) {
+            , _tilesLst(loadTilesLst(resources)) {
         }
 
         std::string tileName(uint16_t id) const {
@@ -151,6 +151,18 @@ namespace {
         }
 
     private:
+        // tiles.lst (tile id -> name), or nullptr when it isn't mounted — tileName() falls back to a
+        // "tile#N" label, so analyze still runs on a bare .map (e.g. one just generated) without the
+        // full game data. Tolerant for the same reason loadScriptsLst() is.
+        static const Lst* loadTilesLst(resource::GameResources& resources) {
+            try {
+                return resources.repository().load<Lst>("art/tiles/tiles.lst");
+            } catch (const std::exception& e) {
+                spdlog::debug("loadTilesLst: {}", e.what());
+                return nullptr;
+            }
+        }
+
         // Load the proto once and cache whether it resolved and its OBJECT_FLAT flag.
         void characterize(uint32_t pid) {
             if (_resolved.find(pid) != _resolved.end()) {
@@ -234,8 +246,31 @@ namespace {
         return std::nullopt;
     }
 
+    // The MapScript an object's map_scripts_pid (SID) points at, or nullptr if the object has no
+    // script. Mirrors resolveObjectScript's lookup (the SID's section + a pid match), so the caller
+    // can read the script's local variables without re-deriving the section.
+    const MapScript* findObjectScript(Map& map, int32_t mapScriptsPid) {
+        if (mapScriptsPid < 0) {
+            return nullptr;
+        }
+        const auto sid = static_cast<uint32_t>(mapScriptsPid);
+        const int section = MapScript::sidSection(sid);
+        if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
+            return nullptr;
+        }
+        for (const auto& script : map.getMapFile().map_scripts[section]) {
+            if (script.pid == sid) {
+                return &script;
+            }
+        }
+        return nullptr;
+    }
+
     // Ordered so the emitted objects keep the field order below (nlohmann's default json sorts keys).
     using ordered_json = nlohmann::ordered_json;
+
+    // Forward-declared so crittersToJson (above scriptsToJson) can attach a script's local variables.
+    ordered_json localVarsToJson(const MapScript& script, const std::vector<int32_t>& lvars);
 
     // List everything and keep the .map files, case-insensitively — more robust than a glob
     // against the raw VFS keys (whose case and leading "/" depend on the DAT/mount).
@@ -599,15 +634,77 @@ namespace {
                 }
                 const uint32_t pid = object->pro_pid;
                 const uint32_t packet = object->ai_packet != 0 ? object->ai_packet : names.critterAiPacket(pid);
-                // The attached script as {programIndex, name} (feed programIndex to describe_script) or null.
+                // The attached script as {programIndex, name, localVars} (feed programIndex to
+                // describe_script) or null. localVars is the script's slice of the map's LVAR pool.
                 ordered_json scriptJson = nullptr;
                 if (const auto ref = resolveObjectScript(map, object->map_scripts_pid, scriptsLst); ref.has_value()) {
-                    scriptJson = ordered_json{ { "programIndex", ref->first }, { "name", ref->second } };
+                    ordered_json localVars = ordered_json::array();
+                    if (const MapScript* script = findObjectScript(map, object->map_scripts_pid); script != nullptr) {
+                        localVars = localVarsToJson(*script, map.getMapFile().map_local_vars);
+                    }
+                    scriptJson = ordered_json{ { "programIndex", ref->first }, { "name", ref->second },
+                        { "localVars", std::move(localVars) } };
                 }
                 array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
                     { "name", names.protoName(pid) }, { "hex", object->position }, { "elevation", elevation },
                     { "team", object->group_id }, { "aiPacket", packet },
                     { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) }, { "script", scriptJson } });
+            }
+        }
+        return array;
+    }
+
+    // The script's local-variable slice of the map's flat LVAR pool: lvars[local_var_offset ..
+    // local_var_offset + local_var_count). Empty array when the script has no locals (offset is the
+    // NONE sentinel or count is 0). Every index is bounds-checked and the slice stops at the pool's
+    // end, so a stale count (e.g. a hand-edited map) can never read past the vector.
+    ordered_json localVarsToJson(const MapScript& script, const std::vector<int32_t>& lvars) {
+        auto array = ordered_json::array();
+        if (script.local_var_offset == MapScript::NONE || script.local_var_count == 0) {
+            return array;
+        }
+        for (uint32_t i = 0; i < script.local_var_count; ++i) {
+            const std::size_t index = static_cast<std::size_t>(script.local_var_offset) + i;
+            if (index >= lvars.size()) {
+                break;
+            }
+            array.push_back(lvars[index]);
+        }
+        return array;
+    }
+
+    // Per-map script list across every section, mirroring the editor's Scripts panel: each entry is
+    // { section, programIndex, name, filename, ownerObject, [spatialRadius|timerMs], localVars }. The
+    // section name comes from the section index (== MapScript::ScriptType); programIndex is the
+    // 0-based scripts.lst index (script_id), resolved to a friendly scrname.msg name and its .lst
+    // filename. ownerObject is the script's owning object id (null for the -1 sentinel / 0 = none).
+    // spatialRadius is included only for Spatial scripts, timerMs only for Timer scripts. localVars
+    // is the script's slice of the map's LVAR pool.
+    ordered_json scriptsToJson(Map& map, const Lst* scriptsLst, resource::GameResources& resources) {
+        auto array = ordered_json::array();
+        const auto& mapFile = map.getMapFile();
+        for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
+            for (const MapScript& script : mapFile.map_scripts[section]) {
+                std::string filename;
+                if (scriptsLst != nullptr && script.script_id < scriptsLst->list().size()) {
+                    filename = scriptsLst->at(script.script_id);
+                }
+                ordered_json entry;
+                entry["section"] = std::string(MapScript::toString(static_cast<MapScript::ScriptType>(section)));
+                entry["programIndex"] = static_cast<int>(script.script_id);
+                entry["name"] = resource::scriptDisplayName(resources, static_cast<int>(script.script_id));
+                entry["filename"] = filename;
+                entry["ownerObject"] = (script.script_oid == MapScript::NONE || script.script_oid == 0)
+                    ? ordered_json(nullptr)
+                    : ordered_json(script.script_oid);
+                if (section == static_cast<int>(MapScript::ScriptType::SPATIAL)) {
+                    entry["spatialRadius"] = script.spatial_radius;
+                }
+                if (section == static_cast<int>(MapScript::ScriptType::TIMER)) {
+                    entry["timerMs"] = script.timer;
+                }
+                entry["localVars"] = localVarsToJson(script, mapFile.map_local_vars);
+                array.push_back(std::move(entry));
             }
         }
         return array;
@@ -731,12 +828,13 @@ namespace {
         entry["clusters"] = clustersToJson(collectClusters(map), ctx.names);
         entry["critters"] = crittersToJson(map, ctx.names, ctx.ai, ctx.scriptsLst);
         entry["header"] = headerToJson(map, loadMapGam(ctx.resources, mapPath), ctx.scriptsLst, ctx.resources);
+        entry["scripts"] = scriptsToJson(map, ctx.scriptsLst, ctx.resources);
         entry["exits"] = exitsToJson(map, ctx.mapNames);
         return entry;
     }
 
     // Machine-readable analyze, for an MCP client: per map { name, path, floor[], objects[],
-    // adjacency[], clusters[], critters[], header{}, exits[] } and an aggregate { analysed, floor[],
+    // adjacency[], clusters[], critters[], header{}, scripts[], exits[] } and an aggregate { analysed, floor[],
     // objects[], adjacency[] }. `flat` is the structural-vs-decoration hint; `adjacency` lists
     // floor-tile borders (transitions); `clusters` groups nearby objects (structures) with a
     // centre/bbox an agent feeds to extract_pattern. Built with nlohmann ordered_json.
