@@ -1441,6 +1441,9 @@ void MainWindow::connectPanelSignals() {
         // Editing a Map name / Lookup name marks the map modified; the value is written to the writable
         // copy when the map is saved (see the saveMap handlers, which call persistMapNames()).
         connect(_mapInfoPanel, &MapInfoPanel::mapNamesChanged, this, [this]() { setMapModified(true); });
+        // Editing a global variable value writes straight into map_global_vars; flag the map modified so
+        // the change is persisted on save.
+        connect(_mapInfoPanel, &MapInfoPanel::mapVariablesChanged, this, [this]() { setMapModified(true); });
     }
 
     // ScriptsPanel signals → current editor widget. Double-clicking an object-owned script row jumps to
@@ -1458,6 +1461,9 @@ void MainWindow::connectPanelSignals() {
                     showStatusMessage("Script has no object on the map");
                 }
             });
+        // Editing a local variable value writes straight into map_local_vars; flag the map modified so
+        // the change is persisted on save.
+        connect(_scriptsPanel, &ScriptsPanel::mapVariablesChanged, this, [this]() { setMapModified(true); });
     }
 }
 

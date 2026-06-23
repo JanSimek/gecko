@@ -13,11 +13,13 @@
 #include <QTreeWidgetItem>
 #include <QComboBox>
 #include <QPushButton>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace geck {
 
@@ -56,7 +58,8 @@ signals:
     void mapScriptIdChanged(int scriptId);
     void darknessChanged(int darkness);
     void timestampChanged(int timestamp);
-    void mapNamesChanged(); // a Map name / Lookup name field was edited -> mark the map modified
+    void mapNamesChanged();     // a Map name / Lookup name field was edited -> mark the map modified
+    void mapVariablesChanged(); // a global variable value was edited -> mark the map modified
     void elevationAdded(int elevation);
     void elevationRemoved(int elevation);
     /// Bulk map operations, routed to the editor's ObjectCommandController so they
@@ -74,6 +77,7 @@ private slots:
     void onClearElevationClicked();
     void onCopyElevationClicked();
     void onAddSpatialScriptClicked();
+    void onGlobalVarChanged(QTreeWidgetItem* item, int column);
 
 private:
     void setupUI();
@@ -137,11 +141,17 @@ private:
     std::unique_ptr<resource::MapNameResolver> _mapNames; // built lazily; reads maps.txt/map.msg once
     Map* _map;
     std::string _mapScriptName;
-    std::unordered_map<std::string, uint32_t> _mvars;
+    // Ordered to match the .gam MAP_GLOBAL_VARS order, which is the order map_global_vars is indexed by:
+    // the i-th entry here is map_global_vars[i]. (An unordered_map would scramble that mapping.)
+    std::vector<std::pair<std::string, int32_t>> _mvars;
 
     // True while updateMapInfo() populates the widgets from the map, so their change signals don't write
     // a half-updated widget set back over the map (see onFieldChanged).
     bool _suppressFieldChanged = false;
+
+    // True while the global-variables tree is (re)populated, so the setText calls during populate don't
+    // fire onGlobalVarChanged as if the user had edited a value (mirror of _suppressFieldChanged).
+    bool _suppressVarEdit = false;
 };
 
 } // namespace geck

@@ -27,6 +27,7 @@
 #include "ui/IconHelper.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/dialogs/SpatialScriptDialog.h"
+#include "ui/widgets/IntCellDelegate.h"
 
 namespace geck {
 
@@ -235,6 +236,10 @@ void MapInfoPanel::setupUI() {
     _globalVarsTree->header()->setStretchLastSection(true);
     _globalVarsTree->setAlternatingRowColors(true);
     _globalVarsTree->setRootIsDecorated(false);
+    // Only the Value column (1) is editable; the delegate returns no editor for the name column and
+    // constrains the value to a signed int. The view owns the delegate.
+    _globalVarsTree->setItemDelegate(new IntCellDelegate(1, _globalVarsTree));
+    connect(_globalVarsTree, &QTreeWidget::itemChanged, this, &MapInfoPanel::onGlobalVarChanged);
     varsLayout->addWidget(_globalVarsTree);
 
     _contentLayout->addWidget(_globalVarsGroup);
@@ -358,6 +363,9 @@ void MapInfoPanel::updateMapInfo() {
 
         updateMapNameDisplay();
 
+        // Guard the value-edited handler while we fill the tree: the setText calls below would otherwise
+        // fire onGlobalVarChanged as spurious user edits. Cleared after population (and in the catch).
+        _suppressVarEdit = true;
         _globalVarsTree->clear();
 
         if (_mvars.empty() && mapInfo.header.num_global_vars > 0) {
@@ -374,23 +382,29 @@ void MapInfoPanel::updateMapInfo() {
             infoItem->setForeground(0, QBrush(ui::theme::colors::statusInfoRgb()));
             infoItem->setForeground(1, QBrush(ui::theme::colors::statusInfoRgb()));
         } else {
-            for (const auto& [key, value] : _mvars) {
+            // The i-th _mvars row corresponds to map_global_vars[i]. Make the Value cell editable and
+            // stash that index in its UserRole so onGlobalVarChanged can write straight to the vector.
+            for (int i = 0; i < static_cast<int>(_mvars.size()); ++i) {
+                const auto& [key, value] = _mvars[static_cast<size_t>(i)];
                 QTreeWidgetItem* item = new QTreeWidgetItem(_globalVarsTree);
                 item->setText(0, QString::fromStdString(key));
                 item->setText(1, QString::number(value));
+                item->setData(1, Qt::UserRole, i);
+                // Per-item flag turns on editing for the whole row; the delegate gates the name column.
+                item->setFlags(item->flags() | Qt::ItemIsEditable);
 
                 item->setForeground(0, QBrush(ui::theme::colors::statusSuccessRgb()));
                 item->setForeground(1, QBrush(ui::theme::colors::statusSuccessRgb()));
             }
 
-            if (!_mvars.empty()) {
-                QTreeWidgetItem* summaryItem = new QTreeWidgetItem(_globalVarsTree);
-                summaryItem->setText(0, QString("✅ Total: %1 variables loaded").arg(_mvars.size()));
-                summaryItem->setText(1, "From GAM file");
-                summaryItem->setForeground(0, QBrush(ui::theme::colors::statusSuccessRgb()));
-                summaryItem->setForeground(1, QBrush(ui::theme::colors::statusSuccessRgb()));
-            }
+            QTreeWidgetItem* summaryItem = new QTreeWidgetItem(_globalVarsTree);
+            summaryItem->setText(0, QString("✅ Total: %1 variables loaded").arg(_mvars.size()));
+            summaryItem->setText(1, "From GAM file");
+            summaryItem->setForeground(0, QBrush(ui::theme::colors::statusSuccessRgb()));
+            summaryItem->setForeground(1, QBrush(ui::theme::colors::statusSuccessRgb()));
         }
+
+        _suppressVarEdit = false; // population done; user edits write back from here on
 
         _globalVarsTree->expandAll();
         _globalVarsTree->resizeColumnToContents(0);
@@ -402,6 +416,7 @@ void MapInfoPanel::updateMapInfo() {
 
     } catch (const std::exception& e) {
         _suppressFieldChanged = false; // never leave write-back disabled if population threw mid-way
+        _suppressVarEdit = false;
         spdlog::error("Error updating map info: {}", e.what());
         clearMapInfo();
     }
@@ -491,13 +506,18 @@ void MapInfoPanel::loadScriptVars() {
             }
         }
 
-        // Global variables come from the map's optional .gam file.
+        // Global-variable NAMES come from the map's optional .gam; the VALUES are the ones stored in
+        // (and saved back to) the .map's map_global_vars block — same split the analyzer's headerToJson
+        // uses. Editing a row writes map_global_vars[index], so we must display that, not the .gam's
+        // initial value, or the user would edit a value they can't see.
         const std::string baseName = _map->filename().substr(0, _map->filename().find("."));
         const std::string gam_path = "maps/" + baseName + ".gam";
         if (_resources.files().exists(gam_path)) {
             if (Gam* gam_file = _resources.repository().load<Gam>(gam_path); gam_file != nullptr) {
+                const auto& mapVars = _map->getMapFile().map_global_vars;
                 for (uint32_t index = 0; index < _map->getMapFile().header.num_global_vars; index++) {
-                    _mvars.emplace(gam_file->mvarKey(index), gam_file->mvarValue(index));
+                    const int32_t value = index < mapVars.size() ? mapVars[index] : 0;
+                    _mvars.emplace_back(gam_file->mvarKey(index), value);
                 }
             }
         } else {
@@ -911,6 +931,42 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
     Q_EMIT addSpatialScriptRequested(dialog.programIndex(), dialog.tile(),
         dialog.elevation(), dialog.radius());
     updateMapScriptsDisplay();
+}
+
+void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {
+    // Ignore the setText calls fired while updateMapInfo() populates the tree, edits to the name column,
+    // and the placeholder/info/summary rows (which carry no UserRole index).
+    if (_suppressVarEdit || !_map || item == nullptr || column != 1) {
+        return;
+    }
+
+    const QVariant indexData = item->data(1, Qt::UserRole);
+    if (!indexData.isValid()) {
+        return; // not a real variable row (placeholder / info / summary)
+    }
+    const int index = indexData.toInt();
+
+    auto& vars = _map->getMapFile().map_global_vars;
+    if (index < 0 || index >= static_cast<int>(vars.size())) {
+        return; // tree row outruns the stored vector (header/.gam mismatch); leave the vector untouched
+    }
+
+    bool parsed = false;
+    const int value = item->text(1).toInt(&parsed);
+    if (!parsed) {
+        // The delegate's QIntValidator normally prevents this, but guard anyway: revert the cell text to
+        // the stored value without re-triggering this handler.
+        _suppressVarEdit = true;
+        item->setText(1, QString::number(vars[static_cast<size_t>(index)]));
+        _suppressVarEdit = false;
+        return;
+    }
+
+    vars[static_cast<size_t>(index)] = static_cast<int32_t>(value);
+    _mvars[static_cast<size_t>(index)].second = static_cast<int32_t>(value); // keep the display copy in sync
+
+    Q_EMIT mapVariablesChanged();
+    spdlog::debug("MapInfoPanel: global var [{}] set to {}", index, value);
 }
 
 void MapInfoPanel::persistMapNames() {

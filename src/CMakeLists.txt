@@ -120,6 +120,8 @@ set(GECK_APP_SOURCES
     ui/widgets/PaginationWidget.cpp
     ui/widgets/DataPathsWidget.h
     ui/widgets/DataPathsWidget.cpp
+    ui/widgets/IntCellDelegate.h
+    ui/widgets/IntCellDelegate.cpp
     ui/widgets/GameLocationWidget.h
     ui/widgets/GameLocationWidget.cpp
     ui/widgets/TextEditorWidget.h
