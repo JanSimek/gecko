@@ -843,6 +843,26 @@ std::unique_ptr<geck::Map> makeMap(const std::string& mapName, int elevation = 0
 
 } // namespace
 
+TEST_CASE("MapInfoPanel names the map's own script from scripts.lst and scrname.msg", "[qt][mapinfo]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\nzclrat.int      ; rat\n");
+    // scriptDisplayName(programIndex 0) reads scrname.msg[0 + 101] = 101.
+    data.writeGameMessageFile("text/english/game/scrname.msg", messageLine(101, QStringLiteral("The Chosen One")));
+    data.mount();
+
+    auto settings = std::make_shared<geck::Settings>();
+    auto map = makeMap("testmap.map");
+    map->getMapFile().header.script_id = 1; // 1-based -> scripts.lst index 0 (obj_dude.int)
+
+    geck::MapInfoPanel panel(data.resources(), settings);
+    panel.setMap(map.get());
+
+    auto* scriptEdit = panel.findChild<QLineEdit*>("mapScript");
+    REQUIRE(scriptEdit != nullptr);
+    // .lst filename plus the scrname.msg description, resolved even with no .gam file mounted.
+    CHECK(scriptEdit->text() == QStringLiteral("obj_dude.int — The Chosen One"));
+}
+
 TEST_CASE("MapInfoPanel shows resolved map.msg display name and maps.txt lookup name", "[qt][mapinfo]") {
     ResourceDataScope data;
     data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
