@@ -34,6 +34,28 @@ const json* findScript(const json& scripts, const std::string& section) {
     return nullptr;
 }
 
+// Write `mapFile` to a temp .map and return analyze's parsed JSON. No game data is mounted, so analyze
+// reads the file back via cli::loadMap's disk fallback. Shared by the cases below.
+json analyzeWrittenMap(Map::MapFile mapFile, const char* mapName, const char* tempPrefix, StubProvider& provider) {
+    Map map{ mapName };
+    map.setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
+
+    TempFile out{ tempPrefix, ".map" };
+    {
+        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        writer.openFile(out.path());
+        REQUIRE(writer.write(map.getMapFile()));
+    } // flush + close before analyze reads it back
+
+    resource::GameResources resources;
+    cli::AnalyzeOptions options;
+    options.json = true;
+    options.maps = { out.path().string() };
+    std::ostringstream jsonOut;
+    REQUIRE(cli::analyzeMaps(resources, options, jsonOut) == 0);
+    return json::parse(jsonOut.str());
+}
+
 } // namespace
 
 // analyze emits a per-map `scripts` list (mirroring the editor's Scripts panel) covering every
@@ -89,26 +111,7 @@ TEST_CASE("analyze surfaces per-section scripts with their local variables", "[c
     critter->map_scripts_pid = static_cast<int32_t>(critterSid);
     mapFile.map_objects[0].push_back(critter);
 
-    Map map{ "synthetic.map" };
-    map.setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
-
-    TempFile out{ "geck_analyze_scripts", ".map" };
-    const auto path = out.path();
-    {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(path);
-        REQUIRE(writer.write(map.getMapFile()));
-    } // flush + close before analyze reads it back
-
-    // analyze reads the .map straight off disk (the cli::loadMap fallback), so no data need be mounted.
-    resource::GameResources resources;
-    cli::AnalyzeOptions options;
-    options.json = true;
-    options.maps = { path.string() };
-    std::ostringstream jsonOut;
-    REQUIRE(cli::analyzeMaps(resources, options, jsonOut) == 0);
-
-    const json root = json::parse(jsonOut.str());
+    const json root = analyzeWrittenMap(std::move(mapFile), "synthetic.map", "geck_analyze_scripts", provider);
     REQUIRE(root["maps"].is_array());
     REQUIRE(root["maps"].size() == 1);
     const json& entry = root["maps"][0];
@@ -174,25 +177,7 @@ TEST_CASE("analyze clamps a script's local-var slice to the pool", "[cli][analyz
     system.local_var_count = 5; // stale: only one value (index 1) actually exists
     mapFile.map_scripts[static_cast<int>(MapScript::ScriptType::SYSTEM)].push_back(system);
 
-    Map map{ "synthetic_clamp.map" };
-    map.setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
-
-    TempFile out{ "geck_analyze_scripts_clamp", ".map" };
-    const auto path = out.path();
-    {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(path);
-        REQUIRE(writer.write(map.getMapFile()));
-    }
-
-    resource::GameResources resources;
-    cli::AnalyzeOptions options;
-    options.json = true;
-    options.maps = { path.string() };
-    std::ostringstream jsonOut;
-    REQUIRE(cli::analyzeMaps(resources, options, jsonOut) == 0);
-
-    const json root = json::parse(jsonOut.str());
+    const json root = analyzeWrittenMap(std::move(mapFile), "synthetic_clamp.map", "geck_analyze_scripts_clamp", provider);
     const json& scripts = root["maps"][0]["scripts"];
     REQUIRE(scripts.size() == 1);
     CHECK(scripts[0]["localVars"] == json::array({ 2 })); // only the in-range value, not five
