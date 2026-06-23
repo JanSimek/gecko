@@ -6,6 +6,7 @@
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/panels/SelectionPanel.h"
 #include "ui/panels/MapInfoPanel.h"
+#include "ui/panels/ScriptsPanel.h"
 #include "ui/panels/TilePalettePanel.h"
 #include "ui/panels/ObjectPalettePanel.h"
 #include "ui/panels/FileBrowserPanel.h"
@@ -82,16 +83,19 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
     , _elevationMenu(nullptr)
     , _mainToolBar(nullptr)
     , _mapInfoDock(nullptr)
+    , _scriptsDock(nullptr)
     , _selectionDock(nullptr)
     , _tilePaletteDock(nullptr)
     , _objectPaletteDock(nullptr)
     , _fileBrowserDock(nullptr)
     , _selectionPanel(nullptr)
     , _mapInfoPanel(nullptr)
+    , _scriptsPanel(nullptr)
     , _tilePalettePanel(nullptr)
     , _objectPalettePanel(nullptr)
     , _fileBrowserPanel(nullptr)
     , _mapInfoPanelAction(nullptr)
+    , _scriptsPanelAction(nullptr)
     , _selectionPanelAction(nullptr)
     , _tilePalettePanelAction(nullptr)
     , _objectPalettePanelAction(nullptr)
@@ -310,13 +314,14 @@ QAction* MainWindow::addPanelToggleAction(const QString& label, QDockWidget* doc
     return action;
 }
 
-std::array<QDockWidget*, 5> MainWindow::managedDocks() const {
-    return { _mapInfoDock, _selectionDock, _tilePaletteDock, _objectPaletteDock, _fileBrowserDock };
+std::array<QDockWidget*, 6> MainWindow::managedDocks() const {
+    return { _mapInfoDock, _scriptsDock, _selectionDock, _tilePaletteDock, _objectPaletteDock, _fileBrowserDock };
 }
 
-std::array<MainWindow::DockActionPair, 5> MainWindow::managedDockActionPairs() const {
+std::array<MainWindow::DockActionPair, 6> MainWindow::managedDockActionPairs() const {
     return { {
         { _mapInfoDock, _mapInfoPanelAction },
+        { _scriptsDock, _scriptsPanelAction },
         { _selectionDock, _selectionPanelAction },
         { _tilePaletteDock, _tilePalettePanelAction },
         { _objectPaletteDock, _objectPalettePanelAction },
@@ -336,8 +341,9 @@ void MainWindow::applyDefaultDockPlacements() {
         Qt::DockWidgetArea area;
     };
 
-    const std::array<DockPlacement, 5> placements = { {
+    const std::array<DockPlacement, 6> placements = { {
         { _mapInfoDock, Qt::RightDockWidgetArea },
+        { _scriptsDock, Qt::RightDockWidgetArea },
         { _selectionDock, Qt::RightDockWidgetArea },
         { _tilePaletteDock, Qt::LeftDockWidgetArea },
         { _objectPaletteDock, Qt::LeftDockWidgetArea },
@@ -354,6 +360,11 @@ void MainWindow::applyDefaultDockPlacements() {
 void MainWindow::applyDefaultPanelDockLayout() {
     if (_mapInfoDock && _selectionDock) {
         splitDockWidget(_mapInfoDock, _selectionDock, Qt::Vertical);
+    }
+    // Tab the Scripts panel behind Map Info; keep Map Info the visible tab by default.
+    if (_mapInfoDock && _scriptsDock) {
+        tabifyDockWidget(_mapInfoDock, _scriptsDock);
+        _mapInfoDock->raise();
     }
     if (_tilePaletteDock && _objectPaletteDock) {
         tabifyDockWidget(_tilePaletteDock, _objectPaletteDock);
@@ -500,7 +511,7 @@ void MainWindow::setupMenuBar() {
     QAction* redockAllAction = dockLayoutMenu->addAction("Re-&dock All Floating Panels");
     redockAllAction->setStatusTip("Dock all floating panels back to the main window");
     connect(redockAllAction, &QAction::triggered, [this]() {
-        for (QDockWidget* dock : { _mapInfoDock, _selectionDock, _tilePaletteDock, _objectPaletteDock, _fileBrowserDock }) {
+        for (QDockWidget* dock : { _mapInfoDock, _scriptsDock, _selectionDock, _tilePaletteDock, _objectPaletteDock, _fileBrowserDock }) {
             if (dock->isFloating()) {
                 dock->setFloating(false);
             }
@@ -838,6 +849,9 @@ void MainWindow::setupDockWidgets() {
     _selectionPanel = new SelectionPanel(*_resourcesShared);
     _selectionDock = createDock("Selection", "SelectionDock", _selectionPanel, Qt::RightDockWidgetArea, QSizePolicy::Preferred, ui::constants::dock::MIN_HEIGHT_SMALL);
 
+    _scriptsPanel = new ScriptsPanel(*_resourcesShared);
+    _scriptsDock = createDock("Scripts", "ScriptsDock", _scriptsPanel, Qt::RightDockWidgetArea, QSizePolicy::Preferred, ui::constants::dock::MIN_HEIGHT_SMALL);
+
     _tilePalettePanel = new TilePalettePanel(*_resourcesShared);
     _tilePaletteDock = createDock("Tile Palette", "TilePaletteDock", _tilePalettePanel, Qt::LeftDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_LARGE);
 
@@ -970,6 +984,9 @@ void MainWindow::replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSize
 void MainWindow::rebuildResourcePanels() {
     _mapInfoPanel = new MapInfoPanel(*_resourcesShared, _settings);
     replaceDockPanelWidget(_mapInfoDock, _mapInfoPanel, QSizePolicy::Preferred);
+
+    _scriptsPanel = new ScriptsPanel(*_resourcesShared);
+    replaceDockPanelWidget(_scriptsDock, _scriptsPanel, QSizePolicy::Preferred);
 
     _selectionPanel = new SelectionPanel(*_resourcesShared);
     replaceDockPanelWidget(_selectionDock, _selectionPanel, QSizePolicy::Preferred);
@@ -1526,6 +1543,10 @@ void MainWindow::updateMapInfo(Map* map) {
         _mapInfoPanel->setMap(map);
     }
 
+    if (_scriptsPanel) {
+        _scriptsPanel->setMap(map);
+    }
+
     updateElevationMenu(map);
 
     if (_tilePalettePanel && map) {
@@ -1621,8 +1642,9 @@ void MainWindow::setupPanelsMenu() {
         QAction** actionRef;
     };
 
-    const std::array<PanelToggleSpec, 5> panelToggleSpecs = { {
+    const std::array<PanelToggleSpec, 6> panelToggleSpecs = { {
         { "Map &Information", _mapInfoDock, &_mapInfoPanelAction },
+        { "Scri&pts", _scriptsDock, &_scriptsPanelAction },
         { "&Selection", _selectionDock, &_selectionPanelAction },
         { "&Tile Palette", _tilePaletteDock, &_tilePalettePanelAction },
         { "&Object Palette", _objectPaletteDock, &_objectPalettePanelAction },

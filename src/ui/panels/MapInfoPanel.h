@@ -122,7 +122,7 @@ private:
     QGroupBox* _globalVarsGroup;
     QTreeWidget* _globalVarsTree;
 
-    // Map scripts group (placeholder)
+    // Map scripts group: concise counts-only summary; the full list lives in the Scripts panel.
     QGroupBox* _mapScriptsGroup;
     QLabel* _mapScriptsLabel;
 

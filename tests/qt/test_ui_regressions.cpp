@@ -49,7 +49,9 @@
 #include "util/FileIo.h"
 #include "ui/Settings.h"
 #include "ui/panels/MapInfoPanel.h"
+#include "ui/panels/ScriptsPanel.h"
 #include "format/map/Map.h"
+#include "format/map/MapScript.h"
 #include <QLineEdit>
 #include <QPushButton>
 
@@ -966,4 +968,61 @@ TEST_CASE("MapInfoPanel hints to add a writable Data Path when none is configure
     // anywhere hidden.
     CHECK_FALSE(hint->isHidden());
     CHECK(hint->text().contains("writable folder"));
+}
+
+TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name", "[qt][scripts]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\nzclrat.int      ; rat\n");
+    // scriptDisplayName(programIndex 0) reads scrname.msg[0 + 101] = 101.
+    data.writeGameMessageFile("text/english/game/scrname.msg", messageLine(101, QStringLiteral("The Chosen One")));
+    data.mount();
+
+    auto map = makeMap("testmap.map");
+
+    // One CRITTER-section script (program index 0 -> obj_dude.int) owned by object 42, plus a second one
+    // so the row count reflects every section's scripts.
+    auto& mapFile = map->getMapFile();
+    mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::CRITTER)].push_back(
+        geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::CRITTER, 0, 0, 42));
+    mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::ITEM)].push_back(
+        geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::ITEM, 1, 1, 7));
+
+    geck::ScriptsPanel panel(data.resources());
+    panel.setMap(map.get());
+
+    auto* table = panel.findChild<QTableWidget*>();
+    REQUIRE(table != nullptr);
+    CHECK(table->rowCount() == 2);
+
+    // Find the row whose Script ID cell is 0 (sorting may reorder rows) and check its filename + name.
+    bool foundScriptZero = false;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        const QTableWidgetItem* idItem = table->item(row, 1); // COL_SCRIPT_ID
+        REQUIRE(idItem != nullptr);
+        if (idItem->data(Qt::DisplayRole).toInt() == 0) {
+            foundScriptZero = true;
+            CHECK(table->item(row, 2)->text() == QStringLiteral("obj_dude.int"));   // COL_FILENAME
+            CHECK(table->item(row, 3)->text() == QStringLiteral("The Chosen One")); // COL_NAME
+        }
+    }
+    CHECK(foundScriptZero);
+
+    // Regression: an active filter is re-applied after the table is re-populated (e.g. a map switch),
+    // rather than silently showing every row again.
+    auto* filter = panel.findChild<QLineEdit*>();
+    REQUIRE(filter != nullptr);
+    filter->setText("obj_dude"); // matches only the obj_dude.int row
+    panel.setMap(map.get());     // re-populate; the filter must still be honoured
+    int visibleRows = 0;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        if (!table->isRowHidden(row)) {
+            ++visibleRows;
+        }
+    }
+    CHECK(visibleRows == 1);
+    filter->clear();
+
+    // Clearing the map empties the table without crashing.
+    panel.setMap(nullptr);
+    CHECK(table->rowCount() == 0);
 }

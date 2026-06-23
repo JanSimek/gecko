@@ -40,6 +40,7 @@ class LoadingWidget;
 class WelcomeWidget;
 class SelectionPanel;
 class MapInfoPanel;
+class ScriptsPanel;
 class TilePalettePanel;
 class ObjectPalettePanel;
 class FileBrowserPanel;
@@ -160,8 +161,8 @@ private:
     void setDockVisibility(QDockWidget* dock, QAction* action, bool visible);
     void persistPanelPreference(QDockWidget* dock, bool visible);
     QAction* addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef);
-    std::array<QDockWidget*, 5> managedDocks() const;
-    std::array<DockActionPair, 5> managedDockActionPairs() const;
+    std::array<QDockWidget*, 6> managedDocks() const;
+    std::array<DockActionPair, 6> managedDockActionPairs() const;
     void applyDefaultDockPlacements();
     void applyDefaultPanelDockLayout();
     void connectFileBrowserSignals();
@@ -221,6 +222,7 @@ private:
 
     // Dock widgets for panels
     QDockWidget* _mapInfoDock;
+    QDockWidget* _scriptsDock;
     QDockWidget* _selectionDock;
     QDockWidget* _tilePaletteDock;
     QDockWidget* _objectPaletteDock;
@@ -237,12 +239,14 @@ private:
     // Panel widgets
     SelectionPanel* _selectionPanel;
     MapInfoPanel* _mapInfoPanel;
+    ScriptsPanel* _scriptsPanel;
     TilePalettePanel* _tilePalettePanel;
     ObjectPalettePanel* _objectPalettePanel;
     FileBrowserPanel* _fileBrowserPanel;
 
     // Panel menu actions
     QAction* _mapInfoPanelAction;
+    QAction* _scriptsPanelAction;
     QAction* _selectionPanelAction;
     QAction* _tilePalettePanelAction;
     QAction* _objectPalettePanelAction;
