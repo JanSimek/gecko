@@ -251,7 +251,7 @@ namespace {
         entry["orphanedObjects"] = orphanedObjectsJson(resources, objects, blocked, component, entryFlags, orphanTotal);
         entry["orphanedObjectCount"] = static_cast<int>(orphanTotal);
         if (orphanTotal > kMaxReported) {
-            spdlog::info("reachability {} elev {}: reporting {} of {} orphaned objects", mapName, elevation, kMaxReported, orphanTotal);
+            spdlog::debug("reachability {} elev {}: reporting {} of {} orphaned objects", mapName, elevation, kMaxReported, orphanTotal);
         }
         return entry;
     }

@@ -51,10 +51,10 @@ void MapLoader::load() {
     // reported error instead.
     try {
         if (_forceFilesystem) {
-            spdlog::info("MapLoader: Force filesystem loading requested");
+            spdlog::debug("MapLoader: Force filesystem loading requested");
             loadFromFilesystem();
         } else {
-            spdlog::info("MapLoader: Attempting VFS loading first");
+            spdlog::debug("MapLoader: Attempting VFS loading first");
             loadFromVFS();
         }
     } catch (const FileReaderException& e) {
@@ -66,7 +66,7 @@ void MapLoader::load() {
 }
 
 void MapLoader::loadFromVFS() {
-    spdlog::info("MapLoader: Loading map from VFS: {}", _mapPath.string());
+    spdlog::debug("MapLoader: Loading map from VFS: {}", _mapPath.string());
 
     try {
         if (!ensureResourceListsReady()) {
@@ -101,7 +101,7 @@ void MapLoader::loadFromVFS() {
         }
 
         _percentDone = 20;
-        spdlog::info("MapLoader: Successfully loaded map from VFS: {}", _mapPath.string());
+        spdlog::debug("MapLoader: Successfully loaded map from VFS: {}", _mapPath.string());
 
         loadMapResources();
 
@@ -119,7 +119,7 @@ void MapLoader::loadFromVFS() {
 }
 
 void MapLoader::loadFromFilesystem() {
-    spdlog::info("MapLoader: Loading map from filesystem: {}", _mapPath.string());
+    spdlog::debug("MapLoader: Loading map from filesystem: {}", _mapPath.string());
     spdlog::stopwatch stopwatch_total;
 
     if (!ensureResourceListsReady()) {
@@ -146,11 +146,9 @@ void MapLoader::loadFromFilesystem() {
     }
 
     _percentDone = 20;
-    spdlog::info("MapLoader: Successfully loaded map from filesystem: {}", _mapPath.string());
+    spdlog::debug("MapLoader: Successfully loaded map from filesystem: {}", _mapPath.string());
 
     loadMapResources();
-
-    spdlog::info("Map loader finished after {:.3} seconds", stopwatch_total);
 
     // Only mark complete if loadMapResources didn't set an error.
     if (!_hasError) {
@@ -180,7 +178,7 @@ void MapLoader::loadMapResources() {
     try {
         if (_elevation == INVALID_ELEVATION) {
             uint32_t default_elevation = _map->getMapFile().header.player_default_elevation;
-            spdlog::info("Using default map elevation {}", default_elevation);
+            spdlog::debug("Using default map elevation {}", default_elevation);
             _elevation = default_elevation;
         }
 
@@ -210,7 +208,6 @@ void MapLoader::loadMapResources() {
             tile_number++;
         }
 
-        spdlog::info("... tile textures loaded in {:.3} seconds", stopwatch_chunk);
         stopwatch_chunk.reset();
 
         size_t objectNumber = 1;
@@ -240,8 +237,6 @@ void MapLoader::loadMapResources() {
         _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK);
         _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK_FULL);
         _resources->textures().preload(ResourcePaths::Frm::SCROLL_BLOCKER);
-
-        spdlog::info("... objects and resources loaded in {:.3} seconds", stopwatch_chunk);
 
         _percentDone = 100;
         setProgress("Map loading complete");

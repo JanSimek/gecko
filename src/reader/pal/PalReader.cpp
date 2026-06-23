@@ -54,7 +54,7 @@ std::unique_ptr<geck::Pal> geck::PalReader::read() {
 
             // Validate conversion table values (should be palette indices 0-255)
             if (conversion > 255) {
-                spdlog::warn("PAL file has unusual conversion table value: {} at offset {}",
+                spdlog::debug("PAL file has unusual conversion table value: {} at offset {}",
                     conversion, offset - 1);
             }
         }

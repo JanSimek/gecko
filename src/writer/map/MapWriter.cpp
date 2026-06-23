@@ -169,7 +169,7 @@ bool MapWriter::write(const Map::MapFile& map) {
         // utils.writeBE32(0);
 
         utils.flush();
-        spdlog::info("Successfully wrote map file: {} ({} bytes)", getPath().filename().string(), getBytesWritten());
+        spdlog::debug("Successfully wrote map file: {} ({} bytes)", getPath().filename().string(), getBytesWritten());
         return true;
 
     } catch (const FileWriterException& e) {

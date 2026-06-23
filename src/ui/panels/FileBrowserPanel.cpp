@@ -96,7 +96,7 @@ FileLoaderWorker::FileLoaderWorker(std::shared_ptr<resource::GameResources> reso
 
 void FileLoaderWorker::loadFiles() {
     try {
-        spdlog::info("FileLoaderWorker: Starting background file loading...");
+        spdlog::debug("FileLoaderWorker: Starting background file loading...");
         Q_EMIT loadingProgress(0, 100, "Initializing file system...");
 
         spdlog::debug("FileLoaderWorker: Listing mounted files...");
@@ -150,7 +150,7 @@ void FileLoaderWorker::loadFiles() {
         spdlog::debug("FileLoaderWorker: Emitting filesLoaded with {} files", allFiles.size());
         Q_EMIT filesLoaded(allFiles);
 
-        spdlog::info("FileLoaderWorker: Loaded {} files with {} file types",
+        spdlog::debug("FileLoaderWorker: Loaded {} files with {} file types",
             allFiles.size(), fileTypes.size());
 
         Q_EMIT loadingComplete();
@@ -438,7 +438,7 @@ void FileBrowserPanel::loadFiles() {
     connect(_loaderWorker, &FileLoaderWorker::loadingComplete, _loaderThread, &QThread::quit, Qt::QueuedConnection);
 
     spdlog::debug("FileBrowserPanel: Worker signals connected");
-    spdlog::info("FileBrowserPanel: Starting background file loading...");
+    spdlog::debug("FileBrowserPanel: Starting background file loading...");
     _loaderThread->start();
 }
 
@@ -637,7 +637,7 @@ void FileBrowserPanel::updateFileCount() {
 }
 
 void FileBrowserPanel::refreshFileList() {
-    spdlog::info("FileBrowserPanel: Refreshing file list");
+    spdlog::debug("FileBrowserPanel: Refreshing file list");
     loadFiles();
 }
 
@@ -717,7 +717,7 @@ void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
 
     if (treeItem && treeItem->getType() == FileTreeItem::File) {
         QString filePath = treeItem->getFilePath();
-        spdlog::info("FileBrowserPanel: File double-clicked with path: '{}'", filePath.toStdString());
+        spdlog::debug("FileBrowserPanel: File double-clicked with path: '{}'", filePath.toStdString());
 
         if (filePath.endsWith(".pro", Qt::CaseInsensitive)) {
             spdlog::debug("FileBrowserPanel: Opening PRO editor for double-clicked file: {}", filePath.toStdString());
@@ -740,7 +740,7 @@ void FileBrowserPanel::updateFileDisplay() {
 void FileBrowserPanel::onFilesLoaded(const std::vector<std::string>& files) {
     spdlog::debug("FileBrowserPanel::onFilesLoaded called with {} files", files.size());
     _allFiles = files;
-    spdlog::info("FileBrowserPanel: Received {} files from background loader", files.size());
+    spdlog::debug("FileBrowserPanel: Received {} files from background loader", files.size());
 
     buildFileTreeProgressive(files);
 }
@@ -784,7 +784,7 @@ void FileBrowserPanel::buildFileTreeProgressive(const std::vector<std::string>& 
         filteredFiles.push_back(file);
     }
 
-    spdlog::info("FileBrowserPanel: Starting progressive build of {} filtered files", filteredFiles.size());
+    spdlog::debug("FileBrowserPanel: Starting progressive build of {} filtered files", filteredFiles.size());
     startProgressiveTreeBuild(filteredFiles);
 }
 
@@ -818,7 +818,7 @@ void FileBrowserPanel::processNextChunk() {
         resizeNameColumnToContent();
         updateFileCount();
 
-        spdlog::info("FileBrowserPanel: Progressive tree building completed");
+        spdlog::debug("FileBrowserPanel: Progressive tree building completed");
         return;
     }
 
@@ -960,7 +960,7 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
         }
 
         _statusLabel->setText(QString("Exported %1 (%2 bytes)").arg(fileInfo.fileName()).arg(bytesWritten));
-        spdlog::info("FileBrowserPanel: Exported {} to {} ({} bytes)",
+        spdlog::debug("FileBrowserPanel: Exported {} to {} ({} bytes)",
             filePath.toStdString(), saveFilePath.toStdString(), bytesWritten);
 
         Q_EMIT fileExportRequested(filePath);
@@ -983,7 +983,7 @@ void FileBrowserPanel::executeScript(const QString& filePath) {
 
     const QString source = QString::fromUtf8(reinterpret_cast<const char*>(buffer->data()),
         static_cast<qsizetype>(buffer->size()));
-    spdlog::info("FileBrowserPanel: Loading script into the console: {}", filePath.toStdString());
+    spdlog::debug("FileBrowserPanel: Loading script into the console: {}", filePath.toStdString());
     Q_EMIT executeScriptRequested(source);
 }
 

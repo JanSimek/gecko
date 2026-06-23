@@ -357,7 +357,7 @@ void InventoryViewerDialog::onAddItemClicked() {
         populateInventoryTree();
         updateStatusLabel();
 
-        spdlog::info("InventoryViewerDialog: Added item PID 0x{:08X} with amount {} to inventory", pid, amount);
+        spdlog::debug("InventoryViewerDialog: Added item PID 0x{:08X} with amount {} to inventory", pid, amount);
 
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Error", QString("Failed to add item: %1").arg(e.what()));
@@ -404,7 +404,7 @@ void InventoryViewerDialog::onRemoveItemClicked() {
 
         _removeButton->setEnabled(false);
 
-        spdlog::info("InventoryViewerDialog: Removed item PID 0x{:08X} (display amount {}) from inventory", removedPid, displayAmount);
+        spdlog::debug("InventoryViewerDialog: Removed item PID 0x{:08X} (display amount {}) from inventory", removedPid, displayAmount);
 
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Error", QString("Failed to remove item: %1").arg(e.what()));

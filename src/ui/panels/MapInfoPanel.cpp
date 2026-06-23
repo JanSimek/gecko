@@ -837,7 +837,7 @@ void MapInfoPanel::onElevationCheckboxChanged() {
         }
 
         Q_EMIT elevationAdded(elevation);
-        spdlog::info("MapInfoPanel: Added {} to map", elevationName.toStdString());
+        spdlog::debug("MapInfoPanel: Added {} to map", elevationName.toStdString());
 
         updateElevationCheckboxStates();
 
@@ -873,7 +873,7 @@ void MapInfoPanel::onElevationCheckboxChanged() {
             }
 
             Q_EMIT elevationRemoved(elevation);
-            spdlog::info("MapInfoPanel: Removed {} from map", elevationName.toStdString());
+            spdlog::debug("MapInfoPanel: Removed {} from map", elevationName.toStdString());
 
             updateElevationCheckboxStates();
 
@@ -1042,7 +1042,7 @@ void MapInfoPanel::writeNameEdits(const std::filesystem::path& writableRoot, int
         _resources.repository().clear();
         _mapNames = std::make_unique<resource::MapNameResolver>(_resources);
         updateMapNameDisplay();
-        spdlog::info("MapInfoPanel: saved map names to {}", writableRoot.string());
+        spdlog::debug("MapInfoPanel: saved map names to {}", writableRoot.string());
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Save Map Names", QString("Failed to save map names:\n%1").arg(e.what()));
     }

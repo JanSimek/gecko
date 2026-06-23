@@ -863,7 +863,7 @@ void SelectionPanel::onChangeFrmClicked() {
     const auto objectTypeFilter = FrmSelectorDialog::filterForFid(currentFrmPid);
     dialog.setObjectTypeFilter(objectTypeFilter);
     if (objectTypeFilter.has_value()) {
-        spdlog::info("SelectionPanel: Filtering FRM dialog by object type: {}", static_cast<int>(*objectTypeFilter));
+        spdlog::debug("SelectionPanel: Filtering FRM dialog by object type: {}", static_cast<int>(*objectTypeFilter));
     }
 
     if (dialog.exec() == QDialog::Accepted) {
@@ -900,13 +900,13 @@ void SelectionPanel::onChangeFrmClicked() {
 
                         // Update the visual but keep the original frm_pid for game compatibility:
                         // the editor shows the new FRM while the saved map stays loadable in-game.
-                        spdlog::info("SelectionPanel: Keeping original frm_pid {} for game compatibility, visual uses custom FRM", currentFrmPid);
+                        spdlog::debug("SelectionPanel: Keeping original frm_pid {} for game compatibility, visual uses custom FRM", currentFrmPid);
 
                         Q_EMIT statusMessage(QString("Warning: Custom FRM may not display correctly in game"));
                     } else {
                         // Valid LST-based FID, safe to persist.
                         mapObject.frm_pid = derivedFrmPid;
-                        spdlog::info("SelectionPanel: Updated MapObject frm_pid from {} to {} for persistent save",
+                        spdlog::debug("SelectionPanel: Updated MapObject frm_pid from {} to {} for persistent save",
                             currentFrmPid, derivedFrmPid);
                     }
 
@@ -932,7 +932,7 @@ void SelectionPanel::onChangeFrmClicked() {
                 // compatibility while still showing the new FRM in the editor.
                 if ((currentFrmPid >> 24) == 1) { // FID type field 1 == critter
                     spdlog::warn("SelectionPanel: FRM '{}' not found in critters.lst - change may not persist in game", filename);
-                    spdlog::info("SelectionPanel: Keeping original FRM PID ({}) for game compatibility", currentFrmPid);
+                    spdlog::debug("SelectionPanel: Keeping original FRM PID ({}) for game compatibility", currentFrmPid);
 
                     Q_EMIT statusMessage(QString("Warning: FRM '%1' may not display correctly in game - not found in critters.lst")
                             .arg(QString::fromStdString(filename)));
@@ -945,7 +945,7 @@ void SelectionPanel::onChangeFrmClicked() {
                 updateObjectInfo();
             }
 
-            spdlog::info("SelectionPanel: Changed object FRM visual to path: {}", newFrmPath);
+            spdlog::debug("SelectionPanel: Changed object FRM visual to path: {}", newFrmPath);
 
             // Keep the object highlighted after the FRM change. Delay via a single-shot
             // timer so the texture update is fully processed before re-highlighting.

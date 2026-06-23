@@ -35,7 +35,7 @@ void ExternalEditorLauncher::openFile(const QString& vfsFilePath) {
         auto editorMode = settings.getTextEditorMode();
         QString customEditorPath = settings.getCustomEditorPath();
 
-        spdlog::info("ExternalEditorLauncher: Opening text file with {} editor: {}",
+        spdlog::debug("ExternalEditorLauncher: Opening text file with {} editor: {}",
             (editorMode == Settings::TextEditorMode::CUSTOM) ? "custom" : "system",
             vfsFilePath.toStdString());
 
@@ -61,7 +61,7 @@ void ExternalEditorLauncher::openFile(const QString& vfsFilePath) {
         QFileInfo requestedPathInfo(vfsFilePath);
         if (requestedPathInfo.exists() && requestedPathInfo.isReadable() && requestedPathInfo.isFile()) {
             targetFilePath = requestedPathInfo.absoluteFilePath();
-            spdlog::info("ExternalEditorLauncher: Opening native file directly at {}", targetFilePath.toStdString());
+            spdlog::debug("ExternalEditorLauncher: Opening native file directly at {}", targetFilePath.toStdString());
         } else {
             QTemporaryFile tempFile(tempFilePath);
             tempFile.setAutoRemove(false);
@@ -96,7 +96,7 @@ void ExternalEditorLauncher::openFile(const QString& vfsFilePath) {
             opened = QProcess::startDetached(customEditorPath, arguments);
 
             if (opened) {
-                spdlog::info("ExternalEditorLauncher: Successfully opened file with custom editor: {} -> {}",
+                spdlog::debug("ExternalEditorLauncher: Successfully opened file with custom editor: {} -> {}",
                     customEditorPath.toStdString(), targetFilePath.toStdString());
             } else {
                 spdlog::warn("ExternalEditorLauncher: Failed to start custom editor: {}", customEditorPath.toStdString());
@@ -118,7 +118,7 @@ void ExternalEditorLauncher::openFile(const QString& vfsFilePath) {
                     QFile::remove(targetFilePath);
                 }
             } else {
-                spdlog::info("ExternalEditorLauncher: Successfully opened file with system default editor: {}", targetFilePath.toStdString());
+                spdlog::debug("ExternalEditorLauncher: Successfully opened file with system default editor: {}", targetFilePath.toStdString());
             }
         }
 

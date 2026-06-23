@@ -170,10 +170,8 @@ void Application::checkFirstRun() {
         settings.save();
 
         if (result == QDialog::Accepted) {
-            spdlog::info("Settings dialog accepted, configuration saved");
             loadDataPaths();
         } else {
-            spdlog::info("Settings dialog cancelled, saving default configuration");
             // Load data paths even if cancelled, so the app is usable.
             loadDataPaths();
         }
@@ -206,7 +204,7 @@ void Application::loadDataPaths() {
         _mainWindow->showFileBrowserPanel();
     }
 
-    spdlog::info("Data paths loaded successfully");
+    spdlog::debug("Data paths loaded successfully");
 }
 
 std::filesystem::path Application::getResourcesPath() {

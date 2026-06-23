@@ -17,7 +17,7 @@ std::string CritterFrmResolver::generateCritterFrmName(const std::string& baseNa
 
     char suffix1, suffix2;
     if (!getSuffixes(id1, id2, suffix1, suffix2)) {
-        spdlog::warn("CritterFrmResolver: Invalid suffix combination for id1={}, id2={}", id1, id2);
+        spdlog::debug("CritterFrmResolver: Invalid suffix combination for id1={}, id2={}", id1, id2);
         return "";
     }
 

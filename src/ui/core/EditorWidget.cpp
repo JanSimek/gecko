@@ -512,19 +512,19 @@ void EditorWidget::openMap() {
     QString mapPathQString = QtDialogs::openMapFile(this, "Choose Fallout 2 map to load");
 
     if (mapPathQString.isEmpty()) {
-        spdlog::info("No map file selected");
+        spdlog::debug("No map file selected");
         return;
     }
 
     std::string mapPath = mapPathQString.toStdString();
-    spdlog::info("User requested to open new map: {}", mapPath);
+    spdlog::debug("User requested to open new map: {}", mapPath);
 
     // MainWindow handles the actual loading
     Q_EMIT mapLoadRequested(mapPath);
 }
 
 void EditorWidget::createNewMap() {
-    spdlog::info("Creating new empty map");
+    spdlog::debug("Creating new empty map");
 
     _session.resetToEmptyMap();
     _controller.visualizer().clearHexPositions();
@@ -550,7 +550,7 @@ void EditorWidget::createNewMap() {
         _mainWindow->updateMapInfo(_session.map());
     }
 
-    spdlog::info("Created new empty map with {} tiles per elevation", Map::TILES_PER_ELEVATION);
+    spdlog::debug("Created new empty map with {} tiles per elevation", Map::TILES_PER_ELEVATION);
 }
 
 std::vector<int> EditorWidget::calculateRectangleBorderHexes(sf::FloatRect rectangle) {
@@ -631,7 +631,7 @@ void EditorWidget::loadSprites() {
 
     _session.selectionManager()->initializeSpatialIndex();
 
-    spdlog::info("Map sprites loaded in {:.3} seconds", sw);
+    spdlog::debug("Map sprites loaded in {:.3} seconds", sw);
 }
 
 bool EditorWidget::isObjectSelectable(const std::shared_ptr<Object>& object) const {
@@ -811,7 +811,7 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         if (_mainWindow && _mainWindow->getTilePalettePanel()) {
             _mainWindow->getTilePalettePanel()->deselectTile();
         }
-        spdlog::info("Tile placement mode cancelled");
+        spdlog::debug("Tile placement mode cancelled");
     };
 
     callbacks.onExitGridPlacement = [this](sf::Vector2f worldPos) {
@@ -914,7 +914,7 @@ void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderH
         }
     }
 
-    spdlog::info("Scroll blocker rectangle: {} scroll blockers created on border", scrollBlockersCreated);
+    spdlog::debug("Scroll blocker rectangle: {} scroll blockers created on border", scrollBlockersCreated);
 }
 
 void EditorWidget::update([[maybe_unused]] const float dt) {
@@ -996,7 +996,7 @@ bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier mod
     if (result.success && result.selectionChanged) {
         const auto& selection = _session.selectionManager()->getCurrentSelection();
         if (selection.count() > 1) {
-            spdlog::info("Multi-selection: {} items selected", selection.count());
+            spdlog::debug("Multi-selection: {} items selected", selection.count());
         }
     }
 
@@ -1014,7 +1014,7 @@ void EditorWidget::cycleSelectionMode() {
 
     // Changing the selection type keeps the current selection; subsequent clicks/drags then add to
     // or subtract from it under the new type (the add/deselect paths are already mode-aware).
-    spdlog::info("Selection mode changed to: {}", selectionModeToString(_currentSelectionMode));
+    spdlog::debug("Selection mode changed to: {}", selectionModeToString(_currentSelectionMode));
 }
 
 void EditorWidget::setSelectionMode(SelectionMode mode) {
@@ -1029,7 +1029,7 @@ void EditorWidget::setSelectionMode(SelectionMode mode) {
     }
 
     // Keep the current selection across a type change (see cycleSelectionMode).
-    spdlog::info("Selection mode set to: {}", selectionModeToString(_currentSelectionMode));
+    spdlog::debug("Selection mode set to: {}", selectionModeToString(_currentSelectionMode));
 }
 
 void EditorWidget::setActiveSelectionLayers(SelectionLayers layers) {
@@ -1043,7 +1043,7 @@ void EditorWidget::setActiveSelectionLayers(SelectionLayers layers) {
         return; // created lazily with the map; a menu sync can run first (first New Map)
     }
     _session.selectionManager()->setActiveLayers(layers);
-    spdlog::info("Selection layers set to: floor={} roof={} objects={}",
+    spdlog::debug("Selection layers set to: floor={} roof={} objects={}",
         layers.floorTiles, layers.roofTiles, layers.objects);
 }
 
@@ -1057,15 +1057,15 @@ SelectionLayers EditorWidget::getActiveSelectionLayers() const {
 void EditorWidget::toggleScrollBlockerRectangleMode() {
     if (_currentSelectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
         _currentSelectionMode = SelectionMode::ALL;
-        spdlog::info("Scroll blocker rectangle mode disabled, switched to ALL mode");
+        spdlog::debug("Scroll blocker rectangle mode disabled, switched to ALL mode");
     } else {
         _currentSelectionMode = SelectionMode::SCROLL_BLOCKER_RECTANGLE;
         // Auto-enable scroll blocker visibility so the user can see what they are placing
         if (!_session.visibility().showScrollBlockers) {
             _session.visibility().showScrollBlockers = true;
-            spdlog::info("Automatically enabled scroll blocker visibility");
+            spdlog::debug("Automatically enabled scroll blocker visibility");
         }
-        spdlog::info("Scroll blocker rectangle mode enabled");
+        spdlog::debug("Scroll blocker rectangle mode enabled");
     }
 
     if (_inputHandler) {
@@ -1097,7 +1097,7 @@ void EditorWidget::rotateSelectedObject() {
             spdlog::debug("Rotated object to direction {}", object->getMapObject().direction);
         }
         registerObjectRotation(validObjects, beforeDirs, afterDirs);
-        spdlog::info("Rotated {} selected object(s)", objects.size());
+        spdlog::debug("Rotated {} selected object(s)", objects.size());
     } else {
         spdlog::debug("No objects selected for rotation");
     }
@@ -1431,7 +1431,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
 
     auto result = _session.selectionManager()->selectArea(selectionArea, areaMode, _session.currentElevation());
 
-    spdlog::info("Range selection: area ({:.1f}, {:.1f}, {:.1f}, {:.1f})",
+    spdlog::debug("Range selection: area ({:.1f}, {:.1f}, {:.1f}, {:.1f})",
         selectionArea.position.x, selectionArea.position.y, selectionArea.size.x, selectionArea.size.y);
 
     return result;
@@ -1684,7 +1684,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
             object->setHexPosition(hex->get());
         }
 
-        spdlog::info("EditorWidget: Successfully placed object at hex {} (pro_pid: {})",
+        spdlog::debug("EditorWidget: Successfully placed object at hex {} (pro_pid: {})",
             hexPosition, mapObject->pro_pid);
 
         registerObjectPlacement(mapObject, object);
@@ -1828,7 +1828,7 @@ void EditorWidget::setShowLightOverlays(bool show) {
         object->setShowLightOverlay(show);
     });
 
-    spdlog::info("Light overlay display set to: {} (found {} light objects)", show, lightObjectCount);
+    spdlog::debug("Light overlay display set to: {} (found {} light objects)", show, lightObjectCount);
 }
 
 void EditorWidget::clearDragSelectionPreview() {
@@ -1858,7 +1858,7 @@ void EditorWidget::onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t n
         }
 
         registerObjectFrmChange(object, oldFrmPid, oldFrmPath, newFrmPid, newFrmPath);
-        spdlog::info("EditorWidget::onObjectFrmChanged - updated object visual to FRM PID {} ({})", newFrmPid, newFrmPath);
+        spdlog::debug("EditorWidget::onObjectFrmChanged - updated object visual to FRM PID {} ({})", newFrmPid, newFrmPath);
     } catch (const std::exception& e) {
         spdlog::error("EditorWidget::onObjectFrmChanged - failed to update object FRM: {}", e.what());
     }
@@ -1880,7 +1880,7 @@ void EditorWidget::onObjectFrmPathChanged(std::shared_ptr<Object> object, const 
         std::string oldFrmPath = _resources.frmResolver().resolve(oldFrmPid);
 
         registerObjectFrmChange(object, oldFrmPid, oldFrmPath, oldFrmPid, newFrmPath);
-        spdlog::info("EditorWidget::onObjectFrmPathChanged - updated object visual to FRM path: {}", newFrmPath);
+        spdlog::debug("EditorWidget::onObjectFrmPathChanged - updated object visual to FRM path: {}", newFrmPath);
 
     } catch (const std::exception& e) {
         spdlog::error("EditorWidget::onObjectFrmPathChanged - failed to update object FRM from path {}: {}",
@@ -1901,7 +1901,7 @@ void EditorWidget::deleteSelectedObjects() {
         return;
     }
 
-    spdlog::info("EditorWidget::deleteSelectedObjects - Deleting {} selected objects", selectedObjects.size());
+    spdlog::debug("EditorWidget::deleteSelectedObjects - Deleting {} selected objects", selectedObjects.size());
 
     std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> removedObjects;
     for (const auto& object : selectedObjects) {
@@ -1928,7 +1928,7 @@ void EditorWidget::deleteSelectedObjects() {
 
     Q_EMIT selectionChanged(_session.selectionManager()->getCurrentSelection(), _session.currentElevation());
 
-    spdlog::info("EditorWidget::deleteSelectedObjects - Successfully deleted {} objects", removedObjects.size());
+    spdlog::debug("EditorWidget::deleteSelectedObjects - Successfully deleted {} objects", removedObjects.size());
 }
 
 } // namespace geck
