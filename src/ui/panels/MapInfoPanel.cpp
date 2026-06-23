@@ -474,8 +474,7 @@ void MapInfoPanel::loadScriptVars() {
         // The map's own script (header.script_id, 1-based) names a scripts.lst entry. Resolve its
         // filename and scrname.msg description independently of the .gam file (which only carries the
         // map's global variables), so the name shows even for a map that has no .gam.
-        const int map_script_id = _map->getMapFile().header.script_id;
-        if (map_script_id > 0) {
+        if (const int map_script_id = _map->getMapFile().header.script_id; map_script_id > 0) {
             auto scripts = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
             const auto& scriptList = scripts->list();
             if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
@@ -629,7 +628,7 @@ void MapInfoPanel::updateMapScriptsDisplay() {
 
     try {
         // Concise counts-only summary. The full, sortable per-script list lives in the Scripts panel.
-        auto& mapInfo = _map->getMapFile();
+        const auto& mapInfo = _map->getMapFile();
         QString summary;
 
         if (mapInfo.header.script_id > 0) {
@@ -645,7 +644,7 @@ void MapInfoPanel::updateMapScriptsDisplay() {
         int totalScripts = 0;
         QStringList sectionParts;
         for (int i = 0; i < Map::SCRIPT_SECTIONS; ++i) {
-            const int count = static_cast<int>(mapInfo.map_scripts[i].size());
+            const auto count = static_cast<int>(mapInfo.map_scripts[i].size());
             totalScripts += count;
             if (count > 0) {
                 const auto type = static_cast<MapScript::ScriptType>(i);

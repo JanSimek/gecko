@@ -511,8 +511,10 @@ void MainWindow::setupMenuBar() {
     QAction* redockAllAction = dockLayoutMenu->addAction("Re-&dock All Floating Panels");
     redockAllAction->setStatusTip("Dock all floating panels back to the main window");
     connect(redockAllAction, &QAction::triggered, [this]() {
-        for (QDockWidget* dock : { _mapInfoDock, _scriptsDock, _selectionDock, _tilePaletteDock, _objectPaletteDock, _fileBrowserDock }) {
-            if (dock->isFloating()) {
+        // managedDocks() is the single source of truth for the dock set, so this can't drift as panels
+        // are added, and it tolerates any not-yet-created dock.
+        for (QDockWidget* dock : managedDocks()) {
+            if (dock != nullptr && dock->isFloating()) {
                 dock->setFloating(false);
             }
         }
