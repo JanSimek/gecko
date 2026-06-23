@@ -79,7 +79,6 @@ void DataPathLoader::load() {
 void DataPathLoader::onDone() {
     if (_hasError) {
         spdlog::warn("DataPathLoader completed with errors: {}", _errorMessage);
-    } else {
     }
 }
 

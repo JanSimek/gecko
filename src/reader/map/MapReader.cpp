@@ -170,7 +170,7 @@ std::unique_ptr<Map> MapReader::read() {
         elevations++;
     if (elevation_high)
         elevations++;
-    spdlog::debug("Map has " + std::to_string(elevations) + " elevation(s)");
+    spdlog::debug("Map has {} elevation(s)", elevations);
 
     map_file->header.darkness = read_be_u32();
 
@@ -291,7 +291,7 @@ std::unique_ptr<Map> MapReader::read() {
     // The engine (object.cc objectLoadAll / objectSaveAll) always frames this
     // section as exactly ELEVATION_COUNT per-elevation count blocks, regardless
     // of which elevations are enabled. Read all three unconditionally.
-    uint32_t total_objects = read_be_u32();
+    read_be_u32(); // total object count across elevations — consumed; per-elevation counts follow
 
     for (int elev = 0; elev < Map::ELEVATION_COUNT; ++elev) {
         auto objectsOnElevation = read_be_u32();

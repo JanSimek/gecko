@@ -164,17 +164,12 @@ void Application::checkFirstRun() {
         spdlog::info("First run detected, showing settings dialog");
 
         SettingsDialog dialog(_settings, _mainWindow.get());
-        int result = dialog.exec();
+        dialog.exec();
 
-        // Save even if cancelled so we keep at least the default data path from the command line.
+        // Save and reload data paths whether or not the dialog was accepted, so we keep at least the
+        // default data path from the command line and the app is usable either way.
         settings.save();
-
-        if (result == QDialog::Accepted) {
-            loadDataPaths();
-        } else {
-            // Load data paths even if cancelled, so the app is usable.
-            loadDataPaths();
-        }
+        loadDataPaths();
     } else {
         loadDataPaths();
     }
