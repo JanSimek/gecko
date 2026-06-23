@@ -1,9 +1,9 @@
 #pragma once
 
 #include "ui/common/BaseDialog.h"
+#include "ui/dialogs/ScriptSelectorDialog.h"
 
 #include <vector>
-#include <string>
 
 class QLabel;
 class QSpinBox;
@@ -20,7 +20,7 @@ class SpatialScriptDialog : public BaseDialog {
     Q_OBJECT
 
 public:
-    explicit SpatialScriptDialog(const std::vector<std::string>& scriptNames, QWidget* parent = nullptr);
+    explicit SpatialScriptDialog(const std::vector<ScriptSelectorDialog::Entry>& scripts, QWidget* parent = nullptr);
 
     int programIndex() const { return _programIndex; }
     int tile() const;
@@ -33,7 +33,7 @@ private slots:
     void onChooseScript();
 
 private:
-    std::vector<std::string> _scriptNames;
+    std::vector<ScriptSelectorDialog::Entry> _scripts;
     int _programIndex = -1;
 
     QLabel* _scriptLabel;

@@ -49,6 +49,7 @@ add_executable(general_tests
     general/test_pattern_builder.cpp
     general/test_map_script_api.cpp
     general/test_resource_repository.cpp
+    general/test_script_names.cpp
     general/test_object_visibility.cpp
     general/test_dat_concurrency.cpp
     general/test_map_renderer.cpp

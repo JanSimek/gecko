@@ -24,6 +24,7 @@
 #include "resource/ResourcePaths.h"
 #include "util/Coordinates.h"
 #include "ui/IconHelper.h"
+#include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/dialogs/SpatialScriptDialog.h"
 
 namespace geck {
@@ -969,7 +970,7 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
         return;
     }
 
-    SpatialScriptDialog dialog(scriptsLst->list(), this);
+    SpatialScriptDialog dialog(ScriptSelectorDialog::buildEntries(_resources), this);
     if (dialog.exec() != QDialog::Accepted || dialog.programIndex() < 0) {
         return;
     }

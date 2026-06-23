@@ -35,6 +35,28 @@ TEST_CASE("LstReader trims comments, normalizes slashes, lowercases and skips bl
     CHECK(list[2] == "plain.frm");
 }
 
+TEST_CASE("LstReader captures the ';' comment per entry, dropping '#' metadata", "[lst]") {
+    const std::string content = "obj_dude.int    ; Player script.                # local_vars=7\r\n" // comment + '#' meta + CRLF
+                                "zclrat.int      ; Generic lesser rat            # local_vars=5\n"
+                                "plain.int\n"                           // no comment
+                                "; full-line comment\n"                 // skipped (no entry)
+                                "spaced.int   ;   padded comment   \n"; // trimmed both ends
+
+    LstReader reader;
+    auto lst = reader.openFile("synthetic.lst", bytesOf(content));
+    REQUIRE(lst != nullptr);
+
+    const auto& list = lst->list();
+    const auto& comments = lst->comments();
+    REQUIRE(list.size() == 4);
+    REQUIRE(comments.size() == list.size()); // aligned 1:1 with the entries
+
+    CHECK(comments[0] == "Player script."); // '#' metadata dropped, trimmed; case preserved
+    CHECK(comments[1] == "Generic lesser rat");
+    CHECK(comments[2].empty());             // plain.int has no comment
+    CHECK(comments[3] == "padded comment"); // interior preserved, ends trimmed
+}
+
 TEST_CASE("LstReader at() indexes entries from zero", "[lst]") {
     LstReader reader;
     auto lst = reader.openFile("x.lst", bytesOf("first.frm\nsecond.frm\n"));

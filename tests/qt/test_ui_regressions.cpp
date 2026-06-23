@@ -34,6 +34,7 @@
 #include "ui/dialogs/CritterPropertiesDialog.h"
 #include "ui/dialogs/InventoryViewerDialog.h"
 #include "ui/dialogs/ItemSelectorDialog.h"
+#include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/widgets/DataPathsWidget.h"
 #include "ui/widgets/ObjectPreviewWidget.h"
 #include "ui/widgets/ProInfoPanelWidget.h"
@@ -594,6 +595,38 @@ TEST_CASE("Info panel derives display state from PRO data", "[qt][pro]") {
     REQUIRE(widget.nameText() == "10mm JHP");
     REQUIRE(widget.filenameText() == "00000030.pro");
     REQUIRE(widget.windowTitleText() == "10mm JHP (Ammo) - PRO editor");
+}
+
+TEST_CASE("ScriptSelectorDialog shows index/filename/name/comment columns and returns the program index", "[qt][script]") {
+    const std::vector<geck::ScriptSelectorDialog::Entry> entries = {
+        { 0, "obj_dude.int", "The Chosen One", "Player script." },
+        { 1, "obj_door.int", "", "A door" },
+        { 2, "raiders.int", "Raiders", "" },
+    };
+    geck::ScriptSelectorDialog dialog(entries, /*currentIndex=*/2);
+    auto* table = dialog.findChild<QTableWidget*>();
+    REQUIRE(table != nullptr);
+    REQUIRE(table->rowCount() == 3);
+    REQUIRE(table->columnCount() == 4);
+
+    // Find a row by its filename so the assertions don't depend on the (sortable) row order. Columns are
+    // index / filename / name / comment.
+    int dudeRow = -1;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        if (table->item(row, 1)->text() == "obj_dude.int") {
+            dudeRow = row;
+            break;
+        }
+    }
+    REQUIRE(dudeRow >= 0);
+    CHECK(table->item(dudeRow, 0)->data(Qt::DisplayRole).toInt() == 0);
+    CHECK(table->item(dudeRow, 2)->text() == "The Chosen One");
+    CHECK(table->item(dudeRow, 3)->text() == "Player script."); // scripts.lst comment column
+
+    // currentIndex == 2 is preselected; selectedIndex returns the program index, not the row.
+    CHECK(dialog.selectedIndex() == 2);
+    table->selectRow(dudeRow);
+    CHECK(dialog.selectedIndex() == 0);
 }
 
 TEST_CASE("EditorWidget::canSaveInPlace accepts only real on-disk files, not VFS paths", "[qt][save]") {

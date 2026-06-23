@@ -437,6 +437,7 @@ add_library(gecko_resource STATIC
     resource/MapNameResolver.h
     resource/MapNameResolver.cpp
     resource/AiTxtLoader.h
+    resource/ScriptNames.h
     resource/WritableDataRoot.h
     resource/WritableDataRoot.cpp
     resource/MapNameEditor.h

@@ -32,6 +32,24 @@ std::string parseLine(std::string line) {
     return line;
 }
 
+// The human-readable comment after ';' on an LST line (e.g. a script's description in scripts.lst), with
+// any trailing "# ..." metadata removed (scripts.lst appends "# local_vars=N") and both ends trimmed.
+// Empty when the line has no ';'. Case is preserved, unlike the lowercased entry name.
+std::string parseComment(const std::string& line) {
+    const auto semi = line.find(';');
+    if (semi == std::string::npos) {
+        return {};
+    }
+    std::string comment = line.substr(semi + 1);
+    if (const auto hash = comment.find('#'); hash != std::string::npos) {
+        comment.erase(hash);
+    }
+    const auto notSpace = [](unsigned char c) { return !std::isspace(c); };
+    comment.erase(comment.begin(), std::find_if(comment.begin(), comment.end(), notSpace));
+    comment.erase(std::find_if(comment.rbegin(), comment.rend(), notSpace).base(), comment.end());
+    return comment;
+}
+
 std::unique_ptr<Lst> LstReader::read() {
     try {
         auto& utils = getBinaryUtils();
@@ -46,6 +64,7 @@ std::unique_ptr<Lst> LstReader::read() {
         }
 
         std::vector<std::string> list;
+        std::vector<std::string> comments;
         int lines_processed = 0;
         int valid_entries = 0;
 
@@ -69,6 +88,7 @@ std::unique_ptr<Lst> LstReader::read() {
 
                 if (!parsed_line.empty()) {
                     list.push_back(parsed_line);
+                    comments.push_back(parseComment(line)); // line is the raw text; parseLine took a copy
                     valid_entries++;
 
                     spdlog::trace("LST entry {}: '{}'", valid_entries, parsed_line);
@@ -81,6 +101,7 @@ std::unique_ptr<Lst> LstReader::read() {
 
         auto lst = std::make_unique<Lst>(_path);
         lst->setList(list);
+        lst->setComments(comments);
         return lst;
 
     } catch (const FileReaderException&) {

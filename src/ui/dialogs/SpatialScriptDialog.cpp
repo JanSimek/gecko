@@ -15,9 +15,9 @@
 
 namespace geck {
 
-SpatialScriptDialog::SpatialScriptDialog(const std::vector<std::string>& scriptNames, QWidget* parent)
+SpatialScriptDialog::SpatialScriptDialog(const std::vector<ScriptSelectorDialog::Entry>& scripts, QWidget* parent)
     : BaseDialog("Add Spatial Script", parent)
-    , _scriptNames(scriptNames) {
+    , _scripts(scripts) {
 
     auto* mainLayout = new QVBoxLayout(this);
     auto* formLayout = new QFormLayout();
@@ -54,7 +54,7 @@ SpatialScriptDialog::SpatialScriptDialog(const std::vector<std::string>& scriptN
 }
 
 void SpatialScriptDialog::onChooseScript() {
-    ScriptSelectorDialog dialog(_scriptNames, _programIndex, this);
+    ScriptSelectorDialog dialog(_scripts, _programIndex, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
@@ -63,8 +63,13 @@ void SpatialScriptDialog::onChooseScript() {
         return;
     }
     _programIndex = index;
-    if (static_cast<size_t>(index) < _scriptNames.size()) {
-        _scriptLabel->setText(QString("%1: %2").arg(index).arg(QString::fromStdString(_scriptNames[index])));
+    if (static_cast<size_t>(index) < _scripts.size()) {
+        const ScriptSelectorDialog::Entry& entry = _scripts[static_cast<size_t>(index)];
+        QString label = QString::fromStdString(entry.filename);
+        if (!entry.name.empty()) {
+            label += " — " + QString::fromStdString(entry.name);
+        }
+        _scriptLabel->setText(label);
     } else {
         _scriptLabel->setText(QString("Script #%1").arg(index));
     }

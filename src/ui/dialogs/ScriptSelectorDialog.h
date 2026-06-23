@@ -2,13 +2,17 @@
 
 #include "ui/common/BaseDialog.h"
 
-#include <vector>
 #include <string>
+#include <vector>
 
-class QListWidget;
+class QTableWidget;
 class QLineEdit;
 
 namespace geck {
+
+namespace resource {
+    class GameResources;
+}
 
 /// @brief Picks a script program from scripts.lst.
 ///
@@ -20,9 +24,22 @@ class ScriptSelectorDialog : public BaseDialog {
     Q_OBJECT
 
 public:
-    /// @param scriptNames  scripts.lst entries (index == program index)
+    /// One selectable script: its program index (0-based scripts.lst line), the scripts.lst filename, the
+    /// scrname.msg display name, and the scripts.lst ';' comment. `name` and `comment` may each be empty.
+    struct Entry {
+        int index = 0;
+        std::string filename;
+        std::string name;
+        std::string comment;
+    };
+
+    /// @param scripts      the rows to show (one per scripts.lst entry)
     /// @param currentIndex program index to preselect, or -1
-    ScriptSelectorDialog(const std::vector<std::string>& scriptNames, int currentIndex, QWidget* parent = nullptr);
+    ScriptSelectorDialog(const std::vector<Entry>& scripts, int currentIndex, QWidget* parent = nullptr);
+
+    /// Build a row for every scripts.lst entry, resolving each name via scrname.msg. Shared by the
+    /// object-script and spatial-script pickers so they show the same data.
+    static std::vector<Entry> buildEntries(resource::GameResources& resources);
 
     /// Selected program index, or -1 if none.
     int selectedIndex() const;
@@ -32,7 +49,7 @@ private slots:
 
 private:
     QLineEdit* _filterEdit;
-    QListWidget* _listWidget;
+    QTableWidget* _table;
 };
 
 } // namespace geck
