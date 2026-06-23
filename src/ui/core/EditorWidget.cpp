@@ -1769,6 +1769,77 @@ void EditorWidget::centerViewOnPlayerPosition() {
         playerHexPosition, screenX, screenY);
 }
 
+bool EditorWidget::revealScriptObject(int sid) {
+    if (!_session.map()) {
+        spdlog::warn("EditorWidget::revealScriptObject: No map loaded");
+        return false;
+    }
+
+    // A script's owner is the object whose map_scripts_pid equals the script's SID. Find which elevation
+    // holds it (objects are keyed by elevation in map_objects); -1 == no script, so a matching sid is
+    // always >= 0.
+    const auto& mapFile = _session.map()->getMapFile();
+    int ownerElevation = -1;
+    for (const auto& [elevation, objects] : mapFile.map_objects) {
+        for (const auto& mapObject : objects) {
+            if (mapObject && mapObject->map_scripts_pid == sid) {
+                ownerElevation = elevation;
+                break;
+            }
+        }
+        if (ownerElevation >= 0) {
+            break;
+        }
+    }
+
+    if (ownerElevation < 0) {
+        spdlog::debug("EditorWidget::revealScriptObject: No object owns script SID {}", sid);
+        return false; // ownerless (spatial / timer / system) — leave the current selection untouched
+    }
+
+    // Switch to the owning elevation if needed. changeElevation() rebuilds _session.objects() (fresh
+    // visual wrappers around that elevation's MapObjects) via loadSprites(). The host re-syncs the
+    // elevation menu after this returns true (see MainWindow's scriptObjectActivated handler).
+    if (_session.currentElevation() != ownerElevation) {
+        changeElevation(ownerElevation);
+    }
+
+    // Find the refreshed visual Object for the owning MapObject, select it and center on its hex.
+    for (const auto& object : _session.objects()) {
+        if (!object || !object->hasMapObject()) {
+            continue;
+        }
+        if (object->getMapObject().map_scripts_pid != sid) {
+            continue;
+        }
+
+        // Single-select the object directly (mirrors reselectAfterDragMove's setSelectedItems path,
+        // which also notifies the SelectionPanel via the selection callback).
+        if (auto* manager = _session.selectionManager()) {
+            manager->setSelectedItems({ selection::SelectedItem{ selection::SelectionType::OBJECT, object } });
+        }
+
+        // Center the view on the object's hex — same hex->screen->setCenter path as
+        // centerViewOnPlayerPosition.
+        const auto hex = _session.hexgrid().getHexByPosition(
+            static_cast<uint32_t>(object->getMapObject().position));
+        if (hex) {
+            _controller.viewport().getView().setCenter(
+                sf::Vector2f(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y())));
+        }
+
+        spdlog::debug("EditorWidget::revealScriptObject: Revealed object owning script SID {} on elevation {}",
+            sid, ownerElevation);
+        return true;
+    }
+
+    // The MapObject exists on the elevation but no matching visual wrapper was found (e.g. its sprite
+    // failed to load). Don't disturb the current selection.
+    spdlog::warn("EditorWidget::revealScriptObject: Owner of SID {} on elevation {} has no visual object",
+        sid, ownerElevation);
+    return false;
+}
+
 void EditorWidget::showLoadingErrorsSummary() {
     const auto& loadingErrors = _controller.spriteLoader().lastLoadErrors();
     if (!loadingErrors.hasErrors()) {

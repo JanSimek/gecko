@@ -26,8 +26,15 @@ public:
     /// Repopulate the table from `map`, or clear it when `map` is null.
     void setMap(Map* map);
 
+signals:
+    /// Emitted when the user double-clicks a row owned by a map object. `sid` is the
+    /// script's SID (its owning object's `map_scripts_pid`). Ownerless rows (spatial /
+    /// timer / system scripts and the map's own header script) emit nothing.
+    void scriptObjectActivated(int sid);
+
 private slots:
-    void applyFilter(); // hide rows that don't match _filterEdit; re-applied after every populate()
+    void applyFilter();                // hide rows that don't match _filterEdit; re-applied after every populate()
+    void onCellDoubleClicked(int row); // resolve the row's owning SID and emit scriptObjectActivated
 
 private:
     void populate();

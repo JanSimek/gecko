@@ -117,6 +117,11 @@ public:
     void enterPlayerPositionSelectionMode();
     void centerViewOnPlayerPosition();
 
+    // Find the object that owns the script with the given SID (its `map_scripts_pid`), switch to its
+    // elevation, select it and center the view on it. Returns false (leaving the current selection
+    // untouched) when no object on the map owns that script. Used by the Scripts panel's double-click.
+    bool revealScriptObject(int sid);
+
     // Tile placement
     void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);
     void fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof);

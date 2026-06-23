@@ -1440,6 +1440,23 @@ void MainWindow::connectPanelSignals() {
         // copy when the map is saved (see the saveMap handlers, which call persistMapNames()).
         connect(_mapInfoPanel, &MapInfoPanel::mapNamesChanged, this, [this]() { setMapModified(true); });
     }
+
+    // ScriptsPanel signals → current editor widget. Double-clicking an object-owned script row jumps to
+    // (selects + centers on) the owning object; ownerless rows report that there's no object to reveal.
+    if (_scriptsPanel) {
+        connect(_scriptsPanel, &ScriptsPanel::scriptObjectActivated,
+            this, [this](int sid) {
+                if (!_currentEditorWidget) {
+                    return;
+                }
+                if (_currentEditorWidget->revealScriptObject(sid)) {
+                    // The reveal may have switched elevation directly; re-sync the elevation menu.
+                    updateElevationMenu(_currentEditorWidget->getMap());
+                } else {
+                    showStatusMessage("Script has no object on the map");
+                }
+            });
+    }
 }
 
 void MainWindow::connectToEditorWidget() {
