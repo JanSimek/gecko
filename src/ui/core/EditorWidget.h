@@ -117,6 +117,11 @@ public:
     void enterPlayerPositionSelectionMode();
     void centerViewOnPlayerPosition();
 
+    // Find the object that owns the script with the given SID (its `map_scripts_pid`), switch to its
+    // elevation, select it and center the view on it. Returns false (leaving the current selection
+    // untouched) when no object on the map owns that script. Used by the Scripts panel's double-click.
+    bool revealScriptObject(int sid);
+
     // Tile placement
     void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);
     void fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof);
@@ -280,6 +285,13 @@ public slots:
     const UndoStack& getUndoStack() const { return _session.undoStack(); }
 
 private:
+    // Center the view on a hex position (shared by centerViewOnPlayerPosition and revealScriptObject).
+    void centerViewOnHex(uint32_t hexPosition);
+    // The elevation whose objects own the script with this SID (map_scripts_pid == sid), or -1 if none.
+    int scriptOwnerElevation(int sid) const;
+    // The current elevation's visual Object owning the script with this SID, or nullptr.
+    std::shared_ptr<Object> visualObjectForSid(int sid) const;
+
     // Write the current map to `destination` (create-or-overwrite) and repoint the map at it; shared by
     // saveMap (direct write) and saveMapAs (after the dialog). Reports errors and returns success.
     bool writeMapTo(const std::string& destination);

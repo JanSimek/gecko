@@ -68,6 +68,8 @@ set(GECK_APP_SOURCES
     ui/panels/ObjectPalettePanel.cpp
     ui/panels/MapInfoPanel.h
     ui/panels/MapInfoPanel.cpp
+    ui/panels/ScriptsPanel.h
+    ui/panels/ScriptsPanel.cpp
     ui/panels/SelectionPanel.h
     ui/panels/SelectionPanel.cpp
     ui/panels/FileBrowserPanel.h

@@ -1746,27 +1746,82 @@ void EditorWidget::enterPlayerPositionSelectionMode() {
     spdlog::debug("EditorWidget: Entered player position selection mode");
 }
 
+void EditorWidget::centerViewOnHex(uint32_t hexPosition) {
+    auto hex = _session.hexgrid().getHexByPosition(hexPosition);
+    if (!hex) {
+        spdlog::warn("EditorWidget::centerViewOnHex: Invalid hex position {}", hexPosition);
+        return;
+    }
+    _controller.viewport().getView().setCenter(
+        sf::Vector2f(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y())));
+}
+
 void EditorWidget::centerViewOnPlayerPosition() {
     if (!_session.map()) {
         spdlog::warn("EditorWidget::centerViewOnPlayerPosition: No map loaded");
         return;
     }
+    centerViewOnHex(_session.map()->getMapFile().header.player_default_position);
+}
 
-    uint32_t playerHexPosition = _session.map()->getMapFile().header.player_default_position;
+int EditorWidget::scriptOwnerElevation(int sid) const {
+    if (!_session.map()) {
+        return -1;
+    }
+    // A script's owner is the object whose map_scripts_pid equals the script's SID; objects are keyed by
+    // elevation in map_objects. (-1 == no script, so a real sid is always >= 0.)
+    for (const auto& [elevation, objects] : _session.map()->getMapFile().map_objects) {
+        for (const auto& mapObject : objects) {
+            if (mapObject && mapObject->map_scripts_pid == sid) {
+                return elevation;
+            }
+        }
+    }
+    return -1;
+}
 
-    auto hex = _session.hexgrid().getHexByPosition(playerHexPosition);
-    if (!hex) {
-        spdlog::warn("EditorWidget::centerViewOnPlayerPosition: Invalid player hex position {}", playerHexPosition);
-        return;
+std::shared_ptr<Object> EditorWidget::visualObjectForSid(int sid) const {
+    for (const auto& object : _session.objects()) {
+        if (object && object->hasMapObject() && object->getMapObject().map_scripts_pid == sid) {
+            return object;
+        }
+    }
+    return nullptr;
+}
+
+bool EditorWidget::revealScriptObject(int sid) {
+    const int ownerElevation = scriptOwnerElevation(sid);
+    if (ownerElevation < 0) {
+        spdlog::debug("EditorWidget::revealScriptObject: No object owns script SID {}", sid);
+        return false; // ownerless (spatial / timer / system) — leave the current selection untouched
     }
 
-    float screenX = static_cast<float>(hex->get().x());
-    float screenY = static_cast<float>(hex->get().y());
+    // Switch to the owning elevation if needed; changeElevation() rebuilds _session.objects() (fresh
+    // visual wrappers) via loadSprites(), so the visual Object is fetched only afterwards. The host
+    // re-syncs the elevation menu after this returns true (see MainWindow's scriptObjectActivated handler).
+    if (_session.currentElevation() != ownerElevation) {
+        changeElevation(ownerElevation);
+    }
 
-    _controller.viewport().getView().setCenter(sf::Vector2f(screenX, screenY));
+    const auto object = visualObjectForSid(sid);
+    if (!object) {
+        // The MapObject exists on the elevation but its visual wrapper is missing (e.g. sprite load
+        // failed). Don't disturb the current selection.
+        spdlog::warn("EditorWidget::revealScriptObject: Owner of SID {} on elevation {} has no visual object",
+            sid, ownerElevation);
+        return false;
+    }
 
-    spdlog::debug("EditorWidget::centerViewOnPlayerPosition: Centered view on player position {} at screen ({}, {})",
-        playerHexPosition, screenX, screenY);
+    // Single-select the object (mirrors reselectAfterDragMove's setSelectedItems path, which notifies the
+    // SelectionPanel) and center the view on its hex.
+    if (auto* manager = _session.selectionManager()) {
+        manager->setSelectedItems({ selection::SelectedItem{ selection::SelectionType::OBJECT, object } });
+    }
+    centerViewOnHex(static_cast<uint32_t>(object->getMapObject().position));
+
+    spdlog::debug("EditorWidget::revealScriptObject: Revealed object owning script SID {} on elevation {}",
+        sid, ownerElevation);
+    return true;
 }
 
 void EditorWidget::showLoadingErrorsSummary() {

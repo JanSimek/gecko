@@ -22,6 +22,7 @@
 #include "ui/Settings.h"
 #include "reader/ReaderFactory.h"
 #include "resource/ResourcePaths.h"
+#include "resource/ScriptNames.h"
 #include "util/Coordinates.h"
 #include "ui/IconHelper.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
@@ -183,6 +184,7 @@ void MapInfoPanel::setupUI() {
     headerLayout->addRow("Local variables #:", _localVarsSpin);
 
     _mapScriptEdit = new QLineEdit();
+    _mapScriptEdit->setObjectName("mapScript");
     _mapScriptEdit->setReadOnly(true);
     headerLayout->addRow("Map script:", _mapScriptEdit);
 
@@ -317,6 +319,10 @@ void MapInfoPanel::updateMapInfo() {
     try {
         auto& mapInfo = _map->getMapFile();
 
+        // Populating the widgets below emits their change signals; suppress the write-back to the map so
+        // a half-refreshed widget set can't clobber fields that haven't been updated yet.
+        _suppressFieldChanged = true;
+
         // Update elevation checkboxes based on flags (inverted logic: 0 = enabled, 1 = disabled)
         bool hasElevation1 = (mapInfo.header.flags & 0x2) == 0;
         bool hasElevation2 = (mapInfo.header.flags & 0x4) == 0;
@@ -344,6 +350,8 @@ void MapInfoPanel::updateMapInfo() {
 
         bool isSavegame = ((mapInfo.header.flags & 0x1) != 0);
         _savegameCheck->setChecked(isSavegame);
+
+        _suppressFieldChanged = false; // done populating; user edits write back from here on
 
         loadScriptVars();
         _mapScriptEdit->setText(QString::fromStdString(_mapScriptName));
@@ -393,6 +401,7 @@ void MapInfoPanel::updateMapInfo() {
         updateElevationCheckboxStates();
 
     } catch (const std::exception& e) {
+        _suppressFieldChanged = false; // never leave write-back disabled if population threw mid-way
         spdlog::error("Error updating map info: {}", e.what());
         clearMapInfo();
     }
@@ -462,47 +471,40 @@ void MapInfoPanel::loadScriptVars() {
     }
 
     try {
-        std::string mapFilename = _map->filename();
-        std::string baseName = mapFilename.substr(0, mapFilename.find("."));
-        std::string gam_filename = baseName + ".gam";
-        std::string gam_path = "maps/" + gam_filename;
-
-        Gam* gam_file = nullptr;
-        if (_resources.files().exists(gam_path)) {
-            gam_file = _resources.repository().load<Gam>(gam_path);
-            if (gam_file) {
-                spdlog::debug("GAM file loaded from VFS: {}", gam_path);
-            }
-        }
-
-        if (!gam_file) {
-            spdlog::warn("GAM file '{}' not found in VFS", gam_path);
-            _mapScriptName = "GAM file not found";
-            return;
-        }
-
-        for (uint32_t index = 0; index < _map->getMapFile().header.num_global_vars; index++) {
-            _mvars.emplace(gam_file->mvarKey(index), gam_file->mvarValue(index));
-        }
-
-        int map_script_id = _map->getMapFile().header.script_id;
-        if (map_script_id > 0) {
+        // The map's own script (header.script_id, 1-based) names a scripts.lst entry. Resolve its
+        // filename and scrname.msg description independently of the .gam file (which only carries the
+        // map's global variables), so the name shows even for a map that has no .gam.
+        if (const int map_script_id = _map->getMapFile().header.script_id; map_script_id > 0) {
             auto scripts = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
             const auto& scriptList = scripts->list();
             if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
                 _mapScriptName = scripts->at(map_script_id - 1); // script id starts at 1
-                spdlog::debug("Script name '{}' found for ID {} in: {}", _mapScriptName, map_script_id, ResourcePaths::Lst::SCRIPTS);
+                // Append the scrname.msg description for the same script (its 0-based index is id - 1),
+                // mirroring how object scripts are named in the script picker.
+                const std::string desc = resource::scriptDisplayName(_resources, map_script_id - 1);
+                if (!desc.empty()) {
+                    _mapScriptName += " — " + desc;
+                }
             } else {
                 _mapScriptName = "invalid script index";
-                spdlog::warn("Script ID {} out of bounds for scripts.lst size {} in: {}", map_script_id, scriptList.size(), ResourcePaths::Lst::SCRIPTS);
+                spdlog::warn("Map script ID {} out of bounds for scripts.lst size {}", map_script_id, scriptList.size());
+            }
+        }
+
+        // Global variables come from the map's optional .gam file.
+        const std::string baseName = _map->filename().substr(0, _map->filename().find("."));
+        const std::string gam_path = "maps/" + baseName + ".gam";
+        if (_resources.files().exists(gam_path)) {
+            if (Gam* gam_file = _resources.repository().load<Gam>(gam_path); gam_file != nullptr) {
+                for (uint32_t index = 0; index < _map->getMapFile().header.num_global_vars; index++) {
+                    _mvars.emplace(gam_file->mvarKey(index), gam_file->mvarValue(index));
+                }
             }
         } else {
-            _mapScriptName = "no script";
+            spdlog::debug("GAM file '{}' not found in VFS; map global variables unavailable", gam_path);
         }
     } catch (const std::exception& e) {
         spdlog::error("Error loading script vars: {}", e.what());
-        _mapScriptName = QString("Error: %1").arg(e.what()).toStdString();
-        // Clear any partial data on error
         _mvars.clear();
     }
 }
@@ -547,7 +549,10 @@ void MapInfoPanel::clearMapInfo() {
 }
 
 void MapInfoPanel::onFieldChanged() {
-    if (!_map) {
+    // Ignore the valueChanged/toggled signals that fire while updateMapInfo() is populating the widgets
+    // from the map; otherwise a half-updated widget set would be written back, corrupting fields that
+    // haven't been refreshed yet (e.g. script_id reset to the stale spin value during load).
+    if (_suppressFieldChanged || !_map) {
         return;
     }
 
@@ -622,118 +627,45 @@ void MapInfoPanel::updateMapScriptsDisplay() {
     }
 
     try {
-        auto& mapInfo = _map->getMapFile();
-        QString scriptsInfo;
+        // Concise counts-only summary. The full, sortable per-script list lives in the Scripts panel.
+        const auto& mapInfo = _map->getMapFile();
+        QString summary;
 
         if (mapInfo.header.script_id > 0) {
-            scriptsInfo += QString("Map Script ID: %1\n").arg(mapInfo.header.script_id);
-            scriptsInfo += QString("Map Script Name: %1\n").arg(QString::fromStdString(_mapScriptName));
-
-            if (_mapScriptName.find("not found") != std::string::npos) {
-                scriptsInfo += "⚠️ Script file could not be resolved\n";
-            } else if (_mapScriptName.find("Error") != std::string::npos) {
-                scriptsInfo += "❌ Error loading script information\n";
-            } else if (_mapScriptName.find("GAM file") != std::string::npos) {
-                scriptsInfo += "⚠️ GAM file missing, using script ID only\n";
-            } else if (_mapScriptName != "no script") {
-                scriptsInfo += "✅ Script information loaded successfully\n";
-            }
-        } else if (mapInfo.header.script_id == -1 || mapInfo.header.script_id == 0) {
-            scriptsInfo += "No map script assigned\n";
+            summary += QString("Map script: %1\n").arg(QString::fromStdString(_mapScriptName));
         } else {
-            scriptsInfo += QString("⚠️ Invalid script ID: %1\n").arg(mapInfo.header.script_id);
+            summary += "Map script: none\n";
         }
 
-        scriptsInfo += QString("\nGlobal Variables: %1\n").arg(mapInfo.header.num_global_vars);
-        if (_mvars.empty() && mapInfo.header.num_global_vars > 0) {
-            scriptsInfo += "⚠️ Global variables not loaded (GAM file issue)\n";
-        } else if (!_mvars.empty()) {
-            scriptsInfo += QString("✅ %1 global variables loaded\n").arg(_mvars.size());
-        }
-
-        scriptsInfo += QString("Local Variables: %1\n").arg(mapInfo.header.num_local_vars);
+        summary += QString("Global vars: %1   Local vars: %2\n")
+                       .arg(mapInfo.header.num_global_vars)
+                       .arg(mapInfo.header.num_local_vars);
 
         int totalScripts = 0;
-        bool hasObjectScripts = false;
-
-        scriptsInfo += "\n--- Object Scripts ---\n";
-
-        for (int i = 0; i < Map::SCRIPT_SECTIONS; i++) {
-            int sectionCount = mapInfo.scripts_in_section[i];
-            if (sectionCount > 0) {
-                hasObjectScripts = true;
-
-                // Map section numbers to readable names
-                QString sectionName;
-                switch (i) {
-                    case 0:
-                        sectionName = "System";
-                        break;
-                    case 1:
-                        sectionName = "Spatial";
-                        break;
-                    case 2:
-                        sectionName = "Timer";
-                        break;
-                    case 3:
-                        sectionName = "Item";
-                        break;
-                    case 4:
-                        sectionName = "Critter";
-                        break;
-                    default:
-                        sectionName = QString("Section %1").arg(i);
-                        break;
-                }
-
-                scriptsInfo += QString("%1 Scripts: %2\n").arg(sectionName).arg(sectionCount);
-
-                const auto& scripts = mapInfo.map_scripts[i];
-                int actualScriptCount = static_cast<int>(scripts.size());
-                totalScripts += actualScriptCount;
-
-                // Warn if the header count doesn't match the actual scripts present.
-                if (sectionCount != actualScriptCount) {
-                    scriptsInfo += QString("  ⚠️ Header says %1, but found %2 actual scripts\n")
-                                       .arg(sectionCount)
-                                       .arg(actualScriptCount);
-                }
-
-                int displayCount = std::min(3, actualScriptCount);
-                for (int j = 0; j < displayCount; j++) {
-                    const auto& script = scripts[j];
-                    auto scriptType = MapScript::fromPid(script.pid);
-                    scriptsInfo += QString("  • PID: %1, Type: %2, Script ID: %3\n")
-                                       .arg(script.pid)
-                                       .arg(QString::fromStdString(std::string(MapScript::toString(scriptType))))
-                                       .arg(script.script_id);
-                }
-                if (actualScriptCount > 3) {
-                    scriptsInfo += QString("  • ... and %1 more scripts\n").arg(actualScriptCount - 3);
-                }
+        QStringList sectionParts;
+        for (int i = 0; i < Map::SCRIPT_SECTIONS; ++i) {
+            const auto count = static_cast<int>(mapInfo.map_scripts[i].size());
+            totalScripts += count;
+            if (count > 0) {
+                const auto type = static_cast<MapScript::ScriptType>(i);
+                sectionParts << QString("%1: %2")
+                                    .arg(QString::fromStdString(std::string(MapScript::toString(type))))
+                                    .arg(count);
             }
         }
 
-        if (!hasObjectScripts) {
-            scriptsInfo += "No object scripts found\n";
-        } else {
-            scriptsInfo += QString("\n✅ Total object scripts: %1").arg(totalScripts);
+        summary += QString("Object scripts: %1").arg(totalScripts);
+        if (!sectionParts.isEmpty()) {
+            summary += QString(" (%1)").arg(sectionParts.join(", "));
         }
+        summary += "\n\nFull list in the Scripts panel.";
 
-        _mapScriptsLabel->setText(scriptsInfo.trimmed());
-
-        if (scriptsInfo.contains("❌") || scriptsInfo.contains("Error")) {
-            _mapScriptsLabel->setStyleSheet(ui::theme::styles::errorMonospace());
-        } else if (scriptsInfo.contains("⚠️")) {
-            _mapScriptsLabel->setStyleSheet(ui::theme::styles::warningMonospace());
-        } else {
-            _mapScriptsLabel->setStyleSheet(ui::theme::styles::monospaceText());
-        }
+        _mapScriptsLabel->setText(summary);
+        _mapScriptsLabel->setStyleSheet(ui::theme::styles::italicSecondaryText());
 
     } catch (const std::exception& e) {
-        QString errorMsg = QString("❌ Error loading script information:\n%1").arg(e.what());
-        _mapScriptsLabel->setText(errorMsg);
-        _mapScriptsLabel->setStyleSheet(ui::theme::styles::errorMonospace());
+        _mapScriptsLabel->setText("Could not read map script information.");
+        _mapScriptsLabel->setStyleSheet(ui::theme::styles::statusError());
         spdlog::error("Error updating map scripts display: {}", e.what());
     }
 }

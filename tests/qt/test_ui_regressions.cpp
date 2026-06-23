@@ -49,7 +49,9 @@
 #include "util/FileIo.h"
 #include "ui/Settings.h"
 #include "ui/panels/MapInfoPanel.h"
+#include "ui/panels/ScriptsPanel.h"
 #include "format/map/Map.h"
+#include "format/map/MapScript.h"
 #include <QLineEdit>
 #include <QPushButton>
 
@@ -843,6 +845,26 @@ std::unique_ptr<geck::Map> makeMap(const std::string& mapName, int elevation = 0
 
 } // namespace
 
+TEST_CASE("MapInfoPanel names the map's own script from scripts.lst and scrname.msg", "[qt][mapinfo]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\nzclrat.int      ; rat\n");
+    // scriptDisplayName(programIndex 0) reads scrname.msg[0 + 101] = 101.
+    data.writeGameMessageFile("text/english/game/scrname.msg", messageLine(101, QStringLiteral("The Chosen One")));
+    data.mount();
+
+    auto settings = std::make_shared<geck::Settings>();
+    auto map = makeMap("testmap.map");
+    map->getMapFile().header.script_id = 1; // 1-based -> scripts.lst index 0 (obj_dude.int)
+
+    geck::MapInfoPanel panel(data.resources(), settings);
+    panel.setMap(map.get());
+
+    auto* scriptEdit = panel.findChild<QLineEdit*>("mapScript");
+    REQUIRE(scriptEdit != nullptr);
+    // .lst filename plus the scrname.msg description, resolved even with no .gam file mounted.
+    CHECK(scriptEdit->text() == QStringLiteral("obj_dude.int — The Chosen One"));
+}
+
 TEST_CASE("MapInfoPanel shows resolved map.msg display name and maps.txt lookup name", "[qt][mapinfo]") {
     ResourceDataScope data;
     data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
@@ -946,4 +968,138 @@ TEST_CASE("MapInfoPanel hints to add a writable Data Path when none is configure
     // anywhere hidden.
     CHECK_FALSE(hint->isHidden());
     CHECK(hint->text().contains("writable folder"));
+}
+
+TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name", "[qt][scripts]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\nzclrat.int      ; rat\n");
+    // scriptDisplayName(programIndex 0) reads scrname.msg[0 + 101] = 101.
+    data.writeGameMessageFile("text/english/game/scrname.msg", messageLine(101, QStringLiteral("The Chosen One")));
+    data.mount();
+
+    auto map = makeMap("testmap.map");
+
+    // One CRITTER-section script (program index 0 -> obj_dude.int) owned by object 42, plus a second one
+    // so the row count reflects every section's scripts.
+    auto& mapFile = map->getMapFile();
+    mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::CRITTER)].push_back(
+        geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::CRITTER, 0, 0, 42));
+    mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::ITEM)].push_back(
+        geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::ITEM, 1, 1, 7));
+
+    // The map's own (header) script is 1-based; script_id 1 resolves to scripts.lst index 0
+    // (obj_dude.int) and is listed as a separate "Map" row.
+    mapFile.header.script_id = 1;
+
+    geck::ScriptsPanel panel(data.resources());
+    panel.setMap(map.get());
+
+    auto* table = panel.findChild<QTableWidget*>("scriptsTable"); // the script list (not the local-vars table)
+    REQUIRE(table != nullptr);
+    CHECK(table->rowCount() == 3); // 2 section scripts + the map's own header script
+
+    // Find the row whose Script ID cell is 0 (sorting may reorder rows) and check its filename + name.
+    bool foundScriptZero = false;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        const QTableWidgetItem* idItem = table->item(row, 1); // COL_SCRIPT_ID
+        REQUIRE(idItem != nullptr);
+        if (idItem->data(Qt::DisplayRole).toInt() == 0) {
+            foundScriptZero = true;
+            CHECK(table->item(row, 2)->text() == QStringLiteral("obj_dude.int"));   // COL_FILENAME
+            CHECK(table->item(row, 3)->text() == QStringLiteral("The Chosen One")); // COL_NAME
+        }
+    }
+    CHECK(foundScriptZero);
+
+    // The map's own script appears as a distinct "Map"-section row resolving to obj_dude.int /
+    // "The Chosen One" (script_id 1 -> scripts.lst index 0).
+    bool foundMapRow = false;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        const QTableWidgetItem* sectionItem = table->item(row, 0); // COL_SECTION
+        REQUIRE(sectionItem != nullptr);
+        if (sectionItem->text() == QStringLiteral("Map")) {
+            foundMapRow = true;
+            CHECK(table->item(row, 1)->data(Qt::DisplayRole).toInt() == 0);         // COL_SCRIPT_ID (0-based)
+            CHECK(table->item(row, 2)->text() == QStringLiteral("obj_dude.int"));   // COL_FILENAME
+            CHECK(table->item(row, 3)->text() == QStringLiteral("The Chosen One")); // COL_NAME
+        }
+    }
+    CHECK(foundMapRow);
+
+    // Double-clicking an object-owned row emits scriptObjectActivated carrying that row's SID (stored in
+    // the COL_SCRIPT_ID UserRole); double-clicking the ownerless "Map" row emits nothing.
+    QSignalSpy activatedSpy(&panel, &geck::ScriptsPanel::scriptObjectActivated);
+    int critterRow = -1;
+    int mapRow = -1;
+    qulonglong critterSid = 0;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        const QString section = table->item(row, 0)->text();  // COL_SECTION
+        const QTableWidgetItem* idItem = table->item(row, 1); // COL_SCRIPT_ID
+        if (section == QStringLiteral("Critter")) {
+            critterRow = row;
+            critterSid = idItem->data(Qt::UserRole).toULongLong();
+        } else if (section == QStringLiteral("Map")) {
+            mapRow = row;
+        }
+    }
+    REQUIRE(critterRow >= 0);
+    REQUIRE(mapRow >= 0);
+    CHECK(critterSid != static_cast<qulonglong>(geck::MapScript::NONE)); // owned row carries a real SID
+
+    Q_EMIT table->cellDoubleClicked(critterRow, 1);
+    REQUIRE(activatedSpy.count() == 1);
+    CHECK(activatedSpy.takeFirst().at(0).toInt() == static_cast<int>(critterSid));
+
+    Q_EMIT table->cellDoubleClicked(mapRow, 0); // ownerless map row -> no navigation
+    CHECK(activatedSpy.count() == 0);
+
+    // Regression: an active filter is re-applied after the table is re-populated (e.g. a map switch),
+    // rather than silently showing every row again.
+    auto* filter = panel.findChild<QLineEdit*>();
+    REQUIRE(filter != nullptr);
+    filter->setText("obj_dude"); // matches the critter section row and the Map header-script row
+    panel.setMap(map.get());     // re-populate; the filter must still be honoured
+    int visibleRows = 0;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        if (!table->isRowHidden(row)) {
+            ++visibleRows;
+        }
+    }
+    CHECK(visibleRows == 2); // both the section script and the map's own script resolve to obj_dude.int
+    filter->clear();
+
+    // Clearing the map empties the table without crashing.
+    panel.setMap(nullptr);
+    CHECK(table->rowCount() == 0);
+}
+
+TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scripts]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
+    data.mount();
+
+    auto map = makeMap("testmap.map");
+    auto& mapFile = map->getMapFile();
+
+    // A critter script whose two local variables sit at offset 0 in the map's flat LVAR array.
+    auto script = geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::CRITTER, 0, 0, 42);
+    script.local_var_offset = 0;
+    script.local_var_count = 2;
+    mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::CRITTER)].push_back(script);
+    mapFile.map_local_vars = { 111, 222 };
+
+    geck::ScriptsPanel panel(data.resources());
+    panel.setMap(map.get());
+
+    auto* scriptsTable = panel.findChild<QTableWidget*>("scriptsTable");
+    auto* lvarTable = panel.findChild<QTableWidget*>("localVarsTable");
+    REQUIRE(scriptsTable != nullptr);
+    REQUIRE(lvarTable != nullptr);
+    REQUIRE(scriptsTable->rowCount() == 1);
+    CHECK(lvarTable->rowCount() == 0); // nothing selected yet
+
+    scriptsTable->selectRow(0); // selecting the script reveals its local variables
+    REQUIRE(lvarTable->rowCount() == 2);
+    CHECK(lvarTable->item(0, 1)->data(Qt::DisplayRole).toInt() == 111); // column 1 = Value
+    CHECK(lvarTable->item(1, 1)->data(Qt::DisplayRole).toInt() == 222);
 }

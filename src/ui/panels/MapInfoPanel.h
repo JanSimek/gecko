@@ -122,7 +122,7 @@ private:
     QGroupBox* _globalVarsGroup;
     QTreeWidget* _globalVarsTree;
 
-    // Map scripts group (placeholder)
+    // Map scripts group: concise counts-only summary; the full list lives in the Scripts panel.
     QGroupBox* _mapScriptsGroup;
     QLabel* _mapScriptsLabel;
 
@@ -138,6 +138,10 @@ private:
     Map* _map;
     std::string _mapScriptName;
     std::unordered_map<std::string, uint32_t> _mvars;
+
+    // True while updateMapInfo() populates the widgets from the map, so their change signals don't write
+    // a half-updated widget set back over the map (see onFieldChanged).
+    bool _suppressFieldChanged = false;
 };
 
 } // namespace geck
