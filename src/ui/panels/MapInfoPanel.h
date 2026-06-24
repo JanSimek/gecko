@@ -84,11 +84,18 @@ private slots:
     void onCopyElevationClicked();
     void onAddSpatialScriptClicked();
     void onGlobalVarChanged(QTreeWidgetItem* item, int column);
+    void onAddGlobalVar();
+    void onRemoveGlobalVar();
+    void onGlobalVarSelectionChanged();
 
 private:
     void setupUI();
     void updateMapInfo();
     void loadScriptVars();
+    // (Re)build the global-variables tree from _mvars; guarded by _suppressVarEdit so the setText calls
+    // don't fire onGlobalVarChanged. Shared by the initial map load and the add/remove handlers.
+    void populateGlobalVars();
+    void updateGlobalVarButtons(); // enable Remove only for a real variable row; gate Add on a loaded .gam
     void clearMapInfo();
     void updateMapScriptsDisplay();
     void updateMapNameDisplay();
@@ -131,6 +138,9 @@ private:
     // Global variables group
     QGroupBox* _globalVarsGroup;
     QTreeWidget* _globalVarsTree;
+    QLineEdit* _newGlobalVarNameEdit; // name for a variable to add (appended as the last map global)
+    QPushButton* _addGlobalVarButton;
+    QPushButton* _removeGlobalVarButton;
 
     // Map scripts group: concise counts-only summary; the full list lives in the Scripts panel.
     QGroupBox* _mapScriptsGroup;

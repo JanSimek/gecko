@@ -122,6 +122,60 @@ public:
         return false;
     }
 
+    /// Append a new MAP_GLOBAL_VARS variable. Compiled scripts reference map globals by positional index
+    /// (the MAP_GLOBAL_VARS order), so a new variable is always added as the positionally-last map global
+    /// — inserted in @ref lines immediately after the last existing MapGlobalVars Variable line, or (when
+    /// there are none yet) immediately after the `MAP_GLOBAL_VARS:` section header. This keeps every
+    /// existing variable's index stable. The line is built canonically as `name := value;` so it matches
+    /// the engine's variable shape and round-trips through the serialiser/reader. Returns false (adding
+    /// nothing) if the document has no `MAP_GLOBAL_VARS:` section at all.
+    bool addMapGlobalVar(const std::string& name, int value) {
+        std::size_t insertAfter = 0;
+        bool foundAnchor = false;
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            const GamLine& line = lines[i];
+            const bool isHeader = line.kind == GamLine::Kind::SectionHeader
+                && line.section == GamLine::Section::MapGlobalVars;
+            if (isHeader || isVar(line, GamLine::Section::MapGlobalVars)) {
+                insertAfter = i;
+                foundAnchor = true;
+            }
+        }
+        if (!foundAnchor) {
+            return false; // no MAP_GLOBAL_VARS section to append into
+        }
+
+        GamLine added;
+        added.kind = GamLine::Kind::Variable;
+        added.section = GamLine::Section::MapGlobalVars;
+        added.name = name;
+        added.value = value;
+        added.valuePrefix = name + " := ";
+        added.valueSuffix = ";";
+        added.raw = added.valuePrefix + std::to_string(value) + added.valueSuffix;
+
+        lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(insertAfter + 1), std::move(added));
+        return true;
+    }
+
+    /// Erase the `index`-th MAP_GLOBAL_VARS variable line. Removing a variable shifts every later
+    /// variable's positional index down by one, so a caller that exposes this must warn that compiled
+    /// scripts referencing those variables can break. Returns false if `index` is out of range.
+    bool removeMapGlobalVar(std::size_t index) {
+        std::size_t seen = 0;
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            if (!isVar(lines[i], GamLine::Section::MapGlobalVars)) {
+                continue;
+            }
+            if (seen == index) {
+                lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(i));
+                return true;
+            }
+            ++seen;
+        }
+        return false;
+    }
+
 private:
     static bool isVar(const GamLine& line, GamLine::Section section) {
         return line.kind == GamLine::Kind::Variable && line.section == section;

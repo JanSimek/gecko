@@ -125,6 +125,64 @@ TEST_CASE("Gam::setMapGlobalVar rebuilds the line as it grows then shrinks", "[g
     }
 }
 
+TEST_CASE("Gam::addMapGlobalVar appends a new variable last", "[gam_roundtrip]") {
+    Gam gam = sampleGam();
+
+    // The new variable is appended as the positionally-last map global, so the two existing variables
+    // keep their order and indices.
+    REQUIRE(gam.addMapGlobalVar("MVAR_NEW", 5));
+    const auto mvars = gam.mapGlobalVars();
+    REQUIRE(mvars.size() == 3);
+    CHECK(mvars[0].first == "MVAR_FIRST"); // existing entries unchanged, still indices 0 and 1
+    CHECK(mvars[0].second == -1);
+    CHECK(mvars[1].first == "MVAR_SECOND");
+    CHECK(mvars[1].second == 0);
+    CHECK(mvars[2].first == "MVAR_NEW"); // the appended variable is last
+    CHECK(mvars[2].second == 5);
+
+    // It serialises to the canonical NAME := value; shape, after the existing map globals, and validates.
+    const std::string out = writer::serializeGam(gam);
+    CHECK(out.find("MVAR_NEW := 5;") != std::string::npos);
+    CHECK(out.find("MVAR_SECOND") < out.find("MVAR_NEW")); // appended after the last existing map global
+    CHECK_FALSE(writer::hasErrors(writer::validateGam(gam)));
+
+    // A serialise + re-read round-trips the appended variable as the last entry.
+    const Gam reread = GamReader::parse(out);
+    const auto rmvars = reread.mapGlobalVars();
+    REQUIRE(rmvars.size() == 3);
+    CHECK(rmvars[2].first == "MVAR_NEW");
+    CHECK(rmvars[2].second == 5);
+}
+
+TEST_CASE("Gam::addMapGlobalVar with no MAP_GLOBAL_VARS section returns false", "[gam_roundtrip]") {
+    // A .gam carrying only GAME_GLOBAL_VARS has nowhere to append a map global to.
+    Gam gam = GamReader::parse(std::string{ "GAME_GLOBAL_VARS:\nGVAR_TEST := 5;\n" });
+    CHECK_FALSE(gam.addMapGlobalVar("MVAR_NEW", 1));
+    CHECK(gam.mapGlobalVars().empty());
+}
+
+TEST_CASE("Gam::removeMapGlobalVar drops a variable and shifts the rest", "[gam_roundtrip]") {
+    Gam gam = sampleGam();
+
+    // Removing index 1 (MVAR_SECOND) leaves MVAR_FIRST as the sole — now index 0 — variable.
+    REQUIRE(gam.removeMapGlobalVar(1));
+    const auto mvars = gam.mapGlobalVars();
+    REQUIRE(mvars.size() == 1);
+    CHECK(mvars[0].first == "MVAR_FIRST");
+    CHECK(mvars[0].second == -1);
+
+    // The removed variable is gone from the serialised output; the survivor and the GVAR section remain.
+    const std::string out = writer::serializeGam(gam);
+    CHECK(out.find("MVAR_SECOND") == std::string::npos);
+    CHECK(out.find("MVAR_FIRST      := -1;") != std::string::npos); // survivor kept byte-for-byte
+    CHECK(out.find("GVAR_TEST       := 5;") != std::string::npos);
+    CHECK_FALSE(writer::hasErrors(writer::validateGam(gam)));
+
+    // An out-of-range index is reported, not applied.
+    CHECK_FALSE(gam.removeMapGlobalVar(5));
+    CHECK(gam.mapGlobalVars().size() == 1);
+}
+
 TEST_CASE("validateGam accepts a normal parsed and edited document", "[gam_validator]") {
     Gam gam = sampleGam();
     REQUIRE_FALSE(writer::hasErrors(writer::validateGam(gam)));
