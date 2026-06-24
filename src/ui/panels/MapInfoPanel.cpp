@@ -14,7 +14,6 @@
 #include <optional>
 
 #include "format/map/Map.h"
-#include "format/map/MapScript.h"
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
@@ -68,8 +67,7 @@ MapInfoPanel::MapInfoPanel(resource::GameResources& resources, std::shared_ptr<S
     , _newGlobalVarNameEdit(nullptr)
     , _addGlobalVarButton(nullptr)
     , _removeGlobalVarButton(nullptr)
-    , _mapScriptsGroup(nullptr)
-    , _mapScriptsLabel(nullptr)
+    , _globalVarsSummaryLabel(nullptr)
     , _mapOperationsGroup(nullptr)
     , _clearElevationCombo(nullptr)
     , _copyFromCombo(nullptr)
@@ -251,6 +249,13 @@ void MapInfoPanel::setupUI() {
     connect(_globalVarsTree, &QTreeWidget::itemSelectionChanged, this, &MapInfoPanel::onGlobalVarSelectionChanged);
     varsLayout->addWidget(_globalVarsTree);
 
+    // Count + source summary, directly under the table.
+    _globalVarsSummaryLabel = new QLabel();
+    _globalVarsSummaryLabel->setObjectName("globalVarsSummary");
+    _globalVarsSummaryLabel->setStyleSheet(ui::theme::styles::italicSecondaryText());
+    _globalVarsSummaryLabel->setWordWrap(true);
+    varsLayout->addWidget(_globalVarsSummaryLabel);
+
     // Add / Remove controls. A new variable is appended as the positionally-last map global (so existing
     // indices stay stable); Remove shifts later indices and is gated on a real variable row being selected.
     QHBoxLayout* varsControls = new QHBoxLayout();
@@ -273,16 +278,6 @@ void MapInfoPanel::setupUI() {
     connect(_newGlobalVarNameEdit, &QLineEdit::returnPressed, this, &MapInfoPanel::onAddGlobalVar);
 
     _contentLayout->addWidget(_globalVarsGroup);
-
-    _mapScriptsGroup = new QGroupBox("Map Scripts");
-    QVBoxLayout* scriptsLayout = new QVBoxLayout(_mapScriptsGroup);
-
-    _mapScriptsLabel = new QLabel("No script information available");
-    _mapScriptsLabel->setStyleSheet(ui::theme::styles::italicSecondaryText());
-    _mapScriptsLabel->setWordWrap(true);
-    scriptsLayout->addWidget(_mapScriptsLabel);
-
-    _contentLayout->addWidget(_mapScriptsGroup);
 
     // === Map Operations group (clear / copy elevation) ===
     _mapOperationsGroup = new QGroupBox("Map Operations");
@@ -395,8 +390,6 @@ void MapInfoPanel::updateMapInfo() {
 
         populateGlobalVars();
 
-        updateMapScriptsDisplay();
-
         // Disable the last remaining elevation's checkbox.
         updateElevationCheckboxStates();
 
@@ -443,10 +436,16 @@ void MapInfoPanel::populateGlobalVars() {
             // Variable rows use the default text colour (they're data, not a status).
             item->setFlags(item->flags() | Qt::ItemIsEditable);
         }
+    }
 
-        QTreeWidgetItem* summaryItem = new QTreeWidgetItem(_globalVarsTree);
-        summaryItem->setText(0, QString("Total: %1 variables").arg(_mvars.size()));
-        summaryItem->setText(1, "from GAM");
+    // Count + source caption, shown as a label under the table rather than a row inside it.
+    if (!_mvars.empty()) {
+        const QString gamFile = QString::fromStdString(std::filesystem::path(_gamPath).filename().string());
+        _globalVarsSummaryLabel->setText(QString("Total: %1 variables from %2").arg(_mvars.size()).arg(gamFile));
+        _globalVarsSummaryLabel->setVisible(true);
+    } else {
+        _globalVarsSummaryLabel->clear();
+        _globalVarsSummaryLabel->setVisible(false);
     }
 
     _suppressVarEdit = false; // population done; user edits write back from here on
@@ -623,7 +622,6 @@ void MapInfoPanel::clearMapInfo() {
     _mapScriptName = "no script";
 
     updateGlobalVarButtons(); // no map -> Add/Remove disabled
-    updateMapScriptsDisplay();
 }
 
 void MapInfoPanel::onFieldChanged() {
@@ -695,57 +693,6 @@ void MapInfoPanel::setPlayerPosition(int hexPosition, int elevation) {
 
     _playerPositionSpin->setValue(hexPosition);
     _playerElevationSpin->setValue(elevation);
-}
-
-void MapInfoPanel::updateMapScriptsDisplay() {
-    if (!_map) {
-        _mapScriptsLabel->setText("No map loaded");
-        _mapScriptsLabel->setStyleSheet(ui::theme::styles::italicSecondaryText());
-        return;
-    }
-
-    try {
-        // Concise counts-only summary. The full, sortable per-script list lives in the Scripts panel.
-        const auto& mapInfo = _map->getMapFile();
-        QString summary;
-
-        if (mapInfo.header.script_id > 0) {
-            summary += QString("Map script: %1\n").arg(QString::fromStdString(_mapScriptName));
-        } else {
-            summary += "Map script: none\n";
-        }
-
-        summary += QString("Global vars: %1   Local vars: %2\n")
-                       .arg(mapInfo.header.num_global_vars)
-                       .arg(mapInfo.header.num_local_vars);
-
-        int totalScripts = 0;
-        QStringList sectionParts;
-        for (int i = 0; i < Map::SCRIPT_SECTIONS; ++i) {
-            const auto count = static_cast<int>(mapInfo.map_scripts[i].size());
-            totalScripts += count;
-            if (count > 0) {
-                const auto type = static_cast<MapScript::ScriptType>(i);
-                sectionParts << QString("%1: %2")
-                                    .arg(QString::fromStdString(std::string(MapScript::toString(type))))
-                                    .arg(count);
-            }
-        }
-
-        summary += QString("Object scripts: %1").arg(totalScripts);
-        if (!sectionParts.isEmpty()) {
-            summary += QString(" (%1)").arg(sectionParts.join(", "));
-        }
-        summary += "\n\nFull list in the Scripts panel.";
-
-        _mapScriptsLabel->setText(summary);
-        _mapScriptsLabel->setStyleSheet(ui::theme::styles::italicSecondaryText());
-
-    } catch (const std::exception& e) {
-        _mapScriptsLabel->setText("Could not read map script information.");
-        _mapScriptsLabel->setStyleSheet(ui::theme::styles::statusError());
-        spdlog::error("Error updating map scripts display: {}", e.what());
-    }
 }
 
 void MapInfoPanel::setElevationCheckboxesBlocked(bool blocked) {
@@ -988,7 +935,6 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
     // Direct (synchronous) connection: the script is created before this returns.
     Q_EMIT addSpatialScriptRequested(dialog.programIndex(), dialog.tile(),
         dialog.elevation(), dialog.radius());
-    updateMapScriptsDisplay();
 }
 
 void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {

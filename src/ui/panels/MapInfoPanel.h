@@ -97,7 +97,6 @@ private:
     void populateGlobalVars();
     void updateGlobalVarButtons(); // enable Remove only for a real variable row; gate Add on a loaded .gam
     void clearMapInfo();
-    void updateMapScriptsDisplay();
     void updateMapNameDisplay();
     void updateOverlayHint(); // show/hide the "extracted to <path>" hint based on the writable copy
     // Write the gathered name edits to `writableRoot` (a writable Data Path) via resource::saveMapNames,
@@ -141,10 +140,7 @@ private:
     QLineEdit* _newGlobalVarNameEdit; // name for a variable to add (appended as the last map global)
     QPushButton* _addGlobalVarButton;
     QPushButton* _removeGlobalVarButton;
-
-    // Map scripts group: concise counts-only summary; the full list lives in the Scripts panel.
-    QGroupBox* _mapScriptsGroup;
-    QLabel* _mapScriptsLabel;
+    QLabel* _globalVarsSummaryLabel; // "Total: N variables from <map>.gam", shown under the tree
 
     // Map operations group (clear / copy elevation)
     QGroupBox* _mapOperationsGroup;

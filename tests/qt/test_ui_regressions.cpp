@@ -1137,8 +1137,8 @@ TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map
 
     auto* tree = panel.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
-    // Two variable rows plus the summary row; only the variable rows carry a UserRole index.
-    REQUIRE(tree->topLevelItemCount() == 3);
+    // Two variable rows; the count/source summary is a label under the tree, not a row in it.
+    REQUIRE(tree->topLevelItemCount() == 2);
 
     QTreeWidgetItem* firstVar = tree->topLevelItem(0);
     REQUIRE(firstVar != nullptr);
@@ -1147,10 +1147,10 @@ TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map
     REQUIRE((firstVar->flags() & Qt::ItemIsEditable) != 0);
     CHECK(firstVar->text(1) == QStringLiteral("10")); // value shown is the .gam's MAP_GLOBAL_VARS value
 
-    // The summary row is not a variable row and carries no index (so it can't be edited).
-    QTreeWidgetItem* summary = tree->topLevelItem(2);
-    REQUIRE(summary != nullptr);
-    CHECK_FALSE(summary->data(1, Qt::UserRole).isValid());
+    // The count/source summary is a label under the tree, not a row in it.
+    auto* summaryLabel = panel.findChild<QLabel*>("globalVarsSummary");
+    REQUIRE(summaryLabel != nullptr);
+    CHECK(summaryLabel->text() == QStringLiteral("Total: 2 variables from testmap.gam"));
 
     QSignalSpy varSpy(&panel, &geck::MapInfoPanel::mapVariablesChanged);
 
@@ -1231,16 +1231,16 @@ TEST_CASE("MapInfoPanel adds a map global variable via the name field and Add bu
     REQUIRE(addButton != nullptr);
     REQUIRE(tree != nullptr);
 
-    // One variable row + the summary row before adding.
-    REQUIRE(tree->topLevelItemCount() == 2);
+    // One variable row before adding (the summary is a label, not a row).
+    REQUIRE(tree->topLevelItemCount() == 1);
 
     QSignalSpy varSpy(&panel, &geck::MapInfoPanel::mapVariablesChanged);
 
     nameEdit->setText("MVAR_new");
     addButton->click();
 
-    // The new (editable, value 0) row appears appended before the summary row, and the map is modified.
-    REQUIRE(tree->topLevelItemCount() == 3);
+    // The new (editable, value 0) row appears appended last, and the map is modified.
+    REQUIRE(tree->topLevelItemCount() == 2);
     QTreeWidgetItem* added = tree->topLevelItem(1);
     REQUIRE(added != nullptr);
     CHECK(added->text(0) == QStringLiteral("MVAR_new"));
@@ -1279,7 +1279,7 @@ TEST_CASE("MapInfoPanel removes the last map global variable after confirmation"
     auto* removeButton = panel.findChild<QPushButton*>("removeGlobalVar");
     REQUIRE(tree != nullptr);
     REQUIRE(removeButton != nullptr);
-    REQUIRE(tree->topLevelItemCount() == 3); // two variables + summary
+    REQUIRE(tree->topLevelItemCount() == 2); // two variables (the summary is a label)
 
     // Selecting the last variable row enables Remove.
     QTreeWidgetItem* lastVar = tree->topLevelItem(1);
@@ -1294,7 +1294,7 @@ TEST_CASE("MapInfoPanel removes the last map global variable after confirmation"
     answerNextDialog(QMessageBox::Yes);
     removeButton->click();
 
-    REQUIRE(tree->topLevelItemCount() == 2); // one variable + summary
+    REQUIRE(tree->topLevelItemCount() == 1); // one variable (the summary is a label)
     QTreeWidgetItem* survivor = tree->topLevelItem(0);
     REQUIRE(survivor != nullptr);
     CHECK(survivor->text(0) == QStringLiteral("MVAR_first"));
