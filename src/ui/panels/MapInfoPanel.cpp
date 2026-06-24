@@ -13,7 +13,6 @@
 
 #include "format/map/Map.h"
 #include "format/map/MapScript.h"
-#include "format/gam/Gam.h"
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
@@ -21,6 +20,10 @@
 #include "resource/WritableDataRoot.h"
 #include "ui/Settings.h"
 #include "reader/ReaderFactory.h"
+#include "reader/gam/GamReader.h"
+#include "writer/gam/GamSerializer.h"
+#include "writer/gam/GamValidator.h"
+#include "util/FileIo.h"
 #include "resource/ResourcePaths.h"
 #include "resource/ScriptNames.h"
 #include "util/Coordinates.h"
@@ -382,8 +385,9 @@ void MapInfoPanel::updateMapInfo() {
             infoItem->setForeground(0, QBrush(ui::theme::colors::statusInfoRgb()));
             infoItem->setForeground(1, QBrush(ui::theme::colors::statusInfoRgb()));
         } else {
-            // The i-th _mvars row corresponds to map_global_vars[i]. Make the Value cell editable and
-            // stash that index in its UserRole so onGlobalVarChanged can write straight to the vector.
+            // The i-th _mvars row is the i-th MAP_GLOBAL_VARS variable in the .gam. Make the Value cell
+            // editable and stash that index in its UserRole so onGlobalVarChanged can write straight to
+            // Gam::setMapGlobalVar(i, ...).
             for (int i = 0; i < static_cast<int>(_mvars.size()); ++i) {
                 const auto& [key, value] = _mvars[static_cast<size_t>(i)];
                 QTreeWidgetItem* item = new QTreeWidgetItem(_globalVarsTree);
@@ -479,6 +483,9 @@ void MapInfoPanel::updateOverlayHint() {
 
 void MapInfoPanel::loadScriptVars() {
     _mvars.clear();
+    _gamDoc.reset();
+    _gamPath.clear();
+    _globalVarsEdited = false;
     _mapScriptName = "no script";
 
     if (!_map) {
@@ -506,22 +513,20 @@ void MapInfoPanel::loadScriptVars() {
             }
         }
 
-        // Global-variable NAMES come from the map's optional .gam; the VALUES are the ones stored in
-        // (and saved back to) the .map's map_global_vars block — same split the analyzer's headerToJson
-        // uses. Editing a row writes map_global_vars[index], so we must display that, not the .gam's
-        // initial value, or the user would edit a value they can't see.
+        // For a BASE map the engine re-reads the map's global variables from the map's .gam
+        // MAP_GLOBAL_VARS section (fallout2-ce map.cc), ignoring the .map's own map_global_vars block. So
+        // the .gam — not the .map — is both the source of truth for the displayed value AND where edits
+        // are written back. Parse it losslessly so an edited value can be written without disturbing
+        // names, spacing, or comments.
         const std::string baseName = _map->filename().substr(0, _map->filename().find("."));
-        const std::string gam_path = "maps/" + baseName + ".gam";
-        if (_resources.files().exists(gam_path)) {
-            if (Gam* gam_file = _resources.repository().load<Gam>(gam_path); gam_file != nullptr) {
-                const auto& mapVars = _map->getMapFile().map_global_vars;
-                for (uint32_t index = 0; index < _map->getMapFile().header.num_global_vars; index++) {
-                    const int32_t value = index < mapVars.size() ? mapVars[index] : 0;
-                    _mvars.emplace_back(gam_file->mvarKey(index), value);
-                }
+        _gamPath = "maps/" + baseName + ".gam";
+        if (const auto bytes = _resources.files().readRawBytes(_gamPath); bytes.has_value()) {
+            _gamDoc = GamReader::parse(std::string(bytes->begin(), bytes->end()));
+            for (const auto& [name, value] : _gamDoc->mapGlobalVars()) {
+                _mvars.emplace_back(name, value);
             }
         } else {
-            spdlog::debug("GAM file '{}' not found in VFS; map global variables unavailable", gam_path);
+            spdlog::debug("GAM file '{}' not found in VFS; map global variables unavailable", _gamPath);
         }
     } catch (const std::exception& e) {
         spdlog::error("Error loading script vars: {}", e.what());
@@ -563,6 +568,9 @@ void MapInfoPanel::clearMapInfo() {
     _globalVarsTree->clear();
 
     _mvars.clear();
+    _gamDoc.reset();
+    _gamPath.clear();
+    _globalVarsEdited = false;
     _mapScriptName = "no script";
 
     updateMapScriptsDisplay();
@@ -936,7 +944,7 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
 void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {
     // Ignore the setText calls fired while updateMapInfo() populates the tree, edits to the name column,
     // and the placeholder/info/summary rows (which carry no UserRole index).
-    if (_suppressVarEdit || !_map || item == nullptr || column != 1) {
+    if (_suppressVarEdit || !_map || !_gamDoc.has_value() || item == nullptr || column != 1) {
         return;
     }
 
@@ -945,10 +953,8 @@ void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {
         return; // not a real variable row (placeholder / info / summary)
     }
     const int index = indexData.toInt();
-
-    auto& vars = _map->getMapFile().map_global_vars;
-    if (index < 0 || index >= static_cast<int>(vars.size())) {
-        return; // tree row outruns the stored vector (header/.gam mismatch); leave the vector untouched
+    if (index < 0 || index >= static_cast<int>(_mvars.size())) {
+        return; // tree row outruns the loaded variables; leave the .gam untouched
     }
 
     bool parsed = false;
@@ -957,13 +963,17 @@ void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {
         // The delegate's QIntValidator normally prevents this, but guard anyway: revert the cell text to
         // the stored value without re-triggering this handler.
         _suppressVarEdit = true;
-        item->setText(1, QString::number(vars[static_cast<size_t>(index)]));
+        item->setText(1, QString::number(_mvars[static_cast<size_t>(index)].second));
         _suppressVarEdit = false;
         return;
     }
 
-    vars[static_cast<size_t>(index)] = static_cast<int32_t>(value);
-    _mvars[static_cast<size_t>(index)].second = static_cast<int32_t>(value); // keep the display copy in sync
+    // The .gam is the source of truth for a BASE map's global variables: rewrite the value in the
+    // MAP_GLOBAL_VARS line (preserving its name/spacing/comment) and flag the .gam dirty so it's written
+    // alongside the .map on save.
+    _gamDoc->setMapGlobalVar(static_cast<std::size_t>(index), value);
+    _mvars[static_cast<size_t>(index)].second = value; // keep the display copy in sync
+    _globalVarsEdited = true;
 
     Q_EMIT mapVariablesChanged();
     spdlog::debug("MapInfoPanel: global var [{}] set to {}", index, value);
@@ -1010,6 +1020,50 @@ void MapInfoPanel::persistMapNames() {
     }
     const int elevation = static_cast<int>(_map->getMapFile().header.player_default_elevation);
     writeNameEdits(*target, index, elevation, lookup, display);
+}
+
+void MapInfoPanel::persistMapVars() {
+    // Fast path: nothing edited (the common case on a map save), or no .gam was loaded to edit.
+    if (!_globalVarsEdited || !_gamDoc.has_value() || !_settings) {
+        return;
+    }
+
+    // Validate before writing: never persist a .gam that an edit corrupted. The round-trip check confirms
+    // the file will re-read to the same map-global variables. On any Error, list them and bail without
+    // touching the file — mirroring how the maps.txt save path hard-blocks on Error.
+    const std::vector<writer::GamIssue> issues = writer::validateGam(*_gamDoc);
+    if (writer::hasErrors(issues)) {
+        QString details;
+        for (const writer::GamIssue& issue : issues) {
+            if (issue.severity == writer::GamIssue::Severity::Error) {
+                details += "\n- " + QString::fromStdString(issue.message);
+            }
+        }
+        QMessageBox::warning(this, "Save Map Variables",
+            "These global variable edits can't be saved (validation failed):" + details);
+        return;
+    }
+
+    // Write into a writable folder from the user's Data Paths (no hidden location). If there's none, the
+    // edit can't be saved -> tell the user to add one (mirrors persistMapNames()).
+    const auto target = resource::findWritableDataPath(_settings->getDataPaths());
+    if (!target.has_value()) {
+        QMessageBox::warning(this, "Save Map Variables",
+            "These global variable edits can't be saved: add a writable folder to your Data Paths "
+            "(all current data paths are read-only archives).");
+        return;
+    }
+
+    try {
+        // The .gam path mirrors its VFS-relative path ("maps/<base>.gam") under the writable root.
+        const std::filesystem::path outPath = *target / _gamPath;
+        geck::io::writeFile(outPath, writer::serializeGam(*_gamDoc));
+        _globalVarsEdited = false; // persisted; clear the dirty flag
+        spdlog::debug("MapInfoPanel: saved map global variables to {}", outPath.string());
+    } catch (const std::exception& e) {
+        QMessageBox::warning(this, "Save Map Variables",
+            QString("Failed to save map variables:\n%1").arg(e.what()));
+    }
 }
 
 void MapInfoPanel::writeNameEdits(const std::filesystem::path& writableRoot, int index, int elevation,

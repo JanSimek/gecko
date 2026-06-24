@@ -3,7 +3,6 @@
 #include <QWidget>
 
 class QTableWidget;
-class QTableWidgetItem;
 class QLineEdit;
 
 namespace geck {
@@ -35,14 +34,10 @@ signals:
     /// timer / system scripts and the map's own header script) emit nothing.
     void scriptObjectActivated(int sid);
 
-    /// Emitted when the user edits a local variable's value -> mark the map modified.
-    void mapVariablesChanged();
-
 private slots:
-    void applyFilter();                             // hide rows that don't match _filterEdit; re-applied after every populate()
-    void onCellDoubleClicked(int row);              // resolve the row's owning SID and emit scriptObjectActivated
-    void onScriptSelectionChanged();                // show the selected script's local variables
-    void onLocalVarChanged(QTableWidgetItem* item); // write an edited LVAR value back to map_local_vars
+    void applyFilter();                // hide rows that don't match _filterEdit; re-applied after every populate()
+    void onCellDoubleClicked(int row); // resolve the row's owning SID and emit scriptObjectActivated
+    void onScriptSelectionChanged();   // show the selected script's local variables
 
 private:
     void populate();
@@ -59,10 +54,6 @@ private:
     QLineEdit* _filterEdit;
     QTableWidget* _table;
     QTableWidget* _localVarsTable; // local variables (LVARs) of the currently selected script
-
-    // True while _localVarsTable is (re)filled, so the setData/setItem calls during populate don't fire
-    // onLocalVarChanged as if the user had edited a value.
-    bool _suppressVarEdit = false;
 };
 
 } // namespace geck

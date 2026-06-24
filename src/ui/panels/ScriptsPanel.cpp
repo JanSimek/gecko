@@ -6,7 +6,6 @@
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
 #include "resource/ScriptNames.h"
-#include "ui/widgets/IntCellDelegate.h"
 
 #include <QHeaderView>
 #include <QLabel>
@@ -63,22 +62,18 @@ ScriptsPanel::ScriptsPanel(resource::GameResources& resources, QWidget* parent)
     auto* lvarContainer = new QWidget(this);
     auto* lvarLayout = new QVBoxLayout(lvarContainer);
     lvarLayout->setContentsMargins(0, 0, 0, 0);
-    lvarLayout->addWidget(new QLabel("Local variables (selected script)", lvarContainer));
+    // Read-only: for a BASE map the engine forces every local variable to 0 at load (fallout2-ce
+    // scripts.cc), so the stored value is informational only — the runtime start value.
+    lvarLayout->addWidget(new QLabel("Local variables (runtime — start at 0)", lvarContainer));
 
     _localVarsTable = new QTableWidget(0, 2, lvarContainer);
     _localVarsTable->setObjectName("localVarsTable");
     _localVarsTable->setHorizontalHeaderLabels({ "#", "Value" });
-    // Editing is enabled table-wide; the delegate (and the per-item flags below) restrict it to the
-    // Value column. The "#" column never gets an editor.
-    _localVarsTable->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
+    _localVarsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     _localVarsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     _localVarsTable->verticalHeader()->setVisible(false);
     _localVarsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     _localVarsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    // Only the Value column (1) is editable; the delegate returns no editor for the "#" column and
-    // constrains the value to a signed int. The view owns the delegate.
-    _localVarsTable->setItemDelegate(new IntCellDelegate(1, _localVarsTable));
-    connect(_localVarsTable, &QTableWidget::itemChanged, this, &ScriptsPanel::onLocalVarChanged);
     lvarLayout->addWidget(_localVarsTable);
     splitter->addWidget(lvarContainer);
 
@@ -225,19 +220,14 @@ const MapScript* ScriptsPanel::scriptByPid(qulonglong sid) const {
 }
 
 void ScriptsPanel::onScriptSelectionChanged() {
-    // Guard the value-edited handler while filling the table: the setItem/setData calls below would
-    // otherwise fire onLocalVarChanged as spurious user edits. Cleared before returning.
-    _suppressVarEdit = true;
     _localVarsTable->setRowCount(0);
 
     const int row = _table->currentRow();
     if (row < 0) {
-        _suppressVarEdit = false;
         return;
     }
     const QTableWidgetItem* idItem = _table->item(row, COL_SCRIPT_ID);
     if (idItem == nullptr) {
-        _suppressVarEdit = false;
         return;
     }
 
@@ -245,7 +235,6 @@ void ScriptsPanel::onScriptSelectionChanged() {
     // (local_var_offset .. +local_var_count). Ownerless rows (the map-header row) resolve to nullptr.
     const MapScript* script = scriptByPid(idItem->data(Qt::UserRole).toULongLong());
     if (script == nullptr || script->local_var_offset == MapScript::NONE) {
-        _suppressVarEdit = false;
         return;
     }
 
@@ -258,50 +247,14 @@ void ScriptsPanel::onScriptSelectionChanged() {
         const int lvarRow = _localVarsTable->rowCount();
         _localVarsTable->insertRow(lvarRow);
 
-        // The "#" column is informational only — never editable.
         auto* indexItem = new QTableWidgetItem;
         indexItem->setData(Qt::DisplayRole, static_cast<int>(i));
-        indexItem->setFlags(indexItem->flags() & ~Qt::ItemIsEditable);
         _localVarsTable->setItem(lvarRow, 0, indexItem);
 
-        // The Value cell is editable; stash the ABSOLUTE pool index so onLocalVarChanged can write
-        // straight into map_local_vars regardless of the selected script's offset.
         auto* valueItem = new QTableWidgetItem;
         valueItem->setData(Qt::DisplayRole, lvars[index]);
-        valueItem->setData(Qt::UserRole, static_cast<qulonglong>(index));
-        valueItem->setFlags(valueItem->flags() | Qt::ItemIsEditable);
         _localVarsTable->setItem(lvarRow, 1, valueItem);
     }
-
-    _suppressVarEdit = false; // population done; user edits write back from here on
-}
-
-void ScriptsPanel::onLocalVarChanged(QTableWidgetItem* item) {
-    // Ignore the setItem/setData calls fired while onScriptSelectionChanged() fills the table, and edits
-    // to anything but the Value column.
-    if (_suppressVarEdit || _map == nullptr || item == nullptr || item->column() != 1) {
-        return;
-    }
-
-    auto& lvars = _map->getMapFile().map_local_vars;
-    const std::size_t index = static_cast<std::size_t>(item->data(Qt::UserRole).toULongLong());
-    if (index >= lvars.size()) {
-        return; // stale/out-of-range index; leave the vector untouched
-    }
-
-    bool parsed = false;
-    const int value = item->text().toInt(&parsed);
-    if (!parsed) {
-        // The delegate's QIntValidator normally prevents this; revert the cell to the stored value
-        // without re-triggering this handler.
-        _suppressVarEdit = true;
-        item->setData(Qt::DisplayRole, lvars[index]);
-        _suppressVarEdit = false;
-        return;
-    }
-
-    lvars[index] = static_cast<int32_t>(value);
-    Q_EMIT mapVariablesChanged();
 }
 
 } // namespace geck

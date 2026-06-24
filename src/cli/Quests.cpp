@@ -58,8 +58,9 @@ int buildQuests(resource::GameResources& resources, std::ostream& out) {
         ordered_json gvarName = nullptr;
         ordered_json gvarStart = nullptr;
         if (gam != nullptr && quest.gvar >= 0 && static_cast<std::size_t>(quest.gvar) < gam->gvarCount()) {
-            gvarName = gam->gvarKey(quest.gvar);
-            gvarStart = gam->gvarValue(quest.gvar);
+            const auto gvarIndex = static_cast<std::size_t>(quest.gvar);
+            gvarName = gam->gvarKey(gvarIndex);
+            gvarStart = gam->gvarValue(gvarIndex);
         }
         array.push_back({ { "location", quest.location },
             { "area", orNull(msgText(resources, "text/english/game/map.msg", quest.location)) },

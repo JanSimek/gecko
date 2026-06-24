@@ -1104,61 +1104,28 @@ TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scri
     CHECK(lvarTable->item(1, 1)->data(Qt::DisplayRole).toInt() == 222);
 }
 
-TEST_CASE("ScriptsPanel edits a local variable value back into map_local_vars", "[qt][scripts]") {
+TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map's .gam", "[qt][mapinfo]") {
     ResourceDataScope data;
     data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
-    data.mount();
-
-    auto map = makeMap("testmap.map");
-    auto& mapFile = map->getMapFile();
-
-    // A critter script whose two local variables sit at offset 1 in the map's flat LVAR array, so the
-    // edit must land at the ABSOLUTE pool index (offset + row), not the per-script row index.
-    auto script = geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::CRITTER, 0, 0, 42);
-    script.local_var_offset = 1;
-    script.local_var_count = 2;
-    mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::CRITTER)].push_back(script);
-    mapFile.map_local_vars = { 100, 111, 222 }; // index 0 belongs to no script in this test
-
-    geck::ScriptsPanel panel(data.resources());
-    panel.setMap(map.get());
-
-    auto* scriptsTable = panel.findChild<QTableWidget*>("scriptsTable");
-    auto* lvarTable = panel.findChild<QTableWidget*>("localVarsTable");
-    REQUIRE(scriptsTable != nullptr);
-    REQUIRE(lvarTable != nullptr);
-
-    QSignalSpy varSpy(&panel, &geck::ScriptsPanel::mapVariablesChanged);
-    scriptsTable->selectRow(0); // reveal the script's local variables (populate must not emit)
-    REQUIRE(lvarTable->rowCount() == 2);
-    CHECK(varSpy.count() == 0);
-
-    // The Value cell carries the absolute pool index; the "#" cell stays non-editable.
-    REQUIRE((lvarTable->item(0, 1)->flags() & Qt::ItemIsEditable) != 0);
-    CHECK((lvarTable->item(0, 0)->flags() & Qt::ItemIsEditable) == 0);
-    CHECK(lvarTable->item(0, 1)->data(Qt::UserRole).toULongLong() == 1ull); // offset 1 + row 0
-
-    // Editing the first value row writes through to map_local_vars[1] (NOT [0]) and emits the signal.
-    lvarTable->item(0, 1)->setData(Qt::DisplayRole, -55);
-    CHECK(mapFile.map_local_vars[1] == -55); // negatives accepted (signed int32)
-    CHECK(mapFile.map_local_vars[0] == 100); // untouched
-    CHECK(mapFile.map_local_vars[2] == 222); // untouched
-    CHECK(varSpy.count() == 1);
-}
-
-TEST_CASE("MapInfoPanel edits a global variable value back into map_global_vars", "[qt][mapinfo]") {
-    ResourceDataScope data;
-    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
-    // The map's global variables come from its .gam (basename = map filename without extension).
+    // The map's global variables come from its .gam (basename = map filename without extension). The
+    // values displayed AND edited are the .gam's MAP_GLOBAL_VARS values, since a BASE map's globals are
+    // re-read from the .gam by the engine, ignoring the .map's blocks.
     data.writeGameMessageFile("maps/testmap.gam",
         "MAP_GLOBAL_VARS:\nMVAR_first := 10;\nMVAR_second := 20;\n");
     data.mount();
 
+    // A writable folder, mounted last so its edited .gam copy shadows the source.
+    QTemporaryDir writableDir;
+    REQUIRE(writableDir.isValid());
+    const std::filesystem::path writableRoot = writableDir.path().toStdString();
+    data.resources().files().addDataPath(writableRoot.string());
+
     auto settings = std::make_shared<geck::Settings>();
+    settings->setDataPaths({ writableRoot }); // the writable folder IS the visible Data Path edits go to
+
     auto map = makeMap("testmap.map");
     auto& mapFile = map->getMapFile();
     mapFile.header.num_global_vars = 2;
-    mapFile.map_global_vars = { 10, 20 }; // matches the .gam, the i-th row -> map_global_vars[i]
 
     geck::MapInfoPanel panel(data.resources(), settings);
     panel.setMap(map.get());
@@ -1173,18 +1140,25 @@ TEST_CASE("MapInfoPanel edits a global variable value back into map_global_vars"
     REQUIRE(firstVar->data(1, Qt::UserRole).isValid());
     CHECK(firstVar->data(1, Qt::UserRole).toInt() == 0);
     REQUIRE((firstVar->flags() & Qt::ItemIsEditable) != 0);
-    CHECK(firstVar->text(1) == QStringLiteral("10"));
+    CHECK(firstVar->text(1) == QStringLiteral("10")); // value shown is the .gam's MAP_GLOBAL_VARS value
 
-    // The summary row is not a variable row and carries no index (so it can't be edited into the vector).
+    // The summary row is not a variable row and carries no index (so it can't be edited).
     QTreeWidgetItem* summary = tree->topLevelItem(2);
     REQUIRE(summary != nullptr);
     CHECK_FALSE(summary->data(1, Qt::UserRole).isValid());
 
     QSignalSpy varSpy(&panel, &geck::MapInfoPanel::mapVariablesChanged);
 
-    // Editing the first variable's Value cell writes through to map_global_vars[0] and emits the signal.
+    // Editing the first variable's Value cell emits the signal; nothing is written until persist.
     firstVar->setText(1, QStringLiteral("-42")); // negatives accepted (signed int32)
-    CHECK(mapFile.map_global_vars[0] == -42);
-    CHECK(mapFile.map_global_vars[1] == 20); // the other variable is untouched
     CHECK(varSpy.count() == 1);
+
+    // Persisting writes the .gam to the writable Data Path, with the edited value and the other variable
+    // untouched. A re-read reflects the edit.
+    panel.persistMapVars();
+    const std::filesystem::path savedGam = writableRoot / "maps" / "testmap.gam";
+    REQUIRE(std::filesystem::exists(savedGam));
+    const std::string saved = geck::io::readFile(savedGam);
+    CHECK(saved.find("MVAR_first := -42;") != std::string::npos);
+    CHECK(saved.find("MVAR_second := 20;") != std::string::npos); // the other variable is untouched
 }

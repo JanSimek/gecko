@@ -13,6 +13,7 @@
 #include <QTreeWidgetItem>
 #include <QComboBox>
 #include <QPushButton>
+#include "format/gam/Gam.h"
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -45,6 +46,11 @@ public:
     /// Called when the map is saved (the panel itself only marks the map modified on edit). A no-op
     /// when nothing was edited; surfaces a warning (and writes nothing) if maps.txt would be invalid.
     void persistMapNames();
+
+    /// Write any pending global-variable value edits to the writable copy of the map's `.gam`
+    /// (MAP_GLOBAL_VARS). Called when the map is saved (the panel itself only marks the map modified on
+    /// edit). A no-op when nothing was edited; surfaces a warning if there's no writable Data Path.
+    void persistMapVars();
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
@@ -141,9 +147,18 @@ private:
     std::unique_ptr<resource::MapNameResolver> _mapNames; // built lazily; reads maps.txt/map.msg once
     Map* _map;
     std::string _mapScriptName;
-    // Ordered to match the .gam MAP_GLOBAL_VARS order, which is the order map_global_vars is indexed by:
-    // the i-th entry here is map_global_vars[i]. (An unordered_map would scramble that mapping.)
-    std::vector<std::pair<std::string, int32_t>> _mvars;
+    // The global-variable {name, value} rows the tree is built from, taken straight from the map's .gam
+    // MAP_GLOBAL_VARS in file order: the i-th entry is the i-th MAP_GLOBAL_VARS variable. (For a BASE map
+    // the engine re-reads these from the .gam, ignoring the .map's blocks, so the .gam is the source of
+    // truth and where edits are written back.)
+    std::vector<std::pair<std::string, int>> _mvars;
+
+    // The map's `.gam` parsed losslessly, so a global-variable value can be edited and the file written
+    // back byte-for-byte except that one value. Loaded alongside the names (nullopt when the map has no
+    // .gam); `_gamPath` is the VFS path it came from so persistMapVars() can write the same relative path.
+    std::optional<Gam> _gamDoc;
+    std::string _gamPath;
+    bool _globalVarsEdited = false; // a MAP_GLOBAL_VARS value was edited -> persistMapVars() writes the .gam
 
     // True while updateMapInfo() populates the widgets from the map, so their change signals don't write
     // a half-updated widget set back over the map (see onFieldChanged).
