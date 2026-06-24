@@ -37,18 +37,21 @@ std::vector<std::filesystem::path> expandDataPaths(const std::vector<std::filesy
         return std::find(out.begin(), out.end(), p) != out.end();
     };
     for (const std::filesystem::path& path : dataPaths) {
-        if (!already(path)) {
-            out.push_back(path);
-        }
-        if (!isDirectory(path)) {
-            continue; // a .dat (or anything not a directory) stands alone
-        }
-        // Directory before its DATs preserves the legacy nested-mount order (DATs shadow loose files).
-        for (const char* dat : { "master.dat", "critter.dat" }) {
-            const std::filesystem::path datPath = path / dat;
-            if (isRegularFile(datPath) && !already(datPath)) {
-                out.push_back(datPath);
+        // Mount a directory's bundled archives BEFORE the directory itself so the directory's own loose
+        // files take precedence over master.dat/critter.dat. Mounts are resolved last-wins, and this
+        // matches the engine (fallout2-ce xfileOpen searches the loose data directory before the DATs) —
+        // so an edited loose file (e.g. a saved .gam) overrides the packaged copy instead of being
+        // shadowed by it. A non-directory entry (a .dat listed directly) just stands alone.
+        if (isDirectory(path)) {
+            for (const char* dat : { "master.dat", "critter.dat" }) {
+                const std::filesystem::path datPath = path / dat;
+                if (isRegularFile(datPath) && !already(datPath)) {
+                    out.push_back(datPath);
+                }
             }
+        }
+        if (!already(path)) {
+            out.push_back(path); // the directory last, so its loose files win
         }
     }
     return out;

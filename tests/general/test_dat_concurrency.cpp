@@ -10,6 +10,7 @@
 
 #include "resource/DataFileSystem.h"
 #include "support/Fixtures.h"
+#include "util/FileIo.h"
 
 using geck::resource::DataFileSystem;
 
@@ -72,4 +73,33 @@ TEST_CASE("DAT2 archive serves concurrent reads without corruption", "[dat][vfs]
     }
 
     CHECK(mismatches.load() == 0);
+}
+
+// Regression for "edited .gam resets on reload": vfspp's NativeFileSystem builds its file list once at
+// mount and never rescans, so a file written to a mounted directory afterwards (e.g. a saved .gam under
+// a writable data path) stays invisible to readRawBytes — the archived copy is read back instead.
+// refresh() must re-expose it.
+TEST_CASE("DataFileSystem::refresh exposes files written after mount", "[vfs][refresh]") {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "geck_refresh_test";
+    fs::remove_all(root);
+    fs::create_directories(root / "maps");
+
+    // A file present at mount time is in the native filesystem's cached listing.
+    geck::io::writeFile(root / "maps" / "initial.gam", "MAP_GLOBAL_VARS:\nMVAR_A := 1;\n");
+
+    DataFileSystem dfs;
+    dfs.addDataPath(root);
+    REQUIRE(dfs.readRawBytes("maps/initial.gam").has_value()); // the mount is live and initialised
+
+    // A file created AFTER the mount is invisible until a rescan.
+    geck::io::writeFile(root / "maps" / "test.gam", "MAP_GLOBAL_VARS:\nMVAR_B := 7;\n");
+    CHECK_FALSE(dfs.readRawBytes("maps/test.gam").has_value());
+
+    dfs.refresh();
+    const auto bytes = dfs.readRawBytes("maps/test.gam");
+    REQUIRE(bytes.has_value());
+    CHECK(std::string(bytes->begin(), bytes->end()).find("MVAR_B := 7;") != std::string::npos);
+
+    fs::remove_all(root);
 }

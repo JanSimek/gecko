@@ -173,9 +173,9 @@ TEST_CASE("expandDataPaths makes a folder's DATs explicit, ordered entries", "[p
 
     const auto out = geck::util::expandDataPaths({ tmp.root });
     REQUIRE(out.size() == 3);
-    CHECK(out[0] == tmp.root); // folder before its DATs preserves the legacy mount order
-    CHECK(out[1] == tmp.root / "master.dat");
-    CHECK(out[2] == tmp.root / "critter.dat");
+    CHECK(out[0] == tmp.root / "master.dat"); // DATs first so the folder's loose files (last) override them
+    CHECK(out[1] == tmp.root / "critter.dat");
+    CHECK(out[2] == tmp.root);
 }
 
 TEST_CASE("expandDataPaths passes a .dat entry through unchanged", "[paths]") {
@@ -202,9 +202,9 @@ TEST_CASE("expandDataPaths does not duplicate an already-listed DAT", "[paths]")
 
     const auto out = geck::util::expandDataPaths({ tmp.root, tmp.root / "master.dat" });
     REQUIRE(out.size() == 3);
-    CHECK(out[0] == tmp.root);
-    CHECK(out[1] == tmp.root / "master.dat");
-    CHECK(out[2] == tmp.root / "critter.dat");
+    CHECK(out[0] == tmp.root / "master.dat"); // the folder's DATs come first; the explicit dup is dropped
+    CHECK(out[1] == tmp.root / "critter.dat");
+    CHECK(out[2] == tmp.root);
 }
 
 // =============================================================================

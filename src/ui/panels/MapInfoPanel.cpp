@@ -1058,6 +1058,9 @@ void MapInfoPanel::persistMapVars() {
         // The .gam path mirrors its VFS-relative path ("maps/<base>.gam") under the writable root.
         const std::filesystem::path outPath = *target / _gamPath;
         geck::io::writeFile(outPath, writer::serializeGam(*_gamDoc));
+        // The VFS caches each native mount's file list, so tell it to re-scan — otherwise this freshly
+        // written .gam stays invisible to the next reload and the archived (unedited) copy is read back.
+        _resources.files().refresh();
         _globalVarsEdited = false; // persisted; clear the dirty flag
         spdlog::debug("MapInfoPanel: saved map global variables to {}", outPath.string());
     } catch (const std::exception& e) {
