@@ -31,6 +31,17 @@ bool hasFallout2DataLayout(const std::filesystem::path& path) {
         || isRegularFile(path / "patch000.dat");
 }
 
+// Append a directory's bundled master.dat/critter.dat (present and not already listed) to `out`.
+// Extracted so expandDataPaths stays within the statement-nesting limit.
+static void appendBundledDats(const std::filesystem::path& dir, std::vector<std::filesystem::path>& out) {
+    for (const char* dat : { "master.dat", "critter.dat" }) {
+        const std::filesystem::path datPath = dir / dat;
+        if (isRegularFile(datPath) && std::find(out.begin(), out.end(), datPath) == out.end()) {
+            out.push_back(datPath);
+        }
+    }
+}
+
 std::vector<std::filesystem::path> expandDataPaths(const std::vector<std::filesystem::path>& dataPaths) {
     std::vector<std::filesystem::path> out;
     const auto already = [&out](const std::filesystem::path& p) {
@@ -43,12 +54,7 @@ std::vector<std::filesystem::path> expandDataPaths(const std::vector<std::filesy
         // so an edited loose file (e.g. a saved .gam) overrides the packaged copy instead of being
         // shadowed by it. A non-directory entry (a .dat listed directly) just stands alone.
         if (isDirectory(path)) {
-            for (const char* dat : { "master.dat", "critter.dat" }) {
-                const std::filesystem::path datPath = path / dat;
-                if (isRegularFile(datPath) && !already(datPath)) {
-                    out.push_back(datPath);
-                }
-            }
+            appendBundledDats(path, out);
         }
         if (!already(path)) {
             out.push_back(path); // the directory last, so its loose files win

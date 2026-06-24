@@ -81,7 +81,7 @@ TEST_CASE("DAT2 archive serves concurrent reads without corruption", "[dat][vfs]
 // refresh() must re-expose it.
 TEST_CASE("DataFileSystem::refresh exposes files written after mount", "[vfs][refresh]") {
     namespace fs = std::filesystem;
-    const fs::path root = fs::temp_directory_path() / "geck_refresh_test";
+    const fs::path root = fs::temp_directory_path() / "geck_refresh_test"; // NOSONAR: throwaway test dir, not security-sensitive
     fs::remove_all(root);
     fs::create_directories(root / "maps");
 
