@@ -24,7 +24,7 @@ namespace {
         if (gam == nullptr || gvar < 0 || static_cast<std::size_t>(gvar) >= gam->gvarCount()) {
             return {};
         }
-        return gam->gvarKey(gvar);
+        return gam->gvarKey(static_cast<std::size_t>(gvar));
     }
 
 } // namespace

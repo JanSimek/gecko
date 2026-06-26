@@ -39,6 +39,12 @@ public:
     void clear();
     void addDataPath(const std::filesystem::path& path);
 
+    /// Re-scan directory (native) mounts so files created/overwritten on disk this session become
+    /// visible. vfspp's NativeFileSystem builds its file list once at mount and never rescans, so a
+    /// file written through a plain stream (e.g. a saved .gam under a writable data path) is otherwise
+    /// invisible to readRawBytes until the next launch. DAT mounts are immutable and left untouched.
+    void refresh();
+
     [[nodiscard]] std::optional<std::vector<uint8_t>> readRawBytes(const std::filesystem::path& path) const;
     [[nodiscard]] bool exists(const std::filesystem::path& path) const;
     [[nodiscard]] std::vector<std::filesystem::path> list(const std::string& pattern = "*") const;
