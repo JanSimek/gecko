@@ -62,7 +62,9 @@ ScriptsPanel::ScriptsPanel(resource::GameResources& resources, QWidget* parent)
     auto* lvarContainer = new QWidget(this);
     auto* lvarLayout = new QVBoxLayout(lvarContainer);
     lvarLayout->setContentsMargins(0, 0, 0, 0);
-    lvarLayout->addWidget(new QLabel("Local variables (selected script)", lvarContainer));
+    // Read-only: for a BASE map the engine forces every local variable to 0 at load (fallout2-ce
+    // scripts.cc), so the stored value is informational only — the runtime start value.
+    lvarLayout->addWidget(new QLabel("Local variables (runtime — start at 0)", lvarContainer));
 
     _localVarsTable = new QTableWidget(0, 2, lvarContainer);
     _localVarsTable->setObjectName("localVarsTable");

@@ -1208,6 +1208,7 @@ std::filesystem::path MainWindow::writableMapsDir() const {
 void MainWindow::handleMapSaved() {
     if (_mapInfoPanel) {
         _mapInfoPanel->persistMapNames(); // flush any edited Map name / Lookup name alongside the .map
+        _mapInfoPanel->persistMapVars();  // flush any edited global variable values to the map's .gam
     }
     _mapModified = false;
     updateWindowTitle(); // clear the "[*]" and reflect any Save As rename
@@ -1502,6 +1503,9 @@ void MainWindow::connectPanelSignals() {
         // Editing a Map name / Lookup name marks the map modified; the value is written to the writable
         // copy when the map is saved (see the saveMap handlers, which call persistMapNames()).
         connect(_mapInfoPanel, &MapInfoPanel::mapNamesChanged, this, [this]() { setMapModified(true); });
+        // Editing a global variable value edits the map's .gam (MAP_GLOBAL_VARS); flag the map modified
+        // so persistMapVars() writes the .gam alongside the .map on save (see the saveMap handlers).
+        connect(_mapInfoPanel, &MapInfoPanel::mapVariablesChanged, this, [this]() { setMapModified(true); });
     }
 
     // ScriptsPanel signals → current editor widget. Double-clicking an object-owned script row jumps to

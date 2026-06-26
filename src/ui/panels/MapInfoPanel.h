@@ -13,11 +13,14 @@
 #include <QTreeWidgetItem>
 #include <QComboBox>
 #include <QPushButton>
+#include "format/gam/Gam.h"
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace geck {
 
@@ -44,6 +47,11 @@ public:
     /// when nothing was edited; surfaces a warning (and writes nothing) if maps.txt would be invalid.
     void persistMapNames();
 
+    /// Write any pending global-variable value edits to the writable copy of the map's `.gam`
+    /// (MAP_GLOBAL_VARS). Called when the map is saved (the panel itself only marks the map modified on
+    /// edit). A no-op when nothing was edited; surfaces a warning if there's no writable Data Path.
+    void persistMapVars();
+
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 
@@ -56,7 +64,8 @@ signals:
     void mapScriptIdChanged(int scriptId);
     void darknessChanged(int darkness);
     void timestampChanged(int timestamp);
-    void mapNamesChanged(); // a Map name / Lookup name field was edited -> mark the map modified
+    void mapNamesChanged();     // a Map name / Lookup name field was edited -> mark the map modified
+    void mapVariablesChanged(); // a global variable value was edited -> mark the map modified
     void elevationAdded(int elevation);
     void elevationRemoved(int elevation);
     /// Bulk map operations, routed to the editor's ObjectCommandController so they
@@ -74,13 +83,20 @@ private slots:
     void onClearElevationClicked();
     void onCopyElevationClicked();
     void onAddSpatialScriptClicked();
+    void onGlobalVarChanged(QTreeWidgetItem* item, int column);
+    void onAddGlobalVar();
+    void onRemoveGlobalVar();
+    void onGlobalVarSelectionChanged();
 
 private:
     void setupUI();
     void updateMapInfo();
     void loadScriptVars();
+    // (Re)build the global-variables tree from _mvars; guarded by _suppressVarEdit so the setText calls
+    // don't fire onGlobalVarChanged. Shared by the initial map load and the add/remove handlers.
+    void populateGlobalVars();
+    void updateGlobalVarButtons(); // enable Remove only for a real variable row; gate Add on a loaded .gam
     void clearMapInfo();
-    void updateMapScriptsDisplay();
     void updateMapNameDisplay();
     void updateOverlayHint(); // show/hide the "extracted to <path>" hint based on the writable copy
     // Write the gathered name edits to `writableRoot` (a writable Data Path) via resource::saveMapNames,
@@ -121,10 +137,10 @@ private:
     // Global variables group
     QGroupBox* _globalVarsGroup;
     QTreeWidget* _globalVarsTree;
-
-    // Map scripts group: concise counts-only summary; the full list lives in the Scripts panel.
-    QGroupBox* _mapScriptsGroup;
-    QLabel* _mapScriptsLabel;
+    QLineEdit* _newGlobalVarNameEdit; // name for a variable to add (appended as the last map global)
+    QPushButton* _addGlobalVarButton;
+    QPushButton* _removeGlobalVarButton;
+    QLabel* _globalVarsSummaryLabel; // "Total: N variables from <map>.gam", shown under the tree
 
     // Map operations group (clear / copy elevation)
     QGroupBox* _mapOperationsGroup;
@@ -137,11 +153,26 @@ private:
     std::unique_ptr<resource::MapNameResolver> _mapNames; // built lazily; reads maps.txt/map.msg once
     Map* _map;
     std::string _mapScriptName;
-    std::unordered_map<std::string, uint32_t> _mvars;
+    // The global-variable {name, value} rows the tree is built from, taken straight from the map's .gam
+    // MAP_GLOBAL_VARS in file order: the i-th entry is the i-th MAP_GLOBAL_VARS variable. (For a BASE map
+    // the engine re-reads these from the .gam, ignoring the .map's blocks, so the .gam is the source of
+    // truth and where edits are written back.)
+    std::vector<std::pair<std::string, int>> _mvars;
+
+    // The map's `.gam` parsed losslessly, so a global-variable value can be edited and the file written
+    // back byte-for-byte except that one value. Loaded alongside the names (nullopt when the map has no
+    // .gam); `_gamPath` is the VFS path it came from so persistMapVars() can write the same relative path.
+    std::optional<Gam> _gamDoc;
+    std::string _gamPath;
+    bool _globalVarsEdited = false; // a MAP_GLOBAL_VARS value was edited -> persistMapVars() writes the .gam
 
     // True while updateMapInfo() populates the widgets from the map, so their change signals don't write
     // a half-updated widget set back over the map (see onFieldChanged).
     bool _suppressFieldChanged = false;
+
+    // True while the global-variables tree is (re)populated, so the setText calls during populate don't
+    // fire onGlobalVarChanged as if the user had edited a value (mirror of _suppressFieldChanged).
+    bool _suppressVarEdit = false;
 };
 
 } // namespace geck

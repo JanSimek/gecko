@@ -8,6 +8,7 @@ add_executable(general_tests
     general/test_ai_txt.cpp
     general/test_maps_txt.cpp
     general/test_maps_txt_roundtrip.cpp
+    general/test_gam_roundtrip.cpp
     general/test_msg_roundtrip.cpp
     general/test_writable_data_root.cpp
     general/test_map_name_editor.cpp

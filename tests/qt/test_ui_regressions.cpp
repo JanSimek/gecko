@@ -52,9 +52,12 @@
 #include "ui/panels/ScriptsPanel.h"
 #include "format/map/Map.h"
 #include "format/map/MapScript.h"
+#include <QAbstractButton>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPushButton>
+#include <QTimer>
 
 namespace {
 
@@ -1172,4 +1175,212 @@ TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exi
 
     editor->setMode(geck::EditorMode::Select);
     CHECK(editor->currentMode() == geck::EditorMode::Select);
+}
+
+TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map's .gam", "[qt][mapinfo]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
+    // The map's global variables come from its .gam (basename = map filename without extension). The
+    // values displayed AND edited are the .gam's MAP_GLOBAL_VARS values, since a BASE map's globals are
+    // re-read from the .gam by the engine, ignoring the .map's blocks.
+    data.writeGameMessageFile("maps/testmap.gam",
+        "MAP_GLOBAL_VARS:\nMVAR_first := 10;\nMVAR_second := 20;\n");
+    data.mount();
+
+    // A writable folder, mounted last so its edited .gam copy shadows the source.
+    QTemporaryDir writableDir;
+    REQUIRE(writableDir.isValid());
+    const std::filesystem::path writableRoot = writableDir.path().toStdString();
+    data.resources().files().addDataPath(writableRoot.string());
+
+    auto settings = std::make_shared<geck::Settings>();
+    settings->setDataPaths({ writableRoot }); // the writable folder IS the visible Data Path edits go to
+
+    auto map = makeMap("testmap.map");
+    auto& mapFile = map->getMapFile();
+    // A real base map's stored block mirrors its .gam (the engine snapshots it on save); start aligned.
+    mapFile.map_global_vars = { 10, 20 };
+    mapFile.header.num_global_vars = 2;
+
+    geck::MapInfoPanel panel(data.resources(), settings);
+    panel.setMap(map.get());
+
+    auto* tree = panel.findChild<QTreeWidget*>();
+    REQUIRE(tree != nullptr);
+    // Two variable rows; the count/source summary is a label under the tree, not a row in it.
+    REQUIRE(tree->topLevelItemCount() == 2);
+
+    QTreeWidgetItem* firstVar = tree->topLevelItem(0);
+    REQUIRE(firstVar != nullptr);
+    REQUIRE(firstVar->data(1, Qt::UserRole).isValid());
+    CHECK(firstVar->data(1, Qt::UserRole).toInt() == 0);
+    REQUIRE((firstVar->flags() & Qt::ItemIsEditable) != 0);
+    CHECK(firstVar->text(1) == QStringLiteral("10")); // value shown is the .gam's MAP_GLOBAL_VARS value
+
+    // The count/source summary is a label under the tree, not a row in it.
+    auto* summaryLabel = panel.findChild<QLabel*>("globalVarsSummary");
+    REQUIRE(summaryLabel != nullptr);
+    CHECK(summaryLabel->text() == QStringLiteral("Total: 2 variables from testmap.gam"));
+
+    QSignalSpy varSpy(&panel, &geck::MapInfoPanel::mapVariablesChanged);
+
+    // Editing the first variable's Value cell emits the signal; nothing is written until persist.
+    firstVar->setText(1, QStringLiteral("-42")); // negatives accepted (signed int32)
+    CHECK(varSpy.count() == 1);
+
+    // The edit is mirrored into the .map's stored block too, so the .map and .gam stay in sync.
+    REQUIRE(mapFile.map_global_vars.size() == 2);
+    CHECK(mapFile.map_global_vars[0] == -42);
+    CHECK(mapFile.map_global_vars[1] == 20); // the other variable is untouched
+
+    // Persisting writes the .gam to the writable Data Path, with the edited value and the other variable
+    // untouched. A re-read reflects the edit.
+    panel.persistMapVars();
+    const std::filesystem::path savedGam = writableRoot / "maps" / "testmap.gam";
+    REQUIRE(std::filesystem::exists(savedGam));
+    const std::string saved = geck::io::readFile(savedGam);
+    CHECK(saved.find("MVAR_first := -42;") != std::string::npos);
+    CHECK(saved.find("MVAR_second := 20;") != std::string::npos); // the other variable is untouched
+}
+
+namespace {
+
+// Shared scaffolding for the add/remove global-variable tests: mount a map's .gam, configure a writable
+// Data Path, and hand back the bits each test needs. Keeps the new tests under the duplication budget.
+struct GlobalVarFixture {
+    ResourceDataScope data;
+    QTemporaryDir writableDir;
+    std::shared_ptr<geck::Settings> settings;
+    std::unique_ptr<geck::Map> map;
+
+    explicit GlobalVarFixture(const char* gamContents) {
+        data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
+        data.writeGameMessageFile("maps/testmap.gam", gamContents);
+        data.mount();
+
+        REQUIRE(writableDir.isValid());
+        const std::filesystem::path writableRoot = writableDir.path().toStdString();
+        data.resources().files().addDataPath(writableRoot.string());
+
+        settings = std::make_shared<geck::Settings>();
+        settings->setDataPaths({ writableRoot });
+
+        map = makeMap("testmap.map");
+    }
+};
+
+// Click the given button role on the next modal dialog Qt shows. Posted before triggering the action so
+// the (otherwise blocking) confirmation dialog is answered without a human.
+void answerNextDialog(QMessageBox::StandardButton button) {
+    QTimer::singleShot(0, [button]() {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (auto* box = qobject_cast<QMessageBox*>(widget)) {
+                if (QAbstractButton* target = box->button(button)) {
+                    target->click();
+                    return;
+                }
+            }
+        }
+    });
+}
+
+} // namespace
+
+TEST_CASE("MapInfoPanel adds a map global variable via the name field and Add button", "[qt][mapinfo]") {
+    GlobalVarFixture fixture("MAP_GLOBAL_VARS:\nMVAR_first := 10;\n");
+    fixture.map->getMapFile().map_global_vars = { 10 }; // .map block aligned with the .gam
+    fixture.map->getMapFile().header.num_global_vars = 1;
+
+    geck::MapInfoPanel panel(fixture.data.resources(), fixture.settings);
+    panel.setMap(fixture.map.get());
+
+    auto* nameEdit = panel.findChild<QLineEdit*>("newGlobalVarName");
+    auto* addButton = panel.findChild<QPushButton*>("addGlobalVar");
+    auto* tree = panel.findChild<QTreeWidget*>();
+    REQUIRE(nameEdit != nullptr);
+    REQUIRE(addButton != nullptr);
+    REQUIRE(tree != nullptr);
+
+    // One variable row before adding (the summary is a label, not a row).
+    REQUIRE(tree->topLevelItemCount() == 1);
+
+    QSignalSpy varSpy(&panel, &geck::MapInfoPanel::mapVariablesChanged);
+
+    nameEdit->setText("MVAR_new");
+    addButton->click();
+
+    // The new (editable, value 0) row appears appended last, and the map is modified.
+    REQUIRE(tree->topLevelItemCount() == 2);
+    QTreeWidgetItem* added = tree->topLevelItem(1);
+    REQUIRE(added != nullptr);
+    CHECK(added->text(0) == QStringLiteral("MVAR_new"));
+    CHECK(added->text(1) == QStringLiteral("0"));
+    REQUIRE(added->data(1, Qt::UserRole).isValid());
+    CHECK(added->data(1, Qt::UserRole).toInt() == 1); // appended last -> index 1
+    CHECK((added->flags() & Qt::ItemIsEditable) != 0);
+    CHECK(varSpy.count() == 1);
+    CHECK(nameEdit->text().isEmpty()); // the field is cleared after a successful add
+
+    // The .map's stored block grew in lockstep with the .gam.
+    auto& addedMapFile = fixture.map->getMapFile();
+    REQUIRE(addedMapFile.map_global_vars.size() == 2);
+    CHECK(addedMapFile.map_global_vars[1] == 0);
+    CHECK(addedMapFile.header.num_global_vars == 2);
+
+    // Persisting writes the appended variable after the existing one.
+    panel.persistMapVars();
+    const std::filesystem::path savedGam = std::filesystem::path(fixture.writableDir.path().toStdString()) / "maps" / "testmap.gam";
+    REQUIRE(std::filesystem::exists(savedGam));
+    const std::string out = geck::io::readFile(savedGam);
+    CHECK(out.find("MVAR_first := 10;") != std::string::npos);
+    CHECK(out.find("MVAR_new := 0;") != std::string::npos);
+    CHECK(out.find("MVAR_first") < out.find("MVAR_new"));
+}
+
+TEST_CASE("MapInfoPanel removes the last map global variable after confirmation", "[qt][mapinfo]") {
+    GlobalVarFixture fixture("MAP_GLOBAL_VARS:\nMVAR_first := 10;\nMVAR_last := 99;\n");
+    fixture.map->getMapFile().map_global_vars = { 10, 99 }; // .map block aligned with the .gam
+    fixture.map->getMapFile().header.num_global_vars = 2;
+
+    geck::MapInfoPanel panel(fixture.data.resources(), fixture.settings);
+    panel.setMap(fixture.map.get());
+
+    auto* tree = panel.findChild<QTreeWidget*>();
+    auto* removeButton = panel.findChild<QPushButton*>("removeGlobalVar");
+    REQUIRE(tree != nullptr);
+    REQUIRE(removeButton != nullptr);
+    REQUIRE(tree->topLevelItemCount() == 2); // two variables (the summary is a label)
+
+    // Selecting the last variable row enables Remove.
+    QTreeWidgetItem* lastVar = tree->topLevelItem(1);
+    REQUIRE(lastVar != nullptr);
+    REQUIRE(lastVar->data(1, Qt::UserRole).toInt() == 1);
+    tree->setCurrentItem(lastVar);
+    CHECK(removeButton->isEnabled());
+
+    QSignalSpy varSpy(&panel, &geck::MapInfoPanel::mapVariablesChanged);
+
+    // Confirm the warning -> the row is dropped, the survivor remains, and the map is modified.
+    answerNextDialog(QMessageBox::Yes);
+    removeButton->click();
+
+    REQUIRE(tree->topLevelItemCount() == 1); // one variable (the summary is a label)
+    QTreeWidgetItem* survivor = tree->topLevelItem(0);
+    REQUIRE(survivor != nullptr);
+    CHECK(survivor->text(0) == QStringLiteral("MVAR_first"));
+    CHECK(varSpy.count() == 1);
+
+    // The .map's stored block shrank in lockstep with the .gam.
+    auto& removedMapFile = fixture.map->getMapFile();
+    REQUIRE(removedMapFile.map_global_vars.size() == 1);
+    CHECK(removedMapFile.map_global_vars[0] == 10);
+    CHECK(removedMapFile.header.num_global_vars == 1);
+
+    // The removed variable is gone from the persisted .gam.
+    panel.persistMapVars();
+    const std::filesystem::path savedGam = std::filesystem::path(fixture.writableDir.path().toStdString()) / "maps" / "testmap.gam";
+    REQUIRE(std::filesystem::exists(savedGam));
+    const std::string out = geck::io::readFile(savedGam);
+    CHECK(out.find("MVAR_first := 10;") != std::string::npos);
+    CHECK(out.find("MVAR_last") == std::string::npos);
 }

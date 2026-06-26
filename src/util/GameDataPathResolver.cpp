@@ -31,24 +31,33 @@ bool hasFallout2DataLayout(const std::filesystem::path& path) {
         || isRegularFile(path / "patch000.dat");
 }
 
+// Append a directory's bundled master.dat/critter.dat (present and not already listed) to `out`.
+// Extracted so expandDataPaths stays within the statement-nesting limit.
+static void appendBundledDats(const std::filesystem::path& dir, std::vector<std::filesystem::path>& out) {
+    for (const char* dat : { "master.dat", "critter.dat" }) {
+        const std::filesystem::path datPath = dir / dat;
+        if (isRegularFile(datPath) && std::find(out.begin(), out.end(), datPath) == out.end()) {
+            out.push_back(datPath);
+        }
+    }
+}
+
 std::vector<std::filesystem::path> expandDataPaths(const std::vector<std::filesystem::path>& dataPaths) {
     std::vector<std::filesystem::path> out;
     const auto already = [&out](const std::filesystem::path& p) {
         return std::find(out.begin(), out.end(), p) != out.end();
     };
     for (const std::filesystem::path& path : dataPaths) {
+        // Mount a directory's bundled archives BEFORE the directory itself so the directory's own loose
+        // files take precedence over master.dat/critter.dat. Mounts are resolved last-wins, and this
+        // matches the engine (fallout2-ce xfileOpen searches the loose data directory before the DATs) —
+        // so an edited loose file (e.g. a saved .gam) overrides the packaged copy instead of being
+        // shadowed by it. A non-directory entry (a .dat listed directly) just stands alone.
+        if (isDirectory(path)) {
+            appendBundledDats(path, out);
+        }
         if (!already(path)) {
-            out.push_back(path);
-        }
-        if (!isDirectory(path)) {
-            continue; // a .dat (or anything not a directory) stands alone
-        }
-        // Directory before its DATs preserves the legacy nested-mount order (DATs shadow loose files).
-        for (const char* dat : { "master.dat", "critter.dat" }) {
-            const std::filesystem::path datPath = path / dat;
-            if (isRegularFile(datPath) && !already(datPath)) {
-                out.push_back(datPath);
-            }
+            out.push_back(path); // the directory last, so its loose files win
         }
     }
     return out;

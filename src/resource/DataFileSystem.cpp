@@ -148,6 +148,43 @@ std::vector<std::filesystem::path> DataFileSystem::list(const std::string& patte
     return filtered;
 }
 
+void DataFileSystem::refresh() {
+    const std::scoped_lock lock(_mutex);
+    if (!_vfs) {
+        return;
+    }
+
+    const auto fileSystemsOpt = _vfs->GetFilesystems("/");
+    if (!fileSystemsOpt) {
+        return;
+    }
+
+    // Snapshot the mounts in their current (priority) order. A NativeFileSystem builds its listing once
+    // at Initialize() and never rescans, and Shutdown() wipes its base path (so re-Initialize() can't
+    // rebuild it) — the only way to pick up files written on disk this session is a fresh instance. So
+    // remove every mount and re-add it in the SAME order (priority preserved): directory mounts are
+    // recreated and re-scanned; immutable DAT mounts are reused as-is.
+    std::vector<vfspp::IFileSystemPtr> mounts(fileSystemsOpt->get().begin(), fileSystemsOpt->get().end());
+
+    for (const auto& fileSystem : mounts) {
+        _vfs->RemoveFileSystem("/", fileSystem);
+    }
+    for (const auto& fileSystem : mounts) {
+        const auto native = std::dynamic_pointer_cast<vfspp::NativeFileSystem>(fileSystem);
+        if (!native) {
+            _vfs->AddFileSystem("/", fileSystem); // DAT/other: immutable, reuse as-is
+            continue;
+        }
+        auto fresh = std::make_shared<vfspp::NativeFileSystem>("/", native->BasePath());
+        if (fresh->Initialize()) {
+            _vfs->AddFileSystem("/", fresh);
+        } else {
+            spdlog::warn("DataFileSystem::refresh: failed to re-scan '{}'; keeping the stale mount", native->BasePath());
+            _vfs->AddFileSystem("/", fileSystem); // keep the old mount rather than dropping the path
+        }
+    }
+}
+
 std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesystem::path& path) const {
     const std::scoped_lock lock(_mutex);
     if (!_vfs) {

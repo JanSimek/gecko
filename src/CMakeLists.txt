@@ -120,6 +120,8 @@ set(GECK_APP_SOURCES
     ui/widgets/PaginationWidget.cpp
     ui/widgets/DataPathsWidget.h
     ui/widgets/DataPathsWidget.cpp
+    ui/widgets/IntCellDelegate.h
+    ui/widgets/IntCellDelegate.cpp
     ui/widgets/GameLocationWidget.h
     ui/widgets/GameLocationWidget.cpp
     ui/widgets/TextEditorWidget.h
@@ -307,7 +309,6 @@ add_library(vault STATIC
 
     # GAM
     format/gam/Gam.h
-    format/gam/Gam.cpp
 
     #
     # FILE WRITERS
@@ -385,6 +386,11 @@ add_library(vault STATIC
 
     reader/gam/GamReader.h
     reader/gam/GamReader.cpp
+
+    writer/gam/GamSerializer.h
+    writer/gam/GamSerializer.cpp
+    writer/gam/GamValidator.h
+    writer/gam/GamValidator.cpp
 
     reader/StreamBuffer.cpp
     reader/StreamBuffer.h
