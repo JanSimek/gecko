@@ -22,14 +22,15 @@ namespace resource {
  * @brief Properties dialog for exit grid configuration
  *
  * Provides UI for setting the 4 essential exit grid properties:
- * - Destination map ID
+ * - Destination map (chosen by name)
  * - Player spawn position (hex coordinate)
  * - Destination elevation level
  * - Player orientation/direction
  *
- * When a MapNameResolver is supplied, the destination map ID is annotated with the resolved .map
- * filename and friendly map.msg name (from maps.txt / map.msg), so the editor shows "arcaves.map ·
- * Temple: Foyer" instead of a bare number.
+ * When a MapNameResolver is supplied, the destination map is chosen from a searchable list of the
+ * mounted maps by their .map filename and friendly map.msg name (from maps.txt / map.msg), so the
+ * editor shows "arcaves.map · Temple: Foyer" instead of a bare number. An exit pointing at a map ID
+ * that isn't listed (or any ID when no game data is mounted) is preserved as a "Map <id>" entry.
  */
 class ExitGridPropertiesDialog : public QDialog {
     Q_OBJECT
@@ -56,7 +57,6 @@ public slots:
 private slots:
     void onPositionChanged();
     void validateInput();
-    void updateMapName();
     void onExitToWorldmapToggled(bool checked);
     void onTownMapToggled(bool checked);
 
@@ -64,6 +64,8 @@ private:
     void setupUI();
     void setupFormLayout();
     void setupButtonBox();
+    void populateMapComboBox();
+    void selectMap(uint32_t mapId);
     void updateUI();
     void updateMapControlsEnabled();
     bool isValidInput() const;
@@ -76,13 +78,10 @@ private:
     // Input fields
     QCheckBox* _exitToWorldmapCheckBox;
     QCheckBox* _townMapCheckBox;
-    QSpinBox* _mapIdSpinBox;
+    QComboBox* _mapComboBox; // searchable by-name destination-map picker; item data = maps.txt index
     QSpinBox* _positionSpinBox;
     QComboBox* _elevationComboBox;
     QComboBox* _orientationComboBox;
-
-    // Resolved destination-map name shown under the map ID (filename · friendly name)
-    QLabel* _mapNameLabel;
 
     // Status
     QLabel* _statusLabel;

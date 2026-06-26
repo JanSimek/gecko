@@ -6,6 +6,9 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <cctype>
+
 namespace geck::resource {
 
 namespace {
@@ -48,6 +51,30 @@ std::string MapNameResolver::displayName(int mapIndex, int elevation) const {
 int MapNameResolver::indexOf(const std::string& mapFileName) const {
     const auto info = _doc.findByName(mapFileName); // findByName lowercases + normalizes internally
     return info.has_value() ? info->index : -1;
+}
+
+namespace {
+
+    bool lessByFileNameCi(const MapName& lhs, const MapName& rhs) {
+        const auto toLower = [](unsigned char c) { return std::tolower(c); };
+        return std::lexicographical_compare(
+            lhs.fileName.begin(), lhs.fileName.end(),
+            rhs.fileName.begin(), rhs.fileName.end(),
+            [&](unsigned char a, unsigned char b) { return toLower(a) < toLower(b); });
+    }
+
+} // namespace
+
+std::vector<MapName> MapNameResolver::allMaps() const {
+    std::vector<MapName> maps;
+    for (const auto& section : _doc.sections) {
+        if (section.index < 0) {
+            continue; // skip non-Map sections and any negative sentinels
+        }
+        maps.push_back({ section.index, fileNameOf(section.index), displayName(section.index, 0) });
+    }
+    std::sort(maps.begin(), maps.end(), lessByFileNameCi);
+    return maps;
 }
 
 std::string MapNameResolver::fileNameOfLookup(const std::string& lookupName) const {
