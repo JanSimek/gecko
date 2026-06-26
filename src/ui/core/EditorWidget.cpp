@@ -970,6 +970,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.exitGridLineVertices = &_exitGridLineVertices;
     renderData.exitGridLineCursor = _exitGridLineCursor;
     renderData.exitGridPreviewHexes = &_exitGridPreviewHexes;
+    renderData.exitGridPreviewFrmPids = &_exitGridPreviewFrmPids;
     renderData.exitGridPreviewTint = _exitGridPreviewTint;
 
     _controller.renderingEngine().render(target, _controller.viewport().getView(), renderData, visibility);
@@ -1612,6 +1613,7 @@ void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& v
     // Walk the gap-free hex line through the committed vertices + the live cursor, marking every hex
     // it passes through (deduping shared corners) — the same walk the placement uses.
     _exitGridPreviewHexes.clear();
+    _exitGridPreviewFrmPids.clear();
     std::vector<sf::Vector2f> polyline = vertices;
     polyline.push_back(cursor);
     if (polyline.size() < 2) {
@@ -1624,12 +1626,22 @@ void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& v
         vertexHexes.push_back(_controller.viewport().worldPosToHexIndex(vertex));
     }
     _exitGridPreviewHexes = hexline::hexPolyline(_session.hexgrid(), vertexHexes);
+
+    // Per-hex directional FRM, picked the same way the commit will (Auto = outward facing, an
+    // explicit side = that side's art), so the preview matches what placement produces.
+    _exitGridPreviewFrmPids.reserve(_exitGridPreviewHexes.size());
+    for (const int hex : _exitGridPreviewHexes) {
+        _exitGridPreviewFrmPids.push_back(_exitGridPlacementManager
+                ? _exitGridPlacementManager->previewFrmPidForHex(hex)
+                : 0u);
+    }
 }
 
 void EditorWidget::clearMarkExitsLinePreview() {
     _exitGridLineActive = false;
     _exitGridLineVertices.clear();
     _exitGridPreviewHexes.clear();
+    _exitGridPreviewFrmPids.clear();
 }
 
 void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {

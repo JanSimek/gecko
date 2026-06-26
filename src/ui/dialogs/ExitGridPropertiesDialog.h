@@ -36,10 +36,23 @@ class ExitGridPropertiesDialog : public QDialog {
 
 public:
     struct ExitGridProperties {
-        uint32_t exitMap = 0;         // Destination map ID
-        uint32_t exitPosition = 0;    // Player spawn position (0-39999)
-        uint32_t exitElevation = 0;   // Destination elevation (0-2)
-        uint32_t exitOrientation = 0; // Player direction (0-5)
+        // Which directional marker art to draw for a placed region. Auto picks each hex's art from
+        // its outward facing (exitGridArtForFacing); the explicit sides force one art for every hex
+        // in the region — the escape hatch for ambiguous corners. The map format has no per-instance
+        // side field, so this is purely an art-proto choice, not a stored/serialized property.
+        enum class MarkerArt {
+            Auto,
+            Left,
+            Right,
+            Top,
+            Bottom
+        };
+
+        uint32_t exitMap = 0;                  // Destination map ID
+        uint32_t exitPosition = 0;             // Player spawn position (0-39999)
+        uint32_t exitElevation = 0;            // Destination elevation (0-2)
+        uint32_t exitOrientation = 0;          // Player direction (0-5)
+        MarkerArt markerArt = MarkerArt::Auto; // Directional art override (not serialized)
     };
 
     explicit ExitGridPropertiesDialog(QWidget* parent = nullptr, const resource::MapNameResolver* names = nullptr);
@@ -80,6 +93,7 @@ private:
     QSpinBox* _positionSpinBox;
     QComboBox* _elevationComboBox;
     QComboBox* _orientationComboBox;
+    QComboBox* _markerArtComboBox;
 
     // Resolved destination-map name shown under the map ID (filename · friendly name)
     QLabel* _mapNameLabel;

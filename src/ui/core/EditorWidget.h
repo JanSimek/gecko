@@ -446,6 +446,9 @@ private:
     sf::Vector2f _exitGridLineCursor;
     bool _exitGridLineActive = false;
     std::vector<int> _exitGridPreviewHexes;
+    // The directional marker FRM for each prospective preview hex (parallel to _exitGridPreviewHexes),
+    // so the preview shows the same directional art the commit will place (honouring the override).
+    std::vector<uint32_t> _exitGridPreviewFrmPids;
     sf::Color _exitGridPreviewTint{ 80, 220, 80, 140 };
 };
 

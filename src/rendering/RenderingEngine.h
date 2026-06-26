@@ -107,6 +107,10 @@ public:
         sf::Vector2f exitGridLineCursor;
         bool exitGridLineActive = false;
         const std::vector<int>* exitGridPreviewHexes = nullptr;
+        // The directional marker FRM for each preview hex (parallel to exitGridPreviewHexes). Each
+        // prospective hex is drawn as a transient Object built from this FRM, anchored and oriented
+        // like a committed marker, so the preview shows the correct directional art on the right side.
+        const std::vector<std::uint32_t>* exitGridPreviewFrmPids = nullptr;
         sf::Color exitGridPreviewTint{ 80, 220, 80, 140 };
     };
 
@@ -218,7 +222,11 @@ private:
         const RenderData& renderData);
 
     /**
-     * @brief Render exit grid markers
+     * @brief Highlight committed exit-grid markers (Ctrl+E overlay).
+     *
+     * Redraws each exit-grid Object's own sprite tinted, so the highlight uses the marker's real
+     * directional art and FRM offset (the sprite renderObjects already drew) rather than a second
+     * uniform blit. Single source of truth for what an exit grid looks like.
      */
     void renderExitGrids(sf::RenderTarget& target,
         const sf::View& view,
@@ -235,15 +243,11 @@ private:
     // Split out of renderExitGridEdgePreview to keep its complexity down.
     void drawExitGridPreviewMarkers(sf::RenderTarget& target, const sf::View& view, const RenderData& renderData);
     void drawExitGridPreviewLine(sf::RenderTarget& target, const RenderData& renderData);
-
-    /**
-     * @brief Helper method to render exit grids with a loaded sprite
-     */
-    void renderExitGridsWithSprite(sf::RenderTarget& target,
-        const sf::View& view,
-        const RenderData& renderData,
-        const Map* map,
-        sf::Sprite& exitGridSprite);
+    // Build the transient directional exit-grid marker Object for one prospective preview hex,
+    // anchored exactly like a committed object (Object::setHexPosition / setDirection). Returns
+    // null if the hex is off-grid or its directional FRM is unavailable.
+    std::shared_ptr<Object> buildExitGridPreviewObject(const RenderData& renderData, int hexIndex,
+        uint32_t frmPid) const;
 
     /**
      * @brief Check if a hex is within the visible viewport

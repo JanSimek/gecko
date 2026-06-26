@@ -77,6 +77,11 @@ public:
     };
     DestinationKind currentDestinationKind() const { return _currentDestinationKind; }
 
+    // The directional marker FRM the live preview should draw for `hexPosition`, using the same art
+    // selection a commit would: the last-chosen marker-direction override (Auto -> the hex's outward
+    // facing, an explicit side -> that side's RECT_* art for every hex).
+    [[nodiscard]] uint32_t previewFrmPidForHex(int hexPosition) const;
+
 private:
     // Create exit grid MISC object with the given directional art (proPid/frmPid, chosen per hex by
     // its outward facing) and the destination fields from `properties`. The art is independent of the
@@ -106,6 +111,10 @@ private:
     // The directional exit-grid art (proto + frm) for `hexPosition`, picked by which way that hex
     // faces away from the map centre. Returns the map-exit art if the hex is off-grid.
     ExitGridArt directionalArtForHex(int hexPosition) const;
+    // The exit-grid art for `hexPosition` honouring the marker-direction override: Auto keeps the
+    // per-hex outward-facing classification (directionalArtForHex); an explicit side forces that
+    // side's RECT_* art for every hex in the region.
+    ExitGridArt artForHex(int hexPosition, ExitGridPropertiesDialog::ExitGridProperties::MarkerArt markerArt) const;
 
     // Track the destination kind from a dialog's chosen exit map (drives the preview tint).
     void rememberDestinationKind(uint32_t exitMap);
@@ -118,6 +127,10 @@ private:
     bool _exitGridPlacementMode = false;
     bool _markExitsMode = false;
     DestinationKind _currentDestinationKind = DestinationKind::InterMap;
+    // Last marker-direction override the user chose (drives the live preview art). Defaults to Auto
+    // so the first drawn region previews each hex by its outward facing.
+    ExitGridPropertiesDialog::ExitGridProperties::MarkerArt _currentMarkerArt
+        = ExitGridPropertiesDialog::ExitGridProperties::MarkerArt::Auto;
 };
 
 } // namespace geck

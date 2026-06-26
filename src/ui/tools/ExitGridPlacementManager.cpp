@@ -62,8 +62,9 @@ void ExitGridPlacementManager::placeExitGridAtPosition(sf::Vector2f worldPos) {
     if (!showPropertiesDialog(properties)) {
         return; // User cancelled
     }
+    _currentMarkerArt = properties.markerArt;
 
-    const ExitGridArt art = directionalArtForHex(hexPosition);
+    const ExitGridArt art = artForHex(hexPosition, properties.markerArt);
     auto exitGridObject = createExitGridObject(hexPosition, art.proPid, art.frmPid, properties);
     int currentElevation = _context.getCurrentElevation();
 
@@ -195,6 +196,26 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
     return exitGrid;
 }
 
+namespace {
+    // The fixed directional art for an explicit (non-Auto) side override.
+    ExitGridArt explicitSideArt(ExitGridPropertiesDialog::ExitGridProperties::MarkerArt markerArt) {
+        using MarkerArt = ExitGridPropertiesDialog::ExitGridProperties::MarkerArt;
+        switch (markerArt) {
+            case MarkerArt::Left:
+                return { ExitGrid::RECT_LEFT_PRO_PID, ExitGrid::RECT_LEFT_FRM_PID };
+            case MarkerArt::Right:
+                return { ExitGrid::RECT_RIGHT_PRO_PID, ExitGrid::RECT_RIGHT_FRM_PID };
+            case MarkerArt::Top:
+                return { ExitGrid::RECT_TOP_PRO_PID, ExitGrid::RECT_TOP_FRM_PID };
+            case MarkerArt::Bottom:
+                return { ExitGrid::RECT_BOTTOM_PRO_PID, ExitGrid::RECT_BOTTOM_FRM_PID };
+            case MarkerArt::Auto:
+                break;
+        }
+        return { ExitGrid::MAP_EXIT_PRO_PID, ExitGrid::MAP_EXIT_FRM_PID };
+    }
+} // namespace
+
 ExitGridArt ExitGridPlacementManager::directionalArtForHex(int hexPosition) const {
     const auto* hexGrid = _context.getHexagonGrid();
     const ExitGridArt mapExit{ ExitGrid::MAP_EXIT_PRO_PID, ExitGrid::MAP_EXIT_FRM_PID };
@@ -207,6 +228,21 @@ ExitGridArt ExitGridPlacementManager::directionalArtForHex(int hexPosition) cons
     }
     const auto [centerX, centerY] = hexGridCenterScreen(*hexGrid);
     return exitGridArtForFacing(hex->get().x(), hex->get().y(), centerX, centerY);
+}
+
+ExitGridArt ExitGridPlacementManager::artForHex(int hexPosition,
+    ExitGridPropertiesDialog::ExitGridProperties::MarkerArt markerArt) const {
+    using MarkerArt = ExitGridPropertiesDialog::ExitGridProperties::MarkerArt;
+    // Auto keeps the per-hex outward-facing classification; an explicit side forces one art for
+    // every hex in the region (the escape hatch for ambiguous corners).
+    if (markerArt == MarkerArt::Auto) {
+        return directionalArtForHex(hexPosition);
+    }
+    return explicitSideArt(markerArt);
+}
+
+uint32_t ExitGridPlacementManager::previewFrmPidForHex(int hexPosition) const {
+    return artForHex(hexPosition, _currentMarkerArt).frmPid;
 }
 
 bool ExitGridPlacementManager::showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing) {
@@ -422,11 +458,12 @@ std::size_t ExitGridPlacementManager::createExitGridsForHexes(const std::vector<
         return 0; // User cancelled
     }
     rememberDestinationKind(newProperties.exitMap);
+    _currentMarkerArt = newProperties.markerArt;
 
     int currentElevation = _context.getCurrentElevation();
     std::vector<std::shared_ptr<MapObject>> createdExitGrids;
     for (int hexPosition : hexPositions) {
-        const ExitGridArt art = directionalArtForHex(hexPosition);
+        const ExitGridArt art = artForHex(hexPosition, newProperties.markerArt);
         createdExitGrids.push_back(createExitGridObject(hexPosition, art.proPid, art.frmPid, newProperties));
     }
 

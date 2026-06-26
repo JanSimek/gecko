@@ -1,8 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
+#include "editor/Hex.h"
 #include "editor/HexagonGrid.h"
 #include "util/HexLine.h"
 
@@ -20,6 +22,36 @@ bool isGapFree(const std::vector<int>& line) {
         }
     }
     return true;
+}
+
+// The largest perpendicular screen distance of any line hex's centre from the straight chord
+// between the two endpoint centres. A truly straight cube line hugs that chord; a greedy walk
+// that minimises distance-to-endpoint bows far off it.
+double maxOffsetFromChord(const HexagonGrid& grid, const std::vector<int>& line) {
+    const auto first = grid.getHexByPosition(static_cast<uint32_t>(line.front()));
+    const auto last = grid.getHexByPosition(static_cast<uint32_t>(line.back()));
+    if (!first.has_value() || !last.has_value()) {
+        return 0.0;
+    }
+    const double ax = first->get().x();
+    const double ay = first->get().y();
+    const double bx = last->get().x();
+    const double by = last->get().y();
+    const double len = std::hypot(bx - ax, by - ay);
+    if (len == 0.0) {
+        return 0.0;
+    }
+    double worst = 0.0;
+    for (const int hex : line) {
+        const auto h = grid.getHexByPosition(static_cast<uint32_t>(hex));
+        if (!h.has_value()) {
+            continue;
+        }
+        // Perpendicular distance from the point to the line through (ax,ay)-(bx,by).
+        const double cross = std::abs((bx - ax) * (ay - h->get().y()) - (ax - h->get().x()) * (by - ay));
+        worst = std::max(worst, cross / len);
+    }
+    return worst;
 }
 
 } // namespace
@@ -86,4 +118,32 @@ TEST_CASE("hexline::isValidHex matches the grid bounds", "[hexline]") {
     CHECK(hexline::isValidHex(HexagonGrid::POSITION_COUNT - 1));
     CHECK_FALSE(hexline::isValidHex(-1));
     CHECK_FALSE(hexline::isValidHex(HexagonGrid::POSITION_COUNT));
+}
+
+TEST_CASE("hexLine stays on the straight chord (no bowing)", "[hexline]") {
+    HexagonGrid grid;
+    // A spread of edges in different directions: horizontal, vertical, and two diagonals. The
+    // old greedy distance-to-endpoint walk bowed hundreds of pixels off these; a cube line hugs
+    // the chord to within about one hex.
+    struct Edge {
+        int start;
+        int end;
+    };
+    const std::vector<Edge> edges = {
+        { 100 * HexagonGrid::GRID_WIDTH + 40, 100 * HexagonGrid::GRID_WIDTH + 160 }, // wide horizontal
+        { 40 * HexagonGrid::GRID_WIDTH + 100, 160 * HexagonGrid::GRID_WIDTH + 100 }, // tall vertical
+        { 40 * HexagonGrid::GRID_WIDTH + 40, 160 * HexagonGrid::GRID_WIDTH + 160 },  // down-right diagonal
+        { 40 * HexagonGrid::GRID_WIDTH + 160, 160 * HexagonGrid::GRID_WIDTH + 40 },  // down-left diagonal
+    };
+
+    for (const Edge& edge : edges) {
+        const auto line = hexline::hexLine(grid, edge.start, edge.end);
+        REQUIRE(line.size() >= 2);
+        CHECK(line.front() == edge.start);
+        CHECK(line.back() == edge.end);
+        CHECK(isGapFree(line));
+
+        // Every hex centre is within roughly one hex width of the chord — i.e. the line is straight.
+        CHECK(maxOffsetFromChord(grid, line) <= static_cast<double>(geck::Hex::HEX_WIDTH));
+    }
 }

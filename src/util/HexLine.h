@@ -1,7 +1,8 @@
 #pragma once
 
 #include <array>
-#include <limits>
+#include <cmath>
+#include <cstdlib>
 #include <set>
 #include <vector>
 
@@ -42,52 +43,66 @@ inline std::vector<int> hexNeighbors(int hex) {
     return result;
 }
 
-/// Squared screen distance from `hex` to the point (ex, ey); max if `hex` is off-grid.
-inline long screenDistSq(const HexagonGrid& grid, int hex, int ex, int ey) {
-    const auto h = grid.getHexByPosition(static_cast<uint32_t>(hex));
-    if (!h.has_value()) {
-        return std::numeric_limits<long>::max();
-    }
-    const long dx = h->get().x() - ex;
-    const long dy = h->get().y() - ey;
-    return dx * dx + dy * dy;
-}
+namespace detail {
 
-/// A gap-free run of hexes from `startHex` to `endHex`: greedily steps to the neighbour
-/// whose screen position is nearest the end, so consecutive hexes are always screen-adjacent
-/// (the iso staircase a straight screen-line walk would skip). Endpoints are included. Empty
-/// if either endpoint is off-grid.
-inline std::vector<int> hexLine(const HexagonGrid& grid, int startHex, int endHex) {
+    /// Linear interpolation of a single cube axis between `a` and `b` at parameter `t` in [0, 1].
+    inline double cubeLerp(int a, int b, double t) {
+        return static_cast<double>(a) + static_cast<double>(b - a) * t;
+    }
+
+    /// Round a fractional cube (x, y, z) to the nearest valid integer cube (x + y + z == 0):
+    /// round each axis, then nudge the component with the largest rounding error so the sum stays 0.
+    inline geck::hexgrid::Cube cubeRound(double fx, double fy, double fz) {
+        auto rx = static_cast<long>(std::lround(fx));
+        auto ry = static_cast<long>(std::lround(fy));
+        auto rz = static_cast<long>(std::lround(fz));
+
+        const double dx = std::abs(static_cast<double>(rx) - fx);
+        const double dy = std::abs(static_cast<double>(ry) - fy);
+        const double dz = std::abs(static_cast<double>(rz) - fz);
+
+        if (dx > dy && dx > dz) {
+            rx = -ry - rz;
+        } else if (dy > dz) {
+            ry = -rx - rz;
+        } else {
+            rz = -rx - ry;
+        }
+        return { static_cast<int>(rx), static_cast<int>(ry), static_cast<int>(rz) };
+    }
+
+} // namespace detail
+
+/// A gap-free run of hexes from `startHex` to `endHex` along the straight cube-coordinate chord:
+/// the endpoints are exact, consecutive results are grid neighbours (no gaps), and no hex repeats.
+/// `grid` is unused — the walk is pure grid geometry — but the signature is kept so callers
+/// (ExitGridPlacementManager, MapScriptApi::placeExitGridRect) don't churn. Empty if either
+/// endpoint is off-grid.
+inline std::vector<int> hexLine([[maybe_unused]] const HexagonGrid& grid, int startHex, int endHex) {
+    using namespace geck::hexgrid;
     std::vector<int> line;
     if (!isValidHex(startHex) || !isValidHex(endHex)) {
         return line;
     }
-    const auto endRef = grid.getHexByPosition(static_cast<uint32_t>(endHex));
-    if (!endRef.has_value()) {
+
+    const Cube a = cubeOfPosition(startHex);
+    const Cube b = cubeOfPosition(endHex);
+    // Cube distance = the number of single-hex steps between the endpoints.
+    const int n = (std::abs(a.x - b.x) + std::abs(a.y - b.y) + std::abs(a.z - b.z)) / 2;
+    if (n == 0) {
+        line.push_back(startHex); // start == end: a single hex.
         return line;
     }
-    const int ex = endRef->get().x();
-    const int ey = endRef->get().y();
 
-    int cur = startHex;
-    line.push_back(cur);
-    // A straight screen edge needs at most a grid span's worth of steps; the bound also stops
-    // a pathological non-converging walk.
-    const int maxSteps = 2 * (HexagonGrid::GRID_WIDTH + HexagonGrid::GRID_HEIGHT);
-    for (int step = 0; step < maxSteps && cur != endHex; ++step) {
-        long best = screenDistSq(grid, cur, ex, ey);
-        int next = -1;
-        for (const int neighbour : hexNeighbors(cur)) {
-            if (const long d = screenDistSq(grid, neighbour, ex, ey); d < best) {
-                best = d;
-                next = neighbour;
-            }
-        }
-        if (next < 0) {
-            break; // no neighbour is closer to the end — straight edges never hit this
-        }
-        cur = next;
-        line.push_back(cur);
+    line.reserve(static_cast<std::size_t>(n) + 1);
+    for (int i = 0; i <= n; ++i) {
+        const double t = static_cast<double>(i) / static_cast<double>(n);
+        const Cube c = detail::cubeRound(
+            detail::cubeLerp(a.x, b.x, t),
+            detail::cubeLerp(a.y, b.y, t),
+            detail::cubeLerp(a.z, b.z, t));
+        const ColRow cr = cubeToOffset(c);
+        line.push_back(cr.row * WIDTH + cr.col);
     }
     return line;
 }

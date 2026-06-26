@@ -5,10 +5,10 @@
 #include "viewport/ViewportController.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
+#include "format/frm/Frm.h"
 #include "resource/GameResources.h"
 #include "util/Constants.h"
 #include "util/ColorUtils.h"
-#include "resource/ResourcePaths.h"
 #include "util/Coordinates.h"
 #include "util/TileUtils.h"
 #include <spdlog/spdlog.h>
@@ -437,53 +437,28 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
     const sf::View& view,
     const RenderData& renderData,
     const Map* map) {
-    if (!map || !renderData.hexGrid) {
+    if (!map || !renderData.objects) {
         return;
     }
 
-    const sf::Texture& exitGridTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
-    sf::Sprite exitGridSprite(exitGridTexture);
-
-    renderExitGridsWithSprite(target, view, renderData, map, exitGridSprite);
-}
-
-void RenderingEngine::renderExitGridsWithSprite(sf::RenderTarget& target,
-    const sf::View& view,
-    const RenderData& renderData,
-    const Map* map,
-    sf::Sprite& exitGridSprite) {
-
-    const auto& allObjects = map->objects();
-
-    auto elevationIt = allObjects.find(renderData.currentElevation);
-    if (elevationIt == allObjects.end()) {
-        return; // No objects on this elevation
-    }
-
-    for (const auto& mapObject : elevationIt->second) {
+    // Highlight the already-correct exit-grid Object sprites (the same sprites renderObjects drew,
+    // built from each marker's frm_pid with its proper directional art and FRM offset) by redrawing
+    // each one tinted. This is a single source of truth — no second uniform blit that ignores the
+    // per-object direction and offset.
+    for (const auto& object : *renderData.objects) {
+        const auto mapObject = object ? object->getMapObjectPtr() : nullptr;
         if (!mapObject || !mapObject->isExitGridMarker()) {
             continue;
         }
 
-        int hexPosition = mapObject->position;
-        if (hexPosition < 0 || hexPosition >= static_cast<int>(renderData.hexGrid->size())) {
+        sf::Sprite highlight = object->getSprite(); // copy so the object's own colour is untouched
+        const sf::FloatRect bounds = highlight.getGlobalBounds();
+        if (!isHexVisible(static_cast<int>(bounds.position.x + bounds.size.x / 2.f),
+                static_cast<int>(bounds.position.y + bounds.size.y / 2.f), view)) {
             continue;
         }
-
-        auto hexOptional = renderData.hexGrid->getHexByPosition(hexPosition);
-        if (!hexOptional.has_value()) {
-            continue;
-        }
-
-        const Hex& hex = hexOptional.value().get();
-        WorldCoords hexCenter(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
-
-        if (!isHexVisible(static_cast<int>(hexCenter.x()), static_cast<int>(hexCenter.y()), view)) {
-            continue;
-        }
-
-        exitGridSprite.setPosition(hexCenter.toVector());
-        target.draw(exitGridSprite);
+        highlight.setColor(TileColors::exitGridHighlight());
+        target.draw(highlight);
     }
 }
 
@@ -497,32 +472,62 @@ void RenderingEngine::renderExitGridEdgePreview(sf::RenderTarget& target,
     drawExitGridPreviewLine(target, renderData);
 }
 
+std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const RenderData& renderData,
+    int hexIndex, std::uint32_t frmPid) const {
+    if (frmPid == 0 || !renderData.hexGrid) {
+        return nullptr;
+    }
+    auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+    if (!hexOptional.has_value()) {
+        return nullptr;
+    }
+
+    const std::string frmName = _resources.frmResolver().resolve(frmPid);
+    if (frmName.empty()) {
+        return nullptr;
+    }
+    const Frm* frm = _resources.repository().find<Frm>(frmName);
+    if (!frm) {
+        frm = _resources.repository().load<Frm>(frmName);
+    }
+    if (!frm) {
+        return nullptr;
+    }
+
+    // Anchor exactly like a committed exit grid: Object::setHexPosition applies the FRM's per-frame
+    // x/y offset, and setDirection sets the correct directional frame rect.
+    auto previewObject = std::make_shared<Object>(frm);
+    previewObject->setSprite(sf::Sprite{ _resources.textures().get(frmName) });
+    previewObject->setHexPosition(hexOptional.value().get());
+    previewObject->setDirection(ObjectDirection(0));
+    return previewObject;
+}
+
 void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const sf::View& view,
     const RenderData& renderData) {
-    // Each prospective on-line hex gets the exit-grid marker tinted by the destination kind.
-    if (!renderData.exitGridPreviewHexes || renderData.exitGridPreviewHexes->empty()) {
+    // Each prospective on-line hex is drawn with its own directional marker art (the same FRM the
+    // commit will place), anchored and oriented like a real exit grid, then tinted by destination
+    // kind — not a uniform left-pinned blit.
+    const auto* hexes = renderData.exitGridPreviewHexes;
+    const auto* frmPids = renderData.exitGridPreviewFrmPids;
+    if (!hexes || hexes->empty() || !frmPids || frmPids->size() != hexes->size()) {
         return;
     }
-    const sf::Texture& exitGridTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
-    sf::Sprite exitGridSprite(exitGridTexture);
-    exitGridSprite.setColor(renderData.exitGridPreviewTint);
 
-    for (int hexIndex : *renderData.exitGridPreviewHexes) {
+    for (std::size_t i = 0; i < hexes->size(); ++i) {
+        const int hexIndex = (*hexes)[i];
         if (hexIndex < 0 || hexIndex >= static_cast<int>(renderData.hexGrid->size())) {
             continue;
         }
         auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
-        if (!hexOptional.has_value()) {
+        if (!hexOptional.has_value()
+            || !isHexVisible(hexOptional.value().get().x(), hexOptional.value().get().y(), view)) {
             continue;
         }
-        const Hex& hex = hexOptional.value().get();
-        const auto hexX = static_cast<int>(hex.x());
-        const auto hexY = static_cast<int>(hex.y());
-        if (!isHexVisible(hexX, hexY, view)) {
-            continue;
+        if (auto previewObject = buildExitGridPreviewObject(renderData, hexIndex, (*frmPids)[i])) {
+            previewObject->getSprite().setColor(renderData.exitGridPreviewTint);
+            target.draw(previewObject->getSprite());
         }
-        exitGridSprite.setPosition(sf::Vector2f(static_cast<float>(hexX), static_cast<float>(hexY)));
-        target.draw(exitGridSprite);
     }
 }
 
