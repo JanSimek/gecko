@@ -5,6 +5,9 @@
 #include <SFML/Graphics/RenderTexture.hpp>
 #include <SFML/Window/Event.hpp>
 
+#include <cstddef>
+#include <vector>
+
 #include "ui/input/InputHandler.h"
 
 using geck::InputHandler;
@@ -40,6 +43,19 @@ struct Harness {
         press.button = sf::Mouse::Button::Left;
         press.position = { x, y };
         handler.handleEvent(sf::Event(press), target, view);
+    }
+
+    void rightClick(int x, int y) {
+        sf::Event::MouseButtonPressed press;
+        press.button = sf::Mouse::Button::Right;
+        press.position = { x, y };
+        handler.handleEvent(sf::Event(press), target, view);
+    }
+
+    void mouseMove(int x, int y) {
+        sf::Event::MouseMoved move;
+        move.position = { x, y };
+        handler.handleEvent(sf::Event(move), target, view);
     }
 };
 
@@ -122,4 +138,63 @@ TEST_CASE("InputHandler begins drag-selection on a plain click in select mode", 
     h.leftClick(100, 100);
 
     CHECK(h.handler.getCurrentAction() == InputHandler::EditorAction::DRAG_SELECTING);
+}
+
+// The "Draw region" (MarkExits) polygon state machine: clicks append vertices, mouse moves fire a
+// live preview, and right-click with >=3 vertices finalizes the polygon.
+TEST_CASE("InputHandler builds an exit-grid polygon and finalizes it on right-click", "[input][polygon]") {
+    if (glContextUnavailable()) {
+        SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
+    }
+    Harness h;
+    std::vector<sf::Vector2f> finalized;
+    int previewCalls = 0;
+    std::size_t lastPreviewVertexCount = 0;
+    InputHandler::Callbacks cb;
+    cb.onMarkExitsPolygon = [&](const std::vector<sf::Vector2f>& verts) { finalized = verts; };
+    cb.onMarkExitsPolygonPreview = [&](const std::vector<sf::Vector2f>& verts, sf::Vector2f) {
+        ++previewCalls;
+        lastPreviewVertexCount = verts.size();
+    };
+    h.handler.setCallbacks(cb);
+    h.handler.setMarkExitsMode(true);
+    REQUIRE(h.handler.isInMarkExitsMode());
+
+    // Three vertices via three (well-separated) left clicks.
+    h.leftClick(100, 100);
+    h.leftClick(300, 100);
+    h.leftClick(200, 300);
+
+    // A mouse move fires the live preview with the three committed vertices.
+    h.mouseMove(220, 220);
+    CHECK(previewCalls >= 1);
+    CHECK(lastPreviewVertexCount == 3);
+
+    // Right-click finalizes (>=3 vertices) and the polygon is reported, then the vertices clear.
+    h.rightClick(220, 220);
+    CHECK(finalized.size() == 3);
+    CHECK(h.handler.isInMarkExitsMode()); // still active so another region can be drawn
+}
+
+TEST_CASE("InputHandler cancels an exit-grid polygon on right-click with too few vertices", "[input][polygon]") {
+    if (glContextUnavailable()) {
+        SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
+    }
+    Harness h;
+    bool finalized = false;
+    bool cancelled = false;
+    InputHandler::Callbacks cb;
+    cb.onMarkExitsPolygon = [&](const std::vector<sf::Vector2f>&) { finalized = true; };
+    cb.onMarkExitsModeCancelled = [&]() { cancelled = true; };
+    h.handler.setCallbacks(cb);
+    h.handler.setMarkExitsMode(true);
+
+    h.leftClick(100, 100);
+    h.leftClick(300, 100); // only two vertices
+
+    h.rightClick(220, 220);
+
+    CHECK_FALSE(finalized);
+    CHECK(cancelled);
+    CHECK_FALSE(h.handler.isInMarkExitsMode()); // tool dropped
 }

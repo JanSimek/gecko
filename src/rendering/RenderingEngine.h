@@ -97,6 +97,17 @@ public:
         // Map data
         const Map* map = nullptr;
         int currentElevation = 0;
+
+        // Exit-grid "Draw region" live preview (MarkExits mode). When polygon outline drawing is
+        // active, exitGridPolygonVertices holds the committed vertices and exitGridPolygonCursor the
+        // live cursor, so the outline is drawn vertex->vertex and last->cursor. exitGridPreviewHexes
+        // lists the prospective interior hex indices, each drawn with the exit-grid marker tinted by
+        // exitGridPreviewTint (green for an inter-map exit, brown for a world-map exit).
+        const std::vector<sf::Vector2f>* exitGridPolygonVertices = nullptr;
+        sf::Vector2f exitGridPolygonCursor;
+        bool exitGridPolygonActive = false;
+        const std::vector<int>* exitGridPreviewHexes = nullptr;
+        sf::Color exitGridPreviewTint{ 80, 220, 80, 140 };
     };
 
     explicit RenderingEngine(resource::GameResources& resources);
@@ -213,6 +224,14 @@ private:
         const sf::View& view,
         const RenderData& renderData,
         const Map* map);
+
+    /**
+     * @brief Render the in-progress exit-grid "Draw region" preview: the polygon outline plus each
+     * prospective interior hex marked with the (tinted) exit-grid marker sprite.
+     */
+    void renderExitGridRegionPreview(sf::RenderTarget& target,
+        const sf::View& view,
+        const RenderData& renderData);
 
     /**
      * @brief Helper method to render exit grids with a loaded sprite

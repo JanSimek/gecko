@@ -45,6 +45,7 @@ add_executable(general_tests
     general/test_reading_dat.cpp
     general/test_reading_map.cpp
     general/test_hex_geometry.cpp
+    general/test_polygon_geometry.cpp
     general/test_pattern_stamper.cpp
     general/test_pattern_builder.cpp
     general/test_map_script_api.cpp

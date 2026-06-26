@@ -57,6 +57,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QMenu>
+#include <QToolButton>
 #include <QIcon>
 #include <QSignalBlocker>
 #include <QFileDialog>
@@ -775,23 +776,64 @@ void MainWindow::setupToolModeActions() {
         }
     });
 
-    _markExitsAction = _mainToolBar->addAction(createIcon(":/icons/actions/door-exit.svg"), "Mark Exits");
-    _markExitsAction->setStatusTip("Select exit grids to edit their properties");
-    _markExitsAction->setCheckable(true);
-    connect(_markExitsAction, &QAction::triggered, this, [this](bool checked) {
-        if (_currentEditorWidget) {
-            _currentEditorWidget->setMarkExitsMode(checked);
-        }
-    });
+    // Unified Exit-Grids tool: one checkable button plus a dropdown choosing the sub-mode
+    // ("Place single hex" vs "Draw region"), mirroring the selection-mode dropdown above.
+    _exitGridsAction = _mainToolBar->addAction(createIcon(":/icons/actions/door-exit.svg"), "Exit Grids");
+    _exitGridsAction->setStatusTip("Place exit-grid markers (single hex) or draw a polygon region");
+    _exitGridsAction->setCheckable(true);
 
-    _placeExitGridAction = _mainToolBar->addAction(createIcon(":/icons/actions/door-exit.svg"), "Place Exit Grids");
-    _placeExitGridAction->setStatusTip("Place new exit-grid markers by clicking individual hexes");
-    _placeExitGridAction->setCheckable(true);
-    connect(_placeExitGridAction, &QAction::triggered, this, [this](bool checked) {
-        if (_currentEditorWidget) {
-            _currentEditorWidget->setExitGridPlacementMode(checked);
-        }
+    _exitGridsMenu = new QMenu(this);
+    auto addExitGridMode = [this](const QString& label, EditorMode mode, bool checked) {
+        QAction* action = _exitGridsMenu->addAction(label);
+        action->setCheckable(true);
+        action->setChecked(checked);
+        action->setData(static_cast<int>(mode));
+        connect(action, &QAction::triggered, this, [this, mode]() {
+            // Exclusive: tick the chosen sub-mode, untick the other, and (re)activate the tool.
+            for (QAction* item : _exitGridsMenu->actions()) {
+                const QSignalBlocker block(item);
+                item->setChecked(item->data().toInt() == static_cast<int>(mode));
+            }
+            const QSignalBlocker buttonBlock(_exitGridsAction);
+            _exitGridsAction->setChecked(true);
+            applyExitGridsTool(true);
+        });
+        return action;
+    };
+    _exitGridDrawRegionAction = addExitGridMode("Draw region", EditorMode::MarkExits, true);
+    _exitGridPlaceHexAction = addExitGridMode("Place single hex", EditorMode::PlaceExitGrid, false);
+
+    // Attach the sub-mode dropdown to the button's menu-indicator arrow (MenuButtonPopup): the main
+    // button is a plain on/off toggle, while the small arrow opens the dropdown to switch sub-mode.
+    _exitGridsAction->setMenu(_exitGridsMenu);
+    if (auto* toolButton = qobject_cast<QToolButton*>(_mainToolBar->widgetForAction(_exitGridsAction))) {
+        toolButton->setPopupMode(QToolButton::MenuButtonPopup);
+    }
+
+    // Toggling the button on activates the chosen sub-mode; off returns to Select.
+    connect(_exitGridsAction, &QAction::triggered, this, [this](bool checked) {
+        applyExitGridsTool(checked);
     });
+}
+
+void MainWindow::applyExitGridsTool(bool checked) {
+    if (!_currentEditorWidget) {
+        return;
+    }
+    if (!checked) {
+        _currentEditorWidget->setMode(EditorMode::Select);
+        return;
+    }
+    // Activate whichever sub-mode is ticked in the dropdown (default: Draw region).
+    EditorMode mode = EditorMode::MarkExits;
+    for (QAction* item : _exitGridsMenu->actions()) {
+        if (item->isChecked()) {
+            mode = static_cast<EditorMode>(item->data().toInt());
+            break;
+        }
+    }
+    _currentEditorWidget->setMode(mode);
+    _exitGridsAction->setText(mode == EditorMode::PlaceExitGrid ? "Place Hex" : "Draw Region");
 }
 
 void MainWindow::syncToolModeActions(EditorMode mode) {
@@ -802,8 +844,27 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         }
     };
     sync(_selectToolAction, EditorMode::Select);
-    sync(_markExitsAction, EditorMode::MarkExits);
-    sync(_placeExitGridAction, EditorMode::PlaceExitGrid);
+
+    // Unified Exit-Grids button is checked while in either sub-mode; the dropdown shows which one,
+    // and the button label tracks the active sub-mode.
+    const bool inExitGridMode = (mode == EditorMode::PlaceExitGrid || mode == EditorMode::MarkExits);
+    if (_exitGridsAction) {
+        QSignalBlocker blocker(_exitGridsAction);
+        _exitGridsAction->setChecked(inExitGridMode);
+        if (mode == EditorMode::PlaceExitGrid) {
+            _exitGridsAction->setText("Place Hex");
+        } else if (mode == EditorMode::MarkExits) {
+            _exitGridsAction->setText("Draw Region");
+        } else {
+            _exitGridsAction->setText("Exit Grids");
+        }
+    }
+    if (_exitGridsMenu && inExitGridMode) {
+        for (QAction* item : _exitGridsMenu->actions()) {
+            const QSignalBlocker block(item);
+            item->setChecked(item->data().toInt() == static_cast<int>(mode));
+        }
+    }
 
     // Free up "R" for variant cycling while a pattern is being stamped.
     if (_rotateAction) {
@@ -2065,8 +2126,10 @@ void MainWindow::clearStatusMessage() {
 }
 
 void MainWindow::deselectMarkExitsMode() {
-    if (_markExitsAction) {
-        _markExitsAction->setChecked(false);
+    if (_exitGridsAction) {
+        QSignalBlocker blocker(_exitGridsAction);
+        _exitGridsAction->setChecked(false);
+        _exitGridsAction->setText("Exit Grids");
     }
 }
 

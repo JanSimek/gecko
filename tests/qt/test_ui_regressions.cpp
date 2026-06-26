@@ -53,6 +53,7 @@
 #include "format/map/Map.h"
 #include "format/map/MapScript.h"
 #include <QLineEdit>
+#include <QMenu>
 #include <QPushButton>
 
 namespace {
@@ -1102,4 +1103,73 @@ TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scri
     REQUIRE(lvarTable->rowCount() == 2);
     CHECK(lvarTable->item(0, 1)->data(Qt::DisplayRole).toInt() == 111); // column 1 = Value
     CHECK(lvarTable->item(1, 1)->data(Qt::DisplayRole).toInt() == 222);
+}
+
+// The unified Exit-Grids toolbar tool replaces the two former buttons with one checkable button
+// plus a dropdown whose two items ("Draw region" / "Place single hex") are exclusive: triggering
+// one ticks it, unticks the other, and keeps the tool button checked. (Driving the editor mode
+// itself needs game data to construct the editor, so that half is covered separately below against
+// EditorWidget directly.)
+TEST_CASE("Unified Exit-Grids tool exposes one button with an exclusive sub-mode dropdown", "[qt][exitgrids]") {
+    removeTestSettings();
+
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
+
+    // The two former separate buttons are gone, replaced by one "Exit Grids" button.
+    CHECK(findAction(window, "Mark Exits") == nullptr);
+    CHECK(findAction(window, "Place Exit Grids") == nullptr);
+
+    auto* exitGridsAction = findAction(window, "Exit Grids");
+    auto* drawRegion = findAction(window, "Draw region");
+    auto* placeHex = findAction(window, "Place single hex");
+    REQUIRE(exitGridsAction != nullptr);
+    REQUIRE(drawRegion != nullptr);
+    REQUIRE(placeHex != nullptr);
+    CHECK(exitGridsAction->isCheckable());
+    CHECK(exitGridsAction->menu() != nullptr); // dropdown attached to the button
+
+    // Default sub-mode is "Draw region".
+    CHECK(drawRegion->isChecked());
+    CHECK_FALSE(placeHex->isChecked());
+
+    // Triggering "Place single hex" makes it the (exclusive) checked sub-mode and keeps the tool on.
+    placeHex->trigger();
+    QApplication::processEvents();
+    CHECK(placeHex->isChecked());
+    CHECK_FALSE(drawRegion->isChecked());
+    CHECK(exitGridsAction->isChecked());
+
+    // Triggering "Draw region" flips the exclusive selection back.
+    drawRegion->trigger();
+    QApplication::processEvents();
+    CHECK(drawRegion->isChecked());
+    CHECK_FALSE(placeHex->isChecked());
+    CHECK(exitGridsAction->isChecked());
+}
+
+// The editor-mode half: EditorWidget::currentMode() moves between PlaceExitGrid and MarkExits via
+// the same setters the unified tool ultimately drives, pinning that the two sub-modes map to
+// distinct editor modes. Constructing an EditorWidget pulls in the HexRenderer, which eagerly loads
+// art/misc/HEX.frm, so this can only run where the game data is mounted; without it we skip rather
+// than fail (the structural dropdown test above covers the wiring with no data).
+TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exitgrids]") {
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    std::unique_ptr<geck::EditorWidget> editor;
+    try {
+        editor = std::make_unique<geck::EditorWidget>(*resources, makeMap("exitgrids.map"));
+    } catch (const std::exception& e) {
+        SKIP(std::string("EditorWidget needs mounted game data (HEX.frm): ") + e.what());
+    }
+
+    CHECK(editor->currentMode() == geck::EditorMode::Select);
+
+    editor->setMarkExitsMode(true); // "Draw region"
+    CHECK(editor->currentMode() == geck::EditorMode::MarkExits);
+
+    editor->setExitGridPlacementMode(true); // "Place single hex"
+    CHECK(editor->currentMode() == geck::EditorMode::PlaceExitGrid);
+
+    editor->setMode(geck::EditorMode::Select);
+    CHECK(editor->currentMode() == geck::EditorMode::Select);
 }

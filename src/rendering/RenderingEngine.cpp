@@ -127,6 +127,9 @@ void RenderingEngine::render(sf::RenderTarget& target,
 
     // Layer 8: Hex highlights and markers
     renderHexHighlights(target, renderData);
+
+    // Layer 9: Exit-grid "Draw region" live preview (polygon outline + prospective interior hexes).
+    renderExitGridRegionPreview(target, view, renderData);
 }
 
 void RenderingEngine::renderFloorTiles(sf::RenderTarget& target,
@@ -482,6 +485,56 @@ void RenderingEngine::renderExitGridsWithSprite(sf::RenderTarget& target,
         exitGridSprite.setPosition(hexCenter.toVector());
         target.draw(exitGridSprite);
     }
+}
+
+void RenderingEngine::renderExitGridRegionPreview(sf::RenderTarget& target,
+    const sf::View& view,
+    const RenderData& renderData) {
+    if (!renderData.exitGridPolygonActive || !renderData.hexGrid) {
+        return;
+    }
+
+    // Each prospective interior hex gets the exit-grid marker tinted by the destination kind.
+    if (renderData.exitGridPreviewHexes && !renderData.exitGridPreviewHexes->empty()) {
+        const sf::Texture& exitGridTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
+        sf::Sprite exitGridSprite(exitGridTexture);
+        exitGridSprite.setColor(renderData.exitGridPreviewTint);
+
+        for (int hexIndex : *renderData.exitGridPreviewHexes) {
+            if (hexIndex < 0 || hexIndex >= static_cast<int>(renderData.hexGrid->size())) {
+                continue;
+            }
+            auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+            if (!hexOptional.has_value()) {
+                continue;
+            }
+            const Hex& hex = hexOptional.value().get();
+            const auto hexX = static_cast<int>(hex.x());
+            const auto hexY = static_cast<int>(hex.y());
+            if (!isHexVisible(hexX, hexY, view)) {
+                continue;
+            }
+            exitGridSprite.setPosition(sf::Vector2f(static_cast<float>(hexX), static_cast<float>(hexY)));
+            target.draw(exitGridSprite);
+        }
+    }
+
+    // The polygon outline: a line strip vertex->vertex, plus a segment from the last vertex to the
+    // live cursor so the edge being drawn previews under the mouse.
+    const auto* vertices = renderData.exitGridPolygonVertices;
+    if (!vertices || vertices->empty()) {
+        return;
+    }
+    const sf::Color outlineColor(renderData.exitGridPreviewTint.r, renderData.exitGridPreviewTint.g,
+        renderData.exitGridPreviewTint.b, 255);
+    sf::VertexArray outline(sf::PrimitiveType::LineStrip);
+    for (const sf::Vector2f& vertex : *vertices) {
+        outline.append(sf::Vertex{ vertex, outlineColor });
+    }
+    outline.append(sf::Vertex{ renderData.exitGridPolygonCursor, outlineColor });
+    // Close the loop back to the first vertex so the prospective region reads as a closed shape.
+    outline.append(sf::Vertex{ vertices->front(), outlineColor });
+    target.draw(outline);
 }
 
 } // namespace geck

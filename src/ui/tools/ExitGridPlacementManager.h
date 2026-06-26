@@ -1,8 +1,11 @@
 #pragma once
 
 #include <SFML/Graphics.hpp>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include <QString>
 
@@ -58,6 +61,19 @@ public:
     // Mark exits mode - select and edit exit grids
     void handleMarkExitsSelection(sf::Vector2f worldPos);
     void selectExitGridsInArea(sf::Vector2f startPos, sf::Vector2f endPos);
+    // Polygon "Draw region" mode: every hex whose world center lies inside the polygon (described
+    // by its world-space vertices) becomes an exit grid sharing one destination — or, if existing
+    // exit grids fall inside, those are bulk-edited instead (mirrors selectExitGridsInArea).
+    void selectExitGridsInPolygon(const std::vector<sf::Vector2f>& worldVertices);
+
+    // Destination kind the live region preview tints by: inter-map (green) vs world/town map
+    // (brown). Defaults to inter-map and is updated whenever a region dialog sets the destination,
+    // so the next drawn region previews in the kind the user last chose.
+    enum class DestinationKind {
+        InterMap,
+        WorldMap
+    };
+    DestinationKind currentDestinationKind() const { return _currentDestinationKind; }
 
 private:
     // Create exit grid MISC object with properties
@@ -66,6 +82,20 @@ private:
     // Show properties dialog and handle result
     bool showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing = nullptr);
 
+    // Shared region logic, factored out so selectExitGridsInArea and selectExitGridsInPolygon
+    // don't copy-paste the dialog/apply/create flow.
+    //
+    // bulkEditExistingExitGrids: show one dialog (defaulted from the first object) and apply the
+    // chosen destination to every passed exit grid via registerExitGridEdit. Returns true if a
+    // change was committed.
+    bool bulkEditExistingExitGrids(const std::vector<std::shared_ptr<Object>>& exitGrids);
+    // createExitGridsForHexes: show one dialog and create one exit grid per hex via
+    // registerExitGridCreation. Returns the number created.
+    std::size_t createExitGridsForHexes(const std::vector<int>& hexPositions);
+
+    // Track the destination kind from a dialog's chosen exit map (drives the preview tint).
+    void rememberDestinationKind(uint32_t exitMap);
+
     ExitGridContext& _context;
     resource::GameResources& _resources;
     std::function<void(const QString&)> _showStatus;
@@ -73,6 +103,7 @@ private:
     // State
     bool _exitGridPlacementMode = false;
     bool _markExitsMode = false;
+    DestinationKind _currentDestinationKind = DestinationKind::InterMap;
 };
 
 } // namespace geck
