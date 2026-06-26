@@ -92,6 +92,11 @@ private:
     // createExitGridsForHexes: show one dialog and create one exit grid per hex via
     // registerExitGridCreation. Returns the number created.
     std::size_t createExitGridsForHexes(const std::vector<int>& hexPositions);
+    // The per-hex point-in-polygon collection, split out of selectExitGridsInPolygon to keep its
+    // complexity down: existing exit grids whose hex center is inside the polygon, and the indices of
+    // every interior hex.
+    std::vector<std::shared_ptr<Object>> collectExitGridsInPolygon(const std::vector<sf::Vector2f>& worldVertices) const;
+    std::vector<int> collectHexesInPolygon(const std::vector<sf::Vector2f>& worldVertices) const;
 
     // Track the destination kind from a dialog's chosen exit map (drives the preview tint).
     void rememberDestinationKind(uint32_t exitMap);

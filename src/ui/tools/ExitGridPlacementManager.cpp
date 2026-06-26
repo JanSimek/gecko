@@ -14,7 +14,6 @@
 #include "resource/MapNameResolver.h"
 
 #include <QApplication>
-#include <QMessageBox>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -63,11 +62,6 @@ void ExitGridPlacementManager::placeExitGridAtPosition(sf::Vector2f worldPos) {
     }
 
     auto exitGridObject = createExitGridObject(hexPosition, properties);
-    if (!exitGridObject) {
-        QMessageBox::critical(_context.getDialogParent(), "Error", "Failed to create exit grid object.");
-        return;
-    }
-
     int currentElevation = _context.getCurrentElevation();
 
     // Registers the undo action and adds to map; redo runs immediately
@@ -420,9 +414,7 @@ std::size_t ExitGridPlacementManager::createExitGridsForHexes(const std::vector<
     int currentElevation = _context.getCurrentElevation();
     std::vector<std::shared_ptr<MapObject>> createdExitGrids;
     for (int hexPosition : hexPositions) {
-        if (auto exitGrid = createExitGridObject(hexPosition, newProperties); exitGrid) {
-            createdExitGrids.push_back(exitGrid);
-        }
+        createdExitGrids.push_back(createExitGridObject(hexPosition, newProperties));
     }
 
     if (createdExitGrids.empty()) {
@@ -493,20 +485,17 @@ void ExitGridPlacementManager::selectExitGridsInArea(sf::Vector2f startPos, sf::
     createExitGridsForHexes(hexesInArea);
 }
 
-void ExitGridPlacementManager::selectExitGridsInPolygon(const std::vector<sf::Vector2f>& worldVertices) {
-    if (!_markExitsMode || worldVertices.size() < 3) {
-        return;
-    }
-
-    const auto bounds = geometry::polygonBounds(worldVertices);
-
-    // Existing exit grids whose hex center lies inside the polygon -> bulk-edit them instead of
-    // creating duplicates (mirrors selectExitGridsInArea).
-    std::vector<std::shared_ptr<Object>> exitGridsInPolygon;
+std::vector<std::shared_ptr<Object>> ExitGridPlacementManager::collectExitGridsInPolygon(
+    const std::vector<sf::Vector2f>& worldVertices) const {
+    std::vector<std::shared_ptr<Object>> result;
     const auto* hexGrid = _context.getHexagonGrid();
+    if (!hexGrid) {
+        return result;
+    }
+    const auto bounds = geometry::polygonBounds(worldVertices);
     for (auto& object : _context.getObjects()) {
         auto mapObjectPtr = object ? object->getMapObjectPtr() : nullptr;
-        if (!mapObjectPtr || !mapObjectPtr->isExitGridMarker() || !hexGrid) {
+        if (!mapObjectPtr || !mapObjectPtr->isExitGridMarker()) {
             continue;
         }
         auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(mapObjectPtr->position));
@@ -515,8 +504,36 @@ void ExitGridPlacementManager::selectExitGridsInPolygon(const std::vector<sf::Ve
         }
         sf::Vector2f center(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
         if (bounds.contains(center) && geometry::pointInPolygon(center, worldVertices)) {
-            exitGridsInPolygon.push_back(object);
+            result.push_back(object);
         }
+    }
+    return result;
+}
+
+std::vector<int> ExitGridPlacementManager::collectHexesInPolygon(
+    const std::vector<sf::Vector2f>& worldVertices) const {
+    std::vector<int> result;
+    const auto* hexGrid = _context.getHexagonGrid();
+    if (!hexGrid) {
+        return result;
+    }
+    const auto bounds = geometry::polygonBounds(worldVertices);
+    for (int hexIndex = 0; hexIndex < static_cast<int>(hexGrid->size()); ++hexIndex) {
+        auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+        if (!hex.has_value()) {
+            continue;
+        }
+        sf::Vector2f center(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
+        if (bounds.contains(center) && geometry::pointInPolygon(center, worldVertices)) {
+            result.push_back(hexIndex);
+        }
+    }
+    return result;
+}
+
+void ExitGridPlacementManager::selectExitGridsInPolygon(const std::vector<sf::Vector2f>& worldVertices) {
+    if (!_markExitsMode || worldVertices.size() < 3) {
+        return;
     }
 
     auto* selectionManager = _context.getSelectionManager();
@@ -525,8 +542,9 @@ void ExitGridPlacementManager::selectExitGridsInPolygon(const std::vector<sf::Ve
     }
     _context.clearSelection();
 
-    if (!exitGridsInPolygon.empty()) {
-        bulkEditExistingExitGrids(exitGridsInPolygon);
+    // Existing exit grids inside the polygon -> bulk-edit them; otherwise create one per interior hex.
+    if (const auto existing = collectExitGridsInPolygon(worldVertices); !existing.empty()) {
+        bulkEditExistingExitGrids(existing);
         if (selectionManager) {
             selectionManager->clearSelection();
         }
@@ -534,21 +552,7 @@ void ExitGridPlacementManager::selectExitGridsInPolygon(const std::vector<sf::Ve
         return;
     }
 
-    // No existing exit grids inside the polygon - create one per interior hex.
-    std::vector<int> hexesInPolygon;
-    if (hexGrid) {
-        for (int hexIndex = 0; hexIndex < static_cast<int>(hexGrid->size()); ++hexIndex) {
-            auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
-            if (!hex.has_value()) {
-                continue;
-            }
-            sf::Vector2f center(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
-            if (bounds.contains(center) && geometry::pointInPolygon(center, worldVertices)) {
-                hexesInPolygon.push_back(hexIndex);
-            }
-        }
-    }
-    createExitGridsForHexes(hexesInPolygon);
+    createExitGridsForHexes(collectHexesInPolygon(worldVertices));
 }
 
 } // namespace geck

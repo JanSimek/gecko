@@ -232,6 +232,9 @@ private:
     void renderExitGridRegionPreview(sf::RenderTarget& target,
         const sf::View& view,
         const RenderData& renderData);
+    // Split out of renderExitGridRegionPreview to keep its complexity down.
+    void drawExitGridPreviewMarkers(sf::RenderTarget& target, const sf::View& view, const RenderData& renderData);
+    void drawExitGridPreviewOutline(sf::RenderTarget& target, const RenderData& renderData);
 
     /**
      * @brief Helper method to render exit grids with a loaded sprite

@@ -493,34 +493,42 @@ void RenderingEngine::renderExitGridRegionPreview(sf::RenderTarget& target,
     if (!renderData.exitGridPolygonActive || !renderData.hexGrid) {
         return;
     }
+    drawExitGridPreviewMarkers(target, view, renderData);
+    drawExitGridPreviewOutline(target, renderData);
+}
 
+void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const sf::View& view,
+    const RenderData& renderData) {
     // Each prospective interior hex gets the exit-grid marker tinted by the destination kind.
-    if (renderData.exitGridPreviewHexes && !renderData.exitGridPreviewHexes->empty()) {
-        const sf::Texture& exitGridTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
-        sf::Sprite exitGridSprite(exitGridTexture);
-        exitGridSprite.setColor(renderData.exitGridPreviewTint);
-
-        for (int hexIndex : *renderData.exitGridPreviewHexes) {
-            if (hexIndex < 0 || hexIndex >= static_cast<int>(renderData.hexGrid->size())) {
-                continue;
-            }
-            auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
-            if (!hexOptional.has_value()) {
-                continue;
-            }
-            const Hex& hex = hexOptional.value().get();
-            const auto hexX = static_cast<int>(hex.x());
-            const auto hexY = static_cast<int>(hex.y());
-            if (!isHexVisible(hexX, hexY, view)) {
-                continue;
-            }
-            exitGridSprite.setPosition(sf::Vector2f(static_cast<float>(hexX), static_cast<float>(hexY)));
-            target.draw(exitGridSprite);
-        }
+    if (!renderData.exitGridPreviewHexes || renderData.exitGridPreviewHexes->empty()) {
+        return;
     }
+    const sf::Texture& exitGridTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
+    sf::Sprite exitGridSprite(exitGridTexture);
+    exitGridSprite.setColor(renderData.exitGridPreviewTint);
 
-    // The polygon outline: a line strip vertex->vertex, plus a segment from the last vertex to the
-    // live cursor so the edge being drawn previews under the mouse.
+    for (int hexIndex : *renderData.exitGridPreviewHexes) {
+        if (hexIndex < 0 || hexIndex >= static_cast<int>(renderData.hexGrid->size())) {
+            continue;
+        }
+        auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+        if (!hexOptional.has_value()) {
+            continue;
+        }
+        const Hex& hex = hexOptional.value().get();
+        const auto hexX = static_cast<int>(hex.x());
+        const auto hexY = static_cast<int>(hex.y());
+        if (!isHexVisible(hexX, hexY, view)) {
+            continue;
+        }
+        exitGridSprite.setPosition(sf::Vector2f(static_cast<float>(hexX), static_cast<float>(hexY)));
+        target.draw(exitGridSprite);
+    }
+}
+
+void RenderingEngine::drawExitGridPreviewOutline(sf::RenderTarget& target, const RenderData& renderData) {
+    // A line strip vertex->vertex, a segment from the last vertex to the live cursor (so the edge being
+    // drawn previews under the mouse), and a closing edge back to the first vertex.
     const auto* vertices = renderData.exitGridPolygonVertices;
     if (!vertices || vertices->empty()) {
         return;
@@ -532,7 +540,6 @@ void RenderingEngine::renderExitGridRegionPreview(sf::RenderTarget& target,
         outline.append(sf::Vertex{ vertex, outlineColor });
     }
     outline.append(sf::Vertex{ renderData.exitGridPolygonCursor, outlineColor });
-    // Close the loop back to the first vertex so the prospective region reads as a closed shape.
     outline.append(sf::Vertex{ vertices->front(), outlineColor });
     target.draw(outline);
 }
