@@ -63,19 +63,19 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
         }
 
         if (_mode == EditorMode::MarkExits) {
-            // "Draw region": a click appends a polygon vertex; a double-click finalizes it. The
+            // "Draw edge": a click appends a line vertex; a double-click finalizes it. The
             // double-click's two presses both arrive here, so the second one both appends the final
             // vertex (the first of the pair was already appended) and then finalizes.
             const sf::Vector2f delta = worldPos - _dragStartWorldPos;
             const float distance = std::sqrt(delta.x * delta.x + delta.y * delta.y);
-            const bool isDoubleClick = _polygonVertices.size() >= 2 && _doubleClickClock.getElapsedTime().asSeconds() < kDoubleClickSeconds && distance < kDoubleClickWorldDistance;
+            const bool isDoubleClick = _lineVertices.size() >= 2 && _doubleClickClock.getElapsedTime().asSeconds() < kDoubleClickSeconds && distance < kDoubleClickWorldDistance;
             _doubleClickClock.restart();
             _dragStartWorldPos = worldPos;
 
             if (isDoubleClick) {
-                finalizeExitGridPolygon();
+                finalizeExitGridLine();
             } else {
-                _polygonVertices.push_back(worldPos);
+                _lineVertices.push_back(worldPos);
             }
             return;
         }
@@ -121,14 +121,14 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             _mode = EditorMode::Select;
             spdlog::debug("Exit grid placement mode cancelled with right-click");
         } else if (_mode == EditorMode::MarkExits) {
-            // Right-click finalizes the polygon when there are enough vertices, otherwise it
-            // abandons the in-progress polygon and drops the tool.
-            if (_polygonVertices.size() >= 3) {
-                finalizeExitGridPolygon();
+            // Right-click finalizes the edge line when there are enough vertices, otherwise it
+            // abandons the in-progress line and drops the tool.
+            if (_lineVertices.size() >= 2) {
+                finalizeExitGridLine();
             } else {
-                cancelExitGridPolygon();
+                cancelExitGridLine();
             }
-            spdlog::debug("Mark exits mode right-click ({} vertices)", _polygonVertices.size());
+            spdlog::debug("Mark exits mode right-click ({} vertices)", _lineVertices.size());
         } else if (_mode == EditorMode::StampPattern) {
             _mode = EditorMode::Select;
             if (_callbacks.onStampPatternCancel) {
@@ -220,10 +220,10 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
         _callbacks.onMouseMove(worldPos);
     }
 
-    // "Draw region": preview the outline + interior hexes from the committed vertices to the live
+    // "Draw edge": preview the polyline + on-line hexes from the committed vertices to the live
     // cursor on every move, independent of any drag action.
-    if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsPolygonPreview) {
-        _callbacks.onMarkExitsPolygonPreview(_polygonVertices, worldPos);
+    if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsLinePreview) {
+        _callbacks.onMarkExitsLinePreview(_lineVertices, worldPos);
     }
 
     switch (_currentAction) {
@@ -290,8 +290,8 @@ void InputHandler::handleMouseWheelScrolled(const sf::Event::MouseWheelScrolled&
 void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
     if (event.code == sf::Keyboard::Key::Escape) {
         if (_mode == EditorMode::MarkExits) {
-            // Esc abandons the in-progress "Draw region" polygon and drops the tool.
-            cancelExitGridPolygon();
+            // Esc abandons the in-progress "Draw edge" line and drops the tool.
+            cancelExitGridLine();
         } else if (_currentAction == EditorAction::OBJECT_MOVING && _callbacks.onObjectDragCancel) {
             _callbacks.onObjectDragCancel();
             _currentAction = EditorAction::NONE;
@@ -300,9 +300,9 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
             _callbacks.onEscape();
         }
     } else if (event.code == sf::Keyboard::Key::Enter && _mode == EditorMode::MarkExits) {
-        // Enter finalizes the "Draw region" polygon when it has enough vertices.
-        if (_polygonVertices.size() >= 3) {
-            finalizeExitGridPolygon();
+        // Enter finalizes the "Draw edge" line when it has enough vertices.
+        if (_lineVertices.size() >= 2) {
+            finalizeExitGridLine();
         }
     } else if (event.code == sf::Keyboard::Key::Delete || event.code == sf::Keyboard::Key::Backspace) {
         if (_callbacks.onDeleteObjects) {
@@ -321,20 +321,20 @@ void InputHandler::handleKeyReleased(const sf::Event::KeyReleased&) {
     // Currently no key release handling needed
 }
 
-void InputHandler::finalizeExitGridPolygon() {
-    if (_polygonVertices.size() >= 3 && _callbacks.onMarkExitsPolygon) {
-        _callbacks.onMarkExitsPolygon(_polygonVertices);
+void InputHandler::finalizeExitGridLine() {
+    if (_lineVertices.size() >= 2 && _callbacks.onMarkExitsLine) {
+        _callbacks.onMarkExitsLine(_lineVertices);
     }
-    _polygonVertices.clear();
-    // The tool stays active so the user can immediately draw another region; the caller
+    _lineVertices.clear();
+    // The tool stays active so the user can immediately draw another edge; the caller
     // (EditorWidget) repaints the now-cleared preview.
-    if (_callbacks.onMarkExitsPolygonPreview) {
-        _callbacks.onMarkExitsPolygonPreview(_polygonVertices, _dragStartWorldPos);
+    if (_callbacks.onMarkExitsLinePreview) {
+        _callbacks.onMarkExitsLinePreview(_lineVertices, _dragStartWorldPos);
     }
 }
 
-void InputHandler::cancelExitGridPolygon() {
-    _polygonVertices.clear();
+void InputHandler::cancelExitGridLine() {
+    _lineVertices.clear();
     _mode = EditorMode::Select;
     if (_callbacks.onMarkExitsModeCancelled) {
         _callbacks.onMarkExitsModeCancelled();

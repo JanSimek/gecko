@@ -32,7 +32,7 @@
 #include <unordered_map>
 
 #include "util/Constants.h"
-#include "util/PolygonGeometry.h"
+#include "util/HexLine.h"
 #include "resource/ResourceInitializer.h"
 #include "util/TileUtils.h"
 #include "ui/QtDialogs.h"
@@ -836,13 +836,13 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         _exitGridPlacementManager->handleMarkExitsSelection(worldPos);
     };
 
-    callbacks.onMarkExitsPolygonPreview = [this](const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor) {
-        updateMarkExitsPolygonPreview(vertices, cursor);
+    callbacks.onMarkExitsLinePreview = [this](const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor) {
+        updateMarkExitsLinePreview(vertices, cursor);
     };
 
-    callbacks.onMarkExitsPolygon = [this](const std::vector<sf::Vector2f>& vertices) {
-        clearMarkExitsPolygonPreview();
-        _exitGridPlacementManager->selectExitGridsInPolygon(vertices);
+    callbacks.onMarkExitsLine = [this](const std::vector<sf::Vector2f>& vertices) {
+        clearMarkExitsLinePreview();
+        _exitGridPlacementManager->selectExitGridsAlongLine(vertices);
     };
 
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
@@ -872,7 +872,7 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     };
 
     callbacks.onMarkExitsModeCancelled = [this]() {
-        clearMarkExitsPolygonPreview();
+        clearMarkExitsLinePreview();
         // Notify MainWindow to deselect the toolbar button
         if (_mainWindow) {
             _mainWindow->deselectMarkExitsMode();
@@ -965,10 +965,10 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.map = _session.map();
     renderData.currentElevation = _session.currentElevation();
 
-    // Exit-grid "Draw region" live preview (MarkExits mode).
-    renderData.exitGridPolygonActive = _exitGridPolygonActive;
-    renderData.exitGridPolygonVertices = &_exitGridPolygonVertices;
-    renderData.exitGridPolygonCursor = _exitGridPolygonCursor;
+    // Exit-grid "Draw edge" live preview (MarkExits mode).
+    renderData.exitGridLineActive = _exitGridLineActive;
+    renderData.exitGridLineVertices = &_exitGridLineVertices;
+    renderData.exitGridLineCursor = _exitGridLineCursor;
     renderData.exitGridPreviewHexes = &_exitGridPreviewHexes;
     renderData.exitGridPreviewTint = _exitGridPreviewTint;
 
@@ -1157,7 +1157,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         clearStampPreview();
     }
     if (mode != EditorMode::MarkExits) {
-        clearMarkExitsPolygonPreview();
+        clearMarkExitsLinePreview();
     }
     if (_inputHandler) {
         _inputHandler->setTilePlacementMode(false, -1, false);
@@ -1598,10 +1598,10 @@ std::vector<Tile>& EditorWidget::ensureElevationTiles(int elevation) {
     return tilesVec;
 }
 
-void EditorWidget::updateMarkExitsPolygonPreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor) {
-    _exitGridPolygonVertices = vertices;
-    _exitGridPolygonCursor = cursor;
-    _exitGridPolygonActive = true;
+void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor) {
+    _exitGridLineVertices = vertices;
+    _exitGridLineCursor = cursor;
+    _exitGridLineActive = true;
 
     // Tint by the tool's current destination kind: green inter-map, brown world/town map.
     using Kind = ExitGridPlacementManager::DestinationKind;
@@ -1609,32 +1609,26 @@ void EditorWidget::updateMarkExitsPolygonPreview(const std::vector<sf::Vector2f>
         && _exitGridPlacementManager->currentDestinationKind() == Kind::WorldMap;
     _exitGridPreviewTint = worldMap ? sf::Color(200, 150, 90, 140) : sf::Color(80, 220, 80, 140);
 
-    // Build the closed polygon (committed vertices + live cursor) and mark every hex whose center
-    // lies inside it. The closing edge back to the first vertex is implied by pointInPolygon.
+    // Walk the gap-free hex line through the committed vertices + the live cursor, marking every hex
+    // it passes through (deduping shared corners) — the same walk the placement uses.
     _exitGridPreviewHexes.clear();
-    std::vector<sf::Vector2f> polygon = vertices;
-    polygon.push_back(cursor);
-    if (polygon.size() < 3) {
-        return; // not enough points to enclose an area yet (outline still previews)
+    std::vector<sf::Vector2f> polyline = vertices;
+    polyline.push_back(cursor);
+    if (polyline.size() < 2) {
+        return; // need at least two points to form an edge (the cursor segment still previews)
     }
 
-    const auto bounds = geometry::polygonBounds(polygon);
-    const auto& hexGrid = _session.hexgrid();
-    for (int hexIndex = 0; hexIndex < static_cast<int>(hexGrid.size()); ++hexIndex) {
-        auto hex = hexGrid.getHexByPosition(static_cast<uint32_t>(hexIndex));
-        if (!hex.has_value()) {
-            continue;
-        }
-        sf::Vector2f center(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
-        if (bounds.contains(center) && geometry::pointInPolygon(center, polygon)) {
-            _exitGridPreviewHexes.push_back(hexIndex);
-        }
+    std::vector<int> vertexHexes;
+    vertexHexes.reserve(polyline.size());
+    for (const sf::Vector2f& vertex : polyline) {
+        vertexHexes.push_back(_controller.viewport().worldPosToHexIndex(vertex));
     }
+    _exitGridPreviewHexes = hexline::hexPolyline(_session.hexgrid(), vertexHexes);
 }
 
-void EditorWidget::clearMarkExitsPolygonPreview() {
-    _exitGridPolygonActive = false;
-    _exitGridPolygonVertices.clear();
+void EditorWidget::clearMarkExitsLinePreview() {
+    _exitGridLineActive = false;
+    _exitGridLineVertices.clear();
     _exitGridPreviewHexes.clear();
 }
 

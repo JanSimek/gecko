@@ -68,11 +68,11 @@ public:
         std::function<void()> onStampPatternCancel;
         std::function<void()> onStampCycleVariant;
         std::function<void(sf::Vector2f worldPos)> onMarkExitsSelection;
-        // Polygon "Draw region" mode. onMarkExitsPolygonPreview fires on every mouse move with the
-        // vertices committed so far plus the live cursor (to draw the in-progress outline);
-        // onMarkExitsPolygon fires once on finalize with the finished vertex ring.
-        std::function<void(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor)> onMarkExitsPolygonPreview;
-        std::function<void(const std::vector<sf::Vector2f>& vertices)> onMarkExitsPolygon;
+        // Polyline "Draw edge" mode. onMarkExitsLinePreview fires on every mouse move with the
+        // vertices committed so far plus the live cursor (to draw the in-progress edge);
+        // onMarkExitsLine fires once on finalize with the finished vertex polyline.
+        std::function<void(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor)> onMarkExitsLinePreview;
+        std::function<void(const std::vector<sf::Vector2f>& vertices)> onMarkExitsLine;
 
         // Hover
         std::function<void(sf::Vector2f worldPos)> onMouseMove;
@@ -148,12 +148,12 @@ private:
     bool isShiftPressed() const;
     void setActiveMode(bool enabled, EditorMode mode) {
         _mode = enabled ? mode : EditorMode::Select;
-        _polygonVertices.clear(); // any mode change abandons an in-progress exit-grid polygon
+        _lineVertices.clear(); // any mode change abandons an in-progress exit-grid edge line
     }
 
-    // "Draw region" polygon state machine helpers (MarkExits mode).
-    void finalizeExitGridPolygon(); // fires onMarkExitsPolygon if >=3 vertices, then clears
-    void cancelExitGridPolygon();   // clears vertices and drops the tool (onMarkExitsModeCancelled)
+    // "Draw edge" polyline state machine helpers (MarkExits mode).
+    void finalizeExitGridLine(); // fires onMarkExitsLine if >=2 vertices, then clears
+    void cancelExitGridLine();   // clears vertices and drops the tool (onMarkExitsModeCancelled)
 
     // State
     Callbacks _callbacks;
@@ -172,11 +172,11 @@ private:
     // Active tool mode — a single value, mutually exclusive by construction
     // (replaces the former bank of per-mode bools).
     EditorMode _mode = EditorMode::Select;
-    // Vertices clicked so far for the in-progress exit-grid "Draw region" polygon (MarkExits mode);
+    // Vertices clicked so far for the in-progress exit-grid "Draw edge" line (MarkExits mode);
     // cleared on finalize/cancel/mode-change.
-    std::vector<sf::Vector2f> _polygonVertices;
-    // Double-click detection for finalizing a "Draw region" polygon (time since the last vertex
-    // click + how far the cursor moved). The clock restarts on every polygon vertex click.
+    std::vector<sf::Vector2f> _lineVertices;
+    // Double-click detection for finalizing a "Draw edge" line (time since the last vertex
+    // click + how far the cursor moved). The clock restarts on every line vertex click.
     sf::Clock _doubleClickClock;
     static constexpr float kDoubleClickSeconds = 0.4f;
     static constexpr float kDoubleClickWorldDistance = 12.0f;

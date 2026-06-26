@@ -777,9 +777,9 @@ void MainWindow::setupToolModeActions() {
     });
 
     // Unified Exit-Grids tool: one checkable button plus a dropdown choosing the sub-mode
-    // ("Place single hex" vs "Draw region"), mirroring the selection-mode dropdown above.
+    // ("Place single hex" vs "Draw edge"), mirroring the selection-mode dropdown above.
     _exitGridsAction = _mainToolBar->addAction(createIcon(":/icons/actions/door-exit.svg"), "Exit Grids");
-    _exitGridsAction->setStatusTip("Place exit-grid markers (single hex) or draw a polygon region");
+    _exitGridsAction->setStatusTip("Place exit-grid markers (single hex) or draw an edge line along the map border");
     _exitGridsAction->setCheckable(true);
 
     _exitGridsMenu = new QMenu(this);
@@ -800,7 +800,7 @@ void MainWindow::setupToolModeActions() {
         });
         return action;
     };
-    _exitGridDrawRegionAction = addExitGridMode("Draw region", EditorMode::MarkExits, true);
+    _exitGridDrawRegionAction = addExitGridMode("Draw edge", EditorMode::MarkExits, true);
     _exitGridPlaceHexAction = addExitGridMode("Place single hex", EditorMode::PlaceExitGrid, false);
 
     // Attach the sub-mode dropdown to the button's menu-indicator arrow (MenuButtonPopup): the main
@@ -824,7 +824,7 @@ void MainWindow::applyExitGridsTool(bool checked) {
         _currentEditorWidget->setMode(EditorMode::Select);
         return;
     }
-    // Activate whichever sub-mode is ticked in the dropdown (default: Draw region).
+    // Activate whichever sub-mode is ticked in the dropdown (default: Draw edge).
     EditorMode mode = EditorMode::MarkExits;
     for (QAction* item : _exitGridsMenu->actions()) {
         if (item->isChecked()) {
@@ -833,7 +833,7 @@ void MainWindow::applyExitGridsTool(bool checked) {
         }
     }
     _currentEditorWidget->setMode(mode);
-    _exitGridsAction->setText(mode == EditorMode::PlaceExitGrid ? "Place Hex" : "Draw Region");
+    _exitGridsAction->setText(mode == EditorMode::PlaceExitGrid ? "Place Hex" : "Draw Edge");
 }
 
 void MainWindow::syncToolModeActions(EditorMode mode) {
@@ -854,7 +854,7 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         if (mode == EditorMode::PlaceExitGrid) {
             _exitGridsAction->setText("Place Hex");
         } else if (mode == EditorMode::MarkExits) {
-            _exitGridsAction->setText("Draw Region");
+            _exitGridsAction->setText("Draw Edge");
         } else {
             _exitGridsAction->setText("Exit Grids");
         }

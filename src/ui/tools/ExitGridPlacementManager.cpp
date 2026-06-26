@@ -6,7 +6,8 @@
 #include "format/map/MapObject.h"
 #include "util/Coordinates.h"
 #include "util/Constants.h"
-#include "util/PolygonGeometry.h"
+#include "util/ExitGridDirection.h"
+#include "util/HexLine.h"
 #include "util/TileUtils.h"
 #include "editor/HexagonGrid.h"
 #include "selection/SelectionManager.h"
@@ -14,6 +15,7 @@
 #include "resource/MapNameResolver.h"
 
 #include <QApplication>
+#include <set>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -61,7 +63,8 @@ void ExitGridPlacementManager::placeExitGridAtPosition(sf::Vector2f worldPos) {
         return; // User cancelled
     }
 
-    auto exitGridObject = createExitGridObject(hexPosition, properties);
+    const ExitGridArt art = directionalArtForHex(hexPosition);
+    auto exitGridObject = createExitGridObject(hexPosition, art.proPid, art.frmPid, properties);
     int currentElevation = _context.getCurrentElevation();
 
     // Registers the undo action and adds to map; redo runs immediately
@@ -129,7 +132,8 @@ void ExitGridPlacementManager::editExitGridProperties(std::shared_ptr<MapObject>
         newProperties.exitMap, exitGrid->frm_pid);
 }
 
-std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int hexPosition, const ExitGridPropertiesDialog::ExitGridProperties& properties) {
+std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int hexPosition,
+    uint32_t proPid, uint32_t frmPid, const ExitGridPropertiesDialog::ExitGridProperties& properties) {
     auto exitGrid = std::make_shared<MapObject>();
 
     exitGrid->unknown0 = 0;
@@ -141,17 +145,11 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
     exitGrid->frame_number = 0;
     exitGrid->direction = 0;
 
-    // Set exit grid PIDs based on exit type
-    // World/town map exit: Uses WORLD_EXIT_PRO_PID/WORLD_EXIT_FRM_PID
-    // Map exit: Uses MAP_EXIT_PRO_PID/MAP_EXIT_FRM_PID
-    bool isWorldmapExit = (properties.exitMap == ExitGrid::WORLD_MAP_EXIT || properties.exitMap == ExitGrid::TOWN_MAP_EXIT);
-    if (isWorldmapExit) {
-        exitGrid->pro_pid = ExitGrid::WORLD_EXIT_PRO_PID;
-        exitGrid->frm_pid = ExitGrid::WORLD_EXIT_FRM_PID;
-    } else {
-        exitGrid->pro_pid = ExitGrid::MAP_EXIT_PRO_PID;
-        exitGrid->frm_pid = ExitGrid::MAP_EXIT_FRM_PID;
-    }
+    // The exit-grid art is direction-specific (which way the exit faces), chosen per hex by the
+    // caller from its outward facing — independent of the destination, which drives only the exit_*
+    // fields below.
+    exitGrid->pro_pid = proPid;
+    exitGrid->frm_pid = frmPid;
     exitGrid->flags = 0;
     exitGrid->elevation = _context.getCurrentElevation();
 
@@ -195,6 +193,20 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
     exitGrid->elevlevel = 0;
 
     return exitGrid;
+}
+
+ExitGridArt ExitGridPlacementManager::directionalArtForHex(int hexPosition) const {
+    const auto* hexGrid = _context.getHexagonGrid();
+    const ExitGridArt mapExit{ ExitGrid::MAP_EXIT_PRO_PID, ExitGrid::MAP_EXIT_FRM_PID };
+    if (!hexGrid) {
+        return mapExit;
+    }
+    const auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(hexPosition));
+    if (!hex.has_value()) {
+        return mapExit;
+    }
+    const auto [centerX, centerY] = hexGridCenterScreen(*hexGrid);
+    return exitGridArtForFacing(hex->get().x(), hex->get().y(), centerX, centerY);
 }
 
 bool ExitGridPlacementManager::showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing) {
@@ -401,7 +413,7 @@ bool ExitGridPlacementManager::bulkEditExistingExitGrids(const std::vector<std::
 
 std::size_t ExitGridPlacementManager::createExitGridsForHexes(const std::vector<int>& hexPositions) {
     if (hexPositions.empty()) {
-        _showStatus("No hexes found in selected area");
+        _showStatus("No hexes found along the edge line");
         return 0;
     }
 
@@ -414,7 +426,8 @@ std::size_t ExitGridPlacementManager::createExitGridsForHexes(const std::vector<
     int currentElevation = _context.getCurrentElevation();
     std::vector<std::shared_ptr<MapObject>> createdExitGrids;
     for (int hexPosition : hexPositions) {
-        createdExitGrids.push_back(createExitGridObject(hexPosition, newProperties));
+        const ExitGridArt art = directionalArtForHex(hexPosition);
+        createdExitGrids.push_back(createExitGridObject(hexPosition, art.proPid, art.frmPid, newProperties));
     }
 
     if (createdExitGrids.empty()) {
@@ -485,54 +498,46 @@ void ExitGridPlacementManager::selectExitGridsInArea(sf::Vector2f startPos, sf::
     createExitGridsForHexes(hexesInArea);
 }
 
-std::vector<std::shared_ptr<Object>> ExitGridPlacementManager::collectExitGridsInPolygon(
+std::vector<int> ExitGridPlacementManager::collectHexesAlongLine(
     const std::vector<sf::Vector2f>& worldVertices) const {
-    std::vector<std::shared_ptr<Object>> result;
     const auto* hexGrid = _context.getHexagonGrid();
-    if (!hexGrid) {
+    auto* viewport = _context.getViewportController();
+    if (!hexGrid || !viewport || worldVertices.size() < 2) {
+        return {};
+    }
+
+    // Map each polyline vertex to its hex (-1 if off-grid), then join consecutive hexes by a
+    // gap-free hex-line walk (the iso staircase), deduping shared corners.
+    std::vector<int> vertexHexes;
+    vertexHexes.reserve(worldVertices.size());
+    for (const sf::Vector2f& vertex : worldVertices) {
+        const auto hexOpt = viewport->worldPosToHexPosition(WorldCoords(vertex.x, vertex.y));
+        vertexHexes.push_back((hexOpt.has_value() && hexOpt->isValid()) ? hexOpt->value() : -1);
+    }
+    return hexline::hexPolyline(*hexGrid, vertexHexes);
+}
+
+std::vector<std::shared_ptr<Object>> ExitGridPlacementManager::collectExitGridsOnHexes(
+    const std::vector<int>& hexPositions) const {
+    std::vector<std::shared_ptr<Object>> result;
+    if (hexPositions.empty()) {
         return result;
     }
-    const auto bounds = geometry::polygonBounds(worldVertices);
+    const std::set<int> wanted(hexPositions.begin(), hexPositions.end());
     for (auto& object : _context.getObjects()) {
         auto mapObjectPtr = object ? object->getMapObjectPtr() : nullptr;
         if (!mapObjectPtr || !mapObjectPtr->isExitGridMarker()) {
             continue;
         }
-        auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(mapObjectPtr->position));
-        if (!hex.has_value()) {
-            continue;
-        }
-        sf::Vector2f center(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
-        if (bounds.contains(center) && geometry::pointInPolygon(center, worldVertices)) {
+        if (wanted.count(static_cast<int>(mapObjectPtr->position)) > 0) {
             result.push_back(object);
         }
     }
     return result;
 }
 
-std::vector<int> ExitGridPlacementManager::collectHexesInPolygon(
-    const std::vector<sf::Vector2f>& worldVertices) const {
-    std::vector<int> result;
-    const auto* hexGrid = _context.getHexagonGrid();
-    if (!hexGrid) {
-        return result;
-    }
-    const auto bounds = geometry::polygonBounds(worldVertices);
-    for (int hexIndex = 0; hexIndex < static_cast<int>(hexGrid->size()); ++hexIndex) {
-        auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
-        if (!hex.has_value()) {
-            continue;
-        }
-        sf::Vector2f center(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
-        if (bounds.contains(center) && geometry::pointInPolygon(center, worldVertices)) {
-            result.push_back(hexIndex);
-        }
-    }
-    return result;
-}
-
-void ExitGridPlacementManager::selectExitGridsInPolygon(const std::vector<sf::Vector2f>& worldVertices) {
-    if (!_markExitsMode || worldVertices.size() < 3) {
+void ExitGridPlacementManager::selectExitGridsAlongLine(const std::vector<sf::Vector2f>& worldVertices) {
+    if (!_markExitsMode || worldVertices.size() < 2) {
         return;
     }
 
@@ -542,8 +547,11 @@ void ExitGridPlacementManager::selectExitGridsInPolygon(const std::vector<sf::Ve
     }
     _context.clearSelection();
 
-    // Existing exit grids inside the polygon -> bulk-edit them; otherwise create one per interior hex.
-    if (const auto existing = collectExitGridsInPolygon(worldVertices); !existing.empty()) {
+    const std::vector<int> lineHexes = collectHexesAlongLine(worldVertices);
+
+    // Existing exit grids on the line -> bulk-edit them; otherwise create one per line hex, each
+    // with the directional art for its outward facing.
+    if (const auto existing = collectExitGridsOnHexes(lineHexes); !existing.empty()) {
         bulkEditExistingExitGrids(existing);
         if (selectionManager) {
             selectionManager->clearSelection();
@@ -552,7 +560,7 @@ void ExitGridPlacementManager::selectExitGridsInPolygon(const std::vector<sf::Ve
         return;
     }
 
-    createExitGridsForHexes(collectHexesInPolygon(worldVertices));
+    createExitGridsForHexes(lineHexes);
 }
 
 } // namespace geck

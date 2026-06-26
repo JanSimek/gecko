@@ -340,11 +340,11 @@ private:
     // Add-preview helpers: tint the covered tiles/objects and record them for clearDragPreview.
     void previewAreaTiles(const sf::FloatRect& area, bool roof, bool includeEmpty);
     void previewAreaObjects(const sf::FloatRect& area);
-    // Exit-grid "Draw region" live preview: recompute the prospective interior hexes (hex centers
-    // inside the polygon formed by the committed vertices + the live cursor) and the tint from the
-    // tool's current destination kind, for the renderer to draw the outline and marked hexes.
-    void updateMarkExitsPolygonPreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor);
-    void clearMarkExitsPolygonPreview();
+    // Exit-grid "Draw edge" live preview: recompute the prospective on-line hexes (the gap-free hex
+    // line through the committed vertices + the live cursor) and the tint from the tool's current
+    // destination kind, for the renderer to draw the polyline and marked hexes.
+    void updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor);
+    void clearMarkExitsLinePreview();
     void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     // Commit a finished drag rectangle to the selection (replace/deselect/additive), or build
     // scroll blockers when in that mode. Extracted from the onDragSelection callback.
@@ -439,12 +439,12 @@ private:
     // Player position selection state
     bool _playerPositionSelectionMode = false;
 
-    // Exit-grid "Draw region" preview state (MarkExits mode). _exitGridPolygonActive gates the
-    // renderer; the vertices/cursor draw the outline; the hexes are the prospective interior hexes
-    // (recomputed each mouse move); the tint reflects the tool's current destination kind.
-    std::vector<sf::Vector2f> _exitGridPolygonVertices;
-    sf::Vector2f _exitGridPolygonCursor;
-    bool _exitGridPolygonActive = false;
+    // Exit-grid "Draw edge" preview state (MarkExits mode). _exitGridLineActive gates the renderer;
+    // the vertices/cursor draw the polyline; the hexes are the prospective on-line hexes (recomputed
+    // each mouse move); the tint reflects the tool's current destination kind.
+    std::vector<sf::Vector2f> _exitGridLineVertices;
+    sf::Vector2f _exitGridLineCursor;
+    bool _exitGridLineActive = false;
     std::vector<int> _exitGridPreviewHexes;
     sf::Color _exitGridPreviewTint{ 80, 220, 80, 140 };
 };

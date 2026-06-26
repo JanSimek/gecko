@@ -1109,7 +1109,7 @@ TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scri
 }
 
 // The unified Exit-Grids toolbar tool replaces the two former buttons with one checkable button
-// plus a dropdown whose two items ("Draw region" / "Place single hex") are exclusive: triggering
+// plus a dropdown whose two items ("Draw edge" / "Place single hex") are exclusive: triggering
 // one ticks it, unticks the other, and keeps the tool button checked. (Driving the editor mode
 // itself needs game data to construct the editor, so that half is covered separately below against
 // EditorWidget directly.)
@@ -1124,29 +1124,29 @@ TEST_CASE("Unified Exit-Grids tool exposes one button with an exclusive sub-mode
     CHECK(findAction(window, "Place Exit Grids") == nullptr);
 
     auto* exitGridsAction = findAction(window, "Exit Grids");
-    auto* drawRegion = findAction(window, "Draw region");
+    auto* drawEdge = findAction(window, "Draw edge");
     auto* placeHex = findAction(window, "Place single hex");
     REQUIRE(exitGridsAction != nullptr);
-    REQUIRE(drawRegion != nullptr);
+    REQUIRE(drawEdge != nullptr);
     REQUIRE(placeHex != nullptr);
     CHECK(exitGridsAction->isCheckable());
     CHECK(exitGridsAction->menu() != nullptr); // dropdown attached to the button
 
-    // Default sub-mode is "Draw region".
-    CHECK(drawRegion->isChecked());
+    // Default sub-mode is "Draw edge".
+    CHECK(drawEdge->isChecked());
     CHECK_FALSE(placeHex->isChecked());
 
     // Triggering "Place single hex" makes it the (exclusive) checked sub-mode and keeps the tool on.
     placeHex->trigger();
     QApplication::processEvents();
     CHECK(placeHex->isChecked());
-    CHECK_FALSE(drawRegion->isChecked());
+    CHECK_FALSE(drawEdge->isChecked());
     CHECK(exitGridsAction->isChecked());
 
-    // Triggering "Draw region" flips the exclusive selection back.
-    drawRegion->trigger();
+    // Triggering "Draw edge" flips the exclusive selection back.
+    drawEdge->trigger();
     QApplication::processEvents();
-    CHECK(drawRegion->isChecked());
+    CHECK(drawEdge->isChecked());
     CHECK_FALSE(placeHex->isChecked());
     CHECK(exitGridsAction->isChecked());
 }
@@ -1167,7 +1167,7 @@ TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exi
 
     CHECK(editor->currentMode() == geck::EditorMode::Select);
 
-    editor->setMarkExitsMode(true); // "Draw region"
+    editor->setMarkExitsMode(true); // "Draw edge"
     CHECK(editor->currentMode() == geck::EditorMode::MarkExits);
 
     editor->setExitGridPlacementMode(true); // "Place single hex"

@@ -98,14 +98,14 @@ public:
         const Map* map = nullptr;
         int currentElevation = 0;
 
-        // Exit-grid "Draw region" live preview (MarkExits mode). When polygon outline drawing is
-        // active, exitGridPolygonVertices holds the committed vertices and exitGridPolygonCursor the
-        // live cursor, so the outline is drawn vertex->vertex and last->cursor. exitGridPreviewHexes
-        // lists the prospective interior hex indices, each drawn with the exit-grid marker tinted by
+        // Exit-grid "Draw edge" live preview (MarkExits mode). When edge-line drawing is active,
+        // exitGridLineVertices holds the committed polyline vertices and exitGridLineCursor the live
+        // cursor, so the line is drawn vertex->vertex and last->cursor. exitGridPreviewHexes lists the
+        // prospective on-line hex indices, each drawn with the exit-grid marker tinted by
         // exitGridPreviewTint (green for an inter-map exit, brown for a world-map exit).
-        const std::vector<sf::Vector2f>* exitGridPolygonVertices = nullptr;
-        sf::Vector2f exitGridPolygonCursor;
-        bool exitGridPolygonActive = false;
+        const std::vector<sf::Vector2f>* exitGridLineVertices = nullptr;
+        sf::Vector2f exitGridLineCursor;
+        bool exitGridLineActive = false;
         const std::vector<int>* exitGridPreviewHexes = nullptr;
         sf::Color exitGridPreviewTint{ 80, 220, 80, 140 };
     };
@@ -226,15 +226,15 @@ private:
         const Map* map);
 
     /**
-     * @brief Render the in-progress exit-grid "Draw region" preview: the polygon outline plus each
-     * prospective interior hex marked with the (tinted) exit-grid marker sprite.
+     * @brief Render the in-progress exit-grid "Draw edge" preview: the polyline plus each
+     * prospective on-line hex marked with the (tinted) exit-grid marker sprite.
      */
-    void renderExitGridRegionPreview(sf::RenderTarget& target,
+    void renderExitGridEdgePreview(sf::RenderTarget& target,
         const sf::View& view,
         const RenderData& renderData);
-    // Split out of renderExitGridRegionPreview to keep its complexity down.
+    // Split out of renderExitGridEdgePreview to keep its complexity down.
     void drawExitGridPreviewMarkers(sf::RenderTarget& target, const sf::View& view, const RenderData& renderData);
-    void drawExitGridPreviewOutline(sf::RenderTarget& target, const RenderData& renderData);
+    void drawExitGridPreviewLine(sf::RenderTarget& target, const RenderData& renderData);
 
     /**
      * @brief Helper method to render exit grids with a loaded sprite

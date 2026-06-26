@@ -7,13 +7,11 @@
 #include <cstdint>
 #include <format>
 #include <functional>
-#include <limits>
 #include <memory>
 #include <set>
 #include <unordered_map>
 
 #include "editor/Hex.h"
-#include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
 #include "format/lst/Lst.h"
@@ -30,6 +28,7 @@
 #include "resource/ResourcePaths.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "util/Constants.h"
+#include "util/HexLine.h"
 #include "util/ProHelper.h"
 
 namespace geck {
@@ -49,24 +48,8 @@ bool MapScriptApi::isValidHex(int hex) const {
 }
 
 std::vector<int> MapScriptApi::hexNeighbors(int hex) const {
-    using namespace geck::hexgrid;
-    // The six cube-coordinate neighbour directions; converting through cube space gives
-    // the parity-correct offset neighbours regardless of the hex's column parity.
-    static constexpr std::array<Cube, 6> kDirs = {
-        { { 1, -1, 0 }, { 1, 0, -1 }, { 0, 1, -1 }, { -1, 1, 0 }, { -1, 0, 1 }, { 0, -1, 1 } }
-    };
-    std::vector<int> result;
-    if (!isValidHex(hex)) {
-        return result;
-    }
-    const Cube c = cubeOfPosition(hex);
-    for (const Cube& d : kDirs) {
-        const ColRow cr = cubeToOffset(c + d);
-        if (cr.col >= 0 && cr.col < WIDTH && cr.row >= 0 && cr.row < HEIGHT) {
-            result.push_back(cr.row * WIDTH + cr.col);
-        }
-    }
-    return result;
+    // Parity-correct cube-coordinate neighbours; shared with the editor's exit-grid edge walk.
+    return hexline::hexNeighbors(hex);
 }
 
 uint16_t MapScriptApi::getFloor(int tileIndex) const {
@@ -527,17 +510,6 @@ namespace {
         const uint32_t pos = grid.positionAt(static_cast<uint32_t>(sx), static_cast<uint32_t>(sy));
         return pos == Hex::HEX_OUT_OF_MAP ? -1 : static_cast<int>(pos);
     }
-
-    // Squared screen distance from `hex` to the point (ex, ey); max if `hex` is off-grid.
-    long screenDistSq(const HexagonGrid& grid, int hex, int ex, int ey) {
-        const auto h = grid.getHexByPosition(static_cast<uint32_t>(hex));
-        if (!h.has_value()) {
-            return std::numeric_limits<long>::max();
-        }
-        const long dx = h->get().x() - ex;
-        const long dy = h->get().y() - ey;
-        return dx * dx + dy * dy;
-    }
 } // namespace
 
 bool MapScriptApi::placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid, const ExitDest& dest) {
@@ -567,41 +539,6 @@ bool MapScriptApi::placeExitGrid(int hex, int destMapId, int destHex, int destEl
     const auto dest = static_cast<uint32_t>(destMapId);
     const ExitGridArt art = exitGridArt(dest);
     return placeExitGridMarker(hex, art.proPid, art.frmPid, { dest, destHex, destElevation, orientation });
-}
-
-std::vector<int> MapScriptApi::hexLine(int startHex, int endHex) const {
-    std::vector<int> line;
-    if (!isValidHex(startHex) || !isValidHex(endHex)) {
-        return line;
-    }
-    const auto endRef = _hexgrid.getHexByPosition(static_cast<uint32_t>(endHex));
-    if (!endRef.has_value()) {
-        return line;
-    }
-    const int ex = endRef->get().x();
-    const int ey = endRef->get().y();
-
-    int cur = startHex;
-    line.push_back(cur);
-    // A straight screen edge needs at most a grid span's worth of steps; the bound also stops a
-    // pathological non-converging walk.
-    const int maxSteps = 2 * (HexagonGrid::GRID_WIDTH + HexagonGrid::GRID_HEIGHT);
-    for (int step = 0; step < maxSteps && cur != endHex; ++step) {
-        long best = screenDistSq(_hexgrid, cur, ex, ey);
-        int next = -1;
-        for (const int neighbour : hexNeighbors(cur)) {
-            if (const long d = screenDistSq(_hexgrid, neighbour, ex, ey); d < best) {
-                best = d;
-                next = neighbour;
-            }
-        }
-        if (next < 0) {
-            break; // no neighbour is closer to the end — straight edges never hit this
-        }
-        cur = next;
-        line.push_back(cur);
-    }
-    return line;
 }
 
 int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int screenHalfHeight,
@@ -647,7 +584,7 @@ int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int scre
     std::set<int> placedHexes; // corners are shared between two edges — place each hex once.
     int placed = 0;
     for (const Edge& edge : edges) {
-        for (const int hex : hexLine(edge.from, edge.to)) {
+        for (const int hex : hexline::hexLine(_hexgrid, edge.from, edge.to)) {
             if (placedHexes.insert(hex).second && placeExitGridMarker(hex, edge.proPid, edge.frmPid, dest)) {
                 ++placed;
             }

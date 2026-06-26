@@ -128,8 +128,8 @@ void RenderingEngine::render(sf::RenderTarget& target,
     // Layer 8: Hex highlights and markers
     renderHexHighlights(target, renderData);
 
-    // Layer 9: Exit-grid "Draw region" live preview (polygon outline + prospective interior hexes).
-    renderExitGridRegionPreview(target, view, renderData);
+    // Layer 9: Exit-grid "Draw edge" live preview (polyline + prospective on-line hexes).
+    renderExitGridEdgePreview(target, view, renderData);
 }
 
 void RenderingEngine::renderFloorTiles(sf::RenderTarget& target,
@@ -487,19 +487,19 @@ void RenderingEngine::renderExitGridsWithSprite(sf::RenderTarget& target,
     }
 }
 
-void RenderingEngine::renderExitGridRegionPreview(sf::RenderTarget& target,
+void RenderingEngine::renderExitGridEdgePreview(sf::RenderTarget& target,
     const sf::View& view,
     const RenderData& renderData) {
-    if (!renderData.exitGridPolygonActive || !renderData.hexGrid) {
+    if (!renderData.exitGridLineActive || !renderData.hexGrid) {
         return;
     }
     drawExitGridPreviewMarkers(target, view, renderData);
-    drawExitGridPreviewOutline(target, renderData);
+    drawExitGridPreviewLine(target, renderData);
 }
 
 void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const sf::View& view,
     const RenderData& renderData) {
-    // Each prospective interior hex gets the exit-grid marker tinted by the destination kind.
+    // Each prospective on-line hex gets the exit-grid marker tinted by the destination kind.
     if (!renderData.exitGridPreviewHexes || renderData.exitGridPreviewHexes->empty()) {
         return;
     }
@@ -526,22 +526,22 @@ void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const
     }
 }
 
-void RenderingEngine::drawExitGridPreviewOutline(sf::RenderTarget& target, const RenderData& renderData) {
-    // A line strip vertex->vertex, a segment from the last vertex to the live cursor (so the edge being
-    // drawn previews under the mouse), and a closing edge back to the first vertex.
-    const auto* vertices = renderData.exitGridPolygonVertices;
+void RenderingEngine::drawExitGridPreviewLine(sf::RenderTarget& target, const RenderData& renderData) {
+    // An open polyline vertex->vertex with a trailing segment from the last vertex to the live cursor
+    // (so the edge being drawn previews under the mouse). Unlike a region, the line is NOT closed back
+    // to the first vertex.
+    const auto* vertices = renderData.exitGridLineVertices;
     if (!vertices || vertices->empty()) {
         return;
     }
-    const sf::Color outlineColor(renderData.exitGridPreviewTint.r, renderData.exitGridPreviewTint.g,
+    const sf::Color lineColor(renderData.exitGridPreviewTint.r, renderData.exitGridPreviewTint.g,
         renderData.exitGridPreviewTint.b, 255);
-    sf::VertexArray outline(sf::PrimitiveType::LineStrip);
+    sf::VertexArray line(sf::PrimitiveType::LineStrip);
     for (const sf::Vector2f& vertex : *vertices) {
-        outline.append(sf::Vertex{ vertex, outlineColor });
+        line.append(sf::Vertex{ vertex, lineColor });
     }
-    outline.append(sf::Vertex{ renderData.exitGridPolygonCursor, outlineColor });
-    outline.append(sf::Vertex{ vertices->front(), outlineColor });
-    target.draw(outline);
+    line.append(sf::Vertex{ renderData.exitGridLineCursor, lineColor });
+    target.draw(line);
 }
 
 } // namespace geck

@@ -217,7 +217,7 @@ private:
     QAction* _exitGridsAction = nullptr;
     QMenu* _exitGridsMenu = nullptr;
     QAction* _exitGridPlaceHexAction = nullptr;   // "Place single hex" -> EditorMode::PlaceExitGrid
-    QAction* _exitGridDrawRegionAction = nullptr; // "Draw region"     -> EditorMode::MarkExits
+    QAction* _exitGridDrawRegionAction = nullptr; // "Draw edge"       -> EditorMode::MarkExits
     QAction* _rotateAction = nullptr;
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
