@@ -1,5 +1,6 @@
 #include "InputHandler.h"
 #include "util/Constants.h"
+#include "util/ExitGridDirection.h"
 #include <SFML/System/Time.hpp>
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/Mouse.hpp>
@@ -65,7 +66,9 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
         if (_mode == EditorMode::MarkExits) {
             // "Draw edge": a click appends a line vertex; a double-click finalizes it. The
             // double-click's two presses both arrive here, so the second one both appends the final
-            // vertex (the first of the pair was already appended) and then finalizes.
+            // vertex (the first of the pair was already appended) and then finalizes. Double-click
+            // detection uses the RAW cursor (physical mouse stillness), but with Ctrl held the appended
+            // vertex is SNAPPED to the nearest clean angle so the committed segment is an aligned edge.
             const sf::Vector2f delta = worldPos - _dragStartWorldPos;
             const float distance = std::sqrt(delta.x * delta.x + delta.y * delta.y);
             const bool isDoubleClick = _lineVertices.size() >= 2 && _doubleClickClock.getElapsedTime().asSeconds() < kDoubleClickSeconds && distance < kDoubleClickWorldDistance;
@@ -75,7 +78,7 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             if (isDoubleClick) {
                 finalizeExitGridLine();
             } else {
-                _lineVertices.push_back(worldPos);
+                _lineVertices.push_back(maybeSnapMarkExitsCursor(worldPos));
             }
             return;
         }
@@ -213,9 +216,10 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
     }
 
     // "Draw edge": preview the polyline + on-line hexes from the committed vertices to the live
-    // cursor on every move, independent of any drag action.
+    // cursor on every move, independent of any drag action. With Ctrl held, the live cursor snaps to
+    // the nearest clean exit-grid angle so the in-progress segment previews as a straight aligned edge.
     if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsLinePreview) {
-        _callbacks.onMarkExitsLinePreview(_lineVertices, worldPos, _markExitsFlip);
+        _callbacks.onMarkExitsLinePreview(_lineVertices, maybeSnapMarkExitsCursor(worldPos), _markExitsFlip);
     }
 
     switch (_currentAction) {
@@ -314,7 +318,7 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
         if (_mode == EditorMode::MarkExits) {
             _markExitsFlip = !_markExitsFlip;
             if (_callbacks.onMarkExitsLinePreview) {
-                _callbacks.onMarkExitsLinePreview(_lineVertices, _mouseLastWorldPos, _markExitsFlip);
+                _callbacks.onMarkExitsLinePreview(_lineVertices, maybeSnapMarkExitsCursor(_mouseLastWorldPos), _markExitsFlip);
             }
         }
     }
@@ -381,6 +385,21 @@ sf::Vector2f InputHandler::pixelToWorld(sf::Vector2i pixelPos,
 
 bool InputHandler::isShiftPressed() const {
     return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
+}
+
+bool InputHandler::isCtrlPressed() {
+    return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl);
+}
+
+sf::Vector2f InputHandler::maybeSnapMarkExitsCursor(sf::Vector2f cursor) const {
+    // Snap only the LIVE segment (last committed vertex -> cursor) and only while Ctrl is held; with no
+    // committed vertex there is no segment to align, so leave the cursor raw.
+    if (_mode != EditorMode::MarkExits || _lineVertices.empty() || !isCtrlPressed()) {
+        return cursor;
+    }
+    const sf::Vector2f last = _lineVertices.back();
+    const auto [sx, sy] = snapToExitGridAngle(last.x, last.y, cursor.x, cursor.y);
+    return sf::Vector2f{ static_cast<float>(sx), static_cast<float>(sy) };
 }
 
 } // namespace geck

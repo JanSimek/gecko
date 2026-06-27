@@ -78,12 +78,19 @@ public:
     };
     DestinationKind currentDestinationKind() const { return _currentDestinationKind; }
 
-    // The directional marker FRM for an ordered line of hexes, parallel to `orderedHexes`: the
-    // last-chosen marker-direction override (Auto -> the single whole-stroke side, optionally flipped;
-    // an explicit direction -> that direction's art) gives EVERY hex the same FRM, so the live preview
-    // shows the same clean single-side edge the commit will produce. `flipSide` inverts the auto side
-    // (the live "flip" key); ignored when an explicit override is active.
-    [[nodiscard]] std::vector<uint32_t> previewFrmPidsForLine(const std::vector<int>& orderedHexes,
+    // The live "Draw edge" preview for a polyline of world-space vertices (the committed vertices plus
+    // the live cursor as the last point): the deduped gap-free hex run AND the directional marker FRM
+    // for each of those hexes, classified PER SEGMENT. Each polyline segment (vertex[i] -> vertex[i+1])
+    // is classified once from its own screen direction (Auto) or forced by the marker-direction
+    // override, and that art is applied to all of the segment's hexes; a shared hex keeps its
+    // first-seen segment's art. So an earlier, committed segment's art is FROZEN — only the live
+    // segment (last vertex -> cursor) changes as the cursor moves. `flipSide` inverts the side on every
+    // segment (the live "flip" key). The returned vectors are parallel (hex i has frm i).
+    struct LinePreview {
+        std::vector<int> hexes;
+        std::vector<uint32_t> frmPids;
+    };
+    [[nodiscard]] LinePreview previewForLine(const std::vector<sf::Vector2f>& worldVertices,
         bool flipSide = false) const;
 
     /// The line hexes that don't already have an exit grid -- the ones a stroke CREATES on (empty when
@@ -109,13 +116,25 @@ private:
     // chosen destination to every passed exit grid via registerExitGridEdit. Returns true if a
     // change was committed.
     bool bulkEditExistingExitGrids(const std::vector<std::shared_ptr<Object>>& exitGrids);
-    // createExitGridsForHexes: show one dialog and create one exit grid per hex via
-    // registerExitGridCreation, all sharing the single whole-stroke directional art (optionally
-    // flipped). Returns the number created.
-    std::size_t createExitGridsForHexes(const std::vector<int>& hexPositions, bool flipSide);
+    // createExitGridsForLine: show one dialog, classify the polyline PER SEGMENT, and create one exit
+    // grid on each FRESH hex (those in `freshHexes`) via registerExitGridCreation, each carrying its
+    // own segment's directional art (optionally flipped). Returns the number created.
+    std::size_t createExitGridsForLine(const std::vector<sf::Vector2f>& worldVertices,
+        const std::set<int>& freshHexes, bool flipSide);
     // The deduped, gap-free hex line through `worldVertices`: each vertex is mapped to its hex and
     // consecutive hexes are joined by a hex-line walk. Split out of selectExitGridsAlongLine.
     std::vector<int> collectHexesAlongLine(const std::vector<sf::Vector2f>& worldVertices) const;
+    // The per-segment runs of `worldVertices`: one ExitGridSegmentRun per consecutive vertex pair,
+    // each carrying its hex-line walk, its screen delta (for the axis) and its midpoint outward facing
+    // (for the side). Drives the PER-SEGMENT classification used by both the preview and the commit so
+    // each segment gets its own art (frozen once committed) instead of one art for the whole stroke.
+    std::vector<ExitGridSegmentRun> buildSegmentRuns(const std::vector<sf::Vector2f>& worldVertices) const;
+    // The per-hex directional art ({proto, frm}) for a polyline, classified PER SEGMENT: parallel to
+    // `outHexes`. An explicit marker-direction override forces one direction on every hex; Auto
+    // classifies each segment from its own screen direction. `flipSide` inverts the side on every
+    // segment. Shared by previewForLine and the commit so they agree hex-for-hex.
+    void perSegmentArt(const std::vector<sf::Vector2f>& worldVertices, bool flipSide,
+        std::vector<int>& outHexes, std::vector<ExitGridArt>& outArt) const;
     // The existing exit-grid objects sitting on any of `hexPositions`.
     std::vector<std::shared_ptr<Object>> collectExitGridsOnHexes(const std::vector<int>& hexPositions) const;
     // The SINGLE auto (non-override) directional art for a whole drawn stroke: classify the stroke's

@@ -15,9 +15,13 @@ using geck::exitGridArtForFacing;
 using geck::exitGridArtForSegment;
 using geck::ExitGridDestinationKind;
 using geck::exitGridDirectionForLine;
+using geck::exitGridDirsForPolyline;
 using geck::exitGridOutward;
+using geck::ExitGridSegmentRun;
+using geck::exitGridSnapDirections;
 using geck::flipExitGridDirection;
 using geck::HexagonGrid;
+using geck::snapToExitGridAngle;
 namespace ExitGrid = geck::ExitGrid;
 
 namespace {
@@ -333,4 +337,173 @@ TEST_CASE("autoArtForLine (real grid): a stroke along the iso-diamond edge commi
     CHECK(isDiagonalProto(steep.proPid));
     // brown frm = diagonal proto + 0x11
     CHECK(steep.frmPid == steep.proPid + 0x11);
+}
+
+// --------------------------------------------------------------------------------------------------
+// PER-SEGMENT classification: each polyline segment gets art from ITS OWN screen direction (one axis +
+// side, uniform within the segment), and a committed segment's art is FROZEN — drawing further
+// vertices never re-classifies it. Shared hexes keep their FIRST-seen segment's direction (dedup).
+
+TEST_CASE("exitGridDirsForPolyline: a horizontal segment then a diagonal segment classify separately",
+    "[exitgrid][persegment]") {
+    // Segment 1: a horizontal SCREEN delta (dx dominates), midpoint below centre -> BOTTOM edge.
+    ExitGridSegmentRun horizontal;
+    horizontal.hexes = { 10, 11, 12 };
+    horizontal.screenDx = 200;
+    horizontal.screenDy = 0;
+    horizontal.outwardX = 0;
+    horizontal.outwardY = 300; // below centre
+
+    // Segment 2: the measured STEEP iso edge delta (480, 360) -> a "\" diagonal (dirs 6/7).
+    ExitGridSegmentRun diagonal;
+    diagonal.hexes = { 12, 213, 414 }; // shares hex 12 with segment 1
+    diagonal.screenDx = 480;
+    diagonal.screenDy = 360;
+    diagonal.outwardX = 300;
+    diagonal.outwardY = 200;
+
+    std::vector<int> hexes;
+    std::vector<int> dirs;
+    exitGridDirsForPolyline({ horizontal, diagonal }, /*flipSide=*/false, hexes, dirs);
+
+    // Hex 12 is shared; first-seen (the horizontal segment) wins, so it appears once.
+    REQUIRE(hexes.size() == 5);
+    REQUIRE(dirs.size() == 5);
+    CHECK(hexes == std::vector<int>{ 10, 11, 12, 213, 414 });
+
+    // The horizontal segment's hexes (incl. the shared 12) are all the cardinal BOTTOM edge...
+    CHECK(dirs[0] == ExitGrid::DIR_BOTTOM); // hex 10
+    CHECK(dirs[1] == ExitGrid::DIR_BOTTOM); // hex 11
+    CHECK(dirs[2] == ExitGrid::DIR_BOTTOM); // hex 12 (shared, first-seen = horizontal)
+    // ...while the diagonal segment's own hexes are a "\" diagonal (dirs 6/7), NOT a cardinal.
+    CHECK(isDiagonalDir(dirs[3]));                  // hex 213
+    CHECK(isDiagonalDir(dirs[4]));                  // hex 414
+    CHECK(dirs[3] / 2 == ExitGrid::DIR_BACK_A / 2); // same "\" pair
+    CHECK(dirs[4] == dirs[3]);                      // uniform within the segment
+}
+
+TEST_CASE("exitGridDirsForPolyline: an earlier segment stays FROZEN when a later segment is added",
+    "[exitgrid][persegment]") {
+    // The same first (horizontal) segment classified alone, then again with a second segment appended:
+    // its hexes' directions must be identical — adding vertices never re-classifies a committed segment.
+    ExitGridSegmentRun seg1;
+    seg1.hexes = { 5, 6 };
+    seg1.screenDx = 200;
+    seg1.screenDy = 0;
+    seg1.outwardX = 0;
+    seg1.outwardY = 300;
+
+    std::vector<int> hexesAlone;
+    std::vector<int> dirsAlone;
+    exitGridDirsForPolyline({ seg1 }, false, hexesAlone, dirsAlone);
+
+    ExitGridSegmentRun seg2;
+    seg2.hexes = { 7, 8 };
+    seg2.screenDx = 0;
+    seg2.screenDy = 200; // a vertical segment -> a LEFT/RIGHT cardinal, unrelated to seg1
+    seg2.outwardX = 300;
+    seg2.outwardY = 0;
+
+    std::vector<int> hexesBoth;
+    std::vector<int> dirsBoth;
+    exitGridDirsForPolyline({ seg1, seg2 }, false, hexesBoth, dirsBoth);
+
+    // seg1's hexes keep exactly their standalone directions (frozen).
+    REQUIRE(dirsBoth.size() == 4);
+    CHECK(dirsBoth[0] == dirsAlone[0]);
+    CHECK(dirsBoth[1] == dirsAlone[1]);
+    // seg2 added its own (vertical) direction, distinct from seg1's horizontal one.
+    CHECK(dirsBoth[2] == ExitGrid::DIR_RIGHT);
+    CHECK(dirsBoth[3] == ExitGrid::DIR_RIGHT);
+    CHECK(dirsBoth[2] != dirsBoth[0]);
+}
+
+TEST_CASE("exitGridDirsForPolyline: the flip applies to EVERY segment", "[exitgrid][persegment]") {
+    ExitGridSegmentRun seg;
+    seg.hexes = { 1, 2 };
+    seg.screenDx = 200;
+    seg.screenDy = 0;
+    seg.outwardX = 0;
+    seg.outwardY = 300; // BOTTOM without flip
+
+    std::vector<int> h;
+    std::vector<int> dirsNoFlip;
+    std::vector<int> dirsFlip;
+    exitGridDirsForPolyline({ seg }, false, h, dirsNoFlip);
+    exitGridDirsForPolyline({ seg }, true, h, dirsFlip);
+    CHECK(dirsNoFlip[0] == ExitGrid::DIR_BOTTOM);
+    CHECK(dirsFlip[0] == ExitGrid::DIR_TOP); // flip turns BOTTOM into TOP on every hex
+    CHECK(dirsFlip[1] == ExitGrid::DIR_TOP);
+}
+
+// --------------------------------------------------------------------------------------------------
+// CTRL-SNAP: a pure (lastVertex, cursor) -> snapped cursor function. The eight clean angles are the
+// exit-grid edge SCREEN directions (horizontal, vertical, and the two iso diagonals at the measured
+// 4:1 / 4:3 slopes, both signs). Snapping keeps the cursor's DISTANCE from the last vertex and rotates
+// its angle to the nearest clean one.
+
+namespace {
+double distance(double ax, double ay, double bx, double by) {
+    const double dx = bx - ax;
+    const double dy = by - ay;
+    return std::sqrt(dx * dx + dy * dy);
+}
+} // namespace
+
+TEST_CASE("exitGridSnapDirections: the eight clean directions are unit vectors at the measured slopes",
+    "[exitgrid][snap]") {
+    const auto& dirs = exitGridSnapDirections();
+    REQUIRE(dirs.size() == 8);
+    for (const auto& d : dirs) {
+        CHECK(std::abs(std::sqrt(d.x * d.x + d.y * d.y) - 1.0) < 1e-9); // unit length
+    }
+    // The shallow iso edge has screen slope |dx/dy| == 4 (e.g. measured delta (-720, 180)).
+    bool sawShallow = false;
+    bool sawSteep = false;
+    for (const auto& d : dirs) {
+        if (d.y != 0.0 && d.x != 0.0) {
+            const double slope = std::abs(d.x / d.y);
+            if (std::abs(slope - 4.0) < 1e-6) {
+                sawShallow = true; // 4:1
+            }
+            if (std::abs(slope - 4.0 / 3.0) < 1e-6) {
+                sawSteep = true; // 4:3
+            }
+        }
+    }
+    CHECK(sawShallow);
+    CHECK(sawSteep);
+}
+
+TEST_CASE("snapToExitGridAngle: a cursor a few degrees off a clean angle snaps onto it, distance kept",
+    "[exitgrid][snap]") {
+    constexpr double last_x = 1000.0;
+    constexpr double last_y = 1000.0;
+    const auto& dirs = exitGridSnapDirections();
+
+    for (const auto& d : dirs) {
+        constexpr double len = 250.0;
+        // A cursor exactly on the ray at distance `len`.
+        const double onX = last_x + d.x * len;
+        const double onY = last_y + d.y * len;
+        // Rotate it a few degrees off the ray (about the last vertex), keeping the distance.
+        constexpr double theta = 5.0 * 3.14159265358979323846 / 180.0;
+        const double ox = onX - last_x;
+        const double oy = onY - last_y;
+        const double offX = last_x + ox * std::cos(theta) - oy * std::sin(theta);
+        const double offY = last_y + ox * std::sin(theta) + oy * std::cos(theta);
+
+        const auto [sx, sy] = snapToExitGridAngle(last_x, last_y, offX, offY);
+        // Snaps back onto the clean ray...
+        CHECK(std::abs(sx - onX) < 1e-6);
+        CHECK(std::abs(sy - onY) < 1e-6);
+        // ...preserving the distance from the last vertex.
+        CHECK(std::abs(distance(last_x, last_y, sx, sy) - len) < 1e-6);
+    }
+}
+
+TEST_CASE("snapToExitGridAngle: a zero-length offset is returned unchanged", "[exitgrid][snap]") {
+    const auto [sx, sy] = snapToExitGridAngle(500.0, 500.0, 500.0, 500.0);
+    CHECK(sx == 500.0);
+    CHECK(sy == 500.0);
 }

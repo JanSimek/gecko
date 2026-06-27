@@ -1,8 +1,12 @@
 #pragma once
 
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <set>
 #include <utility>
+#include <vector>
 
 #include "editor/HexagonGrid.h"
 #include "util/Constants.h"
@@ -191,6 +195,118 @@ inline ExitGridArt exitGridArtForFacing(int hexX, int hexY, int mapCenterX, int 
         : exitgrid_detail::SegmentAxis::Vertical;
     const int dir = exitgrid_detail::directionForAxis(axis, dx, dy);
     return exitGridArtForDirection(dir, kind);
+}
+
+// --------------------------------------------------------------------------------------------------
+// PER-SEGMENT classification
+//
+// The "Draw edge" tool classifies each polyline SEGMENT (vertex[i] -> vertex[i+1]) from THAT segment's
+// own screen direction, picking ONE axis + side for the whole segment (uniform within it). Because a
+// committed segment's endpoints are fixed, its art is fixed too — drawing further vertices does NOT
+// re-classify earlier segments ("frozen"); only the live segment (last vertex -> cursor) updates.
+// Classifying per SEGMENT (not per hex) avoids the both-sides bug a per-hex recompute reintroduces.
+
+/// One polyline segment's geometry for classification: the ordered hexes the segment's hex-line walk
+/// passes through (endpoints inclusive), the segment's overall SCREEN delta (last vertex hex - first
+/// vertex hex, y DOWNWARD) for the axis, and the segment midpoint's outward facing (midpoint hex -
+/// grid centre) for the side.
+struct ExitGridSegmentRun {
+    std::vector<int> hexes;
+    int screenDx = 0;
+    int screenDy = 0;
+    int outwardX = 0;
+    int outwardY = 0;
+};
+
+/// The per-hex exit-grid direction for a polyline, classified PER SEGMENT. Each segment is classified
+/// once (its own screen axis + outward facing, optionally flipped) and that single direction is
+/// assigned to every hex it covers; a hex shared by two segments keeps its FIRST-seen segment's
+/// direction (dedup), so the result has each hex once in first-seen order, parallel to `outHexes`.
+/// `flipSide` applies to ALL segments. Pure (no SFML/Qt) so per-segment placement is unit-testable.
+inline void exitGridDirsForPolyline(const std::vector<ExitGridSegmentRun>& segments, bool flipSide,
+    std::vector<int>& outHexes, std::vector<int>& outDirs) {
+    outHexes.clear();
+    outDirs.clear();
+    std::set<int> seen;
+    for (const ExitGridSegmentRun& seg : segments) {
+        const int dir = exitGridDirectionForLine(seg.screenDx, seg.screenDy,
+            seg.outwardX, seg.outwardY, flipSide);
+        for (const int hex : seg.hexes) {
+            if (seen.insert(hex).second) {
+                outHexes.push_back(hex);
+                outDirs.push_back(dir);
+            }
+        }
+    }
+}
+
+// --------------------------------------------------------------------------------------------------
+// CTRL-SNAP to clean exit-grid angles
+//
+// While drawing the "Draw edge" line, holding Ctrl snaps the LIVE segment (last committed vertex ->
+// cursor) onto the nearest CLEAN exit-grid angle, so the placed bars line up instead of staircasing.
+// The clean angles are the SCREEN directions of the eight exit-grid edges (screen y grows DOWNWARD):
+//   - horizontal  (±1,  0)
+//   - vertical    ( 0, ±1)
+//   - the shallow NE/SW iso-diamond edge, measured slope dx/dy = 4:1 -> (±4, ∓1)
+//   - the steep   NW/SE iso-diamond edge, measured slope dx/dy = 4/3 -> (±4, ±3)
+// These are the SAME slopes the classifier's iso-diamond band is built around (a const-row hex run
+// gives screen delta (-720, 180) = (-4, 1)*180; a const-col run gives (480, 360) = (4, 3)*120), so a
+// snapped segment classifies cleanly to a single cardinal/diagonal art for its whole length.
+
+/// One clean snap direction: a SCREEN-space unit vector (y DOWNWARD).
+struct ExitGridSnapDir {
+    double x;
+    double y;
+};
+
+/// The eight clean exit-grid screen directions as unit vectors, derived from the measured iso-diamond
+/// edge slopes (4:1 shallow, 4/3 steep) plus the two screen cardinals. y grows DOWNWARD.
+inline const std::array<ExitGridSnapDir, 8>& exitGridSnapDirections() {
+    // 1/sqrt(17) for the 4:1 shallow edge, 1/5 for the 3-4-5 steep edge.
+    static constexpr double kShallow = 0.242535625036333; // 1 / sqrt(4^2 + 1^2)
+    static constexpr double kSteep = 0.2;                 // 1 / sqrt(4^2 + 3^2)
+    static const std::array<ExitGridSnapDir, 8> dirs = { {
+        { 1.0, 0.0 },                        // horizontal +x
+        { -1.0, 0.0 },                       // horizontal -x
+        { 0.0, 1.0 },                        // vertical +y (down)
+        { 0.0, -1.0 },                       // vertical -y (up)
+        { 4.0 * kShallow, -1.0 * kShallow }, // shallow "/" up-right
+        { -4.0 * kShallow, 1.0 * kShallow }, // shallow "/" down-left
+        { 4.0 * kSteep, 3.0 * kSteep },      // steep "\" down-right
+        { -4.0 * kSteep, -3.0 * kSteep },    // steep "\" up-left
+    } };
+    return dirs;
+}
+
+/// Snap a live-segment endpoint to the nearest clean exit-grid angle. `lastX/lastY` is the last
+/// committed vertex; `cursorX/cursorY` is the raw cursor. Returns the cursor rotated so the segment
+/// runs along the nearest clean screen direction, KEEPING its length (distance from the last vertex):
+/// project the cursor offset onto the best-matching direction ray (largest dot product) and re-emit
+/// at the original distance along that ray. A zero-length offset is returned unchanged. Pure (no
+/// SFML/Qt) so the snap geometry is unit-testable headlessly; callers wrap it for sf::Vector2f.
+inline std::pair<double, double> snapToExitGridAngle(double lastX, double lastY,
+    double cursorX, double cursorY) {
+    const double dx = cursorX - lastX;
+    const double dy = cursorY - lastY;
+    const double len = std::sqrt(dx * dx + dy * dy);
+    if (len <= 0.0) {
+        return { cursorX, cursorY };
+    }
+    // Pick the direction whose ray the offset projects onto most strongly (max dot product). Because
+    // the eight directions include both signs of each axis, this is the nearest clean angle.
+    const auto& dirs = exitGridSnapDirections();
+    double bestDot = -1e300;
+    ExitGridSnapDir best = dirs.front();
+    for (const ExitGridSnapDir& d : dirs) {
+        const double dot = dx * d.x + dy * d.y;
+        if (dot > bestDot) {
+            bestDot = dot;
+            best = d;
+        }
+    }
+    // Re-emit at the ORIGINAL distance along the chosen unit ray (length preserved, angle snapped).
+    return { lastX + best.x * len, lastY + best.y * len };
 }
 
 } // namespace geck

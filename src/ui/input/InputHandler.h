@@ -154,6 +154,11 @@ private:
     SelectionModifier getSelectionModifier() const;
     sf::Vector2f pixelToWorld(sf::Vector2i pixelPos, sf::RenderTarget& target, const sf::View& view);
     bool isShiftPressed() const;
+    static bool isCtrlPressed();
+    // In "Draw edge" mode with Ctrl held, snap `cursor` (the live-segment endpoint) to the nearest
+    // clean exit-grid angle relative to the last committed vertex, so the live segment is a straight
+    // aligned edge. Returns `cursor` unchanged when Ctrl is up or there is no committed vertex yet.
+    sf::Vector2f maybeSnapMarkExitsCursor(sf::Vector2f cursor) const;
     void setActiveMode(bool enabled, EditorMode mode) {
         _mode = enabled ? mode : EditorMode::Select;
         _lineVertices.clear();  // any mode change abandons an in-progress exit-grid edge line

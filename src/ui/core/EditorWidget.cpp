@@ -33,7 +33,6 @@
 #include <unordered_map>
 
 #include "util/Constants.h"
-#include "util/HexLine.h"
 #include "resource/ResourceInitializer.h"
 #include "util/TileUtils.h"
 #include "ui/QtDialogs.h"
@@ -1617,8 +1616,11 @@ void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& v
         && _exitGridPlacementManager->currentDestinationKind() == Kind::WorldMap;
     _exitGridPreviewTint = worldMap ? sf::Color(200, 150, 90, 140) : sf::Color(80, 220, 80, 140);
 
-    // Walk the gap-free hex line through the committed vertices + the live cursor, marking every hex
-    // it passes through (deduping shared corners) — the same walk the placement uses.
+    // Walk the gap-free hex line through the committed vertices + the live cursor, marking every hex it
+    // passes through and the directional FRM for each — classified PER SEGMENT the same way the commit
+    // will: each polyline segment from its own screen direction (Auto, optionally flipped by the F key),
+    // or the explicit marker-direction override. Earlier committed segments stay frozen; only the live
+    // (cursor) segment changes as the cursor moves.
     _exitGridPreviewHexes.clear();
     _exitGridPreviewFrmPids.clear();
     std::vector<sf::Vector2f> polyline = vertices;
@@ -1627,19 +1629,11 @@ void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& v
         return; // need at least two points to form an edge (the cursor segment still previews)
     }
 
-    std::vector<int> vertexHexes;
-    vertexHexes.reserve(polyline.size());
-    for (const sf::Vector2f& vertex : polyline) {
-        vertexHexes.push_back(_controller.viewport().worldPosToHexIndex(vertex));
+    if (_exitGridPlacementManager) {
+        auto preview = _exitGridPlacementManager->previewForLine(polyline, flipSide);
+        _exitGridPreviewHexes = std::move(preview.hexes);
+        _exitGridPreviewFrmPids = std::move(preview.frmPids);
     }
-    _exitGridPreviewHexes = hexline::hexPolyline(_session.hexgrid(), vertexHexes);
-
-    // Directional FRM, picked the same way the commit will: one whole-stroke side for the whole line
-    // (Auto, optionally flipped by the F key), or the explicit marker-direction override — so the
-    // preview shows the same clean single-side edge placement produces, including the flipped side.
-    _exitGridPreviewFrmPids = _exitGridPlacementManager
-        ? _exitGridPlacementManager->previewFrmPidsForLine(_exitGridPreviewHexes, flipSide)
-        : std::vector<uint32_t>(_exitGridPreviewHexes.size(), 0u);
 }
 
 void EditorWidget::clearMarkExitsLinePreview() {

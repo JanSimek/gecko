@@ -277,12 +277,95 @@ ExitGridArt ExitGridPlacementManager::artForLine(const std::vector<int>& ordered
     return autoArtForLine(orderedHexes, flipSide);
 }
 
-std::vector<uint32_t> ExitGridPlacementManager::previewFrmPidsForLine(
-    const std::vector<int>& orderedHexes, bool flipSide) const {
-    // One whole-stroke art for the whole line: every preview hex gets the same FRM, matching the
-    // commit (a clean single-side edge).
-    const uint32_t frmPid = artForLine(orderedHexes, _currentMarkerArt, flipSide).frmPid;
-    return std::vector<uint32_t>(orderedHexes.size(), frmPid);
+std::vector<ExitGridSegmentRun> ExitGridPlacementManager::buildSegmentRuns(
+    const std::vector<sf::Vector2f>& worldVertices) const {
+    std::vector<ExitGridSegmentRun> runs;
+    const auto* hexGrid = _context.getHexagonGrid();
+    const auto* viewport = _context.getViewportController();
+    if (!hexGrid || !viewport || worldVertices.size() < 2) {
+        return runs;
+    }
+    const auto screenOf = [hexGrid](int hexIndex) -> std::pair<int, int> {
+        const auto h = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+        return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() }
+                             : std::pair<int, int>{ 0, 0 };
+    };
+    const auto hexOf = [viewport](const sf::Vector2f& v) -> int {
+        const auto opt = viewport->worldPosToHexPosition(WorldCoords(v.x, v.y));
+        return (opt.has_value() && opt->isValid()) ? opt->value() : -1;
+    };
+    const auto [centerX, centerY] = hexGridCenterScreen(*hexGrid);
+
+    // One run per consecutive vertex pair. A segment whose endpoints are off-grid (or identical) yields
+    // no hexes and is skipped, so it can't poison the per-segment classification.
+    for (std::size_t i = 0; i + 1 < worldVertices.size(); ++i) {
+        const int aHex = hexOf(worldVertices[i]);
+        const int bHex = hexOf(worldVertices[i + 1]);
+        if (aHex < 0 || bHex < 0) {
+            continue;
+        }
+        std::vector<int> segHexes = hexline::hexLine(*hexGrid, aHex, bHex);
+        if (segHexes.empty()) {
+            continue;
+        }
+        const auto [fx, fy] = screenOf(segHexes.front());
+        const auto [lx, ly] = screenOf(segHexes.back());
+        const auto [mx, my] = screenOf(segHexes[segHexes.size() / 2]);
+        ExitGridSegmentRun run;
+        run.hexes = std::move(segHexes);
+        run.screenDx = lx - fx;
+        run.screenDy = ly - fy;
+        run.outwardX = mx - centerX;
+        run.outwardY = my - centerY;
+        runs.push_back(std::move(run));
+    }
+    return runs;
+}
+
+void ExitGridPlacementManager::perSegmentArt(const std::vector<sf::Vector2f>& worldVertices,
+    bool flipSide, std::vector<int>& outHexes, std::vector<ExitGridArt>& outArt) const {
+    outHexes.clear();
+    outArt.clear();
+    const ExitGridDestinationKind kind = destinationKind();
+    const std::vector<ExitGridSegmentRun> runs = buildSegmentRuns(worldVertices);
+
+    // An explicit marker-direction override forces ONE direction on every hex (the escape hatch for
+    // ambiguous edges); Auto classifies each segment from its own screen direction (frozen per segment).
+    if (const int forced = explicitDirection(_currentMarkerArt); forced >= 0) {
+        const ExitGridArt art = exitGridArtForDirection(forced, kind);
+        std::set<int> seen;
+        for (const ExitGridSegmentRun& seg : runs) {
+            for (const int hex : seg.hexes) {
+                if (seen.insert(hex).second) {
+                    outHexes.push_back(hex);
+                    outArt.push_back(art);
+                }
+            }
+        }
+        return;
+    }
+
+    std::vector<int> dirs;
+    exitGridDirsForPolyline(runs, flipSide, outHexes, dirs);
+    outArt.reserve(dirs.size());
+    for (const int dir : dirs) {
+        outArt.push_back(exitGridArtForDirection(dir, kind));
+    }
+}
+
+ExitGridPlacementManager::LinePreview ExitGridPlacementManager::previewForLine(
+    const std::vector<sf::Vector2f>& worldVertices, bool flipSide) const {
+    // Per-segment art: each polyline segment is classified from its own screen direction (or the
+    // override), so the preview shows the same per-segment edge the commit will place — earlier
+    // committed segments stay frozen while only the live (cursor) segment updates.
+    LinePreview preview;
+    std::vector<ExitGridArt> art;
+    perSegmentArt(worldVertices, flipSide, preview.hexes, art);
+    preview.frmPids.reserve(art.size());
+    for (const ExitGridArt& a : art) {
+        preview.frmPids.push_back(a.frmPid);
+    }
+    return preview;
 }
 
 bool ExitGridPlacementManager::showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing) {
@@ -418,9 +501,9 @@ bool ExitGridPlacementManager::bulkEditExistingExitGrids(const std::vector<std::
     return true;
 }
 
-std::size_t ExitGridPlacementManager::createExitGridsForHexes(const std::vector<int>& hexPositions,
-    bool flipSide) {
-    if (hexPositions.empty()) {
+std::size_t ExitGridPlacementManager::createExitGridsForLine(
+    const std::vector<sf::Vector2f>& worldVertices, const std::set<int>& freshHexes, bool flipSide) {
+    if (freshHexes.empty()) {
         _showStatus("No hexes found along the edge line");
         return 0;
     }
@@ -432,13 +515,20 @@ std::size_t ExitGridPlacementManager::createExitGridsForHexes(const std::vector<
     rememberDestinationKind(newProperties.exitMap);
     _currentMarkerArt = newProperties.markerArt;
 
-    // One whole-stroke art (one consistent side, optionally flipped) shared by every hex, so the bars
-    // form a clean continuous edge.
-    const ExitGridArt art = artForLine(hexPositions, newProperties.markerArt, flipSide);
+    // Per-segment art for the WHOLE polyline (so a hex's segment membership matches the preview), then
+    // create only on the FRESH hexes (skipping any already occupied), each with its own segment's art.
+    std::vector<int> hexes;
+    std::vector<ExitGridArt> art;
+    perSegmentArt(worldVertices, flipSide, hexes, art);
+
     int currentElevation = _context.getCurrentElevation();
     std::vector<std::shared_ptr<MapObject>> createdExitGrids;
-    for (const int hexPosition : hexPositions) {
-        createdExitGrids.push_back(createExitGridObject(hexPosition, art.proPid, art.frmPid, newProperties));
+    for (std::size_t i = 0; i < hexes.size(); ++i) {
+        if (!freshHexes.contains(hexes[i])) {
+            continue; // already occupied: bulk-edit/keep handles those, don't double-place
+        }
+        createdExitGrids.push_back(
+            createExitGridObject(hexes[i], art[i].proPid, art[i].frmPid, newProperties));
     }
 
     if (createdExitGrids.empty()) {
@@ -535,14 +625,15 @@ void ExitGridPlacementManager::selectExitGridsAlongLine(const std::vector<sf::Ve
     // an existing edge): bulk-edit their destination, keeping each one's directional art. A stroke that
     // merely grazes a neighbouring grid must still place -- otherwise a single overlapping hex silently
     // swallows the whole placement (the intermittent "press Enter + OK but nothing appears" bug).
-    const std::vector<int> freshHexes = freshHexesForLine(lineHexes, occupied);
-    if (freshHexes.empty() && !lineHexes.empty()) {
+    const std::vector<int> freshList = freshHexesForLine(lineHexes, occupied);
+    if (freshList.empty() && !lineHexes.empty()) {
         bulkEditExistingExitGrids(existing);
         return;
     }
 
-    // Create on the hexes that don't already have a grid, all sharing the single whole-stroke side.
-    createExitGridsForHexes(freshHexes, flipSide);
+    // Create on the hexes that don't already have a grid, each with its own per-segment art.
+    const std::set<int> freshHexes(freshList.begin(), freshList.end());
+    createExitGridsForLine(worldVertices, freshHexes, flipSide);
 }
 
 } // namespace geck

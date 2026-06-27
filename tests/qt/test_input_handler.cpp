@@ -245,6 +245,27 @@ TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the p
     CHECK(lastPreviewFlip == false);
 }
 
+// Ctrl-snap wiring: the live Draw-edge cursor passes through maybeSnapMarkExitsCursor before the
+// preview/commit fire. Holding Ctrl is a real-keyboard state that can't be driven headlessly (sf::
+// Keyboard reads the OS), so the snapped LIVE behaviour is GUI/eyeball-only — see the pure
+// snapToExitGridAngle tests in general_tests for the geometry. Here we pin the no-op path: with Ctrl
+// up (the headless default) the re-fired preview cursor is the raw cursor, unmodified by the wiring.
+TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Ctrl is up", "[input][line][snap]") {
+    InputHandler handler;
+    sf::Vector2f lastCursor{ -1.f, -1.f };
+    InputHandler::Callbacks cb;
+    cb.onMarkExitsLinePreview = [&](const std::vector<sf::Vector2f>&, sf::Vector2f cursor, bool) {
+        lastCursor = cursor;
+    };
+    handler.setCallbacks(cb);
+    handler.setMarkExitsMode(true);
+
+    // No committed vertex yet: snap can't apply (no segment), so the cursor (the key re-fire's last
+    // world pos, default 0,0) is passed through unchanged regardless of Ctrl.
+    pressKeyDirect(handler, sf::Keyboard::Key::Space);
+    CHECK(lastCursor == sf::Vector2f{ 0.f, 0.f });
+}
+
 TEST_CASE("InputHandler's flip key does nothing outside Draw-edge mode, and resets on mode change", "[input][line][flip]") {
     InputHandler handler;
     int previewCalls = 0;
