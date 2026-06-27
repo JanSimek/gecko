@@ -22,10 +22,12 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <memory>
 #include <ostream>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -54,28 +56,29 @@ namespace {
     } };
 
     std::string toLower(std::string s) {
-        std::transform(s.begin(), s.end(), s.begin(),
+        std::ranges::transform(s, s.begin(),
             [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         return s;
     }
 
     const char* frmTypeName(Frm::FRM_TYPE type) {
+        using enum Frm::FRM_TYPE;
         switch (type) {
-            case Frm::FRM_TYPE::ITEM:
+            case ITEM:
                 return "item";
-            case Frm::FRM_TYPE::CRITTER:
+            case CRITTER:
                 return "critter";
-            case Frm::FRM_TYPE::SCENERY:
+            case SCENERY:
                 return "scenery";
-            case Frm::FRM_TYPE::WALL:
+            case WALL:
                 return "wall";
-            case Frm::FRM_TYPE::TILE:
+            case TILE:
                 return "tile";
-            case Frm::FRM_TYPE::MISC:
+            case MISC:
                 return "misc";
-            case Frm::FRM_TYPE::INTERFACE:
+            case INTERFACE:
                 return "interface";
-            case Frm::FRM_TYPE::INVENTORY:
+            case INVENTORY:
                 return "inventory";
             default:
                 return "unknown";
@@ -94,7 +97,7 @@ namespace {
         }
         // trim surrounding whitespace the reader may have left around a comma-split field
         const auto notSpace = [](unsigned char c) { return std::isspace(c) == 0; };
-        name.erase(name.begin(), std::find_if(name.begin(), name.end(), notSpace));
+        name.erase(name.begin(), std::ranges::find_if(name, notSpace));
         name.erase(std::find_if(name.rbegin(), name.rend(), notSpace).base(), name.end());
         return toLower(name);
     }
@@ -181,9 +184,13 @@ namespace {
         constexpr float tile = 8.0f;
         const sf::Color light(110, 110, 110);
         const sf::Color dark(80, 80, 80);
-        for (float cy = 0; cy < h; cy += tile) {
-            for (float cx = 0; cx < w; cx += tile) {
-                const sf::Color c = (static_cast<int>(cx / tile) + static_cast<int>(cy / tile)) % 2 == 0 ? light : dark;
+        const int rows = static_cast<int>(std::ceil(h / tile));
+        const int cols = static_cast<int>(std::ceil(w / tile));
+        for (int row = 0; row < rows; ++row) {
+            for (int col = 0; col < cols; ++col) {
+                const sf::Color c = (col + row) % 2 == 0 ? light : dark;
+                const float cx = static_cast<float>(col) * tile;
+                const float cy = static_cast<float>(row) * tile;
                 const float x0 = x + cx;
                 const float y0 = y + cy;
                 const float x1 = std::min(x + cx + tile, x + w);
@@ -301,7 +308,7 @@ std::string normalizeArtToken(const std::string& token) {
     if (!normalized.empty() && normalized.front() == '/') {
         normalized.erase(0, 1);
     }
-    std::replace(normalized.begin(), normalized.end(), '\\', '/');
+    std::ranges::replace(normalized, '\\', '/');
     normalized = toLower(normalized);
     if (!resource::hasFrmExtension(normalized)) {
         normalized += ".frm";
@@ -330,7 +337,7 @@ std::optional<std::string> resolveFrmTarget(
     // A bare name: search every art LST for a matching entry and rebuild its full art path.
     const std::string stem = lstEntryStem(normalized);
     for (const auto& art : kArtLists) {
-        auto* lst = resources.repository().find<Lst>(std::string(art.lst));
+        const Lst* lst = resources.repository().find<Lst>(std::string(art.lst));
         if (lst == nullptr) {
             try {
                 lst = resources.repository().load<Lst>(std::string(art.lst));
@@ -359,7 +366,7 @@ int frmInfo(resource::GameResources& resources, const std::string& target, std::
         return 1;
     }
 
-    Frm* frm = nullptr;
+    const Frm* frm = nullptr;
     try {
         frm = resources.repository().load<Frm>(*artPath);
     } catch (const std::exception& e) {
@@ -447,7 +454,7 @@ int listFrms(resource::GameResources& resources, const std::string& glob, std::o
     auto entries = json::array();
 
     for (const auto& art : kArtLists) {
-        Lst* lst = nullptr;
+        const Lst* lst = nullptr;
         try {
             lst = resources.repository().load<Lst>(std::string(art.lst));
         } catch (const std::exception&) {

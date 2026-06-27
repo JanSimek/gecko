@@ -460,6 +460,23 @@ bool isFrmAction(const std::string& action) {
     return action == "info" || action == "render" || action == "resolve" || action == "list";
 }
 
+// Apply a `--flag value` pair to `out`. Returns true if `flag` is a recognized value flag (and was
+// applied); false otherwise, so the caller can treat the token as a positional / unknown flag.
+bool applyFrmValueFlag(const std::string& flag, const std::string& value, FrmArgs& out) {
+    if (flag == "--data") {
+        out.dataPaths.push_back(value);
+    } else if (flag == "--out") {
+        out.outPath = value;
+    } else if (flag == "--dir") {
+        out.direction = std::stoi(value);
+    } else if (flag == "--frame") {
+        out.frame = std::stoi(value);
+    } else {
+        return false;
+    }
+    return true;
+}
+
 // Parse the tokens after `frm <action>` into `out`. Returns false (after printing why) on a bad flag.
 bool parseFrmArgs(const std::vector<std::string>& args, const char* program, FrmArgs& out) {
     for (std::size_t i = 2; i < args.size();) {
@@ -470,17 +487,8 @@ bool parseFrmArgs(const std::vector<std::string>& args, const char* program, Frm
             printUsage(program);
             return false;
         }
-        if (arg == "--data") {
-            out.dataPaths.push_back(args[i + 1]);
-            i += 2;
-        } else if (arg == "--out") {
-            out.outPath = args[i + 1];
-            i += 2;
-        } else if (arg == "--dir") {
-            out.direction = std::stoi(args[i + 1]);
-            i += 2;
-        } else if (arg == "--frame") {
-            out.frame = std::stoi(args[i + 1]);
+        if (valueFlag) {
+            applyFrmValueFlag(arg, args[i + 1], out);
             i += 2;
         } else if (arg.rfind("--", 0) == 0) {
             std::cerr << "error: unexpected argument: " << arg << "\n";

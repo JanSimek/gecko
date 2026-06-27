@@ -64,19 +64,19 @@ namespace exitgrid_detail {
     /// bars), otherwise a vertical line (left/right bars). A zero-length segment is reported
     /// Horizontal so callers fall back deterministically.
     inline SegmentAxis classifySegment(int dx, int dy) {
+        using enum SegmentAxis;
         const int adx = std::abs(dx);
         const int ady = std::abs(dy);
         if (adx == 0 && ady == 0) {
-            return SegmentAxis::Horizontal;
+            return Horizontal;
         }
         // Diagonal band: neither component more than ~2x the other.
-        const bool nearDiagonal = adx <= 2 * ady && ady <= 2 * adx;
-        if (nearDiagonal) {
+        if (const bool nearDiagonal = adx <= 2 * ady && ady <= 2 * adx; nearDiagonal) {
             // Opposite signs => up-right "/"; same signs (incl. one axis zero handled above) => "\".
             const bool opposite = (dx > 0) != (dy > 0);
-            return opposite ? SegmentAxis::ForwardSlash : SegmentAxis::BackSlash;
+            return opposite ? ForwardSlash : BackSlash;
         }
-        return (adx >= ady) ? SegmentAxis::Horizontal : SegmentAxis::Vertical;
+        return (adx >= ady) ? Horizontal : Vertical;
     }
 
     /// Pick the side within an axis pair from the hex's outward facing (which way it points away from
@@ -84,17 +84,18 @@ namespace exitgrid_detail {
     /// the LEFT/BOTTOM/"/"-A/"\"-A side; the second is the opposite — matching the verified table
     /// (dir0=LEFT, dir1=RIGHT, dir2=BOTTOM, dir3=TOP).
     inline int directionForAxis(SegmentAxis axis, int outwardX, int outwardY) {
+        using enum SegmentAxis;
         switch (axis) {
-            case SegmentAxis::Horizontal:
+            case Horizontal:
                 // A horizontal drawn line is a top or bottom edge: above centre faces TOP, else BOTTOM.
                 return (outwardY < 0) ? ExitGrid::DIR_TOP : ExitGrid::DIR_BOTTOM;
-            case SegmentAxis::Vertical:
+            case Vertical:
                 // A vertical drawn line is a left or right edge.
                 return (outwardX < 0) ? ExitGrid::DIR_LEFT : ExitGrid::DIR_RIGHT;
-            case SegmentAxis::ForwardSlash:
+            case ForwardSlash:
                 // "/" pair (dir 4/5): side B faces up-right (outward up OR right), side A the opposite.
                 return (outwardX > 0 || outwardY < 0) ? ExitGrid::DIR_FWD_B : ExitGrid::DIR_FWD_A;
-            case SegmentAxis::BackSlash:
+            case BackSlash:
                 // "\" pair (dir 6/7): side B faces down-right (outward down OR right), side A opposite.
                 return (outwardX > 0 || outwardY > 0) ? ExitGrid::DIR_BACK_B : ExitGrid::DIR_BACK_A;
         }

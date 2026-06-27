@@ -94,20 +94,20 @@ void RenderingEngine::render(sf::RenderTarget& target,
 
     // Layer 4b: Pattern stamp ghost preview (sprites already carry their semi-transparency):
     // floor tiles, then objects, then roof tiles on top.
-    if (renderData.stampPreviewFloorTiles) {
-        for (const auto& sprite : *renderData.stampPreviewFloorTiles) {
+    if (renderData.stampPreview.floorTiles) {
+        for (const auto& sprite : *renderData.stampPreview.floorTiles) {
             target.draw(sprite);
         }
     }
-    if (renderData.stampPreviewObjects) {
-        for (const auto& object : *renderData.stampPreviewObjects) {
+    if (renderData.stampPreview.objects) {
+        for (const auto& object : *renderData.stampPreview.objects) {
             if (object) {
                 target.draw(object->getSprite());
             }
         }
     }
-    if (renderData.stampPreviewRoofTiles) {
-        for (const auto& sprite : *renderData.stampPreviewRoofTiles) {
+    if (renderData.stampPreview.roofTiles) {
+        for (const auto& sprite : *renderData.stampPreview.roofTiles) {
             target.draw(sprite);
         }
     }

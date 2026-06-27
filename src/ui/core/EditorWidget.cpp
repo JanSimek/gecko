@@ -948,9 +948,9 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.selectedRoofTiles = &_controller.visualizer().roofVisuals();
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
-    renderData.stampPreviewFloorTiles = &_stampPreviewFloorTiles;
-    renderData.stampPreviewObjects = &_stampPreviewObjects;
-    renderData.stampPreviewRoofTiles = &_stampPreviewRoofTiles;
+    renderData.stampPreview.floorTiles = &_stampPreviewFloorTiles;
+    renderData.stampPreview.objects = &_stampPreviewObjects;
+    renderData.stampPreview.roofTiles = &_stampPreviewRoofTiles;
     renderData.selectionRectangle = &_selectionRectangle;
     // Use InputHandler state for drag selection rendering
     renderData.isDragSelecting = _inputHandler && _inputHandler->isDragging();

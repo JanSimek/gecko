@@ -306,7 +306,7 @@ void ExitGridPlacementManager::resetState() {
 }
 
 bool ExitGridPlacementManager::editSelectedExitGrids() {
-    auto* selectionManager = _context.getSelectionManager();
+    const auto* selectionManager = _context.getSelectionManager();
     if (!selectionManager) {
         return false;
     }
@@ -324,7 +324,7 @@ bool ExitGridPlacementManager::editSelectedExitGrids() {
                 continue;
             }
 
-            auto& mapObject = selectedObject->getMapObject();
+            const auto& mapObject = selectedObject->getMapObject();
 
             if (mapObject.isExitGridMarker()) {
                 auto mapObjectPtr = selectedObject->getMapObjectPtr();
@@ -365,7 +365,7 @@ bool ExitGridPlacementManager::bulkEditExistingExitGrids(const std::vector<std::
     // Capture before states for undo
     std::vector<std::shared_ptr<MapObject>> mapObjects;
     std::vector<ExitGridContext::ExitGridState> beforeStates;
-    for (auto& exitGridObject : exitGrids) {
+    for (const auto& exitGridObject : exitGrids) {
         auto mapObjectPtr = exitGridObject->getMapObjectPtr();
         if (!mapObjectPtr) {
             continue;
@@ -418,7 +418,7 @@ std::vector<std::pair<int, int>> ExitGridPlacementManager::segmentDirectionsForL
     }
     // Each hex's segment direction is the screen-space vector between its neighbours on the ordered
     // line (endpoints use their single neighbour), so the art reflects the local run of the edge.
-    const auto screenOf = [hexGrid](int hexIndex) -> std::pair<int, int> {
+    const auto screenOf = [hexGrid](int hexIndex) {
         const auto h = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
         return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() } : std::pair<int, int>{ 0, 0 };
     };
@@ -470,7 +470,7 @@ std::size_t ExitGridPlacementManager::createExitGridsForHexes(const std::vector<
 std::vector<int> ExitGridPlacementManager::collectHexesAlongLine(
     const std::vector<sf::Vector2f>& worldVertices) const {
     const auto* hexGrid = _context.getHexagonGrid();
-    auto* viewport = _context.getViewportController();
+    const auto* viewport = _context.getViewportController();
     if (!hexGrid || !viewport || worldVertices.size() < 2) {
         return {};
     }

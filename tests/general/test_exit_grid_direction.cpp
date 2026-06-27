@@ -21,6 +21,18 @@ constexpr auto WORLD = ExitGridDestinationKind::WorldMap; // brown
 bool isExitGridProto(uint32_t proPid) {
     return proPid >= ExitGrid::FIRST_EXIT_GRID_PID && proPid <= ExitGrid::LAST_EXIT_GRID_PID;
 }
+
+// Assert both destination kinds emit an in-range proto for one segment, across every outward facing.
+void checkSegmentProtosInRange(int dx, int dy) {
+    for (int ox = -1; ox <= 1; ++ox) {
+        for (int oy = -1; oy <= 1; ++oy) {
+            const ExitGridArt g = exitGridArtForSegment(dx, dy, ox, oy, INTER);
+            const ExitGridArt b = exitGridArtForSegment(dx, dy, ox, oy, WORLD);
+            CHECK(isExitGridProto(g.proPid));
+            CHECK(isExitGridProto(b.proPid));
+        }
+    }
+}
 } // namespace
 
 TEST_CASE("the verified frm scheme: greenFrm = proto+1, brownFrm = proto+0x11", "[exitgrid][art]") {
@@ -109,14 +121,7 @@ TEST_CASE("every emitted proPid is within the exit-grid range 0x05000010..17", "
     // Sweep a spread of segments/facings/kinds and assert the proto never escapes the valid range.
     for (int dx = -2; dx <= 2; ++dx) {
         for (int dy = -2; dy <= 2; ++dy) {
-            for (int ox = -1; ox <= 1; ++ox) {
-                for (int oy = -1; oy <= 1; ++oy) {
-                    const ExitGridArt g = exitGridArtForSegment(dx, dy, ox, oy, INTER);
-                    const ExitGridArt b = exitGridArtForSegment(dx, dy, ox, oy, WORLD);
-                    CHECK(isExitGridProto(g.proPid));
-                    CHECK(isExitGridProto(b.proPid));
-                }
-            }
+            checkSegmentProtosInRange(dx, dy);
         }
     }
 }

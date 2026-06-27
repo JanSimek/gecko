@@ -30,8 +30,8 @@ struct FixtureResources {
     fs::path root;
     resource::GameResources resources;
 
-    FixtureResources() {
-        root = fs::temp_directory_path() / "geck_frminspect_test";
+    FixtureResources()
+        : root(fs::temp_directory_path() / "geck_frminspect_test") { // NOSONAR: throwaway test dir, not security-sensitive
         std::error_code ec;
         fs::remove_all(root, ec);
 
