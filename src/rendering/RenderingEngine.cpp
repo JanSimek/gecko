@@ -341,9 +341,14 @@ namespace {
         return { static_cast<float>(nx) / len, static_cast<float>(ny) / len };
     }
 
-    // Perpendicular spacing of the SECOND parallel texture row (issue 2): ~the band's on-screen
-    // thickness, so the two rows abut into one ~2x-wide band.
-    constexpr float kSecondRowOffset = 16.0f;
+    // Perpendicular spacing of the SECOND parallel texture row (issue 2): the rendered row's FULL
+    // on-screen thickness along the band normal, so the second row's inner edge meets the first
+    // row's outer edge — the two rows tile edge-to-edge into one ~2x-wide band (no overlap, no gap).
+    // Measured empirically from a rendered run (the composite of overlapping per-hex bars) by
+    // projecting onto each band normal (exitGridOutward): a "/" run (FWD, normal (1,6)) and a "\" run
+    // (BACK, normal (-1,2)) both read ~37px thick — the per-sprite shear that makes the raw bitmaps
+    // differ (127x48 vs 111x60) washes out in the rendered band, so one offset seats both seamlessly.
+    constexpr float kSecondRowOffset = 37.0f;
 
     // Draw the run-TOP bar clipped to the trigger hex so it doesn't overshoot past the first hex
     // (issue 3). The band's "up" end overshoots both ABOVE the hex (clip the texture's top rows) and
@@ -443,7 +448,10 @@ void RenderingEngine::renderDiagonalExitGridBars(sf::RenderTarget& target, const
         };
 
         drawBar({ 0.0f, 0.0f });
-        drawBar(normal * -kSecondRowOffset); // widen across the band (issue 2)
+        // Widen across the band (issue 2): offset the second row by the band's full perpendicular
+        // thickness so it abuts the first row edge-to-edge. Signed along the same normal, so a flip
+        // (which negates the normal) mirrors both rows together.
+        drawBar(normal * -kSecondRowOffset);
     }
 
     // Bridge each diagonal→horizontal junction (issue 4): the diagonal band and the horizontal band
