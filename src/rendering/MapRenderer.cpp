@@ -342,7 +342,8 @@ namespace {
     }
 
     void drawSemanticMarkers(sf::RenderTexture& target, const std::vector<std::shared_ptr<Object>>& objects,
-        resource::GameResources& resources, bool showBlockers, MapRenderer::Legend* legend) {
+        resource::GameResources& resources, bool showBlockers, MapRenderer::Legend* legend,
+        const HexagonGrid& hexgrid) {
         std::unordered_map<uint32_t, bool> flatCache;
         std::map<std::string, std::pair<sf::Color, int>> roles; // role -> {colour, count}
         int scriptedCount = 0;
@@ -356,7 +357,14 @@ namespace {
             }
 
             const sf::FloatRect b = object->getSprite().getGlobalBounds();
-            const sf::Vector2f center{ b.position.x + b.size.x / 2.0f, b.position.y + b.size.y / 2.0f };
+            sf::Vector2f center{ b.position.x + b.size.x / 2.0f, b.position.y + b.size.y / 2.0f };
+            // Exit-grid markers carry a display slide (their bar is pushed off the hex), so mark the true
+            // TRIGGER hex, not the slid sprite's centre — the dot then sits on the saved hex position.
+            if (mo->isExitGridMarker()) {
+                if (const auto h = hexgrid.getHexByPosition(static_cast<uint32_t>(mo->position)); h.has_value()) {
+                    center = { static_cast<float>(h->get().x()), static_cast<float>(h->get().y()) };
+                }
+            }
             const SemanticRole role = semanticRoleFor(*mo, Pro::typeOfPid(mo->pro_pid));
 
             sf::CircleShape marker(role.radius);
@@ -504,7 +512,7 @@ sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend*
     target->clear(options.background);
     target->draw(floor);
     if (semantic) {
-        drawSemanticMarkers(*target, objects, _resources, options.showBlockers, legend);
+        drawSemanticMarkers(*target, objects, _resources, options.showBlockers, legend, hexgrid);
     } else {
         drawObjectMarkers(*target, objects, _resources, options.showBlockers, legend);
     }

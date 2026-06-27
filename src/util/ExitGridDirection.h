@@ -77,6 +77,34 @@ inline bool isDiagonalExitGridDir(int dir) {
     return dir >= ExitGrid::DIR_FWD_A && dir <= ExitGrid::DIR_BACK_B;
 }
 
+/// The EDITOR-DISPLAY inward slide ({dx, dy}, world space, y DOWNWARD) for a DIAGONAL exit-grid bar:
+/// half the bar's perpendicular thickness, pointing INWARD (-outward), so the trigger hex lands at the
+/// bar's OUTER edge and the bar extends fully inward. A diagonal edge places its two rows TWO hexes apart
+/// (≈ one bar thickness), so with both rows slid by this same half-thickness the OUTER row's bar abuts
+/// the INNER row's at the seam — one continuous 2x band, NO overlap, NO gap. The flip (dir^1) reverses
+/// exitGridOutward, so the whole band mirrors. Returns {0,0} for a non-diagonal/out-of-range dir.
+///
+/// The thickness is MEASURED from a 1:1 render of each art (projected onto the band's true perpendicular,
+/// 2-98 percentile of opaque pixels): "\" (exitgrd7/8, 111x60 bbox) ≈ 38px, "/" (exitgrd5/6, 127x48
+/// bbox) ≈ 32px. These match the two-step hex-row spacings (38.4px "\", 31.6px "/"), which is why the
+/// rows tile seamlessly.
+inline std::pair<float, float> exitGridDiagonalInwardSlide(int dir) {
+    if (!isDiagonalExitGridDir(dir)) {
+        return { 0.0f, 0.0f };
+    }
+    // "/" (FWD) bar ≈ 32px thick; "\" (BACK) bar ≈ 38px thick.
+    const bool forwardSlash = (dir == ExitGrid::DIR_FWD_A || dir == ExitGrid::DIR_FWD_B);
+    const float thickness = forwardSlash ? 32.0f : 38.0f;
+    const auto [outX, outY] = exitGridOutward(dir);
+    const float len = std::sqrt(static_cast<float>(outX * outX + outY * outY));
+    if (len <= 0.0f) {
+        return { 0.0f, 0.0f };
+    }
+    // Inward = -outward, unit-scaled to half the bar thickness.
+    const float half = thickness * 0.5f;
+    return { -static_cast<float>(outX) / len * half, -static_cast<float>(outY) / len * half };
+}
+
 /// The exit-grid direction (0..7) an art's proto encodes (proto index 16..23 maps 1:1 to dir 0..7).
 inline int exitGridDirOfProto(uint32_t proPid) {
     return static_cast<int>(proPid - ExitGrid::FIRST_EXIT_GRID_PID);

@@ -218,10 +218,10 @@ namespace {
         return -1;
     }
 
-    // The hex one row OVER from `hex`, perpendicular to a diagonal band — the SECOND row of a 2-deep
-    // diagonal edge. Gathers `hex`'s grid neighbours as screen offsets and lets secondRowNeighbor pick
-    // the one leaning most along the band's outward normal. Returns -1 if off-grid or none lean outward.
-    int secondRowHex(const HexagonGrid& grid, int hex, int dir) {
+    // The hex one row OVER from `hex`, perpendicular to a diagonal band — gathers `hex`'s grid neighbours
+    // as screen offsets and lets secondRowNeighbor pick the one leaning most along the band's outward
+    // normal. Returns -1 if off-grid or none lean outward.
+    int neighborRowHex(const HexagonGrid& grid, int hex, int dir) {
         const auto here = grid.getHexByPosition(static_cast<uint32_t>(hex));
         if (!here.has_value()) {
             return -1;
@@ -236,6 +236,20 @@ namespace {
             }
         }
         return secondRowNeighbor(dir, offsets);
+    }
+
+    // The SECOND-ROW hex `steps` rows OVER from `hex`, perpendicular to a diagonal band. The diagonal bar
+    // art is ~1 bar-thickness deep perpendicular to the band (~38px "\" / ~32px "/", measured), but ONE
+    // hex step over is only ~16-19px — so two centred bars one step apart OVERLAP. Stepping the second
+    // row TWO hexes out makes the row spacing match one bar thickness, so the two bars tile edge-to-edge
+    // into a single continuous 2x band (with the display half-thickness slide in Object). Returns -1 if
+    // any step walks off-grid.
+    int secondRowHex(const HexagonGrid& grid, int hex, int dir, int steps) {
+        int current = hex;
+        for (int i = 0; i < steps && current >= 0; ++i) {
+            current = neighborRowHex(grid, current, dir);
+        }
+        return current;
     }
 } // namespace
 
@@ -354,16 +368,20 @@ ExitGridPlacementManager::CommittedSegment ExitGridPlacementManager::classifySeg
     seg.hexes = run->hexes;
     seg.art.assign(seg.hexes.size(), art);
 
-    // A DIAGONAL edge is a 2-deep band: the drawn hex line sits at the band edge and a SECOND parallel
-    // row of REAL markers extends one hex OVER, perpendicular to the band (the side exitGridOutward(dir)
-    // faces). The flip (dir^1) mirrors that side AND swaps the bar art for both rows. The second row uses
-    // the SAME art (direction/family/flip). Cardinal edges stay single-row. flattenSegments dedups by
-    // hex, so a second-row hex already taken by the first row (or an overlap) is dropped.
+    // A DIAGONAL edge is a 2-deep band: the drawn hex line is the OUTER row and a SECOND parallel row of
+    // REAL markers sits TWO hexes OVER, perpendicular to the band (the side exitGridOutward(dir) faces).
+    // Two hexes (not one) because the bar art is ~1 bar-thickness deep, so a one-step row would overlap;
+    // a two-step row spacing equals one bar thickness, so the two rows' bars meet edge-to-edge into a
+    // single continuous 2x band (Object then slides each bar inward half a thickness so the hex sits at
+    // the bar's OUTER edge and the inner row's bar abuts the seam). The flip (dir^1) mirrors that side
+    // AND swaps the bar art for both rows; the second row uses the SAME art. Cardinal edges stay
+    // single-row. flattenSegments dedups by hex, so a second-row hex already taken is dropped.
+    constexpr int kSecondRowSteps = 2;
     const int dir = exitGridDirOfProto(art.proPid);
     if (const auto* hexGrid = _context.getHexagonGrid(); hexGrid != nullptr && isDiagonalExitGridDir(dir)) {
         std::set<int> seen(run->hexes.begin(), run->hexes.end());
         for (const int hex : run->hexes) {
-            const int second = secondRowHex(*hexGrid, hex, dir);
+            const int second = secondRowHex(*hexGrid, hex, dir, kSecondRowSteps);
             if (second >= 0 && seen.insert(second).second) {
                 seg.hexes.push_back(second);
                 seg.art.push_back(art);

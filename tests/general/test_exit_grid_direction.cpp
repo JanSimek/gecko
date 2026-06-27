@@ -1,6 +1,8 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -14,6 +16,7 @@ using geck::exitGridArtForDirection;
 using geck::exitGridArtForFacing;
 using geck::exitGridArtForSegment;
 using geck::ExitGridDestinationKind;
+using geck::exitGridDiagonalInwardSlide;
 using geck::exitGridDirectionForLine;
 using geck::exitGridDirOfProto;
 using geck::exitGridOutward;
@@ -650,5 +653,47 @@ TEST_CASE("the diagonal second row is a distinct parallel hex line", "[exitgrid]
             inFirst = inFirst || (f == s);
         }
         CHECK_FALSE(inFirst);
+    }
+}
+
+TEST_CASE("exitGridDiagonalInwardSlide is zero for non-diagonal directions", "[exitgrid][slide]") {
+    for (const int dir : { ExitGrid::DIR_LEFT, ExitGrid::DIR_RIGHT, ExitGrid::DIR_BOTTOM, ExitGrid::DIR_TOP }) {
+        const auto [sx, sy] = exitGridDiagonalInwardSlide(dir);
+        CHECK(sx == 0.0f);
+        CHECK(sy == 0.0f);
+    }
+    const auto [ox, oy] = exitGridDiagonalInwardSlide(-1);
+    CHECK(ox == 0.0f);
+    CHECK(oy == 0.0f);
+}
+
+TEST_CASE("exitGridDiagonalInwardSlide points INWARD by half the bar thickness", "[exitgrid][slide]") {
+    // Inward = opposite the outward normal; magnitude = half the measured bar thickness (38px "\",
+    // 32px "/"), so the trigger hex lands at the bar's OUTER edge.
+    constexpr float kBackThickness = 38.0f; // exitgrd7/8
+    constexpr float kFwdThickness = 32.0f;  // exitgrd5/6
+    struct Case {
+        int dir;
+        float thickness;
+    };
+    for (const Case c : { Case{ ExitGrid::DIR_FWD_A, kFwdThickness }, Case{ ExitGrid::DIR_FWD_B, kFwdThickness },
+             Case{ ExitGrid::DIR_BACK_A, kBackThickness }, Case{ ExitGrid::DIR_BACK_B, kBackThickness } }) {
+        const auto [sx, sy] = exitGridDiagonalInwardSlide(c.dir);
+        const auto [ox, oy] = exitGridOutward(c.dir);
+        // Opposite the outward normal: the slide dotted with outward is negative.
+        CHECK((sx * static_cast<float>(ox) + sy * static_cast<float>(oy)) < 0.0f);
+        // Magnitude is half the bar thickness.
+        const float len = std::sqrt(sx * sx + sy * sy);
+        CHECK(len == Catch::Approx(c.thickness * 0.5f).margin(0.01f));
+    }
+}
+
+TEST_CASE("exitGridDiagonalInwardSlide flips with the direction pair", "[exitgrid][slide]") {
+    // dir^1 reverses the outward normal, so the inward slide reverses too — the whole band mirrors.
+    for (const int dir : { ExitGrid::DIR_FWD_A, ExitGrid::DIR_BACK_A }) {
+        const auto [sx, sy] = exitGridDiagonalInwardSlide(dir);
+        const auto [fx, fy] = exitGridDiagonalInwardSlide(flipExitGridDirection(dir));
+        CHECK(fx == Catch::Approx(-sx).margin(0.01f));
+        CHECK(fy == Catch::Approx(-sy).margin(0.01f));
     }
 }
