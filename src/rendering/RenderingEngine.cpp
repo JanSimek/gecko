@@ -389,56 +389,49 @@ namespace {
         }
         target.draw(sprite);
     }
-} // namespace
-
-void RenderingEngine::renderDiagonalExitGridBars(sf::RenderTarget& target, const RenderData& renderData) {
-    if (!renderData.objects || !renderData.hexGrid) {
-        return;
-    }
 
     // Collect placed exit-grid markers (both diagonal and cardinal) so run-grouping can find
-    // diagonal→horizontal junctions; keep each Object* (by hex) to draw its bar.
-    std::vector<exitgrid_runs::Marker> markers;
-    std::unordered_map<int, const Object*> objectByHex;
-    bool anyDiagonal = false;
-    for (const auto& object : *renderData.objects) {
-        const int dir = exitGridMarkerDir(*object);
-        if (dir < 0) {
-            continue;
+    // diagonal→horizontal junctions; keep each Object* (by hex) to draw its bar. Returns whether any
+    // diagonal marker was found (the only case worth rendering a band for).
+    bool collectExitGridMarkers(const RenderingEngine::RenderData& renderData,
+        std::vector<exitgrid_runs::Marker>& markers,
+        std::unordered_map<int, const Object*>& objectByHex) {
+        bool anyDiagonal = false;
+        for (const auto& object : *renderData.objects) {
+            const int dir = exitGridMarkerDir(*object);
+            if (dir < 0) {
+                continue;
+            }
+            const auto mo = object->getMapObjectPtr();
+            const auto hex = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(mo->position));
+            if (!hex.has_value()) {
+                continue;
+            }
+            markers.push_back({ static_cast<int>(mo->position), dir, hex->get().x(), hex->get().y() });
+            objectByHex[static_cast<int>(mo->position)] = object.get();
+            anyDiagonal = anyDiagonal || exitgrid_runs::isDiagonalDir(dir);
         }
-        const auto mo = object->getMapObjectPtr();
-        const auto hex = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(mo->position));
-        if (!hex.has_value()) {
-            continue;
-        }
-        markers.push_back({ static_cast<int>(mo->position), dir, hex->get().x(), hex->get().y() });
-        objectByHex[static_cast<int>(mo->position)] = object.get();
-        anyDiagonal = anyDiagonal || exitgrid_runs::isDiagonalDir(dir);
-    }
-    if (!anyDiagonal) {
-        return;
+        return anyDiagonal;
     }
 
-    const exitgrid_runs::RunAnalysis analysis = exitgrid_runs::analyse(markers);
-
-    // Each diagonal bar: the original (top-clipped if it's the run top), plus a SECOND parallel copy
-    // offset across the band so the thin band reads ~2x wide (issues 2 + 3).
-    for (const auto& [hex, object] : objectByHex) {
-        const int dir = exitGridMarkerDir(*object);
-        if (!exitgrid_runs::isDiagonalDir(dir)) {
-            continue;
-        }
+    // Draw one diagonal marker as two parallel rows: the original (top-clipped if it's the run top),
+    // plus a SECOND copy offset OUTWARD across the band (issue 2) so the thin band reads ~2x wide.
+    // The second row abuts the first edge-to-edge on the FAR side, so the whole doubled band lies on
+    // one side of the hex line and grows away from it, leaving the hex at the band's hex-side edge.
+    // Signed along the band normal, so a flip (which negates the normal) mirrors the whole band to the
+    // other side with the hex still at the edge.
+    void drawDoubledDiagonalBar(sf::RenderTarget& target, const RenderingEngine::RenderData& renderData,
+        const exitgrid_runs::RunAnalysis& analysis, int hex, const Object& object) {
+        const int dir = exitGridMarkerDir(object);
         const sf::Vector2f normal = diagonalBandNormal(dir);
         const auto hexOpt = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hex));
         const float hexX = hexOpt.has_value() ? static_cast<float>(hexOpt->get().x()) : 0.0f;
         const float hexY = hexOpt.has_value() ? static_cast<float>(hexOpt->get().y()) : 0.0f;
-        const bool isTop = [&] {
-            const auto it = analysis.byHex.find(hex);
-            return it != analysis.byHex.end() && it->second.isRunTop;
-        }();
+        const auto it = analysis.byHex.find(hex);
+        const bool isTop = it != analysis.byHex.end() && it->second.isRunTop;
 
         const auto drawBar = [&](sf::Vector2f offset) {
-            sf::Sprite sprite = object->getSprite();
+            sf::Sprite sprite = object.getSprite();
             sprite.move(offset);
             if (isTop) {
                 drawTopClipped(target, sprite, hexX + offset.x, hexY + offset.y, dir);
@@ -448,42 +441,64 @@ void RenderingEngine::renderDiagonalExitGridBars(sf::RenderTarget& target, const
         };
 
         drawBar({ 0.0f, 0.0f });
-        // Widen across the band (issue 2): offset the second row OUTWARD (along +normal, away from the
-        // trigger hex) by the band's full perpendicular thickness so it abuts the first row edge-to-edge
-        // on the FAR side. The whole doubled band then lies on one side of the hex line and grows away
-        // from it, leaving the hex at the band's hex-side edge. Signed along the same normal, so a flip
-        // (which negates the normal) mirrors the whole band to the other side, hex still at the edge.
         drawBar(normal * kSecondRowOffset);
     }
 
     // Bridge each diagonal→horizontal junction (issue 4): the diagonal band and the horizontal band
-    // meet at a continuous run of hexes but their bars leave a corner gap. Draw one extra diagonal
-    // bar nudged toward the horizontal and one extra horizontal bar nudged toward the diagonal so
-    // the two overlap across the seam.
-    for (const exitgrid_runs::Junction& junction : analysis.junctions) {
-        const auto diagIt = objectByHex.find(junction.diagonalHex);
-        const auto horizIt = objectByHex.find(junction.horizontalHex);
-        if (diagIt == objectByHex.end() || horizIt == objectByHex.end()) {
-            continue;
+    // meet at a continuous run of hexes but their bars leave a corner gap. Draw one extra diagonal bar
+    // nudged toward the horizontal and one extra horizontal bar nudged toward the diagonal so the two
+    // overlap across the seam.
+    void drawJunctionBridges(sf::RenderTarget& target, const RenderingEngine::RenderData& renderData,
+        const exitgrid_runs::RunAnalysis& analysis,
+        const std::unordered_map<int, const Object*>& objectByHex) {
+        for (const exitgrid_runs::Junction& junction : analysis.junctions) {
+            const auto diagIt = objectByHex.find(junction.diagonalHex);
+            const auto horizIt = objectByHex.find(junction.horizontalHex);
+            if (diagIt == objectByHex.end() || horizIt == objectByHex.end()) {
+                continue;
+            }
+            const auto diagHexOpt = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(junction.diagonalHex));
+            const auto horizHexOpt = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(junction.horizontalHex));
+            if (!diagHexOpt.has_value() || !horizHexOpt.has_value()) {
+                continue;
+            }
+            // Screen vector from the diagonal hex to the horizontal hex: a bar nudged this way reaches
+            // into its neighbour's band, closing the corner.
+            const sf::Vector2f toHoriz{
+                static_cast<float>(horizHexOpt->get().x() - diagHexOpt->get().x()),
+                static_cast<float>(horizHexOpt->get().y() - diagHexOpt->get().y())
+            };
+            sf::Sprite diagBridge = diagIt->second->getSprite();
+            diagBridge.move(toHoriz);
+            target.draw(diagBridge);
+            sf::Sprite horizBridge = horizIt->second->getSprite();
+            horizBridge.move(-toHoriz);
+            target.draw(horizBridge);
         }
-        const auto diagHexOpt = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(junction.diagonalHex));
-        const auto horizHexOpt = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(junction.horizontalHex));
-        if (!diagHexOpt.has_value() || !horizHexOpt.has_value()) {
-            continue;
-        }
-        // Screen vector from the diagonal hex to the horizontal hex: a bar nudged this way reaches
-        // into its neighbour's band, closing the corner.
-        const sf::Vector2f toHoriz{
-            static_cast<float>(horizHexOpt->get().x() - diagHexOpt->get().x()),
-            static_cast<float>(horizHexOpt->get().y() - diagHexOpt->get().y())
-        };
-        sf::Sprite diagBridge = diagIt->second->getSprite();
-        diagBridge.move(toHoriz);
-        target.draw(diagBridge);
-        sf::Sprite horizBridge = horizIt->second->getSprite();
-        horizBridge.move(-toHoriz);
-        target.draw(horizBridge);
     }
+} // namespace
+
+void RenderingEngine::renderDiagonalExitGridBars(sf::RenderTarget& target, const RenderData& renderData) {
+    if (!renderData.objects || !renderData.hexGrid) {
+        return;
+    }
+
+    std::vector<exitgrid_runs::Marker> markers;
+    std::unordered_map<int, const Object*> objectByHex;
+    if (!collectExitGridMarkers(renderData, markers, objectByHex)) {
+        return;
+    }
+
+    const exitgrid_runs::RunAnalysis analysis = exitgrid_runs::analyse(markers);
+
+    // Each diagonal bar is drawn as a doubled (~2x-wide) band (issues 2 + 3).
+    for (const auto& [hex, object] : objectByHex) {
+        if (exitgrid_runs::isDiagonalDir(exitGridMarkerDir(*object))) {
+            drawDoubledDiagonalBar(target, renderData, analysis, hex, *object);
+        }
+    }
+
+    drawJunctionBridges(target, renderData, analysis, objectByHex);
 }
 
 void RenderingEngine::renderRoofTiles(sf::RenderTarget& target,
