@@ -205,18 +205,15 @@ TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too f
     CHECK_FALSE(h.handler.isInMarkExitsMode()); // tool dropped
 }
 
-// The flip key (Space) for "Draw edge": it toggles the edge's side. A KeyPressed event never touches
-// pixelToWorld (it reuses the stored world cursor), so unlike the click/move cases this needs no GL
-// context and runs in CI too. We construct the handler directly and feed it KeyPressed events; the
-// RenderTexture/View args of handleEvent are unused by the key path, so a default (un-resized)
-// RenderTexture — which creates no GL context — is safe.
+// The flip key (Space) for "Draw edge": it toggles the edge's side. A KeyPressed never touches the
+// RenderTarget/view (only mouse events convert pixels), so we drive InputHandler::handleKeyPressed
+// directly — no RenderTexture, hence no GL context — and the test runs on a display-less CI runner.
+// (Going through handleEvent would need an sf::RenderTexture, which aborts when it can't open X11.)
 namespace {
 void pressKeyDirect(InputHandler& handler, sf::Keyboard::Key key) {
-    sf::RenderTexture unusedTarget; // default-constructed: no GL context created (only resize() does)
-    sf::View unusedView;
     sf::Event::KeyPressed press;
     press.code = key;
-    handler.handleEvent(sf::Event(press), unusedTarget, unusedView);
+    handler.handleKeyPressed(press);
 }
 } // namespace
 

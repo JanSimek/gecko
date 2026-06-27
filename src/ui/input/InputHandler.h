@@ -99,6 +99,11 @@ public:
         sf::RenderTarget& target,
         const sf::View& view);
 
+    /// Handle a key press directly. Keys never use the RenderTarget/view (only mouse events convert
+    /// pixels), so this is target-free — and public so headless tests can drive key behaviour without
+    /// constructing a GL-backed RenderTexture (which aborts on a display-less CI runner).
+    void handleKeyPressed(const sf::Event::KeyPressed& event);
+
     /**
      * @brief Set callbacks for input events
      */
@@ -143,7 +148,6 @@ private:
         sf::RenderTarget& target,
         const sf::View& view);
     void handleMouseWheelScrolled(const sf::Event::MouseWheelScrolled& event);
-    void handleKeyPressed(const sf::Event::KeyPressed& event);
     void handleKeyReleased(const sf::Event::KeyReleased& event);
 
     // Helper methods
