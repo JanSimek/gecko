@@ -2,9 +2,12 @@
 
 #include <array>
 #include <utility>
+#include <vector>
 
+#include "editor/HexagonGrid.h"
 #include "util/Constants.h"
 #include "util/ExitGridDirection.h"
+#include "util/HexLine.h"
 
 using geck::ExitGridArt;
 using geck::exitGridArtForDirection;
@@ -14,6 +17,7 @@ using geck::ExitGridDestinationKind;
 using geck::exitGridDirectionForLine;
 using geck::exitGridOutward;
 using geck::flipExitGridDirection;
+using geck::HexagonGrid;
 namespace ExitGrid = geck::ExitGrid;
 
 namespace {
@@ -232,4 +236,101 @@ TEST_CASE("exitGridOutward: opposite directions point opposite ways; out-of-rang
     }
     CHECK(exitGridOutward(-1) == std::pair{ 0, 0 });
     CHECK(exitGridOutward(ExitGrid::DIR_COUNT) == std::pair{ 0, 0 });
+}
+
+// --------------------------------------------------------------------------------------------------
+// ISO-DIAMOND GEOMETRY LOCK
+//
+// The GUI "Draw edge" tool classifies a stroke by its first->last SCREEN delta (Hex::x()/y()). The
+// playable area is an iso DIAMOND, so real "sloped" exits run along the diamond's two slanted edges,
+// which lie along the hex grid's two axes. Their SCREEN slopes are NOT 1:1: measured on the real
+// 200x200 HexagonGrid, the shallow NE/SW edge is ~4:1 and the steep NW/SE edge is ~1.33:1. A
+// 45°-centred [1/2, 2] diagonal band tipped the shallow 4:1 edge to Horizontal, so a stroke drawn
+// along the real diamond edge got jagged cardinal bars. The cases below feed those EXACT measured
+// deltas to the classifier and assert they yield the diagonal "/" "\" art (dirs 4..7, protos
+// 0x05000014..17), locking the geometry so the band can't silently regress to 45°.
+
+namespace {
+bool isDiagonalProto(uint32_t proPid) {
+    return proPid >= ExitGrid::FWD_A_PRO_PID && proPid <= ExitGrid::BACK_B_PRO_PID; // 0x05000014..17
+}
+bool isDiagonalDir(int dir) { return dir >= ExitGrid::DIR_FWD_A && dir <= ExitGrid::DIR_BACK_B; }
+
+// Mirror ExitGridPlacementManager::autoArtForLine's core on the REAL grid: walk the hex line, take
+// the first->last screen delta for the axis and the midpoint's offset from the grid centre for the
+// side, then classify. Returns the {proto, frm} the tool would commit for the whole stroke.
+ExitGridArt autoArtForRun(const HexagonGrid& grid, int startHex, int endHex,
+    ExitGridDestinationKind kind, bool flipSide = false) {
+    const auto screenOf = [&grid](int hexIndex) -> std::pair<int, int> {
+        const auto h = grid.getHexByPosition(static_cast<uint32_t>(hexIndex));
+        return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() }
+                             : std::pair<int, int>{ 0, 0 };
+    };
+    const std::vector<int> run = geck::hexline::hexLine(grid, startHex, endHex);
+    REQUIRE(run.size() >= 2);
+    const auto [cx, cy] = geck::hexGridCenterScreen(grid);
+    const auto [fx, fy] = screenOf(run.front());
+    const auto [lx, ly] = screenOf(run.back());
+    const auto [mx, my] = screenOf(run[run.size() / 2]);
+    const int dir = exitGridDirectionForLine(lx - fx, ly - fy, mx - cx, my - cy, flipSide);
+    return exitGridArtForDirection(dir, kind);
+}
+
+// position = row * WIDTH + col on the 200x200 grid.
+constexpr int hexPos(int col, int row) { return row * HexagonGrid::GRID_WIDTH + col; }
+} // namespace
+
+TEST_CASE("classifySegment: the MEASURED iso-diamond edge deltas are diagonal, not cardinal",
+    "[exitgrid][iso]") {
+    using geck::exitgrid_detail::classifySegment;
+    using Axis = geck::exitgrid_detail::SegmentAxis;
+
+    // Shallow NE/SW diamond edge, measured first->last delta on the real grid: (-720, 180), slope 4:1.
+    // With the old 45°-centred band this fell to Horizontal (the bug); it MUST be diagonal.
+    CHECK(classifySegment(-720, 180) == Axis::ForwardSlash);
+    // Steep NW/SE diamond edge, measured delta (480, 360), slope ~1.33:1.
+    CHECK(classifySegment(480, 360) == Axis::BackSlash);
+
+    // Near-pure screen axes still resolve to the cardinal arts (these are the rect-tool edges).
+    CHECK(classifySegment(800, 0) == Axis::Horizontal); // pure horizontal screen drag
+    CHECK(classifySegment(0, 600) == Axis::Vertical);   // pure vertical screen drag
+}
+
+TEST_CASE("exitGridDirectionForLine: the measured iso deltas yield a DIAGONAL direction",
+    "[exitgrid][iso]") {
+    // Shallow 4:1 edge: feed a representative outward facing; the result must be one of the "/" "\"
+    // dirs (4..7), never a cardinal. (The side within the pair depends on outward facing, which we
+    // only need to be diagonal here.)
+    const int shallow = exitGridDirectionForLine(/*dx=*/-720, /*dy=*/180,
+        /*outwardX=*/-300, /*outwardY=*/-200, /*flipSide=*/false);
+    CHECK(isDiagonalDir(shallow));
+    const int steep = exitGridDirectionForLine(/*dx=*/480, /*dy=*/360,
+        /*outwardX=*/300, /*outwardY=*/200, /*flipSide=*/false);
+    CHECK(isDiagonalDir(steep));
+
+    // Cardinal deltas stay cardinal: a near-horizontal stroke -> TOP/BOTTOM, near-vertical -> LEFT/RIGHT.
+    CHECK(exitGridDirectionForLine(800, 0, 0, 300, false) == ExitGrid::DIR_BOTTOM);
+    CHECK(exitGridDirectionForLine(800, 0, 0, -300, false) == ExitGrid::DIR_TOP);
+    CHECK(exitGridDirectionForLine(0, 600, 300, 0, false) == ExitGrid::DIR_RIGHT);
+    CHECK(exitGridDirectionForLine(0, 600, -300, 0, false) == ExitGrid::DIR_LEFT);
+}
+
+TEST_CASE("autoArtForLine (real grid): a stroke along the iso-diamond edge commits a DIAGONAL proto",
+    "[exitgrid][iso]") {
+    HexagonGrid grid;
+    constexpr int C = 100; // a central col/row, well inside the diamond
+
+    // Shallow NE/SW edge: vary the column only (a const-row hex run). Screen slope ~4:1.
+    const ExitGridArt shallow = autoArtForRun(grid, hexPos(C, C), hexPos(C + 30, C),
+        ExitGridDestinationKind::InterMap);
+    CHECK(isDiagonalProto(shallow.proPid));
+    // green frm = diagonal proto + 1
+    CHECK(shallow.frmPid == shallow.proPid + 1);
+
+    // Steep NW/SE edge: vary the row only (a const-col hex run). Screen slope ~1.33:1.
+    const ExitGridArt steep = autoArtForRun(grid, hexPos(C, C), hexPos(C, C + 30),
+        ExitGridDestinationKind::WorldMap);
+    CHECK(isDiagonalProto(steep.proPid));
+    // brown frm = diagonal proto + 0x11
+    CHECK(steep.frmPid == steep.proPid + 0x11);
 }

@@ -87,12 +87,17 @@ namespace exitgrid_detail {
         ForwardSlash,
         BackSlash };
 
-    /// The drawn segment's axis. A segment counts as diagonal when neither screen component clearly
-    /// dominates (|dx| and |dy| within a 2:1 band of each other); a "/" runs up-right (dx, dy
-    /// opposite signs in screen space), a "\" runs down-right (dx, dy same signs). Outside the
-    /// diagonal band the longer screen component wins: |dx| >= |dy| is a horizontal line (top/bottom
-    /// bars), otherwise a vertical line (left/right bars). A zero-length segment is reported
-    /// Horizontal so callers fall back deterministically.
+    /// The drawn segment's axis. The diagonal band is sized for the Fallout ISO DIAMOND: the playable
+    /// area is a diamond whose two slanted edges run along the hex grid's two axes, and those edges
+    /// have measured SCREEN slopes of ~1.33:1 (the steep NW/SE edge) and ~4:1 (the shallow NE/SW edge)
+    /// — NOT 1:1. A 45°-centred [1/2, 2] band tips the shallow 4:1 edge to Horizontal, so a stroke
+    /// drawn along the real diamond edge gets jagged cardinal bars instead of the diagonal "/" "\" art.
+    /// So the band is |slope| in [1/2, 6] (slope = |dx|/|dy|), which puts BOTH diamond-edge slopes
+    /// comfortably inside (4:1 with a 1.5x margin to the upper bound) while still excluding a near-pure
+    /// screen-horizontal stroke (|slope| > 6 => Horizontal) and a near-pure screen-vertical stroke
+    /// (|slope| < 1/2 => Vertical). A "/" runs up-right (dx, dy opposite signs in screen space), a "\"
+    /// runs down-right (dx, dy same signs). A zero-length segment is reported Horizontal so callers
+    /// fall back deterministically.
     inline SegmentAxis classifySegment(int dx, int dy) {
         using enum SegmentAxis;
         const int adx = std::abs(dx);
@@ -100,8 +105,9 @@ namespace exitgrid_detail {
         if (adx == 0 && ady == 0) {
             return Horizontal;
         }
-        // Diagonal band: neither component more than ~2x the other.
-        if (const bool nearDiagonal = adx <= 2 * ady && ady <= 2 * adx; nearDiagonal) {
+        // Diagonal band: |slope| in [1/2, 6]. The upper bound (adx <= 6*ady) admits the shallow 4:1
+        // diamond edge; the lower bound (ady <= 2*adx) admits the steep 1.33:1 one.
+        if (const bool nearDiagonal = adx <= 6 * ady && ady <= 2 * adx; nearDiagonal) {
             // Opposite signs => up-right "/"; same signs (incl. one axis zero handled above) => "\".
             const bool opposite = (dx > 0) != (dy > 0);
             return opposite ? ForwardSlash : BackSlash;

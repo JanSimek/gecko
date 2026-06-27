@@ -6,11 +6,12 @@ namespace geck {
 
 namespace {
 
-    // A middle dot flanked by spaces — a single consistent separator across every hint.
-    constexpr QLatin1String kSeparator{ "  ·  " };
-
     QString joinHints(const QStringList& parts) {
-        return parts.join(kSeparator);
+        // A middle dot (U+00B7) flanked by spaces. Built from QChar so it's encoding-safe regardless
+        // of the source-file/locale encoding — a raw "·" via QLatin1String is read as Latin-1 and
+        // renders as mojibake ("Â·") in the status bar.
+        static const QString separator = QStringLiteral("  ") + QChar(0x00B7) + QStringLiteral("  ");
+        return parts.join(separator);
     }
 
 } // namespace
