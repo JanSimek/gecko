@@ -37,8 +37,7 @@ QString hintForContext(EditorMode mode, bool hasSelection) {
                 QStringLiteral("Esc: exit") });
 
         case EditorMode::MarkExits:
-            // "Draw edge": Space flips the live segment's side; Shift snaps the live segment
-            // to a clean exit-grid angle; Enter or a double-click finishes the line; Esc abandons it.
+            // "Draw edge" keys: flip side, snap to angle, finish, cancel.
             return joinHints({ QStringLiteral("Space: flip side"),
                 QStringLiteral("Shift: snap to angle"),
                 QStringLiteral("Enter / double-click: finish"),

@@ -10,12 +10,11 @@
 #include "editor/HexagonGrid.h"
 #include "util/Constants.h"
 
-// Picks the direction-specific exit-grid marker art ({proto, frm}) for a hex from the line the user
-// drew through it (its local segment) and the destination kind. Exit grids run along the map's iso
-// edges; the PROTO encodes the DIRECTION (which iso edge the marker caps) and the FRM encodes the
-// FAMILY (green=inter-map vs brown=world/town) + direction. See util/Constants.h for the verified
-// 8-direction table. Qt-free and header-only, so it is unit-testable headlessly and reused by both
-// the editor's "Draw edge" tool and the scripting host.
+// Picks the direction-specific exit-grid marker art ({proto, frm}) from the drawn line's local segment
+// and the destination kind. The PROTO encodes the DIRECTION (which iso edge the marker caps), the FRM
+// encodes the FAMILY (green=inter-map vs brown=world/town) + direction; see util/Constants.h for the
+// verified 8-direction table. Qt-free + header-only, so it is unit-testable headlessly and shared by
+// the "Draw edge" tool and the scripting host.
 namespace geck {
 
 struct ExitGridArt {
@@ -40,21 +39,16 @@ inline ExitGridArt exitGridArtForDirection(int dir, ExitGridDestinationKind kind
     return { proto, frm };
 }
 
-/// The OUTWARD screen direction (toward the map boundary / off-map) along which a marker's bar art is
-/// slid by the editor, as a {dx, dy} with screen y growing DOWNWARD. The slide
-/// (Object::applyExitGridOutwardOffset) pushes the bar so the trigger hex sits on the bar's INNER
-/// (player-facing) edge, so "walk out here and leave the map" reads cleanly and — crucially — a flip
-/// (dir ^ 1) reverses the sign of this vector and so moves the (byte-identical) bar art to the OTHER
-/// side of the hex line. LEFT/RIGHT cap the screen-left/right edges, BOTTOM/TOP the screen-bottom/top.
+/// The OUTWARD screen direction ({dx, dy}, y DOWNWARD) the editor slides a marker's bar along so the
+/// trigger hex sits on the bar's INNER (player-facing) edge. A flip (dir ^ 1) reverses this vector's
+/// sign, moving the byte-identical bar to the OTHER side of the hex line. LEFT/RIGHT/BOTTOM/TOP cap
+/// their named screen edges.
 ///
-/// The four DIAGONAL vectors point PERPENDICULAR to the band's actual on-screen line (NOT along the
-/// {±1,±1} screen diagonal — that runs nearly ALONG the "\" band, so it barely separates the two
-/// sides). The bands' measured screen long-axis angles are ~-9° for the "/" pair and ~+26° for the "\"
-/// pair (y down), so the perpendiculars are ~(1, 6) and ~(1, -2); the integers below approximate those
-/// and applyExitGridOutwardOffset NORMALIZES them before scaling by a moderate magnitude (so the slide
-/// distance is uniform regardless of the vector's integer length). The diagonal slide is deliberately
-/// perpendicular-and-moderate, NOT the bbox corner the old code chased (that combined half-width AND
-/// half-height, ~93px, shoving the bar off its hex). Returns {0,0} for an out-of-range dir.
+/// The four DIAGONAL vectors point PERPENDICULAR to the band's on-screen line (the {±1,±1} screen
+/// diagonal runs nearly ALONG the "\" band, so it barely separates the sides). Measured long-axis
+/// angles are ~-9° for "/" and ~+26° for "\", so the perpendiculars are ~(1, 6) and ~(1, -2);
+/// applyExitGridOutwardOffset normalizes these before scaling, so the slide distance is uniform.
+/// Returns {0,0} for an out-of-range dir.
 inline std::pair<int, int> exitGridOutward(int dir) {
     switch (dir) {
         case ExitGrid::DIR_LEFT:
@@ -78,8 +72,8 @@ inline std::pair<int, int> exitGridOutward(int dir) {
     }
 }
 
-/// The screen position of the hex grid's centre hex, the reference point outward facing is measured
-/// from. Returns {0,0} if the grid has no centre hex (degenerate).
+/// Screen position of the grid's centre hex — the reference point outward facing is measured from.
+/// Returns {0,0} for a degenerate grid with no centre hex.
 inline std::pair<int, int> hexGridCenterScreen(const HexagonGrid& grid) {
     const int centerHex = (HexagonGrid::GRID_HEIGHT / 2) * HexagonGrid::GRID_WIDTH
         + (HexagonGrid::GRID_WIDTH / 2);
@@ -98,17 +92,13 @@ namespace exitgrid_detail {
         ForwardSlash,
         BackSlash };
 
-    /// The drawn segment's axis. The diagonal band is sized for the Fallout ISO DIAMOND: the playable
-    /// area is a diamond whose two slanted edges run along the hex grid's two axes, and those edges
-    /// have measured SCREEN slopes of ~1.33:1 (the steep NW/SE edge) and ~4:1 (the shallow NE/SW edge)
-    /// — NOT 1:1. A 45°-centred [1/2, 2] band tips the shallow 4:1 edge to Horizontal, so a stroke
-    /// drawn along the real diamond edge gets jagged cardinal bars instead of the diagonal "/" "\" art.
-    /// So the band is |slope| in [1/2, 6] (slope = |dx|/|dy|), which puts BOTH diamond-edge slopes
-    /// comfortably inside (4:1 with a 1.5x margin to the upper bound) while still excluding a near-pure
-    /// screen-horizontal stroke (|slope| > 6 => Horizontal) and a near-pure screen-vertical stroke
-    /// (|slope| < 1/2 => Vertical). A "/" runs up-right (dx, dy opposite signs in screen space), a "\"
-    /// runs down-right (dx, dy same signs). A zero-length segment is reported Horizontal so callers
-    /// fall back deterministically.
+    /// The drawn segment's axis. The diagonal band is sized for the Fallout ISO DIAMOND, whose two
+    /// slanted edges run along the hex grid's axes with measured SCREEN slopes ~4:1 (shallow NE/SW) and
+    /// ~1.33:1 (steep NW/SE) — NOT 1:1. A 45°-centred [1/2, 2] band tips the shallow 4:1 edge to
+    /// Horizontal (jagged cardinal bars instead of the "/" "\" art), so the band is |slope| in [1/2, 6]
+    /// (slope = |dx|/|dy|): both diamond slopes sit inside while near-pure screen cardinals stay out.
+    /// A "/" runs up-right (dx, dy opposite signs), a "\" down-right (same signs). A zero-length segment
+    /// reports Horizontal so callers fall back deterministically.
     inline SegmentAxis classifySegment(int dx, int dy) {
         using enum SegmentAxis;
         const int adx = std::abs(dx);
@@ -126,24 +116,18 @@ namespace exitgrid_detail {
         return (adx >= ady) ? Horizontal : Vertical;
     }
 
-    /// Pick the side within an axis pair from the hex's outward facing (which way it points away from
-    /// the map centre: outwardX/outwardY = hex - centre, y DOWNWARD). The first index of each pair is
-    /// the LEFT/BOTTOM/"/"-A/"\"-A side; the second is the opposite — matching the verified table
-    /// (dir0=LEFT, dir1=RIGHT, dir2=BOTTOM, dir3=TOP).
+    /// Pick the side within an axis pair from the hex's outward facing (outwardX/outwardY = hex - centre,
+    /// y DOWNWARD). Matches the verified table (dir0=LEFT, 1=RIGHT, 2=BOTTOM, 3=TOP).
     inline int directionForAxis(SegmentAxis axis, int outwardX, int outwardY) {
         using enum SegmentAxis;
         switch (axis) {
-            case Horizontal:
-                // A horizontal drawn line is a top or bottom edge: above centre faces TOP, else BOTTOM.
+            case Horizontal: // above centre faces TOP, else BOTTOM
                 return (outwardY < 0) ? ExitGrid::DIR_TOP : ExitGrid::DIR_BOTTOM;
             case Vertical:
-                // A vertical drawn line is a left or right edge.
                 return (outwardX < 0) ? ExitGrid::DIR_LEFT : ExitGrid::DIR_RIGHT;
-            case ForwardSlash:
-                // "/" pair (dir 4/5): side B faces up-right (outward up OR right), side A the opposite.
+            case ForwardSlash: // "/" side B faces up-right (outward up OR right), side A opposite
                 return (outwardX > 0 || outwardY < 0) ? ExitGrid::DIR_FWD_B : ExitGrid::DIR_FWD_A;
-            case BackSlash:
-                // "\" pair (dir 6/7): side B faces down-right (outward down OR right), side A opposite.
+            case BackSlash: // "\" side B faces down-right (outward down OR right), side A opposite
                 return (outwardX > 0 || outwardY > 0) ? ExitGrid::DIR_BACK_B : ExitGrid::DIR_BACK_A;
         }
         return ExitGrid::DIR_BOTTOM;
@@ -152,10 +136,8 @@ namespace exitgrid_detail {
 } // namespace exitgrid_detail
 
 /// The directional exit-grid art for a hex drawn as part of a line. `dx`/`dy` are the hex's local
-/// segment direction in screen space (y DOWNWARD); `outwardX`/`outwardY` are the hex's offset from
-/// the map centre (which way it faces away from centre); `kind` selects green vs brown. The segment
-/// axis picks the direction pair (horizontal/vertical/"/"/"\"), and the outward facing picks the side
-/// within the pair. The user's Marker-Direction override can force a specific direction instead.
+/// segment direction (screen, y DOWNWARD); `outwardX`/`outwardY` its offset from the map centre; `kind`
+/// selects green vs brown. The segment axis picks the direction pair, the outward facing the side.
 inline ExitGridArt exitGridArtForSegment(int dx, int dy, int outwardX, int outwardY,
     ExitGridDestinationKind kind) {
     const exitgrid_detail::SegmentAxis axis = exitgrid_detail::classifySegment(dx, dy);
@@ -163,12 +145,10 @@ inline ExitGridArt exitGridArtForSegment(int dx, int dy, int outwardX, int outwa
     return exitGridArtForDirection(dir, kind);
 }
 
-/// Flip a direction (0..7) to the OPPOSITE side of its axis pair: LEFT<->RIGHT, BOTTOM<->TOP,
-/// "/"-A<->"/"-B, "\"-A<->"\"-B. The eight directions are laid out as four adjacent pairs
-/// (0/1, 2/3, 4/5, 6/7), so toggling the low bit swaps within the pair and keeps the axis. The two
-/// art bitmaps in a pair are identical; the only on-screen difference is which side the renderer's
-/// outward offset (exitGridOutward) pushes the bar to — so a flip moves the bar to the other side
-/// (e.g. a horizontal edge's bar from south to north). Out-of-range dirs are returned unchanged.
+/// Flip a direction (0..7) to the OPPOSITE side of its axis pair (LEFT<->RIGHT, etc). The directions
+/// are four adjacent pairs (0/1, 2/3, 4/5, 6/7), so toggling the low bit swaps within the pair and
+/// keeps the axis. The two bitmaps in a pair are identical; the flip only changes which side the
+/// renderer's outward offset (exitGridOutward) pushes the bar to. Out-of-range dirs pass through.
 inline int flipExitGridDirection(int dir) {
     if (dir < 0 || dir >= ExitGrid::DIR_COUNT) {
         return dir;
@@ -177,22 +157,18 @@ inline int flipExitGridDirection(int dir) {
 }
 
 /// The single direction for a WHOLE drawn stroke. `dx`/`dy` are the stroke's overall screen delta
-/// (first vertex -> last vertex, y DOWNWARD); `outwardX`/`outwardY` are the stroke midpoint's offset
-/// from the map centre (which way the whole edge faces away from centre). The stroke's axis picks the
-/// pair and the overall outward facing picks the side ONCE — so every hex on the stroke gets the same
-/// direction (one consistent side, a clean continuous bar) instead of a per-hex recompute that flips
-/// sides mid-run. `flipSide` inverts that side within the pair (the live "flip" key), so the user can
-/// put the edge on the opposite side (south<->north, left<->right, ...). Returns the chosen direction
-/// (0..7); pass it to exitGridArtForDirection for the {proto, frm}.
+/// (first->last vertex, y DOWNWARD); `outwardX`/`outwardY` the midpoint's offset from the map centre.
+/// The axis picks the pair and the outward facing the side ONCE, so every hex shares one consistent
+/// side (a clean continuous bar) instead of flipping mid-run. `flipSide` (the live "flip" key) inverts
+/// that side. Returns the direction (0..7); pass to exitGridArtForDirection for the {proto, frm}.
 inline int exitGridDirectionForLine(int dx, int dy, int outwardX, int outwardY, bool flipSide) {
     const exitgrid_detail::SegmentAxis axis = exitgrid_detail::classifySegment(dx, dy);
     const int dir = exitgrid_detail::directionForAxis(axis, outwardX, outwardY);
     return flipSide ? flipExitGridDirection(dir) : dir;
 }
 
-/// Single-hex fallback (no drawn segment): classify a lone hex purely by its outward facing from the
-/// map centre. The vertical offset dominating => a horizontal (top/bottom) edge, else a vertical
-/// (left/right) edge. Used by single-hex placement, where there is no line to take an axis from.
+/// Single-hex fallback (no drawn segment): classify a lone hex by its outward facing alone. Vertical
+/// offset dominating => a horizontal (top/bottom) edge, else a vertical (left/right) edge.
 inline ExitGridArt exitGridArtForFacing(int hexX, int hexY, int mapCenterX, int mapCenterY,
     ExitGridDestinationKind kind) {
     const int dx = hexX - mapCenterX;
@@ -207,19 +183,16 @@ inline ExitGridArt exitGridArtForFacing(int hexX, int hexY, int mapCenterX, int 
 // --------------------------------------------------------------------------------------------------
 // PER-SEGMENT classification (TRUE freeze)
 //
-// The "Draw edge" tool classifies each polyline SEGMENT (vertex[i] -> vertex[i+1]) from THAT segment's
-// own screen direction, picking ONE axis + side for the whole segment (uniform within it). A segment is
-// frozen IMMUTABLY at the click that closes it — its hexes AND its direction are captured with the flip
-// in effect at that moment and never recomputed (ExitGridPlacementManager owns the frozen segments). So
-// pressing Space or moving the cursor can only touch the ONE live segment (last vertex -> cursor); the
-// flip applies only to that live segment, and an earlier segment can never shift between cursor moves.
-// Classifying per SEGMENT (not per hex) avoids the both-sides bug a per-hex recompute reintroduces.
+// The "Draw edge" tool classifies each polyline SEGMENT from its own screen direction (ONE axis + side,
+// uniform within it) and freezes it IMMUTABLY at the click that closes it (hexes + direction captured
+// with the flip then in effect, never recomputed; ExitGridPlacementManager owns the frozen segments).
+// So Space or a cursor move touches only the ONE live segment. Classifying per SEGMENT (not per hex)
+// avoids the both-sides bug a per-hex recompute reintroduces.
 
-/// One polyline segment's geometry for classification: the ordered hexes the segment's hex-line walk
-/// passes through (endpoints inclusive), the segment's overall SCREEN delta (last vertex hex - first
-/// vertex hex, y DOWNWARD) for the axis, and the segment midpoint's outward facing (midpoint hex -
-/// grid centre) for the side. exitGridDirectionForLine maps {screenDx/Dy, outwardX/Y, flipSide} to the
-/// single direction the whole segment is frozen with.
+/// One polyline segment's geometry for classification: the ordered hexes its hex-line walk passes
+/// through (endpoints inclusive), its overall SCREEN delta (last - first hex, y DOWNWARD) for the axis,
+/// and the midpoint's outward facing (midpoint - grid centre) for the side. exitGridDirectionForLine
+/// maps {screenDx/Dy, outwardX/Y, flipSide} to the single frozen direction.
 struct ExitGridSegmentRun {
     std::vector<int> hexes;
     int screenDx = 0;
@@ -231,16 +204,11 @@ struct ExitGridSegmentRun {
 // --------------------------------------------------------------------------------------------------
 // SHIFT-SNAP to clean exit-grid angles
 //
-// While drawing the "Draw edge" line, holding Shift snaps the LIVE segment (last committed vertex ->
-// cursor) onto the nearest CLEAN exit-grid angle, so the placed bars line up instead of staircasing.
-// The clean angles are the SCREEN directions of the eight exit-grid edges (screen y grows DOWNWARD):
-//   - horizontal  (±1,  0)
-//   - vertical    ( 0, ±1)
-//   - the shallow NE/SW iso-diamond edge, measured slope dx/dy = 4:1 -> (±4, ∓1)
-//   - the steep   NW/SE iso-diamond edge, measured slope dx/dy = 4/3 -> (±4, ±3)
-// These are the SAME slopes the classifier's iso-diamond band is built around (a const-row hex run
-// gives screen delta (-720, 180) = (-4, 1)*180; a const-col run gives (480, 360) = (4, 3)*120), so a
-// snapped segment classifies cleanly to a single cardinal/diagonal art for its whole length.
+// Holding Shift snaps the LIVE segment onto the nearest CLEAN exit-grid angle so the placed bars line
+// up instead of staircasing. The eight clean angles are the screen directions of the exit-grid edges
+// (y DOWNWARD): horizontal (±1, 0), vertical (0, ±1), the shallow 4:1 iso edge (±4, ∓1), and the steep
+// 4/3 iso edge (±4, ±3). These are the SAME slopes the classifier's iso-diamond band uses, so a snapped
+// segment classifies cleanly to one art for its whole length.
 
 /// One clean snap direction: a SCREEN-space unit vector (y DOWNWARD).
 struct ExitGridSnapDir {
@@ -248,8 +216,8 @@ struct ExitGridSnapDir {
     double y;
 };
 
-/// The eight clean exit-grid screen directions as unit vectors, derived from the measured iso-diamond
-/// edge slopes (4:1 shallow, 4/3 steep) plus the two screen cardinals. y grows DOWNWARD.
+/// The eight clean exit-grid screen directions as unit vectors: the measured iso slopes (4:1 shallow,
+/// 4/3 steep) plus the two screen cardinals. y grows DOWNWARD.
 inline const std::array<ExitGridSnapDir, 8>& exitGridSnapDirections() {
     // 1/sqrt(17) for the 4:1 shallow edge, 1/5 for the 3-4-5 steep edge.
     static constexpr double kShallow = 0.242535625036333; // 1 / sqrt(4^2 + 1^2)
@@ -267,12 +235,10 @@ inline const std::array<ExitGridSnapDir, 8>& exitGridSnapDirections() {
     return dirs;
 }
 
-/// Snap a live-segment endpoint to the nearest clean exit-grid angle. `lastX/lastY` is the last
-/// committed vertex; `cursorX/cursorY` is the raw cursor. Returns the cursor rotated so the segment
-/// runs along the nearest clean screen direction, KEEPING its length (distance from the last vertex):
-/// project the cursor offset onto the best-matching direction ray (largest dot product) and re-emit
-/// at the original distance along that ray. A zero-length offset is returned unchanged. Pure (no
-/// SFML/Qt) so the snap geometry is unit-testable headlessly; callers wrap it for sf::Vector2f.
+/// Snap a live-segment endpoint to the nearest clean exit-grid angle. `lastX/lastY` is the last vertex,
+/// `cursorX/cursorY` the raw cursor. Returns the cursor rotated onto the nearest clean direction while
+/// KEEPING its distance from the last vertex (project onto the best-matching ray, re-emit at the same
+/// length). A zero-length offset is returned unchanged. Pure (no SFML/Qt) for headless testing.
 inline std::pair<double, double> snapToExitGridAngle(double lastX, double lastY,
     double cursorX, double cursorY) {
     const double dx = cursorX - lastX;
@@ -281,8 +247,8 @@ inline std::pair<double, double> snapToExitGridAngle(double lastX, double lastY,
     if (len <= 0.0) {
         return { cursorX, cursorY };
     }
-    // Pick the direction whose ray the offset projects onto most strongly (max dot product). Because
-    // the eight directions include both signs of each axis, this is the nearest clean angle.
+    // Pick the ray the offset projects onto most strongly (max dot product); since the eight directions
+    // include both signs of each axis, that is the nearest clean angle.
     const auto& dirs = exitGridSnapDirections();
     double bestDot = -1e300;
     ExitGridSnapDir best = dirs.front();

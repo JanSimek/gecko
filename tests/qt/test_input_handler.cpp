@@ -147,8 +147,8 @@ TEST_CASE("InputHandler begins drag-selection on a plain click in select mode", 
     CHECK(h.handler.getCurrentAction() == InputHandler::EditorAction::DRAG_SELECTING);
 }
 
-// The "Draw edge" (MarkExits) polyline state machine: clicks append vertices, mouse moves fire a
-// live preview, and right-click with >=2 vertices finalizes the line.
+// The "Draw edge" polyline state machine: clicks append vertices, moves fire a live preview, right-click
+// with >=2 vertices finalizes.
 TEST_CASE("InputHandler builds an exit-grid edge line and finalizes it on right-click", "[input][line]") {
     if (glContextUnavailable()) {
         SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
@@ -205,10 +205,9 @@ TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too f
     CHECK_FALSE(h.handler.isInMarkExitsMode()); // tool dropped
 }
 
-// The flip key (Space) for "Draw edge": it toggles the edge's side. A KeyPressed never touches the
-// RenderTarget/view (only mouse events convert pixels), so we drive InputHandler::handleKeyPressed
-// directly — no RenderTexture, hence no GL context — and the test runs on a display-less CI runner.
-// (Going through handleEvent would need an sf::RenderTexture, which aborts when it can't open X11.)
+// The flip key (Space) for "Draw edge" toggles the edge's side. A KeyPressed never touches the
+// RenderTarget/view, so we drive handleKeyPressed directly — no RenderTexture/GL context — and the test
+// runs on a display-less CI runner (handleEvent would need an sf::RenderTexture, which aborts without X11).
 namespace {
 void pressKeyDirect(InputHandler& handler, sf::Keyboard::Key key) {
     sf::Event::KeyPressed press;
@@ -245,11 +244,10 @@ TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the p
     CHECK(lastPreviewFlip == false);
 }
 
-// Shift-snap wiring: the live Draw-edge cursor passes through maybeSnapMarkExitsCursor before the
-// preview/commit fire. Holding Shift is a real-keyboard state that can't be driven headlessly (sf::
-// Keyboard reads the OS), so the snapped LIVE behaviour is GUI/eyeball-only — see the pure
-// snapToExitGridAngle tests in general_tests for the geometry. Here we pin the no-op path: with Shift
-// up (the headless default) the re-fired preview cursor is the raw cursor, unmodified by the wiring.
+// Shift-snap wiring: the live cursor passes through maybeSnapMarkExitsCursor before preview/commit.
+// Holding Shift can't be driven headlessly (sf::Keyboard reads the OS), so the snapped behaviour is
+// GUI-only — see the pure snapToExitGridAngle tests for the geometry. Here we pin the no-op path: with
+// Shift up the re-fired preview cursor is the raw cursor.
 TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Shift is up", "[input][line][snap]") {
     InputHandler handler;
     sf::Vector2f lastCursor{ -1.f, -1.f };

@@ -64,8 +64,8 @@ void ExitGridPlacementManager::placeExitGridAtPosition(sf::Vector2f worldPos) {
     rememberDestinationKind(properties.exitMap);
     _currentMarkerArt = properties.markerArt;
 
-    // A single hex has no stroke: the art falls back to the hex's center-facing classification (or the
-    // explicit override, if chosen). No flip on a click-placed lone marker.
+    // A single hex has no stroke: the art is the center-facing classification (or the explicit
+    // override). No flip on a click-placed lone marker.
     const ExitGridArt art = artForLine({ hexPosition }, properties.markerArt, /*flipSide=*/false);
     auto exitGridObject = createExitGridObject(hexPosition, art.proPid, art.frmPid, properties);
     int currentElevation = _context.getCurrentElevation();
@@ -101,9 +101,8 @@ void ExitGridPlacementManager::editExitGridProperties(std::shared_ptr<MapObject>
         return; // User cancelled
     }
 
-    // A destination-only edit: update only the exit_* fields and keep the existing directional art
-    // (pro_pid/frm_pid). Overwriting the art here would collapse every edited marker to one fixed
-    // direction and lose the per-hex art the line tool placed.
+    // Destination-only edit: update the exit_* fields, keep the directional art (pro_pid/frm_pid).
+    // Overwriting the art would collapse every edited marker to one fixed direction.
     exitGrid->exit_map = newProperties.exitMap;
     exitGrid->exit_position = newProperties.exitPosition;
     exitGrid->exit_elevation = newProperties.exitElevation;
@@ -141,9 +140,7 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
     exitGrid->frame_number = 0;
     exitGrid->direction = 0;
 
-    // The exit-grid art is direction-specific (which way the exit faces), chosen per hex by the
-    // caller from its outward facing — independent of the destination, which drives only the exit_*
-    // fields below.
+    // Direction-specific art, chosen per hex by the caller — independent of the destination (exit_*).
     exitGrid->pro_pid = proPid;
     exitGrid->frm_pid = frmPid;
     exitGrid->flags = 0;
@@ -194,8 +191,8 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
 namespace {
     using MarkerArt = ExitGridPropertiesDialog::ExitGridProperties::MarkerArt;
 
-    // The explicit MarkerArt directions map 1:1 onto ExitGrid::Direction (0..7): Auto is the only
-    // value with no fixed direction. -1 means "no explicit direction" (i.e. Auto).
+    // The explicit MarkerArt values map 1:1 onto ExitGrid::Direction (0..7); Auto has none, so it
+    // returns -1 ("no explicit direction").
     int explicitDirection(MarkerArt markerArt) {
         using enum MarkerArt;
         switch (markerArt) {
@@ -243,11 +240,11 @@ ExitGridArt ExitGridPlacementManager::autoArtForLine(const std::vector<int>& ord
     };
     const auto [centerX, centerY] = hexGridCenterScreen(*hexGrid);
 
-    // A lone hex (no stroke) has no axis: classify it purely by its outward facing.
+    // A lone hex has no axis: classify by its outward facing.
     if (orderedHexes.size() < 2) {
         const auto [hx, hy] = screenOf(orderedHexes.front());
         const ExitGridArt art = exitGridArtForFacing(hx, hy, centerX, centerY, kind);
-        // Honour a flip even for a lone hex so the preview/commit stays consistent.
+        // Honour a flip even for a lone hex so preview/commit stay consistent.
         if (flipSide) {
             return exitGridArtForDirection(
                 flipExitGridDirection(static_cast<int>(art.proPid - ExitGrid::FIRST_EXIT_GRID_PID)),
@@ -256,9 +253,8 @@ ExitGridArt ExitGridPlacementManager::autoArtForLine(const std::vector<int>& ord
         return art;
     }
 
-    // Whole-stroke classification: the screen delta from the first to the last hex picks the axis, and
-    // the stroke midpoint's offset from the map centre picks the side — ONCE for the whole edge, so
-    // every hex shares one consistent side (a clean continuous bar) instead of flipping mid-run.
+    // Whole-stroke classification: first->last delta picks the axis, the midpoint's outward facing picks
+    // the side, ONCE — so every hex shares one side (a clean continuous bar) instead of flipping mid-run.
     const auto [fx, fy] = screenOf(orderedHexes.front());
     const auto [lx, ly] = screenOf(orderedHexes.back());
     const auto [mx, my] = screenOf(orderedHexes[orderedHexes.size() / 2]);
@@ -268,9 +264,8 @@ ExitGridArt ExitGridPlacementManager::autoArtForLine(const std::vector<int>& ord
 
 ExitGridArt ExitGridPlacementManager::artForLine(const std::vector<int>& orderedHexes,
     MarkerArt markerArt, bool flipSide) const {
-    // An explicit marker-direction override forces one art for every hex (the escape hatch for
-    // ambiguous edges); Auto uses the single whole-stroke side. The flip key only affects Auto — an
-    // explicit direction is already a fixed side, so there is nothing to flip.
+    // An explicit override forces one art for every hex; Auto uses the whole-stroke side. The flip only
+    // affects Auto (an explicit direction is already a fixed side).
     if (const int dir = explicitDirection(markerArt); dir >= 0) {
         return exitGridArtForDirection(dir, destinationKind());
     }
@@ -317,8 +312,8 @@ std::optional<ExitGridSegmentRun> ExitGridPlacementManager::buildSegmentRun(
 
 ExitGridArt ExitGridPlacementManager::segmentArt(const ExitGridSegmentRun& run, bool flipSide) const {
     const ExitGridDestinationKind kind = destinationKind();
-    // An explicit marker-direction override forces ONE direction (the escape hatch for ambiguous
-    // edges); Auto classifies the segment from its own screen axis + outward side (optionally flipped).
+    // An explicit override forces ONE direction; Auto classifies from the segment's own screen axis +
+    // outward side (optionally flipped).
     if (const int forced = explicitDirection(_currentMarkerArt); forced >= 0) {
         return exitGridArtForDirection(forced, kind);
     }
@@ -332,9 +327,9 @@ ExitGridPlacementManager::CommittedSegment ExitGridPlacementManager::classifySeg
     CommittedSegment seg;
     const std::optional<ExitGridSegmentRun> run = buildSegmentRun(from, to);
     if (!run.has_value()) {
-        return seg; // degenerate/off-grid: nothing to freeze; the live preview extends from elsewhere.
+        return seg; // degenerate/off-grid: nothing to freeze
     }
-    // One uniform art for the whole segment (its own screen axis + side, frozen at the given flip).
+    // One uniform art for the whole segment, frozen at the given flip.
     const ExitGridArt art = segmentArt(*run, flipSide);
     seg.hexes = run->hexes;
     seg.art.assign(seg.hexes.size(), art);
@@ -346,8 +341,8 @@ void ExitGridPlacementManager::flattenSegments(const std::vector<CommittedSegmen
     outHexes.clear();
     outArt.clear();
     std::set<int> seen;
-    // FROZEN committed segments first (in commit order), then the live one. A hex keeps the art of the
-    // FIRST segment to cover it, so committed hexes never change as the live segment moves.
+    // Committed segments first (in commit order), then the live one; first-seen wins, so committed hexes
+    // never change as the live segment moves.
     const auto append = [&](const CommittedSegment& seg) {
         for (std::size_t i = 0; i < seg.hexes.size(); ++i) {
             if (seen.insert(seg.hexes[i]).second) {
@@ -367,8 +362,8 @@ void ExitGridPlacementManager::beginLine() {
 }
 
 void ExitGridPlacementManager::commitSegment(sf::Vector2f from, sf::Vector2f to, bool flipSide) {
-    // Freeze the just-closed segment with the flip in effect AT THIS CLICK. A degenerate/off-grid
-    // capture is dropped so it can't leave an empty placeholder in the frozen list.
+    // Freeze the just-closed segment at this click's flip. Drop a degenerate/off-grid capture so it
+    // leaves no empty placeholder.
     CommittedSegment seg = classifySegment(from, to, flipSide);
     if (!seg.hexes.empty()) {
         _committedSegments.push_back(std::move(seg));
@@ -381,9 +376,8 @@ void ExitGridPlacementManager::resetLine() {
 
 ExitGridPlacementManager::LinePreview ExitGridPlacementManager::previewForLine(
     sf::Vector2f liveFrom, sf::Vector2f liveTo, bool hasLive, bool flipSide) const {
-    // The FROZEN committed segments (never recomputed) plus the ONE live segment (last committed vertex
-    // -> cursor), classified now at the current flip + Shift-snapped cursor. Committed art stays frozen;
-    // only the live segment changes as the cursor moves or Space flips.
+    // The FROZEN committed segments plus the ONE live segment, classified now at the current flip.
+    // Committed art stays frozen; only the live segment changes as the cursor moves or Space flips.
     LinePreview preview;
     const CommittedSegment live = hasLive ? classifySegment(liveFrom, liveTo, flipSide)
                                           : CommittedSegment{};
@@ -501,9 +495,8 @@ bool ExitGridPlacementManager::bulkEditExistingExitGrids(const std::vector<std::
         beforeStates.push_back(beforeState);
     }
 
-    // Destination-only bulk edit: update only the exit_* fields on every marker and keep each one's
-    // existing directional art (pro_pid/frm_pid) — these markers were placed along a line, each with
-    // the art for its own segment, so we must not collapse them all to one fixed direction.
+    // Destination-only bulk edit: update the exit_* fields, keep each marker's directional art — they
+    // were placed along a line with per-segment art, so we must not collapse them to one direction.
     std::vector<ExitGridContext::ExitGridState> afterStates;
     for (const auto& mapObjectPtr : mapObjects) {
         mapObjectPtr->exit_map = newProperties.exitMap;
@@ -543,14 +536,13 @@ std::size_t ExitGridPlacementManager::createExitGridsForLine(const std::vector<i
     rememberDestinationKind(newProperties.exitMap);
     _currentMarkerArt = newProperties.markerArt;
 
-    // `hexes`/`art` are the FROZEN per-segment classification of the committed line (parallel), matching
-    // the preview hex-for-hex. Create only on the FRESH hexes (skipping any already occupied), each with
-    // its own segment's frozen art.
+    // `hexes`/`art` are the frozen per-segment classification (parallel), matching the preview. Create
+    // only on the FRESH hexes, each with its segment's frozen art.
     int currentElevation = _context.getCurrentElevation();
     std::vector<std::shared_ptr<MapObject>> createdExitGrids;
     for (std::size_t i = 0; i < hexes.size(); ++i) {
         if (!freshHexes.contains(hexes[i])) {
-            continue; // already occupied: bulk-edit/keep handles those, don't double-place
+            continue; // already occupied: don't double-place
         }
         createdExitGrids.push_back(
             createExitGridObject(hexes[i], art[i].proPid, art[i].frmPid, newProperties));
@@ -590,10 +582,6 @@ std::vector<std::shared_ptr<Object>> ExitGridPlacementManager::collectExitGridsO
 
 std::vector<int> ExitGridPlacementManager::freshHexesForLine(const std::vector<int>& lineHexes,
     const std::set<int>& occupied) {
-    // The line hexes that don't already have an exit grid -- the ones a stroke should CREATE on.
-    // Empty when every hex is already occupied (the caller bulk-edits the existing edge) or the line
-    // is empty. Pure + static so the partial-overlap placement decision is unit-testable without a
-    // dialog/context.
     std::vector<int> fresh;
     fresh.reserve(lineHexes.size());
     for (const int hex : lineHexes) {
@@ -615,9 +603,8 @@ void ExitGridPlacementManager::selectExitGridsAlongLine() {
     }
     _context.clearSelection();
 
-    // The placement is exactly the FROZEN committed segments — every segment closed by a click, each
-    // with the art it was captured with. No live segment exists at finalize (the last vertex was
-    // committed by its click), so the placed edge is pixel-identical to the last preview.
+    // The placement is exactly the FROZEN committed segments (no live segment exists at finalize), so
+    // the placed edge is pixel-identical to the last preview.
     std::vector<int> lineHexes;
     std::vector<ExitGridArt> art;
     flattenSegments(_committedSegments, CommittedSegment{}, lineHexes, art);
@@ -632,10 +619,9 @@ void ExitGridPlacementManager::selectExitGridsAlongLine() {
         }
     }
 
-    // Only treat the stroke as an EDIT when EVERY hex already has an exit grid (the user is re-editing
-    // an existing edge): bulk-edit their destination, keeping each one's directional art. A stroke that
-    // merely grazes a neighbouring grid must still place -- otherwise a single overlapping hex silently
-    // swallows the whole placement (the intermittent "press Enter + OK but nothing appears" bug).
+    // Treat the stroke as an EDIT only when EVERY hex already has a grid: bulk-edit the destination,
+    // keeping each one's art. A stroke that merely grazes a neighbour must still place — otherwise a
+    // single overlapping hex silently swallows the placement (the "Enter + OK, nothing appears" bug).
     const std::vector<int> freshList = freshHexesForLine(lineHexes, occupied);
     if (freshList.empty() && !lineHexes.empty()) {
         bulkEditExistingExitGrids(existing);

@@ -64,11 +64,9 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
         }
 
         if (_mode == EditorMode::MarkExits) {
-            // "Draw edge": a click appends a line vertex; a double-click finalizes it. The
-            // double-click's two presses both arrive here, so the second one both appends the final
-            // vertex (the first of the pair was already appended) and then finalizes. Double-click
-            // detection uses the RAW cursor (physical mouse stillness), but with Shift held the appended
-            // vertex is SNAPPED to the nearest clean angle so the committed segment is an aligned edge.
+            // "Draw edge": a click appends a vertex, a double-click finalizes. Double-click detection
+            // uses the RAW cursor (physical mouse stillness); with Shift held the appended vertex is
+            // SNAPPED to the nearest clean angle.
             const sf::Vector2f delta = worldPos - _dragStartWorldPos;
             const float distance = std::sqrt(delta.x * delta.x + delta.y * delta.y);
             const bool isDoubleClick = _lineVertices.size() >= 2 && _doubleClickClock.getElapsedTime().asSeconds() < kDoubleClickSeconds && distance < kDoubleClickWorldDistance;
@@ -78,9 +76,8 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             if (isDoubleClick) {
                 finalizeExitGridLine();
             } else {
-                // Append the (Shift-snapped) vertex. The first vertex STARTS a fresh edge (drop any
-                // stale frozen segments); every vertex from the 2nd on CLOSES a segment from the
-                // previous vertex, which the host freezes immutably with the flip in effect right now.
+                // Append the (Shift-snapped) vertex. The first STARTS a fresh edge; every vertex from
+                // the 2nd on CLOSES a segment, which the host freezes at the current flip.
                 const sf::Vector2f vertex = maybeSnapMarkExitsCursor(worldPos);
                 if (_lineVertices.empty()) {
                     if (_callbacks.onMarkExitsLineReset) {
@@ -135,8 +132,7 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             _mode = EditorMode::Select;
             spdlog::debug("Exit grid placement mode cancelled with right-click");
         } else if (_mode == EditorMode::MarkExits) {
-            // Right-click finalizes the edge line when there are enough vertices, otherwise it
-            // abandons the in-progress line and drops the tool.
+            // Right-click finalizes the line with enough vertices, otherwise abandons it and drops the tool.
             if (_lineVertices.size() >= 2) {
                 finalizeExitGridLine();
             } else {
@@ -226,9 +222,8 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
         _callbacks.onMouseMove(worldPos);
     }
 
-    // "Draw edge": preview the polyline + on-line hexes from the committed vertices to the live
-    // cursor on every move, independent of any drag action. With Shift held, the live cursor snaps to
-    // the nearest clean exit-grid angle so the in-progress segment previews as a straight aligned edge.
+    // "Draw edge": preview the polyline + on-line hexes from the committed vertices to the live cursor
+    // on every move, independent of any drag. With Shift held, the live cursor snaps to a clean angle.
     if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsLinePreview) {
         _callbacks.onMarkExitsLinePreview(_lineVertices, maybeSnapMarkExitsCursor(worldPos), _markExitsFlip);
     }
@@ -322,10 +317,8 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
             _callbacks.onStampCycleVariant();
         }
     } else if (event.code == sf::Keyboard::Key::Space) {
-        // In "Draw edge" mode, Space flips which side the edge's bars sit on (south<->north, the two
-        // diagonal sides). Space is otherwise unused in this mode — panning is a mouse drag, and
-        // Esc/Enter/right-click/double-click drive the line. Re-fire the preview immediately with the
-        // cursor at its last position so the flipped side is visible before finalising.
+        // In "Draw edge" mode, Space flips which side the edge's bars sit on, then re-fires the preview
+        // at the last cursor so the flipped side is visible before finalising.
         if (_mode == EditorMode::MarkExits) {
             _markExitsFlip = !_markExitsFlip;
             if (_callbacks.onMarkExitsLinePreview) {
@@ -352,8 +345,7 @@ void InputHandler::finishDragSelectRelease(sf::Vector2f worldPos) {
 }
 
 void InputHandler::finalizeExitGridLine() {
-    // onMarkExitsLine places the FROZEN committed segments (the host owns them); it must run BEFORE the
-    // reset that drops those frozen segments.
+    // onMarkExitsLine places the FROZEN committed segments, so it must run BEFORE the reset that drops them.
     if (_lineVertices.size() >= 2 && _callbacks.onMarkExitsLine) {
         _callbacks.onMarkExitsLine(_lineVertices, _markExitsFlip);
     }
@@ -361,8 +353,7 @@ void InputHandler::finalizeExitGridLine() {
     if (_callbacks.onMarkExitsLineReset) {
         _callbacks.onMarkExitsLineReset(); // drop the frozen segments — the next edge starts fresh
     }
-    // The tool stays active so the user can immediately draw another edge; the caller
-    // (EditorWidget) repaints the now-cleared preview. The flip toggle persists for the next edge.
+    // The tool stays active for another edge; repaint the now-cleared preview. The flip persists.
     if (_callbacks.onMarkExitsLinePreview) {
         _callbacks.onMarkExitsLinePreview(_lineVertices, _dragStartWorldPos, _markExitsFlip);
     }
@@ -407,9 +398,8 @@ bool InputHandler::isShiftPressed() const {
 }
 
 sf::Vector2f InputHandler::maybeSnapMarkExitsCursor(sf::Vector2f cursor) const {
-    // Snap only the LIVE segment (last committed vertex -> cursor) and only while Shift is held; with no
-    // committed vertex there is no segment to align, so leave the cursor raw. Shift is the conventional
-    // "constrain to a clean angle" modifier (Photoshop / Illustrator / Figma / PowerPoint).
+    // Snap only the LIVE segment, and only while Shift is held (the conventional "constrain to a clean
+    // angle" modifier); with no committed vertex there is no segment to align, so leave the cursor raw.
     if (_mode != EditorMode::MarkExits || _lineVertices.empty() || !isShiftPressed()) {
         return cursor;
     }

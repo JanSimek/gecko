@@ -101,12 +101,10 @@ public:
         const Map* map = nullptr;
         int currentElevation = 0;
 
-        // Exit-grid "Draw edge" live preview (MarkExits mode), grouped so RenderData stays small.
-        // When `active`, `lineVertices` holds the committed polyline vertices and `lineCursor` the
-        // live cursor, so the line is drawn vertex->vertex and last->cursor. `hexes` lists the
-        // prospective on-line hex indices; `frmPids` (parallel to `hexes`) is each hex's directional
-        // marker FRM, drawn as a transient Object so the preview shows the right directional art per
-        // hex; `tint` colours them by destination kind (green inter-map, brown world/town map).
+        // Exit-grid "Draw edge" live preview (MarkExits mode), grouped so RenderData stays small. When
+        // `active`: `lineVertices`/`lineCursor` draw the polyline (vertex->vertex, last->cursor);
+        // `hexes` are the prospective on-line hexes; `frmPids` (parallel) each hex's directional marker
+        // FRM; `tint` colours them by destination kind (green inter-map, brown world/town).
         struct ExitGridPreview {
             const std::vector<sf::Vector2f>* lineVertices = nullptr;
             sf::Vector2f lineCursor;
@@ -226,12 +224,9 @@ private:
         const RenderData& renderData);
 
     /**
-     * @brief Editor-only "Show exit grids" overlay (Ctrl+E).
-     *
-     * Draws a distinct high-contrast marker on every exit-grid hex, on top of the player-visible
-     * directional art that renderObjects already drew. This is purely an editor cue (so exit grids
-     * are easy to spot) and is deliberately separate from the real exitgrd / ext2grd sprites - it
-     * does not depend on any FRM (art/misc/exitgrid.frm does not exist).
+     * @brief Editor-only "Show exit grids" overlay (Ctrl+E): a high-contrast marker on every exit-grid
+     * hex, atop the player-visible directional art renderObjects already drew. Purely an editor cue,
+     * deliberately separate from the real exitgrd / ext2grd sprites.
      */
     void renderExitGrids(sf::RenderTarget& target,
         const sf::View& view,

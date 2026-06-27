@@ -1109,11 +1109,9 @@ TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scri
     CHECK(lvarTable->item(1, 1)->data(Qt::DisplayRole).toInt() == 222);
 }
 
-// The unified Exit-Grids toolbar tool replaces the two former buttons with one checkable button
-// plus a dropdown whose two items ("Draw edge" / "Place single hex") are exclusive: triggering
-// one ticks it, unticks the other, and keeps the tool button checked. (Driving the editor mode
-// itself needs game data to construct the editor, so that half is covered separately below against
-// EditorWidget directly.)
+// The unified Exit-Grids tool is one checkable button plus a dropdown whose two items ("Draw edge" /
+// "Place single hex") are exclusive: triggering one ticks it, unticks the other, keeps the button
+// checked. (Driving the editor mode needs game data, so that half is covered below against EditorWidget.)
 TEST_CASE("Unified Exit-Grids tool exposes one button with an exclusive sub-mode dropdown", "[qt][exitgrids]") {
     removeTestSettings();
 
@@ -1152,11 +1150,9 @@ TEST_CASE("Unified Exit-Grids tool exposes one button with an exclusive sub-mode
     CHECK(exitGridsAction->isChecked());
 }
 
-// The editor-mode half: EditorWidget::currentMode() moves between PlaceExitGrid and MarkExits via
-// the same setters the unified tool ultimately drives, pinning that the two sub-modes map to
-// distinct editor modes. Constructing an EditorWidget pulls in the HexRenderer, which eagerly loads
-// art/misc/HEX.frm, so this can only run where the game data is mounted; without it we skip rather
-// than fail (the structural dropdown test above covers the wiring with no data).
+// The editor-mode half: the two sub-modes map to distinct EditorWidget modes (PlaceExitGrid vs
+// MarkExits). Constructing an EditorWidget eagerly loads art/misc/HEX.frm, so this runs only with game
+// data mounted; without it we skip (the dropdown test above covers the wiring with no data).
 TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exitgrids]") {
     auto resources = std::make_shared<geck::resource::GameResources>();
     std::unique_ptr<geck::EditorWidget> editor;
@@ -1386,10 +1382,9 @@ TEST_CASE("MapInfoPanel removes the last map global variable after confirmation"
     CHECK(out.find("MVAR_last") == std::string::npos);
 }
 
-// Regression: a Draw-edge stroke that only PARTIALLY overlaps existing exit grids must still place new
-// ones on the empty hexes. Previously any single overlapping hex sent the whole stroke to the bulk-edit
-// branch, so the placement silently vanished ("press Enter + OK but nothing appears"). freshHexesForLine
-// is the pure decision: the line hexes minus the occupied ones.
+// Regression: a Draw-edge stroke that only PARTIALLY overlaps existing exit grids must still place on
+// the empty hexes (a single overlapping hex used to send the whole stroke to bulk-edit, so the
+// placement vanished — "Enter + OK, nothing appears"). freshHexesForLine = line hexes minus occupied.
 TEST_CASE("Exit-grid stroke creates on the non-overlapping hexes (partial overlap doesn't swallow it)",
     "[exitgrid][placement]") {
     using geck::ExitGridPlacementManager;

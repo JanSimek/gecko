@@ -72,9 +72,8 @@ TEST_CASE("exitGridArtForDirection emits green for inter-map and brown for world
     }
 }
 
-// The user's verified data points: a horizontal drawn line for a world/town exit -> proto 0x05000013
-// (dir 3, TOP) with the brown frm ext2grd4 = 0x05000024; a "/" diagonal -> proto 0x05000014 (dir 4)
-// with brown frm ext2grd5 = 0x05000025.
+// Verified data points: a horizontal line for a world/town exit -> proto 0x05000013 (dir 3, TOP), brown
+// frm 0x05000024; a "/" diagonal -> proto 0x05000014 (dir 4), brown frm 0x05000025.
 TEST_CASE("exitGridArtForSegment matches the user's horizontal data point", "[exitgrid][segment]") {
     // A horizontal screen segment (dx dominates), hex above centre -> TOP edge, world map -> brown.
     const ExitGridArt art = exitGridArtForSegment(/*dx=*/200, /*dy=*/0,
@@ -248,14 +247,12 @@ TEST_CASE("exitGridOutward: every pair points opposite ways; out-of-range is {0,
 // --------------------------------------------------------------------------------------------------
 // ISO-DIAMOND GEOMETRY LOCK
 //
-// The GUI "Draw edge" tool classifies a stroke by its first->last SCREEN delta (Hex::x()/y()). The
-// playable area is an iso DIAMOND, so real "sloped" exits run along the diamond's two slanted edges,
-// which lie along the hex grid's two axes. Their SCREEN slopes are NOT 1:1: measured on the real
-// 200x200 HexagonGrid, the shallow NE/SW edge is ~4:1 and the steep NW/SE edge is ~1.33:1. A
-// 45°-centred [1/2, 2] diagonal band tipped the shallow 4:1 edge to Horizontal, so a stroke drawn
-// along the real diamond edge got jagged cardinal bars. The cases below feed those EXACT measured
-// deltas to the classifier and assert they yield the diagonal "/" "\" art (dirs 4..7, protos
-// 0x05000014..17), locking the geometry so the band can't silently regress to 45°.
+// "Draw edge" classifies a stroke by its first->last SCREEN delta. Real sloped exits run along the iso
+// diamond's two slanted edges, whose SCREEN slopes are NOT 1:1: measured on the real 200x200 grid, the
+// shallow NE/SW edge is ~4:1 and the steep NW/SE edge is ~1.33:1. The cases below feed those EXACT
+// measured deltas to the classifier and assert they yield diagonal "/" "\" art (dirs 4..7), locking the
+// geometry so the band can't silently regress to a 45°-centred band (which tipped the 4:1 edge to a
+// cardinal — the original bug).
 
 namespace {
 bool isDiagonalProto(uint32_t proPid) {
@@ -263,9 +260,8 @@ bool isDiagonalProto(uint32_t proPid) {
 }
 bool isDiagonalDir(int dir) { return dir >= ExitGrid::DIR_FWD_A && dir <= ExitGrid::DIR_BACK_B; }
 
-// Mirror ExitGridPlacementManager::autoArtForLine's core on the REAL grid: walk the hex line, take
-// the first->last screen delta for the axis and the midpoint's offset from the grid centre for the
-// side, then classify. Returns the {proto, frm} the tool would commit for the whole stroke.
+// Mirror ExitGridPlacementManager::autoArtForLine on the REAL grid: walk the hex line, axis from the
+// first->last delta, side from the midpoint's offset from centre, then classify.
 ExitGridArt autoArtForRun(const HexagonGrid& grid, int startHex, int endHex,
     ExitGridDestinationKind kind, bool flipSide = false) {
     const auto screenOf = [&grid](int hexIndex) -> std::pair<int, int> {
@@ -292,8 +288,8 @@ TEST_CASE("classifySegment: the MEASURED iso-diamond edge deltas are diagonal, n
     using geck::exitgrid_detail::classifySegment;
     using Axis = geck::exitgrid_detail::SegmentAxis;
 
-    // Shallow NE/SW diamond edge, measured first->last delta on the real grid: (-720, 180), slope 4:1.
-    // With the old 45°-centred band this fell to Horizontal (the bug); it MUST be diagonal.
+    // Shallow NE/SW edge, measured delta (-720, 180), slope 4:1 — fell to Horizontal under the old band
+    // (the bug); MUST be diagonal.
     CHECK(classifySegment(-720, 180) == Axis::ForwardSlash);
     // Steep NW/SE diamond edge, measured delta (480, 360), slope ~1.33:1.
     CHECK(classifySegment(480, 360) == Axis::BackSlash);
@@ -343,12 +339,10 @@ TEST_CASE("autoArtForLine (real grid): a stroke along the iso-diamond edge commi
 }
 
 // --------------------------------------------------------------------------------------------------
-// TRUE-FREEZE per-segment capture. Each polyline segment is classified once from ITS OWN screen
-// direction (one axis + side, uniform within the segment), captured with the flip in effect AT THE
-// CLICK that closed it, and never recomputed. ExitGridPlacementManager owns the frozen {hexes, art}
-// segments and only re-classifies the ONE live segment; the model below reproduces that contract with
-// the pure classifier so the freeze property (a committed segment is independent of any later
-// flip/cursor change) is unit-tested headlessly without a GL/Qt context.
+// TRUE-FREEZE per-segment capture. Each polyline segment is classified once from its own screen
+// direction, captured with the flip at the click that closed it, and never recomputed. The model below
+// reproduces ExitGridPlacementManager's contract with the pure classifier so the freeze property (a
+// committed segment is independent of any later flip/cursor change) is tested headlessly.
 
 namespace {
 // A frozen segment as the manager captures it: its hexes and its single captured direction.
@@ -365,7 +359,7 @@ CapturedSegment captureSegment(const ExitGridSegmentRun& run, bool flipAtCapture
 }
 
 // Flatten frozen segments + a live segment into deduped (hex, dir) pairs (first-seen wins), modelling
-// ExitGridPlacementManager::flattenSegments so the test pins the same combine/dedup behaviour.
+// ExitGridPlacementManager::flattenSegments.
 void flatten(const std::vector<CapturedSegment>& committed, const CapturedSegment& live,
     std::vector<int>& outHexes, std::vector<int>& outDirs) {
     outHexes.clear();
@@ -387,8 +381,8 @@ void flatten(const std::vector<CapturedSegment>& committed, const CapturedSegmen
 } // namespace
 
 TEST_CASE("freeze: a captured segment's direction is INDEPENDENT of a later flip", "[exitgrid][freeze]") {
-    // A horizontal segment captured with NO flip -> BOTTOM, frozen. The captured value is a pure
-    // snapshot: changing the flip that drives a LATER (live) segment can never alter it.
+    // A horizontal segment captured with NO flip -> BOTTOM. The captured value is a snapshot: changing
+    // the flip on a LATER (live) segment can never alter it.
     ExitGridSegmentRun run;
     run.hexes = { 10, 11, 12 };
     run.screenDx = 200;
@@ -431,9 +425,9 @@ TEST_CASE("freeze: a captured segment's direction is INDEPENDENT of a later flip
 }
 
 TEST_CASE("freeze: committed hexes are pixel-stable as the live segment moves", "[exitgrid][freeze]") {
-    // Two committed segments captured at different flips, then the live segment sweeps through several
-    // cursor positions. The committed hexes/dirs must be byte-identical every time — only the live
-    // segment's hexes change. This is the Shift-move "committed segments stay put" guarantee.
+    // Two committed segments captured at different flips; as the live segment sweeps several cursor
+    // positions the committed hexes/dirs must stay byte-identical. The "committed segments stay put"
+    // guarantee.
     ExitGridSegmentRun r1;
     r1.hexes = { 1, 2, 3 };
     r1.screenDx = 200;
@@ -485,8 +479,7 @@ TEST_CASE("freeze: committed hexes are pixel-stable as the live segment moves", 
 // --------------------------------------------------------------------------------------------------
 // SHIFT-SNAP: a pure (lastVertex, cursor) -> snapped cursor function. The eight clean angles are the
 // exit-grid edge SCREEN directions (horizontal, vertical, and the two iso diagonals at the measured
-// 4:1 / 4:3 slopes, both signs). Snapping keeps the cursor's DISTANCE from the last vertex and rotates
-// its angle to the nearest clean one.
+// 4:1 / 4:3 slopes, both signs). Snapping keeps the distance and rotates the angle to the nearest one.
 
 namespace {
 double distance(double ax, double ay, double bx, double by) {

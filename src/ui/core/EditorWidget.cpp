@@ -840,14 +840,14 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     };
 
     callbacks.onMarkExitsLine = [this](const std::vector<sf::Vector2f>&, bool) {
-        // The placed edge is the manager's FROZEN committed segments (the vertices/flip are vestigial
-        // now that the manager owns the captured per-segment art); it resets them after placing.
+        // The placed edge is the manager's FROZEN committed segments (the vertices/flip args are
+        // vestigial now that the manager owns the per-segment art); it resets them after placing.
         clearMarkExitsLinePreview();
         _exitGridPlacementManager->selectExitGridsAlongLine();
     };
 
-    // True-freeze hooks: the manager owns the FROZEN committed segments. A reset starts a fresh edge; a
-    // segment commit (one per closing click) freezes that segment with the flip in effect at the click.
+    // True-freeze hooks: a reset starts a fresh edge; a commit (one per closing click) freezes that
+    // segment with the flip at the click.
     callbacks.onMarkExitsLineReset = [this]() {
         _exitGridPlacementManager->beginLine();
     };
@@ -1170,9 +1170,8 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     }
     if (mode != EditorMode::MarkExits) {
         clearMarkExitsLinePreview();
-        // Leaving "Draw edge" abandons any in-progress line: drop its FROZEN committed segments so a
-        // later session starts clean. (Finalize/cancel reset via onMarkExitsLineReset and keep the tool
-        // active, so they don't reach this branch.)
+        // Leaving "Draw edge" abandons any in-progress line: drop its frozen segments. (Finalize/cancel
+        // reset via onMarkExitsLineReset and keep the tool active, so they don't reach here.)
         _exitGridPlacementManager->resetLine();
     }
     if (_inputHandler) {
@@ -1632,9 +1631,8 @@ void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& v
         && _exitGridPlacementManager->currentDestinationKind() == Kind::WorldMap;
     _exitGridPreviewTint = worldMap ? sf::Color(200, 150, 90, 140) : sf::Color(80, 220, 80, 140);
 
-    // The manager owns the FROZEN committed segments; here we only feed it the ONE live segment (the
-    // last committed vertex -> cursor) so it can append it to the frozen run. The committed segments
-    // never recompute, so Space (flip) and cursor moves (incl. Shift-snap) touch only the live segment.
+    // The manager owns the FROZEN committed segments; here we feed it only the ONE live segment (last
+    // vertex -> cursor) to append to the frozen run.
     _exitGridPreviewHexes.clear();
     _exitGridPreviewFrmPids.clear();
 

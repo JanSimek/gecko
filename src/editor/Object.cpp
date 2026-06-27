@@ -121,12 +121,9 @@ void Object::setHexPosition(const Hex& hex) {
         _mapObject->position = hex.position();
     }
 
-    // EDITOR-DISPLAY ONLY: push an exit-grid marker's directional bar OUTWARD (toward the off-map
-    // boundary) so the trigger hex sits at the bar's INNER (player-facing) edge. With the standard
-    // bottom-anchor the bar straddles the trigger hex, which reads ambiguously; nudging it outward
-    // makes "walk out here and leave the map" legible. The Fallout 2 engine applies NO such offset
-    // (it anchors exit-grid art exactly like any other object), so this is a deliberate authoring-
-    // clarity divergence from the in-game look, scoped to exit-grid markers only.
+    // EDITOR-DISPLAY ONLY: push an exit-grid marker's bar OUTWARD so the trigger hex sits at the bar's
+    // INNER edge (the default bottom-anchor straddles the hex, reading ambiguously). The Fallout 2
+    // engine applies NO such offset — this is a deliberate authoring-clarity divergence, exit grids only.
     applyExitGridOutwardOffset(hex);
 
     if (_showLightOverlay && hasLight()) {
@@ -135,12 +132,11 @@ void Object::setHexPosition(const Hex& hex) {
 }
 
 int Object::exitGridDirection() const {
-    // Real placed markers carry a MapObject whose proto index (16..23) is the direction.
+    // Placed markers carry a MapObject whose proto index (16..23) is the direction.
     if (_mapObject != nullptr && _mapObject->isExitGridMarker()) {
         return static_cast<int>(_mapObject->protoId()) - static_cast<int>(MapObject::EXIT_GRID_PID_INDEX_FIRST);
     }
-    // Preview / bare-FRM objects (no MapObject yet) are identified by their directional art name:
-    // exitgrd1..8 (green) or ext2grd1..8 (brown) -> dir 0..7.
+    // Preview / bare-FRM objects (no MapObject) are identified by art name: exitgrd1..8 / ext2grd1..8.
     const std::string& fn = _frm != nullptr ? _frm->filename() : std::string();
     if (fn.size() >= 8 && (fn.rfind("exitgrd", 0) == 0 || fn.rfind("ext2grd", 0) == 0)) {
         const int dir = fn[7] - '1';
@@ -162,16 +158,12 @@ void Object::applyExitGridOutwardOffset(const Hex& hex) {
     }
 
     // A DIAGONAL marker (both components nonzero) gets a MODERATE slide PERPENDICULAR to the band, not
-    // the bbox-corner slide the cardinals use. The diagonal bars are large (127x48, 111x60); parking
-    // the hex on a bbox corner would combine half-width AND half-height (~93px) and shove the bar clear
-    // off its hex. exitGridOutward gives the perpendicular-to-band direction (an integer approximation
-    // of the band's measured screen normal); NORMALIZE it, then slide the (engine-centred / bottom-
-    // anchored) sprite a fixed distance along it. The band moves to one side of the hex line, and a flip
-    // (dir ^ 1) reverses the vector's sign — swinging the byte-identical art to the OTHER side — while
-    // the band stays adjacent to its trigger hex.
+    // the bbox-corner slide the cardinals use: the bars are large (127x48, 111x60), so a bbox corner
+    // would combine half-width AND half-height (~93px) and shove the bar clear off its hex.
+    // exitGridOutward gives the perpendicular-to-band normal; normalize it, then slide a fixed distance.
+    // A flip (dir ^ 1) reverses the sign, swinging the byte-identical art to the OTHER side.
     if (outX != 0 && outY != 0) {
-        // Tuned to roughly the cardinal thin-bar dimension: enough to seat the band on one side of
-        // the line and read as a clean side-switch on flip, small enough not to leave the hex.
+        // Roughly the cardinal thin-bar dimension: seats the band on one side without leaving the hex.
         constexpr float kDiagonalSlide = 26.0f;
         const float len = std::sqrt(static_cast<float>(outX * outX + outY * outY));
         _sprite.move(sf::Vector2f(
@@ -180,10 +172,9 @@ void Object::applyExitGridOutwardOffset(const Hex& hex) {
         return;
     }
 
-    // CARDINAL marker: slide the sprite along the (axis-aligned) outward axis until the trigger hex
-    // lands on the bar's inner edge — the bbox side opposite the outward direction. Read the bar's
-    // actual on-screen bounds (which already include the FRM's frame packing), so this adapts to both
-    // thin pieces (96x24, 32x96) and to both art families without hard-coded per-piece pixel constants.
+    // CARDINAL marker: slide along the outward axis until the trigger hex lands on the bar's inner edge
+    // (the bbox side opposite the outward direction). Reading the actual on-screen bounds adapts to both
+    // thin pieces (96x24, 32x96) and both art families without per-piece pixel constants.
     const sf::FloatRect bounds = _sprite.getGlobalBounds();
     const float left = bounds.position.x;
     const float top = bounds.position.y;

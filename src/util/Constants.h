@@ -130,10 +130,10 @@ namespace WallBlockers {
 
 // Exit Grid constants
 //
-// Exit-grid markers are MISC objects whose PROTO encodes the DIRECTION and whose FRM encodes
-// FAMILY (destination kind) + direction. The PROTO index runs 16..23 (the eight directions);
-// MapObject::isExitGridMarker() requires exactly that range. Verified against the shipped game
-// data (FRM dimensions via `frm info`) and against bhrnddst.map (which uses protos 16-19):
+// Exit-grid markers are MISC objects whose PROTO encodes the DIRECTION and whose FRM encodes the
+// FAMILY (destination kind) + direction. The PROTO index runs 16..23; isExitGridMarker() requires
+// exactly that range. Verified against the shipped game data (FRM dimensions via `frm info`) and
+// bhrnddst.map (which uses protos 16-19):
 //
 //   dir  proto         greenFrm(=proto+1)   brownFrm(=proto+0x11)  size     drawn-line meaning
 //   0    0x05000010    0x05000011 exitgrd1  0x05000021 ext2grd1    96x24    LEFT edge  (a vertical line)
@@ -145,15 +145,12 @@ namespace WallBlockers {
 //   6    0x05000016    0x05000017 exitgrd7  0x05000027 ext2grd7    111x60   "\" diagonal, side A
 //   7    0x05000017    0x05000018 exitgrd8  0x05000028 ext2grd8    111x60   "\" diagonal, side B
 //
-// The "perpendicular bar" intuition: a HORIZONTALLY drawn line (dir 2/3) gets the tall 32x96 bars;
-// a VERTICALLY drawn line (dir 0/1) gets the wide 96x24 bars. The diagonal pairs slant "/" (dir 4/5,
-// 127x48) and "\" (dir 6/7, 111x60); within a pair the two sides render near-identically (a sub-pixel
-// facing offset), so the user's Marker-Direction override disambiguates when the auto pick is wrong.
+// Within a diagonal pair the two sides render near-identically (a sub-pixel facing offset), so the
+// Marker-Direction override disambiguates when the auto pick is wrong.
 //
-// FAMILY = DESTINATION: an inter-map exit (exit_map is a real map id) uses the GREEN art
-// (exitgrd*, frm = proto + 1); a WORLD/TOWN exit (exit_map == WORLD_MAP_EXIT or TOWN_MAP_EXIT)
-// uses the BROWN art (ext2grd*, frm = proto + 0x11). The destination is stored per-object in the
-// exit_* fields; the proto/frm only encode the directional art.
+// FAMILY = DESTINATION: an inter-map exit (exit_map is a real map id) uses the GREEN art (frm =
+// proto + 1); a WORLD/TOWN exit (exit_map == WORLD_MAP_EXIT or TOWN_MAP_EXIT) uses the BROWN art
+// (frm = proto + 0x11). The destination is stored per-object in the exit_* fields.
 namespace ExitGrid {
     // Destination map IDs for special exits
     constexpr uint32_t TOWN_MAP_EXIT = 0xFFFFFFFF;  ///< -1: Opens town map view

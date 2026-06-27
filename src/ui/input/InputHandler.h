@@ -67,17 +67,15 @@ public:
         std::function<void(sf::Vector2f worldPos)> onStampPattern;
         std::function<void()> onStampPatternCancel;
         std::function<void()> onStampCycleVariant;
-        // Polyline "Draw edge" mode. onMarkExitsLinePreview fires on every mouse move (and on a flip-
-        // key toggle) with the vertices committed so far plus the live cursor (to draw the in-progress
-        // edge); onMarkExitsLine fires once on finalize with the finished vertex polyline. `flipSide`
-        // is the current state of the flip toggle (the F key) — when true the edge's side is inverted
-        // (south<->north, ...), so the preview and the commit both reflect it.
+        // Polyline "Draw edge" mode. onMarkExitsLinePreview fires on every mouse move (and flip toggle)
+        // with the committed vertices plus the live cursor; onMarkExitsLine fires once on finalize with
+        // the finished polyline. `flipSide` is the flip toggle's current state (true = side inverted),
+        // reflected by both preview and commit.
         std::function<void(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide)> onMarkExitsLinePreview;
         std::function<void(const std::vector<sf::Vector2f>& vertices, bool flipSide)> onMarkExitsLine;
-        // True-freeze hooks: onMarkExitsLineReset starts a fresh edge (drops any frozen segments) — fired
-        // on the FIRST vertex of a line and on finalize/cancel/mode-change. onMarkExitsSegmentCommitted
-        // fires once per left-click that CLOSES a segment (the 2nd vertex onward) with that segment's
-        // endpoints and the flip in effect at the click, so the host can freeze it immutably.
+        // True-freeze hooks: onMarkExitsLineReset starts a fresh edge (the first vertex, and finalize/
+        // cancel/mode-change). onMarkExitsSegmentCommitted fires once per click that closes a segment
+        // (2nd vertex on) with its endpoints and the flip at the click, so the host can freeze it.
         std::function<void()> onMarkExitsLineReset;
         std::function<void(sf::Vector2f from, sf::Vector2f to, bool flipSide)> onMarkExitsSegmentCommitted;
 
@@ -124,8 +122,8 @@ public:
     bool isInTilePlacementMode() const { return _mode == EditorMode::PlaceTile; }
     bool isInExitGridPlacementMode() const { return _mode == EditorMode::PlaceExitGrid; }
     bool isInMarkExitsMode() const { return _mode == EditorMode::MarkExits; }
-    // The "Draw edge" flip toggle: false = the auto/outward side, true = the opposite side. Toggled by
-    // the flip key (F) while drawing an edge; exposed for tests of the toggle state.
+    // The "Draw edge" flip toggle: false = auto/outward side, true = opposite. Toggled by the flip key;
+    // exposed for tests.
     bool isMarkExitsFlipped() const { return _markExitsFlip; }
 
     /**
@@ -161,13 +159,13 @@ private:
     sf::Vector2f pixelToWorld(sf::Vector2i pixelPos, sf::RenderTarget& target, const sf::View& view);
     bool isShiftPressed() const;
     // In "Draw edge" mode with Shift held, snap `cursor` (the live-segment endpoint) to the nearest
-    // clean exit-grid angle relative to the last committed vertex, so the live segment is a straight
-    // aligned edge. Returns `cursor` unchanged when Shift is up or there is no committed vertex yet.
+    // clean exit-grid angle relative to the last vertex. Returns `cursor` unchanged when Shift is up or
+    // there is no committed vertex.
     sf::Vector2f maybeSnapMarkExitsCursor(sf::Vector2f cursor) const;
     void setActiveMode(bool enabled, EditorMode mode) {
         _mode = enabled ? mode : EditorMode::Select;
-        _lineVertices.clear();  // any mode change abandons an in-progress exit-grid edge line
-        _markExitsFlip = false; // and resets the flip toggle to the default (auto/outward) side
+        _lineVertices.clear();  // a mode change abandons an in-progress edge line
+        _markExitsFlip = false; // and resets the flip toggle to the default side
     }
 
     // "Draw edge" polyline state machine helpers (MarkExits mode).
@@ -187,9 +185,8 @@ private:
     // Mouse state
     sf::Vector2i _mouseStartPos{ 0, 0 };
     sf::Vector2i _mouseLastPos{ 0, 0 };
-    // The last cursor position in WORLD coordinates (updated on every mouse move). Key events carry no
-    // view/target to convert pixels, so the flip key reuses this to re-fire the live edge preview at
-    // the current cursor.
+    // Last cursor position in WORLD coordinates. Key events carry no view/target to convert pixels, so
+    // the flip key reuses this to re-fire the live edge preview at the current cursor.
     sf::Vector2f _mouseLastWorldPos;
     sf::Vector2f _dragStartWorldPos;
     bool _isDragging = false;
@@ -199,15 +196,13 @@ private:
     // Active tool mode — a single value, mutually exclusive by construction
     // (replaces the former bank of per-mode bools).
     EditorMode _mode = EditorMode::Select;
-    // Vertices clicked so far for the in-progress exit-grid "Draw edge" line (MarkExits mode);
-    // cleared on finalize/cancel/mode-change.
+    // Vertices clicked so far for the in-progress "Draw edge" line; cleared on finalize/cancel/mode-change.
     std::vector<sf::Vector2f> _lineVertices;
-    // The "Draw edge" flip toggle: the F key flips which side the edge's bars sit on (south<->north,
-    // left<->right, the two diagonal sides). Default false = the auto/outward side. Reset on mode
-    // change; persists across consecutive edges drawn in one MarkExits session so a chosen side sticks.
+    // The "Draw edge" flip toggle: which side the edge's bars sit on. Default false = auto/outward side.
+    // Reset on mode change, but persists across edges in one session so a chosen side sticks.
     bool _markExitsFlip = false;
-    // Double-click detection for finalizing a "Draw edge" line (time since the last vertex
-    // click + how far the cursor moved). The clock restarts on every line vertex click.
+    // Double-click detection for finalizing a line (elapsed time + cursor distance); the clock restarts
+    // on every vertex click.
     sf::Clock _doubleClickClock;
     static constexpr float kDoubleClickSeconds = 0.4f;
     static constexpr float kDoubleClickWorldDistance = 12.0f;

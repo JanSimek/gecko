@@ -444,13 +444,12 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
         return;
     }
 
-    // Editor-only "Show exit grids" overlay: the bundled "EG" hex marker (art/misc/exitgrid.frm,
-    // shipped under resources/ — not in the DATs) drawn on every exit-grid hex. Separate from the
-    // player-visible directional exitgrd*/ext2grd* art, which renderObjects already drew with its own
-    // FRM offset.
+    // Editor-only "Show exit grids" overlay: the bundled "EG" hex marker (art/misc/exitgrid.frm, shipped
+    // under resources/, not in the DATs) on every exit-grid hex. Separate from the player-visible
+    // directional exitgrd*/ext2grd* art renderObjects already drew.
     const sf::Texture& exitGridTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
     sf::Sprite exitGridSprite(exitGridTexture);
-    // Anchor the marker by its centre so it sits centred on the hex (not offset down-right of it).
+    // Anchor by centre so the marker sits on the hex.
     exitGridSprite.setOrigin(exitGridSprite.getLocalBounds().size / 2.f);
 
     for (const auto& object : *renderData.objects) {
@@ -492,9 +491,8 @@ std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const Render
         return nullptr;
     }
 
-    // FRM resolve/load/texture-upload can all fail or throw (missing art, bad palette, GL upload).
-    // Contain that here so one unbuildable preview hex never aborts the whole preview or throws out
-    // of the SFML frame — the caller falls back to a plain marker for this hex.
+    // FRM resolve/load/texture-upload can fail or throw; contain it here so one unbuildable preview hex
+    // never aborts the whole preview — the caller falls back to a plain marker.
     try {
         const std::filesystem::path frmName = _resources.frmResolver().resolve(frmPid);
         if (frmName.empty()) {
@@ -508,10 +506,9 @@ std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const Render
             return nullptr;
         }
 
-        // Anchor exactly like a committed exit grid: setDirection sets the correct directional frame
-        // rect, then setHexPosition both applies the FRM's per-frame x/y offset and (for an exit-grid
-        // marker) pushes the bar outward so the trigger hex sits at its inner edge. Order matters:
-        // setHexPosition measures the on-screen bounds, so the frame rect must be set first.
+        // Anchor exactly like a committed exit grid: setDirection sets the frame rect, then
+        // setHexPosition applies the FRM offset and pushes the bar outward. Order matters — setHexPosition
+        // measures the on-screen bounds, so the frame rect must be set first.
         auto previewObject = std::make_shared<Object>(frm);
         previewObject->setSprite(sf::Sprite{ _resources.textures().get(frmName) });
         previewObject->setDirection(ObjectDirection(0));
@@ -525,10 +522,9 @@ std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const Render
 
 void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const sf::View& view,
     const RenderData& renderData) {
-    // Each prospective on-line hex is drawn with its own directional marker art (the same FRM the
-    // commit will place), anchored and oriented like a real exit grid, then tinted by destination
-    // kind. If a hex's directional sprite can't be built (missing/broken art), it falls back to the
-    // plain editor overlay marker rather than vanishing — the preview never blanks out.
+    // Each prospective hex is drawn with its own directional marker art (the same FRM the commit will
+    // place), anchored like a real exit grid and tinted by destination kind. If the sprite can't be
+    // built, it falls back to the plain editor overlay marker so the preview never blanks out.
     const auto* hexes = renderData.exitGridPreview.hexes;
     const auto* frmPids = renderData.exitGridPreview.frmPids;
     if (!hexes || hexes->empty() || !frmPids || frmPids->size() != hexes->size()) {
@@ -562,9 +558,8 @@ void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const
 }
 
 void RenderingEngine::drawExitGridPreviewLine(sf::RenderTarget& target, const RenderData& renderData) {
-    // An open polyline vertex->vertex with a trailing segment from the last vertex to the live cursor
-    // (so the edge being drawn previews under the mouse). Unlike a region, the line is NOT closed back
-    // to the first vertex.
+    // An OPEN polyline vertex->vertex with a trailing segment to the live cursor; unlike a region, it is
+    // not closed back to the first vertex.
     const auto* vertices = renderData.exitGridPreview.lineVertices;
     if (!vertices || vertices->empty()) {
         return;
