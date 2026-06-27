@@ -156,15 +156,11 @@ void Object::applyExitGridOutwardOffset(const Hex& hex) {
         return;
     }
 
-    // DIAGONAL markers: slide the bar INWARD half its perpendicular thickness so the trigger hex lands on
-    // the bar's OUTER edge (the bar extends fully inward from the hex). A diagonal EDGE places its two
-    // rows TWO hexes apart (≈ one bar thickness), so both rows sliding by this same half-thickness makes
-    // the outer row's bar meet the inner row's at the seam: one continuous 2x band, no overlap, no gap.
-    // The cardinal bbox-edge slide below cannot be reused here — it would combine half-width AND
+    // DIAGONAL markers anchor on their OWN hex like the engine — no slide. A diagonal edge is one row of
+    // bars, each centred on its drawn hex, so the run stays continuous with any adjoining cardinal run at
+    // the bend. The cardinal bbox-edge slide below must NOT be applied: it would combine half-width AND
     // half-height on these large bars (127x48, 111x60) and shove the art clear off its hex.
     if (outX != 0 && outY != 0) {
-        const auto [slideX, slideY] = exitGridDiagonalInwardSlide(dir);
-        _sprite.move(sf::Vector2f(slideX, slideY));
         return;
     }
 

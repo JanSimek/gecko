@@ -16,7 +16,6 @@ using geck::exitGridArtForDirection;
 using geck::exitGridArtForFacing;
 using geck::exitGridArtForSegment;
 using geck::ExitGridDestinationKind;
-using geck::exitGridDiagonalInwardSlide;
 using geck::exitGridDirectionForLine;
 using geck::exitGridDirOfProto;
 using geck::exitGridOutward;
@@ -25,8 +24,6 @@ using geck::exitGridSnapDirections;
 using geck::flipExitGridDirection;
 using geck::HexagonGrid;
 using geck::isDiagonalExitGridDir;
-using geck::NeighborOffset;
-using geck::secondRowNeighbor;
 using geck::snapToExitGridAngle;
 namespace ExitGrid = geck::ExitGrid;
 
@@ -554,146 +551,14 @@ TEST_CASE("snapToExitGridAngle: a zero-length offset is returned unchanged", "[e
     CHECK(sy == 500.0);
 }
 
-// --- SECOND-ROW selection for the 2-deep diagonal exit band ----------------------------------------
+// --- Diagonal direction helpers --------------------------------------------------------------------
 
-TEST_CASE("isDiagonalExitGridDir / exitGridDirOfProto", "[exitgrid][secondrow]") {
+TEST_CASE("isDiagonalExitGridDir / exitGridDirOfProto", "[exitgrid][diagonal]") {
     CHECK_FALSE(isDiagonalExitGridDir(ExitGrid::DIR_LEFT));
     CHECK_FALSE(isDiagonalExitGridDir(ExitGrid::DIR_BOTTOM));
     CHECK(isDiagonalExitGridDir(ExitGrid::DIR_FWD_A));
     CHECK(isDiagonalExitGridDir(ExitGrid::DIR_BACK_B));
     for (int dir = 0; dir < ExitGrid::DIR_COUNT; ++dir) {
         CHECK(exitGridDirOfProto(ExitGrid::exitGridProto(dir)) == dir);
-    }
-}
-
-TEST_CASE("secondRowNeighbor returns -1 for the cardinal directions", "[exitgrid][secondrow]") {
-    const std::vector<NeighborOffset> nbs = {
-        { 10, +30, 0 }, { 11, -30, 0 }, { 12, 0, +30 }, { 13, 0, -30 }
-    };
-    CHECK(secondRowNeighbor(ExitGrid::DIR_LEFT, nbs) == -1);
-    CHECK(secondRowNeighbor(ExitGrid::DIR_RIGHT, nbs) == -1);
-    CHECK(secondRowNeighbor(ExitGrid::DIR_BOTTOM, nbs) == -1);
-    CHECK(secondRowNeighbor(ExitGrid::DIR_TOP, nbs) == -1);
-}
-
-TEST_CASE("secondRowNeighbor picks the neighbour leaning along the band normal", "[exitgrid][secondrow]") {
-    // Six neighbours roughly arranged around a hex (screen offsets, y DOWNWARD).
-    const std::vector<NeighborOffset> nbs = {
-        { 1, +16, +12 }, // down-right
-        { 2, +16, -12 }, // up-right
-        { 3, -16, +12 }, // down-left
-        { 4, -16, -12 }, // up-left
-        { 5, 0, +24 },   // straight down
-        { 6, 0, -24 },   // straight up
-    };
-
-    // A "\" band, side A, faces DOWN-LEFT (exitGridOutward(BACK_A) = (-1, +2)).
-    const int down = secondRowNeighbor(ExitGrid::DIR_BACK_A, nbs);
-    // Its flip (BACK_B, normal (+1, -2)) must pick a neighbour leaning the OTHER way (up).
-    const int up = secondRowNeighbor(ExitGrid::DIR_BACK_B, nbs);
-    REQUIRE(down >= 0);
-    REQUIRE(up >= 0);
-    CHECK(down != up);
-
-    // The chosen neighbour's dot with the normal is the maximum among all neighbours, and positive.
-    const auto dotWith = [&](int hex, int dir) {
-        const auto [ox, oy] = exitGridOutward(dir);
-        for (const NeighborOffset& n : nbs) {
-            if (n.hex == hex) {
-                return n.dx * ox + n.dy * oy;
-            }
-        }
-        return 0;
-    };
-    CHECK(dotWith(down, ExitGrid::DIR_BACK_A) > 0);
-    CHECK(dotWith(up, ExitGrid::DIR_BACK_B) > 0);
-}
-
-TEST_CASE("the diagonal second row is a distinct parallel hex line", "[exitgrid][secondrow]") {
-    HexagonGrid grid;
-    // A "\" run down-right in (col,row): col 100, rows 96..104.
-    const auto screenOf = [&](int hex) {
-        const auto h = grid.getHexByPosition(static_cast<uint32_t>(hex));
-        return std::pair<int, int>{ h->get().x(), h->get().y() };
-    };
-    const auto secondRowOf = [&](int hex, int dir) -> int {
-        const auto [hx, hy] = screenOf(hex);
-        std::vector<NeighborOffset> offs;
-        for (const int nb : geck::hexline::hexNeighbors(hex)) {
-            const auto [nx, ny] = screenOf(nb);
-            offs.push_back({ nb, nx - hx, ny - hy });
-        }
-        return secondRowNeighbor(dir, offs);
-    };
-
-    const int aHex = 96 * HexagonGrid::GRID_WIDTH + 100;
-    const int bHex = 104 * HexagonGrid::GRID_WIDTH + 100;
-    const auto firstRow = geck::hexline::hexLine(grid, aHex, bHex);
-    REQUIRE(firstRow.size() >= 4);
-
-    const int dir = ExitGrid::DIR_BACK_A;
-    std::vector<int> secondRow;
-    for (const int hex : firstRow) {
-        const int s = secondRowOf(hex, dir);
-        REQUIRE(s >= 0);
-        secondRow.push_back(s);
-        // Every second-row hex is a grid neighbour of its first-row hex (one hex over).
-        bool adjacent = false;
-        for (const int nb : geck::hexline::hexNeighbors(hex)) {
-            adjacent = adjacent || (nb == s);
-        }
-        CHECK(adjacent);
-    }
-
-    // The two rows are disjoint, and each second-row hex leans to the SAME side, so together with the
-    // first row they form a 2-deep band (each second-row hex distinct from every first-row hex).
-    for (const int s : secondRow) {
-        bool inFirst = false;
-        for (const int f : firstRow) {
-            inFirst = inFirst || (f == s);
-        }
-        CHECK_FALSE(inFirst);
-    }
-}
-
-TEST_CASE("exitGridDiagonalInwardSlide is zero for non-diagonal directions", "[exitgrid][slide]") {
-    for (const int dir : { ExitGrid::DIR_LEFT, ExitGrid::DIR_RIGHT, ExitGrid::DIR_BOTTOM, ExitGrid::DIR_TOP }) {
-        const auto [sx, sy] = exitGridDiagonalInwardSlide(dir);
-        CHECK(sx == 0.0f);
-        CHECK(sy == 0.0f);
-    }
-    const auto [ox, oy] = exitGridDiagonalInwardSlide(-1);
-    CHECK(ox == 0.0f);
-    CHECK(oy == 0.0f);
-}
-
-TEST_CASE("exitGridDiagonalInwardSlide points INWARD by half the bar thickness", "[exitgrid][slide]") {
-    // Inward = opposite the outward normal; magnitude = half the measured bar thickness (38px "\",
-    // 32px "/"), so the trigger hex lands at the bar's OUTER edge.
-    constexpr float kBackThickness = 38.0f; // exitgrd7/8
-    constexpr float kFwdThickness = 32.0f;  // exitgrd5/6
-    struct Case {
-        int dir;
-        float thickness;
-    };
-    for (const Case c : { Case{ ExitGrid::DIR_FWD_A, kFwdThickness }, Case{ ExitGrid::DIR_FWD_B, kFwdThickness },
-             Case{ ExitGrid::DIR_BACK_A, kBackThickness }, Case{ ExitGrid::DIR_BACK_B, kBackThickness } }) {
-        const auto [sx, sy] = exitGridDiagonalInwardSlide(c.dir);
-        const auto [ox, oy] = exitGridOutward(c.dir);
-        // Opposite the outward normal: the slide dotted with outward is negative.
-        CHECK((sx * static_cast<float>(ox) + sy * static_cast<float>(oy)) < 0.0f);
-        // Magnitude is half the bar thickness.
-        const float len = std::sqrt(sx * sx + sy * sy);
-        CHECK(len == Catch::Approx(c.thickness * 0.5f).margin(0.01f));
-    }
-}
-
-TEST_CASE("exitGridDiagonalInwardSlide flips with the direction pair", "[exitgrid][slide]") {
-    // dir^1 reverses the outward normal, so the inward slide reverses too — the whole band mirrors.
-    for (const int dir : { ExitGrid::DIR_FWD_A, ExitGrid::DIR_BACK_A }) {
-        const auto [sx, sy] = exitGridDiagonalInwardSlide(dir);
-        const auto [fx, fy] = exitGridDiagonalInwardSlide(flipExitGridDirection(dir));
-        CHECK(fx == Catch::Approx(-sx).margin(0.01f));
-        CHECK(fy == Catch::Approx(-sy).margin(0.01f));
     }
 }
