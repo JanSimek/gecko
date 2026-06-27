@@ -4,6 +4,7 @@
 
 #include <SFML/Graphics/RenderTexture.hpp>
 #include <SFML/Window/Event.hpp>
+#include <SFML/Window/Keyboard.hpp>
 
 #include <cstddef>
 #include <vector>
@@ -56,6 +57,12 @@ struct Harness {
         sf::Event::MouseMoved move;
         move.position = { x, y };
         handler.handleEvent(sf::Event(move), target, view);
+    }
+
+    void pressKey(sf::Keyboard::Key key) {
+        sf::Event::KeyPressed press;
+        press.code = key;
+        handler.handleEvent(sf::Event(press), target, view);
     }
 };
 
@@ -151,9 +158,9 @@ TEST_CASE("InputHandler builds an exit-grid edge line and finalizes it on right-
     int previewCalls = 0;
     std::size_t lastPreviewVertexCount = 0;
     InputHandler::Callbacks cb;
-    cb.onMarkExitsLine = [&finalized](const std::vector<sf::Vector2f>& verts) { finalized = verts; };
+    cb.onMarkExitsLine = [&finalized](const std::vector<sf::Vector2f>& verts, bool) { finalized = verts; };
     cb.onMarkExitsLinePreview = [&previewCalls, &lastPreviewVertexCount](
-                                    const std::vector<sf::Vector2f>& verts, sf::Vector2f) {
+                                    const std::vector<sf::Vector2f>& verts, sf::Vector2f, bool) {
         ++previewCalls;
         lastPreviewVertexCount = verts.size();
     };
@@ -184,7 +191,7 @@ TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too f
     bool finalized = false;
     bool cancelled = false;
     InputHandler::Callbacks cb;
-    cb.onMarkExitsLine = [&finalized](const std::vector<sf::Vector2f>&) { finalized = true; };
+    cb.onMarkExitsLine = [&finalized](const std::vector<sf::Vector2f>&, bool) { finalized = true; };
     cb.onMarkExitsModeCancelled = [&cancelled]() { cancelled = true; };
     h.handler.setCallbacks(cb);
     h.handler.setMarkExitsMode(true);
@@ -196,4 +203,67 @@ TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too f
     CHECK_FALSE(finalized);
     CHECK(cancelled);
     CHECK_FALSE(h.handler.isInMarkExitsMode()); // tool dropped
+}
+
+// The flip key (Space) for "Draw edge": it toggles the edge's side. A KeyPressed event never touches
+// pixelToWorld (it reuses the stored world cursor), so unlike the click/move cases this needs no GL
+// context and runs in CI too. We construct the handler directly and feed it KeyPressed events; the
+// RenderTexture/View args of handleEvent are unused by the key path, so a default (un-resized)
+// RenderTexture — which creates no GL context — is safe.
+namespace {
+void pressKeyDirect(InputHandler& handler, sf::Keyboard::Key key) {
+    sf::RenderTexture unusedTarget; // default-constructed: no GL context created (only resize() does)
+    sf::View unusedView;
+    sf::Event::KeyPressed press;
+    press.code = key;
+    handler.handleEvent(sf::Event(press), unusedTarget, unusedView);
+}
+} // namespace
+
+TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the preview", "[input][line][flip]") {
+    InputHandler handler;
+    int previewCalls = 0;
+    bool lastPreviewFlip = false;
+    InputHandler::Callbacks cb;
+    cb.onMarkExitsLinePreview = [&](const std::vector<sf::Vector2f>&, sf::Vector2f, bool flipSide) {
+        ++previewCalls;
+        lastPreviewFlip = flipSide;
+    };
+    handler.setCallbacks(cb);
+    handler.setMarkExitsMode(true);
+
+    // Default side is the auto/outward side (not flipped).
+    CHECK_FALSE(handler.isMarkExitsFlipped());
+
+    // Space flips to the opposite side and re-fires the preview so the new side is visible immediately.
+    pressKeyDirect(handler, sf::Keyboard::Key::Space);
+    CHECK(handler.isMarkExitsFlipped());
+    CHECK(previewCalls == 1);
+    CHECK(lastPreviewFlip == true);
+
+    // F again toggles back to the default side.
+    pressKeyDirect(handler, sf::Keyboard::Key::F);
+    CHECK_FALSE(handler.isMarkExitsFlipped());
+    CHECK(previewCalls == 2);
+    CHECK(lastPreviewFlip == false);
+}
+
+TEST_CASE("InputHandler's flip key does nothing outside Draw-edge mode, and resets on mode change", "[input][line][flip]") {
+    InputHandler handler;
+    int previewCalls = 0;
+    InputHandler::Callbacks cb;
+    cb.onMarkExitsLinePreview = [&](const std::vector<sf::Vector2f>&, sf::Vector2f, bool) { ++previewCalls; };
+    handler.setCallbacks(cb);
+
+    // Not in MarkExits mode: F is ignored (no toggle, no preview).
+    pressKeyDirect(handler, sf::Keyboard::Key::F);
+    CHECK_FALSE(handler.isMarkExitsFlipped());
+    CHECK(previewCalls == 0);
+
+    // Enter the mode, flip, then leave: the toggle resets to the default.
+    handler.setMarkExitsMode(true);
+    pressKeyDirect(handler, sf::Keyboard::Key::F);
+    CHECK(handler.isMarkExitsFlipped());
+    handler.setMarkExitsMode(false); // back to Select
+    CHECK_FALSE(handler.isMarkExitsFlipped());
 }

@@ -64,9 +64,9 @@ void ExitGridPlacementManager::placeExitGridAtPosition(sf::Vector2f worldPos) {
     rememberDestinationKind(properties.exitMap);
     _currentMarkerArt = properties.markerArt;
 
-    // A single hex has no drawn segment, so segDx/segDy are (0, 0): the art falls back to the hex's
-    // center-facing classification (or the explicit override, if chosen).
-    const ExitGridArt art = artForHex(hexPosition, properties.markerArt, 0, 0);
+    // A single hex has no stroke: the art falls back to the hex's center-facing classification (or the
+    // explicit override, if chosen). No flip on a click-placed lone marker.
+    const ExitGridArt art = artForLine({ hexPosition }, properties.markerArt, /*flipSide=*/false);
     auto exitGridObject = createExitGridObject(hexPosition, art.proPid, art.frmPid, properties);
     int currentElevation = _context.getCurrentElevation();
 
@@ -228,52 +228,61 @@ ExitGridDestinationKind ExitGridPlacementManager::destinationKind() const {
         : ExitGridDestinationKind::InterMap;
 }
 
-ExitGridArt ExitGridPlacementManager::autoArtForHex(int hexPosition, int segDx, int segDy) const {
+ExitGridArt ExitGridPlacementManager::autoArtForLine(const std::vector<int>& orderedHexes,
+    bool flipSide) const {
     const auto* hexGrid = _context.getHexagonGrid();
     const ExitGridDestinationKind kind = destinationKind();
-    // Off-grid fallback: a deterministic bottom-edge marker in the right family.
-    if (!hexGrid) {
+    // Off-grid / empty fallback: a deterministic bottom-edge marker in the right family.
+    if (!hexGrid || orderedHexes.empty()) {
         return exitGridArtForDirection(ExitGrid::DIR_BOTTOM, kind);
     }
-    const auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(hexPosition));
-    if (!hex.has_value()) {
-        return exitGridArtForDirection(ExitGrid::DIR_BOTTOM, kind);
-    }
+    const auto screenOf = [hexGrid](int hexIndex) -> std::pair<int, int> {
+        const auto h = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+        return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() }
+                             : std::pair<int, int>{ 0, 0 };
+    };
     const auto [centerX, centerY] = hexGridCenterScreen(*hexGrid);
-    const int outwardX = hex->get().x() - centerX;
-    const int outwardY = hex->get().y() - centerY;
-    // With a real drawn segment, classify by its axis; for a lone hex (no segment) fall back to the
-    // center-facing classifier.
-    if (segDx == 0 && segDy == 0) {
-        return exitGridArtForFacing(hex->get().x(), hex->get().y(), centerX, centerY, kind);
+
+    // A lone hex (no stroke) has no axis: classify it purely by its outward facing.
+    if (orderedHexes.size() < 2) {
+        const auto [hx, hy] = screenOf(orderedHexes.front());
+        const ExitGridArt art = exitGridArtForFacing(hx, hy, centerX, centerY, kind);
+        // Honour a flip even for a lone hex so the preview/commit stays consistent.
+        if (flipSide) {
+            return exitGridArtForDirection(
+                flipExitGridDirection(static_cast<int>(art.proPid - ExitGrid::FIRST_EXIT_GRID_PID)),
+                kind);
+        }
+        return art;
     }
-    return exitGridArtForSegment(segDx, segDy, outwardX, outwardY, kind);
+
+    // Whole-stroke classification: the screen delta from the first to the last hex picks the axis, and
+    // the stroke midpoint's offset from the map centre picks the side — ONCE for the whole edge, so
+    // every hex shares one consistent side (a clean continuous bar) instead of flipping mid-run.
+    const auto [fx, fy] = screenOf(orderedHexes.front());
+    const auto [lx, ly] = screenOf(orderedHexes.back());
+    const auto [mx, my] = screenOf(orderedHexes[orderedHexes.size() / 2]);
+    const int dir = exitGridDirectionForLine(lx - fx, ly - fy, mx - centerX, my - centerY, flipSide);
+    return exitGridArtForDirection(dir, kind);
 }
 
-ExitGridArt ExitGridPlacementManager::artForHex(int hexPosition, MarkerArt markerArt,
-    int segDx, int segDy) const {
-    // Auto keeps the per-hex segment+facing classification; an explicit direction forces one art for
-    // every hex on the line (the escape hatch for ambiguous corners and the two diagonal sides).
+ExitGridArt ExitGridPlacementManager::artForLine(const std::vector<int>& orderedHexes,
+    MarkerArt markerArt, bool flipSide) const {
+    // An explicit marker-direction override forces one art for every hex (the escape hatch for
+    // ambiguous edges); Auto uses the single whole-stroke side. The flip key only affects Auto — an
+    // explicit direction is already a fixed side, so there is nothing to flip.
     if (const int dir = explicitDirection(markerArt); dir >= 0) {
         return exitGridArtForDirection(dir, destinationKind());
     }
-    return autoArtForHex(hexPosition, segDx, segDy);
-}
-
-uint32_t ExitGridPlacementManager::previewFrmPidForHex(int hexPosition, int segDx, int segDy) const {
-    return artForHex(hexPosition, _currentMarkerArt, segDx, segDy).frmPid;
+    return autoArtForLine(orderedHexes, flipSide);
 }
 
 std::vector<uint32_t> ExitGridPlacementManager::previewFrmPidsForLine(
-    const std::vector<int>& orderedHexes) const {
-    const std::vector<std::pair<int, int>> segDirs = segmentDirectionsForLine(orderedHexes);
-    std::vector<uint32_t> frmPids;
-    frmPids.reserve(orderedHexes.size());
-    for (std::size_t i = 0; i < orderedHexes.size(); ++i) {
-        const auto [segDx, segDy] = segDirs[i];
-        frmPids.push_back(previewFrmPidForHex(orderedHexes[i], segDx, segDy));
-    }
-    return frmPids;
+    const std::vector<int>& orderedHexes, bool flipSide) const {
+    // One whole-stroke art for the whole line: every preview hex gets the same FRM, matching the
+    // commit (a clean single-side edge).
+    const uint32_t frmPid = artForLine(orderedHexes, _currentMarkerArt, flipSide).frmPid;
+    return std::vector<uint32_t>(orderedHexes.size(), frmPid);
 }
 
 bool ExitGridPlacementManager::showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing) {
@@ -409,30 +418,8 @@ bool ExitGridPlacementManager::bulkEditExistingExitGrids(const std::vector<std::
     return true;
 }
 
-std::vector<std::pair<int, int>> ExitGridPlacementManager::segmentDirectionsForLine(
-    const std::vector<int>& orderedHexes) const {
-    std::vector<std::pair<int, int>> dirs(orderedHexes.size(), { 0, 0 });
-    const auto* hexGrid = _context.getHexagonGrid();
-    if (!hexGrid || orderedHexes.size() < 2) {
-        return dirs; // a lone hex (or no grid) has no segment direction
-    }
-    // Each hex's segment direction is the screen-space vector between its neighbours on the ordered
-    // line (endpoints use their single neighbour), so the art reflects the local run of the edge.
-    const auto screenOf = [hexGrid](int hexIndex) {
-        const auto h = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
-        return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() } : std::pair<int, int>{ 0, 0 };
-    };
-    for (std::size_t i = 0; i < orderedHexes.size(); ++i) {
-        const std::size_t prev = (i == 0) ? 0 : i - 1;
-        const std::size_t next = (i + 1 < orderedHexes.size()) ? i + 1 : i;
-        const auto [px, py] = screenOf(orderedHexes[prev]);
-        const auto [nx, ny] = screenOf(orderedHexes[next]);
-        dirs[i] = { nx - px, ny - py };
-    }
-    return dirs;
-}
-
-std::size_t ExitGridPlacementManager::createExitGridsForHexes(const std::vector<int>& hexPositions) {
+std::size_t ExitGridPlacementManager::createExitGridsForHexes(const std::vector<int>& hexPositions,
+    bool flipSide) {
     if (hexPositions.empty()) {
         _showStatus("No hexes found along the edge line");
         return 0;
@@ -445,13 +432,13 @@ std::size_t ExitGridPlacementManager::createExitGridsForHexes(const std::vector<
     rememberDestinationKind(newProperties.exitMap);
     _currentMarkerArt = newProperties.markerArt;
 
-    const std::vector<std::pair<int, int>> segDirs = segmentDirectionsForLine(hexPositions);
+    // One whole-stroke art (one consistent side, optionally flipped) shared by every hex, so the bars
+    // form a clean continuous edge.
+    const ExitGridArt art = artForLine(hexPositions, newProperties.markerArt, flipSide);
     int currentElevation = _context.getCurrentElevation();
     std::vector<std::shared_ptr<MapObject>> createdExitGrids;
-    for (std::size_t i = 0; i < hexPositions.size(); ++i) {
-        const auto [segDx, segDy] = segDirs[i];
-        const ExitGridArt art = artForHex(hexPositions[i], newProperties.markerArt, segDx, segDy);
-        createdExitGrids.push_back(createExitGridObject(hexPositions[i], art.proPid, art.frmPid, newProperties));
+    for (const int hexPosition : hexPositions) {
+        createdExitGrids.push_back(createExitGridObject(hexPosition, art.proPid, art.frmPid, newProperties));
     }
 
     if (createdExitGrids.empty()) {
@@ -505,7 +492,8 @@ std::vector<std::shared_ptr<Object>> ExitGridPlacementManager::collectExitGridsO
     return result;
 }
 
-void ExitGridPlacementManager::selectExitGridsAlongLine(const std::vector<sf::Vector2f>& worldVertices) {
+void ExitGridPlacementManager::selectExitGridsAlongLine(const std::vector<sf::Vector2f>& worldVertices,
+    bool flipSide) {
     if (!_markExitsMode || worldVertices.size() < 2) {
         return;
     }
@@ -519,14 +507,14 @@ void ExitGridPlacementManager::selectExitGridsAlongLine(const std::vector<sf::Ve
     const std::vector<int> lineHexes = collectHexesAlongLine(worldVertices);
 
     // Existing exit grids on the line -> bulk-edit their destination (keeping each one's directional
-    // art); otherwise create one per line hex, each with the directional art for its drawn segment.
+    // art); otherwise create one per line hex, all sharing the single whole-stroke side (flip-aware).
     // The selection was already cleared above, so the bulk-edit branch doesn't clear again.
     if (const auto existing = collectExitGridsOnHexes(lineHexes); !existing.empty()) {
         bulkEditExistingExitGrids(existing);
         return;
     }
 
-    createExitGridsForHexes(lineHexes);
+    createExitGridsForHexes(lineHexes, flipSide);
 }
 
 } // namespace geck

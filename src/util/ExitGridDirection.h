@@ -146,6 +146,33 @@ inline ExitGridArt exitGridArtForSegment(int dx, int dy, int outwardX, int outwa
     return exitGridArtForDirection(dir, kind);
 }
 
+/// Flip a direction (0..7) to the OPPOSITE side of its axis pair: LEFT<->RIGHT, BOTTOM<->TOP,
+/// "/"-A<->"/"-B, "\"-A<->"\"-B. The eight directions are laid out as four adjacent pairs
+/// (0/1, 2/3, 4/5, 6/7), so toggling the low bit swaps within the pair and keeps the axis. The two
+/// art bitmaps in a pair are identical; the only on-screen difference is which side the renderer's
+/// outward offset (exitGridOutward) pushes the bar to — so a flip moves the bar to the other side
+/// (e.g. a horizontal edge's bar from south to north). Out-of-range dirs are returned unchanged.
+inline int flipExitGridDirection(int dir) {
+    if (dir < 0 || dir >= ExitGrid::DIR_COUNT) {
+        return dir;
+    }
+    return dir ^ 1;
+}
+
+/// The single direction for a WHOLE drawn stroke. `dx`/`dy` are the stroke's overall screen delta
+/// (first vertex -> last vertex, y DOWNWARD); `outwardX`/`outwardY` are the stroke midpoint's offset
+/// from the map centre (which way the whole edge faces away from centre). The stroke's axis picks the
+/// pair and the overall outward facing picks the side ONCE — so every hex on the stroke gets the same
+/// direction (one consistent side, a clean continuous bar) instead of a per-hex recompute that flips
+/// sides mid-run. `flipSide` inverts that side within the pair (the live "flip" key), so the user can
+/// put the edge on the opposite side (south<->north, left<->right, ...). Returns the chosen direction
+/// (0..7); pass it to exitGridArtForDirection for the {proto, frm}.
+inline int exitGridDirectionForLine(int dx, int dy, int outwardX, int outwardY, bool flipSide) {
+    const exitgrid_detail::SegmentAxis axis = exitgrid_detail::classifySegment(dx, dy);
+    const int dir = exitgrid_detail::directionForAxis(axis, outwardX, outwardY);
+    return flipSide ? flipExitGridDirection(dir) : dir;
+}
+
 /// Single-hex fallback (no drawn segment): classify a lone hex purely by its outward facing from the
 /// map centre. The vertical offset dominating => a horizontal (top/bottom) edge, else a vertical
 /// (left/right) edge. Used by single-hex placement, where there is no line to take an axis from.

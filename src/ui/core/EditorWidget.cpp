@@ -832,13 +832,13 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         cycleStampVariant();
     };
 
-    callbacks.onMarkExitsLinePreview = [this](const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor) {
-        updateMarkExitsLinePreview(vertices, cursor);
+    callbacks.onMarkExitsLinePreview = [this](const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide) {
+        updateMarkExitsLinePreview(vertices, cursor, flipSide);
     };
 
-    callbacks.onMarkExitsLine = [this](const std::vector<sf::Vector2f>& vertices) {
+    callbacks.onMarkExitsLine = [this](const std::vector<sf::Vector2f>& vertices, bool flipSide) {
         clearMarkExitsLinePreview();
-        _exitGridPlacementManager->selectExitGridsAlongLine(vertices);
+        _exitGridPlacementManager->selectExitGridsAlongLine(vertices, flipSide);
     };
 
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
@@ -1595,7 +1595,7 @@ std::vector<Tile>& EditorWidget::ensureElevationTiles(int elevation) {
     return tilesVec;
 }
 
-void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor) {
+void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide) {
     _exitGridLineVertices = vertices;
     _exitGridLineCursor = cursor;
     _exitGridLineActive = true;
@@ -1623,11 +1623,11 @@ void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& v
     }
     _exitGridPreviewHexes = hexline::hexPolyline(_session.hexgrid(), vertexHexes);
 
-    // Per-hex directional FRM, picked the same way the commit will: each hex's art comes from its own
-    // local segment on the line (Auto), or the explicit marker-direction override, so the preview
-    // matches what placement produces.
+    // Directional FRM, picked the same way the commit will: one whole-stroke side for the whole line
+    // (Auto, optionally flipped by the F key), or the explicit marker-direction override — so the
+    // preview shows the same clean single-side edge placement produces, including the flipped side.
     _exitGridPreviewFrmPids = _exitGridPlacementManager
-        ? _exitGridPlacementManager->previewFrmPidsForLine(_exitGridPreviewHexes)
+        ? _exitGridPlacementManager->previewFrmPidsForLine(_exitGridPreviewHexes, flipSide)
         : std::vector<uint32_t>(_exitGridPreviewHexes.size(), 0u);
 }
 

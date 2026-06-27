@@ -206,6 +206,7 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
     sf::RenderTarget& target,
     const sf::View& view) {
     sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
+    _mouseLastWorldPos = worldPos;
 
     if (_callbacks.onMouseMove) {
         _callbacks.onMouseMove(worldPos);
@@ -214,7 +215,7 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
     // "Draw edge": preview the polyline + on-line hexes from the committed vertices to the live
     // cursor on every move, independent of any drag action.
     if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsLinePreview) {
-        _callbacks.onMarkExitsLinePreview(_lineVertices, worldPos);
+        _callbacks.onMarkExitsLinePreview(_lineVertices, worldPos, _markExitsFlip);
     }
 
     switch (_currentAction) {
@@ -305,6 +306,17 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
         if (_mode == EditorMode::StampPattern && _callbacks.onStampCycleVariant) {
             _callbacks.onStampCycleVariant();
         }
+    } else if (event.code == sf::Keyboard::Key::Space) {
+        // In "Draw edge" mode, Space flips which side the edge's bars sit on (south<->north, the two
+        // diagonal sides). Space is otherwise unused in this mode — panning is a mouse drag, and
+        // Esc/Enter/right-click/double-click drive the line. Re-fire the preview immediately with the
+        // cursor at its last position so the flipped side is visible before finalising.
+        if (_mode == EditorMode::MarkExits) {
+            _markExitsFlip = !_markExitsFlip;
+            if (_callbacks.onMarkExitsLinePreview) {
+                _callbacks.onMarkExitsLinePreview(_lineVertices, _mouseLastWorldPos, _markExitsFlip);
+            }
+        }
     }
 }
 
@@ -326,13 +338,13 @@ void InputHandler::finishDragSelectRelease(sf::Vector2f worldPos) {
 
 void InputHandler::finalizeExitGridLine() {
     if (_lineVertices.size() >= 2 && _callbacks.onMarkExitsLine) {
-        _callbacks.onMarkExitsLine(_lineVertices);
+        _callbacks.onMarkExitsLine(_lineVertices, _markExitsFlip);
     }
     _lineVertices.clear();
     // The tool stays active so the user can immediately draw another edge; the caller
-    // (EditorWidget) repaints the now-cleared preview.
+    // (EditorWidget) repaints the now-cleared preview. The flip toggle persists for the next edge.
     if (_callbacks.onMarkExitsLinePreview) {
-        _callbacks.onMarkExitsLinePreview(_lineVertices, _dragStartWorldPos);
+        _callbacks.onMarkExitsLinePreview(_lineVertices, _dragStartWorldPos, _markExitsFlip);
     }
 }
 

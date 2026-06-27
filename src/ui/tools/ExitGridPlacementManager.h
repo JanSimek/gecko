@@ -61,10 +61,12 @@ public:
     bool editSelectedExitGrids();
 
     // "Draw edge" mode: walk a gap-free hex line through the polyline of world-space vertices; every
-    // hex on the line becomes an exit grid sharing one destination, each with the directional art for
-    // its local segment — or, if existing exit grids sit on those hexes, those have their destination
-    // bulk-edited instead (keeping their directional art).
-    void selectExitGridsAlongLine(const std::vector<sf::Vector2f>& worldVertices);
+    // hex on the line becomes an exit grid sharing one destination AND one directional art — the side
+    // is classified once for the whole stroke (its overall screen axis + outward facing), so the bars
+    // form a clean continuous edge on a single consistent side rather than flipping mid-run. `flipSide`
+    // inverts that side (the live "flip" key). If existing exit grids sit on those hexes, those have
+    // their destination bulk-edited instead (keeping their directional art).
+    void selectExitGridsAlongLine(const std::vector<sf::Vector2f>& worldVertices, bool flipSide = false);
 
     // Destination kind the live region preview tints by: inter-map (green) vs world/town map
     // (brown). Defaults to inter-map and is updated whenever a region dialog sets the destination,
@@ -75,16 +77,13 @@ public:
     };
     DestinationKind currentDestinationKind() const { return _currentDestinationKind; }
 
-    // The directional marker FRM the live preview should draw for `hexPosition`, using the same art
-    // selection a commit would: the last-chosen marker-direction override (Auto -> the hex's drawn
-    // segment + outward facing, an explicit direction -> that direction's art for every hex). segDx/
-    // segDy are the hex's local screen-space segment direction on the previewed line (0,0 = lone hex).
-    [[nodiscard]] uint32_t previewFrmPidForHex(int hexPosition, int segDx, int segDy) const;
-
-    // The per-hex directional marker FRM for an ordered line of hexes, parallel to `orderedHexes`,
-    // each picked from its own local segment direction — exactly what createExitGridsForHexes commits.
-    // Lets the live preview show the same per-segment art the placement will produce.
-    [[nodiscard]] std::vector<uint32_t> previewFrmPidsForLine(const std::vector<int>& orderedHexes) const;
+    // The directional marker FRM for an ordered line of hexes, parallel to `orderedHexes`: the
+    // last-chosen marker-direction override (Auto -> the single whole-stroke side, optionally flipped;
+    // an explicit direction -> that direction's art) gives EVERY hex the same FRM, so the live preview
+    // shows the same clean single-side edge the commit will produce. `flipSide` inverts the auto side
+    // (the live "flip" key); ignored when an explicit override is active.
+    [[nodiscard]] std::vector<uint32_t> previewFrmPidsForLine(const std::vector<int>& orderedHexes,
+        bool flipSide = false) const;
 
 private:
     // Create exit grid MISC object with the given directional art (proPid/frmPid, chosen per hex by
@@ -104,27 +103,25 @@ private:
     // change was committed.
     bool bulkEditExistingExitGrids(const std::vector<std::shared_ptr<Object>>& exitGrids);
     // createExitGridsForHexes: show one dialog and create one exit grid per hex via
-    // registerExitGridCreation, each with the directional art for its outward facing. Returns the
-    // number created.
-    std::size_t createExitGridsForHexes(const std::vector<int>& hexPositions);
+    // registerExitGridCreation, all sharing the single whole-stroke directional art (optionally
+    // flipped). Returns the number created.
+    std::size_t createExitGridsForHexes(const std::vector<int>& hexPositions, bool flipSide);
     // The deduped, gap-free hex line through `worldVertices`: each vertex is mapped to its hex and
     // consecutive hexes are joined by a hex-line walk. Split out of selectExitGridsAlongLine.
     std::vector<int> collectHexesAlongLine(const std::vector<sf::Vector2f>& worldVertices) const;
     // The existing exit-grid objects sitting on any of `hexPositions`.
     std::vector<std::shared_ptr<Object>> collectExitGridsOnHexes(const std::vector<int>& hexPositions) const;
-    // The screen-space (dx, dy) of each ordered line hex's local segment (the direction the line runs
-    // through that hex), used to classify its directional art. Endpoints take their single neighbour's
-    // direction; a lone hex is (0, 0).
-    std::vector<std::pair<int, int>> segmentDirectionsForLine(const std::vector<int>& orderedHexes) const;
-    // The auto (non-override) directional art for `hexPosition` from its drawn segment (segDx/segDy in
-    // screen space; 0,0 = lone hex) and destination kind. Falls back to a deterministic bottom marker
-    // if the hex is off-grid.
-    ExitGridArt autoArtForHex(int hexPosition, int segDx, int segDy) const;
-    // The exit-grid art for `hexPosition` honouring the marker-direction override: Auto keeps the
-    // per-hex segment+facing classification (autoArtForHex); an explicit direction forces that
-    // direction's art for every hex on the line. Family (green/brown) comes from the destination kind.
-    ExitGridArt artForHex(int hexPosition, ExitGridPropertiesDialog::ExitGridProperties::MarkerArt markerArt,
-        int segDx, int segDy) const;
+    // The SINGLE auto (non-override) directional art for a whole drawn stroke: classify the stroke's
+    // overall screen axis (first hex -> last hex) and pick the side once from the stroke midpoint's
+    // outward facing, so every hex shares one consistent side. `flipSide` inverts that side. A lone hex
+    // (or no grid) falls back to the center-facing classifier. Family comes from the destination kind.
+    ExitGridArt autoArtForLine(const std::vector<int>& orderedHexes, bool flipSide) const;
+    // The exit-grid art for a whole stroke honouring the marker-direction override: Auto -> the single
+    // whole-stroke side (autoArtForLine, optionally flipped); an explicit direction -> that direction's
+    // art. Family (green/brown) comes from the destination kind. Used by both the commit and the
+    // preview so they agree.
+    ExitGridArt artForLine(const std::vector<int>& orderedHexes,
+        ExitGridPropertiesDialog::ExitGridProperties::MarkerArt markerArt, bool flipSide) const;
     // The art family (green inter-map vs brown world/town) for the destination the user last chose.
     ExitGridDestinationKind destinationKind() const;
 

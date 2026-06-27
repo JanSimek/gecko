@@ -11,7 +11,9 @@ using geck::exitGridArtForDirection;
 using geck::exitGridArtForFacing;
 using geck::exitGridArtForSegment;
 using geck::ExitGridDestinationKind;
+using geck::exitGridDirectionForLine;
 using geck::exitGridOutward;
+using geck::flipExitGridDirection;
 namespace ExitGrid = geck::ExitGrid;
 
 namespace {
@@ -150,6 +152,52 @@ TEST_CASE("a |dx| == |dy| facing tie favours the vertical (top/bottom) edge", "[
     // |dy| >= |dx| classifies as a horizontal line -> top/bottom edge.
     CHECK(exitGridArtForFacing(CX + 100, CY - 100, CX, CY, INTER).proPid == ExitGrid::TOP_PRO_PID);
     CHECK(exitGridArtForFacing(CX - 100, CY + 100, CX, CY, INTER).proPid == ExitGrid::BOTTOM_PRO_PID);
+}
+
+TEST_CASE("flipExitGridDirection swaps within each axis pair and is an involution", "[exitgrid][flip]") {
+    // The eight directions are four adjacent pairs (0/1, 2/3, 4/5, 6/7); a flip swaps within the pair.
+    CHECK(flipExitGridDirection(ExitGrid::DIR_LEFT) == ExitGrid::DIR_RIGHT);
+    CHECK(flipExitGridDirection(ExitGrid::DIR_RIGHT) == ExitGrid::DIR_LEFT);
+    CHECK(flipExitGridDirection(ExitGrid::DIR_BOTTOM) == ExitGrid::DIR_TOP);
+    CHECK(flipExitGridDirection(ExitGrid::DIR_TOP) == ExitGrid::DIR_BOTTOM);
+    CHECK(flipExitGridDirection(ExitGrid::DIR_FWD_A) == ExitGrid::DIR_FWD_B);
+    CHECK(flipExitGridDirection(ExitGrid::DIR_FWD_B) == ExitGrid::DIR_FWD_A);
+    CHECK(flipExitGridDirection(ExitGrid::DIR_BACK_A) == ExitGrid::DIR_BACK_B);
+    CHECK(flipExitGridDirection(ExitGrid::DIR_BACK_B) == ExitGrid::DIR_BACK_A);
+    // Flipping twice returns the original; out-of-range dirs pass through unchanged.
+    for (int dir = 0; dir < ExitGrid::DIR_COUNT; ++dir) {
+        CHECK(flipExitGridDirection(flipExitGridDirection(dir)) == dir);
+        // A flip keeps the axis (same pair) but always changes the direction.
+        CHECK(flipExitGridDirection(dir) != dir);
+        CHECK(flipExitGridDirection(dir) / 2 == dir / 2);
+    }
+    CHECK(flipExitGridDirection(-1) == -1);
+    CHECK(flipExitGridDirection(ExitGrid::DIR_COUNT) == ExitGrid::DIR_COUNT);
+}
+
+TEST_CASE("exitGridDirectionForLine picks one side for the whole stroke and the flip inverts it",
+    "[exitgrid][line]") {
+    // A horizontal stroke whose midpoint is BELOW centre -> the BOTTOM (south) edge; the flip turns it
+    // into the TOP (north) edge. This is the south<->north flip the F key drives.
+    const int south = exitGridDirectionForLine(/*dx=*/200, /*dy=*/0,
+        /*outwardX=*/0, /*outwardY=*/300, /*flipSide=*/false);
+    CHECK(south == ExitGrid::DIR_BOTTOM);
+    const int north = exitGridDirectionForLine(200, 0, 0, 300, /*flipSide=*/true);
+    CHECK(north == ExitGrid::DIR_TOP);
+    CHECK(north == flipExitGridDirection(south));
+
+    // A vertical stroke right of centre -> RIGHT; flipped -> LEFT.
+    const int right = exitGridDirectionForLine(0, 200, 300, 0, false);
+    const int left = exitGridDirectionForLine(0, 200, 300, 0, true);
+    CHECK(right == ExitGrid::DIR_RIGHT);
+    CHECK(left == ExitGrid::DIR_LEFT);
+
+    // A "\" stroke (dx, dy same sign): flipped picks the other "\" side, never escaping the pair.
+    const int backA = exitGridDirectionForLine(120, 120, -200, -200, false);
+    const int backB = exitGridDirectionForLine(120, 120, -200, -200, true);
+    CHECK((backA == ExitGrid::DIR_BACK_A || backA == ExitGrid::DIR_BACK_B));
+    CHECK(backB == flipExitGridDirection(backA));
+    CHECK(backA / 2 == ExitGrid::DIR_BACK_A / 2); // same "\" pair
 }
 
 TEST_CASE("exitGridOutward: the per-direction outward (off-map) screen vector", "[exitgrid][outward]") {

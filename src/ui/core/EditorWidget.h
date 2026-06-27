@@ -343,7 +343,7 @@ private:
     // Exit-grid "Draw edge" live preview: recompute the prospective on-line hexes (the gap-free hex
     // line through the committed vertices + the live cursor) and the tint from the tool's current
     // destination kind, for the renderer to draw the polyline and marked hexes.
-    void updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor);
+    void updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide);
     void clearMarkExitsLinePreview();
     void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     // Commit a finished drag rectangle to the selection (replace/deselect/additive), or build

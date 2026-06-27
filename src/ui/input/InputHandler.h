@@ -67,11 +67,13 @@ public:
         std::function<void(sf::Vector2f worldPos)> onStampPattern;
         std::function<void()> onStampPatternCancel;
         std::function<void()> onStampCycleVariant;
-        // Polyline "Draw edge" mode. onMarkExitsLinePreview fires on every mouse move with the
-        // vertices committed so far plus the live cursor (to draw the in-progress edge);
-        // onMarkExitsLine fires once on finalize with the finished vertex polyline.
-        std::function<void(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor)> onMarkExitsLinePreview;
-        std::function<void(const std::vector<sf::Vector2f>& vertices)> onMarkExitsLine;
+        // Polyline "Draw edge" mode. onMarkExitsLinePreview fires on every mouse move (and on a flip-
+        // key toggle) with the vertices committed so far plus the live cursor (to draw the in-progress
+        // edge); onMarkExitsLine fires once on finalize with the finished vertex polyline. `flipSide`
+        // is the current state of the flip toggle (the F key) — when true the edge's side is inverted
+        // (south<->north, ...), so the preview and the commit both reflect it.
+        std::function<void(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide)> onMarkExitsLinePreview;
+        std::function<void(const std::vector<sf::Vector2f>& vertices, bool flipSide)> onMarkExitsLine;
 
         // Hover
         std::function<void(sf::Vector2f worldPos)> onMouseMove;
@@ -111,6 +113,9 @@ public:
     bool isInTilePlacementMode() const { return _mode == EditorMode::PlaceTile; }
     bool isInExitGridPlacementMode() const { return _mode == EditorMode::PlaceExitGrid; }
     bool isInMarkExitsMode() const { return _mode == EditorMode::MarkExits; }
+    // The "Draw edge" flip toggle: false = the auto/outward side, true = the opposite side. Toggled by
+    // the flip key (F) while drawing an edge; exposed for tests of the toggle state.
+    bool isMarkExitsFlipped() const { return _markExitsFlip; }
 
     /**
      * @brief Mode setters
@@ -147,7 +152,8 @@ private:
     bool isShiftPressed() const;
     void setActiveMode(bool enabled, EditorMode mode) {
         _mode = enabled ? mode : EditorMode::Select;
-        _lineVertices.clear(); // any mode change abandons an in-progress exit-grid edge line
+        _lineVertices.clear();  // any mode change abandons an in-progress exit-grid edge line
+        _markExitsFlip = false; // and resets the flip toggle to the default (auto/outward) side
     }
 
     // "Draw edge" polyline state machine helpers (MarkExits mode).
@@ -167,6 +173,10 @@ private:
     // Mouse state
     sf::Vector2i _mouseStartPos{ 0, 0 };
     sf::Vector2i _mouseLastPos{ 0, 0 };
+    // The last cursor position in WORLD coordinates (updated on every mouse move). Key events carry no
+    // view/target to convert pixels, so the flip key reuses this to re-fire the live edge preview at
+    // the current cursor.
+    sf::Vector2f _mouseLastWorldPos;
     sf::Vector2f _dragStartWorldPos;
     bool _isDragging = false;
     bool _immediateSelectionPerformed = false;
@@ -178,6 +188,10 @@ private:
     // Vertices clicked so far for the in-progress exit-grid "Draw edge" line (MarkExits mode);
     // cleared on finalize/cancel/mode-change.
     std::vector<sf::Vector2f> _lineVertices;
+    // The "Draw edge" flip toggle: the F key flips which side the edge's bars sit on (south<->north,
+    // left<->right, the two diagonal sides). Default false = the auto/outward side. Reset on mode
+    // change; persists across consecutive edges drawn in one MarkExits session so a chosen side sticks.
+    bool _markExitsFlip = false;
     // Double-click detection for finalizing a "Draw edge" line (time since the last vertex
     // click + how far the cursor moved). The clock restarts on every line vertex click.
     sf::Clock _doubleClickClock;
