@@ -237,8 +237,6 @@ private:
         const sf::View& view,
         const RenderData& renderData,
         const Map* map);
-    // Draw one editor-only exit-grid overlay marker (a magenta hex diamond) at a hex screen centre.
-    static void drawExitGridOverlayMarker(sf::RenderTarget& target, int centerX, int centerY);
 
     /**
      * @brief Render the in-progress exit-grid "Draw edge" preview: the polyline plus each

@@ -7,6 +7,7 @@
 #include "format/map/MapObject.h"
 #include "format/frm/Frm.h"
 #include "resource/GameResources.h"
+#include "resource/ResourcePaths.h"
 #include "util/Constants.h"
 #include "util/ColorUtils.h"
 #include "util/Coordinates.h"
@@ -435,29 +436,6 @@ void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangl
     }
 }
 
-void RenderingEngine::drawExitGridOverlayMarker(sf::RenderTarget& target, int centerX, int centerY) {
-    // A distinct editor-only marker: a high-contrast magenta hex diamond drawn at the marker's hex
-    // centre. This is purely an editor cue (toggled by "Show exit grids") and is separate from the
-    // player-visible directional art, which renderObjects already drew. It is deliberately NOT the
-    // exit-grid FRM (art/misc/exitgrid.frm does not exist — only the directional exitgrd*/ext2grd*),
-    // so it has no missing-resource dependency.
-    constexpr float halfW = Hex::HEX_WIDTH; // a diamond a little larger than a single hex footprint
-    constexpr float halfH = Hex::HEX_HEIGHT;
-    const auto fx = static_cast<float>(centerX);
-    const auto fy = static_cast<float>(centerY);
-
-    sf::ConvexShape diamond(4);
-    diamond.setPoint(0, { fx, fy - halfH });
-    diamond.setPoint(1, { fx + halfW, fy });
-    diamond.setPoint(2, { fx, fy + halfH });
-    diamond.setPoint(3, { fx - halfW, fy });
-    const sf::Color accent = TileColors::exitGridHighlight(); // magenta, semi-transparent
-    diamond.setFillColor(sf::Color(accent.r, accent.g, accent.b, 70));
-    diamond.setOutlineColor(sf::Color(accent.r, accent.g, accent.b, 255));
-    diamond.setOutlineThickness(1.5f);
-    target.draw(diamond);
-}
-
 void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
     const sf::View& view,
     const RenderData& renderData,
@@ -466,11 +444,13 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
         return;
     }
 
-    // Draw a distinct editor-only overlay marker on every exit-grid hex. The player-visible
-    // directional art (each marker's real exitgrd*/ext2grd* sprite) was already drawn by
-    // renderObjects with its proper FRM offset; this overlay adds an unmistakable editor cue on top
-    // so the exit grids are easy to spot when "Show exit grids" is toggled, without re-blitting or
-    // recolouring the real sprites.
+    // Editor-only "Show exit grids" overlay: the bundled "EG" hex marker (art/misc/exitgrid.frm,
+    // shipped under resources/ — not in the DATs) drawn on every exit-grid hex. Separate from the
+    // player-visible directional exitgrd*/ext2grd* art, which renderObjects already drew with its own
+    // FRM offset.
+    const sf::Texture& exitGridTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
+    sf::Sprite exitGridSprite(exitGridTexture);
+
     for (const auto& object : *renderData.objects) {
         const auto mapObject = object ? object->getMapObjectPtr() : nullptr;
         if (!mapObject || !mapObject->isExitGridMarker()) {
@@ -482,9 +462,11 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
         }
         const int cx = hex->get().x();
         const int cy = hex->get().y();
-        if (isHexVisible(cx, cy, view)) {
-            drawExitGridOverlayMarker(target, cx, cy);
+        if (!isHexVisible(cx, cy, view)) {
+            continue;
         }
+        exitGridSprite.setPosition(sf::Vector2f(static_cast<float>(cx), static_cast<float>(cy)));
+        target.draw(exitGridSprite);
     }
 }
 
@@ -563,8 +545,13 @@ void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const
             previewObject->getSprite().setColor(renderData.exitGridPreview.tint);
             target.draw(previewObject->getSprite());
         } else {
-            // Fall back to a plain marker so this hex still previews.
-            drawExitGridOverlayMarker(target, hexOptional.value().get().x(), hexOptional.value().get().y());
+            // Fall back to the bundled editor "EG" marker (tinted) so this hex still previews.
+            const sf::Texture& markerTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
+            sf::Sprite markerSprite(markerTexture);
+            markerSprite.setColor(renderData.exitGridPreview.tint);
+            markerSprite.setPosition(sf::Vector2f(static_cast<float>(hexOptional.value().get().x()),
+                static_cast<float>(hexOptional.value().get().y())));
+            target.draw(markerSprite);
         }
     }
 }

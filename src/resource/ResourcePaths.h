@@ -48,6 +48,11 @@ namespace ResourcePaths {
         constexpr std::string_view WALL_BLOCK = "art/misc/wallblock.frm";
         constexpr std::string_view WALL_BLOCK_FULL = "art/misc/wallblockF.frm";
 
+        // Editor-only "Show exit grids" overlay marker (the bundled "EG" hex image under
+        // resources/art/misc/ — not in the DATs). Drawn per exit-grid hex, separate from the
+        // player-visible directional exitgrd*/ext2grd* art.
+        constexpr std::string_view EXIT_GRID = "art/misc/exitgrid.frm";
+
         // Light source (special case)
         constexpr std::string_view LIGHT = "art/misc/light.frm";
 
