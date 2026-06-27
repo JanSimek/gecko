@@ -32,6 +32,7 @@
 #include "ui/core/EditorWidget.h"
 #include "ui/core/MainWindow.h"
 #include "ui/dialogs/CritterPropertiesDialog.h"
+#include "ui/dialogs/ExitGridPropertiesDialog.h"
 #include "ui/dialogs/InventoryViewerDialog.h"
 #include "ui/dialogs/ItemSelectorDialog.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
@@ -45,6 +46,8 @@
 #include "ui/widgets/pro/ProSceneryWidget.h"
 #include "ui/widgets/pro/ProWeaponWidget.h"
 #include "resource/GameResources.h"
+#include "resource/MapNameResolver.h"
+#include "util/Constants.h"
 #include "util/FalloutEngineEnums.h"
 #include "util/FileIo.h"
 #include "ui/Settings.h"
@@ -971,6 +974,112 @@ TEST_CASE("MapInfoPanel hints to add a writable Data Path when none is configure
     // anywhere hidden.
     CHECK_FALSE(hint->isHidden());
     CHECK(hint->text().contains("writable folder"));
+}
+
+// The exit-grid dialog's by-name destination-map picker. The fixture mounts a tiny maps.txt with two
+// maps (out of alphabetical order, to verify sorting) plus a negative-index section (to verify it is
+// skipped), and a matching map.msg so each map resolves a primary (elevation 0) display name.
+namespace {
+
+struct ExitGridFixture {
+    ResourceDataScope data;
+    std::unique_ptr<geck::resource::MapNameResolver> names;
+
+    ExitGridFixture() {
+        // Map 0 -> klamall.map, Map 1 -> arcaves.map; sorted by filename, arcaves precedes klamall.
+        data.writeGameMessageFile("data/maps.txt",
+            "[Map 0]\nlookup_name=Klamath\nmap_name=klamall\n"
+            "[Map 1]\nlookup_name=Caves\nmap_name=arcaves\n"
+            "[Map -1]\nlookup_name=Sentinel\nmap_name=ignored\n");
+        // displayName(index, 0) reads map.msg[index*3 + 200]: Map 0 -> 200, Map 1 -> 203.
+        data.writeGameMessageFile("text/english/game/map.msg",
+            messageLine(200, QStringLiteral("Klamath")) + messageLine(203, QStringLiteral("Arroyo Caves")));
+        data.mount();
+        names = std::make_unique<geck::resource::MapNameResolver>(data.resources());
+    }
+};
+
+} // namespace
+
+TEST_CASE("ExitGridPropertiesDialog lists mounted maps by name, sorted, with maps.txt index as data", "[qt][exitgrid]") {
+    ExitGridFixture fixture;
+    geck::ExitGridPropertiesDialog dialog(nullptr, fixture.names.get());
+
+    auto* combo = dialog.findChild<QComboBox*>("destinationMap");
+    REQUIRE(combo != nullptr);
+
+    // Sorted case-insensitively by filename: arcaves before klamall. The negative section is skipped.
+    // maps.txt's map_name normalizes to a loadable "<name>.map" filename.
+    REQUIRE(combo->count() == 2);
+    CHECK(combo->itemText(0) == QStringLiteral("arcaves.map · Arroyo Caves"));
+    CHECK(combo->itemData(0).toInt() == 1);
+    CHECK(combo->itemText(1) == QStringLiteral("klamall.map · Klamath"));
+    CHECK(combo->itemData(1).toInt() == 0);
+}
+
+TEST_CASE("ExitGridPropertiesDialog returns the selected map's index", "[qt][exitgrid]") {
+    ExitGridFixture fixture;
+    geck::ExitGridPropertiesDialog dialog(nullptr, fixture.names.get());
+
+    auto* combo = dialog.findChild<QComboBox*>("destinationMap");
+    REQUIRE(combo != nullptr);
+
+    combo->setCurrentIndex(combo->findData(0)); // klamall.map (maps.txt index 0)
+    CHECK(dialog.getProperties().exitMap == 0u);
+
+    combo->setCurrentIndex(combo->findData(1)); // arcaves.map (maps.txt index 1)
+    CHECK(dialog.getProperties().exitMap == 1u);
+}
+
+TEST_CASE("ExitGridPropertiesDialog world/town toggles disable the picker and report the sentinel", "[qt][exitgrid]") {
+    ExitGridFixture fixture;
+    geck::ExitGridPropertiesDialog dialog(nullptr, fixture.names.get());
+
+    auto* combo = dialog.findChild<QComboBox*>("destinationMap");
+    REQUIRE(combo != nullptr);
+
+    geck::ExitGridPropertiesDialog::ExitGridProperties world;
+    world.exitMap = geck::ExitGrid::WORLD_MAP_EXIT;
+    dialog.setProperties(world);
+    CHECK_FALSE(combo->isEnabled());
+    CHECK(dialog.getProperties().exitMap == geck::ExitGrid::WORLD_MAP_EXIT);
+
+    geck::ExitGridPropertiesDialog::ExitGridProperties town;
+    town.exitMap = geck::ExitGrid::TOWN_MAP_EXIT;
+    dialog.setProperties(town);
+    CHECK_FALSE(combo->isEnabled());
+    CHECK(dialog.getProperties().exitMap == geck::ExitGrid::TOWN_MAP_EXIT);
+}
+
+TEST_CASE("ExitGridPropertiesDialog preserves a destination not listed in maps.txt", "[qt][exitgrid]") {
+    ExitGridFixture fixture;
+    geck::ExitGridPropertiesDialog dialog(nullptr, fixture.names.get());
+
+    auto* combo = dialog.findChild<QComboBox*>("destinationMap");
+    REQUIRE(combo != nullptr);
+
+    geck::ExitGridPropertiesDialog::ExitGridProperties props;
+    props.exitMap = 4242; // a map id that isn't in the mounted maps.txt
+    dialog.setProperties(props);
+
+    // An unknown id is preserved as a selected "Map <id>" entry and round-trips unchanged.
+    CHECK(combo->currentText() == QStringLiteral("Map 4242"));
+    CHECK(combo->currentData().toInt() == 4242);
+    CHECK(dialog.getProperties().exitMap == 4242u);
+}
+
+TEST_CASE("ExitGridPropertiesDialog operates with no resolver and preserves the destination id", "[qt][exitgrid]") {
+    // No game data mounted (null resolver): the combo has no map entries but the dialog still works.
+    geck::ExitGridPropertiesDialog dialog(nullptr, nullptr);
+
+    auto* combo = dialog.findChild<QComboBox*>("destinationMap");
+    REQUIRE(combo != nullptr);
+
+    geck::ExitGridPropertiesDialog::ExitGridProperties props;
+    props.exitMap = 7;
+    dialog.setProperties(props);
+    CHECK(combo->currentData().toInt() == 7);
+    CHECK(dialog.getProperties().exitMap == 7u);
 }
 
 TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name", "[qt][scripts]") {

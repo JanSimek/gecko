@@ -3,10 +3,19 @@
 #include "format/maps/MapsTxt.h"
 
 #include <string>
+#include <vector>
 
 namespace geck::resource {
 
 class GameResources;
+
+/// One map entry for the by-name destination picker: its maps.txt index plus the resolved .map
+/// filename and the primary (elevation 0) map.msg display name.
+struct MapName {
+    int index = -1;
+    std::string fileName;
+    std::string displayName;
+};
 
 /// Resolves Fallout 2 map identifiers to names, from the mounted game data:
 ///  - the **.map filename** for a map index, via the `data/maps.txt` document;
@@ -29,6 +38,12 @@ public:
 
     /// The maps.txt index for a .map filename (basename, any case), or -1 if absent.
     int indexOf(const std::string& mapFileName) const;
+
+    /// Every `[Map N]` section with a non-negative index, as `{ index, fileNameOf(index),
+    /// displayName(index, 0) }`, sorted by filename (case-insensitive). The single source for the
+    /// editor's by-name destination-map picker, so the index↔name rules stay here. Empty when no
+    /// maps.txt is mounted.
+    std::vector<MapName> allMaps() const;
 
     /// The .map filename for a maps.txt lookup_name (city.txt's entrance map key, e.g. "Arroyo
     /// Bridge"), case-insensitive, or "" if no map has that lookup_name. The join from the worldmap
