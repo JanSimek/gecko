@@ -74,6 +74,12 @@ public:
         // (south<->north, ...), so the preview and the commit both reflect it.
         std::function<void(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide)> onMarkExitsLinePreview;
         std::function<void(const std::vector<sf::Vector2f>& vertices, bool flipSide)> onMarkExitsLine;
+        // True-freeze hooks: onMarkExitsLineReset starts a fresh edge (drops any frozen segments) — fired
+        // on the FIRST vertex of a line and on finalize/cancel/mode-change. onMarkExitsSegmentCommitted
+        // fires once per left-click that CLOSES a segment (the 2nd vertex onward) with that segment's
+        // endpoints and the flip in effect at the click, so the host can freeze it immutably.
+        std::function<void()> onMarkExitsLineReset;
+        std::function<void(sf::Vector2f from, sf::Vector2f to, bool flipSide)> onMarkExitsSegmentCommitted;
 
         // Hover
         std::function<void(sf::Vector2f worldPos)> onMouseMove;
@@ -154,10 +160,9 @@ private:
     SelectionModifier getSelectionModifier() const;
     sf::Vector2f pixelToWorld(sf::Vector2i pixelPos, sf::RenderTarget& target, const sf::View& view);
     bool isShiftPressed() const;
-    static bool isCtrlPressed();
-    // In "Draw edge" mode with Ctrl held, snap `cursor` (the live-segment endpoint) to the nearest
+    // In "Draw edge" mode with Shift held, snap `cursor` (the live-segment endpoint) to the nearest
     // clean exit-grid angle relative to the last committed vertex, so the live segment is a straight
-    // aligned edge. Returns `cursor` unchanged when Ctrl is up or there is no committed vertex yet.
+    // aligned edge. Returns `cursor` unchanged when Shift is up or there is no committed vertex yet.
     sf::Vector2f maybeSnapMarkExitsCursor(sf::Vector2f cursor) const;
     void setActiveMode(bool enabled, EditorMode mode) {
         _mode = enabled ? mode : EditorMode::Select;

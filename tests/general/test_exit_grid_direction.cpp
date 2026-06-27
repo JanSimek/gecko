@@ -15,7 +15,6 @@ using geck::exitGridArtForFacing;
 using geck::exitGridArtForSegment;
 using geck::ExitGridDestinationKind;
 using geck::exitGridDirectionForLine;
-using geck::exitGridDirsForPolyline;
 using geck::exitGridOutward;
 using geck::ExitGridSegmentRun;
 using geck::exitGridSnapDirections;
@@ -340,104 +339,147 @@ TEST_CASE("autoArtForLine (real grid): a stroke along the iso-diamond edge commi
 }
 
 // --------------------------------------------------------------------------------------------------
-// PER-SEGMENT classification: each polyline segment gets art from ITS OWN screen direction (one axis +
-// side, uniform within the segment), and a committed segment's art is FROZEN — drawing further
-// vertices never re-classifies it. Shared hexes keep their FIRST-seen segment's direction (dedup).
+// TRUE-FREEZE per-segment capture. Each polyline segment is classified once from ITS OWN screen
+// direction (one axis + side, uniform within the segment), captured with the flip in effect AT THE
+// CLICK that closed it, and never recomputed. ExitGridPlacementManager owns the frozen {hexes, art}
+// segments and only re-classifies the ONE live segment; the model below reproduces that contract with
+// the pure classifier so the freeze property (a committed segment is independent of any later
+// flip/cursor change) is unit-tested headlessly without a GL/Qt context.
 
-TEST_CASE("exitGridDirsForPolyline: a horizontal segment then a diagonal segment classify separately",
-    "[exitgrid][persegment]") {
-    // Segment 1: a horizontal SCREEN delta (dx dominates), midpoint below centre -> BOTTOM edge.
-    ExitGridSegmentRun horizontal;
-    horizontal.hexes = { 10, 11, 12 };
-    horizontal.screenDx = 200;
-    horizontal.screenDy = 0;
-    horizontal.outwardX = 0;
-    horizontal.outwardY = 300; // below centre
-
-    // Segment 2: the measured STEEP iso edge delta (480, 360) -> a "\" diagonal (dirs 6/7).
-    ExitGridSegmentRun diagonal;
-    diagonal.hexes = { 12, 213, 414 }; // shares hex 12 with segment 1
-    diagonal.screenDx = 480;
-    diagonal.screenDy = 360;
-    diagonal.outwardX = 300;
-    diagonal.outwardY = 200;
-
+namespace {
+// A frozen segment as the manager captures it: its hexes and its single captured direction.
+struct CapturedSegment {
     std::vector<int> hexes;
-    std::vector<int> dirs;
-    exitGridDirsForPolyline({ horizontal, diagonal }, /*flipSide=*/false, hexes, dirs);
+    int dir = 0;
+};
 
-    // Hex 12 is shared; first-seen (the horizontal segment) wins, so it appears once.
-    REQUIRE(hexes.size() == 5);
-    REQUIRE(dirs.size() == 5);
-    CHECK(hexes == std::vector<int>{ 10, 11, 12, 213, 414 });
-
-    // The horizontal segment's hexes (incl. the shared 12) are all the cardinal BOTTOM edge...
-    CHECK(dirs[0] == ExitGrid::DIR_BOTTOM); // hex 10
-    CHECK(dirs[1] == ExitGrid::DIR_BOTTOM); // hex 11
-    CHECK(dirs[2] == ExitGrid::DIR_BOTTOM); // hex 12 (shared, first-seen = horizontal)
-    // ...while the diagonal segment's own hexes are a "\" diagonal (dirs 6/7), NOT a cardinal.
-    CHECK(isDiagonalDir(dirs[3]));                  // hex 213
-    CHECK(isDiagonalDir(dirs[4]));                  // hex 414
-    CHECK(dirs[3] / 2 == ExitGrid::DIR_BACK_A / 2); // same "\" pair
-    CHECK(dirs[4] == dirs[3]);                      // uniform within the segment
+// Capture one segment at the flip in effect right now — exactly what the manager freezes on a click.
+CapturedSegment captureSegment(const ExitGridSegmentRun& run, bool flipAtCapture) {
+    return { run.hexes,
+        exitGridDirectionForLine(run.screenDx, run.screenDy, run.outwardX, run.outwardY,
+            flipAtCapture) };
 }
 
-TEST_CASE("exitGridDirsForPolyline: an earlier segment stays FROZEN when a later segment is added",
-    "[exitgrid][persegment]") {
-    // The same first (horizontal) segment classified alone, then again with a second segment appended:
-    // its hexes' directions must be identical — adding vertices never re-classifies a committed segment.
-    ExitGridSegmentRun seg1;
-    seg1.hexes = { 5, 6 };
-    seg1.screenDx = 200;
-    seg1.screenDy = 0;
-    seg1.outwardX = 0;
-    seg1.outwardY = 300;
+// Flatten frozen segments + a live segment into deduped (hex, dir) pairs (first-seen wins), modelling
+// ExitGridPlacementManager::flattenSegments so the test pins the same combine/dedup behaviour.
+void flatten(const std::vector<CapturedSegment>& committed, const CapturedSegment& live,
+    std::vector<int>& outHexes, std::vector<int>& outDirs) {
+    outHexes.clear();
+    outDirs.clear();
+    std::set<int> seen;
+    const auto append = [&](const CapturedSegment& seg) {
+        for (const int hex : seg.hexes) {
+            if (seen.insert(hex).second) {
+                outHexes.push_back(hex);
+                outDirs.push_back(seg.dir);
+            }
+        }
+    };
+    for (const auto& seg : committed) {
+        append(seg);
+    }
+    append(live);
+}
+} // namespace
 
-    std::vector<int> hexesAlone;
-    std::vector<int> dirsAlone;
-    exitGridDirsForPolyline({ seg1 }, false, hexesAlone, dirsAlone);
+TEST_CASE("freeze: a captured segment's direction is INDEPENDENT of a later flip", "[exitgrid][freeze]") {
+    // A horizontal segment captured with NO flip -> BOTTOM, frozen. The captured value is a pure
+    // snapshot: changing the flip that drives a LATER (live) segment can never alter it.
+    ExitGridSegmentRun run;
+    run.hexes = { 10, 11, 12 };
+    run.screenDx = 200;
+    run.screenDy = 0;
+    run.outwardX = 0;
+    run.outwardY = 300; // below centre -> BOTTOM without flip
 
-    ExitGridSegmentRun seg2;
-    seg2.hexes = { 7, 8 };
-    seg2.screenDx = 0;
-    seg2.screenDy = 200; // a vertical segment -> a LEFT/RIGHT cardinal, unrelated to seg1
-    seg2.outwardX = 300;
-    seg2.outwardY = 0;
+    const CapturedSegment frozen = captureSegment(run, /*flipAtCapture=*/false);
+    CHECK(frozen.dir == ExitGrid::DIR_BOTTOM);
 
-    std::vector<int> hexesBoth;
-    std::vector<int> dirsBoth;
-    exitGridDirsForPolyline({ seg1, seg2 }, false, hexesBoth, dirsBoth);
+    // The user now presses Space (the live flip becomes true) and moves the cursor. Re-flattening with
+    // any live segment and any current flip leaves the committed segment's hexes/dirs untouched.
+    for (const bool liveFlip : { false, true }) {
+        ExitGridSegmentRun liveRun;
+        liveRun.hexes = { 12, 213, 414 }; // shares hex 12 with the frozen segment
+        liveRun.screenDx = 480;
+        liveRun.screenDy = 360; // a "\" diagonal
+        liveRun.outwardX = 300;
+        liveRun.outwardY = 200;
+        const CapturedSegment live = captureSegment(liveRun, liveFlip);
 
-    // seg1's hexes keep exactly their standalone directions (frozen).
-    REQUIRE(dirsBoth.size() == 4);
-    CHECK(dirsBoth[0] == dirsAlone[0]);
-    CHECK(dirsBoth[1] == dirsAlone[1]);
-    // seg2 added its own (vertical) direction, distinct from seg1's horizontal one.
-    CHECK(dirsBoth[2] == ExitGrid::DIR_RIGHT);
-    CHECK(dirsBoth[3] == ExitGrid::DIR_RIGHT);
-    CHECK(dirsBoth[2] != dirsBoth[0]);
+        std::vector<int> hexes;
+        std::vector<int> dirs;
+        flatten({ frozen }, live, hexes, dirs);
+
+        // The frozen segment's hexes come first and keep BOTTOM regardless of the live flip; hex 12 is
+        // shared and first-seen (frozen) wins, so it stays BOTTOM too.
+        REQUIRE(hexes.size() == 5);
+        CHECK(hexes == std::vector<int>{ 10, 11, 12, 213, 414 });
+        CHECK(dirs[0] == ExitGrid::DIR_BOTTOM); // hex 10 (frozen)
+        CHECK(dirs[1] == ExitGrid::DIR_BOTTOM); // hex 11 (frozen)
+        CHECK(dirs[2] == ExitGrid::DIR_BOTTOM); // hex 12 (shared, frozen wins)
+        // The live segment is the only thing the flip touches: it's a "\" diagonal, flipped or not.
+        CHECK(isDiagonalDir(dirs[3]));
+        CHECK(dirs[4] == dirs[3]);
+        if (liveFlip) {
+            CHECK(dirs[3] == flipExitGridDirection(captureSegment(liveRun, false).dir));
+        }
+    }
 }
 
-TEST_CASE("exitGridDirsForPolyline: the flip applies to EVERY segment", "[exitgrid][persegment]") {
-    ExitGridSegmentRun seg;
-    seg.hexes = { 1, 2 };
-    seg.screenDx = 200;
-    seg.screenDy = 0;
-    seg.outwardX = 0;
-    seg.outwardY = 300; // BOTTOM without flip
+TEST_CASE("freeze: committed hexes are pixel-stable as the live segment moves", "[exitgrid][freeze]") {
+    // Two committed segments captured at different flips, then the live segment sweeps through several
+    // cursor positions. The committed hexes/dirs must be byte-identical every time — only the live
+    // segment's hexes change. This is the Shift-move "committed segments stay put" guarantee.
+    ExitGridSegmentRun r1;
+    r1.hexes = { 1, 2, 3 };
+    r1.screenDx = 200;
+    r1.screenDy = 0;
+    r1.outwardX = 0;
+    r1.outwardY = 300; // BOTTOM
+    const CapturedSegment c1 = captureSegment(r1, /*flipAtCapture=*/false);
 
-    std::vector<int> h;
-    std::vector<int> dirsNoFlip;
-    std::vector<int> dirsFlip;
-    exitGridDirsForPolyline({ seg }, false, h, dirsNoFlip);
-    exitGridDirsForPolyline({ seg }, true, h, dirsFlip);
-    CHECK(dirsNoFlip[0] == ExitGrid::DIR_BOTTOM);
-    CHECK(dirsFlip[0] == ExitGrid::DIR_TOP); // flip turns BOTTOM into TOP on every hex
-    CHECK(dirsFlip[1] == ExitGrid::DIR_TOP);
+    ExitGridSegmentRun r2;
+    r2.hexes = { 3, 4, 5 }; // shares hex 3 with c1
+    r2.screenDx = 0;
+    r2.screenDy = 200; // vertical -> LEFT/RIGHT
+    r2.outwardX = 300;
+    r2.outwardY = 0;
+    const CapturedSegment c2 = captureSegment(r2, /*flipAtCapture=*/true); // captured with flip ON
+
+    std::vector<int> baselineHexes;
+    std::vector<int> baselineDirs;
+    {
+        const CapturedSegment emptyLive{};
+        flatten({ c1, c2 }, emptyLive, baselineHexes, baselineDirs);
+    }
+    // The shared hex 3 keeps c1's BOTTOM (first-seen); c2 contributes 4,5 at its captured (flipped) side.
+    REQUIRE(baselineHexes == std::vector<int>{ 1, 2, 3, 4, 5 });
+    CHECK(baselineDirs[2] == ExitGrid::DIR_BOTTOM);                       // shared hex 3, c1 wins
+    CHECK(baselineDirs[3] == flipExitGridDirection(ExitGrid::DIR_RIGHT)); // c2 captured flipped -> LEFT
+
+    // Sweep the live segment; the committed prefix never moves.
+    for (int sweep = 50; sweep <= 400; sweep += 50) {
+        ExitGridSegmentRun liveRun;
+        liveRun.hexes = { 6, 7 };
+        liveRun.screenDx = sweep;
+        liveRun.screenDy = 0;
+        liveRun.outwardX = 0;
+        liveRun.outwardY = -300;
+        std::vector<int> hexes;
+        std::vector<int> dirs;
+        flatten({ c1, c2 }, captureSegment(liveRun, /*flipAtCapture=*/true), hexes, dirs);
+
+        // The committed prefix (5 hexes) is identical to the baseline; only the live tail (6,7) is added.
+        REQUIRE(hexes.size() == 7);
+        for (std::size_t i = 0; i < baselineHexes.size(); ++i) {
+            CHECK(hexes[i] == baselineHexes[i]);
+            CHECK(dirs[i] == baselineDirs[i]);
+        }
+    }
 }
 
 // --------------------------------------------------------------------------------------------------
-// CTRL-SNAP: a pure (lastVertex, cursor) -> snapped cursor function. The eight clean angles are the
+// SHIFT-SNAP: a pure (lastVertex, cursor) -> snapped cursor function. The eight clean angles are the
 // exit-grid edge SCREEN directions (horizontal, vertical, and the two iso diagonals at the measured
 // 4:1 / 4:3 slopes, both signs). Snapping keeps the cursor's DISTANCE from the last vertex and rotates
 // its angle to the nearest clean one.

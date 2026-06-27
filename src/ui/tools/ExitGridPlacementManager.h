@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <set>
 #include <utility>
 #include <vector>
@@ -61,13 +62,32 @@ public:
     // Check if selected objects contain exit grids and edit them
     bool editSelectedExitGrids();
 
-    // "Draw edge" mode: walk a gap-free hex line through the polyline of world-space vertices; every
-    // hex on the line becomes an exit grid sharing one destination AND one directional art — the side
-    // is classified once for the whole stroke (its overall screen axis + outward facing), so the bars
-    // form a clean continuous edge on a single consistent side rather than flipping mid-run. `flipSide`
-    // inverts that side (the live "flip" key). If existing exit grids sit on those hexes, those have
-    // their destination bulk-edited instead (keeping their directional art).
-    void selectExitGridsAlongLine(const std::vector<sf::Vector2f>& worldVertices, bool flipSide = false);
+    // "Draw edge" finalize: place the FROZEN committed segments — every segment was captured (hexes +
+    // directional art) at the click that closed it, so the placed edge is pixel-identical to the last
+    // preview and each segment keeps the side it was committed with (the flip in effect then). If
+    // existing exit grids already sit on every hex, their destination is bulk-edited instead (keeping
+    // their art). The committed segments are reset by the caller (onMarkExitsLineReset) after this runs.
+    void selectExitGridsAlongLine();
+
+    // --- "Draw edge" TRUE-FREEZE state machine -----------------------------------------------------
+    //
+    // A committed segment is captured IMMUTABLY at the click that closes it: its hex list AND its art
+    // (direction + side, using the flip in effect AT THAT MOMENT). Once captured it never recomputes,
+    // so pressing Space or moving the cursor (incl. Shift-snap) can only touch the ONE live segment
+    // (last committed vertex -> cursor). The committed segments live HERE (the manager already owns the
+    // per-segment art logic); the InputHandler drives capture/reset because only it knows when a vertex
+    // is committed and when the line resets.
+    //
+    // beginLine: start a fresh edge with NO committed segments (called when the first vertex is placed).
+    void beginLine();
+    // commitSegment: freeze the segment `from -> to` (its hexes + art at the current flip). Called on
+    // every left-click that closes a segment (the 2nd vertex onward). A degenerate/off-grid segment
+    // captures nothing, so the live preview can still extend from the last good vertex.
+    void commitSegment(sf::Vector2f from, sf::Vector2f to, bool flipSide);
+    // resetLine: drop all committed segments (line finalized OR cancelled / mode left).
+    void resetLine();
+    // The number of frozen committed segments — exposed for tests of the freeze state machine.
+    [[nodiscard]] std::size_t committedSegmentCount() const { return _committedSegments.size(); }
 
     // Destination kind the live region preview tints by: inter-map (green) vs world/town map
     // (brown). Defaults to inter-map and is updated whenever a region dialog sets the destination,
@@ -78,20 +98,19 @@ public:
     };
     DestinationKind currentDestinationKind() const { return _currentDestinationKind; }
 
-    // The live "Draw edge" preview for a polyline of world-space vertices (the committed vertices plus
-    // the live cursor as the last point): the deduped gap-free hex run AND the directional marker FRM
-    // for each of those hexes, classified PER SEGMENT. Each polyline segment (vertex[i] -> vertex[i+1])
-    // is classified once from its own screen direction (Auto) or forced by the marker-direction
-    // override, and that art is applied to all of the segment's hexes; a shared hex keeps its
-    // first-seen segment's art. So an earlier, committed segment's art is FROZEN — only the live
-    // segment (last vertex -> cursor) changes as the cursor moves. `flipSide` inverts the side on every
-    // segment (the live "flip" key). The returned vectors are parallel (hex i has frm i).
+    // The live "Draw edge" preview: the FROZEN committed segments (never recomputed) followed by the
+    // ONE live segment (last committed vertex `liveFrom` -> cursor `liveTo`), deduped first-seen, with
+    // the directional marker FRM for each hex. Committed segments keep the art they were captured with;
+    // only the live segment is (re)classified here from its own screen direction (Auto, optionally
+    // flipped) or the marker-direction override. `flipSide` therefore affects ONLY the live segment.
+    // `hasLive` is false before the first vertex is committed (no segment to draw yet). The returned
+    // vectors are parallel (hex i has frm i).
     struct LinePreview {
         std::vector<int> hexes;
         std::vector<uint32_t> frmPids;
     };
-    [[nodiscard]] LinePreview previewForLine(const std::vector<sf::Vector2f>& worldVertices,
-        bool flipSide = false) const;
+    [[nodiscard]] LinePreview previewForLine(sf::Vector2f liveFrom, sf::Vector2f liveTo, bool hasLive,
+        bool flipSide) const;
 
     /// The line hexes that don't already have an exit grid -- the ones a stroke CREATES on (empty when
     /// the whole stroke is already grids, so the caller bulk-edits an existing edge). Pure + static so
@@ -116,25 +135,39 @@ private:
     // chosen destination to every passed exit grid via registerExitGridEdit. Returns true if a
     // change was committed.
     bool bulkEditExistingExitGrids(const std::vector<std::shared_ptr<Object>>& exitGrids);
-    // createExitGridsForLine: show one dialog, classify the polyline PER SEGMENT, and create one exit
-    // grid on each FRESH hex (those in `freshHexes`) via registerExitGridCreation, each carrying its
-    // own segment's directional art (optionally flipped). Returns the number created.
-    std::size_t createExitGridsForLine(const std::vector<sf::Vector2f>& worldVertices,
-        const std::set<int>& freshHexes, bool flipSide);
-    // The deduped, gap-free hex line through `worldVertices`: each vertex is mapped to its hex and
-    // consecutive hexes are joined by a hex-line walk. Split out of selectExitGridsAlongLine.
-    std::vector<int> collectHexesAlongLine(const std::vector<sf::Vector2f>& worldVertices) const;
-    // The per-segment runs of `worldVertices`: one ExitGridSegmentRun per consecutive vertex pair,
-    // each carrying its hex-line walk, its screen delta (for the axis) and its midpoint outward facing
-    // (for the side). Drives the PER-SEGMENT classification used by both the preview and the commit so
-    // each segment gets its own art (frozen once committed) instead of one art for the whole stroke.
-    std::vector<ExitGridSegmentRun> buildSegmentRuns(const std::vector<sf::Vector2f>& worldVertices) const;
-    // The per-hex directional art ({proto, frm}) for a polyline, classified PER SEGMENT: parallel to
-    // `outHexes`. An explicit marker-direction override forces one direction on every hex; Auto
-    // classifies each segment from its own screen direction. `flipSide` inverts the side on every
-    // segment. Shared by previewForLine and the commit so they agree hex-for-hex.
-    void perSegmentArt(const std::vector<sf::Vector2f>& worldVertices, bool flipSide,
-        std::vector<int>& outHexes, std::vector<ExitGridArt>& outArt) const;
+    // createExitGridsForLine: show one dialog and create one exit grid on each FRESH hex (those in
+    // `freshHexes`) via registerExitGridCreation, each carrying its own pre-classified per-segment art
+    // (parallel to `hexes`). Returns the number created.
+    std::size_t createExitGridsForLine(const std::vector<int>& hexes,
+        const std::vector<ExitGridArt>& art, const std::set<int>& freshHexes);
+
+    // One immutably-captured polyline segment: its gap-free hex run and the parallel per-hex art it was
+    // frozen with (direction + side at the flip in effect when the closing vertex was clicked). The
+    // hexes/art never recompute, so flips or cursor moves on later segments can't disturb it.
+    struct CommittedSegment {
+        std::vector<int> hexes;
+        std::vector<ExitGridArt> art;
+    };
+
+    // Capture (classify) ONE world-space segment `from -> to` at `flipSide`: its hex-line walk and the
+    // parallel per-hex art (Auto from the segment's own screen direction, optionally flipped, or the
+    // marker-direction override). Returns an empty segment for a degenerate/off-grid pair. This is the
+    // single capture used both to FREEZE a committed segment and to (re)compute the live segment.
+    CommittedSegment classifySegment(sf::Vector2f from, sf::Vector2f to, bool flipSide) const;
+    // The geometry (hexes + screen axis + outward facing) of one world-space segment, or std::nullopt
+    // for a degenerate/off-grid pair. The per-segment classification input.
+    std::optional<ExitGridSegmentRun> buildSegmentRun(sf::Vector2f from, sf::Vector2f to) const;
+    // The art ({proto, frm}) for one classified segment run honouring the marker-direction override:
+    // Auto -> the segment's own screen axis + outward side (optionally flipped); an explicit direction
+    // -> that direction. Shared by the freeze and the live recompute so they agree hex-for-hex.
+    ExitGridArt segmentArt(const ExitGridSegmentRun& run, bool flipSide) const;
+    // Flatten the FROZEN committed segments followed by the live segment into deduped, parallel
+    // (hexes, art) vectors: each hex appears once in first-seen order, keeping the art of the FIRST
+    // segment that covered it. Because committed segments are flattened in commit order before the live
+    // one, their hexes/art are pixel-stable regardless of how the live segment moves. `live` may be
+    // empty (no live segment yet). Pure + static so the freeze/dedup is unit-testable.
+    static void flattenSegments(const std::vector<CommittedSegment>& committed,
+        const CommittedSegment& live, std::vector<int>& outHexes, std::vector<ExitGridArt>& outArt);
     // The existing exit-grid objects sitting on any of `hexPositions`.
     std::vector<std::shared_ptr<Object>> collectExitGridsOnHexes(const std::vector<int>& hexPositions) const;
     // The SINGLE auto (non-override) directional art for a whole drawn stroke: classify the stroke's
@@ -166,6 +199,9 @@ private:
     // so the first drawn region previews each hex by its outward facing.
     ExitGridPropertiesDialog::ExitGridProperties::MarkerArt _currentMarkerArt
         = ExitGridPropertiesDialog::ExitGridProperties::MarkerArt::Auto;
+    // The FROZEN committed segments of the in-progress "Draw edge" line, captured one-per-closing-click.
+    // Reset on line begin/finalize/cancel. Pixel-stable: never recomputed once captured.
+    std::vector<CommittedSegment> _committedSegments;
 };
 
 } // namespace geck

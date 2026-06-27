@@ -21,6 +21,12 @@ TEST_CASE("MarkExits hint advertises Space to flip the edge side", "[hints]") {
     REQUIRE(hint.contains("finish"));
 }
 
+TEST_CASE("MarkExits hint advertises Shift to snap the live segment to a clean angle", "[hints]") {
+    const QString hint = hintForContext(EditorMode::MarkExits, false);
+    REQUIRE(hint.contains("Shift"));
+    REQUIRE(hint.contains("snap"));
+}
+
 TEST_CASE("PlaceExitGrid hint advertises Esc to leave the tool", "[hints]") {
     const QString hint = hintForContext(EditorMode::PlaceExitGrid, false);
     REQUIRE(hint.contains("Esc"));
@@ -60,7 +66,8 @@ TEST_CASE("SetPlayerPosition hint advertises click to set the start and Esc to c
 }
 
 TEST_CASE("Every hint uses the middot separator between multiple keys", "[hints]") {
-    // MarkExits has three parts, so it must contain the separator at least twice.
+    // MarkExits has four parts (Space, Shift, Enter/double-click, Esc), so it must contain the
+    // separator exactly three times.
     const QString hint = hintForContext(EditorMode::MarkExits, false);
-    REQUIRE(hint.count(QString::fromUtf8("·")) == 2);
+    REQUIRE(hint.count(QString::fromUtf8("·")) == 3);
 }

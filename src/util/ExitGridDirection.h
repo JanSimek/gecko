@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
-#include <set>
 #include <utility>
 #include <vector>
 
@@ -198,18 +197,21 @@ inline ExitGridArt exitGridArtForFacing(int hexX, int hexY, int mapCenterX, int 
 }
 
 // --------------------------------------------------------------------------------------------------
-// PER-SEGMENT classification
+// PER-SEGMENT classification (TRUE freeze)
 //
 // The "Draw edge" tool classifies each polyline SEGMENT (vertex[i] -> vertex[i+1]) from THAT segment's
-// own screen direction, picking ONE axis + side for the whole segment (uniform within it). Because a
-// committed segment's endpoints are fixed, its art is fixed too — drawing further vertices does NOT
-// re-classify earlier segments ("frozen"); only the live segment (last vertex -> cursor) updates.
+// own screen direction, picking ONE axis + side for the whole segment (uniform within it). A segment is
+// frozen IMMUTABLY at the click that closes it — its hexes AND its direction are captured with the flip
+// in effect at that moment and never recomputed (ExitGridPlacementManager owns the frozen segments). So
+// pressing Space or moving the cursor can only touch the ONE live segment (last vertex -> cursor); the
+// flip applies only to that live segment, and an earlier segment can never shift between cursor moves.
 // Classifying per SEGMENT (not per hex) avoids the both-sides bug a per-hex recompute reintroduces.
 
 /// One polyline segment's geometry for classification: the ordered hexes the segment's hex-line walk
 /// passes through (endpoints inclusive), the segment's overall SCREEN delta (last vertex hex - first
 /// vertex hex, y DOWNWARD) for the axis, and the segment midpoint's outward facing (midpoint hex -
-/// grid centre) for the side.
+/// grid centre) for the side. exitGridDirectionForLine maps {screenDx/Dy, outwardX/Y, flipSide} to the
+/// single direction the whole segment is frozen with.
 struct ExitGridSegmentRun {
     std::vector<int> hexes;
     int screenDx = 0;
@@ -218,32 +220,10 @@ struct ExitGridSegmentRun {
     int outwardY = 0;
 };
 
-/// The per-hex exit-grid direction for a polyline, classified PER SEGMENT. Each segment is classified
-/// once (its own screen axis + outward facing, optionally flipped) and that single direction is
-/// assigned to every hex it covers; a hex shared by two segments keeps its FIRST-seen segment's
-/// direction (dedup), so the result has each hex once in first-seen order, parallel to `outHexes`.
-/// `flipSide` applies to ALL segments. Pure (no SFML/Qt) so per-segment placement is unit-testable.
-inline void exitGridDirsForPolyline(const std::vector<ExitGridSegmentRun>& segments, bool flipSide,
-    std::vector<int>& outHexes, std::vector<int>& outDirs) {
-    outHexes.clear();
-    outDirs.clear();
-    std::set<int> seen;
-    for (const ExitGridSegmentRun& seg : segments) {
-        const int dir = exitGridDirectionForLine(seg.screenDx, seg.screenDy,
-            seg.outwardX, seg.outwardY, flipSide);
-        for (const int hex : seg.hexes) {
-            if (seen.insert(hex).second) {
-                outHexes.push_back(hex);
-                outDirs.push_back(dir);
-            }
-        }
-    }
-}
-
 // --------------------------------------------------------------------------------------------------
-// CTRL-SNAP to clean exit-grid angles
+// SHIFT-SNAP to clean exit-grid angles
 //
-// While drawing the "Draw edge" line, holding Ctrl snaps the LIVE segment (last committed vertex ->
+// While drawing the "Draw edge" line, holding Shift snaps the LIVE segment (last committed vertex ->
 // cursor) onto the nearest CLEAN exit-grid angle, so the placed bars line up instead of staircasing.
 // The clean angles are the SCREEN directions of the eight exit-grid edges (screen y grows DOWNWARD):
 //   - horizontal  (±1,  0)

@@ -839,9 +839,21 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         updateMarkExitsLinePreview(vertices, cursor, flipSide);
     };
 
-    callbacks.onMarkExitsLine = [this](const std::vector<sf::Vector2f>& vertices, bool flipSide) {
+    callbacks.onMarkExitsLine = [this](const std::vector<sf::Vector2f>&, bool) {
+        // The placed edge is the manager's FROZEN committed segments (the vertices/flip are vestigial
+        // now that the manager owns the captured per-segment art); it resets them after placing.
         clearMarkExitsLinePreview();
-        _exitGridPlacementManager->selectExitGridsAlongLine(vertices, flipSide);
+        _exitGridPlacementManager->selectExitGridsAlongLine();
+    };
+
+    // True-freeze hooks: the manager owns the FROZEN committed segments. A reset starts a fresh edge; a
+    // segment commit (one per closing click) freezes that segment with the flip in effect at the click.
+    callbacks.onMarkExitsLineReset = [this]() {
+        _exitGridPlacementManager->beginLine();
+    };
+
+    callbacks.onMarkExitsSegmentCommitted = [this](sf::Vector2f from, sf::Vector2f to, bool flipSide) {
+        _exitGridPlacementManager->commitSegment(from, to, flipSide);
     };
 
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
@@ -1158,6 +1170,10 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     }
     if (mode != EditorMode::MarkExits) {
         clearMarkExitsLinePreview();
+        // Leaving "Draw edge" abandons any in-progress line: drop its FROZEN committed segments so a
+        // later session starts clean. (Finalize/cancel reset via onMarkExitsLineReset and keep the tool
+        // active, so they don't reach this branch.)
+        _exitGridPlacementManager->resetLine();
     }
     if (_inputHandler) {
         _inputHandler->setTilePlacementMode(false, -1, false);
@@ -1616,21 +1632,16 @@ void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& v
         && _exitGridPlacementManager->currentDestinationKind() == Kind::WorldMap;
     _exitGridPreviewTint = worldMap ? sf::Color(200, 150, 90, 140) : sf::Color(80, 220, 80, 140);
 
-    // Walk the gap-free hex line through the committed vertices + the live cursor, marking every hex it
-    // passes through and the directional FRM for each — classified PER SEGMENT the same way the commit
-    // will: each polyline segment from its own screen direction (Auto, optionally flipped by the F key),
-    // or the explicit marker-direction override. Earlier committed segments stay frozen; only the live
-    // (cursor) segment changes as the cursor moves.
+    // The manager owns the FROZEN committed segments; here we only feed it the ONE live segment (the
+    // last committed vertex -> cursor) so it can append it to the frozen run. The committed segments
+    // never recompute, so Space (flip) and cursor moves (incl. Shift-snap) touch only the live segment.
     _exitGridPreviewHexes.clear();
     _exitGridPreviewFrmPids.clear();
-    std::vector<sf::Vector2f> polyline = vertices;
-    polyline.push_back(cursor);
-    if (polyline.size() < 2) {
-        return; // need at least two points to form an edge (the cursor segment still previews)
-    }
 
     if (_exitGridPlacementManager) {
-        auto preview = _exitGridPlacementManager->previewForLine(polyline, flipSide);
+        const bool hasLive = !vertices.empty();
+        const sf::Vector2f liveFrom = hasLive ? vertices.back() : cursor;
+        auto preview = _exitGridPlacementManager->previewForLine(liveFrom, cursor, hasLive, flipSide);
         _exitGridPreviewHexes = std::move(preview.hexes);
         _exitGridPreviewFrmPids = std::move(preview.frmPids);
     }

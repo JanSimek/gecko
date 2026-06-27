@@ -277,90 +277,118 @@ ExitGridArt ExitGridPlacementManager::artForLine(const std::vector<int>& ordered
     return autoArtForLine(orderedHexes, flipSide);
 }
 
-std::vector<ExitGridSegmentRun> ExitGridPlacementManager::buildSegmentRuns(
-    const std::vector<sf::Vector2f>& worldVertices) const {
-    std::vector<ExitGridSegmentRun> runs;
+std::optional<ExitGridSegmentRun> ExitGridPlacementManager::buildSegmentRun(
+    sf::Vector2f from, sf::Vector2f to) const {
     const auto* hexGrid = _context.getHexagonGrid();
     const auto* viewport = _context.getViewportController();
-    if (!hexGrid || !viewport || worldVertices.size() < 2) {
-        return runs;
+    if (!hexGrid || !viewport) {
+        return std::nullopt;
+    }
+    const auto hexOf = [viewport](const sf::Vector2f& v) -> int {
+        const auto opt = viewport->worldPosToHexPosition(WorldCoords(v.x, v.y));
+        return (opt.has_value() && opt->isValid()) ? opt->value() : -1;
+    };
+    const int aHex = hexOf(from);
+    const int bHex = hexOf(to);
+    if (aHex < 0 || bHex < 0) {
+        return std::nullopt;
+    }
+    std::vector<int> segHexes = hexline::hexLine(*hexGrid, aHex, bHex);
+    if (segHexes.empty()) {
+        return std::nullopt;
     }
     const auto screenOf = [hexGrid](int hexIndex) -> std::pair<int, int> {
         const auto h = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
         return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() }
                              : std::pair<int, int>{ 0, 0 };
     };
-    const auto hexOf = [viewport](const sf::Vector2f& v) -> int {
-        const auto opt = viewport->worldPosToHexPosition(WorldCoords(v.x, v.y));
-        return (opt.has_value() && opt->isValid()) ? opt->value() : -1;
-    };
     const auto [centerX, centerY] = hexGridCenterScreen(*hexGrid);
-
-    // One run per consecutive vertex pair. A segment whose endpoints are off-grid (or identical) yields
-    // no hexes and is skipped, so it can't poison the per-segment classification.
-    for (std::size_t i = 0; i + 1 < worldVertices.size(); ++i) {
-        const int aHex = hexOf(worldVertices[i]);
-        const int bHex = hexOf(worldVertices[i + 1]);
-        if (aHex < 0 || bHex < 0) {
-            continue;
-        }
-        std::vector<int> segHexes = hexline::hexLine(*hexGrid, aHex, bHex);
-        if (segHexes.empty()) {
-            continue;
-        }
-        const auto [fx, fy] = screenOf(segHexes.front());
-        const auto [lx, ly] = screenOf(segHexes.back());
-        const auto [mx, my] = screenOf(segHexes[segHexes.size() / 2]);
-        ExitGridSegmentRun run;
-        run.hexes = std::move(segHexes);
-        run.screenDx = lx - fx;
-        run.screenDy = ly - fy;
-        run.outwardX = mx - centerX;
-        run.outwardY = my - centerY;
-        runs.push_back(std::move(run));
-    }
-    return runs;
+    const auto [fx, fy] = screenOf(segHexes.front());
+    const auto [lx, ly] = screenOf(segHexes.back());
+    const auto [mx, my] = screenOf(segHexes[segHexes.size() / 2]);
+    ExitGridSegmentRun run;
+    run.hexes = std::move(segHexes);
+    run.screenDx = lx - fx;
+    run.screenDy = ly - fy;
+    run.outwardX = mx - centerX;
+    run.outwardY = my - centerY;
+    return run;
 }
 
-void ExitGridPlacementManager::perSegmentArt(const std::vector<sf::Vector2f>& worldVertices,
-    bool flipSide, std::vector<int>& outHexes, std::vector<ExitGridArt>& outArt) const {
+ExitGridArt ExitGridPlacementManager::segmentArt(const ExitGridSegmentRun& run, bool flipSide) const {
+    const ExitGridDestinationKind kind = destinationKind();
+    // An explicit marker-direction override forces ONE direction (the escape hatch for ambiguous
+    // edges); Auto classifies the segment from its own screen axis + outward side (optionally flipped).
+    if (const int forced = explicitDirection(_currentMarkerArt); forced >= 0) {
+        return exitGridArtForDirection(forced, kind);
+    }
+    const int dir = exitGridDirectionForLine(run.screenDx, run.screenDy,
+        run.outwardX, run.outwardY, flipSide);
+    return exitGridArtForDirection(dir, kind);
+}
+
+ExitGridPlacementManager::CommittedSegment ExitGridPlacementManager::classifySegment(
+    sf::Vector2f from, sf::Vector2f to, bool flipSide) const {
+    CommittedSegment seg;
+    const std::optional<ExitGridSegmentRun> run = buildSegmentRun(from, to);
+    if (!run.has_value()) {
+        return seg; // degenerate/off-grid: nothing to freeze; the live preview extends from elsewhere.
+    }
+    // One uniform art for the whole segment (its own screen axis + side, frozen at the given flip).
+    const ExitGridArt art = segmentArt(*run, flipSide);
+    seg.hexes = run->hexes;
+    seg.art.assign(seg.hexes.size(), art);
+    return seg;
+}
+
+void ExitGridPlacementManager::flattenSegments(const std::vector<CommittedSegment>& committed,
+    const CommittedSegment& live, std::vector<int>& outHexes, std::vector<ExitGridArt>& outArt) {
     outHexes.clear();
     outArt.clear();
-    const ExitGridDestinationKind kind = destinationKind();
-    const std::vector<ExitGridSegmentRun> runs = buildSegmentRuns(worldVertices);
-
-    // An explicit marker-direction override forces ONE direction on every hex (the escape hatch for
-    // ambiguous edges); Auto classifies each segment from its own screen direction (frozen per segment).
-    if (const int forced = explicitDirection(_currentMarkerArt); forced >= 0) {
-        const ExitGridArt art = exitGridArtForDirection(forced, kind);
-        std::set<int> seen;
-        for (const ExitGridSegmentRun& seg : runs) {
-            for (const int hex : seg.hexes) {
-                if (seen.insert(hex).second) {
-                    outHexes.push_back(hex);
-                    outArt.push_back(art);
-                }
+    std::set<int> seen;
+    // FROZEN committed segments first (in commit order), then the live one. A hex keeps the art of the
+    // FIRST segment to cover it, so committed hexes never change as the live segment moves.
+    const auto append = [&](const CommittedSegment& seg) {
+        for (std::size_t i = 0; i < seg.hexes.size(); ++i) {
+            if (seen.insert(seg.hexes[i]).second) {
+                outHexes.push_back(seg.hexes[i]);
+                outArt.push_back(seg.art[i]);
             }
         }
-        return;
+    };
+    for (const CommittedSegment& seg : committed) {
+        append(seg);
     }
+    append(live);
+}
 
-    std::vector<int> dirs;
-    exitGridDirsForPolyline(runs, flipSide, outHexes, dirs);
-    outArt.reserve(dirs.size());
-    for (const int dir : dirs) {
-        outArt.push_back(exitGridArtForDirection(dir, kind));
+void ExitGridPlacementManager::beginLine() {
+    _committedSegments.clear();
+}
+
+void ExitGridPlacementManager::commitSegment(sf::Vector2f from, sf::Vector2f to, bool flipSide) {
+    // Freeze the just-closed segment with the flip in effect AT THIS CLICK. A degenerate/off-grid
+    // capture is dropped so it can't leave an empty placeholder in the frozen list.
+    CommittedSegment seg = classifySegment(from, to, flipSide);
+    if (!seg.hexes.empty()) {
+        _committedSegments.push_back(std::move(seg));
     }
+}
+
+void ExitGridPlacementManager::resetLine() {
+    _committedSegments.clear();
 }
 
 ExitGridPlacementManager::LinePreview ExitGridPlacementManager::previewForLine(
-    const std::vector<sf::Vector2f>& worldVertices, bool flipSide) const {
-    // Per-segment art: each polyline segment is classified from its own screen direction (or the
-    // override), so the preview shows the same per-segment edge the commit will place — earlier
-    // committed segments stay frozen while only the live (cursor) segment updates.
+    sf::Vector2f liveFrom, sf::Vector2f liveTo, bool hasLive, bool flipSide) const {
+    // The FROZEN committed segments (never recomputed) plus the ONE live segment (last committed vertex
+    // -> cursor), classified now at the current flip + Shift-snapped cursor. Committed art stays frozen;
+    // only the live segment changes as the cursor moves or Space flips.
     LinePreview preview;
+    const CommittedSegment live = hasLive ? classifySegment(liveFrom, liveTo, flipSide)
+                                          : CommittedSegment{};
     std::vector<ExitGridArt> art;
-    perSegmentArt(worldVertices, flipSide, preview.hexes, art);
+    flattenSegments(_committedSegments, live, preview.hexes, art);
     preview.frmPids.reserve(art.size());
     for (const ExitGridArt& a : art) {
         preview.frmPids.push_back(a.frmPid);
@@ -501,8 +529,8 @@ bool ExitGridPlacementManager::bulkEditExistingExitGrids(const std::vector<std::
     return true;
 }
 
-std::size_t ExitGridPlacementManager::createExitGridsForLine(
-    const std::vector<sf::Vector2f>& worldVertices, const std::set<int>& freshHexes, bool flipSide) {
+std::size_t ExitGridPlacementManager::createExitGridsForLine(const std::vector<int>& hexes,
+    const std::vector<ExitGridArt>& art, const std::set<int>& freshHexes) {
     if (freshHexes.empty()) {
         _showStatus("No hexes found along the edge line");
         return 0;
@@ -515,12 +543,9 @@ std::size_t ExitGridPlacementManager::createExitGridsForLine(
     rememberDestinationKind(newProperties.exitMap);
     _currentMarkerArt = newProperties.markerArt;
 
-    // Per-segment art for the WHOLE polyline (so a hex's segment membership matches the preview), then
-    // create only on the FRESH hexes (skipping any already occupied), each with its own segment's art.
-    std::vector<int> hexes;
-    std::vector<ExitGridArt> art;
-    perSegmentArt(worldVertices, flipSide, hexes, art);
-
+    // `hexes`/`art` are the FROZEN per-segment classification of the committed line (parallel), matching
+    // the preview hex-for-hex. Create only on the FRESH hexes (skipping any already occupied), each with
+    // its own segment's frozen art.
     int currentElevation = _context.getCurrentElevation();
     std::vector<std::shared_ptr<MapObject>> createdExitGrids;
     for (std::size_t i = 0; i < hexes.size(); ++i) {
@@ -542,25 +567,6 @@ std::size_t ExitGridPlacementManager::createExitGridsForLine(
         createdExitGrids.size(), currentElevation);
     _showStatus(QString("Created %1 exit grids along the edge").arg(createdExitGrids.size()));
     return createdExitGrids.size();
-}
-
-std::vector<int> ExitGridPlacementManager::collectHexesAlongLine(
-    const std::vector<sf::Vector2f>& worldVertices) const {
-    const auto* hexGrid = _context.getHexagonGrid();
-    const auto* viewport = _context.getViewportController();
-    if (!hexGrid || !viewport || worldVertices.size() < 2) {
-        return {};
-    }
-
-    // Map each polyline vertex to its hex (-1 if off-grid), then join consecutive hexes by a
-    // gap-free hex-line walk (the iso staircase), deduping shared corners.
-    std::vector<int> vertexHexes;
-    vertexHexes.reserve(worldVertices.size());
-    for (const sf::Vector2f& vertex : worldVertices) {
-        const auto hexOpt = viewport->worldPosToHexPosition(WorldCoords(vertex.x, vertex.y));
-        vertexHexes.push_back((hexOpt.has_value() && hexOpt->isValid()) ? hexOpt->value() : -1);
-    }
-    return hexline::hexPolyline(*hexGrid, vertexHexes);
 }
 
 std::vector<std::shared_ptr<Object>> ExitGridPlacementManager::collectExitGridsOnHexes(
@@ -598,9 +604,8 @@ std::vector<int> ExitGridPlacementManager::freshHexesForLine(const std::vector<i
     return fresh;
 }
 
-void ExitGridPlacementManager::selectExitGridsAlongLine(const std::vector<sf::Vector2f>& worldVertices,
-    bool flipSide) {
-    if (!_markExitsMode || worldVertices.size() < 2) {
+void ExitGridPlacementManager::selectExitGridsAlongLine() {
+    if (!_markExitsMode || _committedSegments.empty()) {
         return;
     }
 
@@ -610,7 +615,13 @@ void ExitGridPlacementManager::selectExitGridsAlongLine(const std::vector<sf::Ve
     }
     _context.clearSelection();
 
-    const std::vector<int> lineHexes = collectHexesAlongLine(worldVertices);
+    // The placement is exactly the FROZEN committed segments — every segment closed by a click, each
+    // with the art it was captured with. No live segment exists at finalize (the last vertex was
+    // committed by its click), so the placed edge is pixel-identical to the last preview.
+    std::vector<int> lineHexes;
+    std::vector<ExitGridArt> art;
+    flattenSegments(_committedSegments, CommittedSegment{}, lineHexes, art);
+
     const auto existing = collectExitGridsOnHexes(lineHexes);
 
     // The hexes already occupied by an exit grid.
@@ -631,9 +642,9 @@ void ExitGridPlacementManager::selectExitGridsAlongLine(const std::vector<sf::Ve
         return;
     }
 
-    // Create on the hexes that don't already have a grid, each with its own per-segment art.
+    // Create on the hexes that don't already have a grid, each with its own frozen per-segment art.
     const std::set<int> freshHexes(freshList.begin(), freshList.end());
-    createExitGridsForLine(worldVertices, freshHexes, flipSide);
+    createExitGridsForLine(lineHexes, art, freshHexes);
 }
 
 } // namespace geck
