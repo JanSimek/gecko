@@ -241,8 +241,8 @@ TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the p
     CHECK(previewCalls == 1);
     CHECK(lastPreviewFlip == true);
 
-    // F again toggles back to the default side.
-    pressKeyDirect(handler, sf::Keyboard::Key::F);
+    // Space again toggles back to the default side.
+    pressKeyDirect(handler, sf::Keyboard::Key::Space);
     CHECK_FALSE(handler.isMarkExitsFlipped());
     CHECK(previewCalls == 2);
     CHECK(lastPreviewFlip == false);
@@ -255,14 +255,14 @@ TEST_CASE("InputHandler's flip key does nothing outside Draw-edge mode, and rese
     cb.onMarkExitsLinePreview = [&](const std::vector<sf::Vector2f>&, sf::Vector2f, bool) { ++previewCalls; };
     handler.setCallbacks(cb);
 
-    // Not in MarkExits mode: F is ignored (no toggle, no preview).
-    pressKeyDirect(handler, sf::Keyboard::Key::F);
+    // Not in MarkExits mode: Space is ignored (no toggle, no preview).
+    pressKeyDirect(handler, sf::Keyboard::Key::Space);
     CHECK_FALSE(handler.isMarkExitsFlipped());
     CHECK(previewCalls == 0);
 
     // Enter the mode, flip, then leave: the toggle resets to the default.
     handler.setMarkExitsMode(true);
-    pressKeyDirect(handler, sf::Keyboard::Key::F);
+    pressKeyDirect(handler, sf::Keyboard::Key::Space);
     CHECK(handler.isMarkExitsFlipped());
     handler.setMarkExitsMode(false); // back to Select
     CHECK_FALSE(handler.isMarkExitsFlipped());
