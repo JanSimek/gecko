@@ -1252,3 +1252,344 @@ metadata reader. Visual analysis becomes a **Small–Medium** add-on once the Qt
 extraction is done (the renderer is already Qt-free; it just needs to move to a shared library +
 an offscreen `sf::RenderTexture` wrapper). Start with `gecko-cli` + read tools, since that's
 immediately useful and de-risks the rest.
+
+---
+
+# Area-Fill + Luau Plugins — Unified Design Proposal
+
+This proposal specifies two features that share one substrate: **Feature A**, a Luau-and-data-driven *area fill* ("Fill Selection") that closes the `autotile_floor` / "paint a pattern of tiles" gap; and **Feature B**, a *Luau plugin system* that lets third parties add tools, panels, menus, and event handlers. The decision throughout is to **build one set of seams and exercise it twice**: area-fill is the first first-party consumer of the same selection-projection, ghost-preview, `ITool`, and `MapScriptApi`-over-a-batch machinery that the plugin system opens to third parties. Engine-data-fidelity is non-negotiable: PIDs/directions/flags/tile-ids stored and replayed verbatim, no fallback label tables, no rotation math, validated readers with no silent fallback.
+
+---
+
+## 1. Where things stand
+
+Gecko already ships a coherent two-tier authoring stack. Both features extend it; neither replaces it.
+
+**Tier-1 — declarative patterns (`src/pattern/`), always compiled.** `pattern::Pattern` is a POD with one-or-more pre-authored `PatternVariant`s (orientation is a variant set, never a rotation transform — `Pattern.h:30-33`). `PatternStamper` has a clean **pure `plan()` / impure `stamp()`** split (`PatternStamper.cpp:22-77` vs `146-168`): `stamp()` wraps N object placements + tile edits in one `ScopedUndoBatch`. Capture (`PatternBuilder::fromSelection`), serialize (`PatternSerializer` Qt-side / `cli/PatternJson` nlohmann-side, wire-identical, validated, no silent fallback), thumbnail (`PatternThumbnail` reusing `plan()` at identity anchor), and click-to-stamp (`EditorMode::StampPattern` + live ghost at `DRAG_PREVIEW_ALPHA`) all converge on this one POD. The library lives at `PatternLibrary::rootDir()` (`<ConfigLocation>/gecko/patterns`).
+
+**Tier-2 — Luau scripting (`src/scripting/`), gated `GECK_SCRIPTING_ENABLED`.** `LuaScriptRuntime::run` is **fresh-VM-per-run** (`luaL_newstate` `:51` → `lua_close` `:134/:149`), synchronous on the UI thread, with the binding/`args`/`print` set **before** `luaL_sandbox(L)` (`:110`) so they freeze as read-only globals. There is **no interrupt, no timeout, no memory cap** today. `MapScriptApi` is the host façade (queries, coordinate helpers, `placeProto/placeObject/paintFloor/paintRoof`, `placeStamp`, `placeExitGrid*`, `newMap`, `setPlayerStart`), bound via the `GECK_SCRIPT_API` X-macro whose shared `&MapScriptApi::name` reference is the anti-drift guard (`LuaScriptRuntime.cpp:66`). Convention: **errors raise, "not applicable" stays a value** (off-grid place → `false`, unknown tile → `-1`). `MapScriptApi` holds map/elevation **by reference at construction** (`MapScriptApi.h:211-214`) and is rebuilt per run.
+
+**Headless — CLI/MCP, always compiled façade.** `MapScriptApi`/`ScriptApiReference` compile without Lua; `gecko-cli generate` / MCP `generate` drive the same façade with `buildSprites=false` over a `CallbackCommandHost` (`MapGenerator.cpp:50-105`). `--stamp name=file.json` loads Tier-1 patterns into `addStamp`.
+
+**Mapping the two asks onto what exists:**
+
+| Ask | Already covered | Net-new |
+|---|---|---|
+| **A. Area fill** | The *commit* primitive (`PatternStamper`'s pure-plan + one-`ScopedUndoBatch`), the *preview* primitive (`PatternSprite` ghosts + a typed `RenderData` field), the *library/serialize* discipline, headless `MapScriptApi` | A **selection→area** value object; a **plan-sink** inside `MapScriptApi` mutators (preview-then-replay); a **seamless-floor (`autotileFloor`) primitive**; a **`FillRecipe`** declarative format + C++ runner; seeded scatter (weight/noise/density/spacing/jitter); a Fill dialog/preview; CLI/MCP `fill` |
+| **B. Plugin system** | `MapScriptApi`+`ScopedUndoBatch` as a UI-free undoable mutation API; narrow `*Context` host interfaces (`ExitGridContext.h`) as the decoupling shape; `GameResources&` injection; the Luau VM bring-up code | **`ITool`+`ToolRegistry`** replacing the closed `EditorMode` enum + scattered switches; a **persistent per-plugin VM** with persistent print capture; **`MapScriptApi::retarget`**; **capability-gated binding**; manifest + permission model; declarative `Gui.*`; lifecycle/discovery; resource limits |
+
+The architecture brief is explicit: **there is no tool/panel/menu registration seam today** — every tool is an `EditorMode` value wired through hand-written `switch`es in `InputHandler`, `EditorWidget::setMode`, and `MainWindow::syncToolModeActions`. Feature B's first job is to add that seam; Feature A is what proves it.
+
+---
+
+## 2. Dims-mapper benchmark
+
+Read from the Dims source vendored at `reference/F2_Mapper_Dims-master/Mapper/` and web-confirmed for the official BIS mapper:
+
+- **F2_Mapper_Dims.** Single-tile pen (one tile per click, ghost preview, *no* drag-paint, *no* brush size). Rectangular **single-tile** region fill (`SetFloorRegion`/`SetRoofRegion`, `tileset.cpp:52-70`) — not flood fill, not a pattern. A **random-object scatter brush**: 7 INI-defined sets (`DrawObject.ini`: Tree/Grass/Rock/Small Rock/Dirt/Corn #1/Corn #2), `CRandomObj::GetObjectID()` returns `objPid[random(count)]` — **uniform** random, one object per click, re-rolled each click. **No density, radius, jitter, rotation, weighting, or area fill.** Templates/prefabs were **stubbed and never built** (`objtempl.h` empty).
+- **Official BIS mapper2.exe.** "Use Pattern" (Alt-Y): pick a pre-made **tile** pattern, stamp it, Plus/Minus change stamp size (2×2…N×N), right-click exits. A genuine resizable pattern stamp — but **tiles only**, fixed built-in list, no random object scatter, no user-authored prefabs.
+
+**How this proposal beats both, by construction:**
+
+1. **Weighted, noise-clumped, density-controlled area scatter** — Dims has uniform per-click selection only; the BIS mapper has none. `FillRecipe.scatter` carries a cumulative-weight palette, value-noise clumping/thresholding, density, spacing, direction jitter, and occupancy — applied across an arbitrary selection in **one undo step**.
+2. **Seamless multi-tile floor** (`autotileFloor`) — neither legacy tool repeats a multi-tile floor *material*; Dims fills a rect with one id, the BIS mapper stamps a fixed pattern. We pick each cell's tile from its neighbour mask against a data-driven `FloorTileSet`.
+3. **Real saved prefabs in the fill** — scatter palette entries may be `"stamp":"name"` → `placeStamp`, so a captured "bush+rock cluster" scatters as a unit. This is the feature Dims stubbed.
+4. **Live ghost preview + locked seed reproducibility** — preview *is* the apply (plan-capture → replay), even for nondeterministic scripts.
+5. **INI parity, upgraded** — we keep Dims' best idea (data-defined sets, low-friction extensibility) but as validated JSON with **weights**, and shared with the Tier-1 library, CLI/MCP, and Luau.
+
+The one Dims/BIS idea we *also* deliver and they lack: **drag-to-paint with an adjustable footprint** (the freehand Fill Brush, §3 Phase F).
+
+---
+
+## 3. Feature A — Luau-driven area fill
+
+### 3.1 Execution model (the heart)
+
+Both tiers drive **one** `MapScriptApi`; a `FillPlan*` sink sits inside its mutators.
+
+```
+ Tier-1 FillRecipe ─┐                         ┌─ sink active? RECORD into FillPlan
+ (C++ runner)       ├─▶ MapScriptApi mutators ─┤
+ Tier-2 Luau fill ──┘   paintFloor/placeProto  └─ else COMMIT live via controller
+                        autotileFloor/placeStamp
+        preview: run with FillPlan* installed ─▶ ghosts (DRAG_PREVIEW_ALPHA)
+        apply:   PlacementBatch.replay(plan)  ─▶ ONE ScopedUndoBatch
+```
+
+- **Preview** runs the fill with a `FillPlan*` installed. Mutators resolve art/tile-ids at full fidelity but **record** rather than commit. Rendered as semi-transparent ghosts.
+- **Apply** is `PlacementBatch::replay(plan)` inside one `ScopedUndoBatch` — **no re-run**, so preview == apply byte-for-byte even for nondeterministic Tier-2 scripts.
+- The plan-sink is the single place that enforces **clip-to-area** and the **placement cap**.
+
+**Capture coverage — the two real chokepoints, plus the stamp fix.** Insert the sink at exactly two points: `registerObject` (`MapScriptApi.cpp:288-330`, funnels `placeProto/placeObject/…XY/placeExitGrid*`) and `paintTile` (`:361-371`, funnels `paintFloor/paintRoof/autotileFloor`). **`placeStamp` does *not* route through these** — `MapScriptApi::placeStamp` (`:432-448`) builds its own `PatternStamper` and calls `stamp()`, which opens its **own** `ScopedUndoBatch`. Left unfixed, a stamp palette entry would mutate the live map and push a real undo entry *during preview*. **Fix (folded in):** add a sink-aware planning entry to `PatternStamper` — `void planInto(FillPlan&, const PatternVariant&, int targetHex, int elevation)` that runs the existing pure `plan()` and resolves its `ObjectPlacement`/`TilePlacement`s into the `FillPlan` (building sprites when `_buildSprites`), committing nothing. `MapScriptApi::placeStamp` becomes: `if (_planSink) stamper.planInto(*_planSink, …); else stamper.stamp(…);`. This preserves the pure/impure split and makes stamp scatter capturable. Factoring `PlacementBatch` out of `PatternStamper::stamp` fixes the *commit* side; `planInto` fixes the *capture* side — both are required.
+
+### 3.2 Data model (new C++, always compiled unless marked)
+
+- `src/scripting/EditArea.h` — `{ std::vector<int> hexes, floorTiles, roofTiles; }`, each **sorted ascending** (canonical order is contractual so seeded draws reproduce). Built by the host from `SelectionManager::getHexesInArea`/`getTilesInAreaIncludingEmpty`/`getObjectsInArea` (a `sf::FloatRect`) **or** — when the committed selection has no rect — from the discrete `SelectionState` getters (`getHexIndices/getFloorTileIndices/getRoofTileIndices/getObjects`), then `std::sort`ed. *(Folded in: `selectionArea` is `std::optional` and a discrete object/hex selection has no rect; never assume a rect exists.)*
+- `src/scripting/FillPlan.h` — `{ std::vector<TileChange> tiles; std::vector<std::pair<std::shared_ptr<MapObject>,std::shared_ptr<Object>>> objects; int dropped; }`.
+- `src/pattern/FloorTileSet.{h,cpp}` (+ Qt `FloorTileSetSerializer`, Qt-free `cli/FloorTileSetJson`) — the autotile material (§3.4).
+- `src/pattern/FillRecipe.h` + `FillRecipeSerializer.{h,cpp}` (Qt) + `src/cli/FillRecipeJson.{h,cpp}` (nlohmann) — wire-compatible, validated, no silent fallback, same split and `checkInt` range discipline as `PatternSerializer.cpp:62-78`.
+- `src/pattern/FillRecipeRunner.{h,cpp}` — Tier-1 interpreter; ctor `(MapScriptApi&, const FillRecipe&, uint32_t seed)`, holds `std::mt19937`; `FillResult run()` (floor first, then scatter). **Bounded by construction → no sandbox.**
+- `src/pattern/PlacementBatch.{h,cpp}` — factored out of `PatternStamper::stamp` (`:146-168`): one `ScopedUndoBatch`, replays objects via `registerObjectPlacement` (GUI) / `registerObjectData` (headless) + tiles via `applyTileChanges`+`registerTileEdit`. `PatternStamper` is refactored to use it, so stamp and fill share one tested commit path.
+- GUI: `src/ui/dialogs/FillDialog.{h,cpp}`; `src/pattern/FillThumbnail.{h,cpp}` (reuses `ThumbnailComposer`/`PatternSprite`); a **generic ghost-overlay field** on `RenderingEngine::RenderData` (see §5 — shared with plugin tool previews, not a fill-specific field).
+- *Gated:* the Tier-2 prelude/run wiring + "Edit as Script". CLI `gecko-cli fill` + MCP `fill` are **always-on for recipes** (`buildSprites=false`, the `MapGenerator.cpp:50-105` context).
+
+### 3.3 New Luau / `MapScriptApi` surface
+
+Host-only (not script-bound, like `addStamp`): `void setArea(const EditArea*)`, `void setPlanSink(FillPlan*)`, `void registerFloorSet(std::string, FloorTileSet)`.
+
+Script-bound — add to `GECK_SCRIPT_API` (`ScriptApiReference.h:13-50`), each backed by a real `MapScriptApi::name` (the `&MapScriptApi::name` reference is the drift guard). `noise2d`, `paintFloor[XY]`, `placeProto[XY]`, `placeStamp`, `proto`, `tileId`, `hexCol/hexRow`, `tileCol/tileRow`, `mapSceneryHistogram` **already exist**:
+
+```c
+/* selection / area (input; EditArea borrowed, host-set per run) */
+X(hasArea,           "() -> bool",                  "True if a selection area is bound to this run.")
+X(areaHexes,         "() -> {hex,...}",             "Hex indices in the selection, ascending.")
+X(areaFloorTiles,    "() -> {tileIndex,...}",       "Floor-tile indices in the selection, ascending.")
+X(areaRoofTiles,     "() -> {tileIndex,...}",       "Roof-tile indices in the selection, ascending.")
+X(areaContainsHex,   "(hex) -> bool",               "Is hex inside the selection?")
+X(areaContainsTile,  "(tileIndex) -> bool",         "Is tile inside the selection?")
+X(areaFloorEdgeMask, "(tileIndex) -> int",          "8-neighbour selection-membership mask of a floor tile.")
+/* seamless multi-tile floor */
+X(autotileFloor,     "(setName) -> int",            "Paint the selection's floor from a FloorTileSet by neighbour mask. Returns tiles painted.")
+X(autotileFloorAt,   "(setName, tileIndex) -> tileId","Tile autotile WOULD choose for one cell; paints nothing.")
+/* deterministic seeded helpers */
+X(rng,               "() -> [0,1)",                 "Deterministic PRNG draw seeded from args.seed.")
+X(rngInt,            "(lo, hi) -> int",             "Deterministic integer in [lo,hi].")
+X(weightedPick,      "(values, weights, r) -> value","Pick values[i] by weight using r in [0,1).")
+X(objectAt,          "(hex) -> pid",                "PID of a blocking object at hex in the COMMITTED map, else 0.")
+X(noise3d,           "(x, y, z) -> [0,1]",          "Coherent value noise with a third (seed/octave) axis.")
+```
+
+`area.forEachHex/forEachFloorTile` ship as a **bundled trusted prelude** `resources/scripts/lib/fill.luau`, prepended to Tier-2 source (fresh-VM-per-run makes concatenation correct; frozen by the same `luaL_sandbox`):
+
+```lua
+local area = {}
+function area.forEachHex(f)       for _,h in ipairs(api:areaHexes())      do f(h, api:hexCol(h), api:hexRow(h)) end end
+function area.forEachFloorTile(f) for _,t in ipairs(api:areaFloorTiles()) do f(t, api:tileCol(t), api:tileRow(t)) end end
+area.hexes = function() return api:areaHexes() end
+return area
+```
+
+**`objectAt` is a committed-map query, not a pending-plan query** *(folded in)*. Because apply is replay, the script runs once into the sink; `objectAt(hex)` reads `_map` and **never sees placements already recorded in this run's `FillPlan`**. Intra-fill de-dup/spacing must be tracked by `FillRecipeRunner` (which already maintains a touched-cell set) or by the Tier-2 script itself. This is documented in the `objectAt` doc string and the fill-authoring guide; a script that relies on `objectAt` for self-occupancy will silently stack objects. The "errors raise, N/A is a value" contract holds throughout (`objectAt`→0 when free; unknown set/tile → `ScriptError`).
+
+### 3.4 The `autotileFloor` primitive (closes the gap)
+
+A `FloorTileSet` is a data-driven **mask → authored tile** table — no rotation (FO2 `edg*` art is edge-specific; same ethos as `Pattern.h:30-33`). Floor is a plain 100×100 square grid (`PatternStamper.cpp:60-72` notes "no parity offset"), so 4/8-neighbour masks are trivial.
+
+```jsonc
+// resources/scripts/fills/sets/desert_sand.json  (bundled; users override under .../fills/sets/)
+{ "name":"desert_sand", "version":1, "center":"edg5000",
+  "neighborhood":"blob8",                 // "edges4" (16 masks) | "blob8" (47-tile reduction)
+  "variants": { "0":"edg5001", "255":"edg5000", "17":"edg5010" },  // mask -> tile FRM name
+  "fallback":"center" }                   // mask not listed => center (explicit, never PID-0)
+```
+
+`autotileFloor(set)`: for each `t` in `areaFloorTiles()`, build the mask from **in-area** neighbours (`blob8` counts a diagonal only if both flanking cardinals are set, reducing 256→47), look up `variants[mask]` else `center`, resolve via `tileId` (−1 → `ScriptError`, never PID-0), `paintFloor(t,id)`. Because it routes through `paintTile`, it is **captured by the plan sink for free** — autotile previews automatically. `areaFloorEdgeMask` exposes the raw mask so advanced Tier-2 scripts can autotile by hand or blend into pre-existing terrain via `getFloorXY` (an optional advanced flag; MVP masks against selection membership only). Registered exactly like stamps: `registerFloorSets()` scans bundled `resources/scripts/fills/sets/*.json` first, then user `.../fills/sets/` last (user wins), mirroring `registerLibraryStamps` (`EditorWidget.cpp:384-419`).
+
+### 3.5 `FillRecipe` (Tier-1) and Tier-2 brushes
+
+```jsonc
+// .../gecko/patterns/fills/desert_scrub.fill.json   ("kind":"fill" distinguishes it in the shared library)
+{ "name":"Desert scrub", "version":1, "kind":"fill",
+  "floor":  { "mode":"autotile", "set":"desert_sand" },   // none | single | scatter | autotile
+  "roof":   { "mode":"none" },
+  "scatter":{ "palette":[ {"proto":["scenery",102],"weight":5},
+                          {"proto":["scenery",116],"weight":1},
+                          {"stamp":"small_bush_cluster","weight":2} ],   // Tier-1 prefab via placeStamp
+              "paletteFromMap":"maps/desert1.map",        // optional: seed palette via mapSceneryHistogram
+              "density":0.25, "noiseScale":0.08, "noiseThreshold":0.45,
+              "jitterDirection":true, "spacing":1, "respectOccupancy":true },
+  "clipToSelection":true, "seed":null }                   // null => per-run; int => locked
+```
+
+`FillRecipeRunner::run()` paints floor (`single`→`paintFloorXY`; `scatter`→weighted+`noise2d`; `autotile`→`autotileFloor`), then scatter: cumulative-weight palette; per hex sample `noise2d((col+ox)*scale,(row+oy)*scale)`; below `noiseThreshold`→clearing; else with prob `density`, `weightedPick`→`placeProtoXY`/`placeStamp`, honouring `spacing`/`jitterDirection` and a **runner-maintained occupancy set** (not `objectAt`, per §3.3). Validation reuses `checkInt`; `proto` types validated through `MapScriptApi::proto` (raises on bad type), tile names through `tileId` (−1 → reject) — engine values verbatim, no fallback table.
+
+A **Tier-2 brush** is a Luau script plus a thin `*.fill.json` manifest (`"script":"x.luau"` + a typed `params:[{id,type,role,…}]` array) whose params drive generated dialog controls **and** are passed as `args` (closing the "Console passes no args" gap, `EditorWidget.cpp:431`). The dialog's "Edit as Script…" lowers a `FillRecipe` to an equivalent Luau script and drops it into `ScriptConsoleWidget::setSource` (`MainWindow.cpp:1020-1027`) — the Tier-1→Tier-2 graduation path (scripting builds only).
+
+### 3.6 UX
+
+**Core MVP — an action on the selection, no new `EditorMode`.** Edit-menu "Fill Selection…" + toolbar button (`addMenuAction`/`addToolAction`), enabled only when the selection is non-empty **and the relevant layer is present** (an `autotile`/floor fill requires `floorTiles`; gate it so a pure object/hex selection can't run a no-op floor fill — folded in from the `EditArea` rect-less correction). `FillDialog` (structure modelled on `PatternBrowserDialog`): left, a Fills browser over `PatternLibrary::rootDir()/fills` + bundled, thumbnails via `FillThumbnail`; right, auto-generated controls (floor on/off+mode, scatter on/off, density/spacing/jitter/clip, a **seed field** defaulted random, shows the resolved seed after a run, lockable); bottom, Live-preview toggle, "Edit as Script…" (gated), Apply/Cancel. Live preview runs the fill into a `FillPlan`, converts to ghosts at `DRAG_PREVIEW_ALPHA`, **recomputed only on parameter change (debounced), never per frame**. Apply commits the previewed plan; Cancel discards (nothing was committed). Post-apply runs the existing `mutated()` resync (clear selection/visualizer, refresh Map Info, emit `mapModifiedByScript()`, `EditorWidget.cpp:435-447`).
+
+**Freehand Fill Brush (final phase) — built as a native `ITool`, not a bespoke `EditorMode`** (see §5). Footprint = tile/hex disc of radius `size`; one `beginBatch("Fill: <name>")` on press, `endBatch()` on release; track touched cells to de-dup and respect occupancy across overlapping footprints; footprint ghost via the shared overlay. Reuses `FillRecipe`/`FillRecipeRunner`/`PlacementBatch` wholesale — only the area source differs (footprint vs selection), so freehand applies incrementally inside the manual batch rather than via plan-replay.
+
+### 3.7 Undo as one step
+
+Always one entry. Selection fill: `PlacementBatch::replay` wraps everything in one `ScopedUndoBatch` (`ObjectCommandController.h:172-197`); tile paints and object placements interleave and revert in reverse, identical to `PatternStamper::stamp`. Freehand: one manual `beginBatch`/`endBatch` per stroke; nested batches are safe (only the outermost `endBatch` flushes, `:71`). **Mandatory, not cosmetic:** `UndoStack` caps at `maxCommands=100` and evicts oldest (`UndoStack.h:17,31-33`) — a 5,000-tile fill unbatched wipes all history; batched it is one Ctrl-Z. Preview never enters undo (the sink never calls the controller).
+
+### 3.8 Pattern-library reuse
+
+Fills live in `fills/` under the existing `PatternLibrary::rootDir()`; one browser with a Patterns/Fills filter. Scatter palette `"stamp":"name"` entries route to `placeStamp` (`MapScriptApi.cpp:432-448`), so a prefab captured via "Save Selection as Pattern" or `extract_pattern` scatters as a cluster. A captured selection's `mapSceneryHistogram` seeds a starter palette. Fills and prefabs share library, browser, thumbnail, and `placeStamp`/`addStamp` plumbing.
+
+### 3.9 Phased plan (A)
+
+- **A0 — Selection + plan/apply core (always compiled, headless-testable).** `EditArea` (both rect and discrete-getter construction); `setArea` + area accessors (X-macro + reference TU); `FillPlan` + `setPlanSink`; the two sink insertion points; `PatternStamper::planInto` (stamp capture) + `PlacementBatch` (factored from `stamp`); seeded `rng/rngInt/weightedPick/objectAt/noise3d`. Unit tests: same seed → identical `FillPlan`; replay == captured; stamp palette entries captured (not committed) under a sink.
+- **A1 — Tier-1 recipes (always compiled; works in default OFF build).** `FillRecipe` + serializers + validator; `FillRecipeRunner` (floor single/scatter; scatter palette/noise/density/spacing/jitter/runner-occupancy); CLI `fill` + MCP `fill`. First user value, headless, beats Dims.
+- **A2 — Seamless floor.** `FloorTileSet` + reader + `registerFloorSet`; `autotileFloor`/`autotileFloorAt`/`areaFloorEdgeMask`; bundle `desert_sand`/`cave_rock`. Closes `autotile_floor`.
+- **A3 — Interactive GUI MVP.** Shared ghost-overlay `RenderData` field; `FillDialog` (browser + generated controls + seed/lock + debounced live preview + Apply/Cancel); Edit-menu/toolbar action; `FillThumbnail`. **No `EditorMode`.** First end-user release.
+- **A4 — Tier-2 Luau (gated).** `fill.luau` prelude; custom Luau fills via the dialog; pass `args`; recipe→Luau lowering. **Prerequisite: the sandbox interrupt+deadline (B-side) must land first** (see §3.10).
+- **A5 — Freehand Fill Brush.** A native `ITool` on the registry introduced by Feature B (§5), not a new bespoke mode.
+
+### 3.10 Sandbox ordering (folded-in correction)
+
+`LuaScriptRuntime::run` has **no interrupt and no timeout** today, and `EditorWidget::runScript`→`runtime.run` is synchronous on the UI thread — a previewed Tier-2 fill with an infinite loop hangs the editor. **Therefore Tier-2-in-GUI (A4) must not ship before the interrupt+deadline exists.** Two acceptable orderings, pick one: (i) land the interrupt+deadline watchdog (Feature B's `LuaSandboxHost` work) before A4; or (ii) restrict A4 to *trusted bundled* fills until the watchdog lands. Tier-1 (A0–A3) is bounded by construction and needs none of this. The plan-sink additionally enforces a **placement cap** (`k × area.size()`, surplus → `++dropped`) and **clip-to-area**, which apply to both tiers.
+
+---
+
+## 4. Feature B — Luau plugin system
+
+Plugins add **tools, panels, menus/toolbar buttons, and event handlers**. They need a **broader, capability-gated trust model than the generation sandbox** — and this must be stated plainly: the Tier-2 generation runtime is *safe-by-default-and-ephemeral* (fresh VM, run once, discarded), so it can afford zero limits; a plugin is **resident** (it must answer `QAction::triggered`, tool mouse events, and `on(event)` callbacks for the life of the session) and runs **untrusted third-party code on the UI thread**, so it requires per-plugin isolation, resource limits, and an explicit permission grant. These are different requirements, not a stricter version of the same thing.
+
+### 4.1 Abstraction seams to add (named)
+
+The architecture brief identifies the hard couplings; the plugin layer adds these seams (all **always compiled, no Lua dependency**, so native tools can adopt them and they are testable with plugins off):
+
+1. **`ITool` + `ToolRegistry`** (`src/ui/tools/ITool.h`, `ToolRegistry.{h,cpp}`) — replaces the closed `EditorMode` enum + scattered switches with dynamic dispatch to an active tool. `ITool` exposes `id()`, `onActivate/onDeactivate`, `onMousePressed/Moved/Released(const ToolMouseEvent&)`, `onKey(const ToolKeyEvent&)`, and `ToolPreview buildPreview(const ToolMouseEvent&)`. **Engine coordinates are resolved by the host** (`hex/col/row/tileIndex` in `ToolMouseEvent`); tools never see `sf::Vector2f`, and `buildPreview` returns a *spec*, never SFML draws. Validate by porting one native tool (tile placement) onto `ITool` with no UX change.
+2. **`EditorMode::PluginTool` + one generic `InputHandler` branch** — `onPluginTool{Pressed,Moved,Released,Key}` added **once**, forwarding to `ToolRegistry::active()`. Not per-tool callbacks.
+3. **One generic ghost-overlay `RenderData` field** — populated by the active tool's `buildPreview` (and reused by Feature A's fill preview, §5). Replaces the bespoke-typed-field-per-preview pattern.
+4. **MainWindow registration APIs** — `addPluginMenuItem/addPluginToolButton/addPluginDock/removePluginUi`, and relaxation of the fixed `std::array<QDockWidget*,6>` (`MainWindow.h:167-168`) into a `std::vector<QDockWidget*> _pluginDocks`. One `syncToolModeActions` case for `PluginTool`.
+5. **`PluginToolHost`** — implements the **union** of the existing `*Context` methods (`getMap/getViewportController/getCurrentElevation/getSelectionManager/register*`, modelled on `ExitGridContext.h`) so plugin tools commit through `_controller.commandController()` exactly like native tools.
+
+### 4.2 Persistent VM, print, and `retarget` (the three load-bearing host changes)
+
+These are net-new and more invasive than "refs→pointers"; they land early with focused tests.
+
+- **Phase-0 refactor `LuaSandboxHost`** — extract shared VM bring-up from `LuaScriptRuntime` (`luaL_openlibs`, the `capturePrint` closure, `luau_compile`/`luau_load`, and the critical **`luaL_sandbox` after binding** ordering). No behavior change; existing scripting tests stay green.
+- **Persistent print capture.** `capturePrint` today carries a **lightuserdata upvalue pointing at a stack-local `result.output`** (`LuaScriptRuntime.cpp:27-44,59`) — that lifetime is invalid for a resident VM. The extraction must repoint `print` at a **persistent per-VM ring buffer** owned by the `PluginVm`, surfaced in the plugin's console dock.
+- **`MapScriptApi::retarget(GameResources&, const HexagonGrid&, ObjectCommandController&, Map*, int elevation, bool buildSprites)`.** `_resources/_hexgrid/_controller` are references and `_map` is `Map&` (`MapScriptApi.h:211-214`); a persistent VM outlives any one map and survives elevation switches and `newEmptyMap()` swapping the underlying `Map` (owned as `std::unique_ptr<Map>&` inside `ObjectCommandController`). Convert internals to pointers and **audit the `_map == nullptr` state across *every* method, not just mutators** — queries (`getFloor`, `hexNeighbors`, `mapScenery`) assume a live map/grid and must return the N/A value or raise `ScriptError` when no map is open. The host re-points on File>New / load / elevation-switch. **Keep the value constructor** for the generation runtime and CLI/MCP (which build a fresh `MapScriptApi` per run and never call `retarget`). This is the single riskiest change and should land in Phase B2 with tests. *(Note: Feature A never needs `retarget` — its fills build a fresh `MapScriptApi` per run like `EditorWidget::runScript`. The invasive refactor is a plugin-only cost.)*
+
+### 4.3 Manifest + capability/trust model
+
+**Manifest is C++-parsed JSON, never executed Lua** — permissions/identity must be known before any plugin code runs. Validated, no-silent-fallback, same discipline as `PatternSerializer::deserialize`. **Capability gating is by *binding*, not runtime check** (defense-in-depth): a denied capability's function is simply **absent** from the VM (`attempt to call a nil value`), bound only when granted, *before* `luaL_sandbox` freezes globals. A `GECK_PLUGIN_API` X-macro mirrors `GECK_SCRIPT_API`, each entry carrying its required `Capability`.
+
+**Enforcement invariant (folded in):** this works *only* because there is **one `lua_State` per plugin**. LuaBridge registers the class on `getGlobalNamespace(L)` per state, so a `map.read` plugin's VM does `beginClass` with the `GECK_SCRIPT_API_READ` subset and the write methods are **genuinely absent from that VM's metatable**. Split `GECK_SCRIPT_API` into `GECK_SCRIPT_API_READ` + `GECK_SCRIPT_API_WRITE` (with `GECK_SCRIPT_API = READ+WRITE`, so the generation runtime is byte-for-byte unchanged), and the binder selects which method set to register at bind time. It is all-or-nothing per VM — you cannot downgrade a single shared `api` object — which is fine given per-plugin VMs.
+
+Coarse capability set:
+
+| Capability | Tier | Grants | Cannot touch |
+|---|---|---|---|
+| `ui` | Standard | register menu/toolbar/dock/tool, status/notify, declarative widgets | raw Qt, other plugins' widgets, MainWindow internals |
+| `map.read` | Standard | `api:` queries + coordinates + `editor:selection()` | other maps on disk |
+| `map.write` | Standard | `api:` undoable mutators (place/paint/stamp/exit-grid) | non-undoable internals |
+| `events` | Standard | subscribe to the fixed event list | post fake / cancel host events |
+| `storage` | Standard | JSON KV under `plugins/<id>/storage.json` | other plugins' / global settings |
+| `fs.read` | **Sensitive** | read files canonicalized + confined to plugin dir | writes; `..`/symlink escape |
+| `net`, `fs.write` | — | **never bound in v1** | everything |
+
+**Trust model, deliberately minimal for v1** *(folded in — the heavy machinery is over-built for hand-installed plugins).* v1 ships a **single install-time `PluginPermissionDialog`** (Standard vs Sensitive grouping, plain-language descriptions, per-cap toggles for Sensitive), persisted as a `PluginGrant`. **Deferred to a later phase, not v1:** SHA-256 package pinning, re-prompt-on-capability-widening, quarantine, the `manifest_version`/`apiVersion`/`plugin_abi` triple, `.gplug` packaging, and ed25519 signing. Until ABI 1 is frozen, gate real third-party *distribution*; hand-installed plugins are the v1 audience. `fs.read` is path-confined (canonicalized, symlinks resolved and re-checked, `..` rejected); `net`/`fs.write`/process-spawn/FFI are not bindable regardless of trust.
+
+### 4.4 The Luau API (three namespaces)
+
+`api:` is the **existing `MapScriptApi`** bound by capability (`map.read`→READ subset, `map.write`→READ+WRITE). No new map verbs.
+
+```lua
+-- editor:  app integration --------------------------------------------------
+h = editor:addMenuItem{ menu="Edit", text="…", shortcut="Ctrl+Shift+G", icon="a.png", onTrigger=fn } -- ui
+h = editor:addToolButton{ text="Scatter Brush", icon="a.png", onTrigger=fn }                          -- ui
+h = editor:addDockPanel{ id="scatter.panel", title="…", area="right", ui = Gui.Column{...} }          -- ui
+t = editor:registerTool{ id="scatter", title="…", icon="a.png",
+       onActivate=fn,onDeactivate=fn,onMouseDown=fn,onMouseMove=fn,onMouseUp=fn,onKey=fn,
+       preview=function(ev) return {tiles=..., objects=...} end }                                     -- ui
+editor:activateTool(t)
+editor:setWidget(id, props)   editor:getWidget(id) -> props   editor:removeUi(h)                      -- ui
+editor:status(text)           editor:notify("warn", text)                                             -- no cap
+editor:hasSelection() -> bool                                                                          -- map.read
+editor:selection() -> { rect=, hexes={}, floorTiles={}, roofTiles={}, objects={ {hex,pid} } }         -- map.read
+editor:currentElevation() -> int   editor:currentMapPath() -> string|nil                              -- map.read
+editor:undoBatch(desc, function() ... end)                                                            -- map.write
+sub = editor:on(event, fn)   editor:off(sub)                                                          -- events
+-- plugin:  self + sandboxed services ---------------------------------------
+plugin.id, plugin.version, plugin.dir   plugin:log(level,msg)   plugin:capabilities() -> {...}
+plugin:asset(rel) -> path               -- bundled assets always readable, NO fs.read
+plugin:require("submodule")             -- resolved INSIDE plugin.dir only
+plugin:store(k,v)  plugin:load(k)  plugin:keys()  plugin:delete(k)                                    -- storage
+plugin:readFile(rel)  plugin:listDir(rel)  plugin:exists(rel)                                         -- fs.read
+editor:registerStamp(name, "assets/hut.json")   -- PatternSerializer + addStamp (no fs cap)
+```
+
+`editor:selection()` is the **same `SelectionManager`→tables projection** Feature A uses for `EditArea` (§5). Objects surface as `{hex, pid}` — **no `Object`/`QObject` ever crosses to Lua**.
+
+**Declarative UI (`Gui.*`) — the only way a plugin builds widgets.** A closed vocabulary (`Column/Row/Group/Label/Spacer/Button/Combo/Checkbox/Slider/SpinBox/List/LineEdit/IconButton`), materialized by `DeclarativeUiBuilder` into real `QWidget`s themed via `ui::theme`. No `findChild`, no metaobject reflection, no raw widget pointer. Live updates by opaque string `id` (`editor:setWidget`). Mirrors Qt Creator 14's constrained `Gui` module.
+
+**Three enforced Qt-safety rules:** (1) no Qt pointer enters Lua — registration returns **opaque string handles**; the real `QAction`/`QDockWidget` lives in `Plugin::uiHandles` as `QPointer`, validated against the calling plugin. (2) UI is data, not imperative Qt. (3) every boundary is `pcall`-wrapped with a per-plugin `debug.traceback` and the interrupt deadline armed — an error or `ScriptError` is caught at the edge and **never** reaches the Qt event loop.
+
+### 4.5 Interactive tools, end to end
+
+`editor:registerTool{...}` → `PluginManager` builds a `LuaTool : ITool`, registers it in `ToolRegistry`, calls `MainWindow::addPluginToolButton` (checkable, exclusive with native tools). Click → `setMode(EditorMode::PluginTool)` + `ToolRegistry::setActive(id)`. Mouse events → the one generic `InputHandler` branch → `EditorWidget` resolves world→hex via `viewport().worldPosToHexIndex` (the `stampPatternAt` path, `EditorWidget.cpp:1255`) → the active `LuaTool` → `PluginInvoker::call` into Lua with the **engine-coordinate** event. Hover → `buildPreview` returns a ghost spec → the shared overlay field → rendered next frame via `PatternSprite::buildSpriteObject`/`buildTileSprite` + `DRAG_PREVIEW_ALPHA`. Commit → `api:` mutators inside one undo batch → post-mutation resync.
+
+### 4.6 Undo, threading, error containment
+
+**Undo.** All plugin mutation goes through `MapScriptApi`→`ObjectCommandController`. `PluginInvoker` opens a `ScopedUndoBatch("<Plugin>: <action>")` around each dispatched `map.write` callback (one menu click / event = one Ctrl-Z), structurally identical to `LuaScriptRuntime::run` wrapping a whole run. Drag tools open the batch on `onMousePressed` and flush on `onMouseReleased` (one stroke = one entry). `editor:undoBatch`/`api:beginBatch/endBatch` allow explicit grouping; nested batches are safe. Mandatory because `UndoStack` caps at 100. `ScopedUndoBatch`'s destructor flushes even on a raised callback.
+
+**Threading.** All plugin code runs on the UI thread; **the host builds `buildSprites=true`** like `EditorWidget::runScript`. No thread spawning escape exists. **Honest scope of the watchdog *(folded in):* the interrupt watchdog bounds runaway *Lua loops*, not heavy *host calls*.** `lua_callbacks(L)->interrupt` fires at Lua instruction boundaries only; a single long bound C++ call invoked from Lua — `mapSceneryHistogram`/`loadReferenceMap` over a big map, a `placeStamp` of a large prefab, or building thousands of sprites with `buildSprites=true` — is not preemptible and will blow the deadline and stutter the ~60 fps loop. The watchdog makes infinite Lua loops catchable; it does not make every host call cheap.
+
+**Memory + placement caps *(folded in):*** the tracking allocator on `lua_newstate(allocf)` bounds **only the Lua heap**. The `Object`/`MapObject`/`sf::Sprite`/`std::vector` results created **C++-side** by `api:` calls are invisible to it — a `map.write` plugin can exhaust host memory while under the Lua cap. Therefore `map.write` plugins also get the **placement/result cap** Feature A introduces in the plan-sink (refuse beyond `k × area.size()`/per-dispatch budget; surplus → reported `dropped`), not just the allocator.
+
+**Error containment.** Every boundary `pcall` + traceback; the C++ caller is `noexcept` at the edge. Fault accounting: consecutive errors/timeouts increment `faultCount`; after a threshold the host auto-disables the plugin, tears down its UI, and shows a dismissible banner with Re-enable + traceback. A sandboxed Luau plugin cannot segfault (no FFI/raw memory), so "crash" reduces to error/timeout/OOM — all contained. **Teardown is total:** `Plugin` owns every `UiHandle`/`EventSub`/`toolId`, so disable/quarantine/reload removes every `QAction`/`QDockWidget`/tool/subscription, `editor:off`s all subs, and `lua_close`es the VM — leak-free, which is what makes hot-reload safe.
+
+### 4.7 Discovery, lifecycle, hot-reload
+
+Scan `<ConfigLocation>/gecko/plugins/*/plugin.json` (user, writable) and bundled `resources/plugins/*/` (read-only), dedupe by `id` with **user shadowing bundled** — the same precedence as `registerLibraryStamps`. Invalid manifests become `Faulted` rows with a reason, never silently dropped. **Enable:** resolve grant (prompt if incomplete) → build `PluginVm` (tracking allocator, openlibs, persistent print ring, capability-gated `PluginBinder::bind`, interrupt watchdog, `luaL_sandbox`, seed) → compile+load entry, run once to capture callbacks as registry refs → register UI/tools/events → `Enabled`. **Disable:** optional `onDisable` (pcall) → total teardown → `lua_close`. **Hot-reload (dev-mode toggle):** `QFileSystemWatcher` debounced → disable → re-scan → enable; `storage` persists, UI rebuilds from scratch.
+
+### 4.8 CMake gating
+
+`option(GECK_ENABLE_PLUGINS … OFF)` that **requires** `GECK_ENABLE_SCRIPTING` (configure error otherwise). The **seam is always compiled** (`ITool`, `ToolRegistry`, `EditorMode::PluginTool`, the overlay field, MainWindow `addPlugin*`). The **Lua host is gated** behind `GECK_PLUGINS_ENABLED`: all of `src/plugin/*` and `src/ui/plugin/*`, with MainWindow's Plugins menu/discovery `#ifdef`-guarded exactly as `GECK_SCRIPTING_ENABLED` guards the console today.
+
+### 4.9 Phased plan (B)
+
+- **B0 — `LuaSandboxHost` extraction** (pure C++, no behavior change; persistent-print-ring repoint designed in). Existing scripting + tests green.
+- **B1 — The seam** (pure C++, no Lua): `ITool`+`ToolRegistry`; `EditorMode::PluginTool` + one `setMode`/`syncToolModeActions` case; one generic `InputHandler` branch; shared overlay field; MainWindow `addPlugin*`/`removePluginUi` + `_pluginDocks`. **Validate by porting tile placement onto `ITool` with no UX change.**
+- **B2 — Persistent VM + lifecycle + manifest (no UI registration, read-only `api`).** `PluginManifest` parse, `PluginManager` discovery/enable/disable, `PluginVm` (allocator cap, watchdog, print/log ring, `pcall` isolation, auto-disable on fault), **`MapScriptApi::retarget` with the full null-safe audit**, `api` bound read-only behind `map.read`, basic Plugin Manager dialog. **This is the plugin MVP.**
+- **B3 — `editor:` registration + write.** `READ/WRITE` `beginClass` split; `map.write` with auto-batch + resync + placement cap; `addMenuItem`/`addToolButton`; install-time permission prompt + grant; `storage`.
+- **B4 — Panels + `Gui.*`.** `DeclarativeUiBuilder`, `addDockPanel`.
+- **B5 — Tools + events.** `LuaTool`+`registerTool`+preview rendering+stroke batching; `PluginEventBus` + `editor:on/off`.
+- **B6 — Reference plugin + DX.** A reference plugin; `fs.read` confined cap; hot-reload; `gecko-cli plugin scaffold`; `plugin_api` MCP tool. *Packaging/signing/quarantine/version-triple deferred beyond v1.*
+
+---
+
+## 5. How A and B fit together
+
+**Area-fill brushes are the first first-party "plugins."** Build the seams once, exercise them with first-party fill, then open them to third parties. Four shared mechanisms — do not build them twice:
+
+1. **Selection → plain data.** `EditArea` (Feature A) and `editor:selection()` (Feature B) are the **same `SelectionManager`→tables/vectors projection** (`getHexesInArea`/`getTilesInAreaIncludingEmpty`/`getObjectsInArea` from a rect; the discrete `SelectionState` getters otherwise; objects as `{hex,pid}`, no `Object` crossing to Lua). One implementation, two thin adapters (a borrowed `EditArea*` bound per fill-run vs a live `editor:selection()` query).
+
+2. **One ghost-overlay `RenderData` field.** Feature B introduces a single generic overlay (populated by `ITool::buildPreview`). Feature A's fill preview and the freehand Fill Brush populate the *same* field rather than a bespoke `fillPreview`/`stampPreview`/`pluginToolPreview` triple. All three render through `PatternSprite::buildSpriteObject`/`buildTileSprite` + `DRAG_PREVIEW_ALPHA`.
+
+3. **One `ITool`/`ToolRegistry`.** The **freehand Fill Brush is a native `ITool`** (Feature A Phase A5), *not* a bespoke `EditorMode::FillBrush`+manager. It is the native tool that **validates the `ITool` seam (B1)** before any Lua `LuaTool` exists — exactly the "port one native tool" validation the seam needs. This deletes the duplicate tool plumbing the two original designs each proposed.
+
+4. **One commit/scatter engine.** `PatternStamper` (refactored onto `PlacementBatch`, with `planInto` for sink capture), `FillRecipeRunner` (the weighted+noise+density+spacing+jitter scatter engine), and the seeded primitives (`rng/rngInt/weightedPick/noise2d/noise3d/objectAt`) are shared. A third-party Scatter Brush plugin scatters with the **same primitives**; it does not reimplement scatter from scratch, and the first-party "Fill Selection" is the canonical worked example that proves the API surface is sufficient.
+
+**The one deliberate divergence:** the first-party fill builds a **fresh `MapScriptApi` per run** (like `EditorWidget::runScript`) and so **never needs `retarget`**; only the resident plugin VM does. This keeps the invasive `retarget`/persistent-VM/persistent-print work entirely inside Feature B, off the critical path of shipping area fill.
+
+---
+
+## 6. Sequencing & effort
+
+Interleaved so value ships early and each phase de-risks the next. "Always compiled" phases work in the default `GECK_ENABLE_SCRIPTING=OFF` build.
+
+| # | Phase | Depends on | Effort | Ships |
+|---|---|---|---|---|
+| 1 | **A0** plan-sink core: `EditArea`, `FillPlan`, two sink points, `PatternStamper::planInto`+`PlacementBatch`, seeded primitives | — | M | Headless, unit-tested core |
+| 2 | **A1** Tier-1 `FillRecipe`+runner; CLI/MCP `fill` | A0 | M | First user value; **beats Dims**, no Qt/Lua |
+| 3 | **A2** `FloorTileSet`+`autotileFloor` | A0 | M | Closes `autotile_floor` |
+| 4 | **B0** `LuaSandboxHost` extraction (persistent-print repoint) | — (parallel) | S | No regression; unblocks resident VM |
+| 5 | **B1** `ITool`+`ToolRegistry`+`PluginTool`+generic input+overlay field+MainWindow `addPlugin*` | B0 | L | The seam, validated by porting tile placement |
+| 6 | **A3** `FillDialog` + debounced preview (uses overlay field) | A1, A2, B1 | M | **First end-user fill release** |
+| 7 | **A5** freehand Fill Brush as native `ITool` | A1, B1 | S | Drag-to-paint; proves `ITool` for real |
+| 8 | **Sandbox** interrupt+deadline+placement cap | B0 | M | Prereq for any GUI Tier-2 |
+| 9 | **A4** Tier-2 Luau fills via dialog | A3, #8 | M | Custom scriptable fills |
+| 10 | **B2** persistent VM + manifest + lifecycle + **`MapScriptApi::retarget`** + read-only `api` | B0, #8 | L | **Plugin MVP** (read-only, isolated) |
+| 11 | **B3** `editor:` register + `map.write` + permission prompt + `storage` | B2 | L | Plugins add menus/buttons + undoable mutation |
+| 12 | **B4/B5** `Gui.*` panels; `LuaTool` tools + events | B3 | L | Plugins add panels/tools |
+| 13 | **B6** reference plugin, `fs.read`, hot-reload, scaffold, `plugin_api` | B5 | M | DX + headline example |
+
+Effort: S ≈ days, M ≈ 1–2 weeks, L ≈ 3–4 weeks for one developer. The **fastest path to shipped value is rows 1–3 + 6** (area fill, end to end, default build, no plugin system at all). The plugin system is a strictly larger effort and should follow once the seam (row 5) is paid for by area fill.
+
+**Risks & open questions (decisions taken inline above):**
+
+- **`MapScriptApi::retarget` null-safety** is the single riskiest change — it touches a class shared by the generation runtime and CLI/MCP. Audit `_map == nullptr` across **every** method, keep the value ctor, land in B2 with focused tests. *Decision:* Feature A avoids it entirely by building fresh per run.
+- **Watchdog ≠ host-call preemption.** Document and accept that a heavy bound call (`mapSceneryHistogram`, large `placeStamp`, mass sprite build) can stutter the loop; bound it instead with the placement/result cap and by keeping such calls out of `preview`/event hot paths. Off-thread plugin work (pure-data `buildSprites=false` over `CommandHost`) is a *later* possibility, out of v1 scope (GL + sprite building are UI-thread-only).
+- **Preview cost on huge selections (40k hexes).** Bounded by debounce + placement cap + once-per-tweak plan; open whether to additionally clip preview to viewport-visible cells.
+- **Two scatter implementations** (C++ `FillRecipeRunner` + Lua). *Decision:* the runner is the source of truth; "Edit as Script" lowers a recipe to Lua that calls the same primitives, so the algorithm is defined once.
+- **Selection has no freeform region** (`SelectionState.h:69` is one `FloatRect` + discrete items). v1 area-fill and plugin area-fill are rect/discrete-set only; lasso/flood-fill/magic-wand is a separate future selection primitive.
+- **Autotile across the selection boundary** masks against selection membership in MVP; blending into pre-existing terrain via `getFloorXY` is a deferred advanced flag.
+- **`blob8` authoring burden** (47 entries). Support both `edges4` and `blob8`; ship `edges4` examples first.
+- **Trust beyond hand-installed plugins.** v1 deliberately ships only the install-time prompt; SHA pinning, re-prompt-on-widening, quarantine, the version triple, `.gplug`, and ed25519 signing are deferred until ABI 1 is frozen and a distribution channel exists. Gate third-party *distribution* until then.
