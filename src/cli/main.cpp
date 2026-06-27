@@ -266,6 +266,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         out.ren.fullExtent = true;
         return 1;
     }
+    if (out.render && arg == "--exit-dots") {
+        out.ren.exitDots = true;
+        return 1;
+    }
     if (out.render) {
         std::cerr << "error: unexpected argument: " << arg << "\n";
         printUsage(program);

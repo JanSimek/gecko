@@ -10,8 +10,10 @@
 #include "util/ColorUtils.h"
 #include "util/Constants.h"
 #include "util/Coordinates.h"
+#include "util/ExitGridDirection.h"
 #include "util/TileUtils.h"
 #include "viewport/ViewportController.h"
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -291,9 +293,13 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
             continue;
         }
 
-        // Exit-grid bars (cardinal AND diagonal) draw through this standard path — each real object
-        // draws its own bar, anchored on its own hex. Diagonal bands are a 2-deep row of real
-        // objects placed by the "Draw edge" tool, so no display-only restyle is needed.
+        // DIAGONAL exit-grid bars draw through renderDiagonalExitGridBars below (a display-only doubled
+        // band); skip them here so they aren't drawn twice. Cardinals + everything else draw normally —
+        // each real object draws its own bar, anchored on its own hex.
+        if (isDiagonalExitGridObject(*object)) {
+            continue;
+        }
+
         target.draw(object->getSprite());
 
         if (visibility.showLightOverlays && object->hasLight()) {
@@ -301,10 +307,73 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
         }
     }
 
+    renderDiagonalExitGridBars(target, renderData);
+
     // Wall blocker overlays render on top of regular objects
     if (visibility.showWallBlockers && renderData.wallBlockerOverlays) {
         for (const auto& overlay : *renderData.wallBlockerOverlays) {
             target.draw(overlay);
+        }
+    }
+}
+
+namespace {
+    // Per-family on-screen band thickness (px), measured from a rendered diagonal run: the composite of
+    // the overlapping per-hex bars reads ~37-38px for a "\" (exitgrd7/8, 111x60) and ~32px for a "/"
+    // (exitgrd5/6, 127x48). texture1 + texture2 are offset along the band normal by these so the two
+    // tile edge-to-edge into one ~2x-wide band.
+    constexpr float kBackslashBandThickness = 38.0f;    // "\" exitgrd7/8
+    constexpr float kForwardSlashBandThickness = 32.0f; // "/" exitgrd5/6
+
+    float diagonalBandThickness(int dir) {
+        return (dir == ExitGrid::DIR_BACK_A || dir == ExitGrid::DIR_BACK_B)
+            ? kBackslashBandThickness
+            : kForwardSlashBandThickness;
+    }
+
+    // The UNIT screen normal a diagonal band is offset along (perpendicular to its on-screen line). It
+    // is exitGridOutward(dir) normalized; a flipped object (dir ^ 1) negates exitGridOutward, so the
+    // band swings to the other side of the hex line with the hex staying on the line.
+    sf::Vector2f diagonalBandNormal(int dir) {
+        const auto [nx, ny] = exitGridOutward(dir);
+        const float len = std::sqrt(static_cast<float>(nx * nx + ny * ny));
+        if (len <= 0.0f) {
+            return { 0.0f, 0.0f };
+        }
+        return { static_cast<float>(nx) / len, static_cast<float>(ny) / len };
+    }
+
+    // Draw one diagonal marker as a doubled band: texture1 spans hex..hex+thickness (the trigger hex at
+    // its OUTER edge), texture2 abuts texture1's inner edge (hex+thickness..hex+2*thickness). Both are
+    // offset along the SIGNED band normal, so the whole band lies on one side of the hex line and a flip
+    // mirrors it across. The base sprite straddles the hex, so the outer texture is centred at
+    // +thickness/2 and the inner at +1.5*thickness along the normal.
+    void drawDoubledDiagonalBar(sf::RenderTarget& target, const Object& object) {
+        const int dir = object.exitGridDirection();
+        const sf::Vector2f normal = diagonalBandNormal(dir);
+        const float thickness = diagonalBandThickness(dir);
+
+        const auto drawBar = [&](float along) {
+            sf::Sprite sprite = object.getSprite();
+            sprite.move(normal * along);
+            target.draw(sprite);
+        };
+        drawBar(thickness * 0.5f); // texture1: hex at the band's outer edge
+        drawBar(thickness * 1.5f); // texture2: abuts texture1's inner edge, seamless
+    }
+} // namespace
+
+bool RenderingEngine::isDiagonalExitGridObject(const Object& object) {
+    return isDiagonalExitGridDir(object.exitGridDirection());
+}
+
+void RenderingEngine::renderDiagonalExitGridBars(sf::RenderTarget& target, const RenderData& renderData) {
+    if (!renderData.objects) {
+        return;
+    }
+    for (const auto& object : *renderData.objects) {
+        if (object && isDiagonalExitGridObject(*object)) {
+            drawDoubledDiagonalBar(target, *object);
         }
     }
 }

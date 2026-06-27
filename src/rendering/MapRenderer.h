@@ -56,6 +56,10 @@ public:
         /// cropping to drawn content. Lets sparse/empty maps still show the entire grid. Off by default
         /// so the usual view stays tight around the content.
         bool fullExtent = false;
+        /// Natural style only: overlay a small magenta dot on each exit-grid marker's TRIGGER hex (its
+        /// saved hex position, not the slid bar). A verification aid for the diagonal-band widening —
+        /// it shows the hex sits on the band's outer edge. Off by default (the clean artwork view).
+        bool exitDots = false;
         sf::Color background{ 0, 0, 0, 255 };
     };
 

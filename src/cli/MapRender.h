@@ -32,6 +32,8 @@ namespace cli {
         /// Frame to the full map screen extent (the whole iso playable grid) instead of cropping to
         /// content, so sparse/empty maps still show the entire grid; off by default.
         bool fullExtent = false;
+        /// Natural style only: overlay a dot on each exit-grid marker's trigger hex (verification aid).
+        bool exitDots = false;
     };
 
     /// Render a map to an image file (format inferred from the extension, e.g. .png). Returns 0 on

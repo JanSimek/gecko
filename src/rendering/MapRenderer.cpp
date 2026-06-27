@@ -395,6 +395,33 @@ namespace {
             fillSemanticLegend(*legend, roles, scriptedCount);
         }
     }
+
+    // Overlay a small magenta dot on each exit-grid marker's TRIGGER hex (its saved hex position), so a
+    // natural render of the diagonal band shows the hex sitting on the band's outer edge.
+    void drawExitGridTriggerDots(sf::RenderTarget& target,
+        const std::vector<std::shared_ptr<Object>>& objects, const HexagonGrid& hexgrid) {
+        for (const auto& object : objects) {
+            if (!object || !object->hasMapObject()) {
+                continue;
+            }
+            const auto mo = object->getMapObjectPtr();
+            if (!mo->isExitGridMarker()) {
+                continue;
+            }
+            const auto h = hexgrid.getHexByPosition(static_cast<uint32_t>(mo->position));
+            if (!h.has_value()) {
+                continue;
+            }
+            constexpr float radius = 3.0f;
+            sf::CircleShape dot(radius);
+            dot.setOrigin({ radius, radius });
+            dot.setPosition({ static_cast<float>(h->get().x()), static_cast<float>(h->get().y()) });
+            dot.setFillColor(sf::Color(255, 0, 255));
+            dot.setOutlineColor(sf::Color(20, 20, 20, 220));
+            dot.setOutlineThickness(1.0f);
+            target.draw(dot);
+        }
+    }
 } // namespace
 
 MapRenderer::MapRenderer(resource::GameResources& resources)
@@ -467,6 +494,9 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
     visibility.showExitGrids = false;
 
     engine.render(*target, target->getView(), data, visibility);
+    if (options.exitDots) {
+        drawExitGridTriggerDots(*target, objects, hexgrid);
+    }
     target->display();
     return target->getTexture().copyToImage();
 }
