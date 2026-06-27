@@ -492,6 +492,22 @@ std::vector<std::shared_ptr<Object>> ExitGridPlacementManager::collectExitGridsO
     return result;
 }
 
+std::vector<int> ExitGridPlacementManager::freshHexesForLine(const std::vector<int>& lineHexes,
+    const std::set<int>& occupied) {
+    // The line hexes that don't already have an exit grid -- the ones a stroke should CREATE on.
+    // Empty when every hex is already occupied (the caller bulk-edits the existing edge) or the line
+    // is empty. Pure + static so the partial-overlap placement decision is unit-testable without a
+    // dialog/context.
+    std::vector<int> fresh;
+    fresh.reserve(lineHexes.size());
+    for (const int hex : lineHexes) {
+        if (!occupied.contains(hex)) {
+            fresh.push_back(hex);
+        }
+    }
+    return fresh;
+}
+
 void ExitGridPlacementManager::selectExitGridsAlongLine(const std::vector<sf::Vector2f>& worldVertices,
     bool flipSide) {
     if (!_markExitsMode || worldVertices.size() < 2) {
@@ -505,16 +521,28 @@ void ExitGridPlacementManager::selectExitGridsAlongLine(const std::vector<sf::Ve
     _context.clearSelection();
 
     const std::vector<int> lineHexes = collectHexesAlongLine(worldVertices);
+    const auto existing = collectExitGridsOnHexes(lineHexes);
 
-    // Existing exit grids on the line -> bulk-edit their destination (keeping each one's directional
-    // art); otherwise create one per line hex, all sharing the single whole-stroke side (flip-aware).
-    // The selection was already cleared above, so the bulk-edit branch doesn't clear again.
-    if (const auto existing = collectExitGridsOnHexes(lineHexes); !existing.empty()) {
+    // The hexes already occupied by an exit grid.
+    std::set<int> occupied;
+    for (const auto& object : existing) {
+        if (const auto mapObject = object ? object->getMapObjectPtr() : nullptr) {
+            occupied.insert(static_cast<int>(mapObject->position));
+        }
+    }
+
+    // Only treat the stroke as an EDIT when EVERY hex already has an exit grid (the user is re-editing
+    // an existing edge): bulk-edit their destination, keeping each one's directional art. A stroke that
+    // merely grazes a neighbouring grid must still place -- otherwise a single overlapping hex silently
+    // swallows the whole placement (the intermittent "press Enter + OK but nothing appears" bug).
+    const std::vector<int> freshHexes = freshHexesForLine(lineHexes, occupied);
+    if (freshHexes.empty() && !lineHexes.empty()) {
         bulkEditExistingExitGrids(existing);
         return;
     }
 
-    createExitGridsForHexes(lineHexes, flipSide);
+    // Create on the hexes that don't already have a grid, all sharing the single whole-stroke side.
+    createExitGridsForHexes(freshHexes, flipSide);
 }
 
 } // namespace geck

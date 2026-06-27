@@ -50,6 +50,7 @@
 #include "ui/Settings.h"
 #include "ui/panels/MapInfoPanel.h"
 #include "ui/panels/ScriptsPanel.h"
+#include "ui/tools/ExitGridPlacementManager.h"
 #include "format/map/Map.h"
 #include "format/map/MapScript.h"
 #include <QAbstractButton>
@@ -1383,4 +1384,26 @@ TEST_CASE("MapInfoPanel removes the last map global variable after confirmation"
     const std::string out = geck::io::readFile(savedGam);
     CHECK(out.find("MVAR_first := 10;") != std::string::npos);
     CHECK(out.find("MVAR_last") == std::string::npos);
+}
+
+// Regression: a Draw-edge stroke that only PARTIALLY overlaps existing exit grids must still place new
+// ones on the empty hexes. Previously any single overlapping hex sent the whole stroke to the bulk-edit
+// branch, so the placement silently vanished ("press Enter + OK but nothing appears"). freshHexesForLine
+// is the pure decision: the line hexes minus the occupied ones.
+TEST_CASE("Exit-grid stroke creates on the non-overlapping hexes (partial overlap doesn't swallow it)",
+    "[exitgrid][placement]") {
+    using geck::ExitGridPlacementManager;
+
+    // No overlap -> every hex is fresh.
+    CHECK(ExitGridPlacementManager::freshHexesForLine({ 1, 2, 3 }, {}) == std::vector<int>{ 1, 2, 3 });
+
+    // Partial overlap -> only the empty hexes are returned (the stroke still places on those).
+    CHECK(ExitGridPlacementManager::freshHexesForLine({ 1, 2, 3, 4 }, { 2, 3 })
+        == std::vector<int>{ 1, 4 });
+
+    // Whole stroke already occupied -> empty, so the caller bulk-edits the existing edge instead.
+    CHECK(ExitGridPlacementManager::freshHexesForLine({ 5, 6 }, { 5, 6 }).empty());
+
+    // Empty line -> empty.
+    CHECK(ExitGridPlacementManager::freshHexesForLine({}, { 1 }).empty());
 }

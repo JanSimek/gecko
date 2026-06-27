@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -84,6 +85,12 @@ public:
     // (the live "flip" key); ignored when an explicit override is active.
     [[nodiscard]] std::vector<uint32_t> previewFrmPidsForLine(const std::vector<int>& orderedHexes,
         bool flipSide = false) const;
+
+    /// The line hexes that don't already have an exit grid -- the ones a stroke CREATES on (empty when
+    /// the whole stroke is already grids, so the caller bulk-edits an existing edge). Pure + static so
+    /// the partial-overlap placement decision is unit-testable without a dialog/context.
+    [[nodiscard]] static std::vector<int> freshHexesForLine(const std::vector<int>& lineHexes,
+        const std::set<int>& occupied);
 
 private:
     // Create exit grid MISC object with the given directional art (proPid/frmPid, chosen per hex by
