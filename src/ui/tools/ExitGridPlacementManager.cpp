@@ -1,20 +1,21 @@
 #include "ExitGridPlacementManager.h"
 #include "ExitGridContext.h"
-#include "ui/widgets/SFMLWidget.h"
 #include "viewport/ViewportController.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "util/Coordinates.h"
 #include "util/Constants.h"
-#include "util/TileUtils.h"
+#include "util/ExitGridDirection.h"
+#include "util/HexLine.h"
 #include "editor/HexagonGrid.h"
 #include "selection/SelectionManager.h"
 #include "selection/SelectionState.h"
 #include "resource/MapNameResolver.h"
 
-#include <QApplication>
-#include <QMessageBox>
+#include <set>
 #include <spdlog/spdlog.h>
+#include <utility>
+#include <vector>
 
 namespace geck {
 
@@ -60,13 +61,13 @@ void ExitGridPlacementManager::placeExitGridAtPosition(sf::Vector2f worldPos) {
     if (!showPropertiesDialog(properties)) {
         return; // User cancelled
     }
+    rememberDestinationKind(properties.exitMap);
+    _currentMarkerArt = properties.markerArt;
 
-    auto exitGridObject = createExitGridObject(hexPosition, properties);
-    if (!exitGridObject) {
-        QMessageBox::critical(_context.getDialogParent(), "Error", "Failed to create exit grid object.");
-        return;
-    }
-
+    // A single hex has no stroke: the art is the center-facing classification (or the explicit
+    // override). No flip on a click-placed lone marker.
+    const ExitGridArt art = artForLine({ hexPosition }, properties.markerArt, /*flipSide=*/false);
+    auto exitGridObject = createExitGridObject(hexPosition, art.proPid, art.frmPid, properties);
     int currentElevation = _context.getCurrentElevation();
 
     // Registers the undo action and adds to map; redo runs immediately
@@ -100,20 +101,12 @@ void ExitGridPlacementManager::editExitGridProperties(std::shared_ptr<MapObject>
         return; // User cancelled
     }
 
+    // Destination-only edit: update the exit_* fields, keep the directional art (pro_pid/frm_pid).
+    // Overwriting the art would collapse every edited marker to one fixed direction.
     exitGrid->exit_map = newProperties.exitMap;
     exitGrid->exit_position = newProperties.exitPosition;
     exitGrid->exit_elevation = newProperties.exitElevation;
     exitGrid->exit_orientation = newProperties.exitOrientation;
-
-    // PIDs depend on exit type (world/town map vs specific map)
-    bool isWorldmapExit = (newProperties.exitMap == ExitGrid::WORLD_MAP_EXIT || newProperties.exitMap == ExitGrid::TOWN_MAP_EXIT);
-    if (isWorldmapExit) {
-        exitGrid->pro_pid = ExitGrid::WORLD_EXIT_PRO_PID;
-        exitGrid->frm_pid = ExitGrid::WORLD_EXIT_FRM_PID;
-    } else {
-        exitGrid->pro_pid = ExitGrid::MAP_EXIT_PRO_PID;
-        exitGrid->frm_pid = ExitGrid::MAP_EXIT_FRM_PID;
-    }
 
     // Capture after state for undo
     ExitGridContext::ExitGridState afterState;
@@ -134,7 +127,8 @@ void ExitGridPlacementManager::editExitGridProperties(std::shared_ptr<MapObject>
         newProperties.exitMap, exitGrid->frm_pid);
 }
 
-std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int hexPosition, const ExitGridPropertiesDialog::ExitGridProperties& properties) {
+std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int hexPosition,
+    uint32_t proPid, uint32_t frmPid, const ExitGridPropertiesDialog::ExitGridProperties& properties) {
     auto exitGrid = std::make_shared<MapObject>();
 
     exitGrid->unknown0 = 0;
@@ -146,17 +140,9 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
     exitGrid->frame_number = 0;
     exitGrid->direction = 0;
 
-    // Set exit grid PIDs based on exit type
-    // World/town map exit: Uses WORLD_EXIT_PRO_PID/WORLD_EXIT_FRM_PID
-    // Map exit: Uses MAP_EXIT_PRO_PID/MAP_EXIT_FRM_PID
-    bool isWorldmapExit = (properties.exitMap == ExitGrid::WORLD_MAP_EXIT || properties.exitMap == ExitGrid::TOWN_MAP_EXIT);
-    if (isWorldmapExit) {
-        exitGrid->pro_pid = ExitGrid::WORLD_EXIT_PRO_PID;
-        exitGrid->frm_pid = ExitGrid::WORLD_EXIT_FRM_PID;
-    } else {
-        exitGrid->pro_pid = ExitGrid::MAP_EXIT_PRO_PID;
-        exitGrid->frm_pid = ExitGrid::MAP_EXIT_FRM_PID;
-    }
+    // Direction-specific art, chosen per hex by the caller — independent of the destination (exit_*).
+    exitGrid->pro_pid = proPid;
+    exitGrid->frm_pid = frmPid;
     exitGrid->flags = 0;
     exitGrid->elevation = _context.getCurrentElevation();
 
@@ -202,6 +188,210 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
     return exitGrid;
 }
 
+namespace {
+    using MarkerArt = ExitGridPropertiesDialog::ExitGridProperties::MarkerArt;
+
+    // The explicit MarkerArt values map 1:1 onto ExitGrid::Direction (0..7); Auto has none, so it
+    // returns -1 ("no explicit direction").
+    int explicitDirection(MarkerArt markerArt) {
+        using enum MarkerArt;
+        switch (markerArt) {
+            case Left:
+                return ExitGrid::DIR_LEFT;
+            case Right:
+                return ExitGrid::DIR_RIGHT;
+            case Bottom:
+                return ExitGrid::DIR_BOTTOM;
+            case Top:
+                return ExitGrid::DIR_TOP;
+            case ForwardA:
+                return ExitGrid::DIR_FWD_A;
+            case ForwardB:
+                return ExitGrid::DIR_FWD_B;
+            case BackA:
+                return ExitGrid::DIR_BACK_A;
+            case BackB:
+                return ExitGrid::DIR_BACK_B;
+            case Auto:
+                break;
+        }
+        return -1;
+    }
+} // namespace
+
+ExitGridDestinationKind ExitGridPlacementManager::destinationKind() const {
+    return _currentDestinationKind == DestinationKind::WorldMap
+        ? ExitGridDestinationKind::WorldMap
+        : ExitGridDestinationKind::InterMap;
+}
+
+ExitGridArt ExitGridPlacementManager::autoArtForLine(const std::vector<int>& orderedHexes,
+    bool flipSide) const {
+    const auto* hexGrid = _context.getHexagonGrid();
+    const ExitGridDestinationKind kind = destinationKind();
+    // Off-grid / empty fallback: a deterministic bottom-edge marker in the right family.
+    if (!hexGrid || orderedHexes.empty()) {
+        return exitGridArtForDirection(ExitGrid::DIR_BOTTOM, kind);
+    }
+    const auto screenOf = [hexGrid](int hexIndex) -> std::pair<int, int> {
+        const auto h = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+        return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() }
+                             : std::pair<int, int>{ 0, 0 };
+    };
+    const auto [centerX, centerY] = hexGridCenterScreen(*hexGrid);
+
+    // A lone hex has no axis: classify by its outward facing.
+    if (orderedHexes.size() < 2) {
+        const auto [hx, hy] = screenOf(orderedHexes.front());
+        const ExitGridArt art = exitGridArtForFacing(hx, hy, centerX, centerY, kind);
+        // Honour a flip even for a lone hex so preview/commit stay consistent.
+        if (flipSide) {
+            return exitGridArtForDirection(
+                flipExitGridDirection(static_cast<int>(art.proPid - ExitGrid::FIRST_EXIT_GRID_PID)),
+                kind);
+        }
+        return art;
+    }
+
+    // Whole-stroke classification: first->last delta picks the axis, the midpoint's outward facing picks
+    // the side, ONCE — so every hex shares one side (a clean continuous bar) instead of flipping mid-run.
+    const auto [fx, fy] = screenOf(orderedHexes.front());
+    const auto [lx, ly] = screenOf(orderedHexes.back());
+    const auto [mx, my] = screenOf(orderedHexes[orderedHexes.size() / 2]);
+    const int dir = exitGridDirectionForLine(lx - fx, ly - fy, mx - centerX, my - centerY, flipSide);
+    return exitGridArtForDirection(dir, kind);
+}
+
+ExitGridArt ExitGridPlacementManager::artForLine(const std::vector<int>& orderedHexes,
+    MarkerArt markerArt, bool flipSide) const {
+    // An explicit override forces one art for every hex; Auto uses the whole-stroke side. The flip only
+    // affects Auto (an explicit direction is already a fixed side).
+    if (const int dir = explicitDirection(markerArt); dir >= 0) {
+        return exitGridArtForDirection(dir, destinationKind());
+    }
+    return autoArtForLine(orderedHexes, flipSide);
+}
+
+std::optional<ExitGridSegmentRun> ExitGridPlacementManager::buildSegmentRun(
+    sf::Vector2f from, sf::Vector2f to) const {
+    const auto* hexGrid = _context.getHexagonGrid();
+    const auto* viewport = _context.getViewportController();
+    if (!hexGrid || !viewport) {
+        return std::nullopt;
+    }
+    const auto hexOf = [viewport](const sf::Vector2f& v) -> int {
+        const auto opt = viewport->worldPosToHexPosition(WorldCoords(v.x, v.y));
+        return (opt.has_value() && opt->isValid()) ? opt->value() : -1;
+    };
+    const int aHex = hexOf(from);
+    const int bHex = hexOf(to);
+    if (aHex < 0 || bHex < 0) {
+        return std::nullopt;
+    }
+    std::vector<int> segHexes = hexline::hexLine(*hexGrid, aHex, bHex);
+    if (segHexes.empty()) {
+        return std::nullopt;
+    }
+    const auto screenOf = [hexGrid](int hexIndex) -> std::pair<int, int> {
+        const auto h = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+        return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() }
+                             : std::pair<int, int>{ 0, 0 };
+    };
+    const auto [centerX, centerY] = hexGridCenterScreen(*hexGrid);
+    const auto [fx, fy] = screenOf(segHexes.front());
+    const auto [lx, ly] = screenOf(segHexes.back());
+    const auto [mx, my] = screenOf(segHexes[segHexes.size() / 2]);
+    ExitGridSegmentRun run;
+    run.hexes = std::move(segHexes);
+    run.screenDx = lx - fx;
+    run.screenDy = ly - fy;
+    run.outwardX = mx - centerX;
+    run.outwardY = my - centerY;
+    return run;
+}
+
+ExitGridArt ExitGridPlacementManager::segmentArt(const ExitGridSegmentRun& run, bool flipSide) const {
+    const ExitGridDestinationKind kind = destinationKind();
+    // An explicit override forces ONE direction; Auto classifies from the segment's own screen axis +
+    // outward side (optionally flipped).
+    if (const int forced = explicitDirection(_currentMarkerArt); forced >= 0) {
+        return exitGridArtForDirection(forced, kind);
+    }
+    const int dir = exitGridDirectionForLine(run.screenDx, run.screenDy,
+        run.outwardX, run.outwardY, flipSide);
+    return exitGridArtForDirection(dir, kind);
+}
+
+ExitGridPlacementManager::CommittedSegment ExitGridPlacementManager::classifySegment(
+    sf::Vector2f from, sf::Vector2f to, bool flipSide) const {
+    CommittedSegment seg;
+    const std::optional<ExitGridSegmentRun> run = buildSegmentRun(from, to);
+    if (!run.has_value()) {
+        return seg; // degenerate/off-grid: nothing to freeze
+    }
+    // One uniform art for the whole segment, frozen at the given flip. A diagonal segment places ONE
+    // object per drawn hex, exactly like a cardinal segment, so the diagonal run stays continuous with
+    // any adjoining horizontal/vertical run at the bend.
+    const ExitGridArt art = segmentArt(*run, flipSide);
+    seg.hexes = run->hexes;
+    seg.art.assign(seg.hexes.size(), art);
+    return seg;
+}
+
+void ExitGridPlacementManager::flattenSegments(const std::vector<CommittedSegment>& committed,
+    const CommittedSegment& live, std::vector<int>& outHexes, std::vector<ExitGridArt>& outArt) {
+    outHexes.clear();
+    outArt.clear();
+    std::set<int> seen;
+    // Committed segments first (in commit order), then the live one; first-seen wins, so committed hexes
+    // never change as the live segment moves.
+    const auto append = [&](const CommittedSegment& seg) {
+        for (std::size_t i = 0; i < seg.hexes.size(); ++i) {
+            if (seen.insert(seg.hexes[i]).second) {
+                outHexes.push_back(seg.hexes[i]);
+                outArt.push_back(seg.art[i]);
+            }
+        }
+    };
+    for (const CommittedSegment& seg : committed) {
+        append(seg);
+    }
+    append(live);
+}
+
+void ExitGridPlacementManager::beginLine() {
+    _committedSegments.clear();
+}
+
+void ExitGridPlacementManager::commitSegment(sf::Vector2f from, sf::Vector2f to, bool flipSide) {
+    // Freeze the just-closed segment at this click's flip. Drop a degenerate/off-grid capture so it
+    // leaves no empty placeholder.
+    CommittedSegment seg = classifySegment(from, to, flipSide);
+    if (!seg.hexes.empty()) {
+        _committedSegments.push_back(std::move(seg));
+    }
+}
+
+void ExitGridPlacementManager::resetLine() {
+    _committedSegments.clear();
+}
+
+ExitGridPlacementManager::LinePreview ExitGridPlacementManager::previewForLine(
+    sf::Vector2f liveFrom, sf::Vector2f liveTo, bool hasLive, bool flipSide) const {
+    // The FROZEN committed segments plus the ONE live segment, classified now at the current flip.
+    // Committed art stays frozen; only the live segment changes as the cursor moves or Space flips.
+    LinePreview preview;
+    const CommittedSegment live = hasLive ? classifySegment(liveFrom, liveTo, flipSide)
+                                          : CommittedSegment{};
+    std::vector<ExitGridArt> art;
+    flattenSegments(_committedSegments, live, preview.hexes, art);
+    preview.frmPids.reserve(art.size());
+    for (const ExitGridArt& a : art) {
+        preview.frmPids.push_back(a.frmPid);
+    }
+    return preview;
+}
+
 bool ExitGridPlacementManager::showPropertiesDialog(ExitGridPropertiesDialog::ExitGridProperties& properties, const ExitGridPropertiesDialog::ExitGridProperties* existing) {
     // maps.txt is small; build the resolver per dialog so it reflects the currently-mounted data.
     const resource::MapNameResolver mapNames(_resources);
@@ -232,7 +422,7 @@ void ExitGridPlacementManager::resetState() {
 }
 
 bool ExitGridPlacementManager::editSelectedExitGrids() {
-    auto* selectionManager = _context.getSelectionManager();
+    const auto* selectionManager = _context.getSelectionManager();
     if (!selectionManager) {
         return false;
     }
@@ -250,7 +440,7 @@ bool ExitGridPlacementManager::editSelectedExitGrids() {
                 continue;
             }
 
-            auto& mapObject = selectedObject->getMapObject();
+            const auto& mapObject = selectedObject->getMapObject();
 
             if (mapObject.isExitGridMarker()) {
                 auto mapObjectPtr = selectedObject->getMapObjectPtr();
@@ -265,225 +455,184 @@ bool ExitGridPlacementManager::editSelectedExitGrids() {
     return false;
 }
 
-void ExitGridPlacementManager::handleMarkExitsSelection(sf::Vector2f worldPos) {
-    if (!_markExitsMode) {
-        return;
-    }
-
-    auto objects = _context.getObjectsAtPosition(worldPos);
-    std::vector<std::shared_ptr<Object>> exitGrids;
-
-    for (auto& object : objects) {
-        if (object && object->getMapObjectPtr() && object->getMapObjectPtr()->isExitGridMarker()) {
-            exitGrids.push_back(object);
-        }
-    }
-
-    if (!exitGrids.empty()) {
-
-        auto* selectionManager = _context.getSelectionManager();
-        if (selectionManager) {
-            selectionManager->clearSelection();
-        }
-
-        _context.clearSelection();
-
-        // Highlight the selected exit grids BEFORE opening the dialog
-        for (auto& exitGrid : exitGrids) {
-            exitGrid->getSprite().setColor(geck::TileColors::exitGridHighlight());
-        }
-
-        // Force an immediate SFML render so the highlight shows before the dialog opens
-        if (auto* sfmlWidget = _context.getSFMLWidget()) {
-            sfmlWidget->updateAndRender();
-        }
-        QApplication::processEvents();
-
-        auto firstExitGrid = exitGrids[0];
-        auto mapObjectPtr = firstExitGrid->getMapObjectPtr();
-        if (mapObjectPtr) {
-            editExitGridProperties(mapObjectPtr);
-
-            // After the dialog closes, clear the highlighting.
-            // refreshObjects() may have recreated objects, so look them up again.
-            auto objectsAfterRefresh = _context.getObjectsAtPosition(worldPos);
-            for (auto& object : objectsAfterRefresh) {
-                if (object && object->getMapObjectPtr() && object->getMapObjectPtr()->isExitGridMarker()) {
-                    object->getSprite().setColor(geck::TileColors::white());
-                }
-            }
-
-            if (selectionManager) {
-                selectionManager->clearSelection();
-            }
-            _context.clearSelection();
-        }
-    } else {
-        auto* selectionManager = _context.getSelectionManager();
-        if (selectionManager) {
-            selectionManager->clearSelection();
-        }
-
-        _showStatus("No exit grids found at this position");
-    }
+void ExitGridPlacementManager::rememberDestinationKind(uint32_t exitMap) {
+    const bool isWorldmapExit = (exitMap == ExitGrid::WORLD_MAP_EXIT || exitMap == ExitGrid::TOWN_MAP_EXIT);
+    _currentDestinationKind = isWorldmapExit ? DestinationKind::WorldMap : DestinationKind::InterMap;
 }
 
-void ExitGridPlacementManager::selectExitGridsInArea(sf::Vector2f startPos, sf::Vector2f endPos) {
-    if (!_markExitsMode) {
+bool ExitGridPlacementManager::bulkEditExistingExitGrids(const std::vector<std::shared_ptr<Object>>& exitGrids) {
+    auto firstMapObject = exitGrids.empty() ? nullptr : exitGrids.front()->getMapObjectPtr();
+    if (!firstMapObject) {
+        return false;
+    }
+
+    ExitGridPropertiesDialog::ExitGridProperties currentProperties;
+    currentProperties.exitMap = firstMapObject->exit_map;
+    currentProperties.exitPosition = firstMapObject->exit_position;
+    currentProperties.exitElevation = firstMapObject->exit_elevation;
+    currentProperties.exitOrientation = firstMapObject->exit_orientation;
+
+    ExitGridPropertiesDialog::ExitGridProperties newProperties;
+    if (!showPropertiesDialog(newProperties, &currentProperties)) {
+        return false; // User cancelled
+    }
+    rememberDestinationKind(newProperties.exitMap);
+
+    // Capture before states for undo
+    std::vector<std::shared_ptr<MapObject>> mapObjects;
+    std::vector<ExitGridContext::ExitGridState> beforeStates;
+    for (const auto& exitGridObject : exitGrids) {
+        auto mapObjectPtr = exitGridObject->getMapObjectPtr();
+        if (!mapObjectPtr) {
+            continue;
+        }
+        mapObjects.push_back(mapObjectPtr);
+        ExitGridContext::ExitGridState beforeState;
+        beforeState.exitMap = mapObjectPtr->exit_map;
+        beforeState.exitPosition = mapObjectPtr->exit_position;
+        beforeState.exitElevation = mapObjectPtr->exit_elevation;
+        beforeState.exitOrientation = mapObjectPtr->exit_orientation;
+        beforeState.frmPid = mapObjectPtr->frm_pid;
+        beforeState.proPid = mapObjectPtr->pro_pid;
+        beforeStates.push_back(beforeState);
+    }
+
+    // Destination-only bulk edit: update the exit_* fields, keep each marker's directional art — they
+    // were placed along a line with per-segment art, so we must not collapse them to one direction.
+    std::vector<ExitGridContext::ExitGridState> afterStates;
+    for (const auto& mapObjectPtr : mapObjects) {
+        mapObjectPtr->exit_map = newProperties.exitMap;
+        mapObjectPtr->exit_position = newProperties.exitPosition;
+        mapObjectPtr->exit_elevation = newProperties.exitElevation;
+        mapObjectPtr->exit_orientation = newProperties.exitOrientation;
+
+        ExitGridContext::ExitGridState afterState;
+        afterState.exitMap = mapObjectPtr->exit_map;
+        afterState.exitPosition = mapObjectPtr->exit_position;
+        afterState.exitElevation = mapObjectPtr->exit_elevation;
+        afterState.exitOrientation = mapObjectPtr->exit_orientation;
+        afterState.frmPid = mapObjectPtr->frm_pid;
+        afterState.proPid = mapObjectPtr->pro_pid;
+        afterStates.push_back(afterState);
+    }
+
+    _context.registerExitGridEdit(mapObjects, beforeStates, afterStates);
+
+    spdlog::info("Updated destination of {} exit grids: map={}", mapObjects.size(), newProperties.exitMap);
+
+    _context.refreshObjects();
+    return true;
+}
+
+std::size_t ExitGridPlacementManager::createExitGridsForLine(const std::vector<int>& hexes,
+    const std::vector<ExitGridArt>& art, const std::set<int>& freshHexes) {
+    if (freshHexes.empty()) {
+        _showStatus("No hexes found along the edge line");
+        return 0;
+    }
+
+    ExitGridPropertiesDialog::ExitGridProperties newProperties;
+    if (!showPropertiesDialog(newProperties)) {
+        return 0; // User cancelled
+    }
+    rememberDestinationKind(newProperties.exitMap);
+    _currentMarkerArt = newProperties.markerArt;
+
+    // `hexes`/`art` are the frozen per-segment classification (parallel), matching the preview. Create
+    // only on the FRESH hexes, each with its segment's frozen art.
+    int currentElevation = _context.getCurrentElevation();
+    std::vector<std::shared_ptr<MapObject>> createdExitGrids;
+    for (std::size_t i = 0; i < hexes.size(); ++i) {
+        if (!freshHexes.contains(hexes[i])) {
+            continue; // already occupied: don't double-place
+        }
+        createdExitGrids.push_back(
+            createExitGridObject(hexes[i], art[i].proPid, art[i].frmPid, newProperties));
+    }
+
+    if (createdExitGrids.empty()) {
+        return 0;
+    }
+
+    // Registers the undo action and adds to map; redo runs immediately
+    _context.registerExitGridCreation(createdExitGrids, currentElevation);
+
+    spdlog::info("Created {} exit grids along the edge (elevation {})",
+        createdExitGrids.size(), currentElevation);
+    _showStatus(QString("Created %1 exit grids along the edge").arg(createdExitGrids.size()));
+    return createdExitGrids.size();
+}
+
+std::vector<std::shared_ptr<Object>> ExitGridPlacementManager::collectExitGridsOnHexes(
+    const std::vector<int>& hexPositions) const {
+    std::vector<std::shared_ptr<Object>> result;
+    if (hexPositions.empty()) {
+        return result;
+    }
+    const std::set<int> wanted(hexPositions.begin(), hexPositions.end());
+    for (const auto& object : _context.getObjects()) {
+        auto mapObjectPtr = object ? object->getMapObjectPtr() : nullptr;
+        if (!mapObjectPtr || !mapObjectPtr->isExitGridMarker()) {
+            continue;
+        }
+        if (wanted.contains(static_cast<int>(mapObjectPtr->position))) {
+            result.push_back(object);
+        }
+    }
+    return result;
+}
+
+std::vector<int> ExitGridPlacementManager::freshHexesForLine(const std::vector<int>& lineHexes,
+    const std::set<int>& occupied) {
+    std::vector<int> fresh;
+    fresh.reserve(lineHexes.size());
+    for (const int hex : lineHexes) {
+        if (!occupied.contains(hex)) {
+            fresh.push_back(hex);
+        }
+    }
+    return fresh;
+}
+
+void ExitGridPlacementManager::selectExitGridsAlongLine() {
+    if (!_markExitsMode || _committedSegments.empty()) {
         return;
     }
 
-    sf::FloatRect selectionArea;
-    selectionArea.position.x = std::min(startPos.x, endPos.x);
-    selectionArea.position.y = std::min(startPos.y, endPos.y);
-    selectionArea.size.x = std::abs(endPos.x - startPos.x);
-    selectionArea.size.y = std::abs(endPos.y - startPos.y);
+    auto* selectionManager = _context.getSelectionManager();
+    if (selectionManager) {
+        selectionManager->clearSelection();
+    }
+    _context.clearSelection();
 
-    std::vector<std::shared_ptr<Object>> exitGridsInArea;
-    const auto& objects = _context.getObjects();
+    // The placement is exactly the FROZEN committed segments (no live segment exists at finalize), so
+    // the placed edge is pixel-identical to the last preview.
+    std::vector<int> lineHexes;
+    std::vector<ExitGridArt> art;
+    flattenSegments(_committedSegments, CommittedSegment{}, lineHexes, art);
 
-    for (auto& object : objects) {
-        if (!object || !object->getMapObjectPtr() || !object->getMapObjectPtr()->isExitGridMarker()) {
-            continue;
-        }
+    const auto existing = collectExitGridsOnHexes(lineHexes);
 
-        const auto& sprite = object->getSprite();
-        auto objectBounds = sprite.getGlobalBounds();
-
-        auto intersection = selectionArea.findIntersection(objectBounds);
-        if (intersection.has_value()) {
-            exitGridsInArea.push_back(object);
+    // The hexes already occupied by an exit grid.
+    std::set<int> occupied;
+    for (const auto& object : existing) {
+        if (const auto mapObject = object ? object->getMapObjectPtr() : nullptr) {
+            occupied.insert(static_cast<int>(mapObject->position));
         }
     }
 
-    if (!exitGridsInArea.empty()) {
-
-        auto* selectionManager = _context.getSelectionManager();
-        if (selectionManager) {
-            selectionManager->clearSelection();
-        }
-
-        _context.clearSelection();
-
-        ExitGridPropertiesDialog::ExitGridProperties newProperties;
-
-        // Use the first exit grid's properties as dialog defaults
-        auto firstMapObject = exitGridsInArea[0]->getMapObjectPtr();
-        if (firstMapObject) {
-            ExitGridPropertiesDialog::ExitGridProperties currentProperties;
-            currentProperties.exitMap = firstMapObject->exit_map;
-            currentProperties.exitPosition = firstMapObject->exit_position;
-            currentProperties.exitElevation = firstMapObject->exit_elevation;
-            currentProperties.exitOrientation = firstMapObject->exit_orientation;
-
-            if (showPropertiesDialog(newProperties, &currentProperties)) {
-                // Capture before states for undo
-                std::vector<std::shared_ptr<MapObject>> mapObjects;
-                std::vector<ExitGridContext::ExitGridState> beforeStates;
-                for (auto& exitGridObject : exitGridsInArea) {
-                    auto mapObjectPtr = exitGridObject->getMapObjectPtr();
-                    if (mapObjectPtr) {
-                        mapObjects.push_back(mapObjectPtr);
-                        ExitGridContext::ExitGridState beforeState;
-                        beforeState.exitMap = mapObjectPtr->exit_map;
-                        beforeState.exitPosition = mapObjectPtr->exit_position;
-                        beforeState.exitElevation = mapObjectPtr->exit_elevation;
-                        beforeState.exitOrientation = mapObjectPtr->exit_orientation;
-                        beforeState.frmPid = mapObjectPtr->frm_pid;
-                        beforeState.proPid = mapObjectPtr->pro_pid;
-                        beforeStates.push_back(beforeState);
-                    }
-                }
-
-                // PIDs depend on exit type (world/town map vs specific map)
-                bool isWorldmapExit = (newProperties.exitMap == ExitGrid::WORLD_MAP_EXIT || newProperties.exitMap == ExitGrid::TOWN_MAP_EXIT);
-                uint32_t newProPid = isWorldmapExit ? ExitGrid::WORLD_EXIT_PRO_PID : ExitGrid::MAP_EXIT_PRO_PID;
-                uint32_t newFrmPid = isWorldmapExit ? ExitGrid::WORLD_EXIT_FRM_PID : ExitGrid::MAP_EXIT_FRM_PID;
-
-                std::vector<ExitGridContext::ExitGridState> afterStates;
-                for (auto& mapObjectPtr : mapObjects) {
-                    mapObjectPtr->exit_map = newProperties.exitMap;
-                    mapObjectPtr->exit_position = newProperties.exitPosition;
-                    mapObjectPtr->exit_elevation = newProperties.exitElevation;
-                    mapObjectPtr->exit_orientation = newProperties.exitOrientation;
-                    mapObjectPtr->pro_pid = newProPid;
-                    mapObjectPtr->frm_pid = newFrmPid;
-
-                    ExitGridContext::ExitGridState afterState;
-                    afterState.exitMap = mapObjectPtr->exit_map;
-                    afterState.exitPosition = mapObjectPtr->exit_position;
-                    afterState.exitElevation = mapObjectPtr->exit_elevation;
-                    afterState.exitOrientation = mapObjectPtr->exit_orientation;
-                    afterState.frmPid = mapObjectPtr->frm_pid;
-                    afterState.proPid = mapObjectPtr->pro_pid;
-                    afterStates.push_back(afterState);
-                }
-
-                _context.registerExitGridEdit(mapObjects, beforeStates, afterStates);
-
-                spdlog::info("Updated {} exit grids: map={}, frm_pid=0x{:08X}",
-                    exitGridsInArea.size(), newProperties.exitMap, newFrmPid);
-
-                // FIXME: Changing exit grid FRM may cause visual position offset due to different FRM shift values
-                _context.refreshObjects();
-            }
-
-            selectionManager->clearSelection();
-            _context.clearSelection();
-        }
-    } else {
-        // No existing exit grids - create new ones in the selected area
-        auto* selectionManager = _context.getSelectionManager();
-        if (selectionManager) {
-            selectionManager->clearSelection();
-        }
-        _context.clearSelection();
-
-        std::vector<int> hexesInArea;
-        const auto* hexGrid = _context.getHexagonGrid();
-        if (hexGrid) {
-            for (int hexIndex = 0; hexIndex < static_cast<int>(hexGrid->size()); ++hexIndex) {
-                if (auto hex = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
-                    sf::Vector2f hexPos(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
-                    // 32x16 hex footprint centered on the hex position
-                    sf::FloatRect hexBounds(sf::Vector2f(hexPos.x - 16, hexPos.y - 8), sf::Vector2f(32, 16));
-                    if (selectionArea.findIntersection(hexBounds)) {
-                        hexesInArea.push_back(hexIndex);
-                    }
-                }
-            }
-        }
-
-        if (hexesInArea.empty()) {
-            _showStatus("No hexes found in selected area");
-            return;
-        }
-
-        ExitGridPropertiesDialog::ExitGridProperties newProperties;
-        if (!showPropertiesDialog(newProperties)) {
-            return; // User cancelled
-        }
-
-        int currentElevation = _context.getCurrentElevation();
-        std::vector<std::shared_ptr<MapObject>> createdExitGrids;
-
-        for (int hexPosition : hexesInArea) {
-            auto exitGrid = createExitGridObject(hexPosition, newProperties);
-            if (exitGrid) {
-                createdExitGrids.push_back(exitGrid);
-            }
-        }
-
-        if (!createdExitGrids.empty()) {
-            // Registers the undo action and adds to map; redo runs immediately
-            _context.registerExitGridCreation(createdExitGrids, currentElevation);
-
-            spdlog::info("Created {} exit grids in selected area (elevation {})",
-                createdExitGrids.size(), currentElevation);
-
-            _showStatus(QString("Created %1 exit grids").arg(createdExitGrids.size()));
-        }
+    // Treat the stroke as an EDIT only when EVERY hex already has a grid: bulk-edit the destination,
+    // keeping each one's art. A stroke that merely grazes a neighbour must still place — otherwise a
+    // single overlapping hex silently swallows the placement (the "Enter + OK, nothing appears" bug).
+    const std::vector<int> freshList = freshHexesForLine(lineHexes, occupied);
+    if (freshList.empty() && !lineHexes.empty()) {
+        bulkEditExistingExitGrids(existing);
+        return;
     }
+
+    // Create on the hexes that don't already have a grid, each with its own frozen per-segment art.
+    const std::set<int> freshHexes(freshList.begin(), freshList.end());
+    createExitGridsForLine(lineHexes, art, freshHexes);
 }
 
 } // namespace geck

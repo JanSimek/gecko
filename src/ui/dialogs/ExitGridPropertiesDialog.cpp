@@ -18,6 +18,8 @@ namespace geck {
 
 using namespace ui::constants;
 
+using MarkerArt = ExitGridPropertiesDialog::ExitGridProperties::MarkerArt;
+
 ExitGridPropertiesDialog::ExitGridPropertiesDialog(QWidget* parent, const resource::MapNameResolver* names)
     : QDialog(parent)
     , _mainLayout(nullptr)
@@ -27,6 +29,7 @@ ExitGridPropertiesDialog::ExitGridPropertiesDialog(QWidget* parent, const resour
     , _positionSpinBox(nullptr)
     , _elevationComboBox(nullptr)
     , _orientationComboBox(nullptr)
+    , _markerArtComboBox(nullptr)
     , _statusLabel(nullptr)
     , _names(names) {
 
@@ -119,6 +122,24 @@ void ExitGridPropertiesDialog::setupFormLayout() {
     _orientationComboBox->setToolTip("Player facing direction when entering destination map");
     _formLayout->addRow("Player Orientation:", _orientationComboBox);
 
+    // Marker direction (directional art override). Auto picks each hex's art from its outward
+    // facing; the explicit sides force one art for the whole drawn region. Not serialized — the
+    // map format has no per-instance side field, so this only chooses which marker proto is drawn.
+    _markerArtComboBox = new QComboBox(this);
+    _markerArtComboBox->addItem("Auto", static_cast<int>(MarkerArt::Auto));
+    _markerArtComboBox->addItem("Left", static_cast<int>(MarkerArt::Left));
+    _markerArtComboBox->addItem("Right", static_cast<int>(MarkerArt::Right));
+    _markerArtComboBox->addItem("Bottom", static_cast<int>(MarkerArt::Bottom));
+    _markerArtComboBox->addItem("Top", static_cast<int>(MarkerArt::Top));
+    _markerArtComboBox->addItem("Diagonal / (A)", static_cast<int>(MarkerArt::ForwardA));
+    _markerArtComboBox->addItem("Diagonal / (B)", static_cast<int>(MarkerArt::ForwardB));
+    _markerArtComboBox->addItem("Diagonal \\ (A)", static_cast<int>(MarkerArt::BackA));
+    _markerArtComboBox->addItem("Diagonal \\ (B)", static_cast<int>(MarkerArt::BackB));
+    _markerArtComboBox->setToolTip("Which directional marker art to draw. Auto uses each hex's drawn "
+                                   "segment + outward facing; the explicit directions force one art "
+                                   "for the whole line (also disambiguates the two diagonal sides).");
+    _formLayout->addRow("Marker Direction:", _markerArtComboBox);
+
     // Connect validation
     connect(_mapComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, &ExitGridPropertiesDialog::validateInput);
@@ -210,6 +231,13 @@ void ExitGridPropertiesDialog::updateUI() {
         }
     }
 
+    for (int i = 0; i < _markerArtComboBox->count(); ++i) {
+        if (_markerArtComboBox->itemData(i).toInt() == static_cast<int>(_properties.markerArt)) {
+            _markerArtComboBox->setCurrentIndex(i);
+            break;
+        }
+    }
+
     updateMapControlsEnabled();
 
     // Run validation to enable/disable the OK button
@@ -229,6 +257,7 @@ ExitGridPropertiesDialog::ExitGridProperties ExitGridPropertiesDialog::getProper
     props.exitPosition = static_cast<uint32_t>(_positionSpinBox->value());
     props.exitElevation = _elevationComboBox->currentData().toUInt();
     props.exitOrientation = _orientationComboBox->currentData().toUInt();
+    props.markerArt = static_cast<MarkerArt>(_markerArtComboBox->currentData().toInt());
     return props;
 }
 

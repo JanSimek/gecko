@@ -134,6 +134,9 @@ private:
     // / objects), clearing any exclusive special mode and refreshing the toolbar button text.
     void applySelectionLayersFromMenu();
     void setupToolModeActions();
+    // Activate the Exit-Grids tool in its currently-selected sub-mode (the checked dropdown item),
+    // or return to Select when `checked` is false. Updates the toolbar button text.
+    void applyExitGridsTool(bool checked);
     void syncToolModeActions(EditorMode mode);
     void setupDockWidgets();
 #ifdef GECK_SCRIPTING_ENABLED
@@ -209,8 +212,12 @@ private:
     // Toolbar
     QToolBar* _mainToolBar;
     QAction* _selectToolAction = nullptr;
-    QAction* _markExitsAction = nullptr;
-    QAction* _placeExitGridAction = nullptr;
+    // Unified Exit-Grids tool: one checkable toolbar button plus a dropdown that picks the
+    // sub-mode. Toggling the button on activates the chosen sub-mode; off returns to Select.
+    QAction* _exitGridsAction = nullptr;
+    QMenu* _exitGridsMenu = nullptr;
+    QAction* _exitGridPlaceHexAction = nullptr;   // "Place single hex" -> EditorMode::PlaceExitGrid
+    QAction* _exitGridDrawRegionAction = nullptr; // "Draw edge"       -> EditorMode::MarkExits
     QAction* _rotateAction = nullptr;
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
@@ -218,6 +225,9 @@ private:
     // Status bar
     QStatusBar* _statusBar;
     QLabel* _statusLabel;
+    // Permanent contextual key-hint, kept separate from _statusLabel so transient
+    // messages (_showStatus) never overwrite it. Driven by EditorWidget::hintChanged.
+    QLabel* _hintLabel;
     QLabel* _hexIndexLabel;
 
     // Dock widgets for panels

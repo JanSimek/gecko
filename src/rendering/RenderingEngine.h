@@ -1,13 +1,13 @@
 #pragma once
 
+#include "HexRenderer.h"
+#include "editor/HexagonGrid.h"
+#include "util/Types.h"
 #include <SFML/Graphics.hpp>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <vector>
-#include "util/Types.h"
-#include "editor/HexagonGrid.h"
-#include "HexRenderer.h"
 
 namespace geck {
 
@@ -79,10 +79,13 @@ public:
         bool isDraggingFromPalette = false;
 
         // Pattern stamp ghost preview (semi-transparent) under the cursor: floor tiles
-        // (under), objects, roof tiles (over)
-        const std::vector<sf::Sprite>* stampPreviewFloorTiles = nullptr;
-        const std::vector<std::shared_ptr<Object>>* stampPreviewObjects = nullptr;
-        const std::vector<sf::Sprite>* stampPreviewRoofTiles = nullptr;
+        // (under), objects, roof tiles (over). Grouped so RenderData stays small.
+        struct StampPreview {
+            const std::vector<sf::Sprite>* floorTiles = nullptr;
+            const std::vector<std::shared_ptr<Object>>* objects = nullptr;
+            const std::vector<sf::Sprite>* roofTiles = nullptr;
+        };
+        StampPreview stampPreview;
 
         // Selection rectangle
         const sf::RectangleShape* selectionRectangle = nullptr;
@@ -97,6 +100,20 @@ public:
         // Map data
         const Map* map = nullptr;
         int currentElevation = 0;
+
+        // Exit-grid "Draw edge" live preview (MarkExits mode), grouped so RenderData stays small. When
+        // `active`: `lineVertices`/`lineCursor` draw the polyline (vertex->vertex, last->cursor);
+        // `hexes` are the prospective on-line hexes; `frmPids` (parallel) each hex's directional marker
+        // FRM; `tint` colours them by destination kind (green inter-map, brown world/town).
+        struct ExitGridPreview {
+            const std::vector<sf::Vector2f>* lineVertices = nullptr;
+            sf::Vector2f lineCursor;
+            bool active = false;
+            const std::vector<int>* hexes = nullptr;
+            const std::vector<std::uint32_t>* frmPids = nullptr;
+            sf::Color tint{ 80, 220, 80, 140 };
+        };
+        ExitGridPreview exitGridPreview;
     };
 
     explicit RenderingEngine(resource::GameResources& resources);
@@ -148,6 +165,18 @@ private:
     void renderObjects(sf::RenderTarget& target,
         const RenderData& renderData,
         const VisibilitySettings& visibility);
+
+    /**
+     * @brief DISPLAY-ONLY widening for DIAGONAL exit-grid bars. The standard loop skips diagonal
+     * exit-grid objects; this draws each one's bar TWICE — texture1 + a perpendicular-offset texture2 —
+     * so the thin diagonal band reads ~2x thick. The trigger hex stays on the band's outer edge and the
+     * two textures abut seamlessly (no overlap, no gap). A flipped object (dir ^ 1) negates the band's
+     * outward normal, swinging the whole doubled band to the OTHER side of the hex line. No new objects
+     * or hexes are created — the saved single-row data is untouched.
+     */
+    void renderDiagonalExitGridBars(sf::RenderTarget& target, const RenderData& renderData);
+    // True when `object` is a placed diagonal exit-grid marker ("/" or "\"). Cardinals return false.
+    static bool isDiagonalExitGridObject(const Object& object);
 
     /**
      * @brief Outline every selected object on top of the scene, grouped by category colour.
@@ -207,7 +236,9 @@ private:
         const RenderData& renderData);
 
     /**
-     * @brief Render exit grid markers
+     * @brief Editor-only "Show exit grids" overlay (Ctrl+E): a high-contrast marker on every exit-grid
+     * hex, atop the player-visible directional art renderObjects already drew. Purely an editor cue,
+     * deliberately separate from the real exitgrd / ext2grd sprites.
      */
     void renderExitGrids(sf::RenderTarget& target,
         const sf::View& view,
@@ -215,13 +246,20 @@ private:
         const Map* map);
 
     /**
-     * @brief Helper method to render exit grids with a loaded sprite
+     * @brief Render the in-progress exit-grid "Draw edge" preview: the polyline plus each
+     * prospective on-line hex marked with the (tinted) exit-grid marker sprite.
      */
-    void renderExitGridsWithSprite(sf::RenderTarget& target,
+    void renderExitGridEdgePreview(sf::RenderTarget& target,
         const sf::View& view,
-        const RenderData& renderData,
-        const Map* map,
-        sf::Sprite& exitGridSprite);
+        const RenderData& renderData);
+    // Split out of renderExitGridEdgePreview to keep its complexity down.
+    void drawExitGridPreviewMarkers(sf::RenderTarget& target, const sf::View& view, const RenderData& renderData);
+    void drawExitGridPreviewLine(sf::RenderTarget& target, const RenderData& renderData);
+    // Build the transient directional exit-grid marker Object for one prospective preview hex,
+    // anchored exactly like a committed object (Object::setHexPosition / setDirection). Returns
+    // null if the hex is off-grid or its directional FRM is unavailable.
+    std::shared_ptr<Object> buildExitGridPreviewObject(const RenderData& renderData, int hexIndex,
+        uint32_t frmPid) const;
 
     /**
      * @brief Check if a hex is within the visible viewport

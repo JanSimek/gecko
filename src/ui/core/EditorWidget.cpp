@@ -1,4 +1,5 @@
 #include "EditorWidget.h"
+#include "ui/core/EditorHints.h"
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/input/InputHandler.h"
 #ifdef GECK_SCRIPTING_ENABLED
@@ -324,6 +325,9 @@ void EditorWidget::initializeSelectionSystem() {
         _controller.visualizer().clear();
         _controller.visualizer().apply(selection);
         Q_EMIT selectionChanged(selection, _session.currentElevation());
+        // The hint depends on whether anything is selected (e.g. Select mode shows R/Delete
+        // only with a selection), so refresh it whenever the selection changes.
+        Q_EMIT hintChanged(hintForContext(_mode, !selection.isEmpty()));
     });
 }
 
@@ -831,16 +835,25 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         cycleStampVariant();
     };
 
-    callbacks.onMarkExitsSelection = [this](sf::Vector2f worldPos) {
-        _exitGridPlacementManager->handleMarkExitsSelection(worldPos);
+    callbacks.onMarkExitsLinePreview = [this](const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide) {
+        updateMarkExitsLinePreview(vertices, cursor, flipSide);
     };
 
-    callbacks.onMarkExitsAreaSelection = [this](sf::Vector2f startPos, sf::Vector2f endPos) {
-        _exitGridPlacementManager->selectExitGridsInArea(startPos, endPos);
+    callbacks.onMarkExitsLine = [this](const std::vector<sf::Vector2f>&, bool) {
+        // The placed edge is the manager's FROZEN committed segments (the vertices/flip args are
+        // vestigial now that the manager owns the per-segment art); it resets them after placing.
+        clearMarkExitsLinePreview();
+        _exitGridPlacementManager->selectExitGridsAlongLine();
     };
 
-    callbacks.onMarkExitsPreview = [this](sf::Vector2f startPos, sf::Vector2f currentPos) {
-        updateMarkExitsPreview(startPos, currentPos);
+    // True-freeze hooks: a reset starts a fresh edge; a commit (one per closing click) freezes that
+    // segment with the flip at the click.
+    callbacks.onMarkExitsLineReset = [this]() {
+        _exitGridPlacementManager->beginLine();
+    };
+
+    callbacks.onMarkExitsSegmentCommitted = [this](sf::Vector2f from, sf::Vector2f to, bool flipSide) {
+        _exitGridPlacementManager->commitSegment(from, to, flipSide);
     };
 
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
@@ -870,6 +883,7 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     };
 
     callbacks.onMarkExitsModeCancelled = [this]() {
+        clearMarkExitsLinePreview();
         // Notify MainWindow to deselect the toolbar button
         if (_mainWindow) {
             _mainWindow->deselectMarkExitsMode();
@@ -949,9 +963,9 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.selectedRoofTiles = &_controller.visualizer().roofVisuals();
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
-    renderData.stampPreviewFloorTiles = &_stampPreviewFloorTiles;
-    renderData.stampPreviewObjects = &_stampPreviewObjects;
-    renderData.stampPreviewRoofTiles = &_stampPreviewRoofTiles;
+    renderData.stampPreview.floorTiles = &_stampPreviewFloorTiles;
+    renderData.stampPreview.objects = &_stampPreviewObjects;
+    renderData.stampPreview.roofTiles = &_stampPreviewRoofTiles;
     renderData.selectionRectangle = &_selectionRectangle;
     // Use InputHandler state for drag selection rendering
     renderData.isDragSelecting = _inputHandler && _inputHandler->isDragging();
@@ -961,6 +975,14 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.playerPositionHex = _session.map() ? static_cast<int>(_session.map()->getMapFile().header.player_default_position) : -1;
     renderData.map = _session.map();
     renderData.currentElevation = _session.currentElevation();
+
+    // Exit-grid "Draw edge" live preview (MarkExits mode).
+    renderData.exitGridPreview.active = _exitGridLineActive;
+    renderData.exitGridPreview.lineVertices = &_exitGridLineVertices;
+    renderData.exitGridPreview.lineCursor = _exitGridLineCursor;
+    renderData.exitGridPreview.hexes = &_exitGridPreviewHexes;
+    renderData.exitGridPreview.frmPids = &_exitGridPreviewFrmPids;
+    renderData.exitGridPreview.tint = _exitGridPreviewTint;
 
     _controller.renderingEngine().render(target, _controller.viewport().getView(), renderData, visibility);
 }
@@ -1146,6 +1168,12 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     if (mode != EditorMode::StampPattern) {
         clearStampPreview();
     }
+    if (mode != EditorMode::MarkExits) {
+        clearMarkExitsLinePreview();
+        // Leaving "Draw edge" abandons any in-progress line: drop its frozen segments. (Finalize/cancel
+        // reset via onMarkExitsLineReset and keep the tool active, so they don't reach here.)
+        _exitGridPlacementManager->resetLine();
+    }
     if (_inputHandler) {
         _inputHandler->setTilePlacementMode(false, -1, false);
         _inputHandler->setExitGridPlacementMode(false);
@@ -1190,6 +1218,13 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     }
 
     Q_EMIT editorModeChanged(_mode);
+    emitHintChanged();
+}
+
+void EditorWidget::emitHintChanged() {
+    const auto* manager = _session.selectionManager();
+    const bool hasSelection = manager && !manager->getCurrentSelection().isEmpty();
+    Q_EMIT hintChanged(hintForContext(_mode, hasSelection));
 }
 
 void EditorWidget::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof) {
@@ -1585,34 +1620,36 @@ std::vector<Tile>& EditorWidget::ensureElevationTiles(int elevation) {
     return tilesVec;
 }
 
-void EditorWidget::updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos) {
-    clearDragPreview();
+void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide) {
+    _exitGridLineVertices = vertices;
+    _exitGridLineCursor = cursor;
+    _exitGridLineActive = true;
 
-    float left = std::min(startWorldPos.x, currentWorldPos.x);
-    float top = std::min(startWorldPos.y, currentWorldPos.y);
-    float width = std::abs(currentWorldPos.x - startWorldPos.x);
-    float height = std::abs(currentWorldPos.y - startWorldPos.y);
-    sf::FloatRect selectionArea({ left, top }, { width, height });
+    // Tint by the tool's current destination kind: green inter-map, brown world/town map.
+    using Kind = ExitGridPlacementManager::DestinationKind;
+    const bool worldMap = _exitGridPlacementManager
+        && _exitGridPlacementManager->currentDestinationKind() == Kind::WorldMap;
+    _exitGridPreviewTint = worldMap ? sf::Color(200, 150, 90, 140) : sf::Color(80, 220, 80, 140);
 
-    _selectionRectangle.setPosition({ left, top });
-    _selectionRectangle.setSize({ width, height });
+    // The manager owns the FROZEN committed segments; here we feed it only the ONE live segment (last
+    // vertex -> cursor) to append to the frozen run.
+    _exitGridPreviewHexes.clear();
+    _exitGridPreviewFrmPids.clear();
 
-    // Highlight only exit grid objects
-    for (auto& object : _session.objects()) {
-        if (!object || !object->getMapObjectPtr() || !object->getMapObjectPtr()->isExitGridMarker()) {
-            continue;
-        }
-
-        const auto& sprite = object->getSprite();
-        auto objectBounds = sprite.getGlobalBounds();
-
-        auto intersection = selectionArea.findIntersection(objectBounds);
-        if (intersection.has_value()) {
-            _previewObjects.push_back(object);
-            // Bright magenta highlight contrasts well against green exit grids
-            object->getSprite().setColor(geck::TileColors::exitGridHighlight());
-        }
+    if (_exitGridPlacementManager) {
+        const bool hasLive = !vertices.empty();
+        const sf::Vector2f liveFrom = hasLive ? vertices.back() : cursor;
+        auto preview = _exitGridPlacementManager->previewForLine(liveFrom, cursor, hasLive, flipSide);
+        _exitGridPreviewHexes = std::move(preview.hexes);
+        _exitGridPreviewFrmPids = std::move(preview.frmPids);
     }
+}
+
+void EditorWidget::clearMarkExitsLinePreview() {
+    _exitGridLineActive = false;
+    _exitGridLineVertices.clear();
+    _exitGridPreviewHexes.clear();
+    _exitGridPreviewFrmPids.clear();
 }
 
 void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {

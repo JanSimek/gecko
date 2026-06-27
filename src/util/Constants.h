@@ -129,33 +129,68 @@ namespace WallBlockers {
 }
 
 // Exit Grid constants
+//
+// Exit-grid markers are MISC objects whose PROTO encodes the DIRECTION and whose FRM encodes the
+// FAMILY (destination kind) + direction. The PROTO index runs 16..23; isExitGridMarker() requires
+// exactly that range. Verified against the shipped game data (FRM dimensions via `frm info`) and
+// bhrnddst.map (which uses protos 16-19):
+//
+//   dir  proto         greenFrm(=proto+1)   brownFrm(=proto+0x11)  size     drawn-line meaning
+//   0    0x05000010    0x05000011 exitgrd1  0x05000021 ext2grd1    96x24    LEFT edge  (a vertical line)
+//   1    0x05000011    0x05000012 exitgrd2  0x05000022 ext2grd2    96x24    RIGHT edge (a vertical line)
+//   2    0x05000012    0x05000013 exitgrd3  0x05000023 ext2grd3    32x96    BOTTOM edge (a horizontal line)
+//   3    0x05000013    0x05000014 exitgrd4  0x05000024 ext2grd4    32x96    TOP edge   (a horizontal line)
+//   4    0x05000014    0x05000015 exitgrd5  0x05000025 ext2grd5    127x48   "/" diagonal, side A
+//   5    0x05000015    0x05000016 exitgrd6  0x05000026 ext2grd6    127x48   "/" diagonal, side B
+//   6    0x05000016    0x05000017 exitgrd7  0x05000027 ext2grd7    111x60   "\" diagonal, side A
+//   7    0x05000017    0x05000018 exitgrd8  0x05000028 ext2grd8    111x60   "\" diagonal, side B
+//
+// Within a diagonal pair the two sides render near-identically (a sub-pixel facing offset), so the
+// Marker-Direction override disambiguates when the auto pick is wrong.
+//
+// FAMILY = DESTINATION: an inter-map exit (exit_map is a real map id) uses the GREEN art (frm =
+// proto + 1); a WORLD/TOWN exit (exit_map == WORLD_MAP_EXIT or TOWN_MAP_EXIT) uses the BROWN art
+// (frm = proto + 0x11). The destination is stored per-object in the exit_* fields.
 namespace ExitGrid {
     // Destination map IDs for special exits
     constexpr uint32_t TOWN_MAP_EXIT = 0xFFFFFFFF;  ///< -1: Opens town map view
     constexpr uint32_t WORLD_MAP_EXIT = 0xFFFFFFFE; ///< -2: Opens world map view
 
-    // Proto PIDs for exit grids (MISC type 0x05, indices 16-23)
-    constexpr uint32_t FIRST_EXIT_GRID_PID = 0x05000010; ///< First exit grid proto (index 16)
-    constexpr uint32_t LAST_EXIT_GRID_PID = 0x05000017;  ///< Last exit grid proto (index 23)
+    // Proto PIDs for exit grids (MISC type 0x05, indices 16-23 = the eight directions)
+    constexpr uint32_t FIRST_EXIT_GRID_PID = 0x05000010; ///< First exit grid proto (index 16, dir 0)
+    constexpr uint32_t LAST_EXIT_GRID_PID = 0x05000017;  ///< Last exit grid proto (index 23, dir 7)
 
-    // Map-to-map exit grid
-    constexpr uint32_t MAP_EXIT_PRO_PID = 0x05000013; ///< Proto for map exit (index 19)
-    constexpr uint32_t MAP_EXIT_FRM_PID = 0x05000014; ///< FRM for map exit (index 20) -> exitgrd4.frm
+    // The eight directions, by the line a user draws / the iso edge the marker caps.
+    enum Direction {
+        DIR_LEFT = 0,   ///< vertical line, 96x24 wide bar
+        DIR_RIGHT = 1,  ///< vertical line, 96x24 wide bar
+        DIR_BOTTOM = 2, ///< horizontal line, 32x96 tall bar
+        DIR_TOP = 3,    ///< horizontal line, 32x96 tall bar
+        DIR_FWD_A = 4,  ///< "/" diagonal, 127x48, side A
+        DIR_FWD_B = 5,  ///< "/" diagonal, 127x48, side B
+        DIR_BACK_A = 6, ///< "\" diagonal, 111x60, side A
+        DIR_BACK_B = 7, ///< "\" diagonal, 111x60, side B
+        DIR_COUNT = 8
+    };
 
-    // World map exit grid
-    constexpr uint32_t WORLD_EXIT_PRO_PID = 0x05000012; ///< Proto for worldmap exit (index 18)
-    constexpr uint32_t WORLD_EXIT_FRM_PID = 0x05000023; ///< FRM for worldmap exit (index 35) -> ext2grd3.frm
+    /// The MISC proto PID for a direction (index 16..23). isExitGridMarker() accepts exactly these.
+    constexpr uint32_t exitGridProto(int dir) { return FIRST_EXIT_GRID_PID + static_cast<uint32_t>(dir); }
+    /// The GREEN (inter-map) FRM PID for a direction's proto: frm = proto + 1.
+    constexpr uint32_t greenFrm(int dir) { return exitGridProto(dir) + 1; }
+    /// The BROWN (world/town-map) FRM PID for a direction's proto: frm = proto + 0x11.
+    constexpr uint32_t brownFrm(int dir) { return exitGridProto(dir) + 0x11; }
 
-    // The four directional art pieces of a screen-space exit-grid rectangle, as used by e.g.
-    // bhrnddst.map. {proto, frm} per edge; the destination is stored per-object, independent of art.
-    constexpr uint32_t RECT_TOP_PRO_PID = 0x05000013;
-    constexpr uint32_t RECT_TOP_FRM_PID = 0x05000024;
-    constexpr uint32_t RECT_BOTTOM_PRO_PID = 0x05000012;
-    constexpr uint32_t RECT_BOTTOM_FRM_PID = 0x05000023;
-    constexpr uint32_t RECT_LEFT_PRO_PID = 0x05000010;
-    constexpr uint32_t RECT_LEFT_FRM_PID = 0x05000021;
-    constexpr uint32_t RECT_RIGHT_PRO_PID = 0x05000011;
-    constexpr uint32_t RECT_RIGHT_FRM_PID = 0x05000022;
+    // Convenience aliases for the cardinal directions, used by the explicit Marker-Direction
+    // override and the single-hex fallback. The matching FRM comes from greenFrm()/brownFrm() by
+    // destination kind — these name only the proto (= direction).
+    constexpr uint32_t LEFT_PRO_PID = exitGridProto(DIR_LEFT);     ///< 0x05000010, 96x24 (vertical line)
+    constexpr uint32_t RIGHT_PRO_PID = exitGridProto(DIR_RIGHT);   ///< 0x05000011, 96x24 (vertical line)
+    constexpr uint32_t BOTTOM_PRO_PID = exitGridProto(DIR_BOTTOM); ///< 0x05000012, 32x96 (horizontal line)
+    constexpr uint32_t TOP_PRO_PID = exitGridProto(DIR_TOP);       ///< 0x05000013, 32x96 (horizontal line)
+    constexpr uint32_t FWD_A_PRO_PID = exitGridProto(DIR_FWD_A);   ///< 0x05000014, 127x48 "/" side A
+    constexpr uint32_t FWD_B_PRO_PID = exitGridProto(DIR_FWD_B);   ///< 0x05000015, 127x48 "/" side B
+    constexpr uint32_t BACK_A_PRO_PID = exitGridProto(DIR_BACK_A); ///< 0x05000016, 111x60 "\" side A
+    constexpr uint32_t BACK_B_PRO_PID = exitGridProto(DIR_BACK_B); ///< 0x05000017, 111x60 "\" side B
 }
 
 // Map defaults

@@ -199,10 +199,6 @@ private:
     // Build + register one exit-grid MISC marker at `hex` with the given art and destination. Assumes
     // `hex` is on-grid (callers validate). Returns registerObject's result.
     bool placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid, const ExitDest& dest);
-    // A gap-free run of hexes from startHex to endHex: greedily steps to the neighbour whose screen
-    // position is nearest the end, so consecutive hexes are always screen-adjacent (the iso
-    // staircase a straight screen-line walk would skip). Empty if either endpoint is off-grid.
-    std::vector<int> hexLine(int startHex, int endHex) const;
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
     // Parse a reference map headlessly (GL-free) for the palette queries; nullptr if unreadable.
     std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;

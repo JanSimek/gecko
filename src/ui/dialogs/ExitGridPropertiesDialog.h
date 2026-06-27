@@ -37,10 +37,29 @@ class ExitGridPropertiesDialog : public QDialog {
 
 public:
     struct ExitGridProperties {
-        uint32_t exitMap = 0;         // Destination map ID
-        uint32_t exitPosition = 0;    // Player spawn position (0-39999)
-        uint32_t exitElevation = 0;   // Destination elevation (0-2)
-        uint32_t exitOrientation = 0; // Player direction (0-5)
+        // Which directional marker art to draw for a placed line. Auto picks each hex's art from the
+        // line's local segment + its outward facing (exitGridArtForSegment); the explicit directions
+        // force one art for every hex in the line — the escape hatch for ambiguous corners and for
+        // diagonals, where the two sides of a "/" or "\" render near-identically. The map format has
+        // no per-instance side field, so this is purely an art-proto choice, not a serialized value.
+        // The eight explicit values map 1:1 onto ExitGrid::Direction (0..7).
+        enum class MarkerArt {
+            Auto,
+            Left,     ///< dir 0 — vertical bar
+            Right,    ///< dir 1 — vertical bar
+            Bottom,   ///< dir 2 — horizontal bar
+            Top,      ///< dir 3 — horizontal bar
+            ForwardA, ///< dir 4 — "/" side A
+            ForwardB, ///< dir 5 — "/" side B
+            BackA,    ///< dir 6 — "\" side A
+            BackB,    ///< dir 7 — "\" side B
+        };
+
+        uint32_t exitMap = 0;                  // Destination map ID
+        uint32_t exitPosition = 0;             // Player spawn position (0-39999)
+        uint32_t exitElevation = 0;            // Destination elevation (0-2)
+        uint32_t exitOrientation = 0;          // Player direction (0-5)
+        MarkerArt markerArt = MarkerArt::Auto; // Directional art override (not serialized)
     };
 
     explicit ExitGridPropertiesDialog(QWidget* parent = nullptr, const resource::MapNameResolver* names = nullptr);
@@ -82,6 +101,7 @@ private:
     QSpinBox* _positionSpinBox;
     QComboBox* _elevationComboBox;
     QComboBox* _orientationComboBox;
+    QComboBox* _markerArtComboBox;
 
     // Status
     QLabel* _statusLabel;

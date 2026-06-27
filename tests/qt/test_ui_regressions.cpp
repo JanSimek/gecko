@@ -53,10 +53,12 @@
 #include "ui/Settings.h"
 #include "ui/panels/MapInfoPanel.h"
 #include "ui/panels/ScriptsPanel.h"
+#include "ui/tools/ExitGridPlacementManager.h"
 #include "format/map/Map.h"
 #include "format/map/MapScript.h"
 #include <QAbstractButton>
 #include <QLineEdit>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QTimer>
@@ -1216,6 +1218,71 @@ TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scri
     CHECK(lvarTable->item(1, 1)->data(Qt::DisplayRole).toInt() == 222);
 }
 
+// The unified Exit-Grids tool is one checkable button plus a dropdown whose two items ("Draw edge" /
+// "Place single hex") are exclusive: triggering one ticks it, unticks the other, keeps the button
+// checked. (Driving the editor mode needs game data, so that half is covered below against EditorWidget.)
+TEST_CASE("Unified Exit-Grids tool exposes one button with an exclusive sub-mode dropdown", "[qt][exitgrids]") {
+    removeTestSettings();
+
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
+
+    // The two former separate buttons are gone, replaced by one "Exit Grids" button.
+    CHECK(findAction(window, "Mark Exits") == nullptr);
+    CHECK(findAction(window, "Place Exit Grids") == nullptr);
+
+    auto* exitGridsAction = findAction(window, "Exit Grids");
+    auto* drawEdge = findAction(window, "Draw edge");
+    auto* placeHex = findAction(window, "Place single hex");
+    REQUIRE(exitGridsAction != nullptr);
+    REQUIRE(drawEdge != nullptr);
+    REQUIRE(placeHex != nullptr);
+    CHECK(exitGridsAction->isCheckable());
+    CHECK(exitGridsAction->menu() != nullptr); // dropdown attached to the button
+
+    // Default sub-mode is "Draw edge".
+    CHECK(drawEdge->isChecked());
+    CHECK_FALSE(placeHex->isChecked());
+
+    // Triggering "Place single hex" makes it the (exclusive) checked sub-mode and keeps the tool on.
+    placeHex->trigger();
+    QApplication::processEvents();
+    CHECK(placeHex->isChecked());
+    CHECK_FALSE(drawEdge->isChecked());
+    CHECK(exitGridsAction->isChecked());
+
+    // Triggering "Draw edge" flips the exclusive selection back.
+    drawEdge->trigger();
+    QApplication::processEvents();
+    CHECK(drawEdge->isChecked());
+    CHECK_FALSE(placeHex->isChecked());
+    CHECK(exitGridsAction->isChecked());
+}
+
+// The editor-mode half: the two sub-modes map to distinct EditorWidget modes (PlaceExitGrid vs
+// MarkExits). Constructing an EditorWidget eagerly loads art/misc/HEX.frm, so this runs only with game
+// data mounted; without it we skip (the dropdown test above covers the wiring with no data).
+TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exitgrids]") {
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    std::unique_ptr<geck::EditorWidget> editor;
+    try {
+        editor = std::make_unique<geck::EditorWidget>(*resources, makeMap("exitgrids.map"));
+    } catch (const std::exception& e) {
+        SKIP(std::string("EditorWidget needs mounted game data (HEX.frm): ") + e.what());
+    }
+
+    CHECK(editor->currentMode() == geck::EditorMode::Select);
+
+    editor->setMarkExitsMode(true); // "Draw edge"
+    CHECK(editor->currentMode() == geck::EditorMode::MarkExits);
+
+    editor->setExitGridPlacementMode(true); // "Place single hex"
+    CHECK(editor->currentMode() == geck::EditorMode::PlaceExitGrid);
+
+    editor->setMode(geck::EditorMode::Select);
+    CHECK(editor->currentMode() == geck::EditorMode::Select);
+}
+
 TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map's .gam", "[qt][mapinfo]") {
     ResourceDataScope data;
     data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
@@ -1422,4 +1489,25 @@ TEST_CASE("MapInfoPanel removes the last map global variable after confirmation"
     const std::string out = geck::io::readFile(savedGam);
     CHECK(out.find("MVAR_first := 10;") != std::string::npos);
     CHECK(out.find("MVAR_last") == std::string::npos);
+}
+
+// Regression: a Draw-edge stroke that only PARTIALLY overlaps existing exit grids must still place on
+// the empty hexes (a single overlapping hex used to send the whole stroke to bulk-edit, so the
+// placement vanished — "Enter + OK, nothing appears"). freshHexesForLine = line hexes minus occupied.
+TEST_CASE("Exit-grid stroke creates on the non-overlapping hexes (partial overlap doesn't swallow it)",
+    "[exitgrid][placement]") {
+    using geck::ExitGridPlacementManager;
+
+    // No overlap -> every hex is fresh.
+    CHECK(ExitGridPlacementManager::freshHexesForLine({ 1, 2, 3 }, {}) == std::vector<int>{ 1, 2, 3 });
+
+    // Partial overlap -> only the empty hexes are returned (the stroke still places on those).
+    CHECK(ExitGridPlacementManager::freshHexesForLine({ 1, 2, 3, 4 }, { 2, 3 })
+        == std::vector<int>{ 1, 4 });
+
+    // Whole stroke already occupied -> empty, so the caller bulk-edits the existing edge instead.
+    CHECK(ExitGridPlacementManager::freshHexesForLine({ 5, 6 }, { 5, 6 }).empty());
+
+    // Empty line -> empty.
+    CHECK(ExitGridPlacementManager::freshHexesForLine({}, { 1 }).empty());
 }

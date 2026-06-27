@@ -54,6 +54,8 @@ set(GECK_APP_SOURCES
     ui/core/VisibilitySettings.h
     ui/core/EditorWidget.h
     ui/core/EditorWidget.cpp
+    ui/core/EditorHints.h
+    ui/core/EditorHints.cpp
     ui/core/EditorController.h
     ui/core/EditorController.cpp
     ui/core/ObjectPicker.h
@@ -615,6 +617,8 @@ if(GECK_BUILD_CLI)
         cli/MapGenerator.cpp
         cli/MapRender.h
         cli/MapRender.cpp
+        cli/FrmInspect.h
+        cli/FrmInspect.cpp
         cli/PatternJson.h
         cli/PatternJson.cpp
         cli/PatternExtract.h

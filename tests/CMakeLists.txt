@@ -46,6 +46,8 @@ add_executable(general_tests
     general/test_reading_dat.cpp
     general/test_reading_map.cpp
     general/test_hex_geometry.cpp
+    general/test_hex_line.cpp
+    general/test_exit_grid_direction.cpp
     general/test_pattern_stamper.cpp
     general/test_pattern_builder.cpp
     general/test_map_script_api.cpp
@@ -68,9 +70,10 @@ if(GECK_ENABLE_SCRIPTING)
 endif()
 
 # Pattern stamp (de)serialization round-trip — needs gecko_cli (cli::serializePattern/loadPattern),
-# no scripting or game data.
+# no scripting or game data. test_frm_inspect covers the FRM tools' non-GL logic (FID parse/decode,
+# art-name resolution, glob listing) against a temp LST fixture.
 if(TARGET gecko_cli)
-    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp general/test_map_reachability.cpp general/test_map_analyzer_scripts.cpp)
+    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp general/test_map_reachability.cpp general/test_map_analyzer_scripts.cpp general/test_frm_inspect.cpp)
     target_link_libraries(general_tests PRIVATE gecko_cli)
 endif()
 
@@ -97,6 +100,8 @@ add_executable(qt_tests
     qt/test_pattern_serializer.cpp
     # InputHandler is Qt-free but lives in gecko_app; its dispatch test needs SFML.
     qt/test_input_handler.cpp
+    # hintForContext is the pure status-bar key-hint provider (lives in gecko_app).
+    qt/test_editor_hints.cpp
 )
 
 # Round-trip the headless pattern writer (gecko_cli) through the editor's Qt PatternSerializer.

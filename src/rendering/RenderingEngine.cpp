@@ -1,19 +1,25 @@
 #include "RenderingEngine.h"
-#include "editor/Object.h"
 #include "editor/Hex.h"
-#include "rendering/ObjectVisibility.h"
-#include "viewport/ViewportController.h"
+#include "editor/Object.h"
+#include "format/frm/Frm.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
+#include "rendering/ObjectVisibility.h"
 #include "resource/GameResources.h"
-#include "util/Constants.h"
-#include "util/ColorUtils.h"
 #include "resource/ResourcePaths.h"
+#include "util/ColorUtils.h"
+#include "util/Constants.h"
 #include "util/Coordinates.h"
+#include "util/ExitGridDirection.h"
 #include "util/TileUtils.h"
-#include <spdlog/spdlog.h>
+#include "viewport/ViewportController.h"
+#include <cmath>
 #include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <map>
+#include <optional>
+#include <spdlog/spdlog.h>
 #include <unordered_set>
 
 namespace geck {
@@ -92,20 +98,20 @@ void RenderingEngine::render(sf::RenderTarget& target,
 
     // Layer 4b: Pattern stamp ghost preview (sprites already carry their semi-transparency):
     // floor tiles, then objects, then roof tiles on top.
-    if (renderData.stampPreviewFloorTiles) {
-        for (const auto& sprite : *renderData.stampPreviewFloorTiles) {
+    if (renderData.stampPreview.floorTiles) {
+        for (const auto& sprite : *renderData.stampPreview.floorTiles) {
             target.draw(sprite);
         }
     }
-    if (renderData.stampPreviewObjects) {
-        for (const auto& object : *renderData.stampPreviewObjects) {
+    if (renderData.stampPreview.objects) {
+        for (const auto& object : *renderData.stampPreview.objects) {
             if (object) {
                 target.draw(object->getSprite());
             }
         }
     }
-    if (renderData.stampPreviewRoofTiles) {
-        for (const auto& sprite : *renderData.stampPreviewRoofTiles) {
+    if (renderData.stampPreview.roofTiles) {
+        for (const auto& sprite : *renderData.stampPreview.roofTiles) {
             target.draw(sprite);
         }
     }
@@ -127,6 +133,9 @@ void RenderingEngine::render(sf::RenderTarget& target,
 
     // Layer 8: Hex highlights and markers
     renderHexHighlights(target, renderData);
+
+    // Layer 9: Exit-grid "Draw edge" live preview (polyline + prospective on-line hexes).
+    renderExitGridEdgePreview(target, view, renderData);
 }
 
 void RenderingEngine::renderFloorTiles(sf::RenderTarget& target,
@@ -284,6 +293,13 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
             continue;
         }
 
+        // DIAGONAL exit-grid bars draw through renderDiagonalExitGridBars below (a display-only doubled
+        // band); skip them here so they aren't drawn twice. Cardinals + everything else draw normally —
+        // each real object draws its own bar, anchored on its own hex.
+        if (isDiagonalExitGridObject(*object)) {
+            continue;
+        }
+
         target.draw(object->getSprite());
 
         if (visibility.showLightOverlays && object->hasLight()) {
@@ -291,10 +307,73 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
         }
     }
 
+    renderDiagonalExitGridBars(target, renderData);
+
     // Wall blocker overlays render on top of regular objects
     if (visibility.showWallBlockers && renderData.wallBlockerOverlays) {
         for (const auto& overlay : *renderData.wallBlockerOverlays) {
             target.draw(overlay);
+        }
+    }
+}
+
+namespace {
+    // Per-family on-screen band thickness (px), measured from a rendered diagonal run: the composite of
+    // the overlapping per-hex bars reads ~37-38px for a "\" (exitgrd7/8, 111x60) and ~32px for a "/"
+    // (exitgrd5/6, 127x48). texture1 + texture2 are offset along the band normal by these so the two
+    // tile edge-to-edge into one ~2x-wide band.
+    constexpr float kBackslashBandThickness = 38.0f;    // "\" exitgrd7/8
+    constexpr float kForwardSlashBandThickness = 32.0f; // "/" exitgrd5/6
+
+    float diagonalBandThickness(int dir) {
+        return (dir == ExitGrid::DIR_BACK_A || dir == ExitGrid::DIR_BACK_B)
+            ? kBackslashBandThickness
+            : kForwardSlashBandThickness;
+    }
+
+    // The UNIT screen normal a diagonal band is offset along (perpendicular to its on-screen line). It
+    // is exitGridOutward(dir) normalized; a flipped object (dir ^ 1) negates exitGridOutward, so the
+    // band swings to the other side of the hex line with the hex staying on the line.
+    sf::Vector2f diagonalBandNormal(int dir) {
+        const auto [nx, ny] = exitGridOutward(dir);
+        const float len = std::sqrt(static_cast<float>(nx * nx + ny * ny));
+        if (len <= 0.0f) {
+            return { 0.0f, 0.0f };
+        }
+        return { static_cast<float>(nx) / len, static_cast<float>(ny) / len };
+    }
+
+    // Draw one diagonal marker as a doubled band: texture1 spans hex..hex+thickness (the trigger hex at
+    // its OUTER edge), texture2 abuts texture1's inner edge (hex+thickness..hex+2*thickness). Both are
+    // offset along the SIGNED band normal, so the whole band lies on one side of the hex line and a flip
+    // mirrors it across. The base sprite straddles the hex, so the outer texture is centred at
+    // +thickness/2 and the inner at +1.5*thickness along the normal.
+    void drawDoubledDiagonalBar(sf::RenderTarget& target, const Object& object) {
+        const int dir = object.exitGridDirection();
+        const sf::Vector2f normal = diagonalBandNormal(dir);
+        const float thickness = diagonalBandThickness(dir);
+
+        const auto drawBar = [&](float along) {
+            sf::Sprite sprite = object.getSprite();
+            sprite.move(normal * along);
+            target.draw(sprite);
+        };
+        drawBar(thickness * 0.5f); // texture1: hex at the band's outer edge
+        drawBar(thickness * 1.5f); // texture2: abuts texture1's inner edge, seamless
+    }
+} // namespace
+
+bool RenderingEngine::isDiagonalExitGridObject(const Object& object) {
+    return isDiagonalExitGridDir(object.exitGridDirection());
+}
+
+void RenderingEngine::renderDiagonalExitGridBars(sf::RenderTarget& target, const RenderData& renderData) {
+    if (!renderData.objects) {
+        return;
+    }
+    for (const auto& object : *renderData.objects) {
+        if (object && isDiagonalExitGridObject(*object)) {
+            drawDoubledDiagonalBar(target, *object);
         }
     }
 }
@@ -434,54 +513,138 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
     const sf::View& view,
     const RenderData& renderData,
     const Map* map) {
-    if (!map || !renderData.hexGrid) {
+    if (!map || !renderData.objects || !renderData.hexGrid) {
         return;
     }
 
+    // Editor-only "Show exit grids" overlay: the bundled "EG" hex marker (art/misc/exitgrid.frm, shipped
+    // under resources/, not in the DATs) on every exit-grid hex. Separate from the player-visible
+    // directional exitgrd*/ext2grd* art renderObjects already drew.
     const sf::Texture& exitGridTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
     sf::Sprite exitGridSprite(exitGridTexture);
+    // Anchor by centre so the marker sits on the hex.
+    exitGridSprite.setOrigin(exitGridSprite.getLocalBounds().size / 2.f);
 
-    renderExitGridsWithSprite(target, view, renderData, map, exitGridSprite);
-}
-
-void RenderingEngine::renderExitGridsWithSprite(sf::RenderTarget& target,
-    const sf::View& view,
-    const RenderData& renderData,
-    const Map* map,
-    sf::Sprite& exitGridSprite) {
-
-    const auto& allObjects = map->objects();
-
-    auto elevationIt = allObjects.find(renderData.currentElevation);
-    if (elevationIt == allObjects.end()) {
-        return; // No objects on this elevation
-    }
-
-    for (const auto& mapObject : elevationIt->second) {
+    for (const auto& object : *renderData.objects) {
+        const auto mapObject = object ? object->getMapObjectPtr() : nullptr;
         if (!mapObject || !mapObject->isExitGridMarker()) {
             continue;
         }
-
-        int hexPosition = mapObject->position;
-        if (hexPosition < 0 || hexPosition >= static_cast<int>(renderData.hexGrid->size())) {
+        const auto hex = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(mapObject->position));
+        if (!hex.has_value()) {
             continue;
         }
-
-        auto hexOptional = renderData.hexGrid->getHexByPosition(hexPosition);
-        if (!hexOptional.has_value()) {
+        const int cx = hex->get().x();
+        const int cy = hex->get().y();
+        if (!isHexVisible(cx, cy, view)) {
             continue;
         }
-
-        const Hex& hex = hexOptional.value().get();
-        WorldCoords hexCenter(static_cast<float>(hex.x()), static_cast<float>(hex.y()));
-
-        if (!isHexVisible(static_cast<int>(hexCenter.x()), static_cast<int>(hexCenter.y()), view)) {
-            continue;
-        }
-
-        exitGridSprite.setPosition(hexCenter.toVector());
+        exitGridSprite.setPosition(sf::Vector2f(static_cast<float>(cx), static_cast<float>(cy)));
         target.draw(exitGridSprite);
     }
+}
+
+void RenderingEngine::renderExitGridEdgePreview(sf::RenderTarget& target,
+    const sf::View& view,
+    const RenderData& renderData) {
+    if (!renderData.exitGridPreview.active || !renderData.hexGrid) {
+        return;
+    }
+    drawExitGridPreviewMarkers(target, view, renderData);
+    drawExitGridPreviewLine(target, renderData);
+}
+
+std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const RenderData& renderData,
+    int hexIndex, std::uint32_t frmPid) const {
+    if (frmPid == 0 || !renderData.hexGrid) {
+        return nullptr;
+    }
+    const auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+    if (!hexOptional.has_value()) {
+        return nullptr;
+    }
+
+    // FRM resolve/load/texture-upload can fail or throw; contain it here so one unbuildable preview hex
+    // never aborts the whole preview — the caller falls back to a plain marker.
+    try {
+        const std::filesystem::path frmName = _resources.frmResolver().resolve(frmPid);
+        if (frmName.empty()) {
+            return nullptr;
+        }
+        const Frm* frm = _resources.repository().find<Frm>(frmName);
+        if (!frm) {
+            frm = _resources.repository().load<Frm>(frmName);
+        }
+        if (!frm) {
+            return nullptr;
+        }
+
+        // Anchor exactly like a committed exit grid: setDirection sets the frame rect, then
+        // setHexPosition applies the FRM offset and pushes the bar outward. Order matters — setHexPosition
+        // measures the on-screen bounds, so the frame rect must be set first.
+        auto previewObject = std::make_shared<Object>(frm);
+        previewObject->setSprite(sf::Sprite{ _resources.textures().get(frmName) });
+        previewObject->setDirection(ObjectDirection(0));
+        previewObject->setHexPosition(hexOptional.value().get());
+        return previewObject;
+    } catch (const std::exception& e) {
+        spdlog::warn("Exit-grid preview: could not build marker for frm 0x{:08X}: {}", frmPid, e.what());
+        return nullptr;
+    }
+}
+
+void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const sf::View& view,
+    const RenderData& renderData) {
+    // Each prospective hex is drawn with its own directional marker art (the same FRM the commit will
+    // place), anchored like a real exit grid and tinted by destination kind. If the sprite can't be
+    // built, it falls back to the plain editor overlay marker so the preview never blanks out.
+    const auto* hexes = renderData.exitGridPreview.hexes;
+    const auto* frmPids = renderData.exitGridPreview.frmPids;
+    if (!hexes || hexes->empty() || !frmPids || frmPids->size() != hexes->size()) {
+        return;
+    }
+
+    for (std::size_t i = 0; i < hexes->size(); ++i) {
+        const int hexIndex = (*hexes)[i];
+        if (hexIndex < 0 || hexIndex >= static_cast<int>(renderData.hexGrid->size())) {
+            continue;
+        }
+        const auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+        if (!hexOptional.has_value()
+            || !isHexVisible(hexOptional.value().get().x(), hexOptional.value().get().y(), view)) {
+            continue;
+        }
+        if (auto previewObject = buildExitGridPreviewObject(renderData, hexIndex, (*frmPids)[i])) {
+            previewObject->getSprite().setColor(renderData.exitGridPreview.tint);
+            target.draw(previewObject->getSprite());
+        } else {
+            // Fall back to the bundled editor "EG" marker (tinted) so this hex still previews.
+            const sf::Texture& markerTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
+            sf::Sprite markerSprite(markerTexture);
+            markerSprite.setOrigin(markerSprite.getLocalBounds().size / 2.f);
+            markerSprite.setColor(renderData.exitGridPreview.tint);
+            markerSprite.setPosition(sf::Vector2f(static_cast<float>(hexOptional.value().get().x()),
+                static_cast<float>(hexOptional.value().get().y())));
+            target.draw(markerSprite);
+        }
+    }
+}
+
+void RenderingEngine::drawExitGridPreviewLine(sf::RenderTarget& target, const RenderData& renderData) {
+    // An OPEN polyline vertex->vertex with a trailing segment to the live cursor; unlike a region, it is
+    // not closed back to the first vertex.
+    const auto* vertices = renderData.exitGridPreview.lineVertices;
+    if (!vertices || vertices->empty()) {
+        return;
+    }
+    const sf::Color lineColor(renderData.exitGridPreview.tint.r, renderData.exitGridPreview.tint.g,
+        renderData.exitGridPreview.tint.b, 255);
+    sf::VertexArray line(sf::PrimitiveType::LineStrip);
+    for (const sf::Vector2f& vertex : *vertices) {
+        line.append(sf::Vertex{ vertex, lineColor });
+    }
+    line.append(sf::Vertex{ renderData.exitGridPreview.lineCursor, lineColor });
+    target.draw(line);
 }
 
 } // namespace geck

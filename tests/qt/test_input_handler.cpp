@@ -4,6 +4,10 @@
 
 #include <SFML/Graphics/RenderTexture.hpp>
 #include <SFML/Window/Event.hpp>
+#include <SFML/Window/Keyboard.hpp>
+
+#include <cstddef>
+#include <vector>
 
 #include "ui/input/InputHandler.h"
 
@@ -39,6 +43,25 @@ struct Harness {
         sf::Event::MouseButtonPressed press;
         press.button = sf::Mouse::Button::Left;
         press.position = { x, y };
+        handler.handleEvent(sf::Event(press), target, view);
+    }
+
+    void rightClick(int x, int y) {
+        sf::Event::MouseButtonPressed press;
+        press.button = sf::Mouse::Button::Right;
+        press.position = { x, y };
+        handler.handleEvent(sf::Event(press), target, view);
+    }
+
+    void mouseMove(int x, int y) {
+        sf::Event::MouseMoved move;
+        move.position = { x, y };
+        handler.handleEvent(sf::Event(move), target, view);
+    }
+
+    void pressKey(sf::Keyboard::Key key) {
+        sf::Event::KeyPressed press;
+        press.code = key;
         handler.handleEvent(sf::Event(press), target, view);
     }
 };
@@ -122,4 +145,141 @@ TEST_CASE("InputHandler begins drag-selection on a plain click in select mode", 
     h.leftClick(100, 100);
 
     CHECK(h.handler.getCurrentAction() == InputHandler::EditorAction::DRAG_SELECTING);
+}
+
+// The "Draw edge" polyline state machine: clicks append vertices, moves fire a live preview, right-click
+// with >=2 vertices finalizes.
+TEST_CASE("InputHandler builds an exit-grid edge line and finalizes it on right-click", "[input][line]") {
+    if (glContextUnavailable()) {
+        SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
+    }
+    Harness h;
+    std::vector<sf::Vector2f> finalized;
+    int previewCalls = 0;
+    std::size_t lastPreviewVertexCount = 0;
+    InputHandler::Callbacks cb;
+    cb.onMarkExitsLine = [&finalized](const std::vector<sf::Vector2f>& verts, bool) { finalized = verts; };
+    cb.onMarkExitsLinePreview = [&previewCalls, &lastPreviewVertexCount](
+                                    const std::vector<sf::Vector2f>& verts, sf::Vector2f, bool) {
+        ++previewCalls;
+        lastPreviewVertexCount = verts.size();
+    };
+    h.handler.setCallbacks(cb);
+    h.handler.setMarkExitsMode(true);
+    REQUIRE(h.handler.isInMarkExitsMode());
+
+    // Two vertices via two (well-separated) left clicks — a line needs only two points.
+    h.leftClick(100, 100);
+    h.leftClick(300, 100);
+
+    // A mouse move fires the live preview with the two committed vertices.
+    h.mouseMove(220, 220);
+    CHECK(previewCalls >= 1);
+    CHECK(lastPreviewVertexCount == 2);
+
+    // Right-click finalizes (>=2 vertices) and the line is reported, then the vertices clear.
+    h.rightClick(220, 220);
+    CHECK(finalized.size() == 2);
+    CHECK(h.handler.isInMarkExitsMode()); // still active so another edge can be drawn
+}
+
+TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too few vertices", "[input][line]") {
+    if (glContextUnavailable()) {
+        SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
+    }
+    Harness h;
+    bool finalized = false;
+    bool cancelled = false;
+    InputHandler::Callbacks cb;
+    cb.onMarkExitsLine = [&finalized](const std::vector<sf::Vector2f>&, bool) { finalized = true; };
+    cb.onMarkExitsModeCancelled = [&cancelled]() { cancelled = true; };
+    h.handler.setCallbacks(cb);
+    h.handler.setMarkExitsMode(true);
+
+    h.leftClick(100, 100); // only one vertex
+
+    h.rightClick(220, 220);
+
+    CHECK_FALSE(finalized);
+    CHECK(cancelled);
+    CHECK_FALSE(h.handler.isInMarkExitsMode()); // tool dropped
+}
+
+// The flip key (Space) for "Draw edge" toggles the edge's side. A KeyPressed never touches the
+// RenderTarget/view, so we drive handleKeyPressed directly — no RenderTexture/GL context — and the test
+// runs on a display-less CI runner (handleEvent would need an sf::RenderTexture, which aborts without X11).
+namespace {
+void pressKeyDirect(InputHandler& handler, sf::Keyboard::Key key) {
+    sf::Event::KeyPressed press;
+    press.code = key;
+    handler.handleKeyPressed(press);
+}
+} // namespace
+
+TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the preview", "[input][line][flip]") {
+    InputHandler handler;
+    int previewCalls = 0;
+    bool lastPreviewFlip = false;
+    InputHandler::Callbacks cb;
+    cb.onMarkExitsLinePreview = [&](const std::vector<sf::Vector2f>&, sf::Vector2f, bool flipSide) {
+        ++previewCalls;
+        lastPreviewFlip = flipSide;
+    };
+    handler.setCallbacks(cb);
+    handler.setMarkExitsMode(true);
+
+    // Default side is the auto/outward side (not flipped).
+    CHECK_FALSE(handler.isMarkExitsFlipped());
+
+    // Space flips to the opposite side and re-fires the preview so the new side is visible immediately.
+    pressKeyDirect(handler, sf::Keyboard::Key::Space);
+    CHECK(handler.isMarkExitsFlipped());
+    CHECK(previewCalls == 1);
+    CHECK(lastPreviewFlip == true);
+
+    // Space again toggles back to the default side.
+    pressKeyDirect(handler, sf::Keyboard::Key::Space);
+    CHECK_FALSE(handler.isMarkExitsFlipped());
+    CHECK(previewCalls == 2);
+    CHECK(lastPreviewFlip == false);
+}
+
+// Shift-snap wiring: the live cursor passes through maybeSnapMarkExitsCursor before preview/commit.
+// Holding Shift can't be driven headlessly (sf::Keyboard reads the OS), so the snapped behaviour is
+// GUI-only — see the pure snapToExitGridAngle tests for the geometry. Here we pin the no-op path: with
+// Shift up the re-fired preview cursor is the raw cursor.
+TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Shift is up", "[input][line][snap]") {
+    InputHandler handler;
+    sf::Vector2f lastCursor{ -1.f, -1.f };
+    InputHandler::Callbacks cb;
+    cb.onMarkExitsLinePreview = [&](const std::vector<sf::Vector2f>&, sf::Vector2f cursor, bool) {
+        lastCursor = cursor;
+    };
+    handler.setCallbacks(cb);
+    handler.setMarkExitsMode(true);
+
+    // No committed vertex yet: snap can't apply (no segment), so the cursor (the key re-fire's last
+    // world pos, default 0,0) is passed through unchanged regardless of Shift.
+    pressKeyDirect(handler, sf::Keyboard::Key::Space);
+    CHECK(lastCursor == sf::Vector2f{ 0.f, 0.f });
+}
+
+TEST_CASE("InputHandler's flip key does nothing outside Draw-edge mode, and resets on mode change", "[input][line][flip]") {
+    InputHandler handler;
+    int previewCalls = 0;
+    InputHandler::Callbacks cb;
+    cb.onMarkExitsLinePreview = [&](const std::vector<sf::Vector2f>&, sf::Vector2f, bool) { ++previewCalls; };
+    handler.setCallbacks(cb);
+
+    // Not in MarkExits mode: Space is ignored (no toggle, no preview).
+    pressKeyDirect(handler, sf::Keyboard::Key::Space);
+    CHECK_FALSE(handler.isMarkExitsFlipped());
+    CHECK(previewCalls == 0);
+
+    // Enter the mode, flip, then leave: the toggle resets to the default.
+    handler.setMarkExitsMode(true);
+    pressKeyDirect(handler, sf::Keyboard::Key::Space);
+    CHECK(handler.isMarkExitsFlipped());
+    handler.setMarkExitsMode(false); // back to Select
+    CHECK_FALSE(handler.isMarkExitsFlipped());
 }

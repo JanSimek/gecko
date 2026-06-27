@@ -167,6 +167,23 @@ namespace {
 
     constexpr uint16_t kEmptyTile = static_cast<uint16_t>(Map::EMPTY_TILE);
 
+    // Grow `bounds` to the FULL floor-tile grid's screen extent — the whole iso playable area — using
+    // the same tile->screen projection the renderer uses to place floor tiles. The screen X and Y of a
+    // tile are both monotonic in (row, col), so the four grid corners bound the entire 100x100 grid.
+    // Independent of map content, so an empty/sparse map still frames to the whole grid.
+    void addFullGridBounds(Bounds& bounds) {
+        constexpr int lastRow = MAP_HEIGHT - 1;
+        constexpr int lastCol = MAP_WIDTH - 1;
+        for (const int row : { 0, lastRow }) {
+            for (const int col : { 0, lastCol }) {
+                const ScreenPosition pos = indexToScreenPosition(row * MAP_WIDTH + col);
+                const auto x = static_cast<float>(pos.x);
+                const auto y = static_cast<float>(pos.y);
+                bounds.add(x, y, x + static_cast<float>(TILE_WIDTH), y + static_cast<float>(TILE_HEIGHT));
+            }
+        }
+    }
+
     // Grow `bounds` to the non-empty tiles of one layer (floor or roof). Empty cells are excluded so
     // the frame fits the map's actual content — the loader emits a blank sprite for every empty cell
     // across the full 100x100 grid, and framing to those would shrink the content into a sea of black.
@@ -325,7 +342,8 @@ namespace {
     }
 
     void drawSemanticMarkers(sf::RenderTexture& target, const std::vector<std::shared_ptr<Object>>& objects,
-        resource::GameResources& resources, bool showBlockers, MapRenderer::Legend* legend) {
+        resource::GameResources& resources, bool showBlockers, MapRenderer::Legend* legend,
+        const HexagonGrid& hexgrid) {
         std::unordered_map<uint32_t, bool> flatCache;
         std::map<std::string, std::pair<sf::Color, int>> roles; // role -> {colour, count}
         int scriptedCount = 0;
@@ -339,7 +357,14 @@ namespace {
             }
 
             const sf::FloatRect b = object->getSprite().getGlobalBounds();
-            const sf::Vector2f center{ b.position.x + b.size.x / 2.0f, b.position.y + b.size.y / 2.0f };
+            sf::Vector2f center{ b.position.x + b.size.x / 2.0f, b.position.y + b.size.y / 2.0f };
+            // Exit-grid markers carry a display slide (their bar is pushed off the hex), so mark the true
+            // TRIGGER hex, not the slid sprite's centre — the dot then sits on the saved hex position.
+            if (mo->isExitGridMarker()) {
+                if (const auto h = hexgrid.getHexByPosition(static_cast<uint32_t>(mo->position)); h.has_value()) {
+                    center = { static_cast<float>(h->get().x()), static_cast<float>(h->get().y()) };
+                }
+            }
             const SemanticRole role = semanticRoleFor(*mo, Pro::typeOfPid(mo->pro_pid));
 
             sf::CircleShape marker(role.radius);
@@ -370,6 +395,33 @@ namespace {
             fillSemanticLegend(*legend, roles, scriptedCount);
         }
     }
+
+    // Overlay a small magenta dot on each exit-grid marker's TRIGGER hex (its saved hex position), so a
+    // natural render of the diagonal band shows the hex sitting on the band's outer edge.
+    void drawExitGridTriggerDots(sf::RenderTarget& target,
+        const std::vector<std::shared_ptr<Object>>& objects, const HexagonGrid& hexgrid) {
+        for (const auto& object : objects) {
+            if (!object || !object->hasMapObject()) {
+                continue;
+            }
+            const auto mo = object->getMapObjectPtr();
+            if (!mo->isExitGridMarker()) {
+                continue;
+            }
+            const auto h = hexgrid.getHexByPosition(static_cast<uint32_t>(mo->position));
+            if (!h.has_value()) {
+                continue;
+            }
+            constexpr float radius = 3.0f;
+            sf::CircleShape dot(radius);
+            dot.setOrigin({ radius, radius });
+            dot.setPosition({ static_cast<float>(h->get().x()), static_cast<float>(h->get().y()) });
+            dot.setFillColor(sf::Color(255, 0, 255));
+            dot.setOutlineColor(sf::Color(20, 20, 20, 220));
+            dot.setOutlineThickness(1.0f);
+            target.draw(dot);
+        }
+    }
 } // namespace
 
 MapRenderer::MapRenderer(resource::GameResources& resources)
@@ -395,7 +447,11 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
 
     // Frame to the map's *content*: non-empty tiles plus objects. (We still draw the blank sprites the
     // loader made for empty cells — they just fall outside this frame instead of dominating it.)
+    // With fullExtent, seed the bounds with the whole floor-tile grid so even an empty map shows it all.
     Bounds bounds;
+    if (options.fullExtent) {
+        addFullGridBounds(bounds);
+    }
     const auto& allTiles = map.getMapFile().tiles;
     if (const auto it = allTiles.find(options.elevation); it != allTiles.end()) {
         addTileContentBounds(bounds, it->second, false);
@@ -438,6 +494,9 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
     visibility.showExitGrids = false;
 
     engine.render(*target, target->getView(), data, visibility);
+    if (options.exitDots) {
+        drawExitGridTriggerDots(*target, objects, hexgrid);
+    }
     target->display();
     return target->getTexture().copyToImage();
 }
@@ -462,9 +521,13 @@ sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend*
         loader.loadObjectSprites(map, options.elevation, objects, wallBlockerOverlays);
     }
 
-    // Flat-coloured floor mesh, plus the content bounds (floor cells and object sprites).
+    // Flat-coloured floor mesh, plus the content bounds (floor cells and object sprites). With
+    // fullExtent, seed the bounds with the whole floor-tile grid so even an empty map shows it all.
     sf::VertexArray floor(sf::PrimitiveType::Triangles);
     Bounds bounds;
+    if (options.fullExtent) {
+        addFullGridBounds(bounds);
+    }
     appendFloorMesh(floor, bounds, tiles, floorColor);
     for (const auto& object : objects) {
         if (object) {
@@ -479,7 +542,7 @@ sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend*
     target->clear(options.background);
     target->draw(floor);
     if (semantic) {
-        drawSemanticMarkers(*target, objects, _resources, options.showBlockers, legend);
+        drawSemanticMarkers(*target, objects, _resources, options.showBlockers, legend, hexgrid);
     } else {
         drawObjectMarkers(*target, objects, _resources, options.showBlockers, legend);
     }

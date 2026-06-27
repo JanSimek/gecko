@@ -1,5 +1,7 @@
 #include "InputHandler.h"
 #include "util/Constants.h"
+#include "util/ExitGridDirection.h"
+#include <SFML/System/Time.hpp>
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/Mouse.hpp>
 #include <spdlog/spdlog.h>
@@ -61,7 +63,33 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             return;
         }
 
-        // Mark exits mode is handled in mouse release (not here) so drag selection works.
+        if (_mode == EditorMode::MarkExits) {
+            // "Draw edge": a click appends a vertex, a double-click finalizes. Double-click detection
+            // uses the RAW cursor (physical mouse stillness); with Shift held the appended vertex is
+            // SNAPPED to the nearest clean angle.
+            const sf::Vector2f delta = worldPos - _dragStartWorldPos;
+            const float distance = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+            const bool isDoubleClick = _lineVertices.size() >= 2 && _doubleClickClock.getElapsedTime().asSeconds() < kDoubleClickSeconds && distance < kDoubleClickWorldDistance;
+            _doubleClickClock.restart();
+            _dragStartWorldPos = worldPos;
+
+            if (isDoubleClick) {
+                finalizeExitGridLine();
+            } else {
+                // Append the (Shift-snapped) vertex. The first STARTS a fresh edge; every vertex from
+                // the 2nd on CLOSES a segment, which the host freezes at the current flip.
+                const sf::Vector2f vertex = maybeSnapMarkExitsCursor(worldPos);
+                if (_lineVertices.empty()) {
+                    if (_callbacks.onMarkExitsLineReset) {
+                        _callbacks.onMarkExitsLineReset();
+                    }
+                } else if (_callbacks.onMarkExitsSegmentCommitted) {
+                    _callbacks.onMarkExitsSegmentCommitted(_lineVertices.back(), vertex, _markExitsFlip);
+                }
+                _lineVertices.push_back(vertex);
+            }
+            return;
+        }
 
         SelectionModifier modifier = getSelectionModifier();
         bool hasModifiers = (modifier != SelectionModifier::NONE);
@@ -73,14 +101,6 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
                 _dragStartWorldPos = worldPos;
                 _isDragging = false;
             }
-            return;
-        }
-        // Mark exits mode only does exit grid selection.
-        if (_mode == EditorMode::MarkExits) {
-            _currentAction = EditorAction::DRAG_SELECTING;
-            _dragStartWorldPos = worldPos;
-            _isDragging = false;
-            _immediateSelectionPerformed = false;
             return;
         }
         // Plain drag-select replaces the selection; Ctrl (TOGGLE) drag removes the covered
@@ -112,11 +132,13 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             _mode = EditorMode::Select;
             spdlog::debug("Exit grid placement mode cancelled with right-click");
         } else if (_mode == EditorMode::MarkExits) {
-            _mode = EditorMode::Select;
-            if (_callbacks.onMarkExitsModeCancelled) {
-                _callbacks.onMarkExitsModeCancelled();
+            // Right-click finalizes the line with enough vertices, otherwise abandons it and drops the tool.
+            if (_lineVertices.size() >= 2) {
+                finalizeExitGridLine();
+            } else {
+                cancelExitGridLine();
             }
-            spdlog::debug("Mark exits mode cancelled with right-click");
+            spdlog::debug("Mark exits mode right-click ({} vertices)", _lineVertices.size());
         } else if (_mode == EditorMode::StampPattern) {
             _mode = EditorMode::Select;
             if (_callbacks.onStampPatternCancel) {
@@ -152,25 +174,10 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
 
             case EditorAction::DRAG_SELECTING:
                 if (_isDragging) {
-                    if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsAreaSelection) {
-                        _callbacks.onMarkExitsAreaSelection(_dragStartWorldPos, worldPos);
-                    } else if (_selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE && _callbacks.onScrollBlockerRectangle) {
-                        float left = std::min(_dragStartWorldPos.x, worldPos.x);
-                        float top = std::min(_dragStartWorldPos.y, worldPos.y);
-                        float width = std::abs(worldPos.x - _dragStartWorldPos.x);
-                        float height = std::abs(worldPos.y - _dragStartWorldPos.y);
-                        sf::FloatRect area({ left, top }, { width, height });
-                        _callbacks.onScrollBlockerRectangle(area);
-                    } else if (_callbacks.onDragSelection) {
-                        _callbacks.onDragSelection(_dragStartWorldPos, worldPos, _dragSelectionModifier);
-                    }
+                    finishDragSelectRelease(worldPos);
                 } else if (!_immediateSelectionPerformed && _callbacks.onSelectionClick) {
-                    if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsSelection) {
-                        _callbacks.onMarkExitsSelection(worldPos);
-                    } else {
-                        // A no-drag release on a Ctrl drag is a Ctrl+click, so pass the modifier.
-                        _callbacks.onSelectionClick(worldPos, _dragSelectionModifier);
-                    }
+                    // A no-drag release on a Ctrl drag is a Ctrl+click, so pass the modifier.
+                    _callbacks.onSelectionClick(worldPos, _dragSelectionModifier);
                 }
                 break;
 
@@ -209,9 +216,16 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
     sf::RenderTarget& target,
     const sf::View& view) {
     sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
+    _mouseLastWorldPos = worldPos;
 
     if (_callbacks.onMouseMove) {
         _callbacks.onMouseMove(worldPos);
+    }
+
+    // "Draw edge": preview the polyline + on-line hexes from the committed vertices to the live cursor
+    // on every move, independent of any drag. With Shift held, the live cursor snaps to a clean angle.
+    if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsLinePreview) {
+        _callbacks.onMarkExitsLinePreview(_lineVertices, maybeSnapMarkExitsCursor(worldPos), _markExitsFlip);
     }
 
     switch (_currentAction) {
@@ -233,12 +247,8 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
                     _isDragging = true;
                 }
             }
-            if (_isDragging) {
-                if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsPreview) {
-                    _callbacks.onMarkExitsPreview(_dragStartWorldPos, worldPos);
-                } else if (_callbacks.onDragSelectionPreview) {
-                    _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos, _dragSelectionModifier);
-                }
+            if (_isDragging && _callbacks.onDragSelectionPreview) {
+                _callbacks.onDragSelectionPreview(_dragStartWorldPos, worldPos, _dragSelectionModifier);
             }
             break;
 
@@ -281,12 +291,20 @@ void InputHandler::handleMouseWheelScrolled(const sf::Event::MouseWheelScrolled&
 
 void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
     if (event.code == sf::Keyboard::Key::Escape) {
-        if (_currentAction == EditorAction::OBJECT_MOVING && _callbacks.onObjectDragCancel) {
+        if (_mode == EditorMode::MarkExits) {
+            // Esc abandons the in-progress "Draw edge" line and drops the tool.
+            cancelExitGridLine();
+        } else if (_currentAction == EditorAction::OBJECT_MOVING && _callbacks.onObjectDragCancel) {
             _callbacks.onObjectDragCancel();
             _currentAction = EditorAction::NONE;
             _isDragging = false;
         } else if (_callbacks.onEscape) {
             _callbacks.onEscape();
+        }
+    } else if (event.code == sf::Keyboard::Key::Enter && _mode == EditorMode::MarkExits) {
+        // Enter finalizes the "Draw edge" line when it has enough vertices.
+        if (_lineVertices.size() >= 2) {
+            finalizeExitGridLine();
         }
     } else if (event.code == sf::Keyboard::Key::Delete || event.code == sf::Keyboard::Key::Backspace) {
         if (_callbacks.onDeleteObjects) {
@@ -298,11 +316,58 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
         if (_mode == EditorMode::StampPattern && _callbacks.onStampCycleVariant) {
             _callbacks.onStampCycleVariant();
         }
+    } else if (event.code == sf::Keyboard::Key::Space) {
+        // In "Draw edge" mode, Space flips which side the edge's bars sit on, then re-fires the preview
+        // at the last cursor so the flipped side is visible before finalising.
+        if (_mode == EditorMode::MarkExits) {
+            _markExitsFlip = !_markExitsFlip;
+            if (_callbacks.onMarkExitsLinePreview) {
+                _callbacks.onMarkExitsLinePreview(_lineVertices, maybeSnapMarkExitsCursor(_mouseLastWorldPos), _markExitsFlip);
+            }
+        }
     }
 }
 
 void InputHandler::handleKeyReleased(const sf::Event::KeyReleased&) {
     // Currently no key release handling needed
+}
+
+void InputHandler::finishDragSelectRelease(sf::Vector2f worldPos) {
+    if (_selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE && _callbacks.onScrollBlockerRectangle) {
+        const float left = std::min(_dragStartWorldPos.x, worldPos.x);
+        const float top = std::min(_dragStartWorldPos.y, worldPos.y);
+        const float width = std::abs(worldPos.x - _dragStartWorldPos.x);
+        const float height = std::abs(worldPos.y - _dragStartWorldPos.y);
+        _callbacks.onScrollBlockerRectangle(sf::FloatRect({ left, top }, { width, height }));
+    } else if (_callbacks.onDragSelection) {
+        _callbacks.onDragSelection(_dragStartWorldPos, worldPos, _dragSelectionModifier);
+    }
+}
+
+void InputHandler::finalizeExitGridLine() {
+    // onMarkExitsLine places the FROZEN committed segments, so it must run BEFORE the reset that drops them.
+    if (_lineVertices.size() >= 2 && _callbacks.onMarkExitsLine) {
+        _callbacks.onMarkExitsLine(_lineVertices, _markExitsFlip);
+    }
+    _lineVertices.clear();
+    if (_callbacks.onMarkExitsLineReset) {
+        _callbacks.onMarkExitsLineReset(); // drop the frozen segments — the next edge starts fresh
+    }
+    // The tool stays active for another edge; repaint the now-cleared preview. The flip persists.
+    if (_callbacks.onMarkExitsLinePreview) {
+        _callbacks.onMarkExitsLinePreview(_lineVertices, _dragStartWorldPos, _markExitsFlip);
+    }
+}
+
+void InputHandler::cancelExitGridLine() {
+    _lineVertices.clear();
+    if (_callbacks.onMarkExitsLineReset) {
+        _callbacks.onMarkExitsLineReset(); // drop the frozen segments of the abandoned line
+    }
+    _mode = EditorMode::Select;
+    if (_callbacks.onMarkExitsModeCancelled) {
+        _callbacks.onMarkExitsModeCancelled();
+    }
 }
 
 void InputHandler::setTilePlacementMode(bool enabled, int tileIndex, bool replaceMode) {
@@ -330,6 +395,17 @@ sf::Vector2f InputHandler::pixelToWorld(sf::Vector2i pixelPos,
 
 bool InputHandler::isShiftPressed() const {
     return sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
+}
+
+sf::Vector2f InputHandler::maybeSnapMarkExitsCursor(sf::Vector2f cursor) const {
+    // Snap only the LIVE segment, and only while Shift is held (the conventional "constrain to a clean
+    // angle" modifier); with no committed vertex there is no segment to align, so leave the cursor raw.
+    if (_mode != EditorMode::MarkExits || _lineVertices.empty() || !isShiftPressed()) {
+        return cursor;
+    }
+    const sf::Vector2f last = _lineVertices.back();
+    const auto [sx, sy] = snapToExitGridAngle(last.x, last.y, cursor.x, cursor.y);
+    return sf::Vector2f{ static_cast<float>(sx), static_cast<float>(sy) };
 }
 
 } // namespace geck

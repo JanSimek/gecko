@@ -271,6 +271,9 @@ signals:
     /// setPlayerStart/newMap), so the host must flag the map modified explicitly.
     void mapModifiedByScript();
     void editorModeChanged(EditorMode mode);
+    /// The contextual status-bar key-hint changed because the mode or the selection changed.
+    /// MainWindow shows it on a permanent status-bar label (separate from transient messages).
+    void hintChanged(const QString& hint);
 
 public slots:
     void onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
@@ -285,6 +288,10 @@ public slots:
     const UndoStack& getUndoStack() const { return _session.undoStack(); }
 
 private:
+    // Recompute the contextual key-hint from the current mode + selection and emit hintChanged.
+    // Called whenever either changes (mode switch, selection callback) so the status bar stays current.
+    void emitHintChanged();
+
     // Center the view on a hex position (shared by centerViewOnPlayerPosition and revealScriptObject).
     void centerViewOnHex(uint32_t hexPosition);
     // The elevation whose objects own the script with this SID (map_scripts_pid == sid), or -1 if none.
@@ -340,7 +347,11 @@ private:
     // Add-preview helpers: tint the covered tiles/objects and record them for clearDragPreview.
     void previewAreaTiles(const sf::FloatRect& area, bool roof, bool includeEmpty);
     void previewAreaObjects(const sf::FloatRect& area);
-    void updateMarkExitsPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
+    // Exit-grid "Draw edge" live preview: recompute the prospective on-line hexes (the gap-free hex
+    // line through the committed vertices + the live cursor) and the tint from the tool's current
+    // destination kind, for the renderer to draw the polyline and marked hexes.
+    void updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide);
+    void clearMarkExitsLinePreview();
     void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     // Commit a finished drag rectangle to the selection (replace/deselect/additive), or build
     // scroll blockers when in that mode. Extracted from the onDragSelection callback.
@@ -434,6 +445,18 @@ private:
 
     // Player position selection state
     bool _playerPositionSelectionMode = false;
+
+    // Exit-grid "Draw edge" preview state (MarkExits mode). _exitGridLineActive gates the renderer;
+    // the vertices/cursor draw the polyline; the hexes are the prospective on-line hexes (recomputed
+    // each mouse move); the tint reflects the tool's current destination kind.
+    std::vector<sf::Vector2f> _exitGridLineVertices;
+    sf::Vector2f _exitGridLineCursor;
+    bool _exitGridLineActive = false;
+    std::vector<int> _exitGridPreviewHexes;
+    // The directional marker FRM for each prospective preview hex (parallel to _exitGridPreviewHexes),
+    // so the preview shows the same directional art the commit will place (honouring the override).
+    std::vector<uint32_t> _exitGridPreviewFrmPids;
+    sf::Color _exitGridPreviewTint{ 80, 220, 80, 140 };
 };
 
 } // namespace geck

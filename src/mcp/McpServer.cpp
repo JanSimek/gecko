@@ -9,6 +9,7 @@
 #include "cli/Quests.h"
 #include "cli/Endings.h"
 #include "cli/GvarRefs.h"
+#include "cli/FrmInspect.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapReachability.h"
 #include "cli/MapRender.h"
@@ -351,6 +352,7 @@ namespace {
         opts.objects = optBool(args, "objects", opts.objects);
         opts.semantic = optBool(args, "semantic", opts.semantic);
         opts.showBlockers = optBool(args, "showBlockers", opts.showBlockers);
+        opts.fullExtent = optBool(args, "full", opts.fullExtent);
         std::ostringstream oss;
         const int rc = cli::renderMap(resources, opts, oss);
         return toolText(oss.str(), rc != 0); // rc != 0 e.g. unreadable map or no GL context
@@ -377,6 +379,54 @@ namespace {
 
     json toolScriptApi() {
         return toolText(scriptApiReference());
+    }
+
+    // --- FRM inspection tools ---------------------------------------------------
+    json toolFrmInfo(resource::GameResources& resources, const json& args) {
+        const std::string target = requireString(args, "frm");
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::frmInfo(resources, target, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("frm_info failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolRenderFrm(resource::GameResources& resources, const json& args) {
+        cli::FrmRenderOptions opts;
+        opts.target = requireString(args, "frm");
+        opts.outPath = requireString(args, "out");
+        opts.direction = static_cast<int>(optInt(args, "direction", -1, -1, 5));
+        opts.frame = static_cast<int>(optInt(args, "frame", -1, -1, 100000));
+        std::ostringstream oss;
+        const int rc = cli::frmRender(resources, opts, oss);
+        return toolText(oss.str(), rc != 0); // rc != 0 e.g. unresolvable FRM or no GL context
+    }
+
+    json toolResolveFid(resource::GameResources& resources, const json& args) {
+        const std::string fid = requireString(args, "fid");
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::resolveFidCommand(resources, fid, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("resolve_fid failed: ") + e.what(), true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolListFrms(resource::GameResources& resources, const json& args) {
+        const std::string glob = requireString(args, "glob");
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::listFrms(resources, glob, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("list_frms failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
     }
 
     // Dispatch a tools/call by name. Returns the tool result, or nullopt for an unknown tool
@@ -526,6 +576,27 @@ namespace {
             "FRP scripts_src) mounted. Args: gvar (the GVAR_* name).",
             json({ { "type", "object" }, { "properties", { { "gvar", { { "type", "string" } } } } }, { "required", json::array({ "gvar" }) } }),
             [](resource::GameResources& r, const json& a) { return toolFindGvar(r, a); } });
+        t.push_back({ "frm_info",
+            "FRM sprite metadata as JSON, so art can be MEASURED instead of inferred from PID "
+            "arithmetic. Accepts an art name (ext2grd1 or art/misc/ext2grd1.frm) or a FID (as a string, "
+            "hex 0x05000021 or decimal). Returns resolvedArtPath, fid, directionCount, "
+            "framesPerDirection, and a per-frame array of {direction,frame,width,height,offsetX,"
+            "offsetY} — the signed pixel offsets that anchor the art (the shiftX/shiftY the map renderer "
+            "applies). Pair with render_frm to also SEE it. Args: frm.",
+            json({ { "type", "object" }, { "properties", { { "frm", { { "type", "string" } } } } }, { "required", json::array({ "frm" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolFrmInfo(r, a); } });
+        t.push_back({ "resolve_fid",
+            "Decode a FID (as a string: hex 0x05000021 or decimal) to JSON {fid, type, index, artPath} "
+            "— the art type (item/critter/scenery/wall/tile/misc/interface/inventory), the LST index, "
+            "and the resolved art/ path. The inverse of the PID-to-art lookup the engine does. Args: fid.",
+            json({ { "type", "object" }, { "properties", { { "fid", { { "type", "string" } } } } }, { "required", json::array({ "fid" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolResolveFid(r, a); } });
+        t.push_back({ "list_frms",
+            "List the art entries whose name matches a glob ('*' and '?'), e.g. ext2grd* or exitgrd*, "
+            "across every art .lst. Each entry: {name, artPath, fid}. Lets you enumerate a sprite family "
+            "(e.g. all exit-grid pieces) and feed an artPath/fid to frm_info or render_frm. Args: glob.",
+            json({ { "type", "object" }, { "properties", { { "glob", { { "type", "string" } } } } }, { "required", json::array({ "glob" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolListFrms(r, a); } });
         t.push_back({ "script_api",
             "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
             "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "
@@ -555,11 +626,23 @@ namespace {
             "(for checking scatter). semantic=true also greys the floor but colours markers by role — "
             "exit grids highlighted, critters by team, scripted objects ringed (legend keyed by role) — "
             "the purpose layer that pairs with describe_map. FLAT objects (invisible engine blockers) "
-            "are hidden unless showBlockers. map/out are filesystem paths — out is written there, and "
+            "are hidden unless showBlockers. full=true frames the whole iso playable grid instead of "
+            "cropping to drawn content, so a sparse/empty map still shows the entire map extent. "
+            "map/out are filesystem paths — out is written there, and "
             "map may be a VFS path or any file on disk (e.g. one generate just wrote). Needs an "
             "off-screen GL context.",
-            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "semantic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } }),
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "semantic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } }, { "full", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } }),
             [](resource::GameResources& r, const json& a) { return toolRender(r, a); } });
+        t.push_back({ "render_frm",
+            "Render an FRM sprite to a PNG so the art can be SEEN, not inferred from PID arithmetic. "
+            "Accepts an art name (ext2grd1 or art/misc/ext2grd1.frm) or a FID (as a string, hex "
+            "0x05000021 or decimal). Default: a grid of all 6 directions (rows) x all frames (columns) "
+            "on a checkerboard background, each cell at the frame's pixel size. Optional direction (0-5) "
+            "renders one direction; optional frame renders one frame index. Returns the output path, "
+            "image size, and grid layout (directions x frames). out is a filesystem path (written "
+            "there). Needs an off-screen GL context. Args: frm, out, optional direction, frame.",
+            json({ { "type", "object" }, { "properties", { { "frm", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "direction", { { "type", "integer" } } }, { "frame", { { "type", "integer" } } } } }, { "required", json::array({ "frm", "out" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolRenderFrm(r, a); } });
         t.push_back({ "extract_pattern",
             "Capture a structure from a real map into a reusable pattern stamp (JSON the editor's "
             "pattern library reads, and generate can place). Locate it with 'pids' (proto PIDs from "
