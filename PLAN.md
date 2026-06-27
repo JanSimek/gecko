@@ -1593,3 +1593,34 @@ Effort: S ≈ days, M ≈ 1–2 weeks, L ≈ 3–4 weeks for one developer. The 
 - **Autotile across the selection boundary** masks against selection membership in MVP; blending into pre-existing terrain via `getFloorXY` is a deferred advanced flag.
 - **`blob8` authoring burden** (47 entries). Support both `edges4` and `blob8`; ship `edges4` examples first.
 - **Trust beyond hand-installed plugins.** v1 deliberately ships only the install-time prompt; SHA pinning, re-prompt-on-widening, quarantine, the version triple, `.gplug`, and ed25519 signing are deferred until ABI 1 is frozen and a distribution channel exists. Gate third-party *distribution* until then.
+
+---
+
+# Exit-grid rendering vs the engine — fix placement (LOWEST priority)
+
+Deferred by author's decision; the current rendering is "good enough" for now. The editor's exit-grid
+bars diverge from how Fallout 2 actually draws them, which causes selection/placement quirks. Leave
+as-is; revisit at lowest priority.
+
+**Engine truth** (verified against shipped maps `ncr1`, `redmtun`, `redwan1`, `artemple` via the new
+`map render --exit-dots` overlay, and against `fallout2-ce/src/object.cc` ~4942): every exit grid is ONE
+bar per object, drawn once, **centered on its hex** — `left = hexScreenX - frameWidth/2`, `bottom =
+hexScreenY`; all eight exit-grid FRMs (`exitgrd1-8` / `ext2grd1-8`) have frame offsets `(0,0)`; there is
+no exit-grid special case in the renderer. The trigger hex == the object's hex == the bar's bottom-center.
+A real exit edge is a SINGLE line of objects (cardinal = straight, diagonal = a one-hex staircase) — never
+a doubled / 2-wide band. It only *looks* wide because the bars (96×24 … 127×48) overlap across the ~16×12
+hex step.
+
+**Editor divergence** (the cause of the known quirks): `Object::applyExitGridOutwardOffset` slides the
+bar off its hex (cardinals onto the bar's inner bbox edge), and `RenderingEngine::renderDiagonalExitGridBars`
+/ `drawDoubledDiagonalBar*` draws diagonal bars TWICE as a doubled display band. Consequences: object
+selection misses the visible bar and instead selects the on-hex object (which renders no bar of its own);
+the trigger hex falls outside the texture; the live preview doesn't match the placement; diagonal pairs
+misalign.
+
+**Fix when prioritized**: delete `renderDiagonalExitGridBars` / `drawDoubledDiagonalBar*` (+ the
+`isDiagonalExitGridObject` skip in `renderObjects`) and `Object::applyExitGridOutwardOffset`; let exit
+grids draw once through the standard object path — the base `setHexPosition` already reproduces the engine
+anchor (centered horizontally, bottom edge at the hex). Then visible bar == real object == selectable. If
+a wider authoring visual is still wanted, do it as a translucent overlay tied to the object's actual hex —
+never an offset or a second copy of the texture, which re-breaks selection.
