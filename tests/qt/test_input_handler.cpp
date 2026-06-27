@@ -151,8 +151,9 @@ TEST_CASE("InputHandler builds an exit-grid edge line and finalizes it on right-
     int previewCalls = 0;
     std::size_t lastPreviewVertexCount = 0;
     InputHandler::Callbacks cb;
-    cb.onMarkExitsLine = [&](const std::vector<sf::Vector2f>& verts) { finalized = verts; };
-    cb.onMarkExitsLinePreview = [&](const std::vector<sf::Vector2f>& verts, sf::Vector2f) {
+    cb.onMarkExitsLine = [&finalized](const std::vector<sf::Vector2f>& verts) { finalized = verts; };
+    cb.onMarkExitsLinePreview = [&previewCalls, &lastPreviewVertexCount](
+                                    const std::vector<sf::Vector2f>& verts, sf::Vector2f) {
         ++previewCalls;
         lastPreviewVertexCount = verts.size();
     };
@@ -183,8 +184,8 @@ TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too f
     bool finalized = false;
     bool cancelled = false;
     InputHandler::Callbacks cb;
-    cb.onMarkExitsLine = [&](const std::vector<sf::Vector2f>&) { finalized = true; };
-    cb.onMarkExitsModeCancelled = [&]() { cancelled = true; };
+    cb.onMarkExitsLine = [&finalized](const std::vector<sf::Vector2f>&) { finalized = true; };
+    cb.onMarkExitsModeCancelled = [&cancelled]() { cancelled = true; };
     h.handler.setCallbacks(cb);
     h.handler.setMarkExitsMode(true);
 

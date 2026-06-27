@@ -67,7 +67,6 @@ public:
         std::function<void(sf::Vector2f worldPos)> onStampPattern;
         std::function<void()> onStampPatternCancel;
         std::function<void()> onStampCycleVariant;
-        std::function<void(sf::Vector2f worldPos)> onMarkExitsSelection;
         // Polyline "Draw edge" mode. onMarkExitsLinePreview fires on every mouse move with the
         // vertices committed so far plus the live cursor (to draw the in-progress edge);
         // onMarkExitsLine fires once on finalize with the finished vertex polyline.
@@ -154,6 +153,10 @@ private:
     // "Draw edge" polyline state machine helpers (MarkExits mode).
     void finalizeExitGridLine(); // fires onMarkExitsLine if >=2 vertices, then clears
     void cancelExitGridLine();   // clears vertices and drops the tool (onMarkExitsModeCancelled)
+
+    // A finished left-button drag in DRAG_SELECTING: either a scroll-blocker rectangle or a normal
+    // drag selection. Split out of handleMouseReleased to keep that switch's nesting shallow.
+    void finishDragSelectRelease(sf::Vector2f worldPos);
 
     // State
     Callbacks _callbacks;

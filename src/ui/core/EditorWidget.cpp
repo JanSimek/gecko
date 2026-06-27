@@ -832,10 +832,6 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         cycleStampVariant();
     };
 
-    callbacks.onMarkExitsSelection = [this](sf::Vector2f worldPos) {
-        _exitGridPlacementManager->handleMarkExitsSelection(worldPos);
-    };
-
     callbacks.onMarkExitsLinePreview = [this](const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor) {
         updateMarkExitsLinePreview(vertices, cursor);
     };
@@ -966,12 +962,12 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.currentElevation = _session.currentElevation();
 
     // Exit-grid "Draw edge" live preview (MarkExits mode).
-    renderData.exitGridLineActive = _exitGridLineActive;
-    renderData.exitGridLineVertices = &_exitGridLineVertices;
-    renderData.exitGridLineCursor = _exitGridLineCursor;
-    renderData.exitGridPreviewHexes = &_exitGridPreviewHexes;
-    renderData.exitGridPreviewFrmPids = &_exitGridPreviewFrmPids;
-    renderData.exitGridPreviewTint = _exitGridPreviewTint;
+    renderData.exitGridPreview.active = _exitGridLineActive;
+    renderData.exitGridPreview.lineVertices = &_exitGridLineVertices;
+    renderData.exitGridPreview.lineCursor = _exitGridLineCursor;
+    renderData.exitGridPreview.hexes = &_exitGridPreviewHexes;
+    renderData.exitGridPreview.frmPids = &_exitGridPreviewFrmPids;
+    renderData.exitGridPreview.tint = _exitGridPreviewTint;
 
     _controller.renderingEngine().render(target, _controller.viewport().getView(), renderData, visibility);
 }
@@ -1627,14 +1623,12 @@ void EditorWidget::updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& v
     }
     _exitGridPreviewHexes = hexline::hexPolyline(_session.hexgrid(), vertexHexes);
 
-    // Per-hex directional FRM, picked the same way the commit will (Auto = outward facing, an
-    // explicit side = that side's art), so the preview matches what placement produces.
-    _exitGridPreviewFrmPids.reserve(_exitGridPreviewHexes.size());
-    for (const int hex : _exitGridPreviewHexes) {
-        _exitGridPreviewFrmPids.push_back(_exitGridPlacementManager
-                ? _exitGridPlacementManager->previewFrmPidForHex(hex)
-                : 0u);
-    }
+    // Per-hex directional FRM, picked the same way the commit will: each hex's art comes from its own
+    // local segment on the line (Auto), or the explicit marker-direction override, so the preview
+    // matches what placement produces.
+    _exitGridPreviewFrmPids = _exitGridPlacementManager
+        ? _exitGridPlacementManager->previewFrmPidsForLine(_exitGridPreviewHexes)
+        : std::vector<uint32_t>(_exitGridPreviewHexes.size(), 0u);
 }
 
 void EditorWidget::clearMarkExitsLinePreview() {

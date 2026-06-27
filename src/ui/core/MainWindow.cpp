@@ -826,7 +826,7 @@ void MainWindow::applyExitGridsTool(bool checked) {
     }
     // Activate whichever sub-mode is ticked in the dropdown (default: Draw edge).
     EditorMode mode = EditorMode::MarkExits;
-    for (QAction* item : _exitGridsMenu->actions()) {
+    for (const QAction* item : _exitGridsMenu->actions()) {
         if (item->isChecked()) {
             mode = static_cast<EditorMode>(item->data().toInt());
             break;

@@ -279,13 +279,16 @@ TEST_CASE("MapScriptApi placeExitGrid records a MISC exit-grid object", "[script
     const auto& eg = *objs.front();
     CHECK(eg.position == HEX);
     CHECK(eg.isExitGridMarker()); // MISC type 0x05, proto index 16..23
-    CHECK(eg.pro_pid == ExitGrid::WORLD_EXIT_PRO_PID);
+    // A lone scripted exit grid uses the bottom-edge marker; a world/town exit draws it in brown.
+    CHECK(eg.pro_pid == ExitGrid::BOTTOM_PRO_PID);
+    CHECK(eg.frm_pid == ExitGrid::brownFrm(ExitGrid::DIR_BOTTOM));
     CHECK(eg.exit_map == ExitGrid::WORLD_MAP_EXIT); // -2 stored as 0xFFFFFFFE
 
-    // A map-to-map exit uses the map-exit proto and keeps every destination field.
+    // A map-to-map exit keeps every destination field and draws the bottom marker in green.
     REQUIRE(api.placeExitGrid(20200, 5, 12345, 1, 3));
     const auto& eg2 = *objs.back();
-    CHECK(eg2.pro_pid == ExitGrid::MAP_EXIT_PRO_PID);
+    CHECK(eg2.pro_pid == ExitGrid::BOTTOM_PRO_PID);
+    CHECK(eg2.frm_pid == ExitGrid::greenFrm(ExitGrid::DIR_BOTTOM));
     CHECK(eg2.exit_map == 5u);
     CHECK(eg2.exit_position == 12345u);
     CHECK(eg2.exit_elevation == 1u);
@@ -321,11 +324,11 @@ TEST_CASE("MapScriptApi placeExitGridRect frames a rectangle of exit grids", "[s
         CHECK(hexes.insert(o->position).second);        // no hex placed twice (corners are shared)
         protos.insert(o->pro_pid);
     }
-    // All four directional edge arts are used.
-    CHECK(protos.count(ExitGrid::RECT_TOP_PRO_PID) == 1);
-    CHECK(protos.count(ExitGrid::RECT_BOTTOM_PRO_PID) == 1);
-    CHECK(protos.count(ExitGrid::RECT_LEFT_PRO_PID) == 1);
-    CHECK(protos.count(ExitGrid::RECT_RIGHT_PRO_PID) == 1);
+    // All four cardinal directional edge arts are used.
+    CHECK(protos.count(ExitGrid::TOP_PRO_PID) == 1);
+    CHECK(protos.count(ExitGrid::BOTTOM_PRO_PID) == 1);
+    CHECK(protos.count(ExitGrid::LEFT_PRO_PID) == 1);
+    CHECK(protos.count(ExitGrid::RIGHT_PRO_PID) == 1);
 
     // Invalid inputs raise.
     CHECK_THROWS(api.placeExitGridRect(-1, 600, 400, -2, 0, 0, 0));                        // off-grid centre

@@ -4,55 +4,141 @@
 #include "util/ExitGridDirection.h"
 
 using geck::ExitGridArt;
+using geck::exitGridArtForDirection;
 using geck::exitGridArtForFacing;
+using geck::exitGridArtForSegment;
+using geck::ExitGridDestinationKind;
 namespace ExitGrid = geck::ExitGrid;
 
 namespace {
 // Reference point the facing is measured from.
 constexpr int CX = 1000;
 constexpr int CY = 1000;
+constexpr auto INTER = ExitGridDestinationKind::InterMap; // green
+constexpr auto WORLD = ExitGridDestinationKind::WorldMap; // brown
+
+// Every emitted proto must be one of the eight directional exit-grid protos (index 16..23).
+bool isExitGridProto(uint32_t proPid) {
+    return proPid >= ExitGrid::FIRST_EXIT_GRID_PID && proPid <= ExitGrid::LAST_EXIT_GRID_PID;
+}
 } // namespace
 
-TEST_CASE("exitGridArtForFacing picks the TOP art for a hex above centre", "[exitgrid][direction]") {
-    // Screen y grows downward, so a smaller y is above centre -> faces the TOP edge.
-    const ExitGridArt art = exitGridArtForFacing(CX, CY - 100, CX, CY);
-    CHECK(art.proPid == ExitGrid::RECT_TOP_PRO_PID);
-    CHECK(art.frmPid == ExitGrid::RECT_TOP_FRM_PID);
+TEST_CASE("the verified frm scheme: greenFrm = proto+1, brownFrm = proto+0x11", "[exitgrid][art]") {
+    for (int dir = 0; dir < ExitGrid::DIR_COUNT; ++dir) {
+        const uint32_t proto = ExitGrid::exitGridProto(dir);
+        CHECK(proto == 0x05000010u + static_cast<uint32_t>(dir));
+        CHECK(ExitGrid::greenFrm(dir) == proto + 1);
+        CHECK(ExitGrid::brownFrm(dir) == proto + 0x11);
+    }
 }
 
-TEST_CASE("exitGridArtForFacing picks the BOTTOM art for a hex below centre", "[exitgrid][direction]") {
-    const ExitGridArt art = exitGridArtForFacing(CX, CY + 100, CX, CY);
-    CHECK(art.proPid == ExitGrid::RECT_BOTTOM_PRO_PID);
-    CHECK(art.frmPid == ExitGrid::RECT_BOTTOM_FRM_PID);
+TEST_CASE("exitGridArtForDirection emits green for inter-map and brown for world/town", "[exitgrid][art]") {
+    for (int dir = 0; dir < ExitGrid::DIR_COUNT; ++dir) {
+        const ExitGridArt green = exitGridArtForDirection(dir, INTER);
+        const ExitGridArt brown = exitGridArtForDirection(dir, WORLD);
+        // Same proto (= direction), different family.
+        CHECK(green.proPid == ExitGrid::exitGridProto(dir));
+        CHECK(brown.proPid == ExitGrid::exitGridProto(dir));
+        CHECK(green.frmPid == ExitGrid::greenFrm(dir));
+        CHECK(brown.frmPid == ExitGrid::brownFrm(dir));
+        // Inter-map vs world flips green <-> brown.
+        CHECK(green.frmPid != brown.frmPid);
+        CHECK(isExitGridProto(green.proPid));
+    }
 }
 
-TEST_CASE("exitGridArtForFacing picks the LEFT art for a hex left of centre", "[exitgrid][direction]") {
-    const ExitGridArt art = exitGridArtForFacing(CX - 100, CY, CX, CY);
-    CHECK(art.proPid == ExitGrid::RECT_LEFT_PRO_PID);
-    CHECK(art.frmPid == ExitGrid::RECT_LEFT_FRM_PID);
+// The user's verified data points: a horizontal drawn line for a world/town exit -> proto 0x05000013
+// (dir 3, TOP) with the brown frm ext2grd4 = 0x05000024; a "/" diagonal -> proto 0x05000014 (dir 4)
+// with brown frm ext2grd5 = 0x05000025.
+TEST_CASE("exitGridArtForSegment matches the user's horizontal data point", "[exitgrid][segment]") {
+    // A horizontal screen segment (dx dominates), hex above centre -> TOP edge, world map -> brown.
+    const ExitGridArt art = exitGridArtForSegment(/*dx=*/200, /*dy=*/0,
+        /*outwardX=*/0, /*outwardY=*/-300, WORLD);
+    CHECK(art.proPid == 0x05000013u);
+    CHECK(art.frmPid == 0x05000024u);
 }
 
-TEST_CASE("exitGridArtForFacing picks the RIGHT art for a hex right of centre", "[exitgrid][direction]") {
-    const ExitGridArt art = exitGridArtForFacing(CX + 100, CY, CX, CY);
-    CHECK(art.proPid == ExitGrid::RECT_RIGHT_PRO_PID);
-    CHECK(art.frmPid == ExitGrid::RECT_RIGHT_FRM_PID);
+TEST_CASE("exitGridArtForSegment matches the user's '/' diagonal data point", "[exitgrid][segment]") {
+    // A "/" segment runs up-right: dx > 0, dy < 0 in screen space. side B faces up-right (dir 5);
+    // a hex facing down-left takes side A (dir 4). World map -> brown ext2grd5 = 0x05000025.
+    const ExitGridArt art = exitGridArtForSegment(/*dx=*/120, /*dy=*/-120,
+        /*outwardX=*/-200, /*outwardY=*/200, WORLD);
+    CHECK(art.proPid == 0x05000014u);
+    CHECK(art.frmPid == 0x05000025u);
 }
 
-TEST_CASE("exitGridArtForFacing breaks a |dx| == |dy| tie toward the vertical (top/bottom) edge", "[exitgrid][direction]") {
-    // |dy| >= |dx| classifies as a vertical edge, so an exact diagonal favours top/bottom.
-    const ExitGridArt up = exitGridArtForFacing(CX + 100, CY - 100, CX, CY);
-    CHECK(up.proPid == ExitGrid::RECT_TOP_PRO_PID);
-
-    const ExitGridArt down = exitGridArtForFacing(CX - 100, CY + 100, CX, CY);
-    CHECK(down.proPid == ExitGrid::RECT_BOTTOM_PRO_PID);
+TEST_CASE("exitGridArtForSegment: a vertical line -> left/right (the 96x24 wide bars)", "[exitgrid][segment]") {
+    // A vertical screen segment (dy dominates). A hex left of centre faces LEFT (dir 0).
+    const ExitGridArt left = exitGridArtForSegment(0, 200, -300, 0, INTER);
+    CHECK(left.proPid == ExitGrid::LEFT_PRO_PID);
+    CHECK(left.proPid == 0x05000010u);
+    // A hex right of centre faces RIGHT (dir 1).
+    const ExitGridArt right = exitGridArtForSegment(0, 200, 300, 0, INTER);
+    CHECK(right.proPid == ExitGrid::RIGHT_PRO_PID);
+    CHECK(right.proPid == 0x05000011u);
 }
 
-TEST_CASE("exitGridArtForFacing classifies by the dominant axis when offsets differ", "[exitgrid][direction]") {
-    // Mostly-horizontal offset -> a left/right edge even with some vertical component.
-    const ExitGridArt right = exitGridArtForFacing(CX + 200, CY + 50, CX, CY);
-    CHECK(right.proPid == ExitGrid::RECT_RIGHT_PRO_PID);
+TEST_CASE("exitGridArtForSegment: a horizontal line -> top/bottom (the 32x96 tall bars)", "[exitgrid][segment]") {
+    const ExitGridArt top = exitGridArtForSegment(200, 0, 0, -300, INTER);
+    CHECK(top.proPid == ExitGrid::TOP_PRO_PID);
+    CHECK(top.proPid == 0x05000013u);
+    const ExitGridArt bottom = exitGridArtForSegment(200, 0, 0, 300, INTER);
+    CHECK(bottom.proPid == ExitGrid::BOTTOM_PRO_PID);
+    CHECK(bottom.proPid == 0x05000012u);
+}
 
-    // Mostly-vertical offset -> a top/bottom edge even with some horizontal component.
-    const ExitGridArt top = exitGridArtForFacing(CX - 50, CY - 200, CX, CY);
-    CHECK(top.proPid == ExitGrid::RECT_TOP_PRO_PID);
+TEST_CASE("exitGridArtForSegment: a '\\' line -> the dir 6/7 diagonal pair", "[exitgrid][segment]") {
+    // A "\" segment runs down-right: dx and dy same sign. Two opposite-facing hexes split the pair.
+    const ExitGridArt a = exitGridArtForSegment(120, 120, -200, -200, INTER);
+    const ExitGridArt b = exitGridArtForSegment(120, 120, 200, 200, INTER);
+    CHECK((a.proPid == ExitGrid::BACK_A_PRO_PID || a.proPid == ExitGrid::BACK_B_PRO_PID));
+    CHECK((b.proPid == ExitGrid::BACK_A_PRO_PID || b.proPid == ExitGrid::BACK_B_PRO_PID));
+    CHECK(a.proPid != b.proPid); // opposite facings pick opposite sides
+}
+
+// The cardinal directions match bhrnddst.map, which uses protos 16-19 (0x05000010..13) for its
+// exit-grid rectangle border.
+TEST_CASE("the cardinal protos are bhrnddst's exit-grid protos (16-19)", "[exitgrid][bhrnddst]") {
+    CHECK(ExitGrid::LEFT_PRO_PID == 0x05000010u);
+    CHECK(ExitGrid::RIGHT_PRO_PID == 0x05000011u);
+    CHECK(ExitGrid::BOTTOM_PRO_PID == 0x05000012u);
+    CHECK(ExitGrid::TOP_PRO_PID == 0x05000013u);
+}
+
+TEST_CASE("every emitted proPid is within the exit-grid range 0x05000010..17", "[exitgrid][range]") {
+    // Sweep a spread of segments/facings/kinds and assert the proto never escapes the valid range.
+    for (int dx = -2; dx <= 2; ++dx) {
+        for (int dy = -2; dy <= 2; ++dy) {
+            for (int ox = -1; ox <= 1; ++ox) {
+                for (int oy = -1; oy <= 1; ++oy) {
+                    const ExitGridArt g = exitGridArtForSegment(dx, dy, ox, oy, INTER);
+                    const ExitGridArt b = exitGridArtForSegment(dx, dy, ox, oy, WORLD);
+                    CHECK(isExitGridProto(g.proPid));
+                    CHECK(isExitGridProto(b.proPid));
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("single-hex fallback (no segment) classifies by outward facing", "[exitgrid][fallback]") {
+    // Screen y grows downward: above centre -> TOP, below -> BOTTOM, left -> LEFT, right -> RIGHT.
+    CHECK(exitGridArtForFacing(CX, CY - 100, CX, CY, INTER).proPid == ExitGrid::TOP_PRO_PID);
+    CHECK(exitGridArtForFacing(CX, CY + 100, CX, CY, INTER).proPid == ExitGrid::BOTTOM_PRO_PID);
+    CHECK(exitGridArtForFacing(CX - 100, CY, CX, CY, INTER).proPid == ExitGrid::LEFT_PRO_PID);
+    CHECK(exitGridArtForFacing(CX + 100, CY, CX, CY, INTER).proPid == ExitGrid::RIGHT_PRO_PID);
+}
+
+TEST_CASE("single-hex fallback flips green <-> brown by destination kind", "[exitgrid][fallback]") {
+    const ExitGridArt green = exitGridArtForFacing(CX, CY - 100, CX, CY, INTER);
+    const ExitGridArt brown = exitGridArtForFacing(CX, CY - 100, CX, CY, WORLD);
+    CHECK(green.proPid == brown.proPid); // same direction
+    CHECK(green.frmPid == ExitGrid::greenFrm(ExitGrid::DIR_TOP));
+    CHECK(brown.frmPid == ExitGrid::brownFrm(ExitGrid::DIR_TOP));
+}
+
+TEST_CASE("a |dx| == |dy| facing tie favours the vertical (top/bottom) edge", "[exitgrid][fallback]") {
+    // |dy| >= |dx| classifies as a horizontal line -> top/bottom edge.
+    CHECK(exitGridArtForFacing(CX + 100, CY - 100, CX, CY, INTER).proPid == ExitGrid::TOP_PRO_PID);
+    CHECK(exitGridArtForFacing(CX - 100, CY + 100, CX, CY, INTER).proPid == ExitGrid::BOTTOM_PRO_PID);
 }

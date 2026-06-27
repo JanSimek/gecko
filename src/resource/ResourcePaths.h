@@ -51,9 +51,6 @@ namespace ResourcePaths {
         // Light source (special case)
         constexpr std::string_view LIGHT = "art/misc/light.frm";
 
-        // Exit grid marker
-        constexpr std::string_view EXIT_GRID = "art/misc/exitgrid.frm";
-
         // Blank tile texture
         constexpr std::string_view BLANK_TILE = "art/tiles/blank.frm";
 

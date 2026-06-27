@@ -35,8 +35,8 @@ inline std::vector<int> hexNeighbors(int hex) {
     }
     const Cube c = cubeOfPosition(hex);
     for (const Cube& d : kDirs) {
-        const ColRow cr = cubeToOffset(c + d);
-        if (cr.col >= 0 && cr.col < WIDTH && cr.row >= 0 && cr.row < HEIGHT) {
+        if (const ColRow cr = cubeToOffset(c + d);
+            cr.col >= 0 && cr.col < WIDTH && cr.row >= 0 && cr.row < HEIGHT) {
             result.push_back(cr.row * WIDTH + cr.col);
         }
     }
@@ -53,9 +53,9 @@ namespace detail {
     /// Round a fractional cube (x, y, z) to the nearest valid integer cube (x + y + z == 0):
     /// round each axis, then nudge the component with the largest rounding error so the sum stays 0.
     inline geck::hexgrid::Cube cubeRound(double fx, double fy, double fz) {
-        auto rx = static_cast<long>(std::lround(fx));
-        auto ry = static_cast<long>(std::lround(fy));
-        auto rz = static_cast<long>(std::lround(fz));
+        long rx = std::lround(fx);
+        long ry = std::lround(fy);
+        long rz = std::lround(fz);
 
         const double dx = std::abs(static_cast<double>(rx) - fx);
         const double dy = std::abs(static_cast<double>(ry) - fy);
@@ -102,6 +102,12 @@ inline std::vector<int> hexLine([[maybe_unused]] const HexagonGrid& grid, int st
             detail::cubeLerp(a.y, b.y, t),
             detail::cubeLerp(a.z, b.z, t));
         const ColRow cr = cubeToOffset(c);
+        // Bounds-check the rounded offset before indexing — a rounding step on a near-edge chord can
+        // land just off the grid, and an off-grid index would poison downstream placement. Mirror the
+        // validity check in hexNeighbors(): skip any out-of-range cell rather than push a bad hex.
+        if (cr.col < 0 || cr.col >= WIDTH || cr.row < 0 || cr.row >= HEIGHT) {
+            continue;
+        }
         line.push_back(cr.row * WIDTH + cr.col);
     }
     return line;

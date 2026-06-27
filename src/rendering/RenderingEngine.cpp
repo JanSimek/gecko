@@ -13,6 +13,8 @@
 #include "util/TileUtils.h"
 #include <spdlog/spdlog.h>
 #include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <map>
 #include <unordered_set>
 
@@ -433,39 +435,63 @@ void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangl
     }
 }
 
+void RenderingEngine::drawExitGridOverlayMarker(sf::RenderTarget& target, int centerX, int centerY) {
+    // A distinct editor-only marker: a high-contrast magenta hex diamond drawn at the marker's hex
+    // centre. This is purely an editor cue (toggled by "Show exit grids") and is separate from the
+    // player-visible directional art, which renderObjects already drew. It is deliberately NOT the
+    // exit-grid FRM (art/misc/exitgrid.frm does not exist — only the directional exitgrd*/ext2grd*),
+    // so it has no missing-resource dependency.
+    constexpr float halfW = Hex::HEX_WIDTH; // a diamond a little larger than a single hex footprint
+    constexpr float halfH = Hex::HEX_HEIGHT;
+    const auto fx = static_cast<float>(centerX);
+    const auto fy = static_cast<float>(centerY);
+
+    sf::ConvexShape diamond(4);
+    diamond.setPoint(0, { fx, fy - halfH });
+    diamond.setPoint(1, { fx + halfW, fy });
+    diamond.setPoint(2, { fx, fy + halfH });
+    diamond.setPoint(3, { fx - halfW, fy });
+    const sf::Color accent = TileColors::exitGridHighlight(); // magenta, semi-transparent
+    diamond.setFillColor(sf::Color(accent.r, accent.g, accent.b, 70));
+    diamond.setOutlineColor(sf::Color(accent.r, accent.g, accent.b, 255));
+    diamond.setOutlineThickness(1.5f);
+    target.draw(diamond);
+}
+
 void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
     const sf::View& view,
     const RenderData& renderData,
     const Map* map) {
-    if (!map || !renderData.objects) {
+    if (!map || !renderData.objects || !renderData.hexGrid) {
         return;
     }
 
-    // Highlight the already-correct exit-grid Object sprites (the same sprites renderObjects drew,
-    // built from each marker's frm_pid with its proper directional art and FRM offset) by redrawing
-    // each one tinted. This is a single source of truth — no second uniform blit that ignores the
-    // per-object direction and offset.
+    // Draw a distinct editor-only overlay marker on every exit-grid hex. The player-visible
+    // directional art (each marker's real exitgrd*/ext2grd* sprite) was already drawn by
+    // renderObjects with its proper FRM offset; this overlay adds an unmistakable editor cue on top
+    // so the exit grids are easy to spot when "Show exit grids" is toggled, without re-blitting or
+    // recolouring the real sprites.
     for (const auto& object : *renderData.objects) {
         const auto mapObject = object ? object->getMapObjectPtr() : nullptr;
         if (!mapObject || !mapObject->isExitGridMarker()) {
             continue;
         }
-
-        sf::Sprite highlight = object->getSprite(); // copy so the object's own colour is untouched
-        const sf::FloatRect bounds = highlight.getGlobalBounds();
-        if (!isHexVisible(static_cast<int>(bounds.position.x + bounds.size.x / 2.f),
-                static_cast<int>(bounds.position.y + bounds.size.y / 2.f), view)) {
+        const auto hex = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(mapObject->position));
+        if (!hex.has_value()) {
             continue;
         }
-        highlight.setColor(TileColors::exitGridHighlight());
-        target.draw(highlight);
+        const int cx = hex->get().x();
+        const int cy = hex->get().y();
+        if (isHexVisible(cx, cy, view)) {
+            drawExitGridOverlayMarker(target, cx, cy);
+        }
     }
 }
 
 void RenderingEngine::renderExitGridEdgePreview(sf::RenderTarget& target,
     const sf::View& view,
     const RenderData& renderData) {
-    if (!renderData.exitGridLineActive || !renderData.hexGrid) {
+    if (!renderData.exitGridPreview.active || !renderData.hexGrid) {
         return;
     }
     drawExitGridPreviewMarkers(target, view, renderData);
@@ -477,39 +503,48 @@ std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const Render
     if (frmPid == 0 || !renderData.hexGrid) {
         return nullptr;
     }
-    auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+    const auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
     if (!hexOptional.has_value()) {
         return nullptr;
     }
 
-    const std::string frmName = _resources.frmResolver().resolve(frmPid);
-    if (frmName.empty()) {
-        return nullptr;
-    }
-    const Frm* frm = _resources.repository().find<Frm>(frmName);
-    if (!frm) {
-        frm = _resources.repository().load<Frm>(frmName);
-    }
-    if (!frm) {
-        return nullptr;
-    }
+    // FRM resolve/load/texture-upload can all fail or throw (missing art, bad palette, GL upload).
+    // Contain that here so one unbuildable preview hex never aborts the whole preview or throws out
+    // of the SFML frame — the caller falls back to a plain marker for this hex.
+    try {
+        const std::filesystem::path frmName = _resources.frmResolver().resolve(frmPid);
+        if (frmName.empty()) {
+            return nullptr;
+        }
+        const Frm* frm = _resources.repository().find<Frm>(frmName);
+        if (!frm) {
+            frm = _resources.repository().load<Frm>(frmName);
+        }
+        if (!frm) {
+            return nullptr;
+        }
 
-    // Anchor exactly like a committed exit grid: Object::setHexPosition applies the FRM's per-frame
-    // x/y offset, and setDirection sets the correct directional frame rect.
-    auto previewObject = std::make_shared<Object>(frm);
-    previewObject->setSprite(sf::Sprite{ _resources.textures().get(frmName) });
-    previewObject->setHexPosition(hexOptional.value().get());
-    previewObject->setDirection(ObjectDirection(0));
-    return previewObject;
+        // Anchor exactly like a committed exit grid: Object::setHexPosition applies the FRM's
+        // per-frame x/y offset, and setDirection sets the correct directional frame rect.
+        auto previewObject = std::make_shared<Object>(frm);
+        previewObject->setSprite(sf::Sprite{ _resources.textures().get(frmName) });
+        previewObject->setHexPosition(hexOptional.value().get());
+        previewObject->setDirection(ObjectDirection(0));
+        return previewObject;
+    } catch (const std::exception& e) {
+        spdlog::warn("Exit-grid preview: could not build marker for frm 0x{:08X}: {}", frmPid, e.what());
+        return nullptr;
+    }
 }
 
 void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const sf::View& view,
     const RenderData& renderData) {
     // Each prospective on-line hex is drawn with its own directional marker art (the same FRM the
     // commit will place), anchored and oriented like a real exit grid, then tinted by destination
-    // kind — not a uniform left-pinned blit.
-    const auto* hexes = renderData.exitGridPreviewHexes;
-    const auto* frmPids = renderData.exitGridPreviewFrmPids;
+    // kind. If a hex's directional sprite can't be built (missing/broken art), it falls back to the
+    // plain editor overlay marker rather than vanishing — the preview never blanks out.
+    const auto* hexes = renderData.exitGridPreview.hexes;
+    const auto* frmPids = renderData.exitGridPreview.frmPids;
     if (!hexes || hexes->empty() || !frmPids || frmPids->size() != hexes->size()) {
         return;
     }
@@ -519,14 +554,17 @@ void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const
         if (hexIndex < 0 || hexIndex >= static_cast<int>(renderData.hexGrid->size())) {
             continue;
         }
-        auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
+        const auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
         if (!hexOptional.has_value()
             || !isHexVisible(hexOptional.value().get().x(), hexOptional.value().get().y(), view)) {
             continue;
         }
         if (auto previewObject = buildExitGridPreviewObject(renderData, hexIndex, (*frmPids)[i])) {
-            previewObject->getSprite().setColor(renderData.exitGridPreviewTint);
+            previewObject->getSprite().setColor(renderData.exitGridPreview.tint);
             target.draw(previewObject->getSprite());
+        } else {
+            // Fall back to a plain marker so this hex still previews.
+            drawExitGridOverlayMarker(target, hexOptional.value().get().x(), hexOptional.value().get().y());
         }
     }
 }
@@ -535,17 +573,17 @@ void RenderingEngine::drawExitGridPreviewLine(sf::RenderTarget& target, const Re
     // An open polyline vertex->vertex with a trailing segment from the last vertex to the live cursor
     // (so the edge being drawn previews under the mouse). Unlike a region, the line is NOT closed back
     // to the first vertex.
-    const auto* vertices = renderData.exitGridLineVertices;
+    const auto* vertices = renderData.exitGridPreview.lineVertices;
     if (!vertices || vertices->empty()) {
         return;
     }
-    const sf::Color lineColor(renderData.exitGridPreviewTint.r, renderData.exitGridPreviewTint.g,
-        renderData.exitGridPreviewTint.b, 255);
+    const sf::Color lineColor(renderData.exitGridPreview.tint.r, renderData.exitGridPreview.tint.g,
+        renderData.exitGridPreview.tint.b, 255);
     sf::VertexArray line(sf::PrimitiveType::LineStrip);
     for (const sf::Vector2f& vertex : *vertices) {
         line.append(sf::Vertex{ vertex, lineColor });
     }
-    line.append(sf::Vertex{ renderData.exitGridLineCursor, lineColor });
+    line.append(sf::Vertex{ renderData.exitGridPreview.lineCursor, lineColor });
     target.draw(line);
 }
 

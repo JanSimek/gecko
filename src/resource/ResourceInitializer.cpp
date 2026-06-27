@@ -89,7 +89,6 @@ void ResourceInitializer::loadEssentialTextures(resource::GameResources& resourc
         resources.textures().preload(ResourcePaths::Frm::SCROLL_BLOCKER);
         resources.textures().preload(ResourcePaths::Frm::WALL_BLOCK);
         resources.textures().preload(ResourcePaths::Frm::WALL_BLOCK_FULL);
-        resources.textures().preload(ResourcePaths::Frm::EXIT_GRID);
 
     } catch (const std::exception& e) {
         spdlog::error("ResourceInitializer: Failed to load essential textures: {}", e.what());

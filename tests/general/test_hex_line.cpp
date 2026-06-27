@@ -17,7 +17,7 @@ namespace {
 bool isGapFree(const std::vector<int>& line) {
     for (std::size_t i = 1; i < line.size(); ++i) {
         const auto neighbours = hexline::hexNeighbors(line[i - 1]);
-        if (std::find(neighbours.begin(), neighbours.end(), line[i]) == neighbours.end()) {
+        if (std::ranges::find(neighbours, line[i]) == neighbours.end()) {
             return false;
         }
     }

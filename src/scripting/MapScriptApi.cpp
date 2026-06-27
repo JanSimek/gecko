@@ -28,6 +28,7 @@
 #include "resource/ResourcePaths.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "util/Constants.h"
+#include "util/ExitGridDirection.h"
 #include "util/HexLine.h"
 #include "util/ProHelper.h"
 
@@ -490,16 +491,12 @@ namespace {
         }
     }
 
-    struct ExitGridArt {
-        uint32_t proPid;
-        uint32_t frmPid;
-    };
-    // Exit grids are MISC markers; the world/town variants use a different proto+art than a map exit.
-    ExitGridArt exitGridArt(uint32_t dest) {
-        if (dest == ExitGrid::WORLD_MAP_EXIT || dest == ExitGrid::TOWN_MAP_EXIT) {
-            return { ExitGrid::WORLD_EXIT_PRO_PID, ExitGrid::WORLD_EXIT_FRM_PID };
-        }
-        return { ExitGrid::MAP_EXIT_PRO_PID, ExitGrid::MAP_EXIT_FRM_PID };
+    // The art family for a destination: an inter-map exit (a real map id) is green, a world/town
+    // exit is brown. The proto encodes direction, the frm green/brown by this kind.
+    ExitGridDestinationKind destinationKindFor(uint32_t dest) {
+        return (dest == ExitGrid::WORLD_MAP_EXIT || dest == ExitGrid::TOWN_MAP_EXIT)
+            ? ExitGridDestinationKind::WorldMap
+            : ExitGridDestinationKind::InterMap;
     }
 
     // The on-grid hex whose screen position is nearest (sx, sy), or -1 if off the map.
@@ -537,7 +534,9 @@ bool MapScriptApi::placeExitGrid(int hex, int destMapId, int destHex, int destEl
     validateExitGridDest(destMapId, destHex, destElevation, orientation);
 
     const auto dest = static_cast<uint32_t>(destMapId);
-    const ExitGridArt art = exitGridArt(dest);
+    // A lone scripted exit grid has no edge orientation, so it uses the bottom-edge marker in the
+    // family the destination implies (green inter-map / brown world-town).
+    const ExitGridArt art = exitGridArtForDirection(ExitGrid::DIR_BOTTOM, destinationKindFor(dest));
     return placeExitGridMarker(hex, art.proPid, art.frmPid, { dest, destHex, destElevation, orientation });
 }
 
@@ -561,7 +560,9 @@ int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int scre
     const int right = cx + screenHalfWidth;
     const int top = cy - screenHalfHeight;
     const int bottom = cy + screenHalfHeight;
-    const ExitDest dest{ static_cast<uint32_t>(destMapId), destHex, destElevation, orientation };
+    const auto dstMap = static_cast<uint32_t>(destMapId);
+    const ExitDest dest{ dstMap, destHex, destElevation, orientation };
+    const ExitGridDestinationKind kind = destinationKindFor(dstMap);
 
     // The four screen corners; each edge is the gap-free hex line between two of them, walked along
     // the iso staircase so the vertical sides are continuous (not a sparse single column).
@@ -572,20 +573,23 @@ int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int scre
 
     struct Edge {
         int from, to;
-        uint32_t proPid, frmPid;
+        ExitGridArt art;
     };
+    // Each rectangle edge uses its cardinal directional art (proto = direction, frm = green/brown by
+    // destination kind): the top/bottom edges run as iso-horizontal lines, the left/right as vertical.
     const std::array<Edge, 4> edges{ {
-        { tl, tr, ExitGrid::RECT_TOP_PRO_PID, ExitGrid::RECT_TOP_FRM_PID },
-        { bl, br, ExitGrid::RECT_BOTTOM_PRO_PID, ExitGrid::RECT_BOTTOM_FRM_PID },
-        { tl, bl, ExitGrid::RECT_LEFT_PRO_PID, ExitGrid::RECT_LEFT_FRM_PID },
-        { tr, br, ExitGrid::RECT_RIGHT_PRO_PID, ExitGrid::RECT_RIGHT_FRM_PID },
+        { tl, tr, exitGridArtForDirection(ExitGrid::DIR_TOP, kind) },
+        { bl, br, exitGridArtForDirection(ExitGrid::DIR_BOTTOM, kind) },
+        { tl, bl, exitGridArtForDirection(ExitGrid::DIR_LEFT, kind) },
+        { tr, br, exitGridArtForDirection(ExitGrid::DIR_RIGHT, kind) },
     } };
 
     std::set<int> placedHexes; // corners are shared between two edges — place each hex once.
     int placed = 0;
     for (const Edge& edge : edges) {
         for (const int hex : hexline::hexLine(_hexgrid, edge.from, edge.to)) {
-            if (placedHexes.insert(hex).second && placeExitGridMarker(hex, edge.proPid, edge.frmPid, dest)) {
+            if (placedHexes.insert(hex).second
+                && placeExitGridMarker(hex, edge.art.proPid, edge.art.frmPid, dest)) {
                 ++placed;
             }
         }

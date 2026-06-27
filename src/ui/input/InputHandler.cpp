@@ -164,16 +164,7 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
 
             case EditorAction::DRAG_SELECTING:
                 if (_isDragging) {
-                    if (_selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE && _callbacks.onScrollBlockerRectangle) {
-                        float left = std::min(_dragStartWorldPos.x, worldPos.x);
-                        float top = std::min(_dragStartWorldPos.y, worldPos.y);
-                        float width = std::abs(worldPos.x - _dragStartWorldPos.x);
-                        float height = std::abs(worldPos.y - _dragStartWorldPos.y);
-                        sf::FloatRect area({ left, top }, { width, height });
-                        _callbacks.onScrollBlockerRectangle(area);
-                    } else if (_callbacks.onDragSelection) {
-                        _callbacks.onDragSelection(_dragStartWorldPos, worldPos, _dragSelectionModifier);
-                    }
+                    finishDragSelectRelease(worldPos);
                 } else if (!_immediateSelectionPerformed && _callbacks.onSelectionClick) {
                     // A no-drag release on a Ctrl drag is a Ctrl+click, so pass the modifier.
                     _callbacks.onSelectionClick(worldPos, _dragSelectionModifier);
@@ -319,6 +310,18 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
 
 void InputHandler::handleKeyReleased(const sf::Event::KeyReleased&) {
     // Currently no key release handling needed
+}
+
+void InputHandler::finishDragSelectRelease(sf::Vector2f worldPos) {
+    if (_selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE && _callbacks.onScrollBlockerRectangle) {
+        const float left = std::min(_dragStartWorldPos.x, worldPos.x);
+        const float top = std::min(_dragStartWorldPos.y, worldPos.y);
+        const float width = std::abs(worldPos.x - _dragStartWorldPos.x);
+        const float height = std::abs(worldPos.y - _dragStartWorldPos.y);
+        _callbacks.onScrollBlockerRectangle(sf::FloatRect({ left, top }, { width, height }));
+    } else if (_callbacks.onDragSelection) {
+        _callbacks.onDragSelection(_dragStartWorldPos, worldPos, _dragSelectionModifier);
+    }
 }
 
 void InputHandler::finalizeExitGridLine() {

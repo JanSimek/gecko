@@ -128,10 +128,15 @@ void ExitGridPropertiesDialog::setupFormLayout() {
     _markerArtComboBox->addItem("Auto", static_cast<int>(MarkerArt::Auto));
     _markerArtComboBox->addItem("Left", static_cast<int>(MarkerArt::Left));
     _markerArtComboBox->addItem("Right", static_cast<int>(MarkerArt::Right));
-    _markerArtComboBox->addItem("Top", static_cast<int>(MarkerArt::Top));
     _markerArtComboBox->addItem("Bottom", static_cast<int>(MarkerArt::Bottom));
-    _markerArtComboBox->setToolTip("Which directional marker art to draw. Auto uses each hex's "
-                                   "outward facing; the explicit sides force one art for the region.");
+    _markerArtComboBox->addItem("Top", static_cast<int>(MarkerArt::Top));
+    _markerArtComboBox->addItem("Diagonal / (A)", static_cast<int>(MarkerArt::ForwardA));
+    _markerArtComboBox->addItem("Diagonal / (B)", static_cast<int>(MarkerArt::ForwardB));
+    _markerArtComboBox->addItem("Diagonal \\ (A)", static_cast<int>(MarkerArt::BackA));
+    _markerArtComboBox->addItem("Diagonal \\ (B)", static_cast<int>(MarkerArt::BackB));
+    _markerArtComboBox->setToolTip("Which directional marker art to draw. Auto uses each hex's drawn "
+                                   "segment + outward facing; the explicit directions force one art "
+                                   "for the whole line (also disambiguates the two diagonal sides).");
     _formLayout->addRow("Marker Direction:", _markerArtComboBox);
 
     // Connect validation

@@ -98,20 +98,21 @@ public:
         const Map* map = nullptr;
         int currentElevation = 0;
 
-        // Exit-grid "Draw edge" live preview (MarkExits mode). When edge-line drawing is active,
-        // exitGridLineVertices holds the committed polyline vertices and exitGridLineCursor the live
-        // cursor, so the line is drawn vertex->vertex and last->cursor. exitGridPreviewHexes lists the
-        // prospective on-line hex indices, each drawn with the exit-grid marker tinted by
-        // exitGridPreviewTint (green for an inter-map exit, brown for a world-map exit).
-        const std::vector<sf::Vector2f>* exitGridLineVertices = nullptr;
-        sf::Vector2f exitGridLineCursor;
-        bool exitGridLineActive = false;
-        const std::vector<int>* exitGridPreviewHexes = nullptr;
-        // The directional marker FRM for each preview hex (parallel to exitGridPreviewHexes). Each
-        // prospective hex is drawn as a transient Object built from this FRM, anchored and oriented
-        // like a committed marker, so the preview shows the correct directional art on the right side.
-        const std::vector<std::uint32_t>* exitGridPreviewFrmPids = nullptr;
-        sf::Color exitGridPreviewTint{ 80, 220, 80, 140 };
+        // Exit-grid "Draw edge" live preview (MarkExits mode), grouped so RenderData stays small.
+        // When `active`, `lineVertices` holds the committed polyline vertices and `lineCursor` the
+        // live cursor, so the line is drawn vertex->vertex and last->cursor. `hexes` lists the
+        // prospective on-line hex indices; `frmPids` (parallel to `hexes`) is each hex's directional
+        // marker FRM, drawn as a transient Object so the preview shows the right directional art per
+        // hex; `tint` colours them by destination kind (green inter-map, brown world/town map).
+        struct ExitGridPreview {
+            const std::vector<sf::Vector2f>* lineVertices = nullptr;
+            sf::Vector2f lineCursor;
+            bool active = false;
+            const std::vector<int>* hexes = nullptr;
+            const std::vector<std::uint32_t>* frmPids = nullptr;
+            sf::Color tint{ 80, 220, 80, 140 };
+        };
+        ExitGridPreview exitGridPreview;
     };
 
     explicit RenderingEngine(resource::GameResources& resources);
@@ -222,16 +223,19 @@ private:
         const RenderData& renderData);
 
     /**
-     * @brief Highlight committed exit-grid markers (Ctrl+E overlay).
+     * @brief Editor-only "Show exit grids" overlay (Ctrl+E).
      *
-     * Redraws each exit-grid Object's own sprite tinted, so the highlight uses the marker's real
-     * directional art and FRM offset (the sprite renderObjects already drew) rather than a second
-     * uniform blit. Single source of truth for what an exit grid looks like.
+     * Draws a distinct high-contrast marker on every exit-grid hex, on top of the player-visible
+     * directional art that renderObjects already drew. This is purely an editor cue (so exit grids
+     * are easy to spot) and is deliberately separate from the real exitgrd / ext2grd sprites - it
+     * does not depend on any FRM (art/misc/exitgrid.frm does not exist).
      */
     void renderExitGrids(sf::RenderTarget& target,
         const sf::View& view,
         const RenderData& renderData,
         const Map* map);
+    // Draw one editor-only exit-grid overlay marker (a magenta hex diamond) at a hex screen centre.
+    static void drawExitGridOverlayMarker(sf::RenderTarget& target, int centerX, int centerY);
 
     /**
      * @brief Render the in-progress exit-grid "Draw edge" preview: the polyline plus each

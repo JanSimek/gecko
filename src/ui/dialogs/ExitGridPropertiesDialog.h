@@ -36,16 +36,22 @@ class ExitGridPropertiesDialog : public QDialog {
 
 public:
     struct ExitGridProperties {
-        // Which directional marker art to draw for a placed region. Auto picks each hex's art from
-        // its outward facing (exitGridArtForFacing); the explicit sides force one art for every hex
-        // in the region — the escape hatch for ambiguous corners. The map format has no per-instance
-        // side field, so this is purely an art-proto choice, not a stored/serialized property.
+        // Which directional marker art to draw for a placed line. Auto picks each hex's art from the
+        // line's local segment + its outward facing (exitGridArtForSegment); the explicit directions
+        // force one art for every hex in the line — the escape hatch for ambiguous corners and for
+        // diagonals, where the two sides of a "/" or "\" render near-identically. The map format has
+        // no per-instance side field, so this is purely an art-proto choice, not a serialized value.
+        // The eight explicit values map 1:1 onto ExitGrid::Direction (0..7).
         enum class MarkerArt {
             Auto,
-            Left,
-            Right,
-            Top,
-            Bottom
+            Left,     ///< dir 0 — vertical bar
+            Right,    ///< dir 1 — vertical bar
+            Bottom,   ///< dir 2 — horizontal bar
+            Top,      ///< dir 3 — horizontal bar
+            ForwardA, ///< dir 4 — "/" side A
+            ForwardB, ///< dir 5 — "/" side B
+            BackA,    ///< dir 6 — "\" side A
+            BackB,    ///< dir 7 — "\" side B
         };
 
         uint32_t exitMap = 0;                  // Destination map ID
