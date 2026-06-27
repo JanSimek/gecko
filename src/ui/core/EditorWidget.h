@@ -271,6 +271,9 @@ signals:
     /// setPlayerStart/newMap), so the host must flag the map modified explicitly.
     void mapModifiedByScript();
     void editorModeChanged(EditorMode mode);
+    /// The contextual status-bar key-hint changed because the mode or the selection changed.
+    /// MainWindow shows it on a permanent status-bar label (separate from transient messages).
+    void hintChanged(const QString& hint);
 
 public slots:
     void onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
@@ -285,6 +288,10 @@ public slots:
     const UndoStack& getUndoStack() const { return _session.undoStack(); }
 
 private:
+    // Recompute the contextual key-hint from the current mode + selection and emit hintChanged.
+    // Called whenever either changes (mode switch, selection callback) so the status bar stays current.
+    void emitHintChanged();
+
     // Center the view on a hex position (shared by centerViewOnPlayerPosition and revealScriptObject).
     void centerViewOnHex(uint32_t hexPosition);
     // The elevation whose objects own the script with this SID (map_scripts_pid == sid), or -1 if none.

@@ -1,4 +1,5 @@
 #include "EditorWidget.h"
+#include "ui/core/EditorHints.h"
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/input/InputHandler.h"
 #ifdef GECK_SCRIPTING_ENABLED
@@ -325,6 +326,9 @@ void EditorWidget::initializeSelectionSystem() {
         _controller.visualizer().clear();
         _controller.visualizer().apply(selection);
         Q_EMIT selectionChanged(selection, _session.currentElevation());
+        // The hint depends on whether anything is selected (e.g. Select mode shows R/Delete
+        // only with a selection), so refresh it whenever the selection changes.
+        Q_EMIT hintChanged(hintForContext(_mode, !selection.isEmpty()));
     });
 }
 
@@ -1200,6 +1204,13 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     }
 
     Q_EMIT editorModeChanged(_mode);
+    emitHintChanged();
+}
+
+void EditorWidget::emitHintChanged() {
+    const auto* manager = _session.selectionManager();
+    const bool hasSelection = manager && !manager->getCurrentSelection().isEmpty();
+    Q_EMIT hintChanged(hintForContext(_mode, hasSelection));
 }
 
 void EditorWidget::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof) {

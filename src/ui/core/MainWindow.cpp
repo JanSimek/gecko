@@ -1,6 +1,7 @@
 #define QT_NO_EMIT
 #include "MainWindow.h"
 #include "EditorWidget.h"
+#include "ui/core/EditorHints.h"
 #include "ui/widgets/LoadingWidget.h"
 #include "ui/widgets/WelcomeWidget.h"
 #include "ui/widgets/SFMLWidget.h"
@@ -1117,6 +1118,11 @@ void MainWindow::setupStatusBar() {
     _statusLabel->setMinimumWidth(ui::constants::sizes::WIDTH_STATUS_LABEL);
     _statusBar->addWidget(_statusLabel, 1); // Stretch to take available space
 
+    // Permanent contextual key-hint. A permanent widget so transient _statusLabel messages
+    // (showStatusMessage) don't clobber it; EditorWidget::hintChanged drives its text.
+    _hintLabel = new QLabel();
+    _statusBar->addPermanentWidget(_hintLabel);
+
     // Create hex index label
     _hexIndexLabel = new QLabel("Hex: N/A");
     _hexIndexLabel->setMinimumWidth(ui::constants::sizes::WIDTH_HEX_LABEL);
@@ -1551,9 +1557,22 @@ void MainWindow::connectToEditorWidget() {
     connect(_currentEditorWidget, &EditorWidget::editorModeChanged, this, [this](EditorMode mode) {
         syncToolModeActions(mode);
     });
+    // Contextual key-hint: the editor emits hintChanged whenever the mode or selection
+    // changes; show it on the permanent status-bar label (never clobbered by transient messages).
+    connect(_currentEditorWidget, &EditorWidget::hintChanged, this, [this](const QString& hint) {
+        if (_hintLabel) {
+            _hintLabel->setText(hint);
+        }
+    });
     // The editor widget doesn't emit editorModeChanged on connect, so seed the
     // toolbar state from its current mode (e.g. after switching maps).
     syncToolModeActions(_currentEditorWidget->currentMode());
+    // Likewise seed the hint once, since hintChanged isn't emitted on connect either.
+    if (_hintLabel) {
+        const auto* selectionManager = _currentEditorWidget->getSelectionManager();
+        const bool hasSelection = selectionManager && !selectionManager->getCurrentSelection().isEmpty();
+        _hintLabel->setText(hintForContext(_currentEditorWidget->currentMode(), hasSelection));
+    }
     connect(_currentEditorWidget, &EditorWidget::hexHoverChanged, this, &MainWindow::updateHexIndexDisplay);
     connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, [this](const std::string& mapPath) {
         handleMapLoadRequest(mapPath, true);

@@ -100,6 +100,8 @@ add_executable(qt_tests
     qt/test_pattern_serializer.cpp
     # InputHandler is Qt-free but lives in gecko_app; its dispatch test needs SFML.
     qt/test_input_handler.cpp
+    # hintForContext is the pure status-bar key-hint provider (lives in gecko_app).
+    qt/test_editor_hints.cpp
 )
 
 # Round-trip the headless pattern writer (gecko_cli) through the editor's Qt PatternSerializer.

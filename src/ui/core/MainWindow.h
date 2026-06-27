@@ -225,6 +225,9 @@ private:
     // Status bar
     QStatusBar* _statusBar;
     QLabel* _statusLabel;
+    // Permanent contextual key-hint, kept separate from _statusLabel so transient
+    // messages (_showStatus) never overwrite it. Driven by EditorWidget::hintChanged.
+    QLabel* _hintLabel;
     QLabel* _hexIndexLabel;
 
     // Dock widgets for panels

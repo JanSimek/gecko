@@ -1,0 +1,59 @@
+#include "ui/core/EditorHints.h"
+
+#include <QStringList>
+
+namespace geck {
+
+namespace {
+
+    // A middle dot flanked by spaces — a single consistent separator across every hint.
+    constexpr QLatin1String kSeparator{ "  ·  " };
+
+    QString joinHints(const QStringList& parts) {
+        return parts.join(kSeparator);
+    }
+
+} // namespace
+
+QString hintForContext(EditorMode mode, bool hasSelection) {
+    switch (mode) {
+        case EditorMode::Select:
+            // Only the keys that genuinely act on a selection: Rotate's "R" toolbar
+            // shortcut (live whenever not stamping) and Delete/Backspace. With nothing
+            // selected neither does anything, so the hint is empty.
+            if (hasSelection) {
+                return joinHints({ QStringLiteral("R: rotate"),
+                    QStringLiteral("Delete: remove") });
+            }
+            return QString();
+
+        case EditorMode::PlaceTile:
+            // A click (or drag) paints; Esc / right-click leaves placement.
+            return QStringLiteral("Esc: exit placement");
+
+        case EditorMode::PlaceExitGrid:
+            return joinHints({ QStringLiteral("Click: place exit grid"),
+                QStringLiteral("Esc: exit") });
+
+        case EditorMode::MarkExits:
+            // "Draw edge": Space flips the side the bars sit on; Enter or a double-click
+            // finishes the line; Esc abandons it.
+            return joinHints({ QStringLiteral("Space: flip side"),
+                QStringLiteral("Enter / double-click: finish"),
+                QStringLiteral("Esc: cancel") });
+
+        case EditorMode::SetPlayerPosition:
+            return joinHints({ QStringLiteral("Click: set player start"),
+                QStringLiteral("Esc: cancel") });
+
+        case EditorMode::StampPattern:
+            // R cycles the prefab's orientation variants (the Rotate shortcut is disabled
+            // while stamping so the key reaches the viewport); Esc cancels.
+            return joinHints({ QStringLiteral("R: cycle variant"),
+                QStringLiteral("Esc: cancel") });
+    }
+
+    return QString();
+}
+
+} // namespace geck
