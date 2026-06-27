@@ -448,10 +448,12 @@ void RenderingEngine::renderDiagonalExitGridBars(sf::RenderTarget& target, const
         };
 
         drawBar({ 0.0f, 0.0f });
-        // Widen across the band (issue 2): offset the second row by the band's full perpendicular
-        // thickness so it abuts the first row edge-to-edge. Signed along the same normal, so a flip
-        // (which negates the normal) mirrors both rows together.
-        drawBar(normal * -kSecondRowOffset);
+        // Widen across the band (issue 2): offset the second row OUTWARD (along +normal, away from the
+        // trigger hex) by the band's full perpendicular thickness so it abuts the first row edge-to-edge
+        // on the FAR side. The whole doubled band then lies on one side of the hex line and grows away
+        // from it, leaving the hex at the band's hex-side edge. Signed along the same normal, so a flip
+        // (which negates the normal) mirrors the whole band to the other side, hex still at the edge.
+        drawBar(normal * kSecondRowOffset);
     }
 
     // Bridge each diagonal→horizontal junction (issue 4): the diagonal band and the horizontal band

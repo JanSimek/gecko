@@ -163,10 +163,12 @@ void Object::applyExitGridOutwardOffset(const Hex& hex) {
     // exitGridOutward gives the perpendicular-to-band normal; normalize it, then slide a fixed distance.
     // A flip (dir ^ 1) reverses the sign, swinging the byte-identical art to the OTHER side.
     if (outX != 0 && outY != 0) {
-        // Seat the band ON / just inside the trigger hex: a small slide keeps the bar adjacent to its
-        // hex (26px overshot, starting the texture past the hex) while still being FLIPPABLE — a flip
-        // (dir ^ 1) reverses this vector's sign and swings the bar to the other side of the line.
-        constexpr float kDiagonalSlide = 10.0f;
+        // Seat the ORIGINAL row so its HEX-SIDE (inner) edge lands ON the trigger hex: slide OUTWARD by
+        // half the rendered band's perpendicular thickness (~37px row / 2). The renderer then stacks the
+        // SECOND row further outward, so the whole doubled band lies on one side of the hex line with the
+        // hex at its very edge. FLIPPABLE: a flip (dir ^ 1) reverses this vector and the second-row
+        // offset together, swinging the whole band to the other side, hex still at the edge.
+        constexpr float kDiagonalSlide = 18.5f;
         const float len = std::sqrt(static_cast<float>(outX * outX + outY * outY));
         _sprite.move(sf::Vector2f(
             static_cast<float>(outX) / len * kDiagonalSlide,
