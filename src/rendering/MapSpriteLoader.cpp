@@ -9,9 +9,9 @@
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
 #include "resource/GameResources.h"
+#include "resource/ResourcePaths.h"
 #include "util/Constants.h"
 #include "util/Coordinates.h"
-#include "resource/ResourcePaths.h"
 #include "util/SpriteFactory.h"
 #include "util/TileUtils.h"
 
@@ -133,11 +133,15 @@ void MapSpriteLoader::loadObjectSprites(
             auto sceneObject = std::make_shared<Object>(frm);
             sf::Sprite objectSprite{ _resources.textures().get(frmName) };
             sceneObject->setSprite(std::move(objectSprite));
+            // setMapObject before setHexPosition: the latter consults isExitGridMarker() to push an
+            // exit-grid bar outward (the trigger hex sits at its inner edge), so the marker info must
+            // be set first. setDirection (which sets the frame rect) also runs before positioning so
+            // the outward nudge measures the correct on-screen bounds.
+            sceneObject->setMapObject(object);
+            sceneObject->setDirection(static_cast<ObjectDirection>(object->direction));
             if (auto hex = _hexgrid.getHexByPosition(object->position); hex.has_value()) {
                 sceneObject->setHexPosition(hex->get());
             }
-            sceneObject->setMapObject(object);
-            sceneObject->setDirection(static_cast<ObjectDirection>(object->direction));
 
             objects.emplace_back(std::move(sceneObject));
             spdlog::debug("Successfully created object for FRM '{}' at position {}", frmName, object->position);

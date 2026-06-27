@@ -1,22 +1,22 @@
 #include "RenderingEngine.h"
-#include "editor/Object.h"
 #include "editor/Hex.h"
-#include "rendering/ObjectVisibility.h"
-#include "viewport/ViewportController.h"
+#include "editor/Object.h"
+#include "format/frm/Frm.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
-#include "format/frm/Frm.h"
+#include "rendering/ObjectVisibility.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
-#include "util/Constants.h"
 #include "util/ColorUtils.h"
+#include "util/Constants.h"
 #include "util/Coordinates.h"
 #include "util/TileUtils.h"
-#include <spdlog/spdlog.h>
+#include "viewport/ViewportController.h"
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <map>
+#include <spdlog/spdlog.h>
 #include <unordered_set>
 
 namespace geck {
@@ -508,12 +508,14 @@ std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const Render
             return nullptr;
         }
 
-        // Anchor exactly like a committed exit grid: Object::setHexPosition applies the FRM's
-        // per-frame x/y offset, and setDirection sets the correct directional frame rect.
+        // Anchor exactly like a committed exit grid: setDirection sets the correct directional frame
+        // rect, then setHexPosition both applies the FRM's per-frame x/y offset and (for an exit-grid
+        // marker) pushes the bar outward so the trigger hex sits at its inner edge. Order matters:
+        // setHexPosition measures the on-screen bounds, so the frame rect must be set first.
         auto previewObject = std::make_shared<Object>(frm);
         previewObject->setSprite(sf::Sprite{ _resources.textures().get(frmName) });
-        previewObject->setHexPosition(hexOptional.value().get());
         previewObject->setDirection(ObjectDirection(0));
+        previewObject->setHexPosition(hexOptional.value().get());
         return previewObject;
     } catch (const std::exception& e) {
         spdlog::warn("Exit-grid preview: could not build marker for frm 0x{:08X}: {}", frmPid, e.what());

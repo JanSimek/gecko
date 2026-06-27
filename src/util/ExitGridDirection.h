@@ -37,6 +37,36 @@ inline ExitGridArt exitGridArtForDirection(int dir, ExitGridDestinationKind kind
     return { proto, frm };
 }
 
+/// The OUTWARD screen direction (toward the map boundary / off-map) for a marker of direction `dir`
+/// (0..7), as a unit-ish {dx, dy} with screen y growing DOWNWARD. This is the direction the marker's
+/// bar art should extend so the trigger hex sits at the bar's INNER (player-facing) edge — a player
+/// walking out from the interior enters the bar at the trigger and leaves the map. It is the same
+/// notion of "which iso edge a direction caps" the classifier uses (verified against bhrnddst.map's
+/// brown exit rectangle): LEFT/RIGHT cap the screen-left/right edges, BOTTOM/TOP the screen-bottom/top
+/// edges, and the diagonals slant along their iso edge. Returns {0,0} for an out-of-range dir.
+inline std::pair<int, int> exitGridOutward(int dir) {
+    switch (dir) {
+        case ExitGrid::DIR_LEFT:
+            return { -1, 0 }; // caps the screen-left edge: bar extends left
+        case ExitGrid::DIR_RIGHT:
+            return { +1, 0 }; // caps the screen-right edge: bar extends right
+        case ExitGrid::DIR_BOTTOM:
+            return { 0, +1 }; // caps the screen-bottom edge: bar extends down
+        case ExitGrid::DIR_TOP:
+            return { 0, -1 }; // caps the screen-top edge: bar extends up
+        case ExitGrid::DIR_FWD_A:
+            return { -1, +1 }; // "/" side A faces down-left
+        case ExitGrid::DIR_FWD_B:
+            return { +1, -1 }; // "/" side B faces up-right
+        case ExitGrid::DIR_BACK_A:
+            return { -1, -1 }; // "\" side A faces up-left
+        case ExitGrid::DIR_BACK_B:
+            return { +1, +1 }; // "\" side B faces down-right
+        default:
+            return { 0, 0 };
+    }
+}
+
 /// The screen position of the hex grid's centre hex, the reference point outward facing is measured
 /// from. Returns {0,0} if the grid has no centre hex (degenerate).
 inline std::pair<int, int> hexGridCenterScreen(const HexagonGrid& grid) {

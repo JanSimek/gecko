@@ -1,5 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <utility>
+
 #include "util/Constants.h"
 #include "util/ExitGridDirection.h"
 
@@ -8,6 +11,7 @@ using geck::exitGridArtForDirection;
 using geck::exitGridArtForFacing;
 using geck::exitGridArtForSegment;
 using geck::ExitGridDestinationKind;
+using geck::exitGridOutward;
 namespace ExitGrid = geck::ExitGrid;
 
 namespace {
@@ -146,4 +150,38 @@ TEST_CASE("a |dx| == |dy| facing tie favours the vertical (top/bottom) edge", "[
     // |dy| >= |dx| classifies as a horizontal line -> top/bottom edge.
     CHECK(exitGridArtForFacing(CX + 100, CY - 100, CX, CY, INTER).proPid == ExitGrid::TOP_PRO_PID);
     CHECK(exitGridArtForFacing(CX - 100, CY + 100, CX, CY, INTER).proPid == ExitGrid::BOTTOM_PRO_PID);
+}
+
+TEST_CASE("exitGridOutward: the per-direction outward (off-map) screen vector", "[exitgrid][outward]") {
+    // Screen y grows DOWNWARD. The renderer pushes the bar along this vector so the trigger hex sits
+    // at the bar's inner edge. The cardinals cap their named screen edge; the diagonals match the
+    // classifier's side facing.
+    CHECK(exitGridOutward(ExitGrid::DIR_LEFT) == std::pair{ -1, 0 });
+    CHECK(exitGridOutward(ExitGrid::DIR_RIGHT) == std::pair{ 1, 0 });
+    CHECK(exitGridOutward(ExitGrid::DIR_BOTTOM) == std::pair{ 0, 1 });
+    CHECK(exitGridOutward(ExitGrid::DIR_TOP) == std::pair{ 0, -1 });
+    CHECK(exitGridOutward(ExitGrid::DIR_FWD_A) == std::pair{ -1, 1 });   // "/" side A faces down-left
+    CHECK(exitGridOutward(ExitGrid::DIR_FWD_B) == std::pair{ 1, -1 });   // "/" side B faces up-right
+    CHECK(exitGridOutward(ExitGrid::DIR_BACK_A) == std::pair{ -1, -1 }); // "\" side A faces up-left
+    CHECK(exitGridOutward(ExitGrid::DIR_BACK_B) == std::pair{ 1, 1 });   // "\" side B faces down-right
+}
+
+TEST_CASE("exitGridOutward: opposite directions point opposite ways; out-of-range is {0,0}",
+    "[exitgrid][outward]") {
+    // The two members of each pair (left/right, bottom/top, the two "/"s, the two "\"s) are negatives.
+    const std::array<std::pair<int, int>, 4> pairs{ {
+        { ExitGrid::DIR_LEFT, ExitGrid::DIR_RIGHT },
+        { ExitGrid::DIR_BOTTOM, ExitGrid::DIR_TOP },
+        { ExitGrid::DIR_FWD_A, ExitGrid::DIR_FWD_B },
+        { ExitGrid::DIR_BACK_A, ExitGrid::DIR_BACK_B },
+    } };
+    for (const auto& [a, b] : pairs) {
+        const auto oa = exitGridOutward(a);
+        const auto ob = exitGridOutward(b);
+        CHECK(oa.first == -ob.first);
+        CHECK(oa.second == -ob.second);
+        CHECK_FALSE((oa.first == 0 && oa.second == 0)); // every real direction has an outward vector
+    }
+    CHECK(exitGridOutward(-1) == std::pair{ 0, 0 });
+    CHECK(exitGridOutward(ExitGrid::DIR_COUNT) == std::pair{ 0, 0 });
 }

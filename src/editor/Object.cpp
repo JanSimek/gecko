@@ -1,14 +1,15 @@
 #include "Object.h"
 #include "editor/HexagonGrid.h"
-#include "format/map/MapObject.h"
 #include "format/frm/Direction.h"
 #include "format/frm/Frame.h"
 #include "format/frm/Frm.h"
+#include "format/map/MapObject.h"
 #include "util/Constants.h"
-#include "util/Exceptions.h"
 #include "util/Coordinates.h"
-#include <spdlog/spdlog.h>
+#include "util/Exceptions.h"
+#include "util/ExitGridDirection.h"
 #include <algorithm>
+#include <spdlog/spdlog.h>
 
 namespace geck {
 
@@ -119,9 +120,70 @@ void Object::setHexPosition(const Hex& hex) {
         _mapObject->position = hex.position();
     }
 
+    // EDITOR-DISPLAY ONLY: push an exit-grid marker's directional bar OUTWARD (toward the off-map
+    // boundary) so the trigger hex sits at the bar's INNER (player-facing) edge. With the standard
+    // bottom-anchor the bar straddles the trigger hex, which reads ambiguously; nudging it outward
+    // makes "walk out here and leave the map" legible. The Fallout 2 engine applies NO such offset
+    // (it anchors exit-grid art exactly like any other object), so this is a deliberate authoring-
+    // clarity divergence from the in-game look, scoped to exit-grid markers only.
+    applyExitGridOutwardOffset(hex);
+
     if (_showLightOverlay && hasLight()) {
         updateLightOverlay();
     }
+}
+
+int Object::exitGridDirection() const {
+    // Real placed markers carry a MapObject whose proto index (16..23) is the direction.
+    if (_mapObject != nullptr && _mapObject->isExitGridMarker()) {
+        return static_cast<int>(_mapObject->protoId()) - static_cast<int>(MapObject::EXIT_GRID_PID_INDEX_FIRST);
+    }
+    // Preview / bare-FRM objects (no MapObject yet) are identified by their directional art name:
+    // exitgrd1..8 (green) or ext2grd1..8 (brown) -> dir 0..7.
+    const std::string& fn = _frm != nullptr ? _frm->filename() : std::string();
+    if (fn.size() >= 8 && (fn.rfind("exitgrd", 0) == 0 || fn.rfind("ext2grd", 0) == 0)) {
+        const int dir = fn[7] - '1';
+        if (dir >= 0 && dir < ExitGrid::DIR_COUNT) {
+            return dir;
+        }
+    }
+    return -1;
+}
+
+void Object::applyExitGridOutwardOffset(const Hex& hex) {
+    const int dir = exitGridDirection();
+    if (dir < 0) {
+        return;
+    }
+    const auto [outX, outY] = exitGridOutward(dir);
+    if (outX == 0 && outY == 0) {
+        return;
+    }
+
+    // Slide the sprite along the outward axis until the trigger hex lands on the bar's inner edge:
+    // the bbox side opposite the outward direction. Read the bar's actual on-screen bounds (which
+    // already include the FRM's frame packing), so this adapts to every piece (96x24, 32x96, the
+    // diagonals) and to both art families without hard-coded per-piece pixel constants.
+    const sf::FloatRect bounds = _sprite.getGlobalBounds();
+    const float left = bounds.position.x;
+    const float top = bounds.position.y;
+    const float right = left + bounds.size.x;
+    const float bottom = top + bounds.size.y;
+
+    float shiftX = 0.0f;
+    if (outX < 0) { // extends left -> inner edge is the right side
+        shiftX = static_cast<float>(hex.x()) - right;
+    } else if (outX > 0) { // extends right -> inner edge is the left side
+        shiftX = static_cast<float>(hex.x()) - left;
+    }
+    float shiftY = 0.0f;
+    if (outY < 0) { // extends up -> inner edge is the bottom side
+        shiftY = static_cast<float>(hex.y()) - bottom;
+    } else if (outY > 0) { // extends down -> inner edge is the top side
+        shiftY = static_cast<float>(hex.y()) - top;
+    }
+
+    _sprite.move(sf::Vector2f(shiftX, shiftY));
 }
 
 int16_t Object::shiftX() const {
