@@ -40,13 +40,18 @@ inline ExitGridArt exitGridArtForDirection(int dir, ExitGridDestinationKind kind
     return { proto, frm };
 }
 
-/// The OUTWARD screen direction (toward the map boundary / off-map) for a marker of direction `dir`
-/// (0..7), as a unit-ish {dx, dy} with screen y growing DOWNWARD. This is the direction the marker's
-/// bar art should extend so the trigger hex sits at the bar's INNER (player-facing) edge — a player
-/// walking out from the interior enters the bar at the trigger and leaves the map. It is the same
-/// notion of "which iso edge a direction caps" the classifier uses (verified against bhrnddst.map's
-/// brown exit rectangle): LEFT/RIGHT cap the screen-left/right edges, BOTTOM/TOP the screen-bottom/top
-/// edges, and the diagonals slant along their iso edge. Returns {0,0} for an out-of-range dir.
+/// The OUTWARD screen direction (toward the map boundary / off-map) along which a CARDINAL marker's
+/// bar art is slid by the editor, as a unit-ish {dx, dy} with screen y growing DOWNWARD. The slide
+/// (Object::applyExitGridOutwardOffset) parks the trigger hex on the bar's INNER (player-facing) edge
+/// so "walk out here and leave the map" reads cleanly: LEFT/RIGHT cap the screen-left/right edges,
+/// BOTTOM/TOP the screen-bottom/top edges. The cardinal bars are THIN across the slide axis (96x24,
+/// 32x96), so this nudge is small and keeps the bar on its hexes.
+///
+/// The four DIAGONAL directions (FWD_A/B, BACK_A/B) deliberately return {0,0} so the slide is a no-op
+/// for them: their bars are LARGE (127x48, 111x60) and a diagonal slide would move them ~half their
+/// width AND height off the trigger hexes. Diagonals therefore keep the engine-faithful anchoring from
+/// setHexPosition (centred-x, bottom-anchored — exactly the Fallout 2 CE exit-grid blit), which already
+/// lays the bar along the iso edge and on the hex. Returns {0,0} for an out-of-range dir as well.
 inline std::pair<int, int> exitGridOutward(int dir) {
     switch (dir) {
         case ExitGrid::DIR_LEFT:
@@ -56,15 +61,11 @@ inline std::pair<int, int> exitGridOutward(int dir) {
         case ExitGrid::DIR_BOTTOM:
             return { 0, +1 }; // caps the screen-bottom edge: bar extends down
         case ExitGrid::DIR_TOP:
-            return { 0, -1 }; // caps the screen-top edge: bar extends up
-        case ExitGrid::DIR_FWD_A:
-            return { -1, +1 }; // "/" side A faces down-left
-        case ExitGrid::DIR_FWD_B:
-            return { +1, -1 }; // "/" side B faces up-right
-        case ExitGrid::DIR_BACK_A:
-            return { -1, -1 }; // "\" side A faces up-left
-        case ExitGrid::DIR_BACK_B:
-            return { +1, +1 }; // "\" side B faces down-right
+            return { 0, -1 };      // caps the screen-top edge: bar extends up
+        case ExitGrid::DIR_FWD_A:  // "/" side A — engine-anchored, no slide
+        case ExitGrid::DIR_FWD_B:  // "/" side B — engine-anchored, no slide
+        case ExitGrid::DIR_BACK_A: // "\" side A — engine-anchored, no slide
+        case ExitGrid::DIR_BACK_B: // "\" side B — engine-anchored, no slide
         default:
             return { 0, 0 };
     }

@@ -208,35 +208,42 @@ TEST_CASE("exitGridDirectionForLine picks one side for the whole stroke and the 
 }
 
 TEST_CASE("exitGridOutward: the per-direction outward (off-map) screen vector", "[exitgrid][outward]") {
-    // Screen y grows DOWNWARD. The renderer pushes the bar along this vector so the trigger hex sits
-    // at the bar's inner edge. The cardinals cap their named screen edge; the diagonals match the
-    // classifier's side facing.
+    // Screen y grows DOWNWARD. The editor slides the bar along this vector so the trigger hex sits at
+    // the bar's inner edge. ONLY the cardinals get a slide (their bars are thin across the slide axis,
+    // so the nudge stays on-hex); each caps its named screen edge.
     CHECK(exitGridOutward(ExitGrid::DIR_LEFT) == std::pair{ -1, 0 });
     CHECK(exitGridOutward(ExitGrid::DIR_RIGHT) == std::pair{ 1, 0 });
     CHECK(exitGridOutward(ExitGrid::DIR_BOTTOM) == std::pair{ 0, 1 });
     CHECK(exitGridOutward(ExitGrid::DIR_TOP) == std::pair{ 0, -1 });
-    CHECK(exitGridOutward(ExitGrid::DIR_FWD_A) == std::pair{ -1, 1 });   // "/" side A faces down-left
-    CHECK(exitGridOutward(ExitGrid::DIR_FWD_B) == std::pair{ 1, -1 });   // "/" side B faces up-right
-    CHECK(exitGridOutward(ExitGrid::DIR_BACK_A) == std::pair{ -1, -1 }); // "\" side A faces up-left
-    CHECK(exitGridOutward(ExitGrid::DIR_BACK_B) == std::pair{ 1, 1 });   // "\" side B faces down-right
+    // The diagonals return {0,0}: no slide. Their bars are large (127x48, 111x60), so a diagonal slide
+    // would shove them ~half their width AND height off the hexes. Diagonals keep the engine-faithful
+    // centred/bottom anchoring from setHexPosition, which already lays the bar on the hex.
+    CHECK(exitGridOutward(ExitGrid::DIR_FWD_A) == std::pair{ 0, 0 });  // "/" side A — engine-anchored
+    CHECK(exitGridOutward(ExitGrid::DIR_FWD_B) == std::pair{ 0, 0 });  // "/" side B — engine-anchored
+    CHECK(exitGridOutward(ExitGrid::DIR_BACK_A) == std::pair{ 0, 0 }); // "\" side A — engine-anchored
+    CHECK(exitGridOutward(ExitGrid::DIR_BACK_B) == std::pair{ 0, 0 }); // "\" side B — engine-anchored
 }
 
-TEST_CASE("exitGridOutward: opposite directions point opposite ways; out-of-range is {0,0}",
+TEST_CASE("exitGridOutward: cardinal pairs point opposite ways; diagonals + out-of-range are {0,0}",
     "[exitgrid][outward]") {
-    // The two members of each pair (left/right, bottom/top, the two "/"s, the two "\"s) are negatives.
-    const std::array<std::pair<int, int>, 4> pairs{ {
+    // The two members of each CARDINAL pair (left/right, bottom/top) are negatives, and each has a
+    // non-zero slide vector.
+    const std::array<std::pair<int, int>, 2> cardinalPairs{ {
         { ExitGrid::DIR_LEFT, ExitGrid::DIR_RIGHT },
         { ExitGrid::DIR_BOTTOM, ExitGrid::DIR_TOP },
-        { ExitGrid::DIR_FWD_A, ExitGrid::DIR_FWD_B },
-        { ExitGrid::DIR_BACK_A, ExitGrid::DIR_BACK_B },
     } };
-    for (const auto& [a, b] : pairs) {
+    for (const auto& [a, b] : cardinalPairs) {
         const auto oa = exitGridOutward(a);
         const auto ob = exitGridOutward(b);
         CHECK(oa.first == -ob.first);
         CHECK(oa.second == -ob.second);
-        CHECK_FALSE((oa.first == 0 && oa.second == 0)); // every real direction has an outward vector
+        CHECK_FALSE((oa.first == 0 && oa.second == 0)); // every cardinal direction has a slide vector
     }
+    // The four diagonals get no slide (engine-faithful anchoring), so their vector is {0,0}.
+    CHECK(exitGridOutward(ExitGrid::DIR_FWD_A) == std::pair{ 0, 0 });
+    CHECK(exitGridOutward(ExitGrid::DIR_FWD_B) == std::pair{ 0, 0 });
+    CHECK(exitGridOutward(ExitGrid::DIR_BACK_A) == std::pair{ 0, 0 });
+    CHECK(exitGridOutward(ExitGrid::DIR_BACK_B) == std::pair{ 0, 0 });
     CHECK(exitGridOutward(-1) == std::pair{ 0, 0 });
     CHECK(exitGridOutward(ExitGrid::DIR_COUNT) == std::pair{ 0, 0 });
 }
