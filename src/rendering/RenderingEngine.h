@@ -1,13 +1,13 @@
 #pragma once
 
+#include "HexRenderer.h"
+#include "editor/HexagonGrid.h"
+#include "util/Types.h"
 #include <SFML/Graphics.hpp>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <vector>
-#include "util/Types.h"
-#include "editor/HexagonGrid.h"
-#include "HexRenderer.h"
 
 namespace geck {
 
@@ -165,6 +165,18 @@ private:
     void renderObjects(sf::RenderTarget& target,
         const RenderData& renderData,
         const VisibilitySettings& visibility);
+
+    /**
+     * @brief DISPLAY-ONLY refinement of the DIAGONAL exit-grid bands. The saved data is unchanged
+     * (one marker/hex); this only restyles how the diagonal bars are drawn so a band reads cleanly:
+     * a second parallel texture row widens the thin band, the run's top bar is clipped to the hex
+     * line (no overshoot past the first hex), and a diagonal→horizontal junction is bridged with an
+     * extra bar. Diagonal exit-grid sprites are skipped in renderObjects and drawn here instead;
+     * cardinals and all other objects are untouched.
+     */
+    void renderDiagonalExitGridBars(sf::RenderTarget& target, const RenderData& renderData);
+    // True for a placed exit-grid marker whose direction is one of the four diagonals (dir 4..7).
+    static bool isDiagonalExitGridObject(const Object& object);
 
     /**
      * @brief Outline every selected object on top of the scene, grouped by category colour.
