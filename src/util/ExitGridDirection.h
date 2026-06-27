@@ -40,18 +40,21 @@ inline ExitGridArt exitGridArtForDirection(int dir, ExitGridDestinationKind kind
     return { proto, frm };
 }
 
-/// The OUTWARD screen direction (toward the map boundary / off-map) along which a CARDINAL marker's
-/// bar art is slid by the editor, as a unit-ish {dx, dy} with screen y growing DOWNWARD. The slide
-/// (Object::applyExitGridOutwardOffset) parks the trigger hex on the bar's INNER (player-facing) edge
-/// so "walk out here and leave the map" reads cleanly: LEFT/RIGHT cap the screen-left/right edges,
-/// BOTTOM/TOP the screen-bottom/top edges. The cardinal bars are THIN across the slide axis (96x24,
-/// 32x96), so this nudge is small and keeps the bar on its hexes.
+/// The OUTWARD screen direction (toward the map boundary / off-map) along which a marker's bar art is
+/// slid by the editor, as a {dx, dy} with screen y growing DOWNWARD. The slide
+/// (Object::applyExitGridOutwardOffset) pushes the bar so the trigger hex sits on the bar's INNER
+/// (player-facing) edge, so "walk out here and leave the map" reads cleanly and — crucially — a flip
+/// (dir ^ 1) reverses the sign of this vector and so moves the (byte-identical) bar art to the OTHER
+/// side of the hex line. LEFT/RIGHT cap the screen-left/right edges, BOTTOM/TOP the screen-bottom/top.
 ///
-/// The four DIAGONAL directions (FWD_A/B, BACK_A/B) deliberately return {0,0} so the slide is a no-op
-/// for them: their bars are LARGE (127x48, 111x60) and a diagonal slide would move them ~half their
-/// width AND height off the trigger hexes. Diagonals therefore keep the engine-faithful anchoring from
-/// setHexPosition (centred-x, bottom-anchored — exactly the Fallout 2 CE exit-grid blit), which already
-/// lays the bar along the iso edge and on the hex. Returns {0,0} for an out-of-range dir as well.
+/// The four DIAGONAL vectors point PERPENDICULAR to the band's actual on-screen line (NOT along the
+/// {±1,±1} screen diagonal — that runs nearly ALONG the "\" band, so it barely separates the two
+/// sides). The bands' measured screen long-axis angles are ~-9° for the "/" pair and ~+26° for the "\"
+/// pair (y down), so the perpendiculars are ~(1, 6) and ~(1, -2); the integers below approximate those
+/// and applyExitGridOutwardOffset NORMALIZES them before scaling by a moderate magnitude (so the slide
+/// distance is uniform regardless of the vector's integer length). The diagonal slide is deliberately
+/// perpendicular-and-moderate, NOT the bbox corner the old code chased (that combined half-width AND
+/// half-height, ~93px, shoving the bar off its hex). Returns {0,0} for an out-of-range dir.
 inline std::pair<int, int> exitGridOutward(int dir) {
     switch (dir) {
         case ExitGrid::DIR_LEFT:
@@ -61,11 +64,15 @@ inline std::pair<int, int> exitGridOutward(int dir) {
         case ExitGrid::DIR_BOTTOM:
             return { 0, +1 }; // caps the screen-bottom edge: bar extends down
         case ExitGrid::DIR_TOP:
-            return { 0, -1 };      // caps the screen-top edge: bar extends up
-        case ExitGrid::DIR_FWD_A:  // "/" side A — engine-anchored, no slide
-        case ExitGrid::DIR_FWD_B:  // "/" side B — engine-anchored, no slide
-        case ExitGrid::DIR_BACK_A: // "\" side A — engine-anchored, no slide
-        case ExitGrid::DIR_BACK_B: // "\" side B — engine-anchored, no slide
+            return { 0, -1 }; // caps the screen-top edge: bar extends up
+        case ExitGrid::DIR_FWD_A:
+            return { +1, +6 }; // "/" side A: perpendicular to the ~-9° "/" band, facing DOWN
+        case ExitGrid::DIR_FWD_B:
+            return { -1, -6 }; // "/" side B: the dir^1 flip, facing UP
+        case ExitGrid::DIR_BACK_A:
+            return { -1, +2 }; // "\" side A: perpendicular to the ~+26° "\" band, facing DOWN-LEFT
+        case ExitGrid::DIR_BACK_B:
+            return { +1, -2 }; // "\" side B: the dir^1 flip, facing UP-RIGHT
         default:
             return { 0, 0 };
     }

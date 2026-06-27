@@ -9,6 +9,7 @@
 #include "util/Exceptions.h"
 #include "util/ExitGridDirection.h"
 #include <algorithm>
+#include <cmath>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -160,10 +161,29 @@ void Object::applyExitGridOutwardOffset(const Hex& hex) {
         return;
     }
 
-    // Slide the sprite along the outward axis until the trigger hex lands on the bar's inner edge:
-    // the bbox side opposite the outward direction. Read the bar's actual on-screen bounds (which
-    // already include the FRM's frame packing), so this adapts to every piece (96x24, 32x96, the
-    // diagonals) and to both art families without hard-coded per-piece pixel constants.
+    // A DIAGONAL marker (both components nonzero) gets a MODERATE slide PERPENDICULAR to the band, not
+    // the bbox-corner slide the cardinals use. The diagonal bars are large (127x48, 111x60); parking
+    // the hex on a bbox corner would combine half-width AND half-height (~93px) and shove the bar clear
+    // off its hex. exitGridOutward gives the perpendicular-to-band direction (an integer approximation
+    // of the band's measured screen normal); NORMALIZE it, then slide the (engine-centred / bottom-
+    // anchored) sprite a fixed distance along it. The band moves to one side of the hex line, and a flip
+    // (dir ^ 1) reverses the vector's sign — swinging the byte-identical art to the OTHER side — while
+    // the band stays adjacent to its trigger hex.
+    if (outX != 0 && outY != 0) {
+        // Tuned to roughly the cardinal thin-bar dimension: enough to seat the band on one side of
+        // the line and read as a clean side-switch on flip, small enough not to leave the hex.
+        constexpr float kDiagonalSlide = 26.0f;
+        const float len = std::sqrt(static_cast<float>(outX * outX + outY * outY));
+        _sprite.move(sf::Vector2f(
+            static_cast<float>(outX) / len * kDiagonalSlide,
+            static_cast<float>(outY) / len * kDiagonalSlide));
+        return;
+    }
+
+    // CARDINAL marker: slide the sprite along the (axis-aligned) outward axis until the trigger hex
+    // lands on the bar's inner edge — the bbox side opposite the outward direction. Read the bar's
+    // actual on-screen bounds (which already include the FRM's frame packing), so this adapts to both
+    // thin pieces (96x24, 32x96) and to both art families without hard-coded per-piece pixel constants.
     const sf::FloatRect bounds = _sprite.getGlobalBounds();
     const float left = bounds.position.x;
     const float top = bounds.position.y;
