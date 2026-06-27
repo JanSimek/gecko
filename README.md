@@ -79,43 +79,56 @@ cmake --build build
 
 ### Controls
 
+> **Shift is modal.** It means three different things depending on what you are doing: hold
+> **Shift** while placing a tile to paint on the **roof**, while clicking with tiles already
+> selected to **range-select**, and while drawing an exit-grid edge to **snap to a clean angle**.
+
 #### Navigation
-- **Arrow keys** or **Right-click + drag**: Pan the view
-- **Mouse wheel**: Zoom in/out
-- **Window resize**: View automatically adjusts
+- **Right-click + drag**: Pan the view
+- **Mouse wheel**: Zoom in / out
+- **Window resize**: View adjusts automatically
 
-#### Selection Modes
-The editor supports multiple selection modes accessible via the toolbar:
+#### Selection & modes
+The active mode is chosen from the toolbar; the status bar shows the keys that act in the current mode.
 
-- **ALL**: Select any element type with intelligent cycling
-  - **Priority**: Roof Tiles → Objects → Floor Tiles
-  - **Cycling**: Click same position repeatedly to cycle through available elements
-- **OBJECTS**: Select only objects
-- **ROOF_TILES**: Select only roof tiles
-- **FLOOR_TILES**: Select only floor tiles
+- **Left-click**: Select the element under the cursor. Clicking the same spot again **cycles** through overlapping elements (roof tile → object → floor tile).
+- **Right-click**: Cancel the active tool / placement mode (when no tool is active, right-click + drag pans).
+- **Esc**: Clear the selection (or exit the active placement / stamp tool).
+- The **Selection** toolbar dropdown picks which layers participate: combine **Floor Tiles**, **Roof Tiles**, and **Objects** (all on = classic "All"), or switch to an exclusive tool (**Roof Tiles**, **Hexes**, **Scroll Blocker Rectangle**).
 
-#### Selection Controls
-- **Left mouse click**: Select the element at the cursor
-- **Multiple clicks on the same position**: Cycle through overlapping elements (ALL mode)
-- **Right mouse click**: Cancel the active placement mode (right-click + drag pans the view)
-- **Esc**: Clear the selection
+#### Multi-selection
+- **Click + drag**: Area select (replaces the current selection).
+- **Alt+Click** / **Alt+Drag** (Option on macOS): Add the item / covered area to the selection.
+- **Ctrl+Click** / **Ctrl+Drag**: Remove from the selection (deselect only — never adds; items on hidden layers are left untouched).
+- **Shift+Click**: Range-select tiles — selects the rectangle between the first selected tile and the clicked tile.
+- **Ctrl+A**: Select all items of the current selection mode.
+- **Ctrl+D**: Deselect everything.
 
-#### Multi-Selection
-- **Click and Drag**: Area selection (replaces the current selection)
-- **Alt+Click** / **Alt+Drag** (Option on macOS): Add the item / covered area to the existing selection
-- **Ctrl+Click** / **Ctrl+Drag**: Remove items from the selection (deselect only — never adds). Items on hidden layers are left untouched.
-- **Shift+Click**: Range selection for tiles (select the area between the first selected tile and the clicked position)
-- **Ctrl+A**: Select all items of the current selection mode
-- **Ctrl+D**: Deselect everything
+#### Object manipulation
+- **R**: Rotate the selected object(s) — works on single or multiple selections.
+- **Delete** / **Backspace**: Remove the selected object(s).
 
-#### Object Manipulation
-- **R key** or **Ctrl+R**: Rotate selected object(s) - works with single or multiple selected objects
+#### Placement tools
+- **Tile placement** (pick a tile in the palette): **Left-click** or **drag** to paint, hold **Shift** to paint on the **roof**, **Esc** or **right-click** to exit.
+- **Stamp / pattern** (Edit → Stamp Pattern): **Left-click** to place, **R** to cycle the prefab's orientation variant, **Esc** or **right-click** to cancel.
+- **Set player position** (Map Info panel): **Left-click** to set the player start hex, **Esc** to cancel.
+- **Exit grid — single hex** (Exit Grids tool → *Place single hex*): **Left-click** to drop one marker, **Esc** or **right-click** to exit.
+- **Exit grid — Draw edge** (Exit Grids tool → *Draw edge*): **Left-click** to add a line vertex, **Space** to flip which side the bars sit on, hold **Shift** to snap the live segment to a clean exit-grid angle, **Enter** or **double-click** to finish the edge, **Esc** or **right-click** to cancel.
+- **Scroll Blocker Rectangle** (**B**): Drag a rectangle to place scroll blockers along its border.
 
-#### File Operations
-- **Ctrl+N**: Create new map
-- **Ctrl+O**: Open existing map
-- **Ctrl+S**: Save current map
-- **Ctrl+Q**: Quit application
+#### View / layers
+- **Ctrl+E**: Toggle the "Show Exit Grids" overlay.
+- **F5**: Save and play the current map in Fallout 2.
+- The **View** menu (and matching toolbar buttons) toggle Objects, Critters, Walls, Roofs, Scroll Blockers, Wall Blockers, Hex Grid, and Light Overlays (no default keys).
+
+#### File
+- **Ctrl+N**: New map
+- **Ctrl+O**: Open map
+- **Ctrl+B**: Browse maps as thumbnails
+- **Ctrl+S**: Save map
+- **Ctrl+Shift+S**: Save map as…
+- **Ctrl+Z** / **Ctrl+Y**: Undo / Redo
+- **Ctrl+Q**: Quit
 
 ## Development
 
