@@ -70,9 +70,10 @@ if(GECK_ENABLE_SCRIPTING)
 endif()
 
 # Pattern stamp (de)serialization round-trip — needs gecko_cli (cli::serializePattern/loadPattern),
-# no scripting or game data.
+# no scripting or game data. test_frm_inspect covers the FRM tools' non-GL logic (FID parse/decode,
+# art-name resolution, glob listing) against a temp LST fixture.
 if(TARGET gecko_cli)
-    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp general/test_map_reachability.cpp general/test_map_analyzer_scripts.cpp)
+    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp general/test_map_reachability.cpp general/test_map_analyzer_scripts.cpp general/test_frm_inspect.cpp)
     target_link_libraries(general_tests PRIVATE gecko_cli)
 endif()
 

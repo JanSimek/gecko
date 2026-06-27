@@ -1,4 +1,5 @@
 #include "cli/BundledResources.h"
+#include "cli/FrmInspect.h"
 #include "cli/MapAnalyzer.h"
 #include "cli/MapDescribe.h"
 #include "cli/MapGraph.h"
@@ -65,9 +66,10 @@ void printUsage(const char* program) {
               << "      pattern stamp the script places with api:placeStamp(name, anchorHex, variant).\n"
               << "  " << program << " map render --map <file.map> --out <file.png>\n"
               << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic|--objects|--semantic]\n"
-              << "      [--show-blockers] --data <dir-or-.dat> [...]\n"
+              << "      [--show-blockers] [--full] --data <dir-or-.dat> [...]\n"
               << "      Renders a map to a PNG (needs an off-screen GL context). --max-dim caps the\n"
-              << "      longest side (default 1600); --roof draws the roof layer over the floor.\n"
+              << "      longest side (default 1600); --roof draws the roof layer over the floor; --full\n"
+              << "      frames the whole iso grid (the full playable area) instead of cropping to content.\n"
               << "      --schematic flat-colours floor tiles by id + marks objects by category (with a\n"
               << "      colour legend); --objects mutes the floor to grey so the object markers pop\n"
               << "      (for checking scatter); --semantic greys the floor and colours markers by role\n"
@@ -108,6 +110,19 @@ void printUsage(const char* program) {
               << "      The endgame win-condition table (endgame.txt): each slide's gvar==value, art, narrator.\n"
               << "  " << program << " map find-gvar <GVAR_NAME> --data <dir-or-.dat> [--data <...>]\n"
               << "      Scripts that read/write a global variable (needs an .ssl source tree mounted): set vs get.\n"
+              << "  " << program << " frm info <name-or-fid> --data <dir-or-.dat> [--data <...>]\n"
+              << "      FRM metadata as JSON: resolvedArtPath, fid, directionCount, framesPerDirection, and a\n"
+              << "      per-frame array of {direction,frame,width,height,offsetX,offsetY}. Accepts an art name\n"
+              << "      (ext2grd1 or art/misc/ext2grd1.frm) or a FID (0x05000021 / decimal).\n"
+              << "  " << program << " frm render <name-or-fid> --out <file.png> [--dir N] [--frame N]\n"
+              << "      --data <dir-or-.dat> [--data <...>]\n"
+              << "      Render the sprite to a PNG (needs an off-screen GL context). Default: a grid of all\n"
+              << "      6 directions x all frames on a checkerboard. --dir N renders one direction; --frame N\n"
+              << "      one frame index. Reports the output path, image size, and grid layout (DxF).\n"
+              << "  " << program << " frm resolve <fid> --data <dir-or-.dat> [--data <...>]\n"
+              << "      Decode a FID (0x.. hex or decimal) to JSON {fid, type, index, artPath}.\n"
+              << "  " << program << " frm list <glob> --data <dir-or-.dat> [--data <...>]\n"
+              << "      Art entries whose name matches <glob> (e.g. ext2grd*), each {name, artPath, fid}.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
@@ -245,6 +260,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     }
     if (out.render && arg == "--show-blockers") {
         out.ren.showBlockers = true;
+        return 1;
+    }
+    if (out.render && arg == "--full") {
+        out.ren.fullExtent = true;
         return 1;
     }
     if (out.render) {
@@ -425,10 +444,127 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     return std::nullopt;
 }
 
+// --- frm subcommand ---------------------------------------------------------------------------
+// The `frm` family (info/render/resolve/list) is self-contained: one positional target plus a few
+// flags, and its own --data list. Kept apart from the `map` parser above so neither grows complex.
+struct FrmArgs {
+    std::string action; // info | render | resolve | list
+    std::string target; // art name / FID / glob
+    std::string outPath;
+    int direction = -1;
+    int frame = -1;
+    std::vector<std::string> dataPaths;
+};
+
+bool isFrmAction(const std::string& action) {
+    return action == "info" || action == "render" || action == "resolve" || action == "list";
+}
+
+// Parse the tokens after `frm <action>` into `out`. Returns false (after printing why) on a bad flag.
+bool parseFrmArgs(const std::vector<std::string>& args, const char* program, FrmArgs& out) {
+    for (std::size_t i = 2; i < args.size();) {
+        const std::string& arg = args[i];
+        const bool valueFlag = arg == "--data" || arg == "--out" || arg == "--dir" || arg == "--frame";
+        if (valueFlag && i + 1 >= args.size()) {
+            std::cerr << "error: " << arg << " needs a value\n";
+            printUsage(program);
+            return false;
+        }
+        if (arg == "--data") {
+            out.dataPaths.push_back(args[i + 1]);
+            i += 2;
+        } else if (arg == "--out") {
+            out.outPath = args[i + 1];
+            i += 2;
+        } else if (arg == "--dir") {
+            out.direction = std::stoi(args[i + 1]);
+            i += 2;
+        } else if (arg == "--frame") {
+            out.frame = std::stoi(args[i + 1]);
+            i += 2;
+        } else if (arg.rfind("--", 0) == 0) {
+            std::cerr << "error: unexpected argument: " << arg << "\n";
+            printUsage(program);
+            return false;
+        } else if (out.target.empty()) {
+            out.target = arg;
+            ++i;
+        } else {
+            std::cerr << "error: frm " << out.action << " takes one positional argument: " << arg << "\n";
+            printUsage(program);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Mount the data paths plus the bundled fallback resources the way main() does for `map`.
+void mountData(geck::resource::GameResources& resources, const std::vector<std::string>& dataPaths, const char* argv0) {
+    for (const auto& path : dataPaths) {
+        resources.files().addDataPath(path);
+    }
+    if (const auto bundled = geck::cli::findBundledResources(argv0); !bundled.empty()) {
+        resources.files().addDataPath(bundled);
+    }
+}
+
+int dispatchFrm(geck::resource::GameResources& resources, const FrmArgs& fa) {
+    if (fa.action == "info") {
+        return geck::cli::frmInfo(resources, fa.target, std::cout);
+    }
+    if (fa.action == "resolve") {
+        return geck::cli::resolveFidCommand(resources, fa.target, std::cout);
+    }
+    if (fa.action == "list") {
+        return geck::cli::listFrms(resources, fa.target, std::cout);
+    }
+    geck::cli::FrmRenderOptions opts;
+    opts.target = fa.target;
+    opts.outPath = fa.outPath;
+    opts.direction = fa.direction;
+    opts.frame = fa.frame;
+    return geck::cli::frmRender(resources, opts, std::cout);
+}
+
+// Run a `frm ...` command end to end (parse, validate, mount, dispatch). Returns the exit code.
+int runFrmCommand(const std::vector<std::string>& args, const char* program) {
+    FrmArgs fa;
+    fa.action = args[1];
+    if (!parseFrmArgs(args, program, fa)) {
+        return 2;
+    }
+    if (fa.target.empty()) {
+        std::cerr << "error: frm " << fa.action << " requires a <name-or-fid> argument\n";
+        printUsage(program);
+        return 2;
+    }
+    if (fa.dataPaths.empty()) {
+        std::cerr << "error: at least one --data <path> is required\n";
+        printUsage(program);
+        return 2;
+    }
+    if (fa.action == "render" && fa.outPath.empty()) {
+        std::cerr << "error: frm render requires --out <file.png>\n";
+        printUsage(program);
+        return 2;
+    }
+
+    spdlog::set_level(spdlog::level::off);
+    geck::resource::GameResources resources;
+    mountData(resources, fa.dataPaths, program);
+    return dispatchFrm(resources, fa);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     const std::vector<std::string> args(argv + 1, argv + argc);
+
+    // The `frm` family is parsed and run on its own path (its own positional + flags), separate from
+    // the `map` subcommands below.
+    if (args.size() >= 2 && args[0] == "frm" && isFrmAction(args[1])) {
+        return runFrmCommand(args, argv[0]);
+    }
 
     CliArgs cli;
     if (const auto exitCode = parseArgs(args, argv[0], cli); exitCode.has_value()) {

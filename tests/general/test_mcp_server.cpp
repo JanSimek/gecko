@@ -34,7 +34,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "find_gvar", "generate", "render_map", "extract_pattern", "script_api" }) {
+        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "find_gvar", "generate", "render_map", "extract_pattern", "script_api", "frm_info", "resolve_fid", "list_frms", "render_frm" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }
@@ -134,6 +134,43 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         const json e = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 18 }, { "method", "tools/call" },
             { "params", { { "name", "endings" }, { "arguments", json::object() } } } });
         CHECK(e["result"]["isError"] == true);
+    }
+
+    SECTION("resolve_fid decodes a FID without any data mounted") {
+        // The type byte + index are pure FID arithmetic, so resolve_fid succeeds even with no data —
+        // only the art-path lookup needs the LSTs (it just reports a null path then).
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 26 }, { "method", "tools/call" },
+            { "params", { { "name", "resolve_fid" }, { "arguments", { { "fid", "0x05000021" } } } } } });
+        CHECK(resp["result"]["isError"] == false);
+        const json decoded = json::parse(resp["result"]["content"][0]["text"].get<std::string>());
+        CHECK(decoded["type"] == "misc");
+        CHECK(decoded["index"] == 33);
+        CHECK(decoded["fid"] == 0x05000021);
+    }
+
+    SECTION("resolve_fid rejects a non-numeric fid as a tool error") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 27 }, { "method", "tools/call" },
+            { "params", { { "name", "resolve_fid" }, { "arguments", { { "fid", "nope" } } } } } });
+        CHECK(resp["result"]["isError"] == true);
+    }
+
+    SECTION("frm_info / render_frm / list_frms without their required args are tool errors") {
+        CHECK(server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 28 }, { "method", "tools/call" },
+                  { "params", { { "name", "frm_info" }, { "arguments", json::object() } } } })["result"]["isError"]
+            == true);
+        CHECK(server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 29 }, { "method", "tools/call" },
+                  { "params", { { "name", "render_frm" }, { "arguments", { { "frm", "ext2grd1" } } } } } })["result"]["isError"]
+            == true); // missing 'out'
+        CHECK(server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 40 }, { "method", "tools/call" },
+                  { "params", { { "name", "list_frms" }, { "arguments", json::object() } } } })["result"]["isError"]
+            == true);
+    }
+
+    SECTION("list_frms with no data mounted is an empty array, not an error") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 41 }, { "method", "tools/call" },
+            { "params", { { "name", "list_frms" }, { "arguments", { { "glob", "ext2grd*" } } } } } });
+        CHECK(resp["result"]["isError"] == false);
+        CHECK(resp["result"]["content"][0]["text"] == "[]\n");
     }
 
     SECTION("bad argument types and out-of-range numbers are tool errors, not silent casts") {

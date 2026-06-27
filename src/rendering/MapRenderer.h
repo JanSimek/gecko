@@ -52,6 +52,10 @@ public:
         /// Schematic only: include FLAT objects (invisible engine blockers — scroll/hex blockers,
         /// exit grids). Off by default so the dots show the real, in-game-visible scenery and walls.
         bool showBlockers = false;
+        /// Frame to the FULL floor-tile grid's screen extent (the whole iso playable area) instead of
+        /// cropping to drawn content. Lets sparse/empty maps still show the entire grid. Off by default
+        /// so the usual view stays tight around the content.
+        bool fullExtent = false;
         sf::Color background{ 0, 0, 0, 255 };
     };
 

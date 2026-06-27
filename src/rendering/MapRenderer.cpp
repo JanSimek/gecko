@@ -167,6 +167,23 @@ namespace {
 
     constexpr uint16_t kEmptyTile = static_cast<uint16_t>(Map::EMPTY_TILE);
 
+    // Grow `bounds` to the FULL floor-tile grid's screen extent — the whole iso playable area — using
+    // the same tile->screen projection the renderer uses to place floor tiles. The screen X and Y of a
+    // tile are both monotonic in (row, col), so the four grid corners bound the entire 100x100 grid.
+    // Independent of map content, so an empty/sparse map still frames to the whole grid.
+    void addFullGridBounds(Bounds& bounds) {
+        constexpr int lastRow = MAP_HEIGHT - 1;
+        constexpr int lastCol = MAP_WIDTH - 1;
+        for (const int row : { 0, lastRow }) {
+            for (const int col : { 0, lastCol }) {
+                const ScreenPosition pos = indexToScreenPosition(row * MAP_WIDTH + col);
+                const auto x = static_cast<float>(pos.x);
+                const auto y = static_cast<float>(pos.y);
+                bounds.add(x, y, x + static_cast<float>(TILE_WIDTH), y + static_cast<float>(TILE_HEIGHT));
+            }
+        }
+    }
+
     // Grow `bounds` to the non-empty tiles of one layer (floor or roof). Empty cells are excluded so
     // the frame fits the map's actual content — the loader emits a blank sprite for every empty cell
     // across the full 100x100 grid, and framing to those would shrink the content into a sea of black.
@@ -395,7 +412,11 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
 
     // Frame to the map's *content*: non-empty tiles plus objects. (We still draw the blank sprites the
     // loader made for empty cells — they just fall outside this frame instead of dominating it.)
+    // With fullExtent, seed the bounds with the whole floor-tile grid so even an empty map shows it all.
     Bounds bounds;
+    if (options.fullExtent) {
+        addFullGridBounds(bounds);
+    }
     const auto& allTiles = map.getMapFile().tiles;
     if (const auto it = allTiles.find(options.elevation); it != allTiles.end()) {
         addTileContentBounds(bounds, it->second, false);
@@ -462,9 +483,13 @@ sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend*
         loader.loadObjectSprites(map, options.elevation, objects, wallBlockerOverlays);
     }
 
-    // Flat-coloured floor mesh, plus the content bounds (floor cells and object sprites).
+    // Flat-coloured floor mesh, plus the content bounds (floor cells and object sprites). With
+    // fullExtent, seed the bounds with the whole floor-tile grid so even an empty map shows it all.
     sf::VertexArray floor(sf::PrimitiveType::Triangles);
     Bounds bounds;
+    if (options.fullExtent) {
+        addFullGridBounds(bounds);
+    }
     appendFloorMesh(floor, bounds, tiles, floorColor);
     for (const auto& object : objects) {
         if (object) {
