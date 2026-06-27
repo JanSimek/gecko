@@ -450,6 +450,8 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
     // FRM offset.
     const sf::Texture& exitGridTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
     sf::Sprite exitGridSprite(exitGridTexture);
+    // Anchor the marker by its centre so it sits centred on the hex (not offset down-right of it).
+    exitGridSprite.setOrigin(exitGridSprite.getLocalBounds().size / 2.f);
 
     for (const auto& object : *renderData.objects) {
         const auto mapObject = object ? object->getMapObjectPtr() : nullptr;
@@ -548,6 +550,7 @@ void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const
             // Fall back to the bundled editor "EG" marker (tinted) so this hex still previews.
             const sf::Texture& markerTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
             sf::Sprite markerSprite(markerTexture);
+            markerSprite.setOrigin(markerSprite.getLocalBounds().size / 2.f);
             markerSprite.setColor(renderData.exitGridPreview.tint);
             markerSprite.setPosition(sf::Vector2f(static_cast<float>(hexOptional.value().get().x()),
                 static_cast<float>(hexOptional.value().get().y())));
