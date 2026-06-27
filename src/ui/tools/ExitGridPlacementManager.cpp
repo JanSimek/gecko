@@ -217,6 +217,26 @@ namespace {
         }
         return -1;
     }
+
+    // The hex one row OVER from `hex`, perpendicular to a diagonal band — the SECOND row of a 2-deep
+    // diagonal edge. Gathers `hex`'s grid neighbours as screen offsets and lets secondRowNeighbor pick
+    // the one leaning most along the band's outward normal. Returns -1 if off-grid or none lean outward.
+    int secondRowHex(const HexagonGrid& grid, int hex, int dir) {
+        const auto here = grid.getHexByPosition(static_cast<uint32_t>(hex));
+        if (!here.has_value()) {
+            return -1;
+        }
+        const int hx = here->get().x();
+        const int hy = here->get().y();
+        std::vector<NeighborOffset> offsets;
+        for (const int nb : hexline::hexNeighbors(hex)) {
+            const auto nbHex = grid.getHexByPosition(static_cast<uint32_t>(nb));
+            if (nbHex.has_value()) {
+                offsets.push_back({ nb, nbHex->get().x() - hx, nbHex->get().y() - hy });
+            }
+        }
+        return secondRowNeighbor(dir, offsets);
+    }
 } // namespace
 
 ExitGridDestinationKind ExitGridPlacementManager::destinationKind() const {
@@ -333,6 +353,23 @@ ExitGridPlacementManager::CommittedSegment ExitGridPlacementManager::classifySeg
     const ExitGridArt art = segmentArt(*run, flipSide);
     seg.hexes = run->hexes;
     seg.art.assign(seg.hexes.size(), art);
+
+    // A DIAGONAL edge is a 2-deep band: the drawn hex line sits at the band edge and a SECOND parallel
+    // row of REAL markers extends one hex OVER, perpendicular to the band (the side exitGridOutward(dir)
+    // faces). The flip (dir^1) mirrors that side AND swaps the bar art for both rows. The second row uses
+    // the SAME art (direction/family/flip). Cardinal edges stay single-row. flattenSegments dedups by
+    // hex, so a second-row hex already taken by the first row (or an overlap) is dropped.
+    const int dir = exitGridDirOfProto(art.proPid);
+    if (const auto* hexGrid = _context.getHexagonGrid(); hexGrid != nullptr && isDiagonalExitGridDir(dir)) {
+        std::set<int> seen(run->hexes.begin(), run->hexes.end());
+        for (const int hex : run->hexes) {
+            const int second = secondRowHex(*hexGrid, hex, dir);
+            if (second >= 0 && seen.insert(second).second) {
+                seg.hexes.push_back(second);
+                seg.art.push_back(art);
+            }
+        }
+    }
     return seg;
 }
 

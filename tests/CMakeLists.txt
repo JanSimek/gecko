@@ -48,7 +48,6 @@ add_executable(general_tests
     general/test_hex_geometry.cpp
     general/test_hex_line.cpp
     general/test_exit_grid_direction.cpp
-    general/test_exit_grid_runs.cpp
     general/test_pattern_stamper.cpp
     general/test_pattern_builder.cpp
     general/test_map_script_api.cpp

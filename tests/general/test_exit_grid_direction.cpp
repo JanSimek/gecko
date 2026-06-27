@@ -15,11 +15,15 @@ using geck::exitGridArtForFacing;
 using geck::exitGridArtForSegment;
 using geck::ExitGridDestinationKind;
 using geck::exitGridDirectionForLine;
+using geck::exitGridDirOfProto;
 using geck::exitGridOutward;
 using geck::ExitGridSegmentRun;
 using geck::exitGridSnapDirections;
 using geck::flipExitGridDirection;
 using geck::HexagonGrid;
+using geck::isDiagonalExitGridDir;
+using geck::NeighborOffset;
+using geck::secondRowNeighbor;
 using geck::snapToExitGridAngle;
 namespace ExitGrid = geck::ExitGrid;
 
@@ -545,4 +549,106 @@ TEST_CASE("snapToExitGridAngle: a zero-length offset is returned unchanged", "[e
     const auto [sx, sy] = snapToExitGridAngle(500.0, 500.0, 500.0, 500.0);
     CHECK(sx == 500.0);
     CHECK(sy == 500.0);
+}
+
+// --- SECOND-ROW selection for the 2-deep diagonal exit band ----------------------------------------
+
+TEST_CASE("isDiagonalExitGridDir / exitGridDirOfProto", "[exitgrid][secondrow]") {
+    CHECK_FALSE(isDiagonalExitGridDir(ExitGrid::DIR_LEFT));
+    CHECK_FALSE(isDiagonalExitGridDir(ExitGrid::DIR_BOTTOM));
+    CHECK(isDiagonalExitGridDir(ExitGrid::DIR_FWD_A));
+    CHECK(isDiagonalExitGridDir(ExitGrid::DIR_BACK_B));
+    for (int dir = 0; dir < ExitGrid::DIR_COUNT; ++dir) {
+        CHECK(exitGridDirOfProto(ExitGrid::exitGridProto(dir)) == dir);
+    }
+}
+
+TEST_CASE("secondRowNeighbor returns -1 for the cardinal directions", "[exitgrid][secondrow]") {
+    const std::vector<NeighborOffset> nbs = {
+        { 10, +30, 0 }, { 11, -30, 0 }, { 12, 0, +30 }, { 13, 0, -30 }
+    };
+    CHECK(secondRowNeighbor(ExitGrid::DIR_LEFT, nbs) == -1);
+    CHECK(secondRowNeighbor(ExitGrid::DIR_RIGHT, nbs) == -1);
+    CHECK(secondRowNeighbor(ExitGrid::DIR_BOTTOM, nbs) == -1);
+    CHECK(secondRowNeighbor(ExitGrid::DIR_TOP, nbs) == -1);
+}
+
+TEST_CASE("secondRowNeighbor picks the neighbour leaning along the band normal", "[exitgrid][secondrow]") {
+    // Six neighbours roughly arranged around a hex (screen offsets, y DOWNWARD).
+    const std::vector<NeighborOffset> nbs = {
+        { 1, +16, +12 }, // down-right
+        { 2, +16, -12 }, // up-right
+        { 3, -16, +12 }, // down-left
+        { 4, -16, -12 }, // up-left
+        { 5, 0, +24 },   // straight down
+        { 6, 0, -24 },   // straight up
+    };
+
+    // A "\" band, side A, faces DOWN-LEFT (exitGridOutward(BACK_A) = (-1, +2)).
+    const int down = secondRowNeighbor(ExitGrid::DIR_BACK_A, nbs);
+    // Its flip (BACK_B, normal (+1, -2)) must pick a neighbour leaning the OTHER way (up).
+    const int up = secondRowNeighbor(ExitGrid::DIR_BACK_B, nbs);
+    REQUIRE(down >= 0);
+    REQUIRE(up >= 0);
+    CHECK(down != up);
+
+    // The chosen neighbour's dot with the normal is the maximum among all neighbours, and positive.
+    const auto dotWith = [&](int hex, int dir) {
+        const auto [ox, oy] = exitGridOutward(dir);
+        for (const NeighborOffset& n : nbs) {
+            if (n.hex == hex) {
+                return n.dx * ox + n.dy * oy;
+            }
+        }
+        return 0;
+    };
+    CHECK(dotWith(down, ExitGrid::DIR_BACK_A) > 0);
+    CHECK(dotWith(up, ExitGrid::DIR_BACK_B) > 0);
+}
+
+TEST_CASE("the diagonal second row is a distinct parallel hex line", "[exitgrid][secondrow]") {
+    HexagonGrid grid;
+    // A "\" run down-right in (col,row): col 100, rows 96..104.
+    const auto screenOf = [&](int hex) {
+        const auto h = grid.getHexByPosition(static_cast<uint32_t>(hex));
+        return std::pair<int, int>{ h->get().x(), h->get().y() };
+    };
+    const auto secondRowOf = [&](int hex, int dir) -> int {
+        const auto [hx, hy] = screenOf(hex);
+        std::vector<NeighborOffset> offs;
+        for (const int nb : geck::hexline::hexNeighbors(hex)) {
+            const auto [nx, ny] = screenOf(nb);
+            offs.push_back({ nb, nx - hx, ny - hy });
+        }
+        return secondRowNeighbor(dir, offs);
+    };
+
+    const int aHex = 96 * HexagonGrid::GRID_WIDTH + 100;
+    const int bHex = 104 * HexagonGrid::GRID_WIDTH + 100;
+    const auto firstRow = geck::hexline::hexLine(grid, aHex, bHex);
+    REQUIRE(firstRow.size() >= 4);
+
+    const int dir = ExitGrid::DIR_BACK_A;
+    std::vector<int> secondRow;
+    for (const int hex : firstRow) {
+        const int s = secondRowOf(hex, dir);
+        REQUIRE(s >= 0);
+        secondRow.push_back(s);
+        // Every second-row hex is a grid neighbour of its first-row hex (one hex over).
+        bool adjacent = false;
+        for (const int nb : geck::hexline::hexNeighbors(hex)) {
+            adjacent = adjacent || (nb == s);
+        }
+        CHECK(adjacent);
+    }
+
+    // The two rows are disjoint, and each second-row hex leans to the SAME side, so together with the
+    // first row they form a 2-deep band (each second-row hex distinct from every first-row hex).
+    for (const int s : secondRow) {
+        bool inFirst = false;
+        for (const int f : firstRow) {
+            inFirst = inFirst || (f == s);
+        }
+        CHECK_FALSE(inFirst);
+    }
 }

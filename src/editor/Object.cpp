@@ -9,7 +9,6 @@
 #include "util/Exceptions.h"
 #include "util/ExitGridDirection.h"
 #include <algorithm>
-#include <cmath>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -157,22 +156,12 @@ void Object::applyExitGridOutwardOffset(const Hex& hex) {
         return;
     }
 
-    // A DIAGONAL marker (both components nonzero) gets a MODERATE slide PERPENDICULAR to the band, not
-    // the bbox-corner slide the cardinals use: the bars are large (127x48, 111x60), so a bbox corner
-    // would combine half-width AND half-height (~93px) and shove the bar clear off its hex.
-    // exitGridOutward gives the perpendicular-to-band normal; normalize it, then slide a fixed distance.
-    // A flip (dir ^ 1) reverses the sign, swinging the byte-identical art to the OTHER side.
+    // DIAGONAL markers anchor engine-faithfully — centred on their own hex (no outward slide), exactly
+    // as Fallout 2 CE draws the exit-grid art. A diagonal EDGE is placed as TWO parallel rows of real
+    // markers (the second one hex over, perpendicular to the band), so the band depth comes from real
+    // objects, not a per-sprite display slide. The cardinal outward-slide below would combine half-width
+    // AND half-height on these large bars (127x48, 111x60) and shove the art clear off its hex.
     if (outX != 0 && outY != 0) {
-        // Seat the ORIGINAL row so its HEX-SIDE (inner) edge lands ON the trigger hex: slide OUTWARD by
-        // half the rendered band's perpendicular thickness (~37px row / 2). The renderer then stacks the
-        // SECOND row further outward, so the whole doubled band lies on one side of the hex line with the
-        // hex at its very edge. FLIPPABLE: a flip (dir ^ 1) reverses this vector and the second-row
-        // offset together, swinging the whole band to the other side, hex still at the edge.
-        constexpr float kDiagonalSlide = 18.5f;
-        const float len = std::sqrt(static_cast<float>(outX * outX + outY * outY));
-        _sprite.move(sf::Vector2f(
-            static_cast<float>(outX) / len * kDiagonalSlide,
-            static_cast<float>(outY) / len * kDiagonalSlide));
         return;
     }
 
