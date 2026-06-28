@@ -1596,11 +1596,14 @@ Effort: S ≈ days, M ≈ 1–2 weeks, L ≈ 3–4 weeks for one developer. The 
 
 ---
 
-# Exit-grid rendering vs the engine — fix placement (LOWEST priority)
+# Exit-grid rendering vs the engine — DONE (engine-faithful, two real rows)
 
-Deferred by author's decision; the current rendering is "good enough" for now. The editor's exit-grid
-bars diverge from how Fallout 2 actually draws them, which causes selection/placement quirks. Leave
-as-is; revisit at lowest priority.
+**DONE — implemented.** Diagonal exit grids now place TWO rows of REAL, selectable objects, each bar
+drawn once centered on its hex like the engine (`Object::applyExitGridOutwardOffset` + the display
+doubling removed; a second row added in `ExitGridPlacementManager::classifySegment` via
+`secondRowNeighbor`/`secondRowHex`, `kSecondRowSteps = 2` so the bars tile into a clean ~2× band).
+Visible bar == selectable object, and the cardinal "hexes outside the texture" is fixed too. The notes
+below record the engine truth and the before→after rationale for reference.
 
 **Engine truth** (verified against shipped maps `ncr1`, `redmtun`, `redwan1`, `artemple` via the new
 `map render --exit-dots` overlay, and against `fallout2-ce/src/object.cc` ~4942): every exit grid is ONE
