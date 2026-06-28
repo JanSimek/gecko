@@ -1257,6 +1257,11 @@ immediately useful and de-risks the rest.
 
 # Area-Fill + Luau Plugins — Unified Design Proposal
 
+> **Status:** Feature A (area fill, phases A0–A3) has **LANDED** — a Luau-driven "Fill Selection"
+> ships with a Fill dialog, ghost preview, and the `scripts/fills/*.luau` recipes, exercised through
+> `MapScriptApi` over a placement batch and surfaced in `gecko-cli`/MCP `fill`. Feature B (the Luau
+> plugin system) remains a proposal. The design below is kept as the reference write-up for both.
+
 This proposal specifies two features that share one substrate: **Feature A**, a Luau-and-data-driven *area fill* ("Fill Selection") that closes the `autotile_floor` / "paint a pattern of tiles" gap; and **Feature B**, a *Luau plugin system* that lets third parties add tools, panels, menus, and event handlers. The decision throughout is to **build one set of seams and exercise it twice**: area-fill is the first first-party consumer of the same selection-projection, ghost-preview, `ITool`, and `MapScriptApi`-over-a-batch machinery that the plugin system opens to third parties. Engine-data-fidelity is non-negotiable: PIDs/directions/flags/tile-ids stored and replayed verbatim, no fallback label tables, no rotation math, validated readers with no silent fallback.
 
 ---
@@ -1596,11 +1601,24 @@ Effort: S ≈ days, M ≈ 1–2 weeks, L ≈ 3–4 weeks for one developer. The 
 
 ---
 
-# Exit-grid rendering vs the engine — fix placement (LOWEST priority)
+# Exit-grid rendering vs the engine — DONE (engine-faithful, two real rows)
 
-Deferred by author's decision; the current rendering is "good enough" for now. The editor's exit-grid
-bars diverge from how Fallout 2 actually draws them, which causes selection/placement quirks. Leave
-as-is; revisit at lowest priority.
+**DONE — implemented.** Diagonal exit grids now place TWO rows of REAL, selectable objects, each bar
+drawn once centered on its hex like the engine (`Object::applyExitGridOutwardOffset` + the display
+doubling removed; a second row added in `ExitGridPlacementManager::classifySegment` via
+`secondRowNeighbor`/`secondRowHex`, `kSecondRowSteps = 2` so the bars tile into a clean ~2× band).
+Visible bar == selectable object, and the cardinal "hexes outside the texture" is fixed too. The notes
+below record the engine truth and the before→after rationale for reference.
+
+**Both rows are real exit grids → a 2-deep trigger zone (by design).** The inner/second row is
+functionally inert in normal play (walking off-map the player exits at the first row it reaches and never
+steps onto the second), but it IS a real exit in the saved data. A "non-exiting decorative exit-grid bar"
+is **impossible**: the engine fires the map transition on any object whose PID is in the exit-grid range
+(`0x05000010–17`) **unconditionally**, ignoring `exit_map`/flags (`fallout2-ce/object.cc:1425`); no
+`exit_map` value means "no transition" (`0`/`-1`/`-2` are world/town map; the inactive-grid FID swap is
+cosmetic, keyed on FID not PID). So two real selectable rows necessarily means two exits in data — chosen
+(author's call) over a display-only second texture, which would keep one exit line but make the second
+bar un-selectable.
 
 **Engine truth** (verified against shipped maps `ncr1`, `redmtun`, `redwan1`, `artemple` via the new
 `map render --exit-dots` overlay, and against `fallout2-ce/src/object.cc` ~4942): every exit grid is ONE
