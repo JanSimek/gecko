@@ -25,8 +25,6 @@ using geck::exitGridSnapDirections;
 using geck::flipExitGridDirection;
 using geck::HexagonGrid;
 using geck::isDiagonalExitGridDir;
-using geck::NeighborOffset;
-using geck::secondRowNeighbor;
 using geck::snapToExitGridAngle;
 namespace ExitGrid = geck::ExitGrid;
 
@@ -566,134 +564,33 @@ TEST_CASE("isDiagonalExitGridDir / exitGridDirOfProto", "[exitgrid][diagonal]") 
     }
 }
 
-// --- Second-row neighbour (the 2nd parallel row of REAL diagonal markers) --------------------------
-
-TEST_CASE("secondRowNeighbor: returns -1 for every CARDINAL direction", "[exitgrid][secondrow]") {
-    // A spread of neighbours so a wrong "max dot" pick would surface; cardinals must still bail with -1.
-    const std::vector<NeighborOffset> neighbors = {
-        { 10, 1, 0 }, { 11, -1, 0 }, { 12, 0, 1 }, { 13, 0, -1 }
-    };
-    CHECK(secondRowNeighbor(ExitGrid::DIR_LEFT, neighbors) == -1);
-    CHECK(secondRowNeighbor(ExitGrid::DIR_RIGHT, neighbors) == -1);
-    CHECK(secondRowNeighbor(ExitGrid::DIR_BOTTOM, neighbors) == -1);
-    CHECK(secondRowNeighbor(ExitGrid::DIR_TOP, neighbors) == -1);
-}
-
-TEST_CASE("secondRowNeighbor: each diagonal picks the neighbour leaning most along its outward normal",
-    "[exitgrid][secondrow]") {
-    // outward(FWD_A) = (1, 6): the (0, +1) downward neighbour has dot 6, the largest here.
-    const std::vector<NeighborOffset> n = {
-        { 20, 1, 0 },  // dot vs (1,6) = 1
-        { 21, 0, 1 },  // dot = 6  <- winner for FWD_A
-        { 22, 0, -1 }, // dot = -6 (skipped, negative)
-        { 23, -1, 0 }, // dot = -1
-    };
-    CHECK(secondRowNeighbor(ExitGrid::DIR_FWD_A, n) == 21);
-    // FWD_B = (-1, -6): the upward neighbour (0,-1) now wins (the flip mirrors to the other side).
-    CHECK(secondRowNeighbor(ExitGrid::DIR_FWD_B, n) == 22);
-
-    // outward(BACK_A) = (-1, 2): (0,+1) gives dot 2, (-1,0) gives dot 1; the downward neighbour wins.
-    CHECK(secondRowNeighbor(ExitGrid::DIR_BACK_A, n) == 21);
-    // BACK_B = (1, -2): the flip -> (0,-1) gives dot 2, the up neighbour wins.
-    CHECK(secondRowNeighbor(ExitGrid::DIR_BACK_B, n) == 22);
-}
-
-TEST_CASE("secondRowNeighbor: a flip mirrors the pick to the opposite-side neighbour",
-    "[exitgrid][secondrow]") {
-    // Symmetric pair of neighbours straddling the band; flipping dir must swap which one is chosen.
-    const std::vector<NeighborOffset> n = {
-        { 30, 1, 5 },   // leans the FWD_A (down) way
-        { 31, -1, -5 }, // leans the FWD_B (up) way
-    };
-    const int a = secondRowNeighbor(ExitGrid::DIR_FWD_A, n);
-    const int b = secondRowNeighbor(flipExitGridDirection(ExitGrid::DIR_FWD_A), n);
-    CHECK(a == 30);
-    CHECK(b == 31);
-    CHECK(a != b);
-}
-
-TEST_CASE("secondRowNeighbor: a neighbour exactly PERPENDICULAR (dot 0) is never picked",
-    "[exitgrid][secondrow]") {
-    // outward(FWD_A) = (1, 6). The offset (6, -1) is perpendicular: dot = 6*1 + (-1)*6 = 0. With the
-    // bestDot seed at 0 and a strict dot > bestDot test, a sole perpendicular neighbour yields -1.
-    const std::vector<NeighborOffset> perpOnly = { { 40, 6, -1 } };
-    CHECK(secondRowNeighbor(ExitGrid::DIR_FWD_A, perpOnly) == -1);
-
-    // Adding one strictly-outward neighbour, the perpendicular one is still passed over.
-    const std::vector<NeighborOffset> perpPlus = { { 40, 6, -1 }, { 41, 0, 1 } };
-    CHECK(secondRowNeighbor(ExitGrid::DIR_FWD_A, perpPlus) == 41);
-
-    // No neighbour leans outward (all dot <= 0) -> -1.
-    const std::vector<NeighborOffset> none = { { 50, 6, -1 }, { 51, -1, 0 } };
-    CHECK(secondRowNeighbor(ExitGrid::DIR_FWD_A, none) == -1);
-}
-
-// --- Placement: a diagonal segment grows a SECOND row of REAL hexes, a cardinal stays single-row -----
+// --- Placement: a diagonal segment places ONE row of objects, exactly like a cardinal ---------------
 
 namespace {
-// Mirror ExitGridPlacementManager's anon-namespace neighborRowHex/secondRowHex on the REAL grid: walk
-// `steps` rows OVER from `hex`, perpendicular to the band (the side exitGridOutward(dir) faces).
-int secondRowHexOnGrid(const HexagonGrid& grid, int hex, int dir, int steps) {
-    int current = hex;
-    for (int i = 0; i < steps && current >= 0; ++i) {
-        const auto here = grid.getHexByPosition(static_cast<uint32_t>(current));
-        if (!here.has_value()) {
-            return -1;
-        }
-        const int hx = here->get().x();
-        const int hy = here->get().y();
-        std::vector<NeighborOffset> offsets;
-        for (const int nb : geck::hexline::hexNeighbors(current)) {
-            const auto nbHex = grid.getHexByPosition(static_cast<uint32_t>(nb));
-            if (nbHex.has_value()) {
-                offsets.push_back({ nb, nbHex->get().x() - hx, nbHex->get().y() - hy });
-            }
-        }
-        current = secondRowNeighbor(dir, offsets);
-    }
-    return current;
-}
-
-// Mirror classifySegment's hex set: the drawn hex line, plus (for a diagonal dir) a deduped second row.
-std::vector<int> classifiedHexes(const HexagonGrid& grid, int startHex, int endHex, int dir, int steps) {
-    std::vector<int> hexes = geck::hexline::hexLine(grid, startHex, endHex);
-    if (!isDiagonalExitGridDir(dir)) {
-        return hexes; // cardinal: single row
-    }
-    std::set<int> seen(hexes.begin(), hexes.end());
-    const std::vector<int> outer = hexes; // iterate the original outer row only
-    for (const int hex : outer) {
-        const int second = secondRowHexOnGrid(grid, hex, dir, steps);
-        if (second >= 0 && seen.insert(second).second) {
-            hexes.push_back(second);
-        }
-    }
-    return hexes;
+// Mirror ExitGridPlacementManager::classifySegment's hex set: a segment places ONE object per drawn
+// hex for EVERY direction (cardinal and diagonal alike). The doubled diagonal LOOK is display-only
+// (RenderingEngine draws a decorative second texture), so the placed object count equals the hexline.
+std::vector<int> classifiedHexes(const HexagonGrid& grid, int startHex, int endHex) {
+    return geck::hexline::hexLine(grid, startHex, endHex);
 }
 } // namespace
 
-TEST_CASE("placement: a DIAGONAL segment yields ~2x the line's hexes; a CARDINAL stays 1x",
-    "[exitgrid][secondrow][placement]") {
+TEST_CASE("placement: a DIAGONAL segment places ONE row of objects, same as a CARDINAL",
+    "[exitgrid][placement]") {
     HexagonGrid grid;
     constexpr int C = 100;
-    constexpr int kSecondRowSteps = 2; // the source default
 
-    // A diagonal "\" run (vary the row -> the steep iso edge classifies BackSlash, dir 6/7).
+    // A diagonal "\" run (vary the row -> the steep iso edge classifies BackSlash, dir 6/7): the placed
+    // object count equals the drawn hex line, NOT 2x. The doubled band is display-only.
     const int dStart = hexPos(C, C);
     const int dEnd = hexPos(C, C + 30);
-    const std::size_t lineLen = geck::hexline::hexLine(grid, dStart, dEnd).size();
-    REQUIRE(lineLen >= 2);
+    const std::vector<int> line = geck::hexline::hexLine(grid, dStart, dEnd);
+    REQUIRE(line.size() >= 2);
+    const std::vector<int> diag = classifiedHexes(grid, dStart, dEnd);
+    CHECK(diag.size() == line.size());
+    CHECK(diag == line);
 
-    const std::vector<int> diag = classifiedHexes(grid, dStart, dEnd, ExitGrid::DIR_BACK_A, kSecondRowSteps);
-    // Two rows of REAL hexes: nearly double the drawn line (a few endpoints can collide and dedup).
-    CHECK(diag.size() > lineLen);
-    CHECK(diag.size() >= lineLen + lineLen - 2);
-    CHECK(diag.size() <= 2 * lineLen);
-    // Every hex is unique (the dedup held) and the original line is fully contained.
-    CHECK(std::set<int>(diag.begin(), diag.end()).size() == diag.size());
-
-    // A cardinal run (pure horizontal hex row -> LEFT/RIGHT) stays single-row.
-    const std::vector<int> card = classifiedHexes(grid, hexPos(C, C), hexPos(C + 20, C),
-        ExitGrid::DIR_RIGHT, kSecondRowSteps);
+    // A cardinal run (pure horizontal hex row -> LEFT/RIGHT) is also exactly single-row.
+    const std::vector<int> card = classifiedHexes(grid, hexPos(C, C), hexPos(C + 20, C));
     CHECK(card.size() == geck::hexline::hexLine(grid, hexPos(C, C), hexPos(C + 20, C)).size());
 }

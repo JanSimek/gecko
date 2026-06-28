@@ -40,10 +40,10 @@ inline ExitGridArt exitGridArtForDirection(int dir, ExitGridDestinationKind kind
 }
 
 /// The band's OUTWARD screen normal ({dx, dy}, y DOWNWARD): the direction PERPENDICULAR to a marker's
-/// on-screen bar, pointing to the side the bar faces. secondRowNeighbor uses it to pick which on-grid
-/// neighbour is the SECOND parallel row of a diagonal band (the one leaning most along this normal); a
-/// flip (dir ^ 1) reverses the sign, so the second row mirrors to the OTHER side of the hex line.
-/// LEFT/RIGHT/BOTTOM/TOP point to their named screen edges.
+/// on-screen bar, pointing to the side the bar faces. RenderingEngine uses it to offset a diagonal
+/// bar's DISPLAY-ONLY second texture to that side; a flip (dir ^ 1) reverses the sign, so the
+/// decorative copy mirrors to the OTHER side of the hex line. LEFT/RIGHT/BOTTOM/TOP point to their
+/// named screen edges.
 ///
 /// The four DIAGONAL vectors point perpendicular to the band's on-screen line (the {±1,±1} screen
 /// diagonal runs nearly ALONG the "\" band, so it barely separates the sides). Measured long-axis
@@ -81,38 +81,6 @@ inline bool isDiagonalExitGridDir(int dir) {
 /// The exit-grid direction (0..7) an art's proto encodes (proto index 16..23 maps 1:1 to dir 0..7).
 inline int exitGridDirOfProto(uint32_t proPid) {
     return static_cast<int>(proPid - ExitGrid::FIRST_EXIT_GRID_PID);
-}
-
-/// A hex neighbour reduced to its screen offset from the home hex (dx, dy = neighbour - home,
-/// y DOWNWARD) plus the neighbour's own hex index, for picking a diagonal band's SECOND row.
-struct NeighborOffset {
-    int hex = -1;
-    int dx = 0;
-    int dy = 0;
-};
-
-/// Pick the SECOND-ROW neighbour for a diagonal band: of `home`'s grid neighbours, the one whose screen
-/// offset leans most strongly along the band's outward normal (exitGridOutward(dir), y DOWNWARD). That
-/// places the second row one hex OVER, perpendicular to the band, on the side the bars face — both rows
-/// hold REAL, selectable markers. A flip (dir^1) reverses the normal, so the second row mirrors to the
-/// other side. Returns -1 if `dir` isn't diagonal or no neighbour leans outward. Because the seed
-/// bestDot is 0 and the test is dot > bestDot, a neighbour exactly PERPENDICULAR to the normal (dot 0)
-/// is never picked — only one leaning strictly outward. Pure (no grid/SFML) for headless testing.
-inline int secondRowNeighbor(int dir, const std::vector<NeighborOffset>& neighbors) {
-    if (!isDiagonalExitGridDir(dir)) {
-        return -1;
-    }
-    const auto [outX, outY] = exitGridOutward(dir);
-    int best = -1;
-    long bestDot = 0;
-    for (const NeighborOffset& nb : neighbors) {
-        const long dot = static_cast<long>(nb.dx) * outX + static_cast<long>(nb.dy) * outY;
-        if (dot > bestDot) {
-            bestDot = dot;
-            best = nb.hex;
-        }
-    }
-    return best;
 }
 
 /// Screen position of the grid's centre hex — the reference point outward facing is measured from.
@@ -191,8 +159,8 @@ inline ExitGridArt exitGridArtForSegment(int dx, int dy, int outwardX, int outwa
 /// Flip a direction (0..7) to the OPPOSITE side of its axis pair (LEFT<->RIGHT, etc). The directions
 /// are four adjacent pairs (0/1, 2/3, 4/5, 6/7), so toggling the low bit swaps within the pair and
 /// keeps the axis. The two bitmaps in a pair are identical; the flip only changes the sign of
-/// exitGridOutward(dir), i.e. which side secondRowNeighbor mirrors the diagonal band's second row to.
-/// Out-of-range dirs pass through.
+/// exitGridOutward(dir), i.e. which side the renderer offsets a diagonal bar's display-only second
+/// texture to. Out-of-range dirs pass through.
 inline int flipExitGridDirection(int dir) {
     if (dir < 0 || dir >= ExitGrid::DIR_COUNT) {
         return dir;

@@ -167,6 +167,18 @@ private:
         const VisibilitySettings& visibility);
 
     /**
+     * @brief DISPLAY-ONLY second texture for DIAGONAL exit-grid bars. renderObjects already drew each
+     * marker's first bar ON its hex (so it stays the selectable object — the picker hit-tests the
+     * unmoved sprite). This pass draws each DIAGONAL marker's bar a SECOND time, offset perpendicular
+     * along exitGridOutward(dir) by ~one band thickness, so the offset copy abuts the on-hex bar into a
+     * ~2x-wide band. The copy is decorative only — not an object, not pickable. A flipped marker
+     * (dir ^ 1) negates exitGridOutward, swinging the copy to the OTHER side. Cardinals get no copy.
+     */
+    void renderDiagonalExitGridDecorations(sf::RenderTarget& target,
+        const RenderData& renderData,
+        const VisibilitySettings& visibility);
+
+    /**
      * @brief Outline every selected object on top of the scene, grouped by category colour.
      *
      * Renders each colour group's selected sprites into an offscreen mask, then edge-detects the
