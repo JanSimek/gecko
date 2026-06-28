@@ -220,6 +220,31 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    json toolDumpGrid(resource::GameResources& resources, const json& args) {
+        cli::DumpGridOptions opts;
+        opts.map = requireString(args, "map");
+        if (args.contains("elevation") && args.at("elevation").is_number_integer()) {
+            opts.elevation = args.at("elevation").get<int>();
+        }
+        if (args.contains("roof") && args.at("roof").is_boolean()) {
+            opts.roof = args.at("roof").get<bool>();
+        }
+        if (args.contains("floor") && args.at("floor").is_boolean()) {
+            opts.floor = args.at("floor").get<bool>();
+        }
+        if (args.contains("objects") && args.at("objects").is_boolean()) {
+            opts.objects = args.at("objects").get<bool>();
+        }
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::dumpMapGrid(resources, opts, oss);
+        } catch (const std::exception& e) { // NOSONAR: tool boundary — any failure is returned to the caller as an error result
+            return toolText(std::string("dump_grid failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
     json toolMapGraph(resource::GameResources& resources, const json& args) {
         cli::MapGraphOptions opts;
         opts.maps = optMaps(args);
@@ -503,6 +528,17 @@ namespace {
             "Args: map.",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeMap(r, a); } });
+        t.push_back({ "dump_grid", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
+            "The RAW spatial layout of one map, the per-cell data behind analyze's digested "
+            "adjacency/clusters. Per elevation: the floor (and, with roof=true, roof) tile-id grid as a "
+            "flat row-major array, 'tileCols' (100) wide so cell (col,row) is grid[row*100+col], with "
+            "'emptyTile' (1) marking empty; and 'objects' [{pid,number,type,name,hex,col,row,dir,flat}] "
+            "for every object (filter flat=true / type to separate scenery from structural exit grids "
+            "and blockers). Use it to learn exact tile placement, transition masks and real scatter "
+            "density/positions from shipped maps before generating terrain. Args: map (required), "
+            "optional elevation (-1/all), roof, floor, objects (booleans).",
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "roof", { { "type", "boolean" } } }, { "floor", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } } } }, { "required", json::array({ "map" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolDumpGrid(r, a); } });
         t.push_back({ "map_graph",
             "The EXIT-GRID connectivity graph — how maps link via exit grids: within a location "
             "(intramap self-edges for elevation changes, and intermap edges between a town's maps, e.g. "

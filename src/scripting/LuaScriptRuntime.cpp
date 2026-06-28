@@ -1,6 +1,7 @@
 #include "scripting/LuaScriptRuntime.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
@@ -22,6 +23,48 @@
 namespace geck {
 
 namespace {
+    // Time-budget watchdog. A pointer to one of these lives in lua_callbacks(L)->userdata (the
+    // documented per-state scratch slot, untouched by Luau and unused by LuaBridge), so the
+    // safepoint interrupt below can read the deadline straight off the lua_State.
+    struct TimeBudget {
+        std::chrono::steady_clock::time_point deadline;
+    };
+
+    // Called by Luau at safepoints (loop back-edges, call/ret, gc). `gc >= 0` marks a GC step:
+    // we must not longjmp out of the collector, so we only abort on the non-GC safepoints. Past
+    // the deadline, luaL_error raises a runtime error that unwinds the pcall — the standard Luau
+    // timeout pattern. Clearing the callback first stops it re-firing during the unwind.
+    void timeBudgetInterrupt(lua_State* L, int gc) {
+        if (gc >= 0) {
+            return;
+        }
+        const auto* budget = static_cast<const TimeBudget*>(lua_callbacks(L)->userdata);
+        if (budget == nullptr) {
+            return;
+        }
+        if (std::chrono::steady_clock::now() >= budget->deadline) {
+            lua_callbacks(L)->interrupt = nullptr;
+            luaL_error(L, "script exceeded its time budget (possible infinite loop)");
+        }
+    }
+
+    // RAII teardown for the run's lua_State: on EVERY exit path (normal return, early compile-error
+    // return, or a C++ exception unwinding out of the run) it disarms the watchdog FIRST — so the
+    // interrupt can't fire (and luaL_error/longjmp) during lua_close's GC, or read the by-then-dead
+    // TimeBudget — then closes the state so it never leaks. Disarming is two pointer writes and
+    // lua_close runs no Lua callbacks once disarmed, so the destructor never throws.
+    struct LuaStateGuard {
+        lua_State* L;
+        ~LuaStateGuard() {
+            if (L == nullptr) {
+                return;
+            }
+            lua_callbacks(L)->interrupt = nullptr;
+            lua_callbacks(L)->userdata = nullptr;
+            lua_close(L);
+        }
+    };
+
     // print(...) capture: append each argument (tab-separated) plus a newline to the std::string
     // carried as a lightuserdata upvalue, so console scripts can report progress.
     int capturePrint(lua_State* L) {
@@ -45,13 +88,17 @@ namespace {
 }
 
 ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
-    ObjectCommandController& controller, const std::string& description, const ScriptArgs& args) {
+    ObjectCommandController& controller, const std::string& description, const ScriptArgs& args,
+    unsigned timeBudgetMs) {
     ScriptResult result;
 
     lua_State* L = luaL_newstate();
     if (L == nullptr) {
         return { false, "failed to create Luau state", "" };
     }
+    // From here, the state (and the watchdog disarm) is owned by RAII: every return below, and any
+    // exception unwinding through this function, tears it down correctly.
+    LuaStateGuard stateGuard{ L };
     luaL_openlibs(L); // Luau's stdlib is already safe: no `io`, `os` trimmed, no bytecode loaders
 
     // Replace print() with one that captures into result.output (a stable stack local for this run).
@@ -130,13 +177,25 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
     if (loadResult != 0) {
         result.ok = false;
         result.error = std::string("compile error: ") + lua_tostring(L, -1);
-        lua_close(L);
-        return result;
+        return result; // stateGuard closes L
+    }
+
+    // Arm the time-budget watchdog (GUI live previews pass a budget; trusted CLI/batch runs pass 0).
+    // The TimeBudget lives on this stack frame, which outlives the pcall below; its address goes in
+    // the per-state userdata slot the interrupt reads. The deadline is taken here so it covers only
+    // execution, not the compile above.
+    TimeBudget budget;
+    if (timeBudgetMs > 0) {
+        budget.deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeBudgetMs);
+        lua_callbacks(L)->userdata = &budget;
+        lua_callbacks(L)->interrupt = &timeBudgetInterrupt;
     }
 
     {
-        // The whole run is one undo entry: every api mutator buffers into this batch, and
-        // endBatch() (on scope exit) collapses them — even if the script errors part-way.
+        // The whole run is one undo entry: a committing run's api mutators buffer into this batch and
+        // endBatch() (on scope exit) collapses them — even if the script errors part-way. When the
+        // caller has installed a plan sink (a fill preview), the mutators record into the sink and
+        // commit nothing, so this batch stays empty and endBatch() pushes nothing — a harmless no-op.
         ScopedUndoBatch batch(controller, description);
         if (lua_pcall(L, 0, 0, 0) != 0) {
             result.ok = false;
@@ -146,7 +205,7 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         }
     }
 
-    lua_close(L);
+    // stateGuard disarms the watchdog and closes the state on return (and on any exception above).
     return result;
 }
 

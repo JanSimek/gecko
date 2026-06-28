@@ -31,11 +31,17 @@ public:
     /// Bind `api`, sandbox, compile + run `source`. Returns ok=false with a message on a
     /// compile or runtime error; partial edits made before the error are still flushed as
     /// the one undo entry, so the user can Ctrl-Z a failed run.
+    ///
+    /// `timeBudgetMs` guards against a runaway script (e.g. an infinite loop in a live GUI
+    /// preview): when > 0, a safepoint interrupt aborts the run once that wall-clock budget
+    /// elapses, returning ok=false with a "time budget" message. 0 (the default) means no
+    /// limit — batch/CLI generation runs are trusted and may take as long as they need.
     ScriptResult run(const std::string& source,
         MapScriptApi& api,
         ObjectCommandController& controller,
         const std::string& description = "Run script",
-        const ScriptArgs& args = {});
+        const ScriptArgs& args = {},
+        unsigned timeBudgetMs = 0);
 };
 
 } // namespace geck

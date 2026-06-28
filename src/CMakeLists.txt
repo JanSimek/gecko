@@ -24,6 +24,9 @@ set(GECK_APP_SOURCES
     pattern/ThumbnailComposer.cpp
     pattern/PatternThumbnail.h
     pattern/PatternThumbnail.cpp
+    # Area-fill editor side: the fill-script library locator (a peer of the pattern equivalents above).
+    pattern/FillLibrary.h
+    pattern/FillLibrary.cpp
 
     ui/ExternalEditorLauncher.h
     ui/ExternalEditorLauncher.cpp
@@ -110,6 +113,8 @@ set(GECK_APP_SOURCES
     ui/dialogs/AboutDialog.cpp
     ui/dialogs/PatternBrowserDialog.h
     ui/dialogs/PatternBrowserDialog.cpp
+    ui/dialogs/FillDialog.h
+    ui/dialogs/FillDialog.cpp
     ui/dialogs/MapBrowserDialog.h
     ui/dialogs/MapBrowserDialog.cpp
 
@@ -533,6 +538,11 @@ add_library(gecko_editing STATIC
     pattern/PatternBuilder.cpp
     pattern/PatternStamper.h
     pattern/PatternStamper.cpp
+    # Built-but-uncommitted edit (FillPlan) + its single-undo-entry apply path (PlacementBatch),
+    # shared by the prefab stamper and the area-fill plan-sink.
+    pattern/FillPlan.h
+    pattern/PlacementBatch.h
+    pattern/PlacementBatch.cpp
     rendering/MapSpriteLoader.h
     rendering/MapSpriteLoader.cpp
     # SFML map renderer (Qt-free): drives the same drawing for the Qt editor and headless

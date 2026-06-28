@@ -19,11 +19,14 @@ namespace resource {
 
 namespace geck::pattern {
 
+struct FillPlan;
+
 /// Places a pattern variant onto the map. Resolution (where each entry lands when the
 /// variant's anchor is dropped on a target hex) is a pure, dependency-free static step;
-/// application builds the objects/tiles and routes them through ObjectCommandController
-/// as a single undo entry. Entries are placed verbatim (no rotation) — orientation is
-/// chosen by selecting a variant, since Fallout 2 object art is direction-specific.
+/// building the objects/tiles (planInto) is non-mutating; committing (stamp) routes the
+/// built plan through ObjectCommandController as a single undo entry via PlacementBatch.
+/// Entries are placed verbatim (no rotation) — orientation is chosen by selecting a
+/// variant, since Fallout 2 object art is direction-specific.
 class PatternStamper {
 public:
     struct ObjectPlacement {
@@ -75,14 +78,21 @@ public:
     /// snapped to the anchor's parity (see plan()), so placement is tile-granular.
     Result stamp(const PatternVariant& variant, int targetHex, int elevation);
 
+    /// Resolve and BUILD `variant` near `targetHex` on `elevation` into `out` without committing:
+    /// each resolved object becomes a MapObject (and, when buildSprites is true, its visual Object)
+    /// and each tile a TileChange (before captured from the current map), appended to the plan.
+    /// Mutates nothing — PlacementBatch::replay(out) commits it. This is the capture path the
+    /// fill plan-sink uses so a stamp placed inside a fill is previewed, not applied. Appends, so a
+    /// caller can build one plan from several stamps; counts off-grid drops into `out.dropped`.
+    void planInto(FillPlan& out, const PatternVariant& variant, int targetHex, int elevation) const;
+
 private:
     std::shared_ptr<Object> buildObject(const std::shared_ptr<MapObject>& mapObject, uint32_t frmPid) const;
     // Build the MapObject for a resolved placement (position/flags/ids verbatim) on `elevation`.
     std::shared_ptr<MapObject> makeMapObject(const ObjectPlacement& placement, int elevation) const;
-    // Register one stamped object: as map data (buildSprites=false) or with a built sprite (true).
-    bool registerStampObject(const std::shared_ptr<MapObject>& mapObject, uint32_t frmPid);
-    // Apply the plan's tiles as one labelled tile edit; returns how many were painted.
-    int applyTiles(const std::vector<TilePlacement>& tiles, int elevation, const std::string& description);
+    // Resolve the plan's tiles into TileChanges (before-value read from the current map) and append
+    // them to `out`; builds nothing on the map (PlacementBatch applies them later).
+    void appendTiles(FillPlan& out, const std::vector<TilePlacement>& tiles, int elevation) const;
 
     resource::GameResources& _resources;
     const HexagonGrid& _hexgrid;

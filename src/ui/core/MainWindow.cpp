@@ -19,6 +19,7 @@
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
+#include "ui/dialogs/FillDialog.h"
 #include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
 #include "ui/UIConstants.h"
@@ -176,6 +177,7 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
 
     QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
     updateUndoRedoActions();
+    updateFillSelectionAction();
 }
 
 void MainWindow::setupUI() {
@@ -428,6 +430,11 @@ void MainWindow::setupMenuBar() {
     addMenuAction(_editMenu, ":/icons/actions/scroll-blocker.svg", "Scroll &Blocker Rectangle", &MainWindow::toggleScrollBlockerRectangleMode, QKeySequence("B"), "Draw rectangle and place scroll blockers on borders");
     addMenuAction(_editMenu, ":/icons/actions/save.svg", "Save Selection as &Pattern...", &MainWindow::showSavePatternDialog, QKeySequence(), "Save the current selection as a reusable prefab pattern");
     addMenuAction(_editMenu, ":/icons/actions/open.svg", "S&tamp Pattern...", &MainWindow::showStampPatternDialog, QKeySequence(), "Load a prefab pattern and click to place it");
+#ifdef GECK_SCRIPTING_ENABLED
+    // Fill is driven entirely by Luau fill scripts, so it is offered only when scripting is built in.
+    // Every use of _fillSelectionAction below is null-guarded, so leaving it null disables the feature.
+    _fillSelectionAction = addMenuAction(_editMenu, ":/icons/actions/paint.svg", "&Fill Selection...", &MainWindow::showFillDialog, QKeySequence(), "Fill the selected area with a Luau fill script");
+#endif
 
     _editMenu->addSeparator();
 
@@ -456,6 +463,7 @@ void MainWindow::setupMenuBar() {
     });
 
     updateUndoRedoActions();
+    updateFillSelectionAction();
 
     _viewMenu = _menuBar->addMenu("&View");
     struct ViewToggleSpec {
@@ -744,6 +752,11 @@ void MainWindow::setupToolBar() {
     _mainToolBar->addSeparator();
 
     setupToolModeActions();
+
+    // "Fill Selection…" (the Edit-menu action) also on the toolbar, beside the tool modes.
+    if (_fillSelectionAction) {
+        _mainToolBar->addAction(_fillSelectionAction);
+    }
 
     _mainToolBar->addSeparator();
 
@@ -1545,6 +1558,11 @@ void MainWindow::connectToEditorWidget() {
             _selectionPanel, &SelectionPanel::handleSelectionChanged);
     }
 
+    // Keep "Fill Selection…" enabled in step with the selection (it needs a fillable layer).
+    connect(_currentEditorWidget, &EditorWidget::selectionChanged, this,
+        [this](const selection::SelectionState&, int) { updateFillSelectionAction(); });
+    updateFillSelectionAction();
+
     if (_tilePalettePanel) {
         _tilePalettePanel->setMap(_currentEditorWidget->getMap());
         _tilePalettePanel->setSelectionManager(_currentEditorWidget->getSelectionManager());
@@ -1648,6 +1666,13 @@ void MainWindow::updateMapInfo(Map* map) {
 
     if (_scriptsPanel) {
         _scriptsPanel->setMap(map);
+    }
+
+    // The selection panel needs the live map to show tile info; without this it
+    // keeps the (often null) map it was given at connect time and every tile
+    // selection falls back to "No tile selected".
+    if (_selectionPanel) {
+        _selectionPanel->setMap(map);
     }
 
     updateElevationMenu(map);
@@ -2026,6 +2051,10 @@ void MainWindow::closeCurrentMap() {
 
     _centralStack->setCurrentWidget(_welcomeWidget);
 
+    // The editor and its Map are gone; clear the panels' borrowed map pointers (Map Info, Scripts,
+    // Selection) so they don't dangle before the next map opens.
+    updateMapInfo(nullptr);
+
     hidePanelsForNoMap();
 
     spdlog::debug("Current map closed successfully");
@@ -2123,6 +2152,30 @@ void MainWindow::showStampPatternDialog() {
     if (selected.has_value()) {
         _currentEditorWidget->beginStampPattern(std::move(*selected));
     }
+}
+
+void MainWindow::showFillDialog() {
+    if (!_currentEditorWidget || !hasActiveMap()) {
+        showStatusMessage("Open a map before filling a selection.");
+        return;
+    }
+    if (!_currentEditorWidget->hasFillableSelection()) {
+        showStatusMessage("Select an area (floor/roof tiles or hexes) to fill first.");
+        return;
+    }
+    // The dialog drives the editor's preview/apply over the current selection; closing it clears any
+    // live ghost (its destructor calls clearFillPreview).
+    FillDialog dialog(*_currentEditorWidget, this);
+    dialog.exec();
+}
+
+void MainWindow::updateFillSelectionAction() {
+    if (!_fillSelectionAction) {
+        return;
+    }
+    const bool enabled = _currentEditorWidget && hasActiveMap()
+        && _currentEditorWidget->hasFillableSelection();
+    _fillSelectionAction->setEnabled(enabled);
 }
 
 void MainWindow::showMapBrowserDialog() {

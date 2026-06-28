@@ -2,16 +2,16 @@
 #include "ui/core/EditorHints.h"
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/input/InputHandler.h"
-#ifdef GECK_SCRIPTING_ENABLED
+// The stamp library + MapScriptApi are used by both the (scripting-only) Console and the always-on
+// area fill, so these are included unconditionally — only runScript itself stays #ifdef'd.
 #include "Application.h"
-#include "scripting/MapScriptApi.h"
 #include "pattern/PatternLibrary.h"
 #include "pattern/PatternSerializer.h"
+#include "scripting/MapScriptApi.h"
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QStringList>
-#endif
 #include "editing/commands/ObjectCommandController.h"
 #include "rendering/MapSpriteLoader.h"
 #include "rendering/RenderingEngine.h"
@@ -43,6 +43,10 @@
 #include "pattern/PatternStamper.h"
 #include "pattern/PatternSprite.h"
 #include "editor/HexagonGrid.h"
+
+// Area fill commits its plan through PlacementBatch (MapScriptApi is already included above, used by
+// both the scripting console and the always-on area fill; only the Luau producer is #ifdef'd).
+#include "pattern/PlacementBatch.h"
 
 #include "format/frm/Frm.h"
 #include "format/map/Tile.h"
@@ -382,7 +386,6 @@ void EditorWidget::init() {
     _controller.viewport().initialize(windowSize);
 }
 
-#ifdef GECK_SCRIPTING_ENABLED
 namespace {
     // Load every *.json stamp under `dir` into `api`, keyed by each pattern's name. Appends one
     // diagnostic line per file we couldn't open or that the deserializer rejected, so a bad stamp is
@@ -422,6 +425,7 @@ namespace {
     }
 } // namespace
 
+#ifdef GECK_SCRIPTING_ENABLED
 ScriptResult EditorWidget::runScript(const std::string& source) {
     if (!_session.map()) {
         return { false, "No map loaded", "" };
@@ -963,9 +967,18 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.selectedRoofTiles = &_controller.visualizer().roofVisuals();
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
-    renderData.stampPreview.floorTiles = &_stampPreviewFloorTiles;
-    renderData.stampPreview.objects = &_stampPreviewObjects;
-    renderData.stampPreview.roofTiles = &_stampPreviewRoofTiles;
+    // The ghost-overlay field is shared: a fill preview and a stamp ghost are never live at once, so
+    // point it at whichever is active (A3 reuses the stamp preview's render path rather than adding a
+    // second field).
+    if (_fillPreviewActive) {
+        renderData.stampPreview.floorTiles = &_fillPreviewFloorTiles;
+        renderData.stampPreview.objects = &_fillPreviewObjects;
+        renderData.stampPreview.roofTiles = &_fillPreviewRoofTiles;
+    } else {
+        renderData.stampPreview.floorTiles = &_stampPreviewFloorTiles;
+        renderData.stampPreview.objects = &_stampPreviewObjects;
+        renderData.stampPreview.roofTiles = &_stampPreviewRoofTiles;
+    }
     renderData.selectionRectangle = &_selectionRectangle;
     // Use InputHandler state for drag selection rendering
     renderData.isDragSelecting = _inputHandler && _inputHandler->isDragging();
@@ -1357,6 +1370,206 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
         object->getSprite().setColor(ghostAlpha); // semi-transparent ghost
         _stampPreviewObjects.push_back(std::move(object));
     }
+}
+
+// ---- Area fill over the current selection (driven by a Luau fill script) ------------------------
+
+namespace {
+    // The bounding hexes covering a set of selected floor/roof tiles, derived from their on-screen sprite
+    // bounds — so a floor/area selection (which carries no hexes) can still scatter objects over the same
+    // region. Exact for a rectangular drag; a non-rectangular selection over-includes its bounding box
+    // (acceptable for a scatter region). Empty when no selected tile has drawable bounds.
+    std::vector<int> hexesCoveringTiles(const std::vector<int>& floorTiles, const std::vector<int>& roofTiles,
+        const std::vector<sf::Sprite>& floorSprites, const std::vector<sf::Sprite>& roofSprites,
+        selection::SelectionManager& selectionManager) {
+        // Sentinel-initialised so each contributing tile just min/max-folds in (no first-vs-rest branch).
+        constexpr float INF = std::numeric_limits<float>::max();
+        float minX = INF;
+        float minY = INF;
+        float maxX = -INF;
+        float maxY = -INF;
+        bool any = false;
+        const auto extend = [&](const std::vector<sf::Sprite>& sprites, int index) {
+            if (index < 0 || index >= static_cast<int>(sprites.size())) {
+                return;
+            }
+            const sf::FloatRect b = sprites[index].getGlobalBounds();
+            if (b.size.x <= 0.f || b.size.y <= 0.f) {
+                return; // empty tile: no sprite bounds to contribute
+            }
+            minX = std::min(minX, b.position.x);
+            minY = std::min(minY, b.position.y);
+            maxX = std::max(maxX, b.position.x + b.size.x);
+            maxY = std::max(maxY, b.position.y + b.size.y);
+            any = true;
+        };
+        for (const int tileIndex : floorTiles) {
+            extend(floorSprites, tileIndex);
+        }
+        for (const int tileIndex : roofTiles) {
+            extend(roofSprites, tileIndex);
+        }
+        if (!any) {
+            return {};
+        }
+        const sf::FloatRect bounds(sf::Vector2f(minX, minY), sf::Vector2f(maxX - minX, maxY - minY));
+        return selectionManager.getHexesInArea(bounds);
+    }
+} // namespace
+
+EditArea EditorWidget::selectionFillArea() const {
+    EditArea area;
+    auto* selectionManager = _session.selectionManager();
+    if (!selectionManager) {
+        return area;
+    }
+    const selection::SelectionState& state = selectionManager->getCurrentSelection();
+    area.floorTiles = state.getFloorTileIndices();
+    area.roofTiles = state.getRoofTileIndices();
+    area.hexes = state.getHexIndices();
+
+    // A tile selection carries no hexes, but object scatter iterates the area's hexes. Derive the
+    // covering hexes from the selected tiles' on-screen bounds so a floor/area selection can scatter
+    // objects over the same region.
+    if (area.hexes.empty() && (!area.floorTiles.empty() || !area.roofTiles.empty())) {
+        area.hexes = hexesCoveringTiles(area.floorTiles, area.roofTiles,
+            _session.floorSprites(), _session.roofSprites(), *selectionManager);
+    }
+
+    // EditArea's contract: each list ascending AND unique (areaContains* binary-searches; the seeded
+    // fill iterates in this canonical order, so the same selection + seed reproduces the same result,
+    // and a duplicated index would be painted/counted twice).
+    const auto sortUnique = [](std::vector<int>& v) {
+        std::ranges::sort(v);
+        v.erase(std::unique(v.begin(), v.end()), v.end());
+    };
+    sortUnique(area.floorTiles);
+    sortUnique(area.roofTiles);
+    sortUnique(area.hexes);
+    return area;
+}
+
+bool EditorWidget::hasFillableSelection() const {
+    auto* selectionManager = _session.selectionManager();
+    if (!selectionManager) {
+        return false;
+    }
+    // Any tile or hex makes the selection fillable; a pure-object selection does not (a floor fill
+    // needs tiles, scatter needs hexes — objects are neither).
+    using enum selection::SelectionType;
+    for (const auto& item : selectionManager->getCurrentSelection().items) {
+        if (item.type == FLOOR_TILE || item.type == ROOF_TILE || item.type == HEX) {
+            return true;
+        }
+    }
+    return false;
+}
+
+#ifdef GECK_SCRIPTING_ENABLED
+ScriptResult EditorWidget::previewLuaFill(const EditArea& area, const std::string& source, uint32_t seed) {
+    // A generous wall-clock cap for a live preview: long enough for a real procedural fill over a
+    // large selection, short enough that an accidental infinite loop aborts instead of hanging the UI.
+    constexpr unsigned FILL_SCRIPT_BUDGET_MS = 3000;
+
+    clearFillPreview();
+    if (!_session.map()) {
+        return { false, "No map loaded", "" };
+    }
+    // Record into the plan sink instead of committing: the script's api:paintFloor/scatter/placeStamp
+    // calls buffer into _fillPlan while the live map stays untouched, so the result previews as a
+    // ghost and applyFillPreview() replays it as one undo entry. setArea exposes the selection to
+    // api:areaFloorTiles()/areaHexes(),
+    // and setSeed makes api:rng()/rngInt() reproducible from the dialog's seed.
+    MapScriptApi api(_resources, _session.hexgrid(), _controller.commandController(), *_session.map(), _session.currentElevation());
+    registerLibraryStamps(api);
+    api.setArea(&area);
+    api.setPlanSink(&_fillPlan);
+    api.setSeed(seed);
+
+    LuaScriptRuntime runtime;
+    ScriptArgs args;
+    args["seed"] = std::to_string(seed); // also reproducible via math.random / args.seed
+    ScriptResult result = runtime.run(
+        source, api, _controller.commandController(), "Fill (script)", args, FILL_SCRIPT_BUDGET_MS);
+
+    if (!result.ok) {
+        clearFillPreview();
+        Q_EMIT statusMessageRequested(QString("Fill script failed: %1").arg(QString::fromStdString(result.error)));
+        return result;
+    }
+    buildFillGhosts();
+    _fillPreviewActive = true;
+    return result;
+}
+#endif
+
+void EditorWidget::buildFillGhosts() {
+    _fillPreviewFloorTiles.clear();
+    _fillPreviewObjects.clear();
+    _fillPreviewRoofTiles.clear();
+
+    const auto ghostAlpha = sf::Color(255, 255, 255, ui::constants::sfml::DRAG_PREVIEW_ALPHA);
+    for (const TileChange& tc : _fillPlan.tiles) {
+        if (auto sprite = pattern::buildTileSprite(_resources, tc.tileIndex, tc.isRoof, tc.after)) {
+            sprite->setColor(ghostAlpha);
+            (tc.isRoof ? _fillPreviewRoofTiles : _fillPreviewFloorTiles).push_back(std::move(*sprite));
+        }
+    }
+    // Rebuild a fresh ghost per object (don't tint the plan's own Object — that one is committed at
+    // full opacity on Apply).
+    for (const pattern::FillPlan::Entry& entry : _fillPlan.objects) {
+        if (!entry.mapObject) {
+            continue;
+        }
+        auto ghost = pattern::buildSpriteObject(_resources, _session.hexgrid(),
+            entry.mapObject->frm_pid, static_cast<int>(entry.mapObject->position), entry.mapObject->direction);
+        if (ghost) {
+            ghost->getSprite().setColor(ghostAlpha);
+            _fillPreviewObjects.push_back(std::move(ghost));
+        }
+    }
+}
+
+void EditorWidget::clearFillPreview() {
+    _fillPreviewActive = false;
+    _fillPreviewFloorTiles.clear();
+    _fillPreviewObjects.clear();
+    _fillPreviewRoofTiles.clear();
+    _fillPlan = pattern::FillPlan{};
+}
+
+void EditorWidget::applyFillPreview(const QString& description) {
+    if (!_session.map() || (_fillPlan.objects.empty() && _fillPlan.tiles.empty())) {
+        clearFillPreview();
+        return;
+    }
+    // Replay the previewed plan as ONE undo entry — no re-run, so the apply matches the preview
+    // exactly (and a multi-thousand-cell fill is a single Ctrl-Z under the UndoStack command cap).
+    const pattern::PlacementBatch::Result result = pattern::PlacementBatch::replay(
+        _controller.commandController(), _fillPlan, /*buildSprites*/ true, description.toStdString());
+
+    // Post-edit resync (mirrors runScript's mutated() path): the fill changed the map and the header
+    // counts, while the selection/visualizer and Map Info still reference the pre-fill state.
+    if (_session.selectionManager()) {
+        _session.selectionManager()->clearSelection();
+    }
+    _controller.visualizer().clearHexPositions();
+    if (_mainWindow) {
+        _mainWindow->updateMapInfo(_session.map());
+    }
+    Q_EMIT mapModifiedByScript();
+    Q_EMIT undoStackChanged();
+
+    QString message = QString("Filled: %1 tiles, %2 objects").arg(result.tilesPainted).arg(result.objectsPlaced);
+    if (result.objectsFailed > 0) {
+        message += QString(" (%1 missing art)").arg(result.objectsFailed);
+    }
+    if (_fillPlan.dropped > 0) {
+        message += QString(" (%1 off-grid)").arg(_fillPlan.dropped);
+    }
+    Q_EMIT statusMessageRequested(message);
+
+    clearFillPreview();
 }
 
 bool EditorWidget::isTilePlacementMode() const {
