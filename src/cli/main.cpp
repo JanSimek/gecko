@@ -39,9 +39,11 @@ struct CliArgs {
     bool quests = false;
     bool endings = false;
     bool findGvar = false;
+    bool dumpGrid = false;
     std::string findGvarName;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
+    geck::cli::DumpGridOptions dumpOpts;
     geck::cli::GenerateOptions gen;
     geck::cli::RenderOptions ren;
     geck::cli::ExtractOptions ext;
@@ -93,6 +95,12 @@ void printUsage(const char* program) {
               << "  " << program << " map describe-map --map <path> --data <dir-or-.dat> [--data <...>]\n"
               << "      One digest composing analyze + reachability for a map (header, biome, structures,\n"
               << "      critter roster with AI + scripts, exits, reachability), as JSON.\n"
+              << "  " << program << " map dump-grid --map <path> [--elevation 0|1|2] [--roof]\n"
+              << "      [--no-floor] [--no-objects] --data <dir-or-.dat> [--data <...>]\n"
+              << "      Dumps the RAW spatial layout as JSON: per elevation the floor (and --roof) tile-id\n"
+              << "      grid (row-major, 100 wide; emptyTile marks empty) and every object's\n"
+              << "      {pid,number,type,name,hex,col,row,dir,flat}. The per-cell data behind analyze's\n"
+              << "      adjacency/clusters — for learning exact tile placement + scatter density.\n"
               << "  " << program << " map graph [map ...] --data <dir-or-.dat> [--data <...>]\n"
               << "      The exit-grid connectivity graph: how maps link via exit grids WITHIN a location\n"
               << "      (+ worldmap hand-off edges), named via maps.txt/map.msg. Not inter-city travel\n"
@@ -131,7 +139,8 @@ bool isKnownSubcommand(const std::vector<std::string>& args) {
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
             || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map"
             || args[1] == "graph" || args[1] == "world" || args[1] == "encounters"
-            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings" || args[1] == "find-gvar");
+            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings" || args[1] == "find-gvar"
+            || args[1] == "dump-grid");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -173,7 +182,8 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
         || (out.describeScript && (arg == "--index" || arg == "--locale"))
         || (out.reachability && arg == "--map")
-        || (out.describeMap && arg == "--map");
+        || (out.describeMap && arg == "--map")
+        || (out.dumpGrid && (arg == "--map" || arg == "--elevation"));
 
     if (valueFlag && i + 1 >= args.size()) {
         std::cerr << "error: " << arg << " needs a value\n";
@@ -347,6 +357,31 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.dumpGrid && arg == "--map") {
+        out.dumpOpts.map = args[i + 1];
+        return 2;
+    }
+    if (out.dumpGrid && arg == "--elevation") {
+        out.dumpOpts.elevation = std::stoi(args[i + 1]);
+        return 2;
+    }
+    if (out.dumpGrid && arg == "--roof") {
+        out.dumpOpts.roof = true;
+        return 1;
+    }
+    if (out.dumpGrid && arg == "--no-floor") {
+        out.dumpOpts.floor = false;
+        return 1;
+    }
+    if (out.dumpGrid && arg == "--no-objects") {
+        out.dumpOpts.objects = false;
+        return 1;
+    }
+    if (out.dumpGrid) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
     if (out.graph) { // trailing positional args are the maps to include (empty = all)
         out.graphOpts.maps.push_back(arg);
         return 1;
@@ -406,6 +441,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.quests = args[1] == "quests";
     out.endings = args[1] == "endings";
     out.findGvar = args[1] == "find-gvar";
+    out.dumpGrid = args[1] == "dump-grid";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -442,6 +478,11 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     }
     if (out.reachability && out.reach.mapPath.empty()) {
         std::cerr << "error: reachability requires --map <path>\n";
+        printUsage(program);
+        return 2;
+    }
+    if (out.dumpGrid && out.dumpOpts.map.empty()) {
+        std::cerr << "error: dump-grid requires --map <path>\n";
         printUsage(program);
         return 2;
     }
@@ -640,6 +681,9 @@ int main(int argc, char** argv) {
             return 2;
         }
         return geck::cli::findGvarRefs(resources, cli.findGvarName, std::cout);
+    }
+    if (cli.dumpGrid) {
+        return geck::cli::dumpMapGrid(resources, cli.dumpOpts, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
 }

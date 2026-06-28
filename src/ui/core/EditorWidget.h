@@ -29,6 +29,8 @@
 #include "ui/core/EditorController.h"
 #include "ui/core/EditorSession.h"
 #include "pattern/Pattern.h"
+#include "pattern/FillPlan.h"
+#include "scripting/EditArea.h"
 #include "ui/tools/ExitGridContext.h"
 #include "ui/dragdrop/DragDropContext.h"
 #include "editor/TileChange.h"
@@ -157,6 +159,35 @@ public:
     // variant, and cycleStampVariant() advances which orientation is placed.
     void beginStampPattern(pattern::Pattern pattern);
     void cycleStampVariant();
+
+    // --- Area fill over the current selection (driven by a Luau script) ----------------------------
+    // These drive the Fill dialog: it snapshots the area once, previews on each parameter change
+    // (a ghost overlay), and commits the previewed plan on Apply — all without a new EditorMode.
+    //
+    // The current selection projected to a (sorted) EditArea: selected floor/roof tiles, plus the
+    // hexes covering them (so object scatter works over a tile selection) and any selected hexes.
+    EditArea selectionFillArea() const;
+    // True when the selection has any fillable target (floor/roof tiles or hexes), i.e. not a
+    // pure-object selection. Gates the Fill action's enabled state.
+    bool hasFillableSelection() const;
+    // Remove the ghost overlay and drop the retained plan.
+    void clearFillPreview();
+    // Commit the last previewed plan as one undo entry, then run the post-edit resync (clear the
+    // selection, refresh Map Info, flag the map modified). No-op when no plan is pending.
+    void applyFillPreview(const QString& description);
+    // The plan behind the current preview (for the dialog's tile/object summary). Empty when no
+    // preview is active. The Luau preview path populates it.
+    const pattern::FillPlan& fillPlan() const { return _fillPlan; }
+
+#ifdef GECK_SCRIPTING_ENABLED
+    // --- Procedural fill — a Luau script paints the selection --------------------------------------
+    // `source` is a Luau script run (under a wall-clock budget) against the selection via the plan
+    // sink: its api:paintFloor/scatter/… calls RECORD into a fresh plan instead of committing, so the
+    // result previews as a ghost and applyFillPreview() replays it as one undo entry. Returns the
+    // run's ScriptResult (ok/error/print output); on failure it clears the preview and leaves the
+    // plan empty.
+    ScriptResult previewLuaFill(const EditArea& area, const std::string& source, uint32_t seed);
+#endif
 
     // Object refresh methods
     void refreshObjects() override;
@@ -442,6 +473,17 @@ private:
     int _stampPreviewHex = -1;
     void updateStampPreview(sf::Vector2f worldPos);
     void clearStampPreview();
+
+    // A3 fill preview: a semi-transparent ghost of the previewed FillPlan (floor under, objects,
+    // roof over) drawn through the same RenderData.stampPreview path, plus the pristine plan replayed
+    // on Apply. The ghosts are rebuilt from the plan's data so the plan itself stays untouched (its
+    // objects render at full opacity once committed). Stamp and fill previews are never live at once.
+    std::vector<sf::Sprite> _fillPreviewFloorTiles;
+    std::vector<std::shared_ptr<Object>> _fillPreviewObjects;
+    std::vector<sf::Sprite> _fillPreviewRoofTiles;
+    bool _fillPreviewActive = false;
+    pattern::FillPlan _fillPlan;
+    void buildFillGhosts();
 
     // Player position selection state
     bool _playerPositionSelectionMode = false;

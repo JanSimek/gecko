@@ -8,13 +8,12 @@
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
-#include "format/frm/Frm.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
-#include "format/map/Tile.h"
+#include "pattern/FillPlan.h"
 #include "pattern/PatternSprite.h"
+#include "pattern/PlacementBatch.h"
 #include "resource/GameResources.h"
-#include "editor/TileChange.h"
 #include "editing/commands/ObjectCommandController.h"
 
 namespace geck::pattern {
@@ -112,57 +111,54 @@ std::shared_ptr<MapObject> PatternStamper::makeMapObject(const ObjectPlacement& 
     return mapObject;
 }
 
-int PatternStamper::applyTiles(const std::vector<TilePlacement>& tiles, int elevation, const std::string& description) {
+void PatternStamper::appendTiles(FillPlan& out, const std::vector<TilePlacement>& tiles, int elevation) const {
     if (tiles.empty()) {
-        return 0;
+        return;
     }
-    std::vector<TileChange> changes;
-    changes.reserve(tiles.size());
     const auto& tilesByElevation = _map.getMapFile().tiles;
     const auto it = tilesByElevation.find(elevation);
+    out.tiles.reserve(out.tiles.size() + tiles.size());
     for (const TilePlacement& tp : tiles) {
         uint16_t before = static_cast<uint16_t>(Map::EMPTY_TILE);
         if (it != tilesByElevation.end() && tp.tileIndex >= 0 && tp.tileIndex < static_cast<int>(it->second.size())) {
             before = tp.isRoof ? it->second[tp.tileIndex].getRoof() : it->second[tp.tileIndex].getFloor();
         }
-        changes.push_back({ elevation, tp.tileIndex, tp.isRoof, before, tp.tileId });
+        out.tiles.push_back({ elevation, tp.tileIndex, tp.isRoof, before, tp.tileId });
     }
-    _controller.applyTileChanges(changes, true);
-    _controller.registerTileEdit(description + " (tiles)", changes);
-    return static_cast<int>(changes.size());
 }
 
-bool PatternStamper::registerStampObject(const std::shared_ptr<MapObject>& mapObject, uint32_t frmPid) {
-    // Headless (data-only): record the MapObject without a sprite — the .map stores just these ids,
-    // so a stamp's objects land even with no art or GL. GUI: build the sprite so it draws, which (as
-    // for placeObject) needs resolvable art.
-    if (!_buildSprites) {
-        return _controller.registerObjectData(mapObject);
+void PatternStamper::planInto(FillPlan& out, const PatternVariant& variant, int targetHex, int elevation) const {
+    const Plan p = plan(variant, targetHex);
+    out.dropped += p.objectsDropped + p.tilesDropped;
+
+    out.objects.reserve(out.objects.size() + p.objects.size());
+    for (const ObjectPlacement& op : p.objects) {
+        auto mapObject = makeMapObject(op, elevation);
+        // GUI: build the visual so the object draws (needs resolvable art; a null one is left in
+        // the entry and PlacementBatch counts it failed). Headless: no sprite — replay records the
+        // MapObject as data, so a stamp's objects land even with no art or GL.
+        std::shared_ptr<Object> object = _buildSprites ? buildObject(mapObject, op.frmPid) : nullptr;
+        out.objects.push_back({ std::move(mapObject), std::move(object) });
     }
-    const auto object = buildObject(mapObject, frmPid);
-    return object != nullptr && _controller.registerObjectPlacement(mapObject, object);
+
+    appendTiles(out, p.tiles, elevation);
 }
 
 PatternStamper::Result PatternStamper::stamp(const PatternVariant& variant, int targetHex, int elevation) {
-    const Plan p = plan(variant, targetHex);
+    FillPlan fp;
+    planInto(fp, variant, targetHex, elevation);
+
     Result r;
-    r.dropped = p.objectsDropped + p.tilesDropped;
-    if (p.objects.empty() && p.tiles.empty()) {
+    r.dropped = fp.dropped;
+    if (fp.objects.empty() && fp.tiles.empty()) {
         return r;
     }
 
     const std::string desc = variant.label.empty() ? "Stamp pattern" : ("Stamp pattern: " + variant.label);
-    ScopedUndoBatch batch(_controller, desc);
-
-    for (const ObjectPlacement& op : p.objects) {
-        if (registerStampObject(makeMapObject(op, elevation), op.frmPid)) {
-            ++r.objectsPlaced;
-        } else {
-            ++r.objectsFailed;
-        }
-    }
-    r.tilesPainted = applyTiles(p.tiles, elevation, desc);
-
+    const PlacementBatch::Result br = PlacementBatch::replay(_controller, fp, _buildSprites, desc);
+    r.objectsPlaced = br.objectsPlaced;
+    r.objectsFailed = br.objectsFailed;
+    r.tilesPainted = br.tilesPainted;
     r.success = true;
     return r;
 }

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -15,7 +16,11 @@ namespace geck {
 class HexagonGrid;
 class Map;
 struct MapObject;
+struct EditArea;
 class ObjectCommandController;
+namespace pattern {
+    struct FillPlan;
+}
 namespace resource {
     class GameResources;
 }
@@ -120,9 +125,49 @@ public:
     uint16_t getFloorXY(int col, int row) const;
     uint16_t getRoofXY(int col, int row) const;
 
+    // --- Selection area (host-set per run; the queries below read it) -------------
+    /// True if a selection area is bound to this run (see setArea).
+    bool hasArea() const;
+    /// The selection's hex / floor-tile / roof-tile indices, ascending (empty if no area is bound).
+    std::vector<int> areaHexes() const;
+    std::vector<int> areaFloorTiles() const;
+    std::vector<int> areaRoofTiles() const;
+    /// Is `hex` inside the selection? (binary search — the area lists are sorted.)
+    bool areaContainsHex(int hex) const;
+    /// Is `tileIndex` inside the selection's floor tiles?
+    bool areaContainsTile(int tileIndex) const;
+
+    // --- Deterministic helpers (seeded; for reproducible scatter) -----------------
+    /// PID of an object occupying `hex` in the COMMITTED map (0 if none). It does NOT see placements
+    /// already recorded in the current plan sink, so intra-fill occupancy is the caller's to track.
+    uint32_t objectAt(int hex) const;
+    /// Coherent 3D value noise in [0,1]; the z axis varies the field per seed/octave (cf. noise2d).
+    double noise3d(double x, double y, double z) const;
+    /// Next draw from this api's seeded stream (see setSeed): rng() in [0,1), rngInt(lo,hi) an int in
+    /// [lo,hi]. Deterministic and cross-platform (mt19937 + integer reduction), so a seed reproduces.
+    double rng();
+    int rngInt(int lo, int hi);
+
     // --- Undo batching -----------------------------------------------------------
     void beginBatch(const std::string& description);
     void endBatch();
+
+    // --- Plan sink (host-only; not script-bound) ---------------------------------
+    /// Redirect the mutators: while a sink is installed, placeObject/placeProto/paint*/placeStamp/
+    /// placeExitGrid* RECORD their fully-built objects and tiles into `sink` and commit NOTHING to
+    /// the map (no undo entry, no live mutation). The host then applies the captured plan as one
+    /// undo entry via pattern::PlacementBatch::replay — so a preview is byte-identical to the apply
+    /// even for seeded/noise runs, and a whole fill collapses to one Ctrl-Z. Pass nullptr to restore
+    /// direct (committing) behaviour. Queries (getFloor, objectAt, …) always read the COMMITTED map,
+    /// so they do not see edits already recorded in the current plan.
+    void setPlanSink(pattern::FillPlan* sink) { _planSink = sink; }
+
+    /// Bind the selection area the area-queries report (borrowed, must outlive the run; nullptr
+    /// clears it). Host-only — a script can't fabricate its own area. See EditArea.
+    void setArea(const EditArea* area) { _area = area; }
+    /// Seed this api's deterministic stream (rng/rngInt) so a fill reproduces. Host-only; the GUI/CLI
+    /// set it from the run's seed, exactly as LuaScriptRuntime seeds Lua's math.random.
+    void setSeed(uint32_t seed) { _rng.seed(seed); }
 
     // --- Mutators (undoable; batch to collapse into one history entry) -----------
     /// Build and place an object at `hex`. Returns false if `hex` is off-grid or the
@@ -220,6 +265,12 @@ private:
     // so mutated() reports them even though the placed/painted counters stay at 0.
     bool _mutatedDirectly = false;
     std::unordered_map<std::string, pattern::Pattern> _stamps;
+    // When non-null, mutators record into this plan instead of committing (see setPlanSink). Borrowed.
+    pattern::FillPlan* _planSink = nullptr;
+    // The selection area the area-queries report (see setArea). Borrowed; null when none is bound.
+    const EditArea* _area = nullptr;
+    // Deterministic stream for rng()/rngInt(); reseed per run via setSeed for reproducible scatter.
+    std::mt19937 _rng;
 };
 
 } // namespace geck
