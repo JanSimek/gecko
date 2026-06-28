@@ -508,8 +508,8 @@ std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const Render
         }
 
         // Anchor exactly like a committed exit grid: setDirection sets the frame rect, then
-        // setHexPosition applies the FRM offset and pushes the bar outward. Order matters — setHexPosition
-        // measures the on-screen bounds, so the frame rect must be set first.
+        // setHexPosition centers the bar on the hex using that frame's FRM offset. Order matters —
+        // setHexPosition reads the current frame's width()/height()/shift, so the rect must be set first.
         auto previewObject = std::make_shared<Object>(frm);
         previewObject->setSprite(sf::Sprite{ _resources.textures().get(frmName) });
         previewObject->setDirection(ObjectDirection(0));

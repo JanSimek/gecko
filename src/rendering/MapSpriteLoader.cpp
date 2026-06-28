@@ -133,10 +133,10 @@ void MapSpriteLoader::loadObjectSprites(
             auto sceneObject = std::make_shared<Object>(frm);
             sf::Sprite objectSprite{ _resources.textures().get(frmName) };
             sceneObject->setSprite(std::move(objectSprite));
-            // setMapObject before setHexPosition: the latter consults isExitGridMarker() to push an
-            // exit-grid bar outward (the trigger hex sits at its inner edge), so the marker info must
-            // be set first. setDirection (which sets the frame rect) also runs before positioning so
-            // the outward nudge measures the correct on-screen bounds.
+            // Order matters: setMapObject first so setDirection/setHexPosition can sync the
+            // MapObject's direction and position fields back onto it. setDirection (which sets the
+            // frame rect) runs before setHexPosition because centering uses the current frame's
+            // width()/height()/shift to seat the sprite on the hex.
             sceneObject->setMapObject(object);
             sceneObject->setDirection(static_cast<ObjectDirection>(object->direction));
             if (auto hex = _hexgrid.getHexByPosition(object->position); hex.has_value()) {

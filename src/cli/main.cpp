@@ -134,6 +134,53 @@ void printUsage(const char* program) {
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
+// Checked integer parse for `--flag <value>` arguments. std::stoi throws std::invalid_argument /
+// std::out_of_range on bad input, which would otherwise terminate the CLI; this catches that and
+// reports a clean "invalid value" error so the subcommand fails gracefully. Returns false (after
+// printing why) on a non-numeric / out-of-range / trailing-garbage value.
+bool parseIntFlag(const std::string& flag, const std::string& value, int& out, const char* program) {
+    try {
+        std::size_t consumed = 0;
+        const int parsed = std::stoi(value, &consumed, 10);
+        if (consumed != value.size()) {
+            std::cerr << "error: " << flag << " expects an integer, got: " << value << "\n";
+            printUsage(program);
+            return false;
+        }
+        out = parsed;
+        return true;
+    } catch (const std::exception&) {
+        std::cerr << "error: " << flag << " expects an integer, got: " << value << "\n";
+        printUsage(program);
+        return false;
+    }
+}
+
+// Checked unsigned parse for `--flag <value>` (base 0: 0x.. hex, else decimal). Same rationale as
+// parseIntFlag: std::stoul throws on bad input and would terminate the CLI.
+bool parseUnsignedFlag(const std::string& flag, const std::string& value, unsigned long& out, const char* program) {
+    if (value.empty() || value.front() == '-' || value.front() == '+') {
+        std::cerr << "error: " << flag << " expects a non-negative integer, got: " << value << "\n";
+        printUsage(program);
+        return false;
+    }
+    try {
+        std::size_t consumed = 0;
+        const unsigned long parsed = std::stoul(value, &consumed, 0);
+        if (consumed != value.size()) {
+            std::cerr << "error: " << flag << " expects a non-negative integer, got: " << value << "\n";
+            printUsage(program);
+            return false;
+        }
+        out = parsed;
+        return true;
+    } catch (const std::exception&) {
+        std::cerr << "error: " << flag << " expects a non-negative integer, got: " << value << "\n";
+        printUsage(program);
+        return false;
+    }
+}
+
 bool isKnownSubcommand(const std::vector<std::string>& args) {
     return args.size() >= 2 && args[0] == "map"
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
@@ -155,20 +202,26 @@ bool extractMissingRequired(const CliArgs& cli) {
     return cli.extract && (cli.ext.mapPath.empty() || cli.ext.outPath.empty() || cli.ext.name.empty());
 }
 
-// Parse a comma-separated list of proto ids/PIDs into `out` (decimal or 0x-hex).
-void parsePids(const std::string& csv, std::vector<std::uint32_t>& out) {
+// Parse a comma-separated list of proto ids/PIDs into `out` (decimal or 0x-hex). Returns false
+// (after printing why) on a non-numeric token, so the caller fails gracefully instead of crashing.
+bool parsePids(const std::string& csv, std::vector<std::uint32_t>& out, const char* program) {
     std::size_t start = 0;
     while (start < csv.size()) {
         const std::size_t comma = csv.find(',', start);
         const std::string token = csv.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
         if (!token.empty()) {
-            out.push_back(static_cast<std::uint32_t>(std::stoul(token, nullptr, 0)));
+            unsigned long value = 0;
+            if (!parseUnsignedFlag("--pids", token, value, program)) {
+                return false;
+            }
+            out.push_back(static_cast<std::uint32_t>(value));
         }
         if (comma == std::string::npos) {
             break;
         }
         start = comma + 1;
     }
+    return true;
 }
 
 // Consume the argument(s) starting at args[i]. Returns how many tokens were consumed (1 for a
@@ -204,8 +257,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         return 2;
     }
     if (out.generate && arg == "--elevation") {
-        out.gen.elevation = std::stoi(args[i + 1]);
-        return 2;
+        return parseIntFlag(arg, args[i + 1], out.gen.elevation, program) ? 2 : 0;
     }
     if (out.generate && arg == "--arg") {
         // key=value -> exposed to the script as args.key
@@ -245,11 +297,14 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         return 2;
     }
     if (out.render && arg == "--elevation") {
-        out.ren.elevation = std::stoi(args[i + 1]);
-        return 2;
+        return parseIntFlag(arg, args[i + 1], out.ren.elevation, program) ? 2 : 0;
     }
     if (out.render && arg == "--max-dim") {
-        out.ren.maxDimension = static_cast<unsigned int>(std::stoul(args[i + 1]));
+        unsigned long maxDim = 0;
+        if (!parseUnsignedFlag(arg, args[i + 1], maxDim, program)) {
+            return 0;
+        }
+        out.ren.maxDimension = static_cast<unsigned int>(maxDim);
         return 2;
     }
     if (out.render && arg == "--roof") {
@@ -298,20 +353,16 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         return 2;
     }
     if (out.extract && arg == "--elevation") {
-        out.ext.elevation = std::stoi(args[i + 1]);
-        return 2;
+        return parseIntFlag(arg, args[i + 1], out.ext.elevation, program) ? 2 : 0;
     }
     if (out.extract && arg == "--pids") {
-        parsePids(args[i + 1], out.ext.pids);
-        return 2;
+        return parsePids(args[i + 1], out.ext.pids, program) ? 2 : 0;
     }
     if (out.extract && arg == "--anchor") {
-        out.ext.anchorHex = std::stoi(args[i + 1]);
-        return 2;
+        return parseIntFlag(arg, args[i + 1], out.ext.anchorHex, program) ? 2 : 0;
     }
     if (out.extract && arg == "--radius") {
-        out.ext.radius = std::stoi(args[i + 1]);
-        return 2;
+        return parseIntFlag(arg, args[i + 1], out.ext.radius, program) ? 2 : 0;
     }
     if (out.extract && arg == "--include-floor") {
         out.ext.includeFloor = true;
@@ -327,8 +378,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         return 0;
     }
     if (out.describeScript && arg == "--index") {
-        out.desc.programIndex = std::stoi(args[i + 1]);
-        return 2;
+        return parseIntFlag(arg, args[i + 1], out.desc.programIndex, program) ? 2 : 0;
     }
     if (out.describeScript && arg == "--locale") {
         out.desc.locale = args[i + 1];
@@ -362,8 +412,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         return 2;
     }
     if (out.dumpGrid && arg == "--elevation") {
-        out.dumpOpts.elevation = std::stoi(args[i + 1]);
-        return 2;
+        return parseIntFlag(arg, args[i + 1], out.dumpOpts.elevation, program) ? 2 : 0;
     }
     if (out.dumpGrid && arg == "--roof") {
         out.dumpOpts.roof = true;
@@ -505,19 +554,18 @@ bool isFrmAction(const std::string& action) {
     return action == "info" || action == "render" || action == "resolve" || action == "list";
 }
 
-// Apply a `--flag value` pair to `out`. Returns true if `flag` is a recognized value flag (and was
-// applied); false otherwise, so the caller can treat the token as a positional / unknown flag.
-bool applyFrmValueFlag(const std::string& flag, const std::string& value, FrmArgs& out) {
+// Apply a recognized `--flag value` pair to `out`. Returns false (after printing why) when the
+// numeric flags (--dir / --frame) get a non-integer value, so the caller fails gracefully instead
+// of letting std::stoi throw and terminate the CLI.
+bool applyFrmValueFlag(const std::string& flag, const std::string& value, FrmArgs& out, const char* program) {
     if (flag == "--data") {
         out.dataPaths.push_back(value);
     } else if (flag == "--out") {
         out.outPath = value;
     } else if (flag == "--dir") {
-        out.direction = std::stoi(value);
+        return parseIntFlag(flag, value, out.direction, program);
     } else if (flag == "--frame") {
-        out.frame = std::stoi(value);
-    } else {
-        return false;
+        return parseIntFlag(flag, value, out.frame, program);
     }
     return true;
 }
@@ -533,7 +581,9 @@ bool parseFrmArgs(const std::vector<std::string>& args, const char* program, Frm
             return false;
         }
         if (valueFlag) {
-            applyFrmValueFlag(arg, args[i + 1], out);
+            if (!applyFrmValueFlag(arg, args[i + 1], out, program)) {
+                return false;
+            }
             i += 2;
         } else if (arg.rfind("--", 0) == 0) {
             std::cerr << "error: unexpected argument: " << arg << "\n";

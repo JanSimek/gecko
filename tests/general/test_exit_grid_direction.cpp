@@ -214,16 +214,17 @@ TEST_CASE("exitGridDirectionForLine picks one side for the whole stroke and the 
 }
 
 TEST_CASE("exitGridOutward: the per-direction outward (off-map) screen vector", "[exitgrid][outward]") {
-    // Screen y grows DOWNWARD. The editor slides the bar along this vector so the trigger hex sits at
-    // the bar's inner edge; a flip (dir ^ 1) reverses the sign and swings the byte-identical art to the
-    // OTHER side of the line. Each cardinal caps its named screen edge.
+    // Screen y grows DOWNWARD. This vector is the side a marker's art faces; secondRowNeighbor uses it
+    // to pick the diagonal band's second row (the neighbour leaning most along it). A flip (dir ^ 1)
+    // reverses the sign, mirroring that facing to the OTHER side of the line. Each cardinal caps its
+    // named screen edge.
     CHECK(exitGridOutward(ExitGrid::DIR_LEFT) == std::pair{ -1, 0 });
     CHECK(exitGridOutward(ExitGrid::DIR_RIGHT) == std::pair{ 1, 0 });
     CHECK(exitGridOutward(ExitGrid::DIR_BOTTOM) == std::pair{ 0, 1 });
     CHECK(exitGridOutward(ExitGrid::DIR_TOP) == std::pair{ 0, -1 });
     // The diagonals face PERPENDICULAR to their band's on-screen line (integer approximations of the
-    // measured ~-9° "/" and ~+26° "\" normals; applyExitGridOutwardOffset normalizes before scaling).
-    // The DIRECTION lives here and must flip sign across a dir ^ 1 pair so the band switches sides.
+    // measured ~-9° "/" and ~+26° "\" normals). The DIRECTION lives here and must flip sign across a
+    // dir ^ 1 pair so the band switches sides.
     CHECK(exitGridOutward(ExitGrid::DIR_FWD_A) == std::pair{ 1, 6 });   // "/" side A: down
     CHECK(exitGridOutward(ExitGrid::DIR_FWD_B) == std::pair{ -1, -6 }); // "/" side B: up (the ^1 flip)
     CHECK(exitGridOutward(ExitGrid::DIR_BACK_A) == std::pair{ -1, 2 }); // "\" side A: down-left
