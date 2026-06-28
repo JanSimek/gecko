@@ -1384,7 +1384,10 @@ namespace {
         selection::SelectionManager& selectionManager) {
         // Sentinel-initialised so each contributing tile just min/max-folds in (no first-vs-rest branch).
         constexpr float INF = std::numeric_limits<float>::max();
-        float minX = INF, minY = INF, maxX = -INF, maxY = -INF;
+        float minX = INF;
+        float minY = INF;
+        float maxX = -INF;
+        float maxY = -INF;
         bool any = false;
         const auto extend = [&](const std::vector<sf::Sprite>& sprites, int index) {
             if (index < 0 || index >= static_cast<int>(sprites.size())) {
@@ -1453,10 +1456,9 @@ bool EditorWidget::hasFillableSelection() const {
     }
     // Any tile or hex makes the selection fillable; a pure-object selection does not (a floor fill
     // needs tiles, scatter needs hexes — objects are neither).
+    using enum selection::SelectionType;
     for (const auto& item : selectionManager->getCurrentSelection().items) {
-        if (item.type == selection::SelectionType::FLOOR_TILE
-            || item.type == selection::SelectionType::ROOF_TILE
-            || item.type == selection::SelectionType::HEX) {
+        if (item.type == FLOOR_TILE || item.type == ROOF_TILE || item.type == HEX) {
             return true;
         }
     }

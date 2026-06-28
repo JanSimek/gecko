@@ -31,7 +31,7 @@ json dumpWrittenMap(Map::MapFile mapFile, const char* mapName, const char* tempP
 
     TempFile out{ tempPrefix, ".map" };
     {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
         writer.openFile(out.path());
         REQUIRE(writer.write(map.getMapFile()));
     } // flush + close before dump-grid reads it back
@@ -118,7 +118,7 @@ TEST_CASE("dump-grid --no-floor / --no-objects drop those sections", "[cli][dump
     map.setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
     TempFile out{ "geck_dump_grid_flags", ".map" };
     {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
         writer.openFile(out.path());
         REQUIRE(writer.write(map.getMapFile()));
     }

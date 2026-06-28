@@ -60,7 +60,7 @@ struct DumpGridOptions {
     int elevation = -1;
     bool floor = true;   // emit the floor-tile id grid
     bool roof = false;   // emit the roof-tile id grid
-    bool objects = true; // emit per-object {pid,number,type,name,hex,col,row,dir,flat}
+    bool objects = true; // emit one record per object: pid, number, type, name, hex, col, row, dir, flat
 };
 
 // Dump the RAW spatial layout of one map as JSON: per elevation, the floor (and optionally roof)

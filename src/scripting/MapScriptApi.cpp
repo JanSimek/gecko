@@ -256,9 +256,9 @@ double MapScriptApi::noise3d(double x, double y, double z) const {
     const double xf = std::floor(x);
     const double yf = std::floor(y);
     const double zf = std::floor(z);
-    const int xi = static_cast<int>(xf);
-    const int yi = static_cast<int>(yf);
-    const int zi = static_cast<int>(zf);
+    const auto xi = static_cast<int>(xf);
+    const auto yi = static_cast<int>(yf);
+    const auto zi = static_cast<int>(zf);
     const double tx = fade(x - xf);
     const double ty = fade(y - yf);
     const double tz = fade(z - zf);
@@ -559,7 +559,7 @@ int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant
         const std::size_t objBefore = _planSink->objects.size();
         const std::size_t tileBefore = _planSink->tiles.size();
         stamper.planInto(*_planSink, pattern.variants[variant], anchorHex, _elevation);
-        const int placed = static_cast<int>(_planSink->objects.size() - objBefore);
+        const auto placed = static_cast<int>(_planSink->objects.size() - objBefore);
         _placedObjects += placed;
         _paintedTiles += static_cast<int>(_planSink->tiles.size() - tileBefore);
         return placed;

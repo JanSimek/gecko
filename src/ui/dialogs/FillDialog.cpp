@@ -198,9 +198,9 @@ void FillDialog::runPreview() {
     }
 
 #ifdef GECK_SCRIPTING_ENABLED
-    const ScriptResult result
+    if (const ScriptResult result
         = _editor->previewLuaFill(_area, _scriptSource, static_cast<uint32_t>(_seed->value()));
-    if (!result.ok) {
+        !result.ok) {
         // previewLuaFill already posted the error to the status bar and cleared the ghost.
         _summary->setText(QStringLiteral("Script error: %1").arg(QString::fromStdString(result.error)));
         return;

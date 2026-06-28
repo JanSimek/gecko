@@ -30,7 +30,7 @@ class FillDialog : public QDialog {
     Q_OBJECT
 
 public:
-    FillDialog(EditorWidget& editor, QWidget* parent = nullptr);
+    explicit FillDialog(EditorWidget& editor, QWidget* parent = nullptr);
     ~FillDialog() override;
 
 private slots:
