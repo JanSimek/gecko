@@ -26,6 +26,18 @@ namespace geck {
     X(mapFloorTiles, "(mapPath) -> {id,...}", "A reference map's floor-tile ids, most-used first.")                                                                    \
     X(listMaps, "() -> {path,...}", "Every map file in the mounted data.")                                                                                             \
     X(noise2d, "(x, y) -> [0,1]", "Coherent value noise — a density field for natural clumps/clearings.")                                                              \
+    X(noise3d, "(x, y, z) -> [0,1]", "Coherent 3D value noise; the z axis varies the field per seed/octave.")                                                          \
+    X(objectAt, "(hex) -> pid", "PID of an object occupying hex in the committed map (0 if none).")                                                                    \
+    /* Selection area (host-set per run; empty when no area is bound) */                                                                                               \
+    X(hasArea, "() -> bool", "True if a selection area is bound to this run.")                                                                                         \
+    X(areaHexes, "() -> {hex,...}", "Hex indices in the selection, ascending.")                                                                                        \
+    X(areaFloorTiles, "() -> {tileIndex,...}", "Floor-tile indices in the selection, ascending.")                                                                      \
+    X(areaRoofTiles, "() -> {tileIndex,...}", "Roof-tile indices in the selection, ascending.")                                                                        \
+    X(areaContainsHex, "(hex) -> bool", "Is hex inside the selection?")                                                                                                \
+    X(areaContainsTile, "(tileIndex) -> bool", "Is the floor tile inside the selection?")                                                                              \
+    /* Deterministic seeded helpers (reproducible scatter) */                                                                                                          \
+    X(rng, "() -> [0,1)", "Next draw from the seeded stream, in [0,1).")                                                                                               \
+    X(rngInt, "(lo, hi) -> int", "Next seeded integer draw in [lo,hi].")                                                                                               \
     /* Coordinates (hex grid 200x200, tile grid 100x100; position = row*width + col) */                                                                                \
     X(hexIndex, "(col, row) -> hex", "Hex index from (col, row); -1 if off-grid.")                                                                                     \
     X(tileIndex, "(col, row) -> tileIndex", "Tile index from (col, row); -1 if off-grid.")                                                                             \
@@ -44,7 +56,7 @@ namespace geck {
     X(placeProtoXY, "(proPid, col, row, dir) -> bool", "placeProto at a (col, row) hex.")                                                                              \
     X(placeStamp, "(name, anchorHex, variant) -> int", "Place a pre-loaded stamp (extract_pattern prefab); returns objects placed.")                                   \
     /* Map setup (spawn / exits) */                                                                                                                                    \
-    X(newMap, "() -> nil", "Reset the bound map to a fresh empty Fallout 2 map (destructive, not undoable). Call first to start from a blank slate.")                   \
+    X(newMap, "() -> nil", "Reset the bound map to a fresh empty Fallout 2 map (destructive, not undoable). Call first to start from a blank slate.")                  \
     X(setPlayerStart, "(hex, orientation, elevation) -> nil", "Set the player spawn in the map header (hex, orientation 0..5, elevation 0..2).")                       \
     X(placeExitGrid, "(hex, destMapId, destHex, destElevation, orientation) -> bool", "Place a map-exit grid; destMapId -2 = worldmap, -1 = town map, else a map id.") \
     X(placeExitGridRect, "(centerHex, screenHalfWidth, screenHalfHeight, destMapId, destHex, destElevation, orientation) -> int", "Place a screen-space rectangle border of exit grids around centerHex; returns markers placed.")

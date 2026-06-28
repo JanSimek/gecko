@@ -7,6 +7,7 @@
 #include "util/Constants.h"
 #include "util/Coordinates.h"
 #include "util/Exceptions.h"
+#include "util/ExitGridDirection.h"
 #include <algorithm>
 #include <spdlog/spdlog.h>
 

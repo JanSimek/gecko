@@ -117,6 +117,7 @@ private slots:
     void onPlayGame();
     void showSavePatternDialog();
     void showStampPatternDialog();
+    void showFillDialog();
     void showMapBrowserDialog();
 
 public slots:
@@ -151,6 +152,9 @@ private:
     void syncMenuStateToEditorWidget();
     void snapshotPanelVisibility();
     void updateUndoRedoActions();
+    // Enables "Fill Selection…" only when a map is open and the selection has a fillable layer
+    // (floor/roof tiles or hexes). Hooked to selectionChanged and re-seeded on map switch.
+    void updateFillSelectionAction();
     /// Sets the window title to the current map's name (plus the modified "[*]" marker).
     void updateWindowTitle();
     /// Records whether the current map has unsaved edits and reflects it in the title bar.
@@ -219,6 +223,7 @@ private:
     QAction* _exitGridPlaceHexAction = nullptr;   // "Place single hex" -> EditorMode::PlaceExitGrid
     QAction* _exitGridDrawRegionAction = nullptr; // "Draw edge"       -> EditorMode::MarkExits
     QAction* _rotateAction = nullptr;
+    QAction* _fillSelectionAction = nullptr;
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
 

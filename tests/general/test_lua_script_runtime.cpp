@@ -5,9 +5,14 @@
 #include <sstream>
 #include <string>
 
+#include "editor/TileChange.h"
 #include "format/map/Map.h"
+#include "format/map/MapObject.h"
 #include "format/map/Tile.h"
+#include "pattern/FillPlan.h"
+#include "pattern/PlacementBatch.h"
 #include "reader/map/MapReader.h"
+#include "scripting/EditArea.h"
 #include "scripting/LuaScriptRuntime.h"
 #include "scripting/MapScriptApi.h"
 #include "scripting/ScriptApiReference.h"
@@ -51,6 +56,186 @@ TEST_CASE("Luau script paints tiles through the host API, as one undo entry", "[
     for (int i = 0; i < 10; ++i) {
         CHECK(fx.mapFile().tiles.at(ELEV)[i].getFloor() == EMPTY);
     }
+    CHECK_FALSE(fx.undoStack.canUndo());
+}
+
+TEST_CASE("A runaway Luau script is aborted by the time budget", "[scripting][lua][watchdog]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // An infinite loop would hang the editor's live preview without a guard. A small wall-clock
+    // budget arms the safepoint interrupt, which aborts the run as a runtime error (not a silent
+    // stop) once the deadline passes — the GUI fill path relies on exactly this.
+    const auto r = rt.run("local n = 0 while true do n = n + 1 end", api, fx.controller, "runaway",
+        {}, /*timeBudgetMs*/ 50);
+    CHECK_FALSE(r.ok);
+    CHECK(r.error.find("time budget") != std::string::npos);
+
+    // A bounded script well inside the same budget still completes normally — the watchdog only
+    // fires past the deadline.
+    const auto ok = rt.run("local s = 0 for i = 1, 1000 do s = s + i end api:paintFloor(0, 271)",
+        api, fx.controller, "bounded", {}, /*timeBudgetMs*/ 2000);
+    INFO("script error: " << ok.error);
+    CHECK(ok.ok);
+    CHECK(fx.mapFile().tiles.at(ELEV)[0].getFloor() == 271);
+}
+
+TEST_CASE("budget 0 means no limit (CLI/batch generation is untimed)", "[scripting][lua][watchdog]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // The default budget (0) installs no interrupt at all, so a long-but-finite trusted run is not
+    // capped. Nested loops do millions of back-edges — every one a safepoint that WOULD abort the
+    // run if an interrupt were wrongly armed at budget 0; completing proves none is.
+    const auto r = rt.run(
+        "local s = 0 for i = 1, 3000 do for j = 1, 3000 do s = s + 1 end end print(s)",
+        api, fx.controller, "untimed");
+    INFO("script error: " << r.error);
+    REQUIRE(r.ok);
+    CHECK(r.output == "9000000\n");
+}
+
+TEST_CASE("A Luau fill paints only the selection, recorded into the plan sink", "[scripting][lua][fill]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // A small floor-tile selection (EditArea requires ascending order): two partial rows of the
+    // 100-wide tile grid.
+    EditArea area;
+    area.floorTiles = { 0, 1, 2, 100, 101, 102 };
+    pattern::FillPlan plan;
+    api.setArea(&area);
+    api.setPlanSink(&plan);
+
+    // A deterministic per-tile pattern over the selection: parity of (col+row) chooses tile A/B.
+    // (Inline, not a shipped script — this exercises the sink mechanism with a predictable result.)
+    const auto r = rt.run(R"(
+        for _, t in ipairs(api:areaFloorTiles()) do
+            local parity = (api:tileCol(t) + api:tileRow(t)) % 2
+            api:paintFloor(t, (parity == 0) and 271 or 300)
+        end
+    )",
+        api, fx.controller, "checkerboard");
+    INFO("script error: " << r.error);
+    REQUIRE(r.ok);
+
+    // One recorded tile change per selected tile, and NOTHING committed to the live map (sink mode).
+    REQUIRE(plan.tiles.size() == area.floorTiles.size());
+    CHECK(api.paintedTiles() == static_cast<int>(area.floorTiles.size()));
+    for (const int t : area.floorTiles) {
+        CHECK(fx.mapFile().tiles.at(ELEV)[t].getFloor() == EMPTY); // sink => live map untouched
+    }
+
+    // Each recorded tile carries the checkerboard value for its own (col,row) parity.
+    for (const TileChange& tc : plan.tiles) {
+        const int col = tc.tileIndex % 100;
+        const int row = tc.tileIndex / 100;
+        const uint16_t expected = ((col + row) % 2 == 0) ? 271 : 300;
+        CHECK_FALSE(tc.isRoof);
+        CHECK(tc.after == expected);
+    }
+
+    // The undo stack is untouched: a preview records into the plan but commits no command.
+    CHECK_FALSE(fx.undoStack.canUndo());
+
+    // Apply == preview: replaying the SAME plan (what applyFillPreview does) now commits exactly the
+    // recorded tiles, as ONE undo entry — so the applied map matches what the preview recorded.
+    const auto applied = pattern::PlacementBatch::replay(
+        fx.controller, plan, /*buildSprites*/ false, "Fill: checkerboard");
+    CHECK(applied.tilesPainted == static_cast<int>(plan.tiles.size()));
+    for (const TileChange& tc : plan.tiles) {
+        CHECK(fx.mapFile().tiles.at(ELEV)[tc.tileIndex].getFloor() == tc.after);
+    }
+    REQUIRE(fx.undoStack.canUndo());
+    fx.undoStack.undo();
+    for (const int t : area.floorTiles) {
+        CHECK(fx.mapFile().tiles.at(ELEV)[t].getFloor() == EMPTY); // one Ctrl-Z reverts the whole fill
+    }
+    CHECK_FALSE(fx.undoStack.canUndo());
+}
+
+TEST_CASE("The bundled biome fills paint the selection's floor by tile id, headlessly", "[scripting][lua][fill]") {
+    // The biome fills paint the floor with numeric tile ids (no data needed) and try to scatter
+    // scenery (placeProtoXY -> false without data, never raising). So headless they must run clean and
+    // record exactly the selection's floor tiles, with no scenery.
+    for (const std::string& script :
+        { std::string("desert"), std::string("woods"), std::string("badlands"), std::string("overgrown") }) {
+        INFO("script: " << script);
+        std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/fills/" + script + ".luau");
+        REQUIRE(file.is_open());
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        const std::string source = buffer.str();
+
+        ControllerFixture fx;
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+        LuaScriptRuntime rt;
+
+        EditArea area;
+        area.floorTiles = { 0, 1, 2, 100, 101, 102 }; // floor only -> areaHexes() empty -> no scatter
+        pattern::FillPlan plan;
+        api.setArea(&area);
+        api.setPlanSink(&plan);
+
+        const auto r = rt.run(source, api, fx.controller, "biome-bundled");
+        INFO("script error: " << r.error);
+        REQUIRE(r.ok);
+        CHECK(plan.tiles.size() == area.floorTiles.size());
+        CHECK(plan.objects.empty()); // scenery needs data; headless it is skipped, not faked
+        // Every painted tile id came from the script's grounded GROUND palette (a real floor id).
+        for (const TileChange& tc : plan.tiles) {
+            CHECK_FALSE(tc.isRoof);
+            CHECK(tc.after != EMPTY);
+        }
+        // Live map untouched during the (sink) preview.
+        for (const int t : area.floorTiles) {
+            CHECK(fx.mapFile().tiles.at(ELEV)[t].getFloor() == EMPTY);
+        }
+    }
+}
+
+TEST_CASE("A Luau fill scatters objects into the plan sink, replayable as one undo entry", "[scripting][lua][fill]") {
+    ControllerFixture fx;
+    // Headless/data-only: placeObject records map data with a null visual; replay commits it as data.
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, /*buildSprites*/ false);
+    LuaScriptRuntime rt;
+
+    EditArea area;
+    area.hexes = { 20100, 20102, 20104 };
+    pattern::FillPlan plan;
+    api.setArea(&area);
+    api.setPlanSink(&plan);
+
+    // Scatter Scrub at each selected hex via placeObject (explicit ids, so no data is needed).
+    const auto r = rt.run(R"(
+        for _, h in ipairs(api:areaHexes()) do
+            api:placeObject(0x02000066, 0x02000000, h, 0)
+        end
+    )",
+        api, fx.controller, "scatter");
+    INFO("script error: " << r.error);
+    REQUIRE(r.ok);
+
+    // Recorded into the plan, NOT committed to the live map, and no undo entry yet (it's a preview).
+    REQUIRE(plan.objects.size() == area.hexes.size());
+    CHECK(fx.mapFile().map_objects.at(ELEV).empty());
+    CHECK_FALSE(fx.undoStack.canUndo());
+    for (const auto& entry : plan.objects) {
+        REQUIRE(entry.mapObject);
+        CHECK(entry.mapObject->pro_pid == 0x02000066u);
+    }
+
+    // Apply == preview: replaying the plan commits exactly those objects, as one undo entry.
+    const auto applied = pattern::PlacementBatch::replay(
+        fx.controller, plan, /*buildSprites*/ false, "Fill: scatter");
+    CHECK(applied.objectsPlaced == static_cast<int>(area.hexes.size()));
+    REQUIRE(fx.mapFile().map_objects.at(ELEV).size() == area.hexes.size());
+    REQUIRE(fx.undoStack.canUndo());
+    fx.undoStack.undo();
+    CHECK(fx.mapFile().map_objects.at(ELEV).empty()); // one Ctrl-Z removes the whole scatter
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 

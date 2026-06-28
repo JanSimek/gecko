@@ -14,6 +14,7 @@
 #include "editor/Hex.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
+#include "scripting/EditArea.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
@@ -21,6 +22,7 @@
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
 #include "editor/TileChange.h"
+#include "pattern/FillPlan.h"
 #include "pattern/PatternSprite.h"
 #include "pattern/PatternStamper.h"
 #include "reader/map/MapReader.h"
@@ -223,6 +225,15 @@ namespace {
         h ^= h >> 16;
         return (h & 0xFFFFFFu) / static_cast<double>(0x1000000);
     }
+
+    // 3D form of latticeValue: a stable [0,1) hash of a (xi, yi, zi) lattice corner.
+    double latticeValue3(int xi, int yi, int zi) {
+        uint32_t h = static_cast<uint32_t>(xi) * 374761393u + static_cast<uint32_t>(yi) * 668265263u
+            + static_cast<uint32_t>(zi) * 2246822519u;
+        h = (h ^ (h >> 13)) * 1274126177u;
+        h ^= h >> 16;
+        return (h & 0xFFFFFFu) / static_cast<double>(0x1000000);
+    }
 } // namespace
 
 double MapScriptApi::noise2d(double x, double y) const {
@@ -239,6 +250,25 @@ double MapScriptApi::noise2d(double x, double y) const {
     const double v11 = latticeValue(xi + 1, yi + 1);
 
     return std::lerp(std::lerp(v00, v10, tx), std::lerp(v01, v11, tx), ty); // bilinear -> [0,1)
+}
+
+double MapScriptApi::noise3d(double x, double y, double z) const {
+    const double xf = std::floor(x);
+    const double yf = std::floor(y);
+    const double zf = std::floor(z);
+    const auto xi = static_cast<int>(xf);
+    const auto yi = static_cast<int>(yf);
+    const auto zi = static_cast<int>(zf);
+    const double tx = fade(x - xf);
+    const double ty = fade(y - yf);
+    const double tz = fade(z - zf);
+
+    // Trilinear blend of the 8 cube-corner lattice values -> [0,1).
+    const double x00 = std::lerp(latticeValue3(xi, yi, zi), latticeValue3(xi + 1, yi, zi), tx);
+    const double x10 = std::lerp(latticeValue3(xi, yi + 1, zi), latticeValue3(xi + 1, yi + 1, zi), tx);
+    const double x01 = std::lerp(latticeValue3(xi, yi, zi + 1), latticeValue3(xi + 1, yi, zi + 1), tx);
+    const double x11 = std::lerp(latticeValue3(xi, yi + 1, zi + 1), latticeValue3(xi + 1, yi + 1, zi + 1), tx);
+    return std::lerp(std::lerp(x00, x10, ty), std::lerp(x01, x11, ty), tz);
 }
 
 uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
@@ -286,6 +316,24 @@ void MapScriptApi::endBatch() {
 }
 
 bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction) {
+    // Plan-sink active (preview / area fill): build the object exactly as the commit paths do
+    // (GUI needs a resolvable sprite — a fid that won't load is "not placed", same as below;
+    // headless records data with a null visual) but RECORD it into the plan instead of committing.
+    // PlacementBatch::replay applies the plan later, so the result matches a direct run.
+    if (_planSink != nullptr) {
+        std::shared_ptr<Object> object;
+        if (_buildSprites) {
+            object = pattern::buildSpriteObject(_resources, _hexgrid, frmPid, hex, direction);
+            if (!object) {
+                return false;
+            }
+            object->setMapObject(mapObject);
+        }
+        _planSink->objects.push_back({ mapObject, std::move(object) }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
+        ++_placedObjects;
+        return true;
+    }
+
     // Headless: record the MapObject as data only. The .map stores just these ids; the engine
     // and editor resolve the art (frmPid) when the map is loaded, so no sprite or GL is needed
     // and placement does not require the FRM to be present in the mounted data.
@@ -363,6 +411,13 @@ bool MapScriptApi::paintTile(int tileIndex, uint16_t tileId, bool isRoof) {
         return false;
     }
     const uint16_t before = isRoof ? getRoof(tileIndex) : getFloor(tileIndex);
+    // Plan-sink active: record the tile change (before captured from the committed map) instead of
+    // applying it; PlacementBatch::replay applies it later as part of the one-entry batch.
+    if (_planSink != nullptr) {
+        _planSink->tiles.push_back({ _elevation, tileIndex, isRoof, before, tileId });
+        ++_paintedTiles;
+        return true;
+    }
     std::vector<TileChange> changes{ { _elevation, tileIndex, isRoof, before, tileId } };
     _controller.applyTileChanges(changes, true);
     _controller.registerTileEdit(isRoof ? "Script: paint roof" : "Script: paint floor", changes);
@@ -409,6 +464,62 @@ uint16_t MapScriptApi::getRoofXY(int col, int row) const {
     return getRoof(tileIndex(col, row));
 }
 
+// --- Selection area ----------------------------------------------------------
+bool MapScriptApi::hasArea() const {
+    return _area != nullptr;
+}
+
+std::vector<int> MapScriptApi::areaHexes() const {
+    return _area != nullptr ? _area->hexes : std::vector<int>{};
+}
+
+std::vector<int> MapScriptApi::areaFloorTiles() const {
+    return _area != nullptr ? _area->floorTiles : std::vector<int>{};
+}
+
+std::vector<int> MapScriptApi::areaRoofTiles() const {
+    return _area != nullptr ? _area->roofTiles : std::vector<int>{};
+}
+
+bool MapScriptApi::areaContainsHex(int hex) const {
+    // The area lists are sorted ascending by contract (see EditArea), so membership is a binary search.
+    return _area != nullptr && std::ranges::binary_search(_area->hexes, hex);
+}
+
+bool MapScriptApi::areaContainsTile(int tileIndex) const {
+    return _area != nullptr && std::ranges::binary_search(_area->floorTiles, tileIndex);
+}
+
+// --- Deterministic helpers ---------------------------------------------------
+uint32_t MapScriptApi::objectAt(int hex) const {
+    const auto& byElevation = _map.getMapFile().map_objects;
+    const auto it = byElevation.find(_elevation);
+    if (it == byElevation.end()) {
+        return 0;
+    }
+    for (const auto& object : it->second) {
+        if (object && static_cast<int>(object->position) == hex) {
+            return object->pro_pid;
+        }
+    }
+    return 0;
+}
+
+double MapScriptApi::rng() {
+    // Top 24 bits of the mt19937 word mapped to [0,1). mt19937's sequence is standardised and the
+    // shift/divide are integer-exact, so the same seed gives the same draws on every platform —
+    // unlike std::uniform_real_distribution, whose output is implementation-defined.
+    return (static_cast<uint32_t>(_rng()) >> 8) * (1.0 / 16777216.0);
+}
+
+int MapScriptApi::rngInt(int lo, int hi) {
+    if (hi < lo) {
+        std::swap(lo, hi);
+    }
+    const uint32_t range = static_cast<uint32_t>(hi - lo) + 1u;
+    return lo + static_cast<int>(static_cast<uint32_t>(_rng()) % range);
+}
+
 bool MapScriptApi::placeObjectXY(uint32_t proPid, uint32_t frmPid, int col, int row, uint32_t direction) {
     return placeObject(proPid, frmPid, hexIndex(col, row), direction);
 }
@@ -441,6 +552,18 @@ int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant
         throw ScriptError("placeStamp: variant " + std::to_string(variant) + " out of range for stamp '" + name + "'");
     }
     pattern::PatternStamper stamper(_resources, _hexgrid, _controller, _map, _buildSprites);
+    // Plan-sink active: capture the stamp's built objects/tiles into the plan (committing nothing),
+    // so a stamp scattered by a fill is previewed and lands in the fill's single undo entry. Without
+    // this, placeStamp would open its own ScopedUndoBatch and mutate the live map during preview.
+    if (_planSink != nullptr) {
+        const std::size_t objBefore = _planSink->objects.size();
+        const std::size_t tileBefore = _planSink->tiles.size();
+        stamper.planInto(*_planSink, pattern.variants[variant], anchorHex, _elevation);
+        const auto placed = static_cast<int>(_planSink->objects.size() - objBefore);
+        _placedObjects += placed;
+        _paintedTiles += static_cast<int>(_planSink->tiles.size() - tileBefore);
+        return placed;
+    }
     const pattern::PatternStamper::Result result = stamper.stamp(pattern.variants[variant], anchorHex, _elevation);
     _placedObjects += result.objectsPlaced;
     _paintedTiles += result.tilesPainted;
@@ -448,11 +571,21 @@ int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant
 }
 
 void MapScriptApi::newMap() {
+    // These whole-map/header mutators can't be expressed as a deferred FillPlan (replay only
+    // applies object/tile changes), so they must never run while a sink is recording a fill
+    // preview — doing so would mutate the live map directly and break preview==apply. Reject with
+    // a clear error instead; a fill script paints/scatters, it does not reset the map.
+    if (_planSink != nullptr) {
+        throw ScriptError("newMap() is not allowed in a fill — it would reset the live map");
+    }
     _controller.newEmptyMap();
     _mutatedDirectly = true;
 }
 
 void MapScriptApi::setPlayerStart(int hex, int orientation, int elevation) {
+    if (_planSink != nullptr) {
+        throw ScriptError("setPlayerStart() is not allowed in a fill — header edits aren't part of a fill plan");
+    }
     if (!isValidHex(hex)) {
         throw ScriptError("setPlayerStart: hex " + std::to_string(hex) + " is off the 200x200 hex grid");
     }

@@ -1257,6 +1257,11 @@ immediately useful and de-risks the rest.
 
 # Area-Fill + Luau Plugins — Unified Design Proposal
 
+> **Status:** Feature A (area fill, phases A0–A3) has **LANDED** — a Luau-driven "Fill Selection"
+> ships with a Fill dialog, ghost preview, and the `scripts/fills/*.luau` recipes, exercised through
+> `MapScriptApi` over a placement batch and surfaced in `gecko-cli`/MCP `fill`. Feature B (the Luau
+> plugin system) remains a proposal. The design below is kept as the reference write-up for both.
+
 This proposal specifies two features that share one substrate: **Feature A**, a Luau-and-data-driven *area fill* ("Fill Selection") that closes the `autotile_floor` / "paint a pattern of tiles" gap; and **Feature B**, a *Luau plugin system* that lets third parties add tools, panels, menus, and event handlers. The decision throughout is to **build one set of seams and exercise it twice**: area-fill is the first first-party consumer of the same selection-projection, ghost-preview, `ITool`, and `MapScriptApi`-over-a-batch machinery that the plugin system opens to third parties. Engine-data-fidelity is non-negotiable: PIDs/directions/flags/tile-ids stored and replayed verbatim, no fallback label tables, no rotation math, validated readers with no silent fallback.
 
 ---

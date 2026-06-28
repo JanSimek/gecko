@@ -53,4 +53,22 @@ struct AnalyzeOptions {
 // TextureManager. Shared by the gecko-cli frontend (and, later, the MCP server).
 int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& options, std::ostream& out);
 
+struct DumpGridOptions {
+    // The single map to dump (VFS path, e.g. "maps/desert6.map"), required.
+    std::string map;
+    // Which elevation to dump; -1 = every present elevation.
+    int elevation = -1;
+    bool floor = true;   // emit the floor-tile id grid
+    bool roof = false;   // emit the roof-tile id grid
+    bool objects = true; // emit one record per object: pid, number, type, name, hex, col, row, dir, flat
+};
+
+// Dump the RAW spatial layout of one map as JSON: per elevation, the floor (and optionally roof)
+// tile-id grid (row-major, COLS wide; `emptyTile` marks empty) and every object's pid/number/type/
+// name and hex position (with col/row + facing). Where `analyze` gives digested adjacency and
+// object clusters, this is the underlying per-cell data — for learning exact tile placement,
+// transition masks and scatter density/positions from real maps. Returns 0 on success, non-zero if
+// the map can't be read. Headless, like analyzeMaps.
+int dumpMapGrid(resource::GameResources& resources, const DumpGridOptions& options, std::ostream& out);
+
 } // namespace geck::cli

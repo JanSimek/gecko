@@ -867,6 +867,37 @@ namespace {
         out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     }
 
+    // One elevation's floor or roof layer as a flat row-major id array (index = row*COLS + col).
+    ordered_json tileGridArray(const std::vector<Tile>& tiles, bool roof) {
+        auto arr = ordered_json::array();
+        for (const auto& tile : tiles) {
+            arr.push_back(roof ? tile.getRoof() : tile.getFloor());
+        }
+        return arr;
+    }
+
+    // One elevation's objects as an array (pid/number/type/name/fid/hex/col/row/dir/flat per object).
+    ordered_json objectGridArray(const Map::MapFile& mapFile, int elevation, NameResolver& names) {
+        auto objects = ordered_json::array();
+        const auto it = mapFile.map_objects.find(elevation);
+        if (it == mapFile.map_objects.end()) {
+            return objects;
+        }
+        for (const auto& object : it->second) {
+            if (!object) {
+                continue;
+            }
+            const uint32_t pid = object->pro_pid;
+            objects.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+                { "type", typeLabel(pid) }, { "name", names.protoName(pid) },
+                { "fid", pidHex(object->frm_pid) }, // the art FID — feed to resolve_fid to SEE what it is
+                { "hex", object->position }, { "col", hexgrid::columnOf(object->position) },
+                { "row", hexgrid::rowOf(object->position) }, { "dir", object->direction },
+                { "flat", names.isFlat(pid) } });
+        }
+        return objects;
+    }
+
 } // namespace
 
 std::vector<MapExit> collectMapExits(Map& map) {
@@ -898,6 +929,51 @@ std::vector<std::string> listMapPaths(const resource::DataFileSystem& files) {
     }
     std::ranges::sort(mapPaths);
     return mapPaths;
+}
+
+int dumpMapGrid(resource::GameResources& resources, const DumpGridOptions& options, std::ostream& out) {
+    if (options.map.empty()) {
+        out << "error: dump-grid requires --map <path>\n";
+        return 2;
+    }
+    const std::unique_ptr<Map> map = loadMap(resources, options.map);
+    if (!map) {
+        out << "skip (unreadable or parse failed): " << options.map << "\n";
+        return 1;
+    }
+    NameResolver names(resources);
+
+    ordered_json root;
+    root["map"] = baseName(options.map);
+    root["path"] = options.map;
+    root["tileCols"] = Map::COLS;
+    root["tileRows"] = Map::ROWS;
+    root["hexCols"] = HexagonGrid::GRID_WIDTH;
+    root["hexRows"] = HexagonGrid::GRID_HEIGHT;
+    root["emptyTile"] = Map::EMPTY_TILE; // floor/roof ids equal to this mark an empty cell
+
+    const auto& mapFile = map->getMapFile();
+    auto elevations = ordered_json::array();
+    for (const auto& [elevation, tiles] : mapFile.tiles) {
+        if (options.elevation >= 0 && elevation != options.elevation) {
+            continue;
+        }
+        ordered_json entry;
+        entry["elevation"] = elevation;
+        if (options.floor) {
+            entry["floor"] = tileGridArray(tiles, /*roof=*/false); // row-major, COLS wide
+        }
+        if (options.roof) {
+            entry["roof"] = tileGridArray(tiles, /*roof=*/true);
+        }
+        if (options.objects) {
+            entry["objects"] = objectGridArray(mapFile, elevation, names);
+        }
+        elevations.push_back(std::move(entry));
+    }
+    root["elevations"] = std::move(elevations);
+    out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
+    return 0;
 }
 
 int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& options, std::ostream& out) {
