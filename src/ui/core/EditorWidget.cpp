@@ -1374,6 +1374,46 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
 
 // ---- Area fill over the current selection (driven by a Luau fill script) ------------------------
 
+namespace {
+    // The bounding hexes covering a set of selected floor/roof tiles, derived from their on-screen sprite
+    // bounds — so a floor/area selection (which carries no hexes) can still scatter objects over the same
+    // region. Exact for a rectangular drag; a non-rectangular selection over-includes its bounding box
+    // (acceptable for a scatter region). Empty when no selected tile has drawable bounds.
+    std::vector<int> hexesCoveringTiles(const std::vector<int>& floorTiles, const std::vector<int>& roofTiles,
+        const std::vector<sf::Sprite>& floorSprites, const std::vector<sf::Sprite>& roofSprites,
+        selection::SelectionManager& selectionManager) {
+        // Sentinel-initialised so each contributing tile just min/max-folds in (no first-vs-rest branch).
+        constexpr float INF = std::numeric_limits<float>::max();
+        float minX = INF, minY = INF, maxX = -INF, maxY = -INF;
+        bool any = false;
+        const auto extend = [&](const std::vector<sf::Sprite>& sprites, int index) {
+            if (index < 0 || index >= static_cast<int>(sprites.size())) {
+                return;
+            }
+            const sf::FloatRect b = sprites[index].getGlobalBounds();
+            if (b.size.x <= 0.f || b.size.y <= 0.f) {
+                return; // empty tile: no sprite bounds to contribute
+            }
+            minX = std::min(minX, b.position.x);
+            minY = std::min(minY, b.position.y);
+            maxX = std::max(maxX, b.position.x + b.size.x);
+            maxY = std::max(maxY, b.position.y + b.size.y);
+            any = true;
+        };
+        for (const int tileIndex : floorTiles) {
+            extend(floorSprites, tileIndex);
+        }
+        for (const int tileIndex : roofTiles) {
+            extend(roofSprites, tileIndex);
+        }
+        if (!any) {
+            return {};
+        }
+        const sf::FloatRect bounds(sf::Vector2f(minX, minY), sf::Vector2f(maxX - minX, maxY - minY));
+        return selectionManager.getHexesInArea(bounds);
+    }
+} // namespace
+
 EditArea EditorWidget::selectionFillArea() const {
     EditArea area;
     auto* selectionManager = _session.selectionManager();
@@ -1386,49 +1426,11 @@ EditArea EditorWidget::selectionFillArea() const {
     area.hexes = state.getHexIndices();
 
     // A tile selection carries no hexes, but object scatter iterates the area's hexes. Derive the
-    // hexes covering the selected tiles from their on-screen bounds, so a floor/area selection can
-    // scatter objects over the same region. Exact for a rectangular drag; a non-rectangular tile
-    // selection over-includes the hexes in its bounding box (acceptable for a scatter region).
+    // covering hexes from the selected tiles' on-screen bounds so a floor/area selection can scatter
+    // objects over the same region.
     if (area.hexes.empty() && (!area.floorTiles.empty() || !area.roofTiles.empty())) {
-        const auto& floorSprites = _session.floorSprites();
-        const auto& roofSprites = _session.roofSprites();
-        bool any = false;
-        float minX = 0.f, minY = 0.f, maxX = 0.f, maxY = 0.f;
-        const auto extend = [&](const std::vector<sf::Sprite>& sprites, int index) {
-            if (index < 0 || index >= static_cast<int>(sprites.size())) {
-                return;
-            }
-            const sf::FloatRect b = sprites[index].getGlobalBounds();
-            if (b.size.x <= 0.f || b.size.y <= 0.f) {
-                return; // empty tile: no sprite bounds to contribute
-            }
-            const float l = b.position.x;
-            const float t = b.position.y;
-            const float r = l + b.size.x;
-            const float btm = t + b.size.y;
-            if (!any) {
-                minX = l;
-                minY = t;
-                maxX = r;
-                maxY = btm;
-                any = true;
-            } else {
-                minX = std::min(minX, l);
-                minY = std::min(minY, t);
-                maxX = std::max(maxX, r);
-                maxY = std::max(maxY, btm);
-            }
-        };
-        for (const int tileIndex : area.floorTiles) {
-            extend(floorSprites, tileIndex);
-        }
-        for (const int tileIndex : area.roofTiles) {
-            extend(roofSprites, tileIndex);
-        }
-        if (any) {
-            const sf::FloatRect bounds(sf::Vector2f(minX, minY), sf::Vector2f(maxX - minX, maxY - minY));
-            area.hexes = selectionManager->getHexesInArea(bounds);
-        }
+        area.hexes = hexesCoveringTiles(area.floorTiles, area.roofTiles,
+            _session.floorSprites(), _session.roofSprites(), *selectionManager);
     }
 
     // EditArea's contract: each list ascending AND unique (areaContains* binary-searches; the seeded

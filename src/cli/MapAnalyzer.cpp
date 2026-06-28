@@ -867,6 +867,37 @@ namespace {
         out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     }
 
+    // One elevation's floor or roof layer as a flat row-major id array (index = row*COLS + col).
+    ordered_json tileGridArray(const std::vector<Tile>& tiles, bool roof) {
+        auto arr = ordered_json::array();
+        for (const auto& tile : tiles) {
+            arr.push_back(roof ? tile.getRoof() : tile.getFloor());
+        }
+        return arr;
+    }
+
+    // One elevation's objects as an array (pid/number/type/name/fid/hex/col/row/dir/flat per object).
+    ordered_json objectGridArray(const Map::MapFile& mapFile, int elevation, NameResolver& names) {
+        auto objects = ordered_json::array();
+        const auto it = mapFile.map_objects.find(elevation);
+        if (it == mapFile.map_objects.end()) {
+            return objects;
+        }
+        for (const auto& object : it->second) {
+            if (!object) {
+                continue;
+            }
+            const uint32_t pid = object->pro_pid;
+            objects.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+                { "type", typeLabel(pid) }, { "name", names.protoName(pid) },
+                { "fid", pidHex(object->frm_pid) }, // the art FID — feed to resolve_fid to SEE what it is
+                { "hex", object->position }, { "col", hexgrid::columnOf(object->position) },
+                { "row", hexgrid::rowOf(object->position) }, { "dir", object->direction },
+                { "flat", names.isFlat(pid) } });
+        }
+        return objects;
+    }
+
 } // namespace
 
 std::vector<MapExit> collectMapExits(Map& map) {
@@ -930,36 +961,13 @@ int dumpMapGrid(resource::GameResources& resources, const DumpGridOptions& optio
         ordered_json entry;
         entry["elevation"] = elevation;
         if (options.floor) {
-            auto floor = ordered_json::array();
-            for (const auto& tile : tiles) {
-                floor.push_back(tile.getFloor());
-            }
-            entry["floor"] = std::move(floor); // row-major, COLS wide (index = row*COLS + col)
+            entry["floor"] = tileGridArray(tiles, /*roof=*/false); // row-major, COLS wide
         }
         if (options.roof) {
-            auto roof = ordered_json::array();
-            for (const auto& tile : tiles) {
-                roof.push_back(tile.getRoof());
-            }
-            entry["roof"] = std::move(roof);
+            entry["roof"] = tileGridArray(tiles, /*roof=*/true);
         }
         if (options.objects) {
-            auto objects = ordered_json::array();
-            if (const auto it = mapFile.map_objects.find(elevation); it != mapFile.map_objects.end()) {
-                for (const auto& object : it->second) {
-                    if (!object) {
-                        continue;
-                    }
-                    const uint32_t pid = object->pro_pid;
-                    objects.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
-                        { "type", typeLabel(pid) }, { "name", names.protoName(pid) },
-                        { "fid", pidHex(object->frm_pid) }, // the art FID — feed to resolve_fid to SEE what it is
-                        { "hex", object->position }, { "col", hexgrid::columnOf(object->position) },
-                        { "row", hexgrid::rowOf(object->position) }, { "dir", object->direction },
-                        { "flat", names.isFlat(pid) } });
-                }
-            }
-            entry["objects"] = std::move(objects);
+            entry["objects"] = objectGridArray(mapFile, elevation, names);
         }
         elevations.push_back(std::move(entry));
     }
