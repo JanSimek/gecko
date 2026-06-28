@@ -88,20 +88,20 @@ void FillDialog::buildUi() {
     _randomizeSeed = new QPushButton(QStringLiteral("Randomise"), this);
     _seedLock = new QCheckBox(QStringLiteral("Lock"), this);
     _seedLock->setToolTip(QStringLiteral("Keep this seed when switching scripts"));
-    auto* seedRow = new QHBoxLayout;
+    auto* seedRow = new QHBoxLayout; // NOSONAR: Qt owns this layout once it is added to the widget tree
     seedRow->addWidget(_seed, 1);
     seedRow->addWidget(_randomizeSeed);
     seedRow->addWidget(_seedLock);
     _livePreview = new QCheckBox(QStringLiteral("Live preview"), this);
     _livePreview->setChecked(true);
-    auto* optionsForm = new QFormLayout;
+    auto* optionsForm = new QFormLayout; // NOSONAR: Qt owns this layout once it is added to the widget tree
     optionsForm->addRow(QStringLiteral("Seed"), seedRow);
     optionsForm->addRow(_livePreview);
 
     _summary = new QLabel(QStringLiteral("Select a fill script."), this);
     _summary->setWordWrap(true);
 
-    auto* controls = new QVBoxLayout;
+    auto* controls = new QVBoxLayout; // NOSONAR: Qt owns this layout once it is added to the widget tree
     controls->addLayout(optionsForm);
     controls->addWidget(_summary);
     controls->addStretch(1);
@@ -110,7 +110,7 @@ void FillDialog::buildUi() {
     _applyButton = buttons->addButton(QStringLiteral("Apply"), QDialogButtonBox::AcceptRole);
     _applyButton->setDefault(true);
 
-    auto* top = new QHBoxLayout;
+    auto* top = new QHBoxLayout; // NOSONAR: Qt owns this layout once it is added to the widget tree
     top->addWidget(_browser, 1);
     top->addLayout(controls, 1);
 
@@ -154,7 +154,7 @@ void FillDialog::populateBrowser() {
 #endif
 }
 
-void FillDialog::onScriptActivated(QListWidgetItem* item) {
+void FillDialog::onScriptActivated(const QListWidgetItem* item) {
     if (item == nullptr) {
         return;
     }

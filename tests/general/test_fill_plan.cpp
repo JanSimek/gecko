@@ -131,8 +131,8 @@ TEST_CASE("placeStamp under a plan sink is captured, not committed", "[scripting
     pat.name = "cluster";
     pattern::PatternVariant v;
     v.anchorHex = 100 * HexagonGrid::GRID_WIDTH + 100;
-    v.objects.push_back({ 0, 0, PRO, FRM, 0u, 0u });
-    v.objects.push_back({ 1, 0, PRO, FRM, 2u, 0u });
+    v.objects.push_back({ 0, 0, PRO, FRM, 0u, 0u }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
+    v.objects.push_back({ 1, 0, PRO, FRM, 2u, 0u }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
     v.floor.push_back({ 0, 0, TILE_A });
     pat.variants.push_back(v);
     api.addStamp("cluster", pat);

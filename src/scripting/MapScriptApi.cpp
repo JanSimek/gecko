@@ -329,7 +329,7 @@ bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, i
             }
             object->setMapObject(mapObject);
         }
-        _planSink->objects.push_back({ mapObject, std::move(object) });
+        _planSink->objects.push_back({ mapObject, std::move(object) }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
         ++_placedObjects;
         return true;
     }

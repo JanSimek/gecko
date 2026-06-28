@@ -138,7 +138,7 @@ void PatternStamper::planInto(FillPlan& out, const PatternVariant& variant, int 
         // the entry and PlacementBatch counts it failed). Headless: no sprite — replay records the
         // MapObject as data, so a stamp's objects land even with no art or GL.
         std::shared_ptr<Object> object = _buildSprites ? buildObject(mapObject, op.frmPid) : nullptr;
-        out.objects.push_back({ std::move(mapObject), std::move(object) });
+        out.objects.push_back({ std::move(mapObject), std::move(object) }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
     }
 
     appendTiles(out, p.tiles, elevation);

@@ -239,7 +239,7 @@ namespace {
         int rc = 0;
         try {
             rc = cli::dumpMapGrid(resources, opts, oss);
-        } catch (const std::exception& e) {
+        } catch (const std::exception& e) { // NOSONAR: tool boundary — any failure is returned to the caller as an error result
             return toolText(std::string("dump_grid failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
         }
         return toolText(oss.str(), rc != 0);
@@ -528,7 +528,7 @@ namespace {
             "Args: map.",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeMap(r, a); } });
-        t.push_back({ "dump_grid",
+        t.push_back({ "dump_grid", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
             "The RAW spatial layout of one map, the per-cell data behind analyze's digested "
             "adjacency/clusters. Per elevation: the floor (and, with roof=true, roof) tile-id grid as a "
             "flat row-major array, 'tileCols' (100) wide so cell (col,row) is grid[row*100+col], with "

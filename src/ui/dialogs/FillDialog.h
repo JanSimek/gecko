@@ -34,7 +34,7 @@ public:
     ~FillDialog() override;
 
 private slots:
-    void onScriptActivated(QListWidgetItem* item);
+    void onScriptActivated(const QListWidgetItem* item);
     void onRandomizeSeed();
     void onApply();
 

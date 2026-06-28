@@ -270,7 +270,7 @@ private:
     // The selection area the area-queries report (see setArea). Borrowed; null when none is bound.
     const EditArea* _area = nullptr;
     // Deterministic stream for rng()/rngInt(); reseed per run via setSeed for reproducible scatter.
-    std::mt19937 _rng;
+    std::mt19937 _rng; // NOSONAR: seeded for reproducible fills, not a security-sensitive use
 };
 
 } // namespace geck

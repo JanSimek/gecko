@@ -25,7 +25,7 @@ namespace {
 // Write `mapFile` to a temp .map and return dump-grid's parsed JSON for `elevation`. No game data is
 // mounted, so dump-grid reads the file back via cli::loadMap's disk fallback (tile ids are raw in the
 // file, so they survive without tiles.lst). Mirrors the analyze tests' harness.
-json dumpWrittenMap(Map::MapFile mapFile, const char* mapName, const char* tempPrefix, StubProvider& provider) {
+json dumpWrittenMap(Map::MapFile mapFile, const char* mapName, const char* tempPrefix, const StubProvider& provider) {
     Map map{ mapName };
     map.setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
 
