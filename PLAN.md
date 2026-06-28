@@ -1605,6 +1605,16 @@ doubling removed; a second row added in `ExitGridPlacementManager::classifySegme
 Visible bar == selectable object, and the cardinal "hexes outside the texture" is fixed too. The notes
 below record the engine truth and the before→after rationale for reference.
 
+**Both rows are real exit grids → a 2-deep trigger zone (by design).** The inner/second row is
+functionally inert in normal play (walking off-map the player exits at the first row it reaches and never
+steps onto the second), but it IS a real exit in the saved data. A "non-exiting decorative exit-grid bar"
+is **impossible**: the engine fires the map transition on any object whose PID is in the exit-grid range
+(`0x05000010–17`) **unconditionally**, ignoring `exit_map`/flags (`fallout2-ce/object.cc:1425`); no
+`exit_map` value means "no transition" (`0`/`-1`/`-2` are world/town map; the inactive-grid FID swap is
+cosmetic, keyed on FID not PID). So two real selectable rows necessarily means two exits in data — chosen
+(author's call) over a display-only second texture, which would keep one exit line but make the second
+bar un-selectable.
+
 **Engine truth** (verified against shipped maps `ncr1`, `redmtun`, `redwan1`, `artemple` via the new
 `map render --exit-dots` overlay, and against `fallout2-ce/src/object.cc` ~4942): every exit grid is ONE
 bar per object, drawn once, **centered on its hex** — `left = hexScreenX - frameWidth/2`, `bottom =
