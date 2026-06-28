@@ -75,10 +75,6 @@ public:
     [[nodiscard]] int width() const;
     [[nodiscard]] int height() const;
 
-    /// The exit-grid direction (0..7) of this object, or -1 if it is not an exit-grid marker. Real
-    /// markers report it from their MapObject proto index; preview/bare-FRM objects from the art name.
-    [[nodiscard]] int exitGridDirection() const;
-
 private:
     static sf::Texture& createBlankTexture();
     void initializeLightOverlay();

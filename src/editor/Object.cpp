@@ -7,7 +7,6 @@
 #include "util/Constants.h"
 #include "util/Coordinates.h"
 #include "util/Exceptions.h"
-#include "util/ExitGridDirection.h"
 #include <algorithm>
 #include <spdlog/spdlog.h>
 
@@ -123,22 +122,6 @@ void Object::setHexPosition(const Hex& hex) {
     if (_showLightOverlay && hasLight()) {
         updateLightOverlay();
     }
-}
-
-int Object::exitGridDirection() const {
-    // Placed markers carry a MapObject whose proto index (16..23) is the direction.
-    if (_mapObject != nullptr && _mapObject->isExitGridMarker()) {
-        return static_cast<int>(_mapObject->protoId()) - static_cast<int>(MapObject::EXIT_GRID_PID_INDEX_FIRST);
-    }
-    // Preview / bare-FRM objects (no MapObject) are identified by art name: exitgrd1..8 / ext2grd1..8.
-    const std::string& fn = _frm != nullptr ? _frm->filename() : std::string();
-    if (fn.size() >= 8 && (fn.rfind("exitgrd", 0) == 0 || fn.rfind("ext2grd", 0) == 0)) {
-        const int dir = fn[7] - '1';
-        if (dir >= 0 && dir < ExitGrid::DIR_COUNT) {
-            return dir;
-        }
-    }
-    return -1;
 }
 
 int16_t Object::shiftX() const {
