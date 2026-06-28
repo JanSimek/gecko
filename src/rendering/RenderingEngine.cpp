@@ -10,10 +10,8 @@
 #include "util/ColorUtils.h"
 #include "util/Constants.h"
 #include "util/Coordinates.h"
-#include "util/ExitGridDirection.h"
 #include "util/TileUtils.h"
 #include "viewport/ViewportController.h"
-#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -300,62 +298,11 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
         }
     }
 
-    // Display-only: thicken each DIAGONAL exit-grid bar into a ~2x band with one offset texture copy.
-    renderDiagonalExitGridDecorations(target, renderData, visibility);
-
     // Wall blocker overlays render on top of regular objects
     if (visibility.showWallBlockers && renderData.wallBlockerOverlays) {
         for (const auto& overlay : *renderData.wallBlockerOverlays) {
             target.draw(overlay);
         }
-    }
-}
-
-namespace {
-    // Per-family on-screen band thickness (px), measured from a rendered diagonal run: the composite of
-    // the overlapping per-hex bars reads ~38px for a "\" (exitgrd7/8, 111x60) and ~32px for a "/"
-    // (exitgrd5/6, 127x48). The decorative copy is offset by one thickness so it abuts the on-hex bar.
-    constexpr float kBackslashBandThickness = 38.0f;    // "\" exitgrd7/8
-    constexpr float kForwardSlashBandThickness = 32.0f; // "/" exitgrd5/6
-
-    float diagonalBandThickness(int dir) {
-        return (dir == ExitGrid::DIR_BACK_A || dir == ExitGrid::DIR_BACK_B)
-            ? kBackslashBandThickness
-            : kForwardSlashBandThickness;
-    }
-
-    // The UNIT screen normal the decorative copy is offset along (perpendicular to the bar's on-screen
-    // line). It is exitGridOutward(dir) normalized; a flipped marker (dir ^ 1) negates exitGridOutward,
-    // so the copy swings to the other side of the hex line while the on-hex bar stays put.
-    sf::Vector2f diagonalBandNormal(int dir) {
-        const auto [nx, ny] = exitGridOutward(dir);
-        const float len = std::sqrt(static_cast<float>(nx * nx + ny * ny));
-        if (len <= 0.0f) {
-            return { 0.0f, 0.0f };
-        }
-        return { static_cast<float>(nx) / len, static_cast<float>(ny) / len };
-    }
-} // namespace
-
-void RenderingEngine::renderDiagonalExitGridDecorations(sf::RenderTarget& target,
-    const RenderData& renderData,
-    const VisibilitySettings& visibility) {
-    if (!renderData.objects) {
-        return;
-    }
-    for (const auto& object : *renderData.objects) {
-        if (!object || !isObjectVisible(object->getMapObject(), visibility)) {
-            continue;
-        }
-        const int dir = object->exitGridDirection();
-        if (!isDiagonalExitGridDir(dir)) {
-            continue; // cardinals + non-exit-grid objects: the single on-hex draw is enough
-        }
-        // The on-hex bar was already drawn in renderObjects (the selectable object). Draw ONLY the
-        // decorative copy, offset by one band thickness so it abuts that bar into a ~2x-wide band.
-        sf::Sprite copy = object->getSprite();
-        copy.move(diagonalBandNormal(dir) * diagonalBandThickness(dir));
-        target.draw(copy);
     }
 }
 

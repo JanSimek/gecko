@@ -217,6 +217,37 @@ namespace {
         }
         return -1;
     }
+
+    // The hex one row OVER from `hex`, perpendicular to a diagonal band — gathers `hex`'s grid neighbours
+    // as screen offsets and lets secondRowNeighbor pick the one leaning most along the band's outward
+    // normal (exitGridOutward(dir)). Returns -1 if off-grid or no neighbour leans outward.
+    int neighborRowHex(const HexagonGrid& grid, int hex, int dir) {
+        const auto here = grid.getHexByPosition(static_cast<uint32_t>(hex));
+        if (!here.has_value()) {
+            return -1;
+        }
+        const int hx = here->get().x();
+        const int hy = here->get().y();
+        std::vector<NeighborOffset> offsets;
+        for (const int nb : hexline::hexNeighbors(hex)) {
+            const auto nbHex = grid.getHexByPosition(static_cast<uint32_t>(nb));
+            if (nbHex.has_value()) {
+                offsets.push_back({ nb, nbHex->get().x() - hx, nbHex->get().y() - hy });
+            }
+        }
+        return secondRowNeighbor(dir, offsets);
+    }
+
+    // The SECOND-ROW hex `steps` rows OVER from `hex`, perpendicular to a diagonal band: walks
+    // neighborRowHex `steps` times. kSecondRowSteps tunes how the two centred rows of REAL bars overlap
+    // (see classifySegment). Returns -1 if any step walks off-grid.
+    int secondRowHex(const HexagonGrid& grid, int hex, int dir, int steps) {
+        int current = hex;
+        for (int i = 0; i < steps && current >= 0; ++i) {
+            current = neighborRowHex(grid, current, dir);
+        }
+        return current;
+    }
 } // namespace
 
 ExitGridDestinationKind ExitGridPlacementManager::destinationKind() const {
@@ -329,13 +360,32 @@ ExitGridPlacementManager::CommittedSegment ExitGridPlacementManager::classifySeg
     if (!run.has_value()) {
         return seg; // degenerate/off-grid: nothing to freeze
     }
-    // One uniform art for the whole segment, frozen at the given flip. A diagonal segment places ONE
-    // object per drawn hex, exactly like a cardinal segment, so the diagonal run stays continuous with
-    // any adjoining horizontal/vertical run at the bend. The doubled-band LOOK is display-only: the
-    // renderer draws a decorative second texture for diagonals (see RenderingEngine), no extra objects.
+    // One uniform art for the whole segment, frozen at the given flip.
     const ExitGridArt art = segmentArt(*run, flipSide);
     seg.hexes = run->hexes;
     seg.art.assign(seg.hexes.size(), art);
+
+    // A DIAGONAL edge is a 2-deep band: the drawn hex line is the OUTER row and a SECOND parallel row of
+    // REAL, selectable markers sits a few hexes OVER, perpendicular to the band (the side
+    // exitGridOutward(dir) faces). Each bar draws ONCE centred on its own hex like the engine, so the two
+    // rows tile into one ~2x band — and a visible bar is its own selectable object (no display offset).
+    // kSecondRowSteps tunes the spacing: a diagonal bar is ~32-38px while one hex step is only ~16-19px,
+    // so steps=2 makes the two centred rows tile edge-to-edge into a clean ~2x band (the empty middle hex
+    // is covered by the bar width), while steps=1 makes them overlap ~50% (denser, ~1.5x). The flip
+    // (dir^1) mirrors that side; the second row uses the SAME frozen art. Cardinal edges stay single-row.
+    // flattenSegments dedups by hex, so a second-row hex already taken is dropped.
+    constexpr int kSecondRowSteps = 2;
+    const int dir = exitGridDirOfProto(art.proPid);
+    if (const auto* hexGrid = _context.getHexagonGrid(); hexGrid != nullptr && isDiagonalExitGridDir(dir)) {
+        std::set<int> seen(run->hexes.begin(), run->hexes.end());
+        for (const int hex : run->hexes) {
+            const int second = secondRowHex(*hexGrid, hex, dir, kSecondRowSteps);
+            if (second >= 0 && seen.insert(second).second) {
+                seg.hexes.push_back(second);
+                seg.art.push_back(art);
+            }
+        }
+    }
     return seg;
 }
 
