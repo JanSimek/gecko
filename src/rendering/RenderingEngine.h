@@ -167,18 +167,6 @@ private:
         const VisibilitySettings& visibility);
 
     /**
-     * @brief DISPLAY-ONLY widening for DIAGONAL exit-grid bars. The standard loop skips diagonal
-     * exit-grid objects; this draws each one's bar TWICE — texture1 + a perpendicular-offset texture2 —
-     * so the thin diagonal band reads ~2x thick. The trigger hex stays on the band's outer edge and the
-     * two textures abut seamlessly (no overlap, no gap). A flipped object (dir ^ 1) negates the band's
-     * outward normal, swinging the whole doubled band to the OTHER side of the hex line. No new objects
-     * or hexes are created — the saved single-row data is untouched.
-     */
-    void renderDiagonalExitGridBars(sf::RenderTarget& target, const RenderData& renderData);
-    // True when `object` is a placed diagonal exit-grid marker ("/" or "\"). Cardinals return false.
-    static bool isDiagonalExitGridObject(const Object& object);
-
-    /**
      * @brief Outline every selected object on top of the scene, grouped by category colour.
      *
      * Renders each colour group's selected sprites into an offscreen mask, then edge-detects the

@@ -77,16 +77,11 @@ public:
 
     /// The exit-grid direction (0..7) of this object, or -1 if it is not an exit-grid marker. Real
     /// markers report it from their MapObject proto index; preview/bare-FRM objects from the art name.
-    /// Used by the renderer to detect and widen DIAGONAL exit-grid bars (display-only).
     [[nodiscard]] int exitGridDirection() const;
 
 private:
     static sf::Texture& createBlankTexture();
     void initializeLightOverlay();
-
-    /// EDITOR-DISPLAY ONLY: nudge an exit-grid marker's sprite OUTWARD so the trigger `hex` sits at the
-    /// bar's inner (player-facing) edge. No-op for every non-exit-grid object. See setHexPosition().
-    void applyExitGridOutwardOffset(const Hex& hex);
 };
 
 } // namespace geck

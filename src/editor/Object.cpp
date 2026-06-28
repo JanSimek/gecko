@@ -7,7 +7,6 @@
 #include "util/Constants.h"
 #include "util/Coordinates.h"
 #include "util/Exceptions.h"
-#include "util/ExitGridDirection.h"
 #include <algorithm>
 #include <spdlog/spdlog.h>
 
@@ -120,11 +119,6 @@ void Object::setHexPosition(const Hex& hex) {
         _mapObject->position = hex.position();
     }
 
-    // EDITOR-DISPLAY ONLY: push an exit-grid marker's bar OUTWARD so the trigger hex sits at the bar's
-    // INNER edge (the default bottom-anchor straddles the hex, reading ambiguously). The Fallout 2
-    // engine applies NO such offset — this is a deliberate authoring-clarity divergence, exit grids only.
-    applyExitGridOutwardOffset(hex);
-
     if (_showLightOverlay && hasLight()) {
         updateLightOverlay();
     }
@@ -144,49 +138,6 @@ int Object::exitGridDirection() const {
         }
     }
     return -1;
-}
-
-void Object::applyExitGridOutwardOffset(const Hex& hex) {
-    const int dir = exitGridDirection();
-    if (dir < 0) {
-        return;
-    }
-    const auto [outX, outY] = exitGridOutward(dir);
-    if (outX == 0 && outY == 0) {
-        return;
-    }
-
-    // DIAGONAL markers anchor on their OWN hex like the engine — no slide. A diagonal edge is one row of
-    // bars, each centred on its drawn hex, so the run stays continuous with any adjoining cardinal run at
-    // the bend. The cardinal bbox-edge slide below must NOT be applied: it would combine half-width AND
-    // half-height on these large bars (127x48, 111x60) and shove the art clear off its hex.
-    if (outX != 0 && outY != 0) {
-        return;
-    }
-
-    // CARDINAL marker: slide along the outward axis until the trigger hex lands on the bar's inner edge
-    // (the bbox side opposite the outward direction). Reading the actual on-screen bounds adapts to both
-    // thin pieces (96x24, 32x96) and both art families without per-piece pixel constants.
-    const sf::FloatRect bounds = _sprite.getGlobalBounds();
-    const float left = bounds.position.x;
-    const float top = bounds.position.y;
-    const float right = left + bounds.size.x;
-    const float bottom = top + bounds.size.y;
-
-    float shiftX = 0.0f;
-    if (outX < 0) { // extends left -> inner edge is the right side
-        shiftX = static_cast<float>(hex.x()) - right;
-    } else if (outX > 0) { // extends right -> inner edge is the left side
-        shiftX = static_cast<float>(hex.x()) - left;
-    }
-    float shiftY = 0.0f;
-    if (outY < 0) { // extends up -> inner edge is the bottom side
-        shiftY = static_cast<float>(hex.y()) - bottom;
-    } else if (outY > 0) { // extends down -> inner edge is the top side
-        shiftY = static_cast<float>(hex.y()) - top;
-    }
-
-    _sprite.move(sf::Vector2f(shiftX, shiftY));
 }
 
 int16_t Object::shiftX() const {
