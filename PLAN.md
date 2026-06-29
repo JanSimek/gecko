@@ -743,16 +743,7 @@ data in the **vault** library (a `format/…` object + a `reader/…`, like `Map
 never inline in the cli/MCP layer. The MCP composes the structured objects into JSON; it does no
 file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set this precedent.)
 
-6. **`engine_reference` — ground answers in the engine source.** A read-only MCP tool that searches
-   a mounted `fallout2-ce` checkout (grep + bounded file read) and returns `file:line` + snippets.
-   The map-script 1-based rule (`scriptIndex - 1`) and the `scrname.msg[programIndex + 101]` /
-   `map.msg[map*3 + elev + 200]` index formulas were all answered by *reading the engine*; this tool
-   lets a **shell-less** MCP agent do the same instead of guessing format details. Config: an
-   engine-source path (like `--data`); cap results (top-N matches, small snippets) so it can't flood
-   context. *Lower priority when the agent already has filesystem/grep tools — then just mounting the
-   source is enough; this earns its keep specifically for headless/sandboxed agents.*
-
-7. **Exit-grid connectivity graph — `map_graph`. ✅ Done.** Walks every map's exit grids into a
+6. **Exit-grid connectivity graph — `map_graph`. ✅ Done.** Walks every map's exit grids into a
    directed map→map graph (`{destMap, destMapName, destHex, destElevation}` + a per-edge hex count),
    with stats flagging dead-ends and maps with no incoming edge. **Scope correction:** this is only
    the exit-grid layer — how a *location's* maps link (intramap elevation changes + intermap edges
@@ -760,7 +751,7 @@ file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set th
    travel; cities are crossed on the world map, so the graph is connected only within a location.
    Follow-up: cross with `reachability` to flag one-way edges.
 
-7b. **Worldmap layer — `world_map` (city.txt). ✅ Done.** The inter-city layer `map_graph` doesn't
+6b. **Worldmap layer — `world_map` (city.txt). ✅ Done.** The inter-city layer `map_graph` doesn't
    cover: a vault `CityTxt` reader (`data/city.txt`) → areas (name, `world_pos`, size, known-at-start,
    the maps each contains via its entrances) + the straight-line distance between every pair of areas.
    This is the actual "map of the world + distances between places." Terrain types + encounter group
@@ -769,7 +760,7 @@ file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set th
    encounter placement) and `worldmap.msg` encounter descriptions (area/city labels are map.msg, now
    surfaced as `world_map`'s `displayName`).
 
-8. **Corpus / world index — evidence, not a solver.** The evidence layer now largely exists: the
+7. **Corpus / world index — evidence, not a solver.** The evidence layer now largely exists: the
    `map_graph`↔`world_map` join (`area`/`mapFile`/`lookupName`), the `quests` tool (each quest's area +
    tracking gvar + thresholds + text) and the `gvars` dictionary (gvar index → `GVAR_*` name) — so an
    agent can already *reason* about progression ("which script sets the gvar that gates quest Y?": read
