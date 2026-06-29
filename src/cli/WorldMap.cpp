@@ -34,7 +34,11 @@ namespace {
                     { "mapFile", mapFile.empty() ? ordered_json(nullptr) : ordered_json(mapFile) } });
             }
             const std::string terrain = world.terrainAt(area.worldX, area.worldY); // "" if no tile grid
+            // The on-screen city label (map.msg[1500+index]) the engine shows, distinct from city.txt's
+            // internal area_name in 'name'. null when map.msg isn't mounted or the area is unnamed.
+            const std::string display = names.areaName(area.index);
             areas.push_back({ { "index", area.index }, { "name", area.name },
+                { "displayName", display.empty() ? ordered_json(nullptr) : ordered_json(display) },
                 { "worldPos", { { "x", area.worldX }, { "y", area.worldY } } },
                 { "size", area.size }, { "knownAtStart", area.startOn },
                 { "terrain", terrain.empty() ? ordered_json(nullptr) : ordered_json(terrain) },

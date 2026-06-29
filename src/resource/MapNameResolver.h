@@ -36,6 +36,12 @@ public:
     /// The friendly map.msg name for `(mapIndex, elevation)`, or "" when unavailable.
     std::string displayName(int mapIndex, int elevation) const;
 
+    /// The friendly worldmap area/city name for a city.txt `[Area N]` index, via the engine's
+    /// `map.msg[1500 + areaIndex]` formula (fallout2-ce worldmap.cc `wmGetAreaIdxName`; the on-screen
+    /// city label, distinct from city.txt's internal `area_name`). "" when the index is negative or
+    /// map.msg isn't mounted.
+    std::string areaName(int areaIndex) const;
+
     /// The maps.txt index for a .map filename (basename, any case), or -1 if absent.
     int indexOf(const std::string& mapFileName) const;
 

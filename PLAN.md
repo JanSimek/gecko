@@ -21,32 +21,24 @@ live with their library (`src/resource/`, `src/ui/`).
    (`MapInfoPanel` checkboxes) is still a direct mutation; a cascading script-delete when an
    object is deleted; and the command-controller actions themselves aren't integration-tested
    (they need GameResources/Qt — a `qt_tests` follow-up).
-2. **Exit grids are rectangle-only** — detailed below.
-3. **AI packet / script program are raw values** (engine packet numbers / scripts.lst names),
+2. **AI packet / script program are raw values** (engine packet numbers / scripts.lst names),
    not friendly labels — no invented label tables, per the engine-fidelity rule. Real labels
    need `data/ai.txt` parsing (AI) or the scripts.lst trailing comment (script "description" —
    see the SSL-editing section; the `.int` has no description, Q below).
-4. **Newly created scripts get `local_var_count=0` / `offset=-1`** — exactly what the engine's
+3. **Newly created scripts get `local_var_count=0` / `offset=-1`** — exactly what the engine's
    `scriptAdd` writes; locals are allocated at runtime from the `.int`. The editor does not
    parse `.int` headers, and the local-var *count* lives in `scripts.lst`, not the binary.
-5. **F11 spatial placement is dialog-driven** (enter tile/elevation/radius), not click-to-place
+4. **F11 spatial placement is dialog-driven** (enter tile/elevation/radius), not click-to-place
    with a live hex marker, radius overlay, and a new `EditorMode`. Existing spatial scripts also
    aren't visualized on the map or editable/deletable through the UI yet.
-6. **F16 per-instance kill-type and custom name are out of scope** — not exposed in the engine
+5. **F16 per-instance kill-type and custom name are out of scope** — not exposed in the engine
    mapper and would require new serialized `MapObject` fields.
-7. **Script attach reassigns the object OID** (`unknown0`) to a fresh unique id (matching the
+6. **Script attach reassigns the object OID** (`unknown0`) to a fresh unique id (matching the
    engine's `objectSetScript`); existing cross-references to the old OID aren't audited/rewritten.
-8. **Inventory "Add" uses a numeric proto index**, not a browsable item picker.
-9. **Edit visuals are sprite-rebuild only** — no engine-style `_obj_toggle_flat` outline
+7. **Inventory "Add" uses a numeric proto index**, not a browsable item picker.
+8. **Edit visuals are sprite-rebuild only** — no engine-style `_obj_toggle_flat` outline
    recompute, multi-hex occupancy overlay, or live light-radius overlay beyond the rebuild.
-10. **PRO-dialog animation preview jitters ("shaky camera").** Playback works, but each frame is
-    centred on its own bounding box instead of being anchored to a fixed reference point. FRM
-    frames carry per-frame signed (x, y) pixel **offsets** (the `Object::shiftX()/shiftY()`
-    values) that the engine accumulates so the sprite's anchor stays put across frames; the
-    preview ignores them, so frames with slightly different centres wobble. **Fix:** position
-    each preview frame by its FRM offset relative to a fixed anchor (mirror how the map
-    renderer/`Object` applies `shiftX/shiftY`) instead of re-centering per frame.
-11. **Keybindings are hardcoded — no user remapping.** Shortcuts are scattered and fixed: the
+9. **Keybindings are hardcoded — no user remapping.** Shortcuts are scattered and fixed: the
     menu/toolbar `QKeySequence`s in `MainWindow::setupMenuBar()`/`setupToolBar()` (New/Open/Save,
     Select All `Ctrl+A`, scroll-blocker `B`, exit grids `Ctrl+E`, undo/redo, …), the editor-mode
     keys in `InputHandler::handleKeyPressed` (`R` cycles a stamp variant, `Esc` cancels, `Delete`/
@@ -57,13 +49,13 @@ live with their library (`src/resource/`, `src/ui/`).
     the menu/toolbar `QAction`s *and* the `InputHandler` dispatch from that table instead of
     literals, so a rebind takes effect everywhere and the bindings stay discoverable. Engine-fidelity
     note: this is editor UX only — it changes no map/format data.
-12. **Toolbar is a fixed button set — not user-customizable.** The primary toolbar (New, Browse Maps,
+10. **Toolbar is a fixed button set — not user-customizable.** The primary toolbar (New, Browse Maps,
     Save, Play) is a hardcoded `primaryToolbarActions` array in `MainWindow::setupToolBar()`. Most
     editors let users choose which buttons appear and reorder them. **Add a customizable toolbar:**
-    drive it from the same command/action table proposed in #11 (stable action id → icon/label/handler),
+    drive it from the same command/action table proposed in #9 (stable action id → icon/label/handler),
     with a context-menu / Preferences UI to add, remove, and reorder buttons, persisted via `Settings`.
     Editor UX only; no map/format change.
-13. **The writable save target is positional, not chosen.** Saving a map (and map-name edits) writes
+11. **The writable save target is positional, not chosen.** Saving a map (and map-name edits) writes
     into the *last folder* in Data Paths — `findWritableDataPath` walks the list from the end and takes
     the first real directory (archives skipped). That's implicit and order-dependent: reordering Data
     Paths silently changes where saves land, and nothing in the UI shows which location is the writable
@@ -72,30 +64,6 @@ live with their library (`src/resource/`, `src/ui/`).
     selected folder as the default writable location, shown with a badge in the list and persisted in
     `Settings`; saves then target that folder regardless of list order. If none is marked, keep the
     current last-folder fallback and hint the user to pick one. DAT archives can't be marked (read-only).
-
-### Exit-grid shapes (rectangle-only) — limitation #2 in detail
-
-**Current behaviour:** the reachable exit-grid creation path
-(`ExitGridPlacementManager::selectExitGridsInArea`) fills a **rectangular** drag selection — it
-collects every hex whose footprint intersects the rectangle and makes an exit-grid object on
-each, so only axis-aligned rectangular exit-grid regions can be authored.
-
-**Engine reality (investigated):** exit grids are **independent per-hex MISC objects**
-(pid 16–23), each carrying its own exit destination; there is **no rectangle, perimeter, or
-"interior texture" concept** in the format — the player triggers the transition by stepping on
-any exit-grid hex. The fallout2-ce mapper's **"Mark Exit-Grids"** mode toggles a marker on each
-**individually clicked hex** (`mapper.cc`: `markExitGridMode` → `mapper_mark_exit_grid()` on each
-left-click, mapper.cc:1325), and the legacy `reference/F2_Mapper_Dims-master/Mapper` works the
-same way. Because the playable map area is an iso diamond, real exit grids commonly run
-**diagonally** along the screen edges — the "triangular"/diagonal shapes a rectangle fill cannot
-represent.
-
-**Fix:** drop the rectangle-fill assumption and support arbitrary-shape placement. We already
-have per-hex placement (`ExitGridPlacementManager::placeExitGridAtPosition`), but it's gated
-behind `EditorMode::PlaceExitGrid`, which has **no UI trigger** (see the EditorMode gap above) —
-wiring that one button gives engine-equivalent per-hex marking. Optionally add line/freehand
-placement for fast diagonal runs. There is no perimeter/interior distinction to preserve: every
-exit-grid hex is a full, independent exit-grid object.
 
 ### Generation-side exit placement — current state & smarter follow-up
 
@@ -123,49 +91,6 @@ blind rectangle:
 
 The primitive (`placeExitGridRect`) and the directional-art mapping are the reusable foundation;
 the follow-up is feeding them terrain-derived locations instead of a centred rectangle.
-
-### Unified exit-grid tool + polygonal drawing (UX)
-
-Exit-grid authoring is split across **two toolbar buttons** (place-single vs the rectangular
-"mark exits" drag). Fold them into **one tool with a mode dropdown**:
-- **Place single** — the existing per-hex `placeExitGridAtPosition` (also closes the no-UI-trigger
-  gap for `EditorMode::PlaceExitGrid` noted above).
-- **Draw region** — replace the axis-aligned rectangle fill (`selectExitGridsInArea`) with a
-  **polygonal / freehand** path: the user clicks vertices (or drags) and every hex on the outline /
-  inside the polygon becomes an exit-grid MISC object, so the diagonal iso-edge runs that real maps
-  use are authorable — directly resolving the rectangle-only limitation above.
-
-While drawing, render each prospective hex with its **MISC exit marker texture at the correct
-orientation**, tinted by destination kind: **green for an inter-map exit**, **brown for a world-map
-exit** (the `-2`/`-1` sentinels; cf. the `ExitGrid::RECT_*` directional art), so the author sees the
-region forming with engine-accurate art before committing. One destination per region — the
-properties dialog (now name-annotated via `MapNameResolver`) still sets it.
-
-### Map metadata editing (maps.txt / map.msg in the editor)
-
-The editor can now *read* a map's friendly name and its exits' destinations (`MapNameResolver`:
-`maps.txt` → `MapsTxt`, plus `map.msg` display names, surfaced in the exit-grid dialog). Next: let
-the user **edit** that metadata.
-
-**Surface — where it lives** (decision needed):
-- **In the existing Map Info panel** *(recommended for the per-map fields)* — the current map's
-  `lookup_name`, display name, music, and yes/no flags (saved / pipboy_active / automap) sit
-  naturally beside the map properties the panel already shows. Lowest friction, no new surface.
-- **A new tab in the Map Info panel** — if the field set grows (ambient_sfx list, per-elevation
-  names, random start points), a "Map Registry" tab keeps the basic panel uncluttered.
-- **A dedicated panel/dialog** — only if editing the *whole* `maps.txt` / `map.msg` table (every
-  map, not just the current one) becomes a goal; heavier, likely out of scope for v1.
-
-Recommendation: per-map fields in the **Map Info panel** (or a tab there); defer a full-table editor.
-
-**Editability — the DAT problem.** `maps.txt` and the `*.msg` files usually live **inside
-`master.dat`**, which the editor reads but must not rewrite. So before editing, **copy the file out
-to the native filesystem** (a writable data root / the configured game data dir) and edit *that*
-copy, which then shadows the archive entry (the VFS already layers loose files over the DAT). Flow:
-on first edit, if the path resolves from a DAT, materialize it to the loose data dir, then read/write
-the loose copy. Needs (a) a "writable data root" setting, (b) a VFS helper to tell whether a path is
-archive-backed, and (c) a `maps.txt` *writer* — or, to preserve comments/ordering, keep the raw text
-and patch only the touched keys rather than re-serializing `MapsTxt`.
 
 ---
 
@@ -841,7 +766,8 @@ file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set th
    This is the actual "map of the world + distances between places." Terrain types + encounter group
    tables are now also covered (`worldmap.txt` → `world_encounters`). **Remaining:** the `worldmap.txt`
    `[Tile NN]` sub-tile grid (per-position terrain → terrain-weighted travel cost, geographic
-   encounter placement) and `worldmap.msg` localized names.
+   encounter placement) and `worldmap.msg` encounter descriptions (area/city labels are map.msg, now
+   surfaced as `world_map`'s `displayName`).
 
 8. **Corpus / world index — evidence, not a solver.** The evidence layer now largely exists: the
    `map_graph`↔`world_map` join (`area`/`mapFile`/`lookupName`), the `quests` tool (each quest's area +
@@ -861,10 +787,10 @@ file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set th
 Surveyed from `fallout2-ce` (`configRead` / `messageListLoad`). Each becomes a vault reader + object,
 then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority order:
 
-- **`map.msg` display names** *(high value, low effort — the obvious next step).* `mapGetName` =
-  `map.msg[mapIndex*3 + elevation + 200]`; city names = `map.msg[1500 + city]`. Gives each map (and
-  every `destMap` exit) a friendly per-elevation name ("Arroyo", "Temple of Trials") alongside the
-  `.map` filename `MapsTxt` already resolves. Pairs directly with `MapsTxt`.
+- **`map.msg` display names** ✅ **done** — `MapNameResolver` owns both engine formulas: per-map names
+  `map.msg[mapIndex*3 + elevation + 200]` (`displayName`) and worldmap city labels
+  `map.msg[1500 + areaIndex]` (`areaName`). Surfaced as `displayName` in `analyze`/`describe_map` (each
+  map + every `destMap` exit), `map_graph` nodes, `list_maps` entries, and `world_map` areas.
 - **`data/quests.txt` + `game/quests.msg`** ✅ **done** — `QuestsTxt` vault reader + the `quests` tool:
   each quest's area (map.msg location name), tracking **gvar** (index + `GVAR_*` name + default via
   vault13.gam), display/completed thresholds, and quests.msg description. The progression spine.
@@ -882,9 +808,12 @@ then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority ord
   `wmFindCurSubTileFromPos`, so `world_map` now reports each area's `terrain` and a terrain-weighted
   `travelCost` between areas. **Follow-up (minor):** per-position *encounter* placement (the subtile
   encounter chances) is still unparsed — only the terrain field is kept.
-- **`game/worldmap.msg`** *(follow-up, small)* — localized area/terrain/encounter names to enrich
-  `world_map` / `world_encounters` (city.txt `area_name` and the encounter section names are the
-  internal labels).
+- **`game/worldmap.msg`** *(follow-up — narrowed)* — area/city labels turned out to live in **map.msg**
+  (`[1500 + areaIndex]`, now surfaced as `world_map`'s `displayName`) and terrain names are already
+  readable in worldmap.txt, so the only names genuinely in worldmap.msg are the random-encounter
+  **descriptions** (`worldmap.msg[3000 + 50*tableId + entryId]`, fallout2-ce worldmap.cc:3595) — and
+  those are runtime-index-tied to the encounter table/entry ordering, not a small add. Just that
+  encounter-description join remains.
 - **`data/endgame.txt`** ✅ **done** — `EndgameTxt` vault reader + the `endings` tool: each ending slide
   keyed by `gvar == value` (gvar resolved to its `GVAR_ENDGAME_MOVIE_*` name + a readable condition),
   the slide art, and the narrator/subtitle base name. Slides sharing a gvar at different values are a
@@ -974,7 +903,7 @@ The visual map picker shipped (`MapBrowserDialog`, File → Browse Maps…: thum
 
 > Status: investigation. Spatial scripts can be created (`SpatialScriptDialog` → F-key flow)
 > but are **invisible on the map** once placed — there's no marker, no radius overlay, and no
-> way to see, select, edit, or delete an existing one (see Known limitations #5). Goal: render
+> way to see, select, edit, or delete an existing one (see Known limitations #4). Goal: render
 > existing spatial scripts on the canvas so designers can see where their trigger zones are.
 
 ## What the data model gives us
@@ -1001,7 +930,7 @@ object list. Placement currently flows MapInfoPanel → `EditorWidget::addSpatia
   culled via the viewport like the other overlays.
 - **Interaction (stretch):** hit-test a marker to select → open `SpatialScriptDialog` to
   edit/delete; ties into the F-key click-to-place + new `EditorMode` already sketched in
-  Known limitations #5 (live hex marker + radius preview while placing).
+  Known limitations #4 (live hex marker + radius preview while placing).
 
 ## Rough effort
 S–M for read-only visualization (marker + radius overlay + visibility toggle), reusing the
@@ -1081,8 +1010,9 @@ the rest.
   into sheets. The core work is a preview clock that advances each animated object's frame
   index over time (honouring the FRM `fps` / `framesPerDirection`, looping idle anims), plus
   per-object animation state and only animating culled/on-screen objects for perf at map scale.
-  **Depends on** fixing the per-frame offset handling (known limitation #10) or animations will
-  wobble. No new assets needed.
+  The per-frame FRM offset handling this needs is already correct (the PRO-dialog animation preview
+  was fixed to anchor frames by their `shiftX/shiftY`), so idle playback won't wobble. No new assets
+  needed.
 - **Lighting / darkness — Medium.** Render honouring `header.darkness` and per-object light
   (`light_radius` / `light_intensity`, already in the model) — an additive light pass / ambient
   tint in `RenderingEngine`. The data already exists; it's a rendering feature.
@@ -1599,46 +1529,3 @@ Effort: S ≈ days, M ≈ 1–2 weeks, L ≈ 3–4 weeks for one developer. The 
 - **`blob8` authoring burden** (47 entries). Support both `edges4` and `blob8`; ship `edges4` examples first.
 - **Trust beyond hand-installed plugins.** v1 deliberately ships only the install-time prompt; SHA pinning, re-prompt-on-widening, quarantine, the version triple, `.gplug`, and ed25519 signing are deferred until ABI 1 is frozen and a distribution channel exists. Gate third-party *distribution* until then.
 
----
-
-# Exit-grid rendering vs the engine — DONE (engine-faithful, two real rows)
-
-**DONE — implemented.** Diagonal exit grids now place TWO rows of REAL, selectable objects, each bar
-drawn once centered on its hex like the engine (`Object::applyExitGridOutwardOffset` + the display
-doubling removed; a second row added in `ExitGridPlacementManager::classifySegment` via
-`secondRowNeighbor`/`secondRowHex`, `kSecondRowSteps = 2` so the bars tile into a clean ~2× band).
-Visible bar == selectable object, and the cardinal "hexes outside the texture" is fixed too. The notes
-below record the engine truth and the before→after rationale for reference.
-
-**Both rows are real exit grids → a 2-deep trigger zone (by design).** The inner/second row is
-functionally inert in normal play (walking off-map the player exits at the first row it reaches and never
-steps onto the second), but it IS a real exit in the saved data. A "non-exiting decorative exit-grid bar"
-is **impossible**: the engine fires the map transition on any object whose PID is in the exit-grid range
-(`0x05000010–17`) **unconditionally**, ignoring `exit_map`/flags (`fallout2-ce/object.cc:1425`); no
-`exit_map` value means "no transition" (`0`/`-1`/`-2` are world/town map; the inactive-grid FID swap is
-cosmetic, keyed on FID not PID). So two real selectable rows necessarily means two exits in data — chosen
-(author's call) over a display-only second texture, which would keep one exit line but make the second
-bar un-selectable.
-
-**Engine truth** (verified against shipped maps `ncr1`, `redmtun`, `redwan1`, `artemple` via the new
-`map render --exit-dots` overlay, and against `fallout2-ce/src/object.cc` ~4942): every exit grid is ONE
-bar per object, drawn once, **centered on its hex** — `left = hexScreenX - frameWidth/2`, `bottom =
-hexScreenY`; all eight exit-grid FRMs (`exitgrd1-8` / `ext2grd1-8`) have frame offsets `(0,0)`; there is
-no exit-grid special case in the renderer. The trigger hex == the object's hex == the bar's bottom-center.
-A real exit edge is a SINGLE line of objects (cardinal = straight, diagonal = a one-hex staircase) — never
-a doubled / 2-wide band. It only *looks* wide because the bars (96×24 … 127×48) overlap across the ~16×12
-hex step.
-
-**Editor divergence** (the cause of the known quirks): `Object::applyExitGridOutwardOffset` slides the
-bar off its hex (cardinals onto the bar's inner bbox edge), and `RenderingEngine::renderDiagonalExitGridBars`
-/ `drawDoubledDiagonalBar*` draws diagonal bars TWICE as a doubled display band. Consequences: object
-selection misses the visible bar and instead selects the on-hex object (which renders no bar of its own);
-the trigger hex falls outside the texture; the live preview doesn't match the placement; diagonal pairs
-misalign.
-
-**Fix when prioritized**: delete `renderDiagonalExitGridBars` / `drawDoubledDiagonalBar*` (+ the
-`isDiagonalExitGridObject` skip in `renderObjects`) and `Object::applyExitGridOutwardOffset`; let exit
-grids draw once through the standard object path — the base `setHexPosition` already reproduces the engine
-anchor (centered horizontally, bottom edge at the hex). Then visible bar == real object == selectable. If
-a wider authoring visual is still wanted, do it as a translucent overlay tied to the object's actual hex —
-never an offset or a second copy of the texture, which re-breaks selection.

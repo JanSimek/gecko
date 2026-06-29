@@ -19,6 +19,7 @@
 #include "scripting/ScriptApiReference.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
+#include "resource/MapNameResolver.h"
 #include "util/ProHelper.h"
 
 #include <nlohmann/json.hpp>
@@ -26,6 +27,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <filesystem>
 #include <format>
 #include <functional>
 #include <optional>
@@ -127,8 +129,10 @@ namespace {
 
     // --- tools -------------------------------------------------------------------
     json toolListMaps(resource::GameResources& resources) {
-        std::vector<std::string> paths;
+        json maps = json::array();
         try {
+            const resource::MapNameResolver names(resources); // maps.txt + map.msg, for friendly names
+            std::vector<std::string> paths;
             for (const auto& path : resources.files().list("*")) {
                 std::string ext = path.extension().string();
                 std::ranges::transform(ext, ext.begin(),
@@ -138,10 +142,17 @@ namespace {
                 }
             }
             std::ranges::sort(paths);
+            for (const auto& path : paths) {
+                const int index = names.indexOf(std::filesystem::path(path).filename().string());
+                const std::string display = index >= 0 ? names.displayName(index, 0) : std::string{};
+                maps.push_back({ { "file", path },
+                    { "displayName", display.empty() ? json(nullptr) : json(display) } });
+            }
         } catch (const std::exception&) {
             // no data mounted -> an empty list is a valid answer (mirrors api:listMaps())
+            maps = json::array();
         }
-        return toolText(json(paths).dump()); // json(vector<string>) -> a JSON array, "[]" when empty
+        return toolText(maps.dump()); // a JSON array of { file, displayName }, "[]" when empty
     }
 
     // Optional "maps" string array -> the maps list (empty = every map). Shared by analyze, palette
@@ -470,7 +481,9 @@ namespace {
     // builder is over-long and so a future pass can tag this group readOnlyHint=true en masse.
     void addReadOnlyTools(std::vector<ToolSpec>& t) {
         t.push_back({ "list_maps",
-            "List every .map file in the mounted Fallout 2 data.",
+            "List every .map file in the mounted Fallout 2 data, each as { file, displayName } where "
+            "'displayName' is the friendly map.msg name (elevation 0; null when the map isn't in "
+            "maps.txt or map.msg isn't mounted).",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json&) { return toolListMaps(r); } });
         t.push_back({ "analyze",
@@ -558,7 +571,9 @@ namespace {
         t.push_back({ "world_map",
             "The WORLDMAP layer from city.txt — the inter-city travel layer that map_graph does not "
             "cover. 'start': where a new game begins ({map, displayName, area} = artemple.map / Arroyo). "
-            "'areas': every location (city/town/encounter site) with its 'name', 'worldPos' {x,y} on the "
+            "'areas': every location (city/town/encounter site) with its 'name' (city.txt's internal "
+            "area_name), 'displayName' (the on-screen city label from map.msg[1500+index], null if "
+            "unnamed), 'worldPos' {x,y} on the "
             "world map, 'size', 'knownAtStart', 'terrain' (from worldmap.txt's tile grid, null if absent), "
             "and 'maps' (the maps it contains — each {map (the lookup_name), on, mapFile}). 'mapFile' is "
             "the .map filename, the JOIN KEY to map_graph: world_map.areas[].maps[].mapFile == "
