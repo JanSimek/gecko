@@ -48,6 +48,20 @@ std::string MapNameResolver::displayName(int mapIndex, int elevation) const {
     return {};
 }
 
+std::string MapNameResolver::areaName(int areaIndex) const {
+    if (areaIndex < 0) {
+        return {};
+    }
+    try {
+        if (Msg* msg = _resources.repository().load<Msg>("text/english/game/map.msg"); msg != nullptr) {
+            return msg->message(1500 + areaIndex).text;
+        }
+    } catch (const std::exception& e) {
+        spdlog::debug("MapNameResolver: map.msg unavailable: {}", e.what());
+    }
+    return {};
+}
+
 int MapNameResolver::indexOf(const std::string& mapFileName) const {
     const auto info = _doc.findByName(mapFileName); // findByName lowercases + normalizes internally
     return info.has_value() ? info->index : -1;

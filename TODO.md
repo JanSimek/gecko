@@ -50,11 +50,6 @@ Detailed progress dialog with task descriptions and completion estimates for lon
       path's map-copy + ddraw.ini step. (Detection of a Steam-*installed* copy as a regular
       executable install is still supported.)
 
-### Map info panel
-
-- [ ] All fields should be editable and saved when the map is saved (exported)
-- [ ] After the Qt migration, map script, map global variables and map scripts are not displayed in the panel
-
 ### Panels
 - [ ] panels should be displayed above the SFML widget, so that when a panel is closed it doesn't cause redrawing of the SFML widget
 

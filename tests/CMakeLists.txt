@@ -12,6 +12,7 @@ add_executable(general_tests
     general/test_msg_roundtrip.cpp
     general/test_writable_data_root.cpp
     general/test_map_name_editor.cpp
+    general/test_map_name_resolver.cpp
     general/test_city_txt.cpp
     general/test_worldmap_txt.cpp
     general/test_quests_txt.cpp
