@@ -2,6 +2,8 @@
 
 #include "ProTabWidget.h"
 
+#include "format/ai/AiPacket.h"
+
 class QTabWidget;
 class QPushButton;
 
@@ -25,7 +27,13 @@ private:
     void setupDefenceTab(QTabWidget* parentTabs);
     void setupGeneralTab(QTabWidget* parentTabs);
     void updateHeadFidLabel();
+    // Resolve the AI Packet spin box value to its ai.txt name and show it beside the number.
+    void updateAiPacketNameLabel();
     uint32_t currentCritterFlags() const;
+
+    // data/ai.txt packet -> name table, loaded once so the AI Packet field reads as a name
+    // (engine-fidelity: the spin box still stores the raw packet number). Empty if unmounted.
+    AiTxt _aiTxt;
 
     static constexpr Frm::FRM_TYPE HeadFrmObjectType = Frm::FRM_TYPE::CRITTER;
 
@@ -39,6 +47,7 @@ private:
     int32_t _headFid;
 
     QSpinBox* _aiPacketEdit;
+    QLabel* _aiPacketNameLabel;
     QSpinBox* _teamNumberEdit;
     QCheckBox* _barterCheck;
     QCheckBox* _noStealCheck;
