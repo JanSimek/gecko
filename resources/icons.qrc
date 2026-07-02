@@ -5,6 +5,7 @@
         <file alias="actions/new.svg">icons/tabler/actions/file-plus.svg</file>
         <file alias="actions/open.svg">icons/tabler/actions/folder-open.svg</file>
         <file alias="actions/save.svg">icons/tabler/actions/device-floppy.svg</file>
+        <file alias="actions/close.svg">icons/tabler/actions/x.svg</file>
         <file alias="actions/rotate.svg">icons/tabler/actions/rotate-clockwise.svg</file>
         <file alias="actions/select.svg">icons/tabler/actions/pointer.svg</file>
         <file alias="actions/paint.svg">icons/tabler/actions/brush.svg</file>

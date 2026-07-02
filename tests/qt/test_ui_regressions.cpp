@@ -790,6 +790,30 @@ TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][main
     REQUIRE_FALSE(selectionAction->isChecked());
 }
 
+// File > Close Map returns to the welcome screen. It must exist with the standard Close shortcut,
+// and triggering it with nothing open must be a safe no-op (no editor spawned, no crash) — the
+// handler guards on hasActiveMap() before touching the teardown path.
+TEST_CASE("File menu offers Close Map, and closing with no map open is a safe no-op", "[qt][mainwindow]") {
+    removeTestSettings();
+
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
+    window.show();
+    QTest::qWait(100);
+
+    QAction* closeMap = findAction(window, "Close Map");
+    REQUIRE(closeMap != nullptr);
+    CHECK(closeMap->shortcut() == QKeySequence(QKeySequence::Close));
+
+    // No map loaded -> the welcome screen is showing and there is no editor widget.
+    REQUIRE(window.findChildren<geck::EditorWidget*>().isEmpty());
+
+    closeMap->trigger();
+    QApplication::processEvents();
+
+    CHECK(window.findChildren<geck::EditorWidget*>().isEmpty());
+}
+
 TEST_CASE("DataPathsWidget shows highest priority on top and preserves stored order", "[qt][datapaths]") {
     auto settings = std::make_shared<geck::Settings>();
     geck::DataPathsWidget widget(settings);

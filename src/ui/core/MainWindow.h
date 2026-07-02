@@ -86,6 +86,7 @@ signals:
     void openMapRequested();
     void saveMapRequested();
     void saveMapAsRequested();
+    void closeMapRequested();
     void selectAllRequested();
     void deselectAllRequested();
     void showObjectsToggled(bool enabled);
