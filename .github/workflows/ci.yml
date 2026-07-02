@@ -25,7 +25,10 @@ concurrency:
 
 env:
   CMAKE_VERSION: 3.31.4
-  QT_VERSION: 6.8.3
+  # Qt 6.8.3's macOS link interface still references the AGL framework, which the
+  # macOS 15+ SDK on macos-latest removed ("ld: framework 'AGL' not found" when linking
+  # the Qt-based gecko/qt_tests targets). 6.9.x dropped that dependency.
+  QT_VERSION: 6.9.3
 
 jobs:
   include-hygiene:
@@ -170,20 +173,12 @@ jobs:
       with:
         key: ${{ runner.os }}-${{ matrix.build_type }}
 
-    - name: Record macOS major version for cache keys
-      # macos-latest tracks the newest image; when GitHub bumps the major version the
-      # SDK can drop frameworks (AGL was removed in the macOS 15 SDK), so an SFML install
-      # cache baked against the old SDK links against a now-missing framework
-      # ("ld: framework 'AGL' not found"). Keying the SFML cache on the major version
-      # rebuilds SFML fresh against the current SDK whenever the image changes.
-      run: echo "MACOS_MAJOR=$(sw_vers -productVersion | cut -d '.' -f 1)" >> "$GITHUB_ENV"
-
     - name: Cache SFML
       id: cache-sfml
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/sfml-install
-        key: ${{ runner.os }}-${{ env.MACOS_MAJOR }}-sfml-3.0.1
+        key: ${{ runner.os }}-sfml-3.0.1
 
     - name: Build and install SFML 3
       if: steps.cache-sfml.outputs.cache-hit != 'true'
