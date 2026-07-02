@@ -227,7 +227,6 @@ protected:
     resource::GameResources& _resources;
 
     // Common constants
-    static constexpr int LAYOUT_SPACING = 10;
     static constexpr int FORM_SPACING = 6;
 };
 

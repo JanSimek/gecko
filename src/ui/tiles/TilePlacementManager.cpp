@@ -1,6 +1,5 @@
 #include "TilePlacementManager.h"
 #include "editor/TileChange.h"
-#include "viewport/ViewportController.h"
 #include "format/map/Map.h"
 #include "format/map/Tile.h"
 #include "selection/SelectionManager.h"
@@ -22,23 +21,22 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
         return;
     }
 
-    sf::Vector2f adjustedWorldPos = worldPos;
-    if (isRoof) {
-        adjustedWorldPos.y += ROOF_OFFSET; // Roof tiles are visually offset upward
-    }
-
-    int hexIndex = _context.getViewportController()->worldPosToHexIndex(adjustedWorldPos);
-    if (hexIndex < 0) {
+    // Resolve the click to a tile with the SAME nearest-tile-centre projection the hover/
+    // selection path uses (EditorWidget::getTileAtPosition -> screenToTileIndex), so the tile
+    // that gets painted is exactly the tile under the cursor. The old path snapped to the
+    // nearest hex and halved, which picks an adjacent tile away from tile centres — the painted
+    // tile then disagreed with the highlighted one. screenToTileIndex applies the roof offset
+    // internally, so no manual ROOF_OFFSET adjustment is needed here.
+    const auto resolvedTile = screenToTileIndex(worldPos.x, worldPos.y, isRoof);
+    if (!resolvedTile) {
         spdlog::debug("TilePlacementManager::placeTileAtPosition: No valid position found");
         return;
     }
+    int tileIndex_pos = *resolvedTile;
 
-    int tileIndex_pos = hexIndexToTileIndex(hexIndex);
-
-    if (tileIndex_pos >= TILES_PER_ELEVATION) {
-        spdlog::debug("TilePlacementManager::placeTileAtPosition: Tile index {} out of bounds", tileIndex_pos);
-        return;
-    }
+    // updateTileSprite works in hex space; recover the tile's canonical top-left hex.
+    // tileIndexToHexIndex -> tileIndexForPosition is a lossless round-trip back to tileIndex_pos.
+    int hexIndex = tileIndexToHexIndex(tileIndex_pos);
 
     auto& elevationTiles = _context.ensureElevationTiles(_context.getCurrentElevation());
 
