@@ -25,7 +25,10 @@ concurrency:
 
 env:
   CMAKE_VERSION: 3.31.4
-  QT_VERSION: 6.8.3
+  # Qt 6.8.3's macOS link interface still references the AGL framework, which the
+  # macOS 15+ SDK on macos-latest removed ("ld: framework 'AGL' not found" when linking
+  # the Qt-based gecko/qt_tests targets). 6.9.x dropped that dependency.
+  QT_VERSION: 6.9.3
 
 jobs:
   include-hygiene:

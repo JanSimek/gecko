@@ -2,8 +2,28 @@
 
 ## Architecture
 
-The 13-work-package roadmap (`ARCHITECTURE_REVIEW.md`) is complete; no architectural backlog
-remains. `src/util/` keeps only genuinely cross-cutting helpers — single-layer utilities now
+The 13-work-package architecture roadmap is delivered.
+
+**Evaluated and intentionally NOT pursued (churn > value):**
+- **PRO/MAP serialization visitor.** SKIP. The clean visitor pattern used for the fixed
+  common/header/trailer blocks does not carry to the type-specific tails (mixed field widths, a
+  `uint8_t soundId`, optional-on-read/unconditional-on-write fields a symmetric visitor cannot
+  express, plus union/subtype dispatch). It would add machinery over the highest-blast-radius code
+  without removing the drift risk; the read->write->read round-trip test net already provides
+  the safety.
+- **`ProFieldFactory` extraction / spacing-token consolidation / `BasePanel` re-parent.** SKIP.
+  Only ~15 LOC is genuinely shared (from a single non-inheriting widget) and it carries a materialId
+  index-vs-value fidelity trap; the spacing sources hold *different* values (not dupes), so
+  consolidation would pixel-shift layouts; `BasePanel` is a grid-browser base that would force stub
+  overrides on the form-inspector panels.
+
+**Deferred (real but modest, do opportunistically):**
+- **PanelVisibilityController.** Extracting the panel-visibility snapshot/restore/persist state
+  machine (~130 LOC + 3 members) would trim `MainWindow`, but it stays `QDockWidget`/`QAction`-bound
+  with no pure testable core and bidirectional wiring back into `MainWindow`. Fold it into the next
+  change that touches dock/panel behavior rather than doing it as standalone churn.
+
+`src/util/` keeps only genuinely cross-cutting helpers — single-layer utilities now
 live with their library (`src/resource/`, `src/ui/`).
 
 > **Intentional non-goal (MAP save):** we deliberately do not recompute / auto-prune the
@@ -14,10 +34,7 @@ live with their library (`src/resource/`, `src/ui/`).
 
 ## Known limitations & follow-ups
 
-1. **Undo coverage.** Instance edits (flags, light, critter, destination, locked/jammed),
-   **inventory** add/remove/quantity, **clear/copy elevation**, and **script attach/detach +
-   spatial-script creation** are now all undoable through `ObjectCommandController`, covered by
-   `UndoStack` + `cloneDeep` unit tests. *Remaining:* the pre-existing elevation add/remove
+1. **Undo coverage.** *Remaining:* the pre-existing elevation add/remove
    (`MapInfoPanel` checkboxes) is still a direct mutation; a cascading script-delete when an
    object is deleted; and the command-controller actions themselves aren't integration-tested
    (they need GameResources/Qt — a `qt_tests` follow-up).
@@ -66,14 +83,6 @@ live with their library (`src/resource/`, `src/ui/`).
     current last-folder fallback and hint the user to pick one. DAT archives can't be marked (read-only).
 
 ### Generation-side exit placement — current state & smarter follow-up
-
-**Now:** the generation API exposes `api:placeExitGrid(hex, …)` (one marker) and
-`api:placeExitGridRect(centerHex, screenHalfWidth, screenHalfHeight, …)`, which walks a
-**screen-space rectangle** border (the engine iso projection, so the hex run staircases) and
-places the matching directional edge art on each of the four sides — reproducing the framed
-rectangle shipped maps like **bhrnddst.map** use (`ExitGrid::RECT_*` in `Constants.h`). Every
-marker shares one destination. `random_camp.luau` uses it to frame the playable area with a
-worldmap exit. This is a fixed, centred rectangle — placement is **geometric, not terrain-aware**.
 
 **Smarter placement (follow-up).** Exits should sit where the map actually *leads out*, not on a
 blind rectangle:
@@ -164,12 +173,7 @@ Adopt **C as the core**, structured so **B** falls out for free and **A** remain
 
 # Scripting & Automation Layer (Patterns / Prefabs + Procedural Generation)
 
-> Status: **Tier-1 prefabs and the Tier-2 scripting core both shipped.** Tier-1
-> (`src/pattern/`: format + JSON serializer, hex cube geometry, `PatternStamper`/`PatternBuilder`,
-> undo-batching, pattern browser). Tier-2: the Luau runtime + sandbox + Script Console, the
-> `MapScriptApi` façade, the headless `gecko-cli map analyze`/`map generate` commands, and a
-> Qt-free `gecko_editing` library so the GUI, the CLI and a future MCP server drive the same
-> editing code. See **§10 (what shipped)** and **§11 (improvement backlog)** for the current
+> Status: See **§11 (improvement backlog)** for the current
 > state and the remaining procedural-generation work (the generators themselves are still basic).
 >
 > **Caveat for the design below:** orientation is a **variant set** (pre-authored
@@ -408,10 +412,6 @@ the user to press Ctrl-Z thousands of times. Therefore:
 
 ## 8. Suggested sequencing
 
-1. ✅ **Host API skeleton** (`MapScriptApi`) over `ObjectCommandController`, one undo step via
-   `ScopedUndoBatch`. Done; unit-tested headless.
-2. ✅ **Tier 2 Luau** (not sol2 — see §2 decision): FetchContent Luau + LuaBridge3, sandboxed
-   state, the same host API bound, a Script Console, and a headless `gecko-cli`. Done.
 3. ➡️ **Curated generators + the MCP as the intelligence layer** — §11. Blind statistical
    generation was tried and abandoned (it scatters structural objects). Curated palettes + clumped
    `noise2d` placement and the unified error model are in; the open items are the **seamless
@@ -424,107 +424,6 @@ the user to press Ctrl-Z thousands of times. Therefore:
 - Collision policy on stamp (overwrite vs skip vs error when target hexes are occupied).
 - Scripts in patterns (object scripts via `programIndex`; spatial scripts) — deferred; see
   the script-model notes (programIndex is portable, SID/OID re-allocated at stamp).
-
-## 10. What shipped (Tier-2 scripting + headless generation)
-
-The scripting core and a first procedural generator are in. Concretely:
-
-- **Luau runtime + sandbox** behind `GECK_ENABLE_SCRIPTING` (OFF by default, ON in every CI
-  job). `print()` is captured for the console. (`src/scripting/LuaScriptRuntime`.)
-- **`MapScriptApi`** — the Lua-free host façade, always compiled. Current surface:
-  `isValidHex`, `hexNeighbors`, `getFloor`/`getRoof`, **`tileId(name)`** (FRM name →
-  `tiles.lst` index), `paintFloor`/`paintRoof`, `placeObject(proPid, frmPid, hex, dir)`,
-  **`placeProto(proPid, hex, dir)`** (resolves the art FID from the proto header),
-  **`noise2d(x, y)`** (coherent value noise for non-uniform placement) and **`protoName(pid)`**
-  (engine display name). The whole run is one undo entry via `ScopedUndoBatch`.
-  - **Unified error model:** genuine failures (no data, unreadable/typo'd map path, unloadable
-    proto) **raise** — surfaced as the run's error, `pcall`-able by a script — rather than returning
-    a silently-empty result. "Not applicable" stays a value (`placeProto` → `false`, `tileId` →
-    `-1` for an unknown name, `listMaps` → `{}`).
-- **Script Console** dock (`View → Script Console`), wired to the current map/elevation.
-- **`gecko-cli`** (Qt-free): `map analyze` (per-map + aggregate ground-tile and object usage,
-  with raw engine PIDs and proto names from the `.msg` files; `--json` for a machine-readable
-  report carrying a `flat` structural-vs-decoration flag per object) and `map generate --script
-  <file> --out <map> [--arg key=value …]` (runs a Luau script against an empty map and writes
-  a `.map`; `--arg`s are exposed to the script as the global `args` table).
-- **`gecko-mcp`** (Qt-free, `GECK_BUILD_MCP`, default on): a Model Context Protocol server over
-  stdio (newline-delimited JSON-RPC 2.0) that reuses the `gecko-cli` logic, so an AI agent can drive
-  the inspect→curate→generate loop conversationally. Tools: `list_maps`, `analyze` (the `--json`
-  report), `proto_info` (PID → type/name/`flat`), `generate`, and `render_map`. The dispatch
-  (`McpServer`) is pure and unit-tested without any transport. This is §11's "MCP as the intelligence
-  layer" landing.
-- **Headless map render** (`gecko-cli map render`, MCP `render_map`). `MapRenderer` (Qt-free, in
-  `gecko_editing`) draws a map through the *same* `RenderingEngine` the editor uses — into an
-  off-screen `sf::RenderTexture`, framed to the content bounds — and saves a PNG, so an agent can
-  *see* a generated biome, not just read its stats. `RenderingEngine`/`HexRenderer` moved out of
-  `gecko_app` into `gecko_editing` for this (they were always Qt-free). Needs an off-screen GL
-  context at runtime; reports an error instead of crashing when none is available.
-  - **Objects style** (`--objects` / `objects:true`) mutes the floor to grey so the category-coloured
-    object markers pop — for verifying scatter/clumping without the schematic's per-id floor rainbow.
-  - **Schematic style** (`--schematic` / `schematic:true`) flat-colours each floor tile by its id
-    and marks objects by category, returning a colour legend (id/type → colour → count). This
-    *grounds* the analyze JSON to the image — the colours are the ids, colour regions are tiles,
-    and borders between colours are the `adjacency` transitions — so a multimodal agent can match
-    what it sees to the data instead of guessing which pixels are which tile.
-- **Tile-adjacency analysis.** `analyze --json` now carries `adjacency` per map and aggregated: the
-  floor-tile *borders* (which tile sits next to which different tile, and how often). Since the
-  Fallout engine has no autotiling — mappers place edge tiles by hand — this is the empirical data
-  an agent curates a transition set from before generating **seamless** terrain (the §11 P2 item).
-- **Palette tool** (`analyze --palette` / MCP `palette`) + `number` in `analyze`. `palette` returns just
-  the weighted generation input — `{ floor:[{id,name,weight}], scenery:[{pid,number,name,weight}] }`
-  aggregated across the given maps — so an agent gets the exact script input in one small call instead
-  of `jq`-ing the ~500 KB `analyze` report. `analyze` objects also now carry `number` (the PID's low 24
-  bits, what `api:proto` wants — one less than the `00000NNN.pro` filename), fixing an off-by-one trap
-  when generating scripts mechanically. (From an agent's MCP-usage retrospective.)
-- **Scripting-API reference** (MCP `script_api`). Returns the generation-script `api:` surface as
-  Markdown — every function + signature, plus the two non-obvious behaviours (runs are auto-seeded and
-  auto-batched) and the error model — generated from an in-code table (`scriptApiEntries`) so it can't
-  drift from a hand-written doc. A `[scripting]` test asserts every documented function is actually
-  bound. (Best practice: the scripting surface is reference *material*, so it's emitted from the
-  single source rather than maintained separately; the MCP *tool* surface is already self-documented
-  by `tools/list`.) Also an **objects** render style and the path-contract docs, from the same agent
-  retrospective.
-- **Object clustering** in `analyze --json`. Each map carries a `clusters[]` array: nearby objects
-  grouped by proximity (single-linkage, Chebyshev ≤ 3 hexes), each with a centroid `centerHex`, a
-  bounding box and member PIDs. So an agent reading desert5 sees the perimeter blockers as one
-  cluster to ignore and each tent as a `Wall`+furniture cluster to grab — it picks a tent's
-  `centerHex` + a radius (from the bbox) and feeds them to `extract_pattern`.
-- **Pattern-stamp extraction** (`gecko-cli`/MCP `extract_pattern`). Capture a structure from a real
-  map into the editor's prefab/stamp JSON: locate it by its proto PIDs (option A — the agent reads
-  them from `analyze`), grow their bounding box by a `radius` so immediate props come along, and
-  capture the objects (and, with `includeFloor`, the floor/roof) verbatim. The Qt-free pattern core
-  (`Pattern`, `PatternBuilder`, `PatternStamper`) moved into `gecko_editing`; the headless JSON
-  writer (`cli::serializePattern`) matches the editor's Qt `PatternSerializer` exactly — proven by a
-  round-trip test — so extracted stamps load in the editor's pattern library and feed `generate`.
-  This is how an agent builds a library of tents/buildings from the reference maps.
-- **Stamp placement in generation** (`api:placeStamp(name, anchorHex, variant)`). `generate` takes
-  `--stamp name=file.json` (MCP: a `stamps` map), loads each via a Qt-free `cli::loadPattern`
-  (nlohmann, round-trip with the writer) and registers it on the `MapScriptApi`; the script places it
-  through the now-shared `PatternStamper`. Verified end to end: a tent extracted from desert5 placed
-  into a fresh map renders as the intact tent. So the desert-map loop is closed — an agent can
-  `analyze` → cluster → `extract_pattern` the tents and `generate` a new desert map that places them.
-- **Reference-map analysis tools.** `MapScriptApi` exposes `mapScenery(mapPath)` (the unique
-  scenery PIDs a reference map uses — blockers filtered out via `OBJECT_FLAT`),
-  `mapSceneryHistogram(mapPath)` (`{pid → count}`), `mapFloorTiles(mapPath)` (floor-tile ids,
-  most-used first) and `listMaps()` (every map in the data), all keyed by **PID** (the unique proto
-  id). These were the basis of the abandoned blind generator; they live on as *analysis* tools an
-  MCP agent reads to understand a reference before curating — see §11.
-- **`gecko_editing`** — a Qt-free library (command controller, sprite/object builders, the
-  script API and the Luau runtime) on top of `gecko_core`, linked by both `gecko_app` and
-  `gecko-cli`, so the editor and headless tools share one editing implementation.
-- **Headless object placement.** `ObjectCommandController::registerObjectData` + the
-  `MapScriptApi(..., buildSprites=false)` mode record a `MapObject` as map data without
-  building a sprite — so the CLI generates **terrain *and* scenery** with no GL context. The
-  GUI keeps building sprites (default `buildSprites=true`).
-- **Worked example:** `scripts/editor/terrain.luau` — a **curated** desert generator: a hand-picked
-  vegetation palette over wasteland sand, scattered in natural clumps via the `noise2d` density
-  field. `scripts/README.md` documents the `api` surface and error model; `scripts/` ships under
-  `resources/scripts` (CMake copies it recursively on build + install).
-
-The remaining weakness is the **floor**: it's still a single uniform tile (seamless multi-tile
-terrain — `autotile_floor` — is the headline open item, **§11 P2 §4**). The scatter is now curated
-and clumped, not uniform-random. Blind statistical generation was tried and abandoned (it scatters
-structural objects); the path forward is curated palettes + an MCP agent's judgment — see §11.
 
 ## 11. Improvement backlog (procedural generation & scripting)
 
@@ -558,20 +457,6 @@ The direction instead:
    plus analyze/inspect (`mapSceneryHistogram`, `protoName`, …) so the agent *understands* a
    reference before curating.
 
-**Shipped.**
-- Curated, **clumped** generator (`scripts/editor/terrain.luau`): hand-picked desert palette over
-  sand, scattered via a `noise2d` density field (natural patches/clearings, not an even sprinkle).
-- **`api:noise2d(x, y)`** — coherent value noise in `[0,1]`, the non-uniform-placement primitive
-  (**P2 §6** below); reusable by the MCP.
-- **`api:protoName(pid)`** — engine display name, so a caller (or the agent) can tell a decoration
-  from a structural feature.
-- **`api:mapScenery` / `mapSceneryHistogram` / `mapFloorTiles`** are kept as *analysis* tools (read
-  to understand a reference), not as a blind generator.
-- **Unified error model:** genuine failures (no data, unreadable/typo'd map path, unloadable proto)
-  **raise** — surfaced as a Lua error the runtime reports, `pcall`-able by a script — instead of a
-  silently-empty result. "Not applicable" stays a value (`placeProto` → `false`, `tileId` → `-1` for
-  an unknown name, `listMaps` → `{}`).
-
 **Still open.**
 - **Seamless multi-tile floor** — the headline visual gap. A C++ terrain synthesiser
   (image-quilting / patch-sampling from a reference grid first, WFC with learned adjacency later)
@@ -582,15 +467,7 @@ The direction instead:
 - Placement polish for the curated scripts/tools: footprint-aware, iso-diamond-masked placement;
   recurring multi-object clusters extracted as **prefabs** (place a rock formation as one unit).
 
-### P1 — Ergonomics: make scripts human-writable — ✅ done
-
-1. ✅ **Palette by PID from a reference map** (not by name). The first attempt resolved a readable
-   proto name → PIDs (`findProtos`), but display names are **not unique** (a `.msg` has several
-   "Scrub" entries) and match game-wide, so the palette was ambiguous and uncurated. Replaced with
-   **`api:mapScenery(mapPath)`** — the exact, unique scenery PIDs a real map is built from (a PID is
-   the engine's unique id; names are not). Flat marker scenery (`OBJECT_FLAT`, e.g. `block.frm`) is
-   excluded so a generator never scatters an invisible blocker. Companion: `mapFloorTiles`,
-   `listMaps`.
+### P1 — Ergonomics: make scripts human-writable
 
 2. **Human coordinates.** *(still open.)* Addressing by linear index (`hex = row*200 + col`, tiles `row*100 + col`)
    is unintuitive, and the two grids differ (200×200 hexes vs 100×100 tiles). Add `(col, row)`
@@ -619,8 +496,6 @@ The direction instead:
    (vault doors, cars), because choosing *what* is scatter-able is semantic, not statistical. The
    reliable path is **curated palettes** + an MCP agent's judgment; the histogram lives on as an
    *analysis* tool, not the generator.
-6. ✅ **Noise-based distribution.** `api:noise2d(x, y)` (coherent value noise in `[0,1]`) is in;
-   `scripts/editor/terrain.luau` uses it as a density field for natural clumping.
 7. **Enclosures / autowalling + roofs.** A helper that rings a region with correctly-oriented
    wall protos (the analyze output is full of left/right/corner `Wall` variants) unlocks the cave
    and town biomes; generate a **roof** layer for enclosed areas (`paintRoof` already exists).
@@ -657,17 +532,7 @@ The direction instead:
 
 # Map semantics & intelligence (analysis MCP roadmap)
 
-> Status: **Phases 1–2 done + the `describe_map` orchestrator (capability 1) shipped.** Phase 1:
-> ai.txt reader; `analyze` reports per-map `critters` (team + ai.txt-resolved AI), a `header` digest
-> (player spawn / enabled elevations / darkness / map script / named map variables) and an `exits`
-> connectivity graph. Phase 2: `describe_script` (.ssl source + dialog) and `reachability`.
-> `describe_map` now composes analyze + reachability into one cross-referenced digest (capability 1
-> below). Remaining: the Phase-3 semantic render overlay (capability 5). Today the MCP *perceives
-> geometry* — tiles, objects,
-> clusters, palette, render, extract/generate. It cannot read the map's **semantic** layer: AI
-> packet is a raw number (no `ai.txt` reader), scripts are referenced by `scripts.lst` index/name
-> only (no `.ssl`/`.int` reading), `analyze` treats critters as generic objects, and there is no
-> reachability/connectivity. The goal is to let an agent reason about a map's **purpose**, its
+> Status: Remaining: the Phase-3 semantic render overlay (capability 5). The goal is to let an agent reason about a map's **purpose**, its
 > **critters' AI**, and its **scripts**.
 
 **Guiding principle.** Don't hardcode classification heuristics ("N critters ⇒ a fight"). Surface
@@ -680,15 +545,6 @@ from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
 
 **Capabilities (each notes the reader it needs):**
 
-1. **`describe_map` — purpose synthesis (orchestrator). ✅ Done.** One structured digest per map:
-   the `analyze` per-map report (header — enabled elevations / darkness / player start / map script /
-   map vars; floor/biome; object `clusters` = structures; `critters` roster with ai.txt-resolved AI
-   and each one's attached `{programIndex, name}`; `exits` graph) **plus** a `reachability` field
-   (per-elevation walkable/reachable hexes + entry-orphaned objects). Composes `analyzeMaps` +
-   `analyzeReachability` (`cli::describeMap`, MCP `describe_map`, CLI `map describe-map`); returns the
-   engine's own evidence with join keys preserved (pid, script_id, ai_packet) — the model writes the
-   conclusion, no baked-in heuristics. Verified: artemple clean (0 orphans), vctydwtn surfaces the 9
-   orphaned servant/slave objects inline with the roster.
 2. **Critters + AI — `critters` tool + new `ai.txt` reader.** Per critter: name (`pro_critters.msg`),
    hex, **team (`group_id`)**, **AI packet resolved via `ai.txt`** (aggression, disposition,
    `run_away_mode`, `area_attack_mode`, `best_weapon`, `distance`, `secondary_freq`), equipped
@@ -711,19 +567,7 @@ from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
      case; with real `.ssl` we read the source directly. `int2ssl` decompilation stays out of scope.
    Plus a critter/object → `{programIndex, name}` bridge in `analyze`, so the agent reads the roster,
    spots a scripted NPC, and calls `describe_script` for the full who→does→says picture.
-4. **Reachability / connectivity — `reachability` (Phase 2, done).** Per-elevation walkable
-   flood-fill (reusing `object_query::blocksMovement` + the parity-correct `HexGeometry` neighbours)
-   seeded from the entry points (player start + exit grids). **Doors count as passable** (the player
-   opens them — `pro->objectSubtypeId() == SCENERY_TYPE::DOOR`), which is essential: otherwise every
-   room behind a closed door looks sealed. Reports `walkableHexes`/`reachableHexes` and
-   `orphanedObjects` — critters/items cut off from the entry-reachable area. Elevations with no entry
-   (reached via stairs/elevators) report `reachableHexes: null` + a note. Optimistic on doors, so it
-   under-reports rather than crying wolf. Verified: artemple/denbus1/newr1 clean (0 orphans),
-   vctydwtn flags a real isolated servant/slave cluster.
-5. **Semantic render overlay** (extends the schematic). **Object roles done:** a `Semantic` render
-   style (`render_map semantic:true` / CLI `--semantic`) greys the floor and colours object markers
-   by role — exit grids highlighted, critters by team (`group_id`), scripted objects (`map_scripts_pid`)
-   ringed — with a role-keyed legend that joins back to `describe_map`. **Still open:** *shading the
+5. **Semantic render overlay** (extends the schematic). **Still open:** *shading the
    unreachable regions* `reachability`/`describe_map` identify, which needs a per-hex reachable mask
    exposed from `MapReachability` and a hex→world tint in the renderer (the object-marker path here is
    sprite-bounds-based and doesn't map arbitrary hexes). **Phase 3.**
@@ -743,33 +587,15 @@ data in the **vault** library (a `format/…` object + a `reader/…`, like `Map
 never inline in the cli/MCP layer. The MCP composes the structured objects into JSON; it does no
 file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set this precedent.)
 
-6. **`engine_reference` — ground answers in the engine source.** A read-only MCP tool that searches
-   a mounted `fallout2-ce` checkout (grep + bounded file read) and returns `file:line` + snippets.
-   The map-script 1-based rule (`scriptIndex - 1`) and the `scrname.msg[programIndex + 101]` /
-   `map.msg[map*3 + elev + 200]` index formulas were all answered by *reading the engine*; this tool
-   lets a **shell-less** MCP agent do the same instead of guessing format details. Config: an
-   engine-source path (like `--data`); cap results (top-N matches, small snippets) so it can't flood
-   context. *Lower priority when the agent already has filesystem/grep tools — then just mounting the
-   source is enough; this earns its keep specifically for headless/sandboxed agents.*
-
-7. **Exit-grid connectivity graph — `map_graph`. ✅ Done.** Walks every map's exit grids into a
-   directed map→map graph (`{destMap, destMapName, destHex, destElevation}` + a per-edge hex count),
-   with stats flagging dead-ends and maps with no incoming edge. **Scope correction:** this is only
-   the exit-grid layer — how a *location's* maps link (intramap elevation changes + intermap edges
-   within a town) and where they hand off to the world map (`kind=worldmap`). It is **not** inter-city
-   travel; cities are crossed on the world map, so the graph is connected only within a location.
+6. **Exit-grid connectivity graph — `map_graph`.**
    Follow-up: cross with `reachability` to flag one-way edges.
 
-7b. **Worldmap layer — `world_map` (city.txt). ✅ Done.** The inter-city layer `map_graph` doesn't
-   cover: a vault `CityTxt` reader (`data/city.txt`) → areas (name, `world_pos`, size, known-at-start,
-   the maps each contains via its entrances) + the straight-line distance between every pair of areas.
-   This is the actual "map of the world + distances between places." Terrain types + encounter group
-   tables are now also covered (`worldmap.txt` → `world_encounters`). **Remaining:** the `worldmap.txt`
+6b. **Worldmap layer — `world_map` (city.txt).** **Remaining:** the `worldmap.txt`
    `[Tile NN]` sub-tile grid (per-position terrain → terrain-weighted travel cost, geographic
    encounter placement) and `worldmap.msg` encounter descriptions (area/city labels are map.msg, now
    surfaced as `world_map`'s `displayName`).
 
-8. **Corpus / world index — evidence, not a solver.** The evidence layer now largely exists: the
+7. **Corpus / world index — evidence, not a solver.** The evidence layer now largely exists: the
    `map_graph`↔`world_map` join (`area`/`mapFile`/`lookupName`), the `quests` tool (each quest's area +
    tracking gvar + thresholds + text) and the `gvars` dictionary (gvar index → `GVAR_*` name) — so an
    agent can already *reason* about progression ("which script sets the gvar that gates quest Y?": read
@@ -787,26 +613,7 @@ file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set th
 Surveyed from `fallout2-ce` (`configRead` / `messageListLoad`). Each becomes a vault reader + object,
 then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority order:
 
-- **`map.msg` display names** ✅ **done** — `MapNameResolver` owns both engine formulas: per-map names
-  `map.msg[mapIndex*3 + elevation + 200]` (`displayName`) and worldmap city labels
-  `map.msg[1500 + areaIndex]` (`areaName`). Surfaced as `displayName` in `analyze`/`describe_map` (each
-  map + every `destMap` exit), `map_graph` nodes, `list_maps` entries, and `world_map` areas.
-- **`data/quests.txt` + `game/quests.msg`** ✅ **done** — `QuestsTxt` vault reader + the `quests` tool:
-  each quest's area (map.msg location name), tracking **gvar** (index + `GVAR_*` name + default via
-  vault13.gam), display/completed thresholds, and quests.msg description. The progression spine.
-- **`data/vault13.gam` global variables** ✅ **done** — the `gvars` tool (gvar index → `GVAR_*` name +
-  default), reusing the `Gam` reader (fixed to read negative-default gvars, which were shifting
-  ordinals). The dictionary that makes quests and scripts legible.
-- **map_graph ↔ world_map join** ✅ **done** — `MapsTxt::findByLookupName` + `MapNameResolver`; world_map
-  entrances carry `mapFile` and map_graph nodes carry `area` + `lookupName`, so the world layer and the
-  exit-grid layer cross-reference in both directions.
-- **`data/city.txt`** ✅ **done** — `CityTxt` vault reader + the `world_map` tool (areas, world
-  positions, sizes, the maps each area contains, pairwise distances). The inter-city layer.
-- **`data/worldmap.txt`** ✅ **done** — `WorldmapTxt` vault reader + the `world_encounters` tool
-  (`[Data]` terrain types — `difficulty`, not "weight" — and `[Encounter: NAME]` group tables) **and**
-  the `[Tile NN]` sub-tile grid: `WorldmapTxt::terrainAt(x,y)` mirrors the engine's
-  `wmFindCurSubTileFromPos`, so `world_map` now reports each area's `terrain` and a terrain-weighted
-  `travelCost` between areas. **Follow-up (minor):** per-position *encounter* placement (the subtile
+- **`data/worldmap.txt`** — **Follow-up (minor):** per-position *encounter* placement (the subtile
   encounter chances) is still unparsed — only the terrain field is kept.
 - **`game/worldmap.msg`** *(follow-up — narrowed)* — area/city labels turned out to live in **map.msg**
   (`[1500 + areaIndex]`, now surfaced as `world_map`'s `displayName`) and terrain names are already
@@ -814,11 +621,7 @@ then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority ord
   **descriptions** (`worldmap.msg[3000 + 50*tableId + entryId]`, fallout2-ce worldmap.cc:3595) — and
   those are runtime-index-tied to the encounter table/entry ordering, not a small add. Just that
   encounter-description join remains.
-- **`data/endgame.txt`** ✅ **done** — `EndgameTxt` vault reader + the `endings` tool: each ending slide
-  keyed by `gvar == value` (gvar resolved to its `GVAR_ENDGAME_MOVIE_*` name + a readable condition),
-  the slide art, and the narrator/subtitle base name. Slides sharing a gvar at different values are a
-  location's branching outcomes (e.g. Gecko has 5). Closes the start→objectives→ending loop with quests
-  + gvars. **Follow-ups:** `enddeath.txt` death endings (in master.dat) and the narration subtitle text
+- **`data/endgame.txt`** — **Follow-ups:** `enddeath.txt` death endings (in master.dat) and the narration subtitle text
   (`text/<lang>/cuts/<narrator>.txt`).
 - **`data/party.txt`** (companions), **`holodisk.txt`**, **`karmavar.txt`** — lore/state, lower
   priority.
@@ -1053,13 +856,6 @@ and probably not worth chasing for a map editor.
 
 ## MCP server hardening — done, and one deferred follow-up
 
-**Done** (a code-review pass): a **table-driven tool registry** (one `ToolSpec` list — name,
-description, schema, handler — that both `tools/call` dispatch and `tools/list` derive from, so they
-can't drift); **argument validation** (typed `requireString`/`requireInt(min,max)`/bounded
-`optInt`/strict `optBool`, surfaced as `isError` — no more negative-pid-wraps-to-huge-uint or
-negative-`maxDimension`); and **protocol edge cases** (a `ping` handler, no-id request methods no
-longer execute as notifications, `jsonrpc:"2.0"` validated → `-32600`).
-
 **Deferred — richer tool output/metadata (MCP 2025-06).** Worth doing some day, not now:
 - **`structuredContent`** on the JSON-emitting tools (analyze/describe_map/palette/proto_info/…) —
   return the parsed object alongside the text block, so clients get typed data instead of re-parsing
@@ -1187,9 +983,7 @@ immediately useful and de-risks the rest.
 
 # Area-Fill + Luau Plugins — Unified Design Proposal
 
-> **Status:** Feature A (area fill, phases A0–A3) has **LANDED** — a Luau-driven "Fill Selection"
-> ships with a Fill dialog, ghost preview, and the `scripts/fills/*.luau` recipes, exercised through
-> `MapScriptApi` over a placement batch and surfaced in `gecko-cli`/MCP `fill`. Feature B (the Luau
+> **Status:** Feature B (the Luau
 > plugin system) remains a proposal. The design below is kept as the reference write-up for both.
 
 This proposal specifies two features that share one substrate: **Feature A**, a Luau-and-data-driven *area fill* ("Fill Selection") that closes the `autotile_floor` / "paint a pattern of tiles" gap; and **Feature B**, a *Luau plugin system* that lets third parties add tools, panels, menus, and event handlers. The decision throughout is to **build one set of seams and exercise it twice**: area-fill is the first first-party consumer of the same selection-projection, ghost-preview, `ITool`, and `MapScriptApi`-over-a-batch machinery that the plugin system opens to third parties. Engine-data-fidelity is non-negotiable: PIDs/directions/flags/tile-ids stored and replayed verbatim, no fallback label tables, no rotation math, validated readers with no silent fallback.

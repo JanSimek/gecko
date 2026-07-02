@@ -18,7 +18,9 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cstdint>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -159,7 +161,10 @@ bool parseIntFlag(const std::string& flag, const std::string& value, int& out, c
 // Checked unsigned parse for `--flag <value>` (base 0: 0x.. hex, else decimal). Same rationale as
 // parseIntFlag: std::stoul throws on bad input and would terminate the CLI.
 bool parseUnsignedFlag(const std::string& flag, const std::string& value, unsigned long& out, const char* program) {
-    if (value.empty() || value.front() == '-' || value.front() == '+') {
+    // Require a leading digit. This rejects a leading '+'/'-' and, crucially, leading
+    // whitespace: std::stoul skips whitespace and then accepts a sign, so " -1" would
+    // otherwise slip past a bare front()=='-' check and wrap to a huge value.
+    if (value.empty() || value.front() < '0' || value.front() > '9') {
         std::cerr << "error: " << flag << " expects a non-negative integer, got: " << value << "\n";
         printUsage(program);
         return false;
@@ -212,6 +217,11 @@ bool parsePids(const std::string& csv, std::vector<std::uint32_t>& out, const ch
         if (!token.empty()) {
             unsigned long value = 0;
             if (!parseUnsignedFlag("--pids", token, value, program)) {
+                return false;
+            }
+            if (value > std::numeric_limits<std::uint32_t>::max()) {
+                std::cerr << "error: --pids value out of range (max 0xFFFFFFFF), got: " << token << "\n";
+                printUsage(program);
                 return false;
             }
             out.push_back(static_cast<std::uint32_t>(value));
@@ -302,6 +312,11 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     if (out.render && arg == "--max-dim") {
         unsigned long maxDim = 0;
         if (!parseUnsignedFlag(arg, args[i + 1], maxDim, program)) {
+            return 0;
+        }
+        if (maxDim > std::numeric_limits<unsigned int>::max()) {
+            std::cerr << "error: --max-dim value out of range, got: " << args[i + 1] << "\n";
+            printUsage(program);
             return 0;
         }
         out.ren.maxDimension = static_cast<unsigned int>(maxDim);

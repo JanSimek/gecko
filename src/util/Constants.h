@@ -88,8 +88,6 @@ namespace UI {
     constexpr int PROGRESS_BAR_MAX = 100; ///< Maximum value for progress bars
     constexpr int PROGRESS_BAR_MIN = 0;   ///< Minimum value for progress bars
     constexpr int TIMER_INTERVAL_MS = 33; ///< Timer interval for 30 FPS updates (33ms = ~30 FPS)
-    constexpr int SPACING_SMALL = 10;     ///< Small spacing between widgets
-    constexpr int SPACING_LARGE = 20;     ///< Large spacing between widgets
 }
 
 // Object rotation constants

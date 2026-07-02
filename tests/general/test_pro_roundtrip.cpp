@@ -342,3 +342,230 @@ TEST_CASE("PRO misc round-trip carries no trailing field", "[pro][roundtrip][mis
     // flags, flagsExt) = 28 bytes — not 32 with a phantom trailing field.
     REQUIRE(std::filesystem::file_size(tempPath) == 28);
 }
+
+// ---------------------------------------------------------------------------
+// Level 4: the remaining item subtypes (ARMOR/AMMO/MISC-item/KEY) and scenery
+// subtypes (DOOR/ELEVATOR/LADDER/GENERIC). These tails were the ones NOT
+// previously round-trip covered. Per-index array sentinels (e.g. 10+i) make the
+// test fail on any dropped/added/reordered field, guarding the hand-enumerated
+// reader/writer schema without introducing a serialization visitor.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("PRO armor round-trip preserves resist/threshold arrays and common data", "[pro][roundtrip][item][armor]") {
+    TempFile tmpFile{ "test_pro_roundtrip_armor", ".pro" };
+    const auto& tempPath = tmpFile.path();
+
+    geck::Pro armor{ tempPath };
+    armor.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::ITEM) << 24) | 0x12u);
+    armor.commonItemData.flagsExt = 0xA1A2A3A4u;
+    armor.commonItemData.SID = 0xB5u;
+    armor.commonItemData.materialId = 1;
+    armor.commonItemData.weight = 25;
+    armor.commonItemData.basePrice = 1000;
+    armor.commonItemData.inventoryFID = 0x00000123;
+    armor.commonItemData.soundId = 0x2A;
+    armor.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::ITEM_TYPE::ARMOR));
+    armor.armorData.armorClass = 20;
+    for (int i = 0; i < geck::Pro::DAMAGE_TYPES_ARMOR; ++i) {
+        armor.armorData.damageResist[i] = static_cast<uint32_t>(10 + i); // per-index -> catches array drift
+        armor.armorData.damageThreshold[i] = static_cast<uint32_t>(30 + i);
+    }
+    armor.armorData.perk = 7;
+    armor.armorData.armorMaleFID = 0x0100002A;
+    armor.armorData.armorFemaleFID = 0x0100002B;
+
+    const geck::Pro got = proRoundTrip(armor, tempPath);
+
+    REQUIRE(got.itemType() == geck::Pro::ITEM_TYPE::ARMOR);
+    REQUIRE(got.commonItemData.flagsExt == 0xA1A2A3A4u);
+    REQUIRE(got.commonItemData.SID == 0xB5u);
+    REQUIRE(got.commonItemData.materialId == 1);
+    REQUIRE(got.commonItemData.weight == 25);
+    REQUIRE(got.commonItemData.basePrice == 1000);
+    REQUIRE(got.commonItemData.inventoryFID == 0x00000123);
+    REQUIRE(got.commonItemData.soundId == 0x2A);
+    REQUIRE(got.armorData.armorClass == 20);
+    for (int i = 0; i < geck::Pro::DAMAGE_TYPES_ARMOR; ++i) {
+        REQUIRE(got.armorData.damageResist[i] == static_cast<uint32_t>(10 + i));
+        REQUIRE(got.armorData.damageThreshold[i] == static_cast<uint32_t>(30 + i));
+    }
+    REQUIRE(got.armorData.perk == 7);
+    REQUIRE(got.armorData.armorMaleFID == 0x0100002A);
+    REQUIRE(got.armorData.armorFemaleFID == 0x0100002B);
+}
+
+TEST_CASE("PRO ammo round-trip preserves the signed damage modifiers", "[pro][roundtrip][item][ammo]") {
+    TempFile tmpFile{ "test_pro_roundtrip_ammo", ".pro" };
+    const auto& tempPath = tmpFile.path();
+
+    geck::Pro ammo{ tempPath };
+    ammo.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::ITEM) << 24) | 0x13u);
+    ammo.commonItemData.flagsExt = 0xC1C2C3C4u;
+    ammo.commonItemData.SID = 0xD5u;
+    ammo.commonItemData.soundId = 0x1F;
+    ammo.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::ITEM_TYPE::AMMO));
+    ammo.ammoData.caliber = 4;
+    ammo.ammoData.quantity = 50;
+    ammo.ammoData.damageModifier = -3; // signed fields must survive
+    ammo.ammoData.damageResistModifier = -10;
+    ammo.ammoData.damageMultiplier = 2;
+    ammo.ammoData.damageTypeModifier = -1;
+
+    const geck::Pro got = proRoundTrip(ammo, tempPath);
+
+    REQUIRE(got.itemType() == geck::Pro::ITEM_TYPE::AMMO);
+    REQUIRE(got.commonItemData.flagsExt == 0xC1C2C3C4u);
+    REQUIRE(got.commonItemData.SID == 0xD5u);
+    REQUIRE(got.ammoData.caliber == 4);
+    REQUIRE(got.ammoData.quantity == 50);
+    REQUIRE(got.ammoData.damageModifier == -3);
+    REQUIRE(got.ammoData.damageResistModifier == -10);
+    REQUIRE(got.ammoData.damageMultiplier == 2);
+    REQUIRE(got.ammoData.damageTypeModifier == -1);
+}
+
+TEST_CASE("PRO misc-item round-trip preserves powerType and charges", "[pro][roundtrip][item][miscitem]") {
+    TempFile tmpFile{ "test_pro_roundtrip_miscitem", ".pro" };
+    const auto& tempPath = tmpFile.path();
+
+    // ITEM_TYPE::MISC (a misc *item* with powerType/charges) — distinct from the
+    // top-level OBJECT_TYPE::MISC object covered above.
+    geck::Pro miscItem{ tempPath };
+    miscItem.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::ITEM) << 24) | 0x14u);
+    miscItem.commonItemData.flagsExt = 0xE1E2E3E4u;
+    miscItem.commonItemData.SID = 0xF5u;
+    miscItem.commonItemData.soundId = 0x0C;
+    miscItem.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::ITEM_TYPE::MISC));
+    miscItem.miscData.powerType = 0x00000029; // ammo PID the item consumes
+    miscItem.miscData.charges = 42;
+
+    const geck::Pro got = proRoundTrip(miscItem, tempPath);
+
+    REQUIRE(got.itemType() == geck::Pro::ITEM_TYPE::MISC);
+    REQUIRE(got.commonItemData.flagsExt == 0xE1E2E3E4u);
+    REQUIRE(got.commonItemData.SID == 0xF5u);
+    REQUIRE(got.miscData.powerType == 0x00000029);
+    REQUIRE(got.miscData.charges == 42);
+}
+
+TEST_CASE("PRO key round-trip preserves keyId", "[pro][roundtrip][item][key]") {
+    TempFile tmpFile{ "test_pro_roundtrip_key", ".pro" };
+    const auto& tempPath = tmpFile.path();
+
+    geck::Pro key{ tempPath };
+    key.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::ITEM) << 24) | 0x15u);
+    key.commonItemData.flagsExt = 0x10203040u;
+    key.commonItemData.SID = 0x50u;
+    key.commonItemData.soundId = 0x03;
+    key.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::ITEM_TYPE::KEY));
+    key.keyData.keyId = 0x0000BEEF;
+
+    const geck::Pro got = proRoundTrip(key, tempPath);
+
+    REQUIRE(got.itemType() == geck::Pro::ITEM_TYPE::KEY);
+    REQUIRE(got.commonItemData.flagsExt == 0x10203040u);
+    REQUIRE(got.commonItemData.SID == 0x50u);
+    REQUIRE(got.keyData.keyId == 0x0000BEEF);
+}
+
+TEST_CASE("PRO scenery door round-trip preserves door fields", "[pro][roundtrip][scenery][door]") {
+    TempFile tmpFile{ "test_pro_roundtrip_door", ".pro" };
+    const auto& tempPath = tmpFile.path();
+
+    geck::Pro door{ tempPath };
+    door.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::SCENERY) << 24) | 0x21u);
+    door.commonItemData.flagsExt = 0x0A0B0C0Du;
+    door.commonItemData.SID = 0x0Eu;
+    door.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::SCENERY_TYPE::DOOR));
+    door.sceneryData.materialId = 5;
+    door.sceneryData.soundId = 11;
+    door.sceneryData.doorData.walkThroughFlag = 1;
+    door.sceneryData.doorData.unknownField = 0x1234;
+
+    const geck::Pro got = proRoundTrip(door, tempPath);
+
+    REQUIRE(got.type() == geck::Pro::OBJECT_TYPE::SCENERY);
+    REQUIRE(got.objectSubtypeId() == static_cast<unsigned int>(geck::Pro::SCENERY_TYPE::DOOR));
+    REQUIRE(got.commonItemData.flagsExt == 0x0A0B0C0Du);
+    REQUIRE(got.commonItemData.SID == 0x0Eu);
+    REQUIRE(got.sceneryData.materialId == 5);
+    REQUIRE(got.sceneryData.soundId == 11);
+    REQUIRE(got.sceneryData.doorData.walkThroughFlag == 1);
+    REQUIRE(got.sceneryData.doorData.unknownField == 0x1234);
+}
+
+TEST_CASE("PRO scenery elevator round-trip preserves elevator fields", "[pro][roundtrip][scenery][elevator]") {
+    TempFile tmpFile{ "test_pro_roundtrip_elevator", ".pro" };
+    const auto& tempPath = tmpFile.path();
+
+    geck::Pro elevator{ tempPath };
+    elevator.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::SCENERY) << 24) | 0x22u);
+    elevator.commonItemData.flagsExt = 0x11223344u;
+    elevator.commonItemData.SID = 0x55u;
+    elevator.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::SCENERY_TYPE::ELEVATOR));
+    elevator.sceneryData.materialId = 6;
+    elevator.sceneryData.soundId = 13;
+    elevator.sceneryData.elevatorData.elevatorType = 3;
+    elevator.sceneryData.elevatorData.elevatorLevel = 2;
+
+    const geck::Pro got = proRoundTrip(elevator, tempPath);
+
+    REQUIRE(got.objectSubtypeId() == static_cast<unsigned int>(geck::Pro::SCENERY_TYPE::ELEVATOR));
+    REQUIRE(got.commonItemData.flagsExt == 0x11223344u);
+    REQUIRE(got.sceneryData.materialId == 6);
+    REQUIRE(got.sceneryData.soundId == 13);
+    REQUIRE(got.sceneryData.elevatorData.elevatorType == 3);
+    REQUIRE(got.sceneryData.elevatorData.elevatorLevel == 2);
+}
+
+TEST_CASE("PRO scenery ladder round-trip preserves the packed dest field", "[pro][roundtrip][scenery][ladder]") {
+    TempFile tmpFile{ "test_pro_roundtrip_ladder", ".pro" };
+    const auto& tempPath = tmpFile.path();
+
+    geck::Pro ladder{ tempPath };
+    ladder.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::SCENERY) << 24) | 0x23u);
+    ladder.commonItemData.flagsExt = 0x66778899u;
+    ladder.commonItemData.SID = 0xAAu;
+    ladder.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::SCENERY_TYPE::LADDER_BOTTOM));
+    ladder.sceneryData.materialId = 7;
+    ladder.sceneryData.soundId = 15;
+    ladder.sceneryData.ladderData.destTileAndElevation = 0x0002ABCD;
+
+    const geck::Pro got = proRoundTrip(ladder, tempPath);
+
+    REQUIRE(got.objectSubtypeId() == static_cast<unsigned int>(geck::Pro::SCENERY_TYPE::LADDER_BOTTOM));
+    REQUIRE(got.commonItemData.flagsExt == 0x66778899u);
+    REQUIRE(got.sceneryData.materialId == 7);
+    REQUIRE(got.sceneryData.soundId == 15);
+    REQUIRE(got.sceneryData.ladderData.destTileAndElevation == 0x0002ABCD);
+}
+
+TEST_CASE("PRO scenery generic round-trip preserves the trailing field", "[pro][roundtrip][scenery][generic]") {
+    TempFile tmpFile{ "test_pro_roundtrip_generic", ".pro" };
+    const auto& tempPath = tmpFile.path();
+
+    geck::Pro generic{ tempPath };
+    generic.header.PID = static_cast<int32_t>(
+        (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::SCENERY) << 24) | 0x24u);
+    generic.commonItemData.flagsExt = 0xBBCCDDEEu;
+    generic.commonItemData.SID = 0xFFu;
+    generic.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::SCENERY_TYPE::GENERIC));
+    generic.sceneryData.materialId = 2;
+    generic.sceneryData.soundId = 8;
+    generic.sceneryData.genericData.unknownField = 0xCAFE1357u; // arbitrary distinctive value
+
+    const geck::Pro got = proRoundTrip(generic, tempPath);
+
+    REQUIRE(got.objectSubtypeId() == static_cast<unsigned int>(geck::Pro::SCENERY_TYPE::GENERIC));
+    REQUIRE(got.commonItemData.flagsExt == 0xBBCCDDEEu);
+    REQUIRE(got.sceneryData.materialId == 2);
+    REQUIRE(got.sceneryData.soundId == 8);
+    REQUIRE(got.sceneryData.genericData.unknownField == 0xCAFE1357u);
+}
