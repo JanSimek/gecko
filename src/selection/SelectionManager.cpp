@@ -202,8 +202,9 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
 
         case SelectionMode::ALL:
             // ALL mode adds the first available item in priority order (roof, object, floor)
-            // without cycling, restricted to the user-enabled layers.
-            if (_layers.roofTiles) {
+            // without cycling, restricted to the user-enabled layers. A hidden roof is skipped so
+            // it can't shadow the object beneath it (consistent with cycleThroughItemsAtPosition).
+            if (_layers.roofTiles && _provider.isRoofVisible()) {
                 auto tileIndex = getRoofTileAtPosition(worldPos, currentElevation);
                 if (tileIndex) {
                     SelectedItem item{ SelectionType::ROOF_TILE, tileIndex.value() };
@@ -699,7 +700,13 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
     // and only walks the user-enabled layers.
     auto objectsAtPos = _layers.objects ? getObjectsAtPosition(worldPos, elevation)
                                         : std::vector<std::shared_ptr<Object>>{};
-    auto roofTileIndex = _layers.roofTiles ? getRoofTileAtPosition(worldPos, elevation) : std::nullopt;
+    // A roof you cannot see must never shadow a click on the object (or floor) beneath it. Point
+    // selection used to gate the roof only on the layer flag, so hiding the roof to edit interior
+    // objects still selected the hidden roof tile under the cursor. This mirrors the area-select
+    // path (collectItemsInArea) and itemsToDeselectInArea, which already check isRoofVisible().
+    auto roofTileIndex = (_layers.roofTiles && _provider.isRoofVisible())
+        ? getRoofTileAtPosition(worldPos, elevation)
+        : std::nullopt;
     auto floorTileIndex = _layers.floorTiles ? getFloorTileAtPosition(worldPos, elevation) : std::nullopt;
 
     bool roofSelected = false;

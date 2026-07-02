@@ -1,5 +1,6 @@
 #include "ProCritterWidget.h"
 
+#include "resource/AiTxtLoader.h"
 #include "resource/GameResources.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/UIConstants.h"
@@ -37,6 +38,7 @@ ProCritterWidget::ProCritterWidget(resource::GameResources& resources, QWidget* 
     , _headFidSelectorButton(nullptr)
     , _headFid(0)
     , _aiPacketEdit(nullptr)
+    , _aiPacketNameLabel(nullptr)
     , _teamNumberEdit(nullptr)
     , _barterCheck(nullptr)
     , _noStealCheck(nullptr)
@@ -76,6 +78,9 @@ ProCritterWidget::ProCritterWidget(resource::GameResources& resources, QWidget* 
     for (auto& widget : _damageResistEdits) {
         widget = nullptr;
     }
+
+    // Load ai.txt once so the AI Packet field can show the packet name; empty if no data mounted.
+    _aiTxt = resource::loadAiTxt(_resources);
 
     setupUI();
 }
@@ -295,7 +300,19 @@ void ProCritterWidget::setupGeneralTab(QTabWidget* parentTabs) {
     critterLayout->addRow("Head FID:", headFidWidget);
 
     _aiPacketEdit = this->createSpinBox(0, INT_MAX, "AI packet number for critter behavior");
-    critterLayout->addRow("AI Packet:", _aiPacketEdit);
+    // Show the ai.txt packet name next to the raw number so the field is readable without a lookup.
+    _aiPacketNameLabel = new QLabel(this);
+    _aiPacketNameLabel->setStyleSheet(ui::theme::styles::smallLabel());
+    _aiPacketNameLabel->setToolTip("AI behaviour packet name from the game's ai.txt");
+    auto* aiPacketRow = new QWidget(this);
+    auto* aiPacketRowLayout = new QHBoxLayout(aiPacketRow);
+    aiPacketRowLayout->setContentsMargins(0, 0, 0, 0);
+    aiPacketRowLayout->addWidget(_aiPacketEdit);
+    aiPacketRowLayout->addWidget(_aiPacketNameLabel, 1);
+    critterLayout->addRow("AI Packet:", aiPacketRow);
+    connect(_aiPacketEdit, QOverload<int>::of(&QSpinBox::valueChanged), this,
+        [this](int) { updateAiPacketNameLabel(); });
+    updateAiPacketNameLabel();
 
     _teamNumberEdit = this->createSpinBox(0, INT_MAX, "Team number for faction identification");
     critterLayout->addRow("Team Number:", _teamNumberEdit);
@@ -377,6 +394,7 @@ void ProCritterWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     updateHeadFidLabel();
 
     _aiPacketEdit->setValue(static_cast<int>(critterData.aiPacket));
+    updateAiPacketNameLabel();
     _teamNumberEdit->setValue(static_cast<int>(critterData.teamNumber));
     _barterCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_BARTER));
     _noStealCheck->setChecked(Pro::hasFlag(critterData.flags, Pro::CritterFlags::CRITTER_NO_STEAL));
@@ -453,6 +471,21 @@ bool ProCritterWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
 
 QString ProCritterWidget::getTabLabel() const {
     return "Critter";
+}
+
+void ProCritterWidget::updateAiPacketNameLabel() {
+    if (_aiPacketNameLabel == nullptr) {
+        return;
+    }
+    const int packetNum = _aiPacketEdit->value();
+    if (const AiPacket* packet = _aiTxt.byPacketNum(packetNum)) {
+        _aiPacketNameLabel->setText(QString::fromStdString(packet->name));
+    } else if (_aiTxt.size() == 0) {
+        // No ai.txt mounted: nothing to resolve against, so let the raw number speak for itself.
+        _aiPacketNameLabel->clear();
+    } else {
+        _aiPacketNameLabel->setText(QStringLiteral("(not in ai.txt)"));
+    }
 }
 
 void ProCritterWidget::updateHeadFidLabel() {

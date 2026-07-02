@@ -43,3 +43,31 @@ TEST_CASE("scriptDisplayName is empty when scrname.msg isn't mounted", "[scriptn
     resource::GameResources resources; // nothing mounted
     CHECK(resource::scriptDisplayName(resources, 0).empty());
 }
+
+// scriptDescription is the label the editor shows for a script program: prefer the scrname.msg name,
+// then fall back to the scripts.lst trailing comment (which names spatial/generic scripts scrname.msg
+// leaves blank), then "" so callers show the bare .int filename.
+TEST_CASE("scriptDescription falls back to the scripts.lst comment when scrname.msg is blank", "[scriptnames]") {
+    const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "scriptdesc_test";
+    fs::remove_all(root);
+
+    // scrname.msg names only index 0 (id 101).
+    writeFile(root / "text/english/game/scrname.msg", "{101}{}{Combat AI}\n");
+    // scripts.lst: index 0 has a comment (ignored, scrname wins), index 1 has only a comment, index 2
+    // has neither. The "# local_vars=N" metadata must be stripped from the comment.
+    writeFile(root / "scripts/scripts.lst",
+        "combatai.int    ; unused because scrname wins   # local_vars=0\n"
+        "zispatch.int    ; Spatial trigger for the bridge # local_vars=2\n"
+        "generic.int\n");
+
+    resource::GameResources resources;
+    resources.files().addDataPath(root.string());
+
+    CHECK(resource::scriptDescription(resources, 0) == "Combat AI");                      // scrname.msg wins
+    CHECK(resource::scriptDescription(resources, 1) == "Spatial trigger for the bridge"); // .lst comment
+    CHECK(resource::scriptDescription(resources, 2).empty());                             // neither -> ""
+    CHECK(resource::scriptDescription(resources, 99).empty());                            // past the list
+    CHECK(resource::scriptDescription(resources, -1).empty());                            // negative index
+
+    fs::remove_all(root);
+}
