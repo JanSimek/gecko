@@ -1,8 +1,10 @@
 #include "WelcomeWidget.h"
 
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPixmap>
+#include <QPushButton>
 #include <QSvgRenderer>
 #include <QPainter>
 #include <QCoreApplication>
@@ -21,7 +23,9 @@ WelcomeWidget::WelcomeWidget(QWidget* parent)
     : QWidget(parent)
     , _layout(nullptr)
     , _imageLabel(nullptr)
-    , _versionLabel(nullptr) {
+    , _versionLabel(nullptr)
+    , _newMapButton(nullptr)
+    , _browseButton(nullptr) {
     setupUI();
 }
 
@@ -49,7 +53,32 @@ void WelcomeWidget::setupUI() {
     if (_versionLabel) {
         _layout->addWidget(_versionLabel, 0, Qt::AlignCenter);
     }
+    createActionButtons();
     _layout->addStretch();
+}
+
+void WelcomeWidget::createActionButtons() {
+    // Give the no-map screen a way to act: create a map or open the browser, mirroring the
+    // File menu's New Map / Browse Maps actions. MainWindow connects these signals to those handlers.
+    _newMapButton = new QPushButton(createIcon(":/icons/actions/new.svg"), "New Map", this);
+    _browseButton = new QPushButton(createIcon(":/icons/actions/open.svg"), "Browse Maps…", this);
+    for (QPushButton* button : { _newMapButton, _browseButton }) {
+        button->setCursor(Qt::PointingHandCursor);
+        button->setMinimumWidth(150);
+    }
+
+    connect(_newMapButton, &QPushButton::clicked, this, &WelcomeWidget::newMapRequested);
+    connect(_browseButton, &QPushButton::clicked, this, &WelcomeWidget::browseMapsRequested);
+
+    auto* buttonRow = new QHBoxLayout();
+    buttonRow->addStretch();
+    buttonRow->addWidget(_newMapButton);
+    buttonRow->addSpacing(ui::theme::spacing::NORMAL);
+    buttonRow->addWidget(_browseButton);
+    buttonRow->addStretch();
+
+    _layout->addSpacing(ui::theme::spacing::LOOSE);
+    _layout->addLayout(buttonRow);
 }
 
 void WelcomeWidget::renderSvgToLabel(QSvgRenderer& svgRenderer) {

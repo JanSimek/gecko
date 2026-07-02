@@ -184,8 +184,10 @@ void MainWindow::setupUI() {
     _centralStack = new QStackedWidget(this);
     setCentralWidget(_centralStack);
 
-    // Welcome widget is shown when no map is loaded
+    // Welcome widget is shown when no map is loaded; its buttons reuse the File-menu handlers.
     _welcomeWidget = new WelcomeWidget(this);
+    connect(_welcomeWidget, &WelcomeWidget::newMapRequested, this, &MainWindow::newMapRequested);
+    connect(_welcomeWidget, &WelcomeWidget::browseMapsRequested, this, &MainWindow::showMapBrowserDialog);
     _centralStack->addWidget(_welcomeWidget);
     _centralStack->setCurrentWidget(_welcomeWidget);
 
