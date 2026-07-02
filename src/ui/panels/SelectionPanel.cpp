@@ -1215,7 +1215,7 @@ void SelectionPanel::updateScriptSection() {
                     auto* lst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
                     if (lst && s.script_id < lst->list().size()) {
                         text = QString::fromStdString(lst->list().at(s.script_id));
-                        const std::string desc = resource::scriptDisplayName(_resources, static_cast<int>(s.script_id));
+                        const std::string desc = resource::scriptDescription(_resources, static_cast<int>(s.script_id));
                         if (!desc.empty()) {
                             text += " — " + QString::fromStdString(desc);
                         }

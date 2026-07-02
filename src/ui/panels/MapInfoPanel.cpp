@@ -546,9 +546,9 @@ void MapInfoPanel::loadScriptVars() {
             const auto& scriptList = scripts->list();
             if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
                 _mapScriptName = scripts->at(map_script_id - 1); // script id starts at 1
-                // Append the scrname.msg description for the same script (its 0-based index is id - 1),
-                // mirroring how object scripts are named in the script picker.
-                const std::string desc = resource::scriptDisplayName(_resources, map_script_id - 1);
+                // Append the friendly description for the same script (its 0-based index is id - 1):
+                // the scrname.msg name, or the scripts.lst comment when scrname.msg doesn't name it.
+                const std::string desc = resource::scriptDescription(_resources, map_script_id - 1);
                 if (!desc.empty()) {
                     _mapScriptName += " — " + desc;
                 }

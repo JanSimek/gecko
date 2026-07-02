@@ -161,7 +161,7 @@ void ScriptsPanel::addRow(const QString& section, int programIndex, qulonglong r
     }
     _table->setItem(row, COL_FILENAME, new QTableWidgetItem(filename));
     _table->setItem(row, COL_NAME,
-        new QTableWidgetItem(QString::fromStdString(resource::scriptDisplayName(_resources, programIndex))));
+        new QTableWidgetItem(QString::fromStdString(resource::scriptDescription(_resources, programIndex))));
 
     // Owned rows carry a numeric DisplayRole so the Owner column sorts numerically; NONE/0 shows "—".
     auto* ownerItem = new QTableWidgetItem;
