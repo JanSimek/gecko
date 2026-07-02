@@ -450,6 +450,32 @@ TEST_CASE("ALL-mode click cycles the stack then deselects", "[selection_manager_
     REQUIRE_FALSE(mgr.hasSelection());
 }
 
+// Regression: a roof you have hidden must not shadow a click on what is beneath it. Point selection
+// used to gate the roof candidate only on the layer flag (not isRoofVisible), so hiding the roof to
+// edit interior objects still selected the invisible roof tile under the cursor instead of the
+// object/floor below. The floor stands in for "the layer beneath the roof": objects rank above the
+// floor in the same cycle, so skipping the hidden roof lets an object beneath it win the click too.
+TEST_CASE("A hidden roof does not shadow a click on what is beneath it", "[selection_manager_real][regression]") {
+    MockEditorWidget mockWidget;
+    geck::selection::SelectionManager mgr(mockWidget);
+
+    const sf::Vector2f clickPos{ 32.0f, 24.0f };
+    const int tileIndex = 1 * MAP_WIDTH + 1;
+
+    SECTION("roof shown: the click selects the roof drawn on top") {
+        mockWidget.roofVisible = true;
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices() == std::vector<int>{ tileIndex });
+    }
+
+    SECTION("roof hidden: the click falls through to the layer beneath, not the invisible roof") {
+        mockWidget.roofVisible = false;
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices().empty());
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices() == std::vector<int>{ tileIndex });
+    }
+}
+
 // Ctrl+drag is deselect-only: it removes already-selected covered items but never adds.
 // Uses HEXES mode (the hex grid is pure geometry — no graphics context needed).
 TEST_CASE("deselectArea removes only selected covered items (Ctrl+drag)", "[selection_manager_real][regression]") {
