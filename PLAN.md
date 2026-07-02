@@ -692,7 +692,6 @@ the same selection; Ctrl-drag to remove). This is the natural companion to #1 �
 The visual map picker shipped (`MapBrowserDialog`, File → Browse Maps…: thumbnail grid + filter
 + preview, lazy render, in-memory cache). Possible follow-ups:
 - **Source grouping** — separate vanilla `master.dat` maps from user/filesystem maps.
-- **Welcome-screen entry point** — reach the browser from the no-map welcome screen.
 - **Persisted cross-session thumbnail cache** (keyed by map path + mtime) — only if cold-start
   render latency proves annoying; the current cache is in-memory `QPixmapCache`.
 
