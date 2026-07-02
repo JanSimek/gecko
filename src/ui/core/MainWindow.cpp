@@ -175,6 +175,11 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     _mapModified = false;
     updateWindowTitle();
 
+    // Installing a map must (re)start the render loop: closeCurrentMap() stops it, and it is
+    // otherwise only started once at application startup. startGameLoop() is idempotent, so this is
+    // a no-op when the loop is already running (e.g. the startup map load).
+    startGameLoop();
+
     QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
     updateUndoRedoActions();
     updateFillSelectionAction();
@@ -247,6 +252,15 @@ void MainWindow::connectMenuSignals() {
         if (_currentEditorWidget && _currentEditorWidget->saveMapAs(writableMapsDir())) {
             handleMapSaved();
         }
+    });
+    connect(this, &MainWindow::closeMapRequested, [this]() {
+        if (!hasActiveMap()) {
+            return; // nothing open — the welcome screen is already showing
+        }
+        if (!maybeSaveChanges()) {
+            return; // user cancelled the close to keep their unsaved map
+        }
+        closeCurrentMap();
     });
     connect(this, &MainWindow::selectAllRequested, [this]() {
         if (_currentEditorWidget) {
@@ -415,6 +429,7 @@ void MainWindow::setupMenuBar() {
     addMenuAction(_fileMenu, ":/icons/actions/open.svg", "&Browse Maps...", &MainWindow::showMapBrowserDialog, QKeySequence("Ctrl+B"), "Browse available maps as thumbnails");
     addMenuAction(_fileMenu, ":/icons/actions/save.svg", "&Save Map", &MainWindow::saveMapRequested, QKeySequence::Save, "Save current map");
     addMenuAction(_fileMenu, ":/icons/actions/save.svg", "Save Map &As...", &MainWindow::saveMapAsRequested, QKeySequence::SaveAs, "Save the current map to a chosen file");
+    addMenuAction(_fileMenu, ":/icons/actions/close.svg", "&Close Map", &MainWindow::closeMapRequested, QKeySequence::Close, "Close the current map and return to the welcome screen");
 
     _fileMenu->addSeparator();
     addMenuAction(_fileMenu, ":/icons/actions/settings.svg", "&Preferences...", &MainWindow::showPreferences, QKeySequence::Preferences, "Open application preferences");
@@ -2041,7 +2056,7 @@ void MainWindow::closeCurrentMap() {
         return;
     }
 
-    spdlog::debug("Closing current map due to data path changes");
+    spdlog::debug("Closing current map");
 
     stopGameLoop();
 
@@ -2050,6 +2065,11 @@ void MainWindow::closeCurrentMap() {
     _currentEditorWidget = nullptr;
 
     _centralStack->setCurrentWidget(_welcomeWidget);
+
+    // No map is open now: clear the dirty flag and reset the title off the closed map, otherwise the
+    // title bar keeps the closed map's name (and a stale "*") while the welcome screen is shown.
+    _mapModified = false;
+    updateWindowTitle();
 
     // The editor and its Map are gone; clear the panels' borrowed map pointers (Map Info, Scripts,
     // Selection) so they don't dangle before the next map opens.
