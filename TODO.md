@@ -14,9 +14,6 @@ Extend existing multi-selection system with batch property editing for multiple 
 ### Script Integration
 Script assignment UI for object properties with dropdown, validation, and preview capabilities.
 
-### Template System
-Preset object configurations for complex placement patterns (furniture sets, defensive positions, etc.). Save and load object placement patterns.
-
 ### Advanced Search & Filter
 Property-based filtering and complex query support for finding specific objects across the entire map.
 
@@ -30,10 +27,6 @@ Detailed progress dialog with task descriptions and completion estimates for lon
 ### Usability
 
 - [ ] Ctrl+C - copy object, Ctrl+V paste object
-- [ ] Proto view
-- [ ] Ctrl-toggle deselection: Ctrl+clicking an already-selected item, or Ctrl+dragging an
-      area that covers already-selected items, should *remove* those items from the selection
-      (toggle them off) instead of re-adding them. Today Ctrl only adds to the selection.
 
 ### Hex palette
 
@@ -55,26 +48,17 @@ Detailed progress dialog with task descriptions and completion estimates for lon
 
 ### Presets
 - [ ] TBD: paint a pattern of tiles
-- [ ] TBD: paste a preset into the map, e.g. hut from Arroyo. Presets should be stored in a JSON/YAML/...
-
-### Performance
-- [ ] Optimize hex grid rendering to only draw visible hexes
 
 ### Code Quality / Architecture
-- [ ] Split `ResourceManager` into narrower engine-facing services instead of a global singleton handling VFS, FRM decoding, message lookup, and texture caching
 - [ ] Break up `EditorWidget` into smaller controllers/services for editing, input/tool orchestration, and rendering coordination
 - [ ] Move application/workspace lifecycle out of `MainWindow` and into dedicated controllers or services
 - [ ] Refactor map reading and writing into smaller section-level parsers/serializers and add round-trip coverage
-- [ ] Finish the `ProEditorDialog` decomposition so type-specific behavior, previews, and persistence are not coordinated from one oversized dialog
 - [ ] Replace placeholder inventory mutations with a shared model-backed inventory editing service used by all inventory UIs
 - [ ] Remove remaining `const_cast` usage by fixing const-correctness and ownership boundaries
-- [ ] Fix tile hit testing so object/tile selection is accurate near tile/object boundaries
 
 ### Known bugs
 
 - [ ] placing lights - light.frm
-- [ ] clicking on an object is not pixel perfect and sometimes a tile underneath or an object close by is selected instead
 - [ ] scroll block drawing mode draws the rectangle in the isometric projection (diagonal) instead of screen projection
-- [ ] placing lights - light.frm
 - [ ] file browser panel has issues with resizing. It is sometimes impossible to change its size or requires several clicks
 - [ ] make sure changing elevations works with the recent changes (probably not)

@@ -38,24 +38,20 @@ live with their library (`src/resource/`, `src/ui/`).
    (`MapInfoPanel` checkboxes) is still a direct mutation; a cascading script-delete when an
    object is deleted; and the command-controller actions themselves aren't integration-tested
    (they need GameResources/Qt — a `qt_tests` follow-up).
-2. **AI packet / script program are raw values** (engine packet numbers / scripts.lst names),
-   not friendly labels — no invented label tables, per the engine-fidelity rule. Real labels
-   need `data/ai.txt` parsing (AI) or the scripts.lst trailing comment (script "description" —
-   see the SSL-editing section; the `.int` has no description, Q below).
-3. **Newly created scripts get `local_var_count=0` / `offset=-1`** — exactly what the engine's
+2. **Newly created scripts get `local_var_count=0` / `offset=-1`** — exactly what the engine's
    `scriptAdd` writes; locals are allocated at runtime from the `.int`. The editor does not
    parse `.int` headers, and the local-var *count* lives in `scripts.lst`, not the binary.
-4. **F11 spatial placement is dialog-driven** (enter tile/elevation/radius), not click-to-place
+3. **F11 spatial placement is dialog-driven** (enter tile/elevation/radius), not click-to-place
    with a live hex marker, radius overlay, and a new `EditorMode`. Existing spatial scripts also
    aren't visualized on the map or editable/deletable through the UI yet.
-5. **F16 per-instance kill-type and custom name are out of scope** — not exposed in the engine
+4. **F16 per-instance kill-type and custom name are out of scope** — not exposed in the engine
    mapper and would require new serialized `MapObject` fields.
-6. **Script attach reassigns the object OID** (`unknown0`) to a fresh unique id (matching the
+5. **Script attach reassigns the object OID** (`unknown0`) to a fresh unique id (matching the
    engine's `objectSetScript`); existing cross-references to the old OID aren't audited/rewritten.
-7. **Inventory "Add" uses a numeric proto index**, not a browsable item picker.
-8. **Edit visuals are sprite-rebuild only** — no engine-style `_obj_toggle_flat` outline
+6. **Inventory "Add" uses a numeric proto index**, not a browsable item picker.
+7. **Edit visuals are sprite-rebuild only** — no engine-style `_obj_toggle_flat` outline
    recompute, multi-hex occupancy overlay, or live light-radius overlay beyond the rebuild.
-9. **Keybindings are hardcoded — no user remapping.** Shortcuts are scattered and fixed: the
+8. **Keybindings are hardcoded — no user remapping.** Shortcuts are scattered and fixed: the
     menu/toolbar `QKeySequence`s in `MainWindow::setupMenuBar()`/`setupToolBar()` (New/Open/Save,
     Select All `Ctrl+A`, scroll-blocker `B`, exit grids `Ctrl+E`, undo/redo, …), the editor-mode
     keys in `InputHandler::handleKeyPressed` (`R` cycles a stamp variant, `Esc` cancels, `Delete`/
@@ -66,13 +62,13 @@ live with their library (`src/resource/`, `src/ui/`).
     the menu/toolbar `QAction`s *and* the `InputHandler` dispatch from that table instead of
     literals, so a rebind takes effect everywhere and the bindings stay discoverable. Engine-fidelity
     note: this is editor UX only — it changes no map/format data.
-10. **Toolbar is a fixed button set — not user-customizable.** The primary toolbar (New, Browse Maps,
+9. **Toolbar is a fixed button set — not user-customizable.** The primary toolbar (New, Browse Maps,
     Save, Play) is a hardcoded `primaryToolbarActions` array in `MainWindow::setupToolBar()`. Most
     editors let users choose which buttons appear and reorder them. **Add a customizable toolbar:**
-    drive it from the same command/action table proposed in #9 (stable action id → icon/label/handler),
+    drive it from the same command/action table proposed in #8 (stable action id → icon/label/handler),
     with a context-menu / Preferences UI to add, remove, and reorder buttons, persisted via `Settings`.
     Editor UX only; no map/format change.
-11. **The writable save target is positional, not chosen.** Saving a map (and map-name edits) writes
+10. **The writable save target is positional, not chosen.** Saving a map (and map-name edits) writes
     into the *last folder* in Data Paths — `findWritableDataPath` walks the list from the end and takes
     the first real directory (archives skipped). That's implicit and order-dependent: reordering Data
     Paths silently changes where saves land, and nothing in the UI shows which location is the writable
@@ -706,7 +702,7 @@ The visual map picker shipped (`MapBrowserDialog`, File → Browse Maps…: thum
 
 > Status: investigation. Spatial scripts can be created (`SpatialScriptDialog` → F-key flow)
 > but are **invisible on the map** once placed — there's no marker, no radius overlay, and no
-> way to see, select, edit, or delete an existing one (see Known limitations #4). Goal: render
+> way to see, select, edit, or delete an existing one (see Known limitations #3). Goal: render
 > existing spatial scripts on the canvas so designers can see where their trigger zones are.
 
 ## What the data model gives us
@@ -733,7 +729,7 @@ object list. Placement currently flows MapInfoPanel → `EditorWidget::addSpatia
   culled via the viewport like the other overlays.
 - **Interaction (stretch):** hit-test a marker to select → open `SpatialScriptDialog` to
   edit/delete; ties into the F-key click-to-place + new `EditorMode` already sketched in
-  Known limitations #4 (live hex marker + radius preview while placing).
+  Known limitations #3 (live hex marker + radius preview while placing).
 
 ## Rough effort
 S–M for read-only visualization (marker + radius overlay + visibility toggle), reusing the
@@ -773,29 +769,6 @@ partly covered — see the exit-grid limitation above).
 ## Rough effort
 S to produce the catalogue (read-only audit of two known codebases); the individual features
 it surfaces are then sized and sequenced separately.
-
----
-
-# Clean and verify TODO.md (housekeeping)
-
-> Status: to do. `TODO.md` has drifted and needs the same "track what's left, not what's done"
-> pass this plan just had.
-
-## What needs doing
-- **Remove completed items.** Several Code Quality / Architecture entries are done now that the
-  architecture roadmap landed — e.g. splitting the resource singleton (`Settings` is injected;
-  resource access is the `GameResources`/`DataFileSystem` facade), the MAP read/write refactor
-  + round-trip coverage, and the `ProEditorDialog` decomposition. Verify each against the
-  current code and delete the ones that shipped.
-- **De-duplicate.** "placing lights - light.frm" is listed twice; collapse duplicates.
-- **Verify the rest still applies** — some bugs/usability items may already be fixed (e.g. the
-  scroll-blocker isometric-rectangle bug is also tracked here in the exit-grid section).
-- **Reconcile with this plan.** Fold the "Legacy F2_Mapper_Dims Missing Features" section into
-  the feature-gap audit above so there is one backlog, not two.
-
-## Rough effort
-S. Pure housekeeping — read TODO.md against current code, delete done/dupe items, cross-link
-the rest.
 
 ---
 
