@@ -78,7 +78,7 @@ TEST_CASE("Tile placement uses the render projection, not hex-snapping", "[viewp
     // NEW placement path (== the hover/selection path): nearest rendered tile centre.
     auto newPlacementTile = [&](sf::Vector2f pt) {
         const auto t = screenToTileIndex(pt.x, pt.y, false);
-        return t ? *t : -1;
+        return t.value_or(-1);
     };
 
     int divergences = 0;

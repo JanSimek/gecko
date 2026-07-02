@@ -28,7 +28,7 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
     // tile then disagreed with the highlighted one. screenToTileIndex applies the roof offset
     // internally, so no manual ROOF_OFFSET adjustment is needed here.
     const auto resolvedTile = screenToTileIndex(worldPos.x, worldPos.y, isRoof);
-    if (!resolvedTile) {
+    if (!resolvedTile.has_value()) {
         spdlog::debug("TilePlacementManager::placeTileAtPosition: No valid position found");
         return;
     }
