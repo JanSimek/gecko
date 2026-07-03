@@ -48,10 +48,9 @@ live with their library (`src/resource/`, `src/ui/`).
    mapper and would require new serialized `MapObject` fields.
 5. **Script attach reassigns the object OID** (`unknown0`) to a fresh unique id (matching the
    engine's `objectSetScript`); existing cross-references to the old OID aren't audited/rewritten.
-6. **Inventory "Add" uses a numeric proto index**, not a browsable item picker.
-7. **Edit visuals are sprite-rebuild only** — no engine-style `_obj_toggle_flat` outline
+6. **Edit visuals are sprite-rebuild only** — no engine-style `_obj_toggle_flat` outline
    recompute, multi-hex occupancy overlay, or live light-radius overlay beyond the rebuild.
-8. **Keybindings are hardcoded — no user remapping.** Shortcuts are scattered and fixed: the
+7. **Keybindings are hardcoded — no user remapping.** Shortcuts are scattered and fixed: the
     menu/toolbar `QKeySequence`s in `MainWindow::setupMenuBar()`/`setupToolBar()` (New/Open/Save,
     Select All `Ctrl+A`, scroll-blocker `B`, exit grids `Ctrl+E`, undo/redo, …), the editor-mode
     keys in `InputHandler::handleKeyPressed` (`R` cycles a stamp variant, `Esc` cancels, `Delete`/
@@ -62,13 +61,13 @@ live with their library (`src/resource/`, `src/ui/`).
     the menu/toolbar `QAction`s *and* the `InputHandler` dispatch from that table instead of
     literals, so a rebind takes effect everywhere and the bindings stay discoverable. Engine-fidelity
     note: this is editor UX only — it changes no map/format data.
-9. **Toolbar is a fixed button set — not user-customizable.** The primary toolbar (New, Browse Maps,
+8. **Toolbar is a fixed button set — not user-customizable.** The primary toolbar (New, Browse Maps,
     Save, Play) is a hardcoded `primaryToolbarActions` array in `MainWindow::setupToolBar()`. Most
     editors let users choose which buttons appear and reorder them. **Add a customizable toolbar:**
-    drive it from the same command/action table proposed in #8 (stable action id → icon/label/handler),
+    drive it from the same command/action table proposed in #7 (stable action id → icon/label/handler),
     with a context-menu / Preferences UI to add, remove, and reorder buttons, persisted via `Settings`.
     Editor UX only; no map/format change.
-10. **The writable save target is positional, not chosen.** Saving a map (and map-name edits) writes
+9. **The writable save target is positional, not chosen.** Saving a map (and map-name edits) writes
     into the *last folder* in Data Paths — `findWritableDataPath` walks the list from the end and takes
     the first real directory (archives skipped). That's implicit and order-dependent: reordering Data
     Paths silently changes where saves land, and nothing in the UI shows which location is the writable
@@ -475,10 +474,6 @@ The direction instead:
    and **document the orientation** so `(col,row)` matches what the editor displays (Fallout's hex
    numbering has a right-to-left quirk).
 
-3. **Script parameters & seed.** `gecko-cli map generate --arg density=300 --arg seed=42` (and a
-   console params field) exposed as a global table, so one script produces reproducible variants
-   without editing it.
-
 ### P2 — Generation quality
 
 4. **Analyze → generate model (autotiling).** `edg*` is a hand-authored *blend set* (~49 variants
@@ -505,15 +500,6 @@ The direction instead:
 10. **Biome script library** — `cave.luau`, `town.luau`, `coast.luau` beside the desert one; each
     a worked example. Expand the `scripts/README.md` table.
 11. **Batch generation** — produce N maps with varying seeds in one `gecko-cli` invocation.
-
-### P4 — AI & visual (ties into the MCP section below)
-
-12. **MCP server** wrapping `gecko_cli`'s `analyze`/`generate` plus a `palette` tool, so an agent
-    can inspect and generate maps conversationally. The `gecko_editing` extraction + the existing
-    `gecko-cli` already de-risk this — see the MCP section.
-13. **Headless render / PNG export.** The one genuine GL case (offscreen `sf::RenderTexture`),
-    needed only to *preview* a generated map. Everything else above is GL-free. Shares the Qt-free
-    render-library extraction noted under the MCP "visual analysis" item.
 
 ### Open questions
 
@@ -546,7 +532,7 @@ from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
    `run_away_mode`, `area_attack_mode`, `best_weapon`, `distance`, `secondary_freq`), equipped
    weapon + inventory, attached script. `ai.txt` is INI (one section per packet; section header =
    name; `packet_num` = the critter's `ai_packet`). **Phase 1.**
-3. **Scripts + behavior — `describe_script` (Phase 2, in progress).** An object's `map_scripts_pid`
+3. **Scripts + behavior — `describe_script` (Phase 2 — shipped).** An object's `map_scripts_pid`
    (SID) → the map's `MapScript` with that pid → its `script_id` = the program index → `scripts.lst`
    row → the **filename** (e.g. `ncProsti.int`). Resolution keys off that **filename basename**
    (extension stripped), matched **case-insensitively** — *not* `SCRIPT_REALNAME`, which is only a
@@ -624,74 +610,10 @@ then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority ord
 
 ---
 
-# Selection type toolbar — combinable layers & non-destructive switching
-
-> Status: idea / scoping. Two related improvements to how the selection *type* works. Today the
-> type is a single `SelectionMode` (`src/util/Types.h`: `ALL`, `FLOOR_TILES`, `ROOF_TILES`,
-> `ROOF_TILES_ALL`, `OBJECTS`, `HEXES`, `SCROLL_BLOCKER_RECTANGLE`) that the toolbar cycles through
-> (`EditorWidget::cycleSelectionMode`/`setSelectionMode`).
-
-## 1. Let the user combine layers (checkboxes instead of one hardcoded type)
-
-**Goal:** instead of one mode at a time, let the user pick a *combination* of layers to select —
-e.g. roof + floor tiles, or floor + objects — via a set of checkboxes on the toolbar.
-
-**Difficulty: moderate, and lower than it first looks**, because the selection code is already
-decomposed per category — the single-mode `switch`es just fan out to per-category helpers that a
-combined model would call directly:
-
-- `SelectionManager::collectItemsInArea` already delegates to `appendObjectsInArea` /
-  `appendTilesInArea(roof=false)` / `appendTilesInArea(roof=true)` / `appendHexesInArea`, and the
-  `ALL` case already calls several of them (objects + floor + roof-if-visible). A combined selection
-  is "call the appenders for each *enabled* category" — `ALL` is just "all enabled".
-- `collectDeselectableAtPosition` (Ctrl+click) and `selectAtPosition` are similarly per-category
-  (`appendRoofCandidate` / `appendObjectCandidates` / `appendTileCandidate` / `appendHexCandidate`).
-- `RenderData.currentSelectionMode` only drives the selection-rectangle colour
-  (`applySelectionRectangleColors`) — cosmetic.
-
-**Work involved:**
-- **Model:** replace the single `SelectionMode` with a set/bitmask of selectable categories
-  (Floor, Roof, Objects — the layer-like ones). Keep `HEXES` and `SCROLL_BLOCKER_RECTANGLE` as
-  distinct *tools* (they aren't "layers" and shouldn't combine), so this is really "generalise the
-  ALL/tile/object modes into a category set" rather than touching every mode.
-- **Dispatch:** rewrite the three `switch (mode)` sites in `SelectionManager` to iterate the enabled
-  categories and call the existing appenders. Mechanical, since the appenders already exist.
-- **UI:** swap the cycle-button for a few checkboxes (Floor / Roof / Objects), wired to the category
-  set. The `selectionModeToString` / cycling logic and the `NUM_SELECTION_TYPES` enum sentinel go
-  away or shrink.
-- **Edge cases:** `ROOF_TILES_ALL` (include-empty) is a roof variant — fold it into a roof option
-  (e.g. a modifier) rather than a separate category; decide how the rect colour reads for a mix.
-
-Risk is low (no new hit-testing; reuses tested per-category helpers and the `SelectionDataProvider`
-seam covered by `MockEditorWidget`). The bulk is the model swap + the toolbar widget.
-
-## 2. Don't clear the selection when the type changes (additive / subtractive)
-
-**Current behaviour:** `EditorWidget::cycleSelectionMode` and `setSelectionMode` both call
-`_selectionManager->clearSelection()`, so changing the type throws away the current selection.
-
-**Goal:** changing the type keeps the existing selection; subsequent clicks/drags then **add to** or
-**subtract from** it under the new type (e.g. select floor tiles, switch to roof, add roof tiles to
-the same selection; Ctrl-drag to remove). This is the natural companion to #1 — with checkboxes,
-"changing the type" becomes "toggling a category", and persistence is expected.
-
-**Work involved (small):**
-- Drop the `clearSelection()` calls from the two mode setters.
-- The add/subtract paths are already mode-aware and additive: `addArea`/`addToSelection` (don't
-  clear), `deselectArea`/`deselectAtPosition` (remove, visibility-respecting), and the selection
-  state already holds **mixed** item types (that's what `ALL` produces), so a persisted floor+roof
-  selection is already a valid state.
-- Verify the move/region code and the selection visuals handle a mixed selection built up across
-  type switches (they should, since `ALL` already yields mixed selections), and that `_state.mode`
-  isn't relied on anywhere as "the one true type" in a way that a persisted mixed selection breaks.
-
----
-
 # Map loader panel — remaining enhancements
 
 The visual map picker shipped (`MapBrowserDialog`, File → Browse Maps…: thumbnail grid + filter
 + preview, lazy render, in-memory cache). Possible follow-ups:
-- **Source grouping** — separate vanilla `master.dat` maps from user/filesystem maps.
 - **Persisted cross-session thumbnail cache** (keyed by map path + mtime) — only if cold-start
   render latency proves annoying; the current cache is in-memory `QPixmapCache`.
 
@@ -737,37 +659,30 @@ part and overlaps the spatial-placement `EditorMode` follow-up.
 
 ---
 
-# Feature-gap audit vs the reference mappers (investigate)
+# Feature-gap audit vs the reference mappers
 
-> Status: investigation. Catalog the editing features the two reference mappers have that
-> Gecko lacks, then turn the gap into a prioritized backlog. One concrete, confirmed example
-> is **EDG (map-edge) support**: fallout2-ce stores per-map `.edg` files (`build/data/MAPS/*.edg`)
-> and the engine mapper authors them (`src/map_edge.{cc,h}`, `src/mapper/map_edge_setup.{cc,h}`,
-> gated by the `edg_support` setting) — Gecko has no `.edg` read/write or edge-setup UI. Find
-> the rest of the gaps the same way, systematically rather than ad hoc.
+> **Done (2026-07-03)** — full parity catalogue in
+> [`docs/feature-gap-audit.md`](docs/feature-gap-audit.md), from a read-only audit of the fallout2-ce
+> built-in mapper (`src/mapper/`) and the legacy Dims mapper (`reference/F2_Mapper_Dims-master/`)
+> against Gecko. Headline: **Gecko already leads both references** in header/PRO/global-var editing,
+> undo/redo, Luau area-fill + generation, MCP analysis, combinable layers, and prefab patterns (which
+> Dims left stubbed). Only ~8 genuine parity gaps remain; the old TODO.md "Legacy Dims missing
+> features" list was mostly wrong-premised (corrected in the audit).
 
-## The two references
-- **Legacy Dims Mapper** — `reference/F2_Mapper_Dims-master/` (the community F2 mapper Gecko is
-  modelled on). TODO.md already has a partial "Legacy F2_Mapper_Dims Missing Features" list
-  (minimap, brush system, batch property editing, script-assignment UI, template system,
-  advanced search/filter, richer progress dialogs) — fold that into this audit rather than
-  keeping a second list.
-- **fallout2-ce built-in mapper** — `/Users/jansimek/Development/fallout2-ce/src/mapper/`
-  (`mapper.cc`, `map_func.cc`, `mp_instance.cc`, `mp_proto.cc`, `mp_scrpt.cc`, `mp_targt.cc`,
-  `mp_text.cc`). This is the engine's own authoring tool and the source of truth for behaviour
-  — walk its tool modes / menu actions and check each against Gecko.
+**Surfaced backlog (adopt, prioritized — match the engine's behaviour, don't invent):**
+1. **`.edg` map-edge support** *(M)* — vault reader/writer for the big-endian `'EDGE'` v1/v2 format the
+   engine authors + enforces (`fallout2-ce map_edge.cc` / `map_edge_setup.cc`), plus a setup overlay.
+   The one real format Gecko can't round-trip.
+2. **Spatial-script visualization** *(S–M)* — marker + radius overlay for placed spatial scripts (they
+   are created but invisible today). Also Known-limitation #3 / the "Visualize spatial scripts" section.
+3. **Eyedropper — pick proto/tile from the map** *(S)* + **edge-scroll panning** *(S)* — cheap QoL both
+   references have; do together.
+4. **Minimap / overview** *(M)* — click-to-navigate + elevation switch, with a viewport rectangle
+   (improving on Dims' cursor-sprite locator).
 
-## What to produce
-A single prioritized parity list: feature → which reference has it → does Gecko have it →
-adopt / defer / intentional non-goal (per the engine-fidelity rule — match the reference's
-behaviour, don't invent). Candidate areas to check beyond EDG/map-edge and the Dims list:
-edge-scroll panning (`map_func.cc`), proto editing (`mp_proto`), script & target tooling
-(`mp_scrpt` / `mp_targt`), per-hex block/roof/light toggles, and exit-grid authoring (already
-partly covered — see the exit-grid limitation above).
-
-## Rough effort
-S to produce the catalogue (read-only audit of two known codebases); the individual features
-it surfaces are then sized and sequenced separately.
+Deferred (substitute exists / niche): object clipboard copy-paste (pattern-stamp covers it),
+whole-elevation hex shift, absolute-rotation setters. Intentional non-goals and the corrected
+TODO-claim table are in the audit doc.
 
 ---
 
@@ -955,8 +870,13 @@ immediately useful and de-risks the rest.
 
 # Area-Fill + Luau Plugins — Unified Design Proposal
 
-> **Status:** Feature B (the Luau
-> plugin system) remains a proposal. The design below is kept as the reference write-up for both.
+> **Status:** Feature A (area fill) SHIPPED as a Luau-driven "Fill Selection" (`EditArea`,
+> `FillPlan`, `PlacementBatch`, `FillDialog`, `FillLibrary` + bundled `scripts/fills/*.luau`,
+> CLI/MCP `fill`). The Tier-1 declarative recipe path (A1) and the `autotileFloor`/`FloorTileSet`
+> primitive (A2) were built and then **removed by design** — the Luau fills cover the need. What
+> remains: **A5** (freehand Fill Brush) and all of **Feature B** (the Luau plugin system), both
+> gated behind the still-unbuilt `ITool`/`ToolRegistry` seam. The design below is kept as the
+> reference write-up for that remaining work.
 
 This proposal specifies two features that share one substrate: **Feature A**, a Luau-and-data-driven *area fill* ("Fill Selection") that closes the `autotile_floor` / "paint a pattern of tiles" gap; and **Feature B**, a *Luau plugin system* that lets third parties add tools, panels, menus, and event handlers. The decision throughout is to **build one set of seams and exercise it twice**: area-fill is the first first-party consumer of the same selection-projection, ghost-preview, `ITool`, and `MapScriptApi`-over-a-batch machinery that the plugin system opens to third parties. Engine-data-fidelity is non-negotiable: PIDs/directions/flags/tile-ids stored and replayed verbatim, no fallback label tables, no rotation math, validated readers with no silent fallback.
 
@@ -1122,12 +1042,13 @@ Fills live in `fills/` under the existing `PatternLibrary::rootDir()`; one brows
 
 ### 3.9 Phased plan (A)
 
-- **A0 — Selection + plan/apply core (always compiled, headless-testable).** `EditArea` (both rect and discrete-getter construction); `setArea` + area accessors (X-macro + reference TU); `FillPlan` + `setPlanSink`; the two sink insertion points; `PatternStamper::planInto` (stamp capture) + `PlacementBatch` (factored from `stamp`); seeded `rng/rngInt/weightedPick/objectAt/noise3d`. Unit tests: same seed → identical `FillPlan`; replay == captured; stamp palette entries captured (not committed) under a sink.
-- **A1 — Tier-1 recipes (always compiled; works in default OFF build).** `FillRecipe` + serializers + validator; `FillRecipeRunner` (floor single/scatter; scatter palette/noise/density/spacing/jitter/runner-occupancy); CLI `fill` + MCP `fill`. First user value, headless, beats Dims.
-- **A2 — Seamless floor.** `FloorTileSet` + reader + `registerFloorSet`; `autotileFloor`/`autotileFloorAt`/`areaFloorEdgeMask`; bundle `desert_sand`/`cave_rock`. Closes `autotile_floor`.
-- **A3 — Interactive GUI MVP.** Shared ghost-overlay `RenderData` field; `FillDialog` (browser + generated controls + seed/lock + debounced live preview + Apply/Cancel); Edit-menu/toolbar action; `FillThumbnail`. **No `EditorMode`.** First end-user release.
-- **A4 — Tier-2 Luau (gated).** `fill.luau` prelude; custom Luau fills via the dialog; pass `args`; recipe→Luau lowering. **Prerequisite: the sandbox interrupt+deadline (B-side) must land first** (see §3.10).
-- **A5 — Freehand Fill Brush.** A native `ITool` on the registry introduced by Feature B (§5), not a new bespoke mode.
+- **A0–A4 — SHIPPED** (Luau-driven Fill Selection). The plan/apply core (`EditArea`, `FillPlan`,
+  `setPlanSink` + the two sink points, `PatternStamper::planInto`, `PlacementBatch`, seeded
+  `rng/rngInt/objectAt/noise3d`), the interactive `FillDialog` GUI with debounced live preview, and
+  gated Tier-2 Luau fills all landed. A1 (declarative `FillRecipe` recipes + CLI/MCP `fill`) and A2
+  (`autotileFloor`/`FloorTileSet` seamless floor) were built then **removed by design** — the Luau
+  fills replaced them, so the `autotile_floor` gap is intentionally closed by scripting, not a set primitive.
+- **A5 — Freehand Fill Brush** *(pending)*. A native `ITool` on the registry introduced by Feature B (§5), not a new bespoke mode.
 
 ### 3.10 Sandbox ordering (folded-in correction)
 

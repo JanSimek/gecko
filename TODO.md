@@ -2,23 +2,11 @@
 
 ## Legacy F2_Mapper_Dims Missing Features
 
-### Minimap
-Real-time minimap with click-to-navigate functionality showing entire map layout with viewport indicator.
-
-### Brush System
-Brush tools for painting objects and terrain features with customizable brush sizes and random object placement from predefined sets.
-
-### Batch Property Editing
-Extend existing multi-selection system with batch property editing for multiple selected objects via the PRO editor.
-
-### Script Integration
-Script assignment UI for object properties with dropdown, validation, and preview capabilities.
-
-### Advanced Search & Filter
-Property-based filtering and complex query support for finding specific objects across the entire map.
-
-### Progress & Status Improvements
-Detailed progress dialog with task descriptions and completion estimates for long operations.
+Audited and folded into **[docs/feature-gap-audit.md](docs/feature-gap-audit.md)** (2026-07-03).
+Most of the old items here were wrong-premised: batch-property-editing and advanced-search are
+features *neither* reference mapper actually has, and script-assignment + a template/prefab system
+Gecko already ships. The one genuine Dims parity gap is the **minimap**. See the audit for the full
+corrected list and the prioritized adopt backlog.
 
 ---
 
