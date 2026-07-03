@@ -301,8 +301,36 @@ public:
     void attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex);
     void detachScript(const std::shared_ptr<MapObject>& object);
     void addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
+    // Edit / delete an existing spatial script by SID (undoable). Both refresh the script panels via
+    // mapScriptsChanged; delete also clears the selection if it pointed at the removed script.
+    void editSpatialScript(uint32_t sid, uint32_t programIndex, int tile, int elevation, int radius);
+    void deleteSpatialScript(uint32_t sid);
+
+    // Shared "selected spatial script" state (map click <-> Scripts panel). Setting it emits
+    // spatialScriptSelectionChanged so the panel can mirror the row; MapScript::NONE clears it.
+    void setSelectedSpatialScript(uint32_t sid);
+    [[nodiscard]] uint32_t selectedSpatialScript() const { return _session.selectedSpatialScriptSid(); }
+
+    // Current field values of the spatial script with this SID (for pre-filling an edit dialog),
+    // or nullopt if none matches. tile/elevation are the decoded built_tile.
+    struct SpatialScriptInfo {
+        uint32_t programIndex;
+        int tile;
+        int elevation;
+        int radius;
+    };
+    [[nodiscard]] std::optional<SpatialScriptInfo> spatialScriptInfo(uint32_t sid) const;
 
 signals:
+    /// The map-side spatial-script selection changed (marker click or clear). MainWindow mirrors it
+    /// onto the Scripts panel row. Carries MapScript::NONE when nothing is selected.
+    void spatialScriptSelectionChanged(uint32_t sid);
+    /// The user double-clicked a spatial marker on the map: open its editor (same as the panel's
+    /// edit request). MainWindow owns the dialog.
+    void spatialScriptEditActivated(uint32_t sid);
+    /// A spatial script was added / edited / deleted, so the script panels must repopulate.
+    void mapScriptsChanged();
+
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
     void hexHoverChanged(int hexIndex);
@@ -352,6 +380,12 @@ private:
         const selection::SelectedItem& item,
         const std::unordered_map<const MapObject*, std::shared_ptr<Object>>& objectsByMapObject,
         const std::optional<std::pair<int, int>>& tileDelta) const;
+
+    // If the spatial-script overlay is visible and a marker sits on the clicked hex (current
+    // elevation), select that script (clearing any object/tile selection) and return true. A second
+    // quick click on the same marker also fires spatialScriptEditActivated. A miss clears the spatial
+    // selection and returns false so normal object selection proceeds.
+    bool trySelectSpatialScriptAt(sf::Vector2f worldPos);
 
     // Object management
     void deleteSelectedObjects();
@@ -463,6 +497,12 @@ private:
     const ObjectInfo* _previewObjectInfo = nullptr; // Object info from palette
 
     int _currentHoverHex = -1;
+
+    // Map-side double-click detection for spatial markers: a second click on the same SID within
+    // kSpatialDoubleClickSeconds opens its editor. Self-contained (no InputHandler timing plumbing).
+    sf::Clock _spatialClickClock;
+    uint32_t _lastSpatialClickSid = 0xFFFFFFFFu; // MapScript::NONE
+    static constexpr float kSpatialDoubleClickSeconds = 0.4f;
 
     // Edge scrolling: auto-pan when the cursor rests near a viewport edge (see setEdgeScrollEnabled).
     // Default on to match both reference mappers; the View menu / Settings persist the user's choice.

@@ -146,6 +146,11 @@ public:
     bool attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex);
     bool detachScript(const std::shared_ptr<MapObject>& object);
     bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
+    // Edit / remove an existing spatial script by SID (undoable); findSpatialScript reads its
+    // current values (e.g. to pre-fill an edit dialog). See ScriptEditService for details.
+    bool editSpatialScript(uint32_t sid, uint32_t programIndex, int tile, int elevation, int radius);
+    bool removeSpatialScript(uint32_t sid);
+    const MapScript* findSpatialScript(uint32_t sid) const;
 
 private:
     resource::GameResources& _resources;

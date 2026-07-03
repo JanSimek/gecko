@@ -10,6 +10,7 @@
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
 #include "format/map/Map.h"
+#include "format/map/MapScript.h"
 #include "selection/SelectionManager.h"
 #include "util/UndoStack.h"
 
@@ -45,10 +46,17 @@ public:
         _floorSprites.clear();
         _roofSprites.clear();
         _wallBlockerOverlays.clear();
+        _selectedSpatialScriptSid = MapScript::NONE;
     }
 
     [[nodiscard]] VisibilitySettings& visibility() { return _visibility; }
     [[nodiscard]] const VisibilitySettings& visibility() const { return _visibility; }
+
+    // The SID (MapScript::pid) of the spatial script currently selected on the map / in the
+    // Scripts panel, or MapScript::NONE. Shared by the click hit-test, the panel row, and the
+    // renderer (which highlights the matching marker).
+    [[nodiscard]] uint32_t selectedSpatialScriptSid() const { return _selectedSpatialScriptSid; }
+    void setSelectedSpatialScriptSid(uint32_t sid) { _selectedSpatialScriptSid = sid; }
 
     [[nodiscard]] UndoStack& undoStack() { return _undoStack; }
     [[nodiscard]] const UndoStack& undoStack() const { return _undoStack; }
@@ -81,6 +89,8 @@ private:
     UndoStack _undoStack{ 100 };
 
     int _currentElevation = 0;
+
+    uint32_t _selectedSpatialScriptSid = MapScript::NONE;
 
     std::unique_ptr<selection::SelectionManager> _selectionManager;
 

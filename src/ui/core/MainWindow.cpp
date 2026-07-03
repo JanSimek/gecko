@@ -20,6 +20,8 @@
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
 #include "ui/dialogs/FillDialog.h"
+#include "ui/dialogs/SpatialScriptDialog.h"
+#include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
 #include "ui/UIConstants.h"
@@ -464,6 +466,7 @@ void MainWindow::setupMenuBar() {
             updateUndoRedoActions();
             if (_selectionPanel)
                 _selectionPanel->refresh();
+            refreshScriptsPanel(); // an undone spatial add/edit/delete must re-appear in the panel
         }
     });
 
@@ -476,6 +479,7 @@ void MainWindow::setupMenuBar() {
             updateUndoRedoActions();
             if (_selectionPanel)
                 _selectionPanel->refresh();
+            refreshScriptsPanel(); // keep the panel in step with a redone spatial add/edit/delete
         }
     });
 
@@ -1587,6 +1591,21 @@ void MainWindow::connectPanelSignals() {
                     showStatusMessage("Script has no object on the map");
                 }
             });
+
+        // Selecting a spatial-script row drives the shared selection (highlights its marker on the map).
+        connect(_scriptsPanel, &ScriptsPanel::spatialScriptSelected, this, [this](uint32_t sid) {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->setSelectedSpatialScript(sid);
+            }
+        });
+        // Edit / delete requested from the panel (context menu or double-click).
+        connect(_scriptsPanel, &ScriptsPanel::spatialScriptEditRequested, this,
+            [this](uint32_t sid) { openSpatialScriptEditor(sid); });
+        connect(_scriptsPanel, &ScriptsPanel::spatialScriptDeleteRequested, this, [this](uint32_t sid) {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->deleteSpatialScript(sid);
+            }
+        });
     }
 }
 
@@ -1641,6 +1660,18 @@ void MainWindow::connectToEditorWidget() {
         handleMapLoadRequest(mapPath, true);
     });
 
+    // Spatial-script selection/editing sync (map <-> Scripts panel). The panel mirrors the map-side
+    // selection; a map double-click opens the editor; add/edit/delete repopulate the panel.
+    connect(_currentEditorWidget, &EditorWidget::spatialScriptSelectionChanged, this, [this](uint32_t sid) {
+        if (_scriptsPanel) {
+            _scriptsPanel->selectSpatialScriptRow(sid);
+        }
+    });
+    connect(_currentEditorWidget, &EditorWidget::spatialScriptEditActivated, this,
+        [this](uint32_t sid) { openSpatialScriptEditor(sid); });
+    connect(_currentEditorWidget, &EditorWidget::mapScriptsChanged, this,
+        [this]() { refreshScriptsPanel(); });
+
     if (_mapInfoPanel) {
         connect(_currentEditorWidget, &EditorWidget::playerPositionSelected,
             this, [this](int hexPosition) {
@@ -1653,6 +1684,38 @@ void MainWindow::connectToEditorWidget() {
     applySelectionColorsToEditor();
 
     spdlog::debug("Connected EditorWidget instance signals");
+}
+
+void MainWindow::openSpatialScriptEditor(uint32_t sid) {
+    if (!_currentEditorWidget) {
+        return;
+    }
+    const auto info = _currentEditorWidget->spatialScriptInfo(sid);
+    if (!info) {
+        showStatusMessage("Spatial script no longer exists");
+        return;
+    }
+
+    // Reuse the Add Spatial Script dialog, pre-filled with the script's current values.
+    SpatialScriptDialog dialog(ScriptSelectorDialog::buildEntries(*_resourcesShared), this);
+    dialog.setWindowTitle("Edit Spatial Script");
+    dialog.setProgramIndex(static_cast<int>(info->programIndex));
+    dialog.setTile(info->tile);
+    dialog.setElevation(info->elevation);
+    dialog.setRadius(info->radius);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    _currentEditorWidget->editSpatialScript(sid, static_cast<uint32_t>(dialog.programIndex()),
+        dialog.tile(), dialog.elevation(), dialog.radius());
+}
+
+void MainWindow::refreshScriptsPanel() {
+    if (_scriptsPanel && _currentEditorWidget) {
+        _scriptsPanel->setMap(_currentEditorWidget->getMap());
+        // populate() drops the selection; re-assert the shared spatial selection so the row stays lit.
+        _scriptsPanel->selectSpatialScriptRow(_currentEditorWidget->selectedSpatialScript());
+    }
 }
 
 void MainWindow::applySelectionColorsToEditor() {

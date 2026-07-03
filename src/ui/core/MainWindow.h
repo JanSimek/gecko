@@ -181,6 +181,12 @@ private:
     void applyDefaultPanelDockLayout();
     void connectFileBrowserSignals();
     void connectPanelSignals();
+    // Open the (pre-filled) Spatial Script dialog to edit the spatial script with this SID, applying
+    // an undoable edit on accept. Shared by the Scripts-panel and map double-click edit requests.
+    void openSpatialScriptEditor(uint32_t sid);
+    // Rebuild the Scripts panel from the current map and re-assert the shared spatial selection.
+    // Called after a spatial-script add/edit/delete and after undo/redo.
+    void refreshScriptsPanel();
     void replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSizePolicy::Policy verticalPolicy);
     void rebuildResourcePanels();
     void rebuildGameResourcesFromSettings();

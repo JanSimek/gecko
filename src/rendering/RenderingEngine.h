@@ -102,6 +102,10 @@ public:
         const Map* map = nullptr;
         int currentElevation = 0;
 
+        // SID (MapScript::pid) of the spatial script to highlight as selected in the
+        // spatial-script overlay, or MapScript::NONE for no selection.
+        uint32_t selectedSpatialScriptSid = 0xFFFFFFFFu;
+
         // Exit-grid "Draw edge" live preview (MarkExits mode), grouped so RenderData stays small. When
         // `active`: `lineVertices`/`lineCursor` draw the polyline (vertex->vertex, last->cursor);
         // `hexes` are the prospective on-line hexes; `frmPids` (parallel) each hex's directional marker

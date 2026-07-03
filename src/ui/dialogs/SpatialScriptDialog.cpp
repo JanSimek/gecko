@@ -62,6 +62,10 @@ void SpatialScriptDialog::onChooseScript() {
     if (index < 0) {
         return;
     }
+    selectProgram(index);
+}
+
+void SpatialScriptDialog::selectProgram(int index) {
     _programIndex = index;
     if (static_cast<size_t>(index) < _scripts.size()) {
         const ScriptSelectorDialog::Entry& entry = _scripts[static_cast<size_t>(index)];
@@ -73,8 +77,25 @@ void SpatialScriptDialog::onChooseScript() {
     } else {
         _scriptLabel->setText(QString("Script #%1").arg(index));
     }
-    _okButton->setEnabled(true);
+    _okButton->setEnabled(index >= 0);
 }
+
+void SpatialScriptDialog::setProgramIndex(int index) {
+    if (index >= 0) {
+        selectProgram(index);
+    }
+}
+
+void SpatialScriptDialog::setTile(int tile) { _tileSpin->setValue(tile); }
+
+void SpatialScriptDialog::setElevation(int elevation) {
+    const int comboIndex = _elevationCombo->findData(elevation);
+    if (comboIndex >= 0) {
+        _elevationCombo->setCurrentIndex(comboIndex);
+    }
+}
+
+void SpatialScriptDialog::setRadius(int radius) { _radiusSpin->setValue(radius); }
 
 int SpatialScriptDialog::tile() const { return _tileSpin->value(); }
 int SpatialScriptDialog::elevation() const { return _elevationCombo->currentData().toInt(); }

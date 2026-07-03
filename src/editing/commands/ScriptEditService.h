@@ -43,6 +43,14 @@ public:
     bool attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex);
     bool detachScript(const std::shared_ptr<MapObject>& object);
     bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
+    // Edit an existing spatial script in place, keeping its SID (pid) stable so a live selection
+    // survives the edit; updates program index, position (tile+elevation) and radius. Undoable.
+    bool editSpatialScript(uint32_t sid, uint32_t programIndex, int tile, int elevation, int radius);
+    // Remove the spatial script with this SID. Undoable. No-op (returns false) if none matches.
+    bool removeSpatialScript(uint32_t sid);
+    // The spatial script with this SID, or nullptr — for reading its current values (e.g. to
+    // pre-fill an edit dialog). The pointer is invalidated by any script-section mutation.
+    const MapScript* findSpatialScript(uint32_t sid) const;
 
     // Section snapshot/restore + targeted erase, shared with bulk object operations.
     ScriptSections snapshotScripts() const;

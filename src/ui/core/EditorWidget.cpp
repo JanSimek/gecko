@@ -16,6 +16,8 @@
 #include <QSize>
 #include <QStringList>
 #include "editing/commands/ObjectCommandController.h"
+#include "format/map/MapScript.h"
+#include "util/BuiltTile.h"
 #include "rendering/MapSpriteLoader.h"
 #include "rendering/RenderingEngine.h"
 #include "ui/dragdrop/DragDropManager.h"
@@ -308,7 +310,83 @@ void EditorWidget::detachScript(const std::shared_ptr<MapObject>& object) {
 }
 
 void EditorWidget::addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius) {
-    _controller.commandController().addSpatialScript(programIndex, tile, elevation, radius);
+    if (_controller.commandController().addSpatialScript(programIndex, tile, elevation, radius)) {
+        Q_EMIT mapScriptsChanged();
+    }
+}
+
+void EditorWidget::editSpatialScript(uint32_t sid, uint32_t programIndex, int tile, int elevation, int radius) {
+    if (_controller.commandController().editSpatialScript(sid, programIndex, tile, elevation, radius)) {
+        Q_EMIT mapScriptsChanged();
+    }
+}
+
+void EditorWidget::deleteSpatialScript(uint32_t sid) {
+    if (_controller.commandController().removeSpatialScript(sid)) {
+        if (_session.selectedSpatialScriptSid() == sid) {
+            setSelectedSpatialScript(MapScript::NONE);
+        }
+        Q_EMIT mapScriptsChanged();
+    }
+}
+
+void EditorWidget::setSelectedSpatialScript(uint32_t sid) {
+    if (_session.selectedSpatialScriptSid() == sid) {
+        return; // no change; also breaks the map<->panel selection sync feedback loop
+    }
+    _session.setSelectedSpatialScriptSid(sid);
+    Q_EMIT spatialScriptSelectionChanged(sid);
+}
+
+std::optional<EditorWidget::SpatialScriptInfo> EditorWidget::spatialScriptInfo(uint32_t sid) const {
+    if (!_session.map()
+        || MapScript::sidSection(sid) != static_cast<int>(MapScript::ScriptType::SPATIAL)) {
+        return std::nullopt;
+    }
+    constexpr int SPATIAL = static_cast<int>(MapScript::ScriptType::SPATIAL);
+    for (const MapScript& s : _session.map()->getMapFile().map_scripts[SPATIAL]) {
+        if (s.pid == sid) {
+            return SpatialScriptInfo{ s.script_id,
+                static_cast<int>(built_tile::tileOf(s.timer)),
+                static_cast<int>(built_tile::elevationOf(s.timer)),
+                static_cast<int>(s.spatial_radius) };
+        }
+    }
+    return std::nullopt;
+}
+
+bool EditorWidget::trySelectSpatialScriptAt(sf::Vector2f worldPos) {
+    if (!_session.visibility().showSpatialScripts || !_session.map()) {
+        return false;
+    }
+    const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
+    if (hex < 0) {
+        return false;
+    }
+    const auto elev = static_cast<uint32_t>(_session.currentElevation());
+    constexpr int SPATIAL = static_cast<int>(MapScript::ScriptType::SPATIAL);
+    for (const MapScript& s : _session.map()->getMapFile().map_scripts[SPATIAL]) {
+        if (built_tile::tileOf(s.timer) != static_cast<uint32_t>(hex)
+            || built_tile::elevationOf(s.timer) != elev) {
+            continue;
+        }
+        // A second quick click on the same marker opens its editor; a single click just selects.
+        const bool doubleClick = s.pid == _lastSpatialClickSid
+            && _spatialClickClock.getElapsedTime().asSeconds() < kSpatialDoubleClickSeconds;
+        _lastSpatialClickSid = s.pid;
+        _spatialClickClock.restart();
+
+        _session.selectionManager()->clearSelection(); // spatial selection is exclusive with objects/tiles
+        setSelectedSpatialScript(s.pid);
+        if (doubleClick) {
+            Q_EMIT spatialScriptEditActivated(s.pid);
+        }
+        return true;
+    }
+    // Clicked away from any marker: drop the spatial selection and let object selection proceed.
+    _lastSpatialClickSid = MapScript::NONE;
+    setSelectedSpatialScript(MapScript::NONE);
+    return false;
 }
 
 EditorWidget::~EditorWidget() {
@@ -723,6 +801,12 @@ void EditorWidget::setupInputCallbacks() {
 void EditorWidget::bindSelectionCallbacks(InputHandler::Callbacks& callbacks) {
     // Mouse events
     callbacks.onSelectionClick = [this](sf::Vector2f worldPos, InputHandler::SelectionModifier modifier) {
+        // A plain click on a visible spatial-script marker selects (or, on a quick second click,
+        // edits) that script instead of the object/tile underneath. Modified clicks (add/toggle/
+        // range) stay object-selection operations and leave the spatial selection untouched.
+        if (modifier == InputHandler::SelectionModifier::NONE && trySelectSpatialScriptAt(worldPos)) {
+            return;
+        }
         SelectionModifier selectionModifier;
         switch (modifier) {
             case InputHandler::SelectionModifier::ADD:
@@ -897,6 +981,12 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     };
 
     callbacks.onDeleteObjects = [this]() {
+        // Delete removes the selected spatial script when one is selected; otherwise it deletes the
+        // selected objects. (Spatial selection is exclusive with object selection.)
+        if (_session.selectedSpatialScriptSid() != MapScript::NONE) {
+            deleteSpatialScript(_session.selectedSpatialScriptSid());
+            return;
+        }
         deleteSelectedObjects();
     };
 
@@ -1083,6 +1173,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.playerPositionHex = _session.map() ? static_cast<int>(_session.map()->getMapFile().header.player_default_position) : -1;
     renderData.map = _session.map();
     renderData.currentElevation = _session.currentElevation();
+    renderData.selectedSpatialScriptSid = _session.selectedSpatialScriptSid();
 
     // Exit-grid "Draw edge" live preview (MarkExits mode).
     renderData.exitGridPreview.active = _exitGridLineActive;
