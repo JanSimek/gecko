@@ -33,7 +33,7 @@ SpatialScriptDialog::SpatialScriptDialog(const std::vector<ScriptSelectorDialog:
     _tileSpin->setRange(0, HexagonGrid::POSITION_COUNT - 1);
     auto* tileRow = new QHBoxLayout();
     tileRow->addWidget(_tileSpin, 1);
-    auto* pickButton = new QPushButton("Pick on map...");
+    auto* pickButton = new QPushButton("Pick on map...", this);
     pickButton->setToolTip("Click a hex on the map to set the position");
     tileRow->addWidget(pickButton);
     formLayout->addRow("Hex tile:", tileRow);

@@ -886,25 +886,7 @@ void EditorWidget::bindInteractionCallbacks(InputHandler::Callbacks& callbacks) 
 }
 
 void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
-    callbacks.onPlayerPositionSelect = [this](sf::Vector2f worldPos) {
-        const int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
-        Q_EMIT statusMessageClearRequested();
-
-        // Generic one-shot hex pick (beginHexPick): consume the callback and return to Select before
-        // invoking it, so the callback (which may reopen a dialog) sees a settled editor state.
-        if (_hexPickCallback) {
-            auto onFinished = std::exchange(_hexPickCallback, nullptr);
-            setMode(EditorMode::Select);
-            onFinished(hexPosition >= 0 ? std::optional<int>(hexPosition) : std::nullopt);
-            return;
-        }
-
-        // Legacy player-position pick: stays in the mode for repeated clicks until Escape.
-        if (hexPosition >= 0) {
-            Q_EMIT playerPositionSelected(hexPosition);
-            spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
-        }
-    };
+    callbacks.onPlayerPositionSelect = [this](sf::Vector2f worldPos) { handlePositionPickClick(worldPos); };
 
     callbacks.onScrollBlockerRectangle = [this](sf::FloatRect area) {
         auto borderHexes = calculateRectangleBorderHexes(area);
@@ -2286,6 +2268,26 @@ void EditorWidget::enterPlayerPositionSelectionMode() {
     Q_EMIT statusMessageRequested("Click on a hex to set the player starting position (Press Escape to cancel)");
 
     spdlog::debug("EditorWidget: Entered player position selection mode");
+}
+
+void EditorWidget::handlePositionPickClick(sf::Vector2f worldPos) {
+    const int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
+    Q_EMIT statusMessageClearRequested();
+
+    // Generic one-shot hex pick (beginHexPick): consume the callback and return to Select before
+    // invoking it, so the callback (which may reopen a dialog) sees a settled editor state.
+    if (_hexPickCallback) {
+        auto onFinished = std::exchange(_hexPickCallback, nullptr);
+        setMode(EditorMode::Select);
+        onFinished(hexPosition >= 0 ? std::optional<int>(hexPosition) : std::nullopt);
+        return;
+    }
+
+    // Legacy player-position pick: stays in the mode for repeated clicks until Escape.
+    if (hexPosition >= 0) {
+        Q_EMIT playerPositionSelected(hexPosition);
+        spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
+    }
 }
 
 void EditorWidget::beginHexPick(std::function<void(std::optional<int>)> onFinished, const QString& prompt) {

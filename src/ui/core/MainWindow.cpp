@@ -1691,7 +1691,7 @@ void MainWindow::openSpatialScriptDialog(std::optional<uint32_t> editSid) {
 
     // Editing needs the target script to still exist.
     std::optional<EditorWidget::SpatialScriptInfo> info;
-    if (editSid) {
+    if (editSid.has_value()) {
         info = _currentEditorWidget->spatialScriptInfo(*editSid);
         if (!info) {
             showStatusMessage("Spatial script no longer exists");
@@ -1736,7 +1736,7 @@ void MainWindow::pickSpatialScriptPosition() {
             if (!_spatialScriptDialog) {
                 return; // dialog was closed while picking
             }
-            if (hex && _currentEditorWidget) {
+            if (hex.has_value() && _currentEditorWidget) {
                 _spatialScriptDialog->setTile(*hex);
                 // The clicked hex lives on the current elevation, so match it.
                 _spatialScriptDialog->setElevation(_currentEditorWidget->getCurrentElevation());
@@ -1752,7 +1752,7 @@ void MainWindow::applySpatialScriptDialog() {
     if (!_currentEditorWidget || !_spatialScriptDialog) {
         return;
     }
-    SpatialScriptDialog* dialog = _spatialScriptDialog;
+    const SpatialScriptDialog* dialog = _spatialScriptDialog;
     if (dialog->programIndex() < 0) {
         return; // OK is disabled without a chosen script, but guard anyway
     }

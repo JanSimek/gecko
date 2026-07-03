@@ -400,6 +400,10 @@ private:
     // selection and returns false so normal object selection proceeds.
     bool trySelectSpatialScriptAt(sf::Vector2f worldPos);
 
+    // Handles a click in SetPlayerPosition mode: routes to an armed beginHexPick callback (one-shot)
+    // or, failing that, emits playerPositionSelected (legacy player-start pick).
+    void handlePositionPickClick(sf::Vector2f worldPos);
+
     // Object management
     void deleteSelectedObjects();
     void registerTileEdit(const QString& description, const std::vector<TileChange>& changes) override;
