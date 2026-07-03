@@ -339,8 +339,7 @@ void EditorWidget::setSelectedSpatialScript(uint32_t sid) {
 }
 
 std::optional<EditorWidget::SpatialScriptInfo> EditorWidget::spatialScriptInfo(uint32_t sid) const {
-    if (!_session.map()
-        || MapScript::sidSection(sid) != static_cast<int>(MapScript::ScriptType::SPATIAL)) {
+    if (!_session.map() || MapScript::fromPid(sid) != MapScript::ScriptType::SPATIAL) {
         return std::nullopt;
     }
     constexpr int SPATIAL = static_cast<int>(MapScript::ScriptType::SPATIAL);

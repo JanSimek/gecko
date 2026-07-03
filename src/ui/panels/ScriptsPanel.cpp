@@ -211,11 +211,10 @@ void ScriptsPanel::onCellDoubleClicked(int row) {
 
     // Double-clicking a spatial row edits it. Only object-owned script types (ITEM / CRITTER) can be
     // navigated to; SYSTEM and TIMER scripts are ownerless, so a double-click there does nothing.
-    const int section = MapScript::sidSection(sid);
-    if (section == static_cast<int>(MapScript::ScriptType::SPATIAL)) {
+    const MapScript::ScriptType type = MapScript::fromPid(sid);
+    if (type == MapScript::ScriptType::SPATIAL) {
         Q_EMIT spatialScriptEditRequested(sid);
-    } else if (section == static_cast<int>(MapScript::ScriptType::ITEM)
-        || section == static_cast<int>(MapScript::ScriptType::CRITTER)) {
+    } else if (type == MapScript::ScriptType::ITEM || type == MapScript::ScriptType::CRITTER) {
         Q_EMIT scriptObjectActivated(static_cast<int>(sid));
     }
 }
@@ -223,16 +222,15 @@ void ScriptsPanel::onCellDoubleClicked(int row) {
 void ScriptsPanel::onTableContextMenu(const QPoint& pos) {
     const int row = _table->indexAt(pos).row();
     const uint32_t sid = sidOfRow(row);
-    if (sid == MapScript::NONE
-        || MapScript::sidSection(sid) != static_cast<int>(MapScript::ScriptType::SPATIAL)) {
+    if (MapScript::fromPid(sid) != MapScript::ScriptType::SPATIAL) {
         return; // Edit/Delete are spatial-only (other scripts live on their owning object).
     }
 
     _table->selectRow(row); // right-click also selects, syncing the map highlight
 
     QMenu menu(this);
-    QAction* editAction = menu.addAction(tr("Edit Spatial Script..."));
-    QAction* deleteAction = menu.addAction(tr("Delete Spatial Script"));
+    const QAction* editAction = menu.addAction(tr("Edit Spatial Script..."));
+    const QAction* deleteAction = menu.addAction(tr("Delete Spatial Script"));
     const QAction* chosen = menu.exec(_table->viewport()->mapToGlobal(pos));
     if (chosen == editAction) {
         Q_EMIT spatialScriptEditRequested(sid);
@@ -295,8 +293,7 @@ void ScriptsPanel::onScriptSelectionChanged() {
     // Mirror the shared spatial selection: a spatial row selects that script on the map, anything
     // else clears it. Suppressed while a rebuild or a map-driven sync is churning the selection.
     if (!_suppressSpatialSelectionSignal) {
-        const bool spatial = sid != MapScript::NONE
-            && MapScript::sidSection(sid) == static_cast<int>(MapScript::ScriptType::SPATIAL);
+        const bool spatial = MapScript::fromPid(sid) == MapScript::ScriptType::SPATIAL;
         Q_EMIT spatialScriptSelected(spatial ? sid : MapScript::NONE);
     }
 
