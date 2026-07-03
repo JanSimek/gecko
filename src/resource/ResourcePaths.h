@@ -53,6 +53,10 @@ namespace ResourcePaths {
         // player-visible directional exitgrd*/ext2grd* art.
         constexpr std::string_view EXIT_GRID = "art/misc/exitgrid.frm";
 
+        // Spatial-script trigger marker — the same green hex the fallout2-ce mapper spawns for its
+        // 'h' toggle (interface art index 3). Drawn at each spatial script's centre hex.
+        constexpr std::string_view SPATIAL_SCRIPT = "art/intrface/msef001.frm";
+
         // Light source (special case)
         constexpr std::string_view LIGHT = "art/misc/light.frm";
 

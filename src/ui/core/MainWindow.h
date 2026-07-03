@@ -103,6 +103,7 @@ signals:
     void showHexGridToggled(bool enabled);
     void showLightOverlaysToggled(bool enabled);
     void showExitGridsToggled(bool enabled);
+    void showSpatialScriptsToggled(bool enabled);
     void elevationChanged(int elevation);
     void selectionModeRequested();
     void rotateObjectRequested();
@@ -296,6 +297,7 @@ private:
     QAction* _showHexGridAction;
     QAction* _showLightOverlaysAction;
     QAction* _showExitGridsAction;
+    QAction* _showSpatialScriptsAction;
     QAction* _mergeOutlinesAction;
     QAction* _edgeScrollAction;
 

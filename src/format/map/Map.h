@@ -80,6 +80,7 @@ public:
     int elevations() const;
 
     MapFile& getMapFile();
+    const MapFile& getMapFile() const;
     void setMapFile(std::unique_ptr<MapFile> newMapFile);
 
     /// Builds a blank Fallout 2 map: default header, three empty elevations of

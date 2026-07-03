@@ -96,6 +96,7 @@ public:
     void setShowHexGrid(bool show) { _session.visibility().showHexGrid = show; }
     void setShowLightOverlays(bool show);
     void setShowExitGrids(bool show) { _session.visibility().showExitGrids = show; }
+    void setShowSpatialScripts(bool show) { _session.visibility().showSpatialScripts = show; }
     void setMergeSelectionOutlines(bool merge) { _session.visibility().mergeSelectionOutlines = merge; }
 
     // Edge scrolling: when enabled, parking the cursor near a viewport edge auto-pans the view that
