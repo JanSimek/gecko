@@ -397,6 +397,41 @@ void TilePalettePanel::setRoofMode(bool isRoof) {
     }
 }
 
+void TilePalettePanel::pickTile(int tileId, bool isRoof) {
+    // Match the picked tile's layer so paint lands on floor vs roof. Set the state directly rather
+    // than via setRoofMode() to avoid it re-emitting for the previously selected tile.
+    _isRoofMode = isRoof;
+    if (_floorModeButton && _roofModeButton) {
+        _floorModeButton->setChecked(!isRoof);
+        _roofModeButton->setChecked(isRoof);
+    }
+
+    // Clear any active filter so the picked tile is part of the visible set (mirrors "Show All").
+    // Each of these rebuilds the grid; that is fine for a one-shot pick.
+    if (_searchLineEdit) {
+        _searchLineEdit->clear();
+    }
+    if (_startTileSpinBox) {
+        _startTileSpinBox->setValue(0);
+    }
+    if (_endTileSpinBox) {
+        _endTileSpinBox->setValue(-1);
+    }
+
+    // Select the tile and arm painting. MainWindow's tileSelected() connection switches the editor
+    // into PlaceTile with this tile, so pressing P "loads the brush" with the picked tile. The
+    // visible highlight is best-effort: it lands only if the tile is on the current page.
+    clearTileSelection();
+    _selectedTileIndex = tileId;
+    auto it = std::ranges::find_if(_tileWidgets,
+        [tileId](const auto& widget) { return widget->getTileIndex() == tileId; });
+    if (it != _tileWidgets.end()) {
+        (*it)->setSelected(true);
+    }
+
+    Q_EMIT tileSelected(tileId, isRoof);
+}
+
 void TilePalettePanel::onPlacementModeChanged() {
     // With unified placement mode, this function is simplified
     Q_EMIT placementModeChanged(_placementMode);

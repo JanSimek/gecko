@@ -68,6 +68,9 @@ public:
     int getSelectedTileIndex() const { return _selectedTileIndex; }
     bool hasSelectedTile() const { return _selectedTileIndex >= 0; }
     void deselectTile();
+    // Eyedropper: select the given tile id on the given layer, clear any active filter so it is
+    // visible, and emit tileSelected() so the editor arms tile painting with it ("load the brush").
+    void pickTile(int tileId, bool isRoof);
 
     // Roof/Floor mode
     bool isRoofMode() const { return _isRoofMode; }

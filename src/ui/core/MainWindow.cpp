@@ -897,9 +897,10 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         }
     }
 
-    // Free up "R" for variant cycling while a pattern is being stamped.
+    // Free up "R" for the viewport while stamping (variant cycling) or placing an object (ghost
+    // rotation); otherwise the toolbar shortcut would swallow the key before it reaches the editor.
     if (_rotateAction) {
-        _rotateAction->setEnabled(mode != EditorMode::StampPattern);
+        _rotateAction->setEnabled(mode != EditorMode::StampPattern && mode != EditorMode::PlaceObject);
     }
 }
 
@@ -1280,15 +1281,24 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     event->accept();
 }
 
-void MainWindow::keyPressEvent(QKeyEvent* event) {
-    // Handle special shortcuts before forwarding to SFML
-    if (event->key() == Qt::Key_P && _currentEditorWidget) {
-        if (_selectionPanel ? _selectionPanel->openProEditorForSelectedObject() : false) {
-            event->accept();
-            return;
-        }
+void MainWindow::raiseObjectPalette() {
+    if (_objectPaletteDock) {
+        _objectPaletteDock->show();
+        _objectPaletteDock->raise();
     }
+}
 
+void MainWindow::raiseTilePalette() {
+    if (_tilePaletteDock) {
+        _tilePaletteDock->show();
+        _tilePaletteDock->raise();
+    }
+}
+
+void MainWindow::keyPressEvent(QKeyEvent* event) {
+    // Editor shortcuts that act on the SFML viewport (e.g. the "P" eyedropper) are handled by the
+    // InputHandler on the forwarded SFML key stream, not here — a focused child consumes key events
+    // before they reach this override. This just forwards keys to SFML.
     if (_currentEditorWidget) {
         SFMLWidget* sfmlWidget = _currentEditorWidget->getSFMLWidget();
         if (sfmlWidget) {

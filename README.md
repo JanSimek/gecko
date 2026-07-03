@@ -109,6 +109,7 @@ The active mode is chosen from the toolbar; the status bar shows the keys that a
 - **Delete** / **Backspace**: Remove the selected object(s).
 
 #### Placement tools
+- **Eyedropper — pick under cursor** (**P**): hover over the map and press **P** to sample the topmost thing under the cursor. A **tile** is loaded into the tile palette and tile painting is armed. An **object** raises the object palette and enters placement mode with a ghost that follows the cursor — **left-click** to drop a copy (keeps placing), **R** to rotate the ghost's facing, **Esc** or **right-click** to stop.
 - **Tile placement** (pick a tile in the palette): **Left-click** or **drag** to paint, hold **Shift** to paint on the **roof**, **Esc** or **right-click** to exit.
 - **Stamp / pattern** (Edit → Stamp Pattern): **Left-click** to place, **R** to cycle the prefab's orientation variant, **Esc** or **right-click** to cancel.
 - **Set player position** (Map Info panel): **Left-click** to set the player start hex, **Esc** to cancel.

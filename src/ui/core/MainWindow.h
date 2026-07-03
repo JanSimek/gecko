@@ -79,6 +79,11 @@ public:
     TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
     FileBrowserPanel* getFileBrowserPanel() const { return _fileBrowserPanel; }
 
+    // Bring a palette dock to the front of its tab group (used by the eyedropper so the picked
+    // object/tile's palette is visible). No-op if the dock is hidden or floating on its own.
+    void raiseObjectPalette();
+    void raiseTilePalette();
+
     resource::GameResources& resources() const { return *_resourcesShared; }
 
 signals:
