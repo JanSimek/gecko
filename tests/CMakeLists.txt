@@ -33,6 +33,7 @@ add_executable(general_tests
     general/test_map_object_views.cpp
     general/test_frm_resolver.cpp
     general/test_viewport_controller.cpp
+    general/test_edge_scroll.cpp
     general/test_map_factory.cpp
     general/test_map_roundtrip.cpp
     general/test_undo_stack.cpp

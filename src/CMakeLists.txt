@@ -488,6 +488,8 @@ add_library(gecko_core STATIC
 
     viewport/ViewportController.h
     viewport/ViewportController.cpp
+    viewport/EdgeScroll.h
+    viewport/EdgeScroll.cpp
 
     selection/SelectionDataProvider.h
     selection/SelectionState.h

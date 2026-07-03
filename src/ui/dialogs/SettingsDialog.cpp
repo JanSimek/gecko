@@ -12,6 +12,7 @@
 #include <QColorDialog>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QCheckBox>
 #include <array>
 #include <spdlog/spdlog.h>
 
@@ -73,10 +74,33 @@ void SettingsDialog::setupTabs() {
     _tabWidget = new QTabWidget();
 
     setupGeneralTab();
+    setupViewportTab();
     setupEditorTab();
     setupColorsTab();
 
     _mainLayout->addWidget(_tabWidget);
+}
+
+void SettingsDialog::setupViewportTab() {
+    _viewportTab = new QWidget();
+    auto* layout = new QVBoxLayout(_viewportTab);
+    layout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
+    layout->setSpacing(SPACING_NORMAL);
+
+    _edgeScrollCheckBox = new QCheckBox("Edge scrolling");
+    _edgeScrollCheckBox->setToolTip("Scroll the map when the cursor rests near a viewport edge.");
+    layout->addWidget(_edgeScrollCheckBox);
+
+    auto* hint = new QLabel(
+        "When enabled, moving the cursor near the edge of the map view pans the view in that "
+        "direction (the closer to the edge, the faster). Also toggled from View › Edge Scrolling.");
+    hint->setWordWrap(true);
+    layout->addWidget(hint);
+
+    layout->addStretch();
+    _tabWidget->addTab(_viewportTab, "Viewport");
+
+    connect(_edgeScrollCheckBox, &QCheckBox::toggled, this, &SettingsDialog::onWidgetChanged);
 }
 
 void SettingsDialog::setupColorsTab() {
@@ -199,6 +223,8 @@ void SettingsDialog::loadSettings() {
 
     _dataPathsWidget->setDataPaths(_originalDataPaths);
 
+    _edgeScrollCheckBox->setChecked(settings.getEdgeScrollEnabled());
+
     _textEditorWidget->setEditorMode(settings.getTextEditorMode());
     _textEditorWidget->setCustomEditorPath(settings.getCustomEditorPath());
 
@@ -227,6 +253,8 @@ void SettingsDialog::saveSettings() {
     auto dataPaths = _dataPathsWidget->getDataPaths();
     bool pathsHaveChanged = dataPaths != _originalDataPaths;
     settings.setDataPaths(dataPaths);
+
+    settings.setEdgeScrollEnabled(_edgeScrollCheckBox->isChecked());
 
     settings.setTextEditorMode(_textEditorWidget->getEditorMode());
     if (_textEditorWidget->getEditorMode() == Settings::TextEditorMode::CUSTOM) {

@@ -60,8 +60,8 @@ Feature the reference actually has (not a stub) and Gecko lacks. Effort: S ≈ d
 | # | Feature | In reference | Gecko today | Effort | Notes |
 |---|---|---|---|---|---|
 | 3 | **Minimap / overview** with click-to-navigate + elevation switch | Dims `DrawMiniMap` + `imgMiniMapMouseDown` (click re-centers & picks elevation); fallout2-ce `automapShow` (TAB) | **LACKS** — only static per-map thumbnails in `MapBrowserDialog` | **M** | The one *real* Dims parity gap. Dims' locator is a cursor sprite, not a scaled viewport rect — a viewport rectangle would improve on it. |
-| 4 | **Eyedropper — pick proto/tile from the map** | fallout2-ce `'p'` jumps the toolbar to the proto/tile under the cursor (`mapperPickObject`/`mapperPickTile`) | **LACKS** | **S** | High-value, low-cost: click a placed object/tile → select its palette entry. |
-| 5 | **Edge-scroll panning** | both (cursor at iso edge scrolls one hex; Dims arrow-scroll + hand-pan) | **PARTIAL** — drag/keys pan via `ViewportController`, no auto edge-scroll | **S** | Small viewport addition. |
+| 4 | **Eyedropper — pick proto/tile from the map** | fallout2-ce `'p'` jumps the toolbar to the proto/tile under the cursor (`mapperPickObject`/`mapperPickTile`) | **DONE** (PR #99) — `P` picks the object/tile under the cursor into the matching palette | **S** | Shipped. |
+| 5 | **Edge-scroll panning** | both (cursor at iso edge scrolls one hex; Dims arrow-scroll + hand-pan) | **DONE** — cursor near a viewport edge auto-pans (ramped by depth into a 32px margin), suppressed during right-drag pan, View-menu toggle persisted in `Settings`; `viewport/EdgeScroll` + `EditorWidget::update` + `ViewportController::panBy` | **S** | Shipped. |
 
 ### Priority 3 — defer (substitute exists or niche)
 
@@ -119,6 +119,6 @@ be retired from TODO.md in favor of this audit.
 
 1. **`.edg` map-edge support** (§2 #1) — the one true format Gecko can't round-trip; engine-authored.
 2. **Spatial-script visualization** (§2 #2) — already a tracked limitation; small overlay work.
-3. **Eyedropper pick-from-map** (§2 #4) + **edge-scroll** (§2 #5) — cheap QoL, do together.
+3. ~~**Eyedropper pick-from-map** (§2 #4) + **edge-scroll** (§2 #5)~~ — **DONE** (eyedropper PR #99; edge-scroll shipped).
 4. **Minimap/overview** (§2 #3) — larger, high-visibility.
 5. Defer #6–#8 unless requested.

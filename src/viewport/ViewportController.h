@@ -45,6 +45,15 @@ public:
     void centerViewOnMap();
 
     /**
+     * @brief Pan the view by a delta expressed in world units.
+     *
+     * The single place that moves the camera; both the drag-pan and the
+     * edge-scroll paths route through here so panning stays defined once.
+     * @param worldDelta Offset added to the current view centre.
+     */
+    void panBy(sf::Vector2f worldDelta);
+
+    /**
      * @brief Zoom the view in or out
      * @param direction Positive for zoom in, negative for zoom out
      */

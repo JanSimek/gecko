@@ -98,6 +98,11 @@ public:
     void setShowExitGrids(bool show) { _session.visibility().showExitGrids = show; }
     void setMergeSelectionOutlines(bool merge) { _session.visibility().mergeSelectionOutlines = merge; }
 
+    // Edge scrolling: when enabled, parking the cursor near a viewport edge auto-pans the view that
+    // way (parity with the reference mappers). Editor UX only — touches no map data.
+    void setEdgeScrollEnabled(bool enabled) { _edgeScrollEnabled = enabled; }
+    bool isEdgeScrollEnabled() const { return _edgeScrollEnabled; }
+
     // User-configured selection highlight colours (from preferences); forwarded to the renderer.
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
 
@@ -407,6 +412,10 @@ private:
     void bindInteractionCallbacks(InputHandler::Callbacks& callbacks);
     void bindToolModeCallbacks(InputHandler::Callbacks& callbacks);
 
+    // Edge-scroll tick: run from update(dt); pans the view while the cursor rests near a viewport
+    // edge, then re-fires the cursor's move so hover/drag previews track the scrolled map.
+    void updateEdgeScroll(float dt);
+
     // UI Components
     QVBoxLayout* _layout;
     SFMLWidget* _sfmlWidget;
@@ -453,6 +462,10 @@ private:
     const ObjectInfo* _previewObjectInfo = nullptr; // Object info from palette
 
     int _currentHoverHex = -1;
+
+    // Edge scrolling: auto-pan when the cursor rests near a viewport edge (see setEdgeScrollEnabled).
+    // Default on to match both reference mappers; the View menu / Settings persist the user's choice.
+    bool _edgeScrollEnabled = true;
 
     // Base positions of the selected floor/roof sprites captured while a region is being dragged, so
     // the live preview can offset them and restore them when the drag ends.

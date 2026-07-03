@@ -8,9 +8,12 @@
 #include "pattern/PatternLibrary.h"
 #include "pattern/PatternSerializer.h"
 #include "scripting/MapScriptApi.h"
+#include <QCursor>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QPoint>
+#include <QSize>
 #include <QStringList>
 #include "editing/commands/ObjectCommandController.h"
 #include "rendering/MapSpriteLoader.h"
@@ -18,6 +21,7 @@
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
+#include "viewport/EdgeScroll.h"
 #include "viewport/ViewportController.h"
 #include "ui/panels/ObjectPalettePanel.h"
 #include "ui/panels/TilePalettePanel.h"
@@ -764,8 +768,7 @@ void EditorWidget::bindInteractionCallbacks(InputHandler::Callbacks& callbacks) 
     };
 
     callbacks.onPan = [this](sf::Vector2f delta) {
-        sf::Vector2f center = _controller.viewport().getView().getCenter();
-        _controller.viewport().getView().setCenter(center + delta);
+        _controller.viewport().panBy(delta);
     };
 
     callbacks.onZoom = [this](float direction) {
@@ -974,8 +977,60 @@ void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderH
     spdlog::debug("Scroll blocker rectangle: {} scroll blockers created on border", scrollBlockersCreated);
 }
 
-void EditorWidget::update([[maybe_unused]] const float dt) {
-    // Called by the SFMLWidget's update loop
+void EditorWidget::update(const float dt) {
+    // Called by the SFMLWidget's update loop every frame (independent of input events),
+    // which is what lets a stationary cursor at the edge keep scrolling.
+    updateEdgeScroll(dt);
+}
+
+void EditorWidget::updateEdgeScroll(const float dt) {
+    if (!_edgeScrollEnabled || !_sfmlWidget || !_inputHandler || dt <= 0.f) {
+        return;
+    }
+
+    // Never fight a manual right-drag pan. Every other action (drag-select, object move, tile
+    // paint, mark-exits, ...) benefits from scrolling toward off-screen areas, so only PANNING
+    // is suppressed.
+    if (_inputHandler->getCurrentAction() == InputHandler::EditorAction::PANNING) {
+        return;
+    }
+
+    // Only scroll while the cursor genuinely hovers the map viewport of the active window — not
+    // when it is over a panel, the menu bar, another window, or off-screen.
+    if (!_sfmlWidget->underMouse()) {
+        return;
+    }
+    if (const QWidget* topLevel = _sfmlWidget->window(); topLevel && !topLevel->isActiveWindow()) {
+        return;
+    }
+
+    const QPoint cursor = _sfmlWidget->mapFromGlobal(QCursor::pos());
+    const QSize viewport = _sfmlWidget->size();
+
+    const sf::Vector2f velocity = EdgeScroll::velocity(
+        sf::Vector2f(static_cast<float>(cursor.x()), static_cast<float>(cursor.y())),
+        sf::Vector2f(static_cast<float>(viewport.width()), static_cast<float>(viewport.height())),
+        EdgeScroll::DEFAULT_MARGIN, EdgeScroll::DEFAULT_SPEED);
+
+    if (velocity == sf::Vector2f{ 0.f, 0.f }) {
+        return;
+    }
+
+    // The velocity is a screen-space speed (px/second). Divide by the zoom so the on-screen scroll
+    // rate stays constant regardless of zoom, then scale by the frame time to get this frame's
+    // world-space step.
+    const float zoom = _controller.viewport().getZoomLevel();
+    const float scale = (zoom > 0.f ? 1.0f / zoom : 1.0f) * dt;
+    _controller.viewport().panBy(velocity * scale);
+
+    // Re-fire the move at the (unchanged) cursor pixel against the now-scrolled view, so the hover
+    // highlight, drag-select rectangle, object ghost, and edge-line preview all track the map that
+    // just moved under a possibly-stationary cursor.
+    if (auto* target = _sfmlWidget->getRenderTarget()) {
+        _inputHandler->handleEvent(
+            sf::Event(sf::Event::MouseMoved{ { cursor.x(), cursor.y() } }),
+            *target, _controller.viewport().getView());
+    }
 }
 
 void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float dt) {
