@@ -11,12 +11,12 @@
 #include <QStatusBar>
 #include <QLabel>
 #include <QSettings>
+#include <QByteArray>
 #include <QMenu>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <filesystem>
-#include <unordered_map>
 #include <utility>
 #include <SFML/Window/Event.hpp>
 
@@ -69,7 +69,6 @@ public:
     void applySelectionColorsToEditor();
 
     // Panel visibility management
-    void hideNonEssentialPanels();
     void refreshFileBrowser();
     void showFileBrowserPanel();
 
@@ -160,7 +159,6 @@ private:
     void updatePanelMenuActions();
     void updateElevationMenu(Map* map);
     void syncMenuStateToEditorWidget();
-    void snapshotPanelVisibility();
     void updateUndoRedoActions();
     // Enables "Fill Selection…" only when a map is open and the selection has a fillable layer
     // (floor/roof tiles or hexes). Hooked to selectionChanged and re-seeded on map switch.
@@ -173,10 +171,11 @@ private:
     /// to discard the map (saved or explicitly discarded), false if the user cancelled.
     bool maybeSaveChanges();
     QIcon themedIcon(const QString& iconPath) const;
-    void restorePanelVisibilitySnapshot();
+    // A map just opened: re-apply the persisted dock layout that was transiently hidden for the
+    // welcome screen (no map). Restores from the saved Qt dock state, the single source of truth.
+    void showPanelsForMap();
     void hidePanelsForNoMap();
     void setDockVisibility(QDockWidget* dock, QAction* action, bool visible);
-    void persistPanelPreference(QDockWidget* dock, bool visible);
     QAction* addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef);
     std::array<QDockWidget*, 6> managedDocks() const;
     std::array<DockActionPair, 6> managedDockActionPairs() const;
@@ -268,9 +267,13 @@ private:
     QDockWidget* _scriptConsoleDock = nullptr;
     ScriptConsoleWidget* _scriptConsole = nullptr;
 #endif
-    std::unordered_map<QDockWidget*, bool> _panelVisibilitySnapshot;
-    bool _suppressPanelSnapshotUpdates = false;
-    bool _suppressPanelPreferenceUpdates = false;
+    // Guards the persisted dock layout while docks are re-laid-out programmatically (hidden for the
+    // welcome screen, re-shown for a map), so those transient changes aren't written back as if the
+    // user made them.
+    bool _suppressDockStateSave = false;
+    // The dock layout (visibility + geometry) to re-apply when a map opens; seeded at startup from the
+    // saved state and refreshed on every genuine user change. See saveDockWidgetState/showPanelsForMap.
+    QByteArray _restoredDockState;
     bool _mapModified = false; // current map has edits not yet written to disk
 
     // Panel widgets

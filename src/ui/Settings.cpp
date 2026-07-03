@@ -121,14 +121,6 @@ QJsonObject Settings::toJson() const {
         ui["floatingDockGeometries"] = floatingDocks;
     }
 
-    if (!_panelVisibilityPreferences.isEmpty()) {
-        QJsonObject panelVisibility;
-        for (auto it = _panelVisibilityPreferences.begin(); it != _panelVisibilityPreferences.end(); ++it) {
-            panelVisibility[it.key()] = it.value();
-        }
-        ui["panelVisibility"] = panelVisibility;
-    }
-
     json["ui"] = ui;
 
     QJsonObject textEditor;
@@ -199,14 +191,6 @@ void Settings::fromJson(const QJsonObject& json) {
             QJsonObject floatingDocks = ui["floatingDockGeometries"].toObject();
             for (auto it = floatingDocks.begin(); it != floatingDocks.end(); ++it) {
                 _floatingDockGeometries[it.key()] = QByteArray::fromBase64(it.value().toString().toLatin1());
-            }
-        }
-
-        if (ui.contains("panelVisibility")) {
-            QJsonObject panelVisibility = ui["panelVisibility"].toObject();
-            _panelVisibilityPreferences.clear();
-            for (auto it = panelVisibility.begin(); it != panelVisibility.end(); ++it) {
-                _panelVisibilityPreferences[it.key()] = it.value().toBool(true);
             }
         }
     }
@@ -348,18 +332,6 @@ QByteArray Settings::getDockState() const {
 
 void Settings::setDockState(const QByteArray& state) {
     _dockState = state;
-}
-
-std::optional<bool> Settings::getPanelVisibilityPreference(const QString& panelName) const {
-    auto it = _panelVisibilityPreferences.find(panelName);
-    if (it != _panelVisibilityPreferences.end()) {
-        return it.value();
-    }
-    return std::nullopt;
-}
-
-void Settings::setPanelVisibilityPreference(const QString& panelName, bool visible) {
-    _panelVisibilityPreferences[panelName] = visible;
 }
 
 QByteArray Settings::getFloatingDockGeometry(const QString& dockName) const {
