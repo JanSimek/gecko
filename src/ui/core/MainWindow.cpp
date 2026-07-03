@@ -126,8 +126,8 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
 
     restoreDockWidgetState();
 
-    // Capture the restored visibility, then hide panels until a map is loaded
-    snapshotPanelVisibility();
+    // restoreDockWidgetState() seeded _restoredDockState with the working layout; hide the panels
+    // until a map is loaded (welcome screen). showPanelsForMap() re-applies the layout on map open.
     hidePanelsForNoMap();
 
     // Reflect actual visibility once restoration settles
@@ -168,9 +168,8 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
 
     if (_currentEditorWidget->getMap()) {
         updateMapInfo(_currentEditorWidget->getMap());
-        restorePanelVisibilitySnapshot();
+        showPanelsForMap();
     } else {
-        snapshotPanelVisibility();
         hidePanelsForNoMap();
     }
 
@@ -307,14 +306,14 @@ QAction* MainWindow::addPanelToggleAction(const QString& label, QDockWidget* doc
     QAction* action = actionRef;
 
     connect(action, &QAction::toggled, this, [this, dock, showDock](bool visible) {
-        if (_suppressPanelPreferenceUpdates) {
+        if (_suppressDockStateSave) {
             return;
         }
 
         spdlog::debug("{} action toggled: {}", dock->windowTitle().toStdString(), visible);
+        // showDock() flips the dock, which fires QDockWidget::visibilityChanged below; that handler
+        // persists the new layout, so there's nothing to save here.
         showDock(dock, visible);
-        snapshotPanelVisibility();
-        persistPanelPreference(dock, visible);
     });
 
     connect(dock, &QDockWidget::visibilityChanged, this, [this, dock, action](bool visible) {
@@ -328,9 +327,11 @@ QAction* MainWindow::addPanelToggleAction(const QString& label, QDockWidget* doc
             QSignalBlocker blocker(*action);
             action->setChecked(dockVisible);
         }
-        if (!_suppressPanelPreferenceUpdates) {
-            snapshotPanelVisibility();
-            persistPanelPreference(dock, dockVisible);
+        // A genuine user show/hide updates the persisted dock layout immediately, so it survives even
+        // a non-clean exit (e.g. the app being killed to recompile). saveDockWidgetState() is a no-op
+        // while re-laying-out programmatically or when no map is open.
+        if (!_suppressDockStateSave) {
+            saveDockWidgetState();
         }
     });
 
@@ -398,6 +399,12 @@ void MainWindow::applyDefaultPanelDockLayout() {
     if (_tilePaletteDock) {
         _tilePaletteDock->raise();
     }
+
+    // Give each dock column enough width to show its panel content (e.g. the Map Info form) without a
+    // horizontal scrollbar. Only applied to the default layout; a restored layout keeps the user's own
+    // widths, so this never fights a manual resize.
+    const int preferredWidth = ui::constants::sizes::PANEL_PREFERRED_WIDTH;
+    resizeDocks({ _mapInfoDock, _tilePaletteDock }, { preferredWidth, preferredWidth }, Qt::Horizontal);
 }
 
 void MainWindow::setupMenuBar() {
@@ -1298,8 +1305,10 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         event->ignore(); // user cancelled the quit to keep their unsaved map
         return;
     }
-    _suppressPanelPreferenceUpdates = true;
-    _suppressPanelSnapshotUpdates = true;
+    // Persist the layout on a normal quit; the destructor runs too late/unreliably (skipped entirely
+    // when the process is killed). saveDockWidgetState() no-ops when no map is open (welcome screen).
+    saveDockWidgetState();
+    _suppressDockStateSave = true; // teardown: closing docks must not rewrite the saved layout
     stopGameLoop();
     event->accept();
 }
@@ -1950,8 +1959,17 @@ void MainWindow::setupPanelsMenu() {
 }
 
 void MainWindow::saveDockWidgetState() {
+    // The saved dock state is the user's working layout with a map open. While no map is open the
+    // panels are transiently hidden (welcome screen) and _suppressDockStateSave guards programmatic
+    // relayout, so in both cases we must not overwrite the saved layout with a transient one.
+    if (_suppressDockStateSave || !_currentEditorWidget || !_currentEditorWidget->getMap()) {
+        return;
+    }
+
     auto& settings = *_settings;
-    settings.setDockState(saveState());
+    const QByteArray state = saveState();
+    _restoredDockState = state; // re-shown verbatim by showPanelsForMap() when the next map opens
+    settings.setDockState(state);
     settings.setWindowGeometry(saveGeometry());
     settings.setWindowMaximized(isMaximized());
 
@@ -1981,6 +1999,7 @@ void MainWindow::restoreDockWidgetState() {
     QByteArray state = settings.getDockState();
     if (!state.isEmpty()) {
         restoreState(state);
+        _restoredDockState = state; // the layout to re-show once a map opens (see showPanelsForMap)
 
         // Restore individual floating dock widget geometries after a short delay
         // This ensures the dock widgets are fully initialized first
@@ -2004,6 +2023,7 @@ void MainWindow::restoreDockWidgetState() {
         spdlog::debug("Restored dock widget state and window geometry");
     } else {
         restoreDefaultLayout();
+        _restoredDockState = saveState(); // no saved layout: remember the default to re-show on map open
         spdlog::debug("No saved state found, using default dock widget layout");
     }
 }
@@ -2020,8 +2040,8 @@ void MainWindow::setDockVisibility(QDockWidget* dock, QAction* action, bool visi
         return;
     }
 
-    const bool previousPreferenceSuppression = _suppressPanelPreferenceUpdates;
-    _suppressPanelPreferenceUpdates = true;
+    const bool previousSuppression = _suppressDockStateSave;
+    _suppressDockStateSave = true; // programmatic show/hide is not a user layout change
 
     if (action) {
         QSignalBlocker blocker(*action);
@@ -2030,87 +2050,25 @@ void MainWindow::setDockVisibility(QDockWidget* dock, QAction* action, bool visi
 
     dock->setVisible(visible);
 
-    _suppressPanelPreferenceUpdates = previousPreferenceSuppression;
+    _suppressDockStateSave = previousSuppression;
 }
 
-void MainWindow::persistPanelPreference(QDockWidget* dock, bool visible) {
-    if (_suppressPanelPreferenceUpdates || !dock) {
-        return;
+void MainWindow::showPanelsForMap() {
+    // Re-apply the persisted dock layout (visibility + geometry) that was hidden for the welcome
+    // screen. Suppress saving so re-applying it isn't mistaken for a user change.
+    const bool previousSuppression = _suppressDockStateSave;
+    _suppressDockStateSave = true;
+    if (!_restoredDockState.isEmpty()) {
+        restoreState(_restoredDockState);
     }
-
-    // For tabified docks, visibilityChanged(false) can fire when the dock just loses focus.
-    // Treat only truly hidden docks (isHidden == true) as user intent to hide.
-    if (!visible && !dock->isHidden()) {
-        return;
-    }
-
-    const bool isShown = !dock->isHidden();
-
-    auto& settings = *_settings;
-    const QString dockName = dock->objectName();
-    if (dockName.isEmpty()) {
-        return;
-    }
-
-    auto preference = settings.getPanelVisibilityPreference(dockName);
-    if (!preference.has_value() || preference.value() != isShown) {
-        settings.setPanelVisibilityPreference(dockName, isShown);
-        settings.save();
-    }
-}
-
-void MainWindow::snapshotPanelVisibility() {
-    if (_suppressPanelSnapshotUpdates) {
-        return;
-    }
-
-    auto isPanelEnabled = [](QAction* action, QDockWidget* dock) {
-        if (action) {
-            return action->isChecked();
-        }
-        return dock && dock->isVisible();
-    };
-
-    for (const auto& [dock, action] : managedDockActionPairs()) {
-        if (dock) {
-            _panelVisibilitySnapshot[dock] = isPanelEnabled(action, dock);
-        }
-    }
-}
-
-void MainWindow::restorePanelVisibilitySnapshot() {
-    if (_panelVisibilitySnapshot.empty()) {
-        snapshotPanelVisibility();
-    }
-
-    auto& settings = *_settings;
-
-    auto applySnapshot = [&](QDockWidget* dock, QAction* action) {
-        if (!dock) {
-            return;
-        }
-        const auto it = _panelVisibilitySnapshot.find(dock);
-        bool visible = (it != _panelVisibilitySnapshot.end()) ? it->second : !dock->isHidden();
-
-        if (auto preference = settings.getPanelVisibilityPreference(dock->objectName()); preference.has_value()) {
-            visible = preference.value();
-        }
-        setDockVisibility(dock, action, visible);
-    };
-
-    for (const auto& [dock, action] : managedDockActionPairs()) {
-        applySnapshot(dock, action);
-    }
+    _suppressDockStateSave = previousSuppression;
 
     updatePanelMenuActions();
-    snapshotPanelVisibility();
 }
 
 void MainWindow::hidePanelsForNoMap() {
-    const bool previousSuppression = _suppressPanelSnapshotUpdates;
-    const bool previousPreferenceSuppression = _suppressPanelPreferenceUpdates;
-    _suppressPanelSnapshotUpdates = true;
-    _suppressPanelPreferenceUpdates = true;
+    const bool previousSuppression = _suppressDockStateSave;
+    _suppressDockStateSave = true; // hiding for the welcome screen must not overwrite the saved layout
 
     for (const auto& [dock, action] : managedDockActionPairs()) {
         setDockVisibility(dock, action, dock == _fileBrowserDock);
@@ -2120,8 +2078,7 @@ void MainWindow::hidePanelsForNoMap() {
         _fileBrowserDock->raise();
     }
 
-    _suppressPanelSnapshotUpdates = previousSuppression;
-    _suppressPanelPreferenceUpdates = previousPreferenceSuppression;
+    _suppressDockStateSave = previousSuppression;
 }
 
 void MainWindow::updatePanelMenuActions() {
@@ -2175,12 +2132,6 @@ QIcon MainWindow::themedIcon(const QString& iconPath) const {
     return QIcon(pixmap);
 }
 
-void MainWindow::hideNonEssentialPanels() {
-    spdlog::debug("Hiding non-essential panels (no map loaded)");
-    snapshotPanelVisibility();
-    hidePanelsForNoMap();
-}
-
 void MainWindow::refreshFileBrowser() {
     if (_fileBrowserPanel) {
         spdlog::debug("Refreshing file browser after data loading");
@@ -2195,8 +2146,6 @@ void MainWindow::showFileBrowserPanel() {
 
     // File browser is tabified with the tile/object palettes; focusing it makes it the active tab
     _fileBrowserDock->widget()->setFocus();
-
-    snapshotPanelVisibility();
 
     spdlog::debug("File browser panel shown and raised");
 }
