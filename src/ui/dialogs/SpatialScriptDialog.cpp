@@ -12,6 +12,7 @@
 #include <QVBoxLayout>
 
 #include "editor/HexagonGrid.h"
+#include "ui/IconHelper.h"
 
 namespace geck {
 
@@ -31,7 +32,13 @@ SpatialScriptDialog::SpatialScriptDialog(const std::vector<ScriptSelectorDialog:
 
     _tileSpin = new QSpinBox(this);
     _tileSpin->setRange(0, HexagonGrid::POSITION_COUNT - 1);
-    formLayout->addRow("Hex tile:", _tileSpin);
+    auto* tileRow = new QHBoxLayout();
+    tileRow->addWidget(_tileSpin, 1);
+    auto* pickButton = new QPushButton("Pick on map...", this);
+    pickButton->setIcon(createIcon(":/icons/actions/target-arrow.svg"));
+    pickButton->setToolTip("Click a hex on the map to set the position");
+    tileRow->addWidget(pickButton);
+    formLayout->addRow("Hex tile:", tileRow);
 
     _elevationCombo = new QComboBox(this);
     _elevationCombo->addItem("Elevation 1", 0);
@@ -50,6 +57,7 @@ SpatialScriptDialog::SpatialScriptDialog(const std::vector<ScriptSelectorDialog:
     _okButton = buttonBox->button(QDialogButtonBox::Ok);
     _okButton->setEnabled(false); // need a script first
     connect(chooseButton, &QPushButton::clicked, this, &SpatialScriptDialog::onChooseScript);
+    connect(pickButton, &QPushButton::clicked, this, &SpatialScriptDialog::pickPositionRequested);
     mainLayout->addWidget(buttonBox);
 }
 
@@ -62,6 +70,10 @@ void SpatialScriptDialog::onChooseScript() {
     if (index < 0) {
         return;
     }
+    selectProgram(index);
+}
+
+void SpatialScriptDialog::selectProgram(int index) {
     _programIndex = index;
     if (static_cast<size_t>(index) < _scripts.size()) {
         const ScriptSelectorDialog::Entry& entry = _scripts[static_cast<size_t>(index)];
@@ -73,8 +85,25 @@ void SpatialScriptDialog::onChooseScript() {
     } else {
         _scriptLabel->setText(QString("Script #%1").arg(index));
     }
-    _okButton->setEnabled(true);
+    _okButton->setEnabled(index >= 0);
 }
+
+void SpatialScriptDialog::setProgramIndex(int index) {
+    if (index >= 0) {
+        selectProgram(index);
+    }
+}
+
+void SpatialScriptDialog::setTile(int tile) { _tileSpin->setValue(tile); }
+
+void SpatialScriptDialog::setElevation(int elevation) {
+    const int comboIndex = _elevationCombo->findData(elevation);
+    if (comboIndex >= 0) {
+        _elevationCombo->setCurrentIndex(comboIndex);
+    }
+}
+
+void SpatialScriptDialog::setRadius(int radius) { _radiusSpin->setValue(radius); }
 
 int SpatialScriptDialog::tile() const { return _tileSpin->value(); }
 int SpatialScriptDialog::elevation() const { return _elevationCombo->currentData().toInt(); }

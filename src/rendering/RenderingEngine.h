@@ -41,6 +41,7 @@ public:
         bool showHexGrid = false;
         bool showLightOverlays = false;
         bool showExitGrids = false;
+        bool showSpatialScripts = false;
         // Merge touching selected objects of the same category into one union outline (true), or
         // outline every selected object individually so shared edges show too (false).
         bool mergeSelectionOutlines = true;
@@ -100,6 +101,10 @@ public:
         // Map data
         const Map* map = nullptr;
         int currentElevation = 0;
+
+        // SID (MapScript::pid) of the spatial script to highlight as selected in the
+        // spatial-script overlay, or MapScript::NONE for no selection.
+        uint32_t selectedSpatialScriptSid = 0xFFFFFFFFu;
 
         // Exit-grid "Draw edge" live preview (MarkExits mode), grouped so RenderData stays small. When
         // `active`: `lineVertices`/`lineCursor` draw the polyline (vertex->vertex, last->cursor);
@@ -232,6 +237,16 @@ private:
         const sf::View& view,
         const RenderData& renderData,
         const Map* map);
+
+    /**
+     * @brief Editor-only "Show spatial scripts" overlay: for each spatial script on the current
+     * elevation, a translucent hex-distance radius disc plus the engine's green marker
+     * (art/intrface/msef001.frm) at its centre hex. Spatial scripts have no MapObject, so this is
+     * driven from the map's script list, not renderData.objects.
+     */
+    void renderSpatialScripts(sf::RenderTarget& target,
+        const sf::View& view,
+        const RenderData& renderData);
 
     /**
      * @brief Render the in-progress exit-grid "Draw edge" preview: the polyline plus each

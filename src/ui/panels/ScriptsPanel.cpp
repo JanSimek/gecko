@@ -10,6 +10,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QSplitter>
 #include <QTableWidget>
 #include <QVBoxLayout>
@@ -81,10 +82,13 @@ ScriptsPanel::ScriptsPanel(resource::GameResources& resources, QWidget* parent)
     splitter->setStretchFactor(1, 1);
     mainLayout->addWidget(splitter);
 
+    _table->setContextMenuPolicy(Qt::CustomContextMenu);
+
     connect(_filterEdit, &QLineEdit::textChanged, this, &ScriptsPanel::applyFilter);
     connect(_table, &QTableWidget::cellDoubleClicked, this,
         [this](int row, int /*column*/) { onCellDoubleClicked(row); });
     connect(_table, &QTableWidget::itemSelectionChanged, this, &ScriptsPanel::onScriptSelectionChanged);
+    connect(_table, &QTableWidget::customContextMenuRequested, this, &ScriptsPanel::onTableContextMenu);
 }
 
 void ScriptsPanel::setMap(Map* map) {
@@ -93,6 +97,11 @@ void ScriptsPanel::setMap(Map* map) {
 }
 
 void ScriptsPanel::populate() {
+    // Clearing/refilling the table churns the selection, which would otherwise fire
+    // spatialScriptSelected(NONE) and clobber the map-side selection. Suppress those emits here;
+    // MainWindow re-asserts the selection after an edit if it should survive.
+    _suppressSpatialSelectionSignal = true;
+
     // Sorting must be off while inserting, or rows shuffle mid-build and setItem targets the wrong cell.
     _table->setSortingEnabled(false);
     _table->setRowCount(0);
@@ -100,6 +109,7 @@ void ScriptsPanel::populate() {
 
     if (_map == nullptr) {
         _table->setSortingEnabled(true);
+        _suppressSpatialSelectionSignal = false;
         return;
     }
 
@@ -139,6 +149,8 @@ void ScriptsPanel::populate() {
     _table->setSortingEnabled(true);
 
     applyFilter(); // a re-populate (map switch) must honour the filter still shown in the box
+
+    _suppressSpatialSelectionSignal = false;
 }
 
 void ScriptsPanel::addRow(const QString& section, int programIndex, qulonglong rowSid, qulonglong ownerOid,
@@ -190,19 +202,72 @@ void ScriptsPanel::applyFilter() {
 }
 
 void ScriptsPanel::onCellDoubleClicked(int row) {
-    const QTableWidgetItem* idItem = _table->item(row, COL_SCRIPT_ID);
-    if (idItem == nullptr) {
-        return;
-    }
-
-    // The owning script's SID is stashed in UserRole; NONE marks an ownerless row (spatial / timer /
-    // system scripts and the map's own header script), which has no object to navigate to.
-    const auto sid = static_cast<uint32_t>(idItem->data(Qt::UserRole).toULongLong());
+    // The row's SID is stashed in UserRole; NONE marks an ownerless row (the map's own header
+    // script), which has neither an object to navigate to nor an editable record.
+    const uint32_t sid = sidOfRow(row);
     if (sid == MapScript::NONE) {
         return;
     }
 
-    Q_EMIT scriptObjectActivated(static_cast<int>(sid));
+    // Double-clicking a spatial row edits it. Only object-owned script types (ITEM / CRITTER) can be
+    // navigated to; SYSTEM and TIMER scripts are ownerless, so a double-click there does nothing.
+    const MapScript::ScriptType type = MapScript::fromPid(sid);
+    if (type == MapScript::ScriptType::SPATIAL) {
+        Q_EMIT spatialScriptEditRequested(sid);
+    } else if (type == MapScript::ScriptType::ITEM || type == MapScript::ScriptType::CRITTER) {
+        Q_EMIT scriptObjectActivated(static_cast<int>(sid));
+    }
+}
+
+void ScriptsPanel::onTableContextMenu(const QPoint& pos) {
+    const int row = _table->indexAt(pos).row();
+    const uint32_t sid = sidOfRow(row);
+    if (MapScript::fromPid(sid) != MapScript::ScriptType::SPATIAL) {
+        return; // Edit/Delete are spatial-only (other scripts live on their owning object).
+    }
+
+    _table->selectRow(row); // right-click also selects, syncing the map highlight
+
+    QMenu menu(this);
+    const QAction* editAction = menu.addAction(tr("Edit Spatial Script..."));
+    const QAction* deleteAction = menu.addAction(tr("Delete Spatial Script"));
+    const QAction* chosen = menu.exec(_table->viewport()->mapToGlobal(pos));
+    if (chosen == editAction) {
+        Q_EMIT spatialScriptEditRequested(sid);
+    } else if (chosen == deleteAction) {
+        Q_EMIT spatialScriptDeleteRequested(sid);
+    }
+}
+
+uint32_t ScriptsPanel::sidOfRow(int row) const {
+    if (row < 0) {
+        return MapScript::NONE;
+    }
+    const QTableWidgetItem* idItem = _table->item(row, COL_SCRIPT_ID);
+    return idItem == nullptr ? MapScript::NONE
+                             : static_cast<uint32_t>(idItem->data(Qt::UserRole).toULongLong());
+}
+
+void ScriptsPanel::selectSpatialScriptRow(uint32_t sid) {
+    _suppressSpatialSelectionSignal = true;
+    if (sid == MapScript::NONE) {
+        _table->clearSelection();
+    } else {
+        int targetRow = -1;
+        for (int row = 0; row < _table->rowCount(); ++row) {
+            if (sidOfRow(row) == sid) {
+                targetRow = row;
+                break;
+            }
+        }
+        if (targetRow >= 0) {
+            _table->selectRow(targetRow);
+            _table->scrollToItem(_table->item(targetRow, COL_SCRIPT_ID));
+        } else {
+            _table->clearSelection();
+        }
+    }
+    _suppressSpatialSelectionSignal = false;
 }
 
 const MapScript* ScriptsPanel::scriptByPid(qulonglong sid) const {
@@ -223,17 +288,18 @@ void ScriptsPanel::onScriptSelectionChanged() {
     _localVarsTable->setRowCount(0);
 
     const int row = _table->currentRow();
-    if (row < 0) {
-        return;
-    }
-    const QTableWidgetItem* idItem = _table->item(row, COL_SCRIPT_ID);
-    if (idItem == nullptr) {
-        return;
+    const uint32_t sid = _table->selectionModel()->hasSelection() ? sidOfRow(row) : MapScript::NONE;
+
+    // Mirror the shared spatial selection: a spatial row selects that script on the map, anything
+    // else clears it. Suppressed while a rebuild or a map-driven sync is churning the selection.
+    if (!_suppressSpatialSelectionSignal) {
+        const bool spatial = MapScript::fromPid(sid) == MapScript::ScriptType::SPATIAL;
+        Q_EMIT spatialScriptSelected(spatial ? sid : MapScript::NONE);
     }
 
     // Resolve the selected row back to its MapScript and show its slice of map_local_vars
     // (local_var_offset .. +local_var_count). Ownerless rows (the map-header row) resolve to nullptr.
-    const MapScript* script = scriptByPid(idItem->data(Qt::UserRole).toULongLong());
+    const MapScript* script = scriptByPid(sid);
     if (script == nullptr || script->local_var_offset == MapScript::NONE) {
         return;
     }

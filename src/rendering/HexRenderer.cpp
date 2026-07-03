@@ -79,6 +79,23 @@ void HexRenderer::renderHighlights(sf::RenderTarget& target,
     }
 }
 
+void HexRenderer::renderHexOverlay(sf::RenderTarget& target,
+    const sf::View& view,
+    const HexagonGrid& hexGrid,
+    const std::vector<int>& hexPositions,
+    sf::Color color) const {
+    sf::Sprite overlay = _gridSprite;
+    overlay.setTextureRect(overlayTextureRect(_gridSprite.getTexture()));
+    overlay.setColor(color);
+    for (int hexPosition : hexPositions) {
+        auto hex = hexGrid.getHexByPosition(static_cast<uint32_t>(hexPosition));
+        if (!hex.has_value() || !isHexVisible(hex->get(), view)) {
+            continue;
+        }
+        drawOverlaySprite(target, hex->get(), overlay);
+    }
+}
+
 const sf::Texture& HexRenderer::hexTexture() const {
     [[maybe_unused]] auto* hexFrm = _resources.repository().load<Frm>(ResourcePaths::Frm::HEX_GRID);
     return _resources.textures().get(ResourcePaths::Frm::HEX_GRID);

@@ -1,12 +1,20 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstdlib>
+#include <unordered_set>
 
 #include "editor/HexGeometry.h"
 
 using namespace geck::hexgrid;
 
 namespace {
+
+// Hex-step distance via the cube model, i.e. the engine's tileDistanceBetween.
+int cubeDistance(int a, int b) {
+    const Cube d = cubeOfPosition(a) - cubeOfPosition(b);
+    return (std::abs(d.x) + std::abs(d.y) + std::abs(d.z)) / 2;
+}
 
 // Unit cube vectors for the six Fallout 2 hex directions (derived so the even-q
 // offset<->cube conversion reproduces the engine's neighbour deltas).
@@ -98,4 +106,52 @@ TEST_CASE("translate reports positions that fall off the grid", "[hex_geometry]"
     const int toAnchor = 0 * WIDTH + 0;   // top-left corner
     const int authored = 98 * WIDTH + 98; // up-left of the authoring anchor
     CHECK_FALSE(translate(authored, fromAnchor, toAnchor).has_value());
+}
+
+TEST_CASE("hexesWithinRadius is the centre only at radius 0", "[hex_geometry]") {
+    const int center = 100 * WIDTH + 100;
+    const auto disc = hexesWithinRadius(center, 0);
+    REQUIRE(disc.size() == 1);
+    CHECK(disc[0] == center);
+}
+
+TEST_CASE("hexesWithinRadius yields the full disc away from edges", "[hex_geometry]") {
+    const int center = 100 * WIDTH + 100; // well interior for these radii
+    for (int radius = 1; radius <= 6; ++radius) {
+        INFO("radius " << radius);
+        const auto disc = hexesWithinRadius(center, radius);
+
+        // A complete hex disc has 3*R*(R+1) + 1 cells.
+        CHECK(disc.size() == static_cast<size_t>(3 * radius * (radius + 1) + 1));
+
+        const std::unordered_set<int> members(disc.begin(), disc.end());
+        CHECK(members.size() == disc.size()); // no duplicates
+        CHECK(members.contains(center));      // centre included
+
+        // Every returned hex is within the radius; no hex just outside it is included.
+        for (int h : disc) {
+            CHECK(cubeDistance(center, h) <= radius);
+        }
+        for (int d = 0; d < 6; ++d) {
+            CHECK(members.contains(stepInDirection(center, d))); // all 6 immediate neighbours present
+        }
+    }
+}
+
+TEST_CASE("hexesWithinRadius clips at the grid edge and stays in bounds", "[hex_geometry]") {
+    const int corner = 0; // top-left; most of a disc here is off-grid
+    const auto disc = hexesWithinRadius(corner, 3);
+
+    // Clipped, so fewer than a full disc, but non-empty and every hex is on-grid.
+    CHECK(disc.size() < static_cast<size_t>(3 * 3 * 4 + 1));
+    CHECK_FALSE(disc.empty());
+    for (int h : disc) {
+        CHECK(h >= 0);
+        CHECK(h < WIDTH * HEIGHT);
+        CHECK(cubeDistance(corner, h) <= 3);
+    }
+}
+
+TEST_CASE("hexesWithinRadius is empty for a negative radius", "[hex_geometry]") {
+    CHECK(hexesWithinRadius(100 * WIDTH + 100, -1).empty());
 }

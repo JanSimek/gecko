@@ -621,10 +621,16 @@ The visual map picker shipped (`MapBrowserDialog`, File → Browse Maps…: thum
 
 # Visualize spatial scripts on the map (investigate)
 
-> Status: investigation. Spatial scripts can be created (`SpatialScriptDialog` → F-key flow)
-> but are **invisible on the map** once placed — there's no marker, no radius overlay, and no
-> way to see, select, edit, or delete an existing one (see Known limitations #3). Goal: render
-> existing spatial scripts on the canvas so designers can see where their trigger zones are.
+> Status: **SHIPPED (visualize + select + edit + delete).** `View › Show Spatial Scripts` renders each
+> placed spatial script — the engine's green `msef001` marker at its centre hex plus a translucent
+> hex-distance radius disc (`hexgrid::hexesWithinRadius`, matching the engine's `tileDistanceBetween`
+> trigger test), filtered to the current elevation, as a viewport-culled overlay in
+> `RenderingEngine::renderSpatialScripts`. A placed spatial script can now be **selected** (click its
+> marker on the map, or its row in the Scripts panel — one shared selection keyed on the SID, the
+> selected marker/disc highlighted amber), **edited** (double-click / context menu → pre-filled
+> `SpatialScriptDialog`, in-place so the SID survives) and **deleted** (`Delete` / context menu), all
+> undoable via `ScriptEditService::editSpatialScript` / `removeSpatialScript`. Known-limitation #3 is
+> now fully closed.
 
 ## What the data model gives us
 A spatial script is a `MapScript` (not a saved object) with `pid == 1`, its position packed
@@ -673,8 +679,11 @@ part and overlaps the spatial-placement `EditorMode` follow-up.
 1. **`.edg` map-edge support** *(M)* — vault reader/writer for the big-endian `'EDGE'` v1/v2 format the
    engine authors + enforces (`fallout2-ce map_edge.cc` / `map_edge_setup.cc`), plus a setup overlay.
    The one real format Gecko can't round-trip.
-2. **Spatial-script visualization** *(S–M)* — marker + radius overlay for placed spatial scripts (they
-   are created but invisible today). Also Known-limitation #3 / the "Visualize spatial scripts" section.
+2. ~~**Spatial-script visualization** *(S–M)*~~ — **DONE.** `View › Show Spatial Scripts` draws the
+   engine's green `msef001` marker + a hex-distance radius disc (`RenderingEngine::renderSpatialScripts`
+   + `hexgrid::hexesWithinRadius`). Placed spatial scripts can now be **selected, edited, and deleted**
+   from both the map (marker click / double-click / `Delete`) and the Scripts panel, with a shared
+   selection and undo — fully closing Known-limitation #3 / the "Visualize spatial scripts" section below.
 3. ~~**Eyedropper — pick proto/tile from the map** *(S)* + **edge-scroll panning** *(S)*~~ — **DONE.**
    Eyedropper shipped (PR #99); edge-scroll shipped (cursor near a viewport edge auto-pans the view,
    ramped by depth into a 32px margin, gated off during right-drag pan, with a View-menu toggle

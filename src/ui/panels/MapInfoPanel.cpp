@@ -29,8 +29,6 @@
 #include "resource/ScriptNames.h"
 #include "util/Coordinates.h"
 #include "ui/IconHelper.h"
-#include "ui/dialogs/ScriptSelectorDialog.h"
-#include "ui/dialogs/SpatialScriptDialog.h"
 #include "ui/widgets/IntCellDelegate.h"
 
 namespace geck {
@@ -158,11 +156,11 @@ void MapInfoPanel::setupUI() {
     _playerPositionSpin = new QSpinBox();
     _playerPositionSpin->setRange(0, HexPosition::MAX_VALUE); // Max hex position
     _setPositionButton = new QPushButton();
-    _setPositionButton->setIcon(createIcon(":/icons/actions/map-pin.svg"));
+    _setPositionButton->setIcon(createIcon(":/icons/actions/target-arrow.svg"));
     _setPositionButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _setPositionButton->setToolTip("Click to select position on map");
     _centerViewButton = new QPushButton();
-    _centerViewButton->setIcon(createIcon(":/icons/actions/target-arrow.svg"));
+    _centerViewButton->setIcon(createIcon(":/icons/actions/map-pin.svg"));
     _centerViewButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _centerViewButton->setToolTip("Center view on player position");
     positionLayout->addWidget(_playerPositionSpin);
@@ -920,21 +918,8 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
     if (!_map) {
         return;
     }
-
-    auto* scriptsLst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
-    if (!scriptsLst) {
-        QMessageBox::warning(this, "Add Spatial Script", "Could not load scripts.lst.");
-        return;
-    }
-
-    SpatialScriptDialog dialog(ScriptSelectorDialog::buildEntries(_resources), this);
-    if (dialog.exec() != QDialog::Accepted || dialog.programIndex() < 0) {
-        return;
-    }
-
-    // Direct (synchronous) connection: the script is created before this returns.
-    Q_EMIT addSpatialScriptRequested(dialog.programIndex(), dialog.tile(),
-        dialog.elevation(), dialog.radius());
+    // The dialog (with its map-pick flow) is owned by MainWindow, which brokers the map click.
+    Q_EMIT addSpatialScriptRequested();
 }
 
 void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {

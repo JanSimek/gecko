@@ -29,6 +29,14 @@ public:
         int currentHoverHex,
         int playerPositionHex) const;
 
+    // Draw the translucent filled hex overlay (the HEX.frm overlay frame) tinted `color` at each of
+    // the given hex positions, skipping off-screen ones. Used for the spatial-script radius disc.
+    void renderHexOverlay(sf::RenderTarget& target,
+        const sf::View& view,
+        const HexagonGrid& hexGrid,
+        const std::vector<int>& hexPositions,
+        sf::Color color) const;
+
 private:
     [[nodiscard]] const sf::Texture& hexTexture() const;
     static sf::IntRect overlayTextureRect(const sf::Texture& texture);

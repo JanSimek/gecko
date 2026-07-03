@@ -53,7 +53,7 @@ Feature the reference actually has (not a stub) and Gecko lacks. Effort: S ≈ d
 | # | Feature | In reference | Gecko today | Effort | Notes |
 |---|---|---|---|---|---|
 | 1 | **`.edg` map-edge support** | fallout2-ce `map_edge_setup.cc` — full two-tier authoring UI (Hi-Res tile-rect zones + Angled square edges w/ per-side clip modes), overlay, and a big-endian `'EDGE'` v1/v2 file written beside the `.map` (`map_edge.cc:309/405`), enforced by the `edg_support` gate | **LACKS** — no `.edg` read/write/UI anywhere | **M** | The engine *authors and enforces* these; a real format Gecko can't round-trip. Adopt: reader/writer in vault + a setup overlay. Match the CE format exactly (engine-fidelity). |
-| 2 | **Spatial-script visualization** | fallout2-ce `'h'` toggle draws interface-art markers at each spatial-script tile (`mp_scrpt.cc:110`) | **PARTIAL** — spatial scripts can be *created* (`SpatialScriptDialog`) but are **invisible** on the map | **S–M** | Already tracked as Known-limitation #3 + PLAN "Visualize spatial scripts". Add a marker + radius overlay layer + View toggle. |
+| 2 | **Spatial-script visualization + editing** | fallout2-ce `'h'` toggle draws interface-art markers at each spatial-script tile (`mp_scrpt.cc:110`) | **DONE** — `View › Show Spatial Scripts` draws the engine's green `msef001` marker + a hex-distance radius disc. **Select/edit/delete** now work from both the map (click marker, double-click to edit, `Delete` to remove) and the Scripts panel (shared selection, context menu), all undoable. Fully closes Known-limitation #3. | **S–M** | Shipped. |
 
 ### Priority 2 — strong QoL, both references have it
 
@@ -118,7 +118,7 @@ be retired from TODO.md in favor of this audit.
 ## Recommended sequencing
 
 1. **`.edg` map-edge support** (§2 #1) — the one true format Gecko can't round-trip; engine-authored.
-2. **Spatial-script visualization** (§2 #2) — already a tracked limitation; small overlay work.
+2. ~~**Spatial-script visualization** (§2 #2)~~ — **DONE.** Overlay + shared map/panel select, edit, delete.
 3. ~~**Eyedropper pick-from-map** (§2 #4) + **edge-scroll** (§2 #5)~~ — **DONE** (eyedropper PR #99; edge-scroll shipped).
 4. **Minimap/overview** (§2 #3) — larger, high-visibility.
 5. Defer #6–#8 unless requested.

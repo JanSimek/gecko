@@ -17,6 +17,10 @@ Map::MapFile& Map::getMapFile() {
     return *mapFile;
 }
 
+const Map::MapFile& Map::getMapFile() const {
+    return *mapFile;
+}
+
 void Map::setMapFile(std::unique_ptr<MapFile> newMapFile) {
     mapFile = std::move(newMapFile);
 }

@@ -2,7 +2,9 @@
 
 #include "HexagonGrid.h"
 
+#include <algorithm>
 #include <optional>
+#include <vector>
 
 // Fallout 2 hex-grid geometry: cube coordinates and shape-preserving translation.
 //
@@ -64,6 +66,33 @@ inline std::optional<int> translate(int position, int fromAnchor, int toAnchor) 
         return std::nullopt;
     }
     return cr.row * WIDTH + cr.col;
+}
+
+// All grid positions within hex-distance `radius` of `centerPosition` — a filled hex disc
+// with the centre included, in ascending position order per the row-major cube sweep. This
+// matches the engine's spatial-script trigger test `tileDistanceBetween(centre, h) <= radius`
+// (fallout2-ce tile.cc/scripts.cc): cube distance equals that hex-step distance because the
+// offset<->cube conversion mirrors the engine's `_dir_tile` parity layout. Off-grid hexes are
+// skipped, so a disc near an edge is clipped; `radius` < 0 yields an empty list.
+inline std::vector<int> hexesWithinRadius(int centerPosition, int radius) {
+    std::vector<int> positions;
+    if (radius < 0) {
+        return positions;
+    }
+    const Cube center = cubeOfPosition(centerPosition);
+    for (int dx = -radius; dx <= radius; ++dx) {
+        const int lo = std::max(-radius, -dx - radius);
+        const int hi = std::min(radius, -dx + radius);
+        for (int dy = lo; dy <= hi; ++dy) {
+            const int dz = -dx - dy;
+            const ColRow cr = cubeToOffset(center + Cube{ dx, dy, dz });
+            if (cr.col < 0 || cr.col >= WIDTH || cr.row < 0 || cr.row >= HEIGHT) {
+                continue;
+            }
+            positions.push_back(cr.row * WIDTH + cr.col);
+        }
+    }
+    return positions;
 }
 
 } // namespace geck::hexgrid

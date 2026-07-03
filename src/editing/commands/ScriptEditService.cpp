@@ -3,11 +3,18 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "editing/commands/UndoBatcher.h"
+#include "util/BuiltTile.h"
 #include "util/UndoStack.h"
 
 #include <algorithm>
+#include <memory>
 
 namespace geck {
+
+namespace {
+    // The map_scripts section index for spatial scripts (== the SPATIAL script type).
+    constexpr int SPATIAL_SECTION = static_cast<int>(MapScript::ScriptType::SPATIAL);
+} // namespace
 
 ScriptEditService::ScriptEditService(std::unique_ptr<Map>& map, UndoBatcher& batcher)
     : _map(map)
@@ -182,6 +189,49 @@ bool ScriptEditService::addSpatialScript(uint32_t programIndex, int tile, int el
     mapFile.scripts_in_section[section] = static_cast<int>(mapFile.map_scripts[section].size());
 
     return recordScriptEdit("Add Spatial Script", section, nullptr, std::move(beforeSection), 0, -1);
+}
+
+const MapScript* ScriptEditService::findSpatialScript(uint32_t sid) const {
+    if (!_map || MapScript::fromPid(sid) != MapScript::ScriptType::SPATIAL) {
+        return nullptr;
+    }
+    const auto& vec = _map->getMapFile().map_scripts[SPATIAL_SECTION];
+    const auto it = std::ranges::find_if(vec, [sid](const MapScript& s) { return s.pid == sid; });
+    return it == vec.end() ? nullptr : std::to_address(it);
+}
+
+bool ScriptEditService::editSpatialScript(uint32_t sid, uint32_t programIndex,
+    int tile, int elevation, int radius) {
+    if (!_map || MapScript::fromPid(sid) != MapScript::ScriptType::SPATIAL) {
+        return false;
+    }
+    auto& vec = _map->getMapFile().map_scripts[SPATIAL_SECTION];
+    const auto it = std::ranges::find_if(vec, [sid](const MapScript& s) { return s.pid == sid; });
+    if (it == vec.end()) {
+        return false;
+    }
+
+    std::vector<MapScript> beforeSection = vec;
+    // In-place: keep pid and script_oid, update program index, packed position and radius.
+    it->script_id = programIndex;
+    it->timer = built_tile::create(static_cast<uint32_t>(tile), static_cast<uint32_t>(elevation));
+    it->spatial_radius = static_cast<uint32_t>(radius);
+
+    return recordScriptEdit("Edit Spatial Script", SPATIAL_SECTION, nullptr, std::move(beforeSection), 0, -1);
+}
+
+bool ScriptEditService::removeSpatialScript(uint32_t sid) {
+    if (!_map || MapScript::fromPid(sid) != MapScript::ScriptType::SPATIAL) {
+        return false;
+    }
+    const auto& vec = _map->getMapFile().map_scripts[SPATIAL_SECTION];
+    std::vector<MapScript> beforeSection = vec;
+    const std::size_t sizeBefore = vec.size();
+    eraseScript(sid);
+    if (vec.size() == sizeBefore) {
+        return false; // nothing matched
+    }
+    return recordScriptEdit("Delete Spatial Script", SPATIAL_SECTION, nullptr, std::move(beforeSection), 0, -1);
 }
 
 } // namespace geck

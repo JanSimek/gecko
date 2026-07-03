@@ -1,6 +1,7 @@
 #define QT_NO_EMIT
 #include "MainWindow.h"
 #include "EditorWidget.h"
+#include "format/map/MapScript.h"
 #include "ui/core/EditorHints.h"
 #include "ui/widgets/LoadingWidget.h"
 #include "ui/widgets/WelcomeWidget.h"
@@ -20,6 +21,8 @@
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
 #include "ui/dialogs/FillDialog.h"
+#include "ui/dialogs/SpatialScriptDialog.h"
+#include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
 #include "ui/UIConstants.h"
@@ -464,6 +467,7 @@ void MainWindow::setupMenuBar() {
             updateUndoRedoActions();
             if (_selectionPanel)
                 _selectionPanel->refresh();
+            refreshScriptsPanel(); // an undone spatial add/edit/delete must re-appear in the panel
         }
     });
 
@@ -476,6 +480,7 @@ void MainWindow::setupMenuBar() {
             updateUndoRedoActions();
             if (_selectionPanel)
                 _selectionPanel->refresh();
+            refreshScriptsPanel(); // keep the panel in step with a redone spatial add/edit/delete
         }
     });
 
@@ -493,7 +498,7 @@ void MainWindow::setupMenuBar() {
         QKeySequence shortcut;
     };
 
-    const std::array<ViewToggleSpec, 9> viewToggleSpecs = { {
+    const std::array<ViewToggleSpec, 10> viewToggleSpecs = { {
         { &_showObjectsAction, ":/icons/actions/view-objects.svg", "Show &Objects", UI::DEFAULT_SHOW_OBJECTS, &MainWindow::showObjectsToggled, {}, {} },
         { &_showCrittersAction, ":/icons/actions/view-critters.svg", "Show &Critters", UI::DEFAULT_SHOW_CRITTERS, &MainWindow::showCrittersToggled, {}, {} },
         { &_showWallsAction, ":/icons/actions/view-walls.svg", "Show &Walls", UI::DEFAULT_SHOW_WALLS, &MainWindow::showWallsToggled, {}, {} },
@@ -503,6 +508,7 @@ void MainWindow::setupMenuBar() {
         { &_showHexGridAction, ":/icons/actions/view-grid.svg", "Show &Hex Grid", UI::DEFAULT_SHOW_HEX_GRID, &MainWindow::showHexGridToggled, {}, {} },
         { &_showLightOverlaysAction, ":/icons/actions/view-light.svg", "Show &Light Overlays", false, &MainWindow::showLightOverlaysToggled, {}, {} },
         { &_showExitGridsAction, ":/icons/actions/view-exits.svg", "Show &Exit Grids", false, &MainWindow::showExitGridsToggled, "Show exit grid markers", QKeySequence("Ctrl+E") },
+        { &_showSpatialScriptsAction, ":/icons/actions/target-arrow.svg", "Show Spatial &Scripts", false, &MainWindow::showSpatialScriptsToggled, "Show spatial-script trigger markers and their radius", {} },
     } };
 
     for (const ViewToggleSpec& spec : viewToggleSpecs) {
@@ -1017,6 +1023,10 @@ void MainWindow::setupDockWidgets() {
     connect(this, &MainWindow::showExitGridsToggled, this, [this](bool enabled) {
         if (_currentEditorWidget)
             _currentEditorWidget->setShowExitGrids(enabled);
+    });
+    connect(this, &MainWindow::showSpatialScriptsToggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setShowSpatialScripts(enabled);
     });
     connect(this, &MainWindow::elevationChanged, this, [this](int elevation) {
         if (_currentEditorWidget)
@@ -1545,10 +1555,7 @@ void MainWindow::connectPanelSignals() {
                     _currentEditorWidget->copyElevation(from, to);
             });
         connect(_mapInfoPanel, &MapInfoPanel::addSpatialScriptRequested,
-            this, [this](int programIndex, int tile, int elevation, int radius) {
-                if (_currentEditorWidget)
-                    _currentEditorWidget->addSpatialScript(static_cast<uint32_t>(programIndex), tile, elevation, radius);
-            });
+            this, [this]() { openSpatialScriptDialog(std::nullopt); });
 
         // Header edits in the Info panel write straight to the map (no undo command), so flag the map
         // modified here. These also fire while the panel is being populated from a freshly loaded map,
@@ -1582,6 +1589,21 @@ void MainWindow::connectPanelSignals() {
                     showStatusMessage("Script has no object on the map");
                 }
             });
+
+        // Selecting a spatial-script row drives the shared selection (highlights its marker on the map).
+        connect(_scriptsPanel, &ScriptsPanel::spatialScriptSelected, this, [this](uint32_t sid) {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->setSelectedSpatialScript(sid);
+            }
+        });
+        // Edit / delete requested from the panel (context menu or double-click).
+        connect(_scriptsPanel, &ScriptsPanel::spatialScriptEditRequested, this,
+            [this](uint32_t sid) { openSpatialScriptDialog(sid); });
+        connect(_scriptsPanel, &ScriptsPanel::spatialScriptDeleteRequested, this, [this](uint32_t sid) {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->deleteSpatialScript(sid);
+            }
+        });
     }
 }
 
@@ -1636,6 +1658,18 @@ void MainWindow::connectToEditorWidget() {
         handleMapLoadRequest(mapPath, true);
     });
 
+    // Spatial-script selection/editing sync (map <-> Scripts panel). The panel mirrors the map-side
+    // selection; a map double-click opens the editor; add/edit/delete repopulate the panel.
+    connect(_currentEditorWidget, &EditorWidget::spatialScriptSelectionChanged, this, [this](uint32_t sid) {
+        if (_scriptsPanel) {
+            _scriptsPanel->selectSpatialScriptRow(sid);
+        }
+    });
+    connect(_currentEditorWidget, &EditorWidget::spatialScriptEditActivated, this,
+        [this](uint32_t sid) { openSpatialScriptDialog(sid); });
+    connect(_currentEditorWidget, &EditorWidget::mapScriptsChanged, this,
+        [this]() { refreshScriptsPanel(); });
+
     if (_mapInfoPanel) {
         connect(_currentEditorWidget, &EditorWidget::playerPositionSelected,
             this, [this](int hexPosition) {
@@ -1648,6 +1682,95 @@ void MainWindow::connectToEditorWidget() {
     applySelectionColorsToEditor();
 
     spdlog::debug("Connected EditorWidget instance signals");
+}
+
+void MainWindow::openSpatialScriptDialog(std::optional<uint32_t> editSid) {
+    if (!_currentEditorWidget) {
+        return;
+    }
+
+    // Editing needs the target script to still exist.
+    std::optional<EditorWidget::SpatialScriptInfo> info;
+    if (editSid.has_value()) {
+        info = _currentEditorWidget->spatialScriptInfo(*editSid);
+        if (!info) {
+            showStatusMessage("Spatial script no longer exists");
+            return;
+        }
+    }
+
+    // One dialog at a time: re-focus an open one rather than stacking a second.
+    if (_spatialScriptDialog) {
+        _spatialScriptDialog->raise();
+        _spatialScriptDialog->activateWindow();
+        return;
+    }
+
+    // Non-modal (like the player-position pick) so the map stays clickable for "Pick on map".
+    auto* dialog = new SpatialScriptDialog(ScriptSelectorDialog::buildEntries(*_resourcesShared), this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    _spatialScriptDialog = dialog;
+    _editingSpatialSid = editSid.value_or(MapScript::NONE);
+
+    if (info) {
+        dialog->setWindowTitle("Edit Spatial Script");
+        dialog->setProgramIndex(static_cast<int>(info->programIndex));
+        dialog->setTile(info->tile);
+        dialog->setElevation(info->elevation);
+        dialog->setRadius(info->radius);
+    }
+
+    connect(dialog, &SpatialScriptDialog::pickPositionRequested, this, &MainWindow::pickSpatialScriptPosition);
+    connect(dialog, &QDialog::accepted, this, &MainWindow::applySpatialScriptDialog);
+    connect(dialog, &QObject::destroyed, this, [this]() { _spatialScriptDialog = nullptr; });
+    dialog->show();
+}
+
+void MainWindow::pickSpatialScriptPosition() {
+    if (!_currentEditorWidget || !_spatialScriptDialog) {
+        return;
+    }
+    _spatialScriptDialog->hide(); // step aside; the map is clickable because the dialog is non-modal
+    _currentEditorWidget->beginHexPick(
+        [this](std::optional<int> hex) {
+            if (!_spatialScriptDialog) {
+                return; // dialog was closed while picking
+            }
+            if (hex.has_value() && _currentEditorWidget) {
+                _spatialScriptDialog->setTile(*hex);
+                // The clicked hex lives on the current elevation, so match it.
+                _spatialScriptDialog->setElevation(_currentEditorWidget->getCurrentElevation());
+            }
+            _spatialScriptDialog->show();
+            _spatialScriptDialog->raise();
+            _spatialScriptDialog->activateWindow();
+        },
+        "Click a hex for the spatial-script position (Esc to cancel)");
+}
+
+void MainWindow::applySpatialScriptDialog() {
+    if (!_currentEditorWidget || !_spatialScriptDialog) {
+        return;
+    }
+    const SpatialScriptDialog* dialog = _spatialScriptDialog;
+    if (dialog->programIndex() < 0) {
+        return; // OK is disabled without a chosen script, but guard anyway
+    }
+    if (_editingSpatialSid == MapScript::NONE) {
+        _currentEditorWidget->addSpatialScript(static_cast<uint32_t>(dialog->programIndex()),
+            dialog->tile(), dialog->elevation(), dialog->radius());
+    } else {
+        _currentEditorWidget->editSpatialScript(_editingSpatialSid,
+            static_cast<uint32_t>(dialog->programIndex()), dialog->tile(), dialog->elevation(), dialog->radius());
+    }
+}
+
+void MainWindow::refreshScriptsPanel() {
+    if (_scriptsPanel && _currentEditorWidget) {
+        _scriptsPanel->setMap(_currentEditorWidget->getMap());
+        // populate() drops the selection; re-assert the shared spatial selection so the row stays lit.
+        _scriptsPanel->selectSpatialScriptRow(_currentEditorWidget->selectedSpatialScript());
+    }
 }
 
 void MainWindow::applySelectionColorsToEditor() {
@@ -1686,6 +1809,7 @@ void MainWindow::syncMenuStateToEditorWidget() {
     _currentEditorWidget->setShowHexGrid(_showHexGridAction->isChecked());
     _currentEditorWidget->setShowLightOverlays(_showLightOverlaysAction->isChecked());
     _currentEditorWidget->setShowExitGrids(_showExitGridsAction->isChecked());
+    _currentEditorWidget->setShowSpatialScripts(_showSpatialScriptsAction->isChecked());
     _currentEditorWidget->setMergeSelectionOutlines(_mergeOutlinesAction->isChecked());
     _currentEditorWidget->setEdgeScrollEnabled(_edgeScrollAction->isChecked());
     updateUndoRedoActions();

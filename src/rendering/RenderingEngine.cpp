@@ -1,9 +1,12 @@
 #include "RenderingEngine.h"
 #include "editor/Hex.h"
+#include "editor/HexGeometry.h"
 #include "editor/Object.h"
 #include "format/frm/Frm.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
+#include "format/map/MapScript.h"
+#include "util/BuiltTile.h"
 #include "rendering/ObjectVisibility.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
@@ -127,6 +130,11 @@ void RenderingEngine::render(sf::RenderTarget& target,
     // Layer 7: Exit grids (if enabled)
     if (visibility.showExitGrids && renderData.map) {
         renderExitGrids(target, view, renderData, renderData.map);
+    }
+
+    // Layer 7b: Spatial-script trigger markers + radius (if enabled)
+    if (visibility.showSpatialScripts && renderData.map) {
+        renderSpatialScripts(target, view, renderData);
     }
 
     // Layer 8: Hex highlights and markers
@@ -469,6 +477,82 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
         }
         exitGridSprite.setPosition(sf::Vector2f(static_cast<float>(cx), static_cast<float>(cy)));
         target.draw(exitGridSprite);
+    }
+}
+
+void RenderingEngine::renderSpatialScripts(sf::RenderTarget& target,
+    const sf::View& view,
+    const RenderData& renderData) {
+    const Map* map = renderData.map;
+    if (!map || !renderData.hexGrid) {
+        return;
+    }
+
+    constexpr int SPATIAL = static_cast<int>(MapScript::ScriptType::SPATIAL);
+    const auto& scripts = map->getMapFile().map_scripts[SPATIAL];
+    if (scripts.empty()) {
+        return;
+    }
+
+    // Radius disc: translucent green, matching the marker. hexesWithinRadius reproduces the engine's
+    // tileDistanceBetween(centre, h) <= radius trigger zone. The selected script switches to a
+    // brighter amber so it reads as highlighted against the green of the others.
+    const sf::Color radiusFill(80, 220, 110, 110);
+    const sf::Color selectedRadiusFill(255, 205, 70, 150);
+    const sf::Color markerTint(255, 255, 255);         // unselected: no colour shift
+    const sf::Color selectedMarkerTint(255, 235, 130); // selected: shifts the green marker to amber
+    const sf::Color fallbackHex(80, 220, 110, 200);
+    const sf::Color selectedFallbackHex(255, 205, 70, 230);
+
+    // The engine's spatial-script marker (interface art msef001 — a green hex) lives in the DATs, so
+    // guard the load: if the game art is unavailable, fall back to a solid hex so the centre still shows.
+    const sf::Texture* markerTexture = nullptr;
+    try {
+        markerTexture = &_resources.textures().get(ResourcePaths::Frm::SPATIAL_SCRIPT);
+    } catch (const std::exception& e) {
+        static bool warned = false;
+        if (!warned) {
+            spdlog::warn("Spatial-script marker art unavailable ({}); drawing a plain hex instead", e.what());
+            warned = true;
+        }
+    }
+
+    std::optional<sf::Sprite> markerSprite;
+    if (markerTexture) {
+        markerSprite.emplace(*markerTexture);
+        markerSprite->setOrigin(markerSprite->getLocalBounds().size / 2.f); // centre on the hex
+    }
+
+    for (const MapScript& script : scripts) {
+        if (built_tile::elevationOf(script.timer) != static_cast<uint32_t>(renderData.currentElevation)) {
+            continue;
+        }
+        const bool selected = script.pid == renderData.selectedSpatialScriptSid;
+        const int centerHex = static_cast<int>(built_tile::tileOf(script.timer));
+
+        // Radius disc first (viewport-culled per hex inside renderHexOverlay), so the marker sits on top.
+        const auto discHexes = hexgrid::hexesWithinRadius(centerHex, static_cast<int>(script.spatial_radius));
+        _hexRenderer.renderHexOverlay(target, view, *renderData.hexGrid, discHexes,
+            selected ? selectedRadiusFill : radiusFill);
+
+        // Centre marker.
+        const auto hex = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(centerHex));
+        if (!hex.has_value()) {
+            continue;
+        }
+        const int cx = hex->get().x();
+        const int cy = hex->get().y();
+        if (!isHexVisible(cx, cy, view)) {
+            continue;
+        }
+        if (markerSprite) {
+            markerSprite->setColor(selected ? selectedMarkerTint : markerTint);
+            markerSprite->setPosition(sf::Vector2f(static_cast<float>(cx), static_cast<float>(cy)));
+            target.draw(*markerSprite);
+        } else {
+            _hexRenderer.renderHexOverlay(target, view, *renderData.hexGrid, { centerHex },
+                selected ? selectedFallbackHex : fallbackHex);
+        }
     }
 }
 

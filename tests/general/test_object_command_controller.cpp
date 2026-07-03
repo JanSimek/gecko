@@ -10,6 +10,7 @@
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
 #include "editing/commands/ObjectCommandController.h"
+#include "util/BuiltTile.h"
 
 #include "support/ControllerFixture.h"
 
@@ -19,6 +20,7 @@ using geck::test::ControllerFixture;
 namespace {
 
 constexpr int ITEM_SECTION = static_cast<int>(MapScript::ScriptType::ITEM);
+constexpr int SPATIAL_SECTION = static_cast<int>(MapScript::ScriptType::SPATIAL);
 
 // Adds an object on `elevation` carrying an attached ITEM script and returns it.
 std::shared_ptr<MapObject> addScriptedObject(ControllerFixture& fx, int elevation, uint32_t oid, uint32_t scriptIndex) {
@@ -188,6 +190,85 @@ TEST_CASE("attachScript and detachScript are undoable", "[undo][controller]") {
     REQUIRE(fx.undoStack.undo());
     CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
     CHECK(obj->map_scripts_pid == expectedSid);
+}
+
+TEST_CASE("editSpatialScript edits in place, keeps the SID, and is undoable", "[undo][controller][spatial]") {
+    ControllerFixture fx;
+    REQUIRE(fx.mapFile().map_scripts[SPATIAL_SECTION].empty());
+
+    // First spatial script in an empty section gets index 0, so the SID is deterministic.
+    const uint32_t sid = MapScript::makeSid(MapScript::ScriptType::SPATIAL, 0);
+    REQUIRE(fx.controller.addSpatialScript(/*programIndex*/ 7, /*tile*/ 100, /*elevation*/ 1, /*radius*/ 3));
+    REQUIRE(fx.mapFile().map_scripts[SPATIAL_SECTION].size() == 1);
+
+    const MapScript* found = fx.controller.findSpatialScript(sid);
+    REQUIRE(found != nullptr);
+    CHECK(found->script_id == 7u);
+    CHECK(found->spatial_radius == 3u);
+    CHECK(built_tile::tileOf(found->timer) == 100u);
+    CHECK(built_tile::elevationOf(found->timer) == 1u);
+
+    // Edit in place: new program index, position and radius; the SID must not change.
+    REQUIRE(fx.controller.editSpatialScript(sid, /*programIndex*/ 9, /*tile*/ 250, /*elevation*/ 2, /*radius*/ 6));
+    REQUIRE(fx.mapFile().map_scripts[SPATIAL_SECTION].size() == 1);
+    const MapScript* edited = fx.controller.findSpatialScript(sid);
+    REQUIRE(edited != nullptr);
+    CHECK(edited->pid == sid);
+    CHECK(edited->script_id == 9u);
+    CHECK(edited->spatial_radius == 6u);
+    CHECK(built_tile::tileOf(edited->timer) == 250u);
+    CHECK(built_tile::elevationOf(edited->timer) == 2u);
+
+    // Undo restores the original values (still one script, same SID).
+    REQUIRE(fx.undoStack.undo());
+    const MapScript* reverted = fx.controller.findSpatialScript(sid);
+    REQUIRE(reverted != nullptr);
+    CHECK(reverted->script_id == 7u);
+    CHECK(reverted->spatial_radius == 3u);
+    CHECK(built_tile::tileOf(reverted->timer) == 100u);
+
+    // Redo re-applies the edit.
+    REQUIRE(fx.undoStack.redo());
+    const MapScript* redone = fx.controller.findSpatialScript(sid);
+    REQUIRE(redone != nullptr);
+    CHECK(redone->spatial_radius == 6u);
+    CHECK(built_tile::tileOf(redone->timer) == 250u);
+}
+
+TEST_CASE("removeSpatialScript deletes by SID and undo restores it", "[undo][controller][spatial]") {
+    ControllerFixture fx;
+    REQUIRE(fx.controller.addSpatialScript(/*programIndex*/ 5, /*tile*/ 42, /*elevation*/ 0, /*radius*/ 2));
+    REQUIRE(fx.controller.addSpatialScript(/*programIndex*/ 6, /*tile*/ 99, /*elevation*/ 0, /*radius*/ 4));
+    REQUIRE(fx.mapFile().map_scripts[SPATIAL_SECTION].size() == 2);
+
+    const uint32_t firstSid = MapScript::makeSid(MapScript::ScriptType::SPATIAL, 0);
+    REQUIRE(fx.controller.findSpatialScript(firstSid) != nullptr);
+
+    REQUIRE(fx.controller.removeSpatialScript(firstSid));
+    CHECK(fx.mapFile().map_scripts[SPATIAL_SECTION].size() == 1);
+    CHECK(fx.controller.findSpatialScript(firstSid) == nullptr);
+
+    REQUIRE(fx.undoStack.undo());
+    CHECK(fx.mapFile().map_scripts[SPATIAL_SECTION].size() == 2);
+    const MapScript* restored = fx.controller.findSpatialScript(firstSid);
+    REQUIRE(restored != nullptr);
+    CHECK(restored->script_id == 5u);
+    CHECK(restored->spatial_radius == 2u);
+
+    REQUIRE(fx.undoStack.redo());
+    CHECK(fx.mapFile().map_scripts[SPATIAL_SECTION].size() == 1);
+    CHECK(fx.controller.findSpatialScript(firstSid) == nullptr);
+}
+
+TEST_CASE("editSpatialScript and removeSpatialScript reject unknown SIDs", "[undo][controller][spatial]") {
+    ControllerFixture fx;
+    const uint32_t missing = MapScript::makeSid(MapScript::ScriptType::SPATIAL, 3);
+    CHECK_FALSE(fx.controller.removeSpatialScript(missing));
+    CHECK_FALSE(fx.controller.editSpatialScript(missing, 1, 0, 0, 1));
+    // A non-spatial SID must be rejected outright.
+    const uint32_t itemSid = MapScript::makeSid(MapScript::ScriptType::ITEM, 0);
+    CHECK_FALSE(fx.controller.removeSpatialScript(itemSid));
+    CHECK(fx.controller.findSpatialScript(itemSid) == nullptr);
 }
 
 TEST_CASE("registerInventoryEdit restores inventory snapshots", "[undo][controller]") {

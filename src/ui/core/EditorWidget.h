@@ -96,6 +96,14 @@ public:
     void setShowHexGrid(bool show) { _session.visibility().showHexGrid = show; }
     void setShowLightOverlays(bool show);
     void setShowExitGrids(bool show) { _session.visibility().showExitGrids = show; }
+    void setShowSpatialScripts(bool show) {
+        _session.visibility().showSpatialScripts = show;
+        // Hiding the overlay drops any spatial-script selection: it can no longer be seen, and a
+        // lingering selection would let the map Delete key remove an invisible script.
+        if (!show) {
+            setSelectedSpatialScript(MapScript::NONE);
+        }
+    }
     void setMergeSelectionOutlines(bool merge) { _session.visibility().mergeSelectionOutlines = merge; }
 
     // Edge scrolling: when enabled, parking the cursor near a viewport edge auto-pans the view that
@@ -122,6 +130,12 @@ public:
     // Player position selection
     void enterPlayerPositionSelectionMode();
     void centerViewOnPlayerPosition();
+
+    // Enter a one-shot "click a hex on the map" mode: the next left-click passes its hex index to
+    // `onFinished`, then returns to Select; Escape (or leaving the mode) calls it with std::nullopt.
+    // Reuses the player-position pick plumbing so callers (e.g. the Spatial Script dialog) don't
+    // duplicate it. The caller stays responsible for any UI (e.g. hiding a non-modal dialog).
+    void beginHexPick(std::function<void(std::optional<int>)> onFinished, const QString& prompt);
 
     // Find the object that owns the script with the given SID (its `map_scripts_pid`), switch to its
     // elevation, select it and center the view on it. Returns false (leaving the current selection
@@ -300,8 +314,36 @@ public:
     void attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex);
     void detachScript(const std::shared_ptr<MapObject>& object);
     void addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
+    // Edit / delete an existing spatial script by SID (undoable). Both refresh the script panels via
+    // mapScriptsChanged; delete also clears the selection if it pointed at the removed script.
+    void editSpatialScript(uint32_t sid, uint32_t programIndex, int tile, int elevation, int radius);
+    void deleteSpatialScript(uint32_t sid);
+
+    // Shared "selected spatial script" state (map click <-> Scripts panel). Setting it emits
+    // spatialScriptSelectionChanged so the panel can mirror the row; MapScript::NONE clears it.
+    void setSelectedSpatialScript(uint32_t sid);
+    [[nodiscard]] uint32_t selectedSpatialScript() const { return _session.selectedSpatialScriptSid(); }
+
+    // Current field values of the spatial script with this SID (for pre-filling an edit dialog),
+    // or nullopt if none matches. tile/elevation are the decoded built_tile.
+    struct SpatialScriptInfo {
+        uint32_t programIndex;
+        int tile;
+        int elevation;
+        int radius;
+    };
+    [[nodiscard]] std::optional<SpatialScriptInfo> spatialScriptInfo(uint32_t sid) const;
 
 signals:
+    /// The map-side spatial-script selection changed (marker click or clear). MainWindow mirrors it
+    /// onto the Scripts panel row. Carries MapScript::NONE when nothing is selected.
+    void spatialScriptSelectionChanged(uint32_t sid);
+    /// The user double-clicked a spatial marker on the map: open its editor (same as the panel's
+    /// edit request). MainWindow owns the dialog.
+    void spatialScriptEditActivated(uint32_t sid);
+    /// A spatial script was added / edited / deleted, so the script panels must repopulate.
+    void mapScriptsChanged();
+
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
     void hexHoverChanged(int hexIndex);
@@ -351,6 +393,16 @@ private:
         const selection::SelectedItem& item,
         const std::unordered_map<const MapObject*, std::shared_ptr<Object>>& objectsByMapObject,
         const std::optional<std::pair<int, int>>& tileDelta) const;
+
+    // If the spatial-script overlay is visible and a marker sits on the clicked hex (current
+    // elevation), select that script (clearing any object/tile selection) and return true. A second
+    // quick click on the same marker also fires spatialScriptEditActivated. A miss clears the spatial
+    // selection and returns false so normal object selection proceeds.
+    bool trySelectSpatialScriptAt(sf::Vector2f worldPos);
+
+    // Handles a click in SetPlayerPosition mode: routes to an armed beginHexPick callback (one-shot)
+    // or, failing that, emits playerPositionSelected (legacy player-start pick).
+    void handlePositionPickClick(sf::Vector2f worldPos);
 
     // Object management
     void deleteSelectedObjects();
@@ -463,6 +515,12 @@ private:
 
     int _currentHoverHex = -1;
 
+    // Map-side double-click detection for spatial markers: a second click on the same SID within
+    // kSpatialDoubleClickSeconds opens its editor. Self-contained (no InputHandler timing plumbing).
+    sf::Clock _spatialClickClock;
+    uint32_t _lastSpatialClickSid = 0xFFFFFFFFu; // MapScript::NONE
+    static constexpr float kSpatialDoubleClickSeconds = 0.4f;
+
     // Edge scrolling: auto-pan when the cursor rests near a viewport edge (see setEdgeScrollEnabled).
     // Default on to match both reference mappers; the View menu / Settings persist the user's choice.
     bool _edgeScrollEnabled = true;
@@ -506,6 +564,10 @@ private:
 
     // Player position selection state
     bool _playerPositionSelectionMode = false;
+
+    // When set, the SetPlayerPosition mode is being used as a generic one-shot hex picker (see
+    // beginHexPick): the next click routes here instead of emitting playerPositionSelected.
+    std::function<void(std::optional<int>)> _hexPickCallback;
 
     // Exit-grid "Draw edge" preview state (MarkExits mode). _exitGridLineActive gates the renderer;
     // the vertices/cursor draw the polyline; the hexes are the prospective on-line hexes (recomputed

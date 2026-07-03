@@ -155,6 +155,18 @@ bool ObjectCommandController::addSpatialScript(uint32_t programIndex, int tile, 
     return _scriptService.addSpatialScript(programIndex, tile, elevation, radius);
 }
 
+bool ObjectCommandController::editSpatialScript(uint32_t sid, uint32_t programIndex, int tile, int elevation, int radius) {
+    return _scriptService.editSpatialScript(sid, programIndex, tile, elevation, radius);
+}
+
+bool ObjectCommandController::removeSpatialScript(uint32_t sid) {
+    return _scriptService.removeSpatialScript(sid);
+}
+
+const MapScript* ObjectCommandController::findSpatialScript(uint32_t sid) const {
+    return _scriptService.findSpatialScript(sid);
+}
+
 bool ObjectCommandController::pushCommand(UndoCommand cmd) {
     return _batcher.push(std::move(cmd));
 }

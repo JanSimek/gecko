@@ -12,7 +12,9 @@
 #include <QLabel>
 #include <QSettings>
 #include <QMenu>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <filesystem>
 #include <unordered_map>
 #include <utility>
@@ -45,6 +47,7 @@ class TilePalettePanel;
 class ObjectPalettePanel;
 class FileBrowserPanel;
 class ScriptConsoleWidget;
+class SpatialScriptDialog;
 class Map;
 
 class MainWindow : public QMainWindow {
@@ -103,6 +106,7 @@ signals:
     void showHexGridToggled(bool enabled);
     void showLightOverlaysToggled(bool enabled);
     void showExitGridsToggled(bool enabled);
+    void showSpatialScriptsToggled(bool enabled);
     void elevationChanged(int elevation);
     void selectionModeRequested();
     void rotateObjectRequested();
@@ -180,6 +184,18 @@ private:
     void applyDefaultPanelDockLayout();
     void connectFileBrowserSignals();
     void connectPanelSignals();
+    // Open the (non-modal) Spatial Script dialog: editSid empty = add a new script, set = edit that
+    // one pre-filled. On accept it applies an undoable add/edit. Shared by the Add button, the
+    // Scripts-panel edit request, and the map double-click.
+    void openSpatialScriptDialog(std::optional<uint32_t> editSid);
+    // "Pick on map" from the open dialog: hide it, let the user click a hex (beginHexPick), then feed
+    // the hex + its elevation back and re-show the dialog.
+    void pickSpatialScriptPosition();
+    // Apply the open dialog's values (add or edit, per _editingSpatialSid).
+    void applySpatialScriptDialog();
+    // Rebuild the Scripts panel from the current map and re-assert the shared spatial selection.
+    // Called after a spatial-script add/edit/delete and after undo/redo.
+    void refreshScriptsPanel();
     void replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSizePolicy::Policy verticalPolicy);
     void rebuildResourcePanels();
     void rebuildGameResourcesFromSettings();
@@ -261,6 +277,11 @@ private:
     SelectionPanel* _selectionPanel;
     MapInfoPanel* _mapInfoPanel;
     ScriptsPanel* _scriptsPanel;
+
+    // The open non-modal Spatial Script dialog (add or edit), or null. _editingSpatialSid is the SID
+    // being edited, or MapScript::NONE (0xFFFFFFFF) when adding.
+    SpatialScriptDialog* _spatialScriptDialog = nullptr;
+    uint32_t _editingSpatialSid = 0xFFFFFFFFu;
     TilePalettePanel* _tilePalettePanel;
     ObjectPalettePanel* _objectPalettePanel;
     FileBrowserPanel* _fileBrowserPanel;
@@ -296,6 +317,7 @@ private:
     QAction* _showHexGridAction;
     QAction* _showLightOverlaysAction;
     QAction* _showExitGridsAction;
+    QAction* _showSpatialScriptsAction;
     QAction* _mergeOutlinesAction;
     QAction* _edgeScrollAction;
 
