@@ -13,9 +13,10 @@ sf::Vector2f EdgeScroll::velocity(sf::Vector2f cursorPx,
         return {};
     }
 
-    // A cursor off the viewport does not scroll (the caller only asks while it hovers,
-    // but stay robust to a cursor sitting exactly on/just past an edge).
-    if (cursorPx.x < 0.f || cursorPx.y < 0.f || cursorPx.x > viewportPx.x || cursorPx.y > viewportPx.y) {
+    // A cursor off the viewport does not scroll. Pixel coordinates are half-open [0, size), so the
+    // right/bottom edges are exclusive; the caller only asks while the cursor hovers, but stay robust
+    // to a cursor sitting exactly on or past an edge.
+    if (cursorPx.x < 0.f || cursorPx.y < 0.f || cursorPx.x >= viewportPx.x || cursorPx.y >= viewportPx.y) {
         return {};
     }
 

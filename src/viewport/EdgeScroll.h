@@ -15,10 +15,11 @@ namespace geck {
  * units.
  *
  * The magnitude ramps linearly from 0 at the inner edge of the margin band to
- * @p speedPxPerSec at the very edge (or beyond), so the closer the cursor is to
- * an edge the faster it scrolls; a corner scrolls diagonally. The result is the
- * zero vector when the cursor sits outside the margin band, or off the viewport
- * entirely.
+ * @p speedPxPerSec at the viewport edge, so the closer the cursor is to an edge
+ * the faster it scrolls; a corner scrolls diagonally. The result is the zero
+ * vector when the cursor sits outside the margin band, or off the viewport
+ * entirely (pixel coordinates are half-open [0, size), so the right/bottom edges
+ * are exclusive).
  *
  * Deliberately free of Qt and any render target so it stays headless-unit-testable.
  */

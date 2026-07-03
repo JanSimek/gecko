@@ -79,6 +79,13 @@ TEST_CASE("EdgeScroll: a cursor off the viewport does not scroll", "[edge_scroll
     CHECK(vel({ kViewport.x + 5.0f, 300.0f }).x == 0.0f);
     CHECK(vel({ 400.0f, -5.0f }).y == 0.0f);
     CHECK(vel({ 400.0f, kViewport.y + 5.0f }).y == 0.0f);
+
+    // Pixel coordinates are half-open [0, size): the right/bottom edges are exclusive, so a cursor
+    // exactly on them is inert, while the left/top edges (0) are the valid full-speed positions.
+    CHECK(vel({ kViewport.x, 300.0f }).x == 0.0f);
+    CHECK(vel({ 400.0f, kViewport.y }).y == 0.0f);
+    CHECK(vel({ 0.0f, 300.0f }).x < 0.0f);
+    CHECK(vel({ 400.0f, 0.0f }).y < 0.0f);
 }
 
 TEST_CASE("EdgeScroll: degenerate inputs are inert", "[edge_scroll]") {
