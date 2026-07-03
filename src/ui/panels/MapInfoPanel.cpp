@@ -156,11 +156,11 @@ void MapInfoPanel::setupUI() {
     _playerPositionSpin = new QSpinBox();
     _playerPositionSpin->setRange(0, HexPosition::MAX_VALUE); // Max hex position
     _setPositionButton = new QPushButton();
-    _setPositionButton->setIcon(createIcon(":/icons/actions/map-pin.svg"));
+    _setPositionButton->setIcon(createIcon(":/icons/actions/target-arrow.svg"));
     _setPositionButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _setPositionButton->setToolTip("Click to select position on map");
     _centerViewButton = new QPushButton();
-    _centerViewButton->setIcon(createIcon(":/icons/actions/target-arrow.svg"));
+    _centerViewButton->setIcon(createIcon(":/icons/actions/map-pin.svg"));
     _centerViewButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);
     _centerViewButton->setToolTip("Center view on player position");
     positionLayout->addWidget(_playerPositionSpin);
