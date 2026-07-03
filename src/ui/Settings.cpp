@@ -110,6 +110,7 @@ QJsonObject Settings::toJson() const {
     }
     ui["windowMaximized"] = _windowMaximized;
     ui["mergeSelectionOutlines"] = _mergeSelectionOutlines;
+    ui["edgeScrollEnabled"] = _edgeScrollEnabled;
 
     // Floating dock geometries
     if (!_floatingDockGeometries.isEmpty()) {
@@ -188,6 +189,10 @@ void Settings::fromJson(const QJsonObject& json) {
 
         if (ui.contains("mergeSelectionOutlines")) {
             _mergeSelectionOutlines = ui["mergeSelectionOutlines"].toBool(true); // Default to true
+        }
+
+        if (ui.contains("edgeScrollEnabled")) {
+            _edgeScrollEnabled = ui["edgeScrollEnabled"].toBool(true); // Default to true
         }
 
         if (ui.contains("floatingDockGeometries")) {
@@ -327,6 +332,14 @@ bool Settings::getMergeSelectionOutlines() const {
 
 void Settings::setMergeSelectionOutlines(bool merge) {
     _mergeSelectionOutlines = merge;
+}
+
+bool Settings::getEdgeScrollEnabled() const {
+    return _edgeScrollEnabled;
+}
+
+void Settings::setEdgeScrollEnabled(bool enabled) {
+    _edgeScrollEnabled = enabled;
 }
 
 QByteArray Settings::getDockState() const {

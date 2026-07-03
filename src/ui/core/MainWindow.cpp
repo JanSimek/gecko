@@ -524,6 +524,19 @@ void MainWindow::setupMenuBar() {
         }
     });
 
+    _edgeScrollAction = _viewMenu->addAction("&Edge Scrolling");
+    _edgeScrollAction->setCheckable(true);
+    _edgeScrollAction->setChecked(_settings ? _settings->getEdgeScrollEnabled() : true);
+    _edgeScrollAction->setStatusTip("Auto-scroll the map when the cursor rests near a viewport edge");
+    connect(_edgeScrollAction, &QAction::toggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setEdgeScrollEnabled(enabled);
+        if (_settings) {
+            _settings->setEdgeScrollEnabled(enabled);
+            _settings->save();
+        }
+    });
+
     _viewMenu->addSeparator();
 
     _panelsMenu = _viewMenu->addMenu("&Panels");
@@ -1674,6 +1687,7 @@ void MainWindow::syncMenuStateToEditorWidget() {
     _currentEditorWidget->setShowLightOverlays(_showLightOverlaysAction->isChecked());
     _currentEditorWidget->setShowExitGrids(_showExitGridsAction->isChecked());
     _currentEditorWidget->setMergeSelectionOutlines(_mergeOutlinesAction->isChecked());
+    _currentEditorWidget->setEdgeScrollEnabled(_edgeScrollAction->isChecked());
     updateUndoRedoActions();
 
     // Reset selection to the default: all layers on (classic "All"), no special tool active.
@@ -2105,6 +2119,16 @@ void MainWindow::showPreferences() {
             rebuildGameResourcesFromSettings();
         }
         applySelectionColorsToEditor();
+
+        // Keep the View-menu toggle and the live editor in step with the dialog's edge-scroll choice.
+        // Block the action's signal so re-checking it doesn't loop back into another settings save.
+        if (_edgeScrollAction && _settings) {
+            const QSignalBlocker block(_edgeScrollAction);
+            _edgeScrollAction->setChecked(_settings->getEdgeScrollEnabled());
+        }
+        if (_currentEditorWidget && _settings) {
+            _currentEditorWidget->setEdgeScrollEnabled(_settings->getEdgeScrollEnabled());
+        }
     });
 
     int result = dialog.exec();

@@ -675,8 +675,10 @@ part and overlaps the spatial-placement `EditorMode` follow-up.
    The one real format Gecko can't round-trip.
 2. **Spatial-script visualization** *(S–M)* — marker + radius overlay for placed spatial scripts (they
    are created but invisible today). Also Known-limitation #3 / the "Visualize spatial scripts" section.
-3. **Eyedropper — pick proto/tile from the map** *(S)* + **edge-scroll panning** *(S)* — cheap QoL both
-   references have; do together.
+3. ~~**Eyedropper — pick proto/tile from the map** *(S)* + **edge-scroll panning** *(S)*~~ — **DONE.**
+   Eyedropper shipped (PR #99); edge-scroll shipped (cursor near a viewport edge auto-pans the view,
+   ramped by depth into a 32px margin, gated off during right-drag pan, with a View-menu toggle
+   persisted in `Settings`). Pure geometry in `viewport/EdgeScroll`, driven from `EditorWidget::update`.
 4. **Minimap / overview** *(M)* — click-to-navigate + elevation switch, with a viewport rectangle
    (improving on Dims' cursor-sprite locator).
 

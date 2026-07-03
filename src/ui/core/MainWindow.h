@@ -297,6 +297,7 @@ private:
     QAction* _showLightOverlaysAction;
     QAction* _showExitGridsAction;
     QAction* _mergeOutlinesAction;
+    QAction* _edgeScrollAction;
 
     bool _isRunning;
 };

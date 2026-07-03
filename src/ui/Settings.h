@@ -62,6 +62,10 @@ public:
     bool getMergeSelectionOutlines() const;
     void setMergeSelectionOutlines(bool merge);
 
+    // Whether the cursor near a viewport edge auto-scrolls the map (View menu toggle).
+    bool getEdgeScrollEnabled() const;
+    void setEdgeScrollEnabled(bool enabled);
+
     // Floating dock geometries
     QByteArray getFloatingDockGeometry(const QString& dockName) const;
     void setFloatingDockGeometry(const QString& dockName, const QByteArray& geometry);
@@ -123,6 +127,7 @@ private:
     QByteArray _dockState;
     bool _windowMaximized = true;        // Default to maximized
     bool _mergeSelectionOutlines = true; // Default: merge touching same-category outlines
+    bool _edgeScrollEnabled = true;      // Default: auto-scroll when the cursor rests near an edge
     QMap<QString, QByteArray> _floatingDockGeometries;
     QMap<QString, bool> _panelVisibilityPreferences;
     QString _version;

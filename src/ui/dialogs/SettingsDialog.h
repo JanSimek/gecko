@@ -6,6 +6,7 @@
 #include <QProgressBar>
 #include <QLabel>
 #include <QPushButton>
+#include <QCheckBox>
 #include <QTabWidget>
 #include <QMap>
 #include <QColor>
@@ -51,6 +52,7 @@ private:
     void setupUI();
     void setupTabs();
     void setupGeneralTab();
+    void setupViewportTab();
     void setupEditorTab();
     void setupColorsTab();
     void updateColorButton(const QString& key) const;
@@ -70,6 +72,10 @@ private:
     QVBoxLayout* _generalTabLayout;
     DataPathsWidget* _dataPathsWidget;
     GameLocationWidget* _gameLocationWidget;
+
+    // Viewport Tab (map-canvas behaviour toggles)
+    QWidget* _viewportTab = nullptr;
+    QCheckBox* _edgeScrollCheckBox = nullptr;
 
     // Editor Tab
     QWidget* _editorTab;

@@ -33,6 +33,10 @@ void ViewportController::centerViewOnMap() {
     spdlog::debug("ViewportController: Centered view on ({:.1f}, {:.1f})", centerX, centerY);
 }
 
+void ViewportController::panBy(sf::Vector2f worldDelta) {
+    _view.move(worldDelta);
+}
+
 void ViewportController::zoomView(float direction) {
     float newZoom = _zoomLevel;
 
