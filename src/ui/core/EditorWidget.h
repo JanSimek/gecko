@@ -131,6 +131,12 @@ public:
     void enterPlayerPositionSelectionMode();
     void centerViewOnPlayerPosition();
 
+    // Enter a one-shot "click a hex on the map" mode: the next left-click passes its hex index to
+    // `onFinished`, then returns to Select; Escape (or leaving the mode) calls it with std::nullopt.
+    // Reuses the player-position pick plumbing so callers (e.g. the Spatial Script dialog) don't
+    // duplicate it. The caller stays responsible for any UI (e.g. hiding a non-modal dialog).
+    void beginHexPick(std::function<void(std::optional<int>)> onFinished, const QString& prompt);
+
     // Find the object that owns the script with the given SID (its `map_scripts_pid`), switch to its
     // elevation, select it and center the view on it. Returns false (leaving the current selection
     // untouched) when no object on the map owns that script. Used by the Scripts panel's double-click.
@@ -554,6 +560,10 @@ private:
 
     // Player position selection state
     bool _playerPositionSelectionMode = false;
+
+    // When set, the SetPlayerPosition mode is being used as a generic one-shot hex picker (see
+    // beginHexPick): the next click routes here instead of emitting playerPositionSelected.
+    std::function<void(std::optional<int>)> _hexPickCallback;
 
     // Exit-grid "Draw edge" preview state (MarkExits mode). _exitGridLineActive gates the renderer;
     // the vertices/cursor draw the polyline; the hexes are the prospective on-line hexes (recomputed

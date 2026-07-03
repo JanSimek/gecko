@@ -31,7 +31,12 @@ SpatialScriptDialog::SpatialScriptDialog(const std::vector<ScriptSelectorDialog:
 
     _tileSpin = new QSpinBox(this);
     _tileSpin->setRange(0, HexagonGrid::POSITION_COUNT - 1);
-    formLayout->addRow("Hex tile:", _tileSpin);
+    auto* tileRow = new QHBoxLayout();
+    tileRow->addWidget(_tileSpin, 1);
+    auto* pickButton = new QPushButton("Pick on map...");
+    pickButton->setToolTip("Click a hex on the map to set the position");
+    tileRow->addWidget(pickButton);
+    formLayout->addRow("Hex tile:", tileRow);
 
     _elevationCombo = new QComboBox(this);
     _elevationCombo->addItem("Elevation 1", 0);
@@ -50,6 +55,7 @@ SpatialScriptDialog::SpatialScriptDialog(const std::vector<ScriptSelectorDialog:
     _okButton = buttonBox->button(QDialogButtonBox::Ok);
     _okButton->setEnabled(false); // need a script first
     connect(chooseButton, &QPushButton::clicked, this, &SpatialScriptDialog::onChooseScript);
+    connect(pickButton, &QPushButton::clicked, this, &SpatialScriptDialog::pickPositionRequested);
     mainLayout->addWidget(buttonBox);
 }
 

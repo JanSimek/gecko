@@ -887,12 +887,23 @@ void EditorWidget::bindInteractionCallbacks(InputHandler::Callbacks& callbacks) 
 
 void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     callbacks.onPlayerPositionSelect = [this](sf::Vector2f worldPos) {
-        int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
+        const int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
+        Q_EMIT statusMessageClearRequested();
+
+        // Generic one-shot hex pick (beginHexPick): consume the callback and return to Select before
+        // invoking it, so the callback (which may reopen a dialog) sees a settled editor state.
+        if (_hexPickCallback) {
+            auto onFinished = std::exchange(_hexPickCallback, nullptr);
+            setMode(EditorMode::Select);
+            onFinished(hexPosition >= 0 ? std::optional<int>(hexPosition) : std::nullopt);
+            return;
+        }
+
+        // Legacy player-position pick: stays in the mode for repeated clicks until Escape.
         if (hexPosition >= 0) {
             Q_EMIT playerPositionSelected(hexPosition);
             spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
         }
-        Q_EMIT statusMessageClearRequested();
     };
 
     callbacks.onScrollBlockerRectangle = [this](sf::FloatRect area) {
@@ -964,6 +975,11 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         } else if (_mode == EditorMode::PlaceObject) {
             setMode(EditorMode::Select);
             Q_EMIT statusMessageRequested("Object placement cancelled.");
+        } else if (_mode == EditorMode::SetPlayerPosition) {
+            // Cancels the player-position pick and any generic hex pick (beginHexPick); leaving the
+            // mode notifies a pending pick callback with no position (see setMode).
+            setMode(EditorMode::Select);
+            Q_EMIT statusMessageClearRequested();
         } else if (_tilePlacementManager->isTilePlacementMode()) {
             if (_mainWindow && _mainWindow->getTilePalettePanel()) {
                 _mainWindow->getTilePalettePanel()->deselectTile();
@@ -1343,7 +1359,16 @@ void EditorWidget::clearSelection() {
 }
 
 void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
+    const EditorMode previousMode = _mode;
     _mode = mode;
+
+    // Leaving the hex-pick mode without a click (e.g. Escape) is a cancel: notify with no position.
+    // A successful pick clears _hexPickCallback before it calls setMode, so this won't double-fire.
+    if (previousMode == EditorMode::SetPlayerPosition && mode != EditorMode::SetPlayerPosition
+        && _hexPickCallback) {
+        auto onFinished = std::exchange(_hexPickCallback, nullptr);
+        onFinished(std::nullopt);
+    }
 
     // Single owner of mutual exclusion: deactivate every mode's state across all
     // components, then activate the target.
@@ -2261,6 +2286,17 @@ void EditorWidget::enterPlayerPositionSelectionMode() {
     Q_EMIT statusMessageRequested("Click on a hex to set the player starting position (Press Escape to cancel)");
 
     spdlog::debug("EditorWidget: Entered player position selection mode");
+}
+
+void EditorWidget::beginHexPick(std::function<void(std::optional<int>)> onFinished, const QString& prompt) {
+    if (!onFinished) {
+        return;
+    }
+    // setMode first (previousMode is whatever the caller was in), then arm the pick so the callback
+    // isn't mistaken for a stale one and cancelled by the setMode transition above.
+    setMode(EditorMode::SetPlayerPosition);
+    _hexPickCallback = std::move(onFinished);
+    Q_EMIT statusMessageRequested(prompt);
 }
 
 void EditorWidget::centerViewOnHex(uint32_t hexPosition) {

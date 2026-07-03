@@ -29,8 +29,6 @@
 #include "resource/ScriptNames.h"
 #include "util/Coordinates.h"
 #include "ui/IconHelper.h"
-#include "ui/dialogs/ScriptSelectorDialog.h"
-#include "ui/dialogs/SpatialScriptDialog.h"
 #include "ui/widgets/IntCellDelegate.h"
 
 namespace geck {
@@ -920,21 +918,8 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
     if (!_map) {
         return;
     }
-
-    auto* scriptsLst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
-    if (!scriptsLst) {
-        QMessageBox::warning(this, "Add Spatial Script", "Could not load scripts.lst.");
-        return;
-    }
-
-    SpatialScriptDialog dialog(ScriptSelectorDialog::buildEntries(_resources), this);
-    if (dialog.exec() != QDialog::Accepted || dialog.programIndex() < 0) {
-        return;
-    }
-
-    // Direct (synchronous) connection: the script is created before this returns.
-    Q_EMIT addSpatialScriptRequested(dialog.programIndex(), dialog.tile(),
-        dialog.elevation(), dialog.radius());
+    // The dialog (with its map-pick flow) is owned by MainWindow, which brokers the map click.
+    Q_EMIT addSpatialScriptRequested();
 }
 
 void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {

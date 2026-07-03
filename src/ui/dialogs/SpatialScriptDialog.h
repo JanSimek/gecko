@@ -36,6 +36,11 @@ public:
 
     static constexpr int MAX_RADIUS = 50; // engine win_get_num_i range in map_scr_add_spatial
 
+signals:
+    /// The user clicked "Pick on map"; the host should let them click a hex and feed it back via
+    /// setTile()/setElevation(). The dialog is non-modal so the map stays interactive.
+    void pickPositionRequested();
+
 private slots:
     void onChooseScript();
 

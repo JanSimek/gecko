@@ -1,6 +1,7 @@
 #define QT_NO_EMIT
 #include "MainWindow.h"
 #include "EditorWidget.h"
+#include "format/map/MapScript.h"
 #include "ui/core/EditorHints.h"
 #include "ui/widgets/LoadingWidget.h"
 #include "ui/widgets/WelcomeWidget.h"
@@ -1554,10 +1555,7 @@ void MainWindow::connectPanelSignals() {
                     _currentEditorWidget->copyElevation(from, to);
             });
         connect(_mapInfoPanel, &MapInfoPanel::addSpatialScriptRequested,
-            this, [this](int programIndex, int tile, int elevation, int radius) {
-                if (_currentEditorWidget)
-                    _currentEditorWidget->addSpatialScript(static_cast<uint32_t>(programIndex), tile, elevation, radius);
-            });
+            this, [this]() { openSpatialScriptDialog(std::nullopt); });
 
         // Header edits in the Info panel write straight to the map (no undo command), so flag the map
         // modified here. These also fire while the panel is being populated from a freshly loaded map,
@@ -1600,7 +1598,7 @@ void MainWindow::connectPanelSignals() {
         });
         // Edit / delete requested from the panel (context menu or double-click).
         connect(_scriptsPanel, &ScriptsPanel::spatialScriptEditRequested, this,
-            [this](uint32_t sid) { openSpatialScriptEditor(sid); });
+            [this](uint32_t sid) { openSpatialScriptDialog(sid); });
         connect(_scriptsPanel, &ScriptsPanel::spatialScriptDeleteRequested, this, [this](uint32_t sid) {
             if (_currentEditorWidget) {
                 _currentEditorWidget->deleteSpatialScript(sid);
@@ -1668,7 +1666,7 @@ void MainWindow::connectToEditorWidget() {
         }
     });
     connect(_currentEditorWidget, &EditorWidget::spatialScriptEditActivated, this,
-        [this](uint32_t sid) { openSpatialScriptEditor(sid); });
+        [this](uint32_t sid) { openSpatialScriptDialog(sid); });
     connect(_currentEditorWidget, &EditorWidget::mapScriptsChanged, this,
         [this]() { refreshScriptsPanel(); });
 
@@ -1686,28 +1684,85 @@ void MainWindow::connectToEditorWidget() {
     spdlog::debug("Connected EditorWidget instance signals");
 }
 
-void MainWindow::openSpatialScriptEditor(uint32_t sid) {
+void MainWindow::openSpatialScriptDialog(std::optional<uint32_t> editSid) {
     if (!_currentEditorWidget) {
         return;
     }
-    const auto info = _currentEditorWidget->spatialScriptInfo(sid);
-    if (!info) {
-        showStatusMessage("Spatial script no longer exists");
+
+    // Editing needs the target script to still exist.
+    std::optional<EditorWidget::SpatialScriptInfo> info;
+    if (editSid) {
+        info = _currentEditorWidget->spatialScriptInfo(*editSid);
+        if (!info) {
+            showStatusMessage("Spatial script no longer exists");
+            return;
+        }
+    }
+
+    // One dialog at a time: re-focus an open one rather than stacking a second.
+    if (_spatialScriptDialog) {
+        _spatialScriptDialog->raise();
+        _spatialScriptDialog->activateWindow();
         return;
     }
 
-    // Reuse the Add Spatial Script dialog, pre-filled with the script's current values.
-    SpatialScriptDialog dialog(ScriptSelectorDialog::buildEntries(*_resourcesShared), this);
-    dialog.setWindowTitle("Edit Spatial Script");
-    dialog.setProgramIndex(static_cast<int>(info->programIndex));
-    dialog.setTile(info->tile);
-    dialog.setElevation(info->elevation);
-    dialog.setRadius(info->radius);
-    if (dialog.exec() != QDialog::Accepted) {
+    // Non-modal (like the player-position pick) so the map stays clickable for "Pick on map".
+    auto* dialog = new SpatialScriptDialog(ScriptSelectorDialog::buildEntries(*_resourcesShared), this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    _spatialScriptDialog = dialog;
+    _editingSpatialSid = editSid.value_or(MapScript::NONE);
+
+    if (info) {
+        dialog->setWindowTitle("Edit Spatial Script");
+        dialog->setProgramIndex(static_cast<int>(info->programIndex));
+        dialog->setTile(info->tile);
+        dialog->setElevation(info->elevation);
+        dialog->setRadius(info->radius);
+    }
+
+    connect(dialog, &SpatialScriptDialog::pickPositionRequested, this, &MainWindow::pickSpatialScriptPosition);
+    connect(dialog, &QDialog::accepted, this, &MainWindow::applySpatialScriptDialog);
+    connect(dialog, &QObject::destroyed, this, [this]() { _spatialScriptDialog = nullptr; });
+    dialog->show();
+}
+
+void MainWindow::pickSpatialScriptPosition() {
+    if (!_currentEditorWidget || !_spatialScriptDialog) {
         return;
     }
-    _currentEditorWidget->editSpatialScript(sid, static_cast<uint32_t>(dialog.programIndex()),
-        dialog.tile(), dialog.elevation(), dialog.radius());
+    _spatialScriptDialog->hide(); // step aside; the map is clickable because the dialog is non-modal
+    _currentEditorWidget->beginHexPick(
+        [this](std::optional<int> hex) {
+            if (!_spatialScriptDialog) {
+                return; // dialog was closed while picking
+            }
+            if (hex && _currentEditorWidget) {
+                _spatialScriptDialog->setTile(*hex);
+                // The clicked hex lives on the current elevation, so match it.
+                _spatialScriptDialog->setElevation(_currentEditorWidget->getCurrentElevation());
+            }
+            _spatialScriptDialog->show();
+            _spatialScriptDialog->raise();
+            _spatialScriptDialog->activateWindow();
+        },
+        "Click a hex for the spatial-script position (Esc to cancel)");
+}
+
+void MainWindow::applySpatialScriptDialog() {
+    if (!_currentEditorWidget || !_spatialScriptDialog) {
+        return;
+    }
+    SpatialScriptDialog* dialog = _spatialScriptDialog;
+    if (dialog->programIndex() < 0) {
+        return; // OK is disabled without a chosen script, but guard anyway
+    }
+    if (_editingSpatialSid == MapScript::NONE) {
+        _currentEditorWidget->addSpatialScript(static_cast<uint32_t>(dialog->programIndex()),
+            dialog->tile(), dialog->elevation(), dialog->radius());
+    } else {
+        _currentEditorWidget->editSpatialScript(_editingSpatialSid,
+            static_cast<uint32_t>(dialog->programIndex()), dialog->tile(), dialog->elevation(), dialog->radius());
+    }
 }
 
 void MainWindow::refreshScriptsPanel() {

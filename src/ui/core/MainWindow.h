@@ -12,7 +12,9 @@
 #include <QLabel>
 #include <QSettings>
 #include <QMenu>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <filesystem>
 #include <unordered_map>
 #include <utility>
@@ -45,6 +47,7 @@ class TilePalettePanel;
 class ObjectPalettePanel;
 class FileBrowserPanel;
 class ScriptConsoleWidget;
+class SpatialScriptDialog;
 class Map;
 
 class MainWindow : public QMainWindow {
@@ -181,9 +184,15 @@ private:
     void applyDefaultPanelDockLayout();
     void connectFileBrowserSignals();
     void connectPanelSignals();
-    // Open the (pre-filled) Spatial Script dialog to edit the spatial script with this SID, applying
-    // an undoable edit on accept. Shared by the Scripts-panel and map double-click edit requests.
-    void openSpatialScriptEditor(uint32_t sid);
+    // Open the (non-modal) Spatial Script dialog: editSid empty = add a new script, set = edit that
+    // one pre-filled. On accept it applies an undoable add/edit. Shared by the Add button, the
+    // Scripts-panel edit request, and the map double-click.
+    void openSpatialScriptDialog(std::optional<uint32_t> editSid);
+    // "Pick on map" from the open dialog: hide it, let the user click a hex (beginHexPick), then feed
+    // the hex + its elevation back and re-show the dialog.
+    void pickSpatialScriptPosition();
+    // Apply the open dialog's values (add or edit, per _editingSpatialSid).
+    void applySpatialScriptDialog();
     // Rebuild the Scripts panel from the current map and re-assert the shared spatial selection.
     // Called after a spatial-script add/edit/delete and after undo/redo.
     void refreshScriptsPanel();
@@ -268,6 +277,11 @@ private:
     SelectionPanel* _selectionPanel;
     MapInfoPanel* _mapInfoPanel;
     ScriptsPanel* _scriptsPanel;
+
+    // The open non-modal Spatial Script dialog (add or edit), or null. _editingSpatialSid is the SID
+    // being edited, or MapScript::NONE (0xFFFFFFFF) when adding.
+    SpatialScriptDialog* _spatialScriptDialog = nullptr;
+    uint32_t _editingSpatialSid = 0xFFFFFFFFu;
     TilePalettePanel* _tilePalettePanel;
     ObjectPalettePanel* _objectPalettePanel;
     FileBrowserPanel* _fileBrowserPanel;
