@@ -96,7 +96,14 @@ public:
     void setShowHexGrid(bool show) { _session.visibility().showHexGrid = show; }
     void setShowLightOverlays(bool show);
     void setShowExitGrids(bool show) { _session.visibility().showExitGrids = show; }
-    void setShowSpatialScripts(bool show) { _session.visibility().showSpatialScripts = show; }
+    void setShowSpatialScripts(bool show) {
+        _session.visibility().showSpatialScripts = show;
+        // Hiding the overlay drops any spatial-script selection: it can no longer be seen, and a
+        // lingering selection would let the map Delete key remove an invisible script.
+        if (!show) {
+            setSelectedSpatialScript(MapScript::NONE);
+        }
+    }
     void setMergeSelectionOutlines(bool merge) { _session.visibility().mergeSelectionOutlines = merge; }
 
     // Edge scrolling: when enabled, parking the cursor near a viewport edge auto-pans the view that

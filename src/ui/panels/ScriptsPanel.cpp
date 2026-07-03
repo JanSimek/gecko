@@ -209,14 +209,15 @@ void ScriptsPanel::onCellDoubleClicked(int row) {
         return;
     }
 
-    // Double-clicking a spatial row edits it (it has no owning object to reveal); everything else
-    // navigates to its owning object.
-    if (MapScript::sidSection(sid) == static_cast<int>(MapScript::ScriptType::SPATIAL)) {
+    // Double-clicking a spatial row edits it. Only object-owned script types (ITEM / CRITTER) can be
+    // navigated to; SYSTEM and TIMER scripts are ownerless, so a double-click there does nothing.
+    const int section = MapScript::sidSection(sid);
+    if (section == static_cast<int>(MapScript::ScriptType::SPATIAL)) {
         Q_EMIT spatialScriptEditRequested(sid);
-        return;
+    } else if (section == static_cast<int>(MapScript::ScriptType::ITEM)
+        || section == static_cast<int>(MapScript::ScriptType::CRITTER)) {
+        Q_EMIT scriptObjectActivated(static_cast<int>(sid));
     }
-
-    Q_EMIT scriptObjectActivated(static_cast<int>(sid));
 }
 
 void ScriptsPanel::onTableContextMenu(const QPoint& pos) {

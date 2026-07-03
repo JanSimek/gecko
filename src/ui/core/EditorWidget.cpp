@@ -981,9 +981,11 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     };
 
     callbacks.onDeleteObjects = [this]() {
-        // Delete removes the selected spatial script when one is selected; otherwise it deletes the
-        // selected objects. (Spatial selection is exclusive with object selection.)
-        if (_session.selectedSpatialScriptSid() != MapScript::NONE) {
+        // Delete removes the selected spatial script only while its overlay is visible (so it can't
+        // silently delete an invisible script); otherwise it deletes the selected objects. Spatial
+        // selection is exclusive with object selection.
+        if (_session.visibility().showSpatialScripts
+            && _session.selectedSpatialScriptSid() != MapScript::NONE) {
             deleteSpatialScript(_session.selectedSpatialScriptSid());
             return;
         }
