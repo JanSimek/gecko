@@ -722,3 +722,56 @@ TEST_CASE("SelectionManager area selection honors host elevation (regression)", 
         CHECK(std::find(roofModeRoofs.begin(), roofModeRoofs.end(), TARGET_ROOF_TILE) != roofModeRoofs.end());
     }
 }
+
+//==============================================================================
+// SECTION: pickAt() — the eyedropper hit-test.
+//
+// pickAt() must mirror an ALL-mode left-click's priority (roof-when-visible ->
+// object -> floor) WITHOUT mutating the selection. The mock's getObjectsAtPosition()
+// returns empty, so these cover the roof-visible and roof-hidden tile paths plus the
+// read-only guarantee; the object-priority branch is exercised via selectAtPosition
+// elsewhere and shares the same hit-tester.
+//==============================================================================
+
+TEST_CASE("SelectionManager::pickAt honours roof-visible priority and never mutates selection", "[selection_manager_real][pick]") {
+    MockEditorWidget mockWidget;
+    geck::selection::SelectionManager mgr(mockWidget);
+
+    // A valid world position; per the mock formula (col = x/32, row = y/24) it maps to a tile index.
+    const sf::Vector2f pos(64.0f, 48.0f);
+    const int expectedTile = mockWidget.getTileAtPosition(pos, false).value();
+
+    SECTION("roof visible: picks the roof tile under the cursor") {
+        mockWidget.roofVisible = true;
+        auto pick = mgr.pickAt(pos, 0);
+        REQUIRE(pick.roofTile.has_value());
+        REQUIRE(pick.roofTile.value() == expectedTile);
+        REQUIRE_FALSE(pick.floorTile.has_value());
+        REQUIRE(pick.object == nullptr);
+    }
+
+    SECTION("roof hidden: falls through to the floor tile") {
+        mockWidget.roofVisible = false;
+        auto pick = mgr.pickAt(pos, 0);
+        REQUIRE(pick.floorTile.has_value());
+        REQUIRE(pick.floorTile.value() == expectedTile);
+        REQUIRE_FALSE(pick.roofTile.has_value());
+        REQUIRE(pick.object == nullptr);
+    }
+
+    SECTION("an out-of-bounds cursor picks nothing") {
+        auto pick = mgr.pickAt(sf::Vector2f(-10.0f, -10.0f), 0);
+        REQUIRE_FALSE(pick.roofTile.has_value());
+        REQUIRE_FALSE(pick.floorTile.has_value());
+        REQUIRE(pick.object == nullptr);
+    }
+
+    SECTION("pickAt never mutates the current selection") {
+        REQUIRE_FALSE(mgr.hasSelection());
+        mgr.pickAt(pos, 0); // roof-visible path
+        mockWidget.roofVisible = false;
+        mgr.pickAt(pos, 0); // floor path
+        REQUIRE_FALSE(mgr.hasSelection());
+        REQUIRE(mgr.getCurrentSelection().count() == 0);
+    }
+}

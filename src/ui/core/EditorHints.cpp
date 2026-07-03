@@ -52,6 +52,13 @@ QString hintForContext(EditorMode mode, bool hasSelection) {
             // while stamping so the key reaches the viewport); Esc cancels.
             return joinHints({ QStringLiteral("R: cycle variant"),
                 QStringLiteral("Esc: cancel") });
+
+        case EditorMode::PlaceObject:
+            // The picked object's ghost tracks the cursor; a click drops a copy, R rotates it (the
+            // Rotate shortcut is disabled while placing so the key reaches the viewport).
+            return joinHints({ QStringLiteral("Click: place"),
+                QStringLiteral("R: rotate"),
+                QStringLiteral("Esc / right-click: cancel") });
     }
 
     return QString();

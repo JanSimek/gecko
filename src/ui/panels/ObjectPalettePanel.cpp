@@ -507,7 +507,15 @@ std::optional<std::pair<int, ObjectCategory>> ObjectPalettePanel::revealProto(ui
 
     // Resolve the proto's .pro filename so we match the exact palette entry without re-deriving the
     // PID<->filename off-by-one; the LST-sourced ObjectInfo::proFileName is the same basename.
-    const QString fileName = QFileInfo(QString::fromStdString(ProHelper::basePath(_resources, pid))).fileName();
+    // basePath() throws on an out-of-range PID (corrupt map / mismatched resources) — treat that as
+    // "not in this palette" rather than letting it terminate the app.
+    QString fileName;
+    try {
+        fileName = QFileInfo(QString::fromStdString(ProHelper::basePath(_resources, pid))).fileName();
+    } catch (const std::exception& e) {
+        spdlog::warn("ObjectPalettePanel::revealProto: cannot resolve PID {}: {}", pid, e.what());
+        return std::nullopt;
+    }
     if (fileName.isEmpty()) {
         return std::nullopt;
     }
