@@ -5,6 +5,7 @@
 #include "resource/GameResources.h"
 #include "util/Constants.h"
 #include "util/ColorUtils.h"
+#include "util/ProHelper.h"
 #include "ui/FrmThumbnailGenerator.h"
 #include "ui/common/BaseWidget.h"
 #include "ui/dragdrop/MimeTypes.h"
@@ -480,6 +481,73 @@ void ObjectPalettePanel::clearObjectSelection() {
         widget->setSelected(false);
     });
     _selectedObjectIndex = -1;
+}
+
+std::optional<std::pair<int, ObjectCategory>> ObjectPalettePanel::revealProto(uint32_t pid) {
+    ObjectCategory category;
+    switch (Pro::typeOfPid(pid)) {
+        case Pro::OBJECT_TYPE::ITEM:
+            category = ObjectCategory::ITEMS;
+            break;
+        case Pro::OBJECT_TYPE::CRITTER:
+            category = ObjectCategory::CRITTERS;
+            break;
+        case Pro::OBJECT_TYPE::SCENERY:
+            category = ObjectCategory::SCENERY;
+            break;
+        case Pro::OBJECT_TYPE::WALL:
+            category = ObjectCategory::WALLS;
+            break;
+        case Pro::OBJECT_TYPE::MISC:
+            category = ObjectCategory::MISC;
+            break;
+        default:
+            return std::nullopt; // TILE / unknown types are not shown in this palette
+    }
+
+    // Resolve the proto's .pro filename so we match the exact palette entry without re-deriving the
+    // PID<->filename off-by-one; the LST-sourced ObjectInfo::proFileName is the same basename.
+    const QString fileName = QFileInfo(QString::fromStdString(ProHelper::basePath(_resources, pid))).fileName();
+    if (fileName.isEmpty()) {
+        return std::nullopt;
+    }
+
+    // Categories are loaded lazily when their tab is first opened, so the eyedropper may target one
+    // the user has never viewed (e.g. a critter while the Items tab is showing). Populate it first.
+    if (getObjectList(category).empty()) {
+        loadCategoryObjects(category);
+    }
+
+    // Locate the entry in the category's full list (robust: independent of which page is materialised).
+    // This index is what getObjectInfo()/the ghost builder expect.
+    const auto& objectList = getObjectList(category);
+    int index = -1;
+    for (int i = 0; i < static_cast<int>(objectList.size()); ++i) {
+        if (objectList[i] && objectList[i]->proFileName.compare(fileName, Qt::CaseInsensitive) == 0) {
+            index = i;
+            break;
+        }
+    }
+    if (index < 0) {
+        return std::nullopt;
+    }
+
+    // Switch to the proto's category and filter to it so it is revealed and selected in the palette.
+    _categoryTabs->setCurrentIndex(static_cast<int>(category));
+    if (_searchLineEdit) {
+        _searchLineEdit->setText(fileName);
+    }
+    clearObjectSelection();
+    for (const auto& widget : _objectWidgets) {
+        const ObjectInfo* info = widget->getObjectInfo();
+        if (info && info->proFileName.compare(fileName, Qt::CaseInsensitive) == 0) {
+            widget->setSelected(true);
+            _selectedObjectIndex = widget->getObjectIndex();
+            Q_EMIT objectSelected(_selectedObjectIndex, _currentCategory);
+            break;
+        }
+    }
+    return std::make_pair(index, category);
 }
 
 void ObjectPalettePanel::calculatePagination() {

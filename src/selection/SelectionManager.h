@@ -104,6 +104,17 @@ public:
     // Helper for external classes (like EditorWidget) to check collision
     bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
 
+    // The topmost pickable thing under a world position (eyedropper). Composes the same hit-testers
+    // and priority a single left-click uses — roof (only when the roof layer is shown) → object →
+    // floor — so "pick under cursor" matches "what a click would select". At most one field is set;
+    // roofTile/floorTile hold the tile position (0..TILES_PER_ELEVATION), not the tiles.lst id.
+    struct PickResult {
+        std::shared_ptr<Object> object;
+        std::optional<int> roofTile;
+        std::optional<int> floorTile;
+    };
+    PickResult pickAt(sf::Vector2f worldPos, int elevation) const;
+
     // Area selection helpers (public for EditorWidget usage)
     std::vector<int> getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) const;
     std::vector<int> getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const;

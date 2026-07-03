@@ -819,6 +819,9 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         if (_mainWindow && _mainWindow->getTilePalettePanel()) {
             _mainWindow->getTilePalettePanel()->deselectTile();
         }
+        // Sync the editor mode deterministically rather than leaning on deselectTile()'s signal (see
+        // the onEscape tile branch for the same rationale).
+        setMode(EditorMode::Select);
         spdlog::debug("Tile placement mode cancelled");
     };
 
@@ -872,11 +875,19 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         if (_mode == EditorMode::StampPattern) {
             setMode(EditorMode::Select);
             Q_EMIT statusMessageRequested("Pattern stamping cancelled.");
+        } else if (_mode == EditorMode::PlaceObject) {
+            setMode(EditorMode::Select);
+            Q_EMIT statusMessageRequested("Object placement cancelled.");
         } else if (_tilePlacementManager->isTilePlacementMode()) {
-            _tilePlacementManager->resetState();
             if (_mainWindow && _mainWindow->getTilePalettePanel()) {
                 _mainWindow->getTilePalettePanel()->deselectTile();
             }
+            _tilePlacementManager->resetState(); // also clears the area-fill / replace sub-options
+            // Deterministically leave PlaceTile: setMode() resets both the tile manager and the input
+            // handler. The old path relied only on deselectTile()'s tileSelected(-1) signal to do
+            // this, which is a no-op when no palette tile is highlighted — stranding the mode so the
+            // viewport kept painting after Escape.
+            setMode(EditorMode::Select);
         } else {
             clearSelection();
         }
@@ -891,6 +902,34 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         // Notify MainWindow to deselect the toolbar button
         if (_mainWindow) {
             _mainWindow->deselectMarkExitsMode();
+        }
+    };
+
+    // Eyedropper: sample what is under the cursor and load it into the matching palette.
+    callbacks.onPick = [this](sf::Vector2f worldPos) {
+        pickAtCursor(worldPos);
+        // Raising a palette dock can move keyboard focus off the viewport; put it back so the next
+        // P / Esc / placement click still arrives here (these keys flow through the SFML widget).
+        if (auto* sfml = getSFMLWidget()) {
+            sfml->setFocus();
+        }
+    };
+    // Object placement mode: reuse the palette-drag ghost machinery — a left-click drops a copy at the
+    // cursor (the ghost stays for repeated placement), and each move retargets the ghost.
+    callbacks.onObjectPlacement = [this](sf::Vector2f worldPos) {
+        placeObjectAtPosition(worldPos);
+    };
+    callbacks.onObjectPlacementMove = [this](sf::Vector2f worldPos) {
+        updateDragPreview(worldPos);
+    };
+    callbacks.onObjectPlacementCancel = [this]() {
+        setMode(EditorMode::Select);
+        Q_EMIT statusMessageRequested("Object placement cancelled.");
+    };
+    callbacks.onObjectPlacementRotate = [this]() {
+        // Rotate the cursor ghost; placeObjectAtPosition() reads its facing so the drop matches.
+        if (_dragPreviewObject) {
+            _dragPreviewObject->rotate();
         }
     };
 }
@@ -1038,20 +1077,6 @@ bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier mod
     return result.success && result.selectionChanged;
 }
 
-void EditorWidget::cycleSelectionMode() {
-    int currentMode = static_cast<int>(_currentSelectionMode);
-    currentMode = (currentMode + 1) % static_cast<int>(SelectionMode::NUM_SELECTION_TYPES);
-    _currentSelectionMode = static_cast<SelectionMode>(currentMode);
-
-    if (_inputHandler) {
-        _inputHandler->setSelectionMode(_currentSelectionMode);
-    }
-
-    // Changing the selection type keeps the current selection; subsequent clicks/drags then add to
-    // or subtract from it under the new type (the add/deselect paths are already mode-aware).
-    spdlog::debug("Selection mode changed to: {}", selectionModeToString(_currentSelectionMode));
-}
-
 void EditorWidget::setSelectionMode(SelectionMode mode) {
     if (_currentSelectionMode == mode) {
         return;
@@ -1063,7 +1088,7 @@ void EditorWidget::setSelectionMode(SelectionMode mode) {
         _inputHandler->setSelectionMode(_currentSelectionMode);
     }
 
-    // Keep the current selection across a type change (see cycleSelectionMode).
+    // Keep the current selection across a type change; the add/deselect paths are mode-aware.
     spdlog::debug("Selection mode set to: {}", selectionModeToString(_currentSelectionMode));
 }
 
@@ -1181,6 +1206,10 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     if (mode != EditorMode::StampPattern) {
         clearStampPreview();
     }
+    if (mode != EditorMode::PlaceObject) {
+        // Leaving object placement drops the cursor ghost and its cached ObjectInfo.
+        cancelDragPreview();
+    }
     if (mode != EditorMode::MarkExits) {
         clearMarkExitsLinePreview();
         // Leaving "Draw edge" abandons any in-progress line: drop its frozen segments. (Finalize/cancel
@@ -1193,6 +1222,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         _inputHandler->setMarkExitsMode(false);
         _inputHandler->setPlayerPositionMode(false);
         _inputHandler->setStampPatternMode(false);
+        _inputHandler->setObjectPlacementMode(false);
     }
 
     switch (mode) {
@@ -1226,6 +1256,13 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         case EditorMode::StampPattern:
             if (_inputHandler) {
                 _inputHandler->setStampPatternMode(true);
+            }
+            break;
+        case EditorMode::PlaceObject:
+            // The ghost + _previewObjectInfo are armed by beginObjectPlacement() before this call;
+            // here we only route placement clicks/moves to the input handler.
+            if (_inputHandler) {
+                _inputHandler->setObjectPlacementMode(true);
             }
             break;
     }
@@ -1865,6 +1902,84 @@ void EditorWidget::clearMarkExitsLinePreview() {
     _exitGridPreviewFrmPids.clear();
 }
 
+void EditorWidget::pickAtCursor(sf::Vector2f worldPos) {
+    auto* selectionManager = _session.selectionManager();
+    if (!selectionManager) {
+        return;
+    }
+    const int elevation = _session.currentElevation();
+    const auto pick = selectionManager->pickAt(worldPos, elevation);
+
+    // An object under the cursor -> arm click-to-place with a live ghost.
+    if (pick.object) {
+        if (pick.object->hasMapObject()) {
+            beginObjectPlacement(pick.object->getMapObject().pro_pid, worldPos);
+        }
+        return;
+    }
+
+    // Otherwise a tile: read its id at the hit position and arm tile painting in the palette.
+    std::optional<int> tilePosition;
+    bool isRoof = false;
+    if (pick.roofTile) {
+        tilePosition = pick.roofTile;
+        isRoof = true;
+    } else if (pick.floorTile) {
+        tilePosition = pick.floorTile;
+    }
+    if (!tilePosition) {
+        return; // nothing pickable under the cursor
+    }
+
+    auto* tilePalette = _mainWindow ? _mainWindow->getTilePalettePanel() : nullptr;
+    Map* map = _session.map();
+    if (!tilePalette || !map) {
+        return;
+    }
+
+    uint16_t tileId = static_cast<uint16_t>(Map::EMPTY_TILE);
+    const auto& tiles = map->getMapFile().tiles;
+    const auto it = tiles.find(elevation);
+    if (it != tiles.end() && *tilePosition >= 0 && *tilePosition < static_cast<int>(it->second.size())) {
+        tileId = isRoof ? it->second[*tilePosition].getRoof() : it->second[*tilePosition].getFloor();
+    }
+
+    tilePalette->pickTile(static_cast<int>(tileId), isRoof);
+    if (_mainWindow) {
+        _mainWindow->raiseTilePalette();
+    }
+    Q_EMIT statusMessageRequested(QString("Picked %1 tile %2 — left-click or drag to paint, Esc to stop")
+            .arg(isRoof ? "roof" : "floor")
+            .arg(tileId));
+}
+
+void EditorWidget::beginObjectPlacement(uint32_t pid, sf::Vector2f worldPos) {
+    auto* palette = _mainWindow ? _mainWindow->getObjectPalettePanel() : nullptr;
+    if (!palette) {
+        return;
+    }
+    // Reveal + select the proto in the object palette and learn its {list index, category}.
+    const auto found = palette->revealProto(pid);
+    if (!found) {
+        Q_EMIT statusMessageRequested("Pick (P): no palette entry for this object");
+        return;
+    }
+    if (_mainWindow) {
+        _mainWindow->raiseObjectPalette();
+    }
+
+    // Arm the palette-drag ghost (sets _previewObjectInfo + builds the cursor ghost), then enter the
+    // click-to-place mode. setMode() clears the ghost again on any exit.
+    startDragPreview(found->first, static_cast<int>(found->second), worldPos);
+    if (!_previewObjectInfo) {
+        cancelDragPreview();
+        Q_EMIT statusMessageRequested("Pick (P): could not load this object");
+        return;
+    }
+    setMode(EditorMode::PlaceObject);
+    Q_EMIT statusMessageRequested("Placing object — left-click to drop, R to rotate, Esc or right-click to stop");
+}
+
 void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     if (!_session.map()) {
         spdlog::warn("EditorWidget: Cannot place object - no map loaded");
@@ -1879,9 +1994,13 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
 
     auto mapObject = std::make_shared<MapObject>();
 
+    // Placement inherits the cursor ghost's facing, so R-rotating the ghost carries into the drop
+    // (the palette-drag ghost is never rotated, so that path keeps direction 0 as before).
+    const int placementDirection = _dragPreviewObject ? _dragPreviewObject->getDirection() : 0;
+
     mapObject->position = hexPosition;
     mapObject->elevation = _session.currentElevation();
-    mapObject->direction = 0;
+    mapObject->direction = placementDirection;
     mapObject->frame_number = 0;
 
     auto hexCoords = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexPosition));
@@ -1927,7 +2046,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
         if (frm && _previewObjectInfo && !_previewObjectInfo->frmPath.isEmpty()) {
             sf::Sprite objectSprite{ _resources.textures().get(_previewObjectInfo->frmPath.toStdString()) };
             object->setSprite(std::move(objectSprite));
-            object->setDirection(static_cast<ObjectDirection>(0));
+            object->setDirection(static_cast<ObjectDirection>(placementDirection));
         }
 
         if (auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexPosition)); hex.has_value()) {

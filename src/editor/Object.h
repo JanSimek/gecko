@@ -56,6 +56,7 @@ public:
 
     void setHexPosition(const Hex& hex);
     void setDirection(ObjectDirection direction);
+    [[nodiscard]] int getDirection() const noexcept { return _direction; }
     void rotate();
 
     void select();

@@ -104,7 +104,6 @@ public:
     Map* getMap() const override { return _session.map(); }
 
     // Qt6 toolbar actions
-    void cycleSelectionMode();
     void setSelectionMode(SelectionMode mode);
     SelectionMode getCurrentSelectionMode() const { return _currentSelectionMode; }
     // Combinable-layer selection: pick which layers a mixed (ALL-mode) selection considers
@@ -131,6 +130,13 @@ public:
 
     // Object placement functionality
     void placeObjectAtPosition(sf::Vector2f worldPos) override;
+
+    // Eyedropper (P): sample the topmost object/tile under the cursor and load it into its palette.
+    // A tile arms tile painting; an object arms click-to-place via beginObjectPlacement().
+    void pickAtCursor(sf::Vector2f worldPos);
+    // Enter PlaceObject mode for the given proto: reveal it in the palette and show a cursor ghost
+    // whose left-click drops a copy (see EditorMode::PlaceObject).
+    void beginObjectPlacement(uint32_t pid, sf::Vector2f worldPos);
 
     // Palette drag preview
     void startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos);

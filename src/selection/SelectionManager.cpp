@@ -243,6 +243,26 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
     return SelectionResult::createNoChange();
 }
 
+SelectionManager::PickResult SelectionManager::pickAt(sf::Vector2f worldPos, int elevation) const {
+    // Same priority as an ALL-mode click (roof-when-shown → object → floor), but read-only: it never
+    // mutates the selection. A hidden roof is skipped so it can't shadow the object beneath it.
+    PickResult result;
+    if (_provider.isRoofVisible()) {
+        if (auto roof = getRoofTileAtPosition(worldPos, elevation)) {
+            result.roofTile = roof;
+            return result;
+        }
+    }
+    if (auto objects = getObjectsAtPosition(worldPos, elevation); !objects.empty()) {
+        result.object = objects.front(); // objects[0] is the topmost, as click-selection uses
+        return result;
+    }
+    if (auto floor = getFloorTileAtPosition(worldPos, elevation)) {
+        result.floorTile = floor;
+    }
+    return result;
+}
+
 namespace {
     // Appends a tile candidate when the hit-test found one at the position.
     void appendTileCandidate(std::vector<SelectedItem>& candidates, std::optional<int> tileIndex, SelectionType type) {

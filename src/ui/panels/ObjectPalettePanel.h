@@ -8,6 +8,8 @@
 #include <QMimeData>
 #include <vector>
 #include <memory>
+#include <optional>
+#include <utility>
 #include <unordered_map>
 
 namespace geck {
@@ -108,6 +110,11 @@ public:
     int getSelectedObjectIndex() const { return _selectedObjectIndex; }
     ObjectCategory getCurrentCategory() const { return _currentCategory; }
     bool hasSelectedObject() const { return _selectedObjectIndex >= 0; }
+
+    // Eyedropper: switch to the proto's category tab and filter to it so it is revealed and selected.
+    // Returns the proto's {list index, category} — the caller uses it to arm click-to-place — or
+    // std::nullopt if the PID's type is not shown here (e.g. a tile) or has no palette entry.
+    std::optional<std::pair<int, ObjectCategory>> revealProto(uint32_t pid);
 
     // Access to object info for drag and drop
     const ObjectInfo* getObjectInfo(int objectIndex, ObjectCategory category) const;
