@@ -315,6 +315,14 @@ TEST_CASE("MapEdge empty()/totalZones() report zone presence", "[map_edge]") {
     CHECK(edge.totalZones() == 1);
 }
 
+TEST_CASE("MapEdgeWriter refuses a zero-zone edge", "[map_edge]") {
+    // A header-only file would not parse back, so the writer must decline to emit one.
+    TempFile tmp{ "map_edge_empty", ".edg" };
+    MapEdgeWriter writer;
+    writer.openFile(tmp.path());
+    CHECK_FALSE(writer.write(MapEdge{}));
+}
+
 TEST_CASE("MapEdgeReader::siblingPath derives the .EDG name from a map path", "[map_edge]") {
     CHECK(MapEdgeReader::siblingPath("ARROYO.MAP") == std::filesystem::path{ "ARROYO.EDG" });
     CHECK(MapEdgeReader::siblingPath("arroyo.map") == std::filesystem::path{ "arroyo.EDG" });

@@ -18,8 +18,10 @@ namespace geck {
 /// reader tolerates but no real file carries). This makes reading an engine-produced file and
 /// writing it back reproduce the original bytes exactly.
 ///
-/// Callers must skip writing an edge with no zones (`MapEdge::empty()`): the engine writes
-/// no file in that case and a zero-zone file does not parse.
+/// `write()` refuses an edge with no zones (`MapEdge::empty()`), returning false without emitting
+/// anything: the engine writes no file in that case and a zero-zone file does not parse. Callers
+/// should still skip empty edges *before* opening the file (see saveMapEdgeBeside) to avoid leaving
+/// a stray truncated file behind.
 class MapEdgeWriter : public FileWriter<MapEdge> {
 public:
     bool write(const MapEdge& edge) override;

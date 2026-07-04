@@ -41,6 +41,13 @@ namespace {
 } // namespace
 
 bool MapEdgeWriter::write(const MapEdge& edge) {
+    // Refuse a zero-zone edge: the engine writes no file in that case and a header-only file does
+    // not parse back, so emitting one would produce a malformed sidecar. Callers skip empty edges
+    // before opening the file (see saveMapEdgeBeside); this guards direct misuse too.
+    if (edge.empty()) {
+        return false;
+    }
+
     BinaryWriteUtils& utils = getBinaryUtils();
 
     utils.writeBE32(MapEdge::MAGIC);

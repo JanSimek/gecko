@@ -285,13 +285,15 @@ void MapLoader::loadSiblingEdge(bool viaVfs) {
             continue;
         }
 
-        // A sibling exists: parse leniently (nullopt on malformed/empty) and stop probing.
+        // Stop at the first sibling that parses. tryParse returns nullopt on a malformed or empty
+        // file, in which case we keep probing the other case variant (a case-sensitive filesystem
+        // could hold a valid ".edg" beside an unparsable ".EDG").
         if (auto edge = MapEdgeReader::tryParse(edgePath, *bytes)) {
             spdlog::debug("MapLoader: loaded map-edge sidecar {} ({} zones)",
                 edgePath.string(), edge->totalZones());
             _map->setEdge(std::move(edge));
+            return;
         }
-        return;
     }
 }
 
