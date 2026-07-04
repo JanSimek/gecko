@@ -18,6 +18,7 @@
 #include "editing/commands/ObjectCommandController.h"
 #include "format/map/MapScript.h"
 #include "util/BuiltTile.h"
+#include "rendering/MapEdgeOverlayGeometry.h"
 #include "rendering/MapSpriteLoader.h"
 #include "rendering/RenderingEngine.h"
 #include "ui/dragdrop/DragDropManager.h"
@@ -386,6 +387,45 @@ bool EditorWidget::trySelectSpatialScriptAt(sf::Vector2f worldPos) {
     _lastSpatialClickSid = MapScript::NONE;
     setSelectedSpatialScript(MapScript::NONE);
     return false;
+}
+
+bool EditorWidget::trySelectEdgeZoneAt(sf::Vector2f worldPos) {
+    if (!_session.visibility().showMapEdges || !_session.map() || !_session.map()->edge().has_value()) {
+        return false;
+    }
+    const int elevation = _session.currentElevation();
+    if (elevation < 0 || elevation >= MapEdge::ELEVATION_COUNT) {
+        return false;
+    }
+    const auto& zones = _session.map()->edge()->elevations[elevation].zones;
+
+    // Grab radius in world units: how close to a zone's outline a click must land to select it.
+    constexpr float kGrabTolerance = 12.f;
+    int bestZone = -1;
+    float bestDistance = kGrabTolerance;
+    for (int i = 0; i < static_cast<int>(zones.size()); ++i) {
+        const auto box = mapEdgeZoneWorldBounds(_session.hexgrid(), zones[i]);
+        if (!box.has_value()) {
+            continue;
+        }
+        const float distance = mapEdgeDistanceToBorder(worldPos, *box);
+        if (distance <= bestDistance) {
+            bestDistance = distance; // <= so a later (topmost-drawn) zone wins ties
+            bestZone = i;
+        }
+    }
+
+    if (bestZone < 0) {
+        _selectedEdgeZone = -1; // clicked away from any border: fall through to object selection
+        _activeEdgeSide = -1;
+        return false;
+    }
+
+    _session.selectionManager()->clearSelection(); // edge selection is exclusive with objects/tiles
+    setSelectedSpatialScript(MapScript::NONE);     // and with spatial scripts
+    _selectedEdgeZone = bestZone;
+    _activeEdgeSide = -1;
+    return true;
 }
 
 EditorWidget::~EditorWidget() {
@@ -815,6 +855,10 @@ void EditorWidget::bindSelectionCallbacks(InputHandler::Callbacks& callbacks) {
         // edits) that script instead of the object/tile underneath. Modified clicks (add/toggle/
         // range) stay object-selection operations and leave the spatial selection untouched.
         if (modifier == InputHandler::SelectionModifier::NONE && trySelectSpatialScriptAt(worldPos)) {
+            return;
+        }
+        // Likewise, a plain click near a map-edge zone's border selects that zone (overlay must be on).
+        if (modifier == InputHandler::SelectionModifier::NONE && trySelectEdgeZoneAt(worldPos)) {
             return;
         }
         SelectionModifier selectionModifier;

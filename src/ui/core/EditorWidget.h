@@ -408,6 +408,12 @@ private:
     // selection and returns false so normal object selection proceeds.
     bool trySelectSpatialScriptAt(sf::Vector2f worldPos);
 
+    // If the map-edge overlay is visible and the click lands near a zone's border on the current
+    // elevation, select that zone (clearing object/tile/spatial selection) and return true. Selection
+    // is by border proximity, not area, so a click in a zone's interior falls through to normal object
+    // selection. A miss clears the edge selection and returns false.
+    bool trySelectEdgeZoneAt(sf::Vector2f worldPos);
+
     // Handles a click in SetPlayerPosition mode: routes to an armed beginHexPick callback (one-shot)
     // or, failing that, emits playerPositionSelected (legacy player-start pick).
     void handlePositionPickClick(sf::Vector2f worldPos);

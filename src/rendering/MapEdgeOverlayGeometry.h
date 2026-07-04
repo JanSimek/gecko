@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 
@@ -49,6 +50,48 @@ inline std::optional<sf::FloatRect> mapEdgeZoneWorldBounds(const HexagonGrid& gr
     const float minY = std::min(top->y, bottom->y);
     const float maxY = std::max(top->y, bottom->y);
     return sf::FloatRect({ minX, minY }, { maxX - minX, maxY - minY });
+}
+
+/// Shortest distance from point `p` to the segment `a`-`b`.
+inline float pointSegmentDistance(sf::Vector2f p, sf::Vector2f a, sf::Vector2f b) {
+    const sf::Vector2f ab{ b.x - a.x, b.y - a.y };
+    const float lengthSq = ab.x * ab.x + ab.y * ab.y;
+    float t = lengthSq > 0.f ? ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / lengthSq : 0.f;
+    t = std::clamp(t, 0.f, 1.f);
+    const float dx = p.x - (a.x + t * ab.x);
+    const float dy = p.y - (a.y + t * ab.y);
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+/// Distance from `p` to the four sides of rect `r`, indexed 0=left,1=top,2=right,3=bottom (matching
+/// EdgeEditService::Side and RenderData::activeEdgeSide).
+inline std::array<float, 4> mapEdgeSideDistances(sf::Vector2f p, const sf::FloatRect& r) {
+    const float l = r.position.x;
+    const float t = r.position.y;
+    const float rr = l + r.size.x;
+    const float b = t + r.size.y;
+    const sf::Vector2f tl{ l, t };
+    const sf::Vector2f tr{ rr, t };
+    const sf::Vector2f br{ rr, b };
+    const sf::Vector2f bl{ l, b };
+    return {
+        pointSegmentDistance(p, tl, bl), // left
+        pointSegmentDistance(p, tl, tr), // top
+        pointSegmentDistance(p, tr, br), // right
+        pointSegmentDistance(p, bl, br), // bottom
+    };
+}
+
+/// Distance from `p` to the nearest point on rect `r`'s outline (0 when on the border).
+inline float mapEdgeDistanceToBorder(sf::Vector2f p, const sf::FloatRect& r) {
+    const auto d = mapEdgeSideDistances(p, r);
+    return std::min({ d[0], d[1], d[2], d[3] });
+}
+
+/// The side of rect `r` (0=left,1=top,2=right,3=bottom) whose segment is nearest `p`.
+inline int mapEdgeNearestSide(sf::Vector2f p, const sf::FloatRect& r) {
+    const auto d = mapEdgeSideDistances(p, r);
+    return static_cast<int>(std::distance(d.begin(), std::min_element(d.begin(), d.end())));
 }
 
 /// The zone `tileRect` covering the whole hex grid — the seed the engine's mapper uses for a newly
