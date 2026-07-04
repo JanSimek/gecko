@@ -14,6 +14,7 @@
 #include <QComboBox>
 #include <QPushButton>
 #include "format/gam/Gam.h"
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -41,6 +42,13 @@ public:
 
     void setMap(Map* map);
     void setPlayerPosition(int hexPosition, int elevation);
+
+    /// Refresh the "Map Edges" group from the editor's current edge state (driven by MainWindow, which
+    /// owns the current elevation and the selected zone). `version` is 0 when the map has no `.edg`,
+    /// else 1 or 2; `clip` holds the four v2 clip flags (left,top,right,bottom) for the current
+    /// elevation. Programmatic; does not emit the edge-edit signals.
+    void setMapEdgeState(bool hasMap, int version, int zoneCount, bool hasSelectedZone,
+        const std::array<bool, 4>& clip);
 
     /// Write any pending Map name / Lookup name edits to the writable copy of map.msg / maps.txt.
     /// Called when the map is saved (the panel itself only marks the map modified on edit). A no-op
@@ -73,6 +81,13 @@ signals:
     void clearElevationRequested(int elevation);
     void copyElevationRequested(int fromElevation, int toElevation);
     void addSpatialScriptRequested();
+    /// Map-edge (.edg) editing, routed to EditorWidget's EdgeEditService (undoable). They act on the
+    /// current elevation / selected zone, which the editor owns. `side` is 0=left,1=top,2=right,3=bottom.
+    void addEdgeZoneRequested();
+    void deleteEdgeZoneRequested();
+    void upgradeEdgeVersion2Requested();
+    void edgeClipToggled(int side);
+    void resetEdgeSquareRequested();
 
 private slots:
     void onFieldChanged();
@@ -83,6 +98,10 @@ private slots:
     void onClearElevationClicked();
     void onCopyElevationClicked();
     void onAddSpatialScriptClicked();
+    void onAddEdgeZoneClicked();
+    void onDeleteEdgeZoneClicked();
+    void onUpgradeEdgeClicked();
+    void onResetEdgeSquareClicked();
     void onGlobalVarChanged(QTreeWidgetItem* item, int column);
     void onAddGlobalVar();
     void onRemoveGlobalVar();
@@ -147,6 +166,17 @@ private:
     QComboBox* _clearElevationCombo;
     QComboBox* _copyFromCombo;
     QComboBox* _copyToCombo;
+
+    // Map edges group (.edg zones + v2 clip). State is pushed in by MainWindow via setMapEdgeState;
+    // _suppressEdgeEdit guards the programmatic checkbox updates from firing edgeClipToggled.
+    QGroupBox* _mapEdgesGroup = nullptr;
+    QLabel* _edgeZoneCountLabel = nullptr;
+    QPushButton* _addEdgeZoneButton = nullptr;
+    QPushButton* _deleteEdgeZoneButton = nullptr;
+    QPushButton* _upgradeEdgeButton = nullptr;
+    QPushButton* _resetEdgeSquareButton = nullptr;
+    std::array<QCheckBox*, 4> _edgeClipChecks{}; // 0=left,1=top,2=right,3=bottom
+    bool _suppressEdgeEdit = false;
 
     resource::GameResources& _resources;
     std::shared_ptr<Settings> _settings;                  // for the writable data root used when editing names

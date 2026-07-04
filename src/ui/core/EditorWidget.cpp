@@ -15,6 +15,7 @@
 #include <QPoint>
 #include <QSize>
 #include <QStringList>
+#include "editing/commands/EdgeEditService.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "format/map/MapScript.h"
 #include "util/BuiltTile.h"
@@ -331,6 +332,61 @@ void EditorWidget::deleteSpatialScript(uint32_t sid) {
     }
 }
 
+int EditorWidget::currentElevation() const {
+    return _session.currentElevation();
+}
+
+const std::optional<MapEdge>& EditorWidget::mapEdge() const {
+    return _controller.commandController().mapEdge();
+}
+
+void EditorWidget::addEdgeZone() {
+    if (!_session.map()) {
+        return;
+    }
+    const MapEdge::Rect seed = mapEdgeFullGridZone(_session.hexgrid());
+    const int index = _controller.commandController().addEdgeZone(_session.currentElevation(), seed);
+    if (index < 0) {
+        return;
+    }
+    _selectedEdgeZone = index; // select the new zone so it can be dragged/deleted right away
+    _activeEdgeSide = -1;
+    Q_EMIT mapEdgeChanged();
+}
+
+void EditorWidget::deleteSelectedEdgeZone() {
+    if (_selectedEdgeZone < 0) {
+        return;
+    }
+    if (_controller.commandController().deleteEdgeZone(_session.currentElevation(), _selectedEdgeZone)) {
+        _selectedEdgeZone = -1;
+        _activeEdgeSide = -1;
+        Q_EMIT mapEdgeChanged();
+    }
+}
+
+void EditorWidget::toggleEdgeClipSide(int side) {
+    if (side < 0 || side > 3) {
+        return;
+    }
+    if (_controller.commandController().toggleEdgeClipSide(_session.currentElevation(),
+            static_cast<EdgeEditService::Side>(side))) {
+        Q_EMIT mapEdgeChanged();
+    }
+}
+
+void EditorWidget::upgradeMapEdgeToVersion2() {
+    if (_controller.commandController().upgradeEdgeToVersion2()) {
+        Q_EMIT mapEdgeChanged();
+    }
+}
+
+void EditorWidget::resetMapEdgeSquare() {
+    if (_controller.commandController().resetEdgeSquare(_session.currentElevation())) {
+        Q_EMIT mapEdgeChanged();
+    }
+}
+
 void EditorWidget::setSelectedSpatialScript(uint32_t sid) {
     if (_session.selectedSpatialScriptSid() == sid) {
         return; // no change; also breaks the map<->panel selection sync feedback loop
@@ -416,8 +472,12 @@ bool EditorWidget::trySelectEdgeZoneAt(sf::Vector2f worldPos) {
     }
 
     if (bestZone < 0) {
-        _selectedEdgeZone = -1; // clicked away from any border: fall through to object selection
-        _activeEdgeSide = -1;
+        // Clicked away from any border: fall through to object selection.
+        if (_selectedEdgeZone != -1) {
+            _selectedEdgeZone = -1;
+            _activeEdgeSide = -1;
+            Q_EMIT mapEdgeChanged();
+        }
         return false;
     }
 
@@ -425,6 +485,7 @@ bool EditorWidget::trySelectEdgeZoneAt(sf::Vector2f worldPos) {
     setSelectedSpatialScript(MapScript::NONE);     // and with spatial scripts
     _selectedEdgeZone = bestZone;
     _activeEdgeSide = -1;
+    Q_EMIT mapEdgeChanged(); // refresh the panel's Delete-button enablement
     return true;
 }
 
@@ -1041,6 +1102,11 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
             deleteSpatialScript(_session.selectedSpatialScriptSid());
             return;
         }
+        // Likewise, Delete removes the selected map-edge zone only while its overlay is visible.
+        if (_session.visibility().showMapEdges && _selectedEdgeZone >= 0) {
+            deleteSelectedEdgeZone();
+            return;
+        }
         deleteSelectedObjects();
     };
 
@@ -1370,6 +1436,9 @@ void EditorWidget::rotateSelectedObject() {
 void EditorWidget::changeElevation(int elevation) {
     if (elevation >= ELEVATION_1 && elevation <= ELEVATION_3) {
         _session.setCurrentElevation(elevation);
+        // Edge zones are per-elevation, so a selected zone index doesn't carry across elevations.
+        _selectedEdgeZone = -1;
+        _activeEdgeSide = -1;
         loadSprites();
     }
 }

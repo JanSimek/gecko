@@ -474,7 +474,8 @@ void MainWindow::setupMenuBar() {
             updateUndoRedoActions();
             if (_selectionPanel)
                 _selectionPanel->refresh();
-            refreshScriptsPanel(); // an undone spatial add/edit/delete must re-appear in the panel
+            refreshScriptsPanel();  // an undone spatial add/edit/delete must re-appear in the panel
+            refreshMapEdgesPanel(); // and an undone edge edit must re-sync the Map Edges group
         }
     });
 
@@ -487,7 +488,8 @@ void MainWindow::setupMenuBar() {
             updateUndoRedoActions();
             if (_selectionPanel)
                 _selectionPanel->refresh();
-            refreshScriptsPanel(); // keep the panel in step with a redone spatial add/edit/delete
+            refreshScriptsPanel();  // keep the panel in step with a redone spatial add/edit/delete
+            refreshMapEdgesPanel(); // and with a redone edge edit
         }
     });
 
@@ -1041,8 +1043,10 @@ void MainWindow::setupDockWidgets() {
             _currentEditorWidget->setShowMapEdges(enabled);
     });
     connect(this, &MainWindow::elevationChanged, this, [this](int elevation) {
-        if (_currentEditorWidget)
+        if (_currentEditorWidget) {
             _currentEditorWidget->changeElevation(elevation);
+            refreshMapEdgesPanel(); // edge zones/clip are per-elevation, so re-sync the panel
+        }
     });
     connect(this, &MainWindow::rotateObjectRequested, this, [this]() {
         if (_currentEditorWidget)
@@ -1571,6 +1575,38 @@ void MainWindow::connectPanelSignals() {
         connect(_mapInfoPanel, &MapInfoPanel::addSpatialScriptRequested,
             this, [this]() { openSpatialScriptDialog(std::nullopt); });
 
+        // Map-edge (.edg) editing routed to the editor's EdgeEditService (undoable).
+        connect(_mapInfoPanel, &MapInfoPanel::addEdgeZoneRequested, this, [this]() {
+            if (!_currentEditorWidget) {
+                return;
+            }
+            // Make the overlay visible so the new zone and its drag handles can be seen and shaped.
+            if (_showMapEdgesAction && !_showMapEdgesAction->isChecked()) {
+                _showMapEdgesAction->setChecked(true); // cascades to setShowMapEdges
+            }
+            _currentEditorWidget->addEdgeZone();
+        });
+        connect(_mapInfoPanel, &MapInfoPanel::deleteEdgeZoneRequested, this, [this]() {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->deleteSelectedEdgeZone();
+            }
+        });
+        connect(_mapInfoPanel, &MapInfoPanel::upgradeEdgeVersion2Requested, this, [this]() {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->upgradeMapEdgeToVersion2();
+            }
+        });
+        connect(_mapInfoPanel, &MapInfoPanel::edgeClipToggled, this, [this](int side) {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->toggleEdgeClipSide(side);
+            }
+        });
+        connect(_mapInfoPanel, &MapInfoPanel::resetEdgeSquareRequested, this, [this]() {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->resetMapEdgeSquare();
+            }
+        });
+
         // Header edits in the Info panel write straight to the map (no undo command), so flag the map
         // modified here. These also fire while the panel is being populated from a freshly loaded map,
         // but setEditorWidget()/createNewMap clear the flag right after populating, so that's harmless.
@@ -1683,6 +1719,8 @@ void MainWindow::connectToEditorWidget() {
         [this](uint32_t sid) { openSpatialScriptDialog(sid); });
     connect(_currentEditorWidget, &EditorWidget::mapScriptsChanged, this,
         [this]() { refreshScriptsPanel(); });
+    connect(_currentEditorWidget, &EditorWidget::mapEdgeChanged, this,
+        [this]() { refreshMapEdgesPanel(); });
 
     if (_mapInfoPanel) {
         connect(_currentEditorWidget, &EditorWidget::playerPositionSelected,
@@ -1787,6 +1825,34 @@ void MainWindow::refreshScriptsPanel() {
     }
 }
 
+void MainWindow::refreshMapEdgesPanel() {
+    if (!_mapInfoPanel) {
+        return;
+    }
+    if (!_currentEditorWidget) {
+        _mapInfoPanel->setMapEdgeState(false, 0, 0, false, { false, false, false, false });
+        return;
+    }
+
+    const bool hasMap = _currentEditorWidget->getMap() != nullptr;
+    const int elevation = _currentEditorWidget->currentElevation();
+    const auto& edge = _currentEditorWidget->mapEdge();
+
+    int version = 0;
+    int zoneCount = 0;
+    std::array<bool, 4> clip{ false, false, false, false };
+    if (edge.has_value() && elevation >= 0 && elevation < MapEdge::ELEVATION_COUNT) {
+        version = edge->version;
+        const auto& elev = edge->elevations[elevation];
+        zoneCount = static_cast<int>(elev.zones.size());
+        clip = { elev.clipSides.left, elev.clipSides.top, elev.clipSides.right, elev.clipSides.bottom };
+    }
+    const int selected = _currentEditorWidget->selectedEdgeZone();
+    const bool hasSelectedZone = selected >= 0 && selected < zoneCount;
+
+    _mapInfoPanel->setMapEdgeState(hasMap, version, zoneCount, hasSelectedZone, clip);
+}
+
 void MainWindow::applySelectionColorsToEditor() {
     if (!_currentEditorWidget || !_settings) {
         return;
@@ -1842,6 +1908,7 @@ void MainWindow::syncMenuStateToEditorWidget() {
 void MainWindow::updateMapInfo(Map* map) {
     if (_mapInfoPanel) {
         _mapInfoPanel->setMap(map);
+        refreshMapEdgesPanel(); // setMap resets the edge group; re-fill it from the loaded map's .edg
     }
 
     if (_scriptsPanel) {

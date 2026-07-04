@@ -342,6 +342,18 @@ public:
     };
     [[nodiscard]] std::optional<SpatialScriptInfo> spatialScriptInfo(uint32_t sid) const;
 
+    // Map-edge (.edg) editing (undoable). All operate on the current elevation and emit
+    // mapEdgeChanged() so the Map Edges panel refreshes. addEdgeZone seeds a full-grid zone and
+    // selects it; deleteSelectedEdgeZone / toggleEdgeClipSide act on the current selection/elevation.
+    void addEdgeZone();
+    void deleteSelectedEdgeZone();
+    void toggleEdgeClipSide(int side); // 0=left,1=top,2=right,3=bottom
+    void upgradeMapEdgeToVersion2();
+    void resetMapEdgeSquare();
+    [[nodiscard]] int selectedEdgeZone() const { return _selectedEdgeZone; }
+    [[nodiscard]] int currentElevation() const;
+    [[nodiscard]] const std::optional<MapEdge>& mapEdge() const;
+
 signals:
     /// The map-side spatial-script selection changed (marker click or clear). MainWindow mirrors it
     /// onto the Scripts panel row. Carries MapScript::NONE when nothing is selected.
@@ -351,6 +363,9 @@ signals:
     void spatialScriptEditActivated(uint32_t sid);
     /// A spatial script was added / edited / deleted, so the script panels must repopulate.
     void mapScriptsChanged();
+    /// The map edge changed (zone added/removed/moved, clip/version/square edit) or the selected
+    /// zone changed, so the Map Edges panel must refresh its counts, buttons and clip state.
+    void mapEdgeChanged();
 
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
