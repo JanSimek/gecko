@@ -13,6 +13,8 @@
 #include <nlohmann/json.hpp>
 
 #include <cctype>
+#include <cstdint>
+#include <optional>
 #include <ostream>
 #include <regex>
 #include <set>

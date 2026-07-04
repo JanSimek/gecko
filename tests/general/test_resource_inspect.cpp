@@ -30,7 +30,7 @@ TEST_CASE("resourceFind locates a DAT entry and names its source", "[resource]")
     CHECK(j["found"] == true);
     REQUIRE(j["source"].is_object());
     CHECK(j["source"]["kind"] == "dat");
-    CHECK(std::string(j["source"]["path"]).find("f2_res.dat") != std::string::npos);
+    CHECK(j["source"]["path"].get<std::string>().find("f2_res.dat") != std::string::npos);
 }
 
 TEST_CASE("resourceFind reports an absent path as found=false, not an error", "[resource]") {
@@ -57,7 +57,7 @@ TEST_CASE("resourceList matches case-insensitively and tags each entry's source"
 
     bool found = false;
     for (const auto& entry : j["entries"]) {
-        if (std::string(entry["path"]).find("hr_alltlk.frm") != std::string::npos) {
+        if (entry["path"].get<std::string>().find("hr_alltlk.frm") != std::string::npos) {
             found = true;
             CHECK(entry["source"]["kind"] == "dat");
         }

@@ -700,17 +700,18 @@ namespace {
             "List mounted entries whose path matches a glob ('*','?'), each tagged with the source that "
             "provides it — browse a DAT / data set without extracting. Matching is case-insensitive and "
             "substring-anchored (tolerant of the VFS leading slash / alias prefix), so 'art/tiles/gras*' or "
-            "'gras03*' both work. JSON {pattern, count, truncated, entries:[{path, source:{kind,label}}]} "
+            "'gras03*' both work. JSON {pattern, count, truncated, entries:[{path, source:{kind,path,label}}]} "
             "(capped; 'truncated' flags an over-long result). Args: glob.",
             json({ { "type", "object" }, { "properties", { { "glob", { { "type", "string" } } } } }, { "required", json::array({ "glob" }) } }),
             [](resource::GameResources& r, const json& a) { return toolResourceList(r, a); } });
         t.push_back({ "resource_missing",
             "Report the art a map REFERENCES but that does NOT resolve in the mounted data — the "
             "diagnostic for 'why won't this map load / render fully'. JSON {map, usedTileCount, "
-            "objectArtCount, missingTiles:[{id,art}], missingObjectArt:[{pid,art}]}. Empty arrays mean "
-            "everything the map uses resolves (so a load failure is elsewhere — e.g. a mount-path mistake; "
-            "check with resource_find). Mirrors what the editor's loader now tolerantly skips instead of "
-            "aborting. Args: map (.map path).",
+            "objectArtCount, missingTiles:[{id,art}], missingObjectArt:[{pid,art}]}, where a missing entry "
+            "gains a 'reason' when the art path couldn't even be formed ('tiles.lst not mounted', 'tile id "
+            "out of tiles.lst range', 'FID does not resolve'). Empty arrays mean everything the map uses "
+            "resolves (so a load failure is elsewhere — e.g. a mount-path mistake; check with resource_find). "
+            "Mirrors what the editor's loader now tolerantly skips instead of aborting. Args: map (.map path).",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
             [](resource::GameResources& r, const json& a) { return toolResourceMissing(r, a); } });
         t.push_back({ "script_api",
