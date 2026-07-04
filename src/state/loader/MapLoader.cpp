@@ -198,14 +198,31 @@ void MapLoader::loadMapResources() {
         size_t tiles_total = lst->list().size();
 
         // Progress for tiles: 20% to 60% (40% of total progress)
+        size_t unresolvedTiles = 0;
         for (const auto& tile : lst->list()) {
             setProgress("Loading map tile texture " + std::to_string(tile_number) + " of " + std::to_string(tiles_total));
-            _resources->textures().preload("art/tiles/" + tile);
+            try {
+                _resources->textures().preload("art/tiles/" + tile);
+            } catch (const std::exception& e) {
+                // A tiles.lst entry whose art isn't in the mounted data is NOT fatal. The engine
+                // loads tiles on demand, so a full tiles.lst that indexes art a given data set does
+                // not ship (common with mods that patch tiles.lst but rely on master.dat for the
+                // rest, or carry unused/placeholder slots) is normal. Skip it: the tile renders
+                // blank only if a map actually places it. Aborting here would make an otherwise
+                // loadable map fail on a tile it never uses.
+                ++unresolvedTiles;
+                spdlog::debug("MapLoader: skipping unresolved tile '{}': {}", tile, e.what());
+            }
 
             // Progress: 20% base + (current/total * 40%)
             int tileProgress = static_cast<int>((tile_number * 40) / tiles_total);
             _percentDone = 20 + tileProgress;
             tile_number++;
+        }
+        if (unresolvedTiles > 0) {
+            spdlog::warn("MapLoader: {} of {} tiles.lst entries could not be resolved in the mounted "
+                         "data; they render blank only where a map places them",
+                unresolvedTiles, tiles_total);
         }
 
         stopwatch_chunk.reset();
@@ -214,6 +231,7 @@ void MapLoader::loadMapResources() {
         size_t objectsTotal = _map->objects().at(_elevation).size();
 
         // Progress for objects: 60% to 95% (35% of total progress)
+        size_t unresolvedObjectArt = 0;
         for (const auto& object : _map->objects().at(_elevation)) {
             setProgress("Loading map object " + std::to_string(objectNumber) + " of " + std::to_string(objectsTotal));
 
@@ -222,13 +240,26 @@ void MapLoader::loadMapResources() {
                 continue; // object inside an inventory/container
             }
 
-            const std::string frmName = _resources->frmResolver().resolve(object->frm_pid);
-            _resources->textures().preload(frmName);
+            // Same tolerance as tiles: a single object whose art (or proto->FID mapping) can't be
+            // resolved must not abort the whole map. resolve() itself throws on an out-of-range FID,
+            // so both it and preload() sit inside the guard; the object just renders blank.
+            try {
+                _resources->textures().preload(_resources->frmResolver().resolve(object->frm_pid));
+            } catch (const std::exception& e) {
+                ++unresolvedObjectArt;
+                spdlog::debug("MapLoader: skipping unresolved art for object pid {}: {}",
+                    object->frm_pid, e.what());
+            }
 
             // Progress: 60% base + (current/total * 35%)
             int objectProgress = static_cast<int>((objectNumber * 35) / std::max(objectsTotal, size_t(1)));
             _percentDone = 60 + objectProgress;
             objectNumber++;
+        }
+        if (unresolvedObjectArt > 0) {
+            spdlog::warn("MapLoader: {} object(s) on elevation {} reference art missing from the "
+                         "mounted data; they render blank",
+                unresolvedObjectArt, _elevation);
         }
 
         // Load essential editor textures

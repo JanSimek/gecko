@@ -14,6 +14,7 @@
 #include "cli/MapReachability.h"
 #include "cli/MapRender.h"
 #include "cli/PatternExtract.h"
+#include "cli/ResourceInspect.h"
 #include "cli/ScriptIntrospect.h"
 #include "format/msg/Msg.h"
 #include "scripting/ScriptApiReference.h"
@@ -465,6 +466,43 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    // --- Resource / data-set inspection tools -----------------------------------
+    json toolResourceFind(resource::GameResources& resources, const json& args) {
+        const std::string path = requireString(args, "path");
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::resourceFind(resources, path, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("resource_find failed: ") + e.what(), true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolResourceList(resource::GameResources& resources, const json& args) {
+        const std::string glob = requireString(args, "glob");
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::resourceList(resources, glob, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("resource_list failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolResourceMissing(resource::GameResources& resources, const json& args) {
+        const std::string map = requireString(args, "map");
+        std::ostringstream oss;
+        int rc = 0;
+        try {
+            rc = cli::resourceMissing(resources, map, oss);
+        } catch (const std::exception& e) {
+            return toolText(std::string("resource_missing failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        }
+        return toolText(oss.str(), rc != 0);
+    }
+
     // Dispatch a tools/call by name. Returns the tool result, or nullopt for an unknown tool
     // (which the caller turns into a JSON-RPC method error).
     // One contract per tool: the schema advertised by tools/list and the handler run by
@@ -648,6 +686,33 @@ namespace {
             "(e.g. all exit-grid pieces) and feed an artPath/fid to frm_info or render_frm. Args: glob.",
             json({ { "type", "object" }, { "properties", { { "glob", { { "type", "string" } } } } }, { "required", json::array({ "glob" }) } }),
             [](resource::GameResources& r, const json& a) { return toolListFrms(r, a); } });
+        t.push_back({ "resource_find",
+            "Locate a VFS path in the mounted data and report WHICH source provides it: JSON {path, "
+            "found, source:{kind (dat|directory), path, label}|null}. kind/label identify master.dat vs a "
+            "patch directory vs a mod, so you can tell whether a file is present and where it comes from "
+            "(e.g. is art/tiles/gras030.frm actually shipped, or a dangling tiles.lst entry). Also exposes "
+            "mount-path mistakes: if the data dir was mounted one level too high, files show up under a "
+            "'/data/...' prefix. 'not found' is a normal answer, not an error. Args: path (e.g. "
+            "art/tiles/gras030.frm).",
+            json({ { "type", "object" }, { "properties", { { "path", { { "type", "string" } } } } }, { "required", json::array({ "path" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolResourceFind(r, a); } });
+        t.push_back({ "resource_list",
+            "List mounted entries whose path matches a glob ('*','?'), each tagged with the source that "
+            "provides it — browse a DAT / data set without extracting. Matching is case-insensitive and "
+            "substring-anchored (tolerant of the VFS leading slash / alias prefix), so 'art/tiles/gras*' or "
+            "'gras03*' both work. JSON {pattern, count, truncated, entries:[{path, source:{kind,label}}]} "
+            "(capped; 'truncated' flags an over-long result). Args: glob.",
+            json({ { "type", "object" }, { "properties", { { "glob", { { "type", "string" } } } } }, { "required", json::array({ "glob" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolResourceList(r, a); } });
+        t.push_back({ "resource_missing",
+            "Report the art a map REFERENCES but that does NOT resolve in the mounted data — the "
+            "diagnostic for 'why won't this map load / render fully'. JSON {map, usedTileCount, "
+            "objectArtCount, missingTiles:[{id,art}], missingObjectArt:[{pid,art}]}. Empty arrays mean "
+            "everything the map uses resolves (so a load failure is elsewhere — e.g. a mount-path mistake; "
+            "check with resource_find). Mirrors what the editor's loader now tolerantly skips instead of "
+            "aborting. Args: map (.map path).",
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolResourceMissing(r, a); } });
         t.push_back({ "script_api",
             "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
             "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "

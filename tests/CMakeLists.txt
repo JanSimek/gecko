@@ -76,7 +76,7 @@ endif()
 # no scripting or game data. test_frm_inspect covers the FRM tools' non-GL logic (FID parse/decode,
 # art-name resolution, glob listing) against a temp LST fixture.
 if(TARGET gecko_cli)
-    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp general/test_map_reachability.cpp general/test_map_analyzer_scripts.cpp general/test_map_dump_grid.cpp general/test_frm_inspect.cpp)
+    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp general/test_map_reachability.cpp general/test_map_analyzer_scripts.cpp general/test_map_dump_grid.cpp general/test_frm_inspect.cpp general/test_resource_inspect.cpp)
     target_link_libraries(general_tests PRIVATE gecko_cli)
 endif()
 
