@@ -21,7 +21,11 @@ class MapEdgeReader : public FileParser<MapEdge> {
 public:
     MapEdgeReader() = default;
 
-    std::unique_ptr<MapEdge> read() override;
+    // Bounds-safe on every path: the header fields go through read_be_u32()/read_be_i32(), which
+    // call validateStreamPosition() (throws before an over-read), and the zone loop reads only via
+    // tryReadRect()/tryReadInt32(), which check the remaining byte count and stop at EOF. The
+    // flawfinder CWE-120 hit is name-based (any function called read()) — hence the suppression.
+    std::unique_ptr<MapEdge> read() override; // Flawfinder: ignore
 
     /// The conventional sibling ".EDG" path for a map file (ARROYO.MAP -> ARROYO.EDG),
     /// mirroring the engine's `buildEdgeFileName` (basename + ".EDG").

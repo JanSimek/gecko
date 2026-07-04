@@ -42,7 +42,7 @@ std::optional<MapEdge::Rect> MapEdgeReader::tryReadRect() {
     return rect;
 }
 
-std::unique_ptr<MapEdge> MapEdgeReader::read() {
+std::unique_ptr<MapEdge> MapEdgeReader::read() { // Flawfinder: ignore (bounds-checked; see header)
     auto edge = std::make_unique<MapEdge>();
 
     // Header: 'EDGE' magic, version (1 or 2), reserved (0). Big-endian int32 throughout.
