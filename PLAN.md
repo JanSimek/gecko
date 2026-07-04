@@ -76,6 +76,22 @@ live with their library (`src/resource/`, `src/ui/`).
     selected folder as the default writable location, shown with a badge in the list and persisted in
     `Settings`; saves then target that folder regardless of list order. If none is marked, keep the
     current last-folder fallback and hint the user to pick one. DAT archives can't be marked (read-only).
+10. **Warnings/errors are console-only — no in-app log or map-completeness panel.** Map loading now
+    tolerates missing art and logs what it skipped (unresolved `tiles.lst` entries and object sprites,
+    named — see `MapLoader::loadMapResources`), but those records go to the `spdlog` sink (stderr /
+    console) and are invisible to a GUI user: they just see a map that silently renders some tiles or
+    objects blank, with no explanation. Other completeness signals are equally buried — unknown script
+    PIDs, protos that fail to resolve, references out of range, and the `resource missing` view (the
+    tiles/object art a map references but that isn't in the mounted data; see the CLI/MCP
+    resource-inspection tools). **Add a dockable Log / Diagnostics panel:** a custom `spdlog` sink
+    forwards warn/error/info records to a Qt model rendered in a filterable panel (level filter, copy,
+    clear, and jump-to-source where a record carries a hex/object), so load-time warnings surface in
+    the UI instead of the terminal. Pair it with a per-map **completeness summary** computed from the
+    same resolve checks the loader and `resource missing` already run — unresolved tiles (by id +
+    name), missing object sprites, unresolved scripts, plus a mount / data-path sanity line — so a user
+    can see at a glance what is absent and why a map looks incomplete. Unify this with the sslc/int2ssl
+    "output panel" the SSL-editing options call for (one panel, a separate compiler-output category)
+    rather than building two. Editor UX only; changes no map/format data.
 
 ### Generation-side exit placement — current state & smarter follow-up
 
