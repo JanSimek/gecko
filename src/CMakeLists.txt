@@ -280,6 +280,7 @@ add_library(vault STATIC
     format/map/MapScript.h
     format/map/MapObject.h
     format/map/MapObject.cpp
+    format/map/MapEdge.h
     format/map/Tile.h
     format/map/Tile.cpp
 
@@ -326,7 +327,9 @@ add_library(vault STATIC
 
     writer/map/MapWriter.h
     writer/map/MapWriter.cpp
-    
+    writer/map/MapEdgeWriter.h
+    writer/map/MapEdgeWriter.cpp
+
     writer/pro/ProWriter.h
     writer/pro/ProWriter.cpp
 
@@ -355,6 +358,8 @@ add_library(vault STATIC
 
     reader/map/MapReader.h
     reader/map/MapReader.cpp
+    reader/map/MapEdgeReader.h
+    reader/map/MapEdgeReader.cpp
 
     reader/msg/MsgReader.h
     reader/msg/MsgReader.cpp

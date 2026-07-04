@@ -505,7 +505,7 @@ void MainWindow::setupMenuBar() {
         QKeySequence shortcut;
     };
 
-    const std::array<ViewToggleSpec, 10> viewToggleSpecs = { {
+    const std::array<ViewToggleSpec, 11> viewToggleSpecs = { {
         { &_showObjectsAction, ":/icons/actions/view-objects.svg", "Show &Objects", UI::DEFAULT_SHOW_OBJECTS, &MainWindow::showObjectsToggled, {}, {} },
         { &_showCrittersAction, ":/icons/actions/view-critters.svg", "Show &Critters", UI::DEFAULT_SHOW_CRITTERS, &MainWindow::showCrittersToggled, {}, {} },
         { &_showWallsAction, ":/icons/actions/view-walls.svg", "Show &Walls", UI::DEFAULT_SHOW_WALLS, &MainWindow::showWallsToggled, {}, {} },
@@ -516,6 +516,7 @@ void MainWindow::setupMenuBar() {
         { &_showLightOverlaysAction, ":/icons/actions/view-light.svg", "Show &Light Overlays", false, &MainWindow::showLightOverlaysToggled, {}, {} },
         { &_showExitGridsAction, ":/icons/actions/view-exits.svg", "Show &Exit Grids", false, &MainWindow::showExitGridsToggled, "Show exit grid markers", QKeySequence("Ctrl+E") },
         { &_showSpatialScriptsAction, ":/icons/actions/target-arrow.svg", "Show Spatial &Scripts", false, &MainWindow::showSpatialScriptsToggled, "Show spatial-script trigger markers and their radius", {} },
+        { &_showMapEdgesAction, ":/icons/actions/map-edges.svg", "Show Map &Edges", false, &MainWindow::showMapEdgesToggled, "Show the .edg scroll-boundary zones and clip rect", {} },
     } };
 
     for (const ViewToggleSpec& spec : viewToggleSpecs) {
@@ -1034,6 +1035,10 @@ void MainWindow::setupDockWidgets() {
     connect(this, &MainWindow::showSpatialScriptsToggled, this, [this](bool enabled) {
         if (_currentEditorWidget)
             _currentEditorWidget->setShowSpatialScripts(enabled);
+    });
+    connect(this, &MainWindow::showMapEdgesToggled, this, [this](bool enabled) {
+        if (_currentEditorWidget)
+            _currentEditorWidget->setShowMapEdges(enabled);
     });
     connect(this, &MainWindow::elevationChanged, this, [this](int elevation) {
         if (_currentEditorWidget)
@@ -1819,6 +1824,7 @@ void MainWindow::syncMenuStateToEditorWidget() {
     _currentEditorWidget->setShowLightOverlays(_showLightOverlaysAction->isChecked());
     _currentEditorWidget->setShowExitGrids(_showExitGridsAction->isChecked());
     _currentEditorWidget->setShowSpatialScripts(_showSpatialScriptsAction->isChecked());
+    _currentEditorWidget->setShowMapEdges(_showMapEdgesAction->isChecked());
     _currentEditorWidget->setMergeSelectionOutlines(_mergeOutlinesAction->isChecked());
     _currentEditorWidget->setEdgeScrollEnabled(_edgeScrollAction->isChecked());
     updateUndoRedoActions();

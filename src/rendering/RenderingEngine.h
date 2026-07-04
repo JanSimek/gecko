@@ -42,6 +42,7 @@ public:
         bool showLightOverlays = false;
         bool showExitGrids = false;
         bool showSpatialScripts = false;
+        bool showMapEdges = false;
         // Merge touching selected objects of the same category into one union outline (true), or
         // outline every selected object individually so shared edges show too (false).
         bool mergeSelectionOutlines = true;
@@ -105,6 +106,13 @@ public:
         // SID (MapScript::pid) of the spatial script to highlight as selected in the
         // spatial-script overlay, or MapScript::NONE for no selection.
         uint32_t selectedSpatialScriptSid = 0xFFFFFFFFu;
+
+        // Index (into the current elevation's zones) of the map-edge zone to highlight as selected
+        // in the map-edge overlay, or -1 for no selection.
+        int selectedEdgeZone = -1;
+        // While dragging a zone side (0=left,1=top,2=right,3=bottom), that side of the selected zone
+        // is drawn highlighted; -1 when not moving a side.
+        int activeEdgeSide = -1;
 
         // Exit-grid "Draw edge" live preview (MarkExits mode), grouped so RenderData stays small. When
         // `active`: `lineVertices`/`lineCursor` draw the polyline (vertex->vertex, last->cursor);
@@ -245,6 +253,16 @@ private:
      * driven from the map's script list, not renderData.objects.
      */
     void renderSpatialScripts(sf::RenderTarget& target,
+        const sf::View& view,
+        const RenderData& renderData);
+
+    /**
+     * @brief Editor-only "Show map edges" overlay: the `.edg` scroll-boundary zones for the current
+     * elevation (each drawn as a red world-space rectangle from its four hex corners), the selected
+     * zone highlighted amber and a dragged side green, plus the v2 square clip rect with per-side
+     * clip colours. Driven from the Map's loaded MapEdge sidecar, not renderData.objects.
+     */
+    void renderMapEdges(sf::RenderTarget& target,
         const sf::View& view,
         const RenderData& renderData);
 

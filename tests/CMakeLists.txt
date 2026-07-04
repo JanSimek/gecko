@@ -36,6 +36,7 @@ add_executable(general_tests
     general/test_edge_scroll.cpp
     general/test_map_factory.cpp
     general/test_map_roundtrip.cpp
+    general/test_map_edge_roundtrip.cpp
     general/test_undo_stack.cpp
     general/test_object_command_controller.cpp
     general/test_animation_layout.cpp

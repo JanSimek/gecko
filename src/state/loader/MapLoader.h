@@ -37,6 +37,12 @@ private:
     void loadFromFilesystem();
     void loadMapResources();
 
+    /// Loads the map's optional ".EDG" map-edge sidecar (if present) onto `_map`. Never throws
+    /// and never fails the map load — a missing or malformed edge file is silently ignored,
+    /// mirroring the engine's `mapEdgeLoad`. `viaVfs` reads through the resource VFS (mounted
+    /// folders + DATs); otherwise the sibling is read from the map file's own directory on disk.
+    void loadSiblingEdge(bool viaVfs);
+
     std::atomic<bool> done = false;
 
     std::shared_ptr<resource::GameResources> _resources;
