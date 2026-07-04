@@ -580,6 +580,17 @@ bool EditorWidget::writeMapTo(const std::string& destination) {
         if (const auto bytesWritten = saveMapToFile(_resources, _session.map()->getMapFile(), destination);
             bytesWritten.has_value()) {
             spdlog::info("Saved map {} ({} bytes)", destination, *bytesWritten);
+
+            // Preserve the map's ".EDG" map-edge sidecar beside the saved map (if it had one).
+            // A write failure here must not fail the already-saved map, so it is only logged.
+            try {
+                if (const auto edgeBytes = saveMapEdgeBeside(_session.map()->edge(), destination)) {
+                    spdlog::info("Saved map-edge sidecar for {} ({} bytes)", destination, *edgeBytes);
+                }
+            } catch (const std::exception& e) {
+                spdlog::warn("Failed to save map-edge sidecar for {}: {}", destination, e.what());
+            }
+
             // Repoint the map at the saved file so the title reflects the name and the next Save targets it.
             _session.map()->setPath(std::filesystem::path(destination));
             return true;
@@ -1139,6 +1150,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     visibility.showLightOverlays = _session.visibility().showLightOverlays;
     visibility.showExitGrids = _session.visibility().showExitGrids;
     visibility.showSpatialScripts = _session.visibility().showSpatialScripts;
+    visibility.showMapEdges = _session.visibility().showMapEdges;
     visibility.mergeSelectionOutlines = _session.visibility().mergeSelectionOutlines;
 
     RenderingEngine::RenderData renderData;
@@ -1173,6 +1185,8 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.map = _session.map();
     renderData.currentElevation = _session.currentElevation();
     renderData.selectedSpatialScriptSid = _session.selectedSpatialScriptSid();
+    renderData.selectedEdgeZone = _selectedEdgeZone;
+    renderData.activeEdgeSide = _activeEdgeSide;
 
     // Exit-grid "Draw edge" live preview (MarkExits mode).
     renderData.exitGridPreview.active = _exitGridLineActive;

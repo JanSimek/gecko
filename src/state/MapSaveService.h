@@ -29,4 +29,17 @@ std::optional<std::size_t> saveMapToFile(resource::GameResources& resources,
     const Map::MapFile& mapFile,
     const std::filesystem::path& path);
 
+/**
+ * @brief Writes the map's ".EDG" map-edge sidecar beside @p mapPath (ARROYO.MAP → ARROYO.EDG).
+ *
+ * Preserves an edge file loaded alongside a map (fallout2-ce map_edge.cc) across a save/Save-As
+ * so Gecko round-trips the format the CE engine authors and enforces. Mirrors the engine's
+ * `mapEdgeSave`, which writes nothing for a zero-zone edge — so a missing or empty @p edge is a
+ * no-op. Qt-free; propagates FileWriterException on a write failure.
+ *
+ * @return the byte count written, or std::nullopt when nothing was written (no/empty edge).
+ */
+std::optional<std::size_t> saveMapEdgeBeside(const std::optional<MapEdge>& edge,
+    const std::filesystem::path& mapPath);
+
 } // namespace geck

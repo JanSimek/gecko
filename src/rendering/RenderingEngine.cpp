@@ -7,6 +7,7 @@
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
 #include "util/BuiltTile.h"
+#include "rendering/MapEdgeOverlayGeometry.h"
 #include "rendering/ObjectVisibility.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
@@ -15,6 +16,7 @@
 #include "util/Coordinates.h"
 #include "util/TileUtils.h"
 #include "viewport/ViewportController.h"
+#include <array>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -135,6 +137,11 @@ void RenderingEngine::render(sf::RenderTarget& target,
     // Layer 7b: Spatial-script trigger markers + radius (if enabled)
     if (visibility.showSpatialScripts && renderData.map) {
         renderSpatialScripts(target, view, renderData);
+    }
+
+    // Layer 7c: Map-edge (.edg) scroll zones + v2 clip rect (if enabled)
+    if (visibility.showMapEdges && renderData.map) {
+        renderMapEdges(target, view, renderData);
     }
 
     // Layer 8: Hex highlights and markers
@@ -552,6 +559,92 @@ void RenderingEngine::renderSpatialScripts(sf::RenderTarget& target,
         } else {
             _hexRenderer.renderHexOverlay(target, view, *renderData.hexGrid, { centerHex },
                 selected ? selectedFallbackHex : fallbackHex);
+        }
+    }
+}
+
+void RenderingEngine::renderMapEdges(sf::RenderTarget& target,
+    [[maybe_unused]] const sf::View& view,
+    const RenderData& renderData) {
+    const Map* map = renderData.map;
+    if (!map || !renderData.hexGrid || !map->edge().has_value()) {
+        return;
+    }
+
+    const int elevation = renderData.currentElevation;
+    if (elevation < 0 || elevation >= MapEdge::ELEVATION_COUNT) {
+        return;
+    }
+    const MapEdge& edge = *map->edge();
+    const MapEdge::Elevation& data = edge.elevations[elevation];
+
+    const sf::Color zoneColor(230, 70, 70);          // red — the engine's active-rect colour
+    const sf::Color selectedZoneColor(255, 205, 70); // amber — matches the selected spatial script
+    const sf::Color movingSideColor(90, 220, 120);   // green — the side currently being dragged
+
+    // A zone is a world-space axis-aligned rectangle; draw its four sides as a line loop, with the
+    // dragged side of the selected zone overdrawn in green.
+    for (size_t i = 0; i < data.zones.size(); ++i) {
+        const auto box = mapEdgeZoneWorldBounds(*renderData.hexGrid, data.zones[i]);
+        if (!box.has_value()) {
+            continue;
+        }
+        const bool selected = static_cast<int>(i) == renderData.selectedEdgeZone;
+        const float l = box->position.x;
+        const float t = box->position.y;
+        const float r = l + box->size.x;
+        const float b = t + box->size.y;
+
+        const sf::Color color = selected ? selectedZoneColor : zoneColor;
+        const std::array<sf::Vertex, 5> loop{
+            sf::Vertex{ { l, t }, color }, sf::Vertex{ { r, t }, color },
+            sf::Vertex{ { r, b }, color }, sf::Vertex{ { l, b }, color },
+            sf::Vertex{ { l, t }, color }
+        };
+        target.draw(loop.data(), loop.size(), sf::PrimitiveType::LineStrip);
+
+        // Highlight the dragged side (0=left,1=top,2=right,3=bottom) of the selected zone.
+        if (selected && renderData.activeEdgeSide >= 0) {
+            sf::Vector2f a;
+            sf::Vector2f c;
+            switch (renderData.activeEdgeSide) {
+                case 0:
+                    a = { l, t };
+                    c = { l, b };
+                    break; // left
+                case 1:
+                    a = { l, t };
+                    c = { r, t };
+                    break; // top
+                case 2:
+                    a = { r, t };
+                    c = { r, b };
+                    break; // right
+                default:
+                    a = { l, b };
+                    c = { r, b };
+                    break; // bottom
+            }
+            const std::array<sf::Vertex, 2> seg{ sf::Vertex{ a, movingSideColor }, sf::Vertex{ c, movingSideColor } };
+            target.draw(seg.data(), seg.size(), sf::PrimitiveType::Lines);
+        }
+    }
+
+    // v2: the per-elevation square clip rect — one diagonal edge per side, coloured by clip mode.
+    if (edge.isVersion2()) {
+        const sf::Color clipAll(90, 220, 120); // side clips all objects
+        const sf::Color clipLow(220, 200, 90); // side clips low objects only
+        const auto corners = mapEdgeSquareCorners(data.squareRect);
+        // Consecutive corners bound the top/left/bottom/right sides in turn.
+        const bool sideClipsAll[4] = {
+            data.clipSides.top, data.clipSides.left, data.clipSides.bottom, data.clipSides.right
+        };
+        for (int side = 0; side < 4; ++side) {
+            const sf::Color color = sideClipsAll[side] ? clipAll : clipLow;
+            const std::array<sf::Vertex, 2> seg{
+                sf::Vertex{ corners[side], color }, sf::Vertex{ corners[(side + 1) % 4], color }
+            };
+            target.draw(seg.data(), seg.size(), sf::PrimitiveType::Lines);
         }
     }
 }

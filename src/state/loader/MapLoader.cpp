@@ -1,4 +1,7 @@
 #include "MapLoader.h"
+#include <array>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <thread>
 #include <spdlog/spdlog.h>
@@ -8,6 +11,7 @@
 
 #include "reader/ReaderExceptions.h"
 #include "reader/ReaderFactory.h"
+#include "reader/map/MapEdgeReader.h"
 #include "reader/map/MapReader.h"
 
 #include "format/pro/Pro.h"
@@ -103,6 +107,7 @@ void MapLoader::loadFromVFS() {
         _percentDone = 20;
         spdlog::debug("MapLoader: Successfully loaded map from VFS: {}", _mapPath.string());
 
+        loadSiblingEdge(/*viaVfs=*/true);
         loadMapResources();
 
         // Only mark complete if loadMapResources didn't set an error.
@@ -148,6 +153,7 @@ void MapLoader::loadFromFilesystem() {
     _percentDone = 20;
     spdlog::debug("MapLoader: Successfully loaded map from filesystem: {}", _mapPath.string());
 
+    loadSiblingEdge(/*viaVfs=*/false);
     loadMapResources();
 
     // Only mark complete if loadMapResources didn't set an error.
@@ -245,6 +251,47 @@ void MapLoader::loadMapResources() {
         _errorMessage = "Failed to load map file:\n" + _mapPath.string() + "\n\nError: " + e.what();
         _hasError = true;
         done = true;
+    }
+}
+
+void MapLoader::loadSiblingEdge(bool viaVfs) {
+    if (!_map) {
+        return;
+    }
+
+    // The engine writes uppercase ".EDG"; also probe ".edg" for case-sensitive filesystems.
+    std::filesystem::path lowerVariant = _mapPath;
+    lowerVariant.replace_extension(".edg");
+    const std::array<std::filesystem::path, 2> candidates{
+        MapEdgeReader::siblingPath(_mapPath), lowerVariant
+    };
+
+    for (const auto& edgePath : candidates) {
+        std::optional<std::vector<uint8_t>> bytes;
+        if (viaVfs) {
+            bytes = _resources->files().readRawBytes(edgePath);
+        } else {
+            std::error_code ec;
+            if (std::filesystem::exists(edgePath, ec)) {
+                std::ifstream in{ edgePath, std::ios::binary };
+                if (in) {
+                    bytes = std::vector<uint8_t>(std::istreambuf_iterator<char>(in),
+                        std::istreambuf_iterator<char>());
+                }
+            }
+        }
+
+        if (!bytes) {
+            continue;
+        }
+
+        // A sibling exists: parse leniently (nullopt on malformed/empty) and stop probing.
+        if (auto edge = MapEdgeReader::tryParse(edgePath, *bytes)) {
+            spdlog::debug("MapLoader: loaded map-edge sidecar {} ({} zones)",
+                edgePath.string(), edge->totalZones());
+            _map->setEdge(std::move(edge));
+        }
+        return;
     }
 }
 

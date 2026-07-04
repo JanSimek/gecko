@@ -104,6 +104,14 @@ public:
             setSelectedSpatialScript(MapScript::NONE);
         }
     }
+    void setShowMapEdges(bool show) {
+        _session.visibility().showMapEdges = show;
+        // Hiding the overlay drops any zone selection, so Delete can't remove an invisible zone.
+        if (!show) {
+            _selectedEdgeZone = -1;
+            _activeEdgeSide = -1;
+        }
+    }
     void setMergeSelectionOutlines(bool merge) { _session.visibility().mergeSelectionOutlines = merge; }
 
     // Edge scrolling: when enabled, parking the cursor near a viewport edge auto-pans the view that
@@ -524,6 +532,11 @@ private:
     // Edge scrolling: auto-pan when the cursor rests near a viewport edge (see setEdgeScrollEnabled).
     // Default on to match both reference mappers; the View menu / Settings persist the user's choice.
     bool _edgeScrollEnabled = true;
+
+    // Map-edge (.edg) overlay editing state. _selectedEdgeZone indexes the current elevation's zones
+    // (-1 = none); _activeEdgeSide is the side being dragged (0=left,1=top,2=right,3=bottom; -1 = none).
+    int _selectedEdgeZone = -1;
+    int _activeEdgeSide = -1;
 
     // Base positions of the selected floor/roof sprites captured while a region is being dragged, so
     // the live preview can offset them and restore them when the drag ends.

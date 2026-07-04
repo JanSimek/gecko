@@ -8,7 +8,10 @@
 #include <vector>
 #include <array>
 
+#include <optional>
+
 #include "format/IFile.h"
+#include "MapEdge.h"
 #include "MapScript.h"
 #include "Tile.h"
 
@@ -83,6 +86,12 @@ public:
     const MapFile& getMapFile() const;
     void setMapFile(std::unique_ptr<MapFile> newMapFile);
 
+    /// The optional ".EDG" map-edge sidecar loaded beside this map (fallout2-ce map_edge.cc).
+    /// Present only when a non-empty `<name>.EDG` was found at load; carried in memory so it can
+    /// be written back beside the map on save without re-reading from the original location.
+    const std::optional<MapEdge>& edge() const { return _edge; }
+    void setEdge(std::optional<MapEdge> edge) { _edge = std::move(edge); }
+
     /// Builds a blank Fallout 2 map: default header, three empty elevations of
     /// EMPTY_TILE tiles, and no scripts or objects.
     static MapFile createEmptyMapFile();
@@ -92,6 +101,7 @@ public:
 
 private:
     std::unique_ptr<MapFile> mapFile;
+    std::optional<MapEdge> _edge;
 };
 
 } // namespace geck
