@@ -57,6 +57,19 @@ public:
     /// Restores an elevation's squareRect + clip flags to the engine defaults (map_edge.cc:229).
     bool resetSquare(int elevation);
 
+    // --- Live drag support (mutates without recording undo until commit) ---
+
+    /// A copy of the current edge, held by the UI as the "before" state across a drag gesture.
+    std::optional<MapEdge> snapshot() const;
+    /// Sets a zone side to a hex index for live preview, WITHOUT recording undo. Silently ignores bad
+    /// args. Used each mouse-move of a side drag; the gesture is committed once via commitEdit().
+    void previewZoneSide(int elevation, int zoneIndex, Side side, int hexIndex);
+    /// Restores the edge to `before` WITHOUT recording undo (drag cancel).
+    void restore(const std::optional<MapEdge>& before);
+    /// Records the current edge as the result of a gesture that started at `before`, as one undo
+    /// command. Records nothing and returns false if the edge is unchanged.
+    bool commitEdit(const std::string& description, std::optional<MapEdge> before);
+
     // --- Reads ---
 
     const std::optional<MapEdge>& edge() const;

@@ -17,6 +17,23 @@ namespace {
     int clampCoord(int value, int maxInclusive) {
         return value < 0 ? 0 : (value > maxInclusive ? maxInclusive : value);
     }
+
+    void assignRectSide(MapEdge::Rect& rect, EdgeEditService::Side side, int value) {
+        switch (side) {
+            case EdgeEditService::LEFT:
+                rect.left = value;
+                break;
+            case EdgeEditService::TOP:
+                rect.top = value;
+                break;
+            case EdgeEditService::RIGHT:
+                rect.right = value;
+                break;
+            case EdgeEditService::BOTTOM:
+                rect.bottom = value;
+                break;
+        }
+    }
 } // namespace
 
 EdgeEditService::EdgeEditService(std::unique_ptr<Map>& map, UndoBatcher& batcher)
@@ -105,23 +122,37 @@ bool EdgeEditService::setZoneSide(int elevation, int zoneIndex, Side side, int h
         return false;
     }
     std::optional<MapEdge> before = _map->edge();
-    MapEdge::Rect& rect = zones[zoneIndex];
-    switch (side) {
-        case LEFT:
-            rect.left = hexIndex;
-            break;
-        case TOP:
-            rect.top = hexIndex;
-            break;
-        case RIGHT:
-            rect.right = hexIndex;
-            break;
-        case BOTTOM:
-            rect.bottom = hexIndex;
-            break;
-    }
+    assignRectSide(zones[zoneIndex], side, hexIndex);
     _map->setEdge(std::move(working));
     return recordEdgeEdit("Move Edge Side", std::move(before));
+}
+
+std::optional<MapEdge> EdgeEditService::snapshot() const {
+    return _map ? _map->edge() : std::nullopt;
+}
+
+void EdgeEditService::previewZoneSide(int elevation, int zoneIndex, Side side, int hexIndex) {
+    if (!hasEdge() || !validElevation(elevation)) {
+        return;
+    }
+    if (hexIndex < 0 || hexIndex >= HexagonGrid::POSITION_COUNT) {
+        return;
+    }
+    MapEdge working = *_map->edge();
+    auto& zones = working.elevations[elevation].zones;
+    if (zoneIndex < 0 || zoneIndex >= static_cast<int>(zones.size())) {
+        return;
+    }
+    assignRectSide(zones[zoneIndex], side, hexIndex);
+    _map->setEdge(std::move(working)); // live preview: no undo recorded
+}
+
+void EdgeEditService::restore(const std::optional<MapEdge>& before) {
+    applyEdgeSnapshot(before);
+}
+
+bool EdgeEditService::commitEdit(const std::string& description, std::optional<MapEdge> before) {
+    return recordEdgeEdit(description, std::move(before));
 }
 
 bool EdgeEditService::upgradeToVersion2() {

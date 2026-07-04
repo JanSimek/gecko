@@ -204,6 +204,22 @@ int ObjectCommandController::edgeZoneCount(int elevation) const {
     return _edgeService.zoneCount(elevation);
 }
 
+std::optional<MapEdge> ObjectCommandController::edgeSnapshot() const {
+    return _edgeService.snapshot();
+}
+
+void ObjectCommandController::previewEdgeZoneSide(int elevation, int zoneIndex, EdgeEditService::Side side, int hexIndex) {
+    _edgeService.previewZoneSide(elevation, zoneIndex, side, hexIndex);
+}
+
+void ObjectCommandController::restoreEdge(const std::optional<MapEdge>& before) {
+    _edgeService.restore(before);
+}
+
+bool ObjectCommandController::commitEdgeEdit(const std::string& description, std::optional<MapEdge> before) {
+    return _edgeService.commitEdit(description, std::move(before));
+}
+
 bool ObjectCommandController::pushCommand(UndoCommand cmd) {
     return _batcher.push(std::move(cmd));
 }

@@ -489,6 +489,94 @@ bool EditorWidget::trySelectEdgeZoneAt(sf::Vector2f worldPos) {
     return true;
 }
 
+std::optional<std::pair<int, int>> EditorWidget::edgeSideAtForDrag(sf::Vector2f worldPos) const {
+    if (!_session.visibility().showMapEdges || !_session.map() || !_session.map()->edge().has_value()) {
+        return std::nullopt;
+    }
+    const int elevation = _session.currentElevation();
+    if (elevation < 0 || elevation >= MapEdge::ELEVATION_COUNT) {
+        return std::nullopt;
+    }
+    const auto& zones = _session.map()->edge()->elevations[elevation].zones;
+
+    constexpr float kGrabTolerance = 12.f;
+    int bestZone = -1;
+    int bestSide = -1;
+    float bestDistance = kGrabTolerance;
+    for (int i = 0; i < static_cast<int>(zones.size()); ++i) {
+        const auto box = mapEdgeZoneWorldBounds(_session.hexgrid(), zones[i]);
+        if (!box.has_value()) {
+            continue;
+        }
+        const auto sideDistances = mapEdgeSideDistances(worldPos, *box);
+        for (int side = 0; side < 4; ++side) {
+            if (sideDistances[side] <= bestDistance) {
+                bestDistance = sideDistances[side];
+                bestZone = i;
+                bestSide = side;
+            }
+        }
+    }
+    if (bestZone < 0) {
+        return std::nullopt;
+    }
+    return std::make_pair(bestZone, bestSide);
+}
+
+bool EditorWidget::beginEdgeSideDrag(sf::Vector2f worldPos) {
+    const auto hit = edgeSideAtForDrag(worldPos);
+    if (!hit.has_value()) {
+        return false;
+    }
+    _session.selectionManager()->clearSelection(); // exclusive with objects/tiles/scripts
+    setSelectedSpatialScript(MapScript::NONE);
+    _selectedEdgeZone = hit->first;
+    _edgeDragSide = hit->second;
+    _activeEdgeSide = hit->second; // draw the grabbed side highlighted while dragging
+    _draggingEdgeSide = true;
+    _edgeDragBefore = _controller.commandController().edgeSnapshot();
+    Q_EMIT mapEdgeChanged();
+    return true;
+}
+
+void EditorWidget::previewEdgeSideDrag(sf::Vector2f worldPos) {
+    if (!_draggingEdgeSide) {
+        return;
+    }
+    const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
+    if (hex < 0) {
+        return; // cursor off-grid: keep the last previewed position
+    }
+    _controller.commandController().previewEdgeZoneSide(_session.currentElevation(), _selectedEdgeZone,
+        static_cast<EdgeEditService::Side>(_edgeDragSide), hex);
+}
+
+void EditorWidget::commitEdgeSideDrag(sf::Vector2f worldPos) {
+    if (!_draggingEdgeSide) {
+        return;
+    }
+    previewEdgeSideDrag(worldPos); // apply the final cursor position
+    // Record the whole gesture (drag start -> release) as a single undo entry.
+    _controller.commandController().commitEdgeEdit("Move Edge Side", _edgeDragBefore);
+    _draggingEdgeSide = false;
+    _edgeDragSide = -1;
+    _activeEdgeSide = -1;
+    _edgeDragBefore.reset();
+    Q_EMIT mapEdgeChanged();
+}
+
+void EditorWidget::cancelEdgeSideDrag() {
+    if (!_draggingEdgeSide) {
+        return;
+    }
+    _controller.commandController().restoreEdge(_edgeDragBefore); // discard the live preview
+    _draggingEdgeSide = false;
+    _edgeDragSide = -1;
+    _activeEdgeSide = -1;
+    _edgeDragBefore.reset();
+    Q_EMIT mapEdgeChanged();
+}
+
 EditorWidget::~EditorWidget() {
 }
 
@@ -975,26 +1063,45 @@ void EditorWidget::bindInteractionCallbacks(InputHandler::Callbacks& callbacks) 
     };
 
     callbacks.canStartObjectDrag = [this](sf::Vector2f worldPos) {
+        // A grabbable map-edge side takes priority over object dragging (both use this gesture).
+        if (edgeSideAtForDrag(worldPos).has_value()) {
+            return true;
+        }
         return _dragDropManager ? _dragDropManager->canStartObjectDrag(worldPos) : false;
     };
 
     callbacks.onObjectDragStart = [this](sf::Vector2f worldPos) {
+        if (beginEdgeSideDrag(worldPos)) {
+            return true;
+        }
         return _dragDropManager ? _dragDropManager->startObjectDrag(worldPos) : false;
     };
 
     callbacks.onObjectDragUpdate = [this](sf::Vector2f worldPos) {
+        if (_draggingEdgeSide) {
+            previewEdgeSideDrag(worldPos);
+            return;
+        }
         if (_dragDropManager) {
             _dragDropManager->updateObjectDrag(worldPos);
         }
     };
 
     callbacks.onObjectDragEnd = [this](sf::Vector2f worldPos) {
+        if (_draggingEdgeSide) {
+            commitEdgeSideDrag(worldPos);
+            return;
+        }
         if (_dragDropManager) {
             _dragDropManager->finishObjectDrag(worldPos);
         }
     };
 
     callbacks.onObjectDragCancel = [this]() {
+        if (_draggingEdgeSide) {
+            cancelEdgeSideDrag();
+            return;
+        }
         if (_dragDropManager) {
             _dragDropManager->cancelObjectDrag();
         }

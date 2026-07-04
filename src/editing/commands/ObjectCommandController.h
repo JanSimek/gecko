@@ -166,6 +166,12 @@ public:
     /// The current map-edge model (may be empty), for reading zone geometry to render/hit-test.
     const std::optional<MapEdge>& mapEdge() const;
     int edgeZoneCount(int elevation) const;
+    // Live side-drag: snapshot the edge at drag start, previewZoneSide each move (no undo), then either
+    // commitEdgeEdit (records the whole gesture as one undo) or restoreEdge (cancel).
+    std::optional<MapEdge> edgeSnapshot() const;
+    void previewEdgeZoneSide(int elevation, int zoneIndex, EdgeEditService::Side side, int hexIndex);
+    void restoreEdge(const std::optional<MapEdge>& before);
+    bool commitEdgeEdit(const std::string& description, std::optional<MapEdge> before);
 
 private:
     resource::GameResources& _resources;

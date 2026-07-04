@@ -81,6 +81,53 @@ TEST_CASE("EdgeEditService::deleteZone removes the right zone and is undoable", 
     CHECK(f.svc.edge()->elevations[0].zones[0] == EdgeFixture::seed());
 }
 
+TEST_CASE("EdgeEditService live side drag previews without undo, commits once", "[edge_edit]") {
+    EdgeFixture f;
+    f.svc.addZone(0, EdgeFixture::seed()); // undo entry #1 (creates the edge)
+
+    // Drag start: snapshot the edge, then preview several mouse-moves (no undo recorded per move).
+    const std::optional<MapEdge> before = f.svc.snapshot();
+    f.svc.previewZoneSide(0, 0, EdgeEditService::LEFT, 500);
+    f.svc.previewZoneSide(0, 0, EdgeEditService::LEFT, 800);
+    f.svc.previewZoneSide(0, 0, EdgeEditService::LEFT, 1200);
+    CHECK(f.svc.edge()->elevations[0].zones[0].left == 1200);
+
+    // Release: commit the whole gesture as a single undo entry (#2).
+    CHECK(f.svc.commitEdit("Move Edge Side", before));
+
+    REQUIRE(f.stack.undo()); // one undo reverts the entire drag, not just the last move
+    CHECK(f.svc.edge()->elevations[0].zones[0].left == EdgeFixture::seed().left);
+    REQUIRE(f.stack.redo());
+    CHECK(f.svc.edge()->elevations[0].zones[0].left == 1200);
+
+    // Exactly two commands were ever recorded (drag + add): the previews added none. Two undos empty
+    // the stack.
+    REQUIRE(f.stack.undo()); // undo the drag
+    REQUIRE(f.stack.undo()); // undo the add
+    CHECK_FALSE(f.svc.hasEdge());
+    CHECK_FALSE(f.stack.canUndo());
+}
+
+TEST_CASE("EdgeEditService restore discards a preview without recording", "[edge_edit]") {
+    EdgeFixture f;
+    f.svc.addZone(0, EdgeFixture::seed()); // the only undo entry
+
+    const std::optional<MapEdge> before = f.svc.snapshot();
+    f.svc.previewZoneSide(0, 0, EdgeEditService::TOP, 777);
+    CHECK(f.svc.edge()->elevations[0].zones[0].top == 777);
+
+    f.svc.restore(before); // drag cancel
+    CHECK(f.svc.edge()->elevations[0].zones[0].top == EdgeFixture::seed().top);
+
+    // An unchanged commit (no net move) records nothing.
+    CHECK_FALSE(f.svc.commitEdit("Move Edge Side", before));
+
+    // Only the add is on the stack: neither restore nor the no-op commit recorded anything.
+    REQUIRE(f.stack.undo());
+    CHECK_FALSE(f.svc.hasEdge());
+    CHECK_FALSE(f.stack.canUndo());
+}
+
 TEST_CASE("EdgeEditService v2 upgrade, clip, square and reset are undoable", "[edge_edit]") {
     EdgeFixture f;
     f.svc.addZone(0, EdgeFixture::seed()); // creates the edge as v1

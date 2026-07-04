@@ -429,6 +429,16 @@ private:
     // selection. A miss clears the edge selection and returns false.
     bool trySelectEdgeZoneAt(sf::Vector2f worldPos);
 
+    // Edge side-drag, layered onto the existing object-drag gesture. edgeSideAtForDrag returns the
+    // {zone, side} whose side lies within grab range of worldPos (nullopt if none). begin selects that
+    // zone and snapshots the edge; preview moves the side live (no undo); commit records the whole
+    // gesture as one undo entry; cancel restores the snapshot.
+    std::optional<std::pair<int, int>> edgeSideAtForDrag(sf::Vector2f worldPos) const;
+    bool beginEdgeSideDrag(sf::Vector2f worldPos);
+    void previewEdgeSideDrag(sf::Vector2f worldPos);
+    void commitEdgeSideDrag(sf::Vector2f worldPos);
+    void cancelEdgeSideDrag();
+
     // Handles a click in SetPlayerPosition mode: routes to an armed beginHexPick callback (one-shot)
     // or, failing that, emits playerPositionSelected (legacy player-start pick).
     void handlePositionPickClick(sf::Vector2f worldPos);
@@ -558,6 +568,11 @@ private:
     // (-1 = none); _activeEdgeSide is the side being dragged (0=left,1=top,2=right,3=bottom; -1 = none).
     int _selectedEdgeZone = -1;
     int _activeEdgeSide = -1;
+    // Live side-drag state: while _draggingEdgeSide, mouse moves preview _edgeDragSide of the selected
+    // zone; _edgeDragBefore is the pre-drag edge snapshot, committed as one undo entry on release.
+    bool _draggingEdgeSide = false;
+    int _edgeDragSide = -1;
+    std::optional<MapEdge> _edgeDragBefore;
 
     // Base positions of the selected floor/roof sprites captured while a region is being dragged, so
     // the live preview can offset them and restore them when the drag ends.
