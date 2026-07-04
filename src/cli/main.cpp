@@ -13,6 +13,7 @@
 #include "cli/MapRender.h"
 #include "cli/MapReachability.h"
 #include "cli/PatternExtract.h"
+#include "cli/ResourceInspect.h"
 #include "cli/ScriptIntrospect.h"
 #include "resource/GameResources.h"
 
@@ -133,6 +134,15 @@ void printUsage(const char* program) {
               << "      Decode a FID (0x.. hex or decimal) to JSON {fid, type, index, artPath}.\n"
               << "  " << program << " frm list <glob> --data <dir-or-.dat> [--data <...>]\n"
               << "      Art entries whose name matches <glob> (e.g. ext2grd*), each {name, artPath, fid}.\n"
+              << "  " << program << " resource find <path> --data <dir-or-.dat> [--data <...>]\n"
+              << "      Locate a VFS path (e.g. art/tiles/gras030.frm) in the mounted data: JSON\n"
+              << "      {path, found, source:{kind,path,label}} — which .dat/dir provides it, or found=false.\n"
+              << "  " << program << " resource list <glob> --data <dir-or-.dat> [--data <...>]\n"
+              << "      Mounted entries matching <glob> ('*'/'?', e.g. art/tiles/gras*), each tagged with its\n"
+              << "      source. Browse a DAT/data set without extracting (result is capped; 'truncated' flags it).\n"
+              << "  " << program << " resource missing <map> --data <dir-or-.dat> [--data <...>]\n"
+              << "      Art a map references but that does NOT resolve in the mounted data: missing tiles\n"
+              << "      (by tiles.lst id) and object art (by FID). Diagnoses 'why won't this map load fully'.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
@@ -673,6 +683,84 @@ int runFrmCommand(const std::vector<std::string>& args, const char* program) {
     return dispatchFrm(resources, fa);
 }
 
+// --- resource subcommand ----------------------------------------------------------------------
+// The `resource` family (find/list/missing) inspects the mounted data itself — which source
+// provides a path, what matches a glob, what a map references but can't resolve. Self-contained
+// like `frm`: one positional (path / glob / map) plus its own --data list.
+struct ResourceArgs {
+    std::string action; // find | list | missing
+    std::string target; // path / glob / map
+    std::vector<std::string> dataPaths;
+};
+
+bool isResourceAction(const std::string& action) {
+    return action == "find" || action == "list" || action == "missing";
+}
+
+// Parse the tokens after `resource <action>` into `out`. Returns false (after printing why) on a
+// bad flag or a second positional.
+bool parseResourceArgs(const std::vector<std::string>& args, const char* program, ResourceArgs& out) {
+    for (std::size_t i = 2; i < args.size();) {
+        const std::string& arg = args[i];
+        if (arg == "--data") {
+            if (i + 1 >= args.size()) {
+                std::cerr << "error: --data needs a value\n";
+                printUsage(program);
+                return false;
+            }
+            out.dataPaths.push_back(args[i + 1]);
+            i += 2;
+        } else if (arg.rfind("--", 0) == 0) {
+            std::cerr << "error: unexpected argument: " << arg << "\n";
+            printUsage(program);
+            return false;
+        } else if (out.target.empty()) {
+            out.target = arg;
+            ++i;
+        } else {
+            std::cerr << "error: resource " << out.action << " takes one positional argument: " << arg << "\n";
+            printUsage(program);
+            return false;
+        }
+    }
+    return true;
+}
+
+int dispatchResource(geck::resource::GameResources& resources, const ResourceArgs& ra) {
+    if (ra.action == "find") {
+        return geck::cli::resourceFind(resources, ra.target, std::cout);
+    }
+    if (ra.action == "list") {
+        return geck::cli::resourceList(resources, ra.target, std::cout);
+    }
+    return geck::cli::resourceMissing(resources, ra.target, std::cout);
+}
+
+// Run a `resource ...` command end to end (parse, validate, mount, dispatch). Returns the exit code.
+int runResourceCommand(const std::vector<std::string>& args, const char* program) {
+    ResourceArgs ra;
+    ra.action = args[1];
+    if (!parseResourceArgs(args, program, ra)) {
+        return 2;
+    }
+    if (ra.target.empty()) {
+        const char* what = ra.action == "find" ? "<path>" : (ra.action == "list" ? "<glob>" : "<map>");
+        std::cerr << "error: resource " << ra.action << " requires a " << what << " argument\n";
+        printUsage(program);
+        return 2;
+    }
+    if (ra.dataPaths.empty()) {
+        std::cerr << "error: at least one --data <path> is required\n";
+        printUsage(program);
+        return 2;
+    }
+
+    spdlog::set_level(spdlog::level::off);
+    geck::resource::GameResources resources;
+    mountData(resources, ra.dataPaths, program);
+    return dispatchResource(resources, ra);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -682,6 +770,11 @@ int main(int argc, char** argv) {
     // the `map` subcommands below.
     if (args.size() >= 2 && args[0] == "frm" && isFrmAction(args[1])) {
         return runFrmCommand(args, argv[0]);
+    }
+
+    // The `resource` family (data-inspection) is likewise parsed and run on its own path.
+    if (args.size() >= 2 && args[0] == "resource" && isResourceAction(args[1])) {
+        return runResourceCommand(args, argv[0]);
     }
 
     CliArgs cli;

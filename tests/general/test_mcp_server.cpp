@@ -34,7 +34,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "find_gvar", "generate", "render_map", "extract_pattern", "script_api", "frm_info", "resolve_fid", "list_frms", "render_frm" }) {
+        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "find_gvar", "generate", "render_map", "extract_pattern", "script_api", "frm_info", "resolve_fid", "list_frms", "render_frm", "resource_find", "resource_list", "resource_missing" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }
@@ -71,6 +71,21 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     SECTION("proto_info without a pid is a tool error") {
         const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 7 }, { "method", "tools/call" },
             { "params", { { "name", "proto_info" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == true);
+    }
+
+    SECTION("resource_find with no data mounted reports found=false, not an error") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 15 }, { "method", "tools/call" },
+            { "params", { { "name", "resource_find" }, { "arguments", { { "path", "art/tiles/gras030.frm" } } } } } });
+        CHECK(resp["result"]["isError"] == false);
+        const json payload = json::parse(resp["result"]["content"][0]["text"].get<std::string>());
+        CHECK(payload["found"] == false);
+        CHECK(payload["source"].is_null());
+    }
+
+    SECTION("resource_find without a path is a tool error") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 16 }, { "method", "tools/call" },
+            { "params", { { "name", "resource_find" }, { "arguments", json::object() } } } });
         CHECK(resp["result"]["isError"] == true);
     }
 

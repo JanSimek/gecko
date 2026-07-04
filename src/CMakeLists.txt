@@ -636,6 +636,8 @@ if(GECK_BUILD_CLI)
         cli/MapRender.cpp
         cli/FrmInspect.h
         cli/FrmInspect.cpp
+        cli/ResourceInspect.h
+        cli/ResourceInspect.cpp
         cli/PatternJson.h
         cli/PatternJson.cpp
         cli/PatternExtract.h
