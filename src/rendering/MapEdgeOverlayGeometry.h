@@ -51,6 +51,52 @@ inline std::optional<sf::FloatRect> mapEdgeZoneWorldBounds(const HexagonGrid& gr
     return sf::FloatRect({ minX, minY }, { maxX - minX, maxY - minY });
 }
 
+/// The zone `tileRect` covering the whole hex grid — the seed the engine's mapper uses for a newly
+/// added zone (fallout2-ce map_edge_setup.cc `fullGridTileRect`). Corners are the grid's four extreme
+/// hex indices; `left`/`right` take the hexes with the max/min world X (X is stored inverted, matching
+/// the engine), `top`/`bottom` the min/max world Y. Any corner that is off-grid is skipped.
+inline MapEdge::Rect mapEdgeFullGridZone(const HexagonGrid& grid) {
+    const std::array<int, 4> corners{
+        0,
+        HexagonGrid::GRID_WIDTH - 1,
+        (HexagonGrid::GRID_HEIGHT - 1) * HexagonGrid::GRID_WIDTH,
+        HexagonGrid::POSITION_COUNT - 1,
+    };
+
+    MapEdge::Rect rect{ corners[0], corners[0], corners[0], corners[0] };
+    float maxX = 0.f;
+    float minX = 0.f;
+    float minY = 0.f;
+    float maxY = 0.f;
+    bool init = false;
+    for (int corner : corners) {
+        const auto hex = grid.getHexByPosition(static_cast<uint32_t>(corner));
+        if (!hex.has_value()) {
+            continue;
+        }
+        const float x = static_cast<float>(hex->get().x());
+        const float y = static_cast<float>(hex->get().y());
+        if (!init || x > maxX) {
+            maxX = x;
+            rect.left = corner; // X inverted: left holds the larger world X
+        }
+        if (!init || x < minX) {
+            minX = x;
+            rect.right = corner;
+        }
+        if (!init || y < minY) {
+            minY = y;
+            rect.top = corner;
+        }
+        if (!init || y > maxY) {
+            maxY = y;
+            rect.bottom = corner;
+        }
+        init = true;
+    }
+    return rect;
+}
+
 /// World-space centre of a square-grid cell `(col, row)` in the 100x100 floor grid.
 inline sf::Vector2f mapEdgeSquareCellCentre(int col, int row) {
     const int index = row * static_cast<int>(MAP_WIDTH) + col;

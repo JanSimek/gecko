@@ -571,6 +571,8 @@ add_library(gecko_editing STATIC
     editing/commands/InventoryEditService.cpp
     editing/commands/ScriptEditService.h
     editing/commands/ScriptEditService.cpp
+    editing/commands/EdgeEditService.h
+    editing/commands/EdgeEditService.cpp
     editing/commands/MapEditService.h
     editing/commands/MapEditService.cpp
     editing/commands/ObjectEditService.h
