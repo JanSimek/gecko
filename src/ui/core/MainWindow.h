@@ -48,6 +48,8 @@ class ObjectPalettePanel;
 class FileBrowserPanel;
 class ScriptConsoleWidget;
 class SpatialScriptDialog;
+class LogPanel;
+class LogModel;
 class Map;
 
 class MainWindow : public QMainWindow {
@@ -87,6 +89,10 @@ public:
     void raiseTilePalette();
 
     resource::GameResources& resources() const { return *_resourcesShared; }
+
+    // Attach the application-wide log record store to the Log panel (the model outlives this
+    // window; the in-app spdlog sink feeds it from application startup on).
+    void setLogModel(LogModel* model);
 
 signals:
     void newMapRequested();
@@ -271,6 +277,8 @@ private:
     QDockWidget* _scriptConsoleDock = nullptr;
     ScriptConsoleWidget* _scriptConsole = nullptr;
 #endif
+    QDockWidget* _logDock = nullptr;
+    LogPanel* _logPanel = nullptr;
     // Guards the persisted dock layout while docks are re-laid-out programmatically (hidden for the
     // welcome screen, re-shown for a map), so those transient changes aren't written back as if the
     // user made them.

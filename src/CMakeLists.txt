@@ -79,6 +79,16 @@ set(GECK_APP_SOURCES
     ui/panels/SelectionPanel.cpp
     ui/panels/FileBrowserPanel.h
     ui/panels/FileBrowserPanel.cpp
+    ui/panels/LogPanel.h
+    ui/panels/LogPanel.cpp
+
+    # In-app log capture (spdlog sink -> Qt model shown by LogPanel)
+    ui/logging/LogModel.h
+    ui/logging/LogModel.cpp
+    ui/logging/LogModelSink.h
+    ui/logging/LogModelSink.cpp
+    ui/logging/LogFilterProxy.h
+    ui/logging/LogFilterProxy.cpp
 
     # Qt6 UI Dialogs
     ui/dialogs/FrmSelectorDialog.h

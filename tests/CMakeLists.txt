@@ -107,6 +107,8 @@ add_executable(qt_tests
     qt/test_input_handler.cpp
     # hintForContext is the pure status-bar key-hint provider (lives in gecko_app).
     qt/test_editor_hints.cpp
+    # Log panel plumbing: the LogModel store (cap, threading), the spdlog sink, the filter proxy.
+    qt/test_log_panel.cpp
 )
 
 # Round-trip the headless pattern writer (gecko_cli) through the editor's Qt PatternSerializer.
