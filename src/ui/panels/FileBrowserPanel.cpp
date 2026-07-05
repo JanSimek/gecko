@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QHeaderView>
+#include <QPointer>
 #include <QSplitter>
 #include <QGroupBox>
 #include <QScrollBar>
@@ -406,6 +407,7 @@ void FileBrowserPanel::loadFiles() {
     }
 
     _isLoading = true;
+    ++_populationEpoch;
     _allFiles.clear();
     _fileTypes.clear();
     _pendingFiles.clear();
@@ -446,6 +448,7 @@ void FileBrowserPanel::stopLoading() {
     spdlog::debug("FileBrowserPanel: Stopping loading operations...");
 
     _isLoading = false;
+    ++_populationEpoch; // any in-flight chunk resuming from processEvents must not continue
 
     if (_loaderWorker) {
         _loaderWorker->_shouldStop.store(true);
@@ -789,6 +792,7 @@ void FileBrowserPanel::buildFileTreeProgressive(const std::vector<std::string>& 
 }
 
 void FileBrowserPanel::startProgressiveTreeBuild(const std::vector<std::string>& filteredFiles) {
+    ++_populationEpoch;
     _pendingFiles = filteredFiles;
     _currentChunkIndex = 0;
 
@@ -825,10 +829,19 @@ void FileBrowserPanel::processNextChunk() {
     FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
     const auto nativeDirectories = _nativeDirectoriesForSources.empty() ? getNativeDirectoryPaths() : _nativeDirectoriesForSources;
 
+    // processEvents below hands control to arbitrary code: a settings change can replace this
+    // panel (it is deleteLater'd but we are still on its stack) or restart/stop the population
+    // (invalidating rootItem and _pendingFiles). Guard both before touching any member again.
+    const QPointer<FileBrowserPanel> alive(this);
+    const int epoch = _populationEpoch;
+
     size_t endIndex = std::min(_currentChunkIndex + CHUNK_SIZE, _pendingFiles.size());
     for (size_t i = _currentChunkIndex; i < endIndex; ++i) {
         if ((i - _currentChunkIndex) % 10 == 0) {
             QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
+            if (!alive || alive->_populationEpoch != epoch) {
+                return;
+            }
         }
 
         insertFileRow(rootItem, _pendingFiles[i], nativeDirectories);

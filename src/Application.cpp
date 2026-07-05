@@ -229,6 +229,11 @@ void Application::loadDataPaths() {
         return;
     }
 
+    // The editor's own assets (blank tile, overlay art, ...) live in the bundled resources
+    // folder, not in the game data — keep it mounted (lowest priority) regardless of how the
+    // user configured the data paths, or every map load fails on art/tiles/blank.frm.
+    util::ensureFallbackDataPath(dataPaths, getResourcesPath());
+
     spdlog::info("Loading {} data paths with progress dialog", dataPaths.size());
 
     // Load game data even without a map: GameResources, the file browser, and new-map

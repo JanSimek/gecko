@@ -235,6 +235,10 @@ private:
     // Progressive building state
     std::vector<std::string> _pendingFiles;
     size_t _currentChunkIndex = 0;
+    // Bumped whenever a population (re)starts or stops. processNextChunk pumps the event loop
+    // mid-chunk, so anything can happen underneath it — a restarted build (stale rootItem and
+    // _pendingFiles) or a stopLoading(). A chunk that resumes into a different epoch must bail.
+    int _populationEpoch = 0;
     QTimer* _chunkTimer = nullptr;
     QTimer* _searchTimer = nullptr;
     bool _isLoading = false;

@@ -1,7 +1,9 @@
 #define QT_NO_EMIT
 #include "MainWindow.h"
+#include "Application.h"
 #include "EditorWidget.h"
 #include "format/map/MapScript.h"
+#include "util/GameDataPathResolver.h"
 #include "ui/core/EditorHints.h"
 #include "ui/widgets/LoadingWidget.h"
 #include "ui/widgets/WelcomeWidget.h"
@@ -1132,7 +1134,10 @@ void MainWindow::replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSize
     if (QWidget* oldWidget = dock->widget()) {
         oldWidget->hide();
         oldWidget->setParent(nullptr);
-        delete oldWidget;
+        // deleteLater, not delete: the old panel may still be on the call stack (FileBrowserPanel's
+        // chunked tree build pumps the event loop mid-chunk); a synchronous delete here would free
+        // an object that resumes executing when the loop unwinds.
+        oldWidget->deleteLater();
     }
 
     dock->setWidget(panel);
@@ -1173,7 +1178,11 @@ void MainWindow::rebuildGameResourcesFromSettings() {
         return;
     }
 
-    const auto dataPaths = _settings->getDataPaths();
+    auto dataPaths = _settings->getDataPaths();
+    // Same fallback as Application::loadDataPaths: the editor's bundled resources (blank tile,
+    // overlay art, ...) must survive any data-path reconfiguration, or every subsequent map load
+    // fails on editor-essential art the game data does not ship.
+    util::ensureFallbackDataPath(dataPaths, Application::getResourcesPath());
 
     if (hasActiveMap()) {
         closeCurrentMap();
