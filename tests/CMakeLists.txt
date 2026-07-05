@@ -109,6 +109,8 @@ add_executable(qt_tests
     qt/test_editor_hints.cpp
     # Log panel plumbing: the LogModel store (cap, threading), the spdlog sink, the filter proxy.
     qt/test_log_panel.cpp
+    # File browser population: worker-computed metadata -> chunked tree build.
+    qt/test_file_browser_population.cpp
 )
 
 # Round-trip the headless pattern writer (gecko_cli) through the editor's Qt PatternSerializer.

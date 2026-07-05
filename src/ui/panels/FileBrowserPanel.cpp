@@ -89,9 +89,73 @@ bool FileBrowserProxyModel::lessThan(const QModelIndex& left, const QModelIndex&
     return QSortFilterProxyModel::lessThan(left, right);
 }
 
+namespace {
+
+    // Display path relative to the native mount that contains it (VFS paths may carry the
+    // mount prefix and doubled leading slashes); falls back to stripping leading slashes.
+    QString normalizeForDisplay(const QString& fullPath, const std::vector<std::filesystem::path>& nativeDirectories) {
+        std::string fullPathStr = fullPath.toStdString();
+
+        for (const auto& nativeDir : nativeDirectories) {
+            std::string nativeDirStr = nativeDir.string();
+
+            if (!nativeDirStr.empty() && nativeDirStr.back() != '/') {
+                nativeDirStr += '/';
+            }
+
+            size_t pos = fullPathStr.find(nativeDirStr);
+            if (pos != std::string::npos) {
+                std::string relativePath = fullPathStr.substr(pos + nativeDirStr.length());
+                return QString::fromStdString(relativePath);
+            }
+        }
+
+        QString result = fullPath;
+        while (result.startsWith('/')) {
+            result = result.mid(1);
+        }
+
+        return result;
+    }
+
+} // namespace
+
 FileLoaderWorker::FileLoaderWorker(std::shared_ptr<resource::GameResources> resources, QObject* parent)
     : QObject(parent)
     , _resources(std::move(resources)) {
+}
+
+QString FileLoaderWorker::resolveProName(const std::string& vfsPath) const {
+    try {
+        std::string path = vfsPath;
+        if (!path.empty() && path.front() == '/') {
+            path = path.substr(1);
+        }
+
+        const auto* pro = _resources->repository().load<Pro>(path);
+        if (!pro) {
+            return QStringLiteral("Failed to load");
+        }
+
+        const auto* msgFile = ProHelper::msgFile(*_resources, pro->type());
+        if (!msgFile) {
+            return QStringLiteral("MSG not found");
+        }
+
+        // Read via getMessages().find(): Msg::message() is a map operator[] that INSERTS a
+        // blank entry on a missing id, mutating the shared cached Msg — unacceptable from a
+        // worker thread (and a silent leak on the UI thread too).
+        const auto messageId = static_cast<int>(pro->header.message_id);
+        const auto& messages = msgFile->getMessages();
+        const auto it = messages.find(messageId);
+        if (it == messages.end() || it->second.text.empty()) {
+            return QStringLiteral("No name (ID: %1)").arg(messageId);
+        }
+        return QString::fromStdString(it->second.text);
+    } catch (const std::exception& e) {
+        spdlog::debug("FileLoaderWorker: failed to resolve PRO name for '{}': {}", vfsPath, e.what());
+        return QStringLiteral("Error: %1").arg(e.what());
+    }
 }
 
 void FileLoaderWorker::loadFiles() {
@@ -122,6 +186,8 @@ void FileLoaderWorker::loadFiles() {
         }
 
         std::unordered_set<std::string> fileTypes;
+        std::vector<FileBrowserEntry> entries;
+        entries.reserve(allFiles.size());
         int processed = 0;
         const int totalFiles = static_cast<int>(allFiles.size());
 
@@ -130,25 +196,40 @@ void FileLoaderWorker::loadFiles() {
                 return;
             }
 
-            QString qFile = QString::fromStdString(file);
-            QFileInfo fileInfo(qFile);
-            QString suffix = fileInfo.suffix().toLower();
+            FileBrowserEntry entry;
+            entry.path = QString::fromStdString(file);
+            entry.normalizedPath = normalizeForDisplay(entry.path, _nativeDirectories);
+
+            QString suffix = QFileInfo(entry.path).suffix().toLower();
             if (!suffix.isEmpty()) {
-                fileTypes.insert(("." + suffix).toStdString());
+                entry.extension = "." + suffix;
+                fileTypes.insert(entry.extension.toStdString());
             }
+
+            if (auto source = _resources->files().sourceInfo(file)) {
+                entry.source = QString::fromStdString(source->displayLabel);
+            } else {
+                entry.source = QStringLiteral("Unknown");
+            }
+
+            if (entry.extension == QLatin1String(".pro")) {
+                entry.proName = resolveProName(file);
+            }
+
+            entries.push_back(std::move(entry));
 
             if (++processed % 1000 == 0) {
                 int progressPercent = 50 + (processed * 50) / totalFiles;
                 Q_EMIT loadingProgress(progressPercent, 100,
-                    QString("Processing files... %1/%2").arg(processed).arg(totalFiles));
+                    QString("Indexing files... %1/%2").arg(processed).arg(totalFiles));
             }
         }
 
         Q_EMIT loadingProgress(100, 100, "File loading completed");
         spdlog::debug("FileLoaderWorker: Emitting fileTypesExtracted with {} types", fileTypes.size());
         Q_EMIT fileTypesExtracted(fileTypes);
-        spdlog::debug("FileLoaderWorker: Emitting filesLoaded with {} files", allFiles.size());
-        Q_EMIT filesLoaded(allFiles);
+        spdlog::debug("FileLoaderWorker: Emitting filesLoaded with {} entries", entries.size());
+        Q_EMIT filesLoaded(entries);
 
         spdlog::debug("FileLoaderWorker: Loaded {} files with {} file types",
             allFiles.size(), fileTypes.size());
@@ -407,11 +488,10 @@ void FileBrowserPanel::loadFiles() {
 
     _isLoading = true;
     ++_populationEpoch;
-    _allFiles.clear();
+    _allEntries.clear();
     _fileTypes.clear();
-    _pendingFiles.clear();
+    _pendingEntries.clear();
     _currentChunkIndex = 0;
-    _nativeDirectoriesForSources = getNativeDirectoryPaths();
 
     _savedExpandedPaths = saveExpandedPaths();
 
@@ -428,6 +508,7 @@ void FileBrowserPanel::loadFiles() {
 
     _loaderThread = new QThread(this);
     _loaderWorker = new FileLoaderWorker(_resourcesShared);
+    _loaderWorker->setNativeDirectories(getNativeDirectoryPaths());
     _loaderWorker->moveToThread(_loaderThread);
 
     spdlog::debug("FileBrowserPanel: Connecting worker signals...");
@@ -493,12 +574,8 @@ void FileBrowserPanel::updateFileTypeComboBox() {
     }
 }
 
-void FileBrowserPanel::insertFileRow(FileTreeItem* rootItem, const std::string& file,
-    const std::vector<std::filesystem::path>& nativeDirectories) {
-    QString qFile = QString::fromStdString(file);
-
-    QString normalizedPath = normalizeDisplayPath(qFile, nativeDirectories);
-    QStringList pathComponents = normalizedPath.split('/', Qt::SkipEmptyParts);
+void FileBrowserPanel::insertFileRow(FileTreeItem* rootItem, const FileBrowserEntry& entry) {
+    QStringList pathComponents = entry.normalizedPath.split('/', Qt::SkipEmptyParts);
     if (pathComponents.isEmpty())
         return;
 
@@ -507,28 +584,25 @@ void FileBrowserPanel::insertFileRow(FileTreeItem* rootItem, const std::string& 
         currentParent = findOrCreateDirectory(currentParent, pathComponents[i]);
     }
 
-    QString fileName = pathComponents.last();
-    FileTreeItem* fileItem = new FileTreeItem(fileName, FileTreeItem::File);
-    fileItem->setFilePath(qFile);
+    FileTreeItem* fileItem = new FileTreeItem(pathComponents.last(), FileTreeItem::File);
+    fileItem->setFilePath(entry.path);
 
-    QString extension = getFileExtension(fileName);
-    QStandardItem* typeItem = new QStandardItem(extension);
+    QStandardItem* typeItem = new QStandardItem(entry.extension);
     typeItem->setEditable(false);
 
-    QStandardItem* sourceItem = new QStandardItem(getFileSource(qFile, nativeDirectories));
+    QStandardItem* sourceItem = new QStandardItem(entry.source);
     sourceItem->setEditable(false);
 
-    QStandardItem* pathItem = new QStandardItem(normalizedPath);
+    QStandardItem* pathItem = new QStandardItem(entry.normalizedPath);
     pathItem->setEditable(false);
 
-    QString proName = (extension.toLower() == ".pro") ? getProName(qFile) : QString();
-    QStandardItem* proNameItem = new QStandardItem(proName);
+    QStandardItem* proNameItem = new QStandardItem(entry.proName);
     proNameItem->setEditable(false);
 
     currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << sourceItem << pathItem << proNameItem);
 }
 
-void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
+void FileBrowserPanel::buildFileTree(const std::vector<FileBrowserEntry>& entries) {
     _treeModel->clear();
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
 
@@ -536,30 +610,16 @@ void FileBrowserPanel::buildFileTree(const std::vector<std::string>& files) {
 
     FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
 
-    std::vector<std::string> filteredFiles;
-    for (const auto& file : files) {
-        QString qFile = QString::fromStdString(file);
-
-        if (!_currentSearchFilter.isEmpty()) {
-            if (!qFile.contains(_currentSearchFilter, Qt::CaseInsensitive)) {
-                continue;
-            }
+    for (const auto& entry : entries) {
+        if (!_currentSearchFilter.isEmpty() && !entry.path.contains(_currentSearchFilter, Qt::CaseInsensitive)) {
+            continue;
         }
 
-        if (_currentFileTypeFilter != "All Files") {
-            QString extension = getFileExtension(qFile);
-            if (extension != _currentFileTypeFilter) {
-                continue;
-            }
+        if (_currentFileTypeFilter != "All Files" && entry.extension != _currentFileTypeFilter) {
+            continue;
         }
 
-        filteredFiles.push_back(file);
-    }
-
-    const auto nativeDirectories = _nativeDirectoriesForSources.empty() ? getNativeDirectoryPaths() : _nativeDirectoriesForSources;
-
-    for (const auto& file : filteredFiles) {
-        insertFileRow(rootItem, file, nativeDirectories);
+        insertFileRow(rootItem, entry);
     }
 
     for (int i = 0; i < _treeModel->rowCount(); ++i) {
@@ -606,7 +666,7 @@ QString FileBrowserPanel::getFileIcon(const QString& extension) const {
 }
 
 void FileBrowserPanel::updateFileCount() {
-    int totalFiles = static_cast<int>(_allFiles.size());
+    int totalFiles = static_cast<int>(_allEntries.size());
     int visibleFiles = 0;
 
     std::function<void(const QModelIndex&)> countVisibleFiles = [&](const QModelIndex& parent) {
@@ -735,16 +795,15 @@ void FileBrowserPanel::updateFileDisplay() {
     if (_isLoading) {
         return;
     }
-    buildFileTree(_allFiles);
+    buildFileTree(_allEntries);
     updateFileCount();
 }
 
-void FileBrowserPanel::onFilesLoaded(const std::vector<std::string>& files) {
-    spdlog::debug("FileBrowserPanel::onFilesLoaded called with {} files", files.size());
-    _allFiles = files;
-    spdlog::debug("FileBrowserPanel: Received {} files from background loader", files.size());
+void FileBrowserPanel::onFilesLoaded(const std::vector<FileBrowserEntry>& entries) {
+    spdlog::debug("FileBrowserPanel::onFilesLoaded called with {} entries", entries.size());
+    _allEntries = entries;
 
-    buildFileTreeProgressive(files);
+    buildFileTreeProgressive(_allEntries);
 }
 
 void FileBrowserPanel::onFileTypesExtracted(const std::unordered_set<std::string>& fileTypes) {
@@ -771,35 +830,29 @@ void FileBrowserPanel::onLoadingError(const QString& error) {
     _isLoading = false;
 }
 
-void FileBrowserPanel::buildFileTreeProgressive(const std::vector<std::string>& files) {
-    std::vector<std::string> filteredFiles;
-    for (const auto& file : files) {
-        QString qFile = QString::fromStdString(file);
-
-        if (_currentFileTypeFilter != "All Files") {
-            QString extension = getFileExtension(qFile);
-            if (extension != _currentFileTypeFilter) {
-                continue;
-            }
+void FileBrowserPanel::buildFileTreeProgressive(const std::vector<FileBrowserEntry>& entries) {
+    std::vector<FileBrowserEntry> filteredEntries;
+    for (const auto& entry : entries) {
+        if (_currentFileTypeFilter != "All Files" && entry.extension != _currentFileTypeFilter) {
+            continue;
         }
-
-        filteredFiles.push_back(file);
+        filteredEntries.push_back(entry);
     }
 
-    spdlog::debug("FileBrowserPanel: Starting progressive build of {} filtered files", filteredFiles.size());
-    startProgressiveTreeBuild(filteredFiles);
+    spdlog::debug("FileBrowserPanel: Starting progressive build of {} filtered files", filteredEntries.size());
+    startProgressiveTreeBuild(std::move(filteredEntries));
 }
 
-void FileBrowserPanel::startProgressiveTreeBuild(const std::vector<std::string>& filteredFiles) {
+void FileBrowserPanel::startProgressiveTreeBuild(std::vector<FileBrowserEntry> filteredEntries) {
     ++_populationEpoch;
-    _pendingFiles = filteredFiles;
+    _pendingEntries = std::move(filteredEntries);
     _currentChunkIndex = 0;
 
     _treeModel->clear();
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
     applyDefaultColumnVisibility();
 
-    _progressBar->setRange(0, static_cast<int>(_pendingFiles.size()));
+    _progressBar->setRange(0, static_cast<int>(_pendingEntries.size()));
     _progressBar->setValue(0);
     _statusLabel->setText("Building file tree...");
 
@@ -821,7 +874,7 @@ void FileBrowserPanel::processNextChunk() {
         return;
     }
 
-    if (_currentChunkIndex >= _pendingFiles.size()) {
+    if (_currentChunkIndex >= _pendingEntries.size()) {
         _isLoading = false;
         _progressBar->setVisible(false);
 
@@ -840,7 +893,6 @@ void FileBrowserPanel::processNextChunk() {
     }
 
     FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
-    const auto nativeDirectories = _nativeDirectoriesForSources.empty() ? getNativeDirectoryPaths() : _nativeDirectoriesForSources;
 
     // No nested processEvents here: a chunk is small (CHUNK_SIZE rows) and the queued
     // re-invoke below already yields to the real event loop between chunks. Re-entrant
@@ -849,16 +901,16 @@ void FileBrowserPanel::processNextChunk() {
     // progress bar sat frozen until the load finished. It also let a settings change
     // delete or restart this panel mid-chunk; with the pump gone, nothing can touch the
     // population state while a chunk runs.
-    size_t endIndex = std::min(_currentChunkIndex + CHUNK_SIZE, _pendingFiles.size());
+    size_t endIndex = std::min(_currentChunkIndex + CHUNK_SIZE, _pendingEntries.size());
     for (size_t i = _currentChunkIndex; i < endIndex; ++i) {
-        insertFileRow(rootItem, _pendingFiles[i], nativeDirectories);
+        insertFileRow(rootItem, _pendingEntries[i]);
     }
 
     _currentChunkIndex = endIndex;
     _progressBar->setValue(static_cast<int>(_currentChunkIndex));
     _statusLabel->setText(QString("Building tree... %1/%2 files")
             .arg(_currentChunkIndex)
-            .arg(_pendingFiles.size()));
+            .arg(_pendingEntries.size()));
 
     // A settings change can restart or stop the population while this chunk's re-invoke
     // is already queued; the epoch check kills the stale pump so a restart doesn't leave
@@ -1215,58 +1267,6 @@ void FileBrowserPanel::applyDefaultColumnVisibility() {
     }
 }
 
-QString FileBrowserPanel::getProName(const QString& filePath) const {
-    std::string stdPath = filePath.toStdString();
-
-    auto cacheIt = _proNameCache.find(stdPath);
-    if (cacheIt != _proNameCache.end()) {
-        return cacheIt->second;
-    }
-
-    QString proName = loadProNameFromFile(filePath);
-    _proNameCache[stdPath] = proName;
-
-    return proName;
-}
-
-QString FileBrowserPanel::loadProNameFromFile(const QString& filePath) const {
-    try {
-        std::string stdPath = filePath.toStdString();
-        if (stdPath.front() == '/') {
-            stdPath = stdPath.substr(1);
-        }
-
-        if (!_resourcesShared->files().exists(stdPath)) {
-            return QString("File not found");
-        }
-
-        const auto* pro = _resourcesShared->repository().load<Pro>(stdPath);
-        if (!pro) {
-            return QString("Failed to load");
-        }
-
-        const auto* msgFile = ProHelper::msgFile(*_resourcesShared, pro->type());
-        if (!msgFile) {
-            return QString("MSG not found");
-        }
-
-        uint32_t messageId = pro->header.message_id;
-
-        try {
-            const auto& nameMessage = const_cast<Msg*>(msgFile)->message(messageId);
-            QString name = QString::fromStdString(nameMessage.text);
-            return name.isEmpty() ? QString("No name (ID: %1)").arg(messageId) : name;
-        } catch ([[maybe_unused]] const std::exception& e) {
-            spdlog::warn("Failed to resolve PRO name for message {}: {}", messageId, e.what());
-            return QString("No name (ID: %1)").arg(messageId);
-        }
-
-    } catch ([[maybe_unused]] const std::exception& e) {
-        spdlog::error("Failed to read PRO metadata for '{}': {}", filePath.toStdString(), e.what());
-        return QString("Error: %1").arg(e.what());
-    }
-}
-
 std::vector<std::filesystem::path> FileBrowserPanel::getNativeDirectoryPaths() const {
     std::vector<std::filesystem::path> nativeDirectories;
 
@@ -1280,53 +1280,6 @@ std::vector<std::filesystem::path> FileBrowserPanel::getNativeDirectoryPaths() c
     }
 
     return nativeDirectories;
-}
-
-QString FileBrowserPanel::getFileSource(const QString& filePath) const {
-    return getFileSource(filePath, getNativeDirectoryPaths());
-}
-
-QString FileBrowserPanel::getFileSource(const QString& filePath, const std::vector<std::filesystem::path>& nativeDirectories) const {
-    Q_UNUSED(nativeDirectories);
-
-    if (auto source = _resourcesShared->files().sourceInfo(filePath.toStdString())) {
-        return QString::fromStdString(source->displayLabel);
-    }
-
-    return QStringLiteral("Unknown");
-}
-
-QString FileBrowserPanel::normalizeDisplayPath(const QString& fullPath) const {
-    // getNativeDirectoryPaths stats every configured data path; per-row callers must
-    // precompute the list once and use the overload below.
-    return normalizeDisplayPath(fullPath, getNativeDirectoryPaths());
-}
-
-QString FileBrowserPanel::normalizeDisplayPath(const QString& fullPath,
-    const std::vector<std::filesystem::path>& nativeDirectories) const {
-    std::string fullPathStr = fullPath.toStdString();
-
-    // VFS may return paths with double leading slashes, so handle both forms
-    for (const auto& nativeDir : nativeDirectories) {
-        std::string nativeDirStr = nativeDir.string();
-
-        if (!nativeDirStr.empty() && nativeDirStr.back() != '/') {
-            nativeDirStr += '/';
-        }
-
-        size_t pos = fullPathStr.find(nativeDirStr);
-        if (pos != std::string::npos) {
-            std::string relativePath = fullPathStr.substr(pos + nativeDirStr.length());
-            return QString::fromStdString(relativePath);
-        }
-    }
-
-    QString result = fullPath;
-    while (result.startsWith('/')) {
-        result = result.mid(1);
-    }
-
-    return result;
 }
 
 } // namespace geck
