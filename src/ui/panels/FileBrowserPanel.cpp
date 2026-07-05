@@ -27,6 +27,7 @@
 #include <QMetaObject>
 #include <QRegularExpression>
 #include <spdlog/spdlog.h>
+#include <chrono>
 #include <algorithm>
 #include <fstream>
 #include <filesystem>
@@ -641,7 +642,8 @@ void FileBrowserPanel::onProNamesResolved(const QHash<QString, QString>& namesBy
 }
 
 void FileBrowserPanel::buildFileTree(const std::vector<FileBrowserEntry>& entries) {
-    _proNameItems.clear(); // the model clear below deletes the indexed items
+    _proxyModel->setDynamicSortFilter(false); // bulk build: sort once at the end
+    _proNameItems.clear();                    // the model clear below deletes the indexed items
     _treeModel->clear();
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
 
@@ -667,6 +669,7 @@ void FileBrowserPanel::buildFileTree(const std::vector<FileBrowserEntry>& entrie
     }
 
     _proxyModel->sort(0, Qt::AscendingOrder);
+    _proxyModel->setDynamicSortFilter(true);
     resizeNameColumnToContent();
 }
 
@@ -887,6 +890,11 @@ void FileBrowserPanel::startProgressiveTreeBuild(std::vector<FileBrowserEntry> f
     _pendingEntries = std::move(filteredEntries);
     _currentChunkIndex = 0;
 
+    // Inserting into a proxy that is already sorted (a previous population ends with sort())
+    // makes every appendRow a sorted insert; suspend dynamic sorting for the bulk build and
+    // sort once on completion.
+    _proxyModel->setDynamicSortFilter(false);
+
     _proNameItems.clear(); // the model clear below deletes the indexed items
     _treeModel->clear();
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
@@ -905,6 +913,7 @@ void FileBrowserPanel::processNextChunk() {
         _progressBar->setVisible(false);
 
         _proxyModel->sort(0, Qt::AscendingOrder);
+        _proxyModel->setDynamicSortFilter(true);
 
         if (!_savedExpandedPaths.isEmpty()) {
             restoreExpandedPaths(_savedExpandedPaths);
@@ -927,9 +936,16 @@ void FileBrowserPanel::processNextChunk() {
     // progress bar sat frozen until the load finished. It also let a settings change
     // delete or restart this panel mid-chunk; with the pump gone, nothing can touch the
     // population state while a chunk runs.
+    const auto chunkStart = std::chrono::steady_clock::now();
     size_t endIndex = std::min(_currentChunkIndex + CHUNK_SIZE, _pendingEntries.size());
     for (size_t i = _currentChunkIndex; i < endIndex; ++i) {
         insertFileRow(rootItem, _pendingEntries[i]);
+    }
+    // A chunk is pure in-memory work and should take low milliseconds; if one is slow the
+    // whole "Building tree" phase crawls, so make the culprit visible in the Log panel.
+    const auto chunkMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - chunkStart).count();
+    if (chunkMs > 250) {
+        spdlog::warn("FileBrowserPanel: tree-build chunk {}..{} took {}ms", _currentChunkIndex, endIndex, chunkMs);
     }
 
     _currentChunkIndex = endIndex;
