@@ -196,6 +196,9 @@ private:
     // Rebuild the Scripts panel from the current map and re-assert the shared spatial selection.
     // Called after a spatial-script add/edit/delete and after undo/redo.
     void refreshScriptsPanel();
+    // Refresh the Info panel's Map Edges group from the editor's current edge/elevation/selection.
+    // Called after an edge edit, on elevation change, on undo/redo, and on map load.
+    void refreshMapEdgesPanel();
     void replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSizePolicy::Policy verticalPolicy);
     void rebuildResourcePanels();
     void rebuildGameResourcesFromSettings();

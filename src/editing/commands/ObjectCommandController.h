@@ -14,6 +14,7 @@
 #include "editing/commands/TileEditService.h"
 #include "editing/commands/InventoryEditService.h"
 #include "editing/commands/ScriptEditService.h"
+#include "editing/commands/EdgeEditService.h"
 #include "editing/commands/MapEditService.h"
 #include "editing/commands/ObjectEditService.h"
 
@@ -152,6 +153,26 @@ public:
     bool removeSpatialScript(uint32_t sid);
     const MapScript* findSpatialScript(uint32_t sid) const;
 
+    // Map-edge (.edg sidecar) editing (undoable). `seed` for addEdgeZone is the initial tileRect
+    // (the caller computes the full-grid rect from the hex grid). `side` uses EdgeEditService::Side
+    // (0=left,1=top,2=right,3=bottom). See EdgeEditService for details.
+    int addEdgeZone(int elevation, const MapEdge::Rect& seed);
+    bool deleteEdgeZone(int elevation, int zoneIndex);
+    bool setEdgeZoneSide(int elevation, int zoneIndex, EdgeEditService::Side side, int hexIndex);
+    bool upgradeEdgeToVersion2();
+    bool setEdgeSquareSide(int elevation, EdgeEditService::Side side, int colOrRow);
+    bool toggleEdgeClipSide(int elevation, EdgeEditService::Side side);
+    bool resetEdgeSquare(int elevation);
+    /// The current map-edge model (may be empty), for reading zone geometry to render/hit-test.
+    const std::optional<MapEdge>& mapEdge() const;
+    int edgeZoneCount(int elevation) const;
+    // Live side-drag: snapshot the edge at drag start, previewZoneSide each move (no undo), then either
+    // commitEdgeEdit (records the whole gesture as one undo) or restoreEdge (cancel).
+    std::optional<MapEdge> edgeSnapshot() const;
+    void previewEdgeZoneSide(int elevation, int zoneIndex, EdgeEditService::Side side, int hexIndex);
+    void restoreEdge(const std::optional<MapEdge>& before);
+    bool commitEdgeEdit(const std::string& description, std::optional<MapEdge> before);
+
 private:
     resource::GameResources& _resources;
     std::unique_ptr<Map>& _map;
@@ -164,6 +185,7 @@ private:
     TileEditService _tileService;
     InventoryEditService _inventoryService;
     ScriptEditService _scriptService;
+    EdgeEditService _edgeService;
     std::function<void()> _refreshObjects;
     std::function<void()> _reloadTiles;
     MapEditService _mapService;

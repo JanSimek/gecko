@@ -39,6 +39,7 @@ add_executable(general_tests
     general/test_map_edge_roundtrip.cpp
     general/test_undo_stack.cpp
     general/test_object_command_controller.cpp
+    general/test_edge_edit_service.cpp
     general/test_animation_layout.cpp
     general/test_reading_lst.cpp
     general/test_reading_pal.cpp

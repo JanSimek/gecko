@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 
@@ -49,6 +50,94 @@ inline std::optional<sf::FloatRect> mapEdgeZoneWorldBounds(const HexagonGrid& gr
     const float minY = std::min(top->y, bottom->y);
     const float maxY = std::max(top->y, bottom->y);
     return sf::FloatRect({ minX, minY }, { maxX - minX, maxY - minY });
+}
+
+/// Shortest distance from point `p` to the segment `a`-`b`.
+inline float pointSegmentDistance(sf::Vector2f p, sf::Vector2f a, sf::Vector2f b) {
+    const sf::Vector2f ab{ b.x - a.x, b.y - a.y };
+    const float lengthSq = ab.x * ab.x + ab.y * ab.y;
+    float t = lengthSq > 0.f ? ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / lengthSq : 0.f;
+    t = std::clamp(t, 0.f, 1.f);
+    const float dx = p.x - (a.x + t * ab.x);
+    const float dy = p.y - (a.y + t * ab.y);
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+/// Distance from `p` to the four sides of rect `r`, indexed 0=left,1=top,2=right,3=bottom (matching
+/// EdgeEditService::Side and RenderData::activeEdgeSide).
+inline std::array<float, 4> mapEdgeSideDistances(sf::Vector2f p, const sf::FloatRect& r) {
+    const float l = r.position.x;
+    const float t = r.position.y;
+    const float rr = l + r.size.x;
+    const float b = t + r.size.y;
+    const sf::Vector2f tl{ l, t };
+    const sf::Vector2f tr{ rr, t };
+    const sf::Vector2f br{ rr, b };
+    const sf::Vector2f bl{ l, b };
+    return {
+        pointSegmentDistance(p, tl, bl), // left
+        pointSegmentDistance(p, tl, tr), // top
+        pointSegmentDistance(p, tr, br), // right
+        pointSegmentDistance(p, bl, br), // bottom
+    };
+}
+
+/// Distance from `p` to the nearest point on rect `r`'s outline (0 when on the border).
+inline float mapEdgeDistanceToBorder(sf::Vector2f p, const sf::FloatRect& r) {
+    const auto d = mapEdgeSideDistances(p, r);
+    return std::min({ d[0], d[1], d[2], d[3] });
+}
+
+/// The side of rect `r` (0=left,1=top,2=right,3=bottom) whose segment is nearest `p`.
+inline int mapEdgeNearestSide(sf::Vector2f p, const sf::FloatRect& r) {
+    const auto d = mapEdgeSideDistances(p, r);
+    return static_cast<int>(std::distance(d.begin(), std::min_element(d.begin(), d.end())));
+}
+
+/// The zone `tileRect` covering the whole hex grid — the seed the engine's mapper uses for a newly
+/// added zone (fallout2-ce map_edge_setup.cc `fullGridTileRect`). Corners are the grid's four extreme
+/// hex indices; `left`/`right` take the hexes with the max/min world X (X is stored inverted, matching
+/// the engine), `top`/`bottom` the min/max world Y. Any corner that is off-grid is skipped.
+inline MapEdge::Rect mapEdgeFullGridZone(const HexagonGrid& grid) {
+    const std::array<int, 4> corners{
+        0,
+        HexagonGrid::GRID_WIDTH - 1,
+        (HexagonGrid::GRID_HEIGHT - 1) * HexagonGrid::GRID_WIDTH,
+        HexagonGrid::POSITION_COUNT - 1,
+    };
+
+    MapEdge::Rect rect{ corners[0], corners[0], corners[0], corners[0] };
+    float maxX = 0.f;
+    float minX = 0.f;
+    float minY = 0.f;
+    float maxY = 0.f;
+    bool init = false;
+    for (int corner : corners) {
+        const auto hex = grid.getHexByPosition(static_cast<uint32_t>(corner));
+        if (!hex.has_value()) {
+            continue;
+        }
+        const float x = static_cast<float>(hex->get().x());
+        const float y = static_cast<float>(hex->get().y());
+        if (!init || x > maxX) {
+            maxX = x;
+            rect.left = corner; // X inverted: left holds the larger world X
+        }
+        if (!init || x < minX) {
+            minX = x;
+            rect.right = corner;
+        }
+        if (!init || y < minY) {
+            minY = y;
+            rect.top = corner;
+        }
+        if (!init || y > maxY) {
+            maxY = y;
+            rect.bottom = corner;
+        }
+        init = true;
+    }
+    return rect;
 }
 
 /// World-space centre of a square-grid cell `(col, row)` in the 100x100 floor grid.

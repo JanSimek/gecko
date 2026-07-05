@@ -1537,27 +1537,34 @@ TEST_CASE("Exit-grid stroke creates on the non-overlapping hexes (partial overla
     CHECK(ExitGridPlacementManager::freshHexesForLine({}, { 1 }).empty());
 }
 
-// The no-map welcome screen offers New Map / Browse Maps buttons; each must emit the matching
-// request signal (MainWindow wires these to the File-menu handlers) so the screen is actionable.
-TEST_CASE("Welcome screen buttons request New Map and Browse Maps", "[qt][welcome]") {
+// The no-map welcome screen offers New Map / Browse Maps / Preferences buttons; each must emit the
+// matching request signal (MainWindow wires these to the File-menu handlers) so the screen is
+// actionable.
+TEST_CASE("Welcome screen buttons request New Map, Browse Maps and Preferences", "[qt][welcome]") {
     geck::WelcomeWidget welcome;
 
     QSignalSpy newSpy(&welcome, &geck::WelcomeWidget::newMapRequested);
     QSignalSpy browseSpy(&welcome, &geck::WelcomeWidget::browseMapsRequested);
+    QSignalSpy preferencesSpy(&welcome, &geck::WelcomeWidget::preferencesRequested);
     REQUIRE(newSpy.isValid());
     REQUIRE(browseSpy.isValid());
+    REQUIRE(preferencesSpy.isValid());
 
     QPushButton* newMapButton = nullptr;
     QPushButton* browseButton = nullptr;
+    QPushButton* preferencesButton = nullptr;
     for (QPushButton* button : welcome.findChildren<QPushButton*>()) {
         if (button->text().contains("New")) {
             newMapButton = button;
         } else if (button->text().contains("Browse")) {
             browseButton = button;
+        } else if (button->text().contains("Preferences")) {
+            preferencesButton = button;
         }
     }
     REQUIRE(newMapButton != nullptr);
     REQUIRE(browseButton != nullptr);
+    REQUIRE(preferencesButton != nullptr);
 
     newMapButton->click();
     CHECK(newSpy.count() == 1);
@@ -1566,4 +1573,9 @@ TEST_CASE("Welcome screen buttons request New Map and Browse Maps", "[qt][welcom
     browseButton->click();
     CHECK(browseSpy.count() == 1);
     CHECK(newSpy.count() == 1); // the New Map click above, unchanged
+
+    preferencesButton->click();
+    CHECK(preferencesSpy.count() == 1);
+    CHECK(newSpy.count() == 1);
+    CHECK(browseSpy.count() == 1);
 }

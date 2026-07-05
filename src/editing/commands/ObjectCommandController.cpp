@@ -29,6 +29,7 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     , _tileService(map, _batcher, [this](int elevation) -> std::vector<Tile>& { return _host.ensureElevationTiles(elevation); }, [this] { return _host.getCurrentElevation(); }, [this](int hexIndex, bool isRoof, int elevation) { _host.updateTileSprite(hexIndex, isRoof, elevation); })
     , _inventoryService(_batcher)
     , _scriptService(map, _batcher)
+    , _edgeService(map, _batcher)
     , _refreshObjects([this] { _host.refreshObjects(); })
     , _reloadTiles([this] { _host.reloadTiles(); })
     , _mapService(map, objects, wallBlockerOverlays, _scriptService, _batcher, _refreshObjects, _reloadTiles)
@@ -165,6 +166,58 @@ bool ObjectCommandController::removeSpatialScript(uint32_t sid) {
 
 const MapScript* ObjectCommandController::findSpatialScript(uint32_t sid) const {
     return _scriptService.findSpatialScript(sid);
+}
+
+int ObjectCommandController::addEdgeZone(int elevation, const MapEdge::Rect& seed) {
+    return _edgeService.addZone(elevation, seed);
+}
+
+bool ObjectCommandController::deleteEdgeZone(int elevation, int zoneIndex) {
+    return _edgeService.deleteZone(elevation, zoneIndex);
+}
+
+bool ObjectCommandController::setEdgeZoneSide(int elevation, int zoneIndex, EdgeEditService::Side side, int hexIndex) {
+    return _edgeService.setZoneSide(elevation, zoneIndex, side, hexIndex);
+}
+
+bool ObjectCommandController::upgradeEdgeToVersion2() {
+    return _edgeService.upgradeToVersion2();
+}
+
+bool ObjectCommandController::setEdgeSquareSide(int elevation, EdgeEditService::Side side, int colOrRow) {
+    return _edgeService.setSquareSide(elevation, side, colOrRow);
+}
+
+bool ObjectCommandController::toggleEdgeClipSide(int elevation, EdgeEditService::Side side) {
+    return _edgeService.toggleClipSide(elevation, side);
+}
+
+bool ObjectCommandController::resetEdgeSquare(int elevation) {
+    return _edgeService.resetSquare(elevation);
+}
+
+const std::optional<MapEdge>& ObjectCommandController::mapEdge() const {
+    return _edgeService.edge();
+}
+
+int ObjectCommandController::edgeZoneCount(int elevation) const {
+    return _edgeService.zoneCount(elevation);
+}
+
+std::optional<MapEdge> ObjectCommandController::edgeSnapshot() const {
+    return _edgeService.snapshot();
+}
+
+void ObjectCommandController::previewEdgeZoneSide(int elevation, int zoneIndex, EdgeEditService::Side side, int hexIndex) {
+    _edgeService.previewZoneSide(elevation, zoneIndex, side, hexIndex);
+}
+
+void ObjectCommandController::restoreEdge(const std::optional<MapEdge>& before) {
+    _edgeService.restore(before);
+}
+
+bool ObjectCommandController::commitEdgeEdit(const std::string& description, std::optional<MapEdge> before) {
+    return _edgeService.commitEdit(description, std::move(before));
 }
 
 bool ObjectCommandController::pushCommand(UndoCommand cmd) {

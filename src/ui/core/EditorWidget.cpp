@@ -15,9 +15,11 @@
 #include <QPoint>
 #include <QSize>
 #include <QStringList>
+#include "editing/commands/EdgeEditService.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "format/map/MapScript.h"
 #include "util/BuiltTile.h"
+#include "rendering/MapEdgeOverlayGeometry.h"
 #include "rendering/MapSpriteLoader.h"
 #include "rendering/RenderingEngine.h"
 #include "ui/dragdrop/DragDropManager.h"
@@ -330,6 +332,61 @@ void EditorWidget::deleteSpatialScript(uint32_t sid) {
     }
 }
 
+int EditorWidget::currentElevation() const {
+    return _session.currentElevation();
+}
+
+const std::optional<MapEdge>& EditorWidget::mapEdge() const {
+    return _controller.commandController().mapEdge();
+}
+
+void EditorWidget::addEdgeZone() {
+    if (!_session.map()) {
+        return;
+    }
+    const MapEdge::Rect seed = mapEdgeFullGridZone(_session.hexgrid());
+    const int index = _controller.commandController().addEdgeZone(_session.currentElevation(), seed);
+    if (index < 0) {
+        return;
+    }
+    _selectedEdgeZone = index; // select the new zone so it can be dragged/deleted right away
+    _activeEdgeSide = -1;
+    Q_EMIT mapEdgeChanged();
+}
+
+void EditorWidget::deleteSelectedEdgeZone() {
+    if (_selectedEdgeZone < 0) {
+        return;
+    }
+    if (_controller.commandController().deleteEdgeZone(_session.currentElevation(), _selectedEdgeZone)) {
+        _selectedEdgeZone = -1;
+        _activeEdgeSide = -1;
+        Q_EMIT mapEdgeChanged();
+    }
+}
+
+void EditorWidget::toggleEdgeClipSide(int side) {
+    if (side < 0 || side > 3) {
+        return;
+    }
+    if (_controller.commandController().toggleEdgeClipSide(_session.currentElevation(),
+            static_cast<EdgeEditService::Side>(side))) {
+        Q_EMIT mapEdgeChanged();
+    }
+}
+
+void EditorWidget::upgradeMapEdgeToVersion2() {
+    if (_controller.commandController().upgradeEdgeToVersion2()) {
+        Q_EMIT mapEdgeChanged();
+    }
+}
+
+void EditorWidget::resetMapEdgeSquare() {
+    if (_controller.commandController().resetEdgeSquare(_session.currentElevation())) {
+        Q_EMIT mapEdgeChanged();
+    }
+}
+
 void EditorWidget::setSelectedSpatialScript(uint32_t sid) {
     if (_session.selectedSpatialScriptSid() == sid) {
         return; // no change; also breaks the map<->panel selection sync feedback loop
@@ -386,6 +443,174 @@ bool EditorWidget::trySelectSpatialScriptAt(sf::Vector2f worldPos) {
     _lastSpatialClickSid = MapScript::NONE;
     setSelectedSpatialScript(MapScript::NONE);
     return false;
+}
+
+bool EditorWidget::trySelectEdgeZoneAt(sf::Vector2f worldPos) {
+    if (!_session.visibility().showMapEdges || !_session.map() || !_session.map()->edge().has_value()) {
+        return false;
+    }
+    const int elevation = _session.currentElevation();
+    if (elevation < 0 || elevation >= MapEdge::ELEVATION_COUNT) {
+        return false;
+    }
+    const auto& zones = _session.map()->edge()->elevations[elevation].zones;
+
+    // Grab radius in world units: how close to a zone's outline a click must land to select it.
+    constexpr float kGrabTolerance = 12.f;
+    int bestZone = -1;
+    float bestDistance = kGrabTolerance;
+    for (int i = 0; i < static_cast<int>(zones.size()); ++i) {
+        const auto box = mapEdgeZoneWorldBounds(_session.hexgrid(), zones[i]);
+        if (!box.has_value()) {
+            continue;
+        }
+        const float distance = mapEdgeDistanceToBorder(worldPos, *box);
+        if (distance <= bestDistance) {
+            bestDistance = distance; // <= so a later (topmost-drawn) zone wins ties
+            bestZone = i;
+        }
+    }
+
+    if (bestZone < 0) {
+        // Clicked away from any border: fall through to object selection.
+        if (_selectedEdgeZone != -1) {
+            _selectedEdgeZone = -1;
+            _activeEdgeSide = -1;
+            Q_EMIT mapEdgeChanged();
+        }
+        return false;
+    }
+
+    _session.selectionManager()->clearSelection(); // edge selection is exclusive with objects/tiles
+    setSelectedSpatialScript(MapScript::NONE);     // and with spatial scripts
+    _selectedEdgeZone = bestZone;
+    _activeEdgeSide = -1;
+    Q_EMIT mapEdgeChanged(); // refresh the panel's Delete-button enablement
+    return true;
+}
+
+std::optional<std::pair<int, int>> EditorWidget::edgeSideAtForDrag(sf::Vector2f worldPos) const {
+    if (!_session.visibility().showMapEdges || !_session.map() || !_session.map()->edge().has_value()) {
+        return std::nullopt;
+    }
+    const int elevation = _session.currentElevation();
+    if (elevation < 0 || elevation >= MapEdge::ELEVATION_COUNT) {
+        return std::nullopt;
+    }
+    const auto& zones = _session.map()->edge()->elevations[elevation].zones;
+
+    constexpr float kGrabTolerance = 12.f;
+    int bestZone = -1;
+    int bestSide = -1;
+    float bestDistance = kGrabTolerance;
+    for (int i = 0; i < static_cast<int>(zones.size()); ++i) {
+        const auto box = mapEdgeZoneWorldBounds(_session.hexgrid(), zones[i]);
+        if (!box.has_value()) {
+            continue;
+        }
+        const auto sideDistances = mapEdgeSideDistances(worldPos, *box);
+        for (int side = 0; side < 4; ++side) {
+            if (sideDistances[side] <= bestDistance) {
+                bestDistance = sideDistances[side];
+                bestZone = i;
+                bestSide = side;
+            }
+        }
+    }
+    if (bestZone < 0) {
+        return std::nullopt;
+    }
+    return std::make_pair(bestZone, bestSide);
+}
+
+bool EditorWidget::beginEdgeSideDrag(sf::Vector2f worldPos) {
+    const auto hit = edgeSideAtForDrag(worldPos);
+    if (!hit.has_value()) {
+        return false;
+    }
+    _session.selectionManager()->clearSelection(); // exclusive with objects/tiles/scripts
+    setSelectedSpatialScript(MapScript::NONE);
+    _selectedEdgeZone = hit->first;
+    _edgeDragSide = hit->second;
+    _activeEdgeSide = hit->second; // draw the grabbed side highlighted while dragging
+    _draggingEdgeSide = true;
+    _edgeDragBefore = _controller.commandController().edgeSnapshot();
+    Q_EMIT mapEdgeChanged();
+    return true;
+}
+
+void EditorWidget::previewEdgeSideDrag(sf::Vector2f worldPos) {
+    if (!_draggingEdgeSide) {
+        return;
+    }
+    const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
+    if (hex < 0) {
+        return; // cursor off-grid: keep the last previewed position
+    }
+    _controller.commandController().previewEdgeZoneSide(_session.currentElevation(), _selectedEdgeZone,
+        static_cast<EdgeEditService::Side>(_edgeDragSide), hex);
+}
+
+void EditorWidget::commitEdgeSideDrag(sf::Vector2f worldPos) {
+    if (!_draggingEdgeSide) {
+        return;
+    }
+    previewEdgeSideDrag(worldPos); // apply the final cursor position
+    // Record the whole gesture (drag start -> release) as a single undo entry.
+    _controller.commandController().commitEdgeEdit("Move Edge Side", _edgeDragBefore);
+    _draggingEdgeSide = false;
+    _edgeDragSide = -1;
+    _activeEdgeSide = -1;
+    _edgeDragBefore.reset();
+    updateEdgeHoverCursor(worldPos); // the released side usually still sits under the cursor
+    Q_EMIT mapEdgeChanged();
+}
+
+void EditorWidget::cancelEdgeSideDrag() {
+    if (!_draggingEdgeSide) {
+        return;
+    }
+    _controller.commandController().restoreEdge(_edgeDragBefore); // discard the live preview
+    _draggingEdgeSide = false;
+    _edgeDragSide = -1;
+    _activeEdgeSide = -1;
+    _edgeDragBefore.reset();
+    resetEdgeHoverCursor(); // the zone snapped back; the next mouse move re-evaluates the hover
+    Q_EMIT mapEdgeChanged();
+}
+
+void EditorWidget::updateEdgeHoverCursor(sf::Vector2f worldPos) {
+    int side = -1;
+    if (_draggingEdgeSide) {
+        side = _edgeDragSide;
+    } else if (_mode == EditorMode::Select && _inputHandler
+        && _inputHandler->getCurrentAction() == InputHandler::EditorAction::NONE) {
+        // Side-dragging is a Select-mode gesture; skip the hover cursor mid-pan/drag-select.
+        if (const auto hit = edgeSideAtForDrag(worldPos)) {
+            side = hit->second;
+        }
+    }
+    if (side == _edgeHoverCursorSide) {
+        return;
+    }
+    _edgeHoverCursorSide = side;
+    if (!_sfmlWidget) {
+        return;
+    }
+    if (side < 0) {
+        _sfmlWidget->unsetCursor();
+    } else {
+        // Zone bounds are world-axis-aligned: sides 0/2 are the vertical left/right borders, 1/3 the
+        // horizontal top/bottom ones.
+        _sfmlWidget->setCursor((side == 0 || side == 2) ? Qt::SizeHorCursor : Qt::SizeVerCursor);
+    }
+}
+
+void EditorWidget::resetEdgeHoverCursor() {
+    if (_edgeHoverCursorSide >= 0 && _sfmlWidget) {
+        _sfmlWidget->unsetCursor();
+    }
+    _edgeHoverCursorSide = -1;
 }
 
 EditorWidget::~EditorWidget() {
@@ -817,6 +1042,10 @@ void EditorWidget::bindSelectionCallbacks(InputHandler::Callbacks& callbacks) {
         if (modifier == InputHandler::SelectionModifier::NONE && trySelectSpatialScriptAt(worldPos)) {
             return;
         }
+        // Likewise, a plain click near a map-edge zone's border selects that zone (overlay must be on).
+        if (modifier == InputHandler::SelectionModifier::NONE && trySelectEdgeZoneAt(worldPos)) {
+            return;
+        }
         SelectionModifier selectionModifier;
         switch (modifier) {
             case InputHandler::SelectionModifier::ADD:
@@ -870,26 +1099,45 @@ void EditorWidget::bindInteractionCallbacks(InputHandler::Callbacks& callbacks) 
     };
 
     callbacks.canStartObjectDrag = [this](sf::Vector2f worldPos) {
+        // A grabbable map-edge side takes priority over object dragging (both use this gesture).
+        if (edgeSideAtForDrag(worldPos).has_value()) {
+            return true;
+        }
         return _dragDropManager ? _dragDropManager->canStartObjectDrag(worldPos) : false;
     };
 
     callbacks.onObjectDragStart = [this](sf::Vector2f worldPos) {
+        if (beginEdgeSideDrag(worldPos)) {
+            return true;
+        }
         return _dragDropManager ? _dragDropManager->startObjectDrag(worldPos) : false;
     };
 
     callbacks.onObjectDragUpdate = [this](sf::Vector2f worldPos) {
+        if (_draggingEdgeSide) {
+            previewEdgeSideDrag(worldPos);
+            return;
+        }
         if (_dragDropManager) {
             _dragDropManager->updateObjectDrag(worldPos);
         }
     };
 
     callbacks.onObjectDragEnd = [this](sf::Vector2f worldPos) {
+        if (_draggingEdgeSide) {
+            commitEdgeSideDrag(worldPos);
+            return;
+        }
         if (_dragDropManager) {
             _dragDropManager->finishObjectDrag(worldPos);
         }
     };
 
     callbacks.onObjectDragCancel = [this]() {
+        if (_draggingEdgeSide) {
+            cancelEdgeSideDrag();
+            return;
+        }
         if (_dragDropManager) {
             _dragDropManager->cancelObjectDrag();
         }
@@ -956,6 +1204,7 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
         _currentHoverHex = _controller.viewport().updateHoverHex(worldPos);
         Q_EMIT hexHoverChanged(_currentHoverHex);
+        updateEdgeHoverCursor(worldPos);
         if (_mode == EditorMode::StampPattern) {
             updateStampPreview(worldPos);
         }
@@ -995,6 +1244,11 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         if (_session.visibility().showSpatialScripts
             && _session.selectedSpatialScriptSid() != MapScript::NONE) {
             deleteSpatialScript(_session.selectedSpatialScriptSid());
+            return;
+        }
+        // Likewise, Delete removes the selected map-edge zone only while its overlay is visible.
+        if (_session.visibility().showMapEdges && _selectedEdgeZone >= 0) {
+            deleteSelectedEdgeZone();
             return;
         }
         deleteSelectedObjects();
@@ -1326,6 +1580,9 @@ void EditorWidget::rotateSelectedObject() {
 void EditorWidget::changeElevation(int elevation) {
     if (elevation >= ELEVATION_1 && elevation <= ELEVATION_3) {
         _session.setCurrentElevation(elevation);
+        // Edge zones are per-elevation, so a selected zone index doesn't carry across elevations.
+        _selectedEdgeZone = -1;
+        _activeEdgeSide = -1;
         loadSprites();
     }
 }

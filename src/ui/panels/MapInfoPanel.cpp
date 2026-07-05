@@ -319,6 +319,53 @@ void MapInfoPanel::setupUI() {
 
     _contentLayout->addWidget(_mapOperationsGroup);
 
+    // === Map Edges group (.edg zones + v2 diagonal square / clip) ===
+    _mapEdgesGroup = new QGroupBox("Map Edges");
+    QVBoxLayout* edgesLayout = new QVBoxLayout(_mapEdgesGroup);
+
+    _edgeZoneCountLabel = new QLabel();
+    _edgeZoneCountLabel->setWordWrap(true);
+    edgesLayout->addWidget(_edgeZoneCountLabel);
+
+    QHBoxLayout* zoneButtonRow = new QHBoxLayout();
+    _addEdgeZoneButton = new QPushButton("Add Zone");
+    _addEdgeZoneButton->setToolTip("Add a full-grid edge zone on the current elevation, then drag its sides on the map to shape it.");
+    _deleteEdgeZoneButton = new QPushButton("Delete Zone");
+    _deleteEdgeZoneButton->setToolTip("Delete the selected edge zone (or press Delete while the overlay is visible).");
+    zoneButtonRow->addWidget(_addEdgeZoneButton);
+    zoneButtonRow->addWidget(_deleteEdgeZoneButton);
+    edgesLayout->addLayout(zoneButtonRow);
+
+    _upgradeEdgeButton = new QPushButton("Enable Angled Edge (v2)");
+    _upgradeEdgeButton->setToolTip("Upgrade this edge to version 2, adding a diagonal \"square\" boundary and per-side clipping.");
+    edgesLayout->addWidget(_upgradeEdgeButton);
+
+    QHBoxLayout* clipRow = new QHBoxLayout();
+    clipRow->addWidget(new QLabel("Clip:"));
+    const std::array<const char*, 4> clipNames{ "Left", "Top", "Right", "Bottom" };
+    for (int side = 0; side < 4; ++side) {
+        _edgeClipChecks[side] = new QCheckBox(clipNames[side]);
+        clipRow->addWidget(_edgeClipChecks[side]);
+        connect(_edgeClipChecks[side], &QCheckBox::toggled, this, [this, side]() {
+            if (!_suppressEdgeEdit) {
+                Q_EMIT edgeClipToggled(side);
+            }
+        });
+    }
+    clipRow->addStretch();
+    edgesLayout->addLayout(clipRow);
+
+    _resetEdgeSquareButton = new QPushButton("Reset Square");
+    _resetEdgeSquareButton->setToolTip("Reset the v2 diagonal square to the full grid and clear all clip flags on the current elevation.");
+    edgesLayout->addWidget(_resetEdgeSquareButton);
+
+    connect(_addEdgeZoneButton, &QPushButton::clicked, this, &MapInfoPanel::onAddEdgeZoneClicked);
+    connect(_deleteEdgeZoneButton, &QPushButton::clicked, this, &MapInfoPanel::onDeleteEdgeZoneClicked);
+    connect(_upgradeEdgeButton, &QPushButton::clicked, this, &MapInfoPanel::onUpgradeEdgeClicked);
+    connect(_resetEdgeSquareButton, &QPushButton::clicked, this, &MapInfoPanel::onResetEdgeSquareClicked);
+
+    _contentLayout->addWidget(_mapEdgesGroup);
+
     _contentLayout->addStretch();
 
     _scrollArea->setWidget(_contentWidget);
@@ -619,7 +666,8 @@ void MapInfoPanel::clearMapInfo() {
     _globalVarsEdited = false;
     _mapScriptName = "no script";
 
-    updateGlobalVarButtons(); // no map -> Add/Remove disabled
+    updateGlobalVarButtons();                                            // no map -> Add/Remove disabled
+    setMapEdgeState(false, 0, 0, false, { false, false, false, false }); // no map -> edge group disabled
 }
 
 void MapInfoPanel::onFieldChanged() {
@@ -920,6 +968,53 @@ void MapInfoPanel::onAddSpatialScriptClicked() {
     }
     // The dialog (with its map-pick flow) is owned by MainWindow, which brokers the map click.
     Q_EMIT addSpatialScriptRequested();
+}
+
+void MapInfoPanel::onAddEdgeZoneClicked() {
+    Q_EMIT addEdgeZoneRequested();
+}
+
+void MapInfoPanel::onDeleteEdgeZoneClicked() {
+    Q_EMIT deleteEdgeZoneRequested();
+}
+
+void MapInfoPanel::onUpgradeEdgeClicked() {
+    Q_EMIT upgradeEdgeVersion2Requested();
+}
+
+void MapInfoPanel::onResetEdgeSquareClicked() {
+    Q_EMIT resetEdgeSquareRequested();
+}
+
+void MapInfoPanel::setMapEdgeState(bool hasMap, int version, int zoneCount, bool hasSelectedZone,
+    const std::array<bool, 4>& clip) {
+    if (!_mapEdgesGroup) {
+        return;
+    }
+    const bool hasEdge = version > 0;
+    const bool isVersion2 = version >= 2;
+
+    if (!hasMap) {
+        _edgeZoneCountLabel->setText("No map loaded.");
+    } else if (!hasEdge) {
+        _edgeZoneCountLabel->setText("No map edge yet — add a zone to create one.");
+    } else {
+        _edgeZoneCountLabel->setText(
+            QString("Edge zones on this elevation: %1  (version %2)").arg(zoneCount).arg(version));
+    }
+
+    _addEdgeZoneButton->setEnabled(hasMap);
+    _deleteEdgeZoneButton->setEnabled(hasMap && hasSelectedZone);
+    _upgradeEdgeButton->setVisible(!isVersion2); // one-way upgrade: hide once done
+    _upgradeEdgeButton->setEnabled(hasMap && hasEdge);
+    _resetEdgeSquareButton->setEnabled(hasMap && isVersion2);
+
+    _suppressEdgeEdit = true; // programmatic; don't re-emit edgeClipToggled
+    for (int side = 0; side < 4; ++side) {
+        _edgeClipChecks[side]->setChecked(clip[side]);
+        _edgeClipChecks[side]->setEnabled(hasMap && isVersion2);
+    }
+    _suppressEdgeEdit = false;
 }
 
 void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {

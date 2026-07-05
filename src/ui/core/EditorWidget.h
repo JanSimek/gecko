@@ -110,6 +110,7 @@ public:
         if (!show) {
             _selectedEdgeZone = -1;
             _activeEdgeSide = -1;
+            resetEdgeHoverCursor(); // a lingering resize cursor would suggest a still-grabbable side
         }
     }
     void setMergeSelectionOutlines(bool merge) { _session.visibility().mergeSelectionOutlines = merge; }
@@ -342,6 +343,18 @@ public:
     };
     [[nodiscard]] std::optional<SpatialScriptInfo> spatialScriptInfo(uint32_t sid) const;
 
+    // Map-edge (.edg) editing (undoable). All operate on the current elevation and emit
+    // mapEdgeChanged() so the Map Edges panel refreshes. addEdgeZone seeds a full-grid zone and
+    // selects it; deleteSelectedEdgeZone / toggleEdgeClipSide act on the current selection/elevation.
+    void addEdgeZone();
+    void deleteSelectedEdgeZone();
+    void toggleEdgeClipSide(int side); // 0=left,1=top,2=right,3=bottom
+    void upgradeMapEdgeToVersion2();
+    void resetMapEdgeSquare();
+    [[nodiscard]] int selectedEdgeZone() const { return _selectedEdgeZone; }
+    [[nodiscard]] int currentElevation() const;
+    [[nodiscard]] const std::optional<MapEdge>& mapEdge() const;
+
 signals:
     /// The map-side spatial-script selection changed (marker click or clear). MainWindow mirrors it
     /// onto the Scripts panel row. Carries MapScript::NONE when nothing is selected.
@@ -351,6 +364,9 @@ signals:
     void spatialScriptEditActivated(uint32_t sid);
     /// A spatial script was added / edited / deleted, so the script panels must repopulate.
     void mapScriptsChanged();
+    /// The map edge changed (zone added/removed/moved, clip/version/square edit) or the selected
+    /// zone changed, so the Map Edges panel must refresh its counts, buttons and clip state.
+    void mapEdgeChanged();
 
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
@@ -407,6 +423,27 @@ private:
     // quick click on the same marker also fires spatialScriptEditActivated. A miss clears the spatial
     // selection and returns false so normal object selection proceeds.
     bool trySelectSpatialScriptAt(sf::Vector2f worldPos);
+
+    // If the map-edge overlay is visible and the click lands near a zone's border on the current
+    // elevation, select that zone (clearing object/tile/spatial selection) and return true. Selection
+    // is by border proximity, not area, so a click in a zone's interior falls through to normal object
+    // selection. A miss clears the edge selection and returns false.
+    bool trySelectEdgeZoneAt(sf::Vector2f worldPos);
+
+    // Edge side-drag, layered onto the existing object-drag gesture. edgeSideAtForDrag returns the
+    // {zone, side} whose side lies within grab range of worldPos (nullopt if none). begin selects that
+    // zone and snapshots the edge; preview moves the side live (no undo); commit records the whole
+    // gesture as one undo entry; cancel restores the snapshot.
+    std::optional<std::pair<int, int>> edgeSideAtForDrag(sf::Vector2f worldPos) const;
+    bool beginEdgeSideDrag(sf::Vector2f worldPos);
+    void previewEdgeSideDrag(sf::Vector2f worldPos);
+    void commitEdgeSideDrag(sf::Vector2f worldPos);
+    void cancelEdgeSideDrag();
+
+    // Hover feedback for the side-drag: show a horizontal/vertical resize cursor while the mouse is
+    // over a grabbable zone side (and while dragging one); restore the default cursor otherwise.
+    void updateEdgeHoverCursor(sf::Vector2f worldPos);
+    void resetEdgeHoverCursor();
 
     // Handles a click in SetPlayerPosition mode: routes to an armed beginHexPick callback (one-shot)
     // or, failing that, emits playerPositionSelected (legacy player-start pick).
@@ -537,6 +574,14 @@ private:
     // (-1 = none); _activeEdgeSide is the side being dragged (0=left,1=top,2=right,3=bottom; -1 = none).
     int _selectedEdgeZone = -1;
     int _activeEdgeSide = -1;
+    // Live side-drag state: while _draggingEdgeSide, mouse moves preview _edgeDragSide of the selected
+    // zone; _edgeDragBefore is the pre-drag edge snapshot, committed as one undo entry on release.
+    bool _draggingEdgeSide = false;
+    int _edgeDragSide = -1;
+    std::optional<MapEdge> _edgeDragBefore;
+    // The side whose resize cursor is currently applied to the viewport (-1 = default cursor); see
+    // updateEdgeHoverCursor.
+    int _edgeHoverCursorSide = -1;
 
     // Base positions of the selected floor/roof sprites captured while a region is being dragged, so
     // the live preview can offset them and restore them when the drag ends.
