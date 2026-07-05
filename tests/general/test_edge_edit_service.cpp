@@ -128,6 +128,22 @@ TEST_CASE("EdgeEditService restore discards a preview without recording", "[edge
     CHECK_FALSE(f.stack.canUndo());
 }
 
+TEST_CASE("EdgeEditService rejects v2 square/clip edits on a v1 edge", "[edge_edit]") {
+    EdgeFixture f;
+    f.svc.addZone(0, EdgeFixture::seed()); // edge starts at v1
+    REQUIRE(f.svc.edge()->version == 1);
+
+    // These only serialize for v2, so they must be rejected (not silently non-persisting edits).
+    CHECK_FALSE(f.svc.toggleClipSide(0, EdgeEditService::LEFT));
+    CHECK_FALSE(f.svc.setSquareSide(0, EdgeEditService::LEFT, 10));
+    CHECK_FALSE(f.svc.resetSquare(0));
+    CHECK_FALSE(f.svc.edge()->elevations[0].clipSides.left); // v1 block untouched
+
+    // Only the addZone is on the undo stack — the three rejected edits recorded nothing.
+    REQUIRE(f.stack.undo());
+    CHECK_FALSE(f.stack.canUndo());
+}
+
 TEST_CASE("EdgeEditService v2 upgrade, clip, square and reset are undoable", "[edge_edit]") {
     EdgeFixture f;
     f.svc.addZone(0, EdgeFixture::seed()); // creates the edge as v1

@@ -1039,8 +1039,11 @@ void MainWindow::setupDockWidgets() {
             _currentEditorWidget->setShowSpatialScripts(enabled);
     });
     connect(this, &MainWindow::showMapEdgesToggled, this, [this](bool enabled) {
-        if (_currentEditorWidget)
+        if (_currentEditorWidget) {
             _currentEditorWidget->setShowMapEdges(enabled);
+            // Hiding the overlay drops the edge-zone selection, so re-sync the panel's button state.
+            refreshMapEdgesPanel();
+        }
     });
     connect(this, &MainWindow::elevationChanged, this, [this](int elevation) {
         if (_currentEditorWidget) {

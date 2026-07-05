@@ -167,7 +167,9 @@ bool EdgeEditService::upgradeToVersion2() {
 }
 
 bool EdgeEditService::setSquareSide(int elevation, Side side, int colOrRow) {
-    if (!hasEdge() || !validElevation(elevation)) {
+    // The square/clip block is only serialized for v2 edges (MapEdgeWriter), so reject the edit on v1
+    // rather than "succeed" with a change that would never be saved.
+    if (!hasEdge() || !validElevation(elevation) || !_map->edge()->isVersion2()) {
         return false;
     }
     std::optional<MapEdge> before = _map->edge();
@@ -192,7 +194,8 @@ bool EdgeEditService::setSquareSide(int elevation, Side side, int colOrRow) {
 }
 
 bool EdgeEditService::toggleClipSide(int elevation, Side side) {
-    if (!hasEdge() || !validElevation(elevation)) {
+    // Clip flags are only serialized for v2 edges, so a v1 toggle would silently not persist.
+    if (!hasEdge() || !validElevation(elevation) || !_map->edge()->isVersion2()) {
         return false;
     }
     std::optional<MapEdge> before = _map->edge();
@@ -217,7 +220,8 @@ bool EdgeEditService::toggleClipSide(int elevation, Side side) {
 }
 
 bool EdgeEditService::resetSquare(int elevation) {
-    if (!hasEdge() || !validElevation(elevation)) {
+    // The square/clip block only exists in v2 files, so resetting it on a v1 edge would not persist.
+    if (!hasEdge() || !validElevation(elevation) || !_map->edge()->isVersion2()) {
         return false;
     }
     std::optional<MapEdge> before = _map->edge();
