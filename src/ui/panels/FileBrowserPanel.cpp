@@ -825,12 +825,13 @@ void FileBrowserPanel::processNextChunk() {
     FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
     const auto nativeDirectories = _nativeDirectoriesForSources.empty() ? getNativeDirectoryPaths() : _nativeDirectoriesForSources;
 
+    // No nested processEvents here: a chunk is small (CHUNK_SIZE rows) and the queued
+    // re-invoke below already yields to the real event loop between chunks. Re-entrant
+    // event pumping from inside the chunk let other timers (notably the SFML render
+    // loop) run long work re-entrantly, starving modal progress dialogs — a map load's
+    // progress bar sat frozen until the load finished.
     size_t endIndex = std::min(_currentChunkIndex + CHUNK_SIZE, _pendingFiles.size());
     for (size_t i = _currentChunkIndex; i < endIndex; ++i) {
-        if ((i - _currentChunkIndex) % 10 == 0) {
-            QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
-        }
-
         insertFileRow(rootItem, _pendingFiles[i], nativeDirectories);
     }
 

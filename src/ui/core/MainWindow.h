@@ -50,6 +50,7 @@ class ScriptConsoleWidget;
 class SpatialScriptDialog;
 class LogPanel;
 class LogModel;
+class CompletenessView;
 class Map;
 
 class MainWindow : public QMainWindow {
@@ -93,6 +94,10 @@ public:
     // Attach the application-wide log record store to the Log panel (the model outlives this
     // window; the in-app spdlog sink feeds it from application startup on).
     void setLogModel(LogModel* model);
+
+    // Re-scan the open map's referenced resources against the mounted data and refresh the Log
+    // dock's "Map" tab (clears it when no map is open). Cheap — in-memory index lookups only.
+    void refreshCompleteness();
 
 signals:
     void newMapRequested();
@@ -279,6 +284,7 @@ private:
 #endif
     QDockWidget* _logDock = nullptr;
     LogPanel* _logPanel = nullptr;
+    CompletenessView* _completenessView = nullptr;
     // Guards the persisted dock layout while docks are re-laid-out programmatically (hidden for the
     // welcome screen, re-shown for a map), so those transient changes aren't written back as if the
     // user made them.

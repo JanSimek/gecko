@@ -1,23 +1,16 @@
 #include "cli/ResourceInspect.h"
 
 #include "cli/MapLoad.h"
-#include "format/lst/Lst.h"
 #include "format/map/Map.h"
-#include "format/map/MapObject.h"
-#include "format/map/Tile.h"
 #include "resource/DataFileSystem.h"
-#include "resource/FrmResolver.h"
 #include "resource/GameResources.h"
-#include "resource/ResourcePaths.h"
+#include "resource/MapCompleteness.h"
 
 #include <nlohmann/json.hpp>
 
-#include <cctype>
-#include <cstdint>
 #include <optional>
 #include <ostream>
 #include <regex>
-#include <set>
 #include <string>
 
 using json = nlohmann::json;
@@ -124,75 +117,47 @@ int resourceMissing(resource::GameResources& resources, const std::string& mapPa
         return 1;
     }
 
-    auto& files = resources.files();
-
-    // --- Tiles: distinct floor/roof ids across every elevation -> tiles.lst filename -> exists? ---
-    std::set<int> usedTileIds;
-    for (const auto& [elevation, tiles] : map->getMapFile().tiles) {
-        for (const auto& tile : tiles) {
-            if (tile.getFloor() != Map::EMPTY_TILE) {
-                usedTileIds.insert(tile.getFloor());
-            }
-            if (tile.getRoof() != Map::EMPTY_TILE) {
-                usedTileIds.insert(tile.getRoof());
-            }
-        }
-    }
-
-    const Lst* tilesLst = nullptr;
-    try {
-        tilesLst = resources.repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
-    } catch (const std::exception&) {
-        tilesLst = nullptr; // reported below as an unresolved tiles.lst
-    }
+    // The scan itself is shared with the editor's completeness panel (resource/MapCompleteness);
+    // this function only renders the report as JSON.
+    const resource::MapCompletenessReport report = resource::scanMapCompleteness(resources, *map);
 
     auto missingTiles = json::array();
-    for (int id : usedTileIds) {
-        if (tilesLst == nullptr) {
-            missingTiles.push_back({ { "id", id }, { "art", nullptr }, { "reason", "tiles.lst not mounted" } });
-            continue;
-        }
-        const auto& names = tilesLst->list();
-        if (id < 0 || static_cast<std::size_t>(id) >= names.size()) {
-            missingTiles.push_back({ { "id", id }, { "art", nullptr }, { "reason", "tile id out of tiles.lst range" } });
-            continue;
-        }
-        const std::string art = "art/tiles/" + names[static_cast<std::size_t>(id)];
-        if (!files.exists(art)) {
-            missingTiles.push_back({ { "id", id }, { "art", art } });
-        }
+    for (const auto& tile : report.missingTiles) {
+        missingTiles.push_back({ { "id", tile.id },
+            { "art", tile.art.empty() ? json(nullptr) : json(tile.art) },
+            { "reason", tile.reason } });
     }
 
-    // --- Object art: distinct FIDs -> resolved art path -> exists? (resolve() can throw) ---
-    std::set<std::uint32_t> checkedFids;
     auto missingObjectArt = json::array();
-    for (const auto& [elevation, objects] : map->objects()) {
-        for (const auto& object : objects) {
-            if (object->position == -1) {
-                continue; // inventory/container child, not placed on the map
-            }
-            if (!checkedFids.insert(object->frm_pid).second) {
-                continue; // this FID already checked
-            }
-            std::string art;
-            try {
-                art = resources.frmResolver().resolve(object->frm_pid);
-            } catch (const std::exception&) {
-                missingObjectArt.push_back({ { "pid", object->frm_pid }, { "art", nullptr }, { "reason", "FID does not resolve" } });
-                continue;
-            }
-            if (art.empty() || !files.exists(art)) {
-                missingObjectArt.push_back({ { "pid", object->frm_pid }, { "art", art.empty() ? json(nullptr) : json(art) } });
-            }
-        }
+    for (const auto& art : report.missingObjectArt) {
+        missingObjectArt.push_back({ { "pid", art.fid },
+            { "art", art.art.empty() ? json(nullptr) : json(art.art) },
+            { "reason", art.reason } });
+    }
+
+    auto missingScripts = json::array();
+    for (const auto& script : report.unresolvedScripts) {
+        missingScripts.push_back({ { "programIndex", script.programIndex },
+            { "name", script.name.empty() ? json(nullptr) : json(script.name) },
+            { "reason", script.reason } });
+    }
+
+    auto mounts = json::array();
+    for (const auto& mount : report.mounts) {
+        mounts.push_back(sourceInfoJson(mount));
     }
 
     json result{
         { "map", mapPath },
-        { "usedTileCount", usedTileIds.size() },
-        { "objectArtCount", checkedFids.size() },
+        { "usedTileCount", report.usedTileCount },
+        { "objectArtCount", report.objectArtCount },
+        { "scriptCount", report.scriptCount },
         { "missingTiles", std::move(missingTiles) },
         { "missingObjectArt", std::move(missingObjectArt) },
+        { "missingScripts", std::move(missingScripts) },
+        { "mounts", std::move(mounts) },
+        { "tilesLstMounted", report.tilesLstMounted },
+        { "scriptsLstMounted", report.scriptsLstMounted },
     };
     out << result.dump() << "\n";
     return 0;
