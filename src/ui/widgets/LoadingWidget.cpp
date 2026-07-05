@@ -101,7 +101,6 @@ void LoadingWidget::updateProgress() {
     if (!_isLoading) {
         return;
     }
-
     bool allDone = true;
     int totalProgress = 0;
     int activeLoaders = 0;
@@ -132,6 +131,17 @@ void LoadingWidget::updateProgress() {
         } else {
             // Run the completion callback exactly once per loader
             if (!_loadersCompleted[i]) {
+                // onDone() runs the consumer's callback synchronously — for a map load that
+                // is the whole editor build (sprites, GL uploads), which can take seconds and
+                // processes no paint or timer events. Show and PAINT the completion state
+                // first, or the dialog freezes on its last-painted value (often the initial
+                // 0%, since a fast loader finishes before the first timer tick) for the
+                // entire build and then jumps to 100%.
+                if (_loaders.size() == 1) {
+                    _progressBar->setValue(100);
+                }
+                _statusLabel->setText(tr("Finalizing..."));
+                repaint();
                 spdlog::debug("LoadingWidget: Calling onDone() for completed loader {}", i);
                 loader->onDone();
                 _loadersCompleted[i] = true;

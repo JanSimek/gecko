@@ -15,7 +15,6 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QHeaderView>
-#include <QPointer>
 #include <QSplitter>
 #include <QGroupBox>
 #include <QScrollBar>
@@ -448,7 +447,7 @@ void FileBrowserPanel::stopLoading() {
     spdlog::debug("FileBrowserPanel: Stopping loading operations...");
 
     _isLoading = false;
-    ++_populationEpoch; // any in-flight chunk resuming from processEvents must not continue
+    ++_populationEpoch; // kill any queued chunk pump belonging to the stopped population
 
     if (_loaderWorker) {
         _loaderWorker->_shouldStop.store(true);
@@ -829,21 +828,15 @@ void FileBrowserPanel::processNextChunk() {
     FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
     const auto nativeDirectories = _nativeDirectoriesForSources.empty() ? getNativeDirectoryPaths() : _nativeDirectoriesForSources;
 
-    // processEvents below hands control to arbitrary code: a settings change can replace this
-    // panel (it is deleteLater'd but we are still on its stack) or restart/stop the population
-    // (invalidating rootItem and _pendingFiles). Guard both before touching any member again.
-    const QPointer<FileBrowserPanel> alive(this);
-    const int epoch = _populationEpoch;
-
+    // No nested processEvents here: a chunk is small (CHUNK_SIZE rows) and the queued
+    // re-invoke below already yields to the real event loop between chunks. Re-entrant
+    // event pumping from inside the chunk let other timers (notably the SFML render
+    // loop) run long work re-entrantly, starving modal progress dialogs — a map load's
+    // progress bar sat frozen until the load finished. It also let a settings change
+    // delete or restart this panel mid-chunk; with the pump gone, nothing can touch the
+    // population state while a chunk runs.
     size_t endIndex = std::min(_currentChunkIndex + CHUNK_SIZE, _pendingFiles.size());
     for (size_t i = _currentChunkIndex; i < endIndex; ++i) {
-        if ((i - _currentChunkIndex) % 10 == 0) {
-            QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
-            if (!alive || alive->_populationEpoch != epoch) {
-                return;
-            }
-        }
-
         insertFileRow(rootItem, _pendingFiles[i], nativeDirectories);
     }
 
@@ -853,7 +846,17 @@ void FileBrowserPanel::processNextChunk() {
             .arg(_currentChunkIndex)
             .arg(_pendingFiles.size()));
 
-    QMetaObject::invokeMethod(this, &FileBrowserPanel::processNextChunk, Qt::QueuedConnection);
+    // A settings change can restart or stop the population while this chunk's re-invoke
+    // is already queued; the epoch check kills the stale pump so a restart doesn't leave
+    // two pumps advancing the same population.
+    const int epoch = _populationEpoch;
+    QMetaObject::invokeMethod(
+        this, [this, epoch]() {
+            if (epoch == _populationEpoch) {
+                processNextChunk();
+            }
+        },
+        Qt::QueuedConnection);
 }
 
 void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
