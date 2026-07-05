@@ -1,6 +1,8 @@
 #define QT_NO_EMIT
 #include "Application.h"
 
+#include <algorithm>
+
 #include <spdlog/spdlog.h>
 #include <QCommandLineParser>
 #include <QCommandLineOption>
@@ -11,6 +13,8 @@
 #include "version.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
+#include "ui/logging/LogModel.h"
+#include "ui/logging/LogModelSink.h"
 #include "state/loader/MapLoader.h"
 #include "util/GameDataPathResolver.h"
 #include "ui/Settings.h"
@@ -33,6 +37,12 @@ Application::Application(int argc, char** argv)
     _qtApp->setApplicationName(geck::version::name);
     _qtApp->setApplicationDisplayName(geck::version::name);
     _qtApp->setApplicationVersion(geck::version::string);
+
+    // Mirror every log record into the Log panel's model from here on, so load-time warnings
+    // (missing tile art, unresolved sprites, ...) reach the UI, not just the console.
+    _logModel = std::make_unique<LogModel>();
+    _logSink = std::make_shared<LogModelSink>(_logModel.get());
+    spdlog::default_logger()->sinks().push_back(_logSink);
 
     std::filesystem::path iconPath = getResourcesPath() / "icon.png";
     QIcon appIcon(QString::fromStdString(iconPath.string()));
@@ -126,6 +136,11 @@ std::string Application::processCommandLineArgs() {
 }
 
 Application::~Application() {
+    if (_logSink) {
+        auto& sinks = spdlog::default_logger()->sinks();
+        sinks.erase(std::remove(sinks.begin(), sinks.end(), _logSink), sinks.end());
+        _logSink->detach();
+    }
     if (_mainWindow) {
         _mainWindow->stopGameLoop();
     }
@@ -138,6 +153,7 @@ Application::~Application() {
 
 void Application::initUI() {
     _mainWindow = std::make_unique<MainWindow>(_resources, _settings);
+    _mainWindow->setLogModel(_logModel.get());
 
     // Check if this is first run or if user prefers maximized
     auto& settings = *_settings;

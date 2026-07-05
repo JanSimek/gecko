@@ -12,6 +12,7 @@
 #include "ui/panels/TilePalettePanel.h"
 #include "ui/panels/ObjectPalettePanel.h"
 #include "ui/panels/FileBrowserPanel.h"
+#include "ui/panels/LogPanel.h"
 #ifdef GECK_SCRIPTING_ENABLED
 #include "ui/panels/ScriptConsoleWidget.h"
 #include "scripting/LuaScriptRuntime.h" // ScriptResult
@@ -944,15 +945,14 @@ void MainWindow::wireScriptConsole() {
         const ScriptResult result = _currentEditorWidget->runScript(source.toStdString());
         _scriptConsole->showResult(result.ok, QString::fromStdString(result.output), QString::fromStdString(result.error));
     });
-
-    if (_viewMenu) {
-        _viewMenu->addSeparator();
-        QAction* consoleAction = _scriptConsoleDock->toggleViewAction();
-        consoleAction->setText(tr("Script &Console"));
-        _viewMenu->addAction(consoleAction);
-    }
 }
 #endif
+
+void MainWindow::setLogModel(LogModel* model) {
+    if (_logPanel) {
+        _logPanel->setModel(model);
+    }
+}
 
 void MainWindow::setupDockWidgets() {
     auto createDock = [this](const QString& title, const char* objectName, QWidget* panel, Qt::DockWidgetArea area, QSizePolicy::Policy verticalPolicy, int minHeight) {
@@ -996,6 +996,25 @@ void MainWindow::setupDockWidgets() {
     _scriptConsoleDock->hide();
     wireScriptConsole();
 #endif
+
+    // Log & diagnostics: same shape as the script console — a bottom dock outside the managed
+    // layout persistence, hidden until opened from the View menu. The record store is the
+    // application's LogModel, attached via setLogModel() once the window exists.
+    _logPanel = new LogPanel();
+    _logDock = createDock("Log", "LogDock", _logPanel, Qt::BottomDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_SMALL);
+    _logDock->hide();
+
+    if (_viewMenu) {
+        _viewMenu->addSeparator();
+#ifdef GECK_SCRIPTING_ENABLED
+        QAction* consoleAction = _scriptConsoleDock->toggleViewAction();
+        consoleAction->setText(tr("Script &Console"));
+        _viewMenu->addAction(consoleAction);
+#endif
+        QAction* logAction = _logDock->toggleViewAction();
+        logAction->setText(tr("&Log"));
+        _viewMenu->addAction(logAction);
+    }
 
     // MainWindow signals → current editor widget (connected once; both sender
     // and receiver are MainWindow, so these survive for the lifetime of the window)
