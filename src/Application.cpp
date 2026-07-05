@@ -1,8 +1,6 @@
 #define QT_NO_EMIT
 #include "Application.h"
 
-#include <algorithm>
-
 #include <spdlog/spdlog.h>
 #include <QCommandLineParser>
 #include <QCommandLineOption>
@@ -137,8 +135,9 @@ std::string Application::processCommandLineArgs() {
 
 Application::~Application() {
     if (_logSink) {
-        auto& sinks = spdlog::default_logger()->sinks();
-        sinks.erase(std::remove(sinks.begin(), sinks.end(), _logSink), sinks.end());
+        // Detach only — do not mutate the logger's sink list here: a worker thread still logging
+        // would race the unsynchronized vector. The detached sink stays installed but inert
+        // (detach and sink_it_ hold the same base_sink mutex) until spdlog tears down at exit.
         _logSink->detach();
     }
     if (_mainWindow) {
