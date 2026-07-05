@@ -137,7 +137,12 @@ QString FileLoaderWorker::resolveProName(const std::string& vfsPath) const {
             return QStringLiteral("Failed to load");
         }
 
-        const auto* msgFile = ProHelper::msgFile(*_resources, pro->type());
+        const Msg* msgFile = nullptr;
+        try {
+            msgFile = ProHelper::msgFile(*_resources, pro->type());
+        } catch (const std::exception&) {
+            msgFile = nullptr; // repository().load throws when the msg file isn't mounted
+        }
         if (!msgFile) {
             return QStringLiteral("MSG not found");
         }
@@ -212,10 +217,6 @@ void FileLoaderWorker::loadFiles() {
                 entry.source = QStringLiteral("Unknown");
             }
 
-            if (entry.extension == QLatin1String(".pro")) {
-                entry.proName = resolveProName(file);
-            }
-
             entries.push_back(std::move(entry));
 
             if (++processed % 1000 == 0) {
@@ -233,6 +234,27 @@ void FileLoaderWorker::loadFiles() {
 
         spdlog::debug("FileLoaderWorker: Loaded {} files with {} file types",
             allFiles.size(), fileTypes.size());
+
+        // Second pass: PRO display names. Parsing every proto (plus its msg file) is the one
+        // expensive per-file job — seconds on a cold cache — so it runs after the tree data is
+        // already delivered and trickles in as batched column updates.
+        QHash<QString, QString> names;
+        for (const auto& entry : entries) {
+            if (_shouldStop.load()) {
+                return;
+            }
+            if (entry.extension != QLatin1String(".pro")) {
+                continue;
+            }
+            names.insert(entry.path, resolveProName(entry.path.toStdString()));
+            if (names.size() >= 500) {
+                Q_EMIT proNamesResolved(names);
+                names.clear();
+            }
+        }
+        if (!names.isEmpty()) {
+            Q_EMIT proNamesResolved(names);
+        }
 
         Q_EMIT loadingComplete();
 
@@ -489,6 +511,8 @@ void FileBrowserPanel::loadFiles() {
     _isLoading = true;
     ++_populationEpoch;
     _allEntries.clear();
+    _resolvedProNames.clear();
+    _proNameItems.clear();
     _fileTypes.clear();
     _pendingEntries.clear();
     _currentChunkIndex = 0;
@@ -514,6 +538,7 @@ void FileBrowserPanel::loadFiles() {
     spdlog::debug("FileBrowserPanel: Connecting worker signals...");
     connect(_loaderThread, &QThread::started, _loaderWorker, &FileLoaderWorker::loadFiles);
     connect(_loaderWorker, &FileLoaderWorker::filesLoaded, this, &FileBrowserPanel::onFilesLoaded, Qt::QueuedConnection);
+    connect(_loaderWorker, &FileLoaderWorker::proNamesResolved, this, &FileBrowserPanel::onProNamesResolved, Qt::QueuedConnection);
     connect(_loaderWorker, &FileLoaderWorker::fileTypesExtracted, this, &FileBrowserPanel::onFileTypesExtracted, Qt::QueuedConnection);
     connect(_loaderWorker, &FileLoaderWorker::loadingProgress, this, &FileBrowserPanel::onLoadingProgress, Qt::QueuedConnection);
     connect(_loaderWorker, &FileLoaderWorker::loadingError, this, &FileBrowserPanel::onLoadingError, Qt::QueuedConnection);
@@ -596,13 +621,27 @@ void FileBrowserPanel::insertFileRow(FileTreeItem* rootItem, const FileBrowserEn
     QStandardItem* pathItem = new QStandardItem(entry.normalizedPath);
     pathItem->setEditable(false);
 
-    QStandardItem* proNameItem = new QStandardItem(entry.proName);
+    QStandardItem* proNameItem = new QStandardItem();
     proNameItem->setEditable(false);
+    if (entry.extension == QLatin1String(".pro")) {
+        proNameItem->setText(_resolvedProNames.value(entry.path));
+        _proNameItems.insert(entry.path, proNameItem);
+    }
 
     currentParent->appendRow(QList<QStandardItem*>() << fileItem << typeItem << sourceItem << pathItem << proNameItem);
 }
 
+void FileBrowserPanel::onProNamesResolved(const QHash<QString, QString>& namesByPath) {
+    for (auto it = namesByPath.constBegin(); it != namesByPath.constEnd(); ++it) {
+        _resolvedProNames.insert(it.key(), it.value());
+        if (QStandardItem* item = _proNameItems.value(it.key())) {
+            item->setText(it.value());
+        }
+    }
+}
+
 void FileBrowserPanel::buildFileTree(const std::vector<FileBrowserEntry>& entries) {
+    _proNameItems.clear(); // the model clear below deletes the indexed items
     _treeModel->clear();
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
 
@@ -848,6 +887,7 @@ void FileBrowserPanel::startProgressiveTreeBuild(std::vector<FileBrowserEntry> f
     _pendingEntries = std::move(filteredEntries);
     _currentChunkIndex = 0;
 
+    _proNameItems.clear(); // the model clear below deletes the indexed items
     _treeModel->clear();
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
     applyDefaultColumnVisibility();

@@ -52,6 +52,7 @@ bool waitForPopulation(FileBrowserPanel& panel, int timeoutMs) {
 TEST_CASE("FileBrowserPanel populates the tree with worker-computed metadata", "[qt][filebrowser]") {
     auto resources = std::make_shared<resource::GameResources>();
     resources->files().addDataPath(geck::test::dataPath("f2_res.dat"));
+    resources->files().addDataPath(geck::test::dataDir()); // loose files, incl. a .pro fixture
     auto settings = std::make_shared<Settings>();
 
     FileBrowserPanel panel(resources, settings);
@@ -68,4 +69,18 @@ TEST_CASE("FileBrowserPanel populates the tree with worker-computed metadata", "
     CHECK(modelContains(model, 0, QStringLiteral("hr_alltlk.frm")));
     CHECK(modelContains(model, 1, QStringLiteral(".frm")));
     CHECK(modelContains(model, 2, QStringLiteral("DAT (f2_res.dat)")));
+
+    // PRO names resolve in the worker's second pass and land in the tree afterwards —
+    // either via the cache at row insertion or as a live column update. The fixture tree
+    // carries no pro_item.msg, so the resolved value is the explicit "MSG not found"
+    // (never silently blank), which is exactly what proves the pipeline delivered.
+    QElapsedTimer timer;
+    timer.start();
+    bool proNameArrived = false;
+    while (timer.elapsed() < 15000 && !proNameArrived) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        proNameArrived = modelContains(model, 4, QStringLiteral("MSG not found"));
+    }
+    CHECK(proNameArrived);
+    CHECK(modelContains(model, 0, QStringLiteral("test_item_drug_radx.pro")));
 }

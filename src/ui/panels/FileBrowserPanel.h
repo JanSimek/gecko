@@ -26,6 +26,7 @@
 #include <unordered_map>
 #include <atomic>
 #include <QSet>
+#include <QHash>
 
 namespace geck {
 
@@ -43,7 +44,6 @@ struct FileBrowserEntry {
     QString normalizedPath; //!< display path, relative to its providing mount
     QString extension;      //!< lowercase ".ext", empty when the file has none
     QString source;         //!< display label of the mount that provides the file
-    QString proName;        //!< resolved PRO name for .pro files, empty otherwise
 };
 
 /**
@@ -65,6 +65,10 @@ public slots:
 
 signals:
     void filesLoaded(const std::vector<FileBrowserEntry>& entries);
+    /// PRO display names, resolved in a second pass after filesLoaded: parsing thousands of
+    /// protos (and their msg files) is the one expensive per-file job, so it must not delay
+    /// the tree. Emitted in batches; keyed by the entry's raw VFS path.
+    void proNamesResolved(const QHash<QString, QString>& namesByPath);
     void fileTypesExtracted(const std::unordered_set<std::string>& fileTypes);
     void loadingProgress(int current, int total, const QString& status);
     void loadingError(const QString& error);
@@ -165,6 +169,7 @@ private slots:
     void updateFileDisplay();
     void onCustomContextMenuRequested(const QPoint& pos);
     void onFilesLoaded(const std::vector<FileBrowserEntry>& entries);
+    void onProNamesResolved(const QHash<QString, QString>& namesByPath);
     void onFileTypesExtracted(const std::unordered_set<std::string>& fileTypes);
     void onLoadingProgress(int current, int total, const QString& status);
     void onLoadingError(const QString& error);
@@ -234,6 +239,11 @@ private:
 
     // Data
     std::vector<FileBrowserEntry> _allEntries;
+    // PRO names arrive from the worker after the tree is built; the cache survives rebuilds
+    // (filter changes re-insert rows before resolution finishes) and the item index lets a
+    // late batch update visible rows in place. The index is rebuilt with every population.
+    QHash<QString, QString> _resolvedProNames;
+    QHash<QString, QStandardItem*> _proNameItems;
     std::unordered_set<std::string> _fileTypes;
 
     // State
