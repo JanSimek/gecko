@@ -143,7 +143,9 @@ void ensureFallbackDataPath(std::vector<std::filesystem::path>& paths, const std
         });
 
     if (!alreadyListed) {
-        paths.push_back(fallbackDir);
+        // The stored order is lowest-priority-first (the VFS resolves last-mounted-wins, and the
+        // Data Paths table displays the list reversed) — so lowest priority means the FRONT.
+        paths.insert(paths.begin(), fallbackDir);
     }
 }
 

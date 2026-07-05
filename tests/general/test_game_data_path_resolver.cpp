@@ -264,7 +264,7 @@ TEST_CASE("resolveGameDataRoot: 'Resources' not inside .app/Contents is not trea
 
 #endif // __APPLE__
 
-TEST_CASE("ensureFallbackDataPath appends a missing fallback at the lowest priority", "[paths]") {
+TEST_CASE("ensureFallbackDataPath inserts a missing fallback at the lowest priority", "[paths]") {
     TempDir tmp;
     const auto gameDir = tmp.root / "game";
     const auto resourcesDir = tmp.root / "resources";
@@ -275,7 +275,10 @@ TEST_CASE("ensureFallbackDataPath appends a missing fallback at the lowest prior
     geck::util::ensureFallbackDataPath(paths, resourcesDir);
 
     REQUIRE(paths.size() == 3);
-    REQUIRE(paths.back() == resourcesDir);
+    // Stored order is lowest-priority-first (the VFS resolves last-mounted-wins), so the
+    // gap-filling fallback must land at the front — user data keeps overriding it.
+    REQUIRE(paths.front() == resourcesDir);
+    REQUIRE(paths.back() == gameDir / "master.dat");
 }
 
 TEST_CASE("ensureFallbackDataPath does not duplicate an already-listed fallback", "[paths]") {
