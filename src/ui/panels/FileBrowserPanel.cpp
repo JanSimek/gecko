@@ -900,20 +900,6 @@ void FileBrowserPanel::startProgressiveTreeBuild(std::vector<FileBrowserEntry> f
 }
 
 void FileBrowserPanel::processNextChunk() {
-    // While a modal is up (e.g. the map-load progress dialog), pause the population: every
-    // inserted row queries the DataFileSystem, whose lock the map loader hammers from its
-    // worker thread, so chunking through it on the UI thread can block for seconds per
-    // chunk and starve the dialog's timer and paint events. Retry until the modal closes.
-    if (QApplication::activeModalWidget() != nullptr) {
-        const int epoch = _populationEpoch;
-        QTimer::singleShot(100, this, [this, epoch]() {
-            if (epoch == _populationEpoch) {
-                processNextChunk();
-            }
-        });
-        return;
-    }
-
     if (_currentChunkIndex >= _pendingEntries.size()) {
         _isLoading = false;
         _progressBar->setVisible(false);
