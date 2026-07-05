@@ -10,6 +10,7 @@
 
 #include "version.h"
 #include "resource/GameResources.h"
+#include "resource/ResourcePaths.h"
 #include "state/loader/MapLoader.h"
 #include "util/GameDataPathResolver.h"
 #include "ui/Settings.h"
@@ -41,7 +42,7 @@ Application::Application(int argc, char** argv)
 
     initUI();
 
-    checkFirstRun();
+    checkDataConfiguration();
 
     loadMap(finalMapPath);
 }
@@ -158,21 +159,50 @@ bool Application::isRunning() const {
     return _mainWindow && _mainWindow->isVisible();
 }
 
-void Application::checkFirstRun() {
+void Application::checkDataConfiguration() {
     auto& settings = *_settings;
     if (!settings.exists()) {
         spdlog::info("First run detected, showing settings dialog");
-
-        SettingsDialog dialog(_settings, _mainWindow.get());
-        dialog.exec();
-
-        // Save and reload data paths whether or not the dialog was accepted, so we keep at least the
-        // default data path from the command line and the app is usable either way.
-        settings.save();
+        showStartupSettingsDialog();
         loadDataPaths();
-    } else {
-        loadDataPaths();
+        return;
     }
+
+    loadDataPaths();
+
+    // Settings exist, but the configured paths no longer provide the files the editor can't
+    // run without (the game install moved or was deleted since the last run). Prompt once with
+    // the same dialog as on first run, then remount whatever the user configured.
+    if (!hasEssentialGameData()) {
+        spdlog::warn("Configured data paths are missing essential game files, showing settings dialog");
+        if (showStartupSettingsDialog()) {
+            _resources->clearAllDataPaths();
+            loadDataPaths();
+        }
+    }
+}
+
+bool Application::showStartupSettingsDialog() {
+    SettingsDialog dialog(_settings, _mainWindow.get());
+
+    bool dataPathsChanged = false;
+    QObject::connect(&dialog, &SettingsDialog::settingsSaved, [&dataPathsChanged](bool changed) {
+        dataPathsChanged = dataPathsChanged || changed;
+    });
+
+    dialog.exec();
+
+    // Save whether or not the dialog was accepted, so we keep at least the default data path
+    // from the command line and the app is usable either way.
+    _settings->save();
+    return dataPathsChanged;
+}
+
+bool Application::hasEssentialGameData() const {
+    // The palette and the tile list back every rendering path; if the mounted data paths can't
+    // resolve them, no map can be displayed and the data configuration needs fixing.
+    const auto& files = _resources->files();
+    return files.exists(ResourcePaths::Pal::COLOR) && files.exists(ResourcePaths::Lst::TILES);
 }
 
 void Application::loadDataPaths() {

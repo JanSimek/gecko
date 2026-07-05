@@ -195,6 +195,7 @@ void MainWindow::setupUI() {
     _welcomeWidget = new WelcomeWidget(this);
     connect(_welcomeWidget, &WelcomeWidget::newMapRequested, this, &MainWindow::newMapRequested);
     connect(_welcomeWidget, &WelcomeWidget::browseMapsRequested, this, &MainWindow::showMapBrowserDialog);
+    connect(_welcomeWidget, &WelcomeWidget::preferencesRequested, this, &MainWindow::showPreferences);
     _centralStack->addWidget(_welcomeWidget);
     _centralStack->setCurrentWidget(_welcomeWidget);
 

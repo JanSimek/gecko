@@ -31,7 +31,9 @@ public:
 private:
     void initUI();
     std::string processCommandLineArgs();
-    void checkFirstRun();
+    void checkDataConfiguration();
+    bool showStartupSettingsDialog();
+    bool hasEssentialGameData() const;
     void loadDataPaths();
 
     std::unique_ptr<QApplication> _qtApp;

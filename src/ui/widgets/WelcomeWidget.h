@@ -27,6 +27,8 @@ signals:
     void newMapRequested();
     /// The user asked to open the map browser from the welcome screen.
     void browseMapsRequested();
+    /// The user asked to open the preferences dialog from the welcome screen.
+    void preferencesRequested();
 
 private:
     void setupUI();
@@ -39,6 +41,7 @@ private:
     QLabel* _versionLabel;
     QPushButton* _newMapButton;
     QPushButton* _browseButton;
+    QPushButton* _preferencesButton;
 };
 
 } // namespace geck

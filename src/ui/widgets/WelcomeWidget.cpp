@@ -25,7 +25,8 @@ WelcomeWidget::WelcomeWidget(QWidget* parent)
     , _imageLabel(nullptr)
     , _versionLabel(nullptr)
     , _newMapButton(nullptr)
-    , _browseButton(nullptr) {
+    , _browseButton(nullptr)
+    , _preferencesButton(nullptr) {
     setupUI();
 }
 
@@ -62,19 +63,23 @@ void WelcomeWidget::createActionButtons() {
     // File menu's New Map / Browse Maps actions. MainWindow connects these signals to those handlers.
     _newMapButton = new QPushButton(createIcon(":/icons/actions/new.svg"), "New Map", this);
     _browseButton = new QPushButton(createIcon(":/icons/actions/open.svg"), "Browse Maps…", this);
-    for (QPushButton* button : { _newMapButton, _browseButton }) {
+    _preferencesButton = new QPushButton(createIcon(":/icons/actions/settings.svg"), "Preferences…", this);
+    for (QPushButton* button : { _newMapButton, _browseButton, _preferencesButton }) {
         button->setCursor(Qt::PointingHandCursor);
         button->setMinimumWidth(150);
     }
 
     connect(_newMapButton, &QPushButton::clicked, this, &WelcomeWidget::newMapRequested);
     connect(_browseButton, &QPushButton::clicked, this, &WelcomeWidget::browseMapsRequested);
+    connect(_preferencesButton, &QPushButton::clicked, this, &WelcomeWidget::preferencesRequested);
 
     auto* buttonRow = new QHBoxLayout();
     buttonRow->addStretch();
     buttonRow->addWidget(_newMapButton);
     buttonRow->addSpacing(ui::theme::spacing::NORMAL);
     buttonRow->addWidget(_browseButton);
+    buttonRow->addSpacing(ui::theme::spacing::NORMAL);
+    buttonRow->addWidget(_preferencesButton);
     buttonRow->addStretch();
 
     _layout->addSpacing(ui::theme::spacing::LOOSE);
