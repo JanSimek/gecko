@@ -15,8 +15,9 @@ namespace geck::resource {
 
 namespace {
 
-    // Load an index .lst through the repository, degrading to nullptr when it isn't mounted —
-    // reported per-entry by the caller, never thrown.
+    // Load an index .lst through the repository, degrading to nullptr when it can't be loaded
+    // for any reason (not mounted, unreadable, unparseable) — surfaced per-entry by the caller
+    // as the "not mounted" reason, never thrown.
     const Lst* tryLoadLst(GameResources& resources, std::string_view path) {
         try {
             return resources.repository().load<Lst>(std::string(path));

@@ -50,8 +50,9 @@ public:
     [[nodiscard]] std::vector<std::filesystem::path> list(const std::string& pattern = "*") const;
     std::optional<MountedSourceInfo> sourceInfo(const std::filesystem::path& path) const;
 
-    /// Every initialized mount in mount (priority) order — the data paths a resource lookup
-    /// walks. Later mounts shadow earlier ones on lookup (sourceInfo probes in reverse).
+    /// Every initialized mount, in the order the data paths were added. Lookups probe the
+    /// mounts in the REVERSE of this order (see sourceInfo), so a later entry shadows an
+    /// earlier one that provides the same path.
     [[nodiscard]] std::vector<MountedSourceInfo> mounts() const;
 
 private:
