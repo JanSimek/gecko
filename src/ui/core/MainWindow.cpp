@@ -13,6 +13,8 @@
 #include "ui/panels/ObjectPalettePanel.h"
 #include "ui/panels/FileBrowserPanel.h"
 #include "ui/panels/LogPanel.h"
+#include "ui/panels/CompletenessView.h"
+#include "resource/MapCompleteness.h"
 #ifdef GECK_SCRIPTING_ENABLED
 #include "ui/panels/ScriptConsoleWidget.h"
 #include "scripting/LuaScriptRuntime.h" // ScriptResult
@@ -66,6 +68,7 @@
 #include <QToolButton>
 #include <QIcon>
 #include <QSignalBlocker>
+#include <QTabWidget>
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
@@ -163,7 +166,11 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     // Any edit (or undo/redo) marks the map dirty for the close/title prompts.
     connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, [this]() { setMapModified(true); });
     // Non-undoable Console-script mutations (newMap/setPlayerStart) flag the map dirty too.
-    connect(_currentEditorWidget, &EditorWidget::mapModifiedByScript, this, [this]() { setMapModified(true); });
+    // A script/fill can reference new protos or tiles wholesale, so re-check completeness as well.
+    connect(_currentEditorWidget, &EditorWidget::mapModifiedByScript, this, [this]() {
+        setMapModified(true);
+        refreshCompleteness();
+    });
 
     syncMenuStateToEditorWidget();
 
@@ -186,6 +193,7 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
     updateUndoRedoActions();
     updateFillSelectionAction();
+    refreshCompleteness();
 }
 
 void MainWindow::setupUI() {
@@ -230,6 +238,8 @@ void MainWindow::connectMenuSignals() {
             // The new map is clean; refresh the title to its name.
             _mapModified = false;
             updateWindowTitle();
+            // setEditorWidget scanned before createNewMap populated the map; re-check now.
+            refreshCompleteness();
         } catch (const std::exception& e) {
             spdlog::error("Failed to create a new map: {}", e.what());
             QtDialogs::showError(this, "Missing Game Files",
@@ -954,6 +964,30 @@ void MainWindow::setLogModel(LogModel* model) {
     }
 }
 
+void MainWindow::refreshCompleteness() {
+    if (!_completenessView) {
+        return;
+    }
+
+    Map* map = _currentEditorWidget ? _currentEditorWidget->getMap() : nullptr;
+    if (!map) {
+        _completenessView->clearReport();
+        return;
+    }
+
+    const auto report = resource::scanMapCompleteness(*_resourcesShared, *map);
+    _completenessView->setReport(report, QString::fromStdString(map->filename()));
+
+    // A one-line total in the Log tab (and on stderr) so the gaps are noticed even when the
+    // Map tab isn't the one showing; the tab holds the per-entry breakdown.
+    if (!report.complete()) {
+        spdlog::warn("Map completeness: {} references {} unresolved resource(s) — {} tile(s), "
+                     "{} object sprite(s), {} script(s); see the Log panel's Map tab",
+            map->filename(), report.missingCount(), report.missingTiles.size(),
+            report.missingObjectArt.size(), report.unresolvedScripts.size());
+    }
+}
+
 void MainWindow::setupDockWidgets() {
     auto createDock = [this](const QString& title, const char* objectName, QWidget* panel, Qt::DockWidgetArea area, QSizePolicy::Policy verticalPolicy, int minHeight) {
         QDockWidget* dock = new QDockWidget(title, this);
@@ -998,10 +1032,17 @@ void MainWindow::setupDockWidgets() {
 #endif
 
     // Log & diagnostics: same shape as the script console — a bottom dock outside the managed
-    // layout persistence, hidden until opened from the View menu. The record store is the
-    // application's LogModel, attached via setLogModel() once the window exists.
+    // layout persistence, hidden until opened from the View menu. Two tabs: the raw record
+    // stream (the application's LogModel, attached via setLogModel() once the window exists)
+    // and the structured per-map completeness summary (refreshed on map load/close).
     _logPanel = new LogPanel();
-    _logDock = createDock("Log", "LogDock", _logPanel, Qt::BottomDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_SMALL);
+    _completenessView = new CompletenessView();
+    connect(_completenessView, &CompletenessView::refreshRequested, this, &MainWindow::refreshCompleteness);
+    auto* logTabs = new QTabWidget();
+    logTabs->setDocumentMode(true);
+    logTabs->addTab(_logPanel, tr("Log"));
+    logTabs->addTab(_completenessView, tr("Map"));
+    _logDock = createDock("Log", "LogDock", logTabs, Qt::BottomDockWidgetArea, QSizePolicy::Expanding, ui::constants::dock::MIN_HEIGHT_SMALL);
     _logDock->hide();
 
     if (_viewMenu) {
@@ -2274,6 +2315,7 @@ void MainWindow::closeCurrentMap() {
 
     spdlog::debug("Current map closed successfully");
     updateUndoRedoActions();
+    refreshCompleteness();
 }
 
 bool MainWindow::hasActiveMap() const {

@@ -50,6 +50,10 @@ public:
     [[nodiscard]] std::vector<std::filesystem::path> list(const std::string& pattern = "*") const;
     std::optional<MountedSourceInfo> sourceInfo(const std::filesystem::path& path) const;
 
+    /// Every initialized mount in mount (priority) order — the data paths a resource lookup
+    /// walks. Later mounts shadow earlier ones on lookup (sourceInfo probes in reverse).
+    [[nodiscard]] std::vector<MountedSourceInfo> mounts() const;
+
 private:
     // Mounts a path with _mutex already held; addDataPath() is the public locking entry point.
     void addDataPathLocked(const std::filesystem::path& path);
