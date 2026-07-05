@@ -200,6 +200,8 @@ private:
     // Path normalization for display
     std::vector<std::filesystem::path> getNativeDirectoryPaths() const;
     QString normalizeDisplayPath(const QString& fullPath) const;
+    QString normalizeDisplayPath(const QString& fullPath,
+        const std::vector<std::filesystem::path>& nativeDirectories) const;
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
@@ -255,7 +257,7 @@ private:
     std::shared_ptr<Settings> _settings;
 
     // Constants
-    static constexpr int CHUNK_SIZE = 50;    // Files processed per chunk (small for better UI responsiveness)
+    static constexpr int CHUNK_SIZE = 500;   // Files per chunk: rows are cheap (~60us) and each chunk is one event-loop turn, so bigger chunks cut per-turn overhead while a turn stays ~30ms
     static constexpr int CHUNK_DELAY_MS = 0; // No delay, use Qt event queue instead
 };
 

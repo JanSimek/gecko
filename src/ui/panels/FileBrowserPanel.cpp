@@ -497,7 +497,7 @@ void FileBrowserPanel::insertFileRow(FileTreeItem* rootItem, const std::string& 
     const std::vector<std::filesystem::path>& nativeDirectories) {
     QString qFile = QString::fromStdString(file);
 
-    QString normalizedPath = normalizeDisplayPath(qFile);
+    QString normalizedPath = normalizeDisplayPath(qFile, nativeDirectories);
     QStringList pathComponents = normalizedPath.split('/', Qt::SkipEmptyParts);
     if (pathComponents.isEmpty())
         return;
@@ -518,7 +518,7 @@ void FileBrowserPanel::insertFileRow(FileTreeItem* rootItem, const std::string& 
     QStandardItem* sourceItem = new QStandardItem(getFileSource(qFile, nativeDirectories));
     sourceItem->setEditable(false);
 
-    QStandardItem* pathItem = new QStandardItem(normalizeDisplayPath(qFile));
+    QStandardItem* pathItem = new QStandardItem(normalizedPath);
     pathItem->setEditable(false);
 
     QString proName = (extension.toLower() == ".pro") ? getProName(qFile) : QString();
@@ -1297,7 +1297,13 @@ QString FileBrowserPanel::getFileSource(const QString& filePath, const std::vect
 }
 
 QString FileBrowserPanel::normalizeDisplayPath(const QString& fullPath) const {
-    auto nativeDirectories = getNativeDirectoryPaths();
+    // getNativeDirectoryPaths stats every configured data path; per-row callers must
+    // precompute the list once and use the overload below.
+    return normalizeDisplayPath(fullPath, getNativeDirectoryPaths());
+}
+
+QString FileBrowserPanel::normalizeDisplayPath(const QString& fullPath,
+    const std::vector<std::filesystem::path>& nativeDirectories) const {
     std::string fullPathStr = fullPath.toStdString();
 
     // VFS may return paths with double leading slashes, so handle both forms
