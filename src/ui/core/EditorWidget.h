@@ -110,6 +110,7 @@ public:
         if (!show) {
             _selectedEdgeZone = -1;
             _activeEdgeSide = -1;
+            resetEdgeHoverCursor(); // a lingering resize cursor would suggest a still-grabbable side
         }
     }
     void setMergeSelectionOutlines(bool merge) { _session.visibility().mergeSelectionOutlines = merge; }
@@ -439,6 +440,11 @@ private:
     void commitEdgeSideDrag(sf::Vector2f worldPos);
     void cancelEdgeSideDrag();
 
+    // Hover feedback for the side-drag: show a horizontal/vertical resize cursor while the mouse is
+    // over a grabbable zone side (and while dragging one); restore the default cursor otherwise.
+    void updateEdgeHoverCursor(sf::Vector2f worldPos);
+    void resetEdgeHoverCursor();
+
     // Handles a click in SetPlayerPosition mode: routes to an armed beginHexPick callback (one-shot)
     // or, failing that, emits playerPositionSelected (legacy player-start pick).
     void handlePositionPickClick(sf::Vector2f worldPos);
@@ -573,6 +579,9 @@ private:
     bool _draggingEdgeSide = false;
     int _edgeDragSide = -1;
     std::optional<MapEdge> _edgeDragBefore;
+    // The side whose resize cursor is currently applied to the viewport (-1 = default cursor); see
+    // updateEdgeHoverCursor.
+    int _edgeHoverCursorSide = -1;
 
     // Base positions of the selected floor/roof sprites captured while a region is being dragged, so
     // the live preview can offset them and restore them when the drag ends.

@@ -562,6 +562,7 @@ void EditorWidget::commitEdgeSideDrag(sf::Vector2f worldPos) {
     _edgeDragSide = -1;
     _activeEdgeSide = -1;
     _edgeDragBefore.reset();
+    updateEdgeHoverCursor(worldPos); // the released side usually still sits under the cursor
     Q_EMIT mapEdgeChanged();
 }
 
@@ -574,7 +575,42 @@ void EditorWidget::cancelEdgeSideDrag() {
     _edgeDragSide = -1;
     _activeEdgeSide = -1;
     _edgeDragBefore.reset();
+    resetEdgeHoverCursor(); // the zone snapped back; the next mouse move re-evaluates the hover
     Q_EMIT mapEdgeChanged();
+}
+
+void EditorWidget::updateEdgeHoverCursor(sf::Vector2f worldPos) {
+    int side = -1;
+    if (_draggingEdgeSide) {
+        side = _edgeDragSide;
+    } else if (_mode == EditorMode::Select && _inputHandler
+        && _inputHandler->getCurrentAction() == InputHandler::EditorAction::NONE) {
+        // Side-dragging is a Select-mode gesture; skip the hover cursor mid-pan/drag-select.
+        if (const auto hit = edgeSideAtForDrag(worldPos)) {
+            side = hit->second;
+        }
+    }
+    if (side == _edgeHoverCursorSide) {
+        return;
+    }
+    _edgeHoverCursorSide = side;
+    if (!_sfmlWidget) {
+        return;
+    }
+    if (side < 0) {
+        _sfmlWidget->unsetCursor();
+    } else {
+        // Zone bounds are world-axis-aligned: sides 0/2 are the vertical left/right borders, 1/3 the
+        // horizontal top/bottom ones.
+        _sfmlWidget->setCursor((side == 0 || side == 2) ? Qt::SizeHorCursor : Qt::SizeVerCursor);
+    }
+}
+
+void EditorWidget::resetEdgeHoverCursor() {
+    if (_edgeHoverCursorSide >= 0 && _sfmlWidget) {
+        _sfmlWidget->unsetCursor();
+    }
+    _edgeHoverCursorSide = -1;
 }
 
 EditorWidget::~EditorWidget() {
@@ -1168,6 +1204,7 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     callbacks.onMouseMove = [this](sf::Vector2f worldPos) {
         _currentHoverHex = _controller.viewport().updateHoverHex(worldPos);
         Q_EMIT hexHoverChanged(_currentHoverHex);
+        updateEdgeHoverCursor(worldPos);
         if (_mode == EditorMode::StampPattern) {
             updateStampPreview(worldPos);
         }
