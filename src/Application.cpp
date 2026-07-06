@@ -106,7 +106,7 @@ std::string Application::processCommandLineArgs() {
     parser.process(*_qtApp);
 
     if (parser.isSet(debugOption)) {
-        spdlog::set_pattern("[%^%l%$] [thread %t] %v");
+        spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] [thread %t] %v");
         spdlog::set_level(spdlog::level::debug);
     }
 

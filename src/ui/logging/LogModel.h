@@ -32,7 +32,9 @@ public:
     /// Role returning the record's Level as an int, on any column (used by LogFilterProxy).
     static constexpr int LEVEL_ROLE = Qt::UserRole + 1;
 
-    static constexpr int MAX_RECORDS = 5000;
+    // Large enough that a debug-heavy session doesn't evict the startup records — losing
+    // "the beginning of the log" is exactly what makes slow-start reports undiagnosable.
+    static constexpr int MAX_RECORDS = 50000;
 
     explicit LogModel(QObject* parent = nullptr);
 
