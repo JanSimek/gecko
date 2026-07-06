@@ -627,9 +627,11 @@ then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority ord
 # Map loader panel — remaining enhancements
 
 The visual map picker shipped (`MapBrowserDialog`, File → Browse Maps…: thumbnail grid + filter
-+ preview, lazy render, in-memory cache). Possible follow-ups:
-- **Persisted cross-session thumbnail cache** (keyed by map path + mtime) — only if cold-start
-  render latency proves annoying; the current cache is in-memory `QPixmapCache`.
++ preview, lazy render, in-memory cache).
+- ~~**Persisted cross-session thumbnail cache**~~ — **DONE**: thumbnails persist as PNGs under the
+  app data dir, keyed by source identity + mtime (DAT-contained maps invalidate with the DAT,
+  loose maps with their own file), and the lazy renderer continues through off-screen cells so one
+  open browse warms the whole library.
 
 ---
 
