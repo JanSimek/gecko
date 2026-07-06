@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include <QImage>
 #include <QPixmap>
 #include <QString>
@@ -30,6 +32,12 @@ public:
     static QImage renderImage(const QString& vfsPath,
         resource::GameResources& resources,
         const HexagonGrid& hexgrid,
+        int size);
+
+    /// Memory/disk cache lookup only — never renders, so it is always cheap enough for the
+    /// UI thread. Misses return nullopt; the caller decides whether (and where) to render.
+    static std::optional<QPixmap> fromCache(const QString& vfsPath,
+        resource::GameResources& resources,
         int size);
 
     /// Cache identity: vfs path + size + providing file's byte-size and mtime. Empty when the

@@ -17,6 +17,51 @@
 
 namespace geck {
 
+MapRenderWorker::MapRenderWorker(std::vector<std::filesystem::path> dataPaths)
+    : _dataPaths(std::move(dataPaths)) {
+}
+
+// Out of line so the unique_ptrs' destructors see the complete types. The worker is
+// destroyed on its thread (deleteLater after quit), keeping GL teardown on its context.
+MapRenderWorker::~MapRenderWorker() = default;
+
+bool MapRenderWorker::ensureResources() {
+    if (_resources) {
+        return true;
+    }
+
+    auto resources = std::make_unique<resource::GameResources>();
+    for (const auto& path : _dataPaths) {
+        resources->files().addDataPath(path);
+    }
+    try {
+        ResourceInitializer::loadEssentialLstFiles(*resources);
+    } catch (const std::exception& e) {
+        spdlog::info("MapRenderWorker: essential lists unavailable, cannot render: {}", e.what());
+        return false;
+    }
+
+    _resources = std::move(resources);
+    _hexgrid = std::make_unique<HexagonGrid>();
+    return true;
+}
+
+void MapRenderWorker::renderRequest(const QString& vfsPath, int size) {
+    if (!ensureResources()) {
+        Q_EMIT rendered(vfsPath, size, QImage());
+        return;
+    }
+
+    const QImage image = MapThumbnail::renderImage(vfsPath, *_resources, *_hexgrid, size);
+    if (!image.isNull()) {
+        const QString id = MapThumbnail::identity(vfsPath, size, *_resources);
+        if (!id.isEmpty()) {
+            image.save(MapThumbnail::diskCachePath(id), "PNG");
+        }
+    }
+    Q_EMIT rendered(vfsPath, size, image);
+}
+
 ThumbnailPrewarmer::ThumbnailPrewarmer(std::vector<std::filesystem::path> dataPaths,
     int thumbnailSize, QObject* parent)
     : QThread(parent)

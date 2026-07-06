@@ -2,11 +2,47 @@
 
 #include <atomic>
 #include <filesystem>
+#include <memory>
 #include <vector>
 
+#include <QImage>
+#include <QObject>
+#include <QString>
 #include <QThread>
 
 namespace geck {
+
+class HexagonGrid;
+namespace resource {
+    class GameResources;
+}
+
+/// Renders map thumbnails on demand from a background thread, for the map browser's cache
+/// misses. Same isolation rules as ThumbnailPrewarmer: a private resource stack built lazily
+/// on the worker thread (own mounts, own GPU textures in this thread's GL context). Every
+/// result is persisted to the disk cache before it is emitted, so it also benefits later
+/// sessions. Move an instance to a QThread and drive it with queued renderRequest() calls.
+class MapRenderWorker : public QObject {
+    Q_OBJECT
+
+public:
+    explicit MapRenderWorker(std::vector<std::filesystem::path> dataPaths);
+    ~MapRenderWorker() override;
+
+public slots:
+    void renderRequest(const QString& vfsPath, int size);
+
+signals:
+    /// The rendered thumbnail, or a null image when the map could not be rendered.
+    void rendered(const QString& vfsPath, int size, const QImage& image);
+
+private:
+    bool ensureResources();
+
+    std::vector<std::filesystem::path> _dataPaths;
+    std::unique_ptr<resource::GameResources> _resources;
+    std::unique_ptr<HexagonGrid> _hexgrid;
+};
 
 /// Fills the persisted map-thumbnail cache in the background so the map browser's first
 /// open finds its previews already rendered. Runs at the lowest thread priority with a

@@ -19,6 +19,8 @@
 #include <QSplitter>
 #include <QStyledItemDelegate>
 #include <QElapsedTimer>
+#include <QPixmapCache>
+#include <QThread>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -26,6 +28,7 @@
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
 #include "ui/rendering/MapThumbnail.h"
+#include "ui/rendering/ThumbnailPrewarmer.h"
 #include "ui/theme/ThemeManager.h"
 
 namespace geck {
@@ -100,12 +103,26 @@ namespace {
     };
 } // namespace
 
-MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources, QWidget* parent)
+MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources,
+    std::vector<std::filesystem::path> dataPaths, QWidget* parent)
     : QDialog(parent)
     , _resources(resources)
     , _hexgrid(std::make_unique<HexagonGrid>()) {
     setWindowTitle("Open Map");
     resize(860, 560);
+
+    // Cache misses render on a background worker (private resource stack, own GL context) so
+    // the dialog never blocks on a map parse; without data paths the old synchronous path
+    // remains as the fallback.
+    if (!dataPaths.empty()) {
+        _renderThread = new QThread(this);
+        _renderWorker = new MapRenderWorker(std::move(dataPaths));
+        _renderWorker->moveToThread(_renderThread);
+        connect(_renderWorker, &MapRenderWorker::rendered, this, &MapBrowserDialog::onWorkerRendered,
+            Qt::QueuedConnection);
+        connect(_renderThread, &QThread::finished, _renderWorker, &QObject::deleteLater);
+        _renderThread->start(QThread::LowPriority);
+    }
 
     _search = new QLineEdit(this);
     _search->setPlaceholderText("Filter maps…");
@@ -174,7 +191,12 @@ MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources, QWidget* 
     populate();
 }
 
-MapBrowserDialog::~MapBrowserDialog() = default;
+MapBrowserDialog::~MapBrowserDialog() {
+    if (_renderThread) {
+        _renderThread->quit();
+        _renderThread->wait();
+    }
+}
 
 void MapBrowserDialog::populate() {
     _grid->clear();
@@ -235,6 +257,28 @@ void MapBrowserDialog::renderNextVisibleThumbnail() {
     }
 
     const QString path = item->data(PATH_ROLE).toString();
+
+    if (auto cached = MapThumbnail::fromCache(path, _resources, THUMBNAIL_SIZE)) {
+        item->setData(RENDERED_ROLE, true);
+        item->setIcon(QIcon(*cached));
+        _thumbnailTimer->setInterval(0); // cache hits stream back-to-back
+        return;
+    }
+
+    if (_renderWorker != nullptr) {
+        // Hand the miss to the background worker and move on; the icon lands via
+        // onWorkerRendered. Marked rendered immediately so the drip never re-requests.
+        item->setData(RENDERED_ROLE, true);
+        if (!_requestedThumbnails.contains(path)) {
+            _requestedThumbnails.insert(path);
+            QMetaObject::invokeMethod(_renderWorker, "renderRequest", Qt::QueuedConnection,
+                Q_ARG(QString, path), Q_ARG(int, THUMBNAIL_SIZE));
+        }
+        _thumbnailTimer->setInterval(0);
+        return;
+    }
+
+    // No worker: render here, with a breather between renders so input and paints interleave.
     QElapsedTimer renderTimer;
     renderTimer.start();
     const QPixmap thumbnail = MapThumbnail::forMap(path, _resources, *_hexgrid, THUMBNAIL_SIZE);
@@ -243,12 +287,43 @@ void MapBrowserDialog::renderNextVisibleThumbnail() {
     if (!thumbnail.isNull()) {
         item->setIcon(QIcon(thumbnail));
     }
-
-    // Adapt the drip to what the tick cost: cache hits are a couple of milliseconds, so they
-    // stream back-to-back and a warmed grid fills instantly; a real render blocks for a map
-    // parse + sprite build, so the loop gets a breather to service input and paints before
-    // the next one — that gap is what keeps the first-ever browse responsive.
     _thumbnailTimer->setInterval(renderTimer.elapsed() < 10 ? 0 : 30);
+}
+
+void MapBrowserDialog::onWorkerRendered(const QString& vfsPath, int size, const QImage& image) {
+    if (image.isNull()) {
+        return; // unreadable map: the placeholder stays, matching the synchronous behaviour
+    }
+
+    const QPixmap pixmap = QPixmap::fromImage(image);
+    // Feed the in-memory cache under the same identity key the lookups use, so re-selection
+    // and later fromCache() calls are instant without touching the disk again.
+    const QString id = MapThumbnail::identity(vfsPath, size, _resources);
+    if (!id.isEmpty()) {
+        QPixmapCache::insert(QStringLiteral("map:") + id, pixmap);
+    }
+
+    if (size == THUMBNAIL_SIZE) {
+        _requestedThumbnails.remove(vfsPath);
+        for (int i = 0; i < _grid->count(); ++i) {
+            QListWidgetItem* item = _grid->item(i);
+            if (item->data(PATH_ROLE).toString() == vfsPath) {
+                item->setIcon(QIcon(pixmap));
+                break;
+            }
+        }
+        return;
+    }
+
+    // Preview-sized result: apply only if the selection still points at this map.
+    if (vfsPath == _pendingPreviewPath) {
+        _pendingPreviewPath.clear();
+        if (const QListWidgetItem* current = _grid->currentItem();
+            current != nullptr && current->data(PATH_ROLE).toString() == vfsPath) {
+            _previewSource = pixmap;
+            rescalePreview();
+        }
+    }
 }
 
 void MapBrowserDialog::onFilterChanged(const QString& text) {
@@ -283,9 +358,29 @@ void MapBrowserDialog::updatePreview(const QListWidgetItem* item) {
     _previewName->setText(lookupName.isEmpty()
             ? path
             : QString("<b>%1</b><br>%2").arg(lookupName.toHtmlEscaped(), path.toHtmlEscaped()));
+    if (auto cached = MapThumbnail::fromCache(path, _resources, PREVIEW_RENDER_SIZE)) {
+        _previewSource = *cached;
+        rescalePreview();
+        return;
+    }
+
     _previewImage->setText("Rendering…");
-    // Defer the heavy render so selection stays snappy; bail if the selection has since
-    // moved on (the cache makes a later re-selection of the same map instant).
+
+    if (_renderWorker != nullptr) {
+        // The worker answers through onWorkerRendered; meanwhile show the grid thumbnail
+        // upscaled so the pane isn't empty while the full-resolution preview renders.
+        _pendingPreviewPath = path;
+        if (auto small = MapThumbnail::fromCache(path, _resources, THUMBNAIL_SIZE)) {
+            _previewSource = *small;
+            rescalePreview();
+        }
+        QMetaObject::invokeMethod(_renderWorker, "renderRequest", Qt::QueuedConnection,
+            Q_ARG(QString, path), Q_ARG(int, PREVIEW_RENDER_SIZE));
+        return;
+    }
+
+    // No worker: defer the heavy render so selection stays snappy; bail if the selection has
+    // since moved on (the cache makes a later re-selection of the same map instant).
     QTimer::singleShot(0, this, [this, path] {
         if (const QListWidgetItem* current = _grid->currentItem();
             current == nullptr || current->data(PATH_ROLE).toString() != path) {

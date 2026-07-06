@@ -66,14 +66,14 @@ QString MapThumbnail::diskCachePath(const QString& identity) {
     return dir + '/' + identity + QStringLiteral(".png");
 }
 
-QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& resources,
-    const HexagonGrid& hexgrid, int size) {
+std::optional<QPixmap> MapThumbnail::fromCache(const QString& vfsPath,
+    resource::GameResources& resources, int size) {
     const QString id = identity(vfsPath, size, resources);
     const QString key = id.isEmpty()
         ? QStringLiteral("map:") + vfsPath + '|' + QString::number(size)
         : QStringLiteral("map:") + id;
     if (auto hit = ThumbnailRenderer::cached(key)) {
-        return *hit;
+        return hit;
     }
 
     const QString cacheFile = id.isEmpty() ? QString() : diskCachePath(id);
@@ -84,6 +84,20 @@ QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& re
             return fromDisk;
         }
     }
+    return std::nullopt;
+}
+
+QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& resources,
+    const HexagonGrid& hexgrid, int size) {
+    if (auto hit = fromCache(vfsPath, resources, size)) {
+        return *hit;
+    }
+
+    const QString id = identity(vfsPath, size, resources);
+    const QString key = id.isEmpty()
+        ? QStringLiteral("map:") + vfsPath + '|' + QString::number(size)
+        : QStringLiteral("map:") + id;
+    const QString cacheFile = id.isEmpty() ? QString() : diskCachePath(id);
 
     const QImage rendered = renderImage(vfsPath, resources, hexgrid, size);
     if (rendered.isNull()) {

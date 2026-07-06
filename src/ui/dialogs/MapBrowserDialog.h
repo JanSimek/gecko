@@ -1,9 +1,12 @@
 #pragma once
 
+#include <filesystem>
 #include <memory>
+#include <vector>
 
 #include <QDialog>
 #include <QPixmap>
+#include <QSet>
 #include <QString>
 
 class QEvent;
@@ -12,13 +15,16 @@ class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QObject;
+class QImage;
 class QPushButton;
 class QShowEvent;
+class QThread;
 class QTimer;
 
 namespace geck {
 
 class HexagonGrid;
+class MapRenderWorker;
 namespace resource {
     class GameResources;
 }
@@ -33,7 +39,12 @@ class MapBrowserDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit MapBrowserDialog(resource::GameResources& resources, QWidget* parent = nullptr);
+    /// `dataPaths` (the app's mounted data paths) enable the background render worker for
+    /// thumbnail cache misses; with an empty list the dialog falls back to rendering on the
+    /// UI thread.
+    explicit MapBrowserDialog(resource::GameResources& resources,
+        std::vector<std::filesystem::path> dataPaths = {},
+        QWidget* parent = nullptr);
     ~MapBrowserDialog() override;
 
     /// VFS path of the chosen map (e.g. "maps/sfshutl2.map"); empty unless accepted.
@@ -49,6 +60,7 @@ private slots:
     void onCurrentItemChanged(const QListWidgetItem* current);
     void onItemActivated(const QListWidgetItem* item);
     void renderNextVisibleThumbnail();
+    void onWorkerRendered(const QString& vfsPath, int size, const QImage& image);
 
 private:
     void populate();
@@ -67,6 +79,13 @@ private:
     QTimer* _thumbnailTimer = nullptr;
     QPixmap _previewSource; ///< Native-resolution preview, rescaled to fit on resize.
     QString _selectedPath;
+
+    // Background renderer for cache misses (null when no data paths were provided). Requests
+    // are queued to the worker's thread; results arrive through onWorkerRendered.
+    QThread* _renderThread = nullptr;
+    MapRenderWorker* _renderWorker = nullptr;
+    QSet<QString> _requestedThumbnails;
+    QString _pendingPreviewPath;
 };
 
 } // namespace geck

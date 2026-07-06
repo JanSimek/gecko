@@ -2442,7 +2442,9 @@ void MainWindow::updateFillSelectionAction() {
 }
 
 void MainWindow::showMapBrowserDialog() {
-    MapBrowserDialog dialog(*_resourcesShared, this);
+    auto dataPaths = _settings->getDataPaths();
+    util::ensureFallbackDataPath(dataPaths, Application::getResourcesPath());
+    MapBrowserDialog dialog(*_resourcesShared, std::move(dataPaths), this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
