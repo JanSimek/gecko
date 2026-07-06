@@ -18,6 +18,7 @@
 #include <QShowEvent>
 #include <QSplitter>
 #include <QStyledItemDelegate>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -234,12 +235,20 @@ void MapBrowserDialog::renderNextVisibleThumbnail() {
     }
 
     const QString path = item->data(PATH_ROLE).toString();
+    QElapsedTimer renderTimer;
+    renderTimer.start();
     const QPixmap thumbnail = MapThumbnail::forMap(path, _resources, *_hexgrid, THUMBNAIL_SIZE);
     // Mark rendered even on failure, so an unreadable map isn't retried every tick.
     item->setData(RENDERED_ROLE, true);
     if (!thumbnail.isNull()) {
         item->setIcon(QIcon(thumbnail));
     }
+
+    // Adapt the drip to what the tick cost: cache hits are a couple of milliseconds, so they
+    // stream back-to-back and a warmed grid fills instantly; a real render blocks for a map
+    // parse + sprite build, so the loop gets a breather to service input and paints before
+    // the next one — that gap is what keeps the first-ever browse responsive.
+    _thumbnailTimer->setInterval(renderTimer.elapsed() < 10 ? 0 : 30);
 }
 
 void MapBrowserDialog::onFilterChanged(const QString& text) {

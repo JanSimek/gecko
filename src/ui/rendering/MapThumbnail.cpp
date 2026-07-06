@@ -30,11 +30,13 @@ namespace geck {
 
 namespace {
 
-    // Rendering a thumbnail is a mini map-load (parse + sprites + offscreen GL render), so the
-    // result is persisted to disk keyed by the providing source's identity and mtime: a map
-    // inside a DAT invalidates when the DAT changes, a loose map when the file itself does.
-    // Every browse after the first — including across sessions — then costs a PNG load.
-    QString diskCachePath(const QString& vfsPath, int size, resource::GameResources& resources) {
+    // Identity of a thumbnail: the VFS path and requested size, plus the byte-size and mtime
+    // of the file that PROVIDES the map — the .map itself for a loose file, the archive for a
+    // DAT-contained one. Editing or re-saving a map therefore mints a new identity (loose maps
+    // individually, DAT maps together with their archive), and both the in-memory and the
+    // on-disk cache key off it, so a mid-session save is re-rendered rather than served stale.
+    // Deliberately not a content hash: a cache hit must not need to read the map's bytes.
+    QString thumbnailIdentity(const QString& vfsPath, int size, resource::GameResources& resources) {
         const auto source = resources.files().sourceInfo(vfsPath.toStdString());
         if (!source) {
             return {};
@@ -55,23 +57,29 @@ namespace {
         hash.addData(QByteArray::number(size));
         hash.addData(QByteArray::number(info.size()));
         hash.addData(QByteArray::number(info.lastModified().toMSecsSinceEpoch()));
+        return QString::fromLatin1(hash.result().toHex());
+    }
 
+    QString diskCachePath(const QString& identity) {
         const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
             + QStringLiteral("/thumbnails");
         QDir().mkpath(dir);
-        return dir + '/' + QString::fromLatin1(hash.result().toHex()) + QStringLiteral(".png");
+        return dir + '/' + identity + QStringLiteral(".png");
     }
 
 } // namespace
 
 QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& resources,
     const HexagonGrid& hexgrid, int size) {
-    const QString key = QStringLiteral("map:") + vfsPath + '|' + QString::number(size);
+    const QString identity = thumbnailIdentity(vfsPath, size, resources);
+    const QString key = identity.isEmpty()
+        ? QStringLiteral("map:") + vfsPath + '|' + QString::number(size)
+        : QStringLiteral("map:") + identity;
     if (auto hit = ThumbnailRenderer::cached(key)) {
         return *hit;
     }
 
-    const QString cacheFile = diskCachePath(vfsPath, size, resources);
+    const QString cacheFile = identity.isEmpty() ? QString() : diskCachePath(identity);
     if (!cacheFile.isEmpty() && QFileInfo::exists(cacheFile)) {
         QPixmap fromDisk;
         if (fromDisk.load(cacheFile, "PNG")) {
