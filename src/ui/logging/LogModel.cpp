@@ -1,5 +1,7 @@
 #include "LogModel.h"
 
+#include <mutex>
+
 #include <QColor>
 #include <QThread>
 
@@ -12,26 +14,56 @@ LogModel::LogModel(QObject* parent)
 }
 
 void LogModel::appendRecord(Level level, const QString& message, const QDateTime& time) {
-    const Record record{ time, level, message };
+    Record record{ time, level, message };
     if (QThread::currentThread() == thread()) {
-        appendOnModelThread(record);
+        appendBatchOnModelThread({ std::move(record) });
         return;
     }
 
-    // Queued to the model's thread; if the model is destroyed first, Qt drops the call.
-    QMetaObject::invokeMethod(
-        this, [this, record]() { appendOnModelThread(record); }, Qt::QueuedConnection);
+    // Buffer and coalesce: a debug-heavy burst (e.g. thousands of proto reads) must become a
+    // handful of batched model updates, not one queued event + row insert + view relayout per
+    // record — that flood starved the UI thread for tens of seconds. Only the first record of
+    // a burst schedules a drain; if the model is destroyed first, Qt drops the queued call.
+    bool scheduleDrain = false;
+    {
+        const std::lock_guard<std::mutex> lock(_pendingMutex);
+        _pending.append(std::move(record));
+        scheduleDrain = !_drainQueued;
+        _drainQueued = true;
+    }
+    if (scheduleDrain) {
+        QMetaObject::invokeMethod(this, &LogModel::drainPending, Qt::QueuedConnection);
+    }
 }
 
-void LogModel::appendOnModelThread(const Record& record) {
-    if (_records.size() >= MAX_RECORDS) {
-        beginRemoveRows(QModelIndex(), 0, 0);
-        _records.removeFirst();
+void LogModel::drainPending() {
+    QList<Record> batch;
+    {
+        const std::lock_guard<std::mutex> lock(_pendingMutex);
+        batch.swap(_pending);
+        _drainQueued = false;
+    }
+    appendBatchOnModelThread(std::move(batch));
+}
+
+void LogModel::appendBatchOnModelThread(QList<Record> batch) {
+    if (batch.isEmpty()) {
+        return;
+    }
+    if (batch.size() > MAX_RECORDS) {
+        batch = batch.mid(batch.size() - MAX_RECORDS);
+    }
+
+    const int overflow = static_cast<int>(_records.size() + batch.size()) - MAX_RECORDS;
+    if (overflow > 0) {
+        beginRemoveRows(QModelIndex(), 0, overflow - 1);
+        _records.remove(0, overflow);
         endRemoveRows();
     }
 
-    beginInsertRows(QModelIndex(), static_cast<int>(_records.size()), static_cast<int>(_records.size()));
-    _records.append(record);
+    beginInsertRows(QModelIndex(), static_cast<int>(_records.size()),
+        static_cast<int>(_records.size() + batch.size()) - 1);
+    _records.append(std::move(batch));
     endInsertRows();
 }
 

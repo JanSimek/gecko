@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 #include <QAbstractTableModel>
 #include <QDateTime>
 #include <QList>
@@ -57,10 +59,16 @@ private:
         Level level;
         QString message;
     };
-
-    void appendOnModelThread(const Record& record);
+    void drainPending();
+    void appendBatchOnModelThread(QList<Record> batch);
 
     QList<Record> _records;
+
+    // Cross-thread records buffer here; the first record of a burst schedules one queued
+    // drain on the model's thread, so a logging flood coalesces into batched row inserts.
+    std::mutex _pendingMutex;
+    QList<Record> _pending;
+    bool _drainQueued = false;
 };
 
 } // namespace geck
