@@ -51,6 +51,7 @@ QString MapThumbnail::identity(const QString& vfsPath, int size, resource::GameR
 
     const QFileInfo info(onDisk);
     QCryptographicHash hash(QCryptographicHash::Sha1);
+    hash.addData("thumb-v2"); // renderer-version salt: bump to orphan all previously cached output
     hash.addData(vfsPath.toUtf8());
     hash.addData(QByteArray::number(size));
     hash.addData(QByteArray::number(info.size()));
