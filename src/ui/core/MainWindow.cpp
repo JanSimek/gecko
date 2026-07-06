@@ -44,7 +44,6 @@
 #include "format/map/Map.h"
 #include "util/Types.h"
 #include "ui/Settings.h"
-#include "resource/WritableDataRoot.h"
 #include "ui/QtDialogs.h"
 #include "ui/ExternalEditorLauncher.h"
 #include "reader/lst/LstReader.h"
@@ -1370,7 +1369,7 @@ std::filesystem::path MainWindow::writableMapsDir() const {
     if (!_settings) {
         return {};
     }
-    const auto root = resource::findWritableDataPath(_settings->getDataPaths());
+    const auto root = _settings->resolveWritableDataPath();
     if (!root) {
         return {}; // no writable Data Path -> the save dialog falls back to its last-used directory
     }

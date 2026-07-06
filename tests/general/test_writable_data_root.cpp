@@ -72,3 +72,48 @@ TEST_CASE("findWritableDataPath returns the last directory, skipping archives", 
     }
     fs::remove_all(base);
 }
+
+TEST_CASE("findWritableDataPath honours an explicit save-location marker", "[writableroot]") {
+    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "fwdp_marker";
+    fs::remove_all(base);
+    const fs::path dirA = base / "a";
+    const fs::path dirB = base / "b";
+    fs::create_directories(dirA);
+    fs::create_directories(dirB);
+    const fs::path fakeDat = base / "master.dat";
+    writeFile(fakeDat, "not a real dat"); // a file, not a directory
+
+    SECTION("a marked directory wins regardless of list order") {
+        // The positional rule alone would pick dirB (the last directory).
+        const auto target = resource::findWritableDataPath({ dirA, fakeDat, dirB }, dirA);
+        REQUIRE(target.has_value());
+        CHECK(*target == dirA);
+    }
+    SECTION("an empty marker keeps the positional rule") {
+        const auto target = resource::findWritableDataPath({ dirA, fakeDat, dirB }, {});
+        REQUIRE(target.has_value());
+        CHECK(*target == dirB);
+    }
+    SECTION("a marker that is not a listed data path falls back") {
+        const fs::path outsider = base / "outside";
+        fs::create_directories(outsider);
+        const auto target = resource::findWritableDataPath({ dirA, dirB }, outsider);
+        REQUIRE(target.has_value());
+        CHECK(*target == dirB);
+    }
+    SECTION("a marker pointing at an archive entry falls back") {
+        const auto target = resource::findWritableDataPath({ dirA, fakeDat }, fakeDat);
+        REQUIRE(target.has_value());
+        CHECK(*target == dirA);
+    }
+    SECTION("a marked directory that vanished from disk falls back") {
+        const fs::path gone = base / "gone"; // listed, but never created on disk
+        const auto target = resource::findWritableDataPath({ dirA, gone, dirB }, gone);
+        REQUIRE(target.has_value());
+        CHECK(*target == dirB);
+    }
+    SECTION("marker set but no usable directory at all -> nullopt") {
+        CHECK_FALSE(resource::findWritableDataPath({ fakeDat }, fakeDat).has_value());
+    }
+    fs::remove_all(base);
+}

@@ -18,7 +18,6 @@
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
 #include "resource/MapNameEditor.h"
-#include "resource/WritableDataRoot.h"
 #include "ui/Settings.h"
 #include "reader/ReaderFactory.h"
 #include "reader/gam/GamReader.h"
@@ -561,7 +560,7 @@ void MapInfoPanel::updateOverlayHint() {
     // in the Data Paths to save them to (every path is a read-only archive), hint the user to add one —
     // the editor never creates or mounts a hidden writable location.
     const bool editable = !_displayNameEdit->isReadOnly();
-    const bool hasWritablePath = _settings && resource::findWritableDataPath(_settings->getDataPaths()).has_value();
+    const bool hasWritablePath = _settings && _settings->resolveWritableDataPath().has_value();
     const bool needsWritablePath = editable && !hasWritablePath;
     _overlayHintLabel->setVisible(needsWritablePath);
     if (needsWritablePath) {
@@ -1194,7 +1193,7 @@ void MapInfoPanel::persistMapNames() {
 
     // Write into a writable folder from the user's Data Paths (no hidden location). If there's none, the
     // edit can't be saved -> tell the user to add one. updateOverlayHint() already shows the same hint.
-    const auto target = resource::findWritableDataPath(_settings->getDataPaths());
+    const auto target = _settings->resolveWritableDataPath();
     if (!target.has_value()) {
         QMessageBox::warning(this, "Save Map Names",
             "These map name edits can't be saved: add a writable folder to your Data Paths "
@@ -1229,7 +1228,7 @@ void MapInfoPanel::persistMapVars() {
 
     // Write into a writable folder from the user's Data Paths (no hidden location). If there's none, the
     // edit can't be saved -> tell the user to add one (mirrors persistMapNames()).
-    const auto target = resource::findWritableDataPath(_settings->getDataPaths());
+    const auto target = _settings->resolveWritableDataPath();
     if (!target.has_value()) {
         QMessageBox::warning(this, "Save Map Variables",
             "These global variable edits can't be saved: add a writable folder to your Data Paths "

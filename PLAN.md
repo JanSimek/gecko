@@ -67,15 +67,16 @@ live with their library (`src/resource/`, `src/ui/`).
     drive it from the same command/action table proposed in #7 (stable action id → icon/label/handler),
     with a context-menu / Preferences UI to add, remove, and reorder buttons, persisted via `Settings`.
     Editor UX only; no map/format change.
-9. **The writable save target is positional, not chosen.** Saving a map (and map-name edits) writes
-    into the *last folder* in Data Paths — `findWritableDataPath` walks the list from the end and takes
-    the first real directory (archives skipped). That's implicit and order-dependent: reordering Data
-    Paths silently changes where saves land, and nothing in the UI shows which location is the writable
-    one. Map saves now default to that folder's `maps/` (Save / Save As), so the choice matters.
-    **Add an explicit default-writable marker:** a button in Settings → Data Paths to designate the
-    selected folder as the default writable location, shown with a badge in the list and persisted in
-    `Settings`; saves then target that folder regardless of list order. If none is marked, keep the
-    current last-folder fallback and hint the user to pick one. DAT archives can't be marked (read-only).
+9. **The writable save target — DONE (explicit save-location marker).** Settings → Data Paths now has
+    a **"Set as Save Location"** toggle button: the chosen folder is persisted (`Settings`
+    `writableDataPath`, cleared automatically if the folder leaves the list) and wins over the
+    positional rule in `resource::findWritableDataPath(paths, preferred)` — with a warning log when a
+    configured marker can't be honoured, never silently. The list badges the *effective* target (save
+    icon; bold = explicit marker, italic = positional default) with explanatory tooltips, DAT archives
+    and the built-in resources folder can't be marked, and marking alone doesn't trigger a data-path
+    remount. With no marker, the previous highest-priority-folder fallback and hint behaviour is
+    unchanged. All consumers (Save/Save As default dir, maps.txt name edits, `.gam` edits) route
+    through `Settings::resolveWritableDataPath()`.
 10. **In-app log panel — SHIPPED, including the completeness summary.** The dockable **Log** panel
     (View › Log, hidden by default like the Script Console) surfaces every `spdlog` record in
     the UI: `LogModelSink` (installed on the default logger at startup) feeds a bounded, thread-safe

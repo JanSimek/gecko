@@ -1,4 +1,5 @@
 #include "Settings.h"
+#include "resource/WritableDataRoot.h"
 #include "util/GameDataPathResolver.h"
 
 #include <QStandardPaths>
@@ -100,6 +101,9 @@ QJsonObject Settings::toJson() const {
 
     json["version"] = _version;
     json["dataPaths"] = pathVectorToJsonArray(_dataPaths);
+    if (!_writableDataPath.empty()) {
+        json["writableDataPath"] = QString::fromStdString(_writableDataPath.string());
+    }
 
     QJsonObject ui;
     if (!_windowGeometry.isEmpty()) {
@@ -162,6 +166,13 @@ void Settings::fromJson(const QJsonObject& json) {
     if (_version != SETTINGS_VERSION) {
         setDataPaths(util::expandDataPaths(_dataPaths));
         _version = SETTINGS_VERSION;
+    }
+
+    // Read after the data paths (setDataPaths clears an unlisted marker); tolerate a hand-edited
+    // settings file whose marker points outside the list by dropping it instead of trusting it.
+    if (json.contains("writableDataPath")) {
+        setWritableDataPath(std::filesystem::path(json["writableDataPath"].toString().toStdString()));
+        clearWritableDataPathIfUnlisted();
     }
 
     if (json.contains("ui")) {
@@ -280,6 +291,7 @@ void Settings::removeDataPath(const std::filesystem::path& path) {
         _dataPaths.erase(it, _dataPaths.end());
         spdlog::debug("Removed data path: {}", normalizedPath.string());
     }
+    clearWritableDataPathIfUnlisted();
 }
 
 std::vector<std::filesystem::path> Settings::getDataPaths() const {
@@ -290,6 +302,30 @@ void Settings::setDataPaths(const std::vector<std::filesystem::path>& paths) {
     _dataPaths.clear();
     for (const auto& path : paths) {
         addDataPath(path);
+    }
+    clearWritableDataPathIfUnlisted();
+}
+
+std::filesystem::path Settings::getWritableDataPath() const {
+    return _writableDataPath;
+}
+
+void Settings::setWritableDataPath(const std::filesystem::path& path) {
+    _writableDataPath = path.empty() ? std::filesystem::path{} : normalizeDataPath(path);
+}
+
+std::optional<std::filesystem::path> Settings::resolveWritableDataPath() const {
+    return resource::findWritableDataPath(_dataPaths, _writableDataPath);
+}
+
+void Settings::clearWritableDataPathIfUnlisted() {
+    if (_writableDataPath.empty()) {
+        return;
+    }
+    // Plain equality: both sides went through normalizeDataPath, so the stored forms are comparable.
+    if (std::find(_dataPaths.begin(), _dataPaths.end(), _writableDataPath) == _dataPaths.end()) {
+        spdlog::debug("Save location '{}' left the data paths; marker cleared", _writableDataPath.string());
+        _writableDataPath.clear();
     }
 }
 

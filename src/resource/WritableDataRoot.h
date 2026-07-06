@@ -15,6 +15,13 @@ class DataFileSystem;
 /// location. Being last means its copies shadow the archives mounted before it.
 std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std::filesystem::path>& dataPaths);
 
+/// Same, but honouring an explicit user choice first: when `preferred` is non-empty, is one of
+/// `dataPaths`, and is an existing directory, it is the writable root regardless of list order.
+/// Otherwise (unset, removed from the list, missing on disk, or an archive) this falls back to the
+/// positional rule above — with a warning log, so a configured-but-unusable choice is never silent.
+std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std::filesystem::path>& dataPaths,
+    const std::filesystem::path& preferred);
+
 /// Ensure a loose, writable copy of a VFS file exists under `writableRoot`, and return its native path.
 ///
 /// Editing game data that lives inside a read-only DAT requires copying it out first. If a copy is
