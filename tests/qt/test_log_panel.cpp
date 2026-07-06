@@ -30,9 +30,21 @@ TEST_CASE("LogModel stores records with level, message, and time", "[qt][log]") 
 }
 
 TEST_CASE("LogModel evicts the oldest records beyond the cap", "[qt][log]") {
+    // Cross-thread so the records arrive as coalesced batches: 50k single-row same-thread
+    // inserts take minutes under a debug heap, and the eviction arithmetic being tested is
+    // shared by both paths.
     LogModel model;
-    for (int i = 0; i < LogModel::MAX_RECORDS + 10; ++i) {
-        model.appendRecord(LogModel::Level::Info, QString::number(i));
+    std::thread producer([&model]() {
+        for (int i = 0; i < LogModel::MAX_RECORDS + 10; ++i) {
+            model.appendRecord(LogModel::Level::Info, QString::number(i));
+        }
+    });
+    producer.join();
+
+    QElapsedTimer timer;
+    timer.start();
+    while (model.rowCount() < LogModel::MAX_RECORDS && timer.elapsed() < 60000) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
     }
 
     REQUIRE(model.rowCount() == LogModel::MAX_RECORDS);

@@ -1,7 +1,9 @@
 #define QT_NO_EMIT
 #include "MainWindow.h"
+#include "Application.h"
 #include "EditorWidget.h"
 #include "format/map/MapScript.h"
+#include "util/GameDataPathResolver.h"
 #include "ui/core/EditorHints.h"
 #include "ui/widgets/LoadingWidget.h"
 #include "ui/widgets/WelcomeWidget.h"
@@ -15,6 +17,7 @@
 #include "ui/panels/LogPanel.h"
 #include "ui/panels/CompletenessView.h"
 #include "resource/MapCompleteness.h"
+#include "ui/rendering/ThumbnailPrewarmer.h"
 #ifdef GECK_SCRIPTING_ENABLED
 #include "ui/panels/ScriptConsoleWidget.h"
 #include "scripting/LuaScriptRuntime.h" // ScriptResult
@@ -50,6 +53,7 @@
 #include "editor/Object.h"
 #include "ui/IconHelper.h"
 
+#include <chrono>
 #include <functional>
 
 #include <QApplication>
@@ -141,6 +145,9 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
 }
 
 MainWindow::~MainWindow() {
+    if (_thumbnailPrewarmer) {
+        _thumbnailPrewarmer->requestStop(); // its destructor (QObject child) waits for the thread
+    }
     saveDockWidgetState();
     stopGameLoop();
 }
@@ -159,7 +166,12 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     _centralStack->setCurrentWidget(_currentEditorWidget);
 
     _currentEditorWidget->setMainWindow(this);
-    _currentEditorWidget->init();
+    {
+        const auto initStart = std::chrono::steady_clock::now();
+        _currentEditorWidget->init();
+        spdlog::info("EditorWidget::init (map view build) took {}ms",
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - initStart).count());
+    }
 
     connectToEditorWidget();
     connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, &MainWindow::updateUndoRedoActions);
@@ -964,6 +976,24 @@ void MainWindow::setLogModel(LogModel* model) {
     }
 }
 
+void MainWindow::startThumbnailPrewarm() {
+    if (_thumbnailPrewarmer) {
+        _thumbnailPrewarmer->requestStop();
+        _thumbnailPrewarmer->wait();
+        _thumbnailPrewarmer->deleteLater();
+        _thumbnailPrewarmer = nullptr;
+    }
+
+    auto dataPaths = _settings->getDataPaths();
+    util::ensureFallbackDataPath(dataPaths, Application::getResourcesPath());
+    if (dataPaths.empty()) {
+        return;
+    }
+
+    _thumbnailPrewarmer = new ThumbnailPrewarmer(std::move(dataPaths), 128, this);
+    _thumbnailPrewarmer->start(QThread::LowestPriority);
+}
+
 void MainWindow::refreshCompleteness() {
     if (!_completenessView) {
         return;
@@ -1173,7 +1203,10 @@ void MainWindow::replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSize
     if (QWidget* oldWidget = dock->widget()) {
         oldWidget->hide();
         oldWidget->setParent(nullptr);
-        delete oldWidget;
+        // deleteLater, not delete: the old panel may still be on the call stack (FileBrowserPanel's
+        // chunked tree build pumps the event loop mid-chunk); a synchronous delete here would free
+        // an object that resumes executing when the loop unwinds.
+        oldWidget->deleteLater();
     }
 
     dock->setWidget(panel);
@@ -1214,7 +1247,11 @@ void MainWindow::rebuildGameResourcesFromSettings() {
         return;
     }
 
-    const auto dataPaths = _settings->getDataPaths();
+    auto dataPaths = _settings->getDataPaths();
+    // Same fallback as Application::loadDataPaths: the editor's bundled resources (blank tile,
+    // overlay art, ...) must survive any data-path reconfiguration, or every subsequent map load
+    // fails on editor-essential art the game data does not ship.
+    util::ensureFallbackDataPath(dataPaths, Application::getResourcesPath());
 
     if (hasActiveMap()) {
         closeCurrentMap();
@@ -1234,6 +1271,7 @@ void MainWindow::rebuildGameResourcesFromSettings() {
 
     _resourcesShared = std::move(newResources);
     rebuildResourcePanels();
+    startThumbnailPrewarm(); // new mounts can mean new maps and new source identities
     refreshFileBrowser();
     showFileBrowserPanel();
     updatePanelMenuActions();
@@ -2446,7 +2484,9 @@ void MainWindow::updateFillSelectionAction() {
 }
 
 void MainWindow::showMapBrowserDialog() {
-    MapBrowserDialog dialog(*_resourcesShared, this);
+    auto dataPaths = _settings->getDataPaths();
+    util::ensureFallbackDataPath(dataPaths, Application::getResourcesPath());
+    MapBrowserDialog dialog(*_resourcesShared, std::move(dataPaths), this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }

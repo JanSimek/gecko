@@ -32,4 +32,12 @@ std::optional<std::filesystem::path> resolveGameDataRoot(const std::filesystem::
 /// falling back to comparing resolved+lexically_normal paths.
 bool pathsEquivalent(const std::filesystem::path& left, const std::filesystem::path& right);
 
+/// Add `fallbackDir` to `paths` unless an equivalent entry is already present or the directory
+/// does not exist. It is inserted at the FRONT — the stored order is lowest-priority-first (the
+/// VFS resolves last-mounted-wins) — so the fallback only fills gaps the configured paths leave.
+/// Used to keep the editor's own bundled resources (blank tile, overlay art, ...) mounted no
+/// matter how the user reconfigures the data paths — editor-essential assets are not game data,
+/// so they must not disappear with a settings change.
+void ensureFallbackDataPath(std::vector<std::filesystem::path>& paths, const std::filesystem::path& fallbackDir);
+
 } // namespace geck::util

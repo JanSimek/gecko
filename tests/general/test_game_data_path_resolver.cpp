@@ -263,3 +263,45 @@ TEST_CASE("resolveGameDataRoot: 'Resources' not inside .app/Contents is not trea
 }
 
 #endif // __APPLE__
+
+TEST_CASE("ensureFallbackDataPath inserts a missing fallback at the lowest priority", "[paths]") {
+    TempDir tmp;
+    const auto gameDir = tmp.root / "game";
+    const auto resourcesDir = tmp.root / "resources";
+    mkdirs(gameDir);
+    mkdirs(resourcesDir);
+
+    std::vector<std::filesystem::path> paths = { gameDir, gameDir / "master.dat" };
+    geck::util::ensureFallbackDataPath(paths, resourcesDir);
+
+    REQUIRE(paths.size() == 3);
+    // Stored order is lowest-priority-first (the VFS resolves last-mounted-wins), so the
+    // gap-filling fallback must land at the front — user data keeps overriding it.
+    REQUIRE(paths.front() == resourcesDir);
+    REQUIRE(paths.back() == gameDir / "master.dat");
+}
+
+TEST_CASE("ensureFallbackDataPath does not duplicate an already-listed fallback", "[paths]") {
+    TempDir tmp;
+    const auto resourcesDir = tmp.root / "resources";
+    mkdirs(resourcesDir);
+
+    SECTION("exact same path") {
+        std::vector<std::filesystem::path> paths = { resourcesDir };
+        geck::util::ensureFallbackDataPath(paths, resourcesDir);
+        REQUIRE(paths.size() == 1);
+    }
+
+    SECTION("non-normal form of the same directory") {
+        std::vector<std::filesystem::path> paths = { tmp.root / "." / "resources" };
+        geck::util::ensureFallbackDataPath(paths, resourcesDir);
+        REQUIRE(paths.size() == 1);
+    }
+}
+
+TEST_CASE("ensureFallbackDataPath skips a fallback directory that does not exist", "[paths]") {
+    TempDir tmp;
+    std::vector<std::filesystem::path> paths = { tmp.root };
+    geck::util::ensureFallbackDataPath(paths, tmp.root / "no_such_dir");
+    REQUIRE(paths.size() == 1);
+}

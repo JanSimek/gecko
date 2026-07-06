@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 #include <QAbstractTableModel>
 #include <QDateTime>
 #include <QList>
@@ -32,7 +34,9 @@ public:
     /// Role returning the record's Level as an int, on any column (used by LogFilterProxy).
     static constexpr int LEVEL_ROLE = Qt::UserRole + 1;
 
-    static constexpr int MAX_RECORDS = 5000;
+    // Large enough that a debug-heavy session doesn't evict the startup records — losing
+    // "the beginning of the log" is exactly what makes slow-start reports undiagnosable.
+    static constexpr int MAX_RECORDS = 50000;
 
     explicit LogModel(QObject* parent = nullptr);
 
@@ -55,10 +59,16 @@ private:
         Level level;
         QString message;
     };
-
-    void appendOnModelThread(const Record& record);
+    void drainPending();
+    void appendBatchOnModelThread(QList<Record> batch);
 
     QList<Record> _records;
+
+    // Cross-thread records buffer here; the first record of a burst schedules one queued
+    // drain on the model's thread, so a logging flood coalesces into batched row inserts.
+    std::mutex _pendingMutex;
+    QList<Record> _pending;
+    bool _drainQueued = false;
 };
 
 } // namespace geck

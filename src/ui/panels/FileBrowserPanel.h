@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QWidget>
+#include <chrono>
 #include <QTreeView>
 #include <QStandardItemModel>
 #include <QSortFilterProxyModel>
@@ -26,6 +27,7 @@
 #include <unordered_map>
 #include <atomic>
 #include <QSet>
+#include <QHash>
 
 namespace geck {
 
@@ -34,6 +36,16 @@ namespace resource {
 }
 
 class Settings;
+
+/// One VFS file plus the display metadata the tree shows. The loader worker computes every
+/// field on its background thread (source labels and PRO names hit the VFS and the proto
+/// repository), so populating the tree on the UI thread is only item construction + appendRow.
+struct FileBrowserEntry {
+    QString path;           //!< raw VFS path, as listed
+    QString normalizedPath; //!< display path, relative to its providing mount
+    QString extension;      //!< lowercase ".ext", empty when the file has none
+    QString source;         //!< display label of the mount that provides the file
+};
 
 /**
  * @brief Worker class for loading files in background thread
@@ -44,20 +56,30 @@ class FileLoaderWorker : public QObject {
 public:
     explicit FileLoaderWorker(std::shared_ptr<resource::GameResources> resources, QObject* parent = nullptr);
 
+    /// Directories the display paths are normalized against; set before the thread starts.
+    void setNativeDirectories(std::vector<std::filesystem::path> dirs) { _nativeDirectories = std::move(dirs); }
+
     std::atomic<bool> _shouldStop{ false };
 
 public slots:
     void loadFiles();
 
 signals:
-    void filesLoaded(const std::vector<std::string>& files);
+    void filesLoaded(const std::vector<FileBrowserEntry>& entries);
+    /// PRO display names, resolved in a second pass after filesLoaded: parsing thousands of
+    /// protos (and their msg files) is the one expensive per-file job, so it must not delay
+    /// the tree. Emitted in batches; keyed by the entry's raw VFS path.
+    void proNamesResolved(const QHash<QString, QString>& namesByPath);
     void fileTypesExtracted(const std::unordered_set<std::string>& fileTypes);
     void loadingProgress(int current, int total, const QString& status);
     void loadingError(const QString& error);
     void loadingComplete();
 
 private:
+    QString resolveProName(const std::string& vfsPath) const;
+
     std::shared_ptr<resource::GameResources> _resources;
+    std::vector<std::filesystem::path> _nativeDirectories;
 };
 
 /**
@@ -147,7 +169,8 @@ public slots:
 private slots:
     void updateFileDisplay();
     void onCustomContextMenuRequested(const QPoint& pos);
-    void onFilesLoaded(const std::vector<std::string>& files);
+    void onFilesLoaded(const std::vector<FileBrowserEntry>& entries);
+    void onProNamesResolved(const QHash<QString, QString>& namesByPath);
     void onFileTypesExtracted(const std::unordered_set<std::string>& fileTypes);
     void onLoadingProgress(int current, int total, const QString& status);
     void onLoadingError(const QString& error);
@@ -160,22 +183,19 @@ private:
     void setupFilterControls();
     void setupStatusBar();
 
-    void buildFileTree(const std::vector<std::string>& files);
-    void buildFileTreeProgressive(const std::vector<std::string>& files);
-    void startProgressiveTreeBuild(const std::vector<std::string>& filteredFiles);
+    void buildFileTree(const std::vector<FileBrowserEntry>& entries);
+    void buildFileTreeProgressive(const std::vector<FileBrowserEntry>& entries);
+    void startProgressiveTreeBuild(std::vector<FileBrowserEntry> filteredEntries);
     FileTreeItem* createDirectoryStructure(const QString& path);
     FileTreeItem* findOrCreateDirectory(FileTreeItem* parent, const QString& dirName);
-    // Builds the directory path + 5-column row for a single file and appends it under
-    // rootItem. Shared by the one-shot (buildFileTree) and progressive (processNextChunk)
-    // tree builders so the row layout stays in one place.
-    void insertFileRow(FileTreeItem* rootItem, const std::string& file,
-        const std::vector<std::filesystem::path>& nativeDirectories);
+    // Builds the directory path + 5-column row for one precomputed entry and appends it
+    // under rootItem. Shared by the one-shot (buildFileTree) and progressive
+    // (processNextChunk) tree builders so the row layout stays in one place.
+    void insertFileRow(FileTreeItem* rootItem, const FileBrowserEntry& entry);
     QString getFileExtension(const QString& filePath) const;
     QString getFileIcon(const QString& extension) const;
     void updateFileCount();
     void updateFileTypeComboBox();
-    QString getFileSource(const QString& filePath) const;
-    QString getFileSource(const QString& filePath, const std::vector<std::filesystem::path>& nativeDirectories) const;
     void exportFile(const QString& filePath);
     void executeScript(const QString& filePath);
     void openProEditor(const QString& filePath);
@@ -193,13 +213,8 @@ private:
     void toggleColumnVisibility(int column);
     void applyDefaultColumnVisibility();
 
-    // PRO name loading
-    QString getProName(const QString& filePath) const;
-    QString loadProNameFromFile(const QString& filePath) const;
-
-    // Path normalization for display
+    // Data paths the worker normalizes display paths against
     std::vector<std::filesystem::path> getNativeDirectoryPaths() const;
-    QString normalizeDisplayPath(const QString& fullPath) const;
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
@@ -224,18 +239,23 @@ private:
     FileLoaderWorker* _loaderWorker = nullptr;
 
     // Data
-    std::vector<std::string> _allFiles;
+    std::vector<FileBrowserEntry> _allEntries;
+    // PRO names arrive from the worker after the tree is built; the cache survives rebuilds
+    // (filter changes re-insert rows before resolution finishes) and the item index lets a
+    // late batch update visible rows in place. The index is rebuilt with every population.
+    QHash<QString, QString> _resolvedProNames;
+    QHash<QString, QStandardItem*> _proNameItems;
     std::unordered_set<std::string> _fileTypes;
-    std::vector<std::filesystem::path> _nativeDirectoriesForSources;
 
     // State
     QString _currentSearchFilter;
     QString _currentFileTypeFilter;
 
     // Progressive building state
-    std::vector<std::string> _pendingFiles;
+    std::vector<FileBrowserEntry> _pendingEntries;
     size_t _currentChunkIndex = 0;
     QTimer* _chunkTimer = nullptr;
+    std::chrono::steady_clock::time_point _populationStart; //!< for the built-in duration log
     QTimer* _searchTimer = nullptr;
     bool _isLoading = false;
 
@@ -245,14 +265,16 @@ private:
     // Tree expansion state (saved across refreshes)
     QSet<QString> _savedExpandedPaths;
 
-    // PRO name caching
-    mutable std::unordered_map<std::string, QString> _proNameCache;
     std::shared_ptr<resource::GameResources> _resourcesShared;
     std::shared_ptr<Settings> _settings;
 
     // Constants
-    static constexpr int CHUNK_SIZE = 50;    // Files processed per chunk (small for better UI responsiveness)
-    static constexpr int CHUNK_DELAY_MS = 0; // No delay, use Qt event queue instead
+    static constexpr int CHUNK_SIZE = 2000; // Files per chunk: one event-loop turn each
+    // Non-zero so the event loop sleeps between chunks: that idle moment is when macOS
+    // flushes widget paints, i.e. what makes the build's progress visible at all.
+    static constexpr int CHUNK_DELAY_MS = 1;
+    // (with the proxy detached during the build, a row is a few microseconds of
+    // QStandardItem work, so large chunks keep the turn under ~30ms)
 };
 
 } // namespace geck

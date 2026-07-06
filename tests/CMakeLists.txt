@@ -112,6 +112,10 @@ add_executable(qt_tests
     qt/test_log_panel.cpp
     # The Log dock's "Map" tab: report -> grouped tree, empty states, refresh signal.
     qt/test_completeness_view.cpp
+    # File browser population: worker-computed metadata -> chunked tree build.
+    qt/test_file_browser_population.cpp
+    # CI-failing ceilings on operations that have regressed catastrophically before.
+    qt/test_performance_guards.cpp
 )
 
 # Round-trip the headless pattern writer (gecko_cli) through the editor's Qt PatternSerializer.

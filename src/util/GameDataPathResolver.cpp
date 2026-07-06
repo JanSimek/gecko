@@ -127,4 +127,26 @@ bool pathsEquivalent(const std::filesystem::path& left, const std::filesystem::p
     return resolveOrIdentity(left).lexically_normal() == resolveOrIdentity(right).lexically_normal();
 }
 
+void ensureFallbackDataPath(std::vector<std::filesystem::path>& paths, const std::filesystem::path& fallbackDir) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(fallbackDir, ec)) {
+        return;
+    }
+
+    // Plain path equivalence on purpose: pathsEquivalent() resolves entries to a game-data root,
+    // which could alias two different directories; the fallback only needs literal dedup.
+    const auto alreadyListed = std::any_of(paths.begin(), paths.end(),
+        [&fallbackDir](const std::filesystem::path& existing) {
+            std::error_code eqEc;
+            return std::filesystem::equivalent(existing, fallbackDir, eqEc)
+                || existing.lexically_normal() == fallbackDir.lexically_normal();
+        });
+
+    if (!alreadyListed) {
+        // The stored order is lowest-priority-first (the VFS resolves last-mounted-wins, and the
+        // Data Paths table displays the list reversed) — so lowest priority means the FRONT.
+        paths.insert(paths.begin(), fallbackDir);
+    }
+}
+
 } // namespace geck::util

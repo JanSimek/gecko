@@ -1,12 +1,15 @@
 #define QT_NO_EMIT
 #include "Application.h"
 
+#include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/spdlog.h>
 #include <QCommandLineParser>
 #include <QCommandLineOption>
 #include <QObject>
 #include <QIcon>
 #include <QCoreApplication>
+#include <QDir>
+#include <QStandardPaths>
 
 #include "version.h"
 #include "resource/GameResources.h"
@@ -41,6 +44,23 @@ Application::Application(int argc, char** argv)
     _logModel = std::make_unique<LogModel>();
     _logSink = std::make_shared<LogModelSink>(_logModel.get());
     spdlog::default_logger()->sinks().push_back(_logSink);
+
+    // Also persist the log to a rotating file: a Finder-launched app has no visible console,
+    // and slow-start reports need the timings from the exact run that misbehaved.
+    try {
+        const QString logDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/logs";
+        QDir().mkpath(logDir);
+        const std::string logFile = (logDir + "/gecko.log").toStdString();
+        auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(logFile, 2 * 1024 * 1024, 2);
+        fileSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
+        spdlog::default_logger()->sinks().push_back(std::move(fileSink));
+        // Flush every record: this file exists to explain hangs and kills, so it must be
+        // current even when the process never exits cleanly.
+        spdlog::default_logger()->flush_on(spdlog::level::info);
+        spdlog::info("Logging to {}", logFile);
+    } catch (const std::exception& e) {
+        spdlog::warn("Could not open the log file: {}", e.what());
+    }
 
     std::filesystem::path iconPath = getResourcesPath() / "icon.png";
     QIcon appIcon(QString::fromStdString(iconPath.string()));
@@ -106,7 +126,7 @@ std::string Application::processCommandLineArgs() {
     parser.process(*_qtApp);
 
     if (parser.isSet(debugOption)) {
-        spdlog::set_pattern("[%^%l%$] [thread %t] %v");
+        spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] [thread %t] %v");
         spdlog::set_level(spdlog::level::debug);
     }
 
@@ -180,6 +200,7 @@ void Application::checkDataConfiguration() {
         spdlog::info("First run detected, showing settings dialog");
         showStartupSettingsDialog();
         loadDataPaths();
+        _mainWindow->startThumbnailPrewarm();
         return;
     }
 
@@ -195,6 +216,8 @@ void Application::checkDataConfiguration() {
             loadDataPaths();
         }
     }
+
+    _mainWindow->startThumbnailPrewarm();
 }
 
 bool Application::showStartupSettingsDialog() {
@@ -228,6 +251,11 @@ void Application::loadDataPaths() {
         spdlog::warn("No data paths configured, application may not function properly");
         return;
     }
+
+    // The editor's own assets (blank tile, overlay art, ...) live in the bundled resources
+    // folder, not in the game data — keep it mounted (lowest priority) regardless of how the
+    // user configured the data paths, or every map load fails on art/tiles/blank.frm.
+    util::ensureFallbackDataPath(dataPaths, getResourcesPath());
 
     spdlog::info("Loading {} data paths with progress dialog", dataPaths.size());
 

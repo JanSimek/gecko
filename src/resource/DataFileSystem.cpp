@@ -7,6 +7,7 @@
 #include "vfs/VfsppNativeFileSystem.h"
 
 #include <algorithm>
+#include <chrono>
 #include <iterator>
 #include <regex>
 #include <spdlog/spdlog.h>
@@ -77,10 +78,15 @@ void DataFileSystem::addDataPathLocked(const std::filesystem::path& path) {
         return;
     }
 
+    const auto mountStart = std::chrono::steady_clock::now();
     if (!fileSystem->Initialize() || !fileSystem->IsInitialized()) {
         spdlog::error("Failed to initialize data path: {}", mountRoot->string());
         return;
     }
+    // Mount duration is the dominant cold-start cost (DAT index parse / directory walk);
+    // log it so slow startups are attributable per data path from the Log panel.
+    spdlog::info("Mounted '{}' in {}ms", mountRoot->filename().string(),
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - mountStart).count());
 
     _vfs->AddFileSystem("/", fileSystem);
 }
