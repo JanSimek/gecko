@@ -10,19 +10,12 @@
 
 namespace geck::resource {
 
-namespace {
-
-    // Marker membership is a plain path comparison (fs::equivalent for on-disk variance, lexical
-    // fallback) — NOT util::pathsEquivalent, whose resolve-to-game-data-root step would conflate a
-    // folder with its data/ subfolder and honour the marker against the wrong entry.
-    bool sameDataPathEntry(const std::filesystem::path& a, const std::filesystem::path& b) {
-        std::error_code ec;
-        if (std::filesystem::equivalent(a, b, ec)) {
-            return true;
-        }
-        return a.lexically_normal() == b.lexically_normal();
+bool sameDataPathEntry(const std::filesystem::path& a, const std::filesystem::path& b) {
+    std::error_code ec;
+    if (std::filesystem::equivalent(a, b, ec)) {
+        return true;
     }
-
+    return a.lexically_normal() == b.lexically_normal();
 }
 
 std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std::filesystem::path>& dataPaths) {

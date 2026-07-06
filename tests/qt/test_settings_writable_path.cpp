@@ -80,6 +80,32 @@ TEST_CASE("Settings save-location marker: resolution, invariant, persistence", "
         CHECK(*reloaded.resolveWritableDataPath() == dirA);
     }
 
+    SECTION("a marker spelled differently from its list entry is not cleared by mistake") {
+        geck::Settings settings;
+        settings.setDataPaths({ dirA, dirB });
+        // Same directory, non-canonical spelling: equivalence, not exact equality, must decide.
+        settings.setWritableDataPath(dirA / ".");
+        CHECK_FALSE(settings.getWritableDataPath().empty());
+        REQUIRE(settings.resolveWritableDataPath().has_value());
+
+        settings.setDataPaths({ dirA, dirB }); // re-set must keep the equivalent marker listed
+        CHECK_FALSE(settings.getWritableDataPath().empty());
+    }
+
+    SECTION("loading a file without the key resets an in-memory marker") {
+        {
+            geck::Settings settings;
+            settings.setDataPaths({ dirA, dirB });
+            settings.save(); // no marker in the file
+        }
+
+        geck::Settings stale;
+        stale.setDataPaths({ dirA, dirB });
+        stale.setWritableDataPath(dirA);
+        stale.load(); // absent key means unset — the in-memory marker must not survive
+        CHECK(stale.getWritableDataPath().empty());
+    }
+
     SECTION("an unset marker is not written and loads as unset") {
         {
             geck::Settings settings;

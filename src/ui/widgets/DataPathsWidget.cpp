@@ -394,6 +394,10 @@ void DataPathsWidget::refreshSaveLocationMarkers() {
         effective = resource::findWritableDataPath(paths);
     }
 
+    // The marker only takes effect while it is usable; when it isn't, the badge (and its claim
+    // about where saves land) must follow the actual fallback, not the configured wish.
+    const bool markerUsable = !_writableDataPath.empty() && effective.has_value() && *effective == _writableDataPath;
+
     for (int row = 0; row < _pathsTable->rowCount(); ++row) {
         QTableWidgetItem* item = _pathsTable->item(row, PathColumn);
         if (!item) {
@@ -409,8 +413,11 @@ void DataPathsWidget::refreshSaveLocationMarkers() {
         item->setFont(font);
 
         QString tooltip = item->data(BaseTooltipRole).toString();
-        if (isExplicit) {
+        if (isExplicit && markerUsable) {
             tooltip += "\nSave location: map saves and name/variable edits are written here.";
+        } else if (isExplicit) {
+            tooltip += "\nMarked as the save location, but currently unusable (missing folder) — "
+                       "the highest-priority folder is used instead.";
         } else if (isEffective) {
             tooltip += "\nCurrent default save location (highest-priority folder). "
                        "Use \"Set as Save Location\" to pin one explicitly.";

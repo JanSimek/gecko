@@ -170,6 +170,8 @@ void Settings::fromJson(const QJsonObject& json) {
 
     // Read after the data paths (setDataPaths clears an unlisted marker); tolerate a hand-edited
     // settings file whose marker points outside the list by dropping it instead of trusting it.
+    // An absent key means unset — reset first so a reload can't keep a stale in-memory marker.
+    _writableDataPath.clear();
     if (json.contains("writableDataPath")) {
         setWritableDataPath(std::filesystem::path(json["writableDataPath"].toString().toStdString()));
         clearWritableDataPathIfUnlisted();
@@ -322,8 +324,13 @@ void Settings::clearWritableDataPathIfUnlisted() {
     if (_writableDataPath.empty()) {
         return;
     }
-    // Plain equality: both sides went through normalizeDataPath, so the stored forms are comparable.
-    if (std::find(_dataPaths.begin(), _dataPaths.end(), _writableDataPath) == _dataPaths.end()) {
+    // The same equivalence the resolver uses (fs::equivalent / lexical), so a marker spelled
+    // differently from its list entry (symlink, redundant "..") isn't cleared by mistake.
+    const bool listed = std::any_of(_dataPaths.begin(), _dataPaths.end(),
+        [this](const std::filesystem::path& entry) {
+            return resource::sameDataPathEntry(entry, _writableDataPath);
+        });
+    if (!listed) {
         spdlog::debug("Save location '{}' left the data paths; marker cleared", _writableDataPath.string());
         _writableDataPath.clear();
     }
