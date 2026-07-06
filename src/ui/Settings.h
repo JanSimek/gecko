@@ -9,7 +9,7 @@
 #include <QJsonArray>
 #include <QByteArray>
 #include <filesystem>
-#include <memory>
+#include <optional>
 #include <vector>
 
 namespace geck {
@@ -41,6 +41,17 @@ public:
     void removeDataPath(const std::filesystem::path& path);
     std::vector<std::filesystem::path> getDataPaths() const;
     void setDataPaths(const std::vector<std::filesystem::path>& paths);
+
+    // Explicit default save location (Settings > Data Paths "Set as Save Location"). Empty = unset,
+    // in which case saves fall back to the highest-priority folder in the data paths. The marker is
+    // cleared automatically when its folder leaves the data paths, so it can never dangle.
+    std::filesystem::path getWritableDataPath() const;
+    void setWritableDataPath(const std::filesystem::path& path);
+
+    // The folder map saves / maps.txt name edits / .gam edits are written to: the marked folder if
+    // it is still a listed, existing directory, otherwise the positional fallback (nullopt if the
+    // data paths hold no directory at all).
+    std::optional<std::filesystem::path> resolveWritableDataPath() const;
 
     // UI state
     QByteArray getWindowGeometry() const;
@@ -113,11 +124,14 @@ private:
 
     // Helper methods
     QString getSettingsFilePath() const;
+    // Keeps the save-location marker consistent with the data paths (a removed folder can't stay marked).
+    void clearWritableDataPathIfUnlisted();
     QJsonArray pathVectorToJsonArray(const std::vector<std::filesystem::path>& paths) const;
     std::vector<std::filesystem::path> jsonArrayToPathVector(const QJsonArray& array) const;
 
     // Settings data
     std::vector<std::filesystem::path> _dataPaths;
+    std::filesystem::path _writableDataPath; // empty = unset (positional fallback applies)
     QByteArray _windowGeometry;
     QByteArray _dockState;
     bool _windowMaximized = true;        // Default to maximized

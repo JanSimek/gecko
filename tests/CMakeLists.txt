@@ -114,6 +114,8 @@ add_executable(qt_tests
     qt/test_completeness_view.cpp
     # File browser population: worker-computed metadata -> chunked tree build.
     qt/test_file_browser_population.cpp
+    # Explicit save-location marker on the data paths: resolution, never-dangles invariant, JSON round-trip.
+    qt/test_settings_writable_path.cpp
     # CI-failing ceilings on operations that have regressed catastrophically before.
     qt/test_performance_guards.cpp
 )

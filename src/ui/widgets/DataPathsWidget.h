@@ -33,6 +33,11 @@ public:
     std::vector<std::filesystem::path> getDataPaths() const;
     void setDataPaths(const std::vector<std::filesystem::path>& paths);
 
+    // Explicit default save location (empty = unset -> the highest-priority folder is used).
+    // Kept as a path, not a row, so reordering rows never moves the marker.
+    std::filesystem::path getWritableDataPath() const;
+    void setWritableDataPath(const std::filesystem::path& path);
+
     // Validation
     void validatePaths();
 
@@ -50,6 +55,7 @@ private slots:
     void onAutoDetect();
     void onSelectionChanged();
     void onCellDoubleClicked(int row, int column);
+    void onToggleSaveLocation(); // mark the selected folder as the save location (or clear it)
 
 private:
     void setupUI();
@@ -66,6 +72,13 @@ private:
     void renumberPriorities();
     bool isProtectedRow(int row) const;
     int selectedRow() const;
+    std::filesystem::path pathAtRow(int row) const; // normalized, empty if the row has no path item
+    // A row can be marked as the save location only if it's a real folder the editor could write to
+    // (not a .dat, not missing, not the protected built-in resources path).
+    bool isMarkableRow(int row) const;
+    // Re-derive each row's save-location badge (bold + save icon for the explicit marker, italic for
+    // the positional default) from the current rows + marker. Called whenever either changes.
+    void refreshSaveLocationMarkers();
 
     // Highest priority is the top row; the stored order is lowest-priority-first, so the table
     // displays it reversed (see getDataPaths/setDataPaths). Columns:
@@ -82,10 +95,12 @@ private:
     QPushButton* _removeButton;
     QPushButton* _moveUpButton;
     QPushButton* _moveDownButton;
+    QPushButton* _saveLocationButton;
     QPushButton* _autoDetectButton;
     QProgressBar* _progressBar;
 
     std::shared_ptr<Settings> _settings;
+    std::filesystem::path _writableDataPath; // local copy; persisted by SettingsDialog on save
 };
 
 } // namespace geck

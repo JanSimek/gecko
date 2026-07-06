@@ -1,6 +1,7 @@
 #include "DataPathsWidget.h"
 #include "ui/Settings.h"
 #include "Application.h"
+#include "resource/WritableDataRoot.h"
 #include "ui/UIConstants.h"
 #include "ui/common/ButtonStyle.h"
 #include "util/GameDataPathResolver.h"
@@ -15,11 +16,19 @@
 #include <QTableWidgetItem>
 #include <QAbstractItemView>
 #include <algorithm>
+#include <optional>
+#include <system_error>
 #include <spdlog/spdlog.h>
 
 namespace geck {
 
 using namespace ui::constants;
+
+namespace {
+    // The path item's tooltip as composed at row creation, before the save-location line is
+    // appended — refreshSaveLocationMarkers rebuilds from this so the line never accumulates.
+    constexpr int BaseTooltipRole = Qt::UserRole + 1;
+}
 
 DataPathsWidget::DataPathsWidget(std::shared_ptr<Settings> settings, QWidget* parent)
     : QGroupBox("Fallout 2 Data Paths", parent)
@@ -31,6 +40,7 @@ DataPathsWidget::DataPathsWidget(std::shared_ptr<Settings> settings, QWidget* pa
     , _removeButton(nullptr)
     , _moveUpButton(nullptr)
     , _moveDownButton(nullptr)
+    , _saveLocationButton(nullptr)
     , _autoDetectButton(nullptr)
     , _progressBar(nullptr)
     , _settings(std::move(settings)) {
@@ -47,7 +57,9 @@ void DataPathsWidget::setupUI() {
         "reorder or remove) or a single .dat file. Every source is searched together; when the same "
         "file is present in more than one, the higher-priority source wins.\n"
         "The top entry has the highest priority and overrides the ones below it — use Move Up / Move "
-        "Down to reorder.");
+        "Down to reorder.\n"
+        "Map saves and name/variable edits are written to the folder marked as the Save Location; if "
+        "none is marked, the highest-priority folder is used.");
     _helpLabel->setWordWrap(true);
     _helpLabel->setStyleSheet(ui::theme::styles::helpText());
     _layout->addWidget(_helpLabel);
@@ -96,6 +108,14 @@ void DataPathsWidget::setupUI() {
     _moveDownButton->setEnabled(false);
     _controlLayout->addWidget(_moveDownButton);
 
+    _saveLocationButton = new QPushButton("Set as Save Location");
+    _saveLocationButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogSaveButton));
+    _saveLocationButton->setToolTip(
+        "Write map saves and name/variable edits to the selected folder, regardless of its priority.\n"
+        "Only real folders can be a save location — DAT archives are read-only.");
+    _saveLocationButton->setEnabled(false);
+    _controlLayout->addWidget(_saveLocationButton);
+
     _controlLayout->addStretch();
 
     _autoDetectButton = new QPushButton("Auto-Detect");
@@ -104,7 +124,7 @@ void DataPathsWidget::setupUI() {
     _controlLayout->addWidget(_autoDetectButton);
 
     // Consistent icon size + minimum height so the buttons don't shrink and clip their icons on resize.
-    for (QPushButton* btn : { _addButton, _removeButton, _moveUpButton, _moveDownButton, _autoDetectButton }) {
+    for (QPushButton* btn : { _addButton, _removeButton, _moveUpButton, _moveDownButton, _saveLocationButton, _autoDetectButton }) {
         geck::ui::styleActionButton(btn);
     }
 
@@ -120,6 +140,7 @@ void DataPathsWidget::setupConnections() {
     connect(_removeButton, &QPushButton::clicked, this, &DataPathsWidget::onRemovePath);
     connect(_moveUpButton, &QPushButton::clicked, [this]() { moveSelectedPath(-1); });
     connect(_moveDownButton, &QPushButton::clicked, [this]() { moveSelectedPath(1); });
+    connect(_saveLocationButton, &QPushButton::clicked, this, &DataPathsWidget::onToggleSaveLocation);
     connect(_autoDetectButton, &QPushButton::clicked, this, &DataPathsWidget::onAutoDetect);
     connect(_pathsTable, &QTableWidget::itemSelectionChanged, this, &DataPathsWidget::onSelectionChanged);
     connect(_pathsTable, &QTableWidget::cellDoubleClicked, this, &DataPathsWidget::onCellDoubleClicked);
@@ -154,7 +175,26 @@ void DataPathsWidget::setDataPaths(const std::vector<std::filesystem::path>& pat
     }
 
     renumberPriorities();
+
+    // A save-location marker whose folder is no longer among the rows can't stay marked.
+    if (!_writableDataPath.empty()) {
+        const auto current = getDataPaths();
+        if (std::find(current.begin(), current.end(), _writableDataPath) == current.end()) {
+            _writableDataPath.clear();
+        }
+    }
+
     validatePaths();
+    updateButtonStates();
+}
+
+std::filesystem::path DataPathsWidget::getWritableDataPath() const {
+    return _writableDataPath;
+}
+
+void DataPathsWidget::setWritableDataPath(const std::filesystem::path& path) {
+    _writableDataPath = path.empty() ? std::filesystem::path{} : Settings::normalizeDataPath(path);
+    refreshSaveLocationMarkers();
     updateButtonStates();
 }
 
@@ -202,6 +242,7 @@ bool DataPathsWidget::addPathRow(const std::filesystem::path& path, bool atTop) 
     pathItem->setToolTip(pathStr + "\n" + pathItem->toolTip());
 
     pathItem->setData(Qt::UserRole, isDefaultPath);
+    pathItem->setData(BaseTooltipRole, pathItem->toolTip());
 
     const int row = atTop ? 0 : _pathsTable->rowCount();
     _pathsTable->insertRow(row);
@@ -245,6 +286,8 @@ int DataPathsWidget::selectedRow() const {
 }
 
 void DataPathsWidget::validatePaths() {
+    refreshSaveLocationMarkers(); // rows or the marker changed; either moves the badge
+
     auto& settings = *_settings;
     auto dataPaths = getDataPaths();
 
@@ -287,6 +330,106 @@ void DataPathsWidget::updateButtonStates() {
         _moveUpButton->setEnabled(false);
         _moveDownButton->setEnabled(false);
     }
+
+    // The button doubles as the un-mark action when the selected row is already the save location.
+    const bool markable = isMarkableRow(row);
+    _saveLocationButton->setEnabled(markable);
+    const bool selectedIsMarked = markable && !_writableDataPath.empty() && pathAtRow(row) == _writableDataPath;
+    _saveLocationButton->setText(selectedIsMarked ? "Clear Save Location" : "Set as Save Location");
+}
+
+std::filesystem::path DataPathsWidget::pathAtRow(int row) const {
+    if (row < 0 || row >= _pathsTable->rowCount()) {
+        return {};
+    }
+    QTableWidgetItem* item = _pathsTable->item(row, PathColumn);
+    if (!item) {
+        return {};
+    }
+    return Settings::normalizeDataPath(item->text().toStdString());
+}
+
+bool DataPathsWidget::isMarkableRow(int row) const {
+    if (row < 0 || row >= _pathsTable->rowCount() || isProtectedRow(row)) {
+        return false; // the built-in resources folder must not collect user maps
+    }
+    const std::filesystem::path path = pathAtRow(row);
+    std::error_code ec;
+    return !path.empty() && std::filesystem::is_directory(path, ec);
+}
+
+void DataPathsWidget::onToggleSaveLocation() {
+    const int row = selectedRow();
+    if (!isMarkableRow(row)) {
+        return;
+    }
+
+    const std::filesystem::path path = pathAtRow(row);
+    if (_writableDataPath == path) {
+        _writableDataPath.clear();
+        setStatusMessage("Save location cleared — the highest-priority folder will be used.", "info");
+    } else {
+        _writableDataPath = path;
+        setStatusMessage(QString("Save location: %1").arg(QString::fromStdString(path.string())), "success");
+    }
+
+    Q_EMIT dataPathsChanged(); // marks the dialog dirty so Apply/OK persists the marker
+    refreshSaveLocationMarkers();
+    updateButtonStates();
+}
+
+void DataPathsWidget::refreshSaveLocationMarkers() {
+    const auto paths = getDataPaths();
+
+    // Where saves would land right now. Mirrors resource::findWritableDataPath(paths, marker) but
+    // resolves the fallback locally so a stale marker doesn't warn-log on every table repaint —
+    // the warning belongs to actual save operations.
+    std::optional<std::filesystem::path> effective;
+    std::error_code ec;
+    if (!_writableDataPath.empty()
+        && std::find(paths.begin(), paths.end(), _writableDataPath) != paths.end()
+        && std::filesystem::is_directory(_writableDataPath, ec)) {
+        effective = _writableDataPath;
+    } else {
+        effective = resource::findWritableDataPath(paths);
+    }
+
+    // The marker only takes effect while it is usable; when it isn't, the badge (and its claim
+    // about where saves land) must follow the actual fallback, not the configured wish.
+    const bool markerUsable = !_writableDataPath.empty() && effective.has_value() && *effective == _writableDataPath;
+
+    for (int row = 0; row < _pathsTable->rowCount(); ++row) {
+        QTableWidgetItem* item = _pathsTable->item(row, PathColumn);
+        if (!item) {
+            continue;
+        }
+        const std::filesystem::path rowPath = Settings::normalizeDataPath(item->text().toStdString());
+        const bool isExplicit = !_writableDataPath.empty() && rowPath == _writableDataPath;
+        const bool isEffective = effective.has_value() && rowPath == *effective;
+
+        QFont font = _pathsTable->font();
+        font.setBold(isExplicit);
+        font.setItalic(isEffective && !isExplicit);
+        item->setFont(font);
+
+        QString tooltip = item->data(BaseTooltipRole).toString();
+        if (isExplicit && markerUsable) {
+            tooltip += "\nSave location: map saves and name/variable edits are written here.";
+        } else if (isExplicit) {
+            tooltip += "\nMarked as the save location, but currently unusable (missing folder) — "
+                       "the highest-priority folder is used instead.";
+        } else if (isEffective) {
+            tooltip += "\nCurrent default save location (highest-priority folder). "
+                       "Use \"Set as Save Location\" to pin one explicitly.";
+        }
+        item->setToolTip(tooltip);
+
+        // Swap the folder icon for a save badge on the effective row; leave warning/file icons alone.
+        if (std::filesystem::is_directory(rowPath, ec) && _settings->validateDataPath(rowPath)) {
+            item->setIcon(QApplication::style()->standardIcon(
+                isEffective ? QStyle::SP_DialogSaveButton : QStyle::SP_DirIcon));
+        }
+    }
 }
 
 void DataPathsWidget::removeSelectedPath() {
@@ -301,11 +444,20 @@ void DataPathsWidget::removeSelectedPath() {
         return;
     }
 
+    const bool removedMarked = !_writableDataPath.empty() && pathAtRow(row) == _writableDataPath;
+    if (removedMarked) {
+        _writableDataPath.clear();
+    }
+
     _pathsTable->removeRow(row);
     Q_EMIT dataPathsChanged();
     renumberPriorities();
     validatePaths();
     updateButtonStates();
+
+    if (removedMarked) { // after validatePaths so its summary doesn't overwrite this notice
+        setStatusMessage("The removed folder was the save location — the highest-priority folder will be used.", "warning");
+    }
 }
 
 int DataPathsWidget::addFolderExpanded(const std::filesystem::path& folder, bool atTop) {
@@ -458,6 +610,11 @@ void DataPathsWidget::onCellDoubleClicked(int row, int /*column*/) {
         newPath = QFileDialog::getExistingDirectory(this, "Select Fallout 2 Data Directory", currentPath);
     }
     if (!newPath.isEmpty() && newPath != currentPath) {
+        // Re-picking a marked folder keeps it the save location under its new path.
+        const std::filesystem::path oldPath = Settings::normalizeDataPath(currentPath.toStdString());
+        if (!_writableDataPath.empty() && _writableDataPath == oldPath) {
+            _writableDataPath = Settings::normalizeDataPath(newPath.toStdString());
+        }
         item->setText(newPath);
         Q_EMIT dataPathsChanged();
         validatePaths();

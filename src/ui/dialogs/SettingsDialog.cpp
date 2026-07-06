@@ -222,6 +222,7 @@ void SettingsDialog::loadSettings() {
     _originalDataPaths = settings.getDataPaths();
 
     _dataPathsWidget->setDataPaths(_originalDataPaths);
+    _dataPathsWidget->setWritableDataPath(settings.getWritableDataPath());
 
     _edgeScrollCheckBox->setChecked(settings.getEdgeScrollEnabled());
 
@@ -253,6 +254,10 @@ void SettingsDialog::saveSettings() {
     auto dataPaths = _dataPathsWidget->getDataPaths();
     bool pathsHaveChanged = dataPaths != _originalDataPaths;
     settings.setDataPaths(dataPaths);
+    // After setDataPaths (which drops an unlisted marker), and deliberately NOT part of
+    // pathsHaveChanged: moving the save target changes where writes land, not what is mounted,
+    // so it must not trigger the data-path reload.
+    settings.setWritableDataPath(_dataPathsWidget->getWritableDataPath());
 
     settings.setEdgeScrollEnabled(_edgeScrollCheckBox->isChecked());
 

@@ -2,10 +2,21 @@
 
 #include "resource/DataFileSystem.h"
 
+#include <spdlog/spdlog.h>
+
+#include <algorithm>
 #include <fstream>
 #include <stdexcept>
 
 namespace geck::resource {
+
+bool sameDataPathEntry(const std::filesystem::path& a, const std::filesystem::path& b) {
+    std::error_code ec;
+    if (std::filesystem::equivalent(a, b, ec)) {
+        return true;
+    }
+    return a.lexically_normal() == b.lexically_normal();
+}
 
 std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std::filesystem::path>& dataPaths) {
     for (auto it = dataPaths.rbegin(); it != dataPaths.rend(); ++it) {
@@ -15,6 +26,21 @@ std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std:
         }
     }
     return std::nullopt;
+}
+
+std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std::filesystem::path>& dataPaths,
+    const std::filesystem::path& preferred) {
+    if (!preferred.empty()) {
+        const bool listed = std::any_of(dataPaths.begin(), dataPaths.end(),
+            [&preferred](const std::filesystem::path& entry) { return sameDataPathEntry(entry, preferred); });
+        std::error_code ec;
+        if (listed && std::filesystem::is_directory(preferred, ec)) {
+            return preferred;
+        }
+        spdlog::warn("Configured save location '{}' is {} — falling back to the highest-priority folder",
+            preferred.string(), listed ? "not an existing directory" : "no longer among the data paths");
+    }
+    return findWritableDataPath(dataPaths);
 }
 
 std::filesystem::path ensureWritableCopy(const DataFileSystem& files,
