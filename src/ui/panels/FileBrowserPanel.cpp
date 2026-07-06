@@ -666,8 +666,8 @@ void FileBrowserPanel::buildFileTree(const std::vector<FileBrowserEntry>& entrie
         _treeView->expand(index);
     }
 
+    _proxyModel->setSourceModel(_treeModel);
     _proxyModel->sort(0, Qt::AscendingOrder);
-    _proxyModel->setDynamicSortFilter(true);
     resizeNameColumnToContent();
 }
 
@@ -707,6 +707,14 @@ QString FileBrowserPanel::getFileIcon(const QString& extension) const {
 
 void FileBrowserPanel::updateFileCount() {
     int totalFiles = static_cast<int>(_allEntries.size());
+
+    // With no filter active every file is visible; skip the recursive proxy walk, which is
+    // not cheap over tens of thousands of rows.
+    if (_currentSearchFilter.isEmpty() && _currentFileTypeFilter == "All Files") {
+        _statusLabel->setText(QString("%1 files loaded").arg(totalFiles));
+        return;
+    }
+
     int visibleFiles = 0;
 
     std::function<void(const QModelIndex&)> countVisibleFiles = [&](const QModelIndex& parent) {
@@ -887,10 +895,11 @@ void FileBrowserPanel::startProgressiveTreeBuild(std::vector<FileBrowserEntry> f
     _pendingEntries = std::move(filteredEntries);
     _currentChunkIndex = 0;
 
-    // Inserting into a proxy that is already sorted (a previous population ends with sort())
-    // makes every appendRow a sorted insert; suspend dynamic sorting for the bulk build and
-    // sort once on completion.
-    _proxyModel->setDynamicSortFilter(false);
+    // Detach the model from the proxy for the bulk build: attached, every appendRow pays
+    // proxy mapping (and, once a previous population has sorted the proxy, a sorted insert
+    // with lessThan sibling lookups). Detached, rows cost only the QStandardItem work and
+    // the proxy maps everything once on re-attach at completion.
+    _proxyModel->setSourceModel(nullptr);
 
     _proNameItems.clear(); // the model clear below deletes the indexed items
     _treeModel->clear();
@@ -910,8 +919,8 @@ void FileBrowserPanel::processNextChunk() {
         _isLoading = false;
         _progressBar->setVisible(false);
 
+        _proxyModel->setSourceModel(_treeModel);
         _proxyModel->sort(0, Qt::AscendingOrder);
-        _proxyModel->setDynamicSortFilter(true);
 
         if (!_savedExpandedPaths.isEmpty()) {
             restoreExpandedPaths(_savedExpandedPaths);

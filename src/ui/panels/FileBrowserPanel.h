@@ -267,10 +267,12 @@ private:
     std::shared_ptr<Settings> _settings;
 
     // Constants
-    static constexpr int CHUNK_SIZE = 500; // Files per chunk: rows are cheap (~60us) and each chunk is one event-loop turn, so bigger chunks cut per-turn overhead while a turn stays ~30ms
+    static constexpr int CHUNK_SIZE = 2000; // Files per chunk: one event-loop turn each
     // Non-zero so the event loop sleeps between chunks: that idle moment is when macOS
     // flushes widget paints, i.e. what makes the build's progress visible at all.
     static constexpr int CHUNK_DELAY_MS = 1;
+    // (with the proxy detached during the build, a row is a few microseconds of
+    // QStandardItem work, so large chunks keep the turn under ~30ms)
 };
 
 } // namespace geck
