@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QWidget>
+#include <chrono>
 #include <QTreeView>
 #include <QStandardItemModel>
 #include <QSortFilterProxyModel>
@@ -254,6 +255,7 @@ private:
     std::vector<FileBrowserEntry> _pendingEntries;
     size_t _currentChunkIndex = 0;
     QTimer* _chunkTimer = nullptr;
+    std::chrono::steady_clock::time_point _populationStart; //!< for the built-in duration log
     QTimer* _searchTimer = nullptr;
     bool _isLoading = false;
 

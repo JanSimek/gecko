@@ -50,6 +50,7 @@
 #include "editor/Object.h"
 #include "ui/IconHelper.h"
 
+#include <chrono>
 #include <functional>
 
 #include <QApplication>
@@ -158,7 +159,12 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     _centralStack->setCurrentWidget(_currentEditorWidget);
 
     _currentEditorWidget->setMainWindow(this);
-    _currentEditorWidget->init();
+    {
+        const auto initStart = std::chrono::steady_clock::now();
+        _currentEditorWidget->init();
+        spdlog::info("EditorWidget::init (map view build) took {}ms",
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - initStart).count());
+    }
 
     connectToEditorWidget();
     connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, &MainWindow::updateUndoRedoActions);

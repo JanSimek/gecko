@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <QFont>
 #include <QApplication>
+#include <chrono>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -101,6 +102,19 @@ void LoadingWidget::updateProgress() {
     if (!_isLoading) {
         return;
     }
+
+    // The ~33ms timer only falls this far behind when the UI thread was blocked (the
+    // macOS spinning cursor). Attribute the stall in the log so "stuck at N%" reports
+    // can be traced to a phase instead of guessed at.
+    const auto now = std::chrono::steady_clock::now();
+    if (_lastTick.time_since_epoch().count() != 0) {
+        const auto gapMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - _lastTick).count();
+        if (gapMs > 1000) {
+            spdlog::warn("LoadingWidget: UI thread stalled ~{}ms while '{}' showed {}%",
+                gapMs, windowTitle().toStdString(), _progressBar->value());
+        }
+    }
+    _lastTick = now;
     bool allDone = true;
     int totalProgress = 0;
     int activeLoaders = 0;
@@ -143,7 +157,12 @@ void LoadingWidget::updateProgress() {
                 _statusLabel->setText(tr("Finalizing..."));
                 repaint();
                 spdlog::debug("LoadingWidget: Calling onDone() for completed loader {}", i);
+                const auto doneStart = std::chrono::steady_clock::now();
                 loader->onDone();
+                const auto doneMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - doneStart).count();
+                if (doneMs > 250) {
+                    spdlog::info("LoadingWidget: '{}' finalization took {}ms", windowTitle().toStdString(), doneMs);
+                }
                 _loadersCompleted[i] = true;
             }
             totalProgress += 100; // Completed loaders contribute 100%

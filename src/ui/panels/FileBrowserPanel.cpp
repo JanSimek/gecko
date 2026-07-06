@@ -26,6 +26,7 @@
 #include <QThread>
 #include <QMetaObject>
 #include <QRegularExpression>
+#include <chrono>
 #include <spdlog/spdlog.h>
 #include <chrono>
 #include <algorithm>
@@ -165,6 +166,7 @@ QString FileLoaderWorker::resolveProName(const std::string& vfsPath) const {
 }
 
 void FileLoaderWorker::loadFiles() {
+    const auto workStart = std::chrono::steady_clock::now();
     try {
         spdlog::debug("FileLoaderWorker: Starting background file loading...");
         Q_EMIT loadingProgress(0, 100, "Initializing file system...");
@@ -230,7 +232,8 @@ void FileLoaderWorker::loadFiles() {
         Q_EMIT loadingProgress(100, 100, "File loading completed");
         spdlog::debug("FileLoaderWorker: Emitting fileTypesExtracted with {} types", fileTypes.size());
         Q_EMIT fileTypesExtracted(fileTypes);
-        spdlog::debug("FileLoaderWorker: Emitting filesLoaded with {} entries", entries.size());
+        spdlog::info("FileLoaderWorker: listed and indexed {} files in {}ms", entries.size(),
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - workStart).count());
         Q_EMIT filesLoaded(entries);
 
         spdlog::debug("FileLoaderWorker: Loaded {} files with {} file types",
@@ -892,6 +895,7 @@ void FileBrowserPanel::buildFileTreeProgressive(const std::vector<FileBrowserEnt
 }
 
 void FileBrowserPanel::startProgressiveTreeBuild(std::vector<FileBrowserEntry> filteredEntries) {
+    _populationStart = std::chrono::steady_clock::now();
     _pendingEntries = std::move(filteredEntries);
     _currentChunkIndex = 0;
 
@@ -930,7 +934,8 @@ void FileBrowserPanel::processNextChunk() {
         resizeNameColumnToContent();
         updateFileCount();
 
-        spdlog::debug("FileBrowserPanel: Progressive tree building completed");
+        spdlog::info("FileBrowserPanel: built tree with {} rows in {}ms", _pendingEntries.size(),
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - _populationStart).count());
         return;
     }
 

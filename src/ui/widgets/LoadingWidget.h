@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QLabel>
@@ -42,6 +44,7 @@ private:
     std::vector<std::unique_ptr<Loader>> _loaders;
     std::vector<bool> _loadersCompleted; // Track which loaders have had onDone() called
     bool _isLoading;
+    std::chrono::steady_clock::time_point _lastTick; //!< last updateProgress tick, for UI-stall detection
 };
 
 } // namespace geck

@@ -1,6 +1,7 @@
 #include "DataPathLoader.h"
 #include "resource/GameResources.h"
 #include "resource/ResourceInitializer.h"
+#include <chrono>
 #include <thread>
 #include <spdlog/spdlog.h>
 
@@ -55,7 +56,10 @@ void DataPathLoader::load() {
     try {
         setProgress("Loading resource lists");
         _percentDone = 90;
+        const auto listsStart = std::chrono::steady_clock::now();
         ResourceInitializer::loadEssentialLstFiles(*_resources);
+        spdlog::info("DataPathLoader: essential resource lists loaded in {}ms",
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - listsStart).count());
     } catch (const std::exception& e) {
         spdlog::error("DataPathLoader: Failed to initialize essential resource lists: {}", e.what());
         if (!_errorMessage.empty()) {
