@@ -81,6 +81,8 @@ set(GECK_APP_SOURCES
     ui/panels/FileBrowserPanel.cpp
     ui/panels/LogPanel.h
     ui/panels/LogPanel.cpp
+    ui/rendering/ThumbnailPrewarmer.h
+    ui/rendering/ThumbnailPrewarmer.cpp
 
     # In-app log capture (spdlog sink -> Qt model shown by LogPanel)
     ui/logging/LogModel.h

@@ -15,6 +15,7 @@
 #include "ui/panels/ObjectPalettePanel.h"
 #include "ui/panels/FileBrowserPanel.h"
 #include "ui/panels/LogPanel.h"
+#include "ui/rendering/ThumbnailPrewarmer.h"
 #ifdef GECK_SCRIPTING_ENABLED
 #include "ui/panels/ScriptConsoleWidget.h"
 #include "scripting/LuaScriptRuntime.h" // ScriptResult
@@ -141,6 +142,9 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
 }
 
 MainWindow::~MainWindow() {
+    if (_thumbnailPrewarmer) {
+        _thumbnailPrewarmer->requestStop(); // its destructor (QObject child) waits for the thread
+    }
     saveDockWidgetState();
     stopGameLoop();
 }
@@ -962,6 +966,24 @@ void MainWindow::setLogModel(LogModel* model) {
     }
 }
 
+void MainWindow::startThumbnailPrewarm() {
+    if (_thumbnailPrewarmer) {
+        _thumbnailPrewarmer->requestStop();
+        _thumbnailPrewarmer->wait();
+        _thumbnailPrewarmer->deleteLater();
+        _thumbnailPrewarmer = nullptr;
+    }
+
+    auto dataPaths = _settings->getDataPaths();
+    util::ensureFallbackDataPath(dataPaths, Application::getResourcesPath());
+    if (dataPaths.empty()) {
+        return;
+    }
+
+    _thumbnailPrewarmer = new ThumbnailPrewarmer(std::move(dataPaths), 128, this);
+    _thumbnailPrewarmer->start(QThread::LowestPriority);
+}
+
 void MainWindow::setupDockWidgets() {
     auto createDock = [this](const QString& title, const char* objectName, QWidget* panel, Qt::DockWidgetArea area, QSizePolicy::Policy verticalPolicy, int minHeight) {
         QDockWidget* dock = new QDockWidget(title, this);
@@ -1208,6 +1230,7 @@ void MainWindow::rebuildGameResourcesFromSettings() {
 
     _resourcesShared = std::move(newResources);
     rebuildResourcePanels();
+    startThumbnailPrewarm(); // new mounts can mean new maps and new source identities
     refreshFileBrowser();
     showFileBrowserPanel();
     updatePanelMenuActions();

@@ -50,6 +50,7 @@ class ScriptConsoleWidget;
 class SpatialScriptDialog;
 class LogPanel;
 class LogModel;
+class ThumbnailPrewarmer;
 class Map;
 
 class MainWindow : public QMainWindow {
@@ -93,6 +94,11 @@ public:
     // Attach the application-wide log record store to the Log panel (the model outlives this
     // window; the in-app spdlog sink feeds it from application startup on).
     void setLogModel(LogModel* model);
+
+    // (Re)start the background pass that fills the persisted map-thumbnail cache; called once
+    // startup data paths are mounted and again after a Preferences data-path rebuild. The pass
+    // runs at the lowest thread priority on a private resource stack (see ThumbnailPrewarmer).
+    void startThumbnailPrewarm();
 
 signals:
     void newMapRequested();
@@ -279,6 +285,7 @@ private:
 #endif
     QDockWidget* _logDock = nullptr;
     LogPanel* _logPanel = nullptr;
+    ThumbnailPrewarmer* _thumbnailPrewarmer = nullptr;
     // Guards the persisted dock layout while docks are re-laid-out programmatically (hidden for the
     // welcome screen, re-shown for a map), so those transient changes aren't written back as if the
     // user made them.

@@ -3,6 +3,7 @@
 #include <optional>
 #include <vector>
 
+#include <QImage>
 #include <QPixmap>
 #include <QString>
 
@@ -28,6 +29,12 @@ public:
     static QPixmap render(const std::vector<const sf::Sprite*>& sprites,
         int size,
         const QString& cacheKey = QString());
+
+    /// The render itself, without the QPixmap conversion or the in-memory cache. Safe off
+    /// the UI thread: SFML renders into this thread's own GL context and QImage/QPainter
+    /// carry no widget affinity — which is what lets the thumbnail prewarmer run in the
+    /// background. Returns a null image when there is nothing to draw.
+    static QImage renderImage(const std::vector<const sf::Sprite*>& sprites, int size);
 };
 
 } // namespace geck

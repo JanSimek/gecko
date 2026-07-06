@@ -200,6 +200,7 @@ void Application::checkDataConfiguration() {
         spdlog::info("First run detected, showing settings dialog");
         showStartupSettingsDialog();
         loadDataPaths();
+        _mainWindow->startThumbnailPrewarm();
         return;
     }
 
@@ -215,6 +216,8 @@ void Application::checkDataConfiguration() {
             loadDataPaths();
         }
     }
+
+    _mainWindow->startThumbnailPrewarm();
 }
 
 bool Application::showStartupSettingsDialog() {

@@ -35,8 +35,7 @@ std::optional<QPixmap> ThumbnailRenderer::cached(const QString& key) {
     return std::nullopt;
 }
 
-QPixmap ThumbnailRenderer::render(const std::vector<const sf::Sprite*>& sprites, int size,
-    const QString& cacheKey) {
+QImage ThumbnailRenderer::renderImage(const std::vector<const sf::Sprite*>& sprites, int size) {
     // Union of all sprite bounds, with a small margin.
     float minX = std::numeric_limits<float>::max();
     float minY = std::numeric_limits<float>::max();
@@ -94,6 +93,15 @@ QPixmap ThumbnailRenderer::render(const std::vector<const sf::Sprite*>& sprites,
     painter.drawImage((size - scaled.width()) / 2, (size - scaled.height()) / 2, scaled);
     painter.end();
 
+    return canvas;
+}
+
+QPixmap ThumbnailRenderer::render(const std::vector<const sf::Sprite*>& sprites, int size,
+    const QString& cacheKey) {
+    const QImage canvas = renderImage(sprites, size);
+    if (canvas.isNull()) {
+        return {};
+    }
     QPixmap pixmap = QPixmap::fromImage(canvas);
     if (!cacheKey.isEmpty()) {
         QPixmapCache::insert(cacheKey, pixmap);

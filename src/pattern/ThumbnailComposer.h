@@ -5,6 +5,7 @@
 
 #include <SFML/Graphics/Sprite.hpp>
 
+#include <QImage>
 #include <QPixmap>
 #include <QString>
 
@@ -26,5 +27,12 @@ QPixmap composeThumbnail(const std::vector<sf::Sprite>& floorSprites,
     const std::vector<sf::Sprite>& roofSprites,
     int size,
     const QString& cacheKey);
+
+/// QImage variant with no in-memory cache; safe off the UI thread (see
+/// ThumbnailRenderer::renderImage), which the background thumbnail prewarmer relies on.
+QImage composeThumbnailImage(const std::vector<sf::Sprite>& floorSprites,
+    const std::vector<std::shared_ptr<Object>>& objects,
+    const std::vector<sf::Sprite>& roofSprites,
+    int size);
 
 } // namespace geck::pattern

@@ -28,58 +28,54 @@
 
 namespace geck {
 
-namespace {
-
-    // Identity of a thumbnail: the VFS path and requested size, plus the byte-size and mtime
-    // of the file that PROVIDES the map — the .map itself for a loose file, the archive for a
-    // DAT-contained one. Editing or re-saving a map therefore mints a new identity (loose maps
-    // individually, DAT maps together with their archive), and both the in-memory and the
-    // on-disk cache key off it, so a mid-session save is re-rendered rather than served stale.
-    // Deliberately not a content hash: a cache hit must not need to read the map's bytes.
-    QString thumbnailIdentity(const QString& vfsPath, int size, resource::GameResources& resources) {
-        const auto source = resources.files().sourceInfo(vfsPath.toStdString());
-        if (!source) {
-            return {};
-        }
-
-        QString onDisk = QString::fromStdString(source->sourcePath.generic_string());
-        if (source->kind == resource::MountedSourceInfo::Kind::Directory) {
-            QString relative = vfsPath;
-            while (relative.startsWith('/')) {
-                relative = relative.mid(1);
-            }
-            onDisk += '/' + relative;
-        }
-
-        const QFileInfo info(onDisk);
-        QCryptographicHash hash(QCryptographicHash::Sha1);
-        hash.addData(vfsPath.toUtf8());
-        hash.addData(QByteArray::number(size));
-        hash.addData(QByteArray::number(info.size()));
-        hash.addData(QByteArray::number(info.lastModified().toMSecsSinceEpoch()));
-        return QString::fromLatin1(hash.result().toHex());
+// Identity of a thumbnail: the VFS path and requested size, plus the byte-size and mtime
+// of the file that PROVIDES the map — the .map itself for a loose file, the archive for a
+// DAT-contained one. Editing or re-saving a map therefore mints a new identity (loose maps
+// individually, DAT maps together with their archive), and both the in-memory and the
+// on-disk cache key off it, so a mid-session save is re-rendered rather than served stale.
+// Deliberately not a content hash: a cache hit must not need to read the map's bytes.
+QString MapThumbnail::identity(const QString& vfsPath, int size, resource::GameResources& resources) {
+    const auto source = resources.files().sourceInfo(vfsPath.toStdString());
+    if (!source) {
+        return {};
     }
 
-    QString diskCachePath(const QString& identity) {
-        const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-            + QStringLiteral("/thumbnails");
-        QDir().mkpath(dir);
-        return dir + '/' + identity + QStringLiteral(".png");
+    QString onDisk = QString::fromStdString(source->sourcePath.generic_string());
+    if (source->kind == resource::MountedSourceInfo::Kind::Directory) {
+        QString relative = vfsPath;
+        while (relative.startsWith('/')) {
+            relative = relative.mid(1);
+        }
+        onDisk += '/' + relative;
     }
 
-} // namespace
+    const QFileInfo info(onDisk);
+    QCryptographicHash hash(QCryptographicHash::Sha1);
+    hash.addData(vfsPath.toUtf8());
+    hash.addData(QByteArray::number(size));
+    hash.addData(QByteArray::number(info.size()));
+    hash.addData(QByteArray::number(info.lastModified().toMSecsSinceEpoch()));
+    return QString::fromLatin1(hash.result().toHex());
+}
+
+QString MapThumbnail::diskCachePath(const QString& identity) {
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/thumbnails");
+    QDir().mkpath(dir);
+    return dir + '/' + identity + QStringLiteral(".png");
+}
 
 QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& resources,
     const HexagonGrid& hexgrid, int size) {
-    const QString identity = thumbnailIdentity(vfsPath, size, resources);
-    const QString key = identity.isEmpty()
+    const QString id = identity(vfsPath, size, resources);
+    const QString key = id.isEmpty()
         ? QStringLiteral("map:") + vfsPath + '|' + QString::number(size)
-        : QStringLiteral("map:") + identity;
+        : QStringLiteral("map:") + id;
     if (auto hit = ThumbnailRenderer::cached(key)) {
         return *hit;
     }
 
-    const QString cacheFile = identity.isEmpty() ? QString() : diskCachePath(identity);
+    const QString cacheFile = id.isEmpty() ? QString() : diskCachePath(id);
     if (!cacheFile.isEmpty() && QFileInfo::exists(cacheFile)) {
         QPixmap fromDisk;
         if (fromDisk.load(cacheFile, "PNG")) {
@@ -88,6 +84,21 @@ QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& re
         }
     }
 
+    const QImage rendered = renderImage(vfsPath, resources, hexgrid, size);
+    if (rendered.isNull()) {
+        return {};
+    }
+
+    QPixmap pixmap = QPixmap::fromImage(rendered);
+    QPixmapCache::insert(key, pixmap);
+    if (!cacheFile.isEmpty() && !rendered.save(cacheFile, "PNG")) {
+        spdlog::debug("MapThumbnail: could not persist thumbnail for {}", vfsPath.toStdString());
+    }
+    return pixmap;
+}
+
+QImage MapThumbnail::renderImage(const QString& vfsPath, resource::GameResources& resources,
+    const HexagonGrid& hexgrid, int size) {
     const std::filesystem::path path = vfsPath.toStdString();
     const auto bytes = resources.files().readRawBytes(path);
     if (!bytes) {
@@ -139,11 +150,7 @@ QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& re
         }
     }
 
-    const QPixmap thumbnail = pattern::composeThumbnail(floorSprites, objects, roofSprites, size, key);
-    if (!thumbnail.isNull() && !cacheFile.isEmpty() && !thumbnail.save(cacheFile, "PNG")) {
-        spdlog::debug("MapThumbnail: could not persist thumbnail for {}", vfsPath.toStdString());
-    }
-    return thumbnail;
+    return pattern::composeThumbnailImage(floorSprites, objects, roofSprites, size);
 }
 
 } // namespace geck
