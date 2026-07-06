@@ -5,6 +5,11 @@
 #include <optional>
 #include <vector>
 
+#include <QCryptographicHash>
+#include <QDir>
+#include <QFileInfo>
+#include <QPixmapCache>
+#include <QStandardPaths>
 #include <SFML/Graphics/Sprite.hpp>
 #include <spdlog/spdlog.h>
 
@@ -17,16 +22,62 @@
 #include "pattern/PatternSprite.h"
 #include "pattern/ThumbnailComposer.h"
 #include "reader/map/MapReader.h"
+#include "resource/DataFileSystem.h"
 #include "resource/GameResources.h"
 #include "ui/rendering/ThumbnailRenderer.h"
 
 namespace geck {
+
+namespace {
+
+    // Rendering a thumbnail is a mini map-load (parse + sprites + offscreen GL render), so the
+    // result is persisted to disk keyed by the providing source's identity and mtime: a map
+    // inside a DAT invalidates when the DAT changes, a loose map when the file itself does.
+    // Every browse after the first — including across sessions — then costs a PNG load.
+    QString diskCachePath(const QString& vfsPath, int size, resource::GameResources& resources) {
+        const auto source = resources.files().sourceInfo(vfsPath.toStdString());
+        if (!source) {
+            return {};
+        }
+
+        QString onDisk = QString::fromStdString(source->sourcePath.generic_string());
+        if (source->kind == resource::MountedSourceInfo::Kind::Directory) {
+            QString relative = vfsPath;
+            while (relative.startsWith('/')) {
+                relative = relative.mid(1);
+            }
+            onDisk += '/' + relative;
+        }
+
+        const QFileInfo info(onDisk);
+        QCryptographicHash hash(QCryptographicHash::Sha1);
+        hash.addData(vfsPath.toUtf8());
+        hash.addData(QByteArray::number(size));
+        hash.addData(QByteArray::number(info.size()));
+        hash.addData(QByteArray::number(info.lastModified().toMSecsSinceEpoch()));
+
+        const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+            + QStringLiteral("/thumbnails");
+        QDir().mkpath(dir);
+        return dir + '/' + QString::fromLatin1(hash.result().toHex()) + QStringLiteral(".png");
+    }
+
+} // namespace
 
 QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& resources,
     const HexagonGrid& hexgrid, int size) {
     const QString key = QStringLiteral("map:") + vfsPath + '|' + QString::number(size);
     if (auto hit = ThumbnailRenderer::cached(key)) {
         return *hit;
+    }
+
+    const QString cacheFile = diskCachePath(vfsPath, size, resources);
+    if (!cacheFile.isEmpty() && QFileInfo::exists(cacheFile)) {
+        QPixmap fromDisk;
+        if (fromDisk.load(cacheFile, "PNG")) {
+            QPixmapCache::insert(key, fromDisk);
+            return fromDisk;
+        }
     }
 
     const std::filesystem::path path = vfsPath.toStdString();
@@ -80,7 +131,11 @@ QPixmap MapThumbnail::forMap(const QString& vfsPath, resource::GameResources& re
         }
     }
 
-    return pattern::composeThumbnail(floorSprites, objects, roofSprites, size, key);
+    const QPixmap thumbnail = pattern::composeThumbnail(floorSprites, objects, roofSprites, size, key);
+    if (!thumbnail.isNull() && !cacheFile.isEmpty() && !thumbnail.save(cacheFile, "PNG")) {
+        spdlog::debug("MapThumbnail: could not persist thumbnail for {}", vfsPath.toStdString());
+    }
+    return thumbnail;
 }
 
 } // namespace geck

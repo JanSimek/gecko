@@ -207,6 +207,7 @@ void MapBrowserDialog::populate() {
 
 QListWidgetItem* MapBrowserDialog::nextUnrenderedVisibleItem() const {
     const QRect viewport = _grid->viewport()->rect();
+    QListWidgetItem* offscreenCandidate = nullptr;
     for (int i = 0; i < _grid->count(); ++i) {
         QListWidgetItem* item = _grid->item(i);
         if (item->isHidden() || item->data(RENDERED_ROLE).toBool()) {
@@ -215,8 +216,14 @@ QListWidgetItem* MapBrowserDialog::nextUnrenderedVisibleItem() const {
         if (viewport.intersects(_grid->visualItemRect(item))) {
             return item;
         }
+        if (offscreenCandidate == nullptr) {
+            offscreenCandidate = item;
+        }
     }
-    return nullptr;
+    // Nothing visible left: keep warming the off-screen cells. Each render lands in the
+    // persisted thumbnail cache, so one open browse warms the whole library for every
+    // later scroll, filter, and session.
+    return offscreenCandidate;
 }
 
 void MapBrowserDialog::renderNextVisibleThumbnail() {
