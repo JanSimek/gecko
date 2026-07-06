@@ -56,6 +56,7 @@ add_executable(general_tests
     general/test_pattern_builder.cpp
     general/test_fill_plan.cpp
     general/test_map_script_api.cpp
+    general/test_map_completeness.cpp
     general/test_resource_repository.cpp
     general/test_script_names.cpp
     general/test_object_visibility.cpp
@@ -109,6 +110,8 @@ add_executable(qt_tests
     qt/test_editor_hints.cpp
     # Log panel plumbing: the LogModel store (cap, threading), the spdlog sink, the filter proxy.
     qt/test_log_panel.cpp
+    # The Log dock's "Map" tab: report -> grouped tree, empty states, refresh signal.
+    qt/test_completeness_view.cpp
     # File browser population: worker-computed metadata -> chunked tree build.
     qt/test_file_browser_population.cpp
     # CI-failing ceilings on operations that have regressed catastrophically before.

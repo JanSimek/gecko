@@ -81,6 +81,8 @@ set(GECK_APP_SOURCES
     ui/panels/FileBrowserPanel.cpp
     ui/panels/LogPanel.h
     ui/panels/LogPanel.cpp
+    ui/panels/CompletenessView.h
+    ui/panels/CompletenessView.cpp
     ui/rendering/ThumbnailPrewarmer.h
     ui/rendering/ThumbnailPrewarmer.cpp
 
@@ -468,6 +470,8 @@ add_library(gecko_resource STATIC
 
     resource/MapNameResolver.h
     resource/MapNameResolver.cpp
+    resource/MapCompleteness.h
+    resource/MapCompleteness.cpp
     resource/AiTxtLoader.h
     resource/ScriptNames.h
     resource/WritableDataRoot.h

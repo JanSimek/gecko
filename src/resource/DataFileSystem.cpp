@@ -191,6 +191,33 @@ void DataFileSystem::refresh() {
     }
 }
 
+namespace {
+
+    // Classify a mounted filesystem into the source description exposed to callers.
+    MountedSourceInfo describeMount(const vfspp::IFileSystemPtr& fileSystem) {
+        if (auto datFs = std::dynamic_pointer_cast<geck::GeckDat2FileSystem>(fileSystem)) {
+            const std::filesystem::path datPath(datFs->getDatPath());
+            std::string label = datPath.filename().string();
+            if (label.empty()) {
+                label = datPath.generic_string();
+            }
+            return MountedSourceInfo{ MountedSourceInfo::Kind::Dat, datPath, "DAT (" + label + ")" };
+        }
+
+        if (auto nativeFs = std::dynamic_pointer_cast<vfspp::NativeFileSystem>(fileSystem)) {
+            const std::filesystem::path nativePath(nativeFs->BasePath());
+            std::string label = nativePath.filename().string();
+            if (label.empty()) {
+                label = nativePath.generic_string();
+            }
+            return MountedSourceInfo{ MountedSourceInfo::Kind::Directory, nativePath, "Native (" + label + ")" };
+        }
+
+        return MountedSourceInfo{ MountedSourceInfo::Kind::Directory, std::filesystem::path(fileSystem->BasePath()), "VFS" };
+    }
+
+} // namespace
+
 std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesystem::path& path) const {
     const std::scoped_lock lock(_mutex);
     if (!_vfs) {
@@ -218,28 +245,31 @@ std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesyste
             continue;
         }
 
-        if (auto datFs = std::dynamic_pointer_cast<geck::GeckDat2FileSystem>(fileSystem)) {
-            const std::filesystem::path datPath(datFs->getDatPath());
-            std::string label = datPath.filename().string();
-            if (label.empty()) {
-                label = datPath.generic_string();
-            }
-            return MountedSourceInfo{ MountedSourceInfo::Kind::Dat, datPath, "DAT (" + label + ")" };
-        }
-
-        if (auto nativeFs = std::dynamic_pointer_cast<vfspp::NativeFileSystem>(fileSystem)) {
-            const std::filesystem::path nativePath(nativeFs->BasePath());
-            std::string label = nativePath.filename().string();
-            if (label.empty()) {
-                label = nativePath.generic_string();
-            }
-            return MountedSourceInfo{ MountedSourceInfo::Kind::Directory, nativePath, "Native (" + label + ")" };
-        }
-
-        return MountedSourceInfo{ MountedSourceInfo::Kind::Directory, std::filesystem::path(fileSystem->BasePath()), "VFS" };
+        return describeMount(fileSystem);
     }
 
     return std::nullopt;
+}
+
+std::vector<MountedSourceInfo> DataFileSystem::mounts() const {
+    const std::scoped_lock lock(_mutex);
+    if (!_vfs) {
+        return {};
+    }
+
+    const auto fileSystemsOpt = _vfs->GetFilesystems("/");
+    if (!fileSystemsOpt) {
+        return {};
+    }
+
+    std::vector<MountedSourceInfo> result;
+    for (const auto& fileSystem : fileSystemsOpt->get()) {
+        if (!fileSystem || !fileSystem->IsInitialized()) {
+            continue;
+        }
+        result.push_back(describeMount(fileSystem));
+    }
+    return result;
 }
 
 std::filesystem::path DataFileSystem::normalizeVfsPath(const std::filesystem::path& path) {

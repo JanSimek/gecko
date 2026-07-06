@@ -76,20 +76,23 @@ live with their library (`src/resource/`, `src/ui/`).
     selected folder as the default writable location, shown with a badge in the list and persisted in
     `Settings`; saves then target that folder regardless of list order. If none is marked, keep the
     current last-folder fallback and hint the user to pick one. DAT archives can't be marked (read-only).
-10. **In-app log panel — SHIPPED; completeness summary remaining.** The dockable **Log** panel
-    (View › Log, hidden by default like the Script Console) now surfaces every `spdlog` record in
+10. **In-app log panel — SHIPPED, including the completeness summary.** The dockable **Log** panel
+    (View › Log, hidden by default like the Script Console) surfaces every `spdlog` record in
     the UI: `LogModelSink` (installed on the default logger at startup) feeds a bounded, thread-safe
     `LogModel`, shown in a filterable table (minimum-level combo, message text filter, copy
     selection/all, clear) with warning/error rows colour-coded (`src/ui/logging/`,
     `src/ui/panels/LogPanel.*`). Load-time warnings — unresolved `tiles.lst` entries, missing object
-    sprites, map parse failures — are visible in-app instead of stderr. **Remaining follow-ups:**
-    (a) the per-map **completeness summary** computed from the same resolve checks the loader and
-    `resource missing` already run — unresolved tiles (by id + name), missing object sprites,
-    unresolved scripts, plus a mount / data-path sanity line — as a structured section rather than
-    prose warnings (MapLoader already collects the name lists; retain + surface them); (b)
-    jump-to-source where a record carries a hex/object (needs structured records, not text);
-    (c) when the SSL-editing output panel lands, make compiler output a category of this panel
-    rather than a second dock. Editor UX only; changes no map/format data.
+    sprites, map parse failures — are visible in-app instead of stderr. The per-map **completeness
+    summary** shipped as the dock's second tab (**Map**): `resource::scanMapCompleteness`
+    (`src/resource/MapCompleteness.*`, the same scan `resource missing` now renders as JSON — the
+    CLI/MCP output gained `missingScripts` + `mounts` + index-mount flags) checks every referenced
+    tile, object sprite, and script against the mounted data, and `CompletenessView` shows the
+    result grouped (Tile art / Object sprites / Scripts / Data paths) with per-entry reasons, a
+    mount + index-file sanity section, copy, and a Refresh re-scan; refreshed on map
+    load/close/script-mutation, with a one-line totals warning in the Log tab. **Remaining
+    follow-ups:** (b) jump-to-source where a record carries a hex/object (needs structured records,
+    not text); (c) when the SSL-editing output panel lands, make compiler output a category of this
+    panel rather than a second dock. Editor UX only; changes no map/format data.
 
 ### Generation-side exit placement — current state & smarter follow-up
 

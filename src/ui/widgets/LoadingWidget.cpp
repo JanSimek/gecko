@@ -115,6 +115,7 @@ void LoadingWidget::updateProgress() {
         }
     }
     _lastTick = now;
+
     bool allDone = true;
     int totalProgress = 0;
     int activeLoaders = 0;

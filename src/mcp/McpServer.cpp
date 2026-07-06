@@ -705,11 +705,13 @@ namespace {
             json({ { "type", "object" }, { "properties", { { "glob", { { "type", "string" } } } } }, { "required", json::array({ "glob" }) } }),
             [](resource::GameResources& r, const json& a) { return toolResourceList(r, a); } });
         t.push_back({ "resource_missing",
-            "Report the art a map REFERENCES but that does NOT resolve in the mounted data — the "
+            "Report everything a map REFERENCES but that does NOT resolve in the mounted data — the "
             "diagnostic for 'why won't this map load / render fully'. JSON {map, usedTileCount, "
-            "objectArtCount, missingTiles:[{id,art}], missingObjectArt:[{pid,art}]}, where a missing entry "
-            "gains a 'reason' when the art path couldn't even be formed ('tiles.lst not mounted', 'tile id "
-            "out of tiles.lst range', 'FID does not resolve'). Empty arrays mean everything the map uses "
+            "objectArtCount, scriptCount, missingTiles:[{id,art,reason}], missingObjectArt:"
+            "[{pid,art,reason}], missingScripts:[{programIndex,name,reason}], mounts:[{kind,path,label}], "
+            "tilesLstMounted, scriptsLstMounted}. 'art'/'name' are null when the path couldn't even be "
+            "formed ('tiles.lst not mounted', 'tile id out of tiles.lst range', 'FID does not resolve', "
+            "'program index out of scripts.lst range'). Empty arrays mean everything the map uses "
             "resolves (so a load failure is elsewhere — e.g. a mount-path mistake; check with resource_find). "
             "Mirrors what the editor's loader now tolerantly skips instead of aborting. Args: map (.map path).",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
