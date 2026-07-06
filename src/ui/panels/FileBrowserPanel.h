@@ -253,10 +253,6 @@ private:
     // Progressive building state
     std::vector<FileBrowserEntry> _pendingEntries;
     size_t _currentChunkIndex = 0;
-    // Bumped whenever a population (re)starts or stops. A queued chunk re-invoke (or a
-    // modal-deferred retry) belonging to an older population must bail instead of advancing
-    // the new one alongside its own pump.
-    int _populationEpoch = 0;
     QTimer* _chunkTimer = nullptr;
     QTimer* _searchTimer = nullptr;
     bool _isLoading = false;
@@ -271,8 +267,10 @@ private:
     std::shared_ptr<Settings> _settings;
 
     // Constants
-    static constexpr int CHUNK_SIZE = 500;   // Files per chunk: rows are cheap (~60us) and each chunk is one event-loop turn, so bigger chunks cut per-turn overhead while a turn stays ~30ms
-    static constexpr int CHUNK_DELAY_MS = 0; // No delay, use Qt event queue instead
+    static constexpr int CHUNK_SIZE = 500; // Files per chunk: rows are cheap (~60us) and each chunk is one event-loop turn, so bigger chunks cut per-turn overhead while a turn stays ~30ms
+    // Non-zero so the event loop sleeps between chunks: that idle moment is when macOS
+    // flushes widget paints, i.e. what makes the build's progress visible at all.
+    static constexpr int CHUNK_DELAY_MS = 1;
 };
 
 } // namespace geck

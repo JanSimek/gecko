@@ -510,7 +510,6 @@ void FileBrowserPanel::loadFiles() {
     }
 
     _isLoading = true;
-    ++_populationEpoch;
     _allEntries.clear();
     _resolvedProNames.clear();
     _proNameItems.clear();
@@ -554,7 +553,6 @@ void FileBrowserPanel::stopLoading() {
     spdlog::debug("FileBrowserPanel: Stopping loading operations...");
 
     _isLoading = false;
-    ++_populationEpoch; // kill any queued chunk pump belonging to the stopped population
 
     if (_loaderWorker) {
         _loaderWorker->_shouldStop.store(true);
@@ -886,7 +884,6 @@ void FileBrowserPanel::buildFileTreeProgressive(const std::vector<FileBrowserEnt
 }
 
 void FileBrowserPanel::startProgressiveTreeBuild(std::vector<FileBrowserEntry> filteredEntries) {
-    ++_populationEpoch;
     _pendingEntries = std::move(filteredEntries);
     _currentChunkIndex = 0;
 
@@ -900,6 +897,7 @@ void FileBrowserPanel::startProgressiveTreeBuild(std::vector<FileBrowserEntry> f
     _treeModel->setHorizontalHeaderLabels(QStringList() << "Name" << "Type" << "Source" << "Path" << "PRO Name");
     applyDefaultColumnVisibility();
 
+    _chunkTimer->stop(); // a pending re-queue from a previous population must not double-pump
     _progressBar->setRange(0, static_cast<int>(_pendingEntries.size()));
     _progressBar->setValue(0);
     _statusLabel->setText("Building file tree...");
@@ -954,17 +952,12 @@ void FileBrowserPanel::processNextChunk() {
             .arg(_currentChunkIndex)
             .arg(_pendingEntries.size()));
 
-    // A settings change can restart or stop the population while this chunk's re-invoke
-    // is already queued; the epoch check kills the stale pump so a restart doesn't leave
-    // two pumps advancing the same population.
-    const int epoch = _populationEpoch;
-    QMetaObject::invokeMethod(
-        this, [this, epoch]() {
-            if (epoch == _populationEpoch) {
-                processNextChunk();
-            }
-        },
-        Qt::QueuedConnection);
+    // Re-queue through the single-shot timer, NOT a queued invocation: a self-re-posting
+    // event chain keeps the event loop from ever reaching its about-to-idle phase, which
+    // on macOS is when widget paints flush — the progress label updated every chunk but
+    // painted nothing until the build finished. A 1ms timer lets the loop sleep briefly
+    // between chunks, so progress (and the rest of the UI) actually renders.
+    _chunkTimer->start();
 }
 
 void FileBrowserPanel::onCustomContextMenuRequested(const QPoint& pos) {
