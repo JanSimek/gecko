@@ -1,9 +1,33 @@
+#include <cstdio>
+
 #include <QByteArray>
 #include <QApplication>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
 #include <catch2/catch_session.hpp>
+#include <catch2/catch_test_case_info.hpp>
+#include <catch2/reporters/catch_reporter_event_listener.hpp>
+#include <catch2/reporters/catch_reporter_registrars.hpp>
+
+namespace {
+
+// Trace each test case to stderr, flushed immediately. Catch2's own report is buffered until
+// the run ends, so when the suite hangs in CI (where ctest runs qt_tests as one opaque test)
+// the timeout dump would otherwise not say WHICH test hung — this trace's last line does.
+class TestNameTracer : public Catch::EventListenerBase {
+public:
+    using Catch::EventListenerBase::EventListenerBase;
+
+    void testCaseStarting(const Catch::TestCaseInfo& info) override {
+        std::fprintf(stderr, "[qt_tests] %s\n", info.name.c_str());
+        std::fflush(stderr);
+    }
+};
+
+} // namespace
+
+CATCH_REGISTER_LISTENER(TestNameTracer)
 
 int main(int argc, char** argv) {
     QTemporaryDir testHome;

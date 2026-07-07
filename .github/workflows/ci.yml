@@ -48,6 +48,7 @@ jobs:
   build-linux:
     name: Linux - ${{ matrix.build_type }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -133,18 +134,23 @@ jobs:
     - name: Run tests
       run: |
         export LD_LIBRARY_PATH=${{ runner.temp }}/sfml-install/lib:$LD_LIBRARY_PATH
-        ctest --test-dir build --output-on-failure --parallel
+        ctest --test-dir build --output-on-failure --parallel --timeout 600
 
   build-macos:
     name: macOS - ${{ matrix.build_type }}
     runs-on: macos-latest
+    timeout-minutes: 300
     # macOS is the slowest runner and the maintainer develops on macOS (local builds cover
     # it), so run it on mainline pushes + manual dispatch rather than on every PR.
+    # Release-only: a cold-cache macOS Debug build exceeds the 6-hour job limit, and the
+    # cancelled job never saves its ccache, so every later run starts cold too (that spiral
+    # kept master red from 2026-07-05). Debug coverage stays on the Linux and Windows jobs;
+    # a completing Release run keeps the shared macOS ccache warm.
     if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
-        build_type: [Release, Debug]
+        build_type: [Release]
         qt_arch: ['clang_64']
 
     steps:
@@ -213,11 +219,12 @@ jobs:
     - name: Run tests
       run: |
         export DYLD_LIBRARY_PATH=${{ runner.temp }}/sfml-install/lib:$DYLD_LIBRARY_PATH
-        ctest --test-dir build --output-on-failure --parallel
+        ctest --test-dir build --output-on-failure --parallel --timeout 600
 
   build-windows:
     name: Windows - ${{ matrix.build_type }}
     runs-on: windows-latest
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -303,4 +310,4 @@ jobs:
       shell: cmd
       run: |
         set PATH=${{ runner.temp }}\sfml-install\bin;%PATH%
-        ctest --test-dir build --output-on-failure --parallel
+        ctest --test-dir build --output-on-failure --parallel --timeout 600
