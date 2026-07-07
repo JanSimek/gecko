@@ -124,7 +124,7 @@ void RenderingEngine::render(sf::RenderTarget& target,
     // Layer 1b: Light overlays. Drawn as a ground layer (over the floor, under objects) so each light
     // source's illuminated hexes read like light pooling on the ground with objects standing in it.
     if (visibility.showLightOverlays) {
-        renderLightOverlays(target, view, renderData);
+        renderLightOverlays(target, view, renderData, visibility);
     }
 
     // Layer 2: Hex grid overlay (if enabled)
@@ -362,7 +362,8 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
 
 void RenderingEngine::renderLightOverlays(sf::RenderTarget& target,
     const sf::View& view,
-    const RenderData& renderData) {
+    const RenderData& renderData,
+    const VisibilitySettings& visibility) {
     if (!renderData.objects || !renderData.hexGrid) {
         return;
     }
@@ -375,9 +376,16 @@ void RenderingEngine::renderLightOverlays(sf::RenderTarget& target,
             continue;
         }
         const auto mapObject = object->getMapObjectPtr(); // non-null: hasLight() already checked it
+        // A light on a hidden layer (e.g. walls off) shows no overlay, matching the object itself —
+        // the same visibility rule renderObjects uses, so a hidden source never glows.
+        if (!isObjectVisible(*mapObject, visibility)) {
+            continue;
+        }
 
-        const int radius = std::min<int>(static_cast<int>(mapObject->light_radius), light::MAX_RADIUS);
-        const int intensity = std::min<int>(static_cast<int>(mapObject->light_intensity), light::FULL);
+        // light_radius / light_intensity are uint32_t; clamp in unsigned space so a corrupt
+        // out-of-range value can't become a negative int after the cast.
+        const int radius = static_cast<int>(std::min<std::uint32_t>(mapObject->light_radius, light::MAX_RADIUS));
+        const int intensity = static_cast<int>(std::min<std::uint32_t>(mapObject->light_intensity, light::FULL));
         const int centerHex = mapObject->position;
 
         // Group the illuminated hexes by ring so each ring can be tinted by its falloff value; a single
