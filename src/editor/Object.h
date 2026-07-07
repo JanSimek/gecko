@@ -30,14 +30,12 @@ class Frm;
 class Object {
 private:
     sf::Sprite _sprite;
-    sf::CircleShape _lightOverlay; // Light radius visualization
 
     std::shared_ptr<MapObject> _mapObject;
 
     const Frm* _frm;
     int _direction;
     bool _selected;
-    bool _showLightOverlay;
 
 public:
     Object(const Frm* frm);
@@ -63,11 +61,8 @@ public:
     void unselect();
     [[nodiscard]] bool isSelected() const noexcept;
 
-    // Light overlay methods
-    void setShowLightOverlay(bool show);
-    [[nodiscard]] bool isShowingLightOverlay() const noexcept { return _showLightOverlay; }
-    void updateLightOverlay();
-    [[nodiscard]] const sf::CircleShape& getLightOverlay() const noexcept { return _lightOverlay; }
+    // True when this object is a light source (its MapObject has a non-zero light radius or intensity).
+    // The illuminated hexes themselves are drawn by RenderingEngine::renderLightOverlays.
     [[nodiscard]] bool hasLight() const noexcept;
 
     [[nodiscard]] int16_t shiftX() const;
@@ -78,7 +73,6 @@ public:
 
 private:
     static sf::Texture& createBlankTexture();
-    void initializeLightOverlay();
 };
 
 } // namespace geck

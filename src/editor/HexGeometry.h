@@ -3,6 +3,7 @@
 #include "HexagonGrid.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <optional>
 #include <vector>
 
@@ -93,6 +94,39 @@ inline std::vector<int> hexesWithinRadius(int centerPosition, int radius) {
         }
     }
     return positions;
+}
+
+// A hex within a disc, paired with its hex-step distance from the centre.
+struct HexAtDistance {
+    int position = 0;
+    int distance = 0;
+};
+
+// Same filled hex disc as hexesWithinRadius, but each hex is paired with its hex-step distance
+// from the centre (0 at the centre, up to `radius`). Cube distance (|dx|+|dy|+|dz|)/2 equals the
+// engine's hex-step distance because the offset<->cube conversion mirrors fallout2-ce's `_dir_tile`
+// parity layout. Used to tint a light source's hexes by the engine's per-ring falloff. Off-grid
+// hexes are skipped; `radius` < 0 yields an empty list.
+inline std::vector<HexAtDistance> hexDiscByDistance(int centerPosition, int radius) {
+    std::vector<HexAtDistance> hexes;
+    if (radius < 0) {
+        return hexes;
+    }
+    const Cube center = cubeOfPosition(centerPosition);
+    for (int dx = -radius; dx <= radius; ++dx) {
+        const int lo = std::max(-radius, -dx - radius);
+        const int hi = std::min(radius, -dx + radius);
+        for (int dy = lo; dy <= hi; ++dy) {
+            const int dz = -dx - dy;
+            const ColRow cr = cubeToOffset(center + Cube{ dx, dy, dz });
+            if (cr.col < 0 || cr.col >= WIDTH || cr.row < 0 || cr.row >= HEIGHT) {
+                continue;
+            }
+            const int distance = (std::abs(dx) + std::abs(dy) + std::abs(dz)) / 2;
+            hexes.push_back({ cr.row * WIDTH + cr.col, distance });
+        }
+    }
+    return hexes;
 }
 
 } // namespace geck::hexgrid
