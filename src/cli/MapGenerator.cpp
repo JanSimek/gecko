@@ -18,7 +18,10 @@
 
 #include <SFML/Graphics/Sprite.hpp>
 
+#include <nlohmann/json.hpp>
+
 #include "cli/MapLoad.h"
+#include "cli/MapReachability.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
 #include "format/map/Map.h"
@@ -53,6 +56,38 @@ namespace {
         const std::filesystem::path path(outPath);
         const auto numbered = std::format("{}_{}{}", path.stem().string(), n, path.extension().string());
         return (path.parent_path() / numbered).string();
+    }
+
+    // Sanity-check a written map the way the reachability tool does: an exit grid that can't be
+    // walked to from the player start is almost always a generation bug (a sealed room, or a
+    // start placed inside solid terrain). Best-effort — a check failure never fails the generate.
+    void warnOnUnreachableExits(resource::GameResources& resources, const std::string& mapPath, std::ostream& out) {
+        try {
+            std::ostringstream report;
+            if (analyzeReachability(resources, ReachabilityOptions{ mapPath }, report) != 0) {
+                return;
+            }
+            const auto json = nlohmann::json::parse(report.str(), nullptr, /*allow_exceptions*/ false);
+            if (!json.is_object() || !json.contains("reachability")) {
+                return;
+            }
+            for (const auto& elevation : json["reachability"]) {
+                int unreachable = 0;
+                for (const auto& exit : elevation.value("exits", nlohmann::json::array())) {
+                    // null = the player starts on another elevation; only an explicit false is a finding.
+                    const auto reachable = exit.find("reachableFromPlayerStart");
+                    if (reachable != exit.end() && reachable->is_boolean() && !reachable->get<bool>()) {
+                        ++unreachable;
+                    }
+                }
+                if (unreachable > 0) {
+                    out << "warning: " << unreachable << " exit-grid hex(es) on elevation "
+                        << elevation.value("elevation", 0) << " are unreachable from the player start.\n";
+                }
+            }
+        } catch (const std::exception&) {
+            // The map was written; a failed sanity check must not turn success into failure.
+        }
     }
 
     // One generation run: build the headless editing context over a fresh empty map (or a fresh
@@ -149,6 +184,7 @@ namespace {
             return 1;
         }
         out << "wrote " << outPath << "\n";
+        warnOnUnreachableExits(resources, outPath, out);
         return 0;
     }
 
