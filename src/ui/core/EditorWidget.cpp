@@ -2697,19 +2697,9 @@ void EditorWidget::setSelectionColors(const RenderingEngine::SelectionPalette& c
 }
 
 void EditorWidget::setShowLightOverlays(bool show) {
+    // RenderingEngine::renderLightOverlays reads this flag and computes the illuminated hexes from each
+    // light source's MapObject every frame, so there is no per-object overlay state to update here.
     _session.visibility().showLightOverlays = show;
-
-    int lightObjectCount = 0;
-    std::ranges::for_each(_session.objects(), [&lightObjectCount, show](auto& object) {
-        if (object->hasLight()) {
-            lightObjectCount++;
-            spdlog::debug("EditorWidget: Found light source object with light_radius={}, light_intensity={}",
-                object->getMapObject().light_radius, object->getMapObject().light_intensity);
-        }
-        object->setShowLightOverlay(show);
-    });
-
-    spdlog::debug("Light overlay display set to: {} (found {} light objects)", show, lightObjectCount);
 }
 
 void EditorWidget::clearDragSelectionPreview() {

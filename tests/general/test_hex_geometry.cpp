@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <unordered_set>
@@ -154,4 +155,34 @@ TEST_CASE("hexesWithinRadius clips at the grid edge and stays in bounds", "[hex_
 
 TEST_CASE("hexesWithinRadius is empty for a negative radius", "[hex_geometry]") {
     CHECK(hexesWithinRadius(100 * WIDTH + 100, -1).empty());
+}
+
+TEST_CASE("hexDiscByDistance covers the same disc and tags each hex's hex-step distance", "[hex_geometry]") {
+    const int center = 100 * WIDTH + 100; // interior so the disc isn't clipped
+    for (int radius = 0; radius <= 8; ++radius) { // 8 == the engine's max light radius
+        INFO("radius " << radius);
+        const auto disc = hexDiscByDistance(center, radius);
+        const auto plain = hexesWithinRadius(center, radius);
+
+        // Same set of hexes as hexesWithinRadius (order aside).
+        REQUIRE(disc.size() == plain.size());
+        std::unordered_set<int> discPositions;
+        int maxDistance = -1;
+        for (const auto& hex : disc) {
+            discPositions.insert(hex.position);
+            // The tagged distance is exactly the engine's tileDistanceBetween.
+            CHECK(hex.distance == cubeDistance(center, hex.position));
+            maxDistance = std::max(maxDistance, hex.distance);
+        }
+        const std::unordered_set<int> plainPositions(plain.begin(), plain.end());
+        CHECK(discPositions == plainPositions);
+
+        // The centre is present at distance 0, and nothing reaches past the radius.
+        CHECK(discPositions.contains(center));
+        CHECK(maxDistance == radius);
+    }
+}
+
+TEST_CASE("hexDiscByDistance is empty for a negative radius", "[hex_geometry]") {
+    CHECK(hexDiscByDistance(100 * WIDTH + 100, -1).empty());
 }

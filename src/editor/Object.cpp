@@ -16,8 +16,7 @@ Object::Object(const Frm* frm)
     : _sprite(createBlankTexture())
     , _frm(frm)
     , _direction(0)
-    , _selected(false)
-    , _showLightOverlay(false) {
+    , _selected(false) {
 
     if (!frm) {
         spdlog::error("Object constructor: FRM pointer is null");
@@ -35,8 +34,6 @@ Object::Object(const Frm* frm)
             frm->filename(), frm->directions().at(0).frames().size());
         throw SpriteException("FRM direction has no frames", frm->filename());
     }
-
-    initializeLightOverlay();
 }
 
 sf::Texture& Object::createBlankTexture() {
@@ -118,10 +115,6 @@ void Object::setHexPosition(const Hex& hex) {
     if (_mapObject != nullptr) {
         _mapObject->position = hex.position();
     }
-
-    if (_showLightOverlay && hasLight()) {
-        updateLightOverlay();
-    }
 }
 
 int16_t Object::shiftX() const {
@@ -185,46 +178,6 @@ void Object::unselect() {
 
 bool Object::isSelected() const noexcept {
     return _selected;
-}
-
-void Object::initializeLightOverlay() {
-    _lightOverlay.setFillColor(sf::Color(255, 255, 100, 30));    // Light yellow, semi-transparent
-    _lightOverlay.setOutlineColor(sf::Color(255, 255, 150, 80)); // Brighter yellow outline
-    _lightOverlay.setOutlineThickness(1.0f);
-    _lightOverlay.setPointCount(6); // Hexagonal shape to match the grid
-}
-
-void Object::setShowLightOverlay(bool show) {
-    _showLightOverlay = show;
-    if (show && _mapObject) {
-        updateLightOverlay();
-    }
-}
-
-void Object::updateLightOverlay() {
-    if (!_mapObject || !_mapObject->isLightSource()) {
-        return;
-    }
-
-    // Each hex is approximately 32 pixels wide in standard zoom.
-    float hexWidth = 32.0f;
-    float radius = _mapObject->light_radius * hexWidth / 2.0f;
-
-    _lightOverlay.setRadius(radius);
-    _lightOverlay.setOrigin(sf::Vector2f(radius, radius));
-
-    // Position the overlay at the object's center.
-    auto spritePos = _sprite.getPosition();
-    auto spriteBounds = _sprite.getLocalBounds();
-    _lightOverlay.setPosition(sf::Vector2f(
-        spritePos.x + spriteBounds.size.x / 2.0f,
-        spritePos.y + spriteBounds.size.y / 2.0f));
-
-    auto color = _lightOverlay.getFillColor();
-    // Map light intensity (engine range 0-65535) to alpha (30-100).
-    uint8_t alpha = static_cast<uint8_t>(30 + (_mapObject->light_intensity / 65535.0f) * 70);
-    color.a = alpha;
-    _lightOverlay.setFillColor(color);
 }
 
 bool Object::hasLight() const noexcept {

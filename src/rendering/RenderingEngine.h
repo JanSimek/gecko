@@ -180,6 +180,18 @@ private:
         const VisibilitySettings& visibility);
 
     /**
+     * @brief Editor-only "Show light overlays" cue: tint every visible light-source object's illuminated
+     * hexes using Fallout 2 CE's per-ring linear falloff (fallout2-ce `_obj_adjust_light`) — brightest on
+     * the source hex, fading out to the light's radius. Honours the same per-layer visibility rule as
+     * renderObjects, so a light on a hidden layer shows no overlay. Illustrative only: no wall shadowing
+     * and no ambient darkness simulation, it just shows which hexes each light reaches and how strongly.
+     */
+    void renderLightOverlays(sf::RenderTarget& target,
+        const sf::View& view,
+        const RenderData& renderData,
+        const VisibilitySettings& visibility);
+
+    /**
      * @brief Outline every selected object on top of the scene, grouped by category colour.
      *
      * Renders each colour group's selected sprites into an offscreen mask, then edge-detects the

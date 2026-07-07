@@ -16,6 +16,7 @@
 #include "util/Coordinates.h"
 #include "util/TileUtils.h"
 #include "viewport/ViewportController.h"
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <exception>
@@ -54,6 +55,42 @@ void main() {
 
     // Outline thickness in pixels (texels sampled when detecting the silhouette edge).
     constexpr float kOutlineThickness = 1.0f;
+
+    // Fallout 2 CE light model, used to tint the "Show light overlays" cue like the engine lights a
+    // hex (fallout2-ce src/light.cc, src/object.cc `_obj_adjust_light`). The engine stamps light into
+    // a per-hex grid: full intensity on the source hex, then a linear per-ring decrement out to the
+    // light's radius. We reproduce the falloff value per ring; we do NOT reproduce wall shadowing or
+    // the ambient-darkness pass — this is an illustrative overlay, not a lighting simulation.
+    namespace light {
+        constexpr int FLOOR = 655;    // per-hex ambient floor the engine inits every cell to (~1% of full)
+        constexpr int FULL = 65536;   // 0x10000 == 100% brightness (light intensity is clamped to this)
+        constexpr int MAX_RADIUS = 8; // object light radius is clamped to 8 hexes
+
+        // Intensity the engine deposits `ring` steps from a source of the given `intensity`/`radius`:
+        // the source hex (ring 0) gets full intensity, each further ring loses (intensity - FLOOR) /
+        // (radius + 1). Mirrors the `v28[]` distribution built in `_obj_adjust_light`.
+        int depositedIntensity(int intensity, int radius, int ring) {
+            if (ring <= 0) {
+                return intensity;
+            }
+            const int step = (intensity - FLOOR) / (radius + 1);
+            return intensity - ring * step;
+        }
+
+        // Overlay alpha for a deposited intensity: nothing at/below the ambient floor, otherwise a warm
+        // tint whose opacity tracks the fraction of full brightness contributed, so brighter/closer
+        // hexes read stronger and dim or distant ones fade out.
+        constexpr int MIN_ALPHA = 30;
+        constexpr int MAX_ALPHA = 140;
+        int tintAlpha(int deposited) {
+            if (deposited <= FLOOR) {
+                return 0;
+            }
+            const float frac = std::min(1.0f,
+                static_cast<float>(deposited - FLOOR) / static_cast<float>(FULL - FLOOR));
+            return MIN_ALPHA + static_cast<int>(frac * static_cast<float>(MAX_ALPHA - MIN_ALPHA));
+        }
+    } // namespace light
 } // namespace
 
 sf::Color RenderingEngine::objectOutlineColor(const Object& object) const {
@@ -82,6 +119,12 @@ void RenderingEngine::render(sf::RenderTarget& target,
     // Layer 1: Floor tiles (always rendered)
     if (renderData.floorSprites) {
         renderFloorTiles(target, *renderData.floorSprites);
+    }
+
+    // Layer 1b: Light overlays. Drawn as a ground layer (over the floor, under objects) so each light
+    // source's illuminated hexes read like light pooling on the ground with objects standing in it.
+    if (visibility.showLightOverlays) {
+        renderLightOverlays(target, view, renderData, visibility);
     }
 
     // Layer 2: Hex grid overlay (if enabled)
@@ -307,16 +350,63 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
         }
 
         target.draw(object->getSprite());
-
-        if (visibility.showLightOverlays && object->hasLight()) {
-            target.draw(object->getLightOverlay());
-        }
     }
 
     // Wall blocker overlays render on top of regular objects
     if (visibility.showWallBlockers && renderData.wallBlockerOverlays) {
         for (const auto& overlay : *renderData.wallBlockerOverlays) {
             target.draw(overlay);
+        }
+    }
+}
+
+void RenderingEngine::renderLightOverlays(sf::RenderTarget& target,
+    const sf::View& view,
+    const RenderData& renderData,
+    const VisibilitySettings& visibility) {
+    if (!renderData.objects || !renderData.hexGrid) {
+        return;
+    }
+
+    // Warm light tint; the per-ring alpha (set below) carries the falloff.
+    const sf::Color lightTint(255, 224, 130);
+
+    for (const auto& object : *renderData.objects) {
+        if (!object->hasLight()) {
+            continue;
+        }
+        const auto mapObject = object->getMapObjectPtr(); // non-null: hasLight() already checked it
+        // A light on a hidden layer (e.g. walls off) shows no overlay, matching the object itself —
+        // the same visibility rule renderObjects uses, so a hidden source never glows.
+        if (!isObjectVisible(*mapObject, visibility)) {
+            continue;
+        }
+
+        // light_radius / light_intensity are uint32_t; clamp in unsigned space so a corrupt
+        // out-of-range value can't become a negative int after the cast.
+        const int radius = static_cast<int>(std::min<std::uint32_t>(mapObject->light_radius, light::MAX_RADIUS));
+        const int intensity = static_cast<int>(std::min<std::uint32_t>(mapObject->light_intensity, light::FULL));
+        const int centerHex = mapObject->position;
+
+        // Group the illuminated hexes by ring so each ring can be tinted by its falloff value; a single
+        // renderHexOverlay call per ring keeps the draw count low (radius is at most 8).
+        std::vector<std::vector<int>> hexesByRing(static_cast<size_t>(radius) + 1);
+        for (const auto& hex : hexgrid::hexDiscByDistance(centerHex, radius)) {
+            hexesByRing[static_cast<size_t>(hex.distance)].push_back(hex.position);
+        }
+
+        for (int ring = 0; ring <= radius; ++ring) {
+            const auto& ringHexes = hexesByRing[static_cast<size_t>(ring)];
+            if (ringHexes.empty()) {
+                continue;
+            }
+            const int alpha = light::tintAlpha(light::depositedIntensity(intensity, radius, ring));
+            if (alpha <= 0) {
+                continue;
+            }
+            sf::Color color = lightTint;
+            color.a = static_cast<std::uint8_t>(alpha);
+            _hexRenderer.renderHexOverlay(target, view, *renderData.hexGrid, ringHexes, color);
         }
     }
 }

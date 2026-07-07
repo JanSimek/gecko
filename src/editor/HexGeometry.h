@@ -3,6 +3,7 @@
 #include "HexagonGrid.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <optional>
 #include <vector>
 
@@ -68,16 +69,23 @@ inline std::optional<int> translate(int position, int fromAnchor, int toAnchor) 
     return cr.row * WIDTH + cr.col;
 }
 
-// All grid positions within hex-distance `radius` of `centerPosition` — a filled hex disc
-// with the centre included, in ascending position order per the row-major cube sweep. This
-// matches the engine's spatial-script trigger test `tileDistanceBetween(centre, h) <= radius`
-// (fallout2-ce tile.cc/scripts.cc): cube distance equals that hex-step distance because the
-// offset<->cube conversion mirrors the engine's `_dir_tile` parity layout. Off-grid hexes are
-// skipped, so a disc near an edge is clipped; `radius` < 0 yields an empty list.
-inline std::vector<int> hexesWithinRadius(int centerPosition, int radius) {
-    std::vector<int> positions;
+// A hex within a disc, paired with its hex-step distance from the centre.
+struct HexAtDistance {
+    int position = 0;
+    int distance = 0;
+};
+
+// A filled hex disc of hex-distance `radius` around `centerPosition`, each hex paired with its
+// hex-step distance from the centre (0 at the centre, up to `radius`), in ascending position order
+// per the row-major cube sweep. Cube distance (|dx|+|dy|+|dz|)/2 equals the engine's hex-step
+// distance (fallout2-ce `tileDistanceBetween`) because the offset<->cube conversion mirrors the
+// engine's `_dir_tile` parity layout. Off-grid hexes are skipped, so a disc near an edge is clipped;
+// `radius` < 0 yields an empty list. This is the primitive behind hexesWithinRadius (which drops the
+// distance) and the per-ring light-overlay falloff.
+inline std::vector<HexAtDistance> hexDiscByDistance(int centerPosition, int radius) {
+    std::vector<HexAtDistance> hexes;
     if (radius < 0) {
-        return positions;
+        return hexes;
     }
     const Cube center = cubeOfPosition(centerPosition);
     for (int dx = -radius; dx <= radius; ++dx) {
@@ -89,8 +97,22 @@ inline std::vector<int> hexesWithinRadius(int centerPosition, int radius) {
             if (cr.col < 0 || cr.col >= WIDTH || cr.row < 0 || cr.row >= HEIGHT) {
                 continue;
             }
-            positions.push_back(cr.row * WIDTH + cr.col);
+            const int distance = (std::abs(dx) + std::abs(dy) + std::abs(dz)) / 2;
+            hexes.push_back({ cr.row * WIDTH + cr.col, distance });
         }
+    }
+    return hexes;
+}
+
+// All grid positions within hex-distance `radius` of `centerPosition` — the same filled disc as
+// hexDiscByDistance with the per-hex distance dropped. Matches the engine's spatial-script trigger
+// test `tileDistanceBetween(centre, h) <= radius`.
+inline std::vector<int> hexesWithinRadius(int centerPosition, int radius) {
+    const auto disc = hexDiscByDistance(centerPosition, radius);
+    std::vector<int> positions;
+    positions.reserve(disc.size());
+    for (const auto& hex : disc) {
+        positions.push_back(hex.position);
     }
     return positions;
 }
