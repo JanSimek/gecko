@@ -64,9 +64,14 @@ void printUsage(const char* program) {
               << "      --json emits machine-readable output (for the MCP) instead of the human report;\n"
               << "      --palette emits just the weighted floor + scenery palette a generator script needs.\n"
               << "  " << program << " map generate --script <file.luau> --out <file.map>\n"
-              << "      [--elevation 0|1|2] [--arg key=value ...] [--stamp name=file.json ...]\n"
+              << "      [--in <file.map>] [--elevation 0|1|2] [--count N]\n"
+              << "      [--arg key=value ...] [--stamp name=file.json ...]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Runs a Luau generation script against an empty map and writes the result.\n"
+              << "      --in loads an existing map (VFS path or a file on disk) for the script to\n"
+              << "      decorate/edit instead of starting empty. --count N generates N maps in one\n"
+              << "      run, written as <out>_1.map .. <out>_N.map with consecutive seeds from the\n"
+              << "      base (--arg seed=N, or a random base reported so the batch can reproduce).\n"
               << "      --arg passes parameters to the script (read as args.key); --stamp pre-loads a\n"
               << "      pattern stamp the script places with api:placeStamp(name, anchorHex, variant).\n"
               << "  " << program << " map render --map <file.map> --out <file.png>\n"
@@ -250,7 +255,7 @@ bool parsePids(const std::string& csv, std::vector<std::uint32_t>& out, const ch
 int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
     const std::string& arg = args[i];
     const bool valueFlag = arg == "--data"
-        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--elevation" || arg == "--arg" || arg == "--stamp"))
+        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--in" || arg == "--elevation" || arg == "--count" || arg == "--arg" || arg == "--stamp"))
         || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim"))
         || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
         || (out.describeScript && (arg == "--index" || arg == "--locale"))
@@ -276,8 +281,15 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         out.gen.outPath = args[i + 1];
         return 2;
     }
+    if (out.generate && arg == "--in") {
+        out.gen.inPath = args[i + 1];
+        return 2;
+    }
     if (out.generate && arg == "--elevation") {
         return parseIntFlag(arg, args[i + 1], out.gen.elevation, program) ? 2 : 0;
+    }
+    if (out.generate && arg == "--count") {
+        return parseIntFlag(arg, args[i + 1], out.gen.count, program) ? 2 : 0;
     }
     if (out.generate && arg == "--arg") {
         // key=value -> exposed to the script as args.key
