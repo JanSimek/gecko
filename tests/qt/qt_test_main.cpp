@@ -2,7 +2,7 @@
 
 #ifdef _WIN32
 #include <crtdbg.h>
-#include <windows.h>
+#include <Windows.h> // capital W: the Windows SDK's on-disk file name
 #endif
 
 #include <QByteArray>

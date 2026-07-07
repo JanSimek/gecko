@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 #include <random>
+#include <ranges>
 #include <vector>
 
 #include <SFML/Graphics/Sprite.hpp>
@@ -119,8 +120,8 @@ namespace {
             if (!map->getMapFile().tiles.contains(options.elevation)) {
                 out << "error: " << options.inPath << " has no elevation " << options.elevation
                     << " (present:";
-                for (const auto& elevationEntry : map->getMapFile().tiles) {
-                    out << " " << elevationEntry.first;
+                for (const int level : map->getMapFile().tiles | std::views::keys) {
+                    out << " " << level;
                 }
                 out << ").\n";
                 return 2;

@@ -8,6 +8,7 @@
 #include <format>
 #include <functional>
 #include <memory>
+#include <ranges>
 #include <set>
 #include <unordered_map>
 
@@ -293,7 +294,7 @@ std::vector<int> MapScriptApi::mapObjectsAt(const std::string& mapPath, int elev
 bool MapScriptApi::protoBlocks(int pid) const {
     // A wrong answer here silently breaks walkability, so an unloadable proto is a raised error,
     // never a guess (same contract as tileId's missing tiles.lst).
-    Pro* pro = nullptr;
+    const Pro* pro = nullptr;
     try {
         pro = _resources.loadPro(static_cast<uint32_t>(pid));
     } catch (const std::exception&) {
@@ -809,20 +810,16 @@ void MapScriptApi::setPlayerStart(int hex, int orientation, int elevation) {
 
 void MapScriptApi::setElevation(int elevation) {
     if (elevation < 0 || elevation >= Map::ELEVATION_COUNT) {
-        throw ScriptError("setElevation: elevation must be 0.." + std::to_string(Map::ELEVATION_COUNT - 1)
-            + ", got " + std::to_string(elevation));
+        throw ScriptError(std::format("setElevation: elevation must be 0..{}, got {}", Map::ELEVATION_COUNT - 1, elevation));
     }
     // A .map only carries the elevations its header enables; editing an absent one would write
     // into a tile block that doesn't exist. Same contract as generate --in's validation.
     if (!_map.getMapFile().tiles.contains(elevation)) {
-        throw ScriptError(std::format("setElevation: the map has no elevation {} (present:{})", elevation,
-            [this] {
-                std::string present;
-                for (const auto& [level, tiles] : _map.getMapFile().tiles) {
-                    present += " " + std::to_string(level);
-                }
-                return present;
-            }()));
+        std::string present;
+        for (const int level : _map.getMapFile().tiles | std::views::keys) {
+            present += std::format(" {}", level);
+        }
+        throw ScriptError(std::format("setElevation: the map has no elevation {} (present:{})", elevation, present));
     }
     _elevation = elevation;
 }
@@ -963,7 +960,7 @@ std::array<std::vector<int>, 4> MapScriptApi::screenRectEdges(int centerHex, int
 
 std::vector<int> MapScriptApi::hexesOnScreenRect(int centerHex, int screenHalfWidth, int screenHalfHeight) const {
     if (!isValidHex(centerHex)) {
-        throw ScriptError("hexesOnScreenRect: centerHex " + std::to_string(centerHex) + " is off the 200x200 hex grid");
+        throw ScriptError(std::format("hexesOnScreenRect: centerHex {} is off the 200x200 hex grid", centerHex));
     }
     if (screenHalfWidth <= 0 || screenHalfHeight <= 0) {
         throw ScriptError("hexesOnScreenRect: screenHalfWidth/Height must be positive");
