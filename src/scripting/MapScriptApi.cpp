@@ -97,6 +97,32 @@ int MapScriptApi::tileId(const std::string& name) const {
     return -1;
 }
 
+std::map<std::string, int> MapScriptApi::tilesByPrefix(const std::string& prefix) const {
+    // Same availability contract as tileId(): a missing tiles.lst is a real error, an
+    // unmatched prefix is a legitimate empty result.
+    const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
+    if (lst == nullptr) {
+        throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
+    }
+    std::string needle = prefix;
+    std::ranges::transform(needle, needle.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::map<std::string, int> matches;
+    const auto& entries = lst->list();
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        if (!entries[i].starts_with(needle)) {
+            continue;
+        }
+        std::string name = entries[i];
+        if (name.size() >= 4 && name.compare(name.size() - 4, 4, ".frm") == 0) {
+            name.resize(name.size() - 4);
+        }
+        // emplace keeps the first (lowest) id for a duplicated name — tileId's behaviour.
+        matches.emplace(std::move(name), static_cast<int>(i));
+    }
+    return matches;
+}
+
 std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) const {
     // Failing to read/parse the reference is a real error (bad path or no data) — raise it rather
     // than returning null, so the caller isn't handed a silently-empty result.
@@ -456,6 +482,24 @@ int MapScriptApi::tileRow(int tile) const {
     return (tile >= 0 && tile < HexagonGrid::TILE_COUNT) ? tile / HexagonGrid::TILE_GRID_WIDTH : -1;
 }
 
+std::vector<int> MapScriptApi::tilesInRect(int col0, int row0, int col1, int row1) const {
+    const int colLo = std::max(std::min(col0, col1), 0);
+    const int rowLo = std::max(std::min(row0, row1), 0);
+    const int colHi = std::min(std::max(col0, col1), HexagonGrid::TILE_GRID_WIDTH - 1);
+    const int rowHi = std::min(std::max(row0, row1), HexagonGrid::TILE_GRID_HEIGHT - 1);
+    std::vector<int> tiles;
+    if (colLo > colHi || rowLo > rowHi) {
+        return tiles;
+    }
+    tiles.reserve(static_cast<std::size_t>(colHi - colLo + 1) * static_cast<std::size_t>(rowHi - rowLo + 1));
+    for (int row = rowLo; row <= rowHi; ++row) {
+        for (int col = colLo; col <= colHi; ++col) {
+            tiles.push_back(row * HexagonGrid::TILE_GRID_WIDTH + col);
+        }
+    }
+    return tiles;
+}
+
 uint16_t MapScriptApi::getFloorXY(int col, int row) const {
     return getFloor(tileIndex(col, row));
 }
@@ -530,6 +574,59 @@ bool MapScriptApi::placeProtoXY(uint32_t proPid, int col, int row, uint32_t dire
 
 bool MapScriptApi::paintFloorXY(int col, int row, uint16_t tileId) {
     return paintFloor(tileIndex(col, row), tileId);
+}
+
+int MapScriptApi::fillFloorRect(int col0, int row0, int col1, int row1, uint16_t tileId) {
+    int painted = 0;
+    for (const int tile : tilesInRect(col0, row0, col1, row1)) {
+        if (paintFloor(tile, tileId)) {
+            ++painted;
+        }
+    }
+    return painted;
+}
+
+int MapScriptApi::fillRoofRect(int col0, int row0, int col1, int row1, uint16_t tileId) {
+    int painted = 0;
+    for (const int tile : tilesInRect(col0, row0, col1, row1)) {
+        if (paintRoof(tile, tileId)) {
+            ++painted;
+        }
+    }
+    return painted;
+}
+
+int MapScriptApi::fillRegion(int col, int row, uint16_t tileId) {
+    const int start = tileIndex(col, row);
+    if (start < 0) {
+        return 0;
+    }
+    const uint16_t target = getFloor(start);
+    if (target == tileId) {
+        return 0; // the region already has that id — nothing to paint (and no runaway frontier)
+    }
+    // Track visited cells locally rather than re-reading the map: with a plan sink installed the
+    // committed map never changes during the run, so getFloor alone would revisit cells forever.
+    std::vector<bool> visited(HexagonGrid::TILE_COUNT, false);
+    std::vector<int> frontier{ start };
+    visited[start] = true;
+    int painted = 0;
+    while (!frontier.empty()) {
+        const int tile = frontier.back();
+        frontier.pop_back();
+        if (paintFloor(tile, tileId)) {
+            ++painted;
+        }
+        const int c = tileCol(tile);
+        const int r = tileRow(tile);
+        for (const int next : { tileIndex(c - 1, r), tileIndex(c + 1, r), tileIndex(c, r - 1), tileIndex(c, r + 1) }) {
+            if (next >= 0 && !visited[next] && getFloor(next) == target) {
+                visited[next] = true;
+                frontier.push_back(next);
+            }
+        }
+    }
+    return painted;
 }
 
 bool MapScriptApi::paintRoofXY(int col, int row, uint16_t tileId) {

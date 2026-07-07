@@ -142,6 +142,12 @@ ScriptResult LuaScriptRuntime::run(const std::string& source, MapScriptApi& api,
         }
     }
 
+    // Seed the api's deterministic stream (api:rng()/rngInt()) from the same resolved seed, so
+    // both RNGs reproduce from --arg seed=N in every host (console, CLI, MCP). A host that
+    // pre-seeds the api (the fill preview) passes the identical seed in `args`, so this re-seed
+    // is idempotent there.
+    api.setSeed(static_cast<uint32_t>(seed));
+
     // Expose caller parameters as the global table `args` (string -> string), and always publish
     // the resolved seed as args.seed so a script can report it ("re-run with --arg seed=N"). Must
     // precede luaL_sandbox(), which makes globals read-only.

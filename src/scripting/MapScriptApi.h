@@ -68,6 +68,11 @@ public:
     /// if the tile list is unavailable or the name is unknown, so scripts address tiles by name
     /// instead of magic numbers.
     int tileId(const std::string& name) const;
+    /// Every tiles.lst entry whose name starts with `prefix` (case-insensitive, e.g. "cav" for
+    /// the cave floor family), as name (without ".frm") -> paintable id — so a script can pick
+    /// from a tile family without hardcoding ids. Raises like tileId() when tiles.lst is
+    /// unavailable; an unmatched prefix is a legitimate empty result.
+    std::map<std::string, int> tilesByPrefix(const std::string& prefix) const;
     /// The distinct scenery proto PIDs used by a reference map (e.g. "maps/desert1.map") — the
     /// curated palette that map is actually built from, ready to hand to placeProto(). A PID is the
     /// engine's unique proto identifier ((type << 24) | index), so this is exact, unlike resolving
@@ -124,6 +129,10 @@ public:
     /// Floor/roof tile id at (col, row), or EMPTY_TILE if off-grid — the (col, row) form of getFloor.
     uint16_t getFloorXY(int col, int row) const;
     uint16_t getRoofXY(int col, int row) const;
+    /// Tile indices inside the inclusive rectangle spanned by (col0, row0)-(col1, row1),
+    /// ascending. Corners may come in any order and the rectangle is clamped to the 100x100
+    /// grid, so a fully off-grid rectangle is a legitimate empty result.
+    std::vector<int> tilesInRect(int col0, int row0, int col1, int row1) const;
 
     // --- Selection area (host-set per run; the queries below read it) -------------
     /// True if a selection area is bound to this run (see setArea).
@@ -165,8 +174,9 @@ public:
     /// Bind the selection area the area-queries report (borrowed, must outlive the run; nullptr
     /// clears it). Host-only — a script can't fabricate its own area. See EditArea.
     void setArea(const EditArea* area) { _area = area; }
-    /// Seed this api's deterministic stream (rng/rngInt) so a fill reproduces. Host-only; the GUI/CLI
-    /// set it from the run's seed, exactly as LuaScriptRuntime seeds Lua's math.random.
+    /// Seed this api's deterministic stream (rng/rngInt) so a run reproduces. LuaScriptRuntime::run
+    /// re-seeds it from the run's resolved seed (exactly as it seeds Lua's math.random); a host may
+    /// also pre-seed for api use outside a run, as the fill preview does.
     void setSeed(uint32_t seed) { _rng.seed(seed); }
 
     // --- Mutators (undoable; batch to collapse into one history entry) -----------
@@ -186,6 +196,16 @@ public:
     bool placeProtoXY(uint32_t proPid, int col, int row, uint32_t direction);
     bool paintFloorXY(int col, int row, uint16_t tileId);
     bool paintRoofXY(int col, int row, uint16_t tileId);
+
+    // Rectangle / region fills: composites over paintFloor/paintRoof, so they respect the plan
+    // sink and undo batching like every other mutator. Each returns the number of tiles painted.
+    /// Paint every floor/roof tile in the inclusive (col, row) rectangle (clamped to the grid).
+    int fillFloorRect(int col0, int row0, int col1, int row1, uint16_t tileId);
+    int fillRoofRect(int col0, int row0, int col1, int row1, uint16_t tileId);
+    /// Flood-fill (paint-bucket) the 4-connected floor region of uniform tile id containing
+    /// (col, row) with `tileId`. A no-op returning 0 when (col, row) is off-grid or the region
+    /// already has that id.
+    int fillRegion(int col, int row, uint16_t tileId);
 
     // --- Stamps (prefabs captured by extract_pattern) ----------------------------
     /// Register a pre-loaded stamp under `name` so the script can place it. The host (gecko-cli /

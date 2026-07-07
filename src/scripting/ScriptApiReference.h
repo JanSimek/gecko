@@ -19,6 +19,7 @@ namespace geck {
     X(getFloorXY, "(col, row) -> tileId", "Floor tile id at a tile (col, row).")                                                                                       \
     X(getRoofXY, "(col, row) -> tileId", "Roof tile id at a tile (col, row).")                                                                                         \
     X(tileId, "(name) -> int", "Resolve a ground-tile FRM name (e.g. \"edg5000\") to its tiles.lst id; -1 if unknown.")                                                \
+    X(tilesByPrefix, "(prefix) -> {name=id}", "tiles.lst entries whose name starts with prefix (e.g. \"cav\"), as name -> paintable id.")                              \
     X(protoName, "(pid) -> string", "The proto's engine display name (e.g. \"Scrub\"); empty if unresolved.")                                                          \
     X(proto, "(typeName, number) -> pid", "Build a PID from a type (\"scenery\"/\"wall\"/...) and the analyze `number`.")                                              \
     X(mapScenery, "(mapPath) -> {pid,...}", "Distinct scatter-eligible scenery PIDs a reference map uses (blockers filtered).")                                        \
@@ -45,11 +46,15 @@ namespace geck {
     X(hexRow, "(hex) -> int", "Row of a hex (or -1).")                                                                                                                 \
     X(tileCol, "(tileIndex) -> int", "Column of a tile (or -1).")                                                                                                      \
     X(tileRow, "(tileIndex) -> int", "Row of a tile (or -1).")                                                                                                         \
+    X(tilesInRect, "(col0, row0, col1, row1) -> {tileIndex,...}", "Tile indices in the inclusive (col, row) rectangle, clamped to the grid, ascending.")               \
     /* Mutators (undoable; auto-batched into one undo entry) */                                                                                                        \
     X(paintFloor, "(tileIndex, tileId) -> bool", "Paint a floor tile by index.")                                                                                       \
     X(paintRoof, "(tileIndex, tileId) -> bool", "Paint a roof tile by index.")                                                                                         \
     X(paintFloorXY, "(col, row, tileId) -> bool", "Paint a floor tile at (col, row).")                                                                                 \
     X(paintRoofXY, "(col, row, tileId) -> bool", "Paint a roof tile at (col, row).")                                                                                   \
+    X(fillFloorRect, "(col0, row0, col1, row1, tileId) -> int", "Paint every floor tile in the inclusive rectangle; returns tiles painted.")                           \
+    X(fillRoofRect, "(col0, row0, col1, row1, tileId) -> int", "Paint every roof tile in the inclusive rectangle; returns tiles painted.")                             \
+    X(fillRegion, "(col, row, tileId) -> int", "Flood-fill (paint-bucket) the connected same-id floor region at (col, row); returns tiles painted.")                   \
     X(placeObject, "(proPid, frmPid, hex, dir) -> bool", "Place an object at a hex; false if off-grid or art unresolved.")                                             \
     X(placeProto, "(proPid, hex, dir) -> bool", "Place a proto (art FID resolved from the proto) at a hex.")                                                           \
     X(placeObjectXY, "(proPid, frmPid, col, row, dir) -> bool", "placeObject at a (col, row) hex.")                                                                    \
