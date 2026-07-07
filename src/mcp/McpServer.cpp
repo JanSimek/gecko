@@ -360,7 +360,9 @@ namespace {
         cli::GenerateOptions opts;
         opts.scriptPath = requireString(args, "script");
         opts.outPath = requireString(args, "out");
+        opts.inPath = optString(args, "in");
         opts.elevation = static_cast<int>(optInt(args, "elevation", 0, 0, 2));
+        opts.count = static_cast<int>(optInt(args, "count", 1, 1, 1000));
         if (const auto it = args.find("args"); it != args.end() && it->is_object()) {
             for (const auto& [key, value] : it->items()) {
                 opts.args[key] = value.is_string() ? value.get<std::string>() : value.dump();
@@ -513,10 +515,14 @@ namespace {
         std::string description;
         json inputSchema;
         std::function<json(resource::GameResources&, const json&)> handler;
+        // Advertised as MCP tool annotations (tools/list). Default false; toolRegistry() tags the
+        // read-only group en masse. None of our tools is destructive (the mutating ones only write
+        // new output files) and all operate on local data (openWorldHint is emitted as false).
+        bool readOnly = false;
     };
 
     // Read-only / inspection tools (no files written). Split from the mutating tools so neither
-    // builder is over-long and so a future pass can tag this group readOnlyHint=true en masse.
+    // builder is over-long and so toolRegistry() can tag this group readOnlyHint=true en masse.
     void addReadOnlyTools(std::vector<ToolSpec>& t) {
         t.push_back({ "list_maps",
             "List every .map file in the mounted Fallout 2 data, each as { file, displayName } where "
@@ -730,10 +736,13 @@ namespace {
         t.push_back({ "generate",
             "Run a Luau generation script against a fresh map and write a .map. Args: script (path to "
             "the .luau), out (filesystem path for the .map — render_map/analyze can read it straight "
-            "back), optional elevation, optional args (string map), optional stamps (name -> stamp "
-            ".json path, placed by the script with api:placeStamp(name, anchorHex, variant)). Scripting "
-            "build required.",
-            json({ { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } }),
+            "back), optional in (an existing .map — VFS path or file on disk — loaded for the script "
+            "to decorate/edit instead of starting empty), optional elevation, optional count (N > 1 "
+            "batches: the script runs once per map against a fresh copy, writing <out>_1.map .. "
+            "<out>_N.map with consecutive seeds so the maps differ yet reproduce from one args.seed), "
+            "optional args (string map), optional stamps (name -> stamp .json path, placed by the "
+            "script with api:placeStamp(name, anchorHex, variant)). Scripting build required.",
+            json({ { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "in", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "count", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } }),
             [](resource::GameResources& r, const json& a) { return toolGenerate(r, a); } });
         t.push_back({ "render_map",
             "Render a map to a PNG so it can be seen, not just measured. Args: map (.map path), out "
@@ -779,6 +788,9 @@ namespace {
         static const std::vector<ToolSpec> tools = [] {
             std::vector<ToolSpec> t;
             addReadOnlyTools(t);
+            for (auto& spec : t) {
+                spec.readOnly = true; // everything registered so far inspects; it never writes
+            }
             addMutatingTools(t);
             return t;
         }();
@@ -800,11 +812,16 @@ namespace {
         }
     }
 
-    // Tool schemas advertised by tools/list.
+    // Tool schemas advertised by tools/list. The annotations are the MCP 2025-03-26 hints: they
+    // let a client (or its human) triage tools without reading every description — everything
+    // except generate/render_map/render_frm/extract_pattern is read-only, nothing modifies
+    // existing data destructively (the mutating tools only write new output files), and every
+    // tool works purely on local data (openWorldHint false).
     json toolDefinitions() {
         auto tools = json::array();
         for (const auto& spec : toolRegistry()) {
-            tools.push_back({ { "name", spec.name }, { "description", spec.description }, { "inputSchema", spec.inputSchema } });
+            tools.push_back({ { "name", spec.name }, { "description", spec.description }, { "inputSchema", spec.inputSchema },
+                { "annotations", { { "readOnlyHint", spec.readOnly }, { "destructiveHint", false }, { "openWorldHint", false } } } });
         }
         return tools;
     }
