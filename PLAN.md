@@ -107,9 +107,10 @@ blind rectangle:
   box) and place exits on the edge segments the design wants open, leaving the rest walled. Reuse
   the screen→hex edge walk from `placeExitGridRect`, but follow the diamond boundary and accept a
   per-edge open/closed mask.
-- **Reachability-gated** — only place an exit on a hex reachable from the player start (flood-fill,
-  cf. the "Pathing, blocking & reachability" analysis item), so generators can't strand an exit
-  behind a wall.
+- **Reachability-gated** — *partially done:* `generate` now runs the reachability analysis on
+  every map it writes and warns when an exit grid is unreachable from the player start, so a
+  stranded exit is caught at generation time. Still open: placing exits reachability-aware in
+  the first place (the check reports, the placement doesn't consult it).
 
 The primitive (`placeExitGridRect`) and the directional-art mapping are the reusable foundation;
 the follow-up is feeding them terrain-derived locations instead of a centred rectangle.
@@ -482,15 +483,12 @@ The direction instead:
 
 ### P1 — Ergonomics: make scripts human-writable
 
-2. **Human coordinates.** *(still open.)* Addressing by linear index (`hex = row*200 + col`, tiles `row*100 + col`)
-   is unintuitive, and the two grids differ (200×200 hexes vs 100×100 tiles). Add `(col, row)`
-   variants of the common ops (`paintFloorXY`, `placeProtoXY`, `getFloorXY`) plus index↔(col,row)
-   converters (`hexIndex(col,row)`/`tileIndex(col,row)` + inverses) and a **tile↔hex bridge** (a
-   tile covers ~2×2 hexes) so "paint this tile and put a tree on it" is one step. Reuse the engine
-   geometry (`hexgrid::offsetToCube`/`columnOf`/`rowOf`). Optionally add normalized `[0,1]`
-   helpers (`hexAt(fx, fy)`) so "centre"/"scatter across the map" are grid-size-agnostic. Decide
-   and **document the orientation** so `(col,row)` matches what the editor displays (Fallout's hex
-   numbering has a right-to-left quirk).
+2. **Human coordinates.** *(mostly done.)* `(col, row)` variants and the index↔(col,row)
+   converters shipped earlier; the **tile↔hex bridge is now exact**: `hexTile(hex)`/
+   `tileHexes(tile)` project through the renderer's own screen geometry (NOT the naive col/2
+   halving, which drifts a tile near block boundaries) — this is what lets `cave.luau` place
+   walls/blockers that hug a floor boundary. *Remaining (minor):* normalized `[0,1]` helpers
+   (`hexAt(fx, fy)`) and documenting the on-screen orientation convention.
 
 ### P2 — Generation quality
 
@@ -505,9 +503,14 @@ The direction instead:
    (vault doors, cars), because choosing *what* is scatter-able is semantic, not statistical. The
    reliable path is **curated palettes** + an MCP agent's judgment; the histogram lives on as an
    *analysis* tool, not the generator.
-7. **Enclosures / autowalling + roofs.** A helper that rings a region with correctly-oriented
-   wall protos (the analyze output is full of left/right/corner `Wall` variants) unlocks the cave
-   and town biomes; generate a **roof** layer for enclosed areas (`paintRoof` already exists).
+7. **Enclosures / autowalling + roofs.** — **Cave autowalling SHIPPED** as learned wall replay:
+   `cave.luau` keys every boundary tile's 8-neighbour walkability shape (+ parity) and replays
+   the wall arrangements the shipped cave maps use for that shape (per-hex-slot modal pid at its
+   empirical probability), through the new `mapFloorAt`/`mapObjectsAt`/`hexTile`/`tileHexes`
+   primitives — no hand-authored wall tables, orientation lives in the learned pid. The rim is
+   sealed with Secret-Blocking-Hex fills (verified: the cavern's reachable set is exactly its
+   floor). **Remaining:** town/building walls (straight `Wall s.t.` runs + door openings differ
+   from organic cave rims) and generating a **roof** layer for enclosed areas.
 
 ### P3 — Reach & tooling
 
@@ -536,7 +539,9 @@ The direction instead:
 - **Coordinate convention:** expose `(col,row)` as the engine's storage layout or remap to
   match the editor's on-screen/displayed coordinates? Pick one and document it.
 - **Collision policy** when a generator targets an occupied hex/tile (overwrite / skip / error).
-- **Multi-elevation generation** (run a script across all three elevations in one invocation).
+- ~~**Multi-elevation generation**~~ — **DONE**: `api:setElevation(e)` switches which elevation
+  subsequent queries/edits target (validated against the map's enabled elevations; tile/object
+  data route by the recorded elevation, so it is safe mid-run).
 
 ---
 

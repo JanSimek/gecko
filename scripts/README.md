@@ -34,13 +34,17 @@ fills it in when you don't); `terrain.luau` prints it, so when you get a layout 
 with that `--arg seed=<value>` to recreate it exactly. The same seed drives both `math.random`
 and `api:rng()`/`api:rngInt()`.
 
+**Sanity check.** After writing the map, `generate` runs the reachability analysis on it and
+prints a warning when any exit grid cannot be walked to from the player start — the usual sign
+of a sealed room or a spawn placed inside solid terrain.
+
 | Script | What it does |
 |--------|--------------|
 | [`editor/terrain.luau`](editor/terrain.luau) | A curated desert generator: fills the floor with wasteland sand and scatters a **hand-picked palette** of desert vegetation (scrub/weeds/rocks/trees) in **natural clumps** (a `noise2d` density field, not an even sprinkle). Curated so only sensible decorations appear — swap `PALETTE`/`BASE_TILE` to retheme. Tune with `--arg density=N` / `--arg tile=<name>`. |
 | [`editor/scatter.luau`](editor/scatter.luau) | A **parameterized** terrain.luau: the floor tile and scenery palette come from `--arg` (`--arg tile=edg5000 --arg palette=102,103,945`), so any biome generates without editing a script. Curate the palette from `gecko-cli map analyze --json` (pick the small, common, non-`flat` scenery) and pass it in. |
 | [`editor/random_desert.luau`](editor/random_desert.luau) | A **worked template**: a frequency-**weighted mix** of the desert ground tileset (`edg5000`–`edg5007`, not one flat tile) and a weighted scrub/weed/cactus palette scattered in `noise2d` clumps. Weights are the real placement counts `analyze` reports across `desert1`–`desert6`. `--arg density/coverage/scale`; random each run (`--arg seed=N` to reproduce). |
 | [`editor/random_camp.luau`](editor/random_camp.luau) | `random_desert` **plus structures**: scatters the desert, then drops `--arg tents=N` tents (spaced `--arg spacing` hexes apart) from a stamp captured with `extract_pattern`, via `api:placeStamp`. The worked example of the full extract→generate loop: `--stamp tent=tent.json --arg tents=3`. |
-| [`editor/cave.luau`](editor/cave.luau) | A **connected cavern** generator and the worked example of the region helpers: carves seeded chambers + L-corridors with `fillFloorRect`, floods the cavern with `fillRegion` (the paint-bucket) to detect and reconnect sealed-off chambers, then retextures everything in coherent patches from the whole `tilesByPrefix("cav1")` floor family — no hardcoded tile ids. `--arg family/chambers`; pairs naturally with `--count N` for a batch of caves. |
+| [`editor/cave.luau`](editor/cave.luau) | A **real cave-interior generator, learned from the shipped cave maps**: fills the map with the reference's solid-rock tile pattern, carves a noise-roughened cavern painted with the reference's weighted floor mix, lines every rock/floor boundary with the correctly-oriented **Cave Wall variants** (boundary-shape → wall arrangement, learned per tile from `maps/cave1..4.map` via `mapFloorAt`/`mapObjectsAt`/`hexTile`), seals the rim with invisible blocking hexes, rings the cavern with scroll blockers (`hexesOnScreenRect`), and drops a worldmap exit patch + player start. `--arg chambers/refs/exit`; `--count N` batches distinct, reproducible caves; `generate` verifies the exits are reachable. |
 
 ## The `api` surface
 
@@ -66,6 +70,12 @@ and `api:rng()`/`api:rngInt()`.
 | `api:paintFloorXY(col,row,id)` / `api:paintRoofXY(...)` | bool | `(col,row)` form of the painters (tile grid) |
 | `api:getFloorXY(col,row)` / `api:getRoofXY(col,row)` | tile id | `(col,row)` form of the readers |
 | `api:tilesInRect(col0,row0,col1,row1)` | table | tile indices in the inclusive rectangle, ascending; corners in any order, clamped to the grid |
+| `api:hexTile(hex)` / `api:tileHexes(tile)` | int / table | the **exact tile↔hex bridge** (screen geometry, not naive halving): the floor tile under a hex, and the hexes standing on a tile — what lets walls/blockers follow a floor boundary precisely |
+| `api:hexesOnScreenRect(centerHex, halfW, halfH)` | table | the hex border of a screen-space rectangle (the `placeExitGridRect` walk as a query) — ring an area with scroll blockers or anything else |
+| `api:mapFloorAt(mapPath, elev)` | table | a reference map's **full floor grid** (10000 ids, tile-index order) — learn exact layouts (rock patterns, walkable regions) |
+| `api:mapObjectsAt(mapPath, elev, type)` | table | a reference map's objects of one type as flat `(pid, hex, direction)` triples — learn engine-authored placement (e.g. which cave-wall variant lines which boundary shape) |
+| `api:protoBlocks(pid)` | bool | does the proto block movement (NO_BLOCK clear)? raises if the proto can't load |
+| `api:setElevation(e)` | nil | switch which elevation (0..2) subsequent queries/edits target — author multi-level maps in one run; raises if the map lacks it |
 | `api:fillFloorRect(col0,row0,col1,row1,id)` / `api:fillRoofRect(...)` | int | paint every tile in the rectangle; returns tiles painted |
 | `api:fillRegion(col,row,id)` | int | flood-fill (paint-bucket): repaint the 4-connected region of the tile id found at `(col,row)`; returns tiles painted |
 | `api:rng()` / `api:rngInt(lo,hi)` | number / int | draws from the run's seeded stream — cross-platform-deterministic (unlike `math.random`'s float path), so a seed reproduces exactly |
