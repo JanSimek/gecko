@@ -1,5 +1,10 @@
 #include <cstdio>
 
+#ifdef _WIN32
+#include <crtdbg.h>
+#include <windows.h>
+#endif
+
 #include <QByteArray>
 #include <QApplication>
 #include <QStandardPaths>
@@ -30,6 +35,20 @@ public:
 CATCH_REGISTER_LISTENER(TestNameTracer)
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    // Fail loudly, never modally: on a headless CI runner a debug-CRT assert/abort dialog (e.g.
+    // from a debug-Qt Q_ASSERT via qFatal) blocks forever with its message stuck in a buffered
+    // pipe — the suite "hangs" with no diagnostic. Route CRT reports to stderr, keep abort()
+    // non-interactive, suppress the OS fault boxes, and unbuffer stderr so the text gets out.
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    for (int report : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT }) {
+        _CrtSetReportMode(report, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(report, _CRTDBG_FILE_STDERR);
+    }
+    std::setvbuf(stderr, nullptr, _IONBF, 0);
+#endif
+
     QTemporaryDir testHome;
     if (!testHome.isValid()) {
         return 1;

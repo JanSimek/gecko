@@ -4,14 +4,33 @@
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QHeaderView>
+#include <QTreeView>
 
 #include <spdlog/logger.h>
 
 #include "ui/logging/LogFilterProxy.h"
 #include "ui/logging/LogModel.h"
 #include "ui/logging/LogModelSink.h"
+#include "ui/panels/LogPanel.h"
 
 using namespace geck;
+
+TEST_CASE("LogPanel configures its header only once a model provides columns", "[qt][log]") {
+    // Before a source model attaches, the view's header has zero sections — per-index header
+    // configuration then violates QHeaderView's precondition, which is a live Q_ASSERT in debug
+    // Qt builds (it hung qt_tests on Windows Debug CI as a modal abort dialog).
+    LogPanel panel;
+    auto* view = panel.findChild<QTreeView*>();
+    REQUIRE(view != nullptr);
+    CHECK(view->header()->count() == 0);
+
+    LogModel model;
+    panel.setModel(&model);
+    REQUIRE(view->header()->count() == LogModel::ColumnCount);
+    CHECK(view->header()->sectionResizeMode(LogModel::TimeColumn) == QHeaderView::ResizeToContents);
+    CHECK(view->header()->sectionResizeMode(LogModel::MessageColumn) == QHeaderView::Stretch);
+}
 
 TEST_CASE("LogModel stores records with level, message, and time", "[qt][log]") {
     LogModel model;
