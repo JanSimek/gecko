@@ -10,6 +10,7 @@
 
 #ifdef GECK_SCRIPTING_ENABLED
 #include <filesystem>
+#include <format>
 #include <functional>
 #include <memory>
 #include <random>
@@ -50,10 +51,8 @@ namespace {
     // "out/town.map", 3 -> "out/town_3.map" — the per-map output name of a batch run.
     std::string numberedOutPath(const std::string& outPath, int n) {
         const std::filesystem::path path(outPath);
-        std::filesystem::path numbered = path.parent_path() / path.stem();
-        numbered += "_" + std::to_string(n);
-        numbered += path.extension();
-        return numbered.string();
+        const auto numbered = std::format("{}_{}{}", path.stem().string(), n, path.extension().string());
+        return (path.parent_path() / numbered).string();
     }
 
     // One generation run: build the headless editing context over a fresh empty map (or a fresh
@@ -85,8 +84,8 @@ namespace {
             if (!map->getMapFile().tiles.contains(options.elevation)) {
                 out << "error: " << options.inPath << " has no elevation " << options.elevation
                     << " (present:";
-                for (const auto& [elevation, tiles] : map->getMapFile().tiles) {
-                    out << " " << elevation;
+                for (const auto& elevationEntry : map->getMapFile().tiles) {
+                    out << " " << elevationEntry.first;
                 }
                 out << ").\n";
                 return 2;
@@ -191,8 +190,8 @@ int generateMap(resource::GameResources& resources, const GenerateOptions& optio
         try {
             baseSeed = static_cast<uint32_t>(std::stol(it->second)) & 0x7FFFFFFF;
             haveArgSeed = true;
-        } catch (const std::exception&) {
-            haveArgSeed = false; // not a number -> a random base, like a single run
+        } catch (const std::logic_error&) { // stol's invalid_argument / out_of_range
+            haveArgSeed = false;            // not a number -> a random base, like a single run
         }
     }
     if (!haveArgSeed) {

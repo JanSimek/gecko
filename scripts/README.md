@@ -136,11 +136,11 @@ gecko-mcp --data <master.dat>
 | `extract_pattern` | Capture a structure from a real map into a reusable **pattern stamp** (`map`, `out`, `name`, optional `elevation`, `pids`, `anchorHex`, `radius`, `includeFloor`, `includeRoof`). Locate it with `pids` (the structure's proto PIDs from `analyze`) — their bounding box grown by `radius` hexes is the capture region, so immediate props nearby come along — or pass `anchorHex`. Objects captured verbatim; `includeFloor: true` captures the ground and `includeRoof: true` captures the roof layer (a tent/building roof is tiles, not an object — without it the stamp is topless). The stamp JSON loads in the editor's pattern library and can be placed by `generate`. |
 | `script_api` | The generation-script `api` reference (Markdown, generated from the bound surface so it can't drift): every `api:` function with its signature, plus the non-obvious runtime behaviour (runs are **auto-seeded** and **auto-batched**) and the error model. Read it before writing a script for `generate`. |
 
-On `gecko-cli`: `map analyze [--json|--palette]`, `map generate ... [--in <f.map>] [--count N]
-[--stamp name=file.json ...]`,
-`map render --map <f.map> --out <f.png> [--elevation N] [--max-dim N] [--roof] [--schematic|--objects]
-[--show-blockers]`, and `map extract-pattern --map <f.map> --out <f.json> --name <n> [--pids id,...]
-[--anchor <hex>] [--radius N] [--include-floor] [--include-roof]` (also the MCP `extract_pattern` tool).
+On `gecko-cli`:
+- `map analyze [--json|--palette]`
+- `map generate ... [--in <f.map>] [--count N] [--stamp name=file.json ...]`
+- `map render --map <f.map> --out <f.png> [--elevation N] [--max-dim N] [--roof] [--schematic|--objects] [--show-blockers]`
+- `map extract-pattern --map <f.map> --out <f.json> --name <n> [--pids id,...] [--anchor <hex>] [--radius N] [--include-floor] [--include-roof]` (also the MCP `extract_pattern` tool)
 
 **Stamps end to end** — `random_camp.luau` needs a stamp; make one first, then pass it:
 ```

@@ -117,8 +117,8 @@ std::map<std::string, int> MapScriptApi::tilesByPrefix(const std::string& prefix
         if (name.size() >= 4 && name.compare(name.size() - 4, 4, ".frm") == 0) {
             name.resize(name.size() - 4);
         }
-        // emplace keeps the first (lowest) id for a duplicated name — tileId's behaviour.
-        matches.emplace(std::move(name), static_cast<int>(i));
+        // try_emplace keeps the first (lowest) id for a duplicated name — tileId's behaviour.
+        matches.try_emplace(std::move(name), static_cast<int>(i));
     }
     return matches;
 }

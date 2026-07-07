@@ -46,7 +46,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             REQUIRE(tool.contains("annotations"));
             const auto& hints = tool["annotations"];
             const auto name = tool["name"].get<std::string>();
-            const bool writes = std::find(mutating.begin(), mutating.end(), name) != mutating.end();
+            const bool writes = std::ranges::find(mutating, name) != mutating.end();
             CHECK(hints["readOnlyHint"] == !writes);
             CHECK(hints["destructiveHint"] == false); // the mutating tools only write new files
             CHECK(hints["openWorldHint"] == false);   // everything operates on local data

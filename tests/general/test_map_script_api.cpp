@@ -36,6 +36,9 @@ struct TilesLstFixture {
         out << "edg5000.frm\nedg5001.frm\ncav1000.frm\n";
     }
 
+    TilesLstFixture(const TilesLstFixture&) = delete;
+    TilesLstFixture& operator=(const TilesLstFixture&) = delete;
+
     ~TilesLstFixture() {
         std::error_code ec;
         std::filesystem::remove_all(root, ec);
