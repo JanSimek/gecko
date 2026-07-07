@@ -314,6 +314,25 @@ bool MapScriptApi::protoBlocks(int pid) const {
     return !Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_NO_BLOCK);
 }
 
+bool MapScriptApi::protoFlat(int pid) const {
+    // OBJECT_FLAT marks ground-hugging art (rubble/fill textures, floor markers) drawn below
+    // standing objects — as opposed to a wall FACE that stands up. Cave-wall protos come in both:
+    // a generator wants the faces to line a boundary and the flat fill only to carpet solid rock.
+    // Same hard-fail contract as protoBlocks: an unloadable proto is raised, never guessed.
+    const Pro* pro = nullptr;
+    try {
+        pro = _resources.loadPro(static_cast<uint32_t>(pid));
+    } catch (const std::exception&) {
+        pro = nullptr;
+    }
+    if (pro == nullptr) {
+        throw ScriptError(std::format(
+            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
+            static_cast<uint32_t>(pid)));
+    }
+    return Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
+}
+
 std::vector<std::string> MapScriptApi::listMaps() const {
     std::vector<std::string> maps;
     try {

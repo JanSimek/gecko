@@ -2,10 +2,12 @@
 --
 -- Builds a real Fallout 2 cavern the way maps/cave1..4.map elevation 1 are built:
 --   * the whole area filled with the reference's dark solid-rock tile pattern,
---   * a walkable cavern carved through it, painted with the reference's weighted cav* floor mix,
---   * the floor/rock rim lined with a CONTINUOUS run of "Cave Wall" proto variants — each piece
---     chosen by which neighbouring rim hexes it connects to, LEARNED from the shipped walls, so
---     adjacent pieces meet along a shared edge instead of butting a horizontal against a vertical,
+--   * a walkable cavern carved through it, painted with the reference's pervasive cav* FIELD tiles
+--     (rare border/transition tiles like cav4013 and the entrance sand are kept out of the mix),
+--   * the floor/rock rim lined with a CONTINUOUS run of "Cave Wall" FACE variants — only the
+--     standing faces, never the OBJECT_FLAT rock-fill art the same family carries — each chosen by
+--     which neighbouring rim hexes it connects to, LEARNED from the shipped walls, so adjacent
+--     pieces meet along a shared edge instead of butting a horizontal against a vertical,
 --   * invisible blocking hexes sealing the rock side so the player can't walk off the floor,
 --   * a scroll-blocker rectangle ringing the cavern so the camera stays inside,
 --   * an exit-grid patch on the floor (worldmap by default) and the player start.
@@ -61,6 +63,24 @@ for _, id in pairs(api:tilesByPrefix("cav")) do
     cavTileIds[id] = true
 end
 
+-- Even among cav* tiles some are transition/border tiles (e.g. cav4013, the dirt<->sand seam) the
+-- mappers use only at specific edges — scattering them across open floor looks wrong. Keep only the
+-- FIELD tiles the reference uses pervasively: those at or above this fraction of the most-used
+-- walkable tile's count. The rare tail (borders, one-off detail) is dropped from the random mix.
+local FLOOR_FIELD_FRACTION = tonumber(args.floorFieldFraction) or 0.1
+
+-- The "Cave Wall" proto family holds two kinds of art: standing wall FACES that line the boundary,
+-- and OBJECT_FLAT rock-fill textures (proto 621/622 and friends) that carpet solid ground. Only
+-- faces belong on the rim; the flat fill, learned in, fills the wall run with dark rubble and
+-- breaks it up. Cache the flag — protoFlat loads the proto.
+local flatCache = {}
+local function isFlatWall(pid)
+    if flatCache[pid] == nil then
+        flatCache[pid] = api:protoFlat(pid)
+    end
+    return flatCache[pid]
+end
+
 -- A stable key for a wall piece: the sorted directions (0..5) from its hex to the adjacent hexes
 -- that also carry a wall. Sorting makes the key traversal-order-independent — a piece connecting
 -- north+south is the same whether the run arrived from the north or the south.
@@ -111,7 +131,10 @@ do
             end
         end
 
-        -- Walls on the walkable side: learn each piece's connection shape -> pid.
+        -- Wall FACES on the walkable side: learn each piece's connection shape -> pid. Flat fill
+        -- pieces are skipped entirely (they are not part of the boundary run), and the connection
+        -- shape is measured against neighbouring FACES only, so a face's key reflects the face chain
+        -- it belongs to, not stray fill that happens to sit next to it.
         local function walkableTile(t)
             if t < 0 then
                 return false
@@ -119,16 +142,19 @@ do
             local id = floor[t + 1]
             return id ~= EMPTY and not isRock[id]
         end
-        local wallPidAt = {}
+        local faceAt = {}
         local walls = api:mapObjectsAt(ref, REF_ELEVATION, "wall")
         for i = 1, #walls, 3 do
-            wallPidAt[walls[i + 1]] = walls[i]
+            local pid, hex = walls[i], walls[i + 1]
+            if not isFlatWall(pid) then
+                faceAt[hex] = pid
+            end
         end
-        for hex, pid in pairs(wallPidAt) do
+        for hex, pid in pairs(faceAt) do
             if walkableTile(api:hexTile(hex)) then
                 local dirs = {}
                 for _, n in ipairs(api:hexNeighbors(hex)) do
-                    if wallPidAt[n] then
+                    if faceAt[n] then
                         table.insert(dirs, api:hexDir(hex, n))
                     end
                 end
@@ -140,8 +166,17 @@ do
         end
     end
 
+    -- Keep only the pervasive field tiles: drop any below FLOOR_FIELD_FRACTION of the most-used
+    -- walkable tile so border/transition tiles (used a handful of times) never scatter over the floor.
+    local maxWeight = 0
+    for _, w in pairs(weightById) do
+        maxWeight = math.max(maxWeight, w)
+    end
+    local fieldFloor = maxWeight * FLOOR_FIELD_FRACTION
     for id, w in pairs(weightById) do
-        table.insert(floorWeights, { id = id, w = w })
+        if w >= fieldFloor then
+            table.insert(floorWeights, { id = id, w = w })
+        end
     end
     table.sort(floorWeights, function(a, b) return a.id < b.id end) -- pairs() order is unspecified
     assert(#floorWeights > 0, "no walkable cav* floor tiles found in the reference maps")

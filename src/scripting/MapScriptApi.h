@@ -111,6 +111,10 @@ public:
     /// the proto can't be loaded (no data mounted / unknown pid) — a wrong answer here would
     /// silently break map walkability.
     bool protoBlocks(int pid) const;
+    /// True if the proto is OBJECT_FLAT — ground-hugging fill/rubble art drawn below standing
+    /// objects, as opposed to a wall face. Lets a generator tell boundary walls from the flat rock
+    /// texture that carpets solid ground. Raises when the proto can't be loaded (like protoBlocks).
+    bool protoFlat(int pid) const;
     /// Every map file in the mounted data (VFS paths, e.g. "maps/desert1.map"), sorted. Lets a
     /// generator pick a reference map at random when none was given.
     std::vector<std::string> listMaps() const;
