@@ -42,10 +42,15 @@ int main(int argc, char** argv) {
     // non-interactive, suppress the OS fault boxes, and unbuffer stderr so the text gets out.
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#ifdef _DEBUG
+    // Debug CRT only: in the release CRT these are no-op macros that discard their arguments
+    // (leaving `report` unreferenced, which /WX rejects) — and there are no report dialogs to
+    // redirect there anyway.
     for (int report : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT }) {
         _CrtSetReportMode(report, _CRTDBG_MODE_FILE);
         _CrtSetReportFile(report, _CRTDBG_FILE_STDERR);
     }
+#endif
     std::setvbuf(stderr, nullptr, _IONBF, 0);
 #endif
 
