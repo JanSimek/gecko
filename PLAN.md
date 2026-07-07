@@ -511,13 +511,21 @@ The direction instead:
 
 ### P3 — Reach & tooling
 
-8. **`--in <map>`** for `generate` — decorate/edit an existing map, not just an empty one (the GUI
-   console already runs against the current map).
-9. **Fill/region/query helpers** — `fillRect`, `fillRegion`, `tilesByPrefix("cav")`, region and
-   neighbour queries — small, composable, make scripts read like intent.
+8. ~~**`--in <map>`** for `generate`~~ — **DONE.** `--in` (CLI) / `in` (MCP) loads an existing map
+   (VFS path or file on disk) for the script to decorate; the requested elevation is validated
+   against the input's enabled elevations.
+9. ~~**Fill/region/query helpers**~~ — **DONE**: `tilesByPrefix("cav")` (name→id for a tile
+   family), `tilesInRect`, `fillFloorRect`/`fillRoofRect`, and `fillRegion` (4-connected flood
+   fill / paint-bucket) joined the `api:` surface; all route through the paint chokepoint, so
+   they respect the plan sink and undo batching. (`hexNeighbors` already covered the neighbour
+   query.) Also fixed: the run's resolved seed now seeds `api:rng()`/`rngInt()` in every host
+   (LuaScriptRuntime), not just the GUI fill preview.
 10. **Biome script library** — `cave.luau`, `town.luau`, `coast.luau` beside the desert one; each
     a worked example. Expand the `scripts/README.md` table.
-11. **Batch generation** — produce N maps with varying seeds in one `gecko-cli` invocation.
+11. ~~**Batch generation**~~ — **DONE.** `--count N` (CLI) / `count` (MCP): the script runs once
+    per map against a fresh copy (empty or `--in`), writing `<out>_1.map`…`<out>_N.map` with
+    consecutive seeds from the base (`--arg seed=N` or a reported random base), so the batch
+    varies AND reproduces.
 
 ### Open questions
 
@@ -778,9 +786,10 @@ and probably not worth chasing for a map editor.
 - **`structuredContent`** on the JSON-emitting tools (analyze/describe_map/palette/proto_info/…) —
   return the parsed object alongside the text block, so clients get typed data instead of re-parsing
   a string.
-- **Tool annotations** — `readOnlyHint` (everything except generate/render/extract is read-only),
-  `destructiveHint`, `openWorldHint:false` (all data is local). Cheap to add to each `ToolSpec` now
-  that the registry carries per-tool metadata.
+- ~~**Tool annotations**~~ — **DONE.** Every `tools/list` entry now carries `annotations`:
+  `readOnlyHint` (true for the whole inspection group, false for generate/render_map/render_frm/
+  extract_pattern), `destructiveHint:false` (the mutating tools only write new output files) and
+  `openWorldHint:false` (all data is local).
 - **`render_map` as an image/resource** — return an embedded image or a resource link rather than the
   written path (more idiomatic; the path works fine for a local agent).
 - *(Not planned: per-call cancellation / progress notifications — the stdio loop is deliberately
