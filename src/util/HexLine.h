@@ -21,26 +21,47 @@ inline bool isValidHex(int hex) {
     return hex >= 0 && hex < HexagonGrid::POSITION_COUNT;
 }
 
+/// The six cube-coordinate neighbour directions, in the canonical order that indexes a
+/// direction 0..5. hexNeighbors() walks them in this order (skipping off-grid cells) and
+/// hexDirection() reports a step's index against it, so the two agree on what "direction i" means.
+inline constexpr std::array<geck::hexgrid::Cube, 6> kHexDirs = {
+    { { 1, -1, 0 }, { 1, 0, -1 }, { 0, 1, -1 }, { -1, 1, 0 }, { -1, 0, 1 }, { 0, -1, 1 } }
+};
+
 /// The up-to-six on-grid hex neighbours of `hex` (cube-coordinate, so parity-correct
 /// regardless of the hex's column parity). Empty if `hex` is off-grid.
 inline std::vector<int> hexNeighbors(int hex) {
     using namespace geck::hexgrid;
-    // The six cube-coordinate neighbour directions.
-    static constexpr std::array<Cube, 6> kDirs = {
-        { { 1, -1, 0 }, { 1, 0, -1 }, { 0, 1, -1 }, { -1, 1, 0 }, { -1, 0, 1 }, { 0, -1, 1 } }
-    };
     std::vector<int> result;
     if (!isValidHex(hex)) {
         return result;
     }
     const Cube c = cubeOfPosition(hex);
-    for (const Cube& d : kDirs) {
+    for (const Cube& d : kHexDirs) {
         if (const ColRow cr = cubeToOffset(c + d);
             cr.col >= 0 && cr.col < WIDTH && cr.row >= 0 && cr.row < HEIGHT) {
             result.push_back(cr.row * WIDTH + cr.col);
         }
     }
     return result;
+}
+
+/// The direction index 0..5 of the single step from `fromHex` to the adjacent `toHex`, matching
+/// kHexDirs / hexNeighbors' order; -1 if either hex is off-grid or they are not immediate
+/// neighbours. This is the parity-independent "which way did the chain turn" primitive: it is what
+/// lets a wall-segment run condition each piece on the direction it enters and leaves a hex.
+inline int hexDirection(int fromHex, int toHex) {
+    using namespace geck::hexgrid;
+    if (!isValidHex(fromHex) || !isValidHex(toHex)) {
+        return -1;
+    }
+    const Cube delta = cubeOfPosition(toHex) - cubeOfPosition(fromHex);
+    for (int i = 0; i < 6; ++i) {
+        if (delta == kHexDirs[i]) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 namespace detail {

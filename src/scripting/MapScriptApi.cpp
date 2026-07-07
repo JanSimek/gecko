@@ -57,6 +57,12 @@ std::vector<int> MapScriptApi::hexNeighbors(int hex) const {
     return hexline::hexNeighbors(hex);
 }
 
+int MapScriptApi::hexDir(int fromHex, int toHex) const {
+    // The 0..5 step direction between adjacent hexes — the primitive a wall-segment chain uses to
+    // pick a piece that matches the way its run enters and leaves each hex.
+    return hexline::hexDirection(fromHex, toHex);
+}
+
 uint16_t MapScriptApi::getFloor(int tileIndex) const {
     const auto& tiles = _map.getMapFile().tiles;
     const auto it = tiles.find(_elevation);

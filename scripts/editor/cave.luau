@@ -2,11 +2,11 @@
 --
 -- Builds a real Fallout 2 cavern the way maps/cave1..4.map elevation 1 are built:
 --   * the whole area filled with the reference's dark solid-rock tile pattern,
---   * a walkable cavern carved through it, painted with the reference's weighted floor mix,
---   * every rock/floor boundary lined with the correctly-oriented "Cave Wall" proto variant —
---     LEARNED from the reference maps (boundary-shape mask -> wall pid; the orientation is in
---     the pid, shipped walls all use direction 0),
---   * invisible blocking hexes sealing boundary gaps the wall art doesn't cover,
+--   * a walkable cavern carved through it, painted with the reference's weighted cav* floor mix,
+--   * the floor/rock rim lined with a CONTINUOUS run of "Cave Wall" proto variants — each piece
+--     chosen by which neighbouring rim hexes it connects to, LEARNED from the shipped walls, so
+--     adjacent pieces meet along a shared edge instead of butting a horizontal against a vertical,
+--   * invisible blocking hexes sealing the rock side so the player can't walk off the floor,
 --   * a scroll-blocker rectangle ringing the cavern so the camera stays inside,
 --   * an exit-grid patch on the floor (worldmap by default) and the player start.
 --
@@ -27,7 +27,7 @@ local EXIT = args.exit or "worldmap"
 
 local TILE_W, TILE_H = 100, 100
 local EMPTY = 1 -- Map::EMPTY_TILE
--- Engine-verified blocker protos (pro_scenery.msg / pro_misc.msg names):
+-- Engine-verified blocker proto (pro_scenery.msg name):
 local SECRET_BLOCKER = api:proto("scenery", 67) -- "Secret Blocking Hex"
 local SCROLL_BLOCKER = api:proto("misc", 12) -- "Scroll Blocker"
 
@@ -37,35 +37,42 @@ print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " t
 -- Rock pattern: the caves fill unwalkable ground with a small repeating tile pattern
 -- (cave1: cav4009/cav4010 on a 2x2 lattice). Recover it as the most common tile per
 -- (row%2, col%2) parity cell; everything non-empty outside that pattern is walkable floor.
--- The tile-level boundary-shape key: which of a tile's 8 neighbours are walkable, whether the
--- tile itself is, and its grid parity (the hex layout inside a tile depends on it). The learned
--- value is the mappers' whole wall ARRANGEMENT across that tile's hexes — placing arrangements
--- per tile is what reproduces contiguous wall runs; independent per-hex picks read as rubble.
-local NEIGHBORHOOD = {
-    { -1, -1 }, { 0, -1 }, { 1, -1 },
-    { -1, 0 }, { 1, 0 },
-    { -1, 1 }, { 0, 1 }, { 1, 1 },
-}
+--
+-- Wall pieces: shipped cave walls stand in near-continuous runs along the floor/rock rim. A piece's
+-- CONNECTIVITY is fixed by which of its up-to-six neighbouring hexes also carry a wall, so we key on
+-- the sorted set of those directions — taken ONLY from walls on the walkable side of the boundary
+-- (the side we build the rim on) so every learned piece shares a consistent facing. But within one
+-- connection shape the mappers use MANY interchangeable rock-mound variants for texture (a straight
+-- run draws on 10-20 different pids), so we keep the whole per-shape distribution and sample it with
+-- the seeded rng rather than collapsing to the single modal piece — collapsing reads as a monotonous
+-- row of identical posts. Placing by shape still makes adjacent rim walls attach: each connects along
+-- the exact edge they share (direction d for one hex is d+3 for its neighbour), and every variant of
+-- a shape is one the mappers actually placed in that same context.
 
 local rockPattern = {} -- [parityKey 0..3] = tile id (from the FIRST reference)
 local floorWeights = {} -- walkable floor: { {id=..., w=...}, ... } sorted for determinism
-local wallArrangement = {} -- shape key -> { [hexSlot] = wall pid } (possibly empty = "no walls here")
+local wallPieces = {} -- dir-set key ("d,d,..") -> weighted { {pid=, w=}, ... }, sorted for determinism
+local wallPiecesAll = {} -- the same weights pooled across every shape: the fallback palette
 
--- A stable identity for each hex within its tile: the offset from the tile's naive 2x2 hex
--- anchor (offsets stay in [-1..2] around it). Indexing arrangements by tileHexes position
--- would NOT be stable — tiles carry 3..6 hexes, so a list index means different geometry on
--- different tiles and the learning votes smear.
-local function hexSlot(hex, tcol, trow)
-    local dx = hex % 200 - 2 * tcol
-    local dy = hex // 200 - 2 * trow
-    return (dx + 1) * 4 + (dy + 1)
+-- The cavern floor palette is the cav* ground tiles only; the shipped maps blend edg50xx SAND at
+-- their entrance alcoves, and counting those into the mix speckles the cave floor with sand.
+local cavTileIds = {}
+for _, id in pairs(api:tilesByPrefix("cav")) do
+    cavTileIds[id] = true
 end
+
+-- A stable key for a wall piece: the sorted directions (0..5) from its hex to the adjacent hexes
+-- that also carry a wall. Sorting makes the key traversal-order-independent — a piece connecting
+-- north+south is the same whether the run arrived from the north or the south.
+local function dirKey(dirs)
+    table.sort(dirs)
+    return table.concat(dirs, ",")
+end
+
 do
-    -- Each cave map uses its OWN rock tile pair (cave1 fills with cav4009/cav4010, others with
-    -- different ids), so rock/walkable must be classified per reference — a shared set would
-    -- count one map's rock as another map's floor and poison both the palette and the masks.
     local weightById = {}
-    local tally = {} -- key -> { [encoded arrangement] = count }
+    local connCounts = {} -- dir-set key -> { [pid] = count }
+    local pidTotals = {} -- pid -> total count, for the fallback piece
     for refIndex, ref in ipairs(REFS) do
         local floor = api:mapFloorAt(ref, REF_ELEVATION)
 
@@ -92,23 +99,19 @@ do
             isRock[bestId] = true
         end
 
-        -- Weighted walkable-floor mix: every non-empty, non-rock tile the PRIMARY reference
-        -- uses. The palette and the rock pattern must come from the same map or the cavern
-        -- floor clashes with the rock it is carved from; the other references only add wall
-        -- shapes.
+        -- Weighted walkable-floor mix: the primary reference's non-empty, non-rock, cav* tiles.
+        -- The palette and the rock pattern must come from the same map or the cavern floor clashes
+        -- with the rock it is carved from; the other references only contribute wall shapes.
         if refIndex == 1 then
             for t = 1, TILE_W * TILE_H do
                 local id = floor[t]
-                if id ~= EMPTY and not isRock[id] then
+                if id ~= EMPTY and cavTileIds[id] and not isRock[id] then
                     weightById[id] = (weightById[id] or 0) + 1
                 end
             end
         end
 
-        -- Wall arrangements: for every boundary tile (walkable or rock with at least one
-        -- walkable 8-neighbour), key its shape and record the exact wall pids the mappers put
-        -- on that tile's hexes — including "none", so shapes that usually carry no walls learn
-        -- to stay empty.
+        -- Walls on the walkable side: learn each piece's connection shape -> pid.
         local function walkableTile(t)
             if t < 0 then
                 return false
@@ -116,42 +119,23 @@ do
             local id = floor[t + 1]
             return id ~= EMPTY and not isRock[id]
         end
-
         local wallPidAt = {}
         local walls = api:mapObjectsAt(ref, REF_ELEVATION, "wall")
         for i = 1, #walls, 3 do
             wallPidAt[walls[i + 1]] = walls[i]
         end
-
-        for t = 0, TILE_W * TILE_H - 1 do
-            if floor[t + 1] ~= EMPTY then
-                local col, row = t % TILE_W, t // TILE_W
-                local selfWalkable = walkableTile(t)
-                local mask, walkableNeighbors = 0, 0
-                for n, offset in ipairs(NEIGHBORHOOD) do
-                    if walkableTile(api:tileIndex(col + offset[1], row + offset[2])) then
-                        mask += 2 ^ n
-                        walkableNeighbors += 1
+        for hex, pid in pairs(wallPidAt) do
+            if walkableTile(api:hexTile(hex)) then
+                local dirs = {}
+                for _, n in ipairs(api:hexNeighbors(hex)) do
+                    if wallPidAt[n] then
+                        table.insert(dirs, api:hexDir(hex, n))
                     end
                 end
-                local boundary = selfWalkable and walkableNeighbors < 8 or (not selfWalkable and walkableNeighbors > 0)
-                if boundary then
-                    local key = string.format("%d:%d:%d:%d", selfWalkable and 1 or 0, mask, col % 2, row % 2)
-                    local entry = tally[key]
-                    if not entry then
-                        entry = { total = 0, slots = {} }
-                        tally[key] = entry
-                    end
-                    entry.total += 1
-                    for _, hex in ipairs(api:tileHexes(t)) do
-                        local pid = wallPidAt[hex]
-                        if pid then
-                            local slot = hexSlot(hex, col, row)
-                            entry.slots[slot] = entry.slots[slot] or {}
-                            entry.slots[slot][pid] = (entry.slots[slot][pid] or 0) + 1
-                        end
-                    end
-                end
+                local key = dirKey(dirs)
+                connCounts[key] = connCounts[key] or {}
+                connCounts[key][pid] = (connCounts[key][pid] or 0) + 1
+                pidTotals[pid] = (pidTotals[pid] or 0) + 1
             end
         end
     end
@@ -160,35 +144,43 @@ do
         table.insert(floorWeights, { id = id, w = w })
     end
     table.sort(floorWeights, function(a, b) return a.id < b.id end) -- pairs() order is unspecified
-    assert(#floorWeights > 0, "no walkable floor tiles found in the reference maps")
+    assert(#floorWeights > 0, "no walkable cav* floor tiles found in the reference maps")
 
-    -- Per-slot statistics: how often the mappers put a wall on this slot of this shape, and
-    -- which variant (the modal pid). Generation replays the probabilities with the seeded rng,
-    -- so wall density and texture match the references by construction — the mappers' own
-    -- placement was part deliberate, part taste, and a hard threshold reproduces neither.
-    local shapes, walled = 0, 0
-    for key, entry in pairs(tally) do
-        local arrangement = {}
-        local any = false
-        for slot, pids in pairs(entry.slots) do
-            local bestPid, bestCount, slotCount = nil, 0, 0
-            for pid, count in pairs(pids) do
-                slotCount += count
-                if count > bestCount or (count == bestCount and pid < bestPid) then
-                    bestPid, bestCount = pid, count
-                end
-            end
-            arrangement[slot] = { pid = bestPid, p = slotCount / entry.total }
-            any = true
+    -- Turn each shape's { pid -> count } into a weighted list, sorted by pid so the seeded draw is
+    -- reproducible (pairs() order is unspecified).
+    local function weightedList(counts)
+        local list = {}
+        for pid, w in pairs(counts) do
+            table.insert(list, { pid = pid, w = w })
         end
-        wallArrangement[key] = arrangement
+        table.sort(list, function(a, b) return a.pid < b.pid end)
+        return list
+    end
+    local shapes = 0
+    for key, pids in pairs(connCounts) do
+        wallPieces[key] = weightedList(pids)
         shapes += 1
-        if any then
-            walled += 1
+    end
+    wallPiecesAll = weightedList(pidTotals) -- the fallback palette for shapes the corpus never showed
+    assert(#wallPiecesAll > 0, "no walls found on the walkable side of the reference maps")
+    print(string.format("Learned %d wall connection shapes and %d cav* floor tiles from %d reference map(s).",
+        shapes, #floorWeights, #REFS))
+end
+
+-- Weighted seeded draw from a { {pid=, w=}, ... } list (same scheme as pickFloor).
+local function pickWall(list)
+    local total = 0
+    for _, e in ipairs(list) do
+        total += e.w
+    end
+    local r = api:rng() * total
+    for _, e in ipairs(list) do
+        r -= e.w
+        if r <= 0 then
+            return e.pid
         end
     end
-    print(string.format("Learned %d boundary shapes (%d carrying walls) and %d floor tiles from %d reference map(s).",
-        shapes, walled, #floorWeights, #REFS))
+    return list[#list].pid
 end
 
 local function pickFloor()
@@ -311,74 +303,10 @@ for _ in pairs(carved) do
 end
 print(string.format("Carved %d chambers (%d walkable tiles) into the rock.", #chambers, carvedCount))
 
--- ============================ walls + blockers ================================
--- Walk every boundary tile of the carved cavern, key its shape exactly like the learning pass,
--- and replay the mappers' wall arrangement onto the same hex slots. A rock-side boundary tile
--- whose shape was never seen gets invisible blocking hexes instead, like the shipped maps'
--- Secret Blocking Hex seals — sealed is safe, bare is a hole in the cave wall.
-local boundaryTiles = {} -- ascending, for deterministic placement
-do
-    local seen = {}
-    for t in pairs(carved) do
-        local col, row = t % TILE_W, t // TILE_W
-        for row2 = row - 1, row + 1 do
-            for col2 = col - 1, col + 1 do
-                local t2 = api:tileIndex(col2, row2)
-                if t2 >= 0 and not seen[t2] then
-                    seen[t2] = true
-                    table.insert(boundaryTiles, t2)
-                end
-            end
-        end
-    end
-    table.sort(boundaryTiles)
-end
-
-local pidBlocksCache = {}
-local function wallBlocks(pid)
-    if pidBlocksCache[pid] == nil then
-        pidBlocksCache[pid] = api:protoBlocks(pid)
-    end
-    return pidBlocksCache[pid]
-end
-
-local walls, unmatched = 0, 0
-local blockedHex = {} -- hexes already sealed by a movement-blocking wall
-for _, t in ipairs(boundaryTiles) do
-    local col, row = t % TILE_W, t // TILE_W
-    local selfWalkable = carved[t] == true
-    local mask, walkableNeighbors = 0, 0
-    for n, offset in ipairs(NEIGHBORHOOD) do
-        local t2 = api:tileIndex(col + offset[1], row + offset[2])
-        if t2 >= 0 and carved[t2] then
-            mask += 2 ^ n
-            walkableNeighbors += 1
-        end
-    end
-    local boundary = selfWalkable and walkableNeighbors < 8 or (not selfWalkable and walkableNeighbors > 0)
-    if boundary then
-        local key = string.format("%d:%d:%d:%d", selfWalkable and 1 or 0, mask, col % 2, row % 2)
-        local arrangement = wallArrangement[key]
-        if arrangement then
-            for _, hex in ipairs(api:tileHexes(t)) do
-                local slot = arrangement[hexSlot(hex, col, row)]
-                if slot and api:rng() < slot.p and api:placeProto(slot.pid, hex, 0) then
-                    walls += 1
-                    if wallBlocks(slot.pid) then
-                        blockedHex[hex] = true
-                    end
-                end
-            end
-        elseif not selfWalkable then
-            unmatched += 1
-        end
-    end
-end
-
--- Seal the cavern: every rock hex bordering a walkable hex gets an invisible blocker unless a
--- blocking wall already stands there. The wall art alone leaves walk-through gaps (the shipped
--- caves carry hundreds of Secret Blocking Hexes for exactly this reason) — without the seal the
--- player strolls off the floor into the solid rock.
+-- ============================ wall ring =======================================
+-- The wall ring sits on the floor-side contour: every walkable hex that touches rock. Each hex's
+-- piece is chosen by the set of directions to its neighbouring contour hexes, so the whole rim is
+-- one continuous run of matched pieces (no gaps, no horizontal-butting-a-vertical joins).
 local hexTileCache = {}
 local function carvedHex(hex)
     local t = hexTileCache[hex]
@@ -388,28 +316,63 @@ local function carvedHex(hex)
     end
     return t >= 0 and carved[t] == true
 end
-local blockers = 0
-for _, t in ipairs(boundaryTiles) do
-    if not carved[t] then
-        for _, hex in ipairs(api:tileHexes(t)) do
-            if not blockedHex[hex] then
-                local touchesFloor = false
-                for _, n in ipairs(api:hexNeighbors(hex)) do
-                    if carvedHex(n) then
-                        touchesFloor = true
-                        break
-                    end
+
+-- Floor-side contour: walkable hexes with at least one non-walkable neighbour.
+local contour = {}
+local contourList = {}
+for t in pairs(carved) do
+    for _, hex in ipairs(api:tileHexes(t)) do
+        if contour[hex] == nil then
+            local onRim = false
+            for _, n in ipairs(api:hexNeighbors(hex)) do
+                if not carvedHex(n) then
+                    onRim = true
+                    break
                 end
-                if touchesFloor and api:placeProto(SECRET_BLOCKER, hex, 0) then
-                    blockedHex[hex] = true
+            end
+            if onRim then
+                contour[hex] = true
+                table.insert(contourList, hex)
+            end
+        end
+    end
+end
+table.sort(contourList) -- deterministic placement order
+
+local walls = 0
+for _, hex in ipairs(contourList) do
+    local dirs = {}
+    for _, n in ipairs(api:hexNeighbors(hex)) do
+        if contour[n] then
+            table.insert(dirs, api:hexDir(hex, n))
+        end
+    end
+    local pid = pickWall(wallPieces[dirKey(dirs)] or wallPiecesAll)
+    if api:placeProto(pid, hex, 0) then
+        walls += 1
+    end
+end
+
+-- Seal the rock side: every rock hex bordering a walkable hex gets an invisible blocker. The wall
+-- art stands on the walkable side and does not by itself stop the engine walking onto the rock —
+-- the shipped caves carry hundreds of Secret Blocking Hexes for exactly this. Without the seal the
+-- player strolls off the floor into solid rock (and reachability floods the whole grid).
+local sealed = {}
+local blockers = 0
+for t in pairs(carved) do
+    for _, hex in ipairs(api:tileHexes(t)) do
+        for _, n in ipairs(api:hexNeighbors(hex)) do
+            if not sealed[n] and not carvedHex(n) then
+                if api:placeProto(SECRET_BLOCKER, n, 0) then
+                    sealed[n] = true
                     blockers += 1
                 end
             end
         end
     end
 end
-print(string.format("Placed %d walls (%d boundary shapes unseen) and sealed the rim with %d blocking hexes.",
-    walls, unmatched, blockers))
+print(string.format("Lined the rim with %d walls (%d contour hexes) and sealed the rock side with %d blocking hexes.",
+    walls, #contourList, blockers))
 
 -- ============================ scroll blockers =================================
 -- Ring the cavern with a screen-space rectangle of scroll blockers, the way every shipped map

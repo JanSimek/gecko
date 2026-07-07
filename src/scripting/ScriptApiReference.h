@@ -14,6 +14,7 @@ namespace geck {
     /* Queries (no mutation) */                                                                                                                                             \
     X(isValidHex, "(hex) -> bool", "Is hex an on-grid hex index (0..39999)?")                                                                                               \
     X(hexNeighbors, "(hex) -> {hex,...}", "The up-to-6 on-grid neighbour hexes.")                                                                                           \
+    X(hexDir, "(fromHex, toHex) -> int", "Direction 0..5 of the step from fromHex to an adjacent toHex (hexNeighbors' order); -1 if not neighbours.")                       \
     X(getFloor, "(tileIndex) -> tileId", "Floor tile id at a tile index (EMPTY_TILE if out of range).")                                                                     \
     X(getRoof, "(tileIndex) -> tileId", "Roof tile id at a tile index.")                                                                                                    \
     X(getFloorXY, "(col, row) -> tileId", "Floor tile id at a tile (col, row).")                                                                                            \

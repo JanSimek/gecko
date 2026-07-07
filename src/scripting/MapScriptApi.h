@@ -61,6 +61,8 @@ public:
     bool isValidHex(int hex) const;
     /// The up-to-6 on-grid hex neighbours (cube-coordinate, parity-correct).
     std::vector<int> hexNeighbors(int hex) const;
+    /// The 0..5 direction of the step from `fromHex` to an adjacent `toHex`; -1 if not neighbours.
+    int hexDir(int fromHex, int toHex) const;
     /// Floor/roof tile id at `tileIndex` on this elevation, or EMPTY_TILE if out of range.
     uint16_t getFloor(int tileIndex) const;
     uint16_t getRoof(int tileIndex) const;
