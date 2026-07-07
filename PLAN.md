@@ -520,8 +520,10 @@ The direction instead:
    they respect the plan sink and undo batching. (`hexNeighbors` already covered the neighbour
    query.) Also fixed: the run's resolved seed now seeds `api:rng()`/`rngInt()` in every host
    (LuaScriptRuntime), not just the GUI fill preview.
-10. **Biome script library** — `cave.luau`, `town.luau`, `coast.luau` beside the desert one; each
-    a worked example. Expand the `scripts/README.md` table.
+10. **Biome script library** — `cave.luau` **shipped** (the worked example of the region/fill
+    helpers: chambers + corridors via `fillFloorRect`, `fillRegion` connectivity repair,
+    `tilesByPrefix` family retexture). `town.luau` and `coast.luau` remain; expand the
+    `scripts/README.md` table as they land.
 11. ~~**Batch generation**~~ — **DONE.** `--count N` (CLI) / `count` (MCP): the script runs once
     per map against a fresh copy (empty or `--in`), writing `<out>_1.map`…`<out>_N.map` with
     consecutive seeds from the base (`--arg seed=N` or a reported random base), so the batch
