@@ -118,6 +118,12 @@ public:
     /// The proto's art FID (what placeProto resolves and stores) — lets a generator identify a
     /// proto's art via resolve_fid. Raises when the proto can't be loaded (like protoBlocks).
     int protoFid(int pid) const;
+    /// Every frame of the proto's art as flat (direction, frame, width, height, offsetX, offsetY)
+    /// 6-tuples — the same geometry `frm info` reports, in the flattened-tuple style of mapObjectsAt.
+    /// Lets a generator read a piece's real footprint (e.g. advance a boundary walk by dir-0/frame-0
+    /// width to tile wall art gap-free) or its per-frame anchor offsets, without a one-off accessor
+    /// per field. Raises when the proto or its FRM can't be resolved (like protoBlocks).
+    std::vector<int> protoArtFrames(int pid) const;
     /// Every map file in the mounted data (VFS paths, e.g. "maps/desert1.map"), sorted. Lets a
     /// generator pick a reference map at random when none was given.
     std::vector<std::string> listMaps() const;

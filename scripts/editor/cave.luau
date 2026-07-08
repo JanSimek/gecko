@@ -4,11 +4,10 @@
 --   * the whole area filled with the reference's dark solid-rock tile pattern,
 --   * a walkable cavern carved through it, painted with the reference's pervasive cav* FIELD tiles
 --     (rare border/transition tiles like cav4013 and the entrance sand are kept out of the mix),
---   * the floor/rock rim lined with a CONTINUOUS run of "Cave Wall" FACE variants — only the
---     standing faces, never the OBJECT_FLAT rock-fill art the same family carries — each chosen by
---     its OUTWARD NORMAL (the direction to the rock it fronts), LEARNED from the shipped walls, so
---     the isometric view gets rock faces on the north/east rim and filled tops on the south/west
---     instead of one texture butted against another,
+--   * the floor/rock boundary lined with a gap-free run of "Cave Wall" faces — a wall on every
+--     contour hex, each chosen by the boundary's SMOOTHED outward normal so the isometric view gets
+--     standing rock faces on the north/east rim and filled tops on the south/west, without a
+--     filled-top piece flickering into the middle of a face run where the 1-hex rim wobbles,
 --   * invisible blocking hexes sealing the rock side so the player can't walk off the floor,
 --   * a scroll-blocker rectangle ringing the cavern so the camera stays inside,
 --   * an exit-grid patch on the floor (worldmap by default) and the player start.
@@ -41,17 +40,17 @@ print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " t
 -- (cave1: cav4009/cav4010 on a 2x2 lattice). Recover it as the most common tile per
 -- (row%2, col%2) parity cell; everything non-empty outside that pattern is walkable floor.
 --
--- Wall pieces: which "Cave Wall" FACE art a rim hex takes is fixed by its OUTWARD NORMAL — the
--- direction to the solid rock it fronts — because the isometric view shows different things on
--- different sides. On the north/east rim the rock rises behind the floor and you see its FACE
--- (ca002/ca022/ca027-style rock walls); on the south/west rim you look over the near lip and see
--- the flat FILLED TOP of the rock (ca055/ca060/ca062-style). So we key each face on the sorted set
--- of directions to its rock neighbours, learned from the walkable-side contour faces of the shipped
--- maps — mixing the two would butt a rock face against a filled top. Within one orientation the
--- mappers use many interchangeable variants for texture, so we keep the whole per-key distribution
--- and sample it with the seeded rng rather than collapsing to the modal piece (which reads as a
--- monotonous repeat). Every variant of a key is one the mappers placed at that same orientation, so
--- a run stays a continuous same-texture wall.
+-- Wall pieces: which "Cave Wall" art a boundary hex takes is fixed by its OUTWARD-NORMAL COMPASS
+-- CLASS — the screen direction the solid rock lies in — because the isometric view shows different
+-- things on different sides. On the north/east rim the rock rises behind the floor and you see its
+-- FACE (ca002/ca022/ca027-style rock walls); on the south/west rim you look over the near lip and
+-- see the flat FILLED TOP of the rock (ca055/ca060/ca062-style). So we bin each hex's rock direction
+-- into one of eight compass classes and learn a palette per class from the shipped contours. Within
+-- a class the mappers use many interchangeable variants for texture, so we keep the whole per-class
+-- distribution and sample it with the seeded rng rather than collapsing to the modal piece (which
+-- reads as a monotonous repeat). At placement the class comes from the boundary's SMOOTHED normal
+-- (see the wall-ring section), so the family only turns where the boundary does — a face run stays a
+-- continuous run of faces, a top run stays tops.
 
 local rockPattern = {} -- [parityKey 0..3] = tile id (from the FIRST reference)
 local floorWeights = {} -- walkable floor: { {id=..., w=...}, ... } sorted for determinism
@@ -83,11 +82,34 @@ local function isFlatWall(pid)
     return flatCache[pid]
 end
 
--- A stable key from a set of hex directions (0..5): sorted and joined, so it is order-independent.
--- Used for a wall's OUTWARD NORMAL — the directions to the solid rock it fronts.
-local function dirKey(dirs)
-    table.sort(dirs)
-    return table.concat(dirs, ",")
+-- Screen unit vector (x right+, y down+) of each cube hex direction, derived from the engine's
+-- HexagonGrid hex->pixel formula. The grid is anisotropic (16x12), so the six directions are NOT
+-- evenly spaced in screen angle — these exact vectors are what let us read a hex's outward normal.
+local DIR_VEC = {
+    [0] = { -16, 12 }, [1] = { -32, 0 }, [2] = { -16, -12 },
+    [3] = { 16, -12 }, [4] = { 32, 0 }, [5] = { 16, 12 },
+}
+local COMPASS = { "E", "NE", "N", "NW", "W", "SW", "S", "SE" } -- 45-degree bins, 0=E going CCW
+
+-- A wall hex's OUTWARD-NORMAL compass class: the screen direction the summed rock-direction vectors
+-- point (the way the solid rock lies). This is a far sharper predictor of which "Cave Wall" art the
+-- mappers used than the raw rock-direction set — rock up-screen (N/NE) shows a standing FACE, rock
+-- down-screen (S/SW) shows the filled TOP, so the class picks the family. Screen y is DOWN, so North
+-- is -y.
+local function compassOf(dirs)
+    local vx, vy = 0, 0
+    for _, d in ipairs(dirs) do
+        vx += DIR_VEC[d][1]
+        vy += DIR_VEC[d][2]
+    end
+    if vx == 0 and vy == 0 then
+        return "-"
+    end
+    local ang = math.deg(math.atan2(-vy, vx))
+    if ang < 0 then
+        ang += 360
+    end
+    return COMPASS[math.floor((ang + 22.5) / 45) % 8 + 1]
 end
 
 do
@@ -132,10 +154,10 @@ do
             end
         end
 
-        -- Wall FACES on the walkable side: learn each by its outward normal -> pid. Flat fill pieces
-        -- are skipped entirely (they are not part of the boundary run). A face's key is the set of
-        -- directions to its ROCK neighbours (the side it fronts), so the north/east and south/west
-        -- rims each learn their own texture family.
+        -- Learn each boundary wall by its OUTWARD-NORMAL compass class, on the walkable-side contour.
+        -- The contour carries the whole rim: standing FACES where the rock is up-screen (N/E), filled
+        -- TOPS where it is down-screen (S/W). OBJECT_FLAT rock-fill art (block-carpet over solid
+        -- ground) is skipped — it is not a boundary piece.
         local function walkableHex(hex)
             local t = api:hexTile(hex)
             if t < 0 then
@@ -160,9 +182,9 @@ do
                         table.insert(rockDirs, api:hexDir(hex, n))
                     end
                 end
-                -- Only contour faces (those actually fronting rock) teach the rim palette.
-                if #rockDirs > 0 then
-                    local key = dirKey(rockDirs)
+                -- Contour hexes only (front some rock, but are not a fully-enclosed pocket).
+                if #rockDirs > 0 and #rockDirs < 6 then
+                    local key = compassOf(rockDirs)
                     normalCounts[key] = normalCounts[key] or {}
                     normalCounts[key][pid] = (normalCounts[key][pid] or 0) + 1
                     pidTotals[pid] = (pidTotals[pid] or 0) + 1
@@ -203,8 +225,13 @@ do
     end
     wallPiecesAll = weightedList(pidTotals) -- the fallback palette for orientations the corpus never showed
     assert(#wallPiecesAll > 0, "no walls found on the walkable side of the reference maps")
-    print(string.format("Learned %d wall orientations and %d cav* floor tiles from %d reference map(s).",
+    print(string.format("Learned %d wall classes and %d cav* floor tiles from %d reference map(s).",
         orientations, #floorWeights, #REFS))
+end
+
+-- The wall palette for an outward-normal compass class, the global pool as a last resort.
+local function wallListFor(comp)
+    return wallPieces[comp] or wallPiecesAll
 end
 
 -- Weighted seeded draw from a { {pid=, w=}, ... } list (same scheme as pickFloor).
@@ -343,11 +370,14 @@ for _ in pairs(carved) do
 end
 print(string.format("Carved %d chambers (%d walkable tiles) into the rock.", #chambers, carvedCount))
 
--- ============================ wall ring =======================================
--- The wall ring sits on the floor-side contour: every walkable hex that touches rock. Each hex's
--- piece is chosen by its OUTWARD NORMAL — the set of directions to the rock it fronts — so each side
--- gets the texture the isometric view calls for (rock faces on the north/east rim, filled tops on
--- the south/west) and a run stays one continuous same-texture wall.
+-- ============================ wall ring (ordered boundary walk) ===============
+-- The rim is laid by walking the cavern boundary as an ordered loop and placing a wall on EVERY
+-- contour hex, so the run is gap-free by construction. Each hex's piece is chosen by the boundary's
+-- SMOOTHED outward normal at that point — the compass direction of the rock over a short window of
+-- the walk, not the single hex's own jagged rock-direction set. Smoothing is what stops a lone hex
+-- whose local normal wobbles from grabbing a filled-top piece in the middle of a rock-face run (or
+-- vice versa): a face run stays faces and a top run stays tops because the class only turns where
+-- the boundary itself turns.
 local hexTileCache = {}
 local function carvedHex(hex)
     local t = hexTileCache[hex]
@@ -358,40 +388,149 @@ local function carvedHex(hex)
     return t >= 0 and carved[t] == true
 end
 
--- Floor-side contour: walkable hexes with at least one non-walkable neighbour.
-local contour = {}
-local contourList = {}
+-- dir -> neighbour hex, cached; a missing direction is off-grid, which counts as rock (boundary).
+local nbrCache = {}
+local function dirNeighbor(hex, d)
+    local m = nbrCache[hex]
+    if m == nil then
+        m = {}
+        for _, n in ipairs(api:hexNeighbors(hex)) do
+            m[api:hexDir(hex, n)] = n
+        end
+        nbrCache[hex] = m
+    end
+    return m[d]
+end
+local function rockAt(hex, d)
+    local n = dirNeighbor(hex, d)
+    return n == nil or not carvedHex(n)
+end
+local function rockDirsAt(hex)
+    local r = {}
+    for d = 0, 5 do
+        if rockAt(hex, d) then
+            table.insert(r, d)
+        end
+    end
+    return r
+end
+
+-- Hex screen position (engine HexagonGrid formula, constant terms dropped), for the boundary tangent.
+local function hexScreen(hex)
+    local col, row = api:hexCol(hex), api:hexRow(hex)
+    local odd = col % 2
+    return 16 * row - 24 * col - 8 * odd, 12 * row + 6 * col - 6 * odd
+end
+
+-- The outward-normal compass class of boundary hex `seq[i]`, SMOOTHED over a short window of the walk.
+-- The boundary tangent is the screen vector across the window; the outward normal is its perpendicular,
+-- oriented to agree with the hex's own rock side. Reading the class off this smoothed normal instead of
+-- the single hex's rock-direction set is what keeps a face run from flickering into a filled-top piece
+-- (and back) where the 1-hex rim wobbles.
+local SMOOTH_WINDOW = 3
+local function smoothedCompass(seq, i)
+    local n = #seq
+    local rockDirs = rockDirsAt(seq[i])
+    if n < 3 then
+        return compassOf(rockDirs)
+    end
+    local function at(j) return seq[math.max(1, math.min(n, j))] end
+    local ax, ay = hexScreen(at(i - SMOOTH_WINDOW))
+    local bx, by = hexScreen(at(i + SMOOTH_WINDOW))
+    local tx, ty = bx - ax, by - ay
+    if tx == 0 and ty == 0 then
+        return compassOf(rockDirs)
+    end
+    -- Sum this hex's rock directions to know which perpendicular of the tangent points at the rock.
+    local rx, ry = 0, 0
+    for _, d in ipairs(rockDirs) do
+        rx += DIR_VEC[d][1]
+        ry += DIR_VEC[d][2]
+    end
+    local nx, ny = ty, -tx
+    if nx * rx + ny * ry < 0 then
+        nx, ny = -nx, -ny
+    end
+    local ang = math.deg(math.atan2(-ny, nx))
+    if ang < 0 then
+        ang += 360
+    end
+    return COMPASS[math.floor((ang + 22.5) / 45) % 8 + 1]
+end
+
+-- Next directed boundary edge, keeping the walkable interior on the left so one walk closes the loop
+-- (rotate the outward normal CCW; if that side is still rock the boundary bends around this hex,
+-- otherwise step into the walkable neighbour there). Verified to close and cover 100% of a shipped
+-- cavern's contour.
+local function nextEdge(h, d)
+    local nd = (d + 5) % 6
+    if rockAt(h, nd) then
+        return h, nd
+    end
+    return dirNeighbor(h, nd), (d + 1) % 6
+end
+
+-- One seed boundary edge per contour hex (enough to reach every loop); deterministic order.
+local seedByHex = {}
+local seeds = {}
 for t in pairs(carved) do
     for _, hex in ipairs(api:tileHexes(t)) do
-        if contour[hex] == nil then
-            local onRim = false
-            for _, n in ipairs(api:hexNeighbors(hex)) do
-                if not carvedHex(n) then
-                    onRim = true
-                    break
-                end
-            end
-            if onRim then
-                contour[hex] = true
-                table.insert(contourList, hex)
+        if seedByHex[hex] == nil then
+            local rd = rockDirsAt(hex)
+            if #rd > 0 and #rd < 6 then
+                seedByHex[hex] = rd[1]
+                table.insert(seeds, hex)
             end
         end
     end
 end
-table.sort(contourList) -- deterministic placement order
+table.sort(seeds)
+
+local visitedEdge = {}
+local function edgeKey(h, d)
+    return h * 6 + d
+end
 
 local walls = 0
-for _, hex in ipairs(contourList) do
-    local rockDirs = {}
-    for _, n in ipairs(api:hexNeighbors(hex)) do
-        if not carvedHex(n) then
-            table.insert(rockDirs, api:hexDir(hex, n))
+local placedHex = {}
+local function placeWall(hex, comp)
+    if not placedHex[hex] then
+        placedHex[hex] = true
+        if api:placeProto(pickWall(wallListFor(comp)), hex, 0) then
+            walls += 1
         end
     end
-    local pid = pickWall(wallPieces[dirKey(rockDirs)] or wallPiecesAll)
-    if api:placeProto(pid, hex, 0) then
-        walls += 1
+end
+
+for _, startHex in ipairs(seeds) do
+    if not visitedEdge[edgeKey(startHex, seedByHex[startHex])] then
+        -- Trace this loop into an ordered, consecutive-deduped hex sequence.
+        local seq = {}
+        local h, d = startHex, seedByHex[startHex]
+        local guard = 0
+        repeat
+            local k = edgeKey(h, d)
+            if visitedEdge[k] then
+                break
+            end
+            visitedEdge[k] = true
+            if seq[#seq] ~= h then
+                table.insert(seq, h)
+            end
+            h, d = nextEdge(h, d)
+            guard += 1
+        until h == nil or not carvedHex(h) or guard > 200000
+
+        -- A wall on every hex of the loop, each classed by the smoothed outward normal.
+        for i = 1, #seq do
+            placeWall(seq[i], smoothedCompass(seq, i))
+        end
     end
+end
+-- Safety net against gaps: any contour hex the walk did not thread onto a loop still gets a wall,
+-- classed by its own rock directions. (The walk covers whole loops, but a one-hex spur can be missed.)
+for _, hex in ipairs(seeds) do
+    placeWall(hex, compassOf(rockDirsAt(hex)))
 end
 
 -- Seal the rock side: every rock hex bordering a walkable hex gets an invisible blocker. The wall
@@ -413,7 +552,7 @@ for t in pairs(carved) do
     end
 end
 print(string.format("Lined the rim with %d walls (%d contour hexes) and sealed the rock side with %d blocking hexes.",
-    walls, #contourList, blockers))
+    walls, #seeds, blockers))
 
 -- ============================ scroll blockers =================================
 -- Ring the cavern with a screen-space rectangle of scroll blockers, the way every shipped map

@@ -21,6 +21,7 @@
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
 #include "format/msg/Msg.h"
+#include "format/frm/Frm.h"
 #include "format/pro/Pro.h"
 #include "editor/TileChange.h"
 #include "pattern/FillPlan.h"
@@ -447,6 +448,45 @@ int MapScriptApi::protoFid(int pid) const {
             static_cast<uint32_t>(pid)));
     }
     return pro->header.FID;
+}
+
+std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
+    // Resolve the proto -> its art FID -> the FRM, the same path placeProto and the renderer take,
+    // and flatten every frame's geometry into (direction, frame, width, height, offsetX, offsetY)
+    // 6-tuples. Same hard-fail contract as protoFid: an unresolvable proto or FRM is raised, never
+    // guessed, because a caller measuring art footprints can't recover from a silent wrong answer.
+    const int fid = protoFid(pid); // raises if the proto can't load
+    const std::string artPath = _resources.frmResolver().resolve(static_cast<uint32_t>(fid));
+    if (artPath.empty()) {
+        throw ScriptError(std::format("proto 0x{:08x} art (fid 0x{:08x}) does not resolve to an FRM path",
+            static_cast<uint32_t>(pid), static_cast<uint32_t>(fid)));
+    }
+    const Frm* frm = nullptr;
+    try {
+        frm = _resources.repository().load<Frm>(artPath);
+    } catch (const std::exception&) {
+        frm = nullptr;
+    }
+    if (frm == nullptr || frm->directions().empty()) {
+        throw ScriptError(std::format("proto 0x{:08x} art '{}' has no renderable frame",
+            static_cast<uint32_t>(pid), artPath));
+    }
+    std::vector<int> out;
+    const auto& directions = frm->directions();
+    for (int d = 0; d < static_cast<int>(directions.size()); ++d) {
+        const auto& frames = directions[d].frames();
+        out.reserve(out.size() + frames.size() * 6);
+        for (int f = 0; f < static_cast<int>(frames.size()); ++f) {
+            const Frame& frame = frames[f];
+            out.push_back(d);
+            out.push_back(f);
+            out.push_back(frame.width());
+            out.push_back(frame.height());
+            out.push_back(frame.offsetX());
+            out.push_back(frame.offsetY());
+        }
+    }
+    return out;
 }
 
 void MapScriptApi::beginBatch(const std::string& description) {
