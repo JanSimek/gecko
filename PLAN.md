@@ -503,14 +503,42 @@ The direction instead:
    (vault doors, cars), because choosing *what* is scatter-able is semantic, not statistical. The
    reliable path is **curated palettes** + an MCP agent's judgment; the histogram lives on as an
    *analysis* tool, not the generator.
-7. **Enclosures / autowalling + roofs.** — **Cave autowalling SHIPPED** as learned wall replay:
-   `cave.luau` keys every boundary tile's 8-neighbour walkability shape (+ parity) and replays
-   the wall arrangements the shipped cave maps use for that shape (per-hex-slot modal pid at its
-   empirical probability), through the new `mapFloorAt`/`mapObjectsAt`/`hexTile`/`tileHexes`
-   primitives — no hand-authored wall tables, orientation lives in the learned pid. The rim is
-   sealed with Secret-Blocking-Hex fills (verified: the cavern's reachable set is exactly its
-   floor). **Remaining:** town/building walls (straight `Wall s.t.` runs + door openings differ
-   from organic cave rims) and generating a **roof** layer for enclosed areas.
+7. **Enclosures / autowalling + roofs.** — **Cave autowalling SHIPPED, but the wall run still needs
+   improvement.** `cave.luau` now generates the cavern as a smooth **metaball field** (chambers =
+   radial sources, corridors = line sources; walkable interior = the field-≥1 isocontour, noise-warped
+   for organic erosion, flood-filled so no stray pockets) and lines the rim with a dense 2-cell **wall
+   band** — every hex that straddles the isocontour, classed by the field **gradient** (outward normal
+   → compass class), drawing each piece from a per-orientation palette *learned* from the shipped cave
+   maps (`mapFloorAt`/`mapObjectsAt`/`hexTile`/`tileHexes`/`protoFlat`, faces only). This fixed the
+   **shape** ceiling — smooth curves at hex resolution, no tile stair-steps, gap-free (history:
+   learned tile-mask replay → connection-shape → compass class → smoothed-normal 2-cell band → metaball
+   field). Rim sealed with Secret-Blocking-Hex fills (reachable set == floor), scroll-blocker ring,
+   exit patch + player start; deterministic, reachability-verified.
+
+   ⚠️ **Not good enough yet — piece SELECTION is still statistical.** Each rim hex samples a *learned
+   per-compass palette independently*, so neighbouring pieces don't actually **connect**: up close the
+   run shows mismatched faces, no true convex/concave **corners**, and the fill/face families
+   occasionally butt against each other. The compass class + gradient smoothing hide most of it, but
+   the rim never reads as the single continuous, correctly-cornered rock wall the hand-authored caves
+   have.
+
+   ➡️ **Next: an authored wall-ADJACENCY model (Wang / edge-constraint tiling), not per-hex sampling.**
+   Give each "Cave Wall" proto an explicit **connection signature** — *which* pieces may attach on its
+   left/right along the run, which pieces are straight segments for each orientation, which are
+   **corners** (convex vs concave, and for which turn direction), which are run *ends/caps*. Then lay
+   the rim as a **constraint-satisfying sequence** around the 1-D boundary loop (Wang tiling / a small
+   WFC along the contour): pick each next piece only from those allowed to follow the previous piece
+   *and* to match the local turn angle, instead of independent draws. Derive the signatures by
+   **mining adjacency from the shipped cave rims** — which piece actually follows which, and at what
+   turn, via `mapObjectsAt` + the ordered-boundary walk — and/or a small hand-authored table keyed by
+   proto. Shares the **adjacency/Wang** machinery with the floor-tile autotiling in P2 §4. This is the
+   path from "smooth but fuzzy" to "reads as a real, cornered rock wall".
+
+   **Also remaining (content, complementary):** rim **scenery** (shipped caves scatter ~70
+   Rocks/Stalagmites; the generator places 0) and **stamped rock formations** (extract real multi-hex
+   formations from `cave1..4` via `extract-pattern`/`placeStamp`) to reuse authored composition;
+   **town/building** walls (straight `Wall s.t.` runs + door openings differ from organic cave rims);
+   and generating a **roof** layer for enclosed areas.
 
 ### P3 — Reach & tooling
 
