@@ -1,9 +1,7 @@
 #pragma once
 
-#include <cstdint>
 #include <iosfwd>
 #include <string>
-#include <vector>
 
 namespace geck {
 namespace resource {
@@ -32,23 +30,11 @@ namespace cli {
     ///
     /// Emits a JSON object to `out`; returns 0 on success, nonzero with a message on a hard error
     /// (map fails to load).
+    ///
+    /// The flood-fill itself lives in `geck::reachability` (gecko_core) so this serializer and the
+    /// editor's "unreachable areas" overlay share one implementation; this function only shapes that
+    /// result into JSON.
     int analyzeReachability(resource::GameResources& resources, const ReachabilityOptions& options, std::ostream& out);
-
-    // --- Pure helpers, exposed for testing (no game data needed) ---
-
-    /// The engine's instance-flag movement-blocking rule (fallout2-ce `_obj_blocking_at`): a
-    /// CRITTER/SCENERY/WALL object that is neither `OBJECT_HIDDEN` nor `OBJECT_NO_BLOCK` in its
-    /// per-instance `flags`. Items, misc and tiles never block. (Doors, though scenery, are handled
-    /// separately as passable.)
-    bool blocksMovementByInstance(uint32_t objectType, uint32_t flags);
-
-    /// The up-to-6 parity-correct neighbour positions of a hex (empty if `hex` is off-grid).
-    std::vector<int> hexNeighbors(int hex);
-
-    /// Connected components of the WIDTH*HEIGHT hex grid given a `blocked` mask (1 = impassable).
-    /// Returns a component id per hex (-1 for blocked hexes); `sizes[id]` is each component's hex
-    /// count and `samples[id]` is one representative hex in it.
-    std::vector<int> hexComponents(const std::vector<char>& blocked, std::vector<int>& sizes, std::vector<int>& samples);
 
 } // namespace cli
 } // namespace geck

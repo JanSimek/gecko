@@ -24,6 +24,7 @@ struct VisibilitySettings {
     bool showExitGrids = false;
     bool showSpatialScripts = false;
     bool showMapEdges = false;
+    bool showUnreachable = false;
     // Merge touching same-category selected objects into one union outline (vs. one per object).
     bool mergeSelectionOutlines = true;
 };

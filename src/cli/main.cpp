@@ -71,7 +71,7 @@ void printUsage(const char* program) {
               << "      pattern stamp the script places with api:placeStamp(name, anchorHex, variant).\n"
               << "  " << program << " map render --map <file.map> --out <file.png>\n"
               << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic|--objects|--semantic]\n"
-              << "      [--show-blockers] [--full] --data <dir-or-.dat> [...]\n"
+              << "      [--show-blockers] [--show-unreachable] [--full] --data <dir-or-.dat> [...]\n"
               << "      Renders a map to a PNG (needs an off-screen GL context). --max-dim caps the\n"
               << "      longest side (default 1600); --roof draws the roof layer over the floor; --full\n"
               << "      frames the whole iso grid (the full playable area) instead of cropping to content.\n"
@@ -79,6 +79,8 @@ void printUsage(const char* program) {
               << "      colour legend); --objects mutes the floor to grey so the object markers pop\n"
               << "      (for checking scatter); --semantic greys the floor and colours markers by role\n"
               << "      (exit grids, critters by team, scripted ringed); --show-blockers also marks FLAT.\n"
+              << "      --show-unreachable (natural style) shades hexes cut off from the player start and\n"
+              << "      every exit grid, the visual form of `map reachability`.\n"
               << "  " << program << " map extract-pattern --map <file.map> --out <file.json> --name <name>\n"
               << "      [--pids id,id,...] [--anchor <hex>] [--radius N] [--elevation 0|1|2]\n"
               << "      [--include-floor] [--include-roof] --data <dir-or-.dat> [--data <...>]\n"
@@ -358,6 +360,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     }
     if (out.render && arg == "--exit-dots") {
         out.ren.exitDots = true;
+        return 1;
+    }
+    if (out.render && arg == "--show-unreachable") {
+        out.ren.showUnreachable = true;
         return 1;
     }
     if (out.render) {

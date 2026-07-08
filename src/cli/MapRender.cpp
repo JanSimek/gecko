@@ -48,6 +48,7 @@ int renderMap(resource::GameResources& resources, const RenderOptions& options, 
     renderOptions.showBlockers = options.showBlockers;
     renderOptions.fullExtent = options.fullExtent;
     renderOptions.exitDots = options.exitDots;
+    renderOptions.showUnreachable = options.showUnreachable;
     renderOptions.style = options.semantic ? MapRenderer::Style::Semantic
         : options.objects                  ? MapRenderer::Style::Objects
         : options.schematic                ? MapRenderer::Style::Schematic

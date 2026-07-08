@@ -48,6 +48,7 @@
 #include "util/Coordinates.h"
 
 #include "editor/Object.h"
+#include "editor/Reachability.h"
 #include "pattern/PatternStamper.h"
 #include "pattern/PatternSprite.h"
 #include "editor/HexagonGrid.h"
@@ -1405,6 +1406,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     visibility.showExitGrids = _session.visibility().showExitGrids;
     visibility.showSpatialScripts = _session.visibility().showSpatialScripts;
     visibility.showMapEdges = _session.visibility().showMapEdges;
+    visibility.showUnreachable = _session.visibility().showUnreachable;
     visibility.mergeSelectionOutlines = _session.visibility().mergeSelectionOutlines;
 
     RenderingEngine::RenderData renderData;
@@ -1438,6 +1440,12 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.playerPositionHex = _session.map() ? static_cast<int>(_session.map()->getMapFile().header.player_default_position) : -1;
     renderData.map = _session.map();
     renderData.currentElevation = _session.currentElevation();
+    // Unreachable-areas overlay: only compute (and only point RenderData at the cache) while the
+    // toggle is on, so a map with the overlay off pays nothing.
+    if (_session.visibility().showUnreachable) {
+        refreshUnreachableOverlay();
+        renderData.unreachableHexes = &_unreachableHexes;
+    }
     renderData.selectedSpatialScriptSid = _session.selectedSpatialScriptSid();
     renderData.selectedEdgeZone = _selectedEdgeZone;
     renderData.activeEdgeSide = _activeEdgeSide;
@@ -2700,6 +2708,41 @@ void EditorWidget::setShowLightOverlays(bool show) {
     // RenderingEngine::renderLightOverlays reads this flag and computes the illuminated hexes from each
     // light source's MapObject every frame, so there is no per-object overlay state to update here.
     _session.visibility().showLightOverlays = show;
+}
+
+void EditorWidget::refreshUnreachableOverlay() {
+    const Map* map = _session.map();
+    if (!map) {
+        _unreachableHexes.clear();
+        _unreachableCacheValid = false;
+        _unreachableCacheMap = nullptr;
+        return;
+    }
+    const int elevation = _session.currentElevation();
+    const auto& mapFile = map->getMapFile();
+    static const std::vector<std::shared_ptr<MapObject>> kNoObjects;
+    const auto objIt = mapFile.map_objects.find(elevation);
+    const auto& objects = objIt != mapFile.map_objects.end() ? objIt->second : kNoObjects;
+    const std::size_t objectCount = objects.size();
+
+    // Cheap signature: map identity + elevation + object count. It catches load/new, elevation switch,
+    // and object add/remove without hooking every mutation site; the one miss (toggling an existing
+    // object's blocking flag without changing the count) is refreshed by re-toggling the overlay.
+    if (_unreachableCacheValid && map == _unreachableCacheMap
+        && elevation == _unreachableCacheElevation && objectCount == _unreachableCacheObjectCount) {
+        return;
+    }
+
+    const auto& header = mapFile.header;
+    const reachability::ElevationResult result = reachability::analyzeElevation(_resources,
+        static_cast<int>(header.player_default_elevation), static_cast<int>(header.player_default_position),
+        elevation, objects);
+    _unreachableHexes = reachability::unreachableWalkableHexes(result);
+
+    _unreachableCacheMap = map;
+    _unreachableCacheElevation = elevation;
+    _unreachableCacheObjectCount = objectCount;
+    _unreachableCacheValid = true;
 }
 
 void EditorWidget::clearDragSelectionPreview() {

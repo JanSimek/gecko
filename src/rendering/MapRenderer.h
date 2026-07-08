@@ -60,6 +60,10 @@ public:
         /// saved hex position, not the slid bar). A verification aid for the diagonal-band widening —
         /// it shows the hex sits on the band's outer edge. Off by default (the clean artwork view).
         bool exitDots = false;
+        /// Natural style only: shade the walkable hexes cut off from every entry point (player start +
+        /// exit grids) with a translucent red wash — the same "unreachable areas" the editor overlay
+        /// and the `reachability` tool report, so a rendered map shows walled-off regions at a glance.
+        bool showUnreachable = false;
         sf::Color background{ 0, 0, 0, 255 };
     };
 

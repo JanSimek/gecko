@@ -124,6 +124,7 @@ signals:
     void showExitGridsToggled(bool enabled);
     void showSpatialScriptsToggled(bool enabled);
     void showMapEdgesToggled(bool enabled);
+    void showUnreachableToggled(bool enabled);
     void elevationChanged(int elevation);
     void selectionModeRequested();
     void rotateObjectRequested();
@@ -347,6 +348,7 @@ private:
     QAction* _showExitGridsAction;
     QAction* _showSpatialScriptsAction;
     QAction* _showMapEdgesAction;
+    QAction* _showUnreachableAction;
     QAction* _mergeOutlinesAction;
     QAction* _edgeScrollAction;
 

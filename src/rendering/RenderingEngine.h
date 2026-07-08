@@ -43,6 +43,7 @@ public:
         bool showExitGrids = false;
         bool showSpatialScripts = false;
         bool showMapEdges = false;
+        bool showUnreachable = false;
         // Merge touching selected objects of the same category into one union outline (true), or
         // outline every selected object individually so shared edges show too (false).
         bool mergeSelectionOutlines = true;
@@ -102,6 +103,12 @@ public:
         // Map data
         const Map* map = nullptr;
         int currentElevation = 0;
+
+        // Walkable hexes on the current elevation cut off from every entry point (player start + exit
+        // grids), shaded by the reachability overlay when showUnreachable is on. Computed and cached by
+        // the editor (geck::reachability, the same flood-fill the `reachability` CLI/MCP tool uses);
+        // null when the overlay is off.
+        const std::vector<int>* unreachableHexes = nullptr;
 
         // SID (MapScript::pid) of the spatial script to highlight as selected in the
         // spatial-script overlay, or MapScript::NONE for no selection.
@@ -190,6 +197,15 @@ private:
         const sf::View& view,
         const RenderData& renderData,
         const VisibilitySettings& visibility);
+
+    /**
+     * @brief Shade the walkable hexes cut off from every entry point (a translucent wash), so a
+     * designer sees at a glance which floor is stranded by walls/blockers. The hex set is precomputed
+     * by the editor (renderData.unreachableHexes); this only tints it. Drawn as a ground layer.
+     */
+    void renderReachabilityOverlay(sf::RenderTarget& target,
+        const sf::View& view,
+        const RenderData& renderData);
 
     /**
      * @brief Outline every selected object on top of the scene, grouped by category colour.

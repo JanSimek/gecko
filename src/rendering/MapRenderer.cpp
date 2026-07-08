@@ -2,6 +2,7 @@
 
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
+#include "editor/Reachability.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
@@ -492,6 +493,22 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
     visibility.showHexGrid = false;
     visibility.showLightOverlays = false;
     visibility.showExitGrids = false;
+
+    // Unreachable-areas shading (opt-in): the same geck::reachability flood-fill the editor overlay
+    // and the `reachability` tool use, tinted onto the render so walled-off regions are visible.
+    std::vector<int> unreachableHexes;
+    if (options.showUnreachable) {
+        const auto& mf = map.getMapFile();
+        static const std::vector<std::shared_ptr<MapObject>> kNoObjects;
+        const auto it = mf.map_objects.find(options.elevation);
+        const auto& objs = it != mf.map_objects.end() ? it->second : kNoObjects;
+        const auto result = reachability::analyzeElevation(_resources,
+            static_cast<int>(mf.header.player_default_elevation),
+            static_cast<int>(mf.header.player_default_position), options.elevation, objs);
+        unreachableHexes = reachability::unreachableWalkableHexes(result);
+        data.unreachableHexes = &unreachableHexes;
+        visibility.showUnreachable = true;
+    }
 
     engine.render(*target, target->getView(), data, visibility);
     if (options.exitDots) {
