@@ -30,6 +30,7 @@ namespace geck {
     X(mapObjectsAt, "(mapPath, elevation, typeName) -> {pid,hex,dir,...}", "A reference map's objects of one type, flattened as (pid, hex, direction) triples.")            \
     X(protoBlocks, "(pid) -> bool", "Does the proto block movement (NO_BLOCK clear)? Raises if the proto can't load.")                                                      \
     X(protoFlat, "(pid) -> bool", "Is the proto OBJECT_FLAT (ground-hugging fill/rubble, not a standing wall face)? Raises if the proto can't load.")                       \
+    X(protoFid, "(pid) -> fid", "The proto's art FID (what placeProto resolves and stores; decode with resolve_fid). Raises if the proto can't load.")                      \
     X(listMaps, "() -> {path,...}", "Every map file in the mounted data.")                                                                                                  \
     X(noise2d, "(x, y) -> [0,1]", "Coherent value noise — a density field for natural clumps/clearings.")                                                                   \
     X(noise3d, "(x, y, z) -> [0,1]", "Coherent 3D value noise; the z axis varies the field per seed/octave.")                                                               \

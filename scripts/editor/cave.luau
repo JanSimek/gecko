@@ -6,8 +6,9 @@
 --     (rare border/transition tiles like cav4013 and the entrance sand are kept out of the mix),
 --   * the floor/rock rim lined with a CONTINUOUS run of "Cave Wall" FACE variants — only the
 --     standing faces, never the OBJECT_FLAT rock-fill art the same family carries — each chosen by
---     which neighbouring rim hexes it connects to, LEARNED from the shipped walls, so adjacent
---     pieces meet along a shared edge instead of butting a horizontal against a vertical,
+--     its OUTWARD NORMAL (the direction to the rock it fronts), LEARNED from the shipped walls, so
+--     the isometric view gets rock faces on the north/east rim and filled tops on the south/west
+--     instead of one texture butted against another,
 --   * invisible blocking hexes sealing the rock side so the player can't walk off the floor,
 --   * a scroll-blocker rectangle ringing the cavern so the camera stays inside,
 --   * an exit-grid patch on the floor (worldmap by default) and the player start.
@@ -40,21 +41,22 @@ print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " t
 -- (cave1: cav4009/cav4010 on a 2x2 lattice). Recover it as the most common tile per
 -- (row%2, col%2) parity cell; everything non-empty outside that pattern is walkable floor.
 --
--- Wall pieces: shipped cave walls stand in near-continuous runs along the floor/rock rim. A piece's
--- CONNECTIVITY is fixed by which of its up-to-six neighbouring hexes also carry a wall, so we key on
--- the sorted set of those directions — taken ONLY from walls on the walkable side of the boundary
--- (the side we build the rim on) so every learned piece shares a consistent facing. But within one
--- connection shape the mappers use MANY interchangeable rock-mound variants for texture (a straight
--- run draws on 10-20 different pids), so we keep the whole per-shape distribution and sample it with
--- the seeded rng rather than collapsing to the single modal piece — collapsing reads as a monotonous
--- row of identical posts. Placing by shape still makes adjacent rim walls attach: each connects along
--- the exact edge they share (direction d for one hex is d+3 for its neighbour), and every variant of
--- a shape is one the mappers actually placed in that same context.
+-- Wall pieces: which "Cave Wall" FACE art a rim hex takes is fixed by its OUTWARD NORMAL — the
+-- direction to the solid rock it fronts — because the isometric view shows different things on
+-- different sides. On the north/east rim the rock rises behind the floor and you see its FACE
+-- (ca002/ca022/ca027-style rock walls); on the south/west rim you look over the near lip and see
+-- the flat FILLED TOP of the rock (ca055/ca060/ca062-style). So we key each face on the sorted set
+-- of directions to its rock neighbours, learned from the walkable-side contour faces of the shipped
+-- maps — mixing the two would butt a rock face against a filled top. Within one orientation the
+-- mappers use many interchangeable variants for texture, so we keep the whole per-key distribution
+-- and sample it with the seeded rng rather than collapsing to the modal piece (which reads as a
+-- monotonous repeat). Every variant of a key is one the mappers placed at that same orientation, so
+-- a run stays a continuous same-texture wall.
 
 local rockPattern = {} -- [parityKey 0..3] = tile id (from the FIRST reference)
 local floorWeights = {} -- walkable floor: { {id=..., w=...}, ... } sorted for determinism
-local wallPieces = {} -- dir-set key ("d,d,..") -> weighted { {pid=, w=}, ... }, sorted for determinism
-local wallPiecesAll = {} -- the same weights pooled across every shape: the fallback palette
+local wallPieces = {} -- outward-normal key ("d,d,..") -> weighted { {pid=, w=}, ... }, sorted for determinism
+local wallPiecesAll = {} -- the same weights pooled across every orientation: the fallback palette
 
 -- The cavern floor palette is the cav* ground tiles only; the shipped maps blend edg50xx SAND at
 -- their entrance alcoves, and counting those into the mix speckles the cave floor with sand.
@@ -81,9 +83,8 @@ local function isFlatWall(pid)
     return flatCache[pid]
 end
 
--- A stable key for a wall piece: the sorted directions (0..5) from its hex to the adjacent hexes
--- that also carry a wall. Sorting makes the key traversal-order-independent — a piece connecting
--- north+south is the same whether the run arrived from the north or the south.
+-- A stable key from a set of hex directions (0..5): sorted and joined, so it is order-independent.
+-- Used for a wall's OUTWARD NORMAL — the directions to the solid rock it fronts.
 local function dirKey(dirs)
     table.sort(dirs)
     return table.concat(dirs, ",")
@@ -91,7 +92,7 @@ end
 
 do
     local weightById = {}
-    local connCounts = {} -- dir-set key -> { [pid] = count }
+    local normalCounts = {} -- outward-normal key -> { [pid] = count }
     local pidTotals = {} -- pid -> total count, for the fallback piece
     for refIndex, ref in ipairs(REFS) do
         local floor = api:mapFloorAt(ref, REF_ELEVATION)
@@ -131,11 +132,12 @@ do
             end
         end
 
-        -- Wall FACES on the walkable side: learn each piece's connection shape -> pid. Flat fill
-        -- pieces are skipped entirely (they are not part of the boundary run), and the connection
-        -- shape is measured against neighbouring FACES only, so a face's key reflects the face chain
-        -- it belongs to, not stray fill that happens to sit next to it.
-        local function walkableTile(t)
+        -- Wall FACES on the walkable side: learn each by its outward normal -> pid. Flat fill pieces
+        -- are skipped entirely (they are not part of the boundary run). A face's key is the set of
+        -- directions to its ROCK neighbours (the side it fronts), so the north/east and south/west
+        -- rims each learn their own texture family.
+        local function walkableHex(hex)
+            local t = api:hexTile(hex)
             if t < 0 then
                 return false
             end
@@ -151,17 +153,20 @@ do
             end
         end
         for hex, pid in pairs(faceAt) do
-            if walkableTile(api:hexTile(hex)) then
-                local dirs = {}
+            if walkableHex(hex) then
+                local rockDirs = {}
                 for _, n in ipairs(api:hexNeighbors(hex)) do
-                    if faceAt[n] then
-                        table.insert(dirs, api:hexDir(hex, n))
+                    if not walkableHex(n) then
+                        table.insert(rockDirs, api:hexDir(hex, n))
                     end
                 end
-                local key = dirKey(dirs)
-                connCounts[key] = connCounts[key] or {}
-                connCounts[key][pid] = (connCounts[key][pid] or 0) + 1
-                pidTotals[pid] = (pidTotals[pid] or 0) + 1
+                -- Only contour faces (those actually fronting rock) teach the rim palette.
+                if #rockDirs > 0 then
+                    local key = dirKey(rockDirs)
+                    normalCounts[key] = normalCounts[key] or {}
+                    normalCounts[key][pid] = (normalCounts[key][pid] or 0) + 1
+                    pidTotals[pid] = (pidTotals[pid] or 0) + 1
+                end
             end
         end
     end
@@ -181,8 +186,8 @@ do
     table.sort(floorWeights, function(a, b) return a.id < b.id end) -- pairs() order is unspecified
     assert(#floorWeights > 0, "no walkable cav* floor tiles found in the reference maps")
 
-    -- Turn each shape's { pid -> count } into a weighted list, sorted by pid so the seeded draw is
-    -- reproducible (pairs() order is unspecified).
+    -- Turn each orientation's { pid -> count } into a weighted list, sorted by pid so the seeded
+    -- draw is reproducible (pairs() order is unspecified).
     local function weightedList(counts)
         local list = {}
         for pid, w in pairs(counts) do
@@ -191,15 +196,15 @@ do
         table.sort(list, function(a, b) return a.pid < b.pid end)
         return list
     end
-    local shapes = 0
-    for key, pids in pairs(connCounts) do
+    local orientations = 0
+    for key, pids in pairs(normalCounts) do
         wallPieces[key] = weightedList(pids)
-        shapes += 1
+        orientations += 1
     end
-    wallPiecesAll = weightedList(pidTotals) -- the fallback palette for shapes the corpus never showed
+    wallPiecesAll = weightedList(pidTotals) -- the fallback palette for orientations the corpus never showed
     assert(#wallPiecesAll > 0, "no walls found on the walkable side of the reference maps")
-    print(string.format("Learned %d wall connection shapes and %d cav* floor tiles from %d reference map(s).",
-        shapes, #floorWeights, #REFS))
+    print(string.format("Learned %d wall orientations and %d cav* floor tiles from %d reference map(s).",
+        orientations, #floorWeights, #REFS))
 end
 
 -- Weighted seeded draw from a { {pid=, w=}, ... } list (same scheme as pickFloor).
@@ -340,8 +345,9 @@ print(string.format("Carved %d chambers (%d walkable tiles) into the rock.", #ch
 
 -- ============================ wall ring =======================================
 -- The wall ring sits on the floor-side contour: every walkable hex that touches rock. Each hex's
--- piece is chosen by the set of directions to its neighbouring contour hexes, so the whole rim is
--- one continuous run of matched pieces (no gaps, no horizontal-butting-a-vertical joins).
+-- piece is chosen by its OUTWARD NORMAL — the set of directions to the rock it fronts — so each side
+-- gets the texture the isometric view calls for (rock faces on the north/east rim, filled tops on
+-- the south/west) and a run stays one continuous same-texture wall.
 local hexTileCache = {}
 local function carvedHex(hex)
     local t = hexTileCache[hex]
@@ -376,13 +382,13 @@ table.sort(contourList) -- deterministic placement order
 
 local walls = 0
 for _, hex in ipairs(contourList) do
-    local dirs = {}
+    local rockDirs = {}
     for _, n in ipairs(api:hexNeighbors(hex)) do
-        if contour[n] then
-            table.insert(dirs, api:hexDir(hex, n))
+        if not carvedHex(n) then
+            table.insert(rockDirs, api:hexDir(hex, n))
         end
     end
-    local pid = pickWall(wallPieces[dirKey(dirs)] or wallPiecesAll)
+    local pid = pickWall(wallPieces[dirKey(rockDirs)] or wallPiecesAll)
     if api:placeProto(pid, hex, 0) then
         walls += 1
     end

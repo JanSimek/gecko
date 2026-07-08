@@ -616,6 +616,7 @@ TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[s
         CHECK_THROWS(api.mapObjectsAt("maps/desert1.map", 0, "wall"));
         CHECK_THROWS(api.protoBlocks(0x02000066));
         CHECK_THROWS(api.protoFlat(0x02000066));
+        CHECK_THROWS(api.protoFid(0x02000066));
         CHECK_THROWS(api.mapScenery("maps/desert1.map"));
         CHECK_THROWS(api.mapScenery("no/such/map.map"));
         CHECK_THROWS(api.mapSceneryHistogram("maps/desert1.map"));

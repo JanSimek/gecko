@@ -431,6 +431,24 @@ std::string MapScriptApi::protoName(int pid) const {
     return {};
 }
 
+int MapScriptApi::protoFid(int pid) const {
+    // The proto's art FID — what placeProto resolves and stores. Lets a generator identify a proto's
+    // art (resolve_fid / its sprite) rather than reason from the opaque proto number. Same hard-fail
+    // contract as protoName/protoBlocks: an unloadable proto is raised, never guessed.
+    const Pro* pro = nullptr;
+    try {
+        pro = _resources.loadPro(static_cast<uint32_t>(pid));
+    } catch (const std::exception&) {
+        pro = nullptr;
+    }
+    if (pro == nullptr) {
+        throw ScriptError(std::format(
+            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
+            static_cast<uint32_t>(pid)));
+    }
+    return pro->header.FID;
+}
+
 void MapScriptApi::beginBatch(const std::string& description) {
     _controller.beginBatch(description);
 }

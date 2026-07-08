@@ -115,6 +115,9 @@ public:
     /// objects, as opposed to a wall face. Lets a generator tell boundary walls from the flat rock
     /// texture that carpets solid ground. Raises when the proto can't be loaded (like protoBlocks).
     bool protoFlat(int pid) const;
+    /// The proto's art FID (what placeProto resolves and stores) — lets a generator identify a
+    /// proto's art via resolve_fid. Raises when the proto can't be loaded (like protoBlocks).
+    int protoFid(int pid) const;
     /// Every map file in the mounted data (VFS paths, e.g. "maps/desert1.map"), sorted. Lets a
     /// generator pick a reference map at random when none was given.
     std::vector<std::string> listMaps() const;
