@@ -327,31 +327,37 @@ for i = 2, #chambers do
     end
 end
 
--- Smoothing: swallow one-tile rock nubs and pockets the corridors leave behind; they generate
--- boundary shapes the shipped maps never contain (and read as debris, not cavern).
-for _ = 1, 2 do
-    local grow = {}
+-- Cellular-automata boundary smoothing: fill a rock tile that is mostly surrounded by floor and
+-- erode a floor spike that is mostly surrounded by rock. A few passes round the blocky tile-carve
+-- edges — the noise ellipses and L-corridors leave a stair-stepped, nubbly rim — into the smooth
+-- curves the shipped caverns have, so the wall run laid on the contour reads as a smooth rock wall
+-- instead of a jagged, gap-toothed line. Chamber cores (8 carved neighbours) and 3-wide corridors
+-- (an interior corridor tile keeps >= 4) are stable under the rule, so the cavern stays connected.
+for _ = 1, 5 do
+    local flips = {}
     for row = MARGIN - 2, TILE_H - MARGIN + 2 do
         for col = MARGIN - 2, TILE_W - MARGIN + 2 do
             local t = api:tileIndex(col, row)
-            if t >= 0 and not carved[t] then
-                local carvedNeighbors = 0
+            if t >= 0 then
+                local c = 0
                 for dr = -1, 1 do
                     for dc = -1, 1 do
                         local t2 = api:tileIndex(col + dc, row + dr)
                         if t2 >= 0 and t2 ~= t and carved[t2] then
-                            carvedNeighbors += 1
+                            c += 1
                         end
                     end
                 end
-                if carvedNeighbors >= 5 then
-                    table.insert(grow, t)
+                if not carved[t] and c >= 5 then
+                    flips[t] = true
+                elseif carved[t] and c <= 2 then
+                    flips[t] = false
                 end
             end
         end
     end
-    for _, t in ipairs(grow) do
-        carved[t] = true
+    for t, v in pairs(flips) do
+        carved[t] = v or nil
     end
 end
 
@@ -422,28 +428,38 @@ local function hexScreen(hex)
     return 16 * row - 24 * col - 8 * odd, 12 * row + 6 * col - 6 * odd
 end
 
--- The outward-normal compass class of boundary hex `seq[i]`, SMOOTHED over a short window of the walk.
--- The boundary tangent is the screen vector across the window; the outward normal is its perpendicular,
--- oriented to agree with the hex's own rock side. Reading the class off this smoothed normal instead of
--- the single hex's rock-direction set is what keeps a face run from flickering into a filled-top piece
--- (and back) where the 1-hex rim wobbles.
+-- Compass bin of an arbitrary screen vector (screen y is DOWN, so North is -y).
+local function compassFromVec(nx, ny)
+    if nx == 0 and ny == 0 then
+        return "-"
+    end
+    local ang = math.deg(math.atan2(-ny, nx))
+    if ang < 0 then
+        ang += 360
+    end
+    return COMPASS[math.floor((ang + 22.5) / 45) % 8 + 1]
+end
+
+-- The boundary's SMOOTHED outward normal at `seq[i]` as a screen vector: the perpendicular of the
+-- tangent across a short window of the walk, oriented to agree with the hex's own rock side. Reading
+-- placement off this instead of the single hex's jagged rock-direction set keeps a face run from
+-- flickering into a filled-top piece (and back) where the 1-hex rim wobbles. Returns nil, nil for a
+-- degenerate window (caller falls back to the per-hex rock directions).
 local SMOOTH_WINDOW = 3
-local function smoothedCompass(seq, i)
+local function smoothedNormal(seq, i)
     local n = #seq
-    local rockDirs = rockDirsAt(seq[i])
     if n < 3 then
-        return compassOf(rockDirs)
+        return nil, nil
     end
     local function at(j) return seq[math.max(1, math.min(n, j))] end
     local ax, ay = hexScreen(at(i - SMOOTH_WINDOW))
     local bx, by = hexScreen(at(i + SMOOTH_WINDOW))
     local tx, ty = bx - ax, by - ay
     if tx == 0 and ty == 0 then
-        return compassOf(rockDirs)
+        return nil, nil
     end
-    -- Sum this hex's rock directions to know which perpendicular of the tangent points at the rock.
     local rx, ry = 0, 0
-    for _, d in ipairs(rockDirs) do
+    for _, d in ipairs(rockDirsAt(seq[i])) do
         rx += DIR_VEC[d][1]
         ry += DIR_VEC[d][2]
     end
@@ -451,11 +467,7 @@ local function smoothedCompass(seq, i)
     if nx * rx + ny * ry < 0 then
         nx, ny = -nx, -ny
     end
-    local ang = math.deg(math.atan2(-ny, nx))
-    if ang < 0 then
-        ang += 360
-    end
-    return COMPASS[math.floor((ang + 22.5) / 45) % 8 + 1]
+    return nx, ny
 end
 
 -- Next directed boundary edge, keeping the walkable interior on the left so one walk closes the loop
@@ -494,12 +506,30 @@ end
 local walls = 0
 local placedHex = {}
 local function placeWall(hex, comp)
-    if not placedHex[hex] then
+    if hex ~= nil and not placedHex[hex] then
         placedHex[hex] = true
         if api:placeProto(pickWall(wallListFor(comp)), hex, 0) then
             walls += 1
         end
     end
+end
+
+-- The rock hex one step behind `hex` along the outward normal (nx, ny) — nil if that side is not rock.
+-- Backing the contour with a second cell here doubles the run's screen density (the two rows interleave
+-- half a hex apart, closing the ~8px gaps a single row of narrow faces leaves) and gives the wall body,
+-- the way the shipped caves carry walls on both sides of the boundary.
+local function backingHex(hex, nx, ny)
+    local best, bestDot = nil, 0.0
+    for d = 0, 5 do
+        local nb = dirNeighbor(hex, d)
+        if nb ~= nil and not carvedHex(nb) then
+            local dot = DIR_VEC[d][1] * nx + DIR_VEC[d][2] * ny
+            if dot > bestDot then
+                best, bestDot = nb, dot
+            end
+        end
+    end
+    return best
 end
 
 for _, startHex in ipairs(seeds) do
@@ -521,9 +551,15 @@ for _, startHex in ipairs(seeds) do
             guard += 1
         until h == nil or not carvedHex(h) or guard > 200000
 
-        -- A wall on every hex of the loop, each classed by the smoothed outward normal.
+        -- A wall on every hex of the loop plus a backing cell behind it, both classed by the smoothed
+        -- outward normal so the whole band is one texture family that turns only with the boundary.
         for i = 1, #seq do
-            placeWall(seq[i], smoothedCompass(seq, i))
+            local nx, ny = smoothedNormal(seq, i)
+            local comp = nx and compassFromVec(nx, ny) or compassOf(rockDirsAt(seq[i]))
+            placeWall(seq[i], comp)
+            if nx then
+                placeWall(backingHex(seq[i], nx, ny), comp)
+            end
         end
     end
 end
