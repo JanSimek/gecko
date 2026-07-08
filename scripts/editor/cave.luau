@@ -265,99 +265,104 @@ local function pickFloor()
     return floorWeights[#floorWeights].id
 end
 
--- ============================ carve the cavern ================================
--- Chambers are noise-roughened ellipses connected by 2-tile-wide L corridors; carving only
--- ever ADDS to the walkable set and consecutive chambers share a corridor, so the cavern is
--- connected by construction.
+-- ============================ carve the cavern (metaball field) ===============
+-- The cavern is a smooth SCALAR FIELD, not a tile stamp. Each chamber is a radial source and each
+-- corridor a line source; where the summed field clears 1 is the walkable interior and its edge
+-- (field == 1) is a smooth organic curve — no ovals, no stair-steps. A low-frequency noise term warps
+-- the field so the edge erodes like rock. The floor is the field sampled per tile; the wall run later
+-- samples the SAME field at HEX resolution, so the walls trace the true curve instead of the blocky
+-- tile edge. Distances are SCREEN distances (the iso projection) so chambers read round on screen, not
+-- squished. Hex coords are 2x the tile grid; the field lives in hex space.
 local carved = {} -- [tileIndex] = true
 local chambers = {}
 local MARGIN = 22
 
-local function carveTile(col, row)
-    local t = api:tileIndex(col, row)
-    if t >= 0 then
-        carved[t] = true
-    end
-end
-
-local nox, noy = api:rng() * 1000.0, api:rng() * 1000.0
 local function clampCoord(v)
     return math.max(MARGIN, math.min(TILE_W - 1 - MARGIN, v))
 end
 
--- Chamber centres random-walk from the middle so they cluster into one cavern system instead
--- of scattering across the map.
-local cx, cy = 50, 50
-for _ = 1, CHAMBERS do
-    local a = api:rngInt(6, 10) -- ellipse half-extents, in tiles
-    local b = api:rngInt(6, 10)
-    for row = cy - b - 2, cy + b + 2 do
-        for col = cx - a - 2, cx + a + 2 do
-            local dx, dy = (col - cx) / a, (row - cy) / b
-            -- The noise term roughens the rim so chambers read as caverns, not stamped ovals.
-            if dx * dx + dy * dy <= 0.72 + 0.55 * api:noise2d(col * 0.23 + nox, row * 0.23 + noy) then
-                carveTile(col, row)
-            end
-        end
-    end
-    table.insert(chambers, { x = cx, y = cy })
-    cx = clampCoord(cx + api:rngInt(-16, 16))
-    cy = clampCoord(cy + api:rngInt(-16, 16))
+-- Screen position (engine hex->pixel linear part) of a hex-space point.
+local function hexS(c, r)
+    return 16 * r - 24 * c, 12 * r + 6 * c
 end
 
--- Corridors: a noise-wobbled 3-wide L between consecutive chambers, so passages meander like
--- eroded rock rather than running as straight trenches.
-local function carveSpan(col, row, wobbleAxis)
-    local w = math.floor(api:noise2d(col * 0.31 + nox, row * 0.31 + noy) * 3.0 - 1.5 + 0.5)
-    for spread = 0, 2 do
-        if wobbleAxis == "row" then
-            carveTile(col, row + w + spread)
-        else
-            carveTile(col + w + spread, row)
-        end
-    end
+-- Chamber centres random-walk from the middle so they cluster into one cavern system. Each becomes a
+-- point source (a zero-length segment); consecutive chambers are joined by a corridor line source so
+-- the blobs merge into one connected cavern.
+local cx, cy = 50, 50
+local sources = {} -- {ac, ar, bc, br, num}; num = screen-radius^2, field term = num / screenDist^2
+for _ = 1, CHAMBERS do
+    table.insert(chambers, { x = cx, y = cy })
+    local rad = api:rngInt(230, 330)
+    table.insert(sources, { ac = 2 * cx, ar = 2 * cy, bc = 2 * cx, br = 2 * cy, num = rad * rad })
+    cx = clampCoord(cx + api:rngInt(-14, 14))
+    cy = clampCoord(cy + api:rngInt(-14, 14))
 end
 for i = 2, #chambers do
     local a, b = chambers[i - 1], chambers[i]
-    for col = math.min(a.x, b.x), math.max(a.x, b.x) do
-        carveSpan(col, a.y, "row")
-    end
-    for row = math.min(a.y, b.y), math.max(a.y, b.y) do
-        carveSpan(b.x, row, "col")
-    end
+    table.insert(sources, { ac = 2 * a.x, ar = 2 * a.y, bc = 2 * b.x, br = 2 * b.y, num = 150 * 150 })
 end
 
--- Cellular-automata boundary smoothing: fill a rock tile that is mostly surrounded by floor and
--- erode a floor spike that is mostly surrounded by rock. A few passes round the blocky tile-carve
--- edges — the noise ellipses and L-corridors leave a stair-stepped, nubbly rim — into the smooth
--- curves the shipped caverns have, so the wall run laid on the contour reads as a smooth rock wall
--- instead of a jagged, gap-toothed line. Chamber cores (8 carved neighbours) and 3-wide corridors
--- (an interior corridor tile keeps >= 4) are stable under the rule, so the cavern stays connected.
-for _ = 1, 5 do
-    local flips = {}
-    for row = MARGIN - 2, TILE_H - MARGIN + 2 do
-        for col = MARGIN - 2, TILE_W - MARGIN + 2 do
+-- Squared screen distance from a hex-space point to a hex-space segment (a point source is a=b).
+local function segDist2(pc, pr, s)
+    local px, py = hexS(pc, pr)
+    local ax, ay = hexS(s.ac, s.ar)
+    local bx, by = hexS(s.bc, s.br)
+    local dx, dy = bx - ax, by - ay
+    local len2 = dx * dx + dy * dy
+    local tt = 0.0
+    if len2 > 0.0 then
+        tt = ((px - ax) * dx + (py - ay) * dy) / len2
+        tt = math.max(0.0, math.min(1.0, tt))
+    end
+    local ex, ey = px - (ax + tt * dx), py - (ay + tt * dy)
+    return ex * ex + ey * ey
+end
+
+-- The field at a hex-space point, warped by low-frequency noise so the isocontour erodes organically.
+local fnx, fny = api:rng() * 1000.0, api:rng() * 1000.0
+local ROUGH, NF = 0.28, 0.05
+local function field(c, r)
+    local f = 0.0
+    for _, s in ipairs(sources) do
+        local d2 = segDist2(c, r, s)
+        f += s.num / (d2 > 1.0 and d2 or 1.0)
+    end
+    return f * (1.0 + ROUGH * (api:noise2d(c * NF + fnx, r * NF + fny) - 0.5) * 2.0)
+end
+
+-- Floor: a tile is walkable where the field clears 1 at the tile's centre (hex coords 2x the tile
+-- grid). MARGIN keeps the cavern off the map edge.
+for row = MARGIN, TILE_H - 1 - MARGIN do
+    for col = MARGIN, TILE_W - 1 - MARGIN do
+        if field(2 * col + 1, 2 * row + 1) >= 1.0 then
             local t = api:tileIndex(col, row)
             if t >= 0 then
-                local c = 0
-                for dr = -1, 1 do
-                    for dc = -1, 1 do
-                        local t2 = api:tileIndex(col + dc, row + dr)
-                        if t2 >= 0 and t2 ~= t and carved[t2] then
-                            c += 1
-                        end
-                    end
-                end
-                if not carved[t] and c >= 5 then
-                    flips[t] = true
-                elseif carved[t] and c <= 2 then
-                    flips[t] = false
-                end
+                carved[t] = true
             end
         end
     end
-    for t, v in pairs(flips) do
-        carved[t] = v or nil
+end
+
+-- Keep only the floor connected to the first chamber, so a noise-spawned outlier blob cannot leave a
+-- detached pocket (or strand an exit in unreachable rock).
+do
+    local startT = api:tileIndex(chambers[1].x, chambers[1].y)
+    if carved[startT] then
+        local keep = { [startT] = true }
+        local stack = { startT }
+        while #stack > 0 do
+            local t = table.remove(stack)
+            local col, row = t % TILE_W, t // TILE_W
+            for _, dxy in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+                local nt = api:tileIndex(col + dxy[1], row + dxy[2])
+                if nt >= 0 and carved[nt] and not keep[nt] then
+                    keep[nt] = true
+                    table.insert(stack, nt)
+                end
+            end
+        end
+        carved = keep
     end
 end
 
@@ -376,14 +381,13 @@ for _ in pairs(carved) do
 end
 print(string.format("Carved %d chambers (%d walkable tiles) into the rock.", #chambers, carvedCount))
 
--- ============================ wall ring (ordered boundary walk) ===============
--- The rim is laid by walking the cavern boundary as an ordered loop and placing a wall on EVERY
--- contour hex, so the run is gap-free by construction. Each hex's piece is chosen by the boundary's
--- SMOOTHED outward normal at that point — the compass direction of the rock over a short window of
--- the walk, not the single hex's own jagged rock-direction set. Smoothing is what stops a lone hex
--- whose local normal wobbles from grabbing a filled-top piece in the middle of a rock-face run (or
--- vice versa): a face run stays faces and a top run stays tops because the class only turns where
--- the boundary itself turns.
+-- ============================ wall band (field isocontour) ====================
+-- The rim is every hex that STRADDLES the field's isocontour — a hex whose inside/outside flips
+-- against any neighbour — so the band is a smooth ~2-cell ribbon tracing the TRUE curve at hex
+-- resolution: dense, gap-free, and unquantised by the tile grid. Each piece is classed by the field
+-- GRADIENT there: the outward normal is -grad(field) (pointing down the field, into the rock), mapped
+-- through the hex->pixel Jacobian to a screen vector and binned to a compass class. Because the field
+-- is smooth the class turns only as the curve turns — no per-hex flicker, no stair-steps.
 local hexTileCache = {}
 local function carvedHex(hex)
     local t = hexTileCache[hex]
@@ -394,41 +398,7 @@ local function carvedHex(hex)
     return t >= 0 and carved[t] == true
 end
 
--- dir -> neighbour hex, cached; a missing direction is off-grid, which counts as rock (boundary).
-local nbrCache = {}
-local function dirNeighbor(hex, d)
-    local m = nbrCache[hex]
-    if m == nil then
-        m = {}
-        for _, n in ipairs(api:hexNeighbors(hex)) do
-            m[api:hexDir(hex, n)] = n
-        end
-        nbrCache[hex] = m
-    end
-    return m[d]
-end
-local function rockAt(hex, d)
-    local n = dirNeighbor(hex, d)
-    return n == nil or not carvedHex(n)
-end
-local function rockDirsAt(hex)
-    local r = {}
-    for d = 0, 5 do
-        if rockAt(hex, d) then
-            table.insert(r, d)
-        end
-    end
-    return r
-end
-
--- Hex screen position (engine HexagonGrid formula, constant terms dropped), for the boundary tangent.
-local function hexScreen(hex)
-    local col, row = api:hexCol(hex), api:hexRow(hex)
-    local odd = col % 2
-    return 16 * row - 24 * col - 8 * odd, 12 * row + 6 * col - 6 * odd
-end
-
--- Compass bin of an arbitrary screen vector (screen y is DOWN, so North is -y).
+-- Compass bin of a screen vector (screen y is DOWN, so North is -y).
 local function compassFromVec(nx, ny)
     if nx == 0 and ny == 0 then
         return "-"
@@ -440,133 +410,72 @@ local function compassFromVec(nx, ny)
     return COMPASS[math.floor((ang + 22.5) / 45) % 8 + 1]
 end
 
--- The boundary's SMOOTHED outward normal at `seq[i]` as a screen vector: the perpendicular of the
--- tangent across a short window of the walk, oriented to agree with the hex's own rock side. Reading
--- placement off this instead of the single hex's jagged rock-direction set keeps a face run from
--- flickering into a filled-top piece (and back) where the 1-hex rim wobbles. Returns nil, nil for a
--- degenerate window (caller falls back to the per-hex rock directions).
-local SMOOTH_WINDOW = 3
-local function smoothedNormal(seq, i)
-    local n = #seq
-    if n < 3 then
-        return nil, nil
+-- Inside-ness straight from the smooth field (not the tile grid), cached per hex.
+local insideCache = {}
+local function inside(hex)
+    local v = insideCache[hex]
+    if v == nil then
+        v = field(api:hexCol(hex), api:hexRow(hex)) >= 1.0
+        insideCache[hex] = v
     end
-    local function at(j) return seq[math.max(1, math.min(n, j))] end
-    local ax, ay = hexScreen(at(i - SMOOTH_WINDOW))
-    local bx, by = hexScreen(at(i + SMOOTH_WINDOW))
-    local tx, ty = bx - ax, by - ay
-    if tx == 0 and ty == 0 then
-        return nil, nil
-    end
-    local rx, ry = 0, 0
-    for _, d in ipairs(rockDirsAt(seq[i])) do
-        rx += DIR_VEC[d][1]
-        ry += DIR_VEC[d][2]
-    end
-    local nx, ny = ty, -tx
-    if nx * rx + ny * ry < 0 then
-        nx, ny = -nx, -ny
-    end
-    return nx, ny
+    return v
 end
 
--- Next directed boundary edge, keeping the walkable interior on the left so one walk closes the loop
--- (rotate the outward normal CCW; if that side is still rock the boundary bends around this hex,
--- otherwise step into the walkable neighbour there). Verified to close and cover 100% of a shipped
--- cavern's contour.
-local function nextEdge(h, d)
-    local nd = (d + 5) % 6
-    if rockAt(h, nd) then
-        return h, nd
-    end
-    return dirNeighbor(h, nd), (d + 1) % 6
+-- Outward screen normal at a hex = -grad(field) mapped through the hex->pixel Jacobian (columns
+-- d/dcol = (-24, 6), d/drow = (16, 12)). Central differences a couple of hexes wide ride over the
+-- noise wiggle so the class follows the chamber curve, not local grain.
+local GH = 2.0
+local function outwardNormal(hex)
+    local c, r = api:hexCol(hex), api:hexRow(hex)
+    local fc = field(c + GH, r) - field(c - GH, r)
+    local fr = field(c, r + GH) - field(c, r - GH)
+    return 24 * fc - 16 * fr, -6 * fc - 12 * fr
 end
 
--- One seed boundary edge per contour hex (enough to reach every loop); deterministic order.
-local seedByHex = {}
-local seeds = {}
+-- Candidate hexes: everything on the carved tiles and their immediate rock neighbours — the strip the
+-- isocontour runs through — collected into a sorted list so placement order (hence the saved map) is
+-- deterministic.
+local candSet = {}
 for t in pairs(carved) do
     for _, hex in ipairs(api:tileHexes(t)) do
-        if seedByHex[hex] == nil then
-            local rd = rockDirsAt(hex)
-            if #rd > 0 and #rd < 6 then
-                seedByHex[hex] = rd[1]
-                table.insert(seeds, hex)
+        candSet[hex] = true
+    end
+    local col, row = t % TILE_W, t // TILE_W
+    for dr = -1, 1 do
+        for dc = -1, 1 do
+            local nt = api:tileIndex(col + dc, row + dr)
+            if nt >= 0 and not carved[nt] then
+                for _, hex in ipairs(api:tileHexes(nt)) do
+                    candSet[hex] = true
+                end
             end
         end
     end
 end
-table.sort(seeds)
-
-local visitedEdge = {}
-local function edgeKey(h, d)
-    return h * 6 + d
+local candidates = {}
+for hex in pairs(candSet) do
+    table.insert(candidates, hex)
 end
+table.sort(candidates)
 
 local walls = 0
-local placedHex = {}
-local function placeWall(hex, comp)
-    if hex ~= nil and not placedHex[hex] then
-        placedHex[hex] = true
-        if api:placeProto(pickWall(wallListFor(comp)), hex, 0) then
+local boundaryHexes = 0
+for _, hex in ipairs(candidates) do
+    local me = inside(hex)
+    local onBoundary = false
+    for _, n in ipairs(api:hexNeighbors(hex)) do
+        if inside(n) ~= me then
+            onBoundary = true
+            break
+        end
+    end
+    if onBoundary then
+        boundaryHexes += 1
+        local nx, ny = outwardNormal(hex)
+        if api:placeProto(pickWall(wallListFor(compassFromVec(nx, ny))), hex, 0) then
             walls += 1
         end
     end
-end
-
--- The rock hex one step behind `hex` along the outward normal (nx, ny) — nil if that side is not rock.
--- Backing the contour with a second cell here doubles the run's screen density (the two rows interleave
--- half a hex apart, closing the ~8px gaps a single row of narrow faces leaves) and gives the wall body,
--- the way the shipped caves carry walls on both sides of the boundary.
-local function backingHex(hex, nx, ny)
-    local best, bestDot = nil, 0.0
-    for d = 0, 5 do
-        local nb = dirNeighbor(hex, d)
-        if nb ~= nil and not carvedHex(nb) then
-            local dot = DIR_VEC[d][1] * nx + DIR_VEC[d][2] * ny
-            if dot > bestDot then
-                best, bestDot = nb, dot
-            end
-        end
-    end
-    return best
-end
-
-for _, startHex in ipairs(seeds) do
-    if not visitedEdge[edgeKey(startHex, seedByHex[startHex])] then
-        -- Trace this loop into an ordered, consecutive-deduped hex sequence.
-        local seq = {}
-        local h, d = startHex, seedByHex[startHex]
-        local guard = 0
-        repeat
-            local k = edgeKey(h, d)
-            if visitedEdge[k] then
-                break
-            end
-            visitedEdge[k] = true
-            if seq[#seq] ~= h then
-                table.insert(seq, h)
-            end
-            h, d = nextEdge(h, d)
-            guard += 1
-        until h == nil or not carvedHex(h) or guard > 200000
-
-        -- A wall on every hex of the loop plus a backing cell behind it, both classed by the smoothed
-        -- outward normal so the whole band is one texture family that turns only with the boundary.
-        for i = 1, #seq do
-            local nx, ny = smoothedNormal(seq, i)
-            local comp = nx and compassFromVec(nx, ny) or compassOf(rockDirsAt(seq[i]))
-            placeWall(seq[i], comp)
-            if nx then
-                placeWall(backingHex(seq[i], nx, ny), comp)
-            end
-        end
-    end
-end
--- Safety net against gaps: any contour hex the walk did not thread onto a loop still gets a wall,
--- classed by its own rock directions. (The walk covers whole loops, but a one-hex spur can be missed.)
-for _, hex in ipairs(seeds) do
-    placeWall(hex, compassOf(rockDirsAt(hex)))
 end
 
 -- Seal the rock side: every rock hex bordering a walkable hex gets an invisible blocker. The wall
@@ -587,8 +496,8 @@ for t in pairs(carved) do
         end
     end
 end
-print(string.format("Lined the rim with %d walls (%d contour hexes) and sealed the rock side with %d blocking hexes.",
-    walls, #seeds, blockers))
+print(string.format("Lined the rim with %d walls (%d boundary hexes) and sealed the rock side with %d blocking hexes.",
+    walls, boundaryHexes, blockers))
 
 -- ============================ scroll blockers =================================
 -- Ring the cavern with a screen-space rectangle of scroll blockers, the way every shipped map
