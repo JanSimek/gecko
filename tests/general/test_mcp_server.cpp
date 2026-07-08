@@ -39,6 +39,20 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         }
     }
 
+    SECTION("tools/list annotates every tool; only the file-writing four are not read-only") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 2 }, { "method", "tools/list" } });
+        const std::vector<std::string> mutating{ "generate", "render_map", "render_frm", "extract_pattern" };
+        for (const auto& tool : resp["result"]["tools"]) {
+            REQUIRE(tool.contains("annotations"));
+            const auto& hints = tool["annotations"];
+            const auto name = tool["name"].get<std::string>();
+            const bool writes = std::ranges::find(mutating, name) != mutating.end();
+            CHECK(hints["readOnlyHint"] == !writes);
+            CHECK(hints["destructiveHint"] == false); // the mutating tools only write new files
+            CHECK(hints["openWorldHint"] == false);   // everything operates on local data
+        }
+    }
+
     SECTION("a notification (no id) gets no response") {
         const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "method", "notifications/initialized" } });
         CHECK(resp.is_null());

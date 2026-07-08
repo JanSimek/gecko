@@ -147,3 +147,40 @@ TEST_CASE("hexLine stays on the straight chord (no bowing)", "[hexline]") {
         CHECK(maxOffsetFromChord(grid, line) <= static_cast<double>(geck::Hex::HEX_WIDTH));
     }
 }
+
+TEST_CASE("hexDirection inverts hexNeighbors' order", "[hexline]") {
+    // For an interior hex every neighbour is on-grid, so hexNeighbors returns all six in kHexDirs
+    // order and the i-th one must report direction i. This is the contract the wall-segment chain
+    // relies on: the step onto a neighbour has a stable, parity-independent direction index.
+    const int hex = 100 * HexagonGrid::GRID_WIDTH + 100;
+    const auto neighbours = hexline::hexNeighbors(hex);
+    REQUIRE(neighbours.size() == 6);
+    for (int dir = 0; dir < 6; ++dir) {
+        CHECK(hexline::hexDirection(hex, neighbours[dir]) == dir);
+    }
+}
+
+TEST_CASE("hexDirection is antisymmetric and parity-independent", "[hexline]") {
+    // The reverse step is the opposite direction (d and d+3 are the three opposite pairs), and this
+    // holds regardless of the hexes' column parity — the reason wall pieces on either side of a
+    // shared edge attach: hex A's direction d onto B is B's direction d+3 back onto A.
+    for (const int col : { 40, 41 }) { // one even, one odd column
+        const int hex = 100 * HexagonGrid::GRID_WIDTH + col;
+        for (const int n : hexline::hexNeighbors(hex)) {
+            const int forward = hexline::hexDirection(hex, n);
+            const int back = hexline::hexDirection(n, hex);
+            REQUIRE(forward >= 0);
+            REQUIRE(back >= 0);
+            CHECK((forward + 3) % 6 == back);
+        }
+    }
+}
+
+TEST_CASE("hexDirection is -1 for non-neighbours and off-grid hexes", "[hexline]") {
+    const int hex = 100 * HexagonGrid::GRID_WIDTH + 100;
+    CHECK(hexline::hexDirection(hex, hex) == -1);                         // a hex is not its own neighbour
+    CHECK(hexline::hexDirection(hex, hex + 2) == -1);                     // two columns away: not adjacent
+    CHECK(hexline::hexDirection(hex, -1) == -1);                          // off-grid target
+    CHECK(hexline::hexDirection(-1, hex) == -1);                          // off-grid source
+    CHECK(hexline::hexDirection(hex, HexagonGrid::POSITION_COUNT) == -1); // off-grid target (upper bound)
+}

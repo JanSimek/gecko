@@ -107,9 +107,10 @@ blind rectangle:
   box) and place exits on the edge segments the design wants open, leaving the rest walled. Reuse
   the screen→hex edge walk from `placeExitGridRect`, but follow the diamond boundary and accept a
   per-edge open/closed mask.
-- **Reachability-gated** — only place an exit on a hex reachable from the player start (flood-fill,
-  cf. the "Pathing, blocking & reachability" analysis item), so generators can't strand an exit
-  behind a wall.
+- **Reachability-gated** — *partially done:* `generate` now runs the reachability analysis on
+  every map it writes and warns when an exit grid is unreachable from the player start, so a
+  stranded exit is caught at generation time. Still open: placing exits reachability-aware in
+  the first place (the check reports, the placement doesn't consult it).
 
 The primitive (`placeExitGridRect`) and the directional-art mapping are the reusable foundation;
 the follow-up is feeding them terrain-derived locations instead of a centred rectangle.
@@ -482,15 +483,12 @@ The direction instead:
 
 ### P1 — Ergonomics: make scripts human-writable
 
-2. **Human coordinates.** *(still open.)* Addressing by linear index (`hex = row*200 + col`, tiles `row*100 + col`)
-   is unintuitive, and the two grids differ (200×200 hexes vs 100×100 tiles). Add `(col, row)`
-   variants of the common ops (`paintFloorXY`, `placeProtoXY`, `getFloorXY`) plus index↔(col,row)
-   converters (`hexIndex(col,row)`/`tileIndex(col,row)` + inverses) and a **tile↔hex bridge** (a
-   tile covers ~2×2 hexes) so "paint this tile and put a tree on it" is one step. Reuse the engine
-   geometry (`hexgrid::offsetToCube`/`columnOf`/`rowOf`). Optionally add normalized `[0,1]`
-   helpers (`hexAt(fx, fy)`) so "centre"/"scatter across the map" are grid-size-agnostic. Decide
-   and **document the orientation** so `(col,row)` matches what the editor displays (Fallout's hex
-   numbering has a right-to-left quirk).
+2. **Human coordinates.** *(mostly done.)* `(col, row)` variants and the index↔(col,row)
+   converters shipped earlier; the **tile↔hex bridge is now exact**: `hexTile(hex)`/
+   `tileHexes(tile)` project through the renderer's own screen geometry (NOT the naive col/2
+   halving, which drifts a tile near block boundaries) — this is what lets `cave.luau` place
+   walls/blockers that hug a floor boundary. *Remaining (minor):* normalized `[0,1]` helpers
+   (`hexAt(fx, fy)`) and documenting the on-screen orientation convention.
 
 ### P2 — Generation quality
 
@@ -505,19 +503,62 @@ The direction instead:
    (vault doors, cars), because choosing *what* is scatter-able is semantic, not statistical. The
    reliable path is **curated palettes** + an MCP agent's judgment; the histogram lives on as an
    *analysis* tool, not the generator.
-7. **Enclosures / autowalling + roofs.** A helper that rings a region with correctly-oriented
-   wall protos (the analyze output is full of left/right/corner `Wall` variants) unlocks the cave
-   and town biomes; generate a **roof** layer for enclosed areas (`paintRoof` already exists).
+7. **Enclosures / autowalling + roofs.** — **Cave autowalling SHIPPED, but the wall run still needs
+   improvement.** `cave.luau` now generates the cavern as a smooth **metaball field** (chambers =
+   radial sources, corridors = line sources; walkable interior = the field-≥1 isocontour, noise-warped
+   for organic erosion, flood-filled so no stray pockets) and lines the rim with a dense 2-cell **wall
+   band** — every hex that straddles the isocontour, classed by the field **gradient** (outward normal
+   → compass class), drawing each piece from a per-orientation palette *learned* from the shipped cave
+   maps (`mapFloorAt`/`mapObjectsAt`/`hexTile`/`tileHexes`/`protoFlat`, faces only). This fixed the
+   **shape** ceiling — smooth curves at hex resolution, no tile stair-steps, gap-free (history:
+   learned tile-mask replay → connection-shape → compass class → smoothed-normal 2-cell band → metaball
+   field). Rim sealed with Secret-Blocking-Hex fills (reachable set == floor), scroll-blocker ring,
+   exit patch + player start; deterministic, reachability-verified.
+
+   ⚠️ **Not good enough yet — piece SELECTION is still statistical.** Each rim hex samples a *learned
+   per-compass palette independently*, so neighbouring pieces don't actually **connect**: up close the
+   run shows mismatched faces, no true convex/concave **corners**, and the fill/face families
+   occasionally butt against each other. The compass class + gradient smoothing hide most of it, but
+   the rim never reads as the single continuous, correctly-cornered rock wall the hand-authored caves
+   have.
+
+   ➡️ **Next: an authored wall-ADJACENCY model (Wang / edge-constraint tiling), not per-hex sampling.**
+   Give each "Cave Wall" proto an explicit **connection signature** — *which* pieces may attach on its
+   left/right along the run, which pieces are straight segments for each orientation, which are
+   **corners** (convex vs concave, and for which turn direction), which are run *ends/caps*. Then lay
+   the rim as a **constraint-satisfying sequence** around the 1-D boundary loop (Wang tiling / a small
+   WFC along the contour): pick each next piece only from those allowed to follow the previous piece
+   *and* to match the local turn angle, instead of independent draws. Derive the signatures by
+   **mining adjacency from the shipped cave rims** — which piece actually follows which, and at what
+   turn, via `mapObjectsAt` + the ordered-boundary walk — and/or a small hand-authored table keyed by
+   proto. Shares the **adjacency/Wang** machinery with the floor-tile autotiling in P2 §4. This is the
+   path from "smooth but fuzzy" to "reads as a real, cornered rock wall".
+
+   **Also remaining (content, complementary):** rim **scenery** (shipped caves scatter ~70
+   Rocks/Stalagmites; the generator places 0) and **stamped rock formations** (extract real multi-hex
+   formations from `cave1..4` via `extract-pattern`/`placeStamp`) to reuse authored composition;
+   **town/building** walls (straight `Wall s.t.` runs + door openings differ from organic cave rims);
+   and generating a **roof** layer for enclosed areas.
 
 ### P3 — Reach & tooling
 
-8. **`--in <map>`** for `generate` — decorate/edit an existing map, not just an empty one (the GUI
-   console already runs against the current map).
-9. **Fill/region/query helpers** — `fillRect`, `fillRegion`, `tilesByPrefix("cav")`, region and
-   neighbour queries — small, composable, make scripts read like intent.
-10. **Biome script library** — `cave.luau`, `town.luau`, `coast.luau` beside the desert one; each
-    a worked example. Expand the `scripts/README.md` table.
-11. **Batch generation** — produce N maps with varying seeds in one `gecko-cli` invocation.
+8. ~~**`--in <map>`** for `generate`~~ — **DONE.** `--in` (CLI) / `in` (MCP) loads an existing map
+   (VFS path or file on disk) for the script to decorate; the requested elevation is validated
+   against the input's enabled elevations.
+9. ~~**Fill/region/query helpers**~~ — **DONE**: `tilesByPrefix("cav")` (name→id for a tile
+   family), `tilesInRect`, `fillFloorRect`/`fillRoofRect`, and `fillRegion` (4-connected flood
+   fill / paint-bucket) joined the `api:` surface; all route through the paint chokepoint, so
+   they respect the plan sink and undo batching. (`hexNeighbors` already covered the neighbour
+   query.) Also fixed: the run's resolved seed now seeds `api:rng()`/`rngInt()` in every host
+   (LuaScriptRuntime), not just the GUI fill preview.
+10. **Biome script library** — `cave.luau` **shipped** (the worked example of the region/fill
+    helpers: chambers + corridors via `fillFloorRect`, `fillRegion` connectivity repair,
+    `tilesByPrefix` family retexture). `town.luau` and `coast.luau` remain; expand the
+    `scripts/README.md` table as they land.
+11. ~~**Batch generation**~~ — **DONE.** `--count N` (CLI) / `count` (MCP): the script runs once
+    per map against a fresh copy (empty or `--in`), writing `<out>_1.map`…`<out>_N.map` with
+    consecutive seeds from the base (`--arg seed=N` or a reported random base), so the batch
+    varies AND reproduces.
 
 ### Open questions
 
@@ -526,7 +567,9 @@ The direction instead:
 - **Coordinate convention:** expose `(col,row)` as the engine's storage layout or remap to
   match the editor's on-screen/displayed coordinates? Pick one and document it.
 - **Collision policy** when a generator targets an occupied hex/tile (overwrite / skip / error).
-- **Multi-elevation generation** (run a script across all three elevations in one invocation).
+- ~~**Multi-elevation generation**~~ — **DONE**: `api:setElevation(e)` switches which elevation
+  subsequent queries/edits target (validated against the map's enabled elevations; tile/object
+  data route by the recorded elevation, so it is safe mid-run).
 
 ---
 
@@ -778,9 +821,10 @@ and probably not worth chasing for a map editor.
 - **`structuredContent`** on the JSON-emitting tools (analyze/describe_map/palette/proto_info/…) —
   return the parsed object alongside the text block, so clients get typed data instead of re-parsing
   a string.
-- **Tool annotations** — `readOnlyHint` (everything except generate/render/extract is read-only),
-  `destructiveHint`, `openWorldHint:false` (all data is local). Cheap to add to each `ToolSpec` now
-  that the registry carries per-tool metadata.
+- ~~**Tool annotations**~~ — **DONE.** Every `tools/list` entry now carries `annotations`:
+  `readOnlyHint` (true for the whole inspection group, false for generate/render_map/render_frm/
+  extract_pattern), `destructiveHint:false` (the mutating tools only write new output files) and
+  `openWorldHint:false` (all data is local).
 - **`render_map` as an image/resource** — return an embedded image or a resource link rather than the
   written path (more idiomatic; the path works fine for a local agent).
 - *(Not planned: per-call cancellation / progress notifications — the stdio loop is deliberately

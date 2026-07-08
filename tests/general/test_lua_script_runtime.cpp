@@ -400,6 +400,31 @@ TEST_CASE("Each run is randomly seeded, but an explicit seed reproduces", "[scri
     CHECK(c.output == d.output);
 }
 
+TEST_CASE("The run's seed also drives api:rng", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    const std::string draw = "for i = 1, 8 do print(api:rngInt(1, 1000000)) end";
+
+    // The resolved seed is applied to the api stream exactly as to math.random: an explicit seed
+    // reproduces api:rng/rngInt across runs (gecko-cli --count relies on this to vary its batch)...
+    const ScriptArgs seeded{ { "seed", "123" } };
+    const auto a = rt.run(draw, api, fx.controller, "rng", seeded);
+    const auto b = rt.run(draw, api, fx.controller, "rng", seeded);
+    REQUIRE(a.ok);
+    REQUIRE(b.ok);
+    CHECK(a.output == b.output);
+
+    // ...and without one, each run gets a fresh stream instead of mt19937's fixed default.
+    const auto c = rt.run(draw, api, fx.controller, "rng");
+    const auto d = rt.run(draw, api, fx.controller, "rng");
+    REQUIRE(c.ok);
+    REQUIRE(d.ok);
+    CHECK(c.output != d.output);
+    CHECK(a.output != c.output);
+}
+
 TEST_CASE("The run's seed is published as args.seed", "[scripting][lua]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);

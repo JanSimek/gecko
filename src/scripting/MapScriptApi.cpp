@@ -8,6 +8,7 @@
 #include <format>
 #include <functional>
 #include <memory>
+#include <ranges>
 #include <set>
 #include <unordered_map>
 
@@ -20,6 +21,7 @@
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
 #include "format/msg/Msg.h"
+#include "format/frm/Frm.h"
 #include "format/pro/Pro.h"
 #include "editor/TileChange.h"
 #include "pattern/FillPlan.h"
@@ -30,6 +32,7 @@
 #include "resource/ResourcePaths.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "util/Constants.h"
+#include "util/TileUtils.h"
 #include "util/ExitGridDirection.h"
 #include "util/HexLine.h"
 #include "util/ProHelper.h"
@@ -53,6 +56,12 @@ bool MapScriptApi::isValidHex(int hex) const {
 std::vector<int> MapScriptApi::hexNeighbors(int hex) const {
     // Parity-correct cube-coordinate neighbours; shared with the editor's exit-grid edge walk.
     return hexline::hexNeighbors(hex);
+}
+
+int MapScriptApi::hexDir(int fromHex, int toHex) const {
+    // The 0..5 step direction between adjacent hexes — the primitive a wall-segment chain uses to
+    // pick a piece that matches the way its run enters and leaves each hex.
+    return hexline::hexDirection(fromHex, toHex);
 }
 
 uint16_t MapScriptApi::getFloor(int tileIndex) const {
@@ -95,6 +104,32 @@ int MapScriptApi::tileId(const std::string& name) const {
         }
     }
     return -1;
+}
+
+std::map<std::string, int> MapScriptApi::tilesByPrefix(const std::string& prefix) const {
+    // Same availability contract as tileId(): a missing tiles.lst is a real error, an
+    // unmatched prefix is a legitimate empty result.
+    const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
+    if (lst == nullptr) {
+        throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
+    }
+    std::string needle = prefix;
+    std::ranges::transform(needle, needle.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::map<std::string, int> matches;
+    const auto& entries = lst->list();
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        if (!entries[i].starts_with(needle)) {
+            continue;
+        }
+        std::string name = entries[i];
+        if (name.size() >= 4 && name.compare(name.size() - 4, 4, ".frm") == 0) {
+            name.resize(name.size() - 4);
+        }
+        // try_emplace keeps the first (lowest) id for a duplicated name — tileId's behaviour.
+        matches.try_emplace(std::move(name), static_cast<int>(i));
+    }
+    return matches;
 }
 
 std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) const {
@@ -195,6 +230,110 @@ std::vector<int> MapScriptApi::mapFloorTiles(const std::string& mapPath) const {
     return result;
 }
 
+namespace {
+    // Shared elevation-presence check for the reference-map queries: a .map only stores the
+    // elevations its header enables, so asking for an absent one is a real error, not "empty".
+    void requireReferenceElevation(const Map& reference, const std::string& mapPath, int elevation) {
+        if (elevation < 0 || elevation >= Map::ELEVATION_COUNT) {
+            throw ScriptError(std::format("elevation must be 0..{}, got {}", Map::ELEVATION_COUNT - 1, elevation));
+        }
+        if (!reference.getMapFile().tiles.contains(elevation)) {
+            throw ScriptError(std::format("map '{}' has no elevation {}", mapPath, elevation));
+        }
+    }
+
+    // Resolve a readable type name against the engine's own type names (Pro::typeToString) rather
+    // than a second hardcoded table — singular ("scenery") or its plural ("walls"). Throws
+    // ScriptError on an unknown name. Shared by proto() and mapObjectsAt().
+    Pro::OBJECT_TYPE objectTypeFromName(const std::string& typeName) {
+        const auto lower = [](std::string s) {
+            std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return s;
+        };
+        const std::string wanted = lower(typeName);
+
+        using enum Pro::OBJECT_TYPE;
+        for (const Pro::OBJECT_TYPE type : { ITEM, CRITTER, SCENERY, WALL, TILE, MISC }) {
+            const std::string name = lower(Pro::typeToString(type));
+            if (wanted == name || wanted == name + "s") {
+                return type;
+            }
+        }
+        throw ScriptError(std::format("unknown proto type '{}' (use item/critter/scenery/wall/tile/misc)", typeName));
+    }
+} // namespace
+
+std::vector<int> MapScriptApi::mapFloorAt(const std::string& mapPath, int elevation) const {
+    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath); // throws if unreadable
+    requireReferenceElevation(*reference, mapPath, elevation);
+
+    const std::vector<Tile>& tiles = reference->getMapFile().tiles.at(elevation);
+    std::vector<int> floor;
+    floor.reserve(tiles.size());
+    for (const Tile& tile : tiles) {
+        floor.push_back(tile.getFloor());
+    }
+    return floor;
+}
+
+std::vector<int> MapScriptApi::mapObjectsAt(const std::string& mapPath, int elevation, const std::string& typeName) const {
+    const Pro::OBJECT_TYPE wanted = objectTypeFromName(typeName); // throws on an unknown type
+    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath);
+    requireReferenceElevation(*reference, mapPath, elevation);
+
+    std::vector<int> triples;
+    const auto& objectsByElevation = reference->getMapFile().map_objects;
+    const auto it = objectsByElevation.find(elevation);
+    if (it == objectsByElevation.end()) {
+        return triples; // the elevation exists but holds no objects — a valid empty answer
+    }
+    for (const auto& object : it->second) {
+        if (Pro::typeOfPid(object->pro_pid) != wanted) {
+            continue;
+        }
+        triples.push_back(static_cast<int>(object->pro_pid));
+        triples.push_back(object->position);
+        triples.push_back(static_cast<int>(object->direction));
+    }
+    return triples;
+}
+
+bool MapScriptApi::protoBlocks(int pid) const {
+    // A wrong answer here silently breaks walkability, so an unloadable proto is a raised error,
+    // never a guess (same contract as tileId's missing tiles.lst).
+    const Pro* pro = nullptr;
+    try {
+        pro = _resources.loadPro(static_cast<uint32_t>(pid));
+    } catch (const std::exception&) {
+        pro = nullptr;
+    }
+    if (pro == nullptr) {
+        throw ScriptError(std::format(
+            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
+            static_cast<uint32_t>(pid)));
+    }
+    return !Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_NO_BLOCK);
+}
+
+bool MapScriptApi::protoFlat(int pid) const {
+    // OBJECT_FLAT marks ground-hugging art (rubble/fill textures, floor markers) drawn below
+    // standing objects — as opposed to a wall FACE that stands up. Cave-wall protos come in both:
+    // a generator wants the faces to line a boundary and the flat fill only to carpet solid rock.
+    // Same hard-fail contract as protoBlocks: an unloadable proto is raised, never guessed.
+    const Pro* pro = nullptr;
+    try {
+        pro = _resources.loadPro(static_cast<uint32_t>(pid));
+    } catch (const std::exception&) {
+        pro = nullptr;
+    }
+    if (pro == nullptr) {
+        throw ScriptError(std::format(
+            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
+            static_cast<uint32_t>(pid)));
+    }
+    return Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
+}
+
 std::vector<std::string> MapScriptApi::listMaps() const {
     std::vector<std::string> maps;
     try {
@@ -272,26 +411,12 @@ double MapScriptApi::noise3d(double x, double y, double z) const {
 }
 
 uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
-    const auto lower = [](std::string s) {
-        std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return s;
-    };
-    const std::string wanted = lower(typeName);
-
-    // Match against the engine's own type names (Pro::typeToString) rather than a second hardcoded
-    // table — singular ("scenery") or its plural ("walls").
-    using enum Pro::OBJECT_TYPE;
-    for (const Pro::OBJECT_TYPE type : { ITEM, CRITTER, SCENERY, WALL, TILE, MISC }) {
-        const std::string name = lower(Pro::typeToString(type));
-        if (wanted == name || wanted == name + "s") {
-            // The id occupies the low 24 bits of the PID and is 1-based (proto ids start at 1).
-            if (number <= 0 || number > 0x00FFFFFF) {
-                throw ScriptError(std::format("proto number out of range (1..16777215): {}", number));
-            }
-            return Pro::makePid(type, static_cast<uint32_t>(number));
-        }
+    const Pro::OBJECT_TYPE type = objectTypeFromName(typeName); // throws on an unknown type
+    // The id occupies the low 24 bits of the PID and is 1-based (proto ids start at 1).
+    if (number <= 0 || number > 0x00FFFFFF) {
+        throw ScriptError(std::format("proto number out of range (1..16777215): {}", number));
     }
-    throw ScriptError(std::format("unknown proto type '{}' (use item/critter/scenery/wall/tile/misc)", typeName));
+    return Pro::makePid(type, static_cast<uint32_t>(number));
 }
 
 std::string MapScriptApi::protoName(int pid) const {
@@ -305,6 +430,63 @@ std::string MapScriptApi::protoName(int pid) const {
         return msg->message(pro->header.message_id).text;
     }
     return {};
+}
+
+int MapScriptApi::protoFid(int pid) const {
+    // The proto's art FID — what placeProto resolves and stores. Lets a generator identify a proto's
+    // art (resolve_fid / its sprite) rather than reason from the opaque proto number. Same hard-fail
+    // contract as protoName/protoBlocks: an unloadable proto is raised, never guessed.
+    const Pro* pro = nullptr;
+    try {
+        pro = _resources.loadPro(static_cast<uint32_t>(pid));
+    } catch (const std::exception&) {
+        pro = nullptr;
+    }
+    if (pro == nullptr) {
+        throw ScriptError(std::format(
+            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
+            static_cast<uint32_t>(pid)));
+    }
+    return pro->header.FID;
+}
+
+std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
+    // Resolve the proto -> its art FID -> the FRM, the same path placeProto and the renderer take,
+    // and flatten every frame's geometry into (direction, frame, width, height, offsetX, offsetY)
+    // 6-tuples. Same hard-fail contract as protoFid: an unresolvable proto or FRM is raised, never
+    // guessed, because a caller measuring art footprints can't recover from a silent wrong answer.
+    const int fid = protoFid(pid); // raises if the proto can't load
+    const std::string artPath = _resources.frmResolver().resolve(static_cast<uint32_t>(fid));
+    if (artPath.empty()) {
+        throw ScriptError(std::format("proto 0x{:08x} art (fid 0x{:08x}) does not resolve to an FRM path",
+            static_cast<uint32_t>(pid), static_cast<uint32_t>(fid)));
+    }
+    const Frm* frm = nullptr;
+    try {
+        frm = _resources.repository().load<Frm>(artPath);
+    } catch (const std::exception&) {
+        frm = nullptr;
+    }
+    if (frm == nullptr || frm->directions().empty()) {
+        throw ScriptError(std::format("proto 0x{:08x} art '{}' has no renderable frame",
+            static_cast<uint32_t>(pid), artPath));
+    }
+    std::vector<int> out;
+    const auto& directions = frm->directions();
+    for (int d = 0; d < static_cast<int>(directions.size()); ++d) {
+        const auto& frames = directions[d].frames();
+        out.reserve(out.size() + frames.size() * 6);
+        for (int f = 0; f < static_cast<int>(frames.size()); ++f) {
+            const Frame& frame = frames[f];
+            out.push_back(d);
+            out.push_back(f);
+            out.push_back(frame.width());
+            out.push_back(frame.height());
+            out.push_back(frame.offsetX());
+            out.push_back(frame.offsetY());
+        }
+    }
+    return out;
 }
 
 void MapScriptApi::beginBatch(const std::string& description) {
@@ -456,6 +638,59 @@ int MapScriptApi::tileRow(int tile) const {
     return (tile >= 0 && tile < HexagonGrid::TILE_COUNT) ? tile / HexagonGrid::TILE_GRID_WIDTH : -1;
 }
 
+std::vector<int> MapScriptApi::tilesInRect(int col0, int row0, int col1, int row1) const {
+    const int colLo = std::max(std::min(col0, col1), 0);
+    const int rowLo = std::max(std::min(row0, row1), 0);
+    const int colHi = std::min(std::max(col0, col1), HexagonGrid::TILE_GRID_WIDTH - 1);
+    const int rowHi = std::min(std::max(row0, row1), HexagonGrid::TILE_GRID_HEIGHT - 1);
+    std::vector<int> tiles;
+    if (colLo > colHi || rowLo > rowHi) {
+        return tiles;
+    }
+    tiles.reserve(static_cast<std::size_t>(colHi - colLo + 1) * static_cast<std::size_t>(rowHi - rowLo + 1));
+    for (int row = rowLo; row <= rowHi; ++row) {
+        for (int col = colLo; col <= colHi; ++col) {
+            tiles.push_back(row * HexagonGrid::TILE_GRID_WIDTH + col);
+        }
+    }
+    return tiles;
+}
+
+int MapScriptApi::hexTile(int hex) const {
+    // The exact visual bridge: project the hex's screen centre through the same inverse the
+    // eyedropper and tile painting use. The naive col/2 halving drifts up to a tile near block
+    // boundaries, which is enough to put a wall on the wrong side of a floor edge.
+    if (!isValidHex(hex)) {
+        return -1;
+    }
+    const auto h = _hexgrid.getHexByPosition(static_cast<uint32_t>(hex));
+    if (!h.has_value()) {
+        return -1;
+    }
+    const auto tile = screenToTileIndex(static_cast<float>(h->get().x()), static_cast<float>(h->get().y()));
+    return tile.value_or(-1);
+}
+
+std::vector<int> MapScriptApi::tileHexes(int tileIndex) const {
+    std::vector<int> hexes;
+    if (tileIndex < 0 || tileIndex >= HexagonGrid::TILE_COUNT) {
+        return hexes;
+    }
+    // Candidates: the tile's naive 2x2 hex block plus a one-hex margin — the screen mapping can
+    // pull a hex across the halved block boundary, but never past an adjacent hex.
+    const int tx = tileIndex % HexagonGrid::TILE_GRID_WIDTH;
+    const int ty = tileIndex / HexagonGrid::TILE_GRID_WIDTH;
+    for (int hy = 2 * ty - 1; hy <= 2 * ty + 2; ++hy) {
+        for (int hx = 2 * tx - 1; hx <= 2 * tx + 2; ++hx) {
+            const int hex = hexIndex(hx, hy);
+            if (hex >= 0 && hexTile(hex) == tileIndex) {
+                hexes.push_back(hex);
+            }
+        }
+    }
+    return hexes;
+}
+
 uint16_t MapScriptApi::getFloorXY(int col, int row) const {
     return getFloor(tileIndex(col, row));
 }
@@ -532,6 +767,59 @@ bool MapScriptApi::paintFloorXY(int col, int row, uint16_t tileId) {
     return paintFloor(tileIndex(col, row), tileId);
 }
 
+int MapScriptApi::fillFloorRect(int col0, int row0, int col1, int row1, uint16_t tileId) {
+    int painted = 0;
+    for (const int tile : tilesInRect(col0, row0, col1, row1)) {
+        if (paintFloor(tile, tileId)) {
+            ++painted;
+        }
+    }
+    return painted;
+}
+
+int MapScriptApi::fillRoofRect(int col0, int row0, int col1, int row1, uint16_t tileId) {
+    int painted = 0;
+    for (const int tile : tilesInRect(col0, row0, col1, row1)) {
+        if (paintRoof(tile, tileId)) {
+            ++painted;
+        }
+    }
+    return painted;
+}
+
+int MapScriptApi::fillRegion(int col, int row, uint16_t tileId) {
+    const int start = tileIndex(col, row);
+    if (start < 0) {
+        return 0;
+    }
+    const uint16_t target = getFloor(start);
+    if (target == tileId) {
+        return 0; // the region already has that id — nothing to paint (and no runaway frontier)
+    }
+    // Track visited cells locally rather than re-reading the map: with a plan sink installed the
+    // committed map never changes during the run, so getFloor alone would revisit cells forever.
+    std::vector<bool> visited(HexagonGrid::TILE_COUNT, false);
+    std::vector<int> frontier{ start };
+    visited[start] = true;
+    int painted = 0;
+    while (!frontier.empty()) {
+        const int tile = frontier.back();
+        frontier.pop_back();
+        if (paintFloor(tile, tileId)) {
+            ++painted;
+        }
+        const int c = tileCol(tile);
+        const int r = tileRow(tile);
+        for (const int next : { tileIndex(c - 1, r), tileIndex(c + 1, r), tileIndex(c, r - 1), tileIndex(c, r + 1) }) {
+            if (next >= 0 && !visited[next] && getFloor(next) == target) {
+                visited[next] = true;
+                frontier.push_back(next);
+            }
+        }
+    }
+    return painted;
+}
+
 bool MapScriptApi::paintRoofXY(int col, int row, uint16_t tileId) {
     return paintRoof(tileIndex(col, row), tileId);
 }
@@ -601,6 +889,22 @@ void MapScriptApi::setPlayerStart(int hex, int orientation, int elevation) {
     header.player_default_orientation = static_cast<uint32_t>(orientation);
     header.player_default_elevation = static_cast<uint32_t>(elevation);
     _mutatedDirectly = true;
+}
+
+void MapScriptApi::setElevation(int elevation) {
+    if (elevation < 0 || elevation >= Map::ELEVATION_COUNT) {
+        throw ScriptError(std::format("setElevation: elevation must be 0..{}, got {}", Map::ELEVATION_COUNT - 1, elevation));
+    }
+    // A .map only carries the elevations its header enables; editing an absent one would write
+    // into a tile block that doesn't exist. Same contract as generate --in's validation.
+    if (!_map.getMapFile().tiles.contains(elevation)) {
+        std::string present;
+        for (const int level : _map.getMapFile().tiles | std::views::keys) {
+            present += std::format(" {}", level);
+        }
+        throw ScriptError(std::format("setElevation: the map has no elevation {} (present:{})", elevation, present));
+    }
+    _elevation = elevation;
 }
 
 namespace {
@@ -683,9 +987,38 @@ int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int scre
     }
     validateExitGridDest(destMapId, destHex, destElevation, orientation);
 
+    const auto dstMap = static_cast<uint32_t>(destMapId);
+    const ExitDest dest{ dstMap, destHex, destElevation, orientation };
+    const ExitGridDestinationKind kind = destinationKindFor(dstMap);
+
+    // Each rectangle edge uses its cardinal directional art (proto = direction, frm = green/brown by
+    // destination kind): the top/bottom edges run as iso-horizontal lines, the left/right as vertical.
+    const auto edges = screenRectEdges(centerHex, screenHalfWidth, screenHalfHeight);
+    const std::array<ExitGridArt, 4> art{
+        exitGridArtForDirection(ExitGrid::DIR_TOP, kind),
+        exitGridArtForDirection(ExitGrid::DIR_BOTTOM, kind),
+        exitGridArtForDirection(ExitGrid::DIR_LEFT, kind),
+        exitGridArtForDirection(ExitGrid::DIR_RIGHT, kind),
+    };
+
+    std::set<int> placedHexes; // corners are shared between two edges — place each hex once.
+    int placed = 0;
+    for (std::size_t edge = 0; edge < edges.size(); ++edge) {
+        for (const int hex : edges[edge]) {
+            if (placedHexes.insert(hex).second
+                && placeExitGridMarker(hex, art[edge].proPid, art[edge].frmPid, dest)) {
+                ++placed;
+            }
+        }
+    }
+    return placed;
+}
+
+std::array<std::vector<int>, 4> MapScriptApi::screenRectEdges(int centerHex, int screenHalfWidth, int screenHalfHeight) const {
+    std::array<std::vector<int>, 4> edges;
     const auto centre = _hexgrid.getHexByPosition(static_cast<uint32_t>(centerHex));
     if (!centre.has_value()) {
-        return 0;
+        return edges;
     }
     const int cx = centre->get().x();
     const int cy = centre->get().y();
@@ -693,9 +1026,6 @@ int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int scre
     const int right = cx + screenHalfWidth;
     const int top = cy - screenHalfHeight;
     const int bottom = cy + screenHalfHeight;
-    const auto dstMap = static_cast<uint32_t>(destMapId);
-    const ExitDest dest{ dstMap, destHex, destElevation, orientation };
-    const ExitGridDestinationKind kind = destinationKindFor(dstMap);
 
     // The four screen corners; each edge is the gap-free hex line between two of them, walked along
     // the iso staircase so the vertical sides are continuous (not a sparse single column).
@@ -704,30 +1034,25 @@ int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int scre
     const int bl = nearestHex(_hexgrid, left, bottom);
     const int br = nearestHex(_hexgrid, right, bottom);
 
-    struct Edge {
-        int from, to;
-        ExitGridArt art;
-    };
-    // Each rectangle edge uses its cardinal directional art (proto = direction, frm = green/brown by
-    // destination kind): the top/bottom edges run as iso-horizontal lines, the left/right as vertical.
-    const std::array<Edge, 4> edges{ {
-        { tl, tr, exitGridArtForDirection(ExitGrid::DIR_TOP, kind) },
-        { bl, br, exitGridArtForDirection(ExitGrid::DIR_BOTTOM, kind) },
-        { tl, bl, exitGridArtForDirection(ExitGrid::DIR_LEFT, kind) },
-        { tr, br, exitGridArtForDirection(ExitGrid::DIR_RIGHT, kind) },
-    } };
+    edges[0] = hexline::hexLine(_hexgrid, tl, tr); // top
+    edges[1] = hexline::hexLine(_hexgrid, bl, br); // bottom
+    edges[2] = hexline::hexLine(_hexgrid, tl, bl); // left
+    edges[3] = hexline::hexLine(_hexgrid, tr, br); // right
+    return edges;
+}
 
-    std::set<int> placedHexes; // corners are shared between two edges — place each hex once.
-    int placed = 0;
-    for (const Edge& edge : edges) {
-        for (const int hex : hexline::hexLine(_hexgrid, edge.from, edge.to)) {
-            if (placedHexes.insert(hex).second
-                && placeExitGridMarker(hex, edge.art.proPid, edge.art.frmPid, dest)) {
-                ++placed;
-            }
-        }
+std::vector<int> MapScriptApi::hexesOnScreenRect(int centerHex, int screenHalfWidth, int screenHalfHeight) const {
+    if (!isValidHex(centerHex)) {
+        throw ScriptError(std::format("hexesOnScreenRect: centerHex {} is off the 200x200 hex grid", centerHex));
     }
-    return placed;
+    if (screenHalfWidth <= 0 || screenHalfHeight <= 0) {
+        throw ScriptError("hexesOnScreenRect: screenHalfWidth/Height must be positive");
+    }
+    std::set<int> border; // corners are shared between two edges — report each hex once, sorted
+    for (const auto& edge : screenRectEdges(centerHex, screenHalfWidth, screenHalfHeight)) {
+        border.insert(edge.begin(), edge.end());
+    }
+    return { border.begin(), border.end() };
 }
 
 } // namespace geck

@@ -53,9 +53,10 @@ LogPanel::LogPanel(QWidget* parent)
     _view->setSelectionBehavior(QAbstractItemView::SelectRows);
     _view->setEditTriggers(QAbstractItemView::NoEditTriggers);
     _view->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    _view->header()->setSectionResizeMode(LogModel::TimeColumn, QHeaderView::ResizeToContents);
-    _view->header()->setSectionResizeMode(LogModel::LevelColumn, QHeaderView::ResizeToContents);
-    _view->header()->setSectionResizeMode(LogModel::MessageColumn, QHeaderView::Stretch);
+    // The header's per-section modes are set in setModel(): with no source model attached the
+    // header has zero sections, and QHeaderView::setSectionResizeMode(index, mode) asserts on
+    // an out-of-range index in debug Qt builds (this hung qt_tests on Windows Debug CI — the
+    // debug-CRT assert dialog blocks forever on a headless runner).
 
     auto* layout = new QVBoxLayout(this);
     layout->setSpacing(ui::theme::spacing::TIGHT);
@@ -84,6 +85,13 @@ LogPanel::LogPanel(QWidget* parent)
 void LogPanel::setModel(LogModel* model) {
     _model = model;
     _proxy->setSourceModel(model);
+    if (model == nullptr) {
+        return;
+    }
+    // Only now does the header have sections to configure (see the constructor note).
+    _view->header()->setSectionResizeMode(LogModel::TimeColumn, QHeaderView::ResizeToContents);
+    _view->header()->setSectionResizeMode(LogModel::LevelColumn, QHeaderView::ResizeToContents);
+    _view->header()->setSectionResizeMode(LogModel::MessageColumn, QHeaderView::Stretch);
 }
 
 void LogPanel::onLevelFilterChanged(int index) {

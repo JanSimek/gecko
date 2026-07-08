@@ -1,13 +1,17 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <set>
 
 #include "editor/HexagonGrid.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
+#include "format/pro/Pro.h"
 #include "scripting/MapScriptApi.h"
 #include "util/Constants.h"
+#include "writer/map/MapWriter.h"
 
 #include "support/ControllerFixture.h"
 
@@ -18,6 +22,30 @@ namespace {
 constexpr int ELEV = 0;
 constexpr uint16_t SOME_TILE = 271;
 constexpr uint16_t EMPTY = static_cast<uint16_t>(Map::EMPTY_TILE);
+
+// A throwaway data tree holding just a tiles.lst, mounted so the tiles.lst-backed queries
+// (tileId, tilesByPrefix) have real entries to resolve — the pattern of the frm-inspect tests.
+struct TilesLstFixture {
+    std::filesystem::path root;
+
+    TilesLstFixture()
+        : root(std::filesystem::temp_directory_path() / "geck_scriptapi_tiles") { // NOSONAR: throwaway test dir, not security-sensitive
+        std::error_code ec;
+        std::filesystem::remove_all(root, ec);
+        const auto dir = root / "art/tiles";
+        std::filesystem::create_directories(dir);
+        std::ofstream out(dir / "tiles.lst", std::ios::binary);
+        out << "edg5000.frm\nedg5001.frm\ncav1000.frm\n";
+    }
+
+    TilesLstFixture(const TilesLstFixture&) = delete;
+    TilesLstFixture& operator=(const TilesLstFixture&) = delete;
+
+    ~TilesLstFixture() {
+        std::error_code ec;
+        std::filesystem::remove_all(root, ec);
+    }
+};
 } // namespace
 
 TEST_CASE("MapScriptApi query surface", "[scripting]") {
@@ -122,6 +150,72 @@ TEST_CASE("MapScriptApi (col,row) helpers convert and paint consistently", "[scr
         CHECK(api.getFloorXY(5, 3) == SOME_TILE);
         CHECK(api.getFloor(api.tileIndex(5, 3)) == SOME_TILE); // XY and index agree
         CHECK(api.getRoofXY(5, 3) == EMPTY);                   // floor, not roof
+    }
+}
+
+TEST_CASE("MapScriptApi rectangle and region fills", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    SECTION("tilesInRect enumerates the inclusive rectangle, ascending") {
+        const auto tiles = api.tilesInRect(5, 3, 7, 4); // 3 cols x 2 rows
+        REQUIRE(tiles.size() == 6);
+        CHECK(tiles.front() == api.tileIndex(5, 3));
+        CHECK(tiles.back() == api.tileIndex(7, 4));
+        CHECK(std::ranges::is_sorted(tiles));
+    }
+
+    SECTION("tilesInRect accepts swapped corners and clamps to the grid") {
+        CHECK(api.tilesInRect(7, 4, 5, 3) == api.tilesInRect(5, 3, 7, 4));
+        // A rectangle hanging off the top-left corner clamps to the on-grid part.
+        const auto clamped = api.tilesInRect(-2, -2, 1, 1);
+        CHECK(clamped.size() == 4);
+        CHECK(clamped.front() == api.tileIndex(0, 0));
+        // Fully off-grid -> empty, not an error.
+        CHECK(api.tilesInRect(-5, -5, -1, -1).empty());
+    }
+
+    SECTION("fillFloorRect paints every tile in the rectangle and counts them") {
+        CHECK(api.fillFloorRect(10, 10, 12, 11, SOME_TILE) == 6);
+        for (const int tile : api.tilesInRect(10, 10, 12, 11)) {
+            CHECK(api.getFloor(tile) == SOME_TILE);
+        }
+        CHECK(api.getFloorXY(13, 10) == EMPTY); // outside the rectangle untouched
+        CHECK(api.paintedTiles() == 6);
+    }
+
+    SECTION("fillRoofRect paints the roof layer, not the floor") {
+        CHECK(api.fillRoofRect(10, 10, 11, 10, SOME_TILE) == 2);
+        CHECK(api.getRoofXY(10, 10) == SOME_TILE);
+        CHECK(api.getFloorXY(10, 10) == EMPTY);
+    }
+
+    SECTION("fillRegion flood-fills the connected same-id region only") {
+        // Carve a 3x3 SOME_TILE island in the empty map, with a diagonal-only neighbour
+        // that must NOT be reached (the fill is 4-connected).
+        REQUIRE(api.fillFloorRect(20, 20, 22, 22, SOME_TILE) == 9);
+        constexpr uint16_t OTHER_TILE = 300;
+        REQUIRE(api.paintFloorXY(23, 23, SOME_TILE)); // touches (22,22) diagonally only
+        CHECK(api.fillRegion(21, 21, OTHER_TILE) == 9);
+        for (const int tile : api.tilesInRect(20, 20, 22, 22)) {
+            CHECK(api.getFloor(tile) == OTHER_TILE);
+        }
+        CHECK(api.getFloorXY(23, 23) == SOME_TILE); // diagonal neighbour untouched
+        CHECK(api.getFloorXY(19, 20) == EMPTY);     // surrounding empty region untouched
+    }
+
+    SECTION("fillRegion is a no-op on an off-grid start or an already-matching region") {
+        CHECK(api.fillRegion(-1, 0, SOME_TILE) == 0);
+        REQUIRE(api.paintFloorXY(30, 30, SOME_TILE));
+        CHECK(api.fillRegion(30, 30, SOME_TILE) == 0); // region already has that id
+        CHECK(api.paintedTiles() == 1);
+    }
+
+    SECTION("fillRegion floods the whole empty map from any cell in one call") {
+        const int total = HexagonGrid::TILE_COUNT;
+        CHECK(api.fillRegion(50, 50, SOME_TILE) == total);
+        CHECK(api.getFloorXY(0, 0) == SOME_TILE);
+        CHECK(api.getFloorXY(99, 99) == SOME_TILE);
     }
 }
 
@@ -357,6 +451,158 @@ TEST_CASE("MapScriptApi::proto builds a PID from a readable type name and id", "
     CHECK_THROWS(api.proto("scenery", 0x1000000));
 }
 
+TEST_CASE("MapScriptApi tile<->hex bridge is exact, covering, and invertible", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    SECTION("tileHexes is exactly hexTile's preimage over the whole grid") {
+        // Build the preimage from hexTile, then compare every tile's tileHexes against it.
+        // Counting mismatches manually keeps this a single assertion over 50k cells.
+        std::vector<std::vector<int>> preimage(HexagonGrid::TILE_COUNT);
+        int mapped = 0;
+        for (int hex = 0; hex < HexagonGrid::POSITION_COUNT; ++hex) {
+            const int tile = api.hexTile(hex);
+            if (tile >= 0) {
+                REQUIRE(tile < HexagonGrid::TILE_COUNT);
+                preimage[tile].push_back(hex);
+                ++mapped;
+            }
+        }
+        // Nearly every hex stands on some tile (the iso projection loses a sliver at the borders).
+        CHECK(mapped > HexagonGrid::POSITION_COUNT * 9 / 10);
+
+        int mismatches = 0;
+        for (int tile = 0; tile < HexagonGrid::TILE_COUNT; ++tile) {
+            if (api.tileHexes(tile) != preimage[tile]) {
+                ++mismatches;
+            }
+        }
+        CHECK(mismatches == 0);
+    }
+
+    SECTION("an interior tile carries a small block of hexes, all mapping back") {
+        const int tile = api.tileIndex(50, 50);
+        const auto hexes = api.tileHexes(tile);
+        REQUIRE(hexes.size() >= 3); // ~2x2 hexes per tile, shifted by the iso projection
+        REQUIRE(hexes.size() <= 6);
+        for (const int hex : hexes) {
+            CHECK(api.hexTile(hex) == tile);
+        }
+    }
+
+    SECTION("off-grid input is the N/A value, not an error") {
+        CHECK(api.hexTile(-1) == -1);
+        CHECK(api.hexTile(HexagonGrid::POSITION_COUNT) == -1);
+        CHECK(api.tileHexes(-1).empty());
+        CHECK(api.tileHexes(HexagonGrid::TILE_COUNT).empty());
+    }
+}
+
+TEST_CASE("MapScriptApi setElevation routes edits to the chosen elevation", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    api.setElevation(2);
+    REQUIRE(api.paintFloor(10, SOME_TILE));
+    CHECK(api.getFloor(10) == SOME_TILE); // queries follow the switch
+
+    api.setElevation(0);
+    CHECK(api.getFloor(10) == EMPTY); // elevation 0 untouched
+    CHECK(fx.map->getMapFile().tiles.at(2)[10].getFloor() == SOME_TILE);
+    CHECK(fx.map->getMapFile().tiles.at(0)[10].getFloor() == EMPTY);
+
+    CHECK_THROWS(api.setElevation(-1));
+    CHECK_THROWS(api.setElevation(Map::ELEVATION_COUNT));
+}
+
+TEST_CASE("MapScriptApi hexesOnScreenRect matches the exit-grid rectangle walk", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, /*buildSprites*/ false);
+
+    const int center = api.hexIndex(100, 100);
+    const auto border = api.hexesOnScreenRect(center, 96, 48);
+    REQUIRE_FALSE(border.empty());
+    CHECK(std::ranges::is_sorted(border));
+    CHECK(std::ranges::adjacent_find(border) == border.end()); // deduplicated
+
+    // The same hexes placeExitGridRect walks: place a rect and compare the marker positions.
+    const int placed = api.placeExitGridRect(center, 96, 48, -2, 0, 0, 0);
+    CHECK(placed == static_cast<int>(border.size()));
+    std::set<int> markerHexes;
+    for (const auto& object : fx.map->getMapFile().map_objects.at(ELEV)) {
+        markerHexes.insert(object->position);
+    }
+    CHECK(markerHexes == std::set<int>(border.begin(), border.end()));
+
+    CHECK_THROWS(api.hexesOnScreenRect(-1, 96, 48));
+    CHECK_THROWS(api.hexesOnScreenRect(center, 0, 48));
+}
+
+TEST_CASE("MapScriptApi reads a reference map's full floor and typed objects", "[scripting]") {
+    // Author the reference with the api itself — floor paints plus exit grids (MISC markers need
+    // no proto to write or parse) — then mount it at the production layout (maps/<name>.map) and
+    // read it back through the reference queries. Self-contained: no proto stubs, no shipped data.
+    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_refmap"; // NOSONAR: throwaway test dir
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "maps");
+    {
+        ControllerFixture author;
+        MapScriptApi authorApi(author.resources, author.hexgrid, author.controller, *author.map, ELEV,
+            /*buildSprites*/ false);
+        REQUIRE(authorApi.paintFloor(0, SOME_TILE));
+        REQUIRE(authorApi.paintFloor(9999, SOME_TILE));
+        REQUIRE(authorApi.placeExitGrid(20100, -2, 0, 0, 0));
+        REQUIRE(authorApi.placeExitGrid(20102, -2, 0, 0, 0));
+        MapWriter writer{ [](int32_t) -> Pro* { return nullptr; } };
+        writer.openFile(root / "maps/ref.map");
+        REQUIRE(writer.write(author.map->getMapFile()));
+    }
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root);
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    const auto floor = api.mapFloorAt("maps/ref.map", 0);
+    REQUIRE(floor.size() == Map::TILES_PER_ELEVATION);
+    CHECK(floor[0] == SOME_TILE);
+    CHECK(floor[9999] == SOME_TILE);
+    CHECK(floor[5000] == Map::EMPTY_TILE);
+    CHECK_THROWS(api.mapFloorAt("maps/ref.map", 3)); // out-of-range elevation raises
+
+    // Objects come back through their type filter as (pid, hex, direction) triples.
+    const auto misc = api.mapObjectsAt("maps/ref.map", 0, "misc");
+    REQUIRE(misc.size() == 6); // two exit-grid markers
+    const std::set<int> hexes{ misc[1], misc[4] };
+    CHECK(hexes == std::set<int>{ 20100, 20102 });
+    for (const std::size_t at : { std::size_t{ 0 }, std::size_t{ 3 } }) {
+        CHECK(Pro::typeOfPid(static_cast<uint32_t>(misc[at])) == Pro::OBJECT_TYPE::MISC);
+        CHECK(misc[at + 2] == 0);
+    }
+    CHECK(api.mapObjectsAt("maps/ref.map", 0, "wall").empty()); // no walls on this map
+
+    CHECK_THROWS(api.mapObjectsAt("maps/ref.map", 0, "gizmo")); // unknown type name
+    CHECK_THROWS(api.mapObjectsAt("no/such/map.map", 0, "wall"));
+
+    std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("MapScriptApi tilesByPrefix resolves a tile family from tiles.lst", "[scripting]") {
+    TilesLstFixture data;
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(data.root.string());
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    const auto edges = api.tilesByPrefix("EDG"); // case-insensitive, like tileId
+    REQUIRE(edges.size() == 2);
+    CHECK(edges.at("edg5000") == 0);
+    CHECK(edges.at("edg5001") == 1);
+    CHECK(edges.at("edg5001") == api.tileId("edg5001")); // ids agree with tileId
+
+    CHECK(api.tilesByPrefix("cav").at("cav1000") == 2);
+    CHECK(api.tilesByPrefix("zzz").empty()); // unmatched prefix is a valid empty result
+}
+
 TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[scripting]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
@@ -365,6 +611,13 @@ TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[s
         // These can't produce a real answer without game data, so they raise rather than hand back
         // an empty result indistinguishable from a valid "nothing here".
         CHECK_THROWS(api.tileId("edg5000"));
+        CHECK_THROWS(api.tilesByPrefix("edg"));
+        CHECK_THROWS(api.mapFloorAt("maps/desert1.map", 0));
+        CHECK_THROWS(api.mapObjectsAt("maps/desert1.map", 0, "wall"));
+        CHECK_THROWS(api.protoBlocks(0x02000066));
+        CHECK_THROWS(api.protoFlat(0x02000066));
+        CHECK_THROWS(api.protoFid(0x02000066));
+        CHECK_THROWS(api.protoArtFrames(0x02000066));
         CHECK_THROWS(api.mapScenery("maps/desert1.map"));
         CHECK_THROWS(api.mapScenery("no/such/map.map"));
         CHECK_THROWS(api.mapSceneryHistogram("maps/desert1.map"));

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -60,6 +61,8 @@ public:
     bool isValidHex(int hex) const;
     /// The up-to-6 on-grid hex neighbours (cube-coordinate, parity-correct).
     std::vector<int> hexNeighbors(int hex) const;
+    /// The 0..5 direction of the step from `fromHex` to an adjacent `toHex`; -1 if not neighbours.
+    int hexDir(int fromHex, int toHex) const;
     /// Floor/roof tile id at `tileIndex` on this elevation, or EMPTY_TILE if out of range.
     uint16_t getFloor(int tileIndex) const;
     uint16_t getRoof(int tileIndex) const;
@@ -68,6 +71,11 @@ public:
     /// if the tile list is unavailable or the name is unknown, so scripts address tiles by name
     /// instead of magic numbers.
     int tileId(const std::string& name) const;
+    /// Every tiles.lst entry whose name starts with `prefix` (case-insensitive, e.g. "cav" for
+    /// the cave floor family), as name (without ".frm") -> paintable id — so a script can pick
+    /// from a tile family without hardcoding ids. Raises like tileId() when tiles.lst is
+    /// unavailable; an unmatched prefix is a legitimate empty result.
+    std::map<std::string, int> tilesByPrefix(const std::string& prefix) const;
     /// The distinct scenery proto PIDs used by a reference map (e.g. "maps/desert1.map") — the
     /// curated palette that map is actually built from, ready to hand to placeProto(). A PID is the
     /// engine's unique proto identifier ((type << 24) | index), so this is exact, unlike resolving
@@ -87,6 +95,35 @@ public:
     /// first — so a generator can fill with that map's dominant ground (e.g. cave rock for a cave,
     /// sand for a desert). Empty floors are skipped; empty if the map can't be read.
     std::vector<int> mapFloorTiles(const std::string& mapPath) const;
+    /// A reference map's FULL floor grid at `elevation`: 10,000 tile ids in tile-index order
+    /// (row-major, 100 wide), EMPTY_TILE included — the per-cell data a generator learns exact
+    /// layout from (rock patterns, walkable regions). Raises if the map can't be read or has no
+    /// such elevation.
+    std::vector<int> mapFloorAt(const std::string& mapPath, int elevation) const;
+    /// A reference map's objects of one proto type ("wall"/"scenery"/"misc"/...) at `elevation`,
+    /// flattened as (pid, hex, direction) triples — so a generator can learn engine-authored
+    /// placement (e.g. which cave-wall variant lines which boundary shape). Raises on an unknown
+    /// type, an unreadable map, or a missing elevation; an elevation with no such objects is a
+    /// legitimate empty result.
+    std::vector<int> mapObjectsAt(const std::string& mapPath, int elevation, const std::string& typeName) const;
+    /// Does the proto block movement (its NO_BLOCK flag is clear)? What a generator checks before
+    /// treating scatter as walkable-safe, and how it tells blockers from decoration. Raises when
+    /// the proto can't be loaded (no data mounted / unknown pid) — a wrong answer here would
+    /// silently break map walkability.
+    bool protoBlocks(int pid) const;
+    /// True if the proto is OBJECT_FLAT — ground-hugging fill/rubble art drawn below standing
+    /// objects, as opposed to a wall face. Lets a generator tell boundary walls from the flat rock
+    /// texture that carpets solid ground. Raises when the proto can't be loaded (like protoBlocks).
+    bool protoFlat(int pid) const;
+    /// The proto's art FID (what placeProto resolves and stores) — lets a generator identify a
+    /// proto's art via resolve_fid. Raises when the proto can't be loaded (like protoBlocks).
+    int protoFid(int pid) const;
+    /// Every frame of the proto's art as flat (direction, frame, width, height, offsetX, offsetY)
+    /// 6-tuples — the same geometry `frm info` reports, in the flattened-tuple style of mapObjectsAt.
+    /// Lets a generator read a piece's real footprint (e.g. advance a boundary walk by dir-0/frame-0
+    /// width to tile wall art gap-free) or its per-frame anchor offsets, without a one-off accessor
+    /// per field. Raises when the proto or its FRM can't be resolved (like protoBlocks).
+    std::vector<int> protoArtFrames(int pid) const;
     /// Every map file in the mounted data (VFS paths, e.g. "maps/desert1.map"), sorted. Lets a
     /// generator pick a reference map at random when none was given.
     std::vector<std::string> listMaps() const;
@@ -124,6 +161,22 @@ public:
     /// Floor/roof tile id at (col, row), or EMPTY_TILE if off-grid — the (col, row) form of getFloor.
     uint16_t getFloorXY(int col, int row) const;
     uint16_t getRoofXY(int col, int row) const;
+    /// Tile indices inside the inclusive rectangle spanned by (col0, row0)-(col1, row1),
+    /// ascending. Corners may come in any order and the rectangle is clamped to the 100x100
+    /// grid, so a fully off-grid rectangle is a legitimate empty result.
+    std::vector<int> tilesInRect(int col0, int row0, int col1, int row1) const;
+    /// The floor tile visually under a hex (-1 off-grid) — the exact bridge between the 200x200
+    /// hex grid (objects, movement) and the 100x100 tile grid (floor art), computed through the
+    /// same screen geometry the renderer and the eyedropper use, NOT the naive col/2 halving.
+    /// This is what lets wall/blocker placement follow a floor boundary precisely.
+    int hexTile(int hex) const;
+    /// The hexes standing on a floor tile — hexTile's inverse (empty if `tileIndex` is off-grid).
+    std::vector<int> tileHexes(int tileIndex) const;
+    /// The hex border of a screen-space rectangle centred on `centerHex` (half-extents in pixels)
+    /// — the same gap-free iso staircase walk placeExitGridRect places its markers on, exposed as
+    /// a query so scripts can ring an area with anything (scroll blockers, walls). Ascending,
+    /// deduplicated. Raises like placeExitGridRect on a bad centre or non-positive extent.
+    std::vector<int> hexesOnScreenRect(int centerHex, int screenHalfWidth, int screenHalfHeight) const;
 
     // --- Selection area (host-set per run; the queries below read it) -------------
     /// True if a selection area is bound to this run (see setArea).
@@ -165,8 +218,9 @@ public:
     /// Bind the selection area the area-queries report (borrowed, must outlive the run; nullptr
     /// clears it). Host-only — a script can't fabricate its own area. See EditArea.
     void setArea(const EditArea* area) { _area = area; }
-    /// Seed this api's deterministic stream (rng/rngInt) so a fill reproduces. Host-only; the GUI/CLI
-    /// set it from the run's seed, exactly as LuaScriptRuntime seeds Lua's math.random.
+    /// Seed this api's deterministic stream (rng/rngInt) so a run reproduces. LuaScriptRuntime::run
+    /// re-seeds it from the run's resolved seed (exactly as it seeds Lua's math.random); a host may
+    /// also pre-seed for api use outside a run, as the fill preview does.
     void setSeed(uint32_t seed) { _rng.seed(seed); }
 
     // --- Mutators (undoable; batch to collapse into one history entry) -----------
@@ -187,6 +241,16 @@ public:
     bool paintFloorXY(int col, int row, uint16_t tileId);
     bool paintRoofXY(int col, int row, uint16_t tileId);
 
+    // Rectangle / region fills: composites over paintFloor/paintRoof, so they respect the plan
+    // sink and undo batching like every other mutator. Each returns the number of tiles painted.
+    /// Paint every floor/roof tile in the inclusive (col, row) rectangle (clamped to the grid).
+    int fillFloorRect(int col0, int row0, int col1, int row1, uint16_t tileId);
+    int fillRoofRect(int col0, int row0, int col1, int row1, uint16_t tileId);
+    /// Flood-fill (paint-bucket) the 4-connected floor region of uniform tile id containing
+    /// (col, row) with `tileId`. A no-op returning 0 when (col, row) is off-grid or the region
+    /// already has that id.
+    int fillRegion(int col, int row, uint16_t tileId);
+
     // --- Stamps (prefabs captured by extract_pattern) ----------------------------
     /// Register a pre-loaded stamp under `name` so the script can place it. The host (gecko-cli /
     /// the MCP) loads the stamp JSON and calls this before running the script.
@@ -206,6 +270,12 @@ public:
     /// orientation 0..5 (engine hex facings), elevation 0..2. Raises on an out-of-range value. This is
     /// header state (like the editor's Map Info panel), so it is not part of the undo batch.
     void setPlayerStart(int hex, int orientation, int elevation);
+    /// Switch which elevation (0..2) subsequent queries and edits target, so one run can author a
+    /// multi-level map (e.g. a cave entrance plus its interior). Raises if the value is out of
+    /// range or the bound map does not carry that elevation. Tile and object data are routed by
+    /// the recorded elevation, so this is safe mid-run; in the editor's console the view keeps
+    /// showing the elevation you are looking at.
+    void setElevation(int elevation);
     /// Place a map-exit grid at `hex`: stepping onto it sends the player to `destMapId` at `destHex`
     /// (`destElevation`, facing `orientation`). `destMapId` -2 = the worldmap, -1 = the town map,
     /// otherwise a map id; a worldmap/townmap exit ignores destHex. Returns false only when the
@@ -244,6 +314,10 @@ private:
     // Build + register one exit-grid MISC marker at `hex` with the given art and destination. Assumes
     // `hex` is on-grid (callers validate). Returns registerObject's result.
     bool placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid, const ExitDest& dest);
+    // The four hex-line edges (top, bottom, left, right) of a screen-space rectangle centred on
+    // `centerHex` — shared by placeExitGridRect (per-edge directional art) and hexesOnScreenRect
+    // (flat query). Callers validate the centre and extents.
+    std::array<std::vector<int>, 4> screenRectEdges(int centerHex, int screenHalfWidth, int screenHalfHeight) const;
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
     // Parse a reference map headlessly (GL-free) for the palette queries; nullptr if unreadable.
     std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;
