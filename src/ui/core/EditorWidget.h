@@ -113,9 +113,16 @@ public:
             resetEdgeHoverCursor(); // a lingering resize cursor would suggest a still-grabbable side
         }
     }
-    // The unreachable-areas overlay recomputes lazily in render() from a cached signature, so the
-    // setter only flips the flag (like the light overlay).
-    void setShowUnreachableAreas(bool show) { _session.visibility().showUnreachable = show; }
+    // The unreachable-areas overlay recomputes lazily in render() from a cached signature. Enabling
+    // it invalidates the cache so it always recomputes from the current map — this is the manual
+    // "refresh" for the count-neutral edits the signature can't see (moving a blocker, flipping a
+    // blocking flag): toggle the overlay off and on to force a fresh flood-fill.
+    void setShowUnreachableAreas(bool show) {
+        _session.visibility().showUnreachable = show;
+        if (show) {
+            _unreachableCacheValid = false;
+        }
+    }
     void setMergeSelectionOutlines(bool merge) { _session.visibility().mergeSelectionOutlines = merge; }
 
     // Edge scrolling: when enabled, parking the cursor near a viewport edge auto-pans the view that

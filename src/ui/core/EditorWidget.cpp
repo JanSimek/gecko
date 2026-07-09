@@ -2726,8 +2726,9 @@ void EditorWidget::refreshUnreachableOverlay() {
     const std::size_t objectCount = objects.size();
 
     // Cheap signature: map identity + elevation + object count. It catches load/new, elevation switch,
-    // and object add/remove without hooking every mutation site; the one miss (toggling an existing
-    // object's blocking flag without changing the count) is refreshed by re-toggling the overlay.
+    // and object add/remove without hooking every mutation site. A count-neutral edit (moving a blocker,
+    // flipping a blocking flag) the signature can't see is picked up by toggling the overlay off and on
+    // — setShowUnreachableAreas invalidates the cache on enable, forcing a fresh flood-fill.
     if (_unreachableCacheValid && map == _unreachableCacheMap
         && elevation == _unreachableCacheElevation && objectCount == _unreachableCacheObjectCount) {
         return;
