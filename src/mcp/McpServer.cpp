@@ -391,6 +391,7 @@ namespace {
         opts.objects = optBool(args, "objects", opts.objects);
         opts.semantic = optBool(args, "semantic", opts.semantic);
         opts.showBlockers = optBool(args, "showBlockers", opts.showBlockers);
+        opts.showUnreachable = optBool(args, "showUnreachable", opts.showUnreachable);
         opts.fullExtent = optBool(args, "full", opts.fullExtent);
         std::ostringstream oss;
         const int rc = cli::renderMap(resources, opts, oss);
@@ -754,12 +755,15 @@ namespace {
             "(for checking scatter). semantic=true also greys the floor but colours markers by role — "
             "exit grids highlighted, critters by team, scripted objects ringed (legend keyed by role) — "
             "the purpose layer that pairs with describe_map. FLAT objects (invisible engine blockers) "
-            "are hidden unless showBlockers. full=true frames the whole iso playable grid instead of "
+            "are hidden unless showBlockers. showUnreachable=true (natural render) shades the walkable "
+            "hexes cut off from the player start and every exit grid with a translucent red wash — the "
+            "visual form of the reachability tool, for seeing walled-off regions on the map. full=true "
+            "frames the whole iso playable grid instead of "
             "cropping to drawn content, so a sparse/empty map still shows the entire map extent. "
             "map/out are filesystem paths — out is written there, and "
             "map may be a VFS path or any file on disk (e.g. one generate just wrote). Needs an "
             "off-screen GL context.",
-            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "semantic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } }, { "full", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } }),
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "semantic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } }, { "showUnreachable", { { "type", "boolean" } } }, { "full", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } }),
             [](resource::GameResources& r, const json& a) { return toolRender(r, a); } });
         t.push_back({ "render_frm",
             "Render an FRM sprite to a PNG so the art can be SEEN, not inferred from PID arithmetic. "

@@ -113,6 +113,16 @@ public:
             resetEdgeHoverCursor(); // a lingering resize cursor would suggest a still-grabbable side
         }
     }
+    // The unreachable-areas overlay recomputes lazily in render() from a cached signature. Enabling
+    // it invalidates the cache so it always recomputes from the current map — this is the manual
+    // "refresh" for the count-neutral edits the signature can't see (moving a blocker, flipping a
+    // blocking flag): toggle the overlay off and on to force a fresh flood-fill.
+    void setShowUnreachableAreas(bool show) {
+        _session.visibility().showUnreachable = show;
+        if (show) {
+            _unreachableCacheValid = false;
+        }
+    }
     void setMergeSelectionOutlines(bool merge) { _session.visibility().mergeSelectionOutlines = merge; }
 
     // Edge scrolling: when enabled, parking the cursor near a viewport edge auto-pans the view that
@@ -582,6 +592,18 @@ private:
     // The side whose resize cursor is currently applied to the viewport (-1 = default cursor); see
     // updateEdgeHoverCursor.
     int _edgeHoverCursorSide = -1;
+
+    // Cached "unreachable areas" overlay: the walkable hexes on the current elevation stranded from
+    // every entry point (player start + exit grids). The flood-fill (geck::reachability) is too heavy
+    // to run per frame, so render() recomputes it only when the map pointer, elevation, or object
+    // count changes — a cheap signature that catches load/new, elevation switch, and object add/remove.
+    std::vector<int> _unreachableHexes;
+    const Map* _unreachableCacheMap = nullptr;
+    int _unreachableCacheElevation = -1;
+    std::size_t _unreachableCacheObjectCount = 0;
+    bool _unreachableCacheValid = false;
+    // Recompute _unreachableHexes if the signature changed; a no-op when the cache is still current.
+    void refreshUnreachableOverlay();
 
     // Base positions of the selected floor/roof sprites captured while a region is being dragged, so
     // the live preview can offset them and restore them when the drag ends.

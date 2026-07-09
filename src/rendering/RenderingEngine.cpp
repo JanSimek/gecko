@@ -127,6 +127,12 @@ void RenderingEngine::render(sf::RenderTarget& target,
         renderLightOverlays(target, view, renderData, visibility);
     }
 
+    // Layer 1c: Unreachable-area shading. A ground wash (over floor, under objects, like the light
+    // pass) over walkable hexes stranded from every entry point — a diagnostic, off by default.
+    if (visibility.showUnreachable && renderData.unreachableHexes) {
+        renderReachabilityOverlay(target, view, renderData);
+    }
+
     // Layer 2: Hex grid overlay (if enabled)
     if (visibility.showHexGrid) {
         renderHexGrid(target, view, renderData);
@@ -409,6 +415,18 @@ void RenderingEngine::renderLightOverlays(sf::RenderTarget& target,
             _hexRenderer.renderHexOverlay(target, view, *renderData.hexGrid, ringHexes, color);
         }
     }
+}
+
+void RenderingEngine::renderReachabilityOverlay(sf::RenderTarget& target,
+    const sf::View& view,
+    const RenderData& renderData) {
+    if (!renderData.unreachableHexes || !renderData.hexGrid) {
+        return;
+    }
+    // Translucent warning-red wash; renderHexOverlay culls to the view, so passing the whole
+    // (possibly large) unreachable set is fine — only on-screen hexes are drawn.
+    const sf::Color unreachableTint(200, 40, 40, 90);
+    _hexRenderer.renderHexOverlay(target, view, *renderData.hexGrid, *renderData.unreachableHexes, unreachableTint);
 }
 
 void RenderingEngine::renderRoofTiles(sf::RenderTarget& target,

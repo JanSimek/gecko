@@ -575,8 +575,9 @@ The direction instead:
 
 # Map semantics & intelligence (analysis MCP roadmap)
 
-> Status: Remaining: the Phase-3 semantic render overlay (capability 5). The goal is to let an agent reason about a map's **purpose**, its
-> **critters' AI**, and its **scripts**.
+> Status: Phase 3 done — the semantic render overlay (capability 5) shipped as the editor's
+> **Highlight Unreachable Areas** overlay. The goal is to let an agent reason about a map's
+> **purpose**, its **critters' AI**, and its **scripts**.
 
 **Guiding principle.** Don't hardcode classification heuristics ("N critters ⇒ a fight"). Surface
 the engine's own semantic sources faithfully and **cross-referenced**, and let the model infer
@@ -610,10 +611,23 @@ from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
      case; with real `.ssl` we read the source directly. `int2ssl` decompilation stays out of scope.
    Plus a critter/object → `{programIndex, name}` bridge in `analyze`, so the agent reads the roster,
    spots a scripted NPC, and calls `describe_script` for the full who→does→says picture.
-5. **Semantic render overlay** (extends the schematic). **Still open:** *shading the
-   unreachable regions* `reachability`/`describe_map` identify, which needs a per-hex reachable mask
-   exposed from `MapReachability` and a hex→world tint in the renderer (the object-marker path here is
-   sprite-bounds-based and doesn't map arbitrary hexes). **Phase 3.**
+5. **Semantic render overlay** — **DONE (editor overlay).** *Shading the unreachable regions* that
+   `reachability`/`describe_map` identify shipped as **View › Highlight Unreachable Areas**: a
+   translucent red wash over the walkable hexes on the current elevation that are cut off from every
+   entry point (player start + exit grids). The flood-fill was extracted from `cli::MapReachability`
+   into a Qt-free **`geck::reachability`** core (`src/editor/Reachability.{h,cpp}`, gecko_core) so the
+   overlay and the `reachability` CLI/MCP tool compute from **one** implementation and can't drift;
+   the CLI serializer was rewritten on top of it. The renderer tints the hex set via the existing
+   `HexRenderer::renderHexOverlay` (which already maps arbitrary hexes and view-culls — the
+   "sprite-bounds-based" limitation the earlier note assumed was removed by the light-overlay work),
+   in `RenderingEngine::renderReachabilityOverlay`, gated by `VisibilitySettings::showUnreachable` +
+   the View-menu toggle. The editor caches the mask, recomputing only on a map/elevation/object-count
+   signature change (the flood-fill is too heavy per frame). Verified headlessly: the shaded set
+   equals the CLI's unreachable set (cave1 elev 1 → the whole outer solid-rock region, ~37k hexes;
+   the central cavern stays clear). The **same core is also exposed headlessly** for agents: `map
+   render --show-unreachable` (CLI) / `render_map` `showUnreachable:true` (MCP) bakes the shading into
+   the natural-render PNG, so an agent can *see* walled-off regions, not just read the counts from the
+   `reachability` tool.
 
 **Corpus angle (multiplier):** index `analyze` + these semantic facts across all shipped maps so
 the agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improving

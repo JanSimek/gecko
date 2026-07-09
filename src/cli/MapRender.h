@@ -34,6 +34,9 @@ namespace cli {
         bool fullExtent = false;
         /// Natural style only: overlay a dot on each exit-grid marker's trigger hex (verification aid).
         bool exitDots = false;
+        /// Natural style only: shade the walkable hexes cut off from every entry point (unreachable
+        /// areas) — the visual form of the `reachability` tool, for spotting walled-off regions.
+        bool showUnreachable = false;
     };
 
     /// Render a map to an image file (format inferred from the extension, e.g. .png). Returns 0 on
