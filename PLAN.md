@@ -1163,8 +1163,8 @@ The architecture brief identifies the hard couplings; the plugin layer adds thes
 
 These are net-new and more invasive than "refs→pointers"; they land early with focused tests.
 
-- **Phase-0 refactor `LuaSandboxHost`** — extract shared VM bring-up from `LuaScriptRuntime` (`luaL_openlibs`, the `capturePrint` closure, `luau_compile`/`luau_load`, and the critical **`luaL_sandbox` after binding** ordering). No behavior change; existing scripting tests stay green.
-- **Persistent print capture.** `capturePrint` today carries a **lightuserdata upvalue pointing at a stack-local `result.output`** (`LuaScriptRuntime.cpp:27-44,59`) — that lifetime is invalid for a resident VM. The extraction must repoint `print` at a **persistent per-VM ring buffer** owned by the `PluginVm`, surfaced in the plugin's console dock.
+- ~~**Phase-0 refactor `LuaSandboxHost`**~~ — **DONE.** Shared VM bring-up moved out of `LuaScriptRuntime` into `src/scripting/LuaSandboxHost.{h,cpp}` (`luaL_openlibs`, the `capturePrint` closure, `luau_compile`/`luau_load`, the time-budget watchdog, and the critical **`luaL_sandbox` after binding** ordering); `ScriptArgs`/`ScriptResult` moved to `ScriptTypes.h`. No behavior change to `LuaScriptRuntime::run`. Two **pre-existing** sandbox bugs surfaced and were fixed in the same change: the watchdog could be disarmed permanently by a script-level `pcall` catching its error, and a non-string error object (`error({})`) crashed the host on `strlen(nullptr)`.
+- **Persistent print capture.** `capturePrint`'s lightuserdata upvalue now points at the **host**, not at a stack-local `result.output`, and `LuaSandboxHost::setPrintOutput()` repoints the target between dispatches — the seam a resident VM needs. Remaining for `PluginVm`: own a **persistent per-VM ring buffer**, point the host at it, and surface it in the plugin's console dock. The host stores the output string by address, so that buffer must outlive the runs that write into it.
 - **`MapScriptApi::retarget(GameResources&, const HexagonGrid&, ObjectCommandController&, Map*, int elevation, bool buildSprites)`.** `_resources/_hexgrid/_controller` are references and `_map` is `Map&` (`MapScriptApi.h:211-214`); a persistent VM outlives any one map and survives elevation switches and `newEmptyMap()` swapping the underlying `Map` (owned as `std::unique_ptr<Map>&` inside `ObjectCommandController`). Convert internals to pointers and **audit the `_map == nullptr` state across *every* method, not just mutators** — queries (`getFloor`, `hexNeighbors`, `mapScenery`) assume a live map/grid and must return the N/A value or raise `ScriptError` when no map is open. The host re-points on File>New / load / elevation-switch. **Keep the value constructor** for the generation runtime and CLI/MCP (which build a fresh `MapScriptApi` per run and never call `retarget`). This is the single riskiest change and should land in Phase B2 with tests. *(Note: Feature A never needs `retarget` — its fills build a fresh `MapScriptApi` per run like `EditorWidget::runScript`. The invasive refactor is a plugin-only cost.)*
 
 ### 4.3 Manifest + capability/trust model
@@ -1246,7 +1246,7 @@ Scan `<ConfigLocation>/gecko/plugins/*/plugin.json` (user, writable) and bundled
 
 ### 4.9 Phased plan (B)
 
-- **B0 — `LuaSandboxHost` extraction** (pure C++, no behavior change; persistent-print-ring repoint designed in). Existing scripting + tests green.
+- ~~**B0 — `LuaSandboxHost` extraction**~~ — **DONE.** (Pure C++, no behavior change; print repoint via `setPrintOutput()`. Also hardened the watchdog against `pcall` escape and fixed the non-string-error crash — both prerequisites for B2's "`pcall` isolation".)
 - **B1 — The seam** (pure C++, no Lua): `ITool`+`ToolRegistry`; `EditorMode::PluginTool` + one `setMode`/`syncToolModeActions` case; one generic `InputHandler` branch; shared overlay field; MainWindow `addPlugin*`/`removePluginUi` + `_pluginDocks`. **Validate by porting tile placement onto `ITool` with no UX change.**
 - **B2 — Persistent VM + lifecycle + manifest (no UI registration, read-only `api`).** `PluginManifest` parse, `PluginManager` discovery/enable/disable, `PluginVm` (allocator cap, watchdog, print/log ring, `pcall` isolation, auto-disable on fault), **`MapScriptApi::retarget` with the full null-safe audit**, `api` bound read-only behind `map.read`, basic Plugin Manager dialog. **This is the plugin MVP.**
 - **B3 — `editor:` registration + write.** `READ/WRITE` `beginClass` split; `map.write` with auto-batch + resync + placement cap; `addMenuItem`/`addToolButton`; install-time permission prompt + grant; `storage`.
@@ -1281,7 +1281,7 @@ Interleaved so value ships early and each phase de-risks the next. "Always compi
 | 1 | **A0** plan-sink core: `EditArea`, `FillPlan`, two sink points, `PatternStamper::planInto`+`PlacementBatch`, seeded primitives | — | M | Headless, unit-tested core |
 | 2 | **A1** Tier-1 `FillRecipe`+runner; CLI/MCP `fill` | A0 | M | First user value; **beats Dims**, no Qt/Lua |
 | 3 | **A2** `FloorTileSet`+`autotileFloor` | A0 | M | Closes `autotile_floor` |
-| 4 | **B0** `LuaSandboxHost` extraction (persistent-print repoint) | — (parallel) | S | No regression; unblocks resident VM |
+| 4 | ~~**B0** `LuaSandboxHost` extraction (persistent-print repoint)~~ **DONE** | — (parallel) | S | No regression; unblocks resident VM |
 | 5 | **B1** `ITool`+`ToolRegistry`+`PluginTool`+generic input+overlay field+MainWindow `addPlugin*` | B0 | L | The seam, validated by porting tile placement |
 | 6 | **A3** `FillDialog` + debounced preview (uses overlay field) | A1, A2, B1 | M | **First end-user fill release** |
 | 7 | **A5** freehand Fill Brush as native `ITool` | A1, B1 | S | Drag-to-paint; proves `ITool` for real |
