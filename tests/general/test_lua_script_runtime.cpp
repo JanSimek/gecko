@@ -84,44 +84,27 @@ TEST_CASE("A runaway Luau script is aborted by the time budget", "[scripting][lu
 
 // The watchdog raises a plain Lua error, so a script's own pcall/xpcall sees it like any other. If
 // the interrupt disarmed itself when it fired, catching it once would buy the script an unwatched
-// run — an editor hang. The loop after the catch is bounded so a regression fails these tests in a
-// couple of seconds instead of hanging the suite forever.
-TEST_CASE("A script cannot pcall its way past the time budget", "[scripting][lua][watchdog]") {
-    ControllerFixture fx;
-    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
-    LuaScriptRuntime rt;
+// run — an editor hang. xpcall is checked too because its handler runs Lua, and so hits safepoints
+// itself; Luau runs the handler protected, so the re-raise degrades to "error in error handling"
+// rather than recursing. The loop after the catch is small and bounded: a healthy watchdog aborts on
+// its first back-edge, so the bound never gates the passing path, while a regression reaches the
+// print() and fails this test in milliseconds rather than hanging the suite.
+TEST_CASE("A script cannot catch its way past the time budget", "[scripting][lua][watchdog]") {
+    for (const std::string& guard : { std::string("pcall(runaway)"),
+             std::string("xpcall(runaway, function(e) return e end)") }) {
+        INFO("guard: " << guard);
+        ControllerFixture fx;
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+        LuaScriptRuntime rt;
 
-    const auto r = rt.run(R"(
-        pcall(function() while true do end end)
-        local n = 0
-        for i = 1, 200000000 do n = n + 1 end
-        print("escaped")
-    )",
-        api, fx.controller, "pcall escape", {}, /*timeBudgetMs*/ 50);
+        const std::string source = "local function runaway() while true do end end\n" + guard
+            + "\nlocal n = 0\nfor i = 1, 100000 do n = n + 1 end\nprint('escaped')\n";
+        const auto r = rt.run(source, api, fx.controller, "escape", {}, /*timeBudgetMs*/ 50);
 
-    CHECK_FALSE(r.ok);
-    CHECK(r.error.find("time budget") != std::string::npos);
-    CHECK(r.output.find("escaped") == std::string::npos);
-}
-
-TEST_CASE("A script cannot xpcall its way past the time budget", "[scripting][lua][watchdog]") {
-    ControllerFixture fx;
-    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
-    LuaScriptRuntime rt;
-
-    // The handler runs Lua, so it hits safepoints too; Luau runs it protected, so the re-raise
-    // degrades to "error in error handling" rather than recursing.
-    const auto r = rt.run(R"(
-        xpcall(function() while true do end end, function(e) return e end)
-        local n = 0
-        for i = 1, 200000000 do n = n + 1 end
-        print("escaped")
-    )",
-        api, fx.controller, "xpcall escape", {}, /*timeBudgetMs*/ 50);
-
-    CHECK_FALSE(r.ok);
-    CHECK(r.error.find("time budget") != std::string::npos);
-    CHECK(r.output.find("escaped") == std::string::npos);
+        CHECK_FALSE(r.ok);
+        CHECK(r.error.find("time budget") != std::string::npos);
+        CHECK(r.output.find("escaped") == std::string::npos);
+    }
 }
 
 TEST_CASE("A non-string error object is reported, not dereferenced", "[scripting][lua]") {
