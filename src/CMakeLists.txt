@@ -609,6 +609,9 @@ target_link_libraries(gecko_editing PUBLIC gecko_core)
 # UI's #ifdef'd console wiring sees it transitively through gecko_app's link to gecko_editing.
 if(GECK_ENABLE_SCRIPTING)
     target_sources(gecko_editing PRIVATE
+        scripting/ScriptTypes.h
+        scripting/LuaSandboxHost.h
+        scripting/LuaSandboxHost.cpp
         scripting/LuaScriptRuntime.h
         scripting/LuaScriptRuntime.cpp)
     target_link_libraries(gecko_editing PUBLIC
@@ -620,7 +623,7 @@ if(GECK_ENABLE_SCRIPTING)
         # LuaBridge3's templates trip C4702 (unreachable code) at instantiation — an
         # optimizer warning emitted in our TU, which /external can't suppress. Allow it
         # for just this binding file rather than weakening /WX globally.
-        set_source_files_properties(scripting/LuaScriptRuntime.cpp
+        set_source_files_properties(scripting/LuaSandboxHost.cpp
             PROPERTIES COMPILE_OPTIONS "/wd4702")
     endif()
 endif()

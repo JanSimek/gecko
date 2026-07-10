@@ -13,6 +13,7 @@
 #include "pattern/PlacementBatch.h"
 #include "reader/map/MapReader.h"
 #include "scripting/EditArea.h"
+#include "scripting/LuaSandboxHost.h"
 #include "scripting/LuaScriptRuntime.h"
 #include "scripting/MapScriptApi.h"
 #include "scripting/ScriptApiReference.h"
@@ -79,6 +80,43 @@ TEST_CASE("A runaway Luau script is aborted by the time budget", "[scripting][lu
     INFO("script error: " << ok.error);
     CHECK(ok.ok);
     CHECK(fx.mapFile().tiles.at(ELEV)[0].getFloor() == 271);
+}
+
+// The watchdog raises a plain Lua error, so a script's own pcall/xpcall sees it like any other. If
+// the interrupt disarmed itself when it fired, catching it once would buy the script an unwatched
+// run — an editor hang. xpcall is checked too because its handler runs Lua, and so hits safepoints
+// itself; Luau runs the handler protected, so the re-raise degrades to "error in error handling"
+// rather than recursing. The loop after the catch is small and bounded: a healthy watchdog aborts on
+// its first back-edge, so the bound never gates the passing path, while a regression reaches the
+// print() and fails this test in milliseconds rather than hanging the suite.
+TEST_CASE("A script cannot catch its way past the time budget", "[scripting][lua][watchdog]") {
+    for (const std::string& guard : { std::string("pcall(runaway)"),
+             std::string("xpcall(runaway, function(e) return e end)") }) {
+        INFO("guard: " << guard);
+        ControllerFixture fx;
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+        LuaScriptRuntime rt;
+
+        const std::string source = "local function runaway() while true do end end\n" + guard
+            + "\nlocal n = 0\nfor i = 1, 100000 do n = n + 1 end\nprint('escaped')\n";
+        const auto r = rt.run(source, api, fx.controller, "escape", {}, /*timeBudgetMs*/ 50);
+
+        CHECK_FALSE(r.ok);
+        CHECK(r.error.find("time budget") != std::string::npos);
+        CHECK(r.output.find("escaped") == std::string::npos);
+    }
+}
+
+TEST_CASE("A non-string error object is reported, not dereferenced", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // lua_tostring returns nullptr for a table, so building the message from it unchecked would be
+    // a strlen(nullptr) crash — reachable from one line in the Script Console.
+    const auto r = rt.run("error({ code = 1 })", api, fx.controller, "table error");
+    CHECK_FALSE(r.ok);
+    CHECK(r.error.find("non-string error object") != std::string::npos);
 }
 
 TEST_CASE("budget 0 means no limit (CLI/batch generation is untimed)", "[scripting][lua][watchdog]") {
@@ -539,6 +577,96 @@ TEST_CASE("Luau print() output is captured for the console", "[scripting][lua]")
     INFO("script error: " << r.error);
     REQUIRE(r.ok);
     CHECK(r.output == "hello\t42\ndone\n");
+}
+
+TEST_CASE("LuaSandboxHost can repoint captured print output", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaSandboxHost host;
+    std::string first;
+    std::string second;
+    std::string error;
+
+    REQUIRE(host.initialize(api, {}, first, error));
+    REQUIRE(host.loadSource("print('first')", error));
+    REQUIRE(host.runLoaded(error));
+    CHECK(first == "first\n");
+    CHECK(second.empty());
+
+    host.setPrintOutput(second);
+    REQUIRE(host.loadSource("print('second')", error));
+    REQUIRE(host.runLoaded(error));
+    CHECK(first == "first\n");
+    CHECK(second == "second\n");
+}
+
+TEST_CASE("LuaSandboxHost refuses to run before it is initialized", "[scripting][lua]") {
+    LuaSandboxHost host;
+    std::string error;
+
+    CHECK_FALSE(host.loadSource("print('x')", error));
+    CHECK(error == "sandbox not initialized");
+    CHECK_FALSE(host.runLoaded(error));
+    CHECK(error == "sandbox not initialized");
+}
+
+TEST_CASE("LuaSandboxHost refuses to run with no chunk loaded", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaSandboxHost host;
+    std::string out;
+    std::string error;
+    REQUIRE(host.initialize(api, {}, out, error));
+
+    // Must not lua_pcall whatever happens to be on the stack.
+    CHECK_FALSE(host.runLoaded(error));
+    CHECK(error == "no script loaded");
+
+    // ...and the host is still usable afterwards.
+    REQUIRE(host.loadSource("print('ok')", error));
+    REQUIRE(host.runLoaded(error));
+    CHECK(out == "ok\n");
+}
+
+TEST_CASE("LuaSandboxHost discards a chunk that was loaded but never run", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaSandboxHost host;
+    std::string out;
+    std::string error;
+    REQUIRE(host.initialize(api, {}, out, error));
+
+    // A second load supersedes the first: the abandoned chunk neither runs nor stays on the stack.
+    REQUIRE(host.loadSource("print('abandoned')", error));
+    REQUIRE(host.loadSource("print('latest')", error));
+    REQUIRE(host.runLoaded(error));
+    CHECK(out == "latest\n");
+
+    // A failed compile also clears the pending chunk rather than leaving it runnable.
+    REQUIRE(host.loadSource("print('pending')", error));
+    CHECK_FALSE(host.loadSource("this is not lua", error));
+    CHECK(error.find("compile error") != std::string::npos);
+    CHECK_FALSE(host.runLoaded(error));
+    CHECK(error == "no script loaded");
+    CHECK(out == "latest\n");
+}
+
+TEST_CASE("LuaSandboxHost enforces its own time budget and stays usable", "[scripting][lua][watchdog]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaSandboxHost host;
+    std::string out;
+    std::string error;
+    REQUIRE(host.initialize(api, {}, out, error));
+
+    REQUIRE(host.loadSource("while true do end", error));
+    CHECK_FALSE(host.runLoaded(error, /*timeBudgetMs*/ 50));
+    CHECK(error.find("time budget") != std::string::npos);
+
+    // The timeout is per-run, not sticky across runs: the same host runs the next chunk normally.
+    REQUIRE(host.loadSource("print('after')", error));
+    REQUIRE(host.runLoaded(error));
+    CHECK(out == "after\n");
 }
 
 // Every function in the script_api reference (scriptApiEntries) must actually be bound on `api`, so
