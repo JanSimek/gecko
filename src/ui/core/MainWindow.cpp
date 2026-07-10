@@ -977,6 +977,112 @@ void MainWindow::setLogModel(LogModel* model) {
     }
 }
 
+QMenu* MainWindow::ensurePluginMenu() {
+    if (!_pluginMenu && _menuBar) {
+        _pluginMenu = _menuBar->addMenu(tr("&Plugins"));
+    }
+    return _pluginMenu;
+}
+
+QAction* MainWindow::addPluginMenuItem(const QString& id, const QString& text) {
+    QMenu* menu = ensurePluginMenu();
+    if (id.isEmpty() || text.isEmpty() || !menu || _pluginUi.contains(id)) {
+        return nullptr;
+    }
+
+    QAction* action = menu->addAction(text);
+    _pluginUi.insert(id, PluginUiRegistration{
+                             .kind = PluginUiRegistration::Kind::MenuAction,
+                             .action = action,
+                             .menu = menu,
+                         });
+    return action;
+}
+
+QAction* MainWindow::addPluginToolButton(const QString& id, const QString& text, const QIcon& icon) {
+    if (id.isEmpty() || text.isEmpty() || !_mainToolBar || _pluginUi.contains(id)) {
+        return nullptr;
+    }
+
+    QAction* action = icon.isNull() ? _mainToolBar->addAction(text) : _mainToolBar->addAction(icon, text);
+    _pluginUi.insert(id, PluginUiRegistration{
+                             .kind = PluginUiRegistration::Kind::ToolBarAction,
+                             .action = action,
+                         });
+    return action;
+}
+
+QDockWidget* MainWindow::addPluginDock(const QString& id, const QString& title, QWidget* widget,
+    Qt::DockWidgetArea area) {
+    if (id.isEmpty() || title.isEmpty() || !widget || _pluginUi.contains(id)) {
+        return nullptr;
+    }
+
+    QDockWidget* dock = new QDockWidget(title, this);
+    dock->setObjectName(QStringLiteral("PluginDock_%1").arg(id));
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+    dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
+    dock->setWidget(widget);
+    addDockWidget(area, dock);
+    dock->hide();
+
+    QAction* toggleAction = dock->toggleViewAction();
+    toggleAction->setText(title);
+    if (_viewMenu) {
+        _viewMenu->addAction(toggleAction);
+    }
+    connect(dock, &QDockWidget::visibilityChanged, this, [this](bool) {
+        if (!_suppressDockStateSave) {
+            saveDockWidgetState();
+        }
+    });
+
+    _pluginUi.insert(id, PluginUiRegistration{
+                             .kind = PluginUiRegistration::Kind::Dock,
+                             .action = toggleAction,
+                             .dock = dock,
+                         });
+    return dock;
+}
+
+void MainWindow::removePluginUi(const QString& id) {
+    const auto it = _pluginUi.find(id);
+    if (it == _pluginUi.end()) {
+        return;
+    }
+
+    const PluginUiRegistration registration = it.value();
+    _pluginUi.erase(it);
+
+    switch (registration.kind) {
+        case PluginUiRegistration::Kind::MenuAction:
+            if (registration.menu && registration.action) {
+                registration.menu->removeAction(registration.action);
+            }
+            if (registration.action) {
+                registration.action->deleteLater();
+            }
+            break;
+        case PluginUiRegistration::Kind::ToolBarAction:
+            if (_mainToolBar && registration.action) {
+                _mainToolBar->removeAction(registration.action);
+            }
+            if (registration.action) {
+                registration.action->deleteLater();
+            }
+            break;
+        case PluginUiRegistration::Kind::Dock:
+            if (_viewMenu && registration.action) {
+                _viewMenu->removeAction(registration.action);
+            }
+            if (registration.dock) {
+                removeDockWidget(registration.dock);
+                registration.dock->deleteLater();
+            }
+            break;
+    }
+}
+
 void MainWindow::startThumbnailPrewarm() {
     if (_thumbnailPrewarmer) {
         _thumbnailPrewarmer->requestStop();

@@ -107,6 +107,7 @@ add_executable(qt_tests
     # InputHandler is Qt-free but lives in gecko_app; its dispatch test needs SFML.
     qt/test_input_handler.cpp
     qt/test_tool_registry.cpp
+    qt/test_plugin_ui_registration.cpp
     # hintForContext is the pure status-bar key-hint provider (lives in gecko_app).
     qt/test_editor_hints.cpp
     # Log panel plumbing: the LogModel store (cap, threading), the spdlog sink, the filter proxy.

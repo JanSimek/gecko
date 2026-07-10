@@ -1,18 +1,15 @@
 #pragma once
 
-#include <SFML/Graphics/Sprite.hpp>
 #include <SFML/System/Vector2.hpp>
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/Mouse.hpp>
 
-#include <memory>
 #include <optional>
 #include <string_view>
-#include <vector>
+
+#include "rendering/ToolPreview.h"
 
 namespace geck {
-
-class Object;
 
 struct ToolModifiers {
     bool shift = false;
@@ -31,16 +28,6 @@ struct ToolMouseEvent {
 struct ToolKeyEvent {
     sf::Keyboard::Key code = sf::Keyboard::Key::Unknown;
     ToolModifiers modifiers;
-};
-
-struct ToolPreview {
-    std::vector<sf::Sprite> floorTiles;
-    std::vector<std::shared_ptr<Object>> objects;
-    std::vector<sf::Sprite> roofTiles;
-
-    bool empty() const {
-        return floorTiles.empty() && objects.empty() && roofTiles.empty();
-    }
 };
 
 class ITool {

@@ -25,6 +25,7 @@
 #include "util/Constants.h"
 #include "util/UndoStack.h"
 #include "rendering/RenderingEngine.h"
+#include "rendering/ToolPreview.h"
 #include "ui/tiles/TilePlacementContext.h"
 #include "ui/input/InputHandler.h"
 #include "ui/core/EditorMode.h"
@@ -34,6 +35,7 @@
 #include "pattern/FillPlan.h"
 #include "scripting/EditArea.h"
 #include "ui/tools/ExitGridContext.h"
+#include "ui/tools/PluginToolHost.h"
 #include "ui/dragdrop/DragDropContext.h"
 #include "editor/TileChange.h"
 #include "VisibilitySettings.h"
@@ -59,7 +61,7 @@ class SFMLWidget;
 struct ToolMouseEvent;
 struct ObjectInfo;
 
-class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext {
+class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext, public PluginToolHost {
     Q_OBJECT
 
     friend class TilePlacementManager;
@@ -138,6 +140,11 @@ public:
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
 
     Map* getMap() const override { return _session.map(); }
+    Map* map() const override { return _session.map(); }
+    const HexagonGrid& hexgrid() const override { return _session.hexgrid(); }
+    ViewportController& viewport() const override { return _controller.viewport(); }
+    selection::SelectionManager* selectionManager() const override { return _session.selectionManager(); }
+    ObjectCommandController& commandController() override { return _controller.commandController(); }
 
     // Qt6 toolbar actions
     void setSelectionMode(SelectionMode mode);
@@ -366,7 +373,7 @@ public:
     void upgradeMapEdgeToVersion2();
     void resetMapEdgeSquare();
     [[nodiscard]] int selectedEdgeZone() const { return _selectedEdgeZone; }
-    [[nodiscard]] int currentElevation() const;
+    [[nodiscard]] int currentElevation() const override;
     [[nodiscard]] const std::optional<MapEdge>& mapEdge() const;
 
 signals:
@@ -529,6 +536,8 @@ private:
     bool dispatchToolMouseMoved(sf::Vector2f worldPos);
     bool dispatchToolMouseReleased(sf::Vector2f worldPos, sf::Mouse::Button button);
     bool dispatchToolKeyPressed(const sf::Event::KeyPressed& event);
+    void updateToolPreview(const ToolMouseEvent& event);
+    void clearToolPreview();
 
     // Edge-scroll tick: run from update(dt); pans the view while the cursor rests near a viewport
     // edge, then re-fires the cursor's move so hover/drag previews track the scrolled map.
@@ -555,6 +564,7 @@ private:
     std::unique_ptr<TilePlacementManager> _tilePlacementManager;
     std::unique_ptr<ExitGridPlacementManager> _exitGridPlacementManager;
     std::unique_ptr<ToolRegistry> _toolRegistry;
+    ToolPreview _toolPreview;
     // ViewportController now lives in _controller.
 
     // Game/Editor State

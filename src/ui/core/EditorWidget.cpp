@@ -1138,6 +1138,7 @@ bool EditorWidget::activateRegisteredTool(std::string_view id) {
     if (!_toolRegistry || !_toolRegistry->setActiveTool(id)) {
         return false;
     }
+    clearToolPreview();
     setMode(EditorMode::PluginTool);
     return true;
 }
@@ -1159,7 +1160,14 @@ bool EditorWidget::dispatchToolMousePressed(sf::Vector2f worldPos, sf::Mouse::Bu
         return false;
     }
     ITool* tool = _toolRegistry->activeTool();
-    return tool && tool->onMousePressed(buildToolMouseEvent(worldPos, button));
+    if (!tool) {
+        clearToolPreview();
+        return false;
+    }
+    const ToolMouseEvent event = buildToolMouseEvent(worldPos, button);
+    const bool consumed = tool->onMousePressed(event);
+    updateToolPreview(event);
+    return consumed;
 }
 
 bool EditorWidget::dispatchToolMouseMoved(sf::Vector2f worldPos) {
@@ -1167,7 +1175,14 @@ bool EditorWidget::dispatchToolMouseMoved(sf::Vector2f worldPos) {
         return false;
     }
     ITool* tool = _toolRegistry->activeTool();
-    return tool && tool->onMouseMoved(buildToolMouseEvent(worldPos, std::nullopt));
+    if (!tool) {
+        clearToolPreview();
+        return false;
+    }
+    const ToolMouseEvent event = buildToolMouseEvent(worldPos, std::nullopt);
+    const bool consumed = tool->onMouseMoved(event);
+    updateToolPreview(event);
+    return consumed;
 }
 
 bool EditorWidget::dispatchToolMouseReleased(sf::Vector2f worldPos, sf::Mouse::Button button) {
@@ -1175,7 +1190,14 @@ bool EditorWidget::dispatchToolMouseReleased(sf::Vector2f worldPos, sf::Mouse::B
         return false;
     }
     ITool* tool = _toolRegistry->activeTool();
-    return tool && tool->onMouseReleased(buildToolMouseEvent(worldPos, button));
+    if (!tool) {
+        clearToolPreview();
+        return false;
+    }
+    const ToolMouseEvent event = buildToolMouseEvent(worldPos, button);
+    const bool consumed = tool->onMouseReleased(event);
+    updateToolPreview(event);
+    return consumed;
 }
 
 bool EditorWidget::dispatchToolKeyPressed(const sf::Event::KeyPressed& event) {
@@ -1190,6 +1212,19 @@ bool EditorWidget::dispatchToolKeyPressed(const sf::Event::KeyPressed& event) {
         .code = event.code,
         .modifiers = currentToolModifiers(),
     });
+}
+
+void EditorWidget::updateToolPreview(const ToolMouseEvent& event) {
+    ITool* tool = _toolRegistry ? _toolRegistry->activeTool() : nullptr;
+    if (!tool) {
+        clearToolPreview();
+        return;
+    }
+    _toolPreview = tool->buildPreview(event);
+}
+
+void EditorWidget::clearToolPreview() {
+    _toolPreview.clear();
 }
 
 void EditorWidget::bindSelectionCallbacks(InputHandler::Callbacks& callbacks) {
@@ -1628,6 +1663,9 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.exitGridPreview.hexes = &_exitGridPreviewHexes;
     renderData.exitGridPreview.frmPids = &_exitGridPreviewFrmPids;
     renderData.exitGridPreview.tint = _exitGridPreviewTint;
+    if (!_toolPreview.empty()) {
+        renderData.toolPreview = &_toolPreview;
+    }
 
     _controller.renderingEngine().render(target, _controller.viewport().getView(), renderData, visibility);
 }
@@ -1817,6 +1855,9 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     }
     if (mode != EditorMode::PluginTool && _toolRegistry) {
         _toolRegistry->clearActiveTool();
+    }
+    if (mode != EditorMode::PluginTool) {
+        clearToolPreview();
     }
     if (mode != EditorMode::MarkExits) {
         clearMarkExitsLinePreview();
