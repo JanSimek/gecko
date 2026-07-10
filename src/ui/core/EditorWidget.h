@@ -10,6 +10,8 @@
 #include <utility>
 #include <unordered_map>
 #include <functional>
+#include <optional>
+#include <string_view>
 
 #include <QWidget>
 #include <QVBoxLayout>
@@ -51,8 +53,10 @@ class RenderingEngine;
 class DragDropManager;
 class TilePlacementManager;
 class ExitGridPlacementManager;
+class ToolRegistry;
 class ViewportController;
 class SFMLWidget;
+struct ToolMouseEvent;
 struct ObjectInfo;
 
 class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext {
@@ -518,6 +522,13 @@ private:
     void bindSelectionCallbacks(InputHandler::Callbacks& callbacks);
     void bindInteractionCallbacks(InputHandler::Callbacks& callbacks);
     void bindToolModeCallbacks(InputHandler::Callbacks& callbacks);
+    void registerNativeTools();
+    bool activateRegisteredTool(std::string_view id);
+    struct ToolMouseEvent buildToolMouseEvent(sf::Vector2f worldPos, std::optional<sf::Mouse::Button> button) const;
+    bool dispatchToolMousePressed(sf::Vector2f worldPos, sf::Mouse::Button button);
+    bool dispatchToolMouseMoved(sf::Vector2f worldPos);
+    bool dispatchToolMouseReleased(sf::Vector2f worldPos, sf::Mouse::Button button);
+    bool dispatchToolKeyPressed(const sf::Event::KeyPressed& event);
 
     // Edge-scroll tick: run from update(dt); pans the view while the cursor rests near a viewport
     // edge, then re-fires the cursor's move so hover/drag previews track the scrolled map.
@@ -543,6 +554,7 @@ private:
     std::unique_ptr<DragDropManager> _dragDropManager;
     std::unique_ptr<TilePlacementManager> _tilePlacementManager;
     std::unique_ptr<ExitGridPlacementManager> _exitGridPlacementManager;
+    std::unique_ptr<ToolRegistry> _toolRegistry;
     // ViewportController now lives in _controller.
 
     // Game/Editor State

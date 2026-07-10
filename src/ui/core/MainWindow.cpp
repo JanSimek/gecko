@@ -950,10 +950,11 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         }
     }
 
-    // Free up "R" for the viewport while stamping (variant cycling) or placing an object (ghost
-    // rotation); otherwise the toolbar shortcut would swallow the key before it reaches the editor.
+    // Free up "R" for the viewport while stamping, placing an object, or running a registered tool;
+    // otherwise the toolbar shortcut would swallow the key before it reaches the editor.
     if (_rotateAction) {
-        _rotateAction->setEnabled(mode != EditorMode::StampPattern && mode != EditorMode::PlaceObject);
+        _rotateAction->setEnabled(mode != EditorMode::StampPattern && mode != EditorMode::PlaceObject
+            && mode != EditorMode::PluginTool);
     }
 }
 

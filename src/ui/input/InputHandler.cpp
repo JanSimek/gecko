@@ -32,6 +32,17 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
     const sf::View& view) {
     sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
 
+    if (_mode == EditorMode::PluginTool && _callbacks.onToolMousePressed
+        && _callbacks.onToolMousePressed(worldPos, event.button)) {
+        return;
+    }
+    if (_mode == EditorMode::PluginTool && event.button == sf::Mouse::Button::Right) {
+        if (_callbacks.onEscape) {
+            _callbacks.onEscape();
+        }
+        return;
+    }
+
     if (event.button == sf::Mouse::Button::Left) {
         if (_mode == EditorMode::SetPlayerPosition) {
             if (_callbacks.onPlayerPositionSelect) {
@@ -171,6 +182,13 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
     const sf::View& view) {
     sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
 
+    if (_mode == EditorMode::PluginTool && _callbacks.onToolMouseReleased
+        && _callbacks.onToolMouseReleased(worldPos, event.button)) {
+        _currentAction = EditorAction::NONE;
+        _isDragging = false;
+        return;
+    }
+
     if (event.button == sf::Mouse::Button::Left) {
         if (_mode == EditorMode::SetPlayerPosition) {
             return;
@@ -246,6 +264,10 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
         _callbacks.onObjectPlacementMove(worldPos);
     }
 
+    if (_mode == EditorMode::PluginTool && _callbacks.onToolMouseMoved && _callbacks.onToolMouseMoved(worldPos)) {
+        return;
+    }
+
     switch (_currentAction) {
         case EditorAction::PANNING: {
             sf::Vector2i delta = event.position - _mouseLastPos;
@@ -308,6 +330,10 @@ void InputHandler::handleMouseWheelScrolled(const sf::Event::MouseWheelScrolled&
 }
 
 void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
+    if (_mode == EditorMode::PluginTool && _callbacks.onToolKeyPressed && _callbacks.onToolKeyPressed(event)) {
+        return;
+    }
+
     if (event.code == sf::Keyboard::Key::Escape) {
         if (_mode == EditorMode::MarkExits) {
             // Esc abandons the in-progress "Draw edge" line and drops the tool.

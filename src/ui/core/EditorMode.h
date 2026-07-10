@@ -12,6 +12,7 @@ enum class EditorMode {
     SetPlayerPosition, ///< One-shot: next click sets the player start hex.
     StampPattern,      ///< Placing a loaded prefab pattern by clicking hexes.
     PlaceObject,       ///< Placing an eyedropper-picked object: a ghost tracks the cursor, click drops a copy.
+    PluginTool,        ///< Dynamic tool dispatch through ToolRegistry (native first, plugin later).
 };
 
 } // namespace geck

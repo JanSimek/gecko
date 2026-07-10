@@ -2,7 +2,7 @@
 
 #include <QtGlobal>
 
-#include <SFML/Graphics/RenderTexture.hpp>
+#include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Window/Event.hpp>
 #include <SFML/Window/Keyboard.hpp>
 
@@ -15,29 +15,25 @@ using geck::InputHandler;
 
 namespace {
 
-// InputHandler::pixelToWorld() needs a real RenderTarget, which needs an OpenGL
-// context. On a headless CI runner there is no display and SFML *aborts* (SIGABRT)
-// while creating the context rather than failing gracefully — so we must decide to
-// skip BEFORE touching sf::RenderTexture. These cases therefore run locally (where
-// a GL context exists) and skip in CI; they exist to characterise the per-mode
-// dispatch and pin it across refactors.
-bool glContextUnavailable() {
-    // qEnvironmentVariableIsSet is cross-platform and avoids MSVC's C4996 getenv
-    // warning (which /WX turns into a hard error).
-    return qEnvironmentVariableIsSet("CI") || qEnvironmentVariableIsSet("GITHUB_ACTIONS");
+bool keyboardStateUnavailable() {
+#if defined(Q_OS_LINUX)
+    return qEnvironmentVariableIsEmpty("DISPLAY") && qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY");
+#else
+    return false;
+#endif
 }
 
+class HeadlessRenderTarget final : public sf::RenderTarget {
+public:
+    [[nodiscard]] sf::Vector2u getSize() const override { return { 800, 600 }; }
+};
+
 struct Harness {
-    sf::RenderTexture target;
-    sf::View view;
+    HeadlessRenderTarget target;
+    sf::View view{ sf::FloatRect({ 0.f, 0.f }, { 800.f, 600.f }) };
     InputHandler handler;
 
-    Harness() {
-        if (!target.resize({ 800, 600 })) {
-            SKIP("No OpenGL context available for sf::RenderTexture");
-        }
-        view = target.getView();
-    }
+    Harness() = default;
 
     void leftClick(int x, int y) {
         sf::Event::MouseButtonPressed press;
@@ -73,9 +69,6 @@ struct Harness {
 // the single EditorMode enum: the same callbacks must fire afterwards.
 
 TEST_CASE("InputHandler routes a click to the player-position callback and exits the mode", "[input]") {
-    if (glContextUnavailable()) {
-        SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
-    }
     Harness h;
     bool called = false;
     InputHandler::Callbacks cb;
@@ -90,9 +83,6 @@ TEST_CASE("InputHandler routes a click to the player-position callback and exits
 }
 
 TEST_CASE("InputHandler routes a click to the exit-grid placement callback", "[input]") {
-    if (glContextUnavailable()) {
-        SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
-    }
     Harness h;
     int calls = 0;
     InputHandler::Callbacks cb;
@@ -106,9 +96,6 @@ TEST_CASE("InputHandler routes a click to the exit-grid placement callback", "[i
 }
 
 TEST_CASE("InputHandler routes a click to the stamp-pattern callback", "[input]") {
-    if (glContextUnavailable()) {
-        SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
-    }
     Harness h;
     int calls = 0;
     InputHandler::Callbacks cb;
@@ -121,9 +108,82 @@ TEST_CASE("InputHandler routes a click to the stamp-pattern callback", "[input]"
     CHECK(calls == 1);
 }
 
+TEST_CASE("InputHandler forwards mouse events to the active registered-tool branch", "[input][tools]") {
+    Harness h;
+    int pressed = 0;
+    int moved = 0;
+    int released = 0;
+    sf::Mouse::Button lastButton = sf::Mouse::Button::Middle;
+    InputHandler::Callbacks cb;
+    cb.onToolMousePressed = [&pressed, &lastButton](sf::Vector2f, sf::Mouse::Button button) {
+        ++pressed;
+        lastButton = button;
+        return true;
+    };
+    cb.onToolMouseMoved = [&moved](sf::Vector2f) {
+        ++moved;
+        return true;
+    };
+    cb.onToolMouseReleased = [&released](sf::Vector2f, sf::Mouse::Button) {
+        ++released;
+        return true;
+    };
+    h.handler.setCallbacks(cb);
+    h.handler.setPluginToolMode(true);
+
+    h.leftClick(100, 100);
+    h.mouseMove(120, 130);
+
+    sf::Event::MouseButtonReleased release;
+    release.button = sf::Mouse::Button::Left;
+    release.position = { 120, 130 };
+    h.handler.handleEvent(sf::Event(release), h.target, h.view);
+
+    CHECK(pressed == 1);
+    CHECK(moved == 1);
+    CHECK(released == 1);
+    CHECK(lastButton == sf::Mouse::Button::Left);
+}
+
+TEST_CASE("InputHandler falls back when a registered-tool mouse press is not consumed", "[input][tools]") {
+    if (keyboardStateUnavailable()) {
+        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
+    }
+    Harness h;
+    InputHandler::Callbacks cb;
+    cb.onToolMousePressed = [](sf::Vector2f, sf::Mouse::Button) {
+        return false;
+    };
+    h.handler.setCallbacks(cb);
+    h.handler.setPluginToolMode(true);
+
+    h.leftClick(100, 100);
+
+    CHECK(h.handler.getCurrentAction() == InputHandler::EditorAction::DRAG_SELECTING);
+}
+
+TEST_CASE("InputHandler cancels the active registered-tool branch on unconsumed right-click", "[input][tools]") {
+    Harness h;
+    bool cancelled = false;
+    InputHandler::Callbacks cb;
+    cb.onToolMousePressed = [](sf::Vector2f, sf::Mouse::Button) {
+        return false;
+    };
+    cb.onEscape = [&cancelled]() {
+        cancelled = true;
+    };
+    h.handler.setCallbacks(cb);
+    h.handler.setPluginToolMode(true);
+
+    h.rightClick(100, 100);
+
+    CHECK(cancelled);
+    CHECK(h.handler.getCurrentAction() == InputHandler::EditorAction::NONE);
+}
+
 TEST_CASE("InputHandler enters tile-placing action on click in tile mode", "[input]") {
-    if (glContextUnavailable()) {
-        SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
+    if (keyboardStateUnavailable()) {
+        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
     }
     Harness h;
     h.handler.setCallbacks(InputHandler::Callbacks{});
@@ -135,8 +195,8 @@ TEST_CASE("InputHandler enters tile-placing action on click in tile mode", "[inp
 }
 
 TEST_CASE("InputHandler begins drag-selection on a plain click in select mode", "[input]") {
-    if (glContextUnavailable()) {
-        SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
+    if (keyboardStateUnavailable()) {
+        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
     }
     Harness h;
     h.handler.setCallbacks(InputHandler::Callbacks{});
@@ -150,8 +210,8 @@ TEST_CASE("InputHandler begins drag-selection on a plain click in select mode", 
 // The "Draw edge" polyline state machine: clicks append vertices, moves fire a live preview, right-click
 // with >=2 vertices finalizes.
 TEST_CASE("InputHandler builds an exit-grid edge line and finalizes it on right-click", "[input][line]") {
-    if (glContextUnavailable()) {
-        SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
+    if (keyboardStateUnavailable()) {
+        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
     }
     Harness h;
     std::vector<sf::Vector2f> finalized;
@@ -184,8 +244,8 @@ TEST_CASE("InputHandler builds an exit-grid edge line and finalizes it on right-
 }
 
 TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too few vertices", "[input][line]") {
-    if (glContextUnavailable()) {
-        SKIP("InputHandler dispatch test needs a display/GL context; skipped in CI");
+    if (keyboardStateUnavailable()) {
+        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
     }
     Harness h;
     bool finalized = false;
@@ -205,9 +265,7 @@ TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too f
     CHECK_FALSE(h.handler.isInMarkExitsMode()); // tool dropped
 }
 
-// The flip key (Space) for "Draw edge" toggles the edge's side. A KeyPressed never touches the
-// RenderTarget/view, so we drive handleKeyPressed directly — no RenderTexture/GL context — and the test
-// runs on a display-less CI runner (handleEvent would need an sf::RenderTexture, which aborts without X11).
+// KeyPressed never touches the RenderTarget/view, so drive key behavior directly in tests.
 namespace {
 void pressKeyDirect(InputHandler& handler, sf::Keyboard::Key key) {
     sf::Event::KeyPressed press;
@@ -217,6 +275,9 @@ void pressKeyDirect(InputHandler& handler, sf::Keyboard::Key key) {
 } // namespace
 
 TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the preview", "[input][line][flip]") {
+    if (keyboardStateUnavailable()) {
+        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
+    }
     InputHandler handler;
     int previewCalls = 0;
     bool lastPreviewFlip = false;
@@ -244,11 +305,36 @@ TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the p
     CHECK(lastPreviewFlip == false);
 }
 
+TEST_CASE("InputHandler forwards keys to the active registered-tool branch before global handlers", "[input][tools]") {
+    InputHandler handler;
+    int toolKeys = 0;
+    bool deleteCalled = false;
+    InputHandler::Callbacks cb;
+    cb.onToolKeyPressed = [&toolKeys](const sf::Event::KeyPressed& event) {
+        if (event.code == sf::Keyboard::Key::Delete) {
+            ++toolKeys;
+            return true;
+        }
+        return false;
+    };
+    cb.onDeleteObjects = [&deleteCalled]() { deleteCalled = true; };
+    handler.setCallbacks(cb);
+    handler.setPluginToolMode(true);
+
+    pressKeyDirect(handler, sf::Keyboard::Key::Delete);
+
+    CHECK(toolKeys == 1);
+    CHECK_FALSE(deleteCalled);
+}
+
 // Shift-snap wiring: the live cursor passes through maybeSnapMarkExitsCursor before preview/commit.
 // Holding Shift can't be driven headlessly (sf::Keyboard reads the OS), so the snapped behaviour is
 // GUI-only — see the pure snapToExitGridAngle tests for the geometry. Here we pin the no-op path: with
 // Shift up the re-fired preview cursor is the raw cursor.
 TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Shift is up", "[input][line][snap]") {
+    if (keyboardStateUnavailable()) {
+        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
+    }
     InputHandler handler;
     sf::Vector2f lastCursor{ -1.f, -1.f };
     InputHandler::Callbacks cb;
@@ -265,6 +351,9 @@ TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Shi
 }
 
 TEST_CASE("InputHandler's flip key does nothing outside Draw-edge mode, and resets on mode change", "[input][line][flip]") {
+    if (keyboardStateUnavailable()) {
+        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
+    }
     InputHandler handler;
     int previewCalls = 0;
     InputHandler::Callbacks cb;

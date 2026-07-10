@@ -25,6 +25,8 @@
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
+#include "ui/tools/ITool.h"
+#include "ui/tools/ToolRegistry.h"
 #include "viewport/EdgeScroll.h"
 #include "viewport/ViewportController.h"
 #include "ui/panels/ObjectPalettePanel.h"
@@ -68,6 +70,80 @@
 
 namespace geck {
 
+namespace {
+
+    constexpr std::string_view kObjectPlacementToolId = "native.object-placement";
+
+    class ObjectPlacementTool final : public ITool {
+    public:
+        using MouseCallback = std::function<void(sf::Vector2f)>;
+        using VoidCallback = std::function<void()>;
+
+        ObjectPlacementTool(MouseCallback place, MouseCallback move, VoidCallback cancel, VoidCallback rotate)
+            : _place(std::move(place))
+            , _move(std::move(move))
+            , _cancel(std::move(cancel))
+            , _rotate(std::move(rotate)) {
+        }
+
+        std::string_view id() const override { return kObjectPlacementToolId; }
+
+        bool onMousePressed(const ToolMouseEvent& event) override {
+            if (event.button == sf::Mouse::Button::Left) {
+                if (_place) {
+                    _place(event.worldPos);
+                }
+                return true;
+            }
+            if (event.button == sf::Mouse::Button::Right) {
+                if (_cancel) {
+                    _cancel();
+                }
+                return true;
+            }
+            return false;
+        }
+
+        bool onMouseMoved(const ToolMouseEvent& event) override {
+            if (_move) {
+                _move(event.worldPos);
+            }
+            return true;
+        }
+
+        bool onKeyPressed(const ToolKeyEvent& event) override {
+            if (event.code == sf::Keyboard::Key::Escape) {
+                if (_cancel) {
+                    _cancel();
+                }
+                return true;
+            }
+            if (event.code == sf::Keyboard::Key::R) {
+                if (_rotate) {
+                    _rotate();
+                }
+                return true;
+            }
+            return false;
+        }
+
+    private:
+        MouseCallback _place;
+        MouseCallback _move;
+        VoidCallback _cancel;
+        VoidCallback _rotate;
+    };
+
+    ToolModifiers currentToolModifiers() {
+        return {
+            .shift = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift),
+            .control = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl),
+            .alt = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LAlt) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RAlt),
+        };
+    }
+
+} // namespace
+
 EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<Map> map, QWidget* parent)
     : QWidget(parent)
     , _layout(nullptr)
@@ -107,6 +183,8 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
             if (auto* mw = getMainWindow())
                 mw->showStatusMessage(m);
         });
+    _toolRegistry = std::make_unique<ToolRegistry>();
+    registerNativeTools();
     setupInputCallbacks();
 
     setupUI();
@@ -1034,6 +1112,86 @@ void EditorWidget::setupInputCallbacks() {
     _inputHandler->setSelectionMode(_currentSelectionMode);
 }
 
+void EditorWidget::registerNativeTools() {
+    if (!_toolRegistry) {
+        return;
+    }
+    _toolRegistry->registerTool(std::make_unique<ObjectPlacementTool>(
+        [this](sf::Vector2f worldPos) {
+            placeObjectAtPosition(worldPos);
+        },
+        [this](sf::Vector2f worldPos) {
+            updateDragPreview(worldPos);
+        },
+        [this]() {
+            setMode(EditorMode::Select);
+            Q_EMIT statusMessageRequested("Object placement cancelled.");
+        },
+        [this]() {
+            if (_dragPreviewObject) {
+                _dragPreviewObject->rotate();
+            }
+        }));
+}
+
+bool EditorWidget::activateRegisteredTool(std::string_view id) {
+    if (!_toolRegistry || !_toolRegistry->setActiveTool(id)) {
+        return false;
+    }
+    setMode(EditorMode::PluginTool);
+    return true;
+}
+
+ToolMouseEvent EditorWidget::buildToolMouseEvent(sf::Vector2f worldPos, std::optional<sf::Mouse::Button> button) const {
+    ToolMouseEvent event;
+    event.worldPos = worldPos;
+    event.button = button;
+    event.hexIndex = _controller.viewport().worldPosToHexIndex(worldPos);
+    if (const auto tileIndex = screenToTileIndex(worldPos.x, worldPos.y, false); tileIndex.has_value()) {
+        event.tileIndex = *tileIndex;
+    }
+    event.modifiers = currentToolModifiers();
+    return event;
+}
+
+bool EditorWidget::dispatchToolMousePressed(sf::Vector2f worldPos, sf::Mouse::Button button) {
+    if (!_toolRegistry) {
+        return false;
+    }
+    ITool* tool = _toolRegistry->activeTool();
+    return tool && tool->onMousePressed(buildToolMouseEvent(worldPos, button));
+}
+
+bool EditorWidget::dispatchToolMouseMoved(sf::Vector2f worldPos) {
+    if (!_toolRegistry) {
+        return false;
+    }
+    ITool* tool = _toolRegistry->activeTool();
+    return tool && tool->onMouseMoved(buildToolMouseEvent(worldPos, std::nullopt));
+}
+
+bool EditorWidget::dispatchToolMouseReleased(sf::Vector2f worldPos, sf::Mouse::Button button) {
+    if (!_toolRegistry) {
+        return false;
+    }
+    ITool* tool = _toolRegistry->activeTool();
+    return tool && tool->onMouseReleased(buildToolMouseEvent(worldPos, button));
+}
+
+bool EditorWidget::dispatchToolKeyPressed(const sf::Event::KeyPressed& event) {
+    if (!_toolRegistry) {
+        return false;
+    }
+    ITool* tool = _toolRegistry->activeTool();
+    if (!tool) {
+        return false;
+    }
+    return tool->onKeyPressed(ToolKeyEvent{
+        .code = event.code,
+        .modifiers = currentToolModifiers(),
+    });
+}
+
 void EditorWidget::bindSelectionCallbacks(InputHandler::Callbacks& callbacks) {
     // Mouse events
     callbacks.onSelectionClick = [this](sf::Vector2f worldPos, InputHandler::SelectionModifier modifier) {
@@ -1289,6 +1447,19 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         if (_dragPreviewObject) {
             _dragPreviewObject->rotate();
         }
+    };
+
+    callbacks.onToolMousePressed = [this](sf::Vector2f worldPos, sf::Mouse::Button button) {
+        return dispatchToolMousePressed(worldPos, button);
+    };
+    callbacks.onToolMouseMoved = [this](sf::Vector2f worldPos) {
+        return dispatchToolMouseMoved(worldPos);
+    };
+    callbacks.onToolMouseReleased = [this](sf::Vector2f worldPos, sf::Mouse::Button button) {
+        return dispatchToolMouseReleased(worldPos, button);
+    };
+    callbacks.onToolKeyPressed = [this](const sf::Event::KeyPressed& event) {
+        return dispatchToolKeyPressed(event);
     };
 }
 
@@ -1644,6 +1815,9 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         // Leaving object placement drops the cursor ghost and its cached ObjectInfo.
         cancelDragPreview();
     }
+    if (mode != EditorMode::PluginTool && _toolRegistry) {
+        _toolRegistry->clearActiveTool();
+    }
     if (mode != EditorMode::MarkExits) {
         clearMarkExitsLinePreview();
         // Leaving "Draw edge" abandons any in-progress line: drop its frozen segments. (Finalize/cancel
@@ -1657,6 +1831,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         _inputHandler->setPlayerPositionMode(false);
         _inputHandler->setStampPatternMode(false);
         _inputHandler->setObjectPlacementMode(false);
+        _inputHandler->setPluginToolMode(false);
     }
 
     switch (mode) {
@@ -1697,6 +1872,11 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
             // here we only route placement clicks/moves to the input handler.
             if (_inputHandler) {
                 _inputHandler->setObjectPlacementMode(true);
+            }
+            break;
+        case EditorMode::PluginTool:
+            if (_inputHandler) {
+                _inputHandler->setPluginToolMode(true);
             }
             break;
     }
@@ -2402,15 +2582,19 @@ void EditorWidget::beginObjectPlacement(uint32_t pid, sf::Vector2f worldPos) {
         _mainWindow->raiseObjectPalette();
     }
 
-    // Arm the palette-drag ghost (sets _previewObjectInfo + builds the cursor ghost), then enter the
-    // click-to-place mode. setMode() clears the ghost again on any exit.
+    // Enter the registered tool branch first, then arm the palette-drag ghost (sets
+    // _previewObjectInfo + builds the cursor ghost). setMode() clears any old ghost on entry/exit.
+    if (!activateRegisteredTool(kObjectPlacementToolId)) {
+        Q_EMIT statusMessageRequested("Pick (P): object placement tool is unavailable");
+        return;
+    }
+
     startDragPreview(found->first, static_cast<int>(found->second), worldPos);
     if (!_previewObjectInfo) {
-        cancelDragPreview();
+        setMode(EditorMode::Select);
         Q_EMIT statusMessageRequested("Pick (P): could not load this object");
         return;
     }
-    setMode(EditorMode::PlaceObject);
     Q_EMIT statusMessageRequested("Placing object — left-click to drop, R to rotate, Esc or right-click to stop");
 }
 

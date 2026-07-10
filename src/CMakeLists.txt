@@ -204,6 +204,9 @@ set(GECK_APP_SOURCES
     ui/tools/ExitGridContext.h
     ui/tools/ExitGridPlacementManager.h
     ui/tools/ExitGridPlacementManager.cpp
+    ui/tools/ITool.h
+    ui/tools/ToolRegistry.h
+    ui/tools/ToolRegistry.cpp
     # Loaders (kept from state system)
     state/loader/Loader.h
     state/loader/MapLoader.cpp
