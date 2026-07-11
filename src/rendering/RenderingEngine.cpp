@@ -9,6 +9,7 @@
 #include "util/BuiltTile.h"
 #include "rendering/MapEdgeOverlayGeometry.h"
 #include "rendering/ObjectVisibility.h"
+#include "rendering/ToolPreview.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
 #include "util/ColorUtils.h"
@@ -167,6 +168,9 @@ void RenderingEngine::render(sf::RenderTarget& target,
             target.draw(sprite);
         }
     }
+    if (renderData.toolPreview) {
+        renderToolPreview(target, *renderData.toolPreview);
+    }
 
     // Layer 5: Roof tiles (if enabled)
     renderRoofTiles(target, renderData, visibility.showRoof);
@@ -204,6 +208,20 @@ void RenderingEngine::renderFloorTiles(sf::RenderTarget& target,
     const std::vector<sf::Sprite>& floorSprites) {
     for (const auto& floor : floorSprites) {
         target.draw(floor);
+    }
+}
+
+void RenderingEngine::renderToolPreview(sf::RenderTarget& target, const ToolPreview& preview) {
+    for (const auto& sprite : preview.floorTiles) {
+        target.draw(sprite);
+    }
+    for (const auto& object : preview.objects) {
+        if (object) {
+            target.draw(object->getSprite());
+        }
+    }
+    for (const auto& sprite : preview.roofTiles) {
+        target.draw(sprite);
     }
 }
 

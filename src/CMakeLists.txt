@@ -204,6 +204,11 @@ set(GECK_APP_SOURCES
     ui/tools/ExitGridContext.h
     ui/tools/ExitGridPlacementManager.h
     ui/tools/ExitGridPlacementManager.cpp
+    ui/tools/FillBrushTool.h
+    ui/tools/ITool.h
+    ui/tools/PluginToolHost.h
+    ui/tools/ToolRegistry.h
+    ui/tools/ToolRegistry.cpp
     # Loaders (kept from state system)
     state/loader/Loader.h
     state/loader/MapLoader.cpp
@@ -574,6 +579,7 @@ add_library(gecko_editing STATIC
     # PNG export. ThumbnailRenderer/MapThumbnail stay in gecko_app — they use QImage/QPainter.
     rendering/HexRenderer.h
     rendering/HexRenderer.cpp
+    rendering/ToolPreview.h
     rendering/RenderingEngine.h
     rendering/RenderingEngine.cpp
     rendering/MapRenderer.h

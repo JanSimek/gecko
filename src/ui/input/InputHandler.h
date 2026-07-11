@@ -70,12 +70,13 @@ public:
 
         // Eyedropper (P): sample whatever is under the cursor and load it into the matching palette.
         std::function<void(sf::Vector2f worldPos)> onPick;
-        // Click-to-place object mode (entered by picking an object). onObjectPlacement drops a copy at
-        // the click; onObjectPlacementMove tracks the ghost to the cursor; onObjectPlacementCancel exits.
-        std::function<void(sf::Vector2f worldPos)> onObjectPlacement;
-        std::function<void(sf::Vector2f worldPos)> onObjectPlacementMove;
-        std::function<void()> onObjectPlacementCancel;
-        std::function<void()> onObjectPlacementRotate;
+
+        // Dynamic registered tool dispatch. The host owns the active tool registry; InputHandler only
+        // does pixel->world conversion and forwards the event while EditorMode::PluginTool is active.
+        std::function<bool(sf::Vector2f worldPos, sf::Mouse::Button button)> onToolMousePressed;
+        std::function<bool(sf::Vector2f worldPos)> onToolMouseMoved;
+        std::function<bool(sf::Vector2f worldPos, sf::Mouse::Button button)> onToolMouseReleased;
+        std::function<bool(const sf::Event::KeyPressed& event)> onToolKeyPressed;
         // Polyline "Draw edge" mode. onMarkExitsLinePreview fires on every mouse move (and flip toggle)
         // with the committed vertices plus the live cursor; onMarkExitsLine fires once on finalize with
         // the finished polyline. `flipSide` is the flip toggle's current state (true = side inverted),
@@ -146,8 +147,7 @@ public:
     void setStampPatternMode(bool enabled) { setActiveMode(enabled, EditorMode::StampPattern); }
     bool isInStampPatternMode() const { return _mode == EditorMode::StampPattern; }
     void setMarkExitsMode(bool enabled) { setActiveMode(enabled, EditorMode::MarkExits); }
-    void setObjectPlacementMode(bool enabled) { setActiveMode(enabled, EditorMode::PlaceObject); }
-    bool isInObjectPlacementMode() const { return _mode == EditorMode::PlaceObject; }
+    void setPluginToolMode(bool enabled) { setActiveMode(enabled, EditorMode::PluginTool); }
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool replaceMode = false);
     void setSelectionMode(SelectionMode mode) { _selectionMode = mode; }
 

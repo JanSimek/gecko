@@ -32,6 +32,17 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
     const sf::View& view) {
     sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
 
+    if (_mode == EditorMode::PluginTool && _callbacks.onToolMousePressed
+        && _callbacks.onToolMousePressed(worldPos, event.button)) {
+        return;
+    }
+    if (_mode == EditorMode::PluginTool && event.button == sf::Mouse::Button::Right) {
+        if (_callbacks.onEscape) {
+            _callbacks.onEscape();
+        }
+        return;
+    }
+
     if (event.button == sf::Mouse::Button::Left) {
         if (_mode == EditorMode::SetPlayerPosition) {
             if (_callbacks.onPlayerPositionSelect) {
@@ -59,13 +70,6 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
         if (_mode == EditorMode::StampPattern) {
             if (_callbacks.onStampPattern) {
                 _callbacks.onStampPattern(worldPos);
-            }
-            return;
-        }
-
-        if (_mode == EditorMode::PlaceObject) {
-            if (_callbacks.onObjectPlacement) {
-                _callbacks.onObjectPlacement(worldPos);
             }
             return;
         }
@@ -152,12 +156,6 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
                 _callbacks.onStampPatternCancel();
             }
             spdlog::debug("Stamp pattern mode cancelled with right-click");
-        } else if (_mode == EditorMode::PlaceObject) {
-            _mode = EditorMode::Select;
-            if (_callbacks.onObjectPlacementCancel) {
-                _callbacks.onObjectPlacementCancel();
-            }
-            spdlog::debug("Object placement mode cancelled with right-click");
         } else {
             _currentAction = EditorAction::PANNING;
             _mouseStartPos = event.position;
@@ -170,6 +168,13 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
     sf::RenderTarget& target,
     const sf::View& view) {
     sf::Vector2f worldPos = pixelToWorld(event.position, target, view);
+
+    if (_mode == EditorMode::PluginTool && _callbacks.onToolMouseReleased
+        && _callbacks.onToolMouseReleased(worldPos, event.button)) {
+        _currentAction = EditorAction::NONE;
+        _isDragging = false;
+        return;
+    }
 
     if (event.button == sf::Mouse::Button::Left) {
         if (_mode == EditorMode::SetPlayerPosition) {
@@ -241,9 +246,8 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
         _callbacks.onMarkExitsLinePreview(_lineVertices, maybeSnapMarkExitsCursor(worldPos), _markExitsFlip);
     }
 
-    // Object placement: the ghost tracks the cursor on every move, independent of any drag.
-    if (_mode == EditorMode::PlaceObject && _callbacks.onObjectPlacementMove) {
-        _callbacks.onObjectPlacementMove(worldPos);
+    if (_mode == EditorMode::PluginTool && _callbacks.onToolMouseMoved && _callbacks.onToolMouseMoved(worldPos)) {
+        return;
     }
 
     switch (_currentAction) {
@@ -308,6 +312,10 @@ void InputHandler::handleMouseWheelScrolled(const sf::Event::MouseWheelScrolled&
 }
 
 void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
+    if (_mode == EditorMode::PluginTool && _callbacks.onToolKeyPressed && _callbacks.onToolKeyPressed(event)) {
+        return;
+    }
+
     if (event.code == sf::Keyboard::Key::Escape) {
         if (_mode == EditorMode::MarkExits) {
             // Esc abandons the in-progress "Draw edge" line and drops the tool.
@@ -329,13 +337,11 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
             _callbacks.onDeleteObjects();
         }
     } else if (event.code == sf::Keyboard::Key::R) {
-        // The Rotate toolbar shortcut is disabled by the editor while stamping or placing an object,
-        // so R reaches us here: in stamp mode it cycles the pattern's orientation variants; in object
-        // placement it rotates the cursor ghost (which the drop inherits).
+        // The Rotate toolbar shortcut is disabled by the editor while stamping (and while a
+        // registered tool runs), so R reaches us here: in stamp mode it cycles the pattern's
+        // orientation variants. A registered tool sees R first via onToolKeyPressed above.
         if (_mode == EditorMode::StampPattern && _callbacks.onStampCycleVariant) {
             _callbacks.onStampCycleVariant();
-        } else if (_mode == EditorMode::PlaceObject && _callbacks.onObjectPlacementRotate) {
-            _callbacks.onObjectPlacementRotate();
         }
     } else if (event.code == sf::Keyboard::Key::P) {
         // Eyedropper: sample whatever is under the cursor. Key events carry no view/target to convert

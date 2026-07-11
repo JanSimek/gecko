@@ -18,6 +18,7 @@ namespace resource {
 // Forward declarations
 class Object;
 class Map;
+struct ToolPreview;
 
 /**
  * @brief Handles all rendering operations for the editor
@@ -89,6 +90,7 @@ public:
             const std::vector<sf::Sprite>* roofTiles = nullptr;
         };
         StampPreview stampPreview;
+        const ToolPreview* toolPreview = nullptr;
 
         // Selection rectangle
         const sf::RectangleShape* selectionRectangle = nullptr;
@@ -248,6 +250,8 @@ private:
     void renderRoofTiles(sf::RenderTarget& target,
         const RenderData& renderData,
         bool showRoof);
+
+    void renderToolPreview(sf::RenderTarget& target, const ToolPreview& preview);
 
     /**
      * @brief Render selection-related visuals. The roof tile selection outline is drawn only when

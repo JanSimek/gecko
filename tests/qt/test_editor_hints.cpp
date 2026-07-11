@@ -71,3 +71,25 @@ TEST_CASE("Every hint uses the middot separator between multiple keys", "[hints]
     const QString hint = hintForContext(EditorMode::MarkExits, false);
     REQUIRE(hint.count(QString::fromUtf8("·")) == 3);
 }
+
+TEST_CASE("PluginTool hint falls back to the host's cancel guarantee", "[hints]") {
+    // With no tool hint, the generic line advertises exactly what the host enforces: an
+    // unconsumed Esc / right-click always leaves the tool (EditorWidget's onEscape branch).
+    const QString hint = hintForContext(EditorMode::PluginTool, false);
+    REQUIRE(hint.contains("Esc"));
+    REQUIRE(hint.contains("right-click"));
+    REQUIRE(hint.contains("cancel"));
+}
+
+TEST_CASE("PluginTool hint renders the active tool's own items when provided", "[hints]") {
+    // A registered tool supplies its keys one per line (ITool::statusHint); the provider
+    // joins them with the standard middot separator. The object-placement tool's hint must
+    // match what the dedicated PlaceObject mode used to show, so porting it onto the
+    // registry changed no visible text.
+    const QString hint = hintForContext(EditorMode::PluginTool, false,
+        QStringLiteral("Click: place\nR: rotate\nEsc / right-click: cancel"));
+    REQUIRE(hint.contains("Click: place"));
+    REQUIRE(hint.contains("R: rotate"));
+    REQUIRE(hint.contains("Esc / right-click: cancel"));
+    REQUIRE(hint.count(QString::fromUtf8("·")) == 2);
+}

@@ -4,7 +4,6 @@
 #include "EditorWidget.h"
 #include "format/map/MapScript.h"
 #include "util/GameDataPathResolver.h"
-#include "ui/core/EditorHints.h"
 #include "ui/widgets/LoadingWidget.h"
 #include "ui/widgets/WelcomeWidget.h"
 #include "ui/widgets/SFMLWidget.h"
@@ -24,6 +23,7 @@
 #endif
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
+#include "ui/tools/FillBrushTool.h"
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
 #include "ui/dialogs/FillDialog.h"
@@ -898,6 +898,34 @@ void MainWindow::setupToolModeActions() {
     connect(_exitGridsAction, &QAction::triggered, this, [this](bool checked) {
         applyExitGridsTool(checked);
     });
+
+    // Freehand fill brush: drag-to-paint the tile palette's selection; one stroke = one undo
+    // entry. Runs as a registered tool (EditorMode::PluginTool + ToolRegistry).
+    _fillBrushAction = _mainToolBar->addAction(createIcon(":/icons/actions/paint.svg"), "Fill Brush");
+    _fillBrushAction->setStatusTip("Paint the selected palette tile by dragging (one stroke is one undo step)");
+    _fillBrushAction->setCheckable(true);
+    connect(_fillBrushAction, &QAction::triggered, this, [this](bool checked) {
+        applyFillBrushTool(checked);
+    });
+}
+
+void MainWindow::applyFillBrushTool(bool checked) {
+    if (!_currentEditorWidget) {
+        return;
+    }
+    if (!checked) {
+        _currentEditorWidget->setMode(EditorMode::Select);
+        return;
+    }
+    const bool hasTile = _tilePalettePanel && _tilePalettePanel->hasSelectedTile();
+    if (!hasTile || !_currentEditorWidget->activateFillBrush(_tilePalettePanel->getSelectedTileIndex(), _tilePalettePanel->isRoofMode())) {
+        // No tile loaded: don't enter a brush that can't paint. Revert the toggle and say why.
+        const QSignalBlocker blocker(_fillBrushAction);
+        _fillBrushAction->setChecked(false);
+        showStatusMessage("Fill brush: select a tile in the Tiles palette first");
+        return;
+    }
+    updateModeDisplay("Mode: Fill brush", ":/icons/actions/paint.svg");
 }
 
 void MainWindow::applyExitGridsTool(bool checked) {
@@ -929,6 +957,14 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
     };
     sync(_selectToolAction, EditorMode::Select);
 
+    // The brush button tracks its specific registered tool, not PluginTool as a whole —
+    // object placement also runs as PluginTool and must not light the brush up.
+    if (_fillBrushAction) {
+        const QSignalBlocker blocker(_fillBrushAction);
+        _fillBrushAction->setChecked(mode == EditorMode::PluginTool && _currentEditorWidget
+            && _currentEditorWidget->activeToolId() == FillBrushTool::ID);
+    }
+
     // Unified Exit-Grids button is checked while in either sub-mode; the dropdown shows which one,
     // and the button label tracks the active sub-mode.
     const bool inExitGridMode = (mode == EditorMode::PlaceExitGrid || mode == EditorMode::MarkExits);
@@ -950,10 +986,10 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         }
     }
 
-    // Free up "R" for the viewport while stamping (variant cycling) or placing an object (ghost
-    // rotation); otherwise the toolbar shortcut would swallow the key before it reaches the editor.
+    // Free up "R" for the viewport while stamping or while a registered tool runs (object
+    // placement); otherwise the toolbar shortcut would swallow the key before it reaches the editor.
     if (_rotateAction) {
-        _rotateAction->setEnabled(mode != EditorMode::StampPattern && mode != EditorMode::PlaceObject);
+        _rotateAction->setEnabled(mode != EditorMode::StampPattern && mode != EditorMode::PluginTool);
     }
 }
 
@@ -973,6 +1009,129 @@ void MainWindow::wireScriptConsole() {
 void MainWindow::setLogModel(LogModel* model) {
     if (_logPanel) {
         _logPanel->setModel(model);
+    }
+}
+
+QMenu* MainWindow::ensurePluginMenu() {
+    if (!_pluginMenu && _menuBar) {
+        // Keep Help rightmost, per platform convention: insert Plugins before it.
+        _pluginMenu = new QMenu(tr("&Plugins"), _menuBar);
+        if (_helpMenu) {
+            _menuBar->insertMenu(_helpMenu->menuAction(), _pluginMenu);
+        } else {
+            _menuBar->addMenu(_pluginMenu);
+        }
+    }
+    return _pluginMenu;
+}
+
+QAction* MainWindow::addPluginMenuItem(const QString& id, const QString& text) {
+    // Validate before ensurePluginMenu() so a rejected registration can't leave an empty
+    // Plugins menu in the menu bar.
+    if (id.isEmpty() || text.isEmpty() || _pluginUi.contains(id)) {
+        return nullptr;
+    }
+    QMenu* menu = ensurePluginMenu();
+    if (!menu) {
+        return nullptr;
+    }
+
+    QAction* action = menu->addAction(text);
+    menu->menuAction()->setVisible(true);
+    _pluginUi.insert(id, PluginUiRegistration{
+                             .kind = PluginUiRegistration::Kind::MenuAction,
+                             .action = action,
+                             .menu = menu,
+                         });
+    return action;
+}
+
+QAction* MainWindow::addPluginToolButton(const QString& id, const QString& text, const QIcon& icon) {
+    if (id.isEmpty() || text.isEmpty() || !_mainToolBar || _pluginUi.contains(id)) {
+        return nullptr;
+    }
+
+    QAction* action = icon.isNull() ? _mainToolBar->addAction(text) : _mainToolBar->addAction(icon, text);
+    _pluginUi.insert(id, PluginUiRegistration{
+                             .kind = PluginUiRegistration::Kind::ToolBarAction,
+                             .action = action,
+                         });
+    return action;
+}
+
+QDockWidget* MainWindow::addPluginDock(const QString& id, const QString& title, QWidget* widget,
+    Qt::DockWidgetArea area) {
+    if (id.isEmpty() || title.isEmpty() || !widget || _pluginUi.contains(id)) {
+        return nullptr;
+    }
+
+    QDockWidget* dock = new QDockWidget(title, this);
+    dock->setObjectName(QStringLiteral("PluginDock_%1").arg(id));
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+    dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
+    dock->setWidget(widget);
+    addDockWidget(area, dock);
+    dock->hide();
+
+    QAction* toggleAction = dock->toggleViewAction();
+    toggleAction->setText(title);
+    if (_viewMenu) {
+        _viewMenu->addAction(toggleAction);
+    }
+    connect(dock, &QDockWidget::visibilityChanged, this, [this](bool) {
+        if (!_suppressDockStateSave) {
+            saveDockWidgetState();
+        }
+    });
+
+    _pluginUi.insert(id, PluginUiRegistration{
+                             .kind = PluginUiRegistration::Kind::Dock,
+                             .action = toggleAction,
+                             .dock = dock,
+                         });
+    return dock;
+}
+
+void MainWindow::removePluginUi(const QString& id) {
+    const auto it = _pluginUi.find(id);
+    if (it == _pluginUi.end()) {
+        return;
+    }
+
+    const PluginUiRegistration registration = it.value();
+    _pluginUi.erase(it);
+
+    switch (registration.kind) {
+        case PluginUiRegistration::Kind::MenuAction:
+            if (registration.menu && registration.action) {
+                registration.menu->removeAction(registration.action);
+            }
+            if (registration.action) {
+                registration.action->deleteLater();
+            }
+            // An empty Plugins menu is just noise in the menu bar; hide it until the next
+            // registration (the QMenu itself stays alive so pointers remain stable).
+            if (_pluginMenu && _pluginMenu->isEmpty()) {
+                _pluginMenu->menuAction()->setVisible(false);
+            }
+            break;
+        case PluginUiRegistration::Kind::ToolBarAction:
+            if (_mainToolBar && registration.action) {
+                _mainToolBar->removeAction(registration.action);
+            }
+            if (registration.action) {
+                registration.action->deleteLater();
+            }
+            break;
+        case PluginUiRegistration::Kind::Dock:
+            if (_viewMenu && registration.action) {
+                _viewMenu->removeAction(registration.action);
+            }
+            if (registration.dock) {
+                removeDockWidget(registration.dock);
+                registration.dock->deleteLater();
+            }
+            break;
     }
 }
 
@@ -1603,6 +1762,12 @@ void MainWindow::connectPanelSignals() {
                 if (!_currentEditorWidget)
                     return;
                 if (tileIndex >= 0) {
+                    // Picking a tile while the fill brush is active re-loads the brush in
+                    // place instead of yanking the user back to click-painting.
+                    if (_currentEditorWidget->activeToolId() == FillBrushTool::ID) {
+                        _currentEditorWidget->activateFillBrush(tileIndex, isRoof);
+                        return;
+                    }
                     _currentEditorWidget->setTilePlacementMode(true, tileIndex, isRoof);
                     updateModeDisplay("Mode: Tile painting", ":/icons/actions/paint.svg");
                 } else {
@@ -1805,9 +1970,7 @@ void MainWindow::connectToEditorWidget() {
     syncToolModeActions(_currentEditorWidget->currentMode());
     // Likewise seed the hint once, since hintChanged isn't emitted on connect either.
     if (_hintLabel) {
-        const auto* selectionManager = _currentEditorWidget->getSelectionManager();
-        const bool hasSelection = selectionManager && !selectionManager->getCurrentSelection().isEmpty();
-        _hintLabel->setText(hintForContext(_currentEditorWidget->currentMode(), hasSelection));
+        _hintLabel->setText(_currentEditorWidget->currentHintText());
     }
     connect(_currentEditorWidget, &EditorWidget::hexHoverChanged, this, &MainWindow::updateHexIndexDisplay);
     connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, [this](const std::string& mapPath) {

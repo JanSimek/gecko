@@ -16,9 +16,11 @@ namespace {
 
 } // namespace
 
-QString hintForContext(EditorMode mode, bool hasSelection) {
+QString hintForContext(EditorMode mode, bool hasSelection, const QString& activeToolHint) {
+    using enum EditorMode;
+
     switch (mode) {
-        case EditorMode::Select:
+        case Select:
             // Only the keys that genuinely act on a selection: Rotate's "R" toolbar
             // shortcut (live whenever not stamping) and Delete/Backspace. With nothing
             // selected neither does anything, so the hint is empty.
@@ -28,37 +30,39 @@ QString hintForContext(EditorMode mode, bool hasSelection) {
             }
             return QString();
 
-        case EditorMode::PlaceTile:
+        case PlaceTile:
             // A click (or drag) paints; Esc / right-click leaves placement.
             return QStringLiteral("Esc: exit placement");
 
-        case EditorMode::PlaceExitGrid:
+        case PlaceExitGrid:
             return joinHints({ QStringLiteral("Click: place exit grid"),
                 QStringLiteral("Esc: exit") });
 
-        case EditorMode::MarkExits:
+        case MarkExits:
             // "Draw edge" keys: flip side, snap to angle, finish, cancel.
             return joinHints({ QStringLiteral("Space: flip side"),
                 QStringLiteral("Shift: snap to angle"),
                 QStringLiteral("Enter / double-click: finish"),
                 QStringLiteral("Esc: cancel") });
 
-        case EditorMode::SetPlayerPosition:
+        case SetPlayerPosition:
             return joinHints({ QStringLiteral("Click: set player start"),
                 QStringLiteral("Esc: cancel") });
 
-        case EditorMode::StampPattern:
+        case StampPattern:
             // R cycles the prefab's orientation variants (the Rotate shortcut is disabled
             // while stamping so the key reaches the viewport); Esc cancels.
             return joinHints({ QStringLiteral("R: cycle variant"),
                 QStringLiteral("Esc: cancel") });
 
-        case EditorMode::PlaceObject:
-            // The picked object's ghost tracks the cursor; a click drops a copy, R rotates it (the
-            // Rotate shortcut is disabled while placing so the key reaches the viewport).
-            return joinHints({ QStringLiteral("Click: place"),
-                QStringLiteral("R: rotate"),
-                QStringLiteral("Esc / right-click: cancel") });
+        case PluginTool:
+            // A registered tool describes its own keys (ITool::statusHint, one item per
+            // line); tools without a hint get the generic cancel line, which the host
+            // guarantees (an unconsumed Esc / right-click always leaves the tool).
+            if (!activeToolHint.isEmpty()) {
+                return joinHints(activeToolHint.split(QLatin1Char('\n'), Qt::SkipEmptyParts));
+            }
+            return QStringLiteral("Esc / right-click: cancel");
     }
 
     return QString();
