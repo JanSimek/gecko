@@ -57,6 +57,22 @@ public:
         int elevation,
         bool buildSprites = true);
 
+    /// Re-point a long-lived api (a resident plugin VM's host) at the current editor and map.
+    /// `map` may be null: the editor host is alive but no map is open — map-touching calls
+    /// then raise ScriptError until the next retarget. Per-run callers never need this: they
+    /// construct fresh over one map and drop the api afterwards.
+    void retarget(resource::GameResources& resources,
+        const HexagonGrid& hexgrid,
+        ObjectCommandController& controller,
+        Map* map,
+        int elevation,
+        bool buildSprites);
+
+    /// The editor host itself is gone (widget teardown): every api call raises ScriptError
+    /// until retarget() re-points at a live host. Prevents a resident VM from dereferencing
+    /// a destroyed controller/grid through a stale api.
+    void detach();
+
     // --- Queries (no mutation) ---------------------------------------------------
     bool isValidHex(int hex) const;
     /// The up-to-6 on-grid hex neighbours (cube-coordinate, parity-correct).
@@ -327,10 +343,14 @@ private:
     // Whether a scenery proto belongs in a scatter palette (upright decoration, not a flat blocker).
     bool isScatterableScenery(uint32_t pid) const;
 
-    resource::GameResources& _resources;
-    const HexagonGrid& _hexgrid;
-    ObjectCommandController& _controller;
-    Map& _map;
+    // Stored as pointers so a persistent (plugin) host can re-point one long-lived api at
+    // whatever map/editor is current — see retarget()/detach(). The value constructor takes
+    // references and can never produce nulls, so per-run callers (generation runtime,
+    // CLI/MCP, fills) are unaffected. Access goes through the *Ref() guards below.
+    resource::GameResources* _resources;
+    const HexagonGrid* _hexgrid;
+    ObjectCommandController* _controller;
+    Map* _map;
     int _elevation;
     bool _buildSprites;
     int _placedObjects = 0;
@@ -339,6 +359,15 @@ private:
     // so mutated() reports them even though the placed/painted counters stay at 0.
     bool _mutatedDirectly = false;
     std::unordered_map<std::string, pattern::Pattern> _stamps;
+
+    /// Guarded access to the re-pointable host members: mapRef() raises ScriptError when no
+    /// map is open, the others when the api is detached from its editor host. Every method
+    /// that touches the map/host goes through these, so a resident VM's stale calls surface
+    /// as catchable script errors instead of dereferencing dead objects.
+    [[nodiscard]] Map& mapRef() const;
+    [[nodiscard]] ObjectCommandController& controllerRef() const;
+    [[nodiscard]] const HexagonGrid& hexgridRef() const;
+    [[nodiscard]] resource::GameResources& resourcesRef() const;
 
     /// Hard ceiling on entries a plan sink accepts per run, kSinkCapFactor x the bound
     /// area's total footprint (hexes + floor tiles + roof tiles, floored at 1): a runaway
