@@ -1,5 +1,34 @@
 # Improvement Backlog
 
+## Current status (2026-07-12)
+
+> ⚠️ **Most of this document is already implemented.** It is a long-lived backlog written ahead of
+> the work, so a section describing a feature usually means it *shipped*, not that it is pending.
+> **Verify an item against `master` before treating it as open** (grep for the code; check
+> `gh pr list --state merged`). This repo squash-merges, so `git merge-base --is-ancestor <branch>
+> master` is NOT a valid "is it merged" test — it reports merged work as unmerged.
+
+**Shipped (on `master`):** the two-tier scripting/prefab stack — Tier-1 patterns + Tier-2 Luau
+generation, **Fill Selection + the freehand Fill Brush** (Feature A); the **reachability overlay**
+(editor + headless) on a shared `geck::reachability` core; **`.edg` map-edge round-trip + the
+interactive Map Edges editor**; the **map-analysis / MCP tools** (`describe_map`, `map_graph`,
+`reachability`, `world_map`, FRM inspection, resource inspection, spatial-script viz/select);
+**map name/info editing** (maps.txt round-trip, map.msg); the **hex-accurate light overlay**; and the
+data-path / file-browser / loading-dialog work (reconfiguration fixes, explicit save location, load
+priority, progress-dialog fixes). The 13-WP architecture roadmap is delivered.
+
+**Scrapped:** the **Luau plugin system (Feature B)** — deferred indefinitely, see §4 for the
+rationale and PR #122 for the deferral + removal of its dead substrate.
+
+**Genuinely pending (candidates for "what's next"):**
+- **Procedural generation → authored wall-adjacency (Wang / edge-constraint tiling)** — replace
+  per-hex wall sampling with an edge-constraint model. The flagged "➡️ Next" and the highest-value
+  generation-quality improvement; *not on master*.
+- **Analysis/MCP roadmap tail** (§"Next capabilities"), **SSL script editing** polish (§"SSL Script
+  Editing Integration"), **in-game preview mode** (idea/scoping), **MCP server hardening**
+  (deferred follow-ups) — check each against `master` first; parts are already done.
+- **Architecture polish residuals** (below) — opportunistic, low value.
+
 ## Architecture
 
 The 13-work-package architecture roadmap is delivered.
