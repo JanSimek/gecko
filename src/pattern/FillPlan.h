@@ -31,7 +31,7 @@ struct FillPlan {
 
     std::vector<Entry> objects;
     std::vector<TileChange> tiles;
-    int dropped = 0; ///< objects/tiles whose target fell off the grid (later: clipped/capped too)
+    int dropped = 0; ///< objects/tiles refused at record time: off-grid targets, or surplus past the per-run sink cap
 };
 
 } // namespace geck::pattern

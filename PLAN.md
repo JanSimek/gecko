@@ -1002,14 +1002,17 @@ Fills live in `fills/` under the existing `PatternLibrary::rootDir()`; one brows
 > then **removed by design** — the Luau fills replaced them, so the `autotile_floor` gap is closed by
 > scripting rather than a set primitive. Don't rebuild them.
 
-### 3.10 Sandbox dependency
+### 3.10 Sandbox dependency — CLOSED
 
 `LuaScriptRuntime::run` takes a `timeBudgetMs`, and `LuaSandboxHost` arms a safepoint interrupt +
-deadline whenever it is non-zero — the fill preview passes `FILL_SCRIPT_BUDGET_MS`, and a script can
-no longer `pcall` its way past the deadline. Two gaps remain before untrusted resident plugins may
-hold map-writing callbacks: the **Script Console still runs untimed** (`EditorWidget::runScript`
-passes no budget) and synchronously on the UI thread, and there is still no **placement cap**
-(`FillPlan::dropped` counts only off-grid targets). The freehand brush itself is native and bounded.
+deadline whenever it is non-zero — the fill preview passes `FILL_SCRIPT_BUDGET_MS`, the **Script
+Console now passes `CONSOLE_SCRIPT_BUDGET_MS` (30 s)**, and a script cannot `pcall` its way past
+the deadline. The **plan-sink placement cap** is in: while a sink AND an area are bound, each list
+(objects, tiles) refuses entries past `kSinkCapFactor (8) × the area's footprint` — refused
+placements return false like off-grid ones, `placeStamp`'s bulk append is trimmed, and the surplus
+lands in `FillPlan::dropped`, surfaced by the fill UI as "skipped". A sink with no bound area
+(programmatic use) stays uncapped. gecko-cli batch generation stays untimed by design. What B2
+still owes on top: wiring this cap into the per-dispatch budget for resident `map.write` plugins.
 
 ---
 
@@ -1148,7 +1151,7 @@ Remaining phases, ordered by dependency and value. "Always compiled" phases work
 |---|---|---|---|---|
 | 1 | ~~**B1** `ITool`+`ToolRegistry`+`PluginTool`+generic input+overlay field+MainWindow `addPlugin*`~~ **DONE** | — | L | The seam, validated by porting object placement |
 | 2 | ~~**A5** freehand Fill Brush as native `ITool`~~ **DONE** | B1 | S | Drag-to-paint; proves `ITool` for real |
-| 3 | **Plugin sandbox limits** placement cap + a default budget for the Script Console (the interrupt+deadline watchdog itself shipped with `LuaSandboxHost`) | — | S | Prereq for resident plugin callbacks |
+| 3 | ~~**Plugin sandbox limits** placement cap + a default budget for the Script Console~~ **DONE** (see §3.10) | — | S | Prereq for resident plugin callbacks |
 | 4 | **B2** persistent VM + manifest + lifecycle + **`MapScriptApi::retarget`** + read-only `api` | #3 | L | Plugin MVP (read-only, isolated) |
 | 5 | **B3** `editor:` register + `map.write` + permission prompt + `storage` | B2 | L | Plugins add menus/buttons + undoable mutation |
 | 6 | **B4/B5** `Gui.*` panels; `LuaTool` tools + events | B3 | L | Plugins add panels/tools |

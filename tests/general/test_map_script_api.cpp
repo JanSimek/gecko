@@ -9,6 +9,9 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
+#include "pattern/FillPlan.h"
+#include "pattern/Pattern.h"
+#include "scripting/EditArea.h"
 #include "scripting/MapScriptApi.h"
 #include "util/Constants.h"
 #include "writer/map/MapWriter.h"
@@ -648,4 +651,92 @@ TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[s
         }
         CHECK(api.noise2d(1.5, 2.5) != api.noise2d(40.5, 80.5)); // varies across the field
     }
+}
+
+TEST_CASE("The plan sink caps a run at a multiple of the bound area's footprint", "[scripting][cap]") {
+    ControllerFixture fx;
+    // Headless (buildSprites=false): the sink records objects with a null visual, no art needed.
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    // Footprint = 2 hexes + 1 floor tile = 3 -> cap = 8 * 3 = 24 entries per list.
+    EditArea area;
+    area.hexes = { 20100, 20101 };
+    area.floorTiles = { 0 };
+    pattern::FillPlan plan;
+    api.setArea(&area);
+    api.setPlanSink(&plan);
+
+    constexpr uint32_t PRO = 0x02000066;
+    constexpr uint32_t FRM = 0x02000000;
+
+    // Objects: the 25th and later placements are refused, reported like off-grid ones.
+    int placed = 0;
+    for (int i = 0; i < 40; ++i) {
+        if (api.placeObject(PRO, FRM, 20100, 0)) {
+            ++placed;
+        }
+    }
+    CHECK(placed == 24);
+    CHECK(plan.objects.size() == 24);
+    CHECK(plan.dropped == 16);
+    CHECK(api.placedObjects() == 24); // refused placements are not counted as placed
+
+    // Tiles have the same independent cap: repaints are entries too, so a runaway loop
+    // repainting one tile stops growing the plan at the cap.
+    int painted = 0;
+    for (int i = 0; i < 40; ++i) {
+        if (api.paintFloor(0, SOME_TILE)) {
+            ++painted;
+        }
+    }
+    CHECK(painted == 24);
+    CHECK(plan.tiles.size() == 24);
+    CHECK(plan.dropped == 16 + 16);
+}
+
+TEST_CASE("The plan sink cap trims a stamp's bulk append", "[scripting][cap]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    // Footprint = 1 hex -> cap = 8 entries per list.
+    EditArea area;
+    area.hexes = { 20100 };
+    pattern::FillPlan plan;
+    api.setArea(&area);
+    api.setPlanSink(&plan);
+
+    // A stamp with 12 objects in one variant: planInto appends all of them, then the cap
+    // trims the surplus (a truncated stamp is the documented over-cap degradation).
+    pattern::Pattern big;
+    big.name = "big";
+    pattern::PatternVariant variant;
+    for (int i = 0; i < 12; ++i) {
+        pattern::PatternObject object;
+        object.dxHex = i; // spread along a row so every target lands on the grid
+        object.proPid = 0x02000066;
+        object.frmPid = 0x02000000;
+        variant.objects.push_back(object);
+    }
+    big.variants.push_back(variant);
+    api.addStamp("big", big);
+
+    const int placed = api.placeStamp("big", 20100, 0);
+    CHECK(placed == 8);
+    CHECK(plan.objects.size() == 8);
+    CHECK(plan.dropped == 4);
+}
+
+TEST_CASE("A sink with no bound area stays uncapped", "[scripting][cap]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    // Programmatic sink use (no fill area): the cap does not apply.
+    pattern::FillPlan plan;
+    api.setPlanSink(&plan);
+
+    for (int i = 0; i < 50; ++i) {
+        REQUIRE(api.placeObject(0x02000066u, 0x02000000u, 20100 + i, 0));
+    }
+    CHECK(plan.objects.size() == 50);
+    CHECK(plan.dropped == 0);
 }

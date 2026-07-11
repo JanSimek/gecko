@@ -497,12 +497,26 @@ void MapScriptApi::endBatch() {
     _controller.endBatch();
 }
 
+std::size_t MapScriptApi::sinkCap() const {
+    if (_area == nullptr) {
+        return 0;
+    }
+    const std::size_t footprint = _area->hexes.size() + _area->floorTiles.size() + _area->roofTiles.size();
+    return kSinkCapFactor * std::max<std::size_t>(footprint, 1);
+}
+
 bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction) {
     // Plan-sink active (preview / area fill): build the object exactly as the commit paths do
     // (GUI needs a resolvable sprite — a fid that won't load is "not placed", same as below;
     // headless records data with a null visual) but RECORD it into the plan instead of committing.
     // PlacementBatch::replay applies the plan later, so the result matches a direct run.
     if (_planSink != nullptr) {
+        // Refuse past the per-run cap (before any sprite is built): surplus counts as
+        // dropped, and the script sees "not placed" — the same contract as off-grid.
+        if (const std::size_t cap = sinkCap(); cap != 0 && _planSink->objects.size() >= cap) {
+            ++_planSink->dropped;
+            return false;
+        }
         std::shared_ptr<Object> object;
         if (_buildSprites) {
             object = pattern::buildSpriteObject(_resources, _hexgrid, frmPid, hex, direction);
@@ -596,6 +610,12 @@ bool MapScriptApi::paintTile(int tileIndex, uint16_t tileId, bool isRoof) {
     // Plan-sink active: record the tile change (before captured from the committed map) instead of
     // applying it; PlacementBatch::replay applies it later as part of the one-entry batch.
     if (_planSink != nullptr) {
+        // Every paint is a plan entry (repaints included), so a runaway loop grows the plan
+        // without bound — the same cap as objects turns the surplus into dropped instead.
+        if (const std::size_t cap = sinkCap(); cap != 0 && _planSink->tiles.size() >= cap) {
+            ++_planSink->dropped;
+            return false;
+        }
         _planSink->tiles.push_back({ _elevation, tileIndex, isRoof, before, tileId });
         ++_paintedTiles;
         return true;
@@ -847,6 +867,18 @@ int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant
         const std::size_t objBefore = _planSink->objects.size();
         const std::size_t tileBefore = _planSink->tiles.size();
         stamper.planInto(*_planSink, pattern.variants[variant], anchorHex, _elevation);
+        // planInto appends in bulk, so the per-run cap is enforced by trimming the surplus
+        // (a truncated stamp is the documented over-cap degradation, not normal operation).
+        if (const std::size_t cap = sinkCap(); cap != 0) {
+            if (_planSink->objects.size() > cap) {
+                _planSink->dropped += static_cast<int>(_planSink->objects.size() - cap);
+                _planSink->objects.resize(cap);
+            }
+            if (_planSink->tiles.size() > cap) {
+                _planSink->dropped += static_cast<int>(_planSink->tiles.size() - cap);
+                _planSink->tiles.resize(cap);
+            }
+        }
         const auto placed = static_cast<int>(_planSink->objects.size() - objBefore);
         _placedObjects += placed;
         _paintedTiles += static_cast<int>(_planSink->tiles.size() - tileBefore);

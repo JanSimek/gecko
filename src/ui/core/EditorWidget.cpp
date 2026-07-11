@@ -826,8 +826,14 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
     // so api:placeStamp(name, ...) finds the user's saved patterns; any unloadable file is reported.
     const std::string stampNotes = registerLibraryStamps(api);
     LuaScriptRuntime runtime;
+    // The console runs synchronously on the UI thread, so a runaway script would hang the
+    // editor with no recourse — arm the same safepoint watchdog the fill preview uses, just
+    // with a far more generous budget (real generation scripts finish in well under a
+    // second; trusted long batches belong on gecko-cli, which stays untimed).
+    constexpr unsigned CONSOLE_SCRIPT_BUDGET_MS = 30000;
     // The continuous SFML render loop shows the script's edits on the next frame.
-    ScriptResult result = runtime.run(source, api, _controller.commandController(), "Run script");
+    ScriptResult result = runtime.run(source, api, _controller.commandController(), "Run script",
+        {}, CONSOLE_SCRIPT_BUDGET_MS);
     if (!stampNotes.empty()) {
         result.output = result.output.empty() ? stampNotes : stampNotes + "\n" + result.output;
     }
@@ -2058,7 +2064,7 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
         message += QString(" (%1 missing art)").arg(result.objectsFailed);
     }
     if (result.dropped > 0) {
-        message += QString(" (%1 off-grid)").arg(result.dropped);
+        message += QString(" (%1 skipped: off-grid or over cap)").arg(result.dropped);
     }
     Q_EMIT statusMessageRequested(message);
 }
@@ -2305,7 +2311,7 @@ void EditorWidget::applyFillPreview(const QString& description) {
         message += QString(" (%1 missing art)").arg(result.objectsFailed);
     }
     if (_fillPlan.dropped > 0) {
-        message += QString(" (%1 off-grid)").arg(_fillPlan.dropped);
+        message += QString(" (%1 skipped: off-grid or over cap)").arg(_fillPlan.dropped);
     }
     Q_EMIT statusMessageRequested(message);
 
