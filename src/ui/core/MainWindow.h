@@ -56,6 +56,9 @@ class LogModel;
 class CompletenessView;
 class ThumbnailPrewarmer;
 class Map;
+namespace plugin {
+    class PluginManager;
+}
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -199,6 +202,8 @@ private:
 #ifdef GECK_SCRIPTING_ENABLED
     // Connects the script console's Run signal to the editor and adds its View-menu toggle.
     void wireScriptConsole();
+    // Opens the Plugin Manager dialog. Discovery already ran at startup; the dialog can rescan.
+    void showPluginManager();
 #endif
     void setupStatusBar();
     void setupPanelsMenu();
@@ -319,6 +324,9 @@ private:
 #ifdef GECK_SCRIPTING_ENABLED
     QDockWidget* _scriptConsoleDock = nullptr;
     ScriptConsoleWidget* _scriptConsole = nullptr;
+    // Discovers and runs the editor's Luau plugins; kept pointed at the current editor via
+    // setEditorBinding()/clearEditorBinding() as maps open and close.
+    std::unique_ptr<plugin::PluginManager> _pluginManager;
 #endif
     QDockWidget* _logDock = nullptr;
     LogPanel* _logPanel = nullptr;

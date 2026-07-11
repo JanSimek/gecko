@@ -19,6 +19,8 @@
 #include "ui/rendering/ThumbnailPrewarmer.h"
 #ifdef GECK_SCRIPTING_ENABLED
 #include "ui/panels/ScriptConsoleWidget.h"
+#include "ui/plugin/PluginManager.h"
+#include "ui/dialogs/PluginManagerDialog.h"
 #include "scripting/LuaScriptRuntime.h" // ScriptResult
 #endif
 #include "ui/tiles/TilePlacementManager.h"
@@ -131,6 +133,13 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
 
     _externalEditorLauncher = std::make_unique<ExternalEditorLauncher>(*_resourcesShared, _settings, this);
 
+#ifdef GECK_SCRIPTING_ENABLED
+    // Discover installed plugins up front so the Plugin Manager opens populated. Enabling is
+    // explicit (user action), so discovery alone runs no plugin code.
+    _pluginManager = std::make_unique<plugin::PluginManager>();
+    _pluginManager->discover();
+#endif
+
     restoreDockWidgetState();
 
     // restoreDockWidgetState() seeded _restoredDockState with the working layout; hide the panels
@@ -191,6 +200,17 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     } else {
         hidePanelsForNoMap();
     }
+
+#ifdef GECK_SCRIPTING_ENABLED
+    // Point every enabled plugin at the newly installed editor + map (this replaces any prior
+    // binding to the widget just deleteLater()'d above; that widget's controller/grid outlive this
+    // call until the event loop runs, and no plugin dispatches in between, so the retarget is safe).
+    if (_pluginManager) {
+        _pluginManager->setEditorBinding(*_resourcesShared, _currentEditorWidget->hexgrid(),
+            _currentEditorWidget->commandController(), _currentEditorWidget->getMap(),
+            _currentEditorWidget->getCurrentElevation());
+    }
+#endif
 
     // A freshly loaded/created map starts clean; show its name in the title bar.
     _mapModified = false;
@@ -1004,6 +1024,14 @@ void MainWindow::wireScriptConsole() {
         _scriptConsole->showResult(result.ok, QString::fromStdString(result.output), QString::fromStdString(result.error));
     });
 }
+
+void MainWindow::showPluginManager() {
+    if (!_pluginManager) {
+        return;
+    }
+    PluginManagerDialog dialog(*_pluginManager, this);
+    dialog.exec();
+}
 #endif
 
 void MainWindow::setLogModel(LogModel* model) {
@@ -1240,6 +1268,9 @@ void MainWindow::setupDockWidgets() {
         QAction* consoleAction = _scriptConsoleDock->toggleViewAction();
         consoleAction->setText(tr("Script &Console"));
         _viewMenu->addAction(consoleAction);
+        QAction* pluginManagerAction = _viewMenu->addAction(tr("&Plugin Manager..."));
+        pluginManagerAction->setStatusTip(tr("Discover, enable and disable editor plugins"));
+        connect(pluginManagerAction, &QAction::triggered, this, &MainWindow::showPluginManager);
 #endif
         QAction* logAction = _logDock->toggleViewAction();
         logAction->setText(tr("&Log"));
@@ -2501,6 +2532,15 @@ void MainWindow::closeCurrentMap() {
     spdlog::debug("Closing current map");
 
     stopGameLoop();
+
+#ifdef GECK_SCRIPTING_ENABLED
+    // Detach every enabled plugin's api before the editor (its controller/grid) is torn down, so a
+    // resident plugin never dereferences a dead editor. Runs before rebuildGameResourcesFromSettings
+    // replaces GameResources too, since that path closes the map first.
+    if (_pluginManager) {
+        _pluginManager->clearEditorBinding();
+    }
+#endif
 
     _centralStack->removeWidget(_currentEditorWidget);
     _currentEditorWidget->deleteLater();

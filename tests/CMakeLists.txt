@@ -130,6 +130,12 @@ if(TARGET gecko_cli)
     target_link_libraries(qt_tests PRIVATE gecko_cli)
 endif()
 
+# Plugin management (manifest parse + PluginManager lifecycle) lives in gecko_app behind the
+# scripting guard (it drives the Luau PluginVm), so its tests build only with scripting enabled.
+if(GECK_ENABLE_SCRIPTING)
+    target_sources(qt_tests PRIVATE qt/test_plugin_manifest.cpp qt/test_plugin_manager.cpp)
+endif()
+
 # Shared, header-only test support (fixtures, temp files, builders, stub provider).
 # Included as "support/<Header>.h"; fixtures resolve via GECK_TEST_DATA_DIR.
 add_library(test_support INTERFACE)

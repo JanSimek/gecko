@@ -49,6 +49,15 @@ MapScriptApi::MapScriptApi(resource::GameResources& resources, const HexagonGrid
     , _buildSprites(buildSprites) {
 }
 
+MapScriptApi::MapScriptApi()
+    : _resources(nullptr)
+    , _hexgrid(nullptr)
+    , _controller(nullptr)
+    , _map(nullptr)
+    , _elevation(0)
+    , _buildSprites(true) {
+}
+
 void MapScriptApi::retarget(resource::GameResources& resources, const HexagonGrid& hexgrid,
     ObjectCommandController& controller, Map* map, int elevation, bool buildSprites) {
     _resources = &resources;

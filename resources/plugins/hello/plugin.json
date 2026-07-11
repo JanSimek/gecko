@@ -1,0 +1,8 @@
+{
+    "id": "hello",
+    "name": "Hello World",
+    "version": "1.0.0",
+    "entry": "hello.luau",
+    "description": "A minimal read-only example plugin: prints a greeting and a few map queries to the plugin console when enabled.",
+    "author": "Gecko"
+}

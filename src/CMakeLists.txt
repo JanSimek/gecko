@@ -233,7 +233,15 @@ set(GECK_APP_SOURCES
 if(GECK_ENABLE_SCRIPTING)
     list(APPEND GECK_APP_SOURCES
         ui/panels/ScriptConsoleWidget.h
-        ui/panels/ScriptConsoleWidget.cpp)
+        ui/panels/ScriptConsoleWidget.cpp
+        # Plugin management (discovery, per-plugin resident VM lifecycle) and its dialog. Gated with
+        # the console because it drives the Luau runtime (PluginVm) in gecko_editing.
+        ui/plugin/PluginManifest.h
+        ui/plugin/PluginManifest.cpp
+        ui/plugin/PluginManager.h
+        ui/plugin/PluginManager.cpp
+        ui/dialogs/PluginManagerDialog.h
+        ui/dialogs/PluginManagerDialog.cpp)
 endif()
 
 # Reusable application library for the executable and UI tests
