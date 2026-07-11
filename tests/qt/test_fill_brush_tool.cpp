@@ -21,12 +21,16 @@ struct BrushHarness {
 
     std::vector<Paint> paints;
     std::vector<std::string> batchLog;
-    bool offMap = false;
+
+    // Read by the resolveTile lambda handed to the tool; mutated through a setter so
+    // static analysis (which does not track reads through stored closures) sees the use.
+    void setOffMap(bool value) { _offMap = value; }
+    bool isOffMap() const { return _offMap; }
 
     FillBrushTool makeTool() {
         return FillBrushTool(FillBrushTool::Host{
             .resolveTile = [this](sf::Vector2f worldPos, bool) -> std::optional<int> {
-                if (offMap) {
+                if (isOffMap()) {
                     return std::nullopt;
                 }
                 return static_cast<int>(worldPos.x) / 10;
@@ -43,6 +47,9 @@ struct BrushHarness {
         event.button = button;
         return event;
     }
+
+private:
+    bool _offMap = false;
 };
 
 } // namespace
@@ -138,9 +145,9 @@ TEST_CASE("FillBrushTool skips off-map positions but keeps the stroke alive", "[
     tool.setTile(271, false);
 
     CHECK(tool.onMousePressed(BrushHarness::at(5.f, sf::Mouse::Button::Left)));
-    h.offMap = true;
+    h.setOffMap(true);
     CHECK(tool.onMouseMoved(BrushHarness::at(15.f))); // off-map: skipped, stroke continues
-    h.offMap = false;
+    h.setOffMap(false);
     CHECK(tool.onMouseMoved(BrushHarness::at(25.f)));
     CHECK(tool.onMouseReleased(BrushHarness::at(25.f, sf::Mouse::Button::Left)));
 
@@ -166,7 +173,7 @@ TEST_CASE("FillBrushTool ghosts the hovered tile on the loaded layer", "[tools][
     REQUIRE(roof.roofTiles.size() == 1);
     CHECK(roof.roofTiles[0].tileId == 300);
 
-    h.offMap = true;
+    h.setOffMap(true);
     CHECK(tool.buildPreview(BrushHarness::at(25.f)).empty());
 }
 
