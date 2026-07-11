@@ -1037,9 +1037,12 @@ still owes on top: wiring this cap into the per-dispatch budget for resident `ma
 > **What was scrapped:** the resident-plugin work specific to Feature B. Unmerged PRs **#120**
 > (read-only `api` READ/WRITE split) and **#121** (`PluginManager` + `PluginManifest` + Plugin
 > Manager dialog + bundled `hello` example) were **closed, not merged**; their branches remain if
-> revived. Plugin-specific pieces already merged to `master` (`PluginVm`, `MapScriptApi::retarget`/
-> `detach`, `LuaSandboxHost::Options{persistentEnv, readOnlyApi}`) are **inert without a manager
-> driving them** — harmless, tested, and prunable in a later cleanup if desired.
+> revived. The already-merged resident-VM substrate — `PluginVm` (+ its test) and the
+> `LuaSandboxHost::Options` heap cap / persistent-env thread — is **removed here** (`LuaSandboxHost`
+> reverts to the plain extraction; the Console/CLI/MCP runtime is unaffected). `MapScriptApi::retarget`/
+> `detach` are **left in place**: they are inert without a resident owner, but reverting the
+> pointer-internals refactor would churn a class the Console, CLI, MCP and fills all share for no
+> functional gain — a candidate for a later cleanup, not worth the risk now.
 >
 > **The rest of this section (B3–B6, capability model, `Gui.*`, etc.) is reference-only** for a
 > possible future revival, not an active plan.
