@@ -1,5 +1,6 @@
 #include "ui/dialogs/PluginManagerDialog.h"
 
+#include <QColor>
 #include <QDialogButtonBox>
 #include <QFont>
 #include <QFontDatabase>
@@ -147,7 +148,7 @@ void PluginManagerDialog::refresh() {
     const std::vector<plugin::PluginManager::Info> infos = _manager.list();
     for (const auto& info : infos) {
         auto* item = new QListWidgetItem(
-            QStringLiteral("%1 — %2").arg(info.name, stateLabel(info.state)), _list);
+            tr("%1 — %2").arg(info.name, stateLabel(info.state)), _list);
         item->setData(Qt::UserRole, info.id);
         if (info.state == State::Faulted) {
             item->setForeground(QColor(ui::theme::colors::STATUS_ERROR));

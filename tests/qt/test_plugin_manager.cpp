@@ -148,6 +148,25 @@ TEST_CASE("PluginManager faults an enable when the entry file is missing", "[qt]
     CHECK(info->error.contains("entry"));
 }
 
+TEST_CASE("PluginManager keeps a bad manifest's parse error when enable is attempted", "[qt][plugins][manager]") {
+    QTemporaryDir tmp;
+    REQUIRE(tmp.isValid());
+    writePlugin(tmp.path(), "broken", QStringLiteral("{ not json"));
+
+    PluginManager manager;
+    manager.discoverIn({ tmp.path() });
+    const QString parseError = infoFor(manager, "broken")->error;
+    REQUIRE_FALSE(parseError.isEmpty());
+
+    // Enabling a row whose manifest never validated is a no-op that preserves the original error,
+    // not a clobbering "could not read entry script" run.
+    CHECK_FALSE(manager.enable("broken"));
+    const auto info = infoFor(manager, "broken");
+    REQUIRE(info.has_value());
+    CHECK(info->state == State::Faulted);
+    CHECK(info->error == parseError);
+}
+
 TEST_CASE("PluginManager detaches the api on unbind and rebinds on re-enable", "[qt][plugins][manager]") {
     ControllerFixture fx;
     QTemporaryDir tmp;

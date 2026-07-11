@@ -48,7 +48,8 @@ public:
         QString source; ///< "user" or "bundled".
         State state = State::Discovered;
         QString error;   ///< Faulted reason (parse or enable failure), else empty.
-        QString console; ///< The VM's bounded print/fault console when enabled, else empty.
+        QString console; ///< The VM's bounded print/fault console while a VM exists (enabled, or
+                         ///< faulted after it started), else empty.
     };
 
     PluginManager();
@@ -77,9 +78,11 @@ public:
     void clearEditorBinding();
 
     /// Build the plugin's read-only VM, start it, and run its entry script once. Binds to the
-    /// current editor if one is set. On any failure (unreadable entry, VM start failure, a script
-    /// error) the plugin becomes Faulted with the reason on its console; returns true only on a
-    /// clean run.
+    /// current editor if one is set. On any failure (an unvalidated manifest, an unreadable entry,
+    /// a VM start failure, or a script error) the plugin becomes Faulted with the reason in
+    /// Info::error — and, when a VM actually ran, its traceback on the console. A no-op returning
+    /// false for a plugin whose manifest never validated (its discovery-time error is preserved).
+    /// Returns true only on a clean run.
     bool enable(const QString& id);
     /// Tear down the plugin's VM and mark it Disabled. Returns false if the id is unknown.
     bool disable(const QString& id);

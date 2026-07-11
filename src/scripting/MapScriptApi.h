@@ -57,11 +57,11 @@ public:
         int elevation,
         bool buildSprites = true);
 
-    /// Construct a detached api: every host reference starts null, exactly as after detach(),
-    /// so any map/host call raises ScriptError until retarget() points it at a live editor. For
-    /// a resident owner (the plugin manager) that must hold one long-lived api per plugin before
-    /// a map is open and re-point it on every map switch. Per-run callers keep the reference
-    /// constructor above, which is always fully bound and can never produce a null.
+    /// Construct a detached api: every host reference starts null (as after detach()), with
+    /// elevation 0 and buildSprites true, so any map/host call raises ScriptError until retarget()
+    /// points it at a live editor. For a resident owner (the plugin manager) that must hold one
+    /// long-lived api per plugin before a map is open and re-point it on every map switch. Per-run
+    /// callers keep the reference constructor above, which is always fully bound and never null.
     MapScriptApi();
 
     /// Re-point a long-lived api (a resident plugin VM's host) at the current editor and map.

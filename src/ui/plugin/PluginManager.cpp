@@ -172,6 +172,13 @@ bool PluginManager::enable(const QString& id) {
         return false;
     }
 
+    // A row whose manifest never validated has no entry to run; keep its discovery-time parse
+    // error instead of overwriting it with a misleading "could not read entry script". A validated
+    // manifest always has a non-empty entry (PluginManifest::parse requires it).
+    if (plugin->manifest.entry.isEmpty()) {
+        return false;
+    }
+
     // Read the entry script first so a missing/unreadable file fails before we spin up a VM.
     const QString entryPath = QDir(plugin->dir).filePath(plugin->manifest.entry);
     QFile entryFile(entryPath);
@@ -184,14 +191,14 @@ bool PluginManager::enable(const QString& id) {
     }
     const std::string source = entryFile.readAll().toStdString();
 
-    // A fresh VM every enable: re-enabling must never resume a previous faulting state. The api is
-    // owned so it outlives the VM that borrows it; moving the unique_ptr does not move the pointee,
-    // so the reference the VM holds stays valid.
-    auto api = std::make_unique<MapScriptApi>();
+    // A fresh VM every enable: re-enabling must never resume a previous faulting state. Tear down
+    // any prior VM *before* replacing the api it borrows, honouring the VM-outlived-by-api contract
+    // (a re-enable of a still-faulted plugin would otherwise free the api under the old VM).
+    plugin->vm.reset();
+    plugin->api = std::make_unique<MapScriptApi>();
     PluginVm::Config config;
     config.name = plugin->manifest.id.toStdString();
     // MVP: read-only — config.allowMapWrite stays false, so the map-mutating api half is not bound.
-    plugin->api = std::move(api);
     plugin->vm = std::make_unique<PluginVm>(config, *plugin->api);
 
     // Point at the current editor before the entry runs, so an on-load map query sees the open map.
