@@ -192,6 +192,14 @@ public:
     // tool's own hint while one runs. The same text hintChanged carries.
     [[nodiscard]] QString currentHintText() const;
 
+    // Load the freehand fill brush with the palette's tile and activate it (re-loading in
+    // place when it is already the active tool). False when the brush is unavailable or
+    // no tile is selected.
+    bool activateFillBrush(int tileId, bool isRoof);
+    // The active registered tool's id ("" when none) — lets MainWindow tell tool-backed
+    // PluginTool sessions apart when syncing toolbar toggle state.
+    [[nodiscard]] std::string activeToolId() const;
+
     // Palette drag preview
     void startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos);
     void updateDragPreview(sf::Vector2f worldPos);
@@ -572,6 +580,9 @@ private:
     std::unique_ptr<ExitGridPlacementManager> _exitGridPlacementManager;
     std::unique_ptr<ToolRegistry> _toolRegistry;
     ToolPreview _toolPreview;
+    // Last cursor position a tool event carried; lets a consumed KEY rebuild the preview
+    // at the cursor (key events carry no position of their own).
+    sf::Vector2f _lastToolCursorPos{};
     // ViewportController now lives in _controller.
 
     // Game/Editor State

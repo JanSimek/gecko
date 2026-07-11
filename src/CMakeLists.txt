@@ -204,6 +204,7 @@ set(GECK_APP_SOURCES
     ui/tools/ExitGridContext.h
     ui/tools/ExitGridPlacementManager.h
     ui/tools/ExitGridPlacementManager.cpp
+    ui/tools/FillBrushTool.h
     ui/tools/ITool.h
     ui/tools/PluginToolHost.h
     ui/tools/ToolRegistry.h

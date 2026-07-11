@@ -23,6 +23,7 @@
 #endif
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
+#include "ui/tools/FillBrushTool.h"
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
 #include "ui/dialogs/FillDialog.h"
@@ -897,6 +898,34 @@ void MainWindow::setupToolModeActions() {
     connect(_exitGridsAction, &QAction::triggered, this, [this](bool checked) {
         applyExitGridsTool(checked);
     });
+
+    // Freehand fill brush: drag-to-paint the tile palette's selection; one stroke = one undo
+    // entry. Runs as a registered tool (EditorMode::PluginTool + ToolRegistry).
+    _fillBrushAction = _mainToolBar->addAction(createIcon(":/icons/actions/paint.svg"), "Fill Brush");
+    _fillBrushAction->setStatusTip("Paint the selected palette tile by dragging (one stroke is one undo step)");
+    _fillBrushAction->setCheckable(true);
+    connect(_fillBrushAction, &QAction::triggered, this, [this](bool checked) {
+        applyFillBrushTool(checked);
+    });
+}
+
+void MainWindow::applyFillBrushTool(bool checked) {
+    if (!_currentEditorWidget) {
+        return;
+    }
+    if (!checked) {
+        _currentEditorWidget->setMode(EditorMode::Select);
+        return;
+    }
+    const bool hasTile = _tilePalettePanel && _tilePalettePanel->hasSelectedTile();
+    if (!hasTile || !_currentEditorWidget->activateFillBrush(_tilePalettePanel->getSelectedTileIndex(), _tilePalettePanel->isRoofMode())) {
+        // No tile loaded: don't enter a brush that can't paint. Revert the toggle and say why.
+        const QSignalBlocker blocker(_fillBrushAction);
+        _fillBrushAction->setChecked(false);
+        showStatusMessage("Fill brush: select a tile in the Tiles palette first");
+        return;
+    }
+    updateModeDisplay("Mode: Fill brush", ":/icons/actions/paint.svg");
 }
 
 void MainWindow::applyExitGridsTool(bool checked) {
@@ -927,6 +956,14 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         }
     };
     sync(_selectToolAction, EditorMode::Select);
+
+    // The brush button tracks its specific registered tool, not PluginTool as a whole —
+    // object placement also runs as PluginTool and must not light the brush up.
+    if (_fillBrushAction) {
+        const QSignalBlocker blocker(_fillBrushAction);
+        _fillBrushAction->setChecked(mode == EditorMode::PluginTool && _currentEditorWidget
+            && _currentEditorWidget->activeToolId() == FillBrushTool::ID);
+    }
 
     // Unified Exit-Grids button is checked while in either sub-mode; the dropdown shows which one,
     // and the button label tracks the active sub-mode.
@@ -1725,6 +1762,12 @@ void MainWindow::connectPanelSignals() {
                 if (!_currentEditorWidget)
                     return;
                 if (tileIndex >= 0) {
+                    // Picking a tile while the fill brush is active re-loads the brush in
+                    // place instead of yanking the user back to click-painting.
+                    if (_currentEditorWidget->activeToolId() == FillBrushTool::ID) {
+                        _currentEditorWidget->activateFillBrush(tileIndex, isRoof);
+                        return;
+                    }
                     _currentEditorWidget->setTilePlacementMode(true, tileIndex, isRoof);
                     updateModeDisplay("Mode: Tile painting", ":/icons/actions/paint.svg");
                 } else {

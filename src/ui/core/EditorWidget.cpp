@@ -25,6 +25,7 @@
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
+#include "ui/tools/FillBrushTool.h"
 #include "ui/tools/ITool.h"
 #include "ui/tools/ToolRegistry.h"
 #include "viewport/EdgeScroll.h"
@@ -1122,6 +1123,15 @@ void EditorWidget::registerNativeTools() {
     if (!_toolRegistry) {
         return;
     }
+    // The brush resolves/paints through the exact same projection + undoable edit path as
+    // click tile placement (TilePlacementManager), so the ghost, the stroke dedupe key,
+    // and the painted tile can't disagree; the stroke batch collapses to one undo entry.
+    _toolRegistry->registerTool(std::make_unique<FillBrushTool>(FillBrushTool::Host{
+        .resolveTile = [](sf::Vector2f worldPos, bool isRoof) { return screenToTileIndex(worldPos.x, worldPos.y, isRoof); },
+        .paintTile = [this](int tileId, sf::Vector2f worldPos, bool isRoof) { _tilePlacementManager->placeTileAtPosition(tileId, worldPos, isRoof); },
+        .beginStroke = [this](const std::string& description) { _controller.commandController().beginBatch(description); },
+        .endStroke = [this]() { _controller.commandController().endBatch(); },
+    }));
     _toolRegistry->registerTool(std::make_unique<ObjectPlacementTool>(
         [this](sf::Vector2f worldPos) {
             placeObjectAtPosition(worldPos);
@@ -1149,6 +1159,28 @@ bool EditorWidget::activateRegisteredTool(std::string_view id) {
     return true;
 }
 
+std::string EditorWidget::activeToolId() const {
+    return _toolRegistry ? _toolRegistry->activeToolId() : std::string();
+}
+
+bool EditorWidget::activateFillBrush(int tileId, bool isRoof) {
+    if (!_toolRegistry || tileId < 0) {
+        return false;
+    }
+    // Re-loading the brush with a new palette pick keeps the tool active (setActiveTool on
+    // the active id is an idempotent no-op), so mid-session tile switches don't drop the mode.
+    auto* brush = dynamic_cast<FillBrushTool*>(_toolRegistry->tool(FillBrushTool::ID));
+    if (!brush) {
+        return false;
+    }
+    brush->setTile(tileId, isRoof);
+    if (!activateRegisteredTool(FillBrushTool::ID)) {
+        return false;
+    }
+    Q_EMIT statusMessageRequested("Fill brush — hold left and drag to paint, Esc or right-click to stop");
+    return true;
+}
+
 ToolMouseEvent EditorWidget::buildToolMouseEvent(sf::Vector2f worldPos, std::optional<sf::Mouse::Button> button) const {
     ToolMouseEvent event;
     event.worldPos = worldPos;
@@ -1172,6 +1204,7 @@ bool EditorWidget::dispatchToolMouseEvent(sf::Vector2f worldPos, std::optional<s
         return false;
     }
     const ToolMouseEvent event = buildToolMouseEvent(worldPos, button);
+    _lastToolCursorPos = worldPos;
     const bool consumed = (tool->*handler)(event);
     updateToolPreview(event);
     return consumed;
@@ -1197,10 +1230,17 @@ bool EditorWidget::dispatchToolKeyPressed(const sf::Event::KeyPressed& event) {
     if (!tool) {
         return false;
     }
-    return tool->onKeyPressed(ToolKeyEvent{
+    const bool consumed = tool->onKeyPressed(ToolKeyEvent{
         .code = event.code,
         .modifiers = currentToolModifiers(),
     });
+    if (consumed) {
+        // A consumed key may have changed what the tool wants to ghost (rotation, brush
+        // resize); rebuild the preview at the last cursor position so it can't render
+        // stale until the next mouse move.
+        updateToolPreview(buildToolMouseEvent(_lastToolCursorPos, std::nullopt));
+    }
+    return consumed;
 }
 
 void EditorWidget::updateToolPreview(const ToolMouseEvent& event) {

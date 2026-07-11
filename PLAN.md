@@ -989,7 +989,14 @@ Fills live in `fills/` under the existing `PatternLibrary::rootDir()`; one brows
 
 ### 3.9 Remaining phased plan (A)
 
-- **A5 — Freehand Fill Brush**. A native `ITool` on the registry introduced by Feature B (§5), not a new bespoke mode.
+- ~~**A5 — Freehand Fill Brush**~~ — **DONE.** A native `ITool` (`src/ui/tools/FillBrushTool.h`)
+  on the registry: toolbar toggle loads the tile palette's selection, hold-left-and-drag paints
+  every tile the cursor crosses (deduped per stroke), one stroke = one undo entry (batch opens on
+  press, flushes on release — or on deactivation, so Esc mid-stroke can't strand the batch). Its
+  hover ghost is the first real consumer of the `ToolPreviewSpec`→sprites channel, it relies on the
+  host's Esc/right-click cancel guarantee instead of bespoke cancel code, and picking a new palette
+  tile mid-session re-loads the brush in place. The stroke mechanics are unit-tested host-free
+  (callback-injected).
 
 > A0–A4 shipped. A1's declarative `FillRecipe` and A2's `autotileFloor`/`FloorTileSet` were built and
 > then **removed by design** — the Luau fills replaced them, so the `autotile_floor` gap is closed by
@@ -1140,7 +1147,7 @@ Remaining phases, ordered by dependency and value. "Always compiled" phases work
 | # | Phase | Depends on | Effort | Ships |
 |---|---|---|---|---|
 | 1 | ~~**B1** `ITool`+`ToolRegistry`+`PluginTool`+generic input+overlay field+MainWindow `addPlugin*`~~ **DONE** | — | L | The seam, validated by porting object placement |
-| 2 | **A5** freehand Fill Brush as native `ITool` | B1 | S | Drag-to-paint; proves `ITool` for real |
+| 2 | ~~**A5** freehand Fill Brush as native `ITool`~~ **DONE** | B1 | S | Drag-to-paint; proves `ITool` for real |
 | 3 | **Plugin sandbox limits** placement cap + a default budget for the Script Console (the interrupt+deadline watchdog itself shipped with `LuaSandboxHost`) | — | S | Prereq for resident plugin callbacks |
 | 4 | **B2** persistent VM + manifest + lifecycle + **`MapScriptApi::retarget`** + read-only `api` | #3 | L | Plugin MVP (read-only, isolated) |
 | 5 | **B3** `editor:` register + `map.write` + permission prompt + `storage` | B2 | L | Plugins add menus/buttons + undoable mutation |
