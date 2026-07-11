@@ -553,8 +553,9 @@ std::size_t MapScriptApi::sinkCap() const {
 bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction) {
     // Placement is map state even though the write goes through the controller (which holds
     // its own reference to the map): with no map open this must raise, not silently write
-    // into whatever the controller is still bound to.
-    mapRef();
+    // into whatever the controller is still bound to. The (void) discards the [[nodiscard]]
+    // reference on purpose — only the guard's throw matters here (MSVC C4834 under /WX).
+    (void)mapRef();
 
     // Plan-sink active (preview / area fill): build the object exactly as the commit paths do
     // (GUI needs a resolvable sprite — a fid that won't load is "not placed", same as below;
