@@ -619,7 +619,9 @@ if(GECK_ENABLE_SCRIPTING)
         scripting/LuaSandboxHost.h
         scripting/LuaSandboxHost.cpp
         scripting/LuaScriptRuntime.h
-        scripting/LuaScriptRuntime.cpp)
+        scripting/LuaScriptRuntime.cpp
+        scripting/PluginVm.h
+        scripting/PluginVm.cpp)
     target_link_libraries(gecko_editing PUBLIC
         Luau.VM Luau.Compiler Luau.Ast Luau.Bytecode Luau.Common)
     # SYSTEM so the LuaBridge3 headers are external (suppresses their parse-time warnings).

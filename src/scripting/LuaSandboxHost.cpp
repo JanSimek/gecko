@@ -28,12 +28,42 @@ LuaSandboxHost::~LuaSandboxHost() {
     close();
 }
 
+void* LuaSandboxHost::trackingAlloc(void* ud, void* ptr, size_t osize, size_t nsize) {
+    auto* self = static_cast<LuaSandboxHost*>(ud);
+    const size_t oldSize = ptr != nullptr ? osize : 0;
+    if (nsize == 0) {
+        self->_memoryUsed -= oldSize;
+        std::free(ptr);
+        return nullptr;
+    }
+    // Refuse only GROWTH past the limit — shrinks and frees must always succeed, or the GC
+    // could not reclaim its way back under the cap. Luau surfaces the nullptr as a
+    // "not enough memory" script error; the state itself stays alive.
+    if (self->_memoryLimit != 0 && nsize > oldSize
+        && self->_memoryUsed + (nsize - oldSize) > self->_memoryLimit) {
+        return nullptr;
+    }
+    void* grown = std::realloc(ptr, nsize);
+    if (grown != nullptr) {
+        self->_memoryUsed = self->_memoryUsed - oldSize + nsize;
+    }
+    return grown;
+}
+
 bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::string& output,
     std::string& error) {
+    return initialize(api, args, output, error, Options{});
+}
+
+bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::string& output,
+    std::string& error, const Options& options) {
     close();
     error.clear();
     _output = &output;
-    _state = luaL_newstate();
+    _memoryLimit = options.memoryLimitBytes;
+    _memoryUsed = 0;
+    // One allocator path for both modes: with no limit the tracker just counts.
+    _state = lua_newstate(&LuaSandboxHost::trackingAlloc, this);
     if (_state == nullptr) {
         error = "failed to create Luau state";
         return false;
@@ -97,6 +127,16 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
 
     luaL_sandbox(_state);
 
+    if (options.persistentEnv) {
+        // The resident-plugin model (Luau's recommended sandboxing shape): the shared globals
+        // above are frozen readonly, and chunks run on a thread whose environment is a private
+        // WRITABLE proxy over them — so a plugin's global writes persist across dispatches
+        // without ever touching the shared table. The thread stays anchored on the main
+        // state's stack so the GC cannot collect it.
+        _thread = lua_newthread(_state);
+        luaL_sandboxthread(_thread);
+    }
+
     // Seed math.random from the resolved seed, so the run is reproducible. A script may still call
     // math.randomseed itself to override.
     lua_getglobal(_state, "math");          // [math]
@@ -122,23 +162,26 @@ bool LuaSandboxHost::loadSource(const std::string& source, std::string& error) {
         return false;
     }
 
+    lua_State* exec = execState();
     // Drop a chunk an earlier loadSource() pushed but nobody ran. runLoaded()'s lua_pcall is what
     // normally pops it, so an abandoned load would otherwise sit on the stack for the life of the
     // state, keeping its prototype reachable — a slow leak in a resident VM that loads per dispatch.
     if (_hasLoadedChunk) {
-        lua_pop(_state, 1);
+        lua_pop(exec, 1);
         _hasLoadedChunk = false;
     }
 
     // Luau has no source loader: compile to bytecode, then load it. luau_compile mallocs the
-    // buffer, so own it with a free-deleter rather than a manual free.
+    // buffer, so own it with a free-deleter rather than a manual free. Loading on execState()
+    // gives the chunk the persistent thread env when one is enabled.
     size_t bytecodeSize = 0;
     const std::unique_ptr<char, void (*)(void*)> bytecode(
         luau_compile(source.data(), source.size(), nullptr, &bytecodeSize), std::free);
-    const int loadResult = luau_load(_state, "=script", bytecode.get(), bytecodeSize, 0);
+    const int loadResult = luau_load(exec, "=script", bytecode.get(), bytecodeSize, 0);
     if (loadResult != 0) {
-        error = std::string("compile error: ") + lua_tostring(_state, -1);
-        lua_pop(_state, 1);
+        const char* raised = lua_tostring(exec, -1);
+        error = std::string("compile error: ") + (raised != nullptr ? raised : "unknown");
+        lua_pop(exec, 1);
         return false;
     }
 
@@ -164,7 +207,8 @@ bool LuaSandboxHost::runLoaded(std::string& error, unsigned timeBudgetMs) {
         lua_callbacks(_state)->interrupt = &LuaSandboxHost::timeBudgetInterrupt;
     }
 
-    const int result = lua_pcall(_state, 0, 0, 0);
+    lua_State* exec = execState();
+    const int result = lua_pcall(exec, 0, 0, 0);
     _hasLoadedChunk = false;
     const bool timedOut = _timedOut;
     disarmInterrupt();
@@ -172,9 +216,9 @@ bool LuaSandboxHost::runLoaded(std::string& error, unsigned timeBudgetMs) {
     if (result != 0) {
         // lua_tostring yields nullptr for a non-string error object (`error({})`), so never feed it
         // straight to std::string.
-        const char* raised = lua_tostring(_state, -1);
+        const char* raised = lua_tostring(exec, -1);
         std::string message = raised != nullptr ? raised : "non-string error object";
-        lua_pop(_state, 1);
+        lua_pop(exec, 1);
         // The budget is the host's verdict, not the script's: if the run timed out, say so even when
         // the script caught the watchdog error and raised something else in its place.
         if (timedOut && message.find(TIME_BUDGET_ERROR) == std::string::npos) {
@@ -248,12 +292,15 @@ void LuaSandboxHost::close() noexcept {
     if (_state != nullptr) {
         // Disarm before closing: the interrupt must not fire (and longjmp) during lua_close's GC.
         disarmInterrupt();
+        _thread = nullptr; // owned by the state; freed with it
         lua_close(_state);
         _state = nullptr;
     }
     _output = nullptr;
     _hasLoadedChunk = false;
     _timedOut = false;
+    _memoryLimit = 0;
+    _memoryUsed = 0;
 }
 
 void LuaSandboxHost::appendPrintValue(lua_State* L, int index) {
