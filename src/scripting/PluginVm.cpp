@@ -65,6 +65,10 @@ bool PluginVm::enable() {
 }
 
 void PluginVm::recordFault(const std::string& error) {
+    // A failed run's local wreckage is unreachable after the unwind but still counts against
+    // the heap cap until collected — collect now so recovery from an OOM fault is
+    // deterministic instead of depending on when Luau's incremental GC would get there.
+    _host.collectGarbage();
     _lastError = error;
     ++_consecutiveFaults;
     _console += "[" + _config.name + "] fault " + std::to_string(_consecutiveFaults) + "/"

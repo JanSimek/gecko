@@ -280,6 +280,12 @@ void LuaSandboxHost::timeBudgetInterrupt(lua_State* L, int gc) {
     luaL_error(L, "%s", TIME_BUDGET_ERROR);
 }
 
+void LuaSandboxHost::collectGarbage() {
+    if (_state != nullptr) {
+        lua_gc(_state, LUA_GCCOLLECT, 0);
+    }
+}
+
 void LuaSandboxHost::disarmInterrupt() noexcept {
     if (_state == nullptr) {
         return;

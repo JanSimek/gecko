@@ -65,6 +65,14 @@ public:
     /// the run is over: a script cannot pcall its way past the deadline and keep going.
     bool runLoaded(std::string& error, unsigned timeBudgetMs = 0);
 
+    /// Full garbage collection. A failed run's wreckage (e.g. the table that hit the memory
+    /// cap) is unreachable after the unwind but still COUNTS against the cap until collected —
+    /// without this, whether the next run recovers depends on allocator luck.
+    void collectGarbage();
+
+    /// Bytes currently accounted by the tracking allocator (0 when no limit and freshly reset).
+    [[nodiscard]] std::size_t memoryUsed() const { return _memoryUsed; }
+
 private:
     static int capturePrint(lua_State* L);
     static void timeBudgetInterrupt(lua_State* L, int gc);
