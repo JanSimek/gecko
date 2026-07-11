@@ -339,6 +339,16 @@ private:
     // so mutated() reports them even though the placed/painted counters stay at 0.
     bool _mutatedDirectly = false;
     std::unordered_map<std::string, pattern::Pattern> _stamps;
+
+    /// Hard ceiling on entries a plan sink accepts per run, kSinkCapFactor x the bound
+    /// area's total footprint (hexes + floor tiles + roof tiles, floored at 1): a runaway
+    /// or hostile script must not exhaust host memory through the sink — the C++-side
+    /// MapObject/Object/TileChange results are invisible to any Lua-heap allocator cap.
+    /// 0 = uncapped (no area bound: programmatic sink use, not the fill path). Surplus is
+    /// counted in FillPlan::dropped and surfaced by the fill UI.
+    [[nodiscard]] std::size_t sinkCap() const;
+    static constexpr std::size_t kSinkCapFactor = 8;
+
     // When non-null, mutators record into this plan instead of committing (see setPlanSink). Borrowed.
     pattern::FillPlan* _planSink = nullptr;
     // The selection area the area-queries report (see setArea). Borrowed; null when none is bound.

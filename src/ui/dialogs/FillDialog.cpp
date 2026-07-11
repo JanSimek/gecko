@@ -210,7 +210,7 @@ void FillDialog::runPreview() {
                           .arg(plan.tiles.size())
                           .arg(plan.objects.size());
     if (plan.dropped > 0) {
-        summary += QStringLiteral(" (%1 off-grid)").arg(plan.dropped);
+        summary += QStringLiteral(" (%1 skipped: off-grid or over cap)").arg(plan.dropped);
     }
     _summary->setText(summary);
 #endif
