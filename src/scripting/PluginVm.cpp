@@ -60,8 +60,15 @@ bool PluginVm::enable() {
     }
     // A fresh state, deliberately: the faulting one may hold half-mutated plugin globals, and
     // "re-enable" must mean "known-good", not "resume the wreckage".
+    if (!start(_startArgs)) {
+        // start() cleared the flag optimistically; a VM whose state could not even be created
+        // must stay disabled, or dispatches would burn the fault budget on "not started".
+        _disabled = true;
+        return false;
+    }
     _console += "[" + _config.name + "] re-enabled with a fresh state\n";
-    return start(_startArgs);
+    trimConsole();
+    return true;
 }
 
 void PluginVm::recordFault(const std::string& error) {

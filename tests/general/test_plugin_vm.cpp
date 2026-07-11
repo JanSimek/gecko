@@ -81,9 +81,11 @@ TEST_CASE("PluginVm re-enable brings a fresh state, not the wreckage", "[scripti
 
     REQUIRE(vm.enable());
     CHECK_FALSE(vm.disabled());
-    // The faulting state's globals are gone by design.
-    REQUIRE(vm.dispatch("print(counter == nil and 'fresh' or 'stale')"));
-    CHECK(vm.console().find("fresh") != std::string::npos);
+    // The faulting state's globals are gone by design. The token is distinct from the
+    // "re-enabled with a fresh state" log line, so this cannot false-positive on it.
+    REQUIRE(vm.dispatch("print(counter == nil and 'env-reset' or 'env-stale')"));
+    CHECK(vm.console().find("env-reset") != std::string::npos);
+    CHECK(vm.console().find("env-stale") == std::string::npos);
 }
 
 TEST_CASE("PluginVm timeout counts as a fault and the VM survives", "[scripting][plugin][watchdog]") {
