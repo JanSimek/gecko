@@ -2064,7 +2064,8 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
         message += QString(" (%1 missing art)").arg(result.objectsFailed);
     }
     if (result.dropped > 0) {
-        message += QString(" (%1 skipped: off-grid or over cap)").arg(result.dropped);
+        // Direct stamping bypasses the plan sink, so dropped here can only mean off-grid.
+        message += QString(" (%1 off-grid)").arg(result.dropped);
     }
     Q_EMIT statusMessageRequested(message);
 }
