@@ -821,9 +821,11 @@ immediately useful and de-risks the rest.
 
 # Area-Fill + Luau Plugins — Unified Design Proposal
 
-> **Status:** Remaining work is **A5** (freehand Fill Brush) and all of **Feature B** (the Luau
-> plugin system), both gated behind the still-unbuilt `ITool`/`ToolRegistry` seam. The existing
-> Fill Selection implementation is kept here only as reference for the shared design.
+> **Status (2026-07-12):** **Feature A is done** (Fill Selection + the A5 freehand Fill Brush).
+> **Feature B — the Luau plugin system — is DEFERRED indefinitely** (parked as a far-off
+> possibility, not on the near-term roadmap). See the deferral note under §4 for the rationale and
+> for what was kept vs. scrapped. The design below is retained only as reference should the plugin
+> system ever be revived.
 
 This proposal specifies two features that share one substrate: **Feature A**, a Luau-and-data-driven *area fill* ("Fill Selection") that closes the `autotile_floor` / "paint a pattern of tiles" gap; and **Feature B**, a *Luau plugin system* that lets third parties add tools, panels, menus, and event handlers. The decision throughout is to **build one set of seams and exercise it twice**: area-fill is the first first-party consumer of the same selection-projection, ghost-preview, `ITool`, and `MapScriptApi`-over-a-batch machinery that the plugin system opens to third parties. Engine-data-fidelity is non-negotiable: PIDs/directions/flags/tile-ids stored and replayed verbatim, no fallback label tables, no rotation math, validated readers with no silent fallback.
 
@@ -1016,7 +1018,31 @@ still owes on top: wiring this cap into the per-dispatch budget for resident `ma
 
 ---
 
-## 4. Feature B — Luau plugin system
+## 4. Feature B — Luau plugin system  *(DEFERRED — far-off possibility, not planned)*
+
+> **Deferral decision (2026-07-12).** The plugin system is **parked indefinitely**. Rationale:
+> its marginal value over what already exists — the Script Console runs Luau that reads and edits
+> the map, and first-party tools/scripts cover the concrete use cases — is narrow (persistent
+> interactive tools + third-party distribution without recompiling), while its ongoing cost is
+> real and permanent: it runs **untrusted third-party code on the UI thread**, turns the `api:`
+> surface into a **compatibility contract**, and adds a large surface (permissions, declarative
+> `Gui.*`, event bus, packaging/signing) for a **niche editor with a small author pool**. If a
+> concrete need for third-party extensions appears, revive from here.
+>
+> **What was kept (dual-use, already pays off without plugins):** the `ITool`/`ToolRegistry` seam
+> (B1 — powers the native Fill Brush), `MapScriptApi`/`ScriptApiReference` (the Console + headless
+> CLI/MCP generation), the `LuaSandboxHost` extraction, and the plan-sink placement cap + Script
+> Console budget. These stay on `master`.
+>
+> **What was scrapped:** the resident-plugin work specific to Feature B. Unmerged PRs **#120**
+> (read-only `api` READ/WRITE split) and **#121** (`PluginManager` + `PluginManifest` + Plugin
+> Manager dialog + bundled `hello` example) were **closed, not merged**; their branches remain if
+> revived. Plugin-specific pieces already merged to `master` (`PluginVm`, `MapScriptApi::retarget`/
+> `detach`, `LuaSandboxHost::Options{persistentEnv, readOnlyApi}`) are **inert without a manager
+> driving them** — harmless, tested, and prunable in a later cleanup if desired.
+>
+> **The rest of this section (B3–B6, capability model, `Gui.*`, etc.) is reference-only** for a
+> possible future revival, not an active plan.
 
 Plugins add **tools, panels, menus/toolbar buttons, and event handlers**. They need a **broader, capability-gated trust model than the generation sandbox** — and this must be stated plainly: the Tier-2 generation runtime is *safe-by-default-and-ephemeral* (fresh VM, run once, discarded), so it can afford zero limits; a plugin is **resident** (it must answer `QAction::triggered`, tool mouse events, and `on(event)` callbacks for the life of the session) and runs **untrusted third-party code on the UI thread**, so it requires per-plugin isolation, resource limits, and an explicit permission grant. These are different requirements, not a stricter version of the same thing.
 
@@ -1115,14 +1141,11 @@ Scan `<ConfigLocation>/gecko/plugins/*/plugin.json` (user, writable) and bundled
 
 `option(GECK_ENABLE_PLUGINS … OFF)` that **requires** `GECK_ENABLE_SCRIPTING` (configure error otherwise). The **seam is always compiled** (`ITool`, `ToolRegistry`, `EditorMode::PluginTool`, the overlay field, MainWindow `addPlugin*`). The **Lua host is gated** behind `GECK_PLUGINS_ENABLED`: all of `src/plugin/*` and `src/ui/plugin/*`, with MainWindow's Plugins menu/discovery `#ifdef`-guarded exactly as `GECK_SCRIPTING_ENABLED` guards the console today.
 
-### 4.9 Phased plan (B)
+### 4.9 Phased plan (B)  *(DEFERRED — see the deferral note at the top of §4)*
 
-- ~~**B1 — The seam**~~ — **DONE** (pure C++, no Lua): `ITool`+`ToolRegistry`; `EditorMode::PluginTool` + one `setMode`/`syncToolModeActions` case; one generic `InputHandler` branch; the shared `ToolPreviewSpec`→sprites overlay field; MainWindow `addPlugin*`/`removePluginUi`. Validated by porting **object placement** onto `ITool` with no UX change (see seam #1 above for the deliberate deviations); the legacy `EditorMode::PlaceObject` path was deleted with the port.
-- **B2 — Persistent VM + lifecycle + manifest (no UI registration, read-only `api`).** `PluginManifest` parse, `PluginManager` discovery/enable/disable, `PluginVm` (allocator cap, watchdog, print/log ring, `pcall` isolation, auto-disable on fault), **`MapScriptApi::retarget` with the full null-safe audit**, `api` bound read-only behind `map.read`, basic Plugin Manager dialog. **This is the plugin MVP.**
-- **B3 — `editor:` registration + write.** `READ/WRITE` `beginClass` split; `map.write` with auto-batch + resync + placement cap; `addMenuItem`/`addToolButton`; install-time permission prompt + grant; `storage`.
-- **B4 — Panels + `Gui.*`.** `DeclarativeUiBuilder`, `addDockPanel`.
-- **B5 — Tools + events.** `LuaTool`+`registerTool`+preview rendering+stroke batching; `PluginEventBus` + `editor:on/off`.
-- **B6 — Reference plugin + DX.** A reference plugin; `fs.read` confined cap; hot-reload; `gecko-cli plugin scaffold`; `plugin_api` MCP tool. *Packaging/signing/quarantine/version-triple deferred beyond v1.*
+- ~~**B1 — The seam**~~ — **DONE & KEPT** (pure C++, no Lua, dual-use — powers the native Fill Brush): `ITool`+`ToolRegistry`; `EditorMode::PluginTool` + one `setMode`/`syncToolModeActions` case; one generic `InputHandler` branch; the shared `ToolPreviewSpec`→sprites overlay field; MainWindow `addPlugin*`/`removePluginUi`. Validated by porting **object placement** onto `ITool` with no UX change; the legacy `EditorMode::PlaceObject` path was deleted with the port.
+- **B2 — Persistent VM + lifecycle + manifest.** Built (`PluginVm`, `MapScriptApi::retarget`/`detach`, read-only `api` split, `PluginManager`/`PluginManifest`/dialog) then **DEFERRED**: the resident-VM substrate is merged and inert, the `PluginManager` MVP (PRs #120/#121) was **closed unmerged**. Not the active plan.
+- **B3–B6 — PARKED, not planned.** `editor:` registration + `map.write` + permission prompt + `storage` (B3); `Gui.*` panels (B4); `LuaTool` + events (B5); reference plugin, `fs.read`, hot-reload, scaffold, `plugin_api` (B6). Reference only, for a possible future revival.
 
 ---
 
@@ -1152,10 +1175,10 @@ Remaining phases, ordered by dependency and value. "Always compiled" phases work
 | 1 | ~~**B1** `ITool`+`ToolRegistry`+`PluginTool`+generic input+overlay field+MainWindow `addPlugin*`~~ **DONE** | — | L | The seam, validated by porting object placement |
 | 2 | ~~**A5** freehand Fill Brush as native `ITool`~~ **DONE** | B1 | S | Drag-to-paint; proves `ITool` for real |
 | 3 | ~~**Plugin sandbox limits** placement cap + a default budget for the Script Console~~ **DONE** (see §3.10) | — | S | Prereq for resident plugin callbacks |
-| 4 | **B2** persistent VM + manifest + lifecycle + **`MapScriptApi::retarget`** + read-only `api` | #3 | L | Plugin MVP (read-only, isolated) |
-| 5 | **B3** `editor:` register + `map.write` + permission prompt + `storage` | B2 | L | Plugins add menus/buttons + undoable mutation |
-| 6 | **B4/B5** `Gui.*` panels; `LuaTool` tools + events | B3 | L | Plugins add panels/tools |
-| 7 | **B6** reference plugin, `fs.read`, hot-reload, scaffold, `plugin_api` | B5 | M | DX + headline example |
+| 4 | ~~**B2** persistent VM + manifest + lifecycle + retarget + read-only `api`~~ **DEFERRED** (substrate merged & inert; MVP PRs #120/#121 closed unmerged) | #3 | L | — |
+| 5 | ~~**B3** `editor:` register + `map.write` + permission + `storage`~~ **PARKED** | B2 | L | — |
+| 6 | ~~**B4/B5** `Gui.*` panels; `LuaTool` tools + events~~ **PARKED** | B3 | L | — |
+| 7 | ~~**B6** reference plugin, `fs.read`, hot-reload, scaffold, `plugin_api`~~ **PARKED** | B5 | M | — |
 
 Effort: S ≈ days, M ≈ 1–2 weeks, L ≈ 3–4 weeks for one developer. The plugin system is the
 strictly larger effort; A5 should follow once the seam is paid for.
