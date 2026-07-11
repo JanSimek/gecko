@@ -774,6 +774,7 @@ TEST_CASE("MapScriptApi with no open map raises catchable errors instead of dere
     CHECK_THROWS_AS(api.placeObject(0x02000066u, 0x02000000u, 20100, 0), ScriptError);
     CHECK_THROWS_AS(api.objectAt(20100), ScriptError);
     CHECK_THROWS_AS(api.setPlayerStart(20100, 0, 0), ScriptError);
+    CHECK_THROWS_AS(api.newMap(), ScriptError); // must not reset the controller's map behind the host
 
     // Pure geometry and host-backed (non-map) queries still work: they depend on no map.
     CHECK(api.isValidHex(20100));

@@ -949,6 +949,10 @@ void MapScriptApi::newMap() {
     if (_planSink != nullptr) {
         throw ScriptError("newMap() is not allowed in a fill — it would reset the live map");
     }
+    // Resetting is map state like placement: with the api's map null (resident session, no
+    // map open), the controller may still be bound to one — resetting it behind the host's
+    // back would desync the two. Map lifecycle belongs to the host there, so raise.
+    (void)mapRef();
     controllerRef().newEmptyMap();
     _mutatedDirectly = true;
 }
