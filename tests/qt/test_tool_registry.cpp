@@ -93,3 +93,17 @@ TEST_CASE("ToolRegistry exposes sorted tool ids", "[tools]") {
 
     CHECK(registry.toolIds() == std::vector<std::string>{ "alpha", "middle", "zeta" });
 }
+
+TEST_CASE("ToolRegistry re-activating the active tool is an idempotent no-op", "[tools]") {
+    // Documented contract: stateful tools cannot rely on onActivate re-firing when the user
+    // re-invokes the already-active tool; they reset via onDeactivate or their own events.
+    ToolRegistry registry;
+    auto tool = std::make_unique<CountingTool>("tool");
+    auto* toolPtr = tool.get();
+    REQUIRE(registry.registerTool(std::move(tool)));
+
+    REQUIRE(registry.setActiveTool("tool"));
+    REQUIRE(registry.setActiveTool("tool"));
+    CHECK(toolPtr->activations() == 1);
+    CHECK(toolPtr->deactivations() == 0);
+}

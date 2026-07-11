@@ -74,13 +74,6 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             return;
         }
 
-        if (_mode == EditorMode::PlaceObject) {
-            if (_callbacks.onObjectPlacement) {
-                _callbacks.onObjectPlacement(worldPos);
-            }
-            return;
-        }
-
         if (_mode == EditorMode::MarkExits) {
             // "Draw edge": a click appends a vertex, a double-click finalizes. Double-click detection
             // uses the RAW cursor (physical mouse stillness); with Shift held the appended vertex is
@@ -163,12 +156,6 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
                 _callbacks.onStampPatternCancel();
             }
             spdlog::debug("Stamp pattern mode cancelled with right-click");
-        } else if (_mode == EditorMode::PlaceObject) {
-            _mode = EditorMode::Select;
-            if (_callbacks.onObjectPlacementCancel) {
-                _callbacks.onObjectPlacementCancel();
-            }
-            spdlog::debug("Object placement mode cancelled with right-click");
         } else {
             _currentAction = EditorAction::PANNING;
             _mouseStartPos = event.position;
@@ -257,11 +244,6 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
     // on every move, independent of any drag. With Shift held, the live cursor snaps to a clean angle.
     if (_mode == EditorMode::MarkExits && _callbacks.onMarkExitsLinePreview) {
         _callbacks.onMarkExitsLinePreview(_lineVertices, maybeSnapMarkExitsCursor(worldPos), _markExitsFlip);
-    }
-
-    // Object placement: the ghost tracks the cursor on every move, independent of any drag.
-    if (_mode == EditorMode::PlaceObject && _callbacks.onObjectPlacementMove) {
-        _callbacks.onObjectPlacementMove(worldPos);
     }
 
     if (_mode == EditorMode::PluginTool && _callbacks.onToolMouseMoved && _callbacks.onToolMouseMoved(worldPos)) {
@@ -355,13 +337,11 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
             _callbacks.onDeleteObjects();
         }
     } else if (event.code == sf::Keyboard::Key::R) {
-        // The Rotate toolbar shortcut is disabled by the editor while stamping or placing an object,
-        // so R reaches us here: in stamp mode it cycles the pattern's orientation variants; in object
-        // placement it rotates the cursor ghost (which the drop inherits).
+        // The Rotate toolbar shortcut is disabled by the editor while stamping (and while a
+        // registered tool runs), so R reaches us here: in stamp mode it cycles the pattern's
+        // orientation variants. A registered tool sees R first via onToolKeyPressed above.
         if (_mode == EditorMode::StampPattern && _callbacks.onStampCycleVariant) {
             _callbacks.onStampCycleVariant();
-        } else if (_mode == EditorMode::PlaceObject && _callbacks.onObjectPlacementRotate) {
-            _callbacks.onObjectPlacementRotate();
         }
     } else if (event.code == sf::Keyboard::Key::P) {
         // Eyedropper: sample whatever is under the cursor. Key events carry no view/target to convert

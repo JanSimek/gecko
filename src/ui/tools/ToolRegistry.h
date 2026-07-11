@@ -2,6 +2,7 @@
 
 #include "ui/tools/ITool.h"
 
+#include <cstddef>
 #include <memory>
 #include <functional>
 #include <string>
@@ -11,8 +12,16 @@
 
 namespace geck {
 
+/// Owns the registered tools and tracks which one is active.
+///
+/// Lifecycle notes for tool authors: setActiveTool() on the already-active id is an
+/// idempotent no-op (onActivate does NOT re-fire), and unregisterTool() destroys the tool
+/// immediately — it must never be called from inside one of that tool's own event
+/// handlers (the object would be deleted mid-callback).
 class ToolRegistry {
 public:
+    /// Takes ownership. Returns false (and destroys the tool) on a null tool, an empty
+    /// id, or a duplicate id.
     bool registerTool(std::unique_ptr<ITool> tool);
     bool unregisterTool(std::string_view id);
 

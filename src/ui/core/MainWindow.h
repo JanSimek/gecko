@@ -99,6 +99,10 @@ public:
     // window; the in-app spdlog sink feeds it from application startup on).
     void setLogModel(LogModel* model);
 
+    // Plugin UI contributions, keyed by a unique id. Each add* returns nullptr (without
+    // taking any ownership) on an empty id/text or a duplicate id. addPluginDock takes
+    // ownership of `widget` on success — removePluginUi deletes the dock and the widget
+    // with it; on failure the widget stays with the caller.
     QAction* addPluginMenuItem(const QString& id, const QString& text);
     QAction* addPluginToolButton(const QString& id, const QString& text, const QIcon& icon = {});
     QDockWidget* addPluginDock(const QString& id, const QString& title, QWidget* widget,

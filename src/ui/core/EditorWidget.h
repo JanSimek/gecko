@@ -55,6 +55,7 @@ class RenderingEngine;
 class DragDropManager;
 class TilePlacementManager;
 class ExitGridPlacementManager;
+class ITool;
 class ToolRegistry;
 class ViewportController;
 class SFMLWidget;
@@ -183,9 +184,13 @@ public:
     // Eyedropper (P): sample the topmost object/tile under the cursor and load it into its palette.
     // A tile arms tile painting; an object arms click-to-place via beginObjectPlacement().
     void pickAtCursor(sf::Vector2f worldPos);
-    // Enter PlaceObject mode for the given proto: reveal it in the palette and show a cursor ghost
-    // whose left-click drops a copy (see EditorMode::PlaceObject).
+    // Activate the registered object-placement tool for the given proto: reveal it in the palette
+    // and show a cursor ghost whose left-click drops a copy (runs as EditorMode::PluginTool).
     void beginObjectPlacement(uint32_t pid, sf::Vector2f worldPos);
+
+    // The status-bar hint for the current mode/selection, including the active registered
+    // tool's own hint while one runs. The same text hintChanged carries.
+    [[nodiscard]] QString currentHintText() const;
 
     // Palette drag preview
     void startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos);
@@ -532,6 +537,8 @@ private:
     void registerNativeTools();
     bool activateRegisteredTool(std::string_view id);
     struct ToolMouseEvent buildToolMouseEvent(sf::Vector2f worldPos, std::optional<sf::Mouse::Button> button) const;
+    bool dispatchToolMouseEvent(sf::Vector2f worldPos, std::optional<sf::Mouse::Button> button,
+        bool (ITool::*handler)(const ToolMouseEvent&));
     bool dispatchToolMousePressed(sf::Vector2f worldPos, sf::Mouse::Button button);
     bool dispatchToolMouseMoved(sf::Vector2f worldPos);
     bool dispatchToolMouseReleased(sf::Vector2f worldPos, sf::Mouse::Button button);

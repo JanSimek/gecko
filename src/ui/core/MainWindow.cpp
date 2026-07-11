@@ -4,7 +4,6 @@
 #include "EditorWidget.h"
 #include "format/map/MapScript.h"
 #include "util/GameDataPathResolver.h"
-#include "ui/core/EditorHints.h"
 #include "ui/widgets/LoadingWidget.h"
 #include "ui/widgets/WelcomeWidget.h"
 #include "ui/widgets/SFMLWidget.h"
@@ -950,11 +949,10 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         }
     }
 
-    // Free up "R" for the viewport while stamping, placing an object, or running a registered tool;
-    // otherwise the toolbar shortcut would swallow the key before it reaches the editor.
+    // Free up "R" for the viewport while stamping or while a registered tool runs (object
+    // placement); otherwise the toolbar shortcut would swallow the key before it reaches the editor.
     if (_rotateAction) {
-        _rotateAction->setEnabled(mode != EditorMode::StampPattern && mode != EditorMode::PlaceObject
-            && mode != EditorMode::PluginTool);
+        _rotateAction->setEnabled(mode != EditorMode::StampPattern && mode != EditorMode::PluginTool);
     }
 }
 
@@ -979,18 +977,30 @@ void MainWindow::setLogModel(LogModel* model) {
 
 QMenu* MainWindow::ensurePluginMenu() {
     if (!_pluginMenu && _menuBar) {
-        _pluginMenu = _menuBar->addMenu(tr("&Plugins"));
+        // Keep Help rightmost, per platform convention: insert Plugins before it.
+        _pluginMenu = new QMenu(tr("&Plugins"), _menuBar);
+        if (_helpMenu) {
+            _menuBar->insertMenu(_helpMenu->menuAction(), _pluginMenu);
+        } else {
+            _menuBar->addMenu(_pluginMenu);
+        }
     }
     return _pluginMenu;
 }
 
 QAction* MainWindow::addPluginMenuItem(const QString& id, const QString& text) {
+    // Validate before ensurePluginMenu() so a rejected registration can't leave an empty
+    // Plugins menu in the menu bar.
+    if (id.isEmpty() || text.isEmpty() || _pluginUi.contains(id)) {
+        return nullptr;
+    }
     QMenu* menu = ensurePluginMenu();
-    if (id.isEmpty() || text.isEmpty() || !menu || _pluginUi.contains(id)) {
+    if (!menu) {
         return nullptr;
     }
 
     QAction* action = menu->addAction(text);
+    menu->menuAction()->setVisible(true);
     _pluginUi.insert(id, PluginUiRegistration{
                              .kind = PluginUiRegistration::Kind::MenuAction,
                              .action = action,
@@ -1061,6 +1071,11 @@ void MainWindow::removePluginUi(const QString& id) {
             }
             if (registration.action) {
                 registration.action->deleteLater();
+            }
+            // An empty Plugins menu is just noise in the menu bar; hide it until the next
+            // registration (the QMenu itself stays alive so pointers remain stable).
+            if (_pluginMenu && _pluginMenu->isEmpty()) {
+                _pluginMenu->menuAction()->setVisible(false);
             }
             break;
         case PluginUiRegistration::Kind::ToolBarAction:
@@ -1912,9 +1927,7 @@ void MainWindow::connectToEditorWidget() {
     syncToolModeActions(_currentEditorWidget->currentMode());
     // Likewise seed the hint once, since hintChanged isn't emitted on connect either.
     if (_hintLabel) {
-        const auto* selectionManager = _currentEditorWidget->getSelectionManager();
-        const bool hasSelection = selectionManager && !selectionManager->getCurrentSelection().isEmpty();
-        _hintLabel->setText(hintForContext(_currentEditorWidget->currentMode(), hasSelection));
+        _hintLabel->setText(_currentEditorWidget->currentHintText());
     }
     connect(_currentEditorWidget, &EditorWidget::hexHoverChanged, this, &MainWindow::updateHexIndexDisplay);
     connect(_currentEditorWidget, &EditorWidget::mapLoadRequested, this, [this](const std::string& mapPath) {
