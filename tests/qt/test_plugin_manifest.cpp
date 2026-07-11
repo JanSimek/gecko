@@ -4,6 +4,21 @@
 
 using geck::plugin::PluginManifest;
 
+namespace {
+
+// Parse and assert failure with a reason containing `expected`. Centralized so each invalid case is
+// a single differing line (the JSON) rather than a repeated parse/CHECK block.
+void expectInvalid(const char* json, const QString& expected) {
+    QString error;
+    const auto manifest = PluginManifest::parse(QByteArray(json), error);
+    INFO("json: " << json);
+    INFO("error: " << error.toStdString());
+    CHECK_FALSE(manifest.has_value());
+    CHECK(error.contains(expected));
+}
+
+} // namespace
+
 TEST_CASE("PluginManifest parses a complete valid manifest", "[qt][plugins][manifest]") {
     QString error;
     const auto manifest = PluginManifest::parse(
@@ -38,58 +53,22 @@ TEST_CASE("PluginManifest omits optional fields without error", "[qt][plugins][m
 }
 
 TEST_CASE("PluginManifest rejects malformed and invalid manifests", "[qt][plugins][manifest]") {
-    QString error;
-
-    SECTION("malformed JSON") {
-        CHECK_FALSE(PluginManifest::parse("{ not json", error).has_value());
-        CHECK(error.contains("invalid JSON"));
-    }
-    SECTION("non-object root") {
-        CHECK_FALSE(PluginManifest::parse("[]", error).has_value());
-        CHECK(error.contains("must be a JSON object"));
-    }
-    SECTION("missing required field") {
-        CHECK_FALSE(PluginManifest::parse(
-            R"({ "name": "x", "version": "1", "entry": "e.luau" })", error)
-                .has_value());
-        CHECK(error.contains("missing required field \"id\""));
-    }
-    SECTION("blank required field") {
-        CHECK_FALSE(PluginManifest::parse(
-            R"({ "id": "  ", "name": "x", "version": "1", "entry": "e.luau" })", error)
-                .has_value());
-        CHECK(error.contains("must not be blank"));
-    }
-    SECTION("wrong type for a required field") {
-        CHECK_FALSE(PluginManifest::parse(
-            R"({ "id": 5, "name": "x", "version": "1", "entry": "e.luau" })", error)
-                .has_value());
-        CHECK(error.contains("must be a string"));
-    }
-    SECTION("wrong type for an optional field") {
-        CHECK_FALSE(PluginManifest::parse(
-            R"({ "id": "x", "name": "x", "version": "1", "entry": "e.luau", "author": 5 })", error)
-                .has_value());
-        CHECK(error.contains("must be a string"));
-    }
-    SECTION("unsafe id with a path separator") {
-        CHECK_FALSE(PluginManifest::parse(
-            R"({ "id": "a/b", "name": "x", "version": "1", "entry": "e.luau" })", error)
-                .has_value());
-        CHECK(error.contains("\"id\""));
-    }
-    SECTION("absolute entry path") {
-        CHECK_FALSE(PluginManifest::parse(
-            R"({ "id": "x", "name": "x", "version": "1", "entry": "/etc/passwd" })", error)
-                .has_value());
-        CHECK(error.contains("\"entry\""));
-    }
-    SECTION("entry escaping the plugin dir") {
-        CHECK_FALSE(PluginManifest::parse(
-            R"({ "id": "x", "name": "x", "version": "1", "entry": "../secret.luau" })", error)
-                .has_value());
-        CHECK(error.contains("\"entry\""));
-    }
+    expectInvalid("{ not json", QStringLiteral("invalid JSON"));
+    expectInvalid("[]", QStringLiteral("must be a JSON object"));
+    expectInvalid(R"({ "name": "x", "version": "1", "entry": "e.luau" })",
+        QStringLiteral("missing required field \"id\""));
+    expectInvalid(R"({ "id": "  ", "name": "x", "version": "1", "entry": "e.luau" })",
+        QStringLiteral("must not be blank"));
+    expectInvalid(R"({ "id": 5, "name": "x", "version": "1", "entry": "e.luau" })",
+        QStringLiteral("must be a string"));
+    expectInvalid(R"({ "id": "x", "name": "x", "version": "1", "entry": "e.luau", "author": 5 })",
+        QStringLiteral("must be a string"));
+    expectInvalid(R"({ "id": "a/b", "name": "x", "version": "1", "entry": "e.luau" })",
+        QStringLiteral("\"id\""));
+    expectInvalid(R"({ "id": "x", "name": "x", "version": "1", "entry": "/etc/passwd" })",
+        QStringLiteral("\"entry\""));
+    expectInvalid(R"({ "id": "x", "name": "x", "version": "1", "entry": "../secret.luau" })",
+        QStringLiteral("\"entry\""));
 }
 
 TEST_CASE("PluginManifest path/id validators", "[qt][plugins][manifest]") {
