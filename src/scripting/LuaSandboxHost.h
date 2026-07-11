@@ -38,6 +38,11 @@ public:
         /// — the state itself survives. Bounds only the LUA heap: C++-side results created by
         /// api calls are bounded separately (the plan-sink cap).
         std::size_t memoryLimitBytes = 0;
+        /// Bind only the read surface (GECK_SCRIPT_API_READ): queries, area, seeded helpers,
+        /// coordinates. The mutating surface is absent from the class binding entirely, so a
+        /// read-only plugin calling api:paintFloor gets an ordinary script error — there is no
+        /// permission check to bypass. Trusted per-run scripts keep the full surface.
+        bool readOnlyApi = false;
         /// Run chunks inside one sandboxed THREAD environment (luaL_sandboxthread) instead of
         /// on the readonly-global main state: the chunk's global writes go to a private,
         /// writable env that PERSISTS across loadSource/runLoaded cycles — the resident plugin

@@ -78,12 +78,20 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
     lua_setglobal(_state, "print");
 
     // Bind the host API before luaL_sandbox(), which makes globals read-only. The functions come
-    // from the single GECK_SCRIPT_API list that also drives the script_api reference.
+    // from the single GECK_SCRIPT_API list that also drives the script_api reference; a
+    // read-only host binds only the READ half, so the mutators do not exist on the class at all.
 #define GECK_SCRIPT_API_BIND(name, sig, doc) .addFunction(#name, &MapScriptApi::name)
-    luabridge::getGlobalNamespace(_state)
-        .beginClass<MapScriptApi>("MapScriptApi")
-            GECK_SCRIPT_API(GECK_SCRIPT_API_BIND)
-        .endClass();
+    if (options.readOnlyApi) {
+        luabridge::getGlobalNamespace(_state)
+            .beginClass<MapScriptApi>("MapScriptApi")
+                GECK_SCRIPT_API_READ(GECK_SCRIPT_API_BIND)
+            .endClass();
+    } else {
+        luabridge::getGlobalNamespace(_state)
+            .beginClass<MapScriptApi>("MapScriptApi")
+                GECK_SCRIPT_API(GECK_SCRIPT_API_BIND)
+            .endClass();
+    }
 #undef GECK_SCRIPT_API_BIND
     luabridge::setGlobal(_state, &api, "api");
 

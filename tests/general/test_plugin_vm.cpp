@@ -39,7 +39,9 @@ TEST_CASE("PluginVm globals persist across dispatches", "[scripting][plugin]") {
 TEST_CASE("PluginVm dispatches can read and edit the map through the api", "[scripting][plugin]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
-    PluginVm vm(testConfig(), api);
+    PluginVm::Config config = testConfig();
+    config.allowMapWrite = true; // this test exercises the (future-permission) write composition
+    PluginVm vm(config, api);
     REQUIRE(vm.start());
 
     REQUIRE(vm.dispatch("api:paintFloor(0, 271) print(api:getFloor(0))"));
@@ -119,7 +121,9 @@ TEST_CASE("PluginVm memory cap turns runaway allocation into a fault", "[scripti
 TEST_CASE("PluginVm faults cleanly when its api has no open map", "[scripting][plugin]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
-    PluginVm vm(testConfig(), api);
+    PluginVm::Config config = testConfig();
+    config.allowMapWrite = true;
+    PluginVm vm(config, api);
     REQUIRE(vm.start());
 
     // The resident host closed the map: ScriptError surfaces as an ordinary catchable fault.
@@ -146,4 +150,26 @@ TEST_CASE("PluginVm console keeps the newest output under its cap", "[scripting]
     CHECK(vm.console().find("line-1\n") == std::string::npos); // head trimmed
     CHECK(vm.console().front() != '\n');
     CHECK(vm.console().find("line-") == vm.console().find_first_not_of('\n')); // starts at a line
+}
+
+TEST_CASE("PluginVm is read-only by default: queries work, mutators do not exist", "[scripting][plugin]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+    PluginVm vm(testConfig(), api);
+    REQUIRE(vm.start());
+
+    // The read surface is fully live.
+    REQUIRE(vm.dispatch("print(api:getFloor(0)) print(api:isValidHex(20100))"));
+
+    // The mutating surface is not bound at all — no permission check to bypass, the method is
+    // simply absent from the class — so a write attempt is an ordinary catchable fault and the
+    // map is untouched.
+    const auto before = fx.mapFile().tiles.at(ELEV)[0].getFloor();
+    CHECK_FALSE(vm.dispatch("api:paintFloor(0, 271)"));
+    CHECK(vm.consecutiveFaults() == 1);
+    CHECK(fx.mapFile().tiles.at(ELEV)[0].getFloor() == before);
+
+    // A plugin probing for the capability sees nil rather than an error.
+    REQUIRE(vm.dispatch("print(api.paintFloor == nil and 'absent' or 'present')"));
+    CHECK(vm.console().find("absent") != std::string::npos);
 }

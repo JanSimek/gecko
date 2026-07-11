@@ -10,7 +10,9 @@ namespace geck {
 /// method (they match). LuaScriptRuntime expands this to bind the functions (addFunction), and
 /// ScriptApiReference expands it to document them — so the reference can never drift from what is
 /// actually bound. To add an api function, add one line here and implement the method.
-#define GECK_SCRIPT_API(X)                                                                                                                                                                                                                  \
+/// Read-only surface: queries, area, seeded helpers, coordinates, and setElevation (which moves
+/// only the api's elevation cursor, never the map) — everything a read-only resident plugin gets.
+#define GECK_SCRIPT_API_READ(X)                                                                                                                                                                                                             \
     /* Queries (no mutation) */                                                                                                                                                                                                             \
     X(isValidHex, "(hex) -> bool", "Is hex an on-grid hex index (0..39999)?")                                                                                                                                                               \
     X(hexNeighbors, "(hex) -> {hex,...}", "The up-to-6 on-grid neighbour hexes.")                                                                                                                                                           \
@@ -57,25 +59,32 @@ namespace geck {
     X(hexTile, "(hex) -> tileIndex", "The floor tile visually under a hex (exact screen-geometry bridge); -1 if off-grid.")                                                                                                                 \
     X(tileHexes, "(tileIndex) -> {hex,...}", "The hexes standing on a floor tile — hexTile's inverse.")                                                                                                                                     \
     X(hexesOnScreenRect, "(centerHex, screenHalfWidth, screenHalfHeight) -> {hex,...}", "The hex border of a screen-space rectangle (the exit-grid-rect walk as a query).")                                                                 \
-    /* Mutators (undoable; auto-batched into one undo entry) */                                                                                                                                                                             \
-    X(paintFloor, "(tileIndex, tileId) -> bool", "Paint a floor tile by index.")                                                                                                                                                            \
-    X(paintRoof, "(tileIndex, tileId) -> bool", "Paint a roof tile by index.")                                                                                                                                                              \
-    X(paintFloorXY, "(col, row, tileId) -> bool", "Paint a floor tile at (col, row).")                                                                                                                                                      \
-    X(paintRoofXY, "(col, row, tileId) -> bool", "Paint a roof tile at (col, row).")                                                                                                                                                        \
-    X(fillFloorRect, "(col0, row0, col1, row1, tileId) -> int", "Paint every floor tile in the inclusive rectangle; returns tiles painted.")                                                                                                \
-    X(fillRoofRect, "(col0, row0, col1, row1, tileId) -> int", "Paint every roof tile in the inclusive rectangle; returns tiles painted.")                                                                                                  \
-    X(fillRegion, "(col, row, tileId) -> int", "Flood-fill (paint-bucket) the connected same-id floor region at (col, row); returns tiles painted.")                                                                                        \
-    X(placeObject, "(proPid, frmPid, hex, dir) -> bool", "Place an object at a hex; false if off-grid or art unresolved.")                                                                                                                  \
-    X(placeProto, "(proPid, hex, dir) -> bool", "Place a proto (art FID resolved from the proto) at a hex.")                                                                                                                                \
-    X(placeObjectXY, "(proPid, frmPid, col, row, dir) -> bool", "placeObject at a (col, row) hex.")                                                                                                                                         \
-    X(placeProtoXY, "(proPid, col, row, dir) -> bool", "placeProto at a (col, row) hex.")                                                                                                                                                   \
-    X(placeStamp, "(name, anchorHex, variant) -> int", "Place a pre-loaded stamp (extract_pattern prefab); returns objects placed.")                                                                                                        \
-    /* Map setup (spawn / exits) */                                                                                                                                                                                                         \
-    X(newMap, "() -> nil", "Reset the bound map to a fresh empty Fallout 2 map (destructive, not undoable). Call first to start from a blank slate.")                                                                                       \
-    X(setPlayerStart, "(hex, orientation, elevation) -> nil", "Set the player spawn in the map header (hex, orientation 0..5, elevation 0..2).")                                                                                            \
-    X(setElevation, "(elevation) -> nil", "Switch which elevation (0..2) subsequent queries/edits target; raises if the map lacks it.")                                                                                                     \
-    X(placeExitGrid, "(hex, destMapId, destHex, destElevation, orientation) -> bool", "Place a map-exit grid; destMapId -2 = worldmap, -1 = town map, else a map id.")                                                                      \
+    X(setElevation, "(elevation) -> nil", "Switch which elevation (0..2) subsequent queries/edits target; raises if the map lacks it.")
+
+/// Mutating surface: everything that changes the map. Bound only for trusted per-run scripts
+/// (generation, fills, console); resident plugins get it in a later phase behind a permission.
+#define GECK_SCRIPT_API_WRITE(X)                                                                                                                                       \
+    /* Mutators (undoable; auto-batched into one undo entry) */                                                                                                        \
+    X(paintFloor, "(tileIndex, tileId) -> bool", "Paint a floor tile by index.")                                                                                       \
+    X(paintRoof, "(tileIndex, tileId) -> bool", "Paint a roof tile by index.")                                                                                         \
+    X(paintFloorXY, "(col, row, tileId) -> bool", "Paint a floor tile at (col, row).")                                                                                 \
+    X(paintRoofXY, "(col, row, tileId) -> bool", "Paint a roof tile at (col, row).")                                                                                   \
+    X(fillFloorRect, "(col0, row0, col1, row1, tileId) -> int", "Paint every floor tile in the inclusive rectangle; returns tiles painted.")                           \
+    X(fillRoofRect, "(col0, row0, col1, row1, tileId) -> int", "Paint every roof tile in the inclusive rectangle; returns tiles painted.")                             \
+    X(fillRegion, "(col, row, tileId) -> int", "Flood-fill (paint-bucket) the connected same-id floor region at (col, row); returns tiles painted.")                   \
+    X(placeObject, "(proPid, frmPid, hex, dir) -> bool", "Place an object at a hex; false if off-grid or art unresolved.")                                             \
+    X(placeProto, "(proPid, hex, dir) -> bool", "Place a proto (art FID resolved from the proto) at a hex.")                                                           \
+    X(placeObjectXY, "(proPid, frmPid, col, row, dir) -> bool", "placeObject at a (col, row) hex.")                                                                    \
+    X(placeProtoXY, "(proPid, col, row, dir) -> bool", "placeProto at a (col, row) hex.")                                                                              \
+    X(placeStamp, "(name, anchorHex, variant) -> int", "Place a pre-loaded stamp (extract_pattern prefab); returns objects placed.")                                   \
+    /* Map setup (spawn / exits) */                                                                                                                                    \
+    X(newMap, "() -> nil", "Reset the bound map to a fresh empty Fallout 2 map (destructive, not undoable). Call first to start from a blank slate.")                  \
+    X(setPlayerStart, "(hex, orientation, elevation) -> nil", "Set the player spawn in the map header (hex, orientation 0..5, elevation 0..2).")                       \
+    X(placeExitGrid, "(hex, destMapId, destHex, destElevation, orientation) -> bool", "Place a map-exit grid; destMapId -2 = worldmap, -1 = town map, else a map id.") \
     X(placeExitGridRect, "(centerHex, screenHalfWidth, screenHalfHeight, destMapId, destHex, destElevation, orientation) -> int", "Place a screen-space rectangle border of exit grids around centerHex; returns markers placed.")
+
+/// The full surface (read + write): what per-run scripts see, and what the reference documents.
+#define GECK_SCRIPT_API(X) GECK_SCRIPT_API_READ(X) GECK_SCRIPT_API_WRITE(X)
 
 /// One entry of the `api:` surface — Lua name, signature, one-line description.
 struct ScriptApiEntry {

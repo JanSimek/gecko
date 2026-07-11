@@ -27,6 +27,9 @@ public:
         unsigned dispatchBudgetMs = 1000;               ///< Per-dispatch watchdog (0 = untimed).
         int maxConsecutiveFaults = 3;                   ///< Auto-disable threshold.
         std::size_t consoleCapBytes = 64 * 1024;        ///< Bounded print console (keeps the tail).
+        /// The plugin MVP is read-only: the api's mutating surface is simply not bound. A later
+        /// phase flips this per plugin behind an explicit map-write permission grant.
+        bool allowMapWrite = false;
     };
 
     PluginVm(Config config, MapScriptApi& api);

@@ -18,6 +18,7 @@ bool PluginVm::start(const ScriptArgs& args) {
     LuaSandboxHost::Options options;
     options.memoryLimitBytes = _config.memoryLimitBytes;
     options.persistentEnv = true;
+    options.readOnlyApi = !_config.allowMapWrite;
 
     std::string error;
     // The console string is a member, satisfying the host's print-output lifetime contract:
