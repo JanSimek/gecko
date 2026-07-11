@@ -740,3 +740,63 @@ TEST_CASE("A sink with no bound area stays uncapped", "[scripting][cap]") {
     CHECK(plan.objects.size() == 50);
     CHECK(plan.dropped == 0);
 }
+
+TEST_CASE("MapScriptApi retargets a long-lived instance onto another map", "[scripting][retarget]") {
+    ControllerFixture first;
+    ControllerFixture second;
+    MapScriptApi api(first.resources, first.hexgrid, first.controller, *first.map, ELEV, false);
+
+    REQUIRE(api.paintFloor(0, SOME_TILE));
+    CHECK(first.mapFile().tiles.at(ELEV)[0].getFloor() == SOME_TILE);
+
+    // Re-point at the second editor/map (the resident-VM host does this on map switch);
+    // subsequent writes land there and the first map is untouched.
+    api.retarget(second.resources, second.hexgrid, second.controller, second.map.get(), ELEV, false);
+    REQUIRE(api.paintFloor(1, SOME_TILE));
+    CHECK(second.mapFile().tiles.at(ELEV)[1].getFloor() == SOME_TILE);
+    CHECK(first.mapFile().tiles.at(ELEV)[1].getFloor() == EMPTY);
+
+    // Each editor keeps its own undo history: the second's stack got the retargeted paint.
+    CHECK(second.undoStack.canUndo());
+}
+
+TEST_CASE("MapScriptApi with no open map raises catchable errors instead of dereferencing", "[scripting][retarget]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    // Host alive, no map open (File > Close in a resident session).
+    api.retarget(fx.resources, fx.hexgrid, fx.controller, nullptr, ELEV, false);
+
+    // Map-touching calls raise — queries and mutators alike (fake N/A data would silently
+    // corrupt plugin logic, so the audit's contract is raise, not placeholder).
+    CHECK_THROWS_AS(api.getFloor(0), ScriptError);
+    CHECK_THROWS_AS(api.paintFloor(0, SOME_TILE), ScriptError);
+    CHECK_THROWS_AS(api.placeObject(0x02000066u, 0x02000000u, 20100, 0), ScriptError);
+    CHECK_THROWS_AS(api.objectAt(20100), ScriptError);
+    CHECK_THROWS_AS(api.setPlayerStart(20100, 0, 0), ScriptError);
+    CHECK_THROWS_AS(api.newMap(), ScriptError); // must not reset the controller's map behind the host
+
+    // Pure geometry and host-backed (non-map) queries still work: they depend on no map.
+    CHECK(api.isValidHex(20100));
+    CHECK_FALSE(api.hexNeighbors(20100).empty());
+
+    // Re-pointing at a live map restores full function.
+    api.retarget(fx.resources, fx.hexgrid, fx.controller, fx.map.get(), ELEV, false);
+    CHECK(api.paintFloor(0, SOME_TILE));
+}
+
+TEST_CASE("A detached MapScriptApi raises on every host-backed call", "[scripting][retarget]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    // Editor teardown: the controller/grid the api pointed at are about to die. detach()
+    // turns any stale call into a catchable error instead of a dangling dereference.
+    api.detach();
+    CHECK_THROWS_AS(api.getFloor(0), ScriptError);
+    CHECK_THROWS_AS(api.paintFloor(0, SOME_TILE), ScriptError);
+    CHECK_THROWS_AS(api.tileId("edg5000"), ScriptError); // resources-backed, not just map-backed
+    CHECK_THROWS_AS(api.beginBatch("x"), ScriptError);
+
+    // Geometry needs no host at all.
+    CHECK(api.isValidHex(0));
+}
