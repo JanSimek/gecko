@@ -65,6 +65,39 @@ local wallPiecesAll = {} -- the same weights pooled across every orientation: th
 -- turns piece selection from an independent per-hex draw (which never forms real corners) into a
 -- constrained sequence: knowing the previous piece cuts successor uncertainty ~72% on the corpus.
 local follow = {}
+local cornerPieces = {} -- { {pid=, w=, classes={[cls]=true}}, ... }: reviewer-flagged corner pieces
+
+-- Hand-authored piece roles from art review, keyed by proto NUMBER (the low-24-bit id; ca-name in
+-- the comment). The statistical learning mis-files a few pieces — it lets a piece onto an adjacent
+-- edge it only touched a handful of times in the corpus, which the isometric view then reads as the
+-- wrong diagonal. These entries pin the reviewer's intent:
+--   only   = restrict this piece to exactly these compass classes (drops the stray-edge placements)
+--   corner = never on a straight run; placed only at a rim TURN between its two learned edges
+--   drop   = never auto-placed
+-- Compass classes are this script's outward-normal bins; the reviewer's isometric edge names map to
+-- them as NE->E, SW->W, S->SE, NW->NW (their names for the same physical edges).
+local PIECE_OVERRIDES = {
+    [183] = { only = { NW = true } }, -- ca010 NW rock wall (was straying onto the wrong diagonal)
+    [195] = { only = { E = true } }, -- ca022 NE diagonal rock wall
+    [196] = { only = { E = true } }, -- ca023 NE diagonal rock wall
+    [197] = { only = { E = true } }, -- ca024 NE diagonal rock wall
+    [198] = { only = { E = true } }, -- ca025 NE diagonal rock wall
+    [219] = { only = { E = true } }, -- ca048 NE diagonal rock wall
+    [230] = { only = { W = true } }, -- ca059 SW diagonal filled section
+    [231] = { only = { W = true } }, -- ca060 SW/W filled section
+    [232] = { only = { W = true } }, -- ca061 SW diagonal filled section
+    [233] = { only = { W = true } }, -- ca062 SW diagonal filled section
+    [237] = { only = { SE = true } }, -- ca066 S horizontal filled section
+    [238] = { only = { SE = true } }, -- ca067 S horizontal filled section
+    [239] = { only = { SE = true } }, -- ca068 S horizontal filled section
+    [234] = { corner = true }, -- ca063 NE<->SE corner
+    [653] = { corner = true }, -- ca080 SW-SE corner
+    [204] = { corner = true }, -- ca032 filled-diagonal <-> rock-wall corner
+    [222] = { drop = true }, -- ca051 odd, remove from auto-placement
+}
+local function overrideFor(pid)
+    return PIECE_OVERRIDES[pid % 16777216]
+end
 
 -- The cavern floor palette is the cav* ground tiles only; the shipped maps blend edg50xx SAND at
 -- their entrance alcoves, and counting those into the mix speckles the cave floor with sand.
@@ -240,16 +273,56 @@ do
         table.sort(list, function(a, b) return a.pid < b.pid end)
         return list
     end
+    -- Build the per-class palettes, applying the hand-authored overrides: `only` pieces appear only
+    -- in their allowed classes, `drop`/`corner` pieces are pulled from the straight-run palettes
+    -- entirely (corners are re-added as a separate turn-only set carrying their learned edges).
     local orientations = 0
+    local cornerAgg = {} -- pid -> { w = total, classes = {[cls]=true} }
     for key, pids in pairs(normalCounts) do
-        wallPieces[key] = weightedList(pids)
+        local kept = {}
+        for pid, c in pairs(pids) do
+            local ov = overrideFor(pid)
+            if ov == nil then
+                kept[pid] = c
+            elseif ov.drop then
+                -- never placed
+            elseif ov.corner then
+                cornerAgg[pid] = cornerAgg[pid] or { w = 0, classes = {} }
+                cornerAgg[pid].w += c
+                cornerAgg[pid].classes[key] = true
+            elseif ov.only == nil or ov.only[key] then
+                kept[pid] = c
+            end
+        end
+        wallPieces[key] = weightedList(kept)
         wallPieceSet[key] = {}
-        for pid in pairs(pids) do
+        for pid in pairs(kept) do
             wallPieceSet[key][pid] = true
         end
         orientations += 1
     end
-    wallPiecesAll = weightedList(pidTotals) -- the fallback palette for orientations the corpus never showed
+    for pid, agg in pairs(cornerAgg) do
+        local n = 0
+        for _ in pairs(agg.classes) do
+            n += 1
+        end
+        -- Cap placements at the piece's average per shipped map (rounded, >=1): a corner is rare,
+        -- so it must not fire at every micro-transition of a wobbly generated rim.
+        cornerPieces[#cornerPieces + 1] = { pid = pid, w = agg.w, classes = agg.classes, n = n,
+            cap = math.max(1, math.floor(agg.w / #REFS + 0.5)) }
+    end
+    table.sort(cornerPieces, function(a, b) return a.pid < b.pid end)
+
+    -- Fallback pool for a class the corpus never showed: exclude drop/corner pieces so they never
+    -- sneak in through it.
+    local keptAll = {}
+    for pid, c in pairs(pidTotals) do
+        local ov = overrideFor(pid)
+        if ov == nil or (not ov.drop and not ov.corner) then
+            keptAll[pid] = c
+        end
+    end
+    wallPiecesAll = weightedList(keptAll) -- the fallback palette for orientations the corpus never showed
     assert(#wallPiecesAll > 0, "no walls found on the walkable side of the reference maps")
 
     -- Fold the mined counts into weighted follow[prevPid][dir] lists (same seeded-draw shape as the
@@ -543,18 +616,71 @@ local function pickPiece(prevPid, dir, hex)
     return pickWall(wallListFor(comp))
 end
 
+-- Compass class per rim hex (no rng), for detecting the TURNS where corner pieces belong.
+local classOf = {}
+for _, hex in ipairs(rim) do
+    classOf[hex] = compassFromVec(outwardNormal(hex))
+end
+
+-- A reviewer-flagged corner piece for `hex` if it sits at a rim TURN — its class differs from a
+-- rim-neighbour's — and a corner piece was learned on the edges meeting there (both edges for a
+-- two-edge corner; either edge for a one-edge piece). Keeps corners off straight runs and puts them
+-- only where the boundary actually turns. Returns a weighted pick or nil (nil consumes no rng, so
+-- the straight path's draw stays reproducible).
+local cornerPlaced = {} -- pid -> count already placed (enforces each piece's per-map cap)
+local function cornerAt(hex)
+    if #cornerPieces == 0 then
+        return nil
+    end
+    local c = classOf[hex]
+    local other = nil
+    for _, n in ipairs(api:hexNeighbors(hex)) do
+        local nc = classOf[n]
+        if nc ~= nil and nc ~= c then
+            other = nc -- first differing neighbour, fixed direction order -> deterministic
+            break
+        end
+    end
+    if other == nil then
+        return nil
+    end
+    local eligible, total = {}, 0
+    for _, cp in ipairs(cornerPieces) do
+        local classOk = (cp.n >= 2 and cp.classes[c] and cp.classes[other])
+            or (cp.n < 2 and (cp.classes[c] or cp.classes[other]))
+        if classOk and (cornerPlaced[cp.pid] or 0) < cp.cap then
+            eligible[#eligible + 1] = cp
+            total += cp.w
+        end
+    end
+    if #eligible == 0 then
+        return nil -- no eligible corner (or all capped out): the hex falls through to a straight piece
+    end
+    local r = api:rng() * total
+    for _, e in ipairs(eligible) do
+        r -= e.w
+        if r <= 0 then
+            cornerPlaced[e.pid] = (cornerPlaced[e.pid] or 0) + 1
+            return e.pid
+        end
+    end
+    local last = eligible[#eligible]
+    cornerPlaced[last.pid] = (cornerPlaced[last.pid] or 0) + 1
+    return last.pid
+end
+
 -- Lay the rim as a constraint-satisfying sequence: a deterministic BFS spanning-forest over the rim
--- hexes. Each hex is chosen from those allowed to follow its BFS parent along the step between them,
--- so a face run stays a coherent run and corners come out where the boundary actually turns —
--- instead of every hex drawing independently. Seeds (and any component with no placed parent yet)
--- start from the compass palette. Sorted seeds + fixed neighbour order keep the rng draw reproducible.
+-- hexes. A hex at a turn takes a matching corner piece (cornerAt); otherwise it is chosen from those
+-- allowed to follow its BFS parent along the step between them, so a face run stays a coherent run.
+-- Seeds (and any component with no placed parent yet) start from the compass palette. Sorted seeds +
+-- fixed neighbour order keep the rng draw reproducible.
 local placedPid = {}
 local walls = 0
 local boundaryHexes = #rim
 local queue, qhead = {}, 1
 for _, seed in ipairs(rim) do
     if placedPid[seed] == nil then
-        local pid = pickPiece(nil, nil, seed)
+        local pid = cornerAt(seed) or pickPiece(nil, nil, seed)
         placedPid[seed] = pid
         if api:placeProto(pid, seed, 0) then
             walls += 1
@@ -565,7 +691,7 @@ for _, seed in ipairs(rim) do
             qhead += 1
             for _, n in ipairs(api:hexNeighbors(h)) do
                 if onBnd[n] and placedPid[n] == nil then
-                    local npid = pickPiece(placedPid[h], api:hexDir(h, n), n)
+                    local npid = cornerAt(n) or pickPiece(placedPid[h], api:hexDir(h, n), n)
                     placedPid[n] = npid
                     if api:placeProto(npid, n, 0) then
                         walls += 1
