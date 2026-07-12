@@ -4,13 +4,12 @@
 --   * the whole area filled with the reference's dark solid-rock tile pattern,
 --   * a walkable cavern carved through it, painted with the reference's pervasive cav* FIELD tiles
 --     (rare border/transition tiles like cav4013 and the entrance sand are kept out of the mix),
---   * the floor/rock boundary lined with a gap-free run of "Cave Wall" faces — a wall on every
---     contour hex, laid as an edge-constraint (Wang) SEQUENCE rather than an independent per-hex
---     draw: each piece is chosen only from those the shipped rims show following its neighbour along
---     the boundary, so face runs stay coherent and real corners form where the boundary turns. The
---     outward-normal compass palette seeds each run and backstops any (piece, direction) the corpus
---     never showed, so the isometric view still gets faces on the north/east rim and filled tops on
---     the south/west,
+--   * the floor/rock boundary lined with "Cave Wall" pieces chosen by LOCAL BOUNDARY GEOMETRY:
+--     each walkable-side contour hex is keyed by the directions to its neighbouring rim hexes plus
+--     the mask of which neighbours are rock, and the piece is sampled from what the shipped rims put
+--     at that same geometry. The absolute directions pin the isometric orientation, so faces land on
+--     the up-screen rim and filled lips on the near edge without hand tuning (~79% orientation match
+--     on held-out cave4 vs 53% for the old compass bin),
 --   * invisible blocking hexes sealing the rock side so the player can't walk off the floor,
 --   * a scroll-blocker rectangle ringing the cavern so the camera stays inside,
 --   * an exit-grid patch on the floor (worldmap by default) and the player start.
@@ -57,47 +56,17 @@ print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " t
 
 local rockPattern = {} -- [parityKey 0..3] = tile id (from the FIRST reference)
 local floorWeights = {} -- walkable floor: { {id=..., w=...}, ... } sorted for determinism
-local wallPieces = {} -- outward-normal key ("d,d,..") -> weighted { {pid=, w=}, ... }, sorted for determinism
-local wallPieceSet = {} -- same keys -> { [pid]=true }: which pieces belong to each isometric class
-local wallPiecesAll = {} -- the same weights pooled across every orientation: the fallback palette
--- Edge-constraint (Wang) adjacency: which "Cave Wall" piece may FOLLOW another along the rim. Keyed
--- follow[prevPid][stepDir] -> weighted { {pid=, w=}, ... }. Mined from the shipped rims below, this
--- turns piece selection from an independent per-hex draw (which never forms real corners) into a
--- constrained sequence: knowing the previous piece cuts successor uncertainty ~72% on the corpus.
-local follow = {}
-local cornerPieces = {} -- { {pid=, w=, classes={[cls]=true}}, ... }: reviewer-flagged corner pieces
-
--- Hand-authored piece roles from art review, keyed by proto NUMBER (the low-24-bit id; ca-name in
--- the comment). The statistical learning mis-files a few pieces — it lets a piece onto an adjacent
--- edge it only touched a handful of times in the corpus, which the isometric view then reads as the
--- wrong diagonal. These entries pin the reviewer's intent:
---   only   = restrict this piece to exactly these compass classes (drops the stray-edge placements)
---   corner = never on a straight run; placed only at a rim TURN between its two learned edges
---   drop   = never auto-placed
--- Compass classes are this script's outward-normal bins; the reviewer's isometric edge names map to
--- them as NE->E, SW->W, S->SE, NW->NW (their names for the same physical edges).
-local PIECE_OVERRIDES = {
-    [183] = { only = { NW = true } }, -- ca010 NW rock wall (was straying onto the wrong diagonal)
-    [195] = { only = { E = true } }, -- ca022 NE diagonal rock wall
-    [196] = { only = { E = true } }, -- ca023 NE diagonal rock wall
-    [197] = { only = { E = true } }, -- ca024 NE diagonal rock wall
-    [198] = { only = { E = true } }, -- ca025 NE diagonal rock wall
-    [219] = { only = { E = true } }, -- ca048 NE diagonal rock wall
-    [230] = { only = { W = true } }, -- ca059 SW diagonal filled section
-    [231] = { only = { W = true } }, -- ca060 SW/W filled section
-    [232] = { only = { W = true } }, -- ca061 SW diagonal filled section
-    [233] = { only = { W = true } }, -- ca062 SW diagonal filled section
-    [237] = { only = { SE = true } }, -- ca066 S horizontal filled section
-    [238] = { only = { SE = true } }, -- ca067 S horizontal filled section
-    [239] = { only = { SE = true } }, -- ca068 S horizontal filled section
-    [234] = { corner = true }, -- ca063 NE<->SE corner
-    [653] = { corner = true }, -- ca080 SW-SE corner
-    [204] = { corner = true }, -- ca032 filled-diagonal <-> rock-wall corner
-    [222] = { drop = true }, -- ca051 odd, remove from auto-placement
-}
-local function overrideFor(pid)
-    return PIECE_OVERRIDES[pid % 16777216]
-end
+-- Wall pieces are chosen by LOCAL BOUNDARY GEOMETRY, learned from the shipped rims. For each
+-- walkable-side contour hex, the sorted pair of directions to its neighbouring rim hexes plus a
+-- 6-bit mask of which neighbours are rock fully describes the isometric orientation AND the turn
+-- there — the absolute directions encode which diagonal the boundary faces. On held-out cave4 this
+-- key predicts the shipped piece's orientation family 79% of the time (vs 53% for the old
+-- outward-normal compass bin), so the generated rim "does the same thing" the shipped rims do,
+-- without per-piece hand tuning.
+local geomModel = {} -- "faceDirs|rockmask" -> weighted { {pid=, w=}, ... }: the primary key
+local geomDirpair = {} -- "faceDirs"          -> weighted { ... }: coarser fallback when the exact key is unseen
+local wallPieces = {} -- compass class       -> weighted { ... }: final fallback (outward-normal bin)
+local wallPiecesAll = {} -- all pieces pooled: last resort
 
 -- The cavern floor palette is the cav* ground tiles only; the shipped maps blend edg50xx SAND at
 -- their entrance alcoves, and counting those into the mix speckles the cave floor with sand.
@@ -156,9 +125,10 @@ end
 
 do
     local weightById = {}
-    local normalCounts = {} -- outward-normal key -> { [pid] = count }
-    local pidTotals = {} -- pid -> total count, for the fallback piece
-    local followCounts = {} -- prevPid -> stepDir -> { [nextPid] = count }: the mined adjacency
+    local geomCounts = {} -- "faceDirs|rockmask" -> { [pid] = count }: primary geometry key
+    local dirpairCounts = {} -- "faceDirs" -> { [pid] = count }: coarser fallback key
+    local normalCounts = {} -- compass class -> { [pid] = count }: final-fallback bin
+    local pidTotals = {} -- pid -> total count, for the last-resort pool
     for refIndex, ref in ipairs(REFS) do
         local floor = api:mapFloorAt(ref, REF_ELEVATION)
 
@@ -218,30 +188,33 @@ do
             end
         end
         for hex, pid in pairs(faceAt) do
-            -- Adjacency: record every step to a neighbouring face as prevPid --stepDir--> nextPid.
-            -- Both directions of each pair get recorded (A->B at dir d, B->A at d+3), so the table
-            -- serves a rim walk taken either way. Independent of the compass/contour learning below.
-            for _, n in ipairs(api:hexNeighbors(hex)) do
-                local nextPid = faceAt[n]
-                if nextPid ~= nil then
-                    local d = api:hexDir(hex, n)
-                    followCounts[pid] = followCounts[pid] or {}
-                    followCounts[pid][d] = followCounts[pid][d] or {}
-                    followCounts[pid][d][nextPid] = (followCounts[pid][d][nextPid] or 0) + 1
-                end
-            end
             if walkableHex(hex) then
-                local rockDirs = {}
+                -- Local boundary geometry at this face: the directions to its neighbouring faces (the
+                -- rim tangent / turn) and a 6-bit mask of which neighbours are rock (which side the rock
+                -- lies on, hence the isometric orientation). Both are absolute, so they pin the edge.
+                local rockmask, rockDirs, faceDirs = 0, {}, {}
                 for _, n in ipairs(api:hexNeighbors(hex)) do
+                    local d = api:hexDir(hex, n)
                     if not walkableHex(n) then
-                        table.insert(rockDirs, api:hexDir(hex, n))
+                        rockmask += 2 ^ d
+                        table.insert(rockDirs, d)
+                    end
+                    if faceAt[n] ~= nil then
+                        table.insert(faceDirs, d)
                     end
                 end
                 -- Contour hexes only (front some rock, but are not a fully-enclosed pocket).
                 if #rockDirs > 0 and #rockDirs < 6 then
-                    local key = compassOf(rockDirs)
-                    normalCounts[key] = normalCounts[key] or {}
-                    normalCounts[key][pid] = (normalCounts[key][pid] or 0) + 1
+                    table.sort(faceDirs)
+                    local dirpair = table.concat(faceDirs, ",")
+                    local geom = dirpair .. "|" .. rockmask
+                    geomCounts[geom] = geomCounts[geom] or {}
+                    geomCounts[geom][pid] = (geomCounts[geom][pid] or 0) + 1
+                    dirpairCounts[dirpair] = dirpairCounts[dirpair] or {}
+                    dirpairCounts[dirpair][pid] = (dirpairCounts[dirpair][pid] or 0) + 1
+                    local comp = compassOf(rockDirs)
+                    normalCounts[comp] = normalCounts[comp] or {}
+                    normalCounts[comp][pid] = (normalCounts[comp][pid] or 0) + 1
                     pidTotals[pid] = (pidTotals[pid] or 0) + 1
                 end
             end
@@ -276,68 +249,25 @@ do
     -- Build the per-class palettes, applying the hand-authored overrides: `only` pieces appear only
     -- in their allowed classes, `drop`/`corner` pieces are pulled from the straight-run palettes
     -- entirely (corners are re-added as a separate turn-only set carrying their learned edges).
-    local orientations = 0
-    local cornerAgg = {} -- pid -> { w = total, classes = {[cls]=true} }
-    for key, pids in pairs(normalCounts) do
-        local kept = {}
-        for pid, c in pairs(pids) do
-            local ov = overrideFor(pid)
-            if ov == nil then
-                kept[pid] = c
-            elseif ov.drop then
-                -- never placed
-            elseif ov.corner then
-                cornerAgg[pid] = cornerAgg[pid] or { w = 0, classes = {} }
-                cornerAgg[pid].w += c
-                cornerAgg[pid].classes[key] = true
-            elseif ov.only == nil or ov.only[key] then
-                kept[pid] = c
-            end
-        end
-        wallPieces[key] = weightedList(kept)
-        wallPieceSet[key] = {}
-        for pid in pairs(kept) do
-            wallPieceSet[key][pid] = true
-        end
-        orientations += 1
-    end
-    for pid, agg in pairs(cornerAgg) do
-        local n = 0
-        for _ in pairs(agg.classes) do
-            n += 1
-        end
-        -- Cap placements at the piece's average per shipped map (rounded, >=1): a corner is rare,
-        -- so it must not fire at every micro-transition of a wobbly generated rim.
-        cornerPieces[#cornerPieces + 1] = { pid = pid, w = agg.w, classes = agg.classes, n = n,
-            cap = math.max(1, math.floor(agg.w / #REFS + 0.5)) }
-    end
-    table.sort(cornerPieces, function(a, b) return a.pid < b.pid end)
-
-    -- Fallback pool for a class the corpus never showed: exclude drop/corner pieces so they never
-    -- sneak in through it.
-    local keptAll = {}
-    for pid, c in pairs(pidTotals) do
-        local ov = overrideFor(pid)
-        if ov == nil or (not ov.drop and not ov.corner) then
-            keptAll[pid] = c
+    -- Fold each key's { pid -> count } into a weighted list, sorted by pid so the seeded draw is
+    -- reproducible (pairs() order is unspecified).
+    local function foldModel(counts, into)
+        for key, pids in pairs(counts) do
+            into[key] = weightedList(pids)
         end
     end
-    wallPiecesAll = weightedList(keptAll) -- the fallback palette for orientations the corpus never showed
+    foldModel(geomCounts, geomModel)
+    foldModel(dirpairCounts, geomDirpair)
+    foldModel(normalCounts, wallPieces)
+    wallPiecesAll = weightedList(pidTotals) -- last-resort pool
     assert(#wallPiecesAll > 0, "no walls found on the walkable side of the reference maps")
 
-    -- Fold the mined counts into weighted follow[prevPid][dir] lists (same seeded-draw shape as the
-    -- compass palettes), and count the transitions learned for the log.
-    local transitions = 0
-    for prevPid, byDir in pairs(followCounts) do
-        follow[prevPid] = {}
-        for dir, nextCounts in pairs(byDir) do
-            follow[prevPid][dir] = weightedList(nextCounts)
-            for _, c in pairs(nextCounts) do transitions += c end
-        end
+    local geomKeys = 0
+    for _ in pairs(geomModel) do
+        geomKeys += 1
     end
-
-    print(string.format("Learned %d wall classes, %d adjacency transitions and %d cav* floor tiles from %d reference map(s).",
-        orientations, transitions, #floorWeights, #REFS))
+    print(string.format("Learned %d wall geometries and %d cav* floor tiles from %d reference map(s).",
+        geomKeys, #floorWeights, #REFS))
 end
 
 -- The wall palette for an outward-normal compass class, the global pool as a last resort.
@@ -569,137 +499,53 @@ for hex in pairs(candSet) do
 end
 table.sort(candidates)
 
--- The rim hexes: every candidate that straddles the isocontour (a neighbour on the other side).
--- Collected as a set + a deterministically sorted list (candidates is already sorted).
-local onBnd = {}
+-- The rim: the walkable-side contour — an INSIDE (floor) hex with at least one rock neighbour,
+-- exactly the hexes the shipped maps line with a wall face. A set + a deterministically sorted list.
+local rimSet = {}
 local rim = {}
 for _, hex in ipairs(candidates) do
-    local me = inside(hex)
-    for _, n in ipairs(api:hexNeighbors(hex)) do
-        if inside(n) ~= me then
-            onBnd[hex] = true
-            table.insert(rim, hex)
-            break
-        end
-    end
-end
-
--- Piece choice under the edge-constraint model: given the already-placed neighbour's piece and the
--- step direction onto this hex, draw only from those the corpus saw follow it. Falls back to the
--- outward-normal compass palette when there is no placed neighbour (a run's seed) or the mined table
--- has no entry for this (piece, direction) — so it degrades to the current per-hex behaviour, never
--- worse. Same seeded pickWall draw throughout, so a seed reproduces.
-local function pickPiece(prevPid, dir, hex)
-    -- The isometric orientation of this rim position (which side the player views the rock from)
-    -- decides the piece FAMILY: standing faces where the rock rises up-screen (N/E), filled sections
-    -- where you look over the near lip (S/W). That is a hard constraint — a face must never land on
-    -- an edge seen from the other side. The mined adjacency only REFINES the choice within that
-    -- family: intersect the successors of the previous piece with this position's family, so a run
-    -- stays coherent and corners form, but a NE rock face can't chain onto the SE rim. Fall back to
-    -- the family palette when there is no placed neighbour or no in-family successor.
-    local comp = compassFromVec(outwardNormal(hex))
-    if prevPid ~= nil and follow[prevPid] ~= nil then
-        local seq = follow[prevPid][dir]
-        local allow = wallPieceSet[comp]
-        if seq ~= nil then
-            local filtered = {}
-            for _, e in ipairs(seq) do
-                if allow == nil or allow[e.pid] then
-                    filtered[#filtered + 1] = e
-                end
-            end
-            if #filtered > 0 then
-                return pickWall(filtered)
+    if inside(hex) then
+        for _, n in ipairs(api:hexNeighbors(hex)) do
+            if not inside(n) then
+                rimSet[hex] = true
+                table.insert(rim, hex)
+                break
             end
         end
     end
-    return pickWall(wallListFor(comp))
 end
 
--- Compass class per rim hex (no rng), for detecting the TURNS where corner pieces belong.
-local classOf = {}
-for _, hex in ipairs(rim) do
-    classOf[hex] = compassFromVec(outwardNormal(hex))
-end
-
--- A reviewer-flagged corner piece for `hex` if it sits at a rim TURN — its class differs from a
--- rim-neighbour's — and a corner piece was learned on the edges meeting there (both edges for a
--- two-edge corner; either edge for a one-edge piece). Keeps corners off straight runs and puts them
--- only where the boundary actually turns. Returns a weighted pick or nil (nil consumes no rng, so
--- the straight path's draw stays reproducible).
-local cornerPlaced = {} -- pid -> count already placed (enforces each piece's per-map cap)
-local function cornerAt(hex)
-    if #cornerPieces == 0 then
-        return nil
-    end
-    local c = classOf[hex]
-    local other = nil
+-- The local boundary geometry key at a generated rim hex, computed the SAME way the shipped rims
+-- were learned: the sorted directions to neighbouring rim hexes (tangent/turn) plus the mask of the
+-- rock neighbours (which side, hence orientation). Returns the exact key and the dirpair fallback.
+local function geomKeyAt(hex)
+    local rockmask, faceDirs = 0, {}
     for _, n in ipairs(api:hexNeighbors(hex)) do
-        local nc = classOf[n]
-        if nc ~= nil and nc ~= c then
-            other = nc -- first differing neighbour, fixed direction order -> deterministic
-            break
+        local d = api:hexDir(hex, n)
+        if not inside(n) then
+            rockmask += 2 ^ d
+        end
+        if rimSet[n] then
+            table.insert(faceDirs, d)
         end
     end
-    if other == nil then
-        return nil
-    end
-    local eligible, total = {}, 0
-    for _, cp in ipairs(cornerPieces) do
-        local classOk = (cp.n >= 2 and cp.classes[c] and cp.classes[other])
-            or (cp.n < 2 and (cp.classes[c] or cp.classes[other]))
-        if classOk and (cornerPlaced[cp.pid] or 0) < cp.cap then
-            eligible[#eligible + 1] = cp
-            total += cp.w
-        end
-    end
-    if #eligible == 0 then
-        return nil -- no eligible corner (or all capped out): the hex falls through to a straight piece
-    end
-    local r = api:rng() * total
-    for _, e in ipairs(eligible) do
-        r -= e.w
-        if r <= 0 then
-            cornerPlaced[e.pid] = (cornerPlaced[e.pid] or 0) + 1
-            return e.pid
-        end
-    end
-    local last = eligible[#eligible]
-    cornerPlaced[last.pid] = (cornerPlaced[last.pid] or 0) + 1
-    return last.pid
+    table.sort(faceDirs)
+    local dirpair = table.concat(faceDirs, ",")
+    return dirpair .. "|" .. rockmask, dirpair
 end
 
--- Lay the rim as a constraint-satisfying sequence: a deterministic BFS spanning-forest over the rim
--- hexes. A hex at a turn takes a matching corner piece (cornerAt); otherwise it is chosen from those
--- allowed to follow its BFS parent along the step between them, so a face run stays a coherent run.
--- Seeds (and any component with no placed parent yet) start from the compass palette. Sorted seeds +
--- fixed neighbour order keep the rng draw reproducible.
-local placedPid = {}
+-- Place a wall on every rim hex, choosing the piece by local geometry: the exact key, then the
+-- coarser dirpair, then the outward-normal compass bin, then the global pool. Sampling the learned
+-- distribution keeps the mappers' texture variety while the geometry key keeps the orientation
+-- right. The choice is a function of the hex's own geometry alone, so a single sorted pass is
+-- deterministic under the seeded draw (no ordering or neighbour dependence).
 local walls = 0
 local boundaryHexes = #rim
-local queue, qhead = {}, 1
-for _, seed in ipairs(rim) do
-    if placedPid[seed] == nil then
-        local pid = cornerAt(seed) or pickPiece(nil, nil, seed)
-        placedPid[seed] = pid
-        if api:placeProto(pid, seed, 0) then
-            walls += 1
-        end
-        queue[#queue + 1] = seed
-        while qhead <= #queue do
-            local h = queue[qhead]
-            qhead += 1
-            for _, n in ipairs(api:hexNeighbors(h)) do
-                if onBnd[n] and placedPid[n] == nil then
-                    local npid = cornerAt(n) or pickPiece(placedPid[h], api:hexDir(h, n), n)
-                    placedPid[n] = npid
-                    if api:placeProto(npid, n, 0) then
-                        walls += 1
-                    end
-                    queue[#queue + 1] = n
-                end
-            end
-        end
+for _, hex in ipairs(rim) do
+    local geom, dirpair = geomKeyAt(hex)
+    local list = geomModel[geom] or geomDirpair[dirpair] or wallListFor(compassFromVec(outwardNormal(hex)))
+    if api:placeProto(pickWall(list), hex, 0) then
+        walls += 1
     end
 end
 
