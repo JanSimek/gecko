@@ -266,6 +266,23 @@ public:
     /// (col, row) with `tileId`. A no-op returning 0 when (col, row) is off-grid or the region
     /// already has that id.
     int fillRegion(int col, int row, uint16_t tileId);
+    /// Synthesize the inclusive (col, row) rectangle's floor from a reference map's floor grid
+    /// (seeded patch quilting learned from the map — editor/FloorSynth.h), so tiles blend the way
+    /// the reference's hand-authored terrain does instead of fillFloorRect's uniform fill; the
+    /// result also blends into pre-existing non-empty tiles bordering the rectangle. Paints
+    /// through paintFloor, so it batches/previews/undoes like every other mutator. Returns tiles
+    /// painted; raises like mapFloorAt on an unreadable map, a missing elevation, or a reference
+    /// with an empty floor grid.
+    int quiltFloorRect(const std::string& mapPath, int refElevation, int col0, int row0, int col1, int row1);
+    /// quiltFloorRect for an explicit set of floor-tile indices (e.g. a carved cavern region);
+    /// duplicate and off-grid indices are skipped.
+    int quiltFloorTiles(const std::string& mapPath, int refElevation, const std::vector<int>& tiles);
+    /// The previous quiltFloor* run's fidelity stats, flattened as (painted, blocks,
+    /// perfectBlocks, mismatchedCells, repairedCells, unresolvedSeams). Repaired cells are normal
+    /// in small numbers; unresolved seams are borders the reference never showed. Script-visible
+    /// (the CLI silences the log channel) so degraded output is never silent; all zeros before
+    /// the first quilt.
+    std::vector<int> quiltStats() const { return _quiltStats; }
 
     // --- Stamps (prefabs captured by extract_pattern) ----------------------------
     /// Register a pre-loaded stamp under `name` so the script can place it. The host (gecko-cli /
@@ -335,8 +352,12 @@ private:
     // (flat query). Callers validate the centre and extents.
     std::array<std::vector<int>, 4> screenRectEdges(int centerHex, int screenHalfWidth, int screenHalfHeight) const;
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
-    // Parse a reference map headlessly (GL-free) for the palette queries; nullptr if unreadable.
+    // Parse a reference map headlessly (GL-free) for the palette queries; raises if unreadable.
     std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;
+    // loadReferenceMap through a per-api cache keyed by the exact path string, so a run that
+    // learns from a reference more than once (palette + floor grid + quilt) parses it once.
+    // Cleared on retarget()/detach() so a resident host re-reads after a data remount.
+    Map& referenceMap(const std::string& mapPath) const;
     // pid -> placement count for the scatter-eligible scenery in `map` (scenery type, non-flat).
     // Shared by mapScenery (keys) and mapSceneryHistogram (the counts).
     std::map<int, int> sceneryCounts(Map& map) const;
@@ -384,6 +405,10 @@ private:
     const EditArea* _area = nullptr;
     // Deterministic stream for rng()/rngInt(); reseed per run via setSeed for reproducible scatter.
     std::mt19937 _rng; // NOSONAR: seeded for reproducible fills, not a security-sensitive use
+    // Parsed reference maps, keyed by the exact path string (see referenceMap()).
+    mutable std::unordered_map<std::string, std::unique_ptr<Map>> _referenceCache;
+    // The last quiltFloor* run's flattened fidelity stats (see quiltStats()).
+    std::vector<int> _quiltStats = std::vector<int>(6, 0);
 };
 
 } // namespace geck

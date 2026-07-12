@@ -12,6 +12,7 @@
 #include <set>
 #include <unordered_map>
 
+#include "editor/FloorSynth.h"
 #include "editor/Hex.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
@@ -29,6 +30,7 @@
 #include "pattern/PatternStamper.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
+#include <spdlog/spdlog.h>
 #include "resource/ResourcePaths.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "util/Constants.h"
@@ -57,6 +59,7 @@ void MapScriptApi::retarget(resource::GameResources& resources, const HexagonGri
     _map = map;
     _elevation = elevation;
     _buildSprites = buildSprites;
+    _referenceCache.clear(); // the data mount may have changed with the host
 }
 
 void MapScriptApi::detach() {
@@ -64,6 +67,7 @@ void MapScriptApi::detach() {
     _hexgrid = nullptr;
     _controller = nullptr;
     _map = nullptr;
+    _referenceCache.clear();
 }
 
 Map& MapScriptApi::mapRef() const {
@@ -202,6 +206,14 @@ std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) 
     return map;
 }
 
+Map& MapScriptApi::referenceMap(const std::string& mapPath) const {
+    if (const auto it = _referenceCache.find(mapPath); it != _referenceCache.end()) {
+        return *it->second;
+    }
+    auto [it, inserted] = _referenceCache.emplace(mapPath, loadReferenceMap(mapPath));
+    return *it->second;
+}
+
 bool MapScriptApi::isScatterableScenery(uint32_t pid) const {
     // Flat scenery — the invisible movement-blockers / floor markers (block.frm) carry OBJECT_FLAT,
     // while upright decorations (scrub, trees, rocks) do not — is excluded from a scatter palette.
@@ -236,8 +248,7 @@ std::map<int, int> MapScriptApi::sceneryCounts(Map& map) const {
 }
 
 std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
-    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath); // throws if unreadable
-    const auto counts = sceneryCounts(*reference);
+    const auto counts = sceneryCounts(referenceMap(mapPath)); // throws if unreadable
     std::vector<int> palette;
     palette.reserve(counts.size());
     for (const auto& [pid, count] : counts) {
@@ -247,15 +258,14 @@ std::vector<int> MapScriptApi::mapScenery(const std::string& mapPath) const {
 }
 
 std::map<int, int> MapScriptApi::mapSceneryHistogram(const std::string& mapPath) const {
-    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath); // throws if unreadable
-    return sceneryCounts(*reference);
+    return sceneryCounts(referenceMap(mapPath)); // throws if unreadable
 }
 
 std::vector<int> MapScriptApi::mapFloorTiles(const std::string& mapPath) const {
-    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath); // throws if unreadable
+    const Map& reference = referenceMap(mapPath); // throws if unreadable
 
     std::unordered_map<uint16_t, int> counts; // floor tile id -> times used
-    for (const auto& [elevation, tiles] : reference->getMapFile().tiles) {
+    for (const auto& [elevation, tiles] : reference.getMapFile().tiles) {
         for (const auto& tile : tiles) {
             if (tile.getFloor() != static_cast<uint16_t>(Map::EMPTY_TILE)) {
                 counts[tile.getFloor()]++;
@@ -309,10 +319,10 @@ namespace {
 } // namespace
 
 std::vector<int> MapScriptApi::mapFloorAt(const std::string& mapPath, int elevation) const {
-    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath); // throws if unreadable
-    requireReferenceElevation(*reference, mapPath, elevation);
+    const Map& reference = referenceMap(mapPath); // throws if unreadable
+    requireReferenceElevation(reference, mapPath, elevation);
 
-    const std::vector<Tile>& tiles = reference->getMapFile().tiles.at(elevation);
+    const std::vector<Tile>& tiles = reference.getMapFile().tiles.at(elevation);
     std::vector<int> floor;
     floor.reserve(tiles.size());
     for (const Tile& tile : tiles) {
@@ -323,11 +333,11 @@ std::vector<int> MapScriptApi::mapFloorAt(const std::string& mapPath, int elevat
 
 std::vector<int> MapScriptApi::mapObjectsAt(const std::string& mapPath, int elevation, const std::string& typeName) const {
     const Pro::OBJECT_TYPE wanted = objectTypeFromName(typeName); // throws on an unknown type
-    const std::unique_ptr<Map> reference = loadReferenceMap(mapPath);
-    requireReferenceElevation(*reference, mapPath, elevation);
+    const Map& reference = referenceMap(mapPath);
+    requireReferenceElevation(reference, mapPath, elevation);
 
     std::vector<int> triples;
-    const auto& objectsByElevation = reference->getMapFile().map_objects;
+    const auto& objectsByElevation = reference.getMapFile().map_objects;
     const auto it = objectsByElevation.find(elevation);
     if (it == objectsByElevation.end()) {
         return triples; // the elevation exists but holds no objects — a valid empty answer
@@ -893,6 +903,62 @@ int MapScriptApi::fillRegion(int col, int row, uint16_t tileId) {
 
 bool MapScriptApi::paintRoofXY(int col, int row, uint16_t tileId) {
     return paintRoof(tileIndex(col, row), tileId);
+}
+
+int MapScriptApi::quiltFloorRect(const std::string& mapPath, int refElevation, int col0, int row0, int col1, int row1) {
+    return quiltFloorTiles(mapPath, refElevation, tilesInRect(col0, row0, col1, row1));
+}
+
+int MapScriptApi::quiltFloorTiles(const std::string& mapPath, int refElevation, const std::vector<int>& tiles) {
+    const Map& reference = referenceMap(mapPath); // throws if unreadable
+    requireReferenceElevation(reference, mapPath, refElevation);
+
+    floorsynth::Grid referenceGrid;
+    referenceGrid.width = HexagonGrid::TILE_GRID_WIDTH;
+    referenceGrid.height = HexagonGrid::TILE_GRID_HEIGHT;
+    const std::vector<Tile>& referenceTiles = reference.getMapFile().tiles.at(refElevation);
+    referenceGrid.cells.reserve(referenceTiles.size());
+    for (const Tile& tile : referenceTiles) {
+        referenceGrid.cells.push_back(tile.getFloor());
+    }
+    constexpr auto empty = static_cast<uint16_t>(Map::EMPTY_TILE);
+    if (std::ranges::all_of(referenceGrid.cells, [](uint16_t id) { return id == empty; })) {
+        // A reference that teaches nothing is a real error, not a silent no-op fill.
+        throw ScriptError(std::format("map '{}' elevation {} has an empty floor grid — nothing to quilt from", mapPath, refElevation));
+    }
+
+    // The bound map's current floor: pre-existing tiles around the region become the boundary
+    // constraints the synthesis blends into. With a plan sink installed this reads the COMMITTED
+    // map, like every query (see setPlanSink) — same-run uncommitted paints are not constraints.
+    floorsynth::Grid targetGrid;
+    targetGrid.width = HexagonGrid::TILE_GRID_WIDTH;
+    targetGrid.height = HexagonGrid::TILE_GRID_HEIGHT;
+    targetGrid.cells.reserve(static_cast<std::size_t>(HexagonGrid::TILE_COUNT));
+    for (int i = 0; i < HexagonGrid::TILE_COUNT; ++i) {
+        targetGrid.cells.push_back(getFloor(i));
+    }
+
+    floorsynth::Params params;
+    params.emptyId = empty;
+    params.seed = static_cast<uint32_t>(_rng()); // one draw from the run's seeded stream: reproducible
+    const floorsynth::Result result = floorsynth::synthesize(referenceGrid, targetGrid, tiles, params);
+
+    int painted = 0;
+    for (const auto& [tileIndex, id] : result.cells) {
+        if (paintFloor(tileIndex, id)) {
+            ++painted;
+        }
+    }
+    // Degraded output must be visible, not silent: repairs are normal in small numbers, but
+    // unresolved seams mean the reference never showed a border the result now contains. The
+    // stats stay queryable (quiltStats) because the CLI runs with logging off.
+    _quiltStats = { painted, result.stats.blocksPlaced, result.stats.perfectBlocks,
+        result.stats.mismatchedCells, result.stats.repairedCells, result.stats.unresolvedSeams };
+    if (result.stats.unresolvedSeams > 0 || result.stats.repairedCells > 0) {
+        spdlog::info("quiltFloor: painted {} tiles from '{}' ({} blocks, {} repaired cells, {} unresolved seams)",
+            painted, mapPath, result.stats.blocksPlaced, result.stats.repairedCells, result.stats.unresolvedSeams);
+    }
+    return painted;
 }
 
 void MapScriptApi::addStamp(const std::string& name, pattern::Pattern pattern) {
