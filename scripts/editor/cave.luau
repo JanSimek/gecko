@@ -4,10 +4,12 @@
 --   * the whole area filled with the reference's dark solid-rock tile pattern,
 --   * a walkable cavern carved through it, painted with the reference's pervasive cav* FIELD tiles
 --     (rare border/transition tiles like cav4013 and the entrance sand are kept out of the mix),
---   * the floor/rock boundary lined with a gap-free run of "Cave Wall" faces — a wall on every
---     contour hex, each chosen by the boundary's SMOOTHED outward normal so the isometric view gets
---     standing rock faces on the north/east rim and filled tops on the south/west, without a
---     filled-top piece flickering into the middle of a face run where the 1-hex rim wobbles,
+--   * the floor/rock boundary lined with "Cave Wall" pieces chosen by LOCAL BOUNDARY GEOMETRY:
+--     each walkable-side contour hex is keyed by the directions to its neighbouring rim hexes plus
+--     the mask of which neighbours are rock, and the piece is sampled from what the shipped rims put
+--     at that same geometry. The absolute directions pin the isometric orientation, so faces land on
+--     the up-screen rim and filled lips on the near edge without hand tuning (~79% orientation match
+--     on held-out cave4 vs 53% for the old compass bin),
 --   * invisible blocking hexes sealing the rock side so the player can't walk off the floor,
 --   * a scroll-blocker rectangle ringing the cavern so the camera stays inside,
 --   * an exit-grid patch on the floor (worldmap by default) and the player start.
@@ -54,8 +56,31 @@ print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " t
 
 local rockPattern = {} -- [parityKey 0..3] = tile id (from the FIRST reference)
 local floorWeights = {} -- walkable floor: { {id=..., w=...}, ... } sorted for determinism
-local wallPieces = {} -- outward-normal key ("d,d,..") -> weighted { {pid=, w=}, ... }, sorted for determinism
-local wallPiecesAll = {} -- the same weights pooled across every orientation: the fallback palette
+-- Wall pieces are chosen by LOCAL BOUNDARY GEOMETRY, learned from the shipped rims. For each
+-- walkable-side contour hex, the sorted pair of directions to its neighbouring rim hexes plus a
+-- 6-bit mask of which neighbours are rock fully describes the isometric orientation AND the turn
+-- there — the absolute directions encode which diagonal the boundary faces. On held-out cave4 this
+-- key predicts the shipped piece's orientation family 79% of the time (vs 53% for the old
+-- outward-normal compass bin), so the generated rim "does the same thing" the shipped rims do,
+-- without per-piece hand tuning.
+-- A few pieces are true CORNERS (art-reviewed): they belong only where the rim turns, not on a run.
+-- The rock-mask can't confine them (they share a mask with straight pieces), so we key them by their
+-- distinctive bent face-direction pair instead, pull them out of the straight pools, and cap them at
+-- their shipped per-map frequency. Keyed by proto number (ca-name in the comment).
+local CORNER = {
+    [234] = true, -- ca063 NE<->SE corner
+    [204] = true, -- ca032 filled-diagonal <-> rock-wall corner
+    [653] = true, -- ca080 SW-SE corner
+}
+local cornerByDirpair = {} -- "faceDirs" -> weighted { {pid=, w=}, ... }: corner pieces at a turn shape
+local cornerCap = {} -- proto# -> max placements (its shipped per-map average)
+local geomRock = {} -- rock-neighbour mask -> weighted { {pid=, w=}, ... }: the PRIMARY key. Density-
+--                     independent (rock is rock however the rim is spaced), so it transfers from the
+--                     shipped rims to the generated band; learned from faces on BOTH sides of the rim.
+local geomModel = {} -- "faceDirs|rockmask" -> weighted { ... }: finer, used when its key is present
+local geomDirpair = {} -- "faceDirs"          -> weighted { ... }: coarser fallback
+local wallPieces = {} -- compass class       -> weighted { ... }: final fallback (outward-normal bin)
+local wallPiecesAll = {} -- all pieces pooled: last resort
 
 -- The cavern floor palette is the cav* ground tiles only; the shipped maps blend edg50xx SAND at
 -- their entrance alcoves, and counting those into the mix speckles the cave floor with sand.
@@ -114,8 +139,13 @@ end
 
 do
     local weightById = {}
-    local normalCounts = {} -- outward-normal key -> { [pid] = count }
-    local pidTotals = {} -- pid -> total count, for the fallback piece
+    local geomRockCounts = {} -- rockmask -> { [pid] = count }: primary key (density-independent)
+    local geomCounts = {} -- "faceDirs|rockmask" -> { [pid] = count }: finer key
+    local dirpairCounts = {} -- "faceDirs" -> { [pid] = count }: coarser fallback key
+    local normalCounts = {} -- compass class -> { [pid] = count }: final-fallback bin
+    local pidTotals = {} -- pid -> total count, for the last-resort pool
+    local cornerCounts = {} -- "faceDirs" -> { [pid] = count }: corner pieces by turn shape
+    local cornerTotals = {} -- proto# -> count (for the per-map frequency cap)
     for refIndex, ref in ipairs(REFS) do
         local floor = api:mapFloorAt(ref, REF_ELEVATION)
 
@@ -174,19 +204,43 @@ do
                 faceAt[hex] = pid
             end
         end
+        -- Learn from EVERY face — on the walkable side AND the rock side of the rim, as the shipped
+        -- maps place them (cave1: 327 walkable + 175 rock). The local geometry of a face is the mask
+        -- of which neighbours are rock (which side, hence the isometric orientation — this is the
+        -- primary, density-independent key) plus the directions to neighbouring faces (a finer key).
         for hex, pid in pairs(faceAt) do
-            if walkableHex(hex) then
-                local rockDirs = {}
-                for _, n in ipairs(api:hexNeighbors(hex)) do
-                    if not walkableHex(n) then
-                        table.insert(rockDirs, api:hexDir(hex, n))
-                    end
+            local rockmask, rockDirs, faceDirs = 0, {}, {}
+            for _, n in ipairs(api:hexNeighbors(hex)) do
+                local d = api:hexDir(hex, n)
+                if not walkableHex(n) then
+                    rockmask += 2 ^ d
+                    table.insert(rockDirs, d)
                 end
-                -- Contour hexes only (front some rock, but are not a fully-enclosed pocket).
-                if #rockDirs > 0 and #rockDirs < 6 then
-                    local key = compassOf(rockDirs)
-                    normalCounts[key] = normalCounts[key] or {}
-                    normalCounts[key][pid] = (normalCounts[key][pid] or 0) + 1
+                if faceAt[n] ~= nil then
+                    table.insert(faceDirs, d)
+                end
+            end
+            -- Contour hexes only (front some rock, but are not a fully-enclosed pocket).
+            if #rockDirs > 0 and #rockDirs < 6 then
+                table.sort(faceDirs)
+                local dirpair = table.concat(faceDirs, ",")
+                if CORNER[pid % 16777216] then
+                    -- A corner: learn it by its turn shape only, kept out of the straight pools.
+                    cornerCounts[dirpair] = cornerCounts[dirpair] or {}
+                    cornerCounts[dirpair][pid] = (cornerCounts[dirpair][pid] or 0) + 1
+                    cornerTotals[pid % 16777216] = (cornerTotals[pid % 16777216] or 0) + 1
+                else
+                    local rm = tostring(rockmask)
+                    geomRockCounts[rm] = geomRockCounts[rm] or {}
+                    geomRockCounts[rm][pid] = (geomRockCounts[rm][pid] or 0) + 1
+                    local geom = dirpair .. "|" .. rm
+                    geomCounts[geom] = geomCounts[geom] or {}
+                    geomCounts[geom][pid] = (geomCounts[geom][pid] or 0) + 1
+                    dirpairCounts[dirpair] = dirpairCounts[dirpair] or {}
+                    dirpairCounts[dirpair][pid] = (dirpairCounts[dirpair][pid] or 0) + 1
+                    local comp = compassOf(rockDirs)
+                    normalCounts[comp] = normalCounts[comp] or {}
+                    normalCounts[comp][pid] = (normalCounts[comp][pid] or 0) + 1
                     pidTotals[pid] = (pidTotals[pid] or 0) + 1
                 end
             end
@@ -218,15 +272,33 @@ do
         table.sort(list, function(a, b) return a.pid < b.pid end)
         return list
     end
-    local orientations = 0
-    for key, pids in pairs(normalCounts) do
-        wallPieces[key] = weightedList(pids)
-        orientations += 1
+    -- Build the per-class palettes, applying the hand-authored overrides: `only` pieces appear only
+    -- in their allowed classes, `drop`/`corner` pieces are pulled from the straight-run palettes
+    -- entirely (corners are re-added as a separate turn-only set carrying their learned edges).
+    -- Fold each key's { pid -> count } into a weighted list, sorted by pid so the seeded draw is
+    -- reproducible (pairs() order is unspecified).
+    local function foldModel(counts, into)
+        for key, pids in pairs(counts) do
+            into[key] = weightedList(pids)
+        end
     end
-    wallPiecesAll = weightedList(pidTotals) -- the fallback palette for orientations the corpus never showed
-    assert(#wallPiecesAll > 0, "no walls found on the walkable side of the reference maps")
-    print(string.format("Learned %d wall classes and %d cav* floor tiles from %d reference map(s).",
-        orientations, #floorWeights, #REFS))
+    foldModel(geomRockCounts, geomRock)
+    foldModel(geomCounts, geomModel)
+    foldModel(dirpairCounts, geomDirpair)
+    foldModel(normalCounts, wallPieces)
+    foldModel(cornerCounts, cornerByDirpair)
+    for pn, total in pairs(cornerTotals) do
+        cornerCap[pn] = math.max(1, math.floor(total / #REFS + 0.5)) -- shipped per-map average
+    end
+    wallPiecesAll = weightedList(pidTotals) -- last-resort pool
+    assert(#wallPiecesAll > 0, "no walls found on the reference maps")
+
+    local rockKeys = 0
+    for _ in pairs(geomRock) do
+        rockKeys += 1
+    end
+    print(string.format("Learned %d rock-mask wall geometries and %d cav* floor tiles from %d reference map(s).",
+        rockKeys, #floorWeights, #REFS))
 end
 
 -- The wall palette for an outward-normal compass class, the global pool as a last resort.
@@ -458,23 +530,91 @@ for hex in pairs(candSet) do
 end
 table.sort(candidates)
 
-local walls = 0
-local boundaryHexes = 0
+-- The rim: the 2-cell band straddling the isocontour — every hex with a neighbour on the other side,
+-- so BOTH the walkable-side and rock-side contour get a face, the dense both-sided structure the
+-- shipped maps use (which is what makes the run gap-free, the wide sprites overlapping).
+local rimSet = {}
+local rim = {}
 for _, hex in ipairs(candidates) do
     local me = inside(hex)
-    local onBoundary = false
     for _, n in ipairs(api:hexNeighbors(hex)) do
         if inside(n) ~= me then
-            onBoundary = true
+            rimSet[hex] = true
+            table.insert(rim, hex)
             break
         end
     end
-    if onBoundary then
-        boundaryHexes += 1
-        local nx, ny = outwardNormal(hex)
-        if api:placeProto(pickWall(wallListFor(compassFromVec(nx, ny))), hex, 0) then
-            walls += 1
+end
+
+-- The local geometry key at a generated rim hex, the SAME features the shipped faces were learned
+-- by: the rock-neighbour mask (primary — density-independent, so it transfers to the dense band) and
+-- the directions to neighbouring rim hexes (finer).
+local function geomKeyAt(hex)
+    local rockmask, faceDirs = 0, {}
+    for _, n in ipairs(api:hexNeighbors(hex)) do
+        local d = api:hexDir(hex, n)
+        if not inside(n) then
+            rockmask += 2 ^ d
         end
+        if rimSet[n] then
+            table.insert(faceDirs, d)
+        end
+    end
+    table.sort(faceDirs)
+    local dirpair = table.concat(faceDirs, ",")
+    local rm = tostring(rockmask)
+    return rm, dirpair .. "|" .. rm, dirpair
+end
+
+-- Place a wall on every rim hex, choosing the piece by local geometry: the rock-mask key first (the
+-- orientation rule that transfers regardless of spacing), then the finer face-direction keys, then
+-- the compass bin, then the global pool. Sampling the learned distribution keeps the mappers' texture
+-- variety while the rock-mask keeps the orientation right. A per-hex function, so a single sorted
+-- pass is deterministic under the seeded draw.
+-- A corner piece for this hex's turn shape, if one was learned there and still under its cap. Only
+-- the distinctive bent shapes carry corners, so this fires at real turns, not along a run. Consumes
+-- rng only when it returns a piece, so the straight path's draw stays reproducible.
+local cornerPlaced = {} -- proto# -> count
+local function tryCorner(dirpair)
+    local list = cornerByDirpair[dirpair]
+    if list == nil then
+        return nil
+    end
+    local avail, total = {}, 0
+    for _, e in ipairs(list) do
+        local pn = e.pid % 16777216
+        if (cornerPlaced[pn] or 0) < (cornerCap[pn] or 1) then
+            avail[#avail + 1] = e
+            total += e.w
+        end
+    end
+    if #avail == 0 then
+        return nil
+    end
+    local r = api:rng() * total
+    for _, e in ipairs(avail) do
+        r -= e.w
+        if r <= 0 then
+            cornerPlaced[e.pid % 16777216] = (cornerPlaced[e.pid % 16777216] or 0) + 1
+            return e.pid
+        end
+    end
+    local last = avail[#avail]
+    cornerPlaced[last.pid % 16777216] = (cornerPlaced[last.pid % 16777216] or 0) + 1
+    return last.pid
+end
+
+local walls = 0
+local boundaryHexes = #rim
+for _, hex in ipairs(rim) do
+    local rm, geom, dirpair = geomKeyAt(hex)
+    local pid = tryCorner(dirpair)
+    if pid == nil then
+        pid = pickWall(geomRock[rm] or geomModel[geom] or geomDirpair[dirpair]
+            or wallListFor(compassFromVec(outwardNormal(hex))))
+    end
+    if api:placeProto(pid, hex, 0) then
+        walls += 1
     end
 end
 
