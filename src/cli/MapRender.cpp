@@ -1,10 +1,14 @@
 #include "cli/MapRender.h"
 
 #include "cli/MapLoad.h"
+#include "editor/Hex.h"
+#include "editor/HexagonGrid.h"
 #include "format/map/Map.h"
 #include "rendering/MapRenderer.h"
 
 #include <SFML/Graphics/Image.hpp>
+#include <SFML/Graphics/Rect.hpp>
+#include <algorithm>
 
 #include <exception>
 #include <format>
@@ -49,6 +53,22 @@ int renderMap(resource::GameResources& resources, const RenderOptions& options, 
     renderOptions.fullExtent = options.fullExtent;
     renderOptions.exitDots = options.exitDots;
     renderOptions.showUnreachable = options.showUnreachable;
+    if (options.cropCenterHex >= 0) {
+        // The hex's screen coordinates are the render's world space (sprites are placed there), so
+        // centre a ±cropExtentPx square on it. computeFrame then upscales it to fill maxDimension.
+        const HexagonGrid grid;
+        if (const auto hex = grid.getHexByPosition(static_cast<uint32_t>(options.cropCenterHex))) {
+            const float ext = static_cast<float>(std::max(1, options.cropExtentPx));
+            const Hex& h = hex->get();
+            renderOptions.hasCrop = true;
+            renderOptions.cropRect = sf::FloatRect(
+                { static_cast<float>(h.x()) - ext, static_cast<float>(h.y()) - ext },
+                { 2.0f * ext, 2.0f * ext });
+        } else {
+            out << "render: crop hex " << options.cropCenterHex << " is off the grid\n";
+            return 1;
+        }
+    }
     renderOptions.style = options.semantic ? MapRenderer::Style::Semantic
         : options.objects                  ? MapRenderer::Style::Objects
         : options.schematic                ? MapRenderer::Style::Schematic
