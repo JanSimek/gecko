@@ -37,6 +37,25 @@ else
 end
 
 local painted = api:quiltFloorTiles(REF, REF_ELEVATION, tiles)
+
+-- The reference's cliffs are floor art PLUS standing scenery (rock faces, rock patches, scrub,
+-- trees); transplant the pieces standing on the copied cells so cliffs come out whole. Skip
+-- what verbatim copying must not carry: the invisible engine markers below, misc-type markers
+-- (scroll blockers / exit grids — skipped by not requesting "misc"), and walls entirely (the
+-- mountain references only carry see-through blocker walls, invisible in game).
+local MARKERS = {
+    api:proto("scenery", 344), -- Block Hex Auto Inviso
+    api:proto("scenery", 67), -- Secret Blocking Hex
+    api:proto("scenery", 49), -- Exit Grid Map Marker
+    -- The Restoration Project's black-mask scenery (art/scenery/black00x.frm): solid black
+    -- patches its maps lay over unreachable cliff tops. Cover art, not cliff art — quilted onto
+    -- open ground they read as floating black boxes. (Find others with `map analyze` + the
+    -- unnamed protos' art via `frm render`.)
+    api:proto("scenery", 2296),
+    api:proto("scenery", 2297),
+}
+local pieces = api:quiltObjects("scenery", MARKERS)
+
 local stats = api:quiltStats()
-print(string.format("Quilted %d floor tiles from %s (%d repaired, %d seams unmatched).",
-    painted, REF, stats[5], stats[6]))
+print(string.format("Quilted %d floor tiles + %d standing pieces from %s (%d repaired, %d seams unmatched).",
+    painted, pieces, REF, stats[5], stats[6]))

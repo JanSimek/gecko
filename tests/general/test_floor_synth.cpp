@@ -141,6 +141,14 @@ TEST_CASE("synthesize produces only reference-observed seams on a clean run", "[
     CHECK(result.stats.blocksPlaced > 0);
     CHECK(result.stats.perfectBlocks == result.stats.blocksPlaced);
     CHECK(result.stats.mismatchedCells == 0);
+
+    // A clean run is entirely block-copied: every cell knows its reference source, and the
+    // source really holds the id that was copied.
+    REQUIRE(result.sources.size() == result.cells.size());
+    for (std::size_t i = 0; i < result.cells.size(); ++i) {
+        REQUIRE(result.sources[i] >= 0);
+        CHECK(reference.cells[static_cast<size_t>(result.sources[i])] == result.cells[i].second);
+    }
 }
 
 TEST_CASE("synthesize is deterministic for a seed and varies across seeds", "[floorsynth]") {
@@ -298,6 +306,12 @@ TEST_CASE("synthesize reports honest stats when the reference cannot satisfy the
     CHECK(result.stats.repairedCells == 16);
     CHECK(result.stats.repairLevel[4] == 16);
     CHECK(result.stats.unresolvedSeams == 24); // all 2*4*3 internal pairs, (77,77) never observed
+
+    // Ladder-chosen cells carry no source: nothing was copied, so nothing can be transplanted.
+    REQUIRE(result.sources.size() == result.cells.size());
+    for (const int source : result.sources) {
+        CHECK(source == -1);
+    }
 }
 
 TEST_CASE("synthesize assigns nothing for an all-empty reference or an empty region", "[floorsynth]") {

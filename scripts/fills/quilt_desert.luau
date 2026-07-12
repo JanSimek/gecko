@@ -37,6 +37,9 @@ else
 end
 
 local painted = api:quiltFloorTiles(REF, REF_ELEVATION, tiles)
+-- Floor-only by design: desert ground stands alone. To also carry the reference's standing
+-- scenery along with the copied cells, call api:quiltObjects("scenery", {excludePids...}) after
+-- the quilt — see quilt_mountain.luau, whose cliffs need exactly that.
 local stats = api:quiltStats()
 print(string.format("Quilted %d floor tiles from %s (%d repaired, %d seams unmatched).",
     painted, REF, stats[5], stats[6]))

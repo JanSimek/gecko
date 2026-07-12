@@ -739,6 +739,72 @@ TEST_CASE("MapScriptApi quiltExclude masks filler ids out of the reference", "[s
     std::filesystem::remove_all(root, ec);
 }
 
+TEST_CASE("MapScriptApi quiltObjects transplants the reference objects on copied cells", "[scripting][quilt]") {
+    // Author the checkerboard reference PLUS misc exit-grid markers standing on it (MISC needs no
+    // proto to author or transplant headlessly), then quilt and pull the markers across.
+    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_quilt_obj"; // NOSONAR: throwaway test dir
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "maps");
+    uint32_t markerPid = 0;
+    {
+        ControllerFixture author;
+        MapScriptApi authorApi(author.resources, author.hexgrid, author.controller, *author.map, ELEV,
+            /*buildSprites*/ false);
+        for (int row = 0; row < 12; ++row) {
+            for (int col = 0; col < 12; ++col) {
+                REQUIRE(authorApi.paintFloorXY(col, row, static_cast<uint16_t>(271 + (col + row) % 2)));
+            }
+        }
+        // Markers on hexes over the board's interior; every reference cell is identical up to the
+        // checkerboard phase, so quilting reuses these cells and must carry the markers along.
+        REQUIRE(authorApi.placeExitGrid(authorApi.hexIndex(8, 8), -2, 0, 0, 0));
+        REQUIRE(authorApi.placeExitGrid(authorApi.hexIndex(12, 10), -2, 0, 0, 0));
+        markerPid = author.mapFile().map_objects.at(ELEV).front()->pro_pid;
+        MapWriter writer{ [](int32_t) -> Pro* { return nullptr; } };
+        writer.openFile(root / "maps/ref.map");
+        REQUIRE(writer.write(author.map->getMapFile()));
+    }
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root);
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, /*buildSprites*/ false);
+    api.setSeed(99);
+
+    SECTION("markers ride along with the cells they stand on") {
+        REQUIRE(api.quiltFloorRect("maps/ref.map", 0, 0, 0, 19, 19) == 400);
+        const int placed = api.quiltObjects("misc", {});
+        CHECK(placed > 0);
+        // Every transplanted marker stands on a tile inside the quilted rectangle.
+        for (const auto& object : fx.mapFile().map_objects.at(ELEV)) {
+            const int tile = api.hexTile(object->position);
+            CHECK(tile >= 0);
+            CHECK(api.tileCol(tile) <= 19);
+            CHECK(api.tileRow(tile) <= 19);
+            CHECK(object->pro_pid == markerPid);
+        }
+        CHECK(static_cast<int>(fx.mapFile().map_objects.at(ELEV).size()) == placed);
+    }
+
+    SECTION("excludePids drops a proto from the transplant") {
+        REQUIRE(api.quiltFloorRect("maps/ref.map", 0, 0, 0, 19, 19) == 400);
+        CHECK(api.quiltObjects("misc", { static_cast<int>(markerPid) }) == 0);
+    }
+
+    SECTION("a type the reference does not use transplants nothing") {
+        REQUIRE(api.quiltFloorRect("maps/ref.map", 0, 0, 0, 9, 9) == 100);
+        CHECK(api.quiltObjects("scenery", {}) == 0);
+    }
+
+    SECTION("genuine failures raise") {
+        CHECK_THROWS(api.quiltObjects("misc", {})); // no quilt has run yet
+        api.quiltFloorRect("maps/ref.map", 0, 0, 0, 3, 3);
+        CHECK_THROWS(api.quiltObjects("gizmo", {})); // unknown type name
+    }
+
+    std::filesystem::remove_all(root, ec);
+}
+
 TEST_CASE("MapScriptApi tilesByPrefix resolves a tile family from tiles.lst", "[scripting]") {
     TilesLstFixture data;
     ControllerFixture fx;
