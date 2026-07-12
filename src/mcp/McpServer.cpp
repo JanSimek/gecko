@@ -393,6 +393,8 @@ namespace {
         opts.showBlockers = optBool(args, "showBlockers", opts.showBlockers);
         opts.showUnreachable = optBool(args, "showUnreachable", opts.showUnreachable);
         opts.fullExtent = optBool(args, "full", opts.fullExtent);
+        opts.cropCenterHex = static_cast<int>(optInt(args, "cropHex", opts.cropCenterHex, -1, 39999));
+        opts.cropExtentPx = static_cast<int>(optInt(args, "cropExtent", opts.cropExtentPx, 1, 100000));
         std::ostringstream oss;
         const int rc = cli::renderMap(resources, opts, oss);
         return toolText(oss.str(), rc != 0); // rc != 0 e.g. unreadable map or no GL context
@@ -760,10 +762,13 @@ namespace {
             "visual form of the reachability tool, for seeing walled-off regions on the map. full=true "
             "frames the whole iso playable grid instead of "
             "cropping to drawn content, so a sparse/empty map still shows the entire map extent. "
+            "cropHex H (0..39999) zooms into a square centred on that hex, ±cropExtent screen pixels "
+            "(default 220), upscaled to maxDimension — so individual pieces (a cave-rim corner, a "
+            "scatter cluster) become readable where a whole-map render is too small. "
             "map/out are filesystem paths — out is written there, and "
             "map may be a VFS path or any file on disk (e.g. one generate just wrote). Needs an "
             "off-screen GL context.",
-            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "semantic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } }, { "showUnreachable", { { "type", "boolean" } } }, { "full", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } }),
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "semantic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } }, { "showUnreachable", { { "type", "boolean" } } }, { "full", { { "type", "boolean" } } }, { "cropHex", { { "type", "integer" } } }, { "cropExtent", { { "type", "integer" } } } } }, { "required", json::array({ "map", "out" }) } }),
             [](resource::GameResources& r, const json& a) { return toolRender(r, a); } });
         t.push_back({ "render_frm",
             "Render an FRM sprite to a PNG so the art can be SEEN, not inferred from PID arithmetic. "

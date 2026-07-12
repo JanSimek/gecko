@@ -59,13 +59,15 @@ namespace {
         unsigned int height = 1;
         sf::View view;
     };
-    Frame computeFrame(Bounds bounds, unsigned int maxDimension) {
+    Frame computeFrame(Bounds bounds, unsigned int maxDimension, bool allowUpscale = false) {
         constexpr float pad = 8.0f;
         bounds.add(bounds.minX - pad, bounds.minY - pad, bounds.maxX + pad, bounds.maxY + pad);
         const float bboxWidth = std::max(1.0f, bounds.maxX - bounds.minX);
         const float bboxHeight = std::max(1.0f, bounds.maxY - bounds.minY);
         const float maxDim = static_cast<float>(std::max(1u, maxDimension));
-        const float scale = std::min(1.0f, maxDim / std::max(bboxWidth, bboxHeight));
+        // A crop UPSCALES to fill maxDimension (zoom in); the whole-map view never upscales.
+        const float fit = maxDim / std::max(bboxWidth, bboxHeight);
+        const float scale = allowUpscale ? fit : std::min(1.0f, fit);
         Frame frame;
         frame.width = static_cast<unsigned int>(std::max(1.0f, bboxWidth * scale));
         frame.height = static_cast<unsigned int>(std::max(1.0f, bboxHeight * scale));
@@ -450,28 +452,35 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
     // loader made for empty cells — they just fall outside this frame instead of dominating it.)
     // With fullExtent, seed the bounds with the whole floor-tile grid so even an empty map shows it all.
     Bounds bounds;
-    if (options.fullExtent) {
-        addFullGridBounds(bounds);
-    }
-    const auto& allTiles = map.getMapFile().tiles;
-    if (const auto it = allTiles.find(options.elevation); it != allTiles.end()) {
-        addTileContentBounds(bounds, it->second, false);
-        if (options.showRoof) {
-            addTileContentBounds(bounds, it->second, true);
+    if (options.hasCrop) {
+        // Frame exactly the requested rectangle (the whole map is still drawn; the view clips to it).
+        bounds.add(options.cropRect.position.x, options.cropRect.position.y,
+            options.cropRect.position.x + options.cropRect.size.x,
+            options.cropRect.position.y + options.cropRect.size.y);
+    } else {
+        if (options.fullExtent) {
+            addFullGridBounds(bounds);
         }
-    }
-    if (options.showObjects) {
-        for (const auto& object : objects) {
-            if (object) {
-                bounds.add(object->getSprite());
+        const auto& allTiles = map.getMapFile().tiles;
+        if (const auto it = allTiles.find(options.elevation); it != allTiles.end()) {
+            addTileContentBounds(bounds, it->second, false);
+            if (options.showRoof) {
+                addTileContentBounds(bounds, it->second, true);
             }
         }
-    }
-    if (bounds.empty()) {
-        throw std::runtime_error("map has nothing to render at elevation " + std::to_string(options.elevation));
+        if (options.showObjects) {
+            for (const auto& object : objects) {
+                if (object) {
+                    bounds.add(object->getSprite());
+                }
+            }
+        }
+        if (bounds.empty()) {
+            throw std::runtime_error("map has nothing to render at elevation " + std::to_string(options.elevation));
+        }
     }
 
-    const std::unique_ptr<sf::RenderTexture> target = makeTarget(computeFrame(bounds, options.maxDimension));
+    const std::unique_ptr<sf::RenderTexture> target = makeTarget(computeFrame(bounds, options.maxDimension, options.hasCrop));
     target->clear(options.background);
 
     RenderingEngine engine(_resources);
