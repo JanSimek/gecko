@@ -9,6 +9,11 @@
 --   gecko-cli map generate --script scripts/editor/terrain.luau --out out.map \
 --       --arg seed=42 --arg density=350 --data <master.dat>
 --
+-- Pass --arg ref=maps/desert1.map to QUILT the floor from that map instead of the flat fill:
+-- api:quiltFloorRect learns the reference's hand-authored tile blending (the edg* edge/corner
+-- families) and synthesizes ground that transitions the same way, seeded and reproducible.
+-- --arg refElevation=<0..2> picks the reference elevation (default 0).
+--
 -- `api` is the map, `args` the parameters. (To discover a biome's protos and tiles, run
 --  `gecko-cli map analyze --data <master.dat>`; api:protoName(pid) names one.)
 
@@ -48,20 +53,33 @@ local HEX_W,  HEX_H  = 200, 200
 print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " to reproduce this layout.")
 
 -- ---- 1. fill the floor ----------------------------------------------------
--- tileId raises a clear error if Fallout 2 data isn't mounted (the run reports it); it returns -1
--- only when the data IS present but the name is unknown.
-local base = api:tileId(BASE_TILE)
-if base < 0 then
-    error("Unknown ground tile '" .. BASE_TILE .. "' — pass a valid --arg tile=<name>.")
-end
-
-local painted = 0
-for i = 0, TILE_W * TILE_H - 1 do
-    if api:paintFloor(i, base) then
-        painted = painted + 1
+if args.ref then
+    -- Seamless mode: synthesize the whole floor from a reference map's authored blending.
+    local refElevation = tonumber(args.refElevation) or 0
+    local painted = api:quiltFloorRect(args.ref, refElevation, 0, 0, TILE_W - 1, TILE_H - 1)
+    print(string.format("Quilted %d floor tiles from %s (elevation %d).", painted, args.ref, refElevation))
+    -- Degraded synthesis is worth knowing about: repaired cells are normal in small numbers,
+    -- unresolved seams are borders the reference never showed.
+    local stats = api:quiltStats()
+    if stats[5] > 0 or stats[6] > 0 then
+        print(string.format("Quilt fidelity: %d cells repaired, %d seams unmatched in the reference.", stats[5], stats[6]))
     end
+else
+    -- tileId raises a clear error if Fallout 2 data isn't mounted (the run reports it); it returns
+    -- -1 only when the data IS present but the name is unknown.
+    local base = api:tileId(BASE_TILE)
+    if base < 0 then
+        error("Unknown ground tile '" .. BASE_TILE .. "' — pass a valid --arg tile=<name>.")
+    end
+
+    local painted = 0
+    for i = 0, TILE_W * TILE_H - 1 do
+        if api:paintFloor(i, base) then
+            painted = painted + 1
+        end
+    end
+    print(string.format("Filled %d floor tiles with %s.", painted, BASE_TILE))
 end
-print(string.format("Filled %d floor tiles with %s.", painted, BASE_TILE))
 
 -- ---- 2. scatter vegetation in clumps --------------------------------------
 -- A noise density field makes plants gather in patches and leave clearings, instead of an even

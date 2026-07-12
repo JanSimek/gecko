@@ -17,6 +17,7 @@
 #include "writer/map/MapWriter.h"
 
 #include "support/ControllerFixture.h"
+#include "support/QuiltReference.h"
 
 using namespace geck;
 using geck::test::ControllerFixture;
@@ -590,6 +591,154 @@ TEST_CASE("MapScriptApi reads a reference map's full floor and typed objects", "
     std::filesystem::remove_all(root, ec);
 }
 
+TEST_CASE("MapScriptApi quilts a floor learned from a reference map", "[scripting][quilt]") {
+    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_quilt"; // NOSONAR: throwaway test dir
+    geck::test::writeCheckerboardReference(root);
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root);
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    api.setSeed(99);
+
+    SECTION("quiltFloorRect paints the whole rectangle, reproducing the reference's blending") {
+        const int painted = api.quiltFloorRect("maps/ref.map", 0, 0, 0, 9, 9);
+        CHECK(painted == 100);
+        CHECK(api.paintedTiles() == 100);
+        for (int row = 0; row < 10; ++row) {
+            for (int col = 0; col < 10; ++col) {
+                const uint16_t id = api.getFloorXY(col, row);
+                CHECK((id == 271 || id == 272)); // only the reference's vocabulary
+            }
+        }
+        // The checkerboard's alternation is the only adjacency the reference ever shows, so the
+        // synthesized floor must alternate everywhere too — the seams look authored.
+        for (int row = 0; row < 10; ++row) {
+            for (int col = 1; col < 10; ++col) {
+                CHECK(api.getFloorXY(col, row) != api.getFloorXY(col - 1, row));
+            }
+        }
+        // Quilting is undoable like every mutator (the fixture run isn't batched, but each paint
+        // went through the controller).
+        CHECK(fx.undoStack.canUndo());
+
+        // A clean run's fidelity stats: everything painted, nothing repaired, no seam the
+        // reference didn't show. (Before any quilt the stats are all zeros.)
+        const auto stats = api.quiltStats();
+        REQUIRE(stats.size() == 6);
+        CHECK(stats[0] == 100); // painted
+        CHECK(stats[1] > 0);    // blocks placed
+        CHECK(stats[4] == 0);   // repaired cells
+        CHECK(stats[5] == 0);   // unresolved seams
+    }
+
+    SECTION("the same seed reproduces the same floor") {
+        const int painted = api.quiltFloorRect("maps/ref.map", 0, 0, 0, 7, 7);
+        CHECK(painted == 64);
+
+        ControllerFixture again;
+        again.resources.files().addDataPath(root);
+        MapScriptApi apiAgain(again.resources, again.hexgrid, again.controller, *again.map, ELEV);
+        apiAgain.setSeed(99);
+        CHECK(apiAgain.quiltFloorRect("maps/ref.map", 0, 0, 0, 7, 7) == 64);
+        for (int row = 0; row < 8; ++row) {
+            for (int col = 0; col < 8; ++col) {
+                CHECK(api.getFloorXY(col, row) == apiAgain.getFloorXY(col, row));
+            }
+        }
+    }
+
+    SECTION("quilting blends into pre-existing tiles at the border") {
+        // Lay the checkerboard directly except a 2x2 hole, then quilt the hole: the only
+        // seam-valid continuation is the surrounding pattern's own phase.
+        for (int row = 0; row < 6; ++row) {
+            for (int col = 0; col < 6; ++col) {
+                if (row < 2 || row > 3 || col < 2 || col > 3) {
+                    REQUIRE(api.paintFloorXY(col, row, static_cast<uint16_t>(271 + (col + row) % 2)));
+                }
+            }
+        }
+        const int painted = api.quiltFloorTiles("maps/ref.map", 0,
+            { api.tileIndex(2, 2), api.tileIndex(3, 2), api.tileIndex(2, 3), api.tileIndex(3, 3) });
+        CHECK(painted == 4);
+        for (int row = 2; row <= 3; ++row) {
+            for (int col = 2; col <= 3; ++col) {
+                CHECK(api.getFloorXY(col, row) == 271 + (col + row) % 2);
+            }
+        }
+    }
+
+    SECTION("a plan sink captures the quilt without committing") {
+        pattern::FillPlan plan;
+        api.setPlanSink(&plan);
+        const int painted = api.quiltFloorTiles("maps/ref.map", 0, api.tilesInRect(0, 0, 4, 4));
+        CHECK(painted == 25);
+        CHECK(plan.tiles.size() == 25);
+        CHECK(api.getFloor(0) == EMPTY); // nothing committed to the map
+        CHECK_FALSE(fx.undoStack.canUndo());
+    }
+
+    SECTION("duplicate and off-grid indices are skipped, not errors") {
+        const int painted = api.quiltFloorTiles("maps/ref.map", 0,
+            { 5, 5, -3, HexagonGrid::TILE_COUNT, 6 });
+        CHECK(painted == 2);
+    }
+
+    SECTION("genuine failures raise") {
+        CHECK_THROWS(api.quiltFloorRect("no/such/map.map", 0, 0, 0, 3, 3));
+        CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 3, 0, 0, 3, 3)); // out-of-range elevation
+        // An elevation the reference lacks — or carries with an all-empty floor — teaches nothing.
+        CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 1, 0, 0, 3, 3));
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("MapScriptApi quiltExclude masks filler ids out of the reference", "[scripting][quilt]") {
+    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_quilt_excl"; // NOSONAR: throwaway test dir
+    geck::test::writeCheckerboardReference(root);
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root);
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    api.setSeed(99);
+
+    SECTION("an excluded id is never learned or emitted") {
+        // Excluding 272 leaves only 271 cells in the reference, all isolated (a checkerboard
+        // minus one colour has no adjacent same-vocabulary pairs) — the quilt must still cover
+        // the region, using only the remaining id.
+        api.quiltExclude({ 272 });
+        const int painted = api.quiltFloorRect("maps/ref.map", 0, 0, 0, 5, 5);
+        CHECK(painted == 36);
+        for (int row = 0; row < 6; ++row) {
+            for (int col = 0; col < 6; ++col) {
+                CHECK(api.getFloorXY(col, row) == 271); // 272 never emitted
+            }
+        }
+    }
+
+    SECTION("clearing the exclusion restores the full vocabulary") {
+        api.quiltExclude({ 272 });
+        api.quiltExclude({});
+        api.quiltFloorRect("maps/ref.map", 0, 20, 20, 27, 27);
+        bool saw272 = false;
+        for (int row = 20; row <= 27 && !saw272; ++row) {
+            for (int col = 20; col <= 27 && !saw272; ++col) {
+                saw272 = api.getFloorXY(col, row) == 272;
+            }
+        }
+        CHECK(saw272);
+    }
+
+    SECTION("excluding the whole vocabulary raises instead of quilting nothing") {
+        api.quiltExclude({ 271, 272 });
+        CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 0, 0, 0, 3, 3));
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+}
+
 TEST_CASE("MapScriptApi tilesByPrefix resolves a tile family from tiles.lst", "[scripting]") {
     TilesLstFixture data;
     ControllerFixture fx;
@@ -625,6 +774,7 @@ TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[s
         CHECK_THROWS(api.mapScenery("no/such/map.map"));
         CHECK_THROWS(api.mapSceneryHistogram("maps/desert1.map"));
         CHECK_THROWS(api.mapFloorTiles("maps/desert1.map"));
+        CHECK_THROWS(api.quiltFloorRect("maps/desert1.map", 0, 0, 0, 3, 3));
         CHECK_THROWS(api.protoName(0x02000066));
     }
 

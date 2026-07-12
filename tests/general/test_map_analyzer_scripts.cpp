@@ -3,20 +3,16 @@
 #include <nlohmann/json.hpp>
 
 #include <cstdint>
-#include <sstream>
 #include <string>
 #include <vector>
 
-#include "cli/MapAnalyzer.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
 #include "format/pro/Pro.h"
-#include "resource/GameResources.h"
-#include "writer/map/MapWriter.h"
 
+#include "support/AnalyzeWrittenMap.h"
 #include "support/ProStubProvider.h"
-#include "support/TempFile.h"
 
 using nlohmann::json;
 using namespace geck;
@@ -32,28 +28,6 @@ const json* findScript(const json& scripts, const std::string& section) {
         }
     }
     return nullptr;
-}
-
-// Write `mapFile` to a temp .map and return analyze's parsed JSON. No game data is mounted, so analyze
-// reads the file back via cli::loadMap's disk fallback. Shared by the cases below.
-json analyzeWrittenMap(Map::MapFile mapFile, const char* mapName, const char* tempPrefix, StubProvider& provider) {
-    Map map{ mapName };
-    map.setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
-
-    TempFile out{ tempPrefix, ".map" };
-    {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(out.path());
-        REQUIRE(writer.write(map.getMapFile()));
-    } // flush + close before analyze reads it back
-
-    resource::GameResources resources;
-    cli::AnalyzeOptions options;
-    options.json = true;
-    options.maps = { out.path().string() };
-    std::ostringstream jsonOut;
-    REQUIRE(cli::analyzeMaps(resources, options, jsonOut) == 0);
-    return json::parse(jsonOut.str());
 }
 
 } // namespace

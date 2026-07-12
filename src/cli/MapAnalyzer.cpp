@@ -1,6 +1,7 @@
 #include "cli/MapAnalyzer.h"
 
 #include "cli/MapLoad.h"
+#include "editor/FloorSynth.h"
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
 #include "format/ai/AiPacket.h"
@@ -34,6 +35,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -69,24 +71,26 @@ namespace {
     }
 
     // Per-map usage histograms: floor-tile id -> count, proto pid -> count.
-    // An unordered pair of floor-tile ids (a <= b) — a border between two tile types.
-    using TilePair = std::pair<uint16_t, uint16_t>;
+    // An ordered, directional floor-tile border: b sits immediately east ('E', col+1) or south
+    // ('S', row+1) of a. Ordered because transition art is directional (most shipped-map borders
+    // never occur reversed); the opposite direction is simply the swapped pair.
+    using DirectedPair = std::tuple<uint16_t, uint16_t, char>;
 
     struct MapUsage {
         std::map<uint16_t, int> floors;
         std::map<uint32_t, int> objects;
-        // Floor-tile borders: how often tile a sits next to a *different* tile b. The data an
-        // agent reads to learn a tileset's transitions before generating seamless terrain.
-        std::map<TilePair, int> floorAdjacency;
+        // Floor-tile borders: how often tile b follows a *different* tile a in each direction. The
+        // data an agent reads to learn a tileset's transitions before generating seamless terrain.
+        std::map<DirectedPair, int> floorAdjacency;
     };
 
     // Running totals across every analysed map.
     struct Aggregate {
-        std::map<uint16_t, int> floorCount; // floor tile id -> total tiles
-        std::map<uint16_t, int> floorMaps;  // floor tile id -> number of maps using it
-        std::map<uint32_t, int> objCount;   // proto pid -> total instances
-        std::map<uint32_t, int> objMaps;    // proto pid -> number of maps using it
-        std::map<TilePair, int> adjacency;  // floor-tile border -> total occurrences across maps
+        std::map<uint16_t, int> floorCount;    // floor tile id -> total tiles
+        std::map<uint16_t, int> floorMaps;     // floor tile id -> number of maps using it
+        std::map<uint32_t, int> objCount;      // proto pid -> total instances
+        std::map<uint32_t, int> objMaps;       // proto pid -> number of maps using it
+        std::map<DirectedPair, int> adjacency; // directional border -> total occurrences across maps
         int analysed = 0;
     };
 
@@ -285,28 +289,27 @@ namespace {
         return mapPaths;
     }
 
-    // Tally floor-tile borders within one elevation's tile grid (row-major, Map::COLS wide). For
-    // each non-empty tile only its right and down neighbours are checked, so each adjacent pair is
-    // counted once; same-tile borders are ignored — we want the transitions between tile types.
-    void collectFloorAdjacency(const std::vector<Tile>& tiles, std::map<TilePair, int>& adjacency) {
-        constexpr int width = static_cast<int>(Map::COLS);
-        const auto empty = static_cast<uint16_t>(Map::EMPTY_TILE);
-        const int count = static_cast<int>(tiles.size());
-        for (int i = 0; i < count; ++i) {
-            const uint16_t a = tiles[i].getFloor();
-            if (a == empty) {
-                continue;
+    // Tally directional floor-tile borders within one elevation's tile grid (row-major, Map::COLS
+    // wide) through the synthesizer's own learner, so what analyze reports and what quilting
+    // consumes can never disagree. Same-tile borders are dropped from the report — it is about the
+    // transitions between tile types (the learner keeps them for its repair ladder).
+    void collectFloorAdjacency(const std::vector<Tile>& tiles, std::map<DirectedPair, int>& adjacency) {
+        floorsynth::Grid grid;
+        grid.width = static_cast<int>(Map::COLS);
+        grid.height = static_cast<int>(tiles.size()) / grid.width;
+        grid.cells.reserve(tiles.size());
+        for (const auto& tile : tiles) {
+            grid.cells.push_back(tile.getFloor());
+        }
+        const floorsynth::AdjacencyModel model = floorsynth::learnAdjacency(grid, static_cast<uint16_t>(Map::EMPTY_TILE));
+        for (const auto& [pair, count] : model.east) {
+            if (pair.first != pair.second) {
+                adjacency[{ pair.first, pair.second, 'E' }] += count;
             }
-            const int col = i % width;
-            const std::array<int, 2> neighbours{ col + 1 < width ? i + 1 : -1, i + width < count ? i + width : -1 };
-            for (const int j : neighbours) {
-                if (j < 0) {
-                    continue;
-                }
-                const uint16_t b = tiles[static_cast<std::size_t>(j)].getFloor();
-                if (b != empty && b != a) {
-                    adjacency[std::make_pair(std::min(a, b), std::max(a, b))]++;
-                }
+        }
+        for (const auto& [pair, count] : model.south) {
+            if (pair.first != pair.second) {
+                adjacency[{ pair.first, pair.second, 'S' }] += count;
             }
         }
     }
@@ -572,23 +575,28 @@ namespace {
         out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     }
 
-    // Per-map floor-border array: [{a,aName,b,bName,count}], folding totals into agg.adjacency.
+    // Per-map floor-border array: [{a,aName,b,bName,dir,count}], folding totals into
+    // agg.adjacency. dir "E" means b sits immediately east (col+1) of a, "S" immediately south.
     ordered_json adjacencyToJson(const MapUsage& usage, const NameResolver& names, Aggregate& agg) {
         auto array = ordered_json::array();
         for (const auto& [pair, count] : sortedByCountDesc(usage.floorAdjacency)) {
-            array.push_back({ { "a", pair.first }, { "aName", names.tileName(pair.first) },
-                { "b", pair.second }, { "bName", names.tileName(pair.second) }, { "count", count } });
+            const auto& [a, b, dir] = pair;
+            array.push_back({ { "a", a }, { "aName", names.tileName(a) },
+                { "b", b }, { "bName", names.tileName(b) },
+                { "dir", std::string(1, dir) }, { "count", count } });
             agg.adjacency[pair] += count;
         }
         return array;
     }
 
-    // Aggregate floor-border array: [{a,aName,b,bName,total}], most-frequent border first.
+    // Aggregate floor-border array: [{a,aName,b,bName,dir,total}], most-frequent border first.
     ordered_json aggAdjacencyToJson(const Aggregate& agg, const NameResolver& names) {
         auto array = ordered_json::array();
         for (const auto& [pair, count] : sortedByCountDesc(agg.adjacency)) {
-            array.push_back({ { "a", pair.first }, { "aName", names.tileName(pair.first) },
-                { "b", pair.second }, { "bName", names.tileName(pair.second) }, { "total", count } });
+            const auto& [a, b, dir] = pair;
+            array.push_back({ { "a", a }, { "aName", names.tileName(a) },
+                { "b", b }, { "bName", names.tileName(b) },
+                { "dir", std::string(1, dir) }, { "total", count } });
         }
         return array;
     }
@@ -836,8 +844,9 @@ namespace {
     // Machine-readable analyze, for an MCP client: per map { name, path, floor[], objects[],
     // adjacency[], clusters[], critters[], header{}, scripts[], exits[] } and an aggregate { analysed, floor[],
     // objects[], adjacency[] }. `flat` is the structural-vs-decoration hint; `adjacency` lists
-    // floor-tile borders (transitions); `clusters` groups nearby objects (structures) with a
-    // centre/bbox an agent feeds to extract_pattern. Built with nlohmann ordered_json.
+    // directional floor-tile borders (transitions; dir "E"/"S", the reverse direction is the
+    // swapped pair); `clusters` groups nearby objects (structures) with a centre/bbox an agent
+    // feeds to extract_pattern. Built with nlohmann ordered_json.
     void emitJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
         NameResolver& names, const AiTxt& ai, std::ostream& out) {
         Aggregate agg;

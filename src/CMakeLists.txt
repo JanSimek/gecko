@@ -528,6 +528,8 @@ add_library(gecko_core STATIC
     editor/HexagonGrid.h
     editor/HexagonGrid.cpp
     editor/HexGeometry.h
+    editor/FloorSynth.h
+    editor/FloorSynth.cpp
     editor/Reachability.h
     editor/Reachability.cpp
     editor/Hex.h

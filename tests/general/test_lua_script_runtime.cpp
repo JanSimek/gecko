@@ -21,6 +21,7 @@
 
 #include "support/ControllerFixture.h"
 #include "support/ProStubProvider.h"
+#include "support/QuiltReference.h"
 #include "support/TempFile.h"
 
 using namespace geck;
@@ -293,6 +294,38 @@ TEST_CASE("Luau reads a C++ container (hexNeighbors) back as a table", "[scripti
     INFO("script error: " << r.error);
     REQUIRE(r.ok);
     CHECK(fx.mapFile().tiles.at(ELEV)[0].getFloor() == 276);
+}
+
+TEST_CASE("Luau passes a Lua table into quiltFloorTiles and quilts the region", "[scripting][lua]") {
+    // The inverse marshaling direction of the hexNeighbors case: quiltFloorTiles takes a
+    // std::vector<int> PARAMETER, so a Lua array must convert on the way in. The reference is a
+    // 12x12 checkerboard authored to disk; the quilted region must reproduce its vocabulary.
+    const auto root = std::filesystem::temp_directory_path() / "geck_lua_quilt"; // NOSONAR: throwaway test dir
+    geck::test::writeCheckerboardReference(root);
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root);
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    const auto r = rt.run(R"(
+        local tiles = {}
+        for i = 0, 24 do tiles[#tiles + 1] = i end
+        local painted = api:quiltFloorTiles("maps/ref.map", 0, tiles)
+        assert(painted == 25, "expected 25 painted, got " .. painted)
+        assert(api:quiltFloorRect("maps/ref.map", 0, 10, 10, 12, 12) == 9)
+    )",
+        api, fx.controller, "quilt");
+    INFO("script error: " << r.error);
+    REQUIRE(r.ok);
+    CHECK(api.paintedTiles() == 34);
+    for (int i = 0; i < 25; ++i) {
+        const uint16_t id = fx.mapFile().tiles.at(ELEV)[i].getFloor();
+        CHECK((id == 271 || id == 272));
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
 }
 
 TEST_CASE("Luau scripts are sandboxed", "[scripting][lua]") {
