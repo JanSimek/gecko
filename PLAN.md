@@ -491,22 +491,33 @@ The direction instead:
    field). Rim sealed with Secret-Blocking-Hex fills (reachable set == floor), scroll-blocker ring,
    exit patch + player start; deterministic, reachability-verified.
 
-   ✅ **DONE — piece SELECTION is now an edge-constraint (Wang) sequence, not an independent draw.**
-   `cave.luau` mines a `follow[prevPiece][stepDir] -> weighted{nextPiece}` table from the shipped rims
-   (`mapObjectsAt` faces + `hexNeighbors`/`hexDir`) and lays the rim as a **deterministic BFS
-   spanning-forest** over the boundary hexes: each piece is drawn only from those the corpus saw
-   follow its already-placed neighbour along the step between them, so face runs stay coherent and
-   corners form where the boundary turns. The outward-normal compass palette seeds each run and
-   backstops any unseen `(piece, direction)`, so it degrades to the old behaviour, never worse.
-   Validated on the corpus: knowing the previous piece cuts successor entropy from **4.43 → 1.23 bits
-   (72% reduction)**, top-successor share 12% → 71%, with 45% of contexts near-deterministic —
-   confirmed by a mining probe before implementation. Same rim coverage, deterministic, and
-   reachability-clean; the visible north-rim faces go from sparse/patchy to a connected run.
+   ⚠️ **PARTIAL — much improved (orientation is now learned from the shipped rims' LOCAL GEOMETRY),
+   but the rim still does NOT reach hand-authored quality. Do not treat as done.** History of the
+   piece-selection: outward-normal compass bin → edge-constraint (Wang) `follow[prevPiece][dir]`
+   sequence → hand-authored per-piece override table → the current model. `cave.luau` now keys each
+   rim hex primarily by its **rock-neighbour mask** (density-independent, so it transfers to the
+   generated band whatever the spacing), with finer face-direction keys and the compass bin as
+   fallbacks, learned from **every shipped face on BOTH sides** of a 2-cell band (the shipped rim
+   structure: cave1 = 327 walkable + 175 rock faces, ~30–50% contour coverage, wide overlapping
+   sprites). Cross-validated (train cave1–3, predict cave4): this key gets the orientation family
+   right **79% vs 53%** for the compass bin. Reviewer-named corner protos (ca063/ca032/ca080) are
+   pulled out of the pools and keyed by their bent turn shape so they stop sprinkling across edges.
+   Deterministic, reachability-clean. Verified with the new `map render --crop-hex` zoom (shipped as
+   its own tool, PR #124).
 
-   *Remaining refinements (optional):* prefer the along-rim tangent neighbour as the BFS parent (vs.
-   any placed neighbour) for even tighter runs; give hand-authored connection signatures to the rare
-   corner/cap protos the mined table sees too seldom; and share the same adjacency machinery with the
-   floor-tile autotiling in P2 §4.
+   **KNOWN ISSUES — this feature still does not work as expected (screenshot review, 2026-07):**
+   - **Jagged edges.** The learned pieces still do not tile cleanly at the floor/rock boundary; up
+     close the run is messy vs. a hand-authored rim (mismatched faces, imperfect corners/tops).
+   - **Dead-straight bottom edge.** The generated rim is sometimes perfectly straight along one side,
+     almost certainly because the shipped reference caves **continue off the map edge** there — their
+     boundary at the map edge is a straight map-edge line, and the model mimics that instead of a
+     natural rock edge. Fix: detect and exclude off-map-edge boundary in the reference maps, and don't
+     carve generated chambers up to the map edge.
+   - **Near-edge lip cover.** The tops of the rock walls on the near (down-screen) edges should be
+     covered by filled sections the way the shipped maps layer them — they also place the flat
+     `Wall`/`Wall s.t.` fill, currently excluded by `isFlatWall`. Not yet done.
+   - Overall: an improvement over the previous compass model, not a finished feature — needs more
+     iteration against the shipped maps, ideally with the crop tool for per-region verification.
 
    **Also remaining (content, complementary):** rim **scenery** (shipped caves scatter ~70
    Rocks/Stalagmites; the generator places 0) and **stamped rock formations** (extract real multi-hex
