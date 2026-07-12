@@ -84,8 +84,8 @@ namespace {
         // Region bounding box, in tile columns/rows.
         int bboxLeft;
         int bboxTop;
-        int bboxRight;
-        int bboxBottom;
+        int bboxRight = -1;
+        int bboxBottom = -1;
         std::mt19937 rng; // NOSONAR: seeded for reproducible terrain, not a security-sensitive use
         Stats stats;
 
@@ -101,8 +101,6 @@ namespace {
             , inRegion(static_cast<size_t>(tgt.width) * tgt.height, 0)
             , bboxLeft(tgt.width)
             , bboxTop(tgt.height)
-            , bboxRight(-1)
-            , bboxBottom(-1)
             , rng(p.seed) { // NOSONAR: seeded for reproducible terrain, not a security-sensitive use
             seedState();
         }
@@ -166,7 +164,7 @@ namespace {
                 }
             }
 
-            const auto& [sx, sy] = windows[bestWindows[rng() % bestWindows.size()]];
+            const auto& [sx, sy] = windows[bestWindows[rng() % bestWindows.size()]]; // NOSONAR: reproducible pick
             ++stats.blocksPlaced;
             if (best == 0)
                 ++stats.perfectBlocks;
@@ -226,8 +224,14 @@ namespace {
         /// The four directional candidate sets at a cell; a set exists only when its
         /// neighbour is present (has* false means "no constraint", not "empty set").
         struct ConstraintSets {
-            std::vector<uint16_t> fromWest, fromNorth, toEast, toSouth;
-            bool hasWest = false, hasNorth = false, hasEast = false, hasSouth = false;
+            std::vector<uint16_t> fromWest;
+            std::vector<uint16_t> fromNorth;
+            std::vector<uint16_t> toEast;
+            std::vector<uint16_t> toSouth;
+            bool hasWest = false;
+            bool hasNorth = false;
+            bool hasEast = false;
+            bool hasSouth = false;
 
             std::vector<const std::vector<uint16_t>*> available() const {
                 std::vector<const std::vector<uint16_t>*> out;
@@ -324,7 +328,7 @@ namespace {
                 total += static_cast<uint64_t>(model.marginal.at(id));
             if (total == 0)
                 return candidates.back(); // unreachable (weights >= 1); guards the modulo
-            uint64_t r = rng() % total;
+            uint64_t r = rng() % total;   // NOSONAR: reproducible draw
             for (uint16_t id : candidates) {
                 const auto weight = static_cast<uint64_t>(model.marginal.at(id));
                 if (r < weight)

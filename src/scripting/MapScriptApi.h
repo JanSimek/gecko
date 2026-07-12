@@ -406,8 +406,10 @@ private:
     const EditArea* _area = nullptr;
     // Deterministic stream for rng()/rngInt(); reseed per run via setSeed for reproducible scatter.
     std::mt19937 _rng; // NOSONAR: seeded for reproducible fills, not a security-sensitive use
-    // Parsed reference maps, keyed by the exact path string (see referenceMap()).
-    mutable std::unordered_map<std::string, std::unique_ptr<Map>> _referenceCache;
+    // Parsed reference maps, keyed by the exact path string (see referenceMap()). An ordered map
+    // with a transparent comparator: the cache holds a handful of entries, and heterogeneous
+    // lookup beats hashing full path strings.
+    mutable std::map<std::string, std::unique_ptr<Map>, std::less<>> _referenceCache;
     // The last quiltFloor* run's flattened fidelity stats (see quiltStats()).
     std::vector<int> _quiltStats = std::vector<int>(6, 0);
 };

@@ -3,47 +3,18 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <cstdint>
-#include <memory>
-#include <sstream>
 #include <string>
 
-#include "cli/MapAnalyzer.h"
 #include "format/map/Map.h"
-#include "resource/GameResources.h"
-#include "writer/map/MapWriter.h"
 
+#include "support/AnalyzeWrittenMap.h"
 #include "support/ProStubProvider.h"
-#include "support/TempFile.h"
 
 using nlohmann::json;
 using namespace geck;
 using namespace geck::test;
 
 namespace {
-
-// Write `mapFile` to a temp .map and return analyze's parsed JSON. No game data is mounted, so
-// analyze reads the file back via cli::loadMap's disk fallback (raw tile ids survive without
-// tiles.lst). Mirrors the harness in test_map_analyzer_scripts.cpp.
-json analyzeWrittenMap(Map::MapFile mapFile, const char* mapName, const char* tempPrefix, const StubProvider& provider) {
-    Map map{ mapName };
-    map.setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
-
-    TempFile out{ tempPrefix, ".map" };
-    {
-        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(out.path());
-        REQUIRE(writer.write(map.getMapFile()));
-    } // flush + close before analyze reads it back
-
-    resource::GameResources resources;
-    cli::AnalyzeOptions options;
-    options.json = true;
-    options.maps = { out.path().string() };
-    std::ostringstream jsonOut;
-    REQUIRE(cli::analyzeMaps(resources, options, jsonOut) == 0);
-    return json::parse(jsonOut.str());
-}
 
 bool hasEntry(const json& adjacency, int a, int b, const std::string& dir) {
     return std::ranges::any_of(adjacency, [&](const json& entry) {
