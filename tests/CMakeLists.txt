@@ -55,6 +55,7 @@ add_executable(general_tests
     general/test_pattern_stamper.cpp
     general/test_pattern_builder.cpp
     general/test_fill_plan.cpp
+    general/test_floor_synth.cpp
     general/test_map_script_api.cpp
     general/test_map_completeness.cpp
     general/test_resource_repository.cpp
