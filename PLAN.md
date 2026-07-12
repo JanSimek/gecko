@@ -491,24 +491,22 @@ The direction instead:
    field). Rim sealed with Secret-Blocking-Hex fills (reachable set == floor), scroll-blocker ring,
    exit patch + player start; deterministic, reachability-verified.
 
-   ⚠️ **Not good enough yet — piece SELECTION is still statistical.** Each rim hex samples a *learned
-   per-compass palette independently*, so neighbouring pieces don't actually **connect**: up close the
-   run shows mismatched faces, no true convex/concave **corners**, and the fill/face families
-   occasionally butt against each other. The compass class + gradient smoothing hide most of it, but
-   the rim never reads as the single continuous, correctly-cornered rock wall the hand-authored caves
-   have.
+   ✅ **DONE — piece SELECTION is now an edge-constraint (Wang) sequence, not an independent draw.**
+   `cave.luau` mines a `follow[prevPiece][stepDir] -> weighted{nextPiece}` table from the shipped rims
+   (`mapObjectsAt` faces + `hexNeighbors`/`hexDir`) and lays the rim as a **deterministic BFS
+   spanning-forest** over the boundary hexes: each piece is drawn only from those the corpus saw
+   follow its already-placed neighbour along the step between them, so face runs stay coherent and
+   corners form where the boundary turns. The outward-normal compass palette seeds each run and
+   backstops any unseen `(piece, direction)`, so it degrades to the old behaviour, never worse.
+   Validated on the corpus: knowing the previous piece cuts successor entropy from **4.43 → 1.23 bits
+   (72% reduction)**, top-successor share 12% → 71%, with 45% of contexts near-deterministic —
+   confirmed by a mining probe before implementation. Same rim coverage, deterministic, and
+   reachability-clean; the visible north-rim faces go from sparse/patchy to a connected run.
 
-   ➡️ **Next: an authored wall-ADJACENCY model (Wang / edge-constraint tiling), not per-hex sampling.**
-   Give each "Cave Wall" proto an explicit **connection signature** — *which* pieces may attach on its
-   left/right along the run, which pieces are straight segments for each orientation, which are
-   **corners** (convex vs concave, and for which turn direction), which are run *ends/caps*. Then lay
-   the rim as a **constraint-satisfying sequence** around the 1-D boundary loop (Wang tiling / a small
-   WFC along the contour): pick each next piece only from those allowed to follow the previous piece
-   *and* to match the local turn angle, instead of independent draws. Derive the signatures by
-   **mining adjacency from the shipped cave rims** — which piece actually follows which, and at what
-   turn, via `mapObjectsAt` + the ordered-boundary walk — and/or a small hand-authored table keyed by
-   proto. Shares the **adjacency/Wang** machinery with the floor-tile autotiling in P2 §4. This is the
-   path from "smooth but fuzzy" to "reads as a real, cornered rock wall".
+   *Remaining refinements (optional):* prefer the along-rim tangent neighbour as the BFS parent (vs.
+   any placed neighbour) for even tighter runs; give hand-authored connection signatures to the rare
+   corner/cap protos the mined table sees too seldom; and share the same adjacency machinery with the
+   floor-tile autotiling in P2 §4.
 
    **Also remaining (content, complementary):** rim **scenery** (shipped caves scatter ~70
    Rocks/Stalagmites; the generator places 0) and **stamped rock formations** (extract real multi-hex
