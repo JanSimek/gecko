@@ -536,7 +536,9 @@ namespace {
         t.push_back({ "analyze",
             "Analyze ground-tile and object usage as JSON. Omit 'maps' to analyze every map, or "
             "pass it to scope. Each object carries a 'flat' flag (structural blocker vs. decoration) "
-            "for curating a scatter palette. Each map also lists 'critters': who is on it, their team "
+            "for curating a scatter palette. 'adjacency' entries are ordered and directional: "
+            "dir 'E' means b sits immediately east (col+1) of a, 'S' immediately south (row+1); "
+            "the reverse direction is the swapped pair. Each map also lists 'critters': who is on it, their team "
             "(group_id), their AI packet resolved via ai.txt (aggression, disposition, flee/best-weapon/"
             "distance), and the attached 'script' ({programIndex,name,localVars}) — pass that "
             "programIndex to describe_script for the script's source and dialog. Each map also lists "
