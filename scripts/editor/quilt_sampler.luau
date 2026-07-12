@@ -26,7 +26,13 @@ local REFS = {}
 for ref in string.gmatch(args.refs or "maps/desert1.map,maps/klagraz.map,maps/mountn2.map,maps/desert5.map", "[^,]+") do
     REFS[#REFS + 1] = ref
 end
+if #REFS == 0 then
+    error("--arg refs= must name at least one reference map")
+end
 local PATCH = tonumber(args.patch) or 25
+if PATCH < 1 then
+    error("--arg patch= must be at least 1")
+end
 local TILE_W, TILE_H = 100, 100 -- floor grid (see CLAUDE.md: tiles are 100x100)
 
 print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " to reproduce.")
@@ -34,8 +40,11 @@ print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " t
 -- Exclude known invisible-by-design filler so quilting learns only the visible ground even from
 -- references that carpet non-play areas with it (e.g. the Restoration Project's encounter maps
 -- carpet most of their floors with the solid-black bld2043 that hides under building roofs).
-local filler = api:tileId("bld2043")
-if filler >= 0 then
+-- Best-effort: tileId needs tiles.lst; without it the quilt is still valid.
+local ok, filler = pcall(function()
+    return api:tileId("bld2043")
+end)
+if ok and filler >= 0 then
     api:quiltExclude({ filler })
 end
 

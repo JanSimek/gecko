@@ -33,8 +33,11 @@ print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " t
 -- Exclude known invisible-by-design filler so quilting learns only the visible ground even from
 -- references that carpet non-play areas with it (the Restoration Project's encounter maps carpet
 -- most of their floors with the solid-black bld2043 that normally hides under building roofs).
-local filler = api:tileId("bld2043")
-if filler >= 0 then
+-- Best-effort: tileId needs tiles.lst; without it the quilt is still valid.
+local ok, filler = pcall(function()
+    return api:tileId("bld2043")
+end)
+if ok and filler >= 0 then
     api:quiltExclude({ filler })
 end
 
