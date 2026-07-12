@@ -58,6 +58,7 @@ print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " t
 local rockPattern = {} -- [parityKey 0..3] = tile id (from the FIRST reference)
 local floorWeights = {} -- walkable floor: { {id=..., w=...}, ... } sorted for determinism
 local wallPieces = {} -- outward-normal key ("d,d,..") -> weighted { {pid=, w=}, ... }, sorted for determinism
+local wallPieceSet = {} -- same keys -> { [pid]=true }: which pieces belong to each isometric class
 local wallPiecesAll = {} -- the same weights pooled across every orientation: the fallback palette
 -- Edge-constraint (Wang) adjacency: which "Cave Wall" piece may FOLLOW another along the rim. Keyed
 -- follow[prevPid][stepDir] -> weighted { {pid=, w=}, ... }. Mined from the shipped rims below, this
@@ -242,6 +243,10 @@ do
     local orientations = 0
     for key, pids in pairs(normalCounts) do
         wallPieces[key] = weightedList(pids)
+        wallPieceSet[key] = {}
+        for pid in pairs(pids) do
+            wallPieceSet[key][pid] = true
+        end
         orientations += 1
     end
     wallPiecesAll = weightedList(pidTotals) -- the fallback palette for orientations the corpus never showed
@@ -512,14 +517,30 @@ end
 -- has no entry for this (piece, direction) — so it degrades to the current per-hex behaviour, never
 -- worse. Same seeded pickWall draw throughout, so a seed reproduces.
 local function pickPiece(prevPid, dir, hex)
+    -- The isometric orientation of this rim position (which side the player views the rock from)
+    -- decides the piece FAMILY: standing faces where the rock rises up-screen (N/E), filled sections
+    -- where you look over the near lip (S/W). That is a hard constraint — a face must never land on
+    -- an edge seen from the other side. The mined adjacency only REFINES the choice within that
+    -- family: intersect the successors of the previous piece with this position's family, so a run
+    -- stays coherent and corners form, but a NE rock face can't chain onto the SE rim. Fall back to
+    -- the family palette when there is no placed neighbour or no in-family successor.
+    local comp = compassFromVec(outwardNormal(hex))
     if prevPid ~= nil and follow[prevPid] ~= nil then
-        local list = follow[prevPid][dir]
-        if list ~= nil and #list > 0 then
-            return pickWall(list)
+        local seq = follow[prevPid][dir]
+        local allow = wallPieceSet[comp]
+        if seq ~= nil then
+            local filtered = {}
+            for _, e in ipairs(seq) do
+                if allow == nil or allow[e.pid] then
+                    filtered[#filtered + 1] = e
+                end
+            end
+            if #filtered > 0 then
+                return pickWall(filtered)
+            end
         end
     end
-    local nx, ny = outwardNormal(hex)
-    return pickWall(wallListFor(compassFromVec(nx, ny)))
+    return pickWall(wallListFor(comp))
 end
 
 -- Lay the rim as a constraint-satisfying sequence: a deterministic BFS spanning-forest over the rim
