@@ -683,7 +683,27 @@ TEST_CASE("MapScriptApi quilts a floor learned from a reference map", "[scriptin
         CHECK(painted == 2);
     }
 
-    SECTION("quiltExclude removes an id from the learnable vocabulary") {
+    SECTION("genuine failures raise") {
+        CHECK_THROWS(api.quiltFloorRect("no/such/map.map", 0, 0, 0, 3, 3));
+        CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 3, 0, 0, 3, 3)); // out-of-range elevation
+        // An elevation the reference lacks — or carries with an all-empty floor — teaches nothing.
+        CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 1, 0, 0, 3, 3));
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+}
+
+TEST_CASE("MapScriptApi quiltExclude masks filler ids out of the reference", "[scripting][quilt]") {
+    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_quilt_excl"; // NOSONAR: throwaway test dir
+    geck::test::writeCheckerboardReference(root);
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root);
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    api.setSeed(99);
+
+    SECTION("an excluded id is never learned or emitted") {
         // Excluding 272 leaves only 271 cells in the reference, all isolated (a checkerboard
         // minus one colour has no adjacent same-vocabulary pairs) — the quilt must still cover
         // the region, using only the remaining id.
@@ -695,8 +715,10 @@ TEST_CASE("MapScriptApi quilts a floor learned from a reference map", "[scriptin
                 CHECK(api.getFloorXY(col, row) == 271); // 272 never emitted
             }
         }
+    }
 
-        // Clearing the exclusion restores the full vocabulary.
+    SECTION("clearing the exclusion restores the full vocabulary") {
+        api.quiltExclude({ 272 });
         api.quiltExclude({});
         api.quiltFloorRect("maps/ref.map", 0, 20, 20, 27, 27);
         bool saw272 = false;
@@ -711,13 +733,6 @@ TEST_CASE("MapScriptApi quilts a floor learned from a reference map", "[scriptin
     SECTION("excluding the whole vocabulary raises instead of quilting nothing") {
         api.quiltExclude({ 271, 272 });
         CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 0, 0, 0, 3, 3));
-    }
-
-    SECTION("genuine failures raise") {
-        CHECK_THROWS(api.quiltFloorRect("no/such/map.map", 0, 0, 0, 3, 3));
-        CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 3, 0, 0, 3, 3)); // out-of-range elevation
-        // An elevation the reference lacks — or carries with an all-empty floor — teaches nothing.
-        CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 1, 0, 0, 3, 3));
     }
 
     std::error_code ec;
