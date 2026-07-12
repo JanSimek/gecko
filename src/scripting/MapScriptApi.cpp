@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <format>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <ranges>
 #include <set>
@@ -909,9 +910,26 @@ int MapScriptApi::quiltFloorRect(const std::string& mapPath, int refElevation, i
     return quiltFloorTiles(mapPath, refElevation, tilesInRect(col0, row0, col1, row1));
 }
 
+void MapScriptApi::quiltExclude(const std::vector<int>& tileIds) {
+    _quiltExclude.clear();
+    _quiltExclude.reserve(tileIds.size());
+    for (const int id : tileIds) {
+        if (id > 0 && id <= std::numeric_limits<uint16_t>::max()) { // 0/negative can't be a paintable id
+            _quiltExclude.push_back(static_cast<uint16_t>(id));
+        }
+    }
+}
+
 int MapScriptApi::quiltFloorTiles(const std::string& mapPath, int refElevation, const std::vector<int>& tiles) {
     const Map& reference = referenceMap(mapPath); // throws if unreadable
     requireReferenceElevation(reference, mapPath, refElevation);
+
+    constexpr auto empty = static_cast<uint16_t>(Map::EMPTY_TILE);
+    // Excluded ids (see quiltExclude) become empty cells on BOTH grids: never learned from,
+    // never emitted, and an excluded tile already on the map constrains nothing at the border.
+    const auto masked = [this](uint16_t id) {
+        return std::ranges::find(_quiltExclude, id) != _quiltExclude.end() ? empty : id;
+    };
 
     floorsynth::Grid referenceGrid;
     referenceGrid.width = HexagonGrid::TILE_GRID_WIDTH;
@@ -919,12 +937,11 @@ int MapScriptApi::quiltFloorTiles(const std::string& mapPath, int refElevation, 
     const std::vector<Tile>& referenceTiles = reference.getMapFile().tiles.at(refElevation);
     referenceGrid.cells.reserve(referenceTiles.size());
     for (const Tile& tile : referenceTiles) {
-        referenceGrid.cells.push_back(tile.getFloor());
+        referenceGrid.cells.push_back(masked(tile.getFloor()));
     }
-    constexpr auto empty = static_cast<uint16_t>(Map::EMPTY_TILE);
     if (std::ranges::all_of(referenceGrid.cells, [](uint16_t id) { return id == empty; })) {
         // A reference that teaches nothing is a real error, not a silent no-op fill.
-        throw ScriptError(std::format("map '{}' elevation {} has an empty floor grid — nothing to quilt from", mapPath, refElevation));
+        throw ScriptError(std::format("map '{}' elevation {} has an empty floor grid (after exclusions) — nothing to quilt from", mapPath, refElevation));
     }
 
     // The bound map's current floor: pre-existing tiles around the region become the boundary
@@ -935,7 +952,7 @@ int MapScriptApi::quiltFloorTiles(const std::string& mapPath, int refElevation, 
     targetGrid.height = HexagonGrid::TILE_GRID_HEIGHT;
     targetGrid.cells.reserve(static_cast<std::size_t>(HexagonGrid::TILE_COUNT));
     for (int i = 0; i < HexagonGrid::TILE_COUNT; ++i) {
-        targetGrid.cells.push_back(getFloor(i));
+        targetGrid.cells.push_back(masked(getFloor(i)));
     }
 
     floorsynth::Params params;

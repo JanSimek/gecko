@@ -277,6 +277,14 @@ public:
     /// quiltFloorRect for an explicit set of floor-tile indices (e.g. a carved cavern region);
     /// duplicate and off-grid indices are skipped.
     int quiltFloorTiles(const std::string& mapPath, int refElevation, const std::vector<int>& tiles);
+    /// Exclude these tile ids from subsequent quiltFloor* runs: excluded cells in the reference
+    /// are treated exactly like empty ones (never learned from, never emitted), and excluded
+    /// tiles already on the bound map constrain nothing at the region border. This is how a
+    /// script quilts from references that carpet non-visible floor with filler art — the shipped
+    /// maps hide solid-black bld2043 under building roofs and the dark cave rock under wall
+    /// sprites; bare, that filler reads as holes. Sticky for this api instance; call with an
+    /// empty list to clear.
+    void quiltExclude(const std::vector<int>& tileIds);
     /// The previous quiltFloor* run's fidelity stats, flattened as (painted, blocks,
     /// perfectBlocks, mismatchedCells, repairedCells, unresolvedSeams). Repaired cells are normal
     /// in small numbers; unresolved seams are borders the reference never showed. Script-visible
@@ -412,6 +420,8 @@ private:
     mutable std::map<std::string, std::unique_ptr<Map>, std::less<>> _referenceCache;
     // The last quiltFloor* run's flattened fidelity stats (see quiltStats()).
     std::vector<int> _quiltStats = std::vector<int>(6, 0);
+    // Tile ids quiltFloor* treats as empty (see quiltExclude()).
+    std::vector<uint16_t> _quiltExclude;
 };
 
 } // namespace geck

@@ -683,6 +683,36 @@ TEST_CASE("MapScriptApi quilts a floor learned from a reference map", "[scriptin
         CHECK(painted == 2);
     }
 
+    SECTION("quiltExclude removes an id from the learnable vocabulary") {
+        // Excluding 272 leaves only 271 cells in the reference, all isolated (a checkerboard
+        // minus one colour has no adjacent same-vocabulary pairs) — the quilt must still cover
+        // the region, using only the remaining id.
+        api.quiltExclude({ 272 });
+        const int painted = api.quiltFloorRect("maps/ref.map", 0, 0, 0, 5, 5);
+        CHECK(painted == 36);
+        for (int row = 0; row < 6; ++row) {
+            for (int col = 0; col < 6; ++col) {
+                CHECK(api.getFloorXY(col, row) == 271); // 272 never emitted
+            }
+        }
+
+        // Clearing the exclusion restores the full vocabulary.
+        api.quiltExclude({});
+        api.quiltFloorRect("maps/ref.map", 0, 20, 20, 27, 27);
+        bool saw272 = false;
+        for (int row = 20; row <= 27 && !saw272; ++row) {
+            for (int col = 20; col <= 27 && !saw272; ++col) {
+                saw272 = api.getFloorXY(col, row) == 272;
+            }
+        }
+        CHECK(saw272);
+    }
+
+    SECTION("excluding the whole vocabulary raises instead of quilting nothing") {
+        api.quiltExclude({ 271, 272 });
+        CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 0, 0, 0, 3, 3));
+    }
+
     SECTION("genuine failures raise") {
         CHECK_THROWS(api.quiltFloorRect("no/such/map.map", 0, 0, 0, 3, 3));
         CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 3, 0, 0, 3, 3)); // out-of-range elevation
