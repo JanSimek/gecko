@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
-#include <functional>
+#include <array>
 #include <random>
 #include <set>
 
@@ -13,7 +13,8 @@ namespace {
 
 constexpr uint16_t EMPTY = 1;
 
-Grid makeGrid(int width, int height, const std::function<uint16_t(int, int)>& cellAt) {
+template <typename CellAt> // (int col, int row) -> uint16_t
+Grid makeGrid(int width, int height, const CellAt& cellAt) {
     Grid grid;
     grid.width = width;
     grid.height = height;
@@ -68,7 +69,7 @@ TEST_CASE("learnAdjacency records ordered directional pairs", "[floorsynth]") {
     // [ 10 11 ]
     // [ 12 10 ]
     const Grid grid = makeGrid(2, 2, [](int col, int row) {
-        constexpr uint16_t ids[2][2] = { { 10, 11 }, { 12, 10 } };
+        constexpr std::array<std::array<uint16_t, 2>, 2> ids{ { { 10, 11 }, { 12, 10 } } };
         return ids[row][col];
     });
     const AdjacencyModel model = learnAdjacency(grid, EMPTY);
@@ -91,7 +92,7 @@ TEST_CASE("learnAdjacency never counts pairs touching the empty id", "[floorsynt
     // [ 10  E ]
     // [  E 11 ]
     const Grid grid = makeGrid(2, 2, [](int col, int row) {
-        constexpr uint16_t ids[2][2] = { { 10, EMPTY }, { EMPTY, 11 } };
+        constexpr std::array<std::array<uint16_t, 2>, 2> ids{ { { 10, EMPTY }, { EMPTY, 11 } } };
         return ids[row][col];
     });
     const AdjacencyModel model = learnAdjacency(grid, EMPTY);
@@ -173,10 +174,10 @@ TEST_CASE("synthesize result is independent of the caller's region ordering", "[
     params.seed = 11;
     const Result sorted = synthesize(reference, target, region, params);
 
-    std::mt19937 shuffler(1234);
-    std::shuffle(region.begin(), region.end(), shuffler);
-    region.push_back(region.front()); // duplicates are ignored too
-    region.push_back(-5);             // off-grid indices are ignored
+    std::mt19937 shuffler(1234);            // NOSONAR: scrambles a test input, not a security-sensitive use
+    std::ranges::shuffle(region, shuffler); // NOSONAR
+    region.push_back(region.front());       // duplicates are ignored too
+    region.push_back(-5);                   // off-grid indices are ignored
     region.push_back(target.width * target.height + 3);
     const Result shuffled = synthesize(reference, target, region, params);
 

@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <sstream>
@@ -24,13 +25,13 @@ namespace {
 // Write `mapFile` to a temp .map and return analyze's parsed JSON. No game data is mounted, so
 // analyze reads the file back via cli::loadMap's disk fallback (raw tile ids survive without
 // tiles.lst). Mirrors the harness in test_map_analyzer_scripts.cpp.
-json analyzeWrittenMap(Map::MapFile mapFile, const char* mapName, const char* tempPrefix, StubProvider& provider) {
+json analyzeWrittenMap(Map::MapFile mapFile, const char* mapName, const char* tempPrefix, const StubProvider& provider) {
     Map map{ mapName };
     map.setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
 
     TempFile out{ tempPrefix, ".map" };
     {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
         writer.openFile(out.path());
         REQUIRE(writer.write(map.getMapFile()));
     } // flush + close before analyze reads it back
@@ -45,12 +46,9 @@ json analyzeWrittenMap(Map::MapFile mapFile, const char* mapName, const char* te
 }
 
 bool hasEntry(const json& adjacency, int a, int b, const std::string& dir) {
-    for (const auto& entry : adjacency) {
-        if (entry.at("a") == a && entry.at("b") == b && entry.at("dir") == dir) {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::any_of(adjacency, [&](const json& entry) {
+        return entry.at("a") == a && entry.at("b") == b && entry.at("dir") == dir;
+    });
 }
 
 } // namespace

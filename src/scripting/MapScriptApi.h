@@ -356,11 +356,12 @@ private:
     std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;
     // loadReferenceMap through a per-api cache keyed by the exact path string, so a run that
     // learns from a reference more than once (palette + floor grid + quilt) parses it once.
-    // Cleared on retarget()/detach() so a resident host re-reads after a data remount.
-    Map& referenceMap(const std::string& mapPath) const;
+    // Cleared on retarget()/detach() so a resident host re-reads after a data remount. Const:
+    // references are read-only inputs; nothing may mutate a cached parse.
+    const Map& referenceMap(const std::string& mapPath) const;
     // pid -> placement count for the scatter-eligible scenery in `map` (scenery type, non-flat).
     // Shared by mapScenery (keys) and mapSceneryHistogram (the counts).
-    std::map<int, int> sceneryCounts(Map& map) const;
+    std::map<int, int> sceneryCounts(const Map& map) const;
     // Whether a scenery proto belongs in a scatter palette (upright decoration, not a flat blocker).
     bool isScatterableScenery(uint32_t pid) const;
 

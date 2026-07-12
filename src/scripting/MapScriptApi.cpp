@@ -206,11 +206,11 @@ std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) 
     return map;
 }
 
-Map& MapScriptApi::referenceMap(const std::string& mapPath) const {
+const Map& MapScriptApi::referenceMap(const std::string& mapPath) const {
     if (const auto it = _referenceCache.find(mapPath); it != _referenceCache.end()) {
         return *it->second;
     }
-    auto [it, inserted] = _referenceCache.emplace(mapPath, loadReferenceMap(mapPath));
+    const auto [it, inserted] = _referenceCache.try_emplace(mapPath, loadReferenceMap(mapPath));
     return *it->second;
 }
 
@@ -226,7 +226,7 @@ bool MapScriptApi::isScatterableScenery(uint32_t pid) const {
     return pro == nullptr || !Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
 }
 
-std::map<int, int> MapScriptApi::sceneryCounts(Map& map) const {
+std::map<int, int> MapScriptApi::sceneryCounts(const Map& map) const {
     std::map<int, int> counts;
     std::unordered_map<int, bool> eligible; // pid -> scatter-eligible (decided once, then cached)
     for (const auto& [elevation, objects] : map.getMapFile().map_objects) {

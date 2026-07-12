@@ -21,6 +21,7 @@
 
 #include "support/ControllerFixture.h"
 #include "support/ProStubProvider.h"
+#include "support/QuiltReference.h"
 #include "support/TempFile.h"
 
 using namespace geck;
@@ -300,22 +301,7 @@ TEST_CASE("Luau passes a Lua table into quiltFloorTiles and quilts the region", 
     // std::vector<int> PARAMETER, so a Lua array must convert on the way in. The reference is a
     // 12x12 checkerboard authored to disk; the quilted region must reproduce its vocabulary.
     const auto root = std::filesystem::temp_directory_path() / "geck_lua_quilt"; // NOSONAR: throwaway test dir
-    std::error_code ec;
-    std::filesystem::remove_all(root, ec);
-    std::filesystem::create_directories(root / "maps");
-    {
-        ControllerFixture author;
-        MapScriptApi authorApi(author.resources, author.hexgrid, author.controller, *author.map, ELEV,
-            /*buildSprites*/ false);
-        for (int row = 0; row < 12; ++row) {
-            for (int col = 0; col < 12; ++col) {
-                REQUIRE(authorApi.paintFloorXY(col, row, static_cast<uint16_t>(271 + (col + row) % 2)));
-            }
-        }
-        MapWriter writer{ [](int32_t) -> Pro* { return nullptr; } };
-        writer.openFile(root / "maps/ref.map");
-        REQUIRE(writer.write(author.map->getMapFile()));
-    }
+    geck::test::writeCheckerboardReference(root);
 
     ControllerFixture fx;
     fx.resources.files().addDataPath(root);
@@ -338,6 +324,7 @@ TEST_CASE("Luau passes a Lua table into quiltFloorTiles and quilts the region", 
         CHECK((id == 271 || id == 272));
     }
 
+    std::error_code ec;
     std::filesystem::remove_all(root, ec);
 }
 
