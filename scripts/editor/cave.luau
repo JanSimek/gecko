@@ -63,6 +63,17 @@ local floorWeights = {} -- walkable floor: { {id=..., w=...}, ... } sorted for d
 -- key predicts the shipped piece's orientation family 79% of the time (vs 53% for the old
 -- outward-normal compass bin), so the generated rim "does the same thing" the shipped rims do,
 -- without per-piece hand tuning.
+-- A few pieces are true CORNERS (art-reviewed): they belong only where the rim turns, not on a run.
+-- The rock-mask can't confine them (they share a mask with straight pieces), so we key them by their
+-- distinctive bent face-direction pair instead, pull them out of the straight pools, and cap them at
+-- their shipped per-map frequency. Keyed by proto number (ca-name in the comment).
+local CORNER = {
+    [234] = true, -- ca063 NE<->SE corner
+    [204] = true, -- ca032 filled-diagonal <-> rock-wall corner
+    [653] = true, -- ca080 SW-SE corner
+}
+local cornerByDirpair = {} -- "faceDirs" -> weighted { {pid=, w=}, ... }: corner pieces at a turn shape
+local cornerCap = {} -- proto# -> max placements (its shipped per-map average)
 local geomRock = {} -- rock-neighbour mask -> weighted { {pid=, w=}, ... }: the PRIMARY key. Density-
 --                     independent (rock is rock however the rim is spaced), so it transfers from the
 --                     shipped rims to the generated band; learned from faces on BOTH sides of the rim.
@@ -133,6 +144,8 @@ do
     local dirpairCounts = {} -- "faceDirs" -> { [pid] = count }: coarser fallback key
     local normalCounts = {} -- compass class -> { [pid] = count }: final-fallback bin
     local pidTotals = {} -- pid -> total count, for the last-resort pool
+    local cornerCounts = {} -- "faceDirs" -> { [pid] = count }: corner pieces by turn shape
+    local cornerTotals = {} -- proto# -> count (for the per-map frequency cap)
     for refIndex, ref in ipairs(REFS) do
         local floor = api:mapFloorAt(ref, REF_ELEVATION)
 
@@ -211,18 +224,25 @@ do
             if #rockDirs > 0 and #rockDirs < 6 then
                 table.sort(faceDirs)
                 local dirpair = table.concat(faceDirs, ",")
-                local rm = tostring(rockmask)
-                geomRockCounts[rm] = geomRockCounts[rm] or {}
-                geomRockCounts[rm][pid] = (geomRockCounts[rm][pid] or 0) + 1
-                local geom = dirpair .. "|" .. rm
-                geomCounts[geom] = geomCounts[geom] or {}
-                geomCounts[geom][pid] = (geomCounts[geom][pid] or 0) + 1
-                dirpairCounts[dirpair] = dirpairCounts[dirpair] or {}
-                dirpairCounts[dirpair][pid] = (dirpairCounts[dirpair][pid] or 0) + 1
-                local comp = compassOf(rockDirs)
-                normalCounts[comp] = normalCounts[comp] or {}
-                normalCounts[comp][pid] = (normalCounts[comp][pid] or 0) + 1
-                pidTotals[pid] = (pidTotals[pid] or 0) + 1
+                if CORNER[pid % 16777216] then
+                    -- A corner: learn it by its turn shape only, kept out of the straight pools.
+                    cornerCounts[dirpair] = cornerCounts[dirpair] or {}
+                    cornerCounts[dirpair][pid] = (cornerCounts[dirpair][pid] or 0) + 1
+                    cornerTotals[pid % 16777216] = (cornerTotals[pid % 16777216] or 0) + 1
+                else
+                    local rm = tostring(rockmask)
+                    geomRockCounts[rm] = geomRockCounts[rm] or {}
+                    geomRockCounts[rm][pid] = (geomRockCounts[rm][pid] or 0) + 1
+                    local geom = dirpair .. "|" .. rm
+                    geomCounts[geom] = geomCounts[geom] or {}
+                    geomCounts[geom][pid] = (geomCounts[geom][pid] or 0) + 1
+                    dirpairCounts[dirpair] = dirpairCounts[dirpair] or {}
+                    dirpairCounts[dirpair][pid] = (dirpairCounts[dirpair][pid] or 0) + 1
+                    local comp = compassOf(rockDirs)
+                    normalCounts[comp] = normalCounts[comp] or {}
+                    normalCounts[comp][pid] = (normalCounts[comp][pid] or 0) + 1
+                    pidTotals[pid] = (pidTotals[pid] or 0) + 1
+                end
             end
         end
     end
@@ -266,6 +286,10 @@ do
     foldModel(geomCounts, geomModel)
     foldModel(dirpairCounts, geomDirpair)
     foldModel(normalCounts, wallPieces)
+    foldModel(cornerCounts, cornerByDirpair)
+    for pn, total in pairs(cornerTotals) do
+        cornerCap[pn] = math.max(1, math.floor(total / #REFS + 0.5)) -- shipped per-map average
+    end
     wallPiecesAll = weightedList(pidTotals) -- last-resort pool
     assert(#wallPiecesAll > 0, "no walls found on the reference maps")
 
@@ -547,13 +571,49 @@ end
 -- the compass bin, then the global pool. Sampling the learned distribution keeps the mappers' texture
 -- variety while the rock-mask keeps the orientation right. A per-hex function, so a single sorted
 -- pass is deterministic under the seeded draw.
+-- A corner piece for this hex's turn shape, if one was learned there and still under its cap. Only
+-- the distinctive bent shapes carry corners, so this fires at real turns, not along a run. Consumes
+-- rng only when it returns a piece, so the straight path's draw stays reproducible.
+local cornerPlaced = {} -- proto# -> count
+local function tryCorner(dirpair)
+    local list = cornerByDirpair[dirpair]
+    if list == nil then
+        return nil
+    end
+    local avail, total = {}, 0
+    for _, e in ipairs(list) do
+        local pn = e.pid % 16777216
+        if (cornerPlaced[pn] or 0) < (cornerCap[pn] or 1) then
+            avail[#avail + 1] = e
+            total += e.w
+        end
+    end
+    if #avail == 0 then
+        return nil
+    end
+    local r = api:rng() * total
+    for _, e in ipairs(avail) do
+        r -= e.w
+        if r <= 0 then
+            cornerPlaced[e.pid % 16777216] = (cornerPlaced[e.pid % 16777216] or 0) + 1
+            return e.pid
+        end
+    end
+    local last = avail[#avail]
+    cornerPlaced[last.pid % 16777216] = (cornerPlaced[last.pid % 16777216] or 0) + 1
+    return last.pid
+end
+
 local walls = 0
 local boundaryHexes = #rim
 for _, hex in ipairs(rim) do
     local rm, geom, dirpair = geomKeyAt(hex)
-    local list = geomRock[rm] or geomModel[geom] or geomDirpair[dirpair]
-        or wallListFor(compassFromVec(outwardNormal(hex)))
-    if api:placeProto(pickWall(list), hex, 0) then
+    local pid = tryCorner(dirpair)
+    if pid == nil then
+        pid = pickWall(geomRock[rm] or geomModel[geom] or geomDirpair[dirpair]
+            or wallListFor(compassFromVec(outwardNormal(hex))))
+    end
+    if api:placeProto(pid, hex, 0) then
         walls += 1
     end
 end

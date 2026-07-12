@@ -2,6 +2,7 @@
 
 #include <SFML/Graphics/Color.hpp>
 #include <SFML/Graphics/Image.hpp>
+#include <SFML/Graphics/Rect.hpp>
 
 #include <cstdint>
 #include <string>
@@ -64,6 +65,12 @@ public:
         /// exit grids) with a translucent red wash — the same "unreachable areas" the editor overlay
         /// and the `reachability` tool report, so a rendered map shows walled-off regions at a glance.
         bool showUnreachable = false;
+        /// Region crop (world/screen coords). When set, the render frames exactly this rectangle
+        /// instead of the map's content bounds, and — unlike the content view — UPSCALES it to fill
+        /// maxDimension, so a small rectangle renders zoomed in. For inspecting individual pieces
+        /// (e.g. one stretch of a cave rim) that are unreadable in a whole-map render.
+        bool hasCrop = false;
+        sf::FloatRect cropRect;
         sf::Color background{ 0, 0, 0, 255 };
     };
 

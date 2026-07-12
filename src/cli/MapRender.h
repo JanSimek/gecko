@@ -37,6 +37,12 @@ namespace cli {
         /// Natural style only: shade the walkable hexes cut off from every entry point (unreachable
         /// areas) — the visual form of the `reachability` tool, for spotting walled-off regions.
         bool showUnreachable = false;
+        /// Zoomed region crop: centre the render on this hex (0..39999) and frame a square of
+        /// ±cropExtentPx screen pixels around it, upscaled to fill maxDimension. -1 = no crop (whole
+        /// map). Lets an agent read individual pieces — a cave-rim corner, a scatter cluster — that
+        /// are unreadable in a whole-map render.
+        int cropCenterHex = -1;
+        int cropExtentPx = 220;
     };
 
     /// Render a map to an image file (format inferred from the extension, e.g. .png). Returns 0 on

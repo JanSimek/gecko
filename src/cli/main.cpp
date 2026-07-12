@@ -76,7 +76,8 @@ void printUsage(const char* program) {
               << "      pattern stamp the script places with api:placeStamp(name, anchorHex, variant).\n"
               << "  " << program << " map render --map <file.map> --out <file.png>\n"
               << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic|--objects|--semantic]\n"
-              << "      [--show-blockers] [--show-unreachable] [--full] --data <dir-or-.dat> [...]\n"
+              << "      [--show-blockers] [--show-unreachable] [--full] [--crop-hex H [--crop-extent PX]]\n"
+              << "      --data <dir-or-.dat> [...]\n"
               << "      Renders a map to a PNG (needs an off-screen GL context). --max-dim caps the\n"
               << "      longest side (default 1600); --roof draws the roof layer over the floor; --full\n"
               << "      frames the whole iso grid (the full playable area) instead of cropping to content.\n"
@@ -86,6 +87,9 @@ void printUsage(const char* program) {
               << "      (exit grids, critters by team, scripted ringed); --show-blockers also marks FLAT.\n"
               << "      --show-unreachable (natural style) shades hexes cut off from the player start and\n"
               << "      every exit grid, the visual form of `map reachability`.\n"
+              << "      --crop-hex H zooms into a square around hex H (0..39999), ±--crop-extent pixels\n"
+              << "      (default 220), upscaled to --max-dim — to read individual pieces (a rim corner,\n"
+              << "      a scatter cluster) that are unreadable in a whole-map render.\n"
               << "  " << program << " map extract-pattern --map <file.map> --out <file.json> --name <name>\n"
               << "      [--pids id,id,...] [--anchor <hex>] [--radius N] [--elevation 0|1|2]\n"
               << "      [--include-floor] [--include-roof] --data <dir-or-.dat> [--data <...>]\n"
@@ -258,7 +262,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     const std::string& arg = args[i];
     const bool valueFlag = arg == "--data"
         || (out.generate && (arg == "--script" || arg == "--out" || arg == "--in" || arg == "--elevation" || arg == "--count" || arg == "--arg" || arg == "--stamp"))
-        || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim"))
+        || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim" || arg == "--crop-hex" || arg == "--crop-extent"))
         || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
         || (out.describeScript && (arg == "--index" || arg == "--locale"))
         || (out.reachability && arg == "--map")
@@ -377,6 +381,12 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     if (out.render && arg == "--show-unreachable") {
         out.ren.showUnreachable = true;
         return 1;
+    }
+    if (out.render && arg == "--crop-hex") {
+        return parseIntFlag(arg, args[i + 1], out.ren.cropCenterHex, program) ? 2 : 0;
+    }
+    if (out.render && arg == "--crop-extent") {
+        return parseIntFlag(arg, args[i + 1], out.ren.cropExtentPx, program) ? 2 : 0;
     }
     if (out.render) {
         std::cerr << "error: unexpected argument: " << arg << "\n";
