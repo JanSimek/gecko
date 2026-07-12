@@ -805,6 +805,47 @@ TEST_CASE("MapScriptApi quiltObjects transplants the reference objects on copied
     std::filesystem::remove_all(root, ec);
 }
 
+TEST_CASE("MapScriptApi quiltSource learns only from the reference sub-rectangle", "[scripting][quilt]") {
+    // Two vocabularies side by side: left half checkerboard 271/272, right half 273/274.
+    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_quilt_src"; // NOSONAR: throwaway test dir
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "maps");
+    {
+        ControllerFixture author;
+        MapScriptApi authorApi(author.resources, author.hexgrid, author.controller, *author.map, ELEV,
+            /*buildSprites*/ false);
+        for (int row = 0; row < 12; ++row) {
+            for (int col = 0; col < 24; ++col) {
+                const uint16_t base = col < 12 ? 271 : 273;
+                REQUIRE(authorApi.paintFloorXY(col, row, static_cast<uint16_t>(base + (col + row) % 2)));
+            }
+        }
+        MapWriter writer{ [](int32_t) -> Pro* { return nullptr; } };
+        writer.openFile(root / "maps/ref.map");
+        REQUIRE(writer.write(author.map->getMapFile()));
+    }
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root);
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, /*buildSprites*/ false);
+    api.setSeed(99);
+
+    api.quiltSource(12, 0, 23, 11); // learn from the RIGHT half only
+    REQUIRE(api.quiltFloorRect("maps/ref.map", 0, 0, 0, 9, 9) == 100);
+    for (int row = 0; row < 10; ++row) {
+        for (int col = 0; col < 10; ++col) {
+            const uint16_t id = api.getFloorXY(col, row);
+            CHECK((id == 273 || id == 274)); // never the left half's vocabulary
+        }
+    }
+
+    api.quiltSource(-1, -1, -1, -1); // cleared: the whole reference is learnable again
+    REQUIRE(api.quiltFloorRect("maps/ref.map", 0, 20, 20, 29, 29) == 100);
+
+    std::filesystem::remove_all(root, ec);
+}
+
 TEST_CASE("MapScriptApi tilesByPrefix resolves a tile family from tiles.lst", "[scripting]") {
     TilesLstFixture data;
     ControllerFixture fx;

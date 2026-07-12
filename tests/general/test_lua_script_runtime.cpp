@@ -262,7 +262,8 @@ TEST_CASE("The bundled quilt fills synthesize the selection's floor from a refer
         api.setPlanSink(&plan);
 
         LuaScriptRuntime rt;
-        const auto r = rt.run(source, api, fx.controller, "quilt-fill", { { "ref", "maps/ref.map" } });
+        const auto r = rt.run(source, api, fx.controller, "quilt-fill",
+            { { "ref", "maps/ref.map" }, { "groundSrc", "0,0,11,11" }, { "cliff", "off" } });
         INFO("script error: " << r.error);
         REQUIRE(r.ok);
         CHECK(plan.tiles.size() == area.floorTiles.size());

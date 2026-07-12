@@ -908,6 +908,14 @@ bool MapScriptApi::paintRoofXY(int col, int row, uint16_t tileId) {
     return paintRoof(tileIndex(col, row), tileId);
 }
 
+void MapScriptApi::quiltSource(int col0, int row0, int col1, int row1) {
+    if (col0 < 0 || row0 < 0 || col1 < 0 || row1 < 0) {
+        _quiltSource = {}; // any negative coordinate clears the restriction
+        return;
+    }
+    _quiltSource = { std::min(col0, col1), std::min(row0, row1), std::max(col0, col1), std::max(row0, row1) };
+}
+
 int MapScriptApi::quiltObjects(const std::string& typeName, const std::vector<int>& excludePids) {
     const Pro::OBJECT_TYPE wanted = objectTypeFromName(typeName); // throws on an unknown type
     if (_lastQuilt.refElevation < 0) {
@@ -989,6 +997,17 @@ int MapScriptApi::quiltFloorTiles(const std::string& mapPath, int refElevation, 
     referenceGrid.cells.reserve(referenceTiles.size());
     for (const Tile& tile : referenceTiles) {
         referenceGrid.cells.push_back(masked(tile.getFloor()));
+    }
+    if (_quiltSource.col0 >= 0) {
+        // Learn only from the source rectangle (see quiltSource): cells outside it become empty,
+        // which removes their windows, adjacency and transplant sources in one stroke.
+        for (int row = 0; row < referenceGrid.height; ++row) {
+            for (int col = 0; col < referenceGrid.width; ++col) {
+                if (col < _quiltSource.col0 || col > _quiltSource.col1 || row < _quiltSource.row0 || row > _quiltSource.row1) {
+                    referenceGrid.cells[static_cast<size_t>(row) * referenceGrid.width + col] = empty;
+                }
+            }
+        }
     }
     if (std::ranges::all_of(referenceGrid.cells, [](uint16_t id) { return id == empty; })) {
         // A reference that teaches nothing is a real error, not a silent no-op fill.
