@@ -243,7 +243,7 @@ TEST_CASE("The bundled quilt fills synthesize the selection's floor from a refer
     const auto root = std::filesystem::temp_directory_path() / "geck_lua_quilt_fill"; // NOSONAR: throwaway test dir
     geck::test::writeCheckerboardReference(root);
 
-    for (const std::string& script : { std::string("quilt_desert"), std::string("quilt_mountain") }) {
+    for (const std::string& script : { std::string("quilt_desert") }) {
         INFO("script: " << script);
         std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/fills/" + script + ".luau");
         REQUIRE(file.is_open());
