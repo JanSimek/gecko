@@ -285,6 +285,20 @@ public:
     /// sprites; bare, that filler reads as holes. Sticky for this api instance; call with an
     /// empty list to clear.
     void quiltExclude(const std::vector<int>& tileIds);
+    /// Restrict subsequent quiltFloor* learning to the inclusive (col, row) rectangle of the
+    /// REFERENCE map — everything outside it is treated as empty (no windows, no adjacency, no
+    /// transplant sources). Shipped maps author only a small screen-sized viewport fenced by
+    /// scroll blockers, with distinct zones inside it (open ground vs the cliff band): quilting a
+    /// zone means learning from that zone only. Sticky; any negative coordinate clears it.
+    void quiltSource(int col0, int row0, int col1, int row1);
+    /// Transplant the reference objects standing on the cells the LAST quiltFloor* run
+    /// block-copied — pid, art and direction verbatim, positions translated exactly — which is
+    /// how a quilted mountain gets the cliff-face scenery its floor art belongs with. `typeName`
+    /// picks the proto type ("scenery"/"wall"/...); `excludePids` skips protos a verbatim copy
+    /// must not carry over (invisible engine markers: scroll blockers, block hexes, exit-grid
+    /// markers). Cells the repair ladder re-drew bring nothing (their floor no longer matches the
+    /// source). Returns objects placed; raises on an unknown type or when no quilt has run.
+    int quiltObjects(const std::string& typeName, const std::vector<int>& excludePids);
     /// The previous quiltFloor* run's fidelity stats, flattened as (painted, blocks,
     /// perfectBlocks, mismatchedCells, repairedCells, unresolvedSeams). Repaired cells are normal
     /// in small numbers; unresolved seams are borders the reference never showed. Script-visible
@@ -422,6 +436,23 @@ private:
     std::vector<int> _quiltStats = std::vector<int>(6, 0);
     // Tile ids quiltFloor* treats as empty (see quiltExclude()).
     std::vector<uint16_t> _quiltExclude;
+    // Reference sub-rectangle quiltFloor* learns from, inclusive tile (col,row) bounds; the
+    // sentinel col0 == -1 means the whole grid (see quiltSource()).
+    struct QuiltSourceRect {
+        int col0 = -1;
+        int row0 = -1;
+        int col1 = -1;
+        int row1 = -1;
+    };
+    QuiltSourceRect _quiltSource;
+    // What the last quiltFloor* copied: (target tile, source reference cell) for every
+    // block-copied cell, plus which reference it came from — quiltObjects() replays from this.
+    struct QuiltTransfer {
+        std::string mapPath;
+        int refElevation = -1;
+        std::vector<std::pair<int, int>> cells;
+    };
+    QuiltTransfer _lastQuilt;
 };
 
 } // namespace geck

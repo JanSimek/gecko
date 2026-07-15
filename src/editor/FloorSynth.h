@@ -69,6 +69,10 @@ struct Stats {
 struct Result {
     /// (row-major cell index into the target grid, chosen tile id), ascending by index.
     std::vector<std::pair<int, uint16_t>> cells;
+    /// Parallel to `cells`: the reference cell index each id was block-copied from, or -1 when
+    /// the repair ladder chose it. This is what lets a caller transplant the reference content
+    /// that belongs WITH a copied cell (e.g. the cliff-face scenery standing on it).
+    std::vector<int> sources;
     Stats stats;
 };
 

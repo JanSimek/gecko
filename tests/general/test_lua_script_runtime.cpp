@@ -236,6 +236,51 @@ TEST_CASE("The bundled biome fills paint the selection's floor by tile id, headl
     }
 }
 
+TEST_CASE("The bundled quilt fills synthesize the selection's floor from a reference", "[scripting][lua][fill]") {
+    // Unlike the palette fills, the quilt fills learn from a reference MAP, so mount one (the
+    // shared checkerboard) and point args.ref at it. No tiles.lst is mounted: the bld2043
+    // exclusion inside the scripts must degrade gracefully (pcall), not abort the fill.
+    const auto root = std::filesystem::temp_directory_path() / "geck_lua_quilt_fill"; // NOSONAR: throwaway test dir
+    geck::test::writeCheckerboardReference(root);
+
+    for (const std::string& script : { std::string("quilt_desert") }) {
+        INFO("script: " << script);
+        std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/fills/" + script + ".luau");
+        REQUIRE(file.is_open());
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        const std::string source = buffer.str();
+
+        ControllerFixture fx;
+        fx.resources.files().addDataPath(root);
+        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+        EditArea area;
+        area.floorTiles = { 0, 1, 2, 100, 101, 102 };
+        pattern::FillPlan plan;
+        api.setArea(&area);
+        api.setPlanSink(&plan);
+
+        LuaScriptRuntime rt;
+        const auto r = rt.run(source, api, fx.controller, "quilt-fill",
+            { { "ref", "maps/ref.map" }, { "groundSrc", "0,0,11,11" }, { "cliff", "off" } });
+        INFO("script error: " << r.error);
+        REQUIRE(r.ok);
+        CHECK(plan.tiles.size() == area.floorTiles.size());
+        for (const TileChange& tc : plan.tiles) {
+            CHECK_FALSE(tc.isRoof);
+            CHECK((tc.after == 271 || tc.after == 272)); // only the reference's vocabulary
+        }
+        // Live map untouched during the (sink) preview.
+        for (const int t : area.floorTiles) {
+            CHECK(fx.mapFile().tiles.at(ELEV)[t].getFloor() == EMPTY);
+        }
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+}
+
 TEST_CASE("A Luau fill scatters objects into the plan sink, replayable as one undo entry", "[scripting][lua][fill]") {
     ControllerFixture fx;
     // Headless/data-only: placeObject records map data with a null visual; replay commits it as data.

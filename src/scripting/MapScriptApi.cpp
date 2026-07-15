@@ -61,6 +61,7 @@ void MapScriptApi::retarget(resource::GameResources& resources, const HexagonGri
     _elevation = elevation;
     _buildSprites = buildSprites;
     _referenceCache.clear(); // the data mount may have changed with the host
+    _lastQuilt = {};
 }
 
 void MapScriptApi::detach() {
@@ -69,6 +70,7 @@ void MapScriptApi::detach() {
     _controller = nullptr;
     _map = nullptr;
     _referenceCache.clear();
+    _lastQuilt = {};
 }
 
 Map& MapScriptApi::mapRef() const {
@@ -906,6 +908,63 @@ bool MapScriptApi::paintRoofXY(int col, int row, uint16_t tileId) {
     return paintRoof(tileIndex(col, row), tileId);
 }
 
+void MapScriptApi::quiltSource(int col0, int row0, int col1, int row1) {
+    if (col0 < 0 || row0 < 0 || col1 < 0 || row1 < 0) {
+        _quiltSource = {}; // any negative coordinate clears the restriction
+        return;
+    }
+    _quiltSource = { std::min(col0, col1), std::min(row0, row1), std::max(col0, col1), std::max(row0, row1) };
+}
+
+int MapScriptApi::quiltObjects(const std::string& typeName, const std::vector<int>& excludePids) {
+    const Pro::OBJECT_TYPE wanted = objectTypeFromName(typeName); // throws on an unknown type
+    if (_lastQuilt.refElevation < 0) {
+        throw ScriptError("quiltObjects: run quiltFloorRect/quiltFloorTiles first — it records which reference cells were copied");
+    }
+    const Map& reference = referenceMap(_lastQuilt.mapPath);
+
+    // Index the reference's wanted objects by the floor tile under them. hexTile() is pure
+    // screen geometry, so it applies to reference hexes exactly as it does to the bound map's.
+    std::unordered_map<int, std::vector<const MapObject*>> byTile;
+    const auto& objectsByElevation = reference.getMapFile().map_objects;
+    const auto it = objectsByElevation.find(_lastQuilt.refElevation);
+    if (it == objectsByElevation.end()) {
+        return 0; // the reference elevation holds no objects — a valid empty transplant
+    }
+    for (const auto& object : it->second) {
+        if (!object || object->position == -1 || Pro::typeOfPid(object->pro_pid) != wanted) {
+            continue;
+        }
+        if (std::ranges::find(excludePids, static_cast<int>(object->pro_pid)) != excludePids.end()) {
+            continue;
+        }
+        if (const int tile = hexTile(object->position); tile >= 0) {
+            byTile[tile].push_back(object.get());
+        }
+    }
+
+    int placed = 0;
+    for (const auto& [targetTile, sourceTile] : _lastQuilt.cells) {
+        const auto found = byTile.find(sourceTile);
+        if (found == byTile.end()) {
+            continue;
+        }
+        // Both grids are uniform lattices under one affine screen transform, so a tile
+        // translation of (dcol, drow) is exactly a hex translation of (2*dcol, 2*drow) — the
+        // transplanted object keeps its sub-tile position precisely.
+        const int dcol = targetTile % HexagonGrid::TILE_GRID_WIDTH - sourceTile % HexagonGrid::TILE_GRID_WIDTH;
+        const int drow = targetTile / HexagonGrid::TILE_GRID_WIDTH - sourceTile / HexagonGrid::TILE_GRID_WIDTH;
+        for (const MapObject* source : found->second) {
+            const int hex = hexIndex(source->position % HexagonGrid::GRID_WIDTH + 2 * dcol,
+                source->position / HexagonGrid::GRID_WIDTH + 2 * drow);
+            if (hex >= 0 && placeObject(source->pro_pid, source->frm_pid, hex, source->direction)) {
+                ++placed;
+            }
+        }
+    }
+    return placed;
+}
+
 int MapScriptApi::quiltFloorRect(const std::string& mapPath, int refElevation, int col0, int row0, int col1, int row1) {
     return quiltFloorTiles(mapPath, refElevation, tilesInRect(col0, row0, col1, row1));
 }
@@ -939,6 +998,17 @@ int MapScriptApi::quiltFloorTiles(const std::string& mapPath, int refElevation, 
     for (const Tile& tile : referenceTiles) {
         referenceGrid.cells.push_back(masked(tile.getFloor()));
     }
+    if (_quiltSource.col0 >= 0) {
+        // Learn only from the source rectangle (see quiltSource): cells outside it become empty,
+        // which removes their windows, adjacency and transplant sources in one stroke.
+        for (int row = 0; row < referenceGrid.height; ++row) {
+            for (int col = 0; col < referenceGrid.width; ++col) {
+                if (col < _quiltSource.col0 || col > _quiltSource.col1 || row < _quiltSource.row0 || row > _quiltSource.row1) {
+                    referenceGrid.cells[static_cast<size_t>(row) * referenceGrid.width + col] = empty;
+                }
+            }
+        }
+    }
     if (std::ranges::all_of(referenceGrid.cells, [](uint16_t id) { return id == empty; })) {
         // A reference that teaches nothing is a real error, not a silent no-op fill.
         throw ScriptError(std::format("map '{}' elevation {} has an empty floor grid (after exclusions) — nothing to quilt from", mapPath, refElevation));
@@ -966,6 +1036,17 @@ int MapScriptApi::quiltFloorTiles(const std::string& mapPath, int refElevation, 
             ++painted;
         }
     }
+    // Record which reference cell each block-copied tile came from, so quiltObjects() can
+    // transplant the objects standing on those source cells (repaired cells carry no source).
+    _lastQuilt.mapPath = mapPath;
+    _lastQuilt.refElevation = refElevation;
+    _lastQuilt.cells.clear();
+    for (std::size_t i = 0; i < result.cells.size(); ++i) {
+        if (result.sources[i] >= 0) {
+            _lastQuilt.cells.emplace_back(result.cells[i].first, result.sources[i]);
+        }
+    }
+
     // Degraded output must be visible, not silent: repairs are normal in small numbers, but
     // unresolved seams mean the reference never showed a border the result now contains. The
     // stats stay queryable (quiltStats) because the CLI runs with logging off.

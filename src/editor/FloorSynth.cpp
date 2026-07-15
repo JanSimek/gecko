@@ -80,6 +80,7 @@ namespace {
         std::map<uint16_t, std::vector<uint16_t>> eastBefore;  ///< predecessorIndex(model.east)
         std::map<uint16_t, std::vector<uint16_t>> southBefore; ///< predecessorIndex(model.south)
         std::vector<int32_t> state;                            ///< per target cell: an id, UNASSIGNED, or ABSENT
+        std::vector<int32_t> source;                           ///< per target cell: the reference cell it was block-copied from, or -1
         std::vector<uint8_t> inRegion;
         // Region bounding box, in tile columns/rows.
         int bboxLeft;
@@ -98,6 +99,7 @@ namespace {
             , eastBefore(predecessorIndex(model.east))
             , southBefore(predecessorIndex(model.south))
             , state(static_cast<size_t>(tgt.width) * tgt.height, ABSENT)
+            , source(static_cast<size_t>(tgt.width) * tgt.height, -1)
             , inRegion(static_cast<size_t>(tgt.width) * tgt.height, 0)
             , bboxLeft(tgt.width)
             , bboxTop(tgt.height)
@@ -172,8 +174,10 @@ namespace {
             for (int dy = 0; dy < K; ++dy)
                 for (int dx = 0; dx < K; ++dx) {
                     const auto index = static_cast<size_t>((by + dy) * target.width + bx + dx);
-                    if (state[index] == UNASSIGNED)
+                    if (state[index] == UNASSIGNED) {
                         state[index] = reference.at(sx + dx, sy + dy);
+                        source[index] = (sy + dy) * reference.width + (sx + dx);
+                    }
                 }
         }
 
@@ -355,6 +359,7 @@ namespace {
                 int level = 4;
                 const auto candidates = ladderCandidates(constraintSets(west, north, east, south), level);
                 state[static_cast<size_t>(index)] = weightedPick(candidates);
+                source[static_cast<size_t>(index)] = -1; // a repaired id no longer matches its copied source
                 ++stats.repairedCells;
                 ++stats.repairLevel[static_cast<size_t>(level)];
             }
@@ -439,8 +444,11 @@ Result synthesize(const Grid& reference, const Grid& target, const std::vector<i
     run.countUnresolvedSeams();
 
     result.cells.reserve(run.cellsToFill.size());
-    for (int index : run.cellsToFill)
+    result.sources.reserve(run.cellsToFill.size());
+    for (int index : run.cellsToFill) {
         result.cells.emplace_back(index, static_cast<uint16_t>(run.state[static_cast<size_t>(index)]));
+        result.sources.push_back(run.source[static_cast<size_t>(index)]);
+    }
     run.stats.cellsPainted = static_cast<int>(run.cellsToFill.size());
     result.stats = run.stats;
     return result;
