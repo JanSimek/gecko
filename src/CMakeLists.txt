@@ -704,6 +704,8 @@ if(GECK_BUILD_CLI)
     # (handleMessage is unit-testable); gecko-mcp is the thin stdio frontend.
     if(GECK_BUILD_MCP)
         add_library(gecko_mcp STATIC
+            mcp/Base64.h
+            mcp/Base64.cpp
             mcp/McpServer.h
             mcp/McpServer.cpp)
         target_link_libraries(gecko_mcp PUBLIC gecko_cli nlohmann_json::nlohmann_json)

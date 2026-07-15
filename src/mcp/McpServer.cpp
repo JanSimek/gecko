@@ -1,5 +1,7 @@
 #include "mcp/McpServer.h"
 
+#include "mcp/Base64.h"
+
 #include "cli/MapAnalyzer.h"
 #include "cli/MapDescribe.h"
 #include "cli/MapGraph.h"
@@ -30,6 +32,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <functional>
 #include <optional>
 #include <sstream>
@@ -126,6 +129,56 @@ namespace {
             }
             out.push_back(static_cast<std::uint32_t>(pid.get<int64_t>()));
         }
+    }
+
+    // --- image embedding ----------------------------------------------------------
+    // Formats sf::Image writes that are also embeddable as MCP image content (by out extension).
+    std::string imageMimeType(const std::string& path) {
+        std::string ext = std::filesystem::path(path).extension().string();
+        std::ranges::transform(ext, ext.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (ext == ".png") {
+            return "image/png";
+        }
+        if (ext == ".jpg" || ext == ".jpeg") {
+            return "image/jpeg";
+        }
+        if (ext == ".bmp") {
+            return "image/bmp";
+        }
+        return {};
+    }
+
+    // Keep JSON-RPC responses bounded: an over-cap render must be shrunk (maxDimension) or read
+    // from disk instead of embedded.
+    constexpr std::size_t kEmbedMaxBytes = 8u * 1024 * 1024;
+
+    // embed=true on the render tools: read the just-written image back and append it as an MCP
+    // image content block (base64), so the client can look at it without a second file read. The
+    // render itself succeeded by the time this runs, so every embed failure says the file was
+    // still written.
+    json appendEmbeddedImage(json result, const std::string& outPath) {
+        const std::string mime = imageMimeType(outPath);
+        if (mime.empty()) {
+            return toolText("embed: unsupported image extension on '" + outPath
+                    + "' (use .png, .jpg or .bmp); the file was still written",
+                true);
+        }
+        std::ifstream file(outPath, std::ios::binary);
+        const std::string bytes{ std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
+        if (file.bad() || bytes.empty()) {
+            return toolText("embed: could not read back '" + outPath + "'; the file was still written", true);
+        }
+        if (bytes.size() > kEmbedMaxBytes) {
+            return toolText(std::format("embed: {} is {} bytes (embed cap {}); lower maxDimension or read "
+                                        "the file directly; the file was still written",
+                                outPath, bytes.size(), kEmbedMaxBytes),
+                true);
+        }
+        result["content"].push_back({ { "type", "image" },
+            { "data", encodeBase64(reinterpret_cast<const unsigned char*>(bytes.data()), bytes.size()) },
+            { "mimeType", mime } });
+        return result;
     }
 
     // --- tools -------------------------------------------------------------------
@@ -395,9 +448,14 @@ namespace {
         opts.fullExtent = optBool(args, "full", opts.fullExtent);
         opts.cropCenterHex = static_cast<int>(optInt(args, "cropHex", opts.cropCenterHex, -1, 39999));
         opts.cropExtentPx = static_cast<int>(optInt(args, "cropExtent", opts.cropExtentPx, 1, 100000));
+        const bool embed = optBool(args, "embed", false);
         std::ostringstream oss;
         const int rc = cli::renderMap(resources, opts, oss);
-        return toolText(oss.str(), rc != 0); // rc != 0 e.g. unreadable map or no GL context
+        json result = toolText(oss.str(), rc != 0); // rc != 0 e.g. unreadable map or no GL context
+        if (rc == 0 && embed) {
+            result = appendEmbeddedImage(std::move(result), opts.outPath);
+        }
+        return result;
     }
 
     json toolExtractPattern(resource::GameResources& resources, const json& args) {
@@ -442,9 +500,14 @@ namespace {
         opts.outPath = requireString(args, "out");
         opts.direction = static_cast<int>(optInt(args, "direction", -1, -1, 5));
         opts.frame = static_cast<int>(optInt(args, "frame", -1, -1, 100000));
+        const bool embed = optBool(args, "embed", false);
         std::ostringstream oss;
         const int rc = cli::frmRender(resources, opts, oss);
-        return toolText(oss.str(), rc != 0); // rc != 0 e.g. unresolvable FRM or no GL context
+        json result = toolText(oss.str(), rc != 0); // rc != 0 e.g. unresolvable FRM or no GL context
+        if (rc == 0 && embed) {
+            result = appendEmbeddedImage(std::move(result), opts.outPath);
+        }
+        return result;
     }
 
     json toolResolveFid(resource::GameResources& resources, const json& args) {
@@ -518,11 +581,32 @@ namespace {
         std::string description;
         json inputSchema;
         std::function<json(resource::GameResources&, const json&)> handler;
+        // When the tool's SUCCESS text is machine-readable JSON, this drives the MCP
+        // structuredContent field on the result: "" means the text is a JSON object (attached
+        // as-is); a non-empty key means the text is a JSON array, wrapped as { key: [...] }
+        // (structuredContent must be an object per the MCP schema). nullptr = plain text.
+        const char* structuredKey = nullptr;
         // Advertised as MCP tool annotations (tools/list). Default false; toolRegistry() tags the
         // read-only group en masse. None of our tools is destructive (the mutating ones only write
         // new output files) and all operate on local data (openWorldHint is emitted as false).
         bool readOnly = false;
     };
+
+    // Attach the structuredContent form of a tool result when the tool contract says its success
+    // text is JSON (see ToolSpec::structuredKey). The text block stays the authoritative payload:
+    // if it unexpectedly fails to parse — or has the wrong shape — the result simply stays
+    // text-only rather than failing a call that succeeded.
+    void attachStructuredContent(const ToolSpec& spec, json& result) {
+        if (spec.structuredKey == nullptr || result.value("isError", true)) {
+            return;
+        }
+        const json parsed = json::parse(result["content"][0]["text"].get<std::string>(), nullptr,
+            /*allow_exceptions*/ false);
+        const bool wrapArray = *spec.structuredKey != '\0';
+        if (wrapArray ? parsed.is_array() : parsed.is_object()) {
+            result["structuredContent"] = wrapArray ? json{ { spec.structuredKey, parsed } } : parsed;
+        }
+    }
 
     // Read-only / inspection tools (no files written). Split from the mutating tools so neither
     // builder is over-long and so toolRegistry() can tag this group readOnlyHint=true en masse.
@@ -532,7 +616,7 @@ namespace {
             "'displayName' is the friendly map.msg name (elevation 0; null when the map isn't in "
             "maps.txt or map.msg isn't mounted).",
             json({ { "type", "object" }, { "properties", json::object() } }),
-            [](resource::GameResources& r, const json&) { return toolListMaps(r); } });
+            [](resource::GameResources& r, const json&) { return toolListMaps(r); }, "maps" });
         t.push_back({ "analyze",
             "Analyze ground-tile and object usage as JSON. Omit 'maps' to analyze every map, or "
             "pass it to scope. Each object carries a 'flat' flag (structural blocker vs. decoration) "
@@ -546,7 +630,7 @@ namespace {
             "{section,programIndex,name,filename,ownerObject,localVars}, with spatialRadius on Spatial "
             "scripts and timerMs on Timer scripts.",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
-            [](resource::GameResources& r, const json& a) { return toolAnalyze(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolAnalyze(r, a); }, "" });
         t.push_back({ "palette",
             "The weighted generation palette for the given maps (omit 'maps' for all), aggregated: "
             "{ floor:[{id,name,weight}], scenery:[{pid,number,name,weight}] }. Just what a generator "
@@ -554,11 +638,11 @@ namespace {
             "real placement count — without the full analyze report. scenery is scatter-eligible only "
             "(scenery type, non-flat).",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
-            [](resource::GameResources& r, const json& a) { return toolPalette(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolPalette(r, a); }, "" });
         t.push_back({ "proto_info",
             "Resolve a proto PID to its type, engine display name and 'flat' flag.",
             json({ { "type", "object" }, { "properties", { { "pid", { { "type", "integer" } } } } }, { "required", json::array({ "pid" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolProtoInfo(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolProtoInfo(r, a); }, "" });
         t.push_back({ "describe_script",
             "Describe a Fallout 2 script by its scripts.lst program index (the 0-based script_id "
             "analyze reports for a critter/object). Returns the filename, the .ssl source if a "
@@ -567,7 +651,7 @@ namespace {
             "Optional 'locale' picks the dialog language subdir (default english). Args: programIndex, "
             "optional locale.",
             json({ { "type", "object" }, { "properties", { { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "required", json::array({ "programIndex" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolDescribeScript(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolDescribeScript(r, a); }, "" });
         t.push_back({ "reachability",
             "Per-elevation reachability for one map. Floods walkable hexes from the entry points "
             "(player start + exit grids — you can arrive at an exit coming from the adjacent map): "
@@ -578,7 +662,7 @@ namespace {
             "OPTIMISTIC, not exact pathfinding: doors (incl. locked) are passable, so it over-estimates "
             "rather than crying wolf. Args: map.",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolReachability(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolReachability(r, a); }, "" });
         t.push_back({ "describe_map",
             "One structured digest for a single map, composed from analyze + reachability: the header "
             "(elevations, darkness, player start, map script, map variables), floor usage (biome), "
@@ -589,7 +673,7 @@ namespace {
             "so you can infer the map's purpose and follow up with describe_script on any roster entry. "
             "Args: map.",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolDescribeMap(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolDescribeMap(r, a); }, "" });
         t.push_back({ "dump_grid", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
             "The RAW spatial layout of one map, the per-cell data behind analyze's digested "
             "adjacency/clusters. Per elevation: the floor (and, with roof=true, roof) tile-id grid as a "
@@ -600,7 +684,7 @@ namespace {
             "density/positions from shipped maps before generating terrain. Args: map (required), "
             "optional elevation (-1/all), roof, floor, objects (booleans).",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "roof", { { "type", "boolean" } } }, { "floor", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } } } }, { "required", json::array({ "map" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolDumpGrid(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolDumpGrid(r, a); }, "" });
         t.push_back({ "map_graph",
             "The EXIT-GRID connectivity graph — how maps link via exit grids: within a location "
             "(intramap self-edges for elevation changes, and intermap edges between a town's maps, e.g. "
@@ -612,11 +696,17 @@ namespace {
             "the owning world_map 'area' and its city.txt 'lookupName' (so you can go map->area, the "
             "reverse of world_map's area->map); and 'analysed'); 'edges' ({from,to,kind,destMap,"
             "toName,exits}) where 'exits' counts the exit-grid hexes and 'kind' is "
-            "map/worldmap/townmap/unknown; 'stats' flags 'deadEnds' (no outgoing map edge) and "
-            "'noIncoming' (no map exits to it — a location's entry points or orphans). Omit 'maps' for "
-            "every map, or pass it to scope (e.g. one town's maps).",
+            "map/worldmap/townmap/unknown. Each map-kind edge also carries 'oneWay': true when the "
+            "player cannot walk back ('oneWayReason' says why — 'no-return-edge' = the destination "
+            "has no exit grid targeting the source; 'return-unreachable' = return exits exist but "
+            "none shares a walkable region with the arrival hexes, per the reachability tool's "
+            "optimistic model), false when a return path exists, null when undeterminable (the "
+            "destination wasn't analysed, or every return runs through another elevation). 'stats' "
+            "flags 'deadEnds' (no outgoing map edge), 'noIncoming' (no map exits to it — a "
+            "location's entry points or orphans) and 'oneWayEdges' ({from,to,reason}). Omit 'maps' "
+            "for every map, or pass it to scope (e.g. one town's maps).",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
-            [](resource::GameResources& r, const json& a) { return toolMapGraph(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolMapGraph(r, a); }, "" });
         t.push_back({ "world_map",
             "The WORLDMAP layer from city.txt — the inter-city travel layer that map_graph does not "
             "cover. 'start': where a new game begins ({map, displayName, area} = artemple.map / Arroyo). "
@@ -632,7 +722,7 @@ namespace {
             "'how does the player get from city A to city B' (they cross the world map); use map_graph "
             "for travel by exit grids within one location. No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
-            [](resource::GameResources& r, const json& a) { return toolWorldMap(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolWorldMap(r, a); }, "" });
         t.push_back({ "world_encounters",
             "The worldmap's terrain types and random-encounter group tables, from worldmap.txt. "
             "'terrains' (name, shortName, 'difficulty' — the terrain's per-step travel cost) and "
@@ -641,7 +731,7 @@ namespace {
             "so they map to areas. Critter pids are raw — resolve them with proto_info. (Per-position "
             "encounter placement is not parsed; terrain-at-position is in world_map.) No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
-            [](resource::GameResources& r, const json& a) { return toolWorldEncounters(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolWorldEncounters(r, a); }, "" });
         t.push_back({ "quests",
             "The quest registry from quests.txt — what the player has to DO. Each quest: 'area' (the "
             "location name, joins to world_map area names), 'gvar' + 'gvarName' (GVAR_*) + 'gvarStart' "
@@ -650,13 +740,13 @@ namespace {
             "'description' (the objective text). The spine for reasoning about progression: read what "
             "must be done, where, and which world-state flag proves it. No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
-            [](resource::GameResources& r, const json& a) { return toolQuests(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolQuests(r, a); }, "" });
         t.push_back({ "gvars",
             "The global-variable dictionary from vault13.gam: every GVAR by 'index' -> 'name' (GVAR_*) "
             "+ 'default'. Global variables are the engine's progression state machine, so this decodes "
             "a gvar index (from quests, or a script) to a human-readable name. No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
-            [](resource::GameResources& r, const json& a) { return toolGlobalVars(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolGlobalVars(r, a); }, "" });
         t.push_back({ "endings",
             "The endgame slideshow's win-condition table from endgame.txt: each ending slide with the "
             "global variable + value that triggers it ('gvar' + 'gvarName' via vault13.gam + a readable "
@@ -665,7 +755,7 @@ namespace {
             "produces each ending'. With quests + gvars it closes the start->objectives->ending loop. "
             "No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
-            [](resource::GameResources& r, const json& a) { return toolEndings(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolEndings(r, a); }, "" });
         t.push_back({ "find_gvar",
             "Find where a global variable is used in the mounted .ssl / .h script sources: every script "
             "that reads or writes 'gvar', with line, source text, and kind 'set' (set_global_var — the "
@@ -675,7 +765,7 @@ namespace {
             "result means the gvar is genuinely unused (not an error). Needs a script-source tree (e.g. "
             "FRP scripts_src) mounted. Args: gvar (the GVAR_* name).",
             json({ { "type", "object" }, { "properties", { { "gvar", { { "type", "string" } } } } }, { "required", json::array({ "gvar" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolFindGvar(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolFindGvar(r, a); }, "" });
         t.push_back({ "frm_info",
             "FRM sprite metadata as JSON, so art can be MEASURED instead of inferred from PID "
             "arithmetic. Accepts an art name (ext2grd1 or art/misc/ext2grd1.frm) or a FID (as a string, "
@@ -684,19 +774,19 @@ namespace {
             "offsetY} — the signed pixel offsets that anchor the art (the shiftX/shiftY the map renderer "
             "applies). Pair with render_frm to also SEE it. Args: frm.",
             json({ { "type", "object" }, { "properties", { { "frm", { { "type", "string" } } } } }, { "required", json::array({ "frm" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolFrmInfo(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolFrmInfo(r, a); }, "" });
         t.push_back({ "resolve_fid",
             "Decode a FID (as a string: hex 0x05000021 or decimal) to JSON {fid, type, index, artPath} "
             "— the art type (item/critter/scenery/wall/tile/misc/interface/inventory), the LST index, "
             "and the resolved art/ path. The inverse of the PID-to-art lookup the engine does. Args: fid.",
             json({ { "type", "object" }, { "properties", { { "fid", { { "type", "string" } } } } }, { "required", json::array({ "fid" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolResolveFid(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolResolveFid(r, a); }, "" });
         t.push_back({ "list_frms",
             "List the art entries whose name matches a glob ('*' and '?'), e.g. ext2grd* or exitgrd*, "
             "across every art .lst. Each entry: {name, artPath, fid}. Lets you enumerate a sprite family "
             "(e.g. all exit-grid pieces) and feed an artPath/fid to frm_info or render_frm. Args: glob.",
             json({ { "type", "object" }, { "properties", { { "glob", { { "type", "string" } } } } }, { "required", json::array({ "glob" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolListFrms(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolListFrms(r, a); }, "frms" });
         t.push_back({ "resource_find",
             "Locate a VFS path in the mounted data and report WHICH source provides it: JSON {path, "
             "found, source:{kind (dat|directory), path, label}|null}. kind/label identify master.dat vs a "
@@ -706,7 +796,7 @@ namespace {
             "'/data/...' prefix. 'not found' is a normal answer, not an error. Args: path (e.g. "
             "art/tiles/gras030.frm).",
             json({ { "type", "object" }, { "properties", { { "path", { { "type", "string" } } } } }, { "required", json::array({ "path" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolResourceFind(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolResourceFind(r, a); }, "" });
         t.push_back({ "resource_list",
             "List mounted entries whose path matches a glob ('*','?'), each tagged with the source that "
             "provides it — browse a DAT / data set without extracting. Matching is case-insensitive and "
@@ -714,7 +804,7 @@ namespace {
             "'gras03*' both work. JSON {pattern, count, truncated, entries:[{path, source:{kind,path,label}}]} "
             "(capped; 'truncated' flags an over-long result). Args: glob.",
             json({ { "type", "object" }, { "properties", { { "glob", { { "type", "string" } } } } }, { "required", json::array({ "glob" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolResourceList(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolResourceList(r, a); }, "" });
         t.push_back({ "resource_missing",
             "Report everything a map REFERENCES but that does NOT resolve in the mounted data — the "
             "diagnostic for 'why won't this map load / render fully'. JSON {map, usedTileCount, "
@@ -726,7 +816,7 @@ namespace {
             "resolves (so a load failure is elsewhere — e.g. a mount-path mistake; check with resource_find). "
             "Mirrors what the editor's loader now tolerantly skips instead of aborting. Args: map (.map path).",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
-            [](resource::GameResources& r, const json& a) { return toolResourceMissing(r, a); } });
+            [](resource::GameResources& r, const json& a) { return toolResourceMissing(r, a); }, "" });
         t.push_back({ "script_api",
             "The generation-script `api` reference (Markdown): every function a `generate` Luau script "
             "can call on the global `api`, with signatures, plus the non-obvious runtime behaviour (runs "
@@ -768,9 +858,11 @@ namespace {
             "(default 220), upscaled to maxDimension — so individual pieces (a cave-rim corner, a "
             "scatter cluster) become readable where a whole-map render is too small. "
             "map/out are filesystem paths — out is written there, and "
-            "map may be a VFS path or any file on disk (e.g. one generate just wrote). Needs an "
-            "off-screen GL context.",
-            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "semantic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } }, { "showUnreachable", { { "type", "boolean" } } }, { "full", { { "type", "boolean" } } }, { "cropHex", { { "type", "integer" } } }, { "cropExtent", { { "type", "integer" } } } } }, { "required", json::array({ "map", "out" }) } }),
+            "map may be a VFS path or any file on disk (e.g. one generate just wrote). "
+            "embed=true additionally returns the written image inline as an MCP image content "
+            "block (base64) so it can be viewed without reading the file — keep maxDimension "
+            "modest when embedding (8 MB cap). Needs an off-screen GL context.",
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "maxDimension", { { "type", "integer" } } }, { "showRoof", { { "type", "boolean" } } }, { "schematic", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "semantic", { { "type", "boolean" } } }, { "showBlockers", { { "type", "boolean" } } }, { "showUnreachable", { { "type", "boolean" } } }, { "full", { { "type", "boolean" } } }, { "cropHex", { { "type", "integer" } } }, { "cropExtent", { { "type", "integer" } } }, { "embed", { { "type", "boolean" } } } } }, { "required", json::array({ "map", "out" }) } }),
             [](resource::GameResources& r, const json& a) { return toolRender(r, a); } });
         t.push_back({ "render_frm",
             "Render an FRM sprite to a PNG so the art can be SEEN, not inferred from PID arithmetic. "
@@ -779,8 +871,10 @@ namespace {
             "on a checkerboard background, each cell at the frame's pixel size. Optional direction (0-5) "
             "renders one direction; optional frame renders one frame index. Returns the output path, "
             "image size, and grid layout (directions x frames). out is a filesystem path (written "
-            "there). Needs an off-screen GL context. Args: frm, out, optional direction, frame.",
-            json({ { "type", "object" }, { "properties", { { "frm", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "direction", { { "type", "integer" } } }, { "frame", { { "type", "integer" } } } } }, { "required", json::array({ "frm", "out" }) } }),
+            "there). embed=true additionally returns the image inline as an MCP image content block "
+            "(base64). Needs an off-screen GL context. Args: frm, out, optional direction, frame, "
+            "embed.",
+            json({ { "type", "object" }, { "properties", { { "frm", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "direction", { { "type", "integer" } } }, { "frame", { { "type", "integer" } } }, { "embed", { { "type", "boolean" } } } } }, { "required", json::array({ "frm", "out" }) } }),
             [](resource::GameResources& r, const json& a) { return toolRenderFrm(r, a); } });
         t.push_back({ "extract_pattern",
             "Capture a structure from a real map into a reusable pattern stamp (JSON the editor's "
@@ -815,7 +909,9 @@ namespace {
             return std::nullopt;
         }
         try {
-            return it->handler(resources, args);
+            json result = it->handler(resources, args);
+            attachStructuredContent(*it, result);
+            return result;
         } catch (const ToolError& e) {
             // Bad arguments are a tool-result error (the call was well-formed; the input wasn't),
             // not a JSON-RPC protocol error.

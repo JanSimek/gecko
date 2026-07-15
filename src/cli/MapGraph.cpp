@@ -3,8 +3,10 @@
 #include "cli/ConfigLoad.h"
 #include "cli/MapAnalyzer.h" // collectMapExits, listMapPaths, MapExit
 #include "cli/MapLoad.h"     // loadMap
+#include "editor/Reachability.h"
 #include "format/city/CityTxt.h"
 #include "format/map/Map.h"
+#include "format/map/MapObject.h"
 #include "reader/city/CityTxtReader.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
@@ -14,6 +16,7 @@
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <set>
 #include <string>
@@ -50,6 +53,14 @@ namespace {
         std::string toName;
         std::string kind;
         int exits = 0;
+        // The individual exit grids forming this edge — the one-way join needs each arrival's
+        // destination hex/elevation and each return exit's source hex/elevation.
+        std::vector<MapExit> exitList;
+        // Can the player walk back through this edge? Filled by annotateReturnPaths for map-kind
+        // edges: unset = undeterminable (destination never analysed, or every return path runs
+        // through another elevation — stairs, which this model doesn't trace).
+        std::optional<bool> oneWay;
+        std::string oneWayReason; ///< "no-return-edge" or "return-unreachable" when oneWay is true
     };
 
     using Nodes = std::map<std::string, NodeInfo>;
@@ -104,11 +115,14 @@ namespace {
             edge.toName = toName;
         }
         ++edge.exits;
+        edge.exitList.push_back(exit);
     }
 
     // Load each map and fold its exit grids into the node/edge maps; returns how many maps loaded.
+    // `pathOf` records each analysed node's full path so the one-way join can re-load it.
     int buildGraph(resource::GameResources& resources, const resource::MapNameResolver& names,
-        const std::vector<std::string>& mapPaths, Nodes& nodes, Edges& edges) {
+        const std::vector<std::string>& mapPaths, Nodes& nodes, Edges& edges,
+        std::map<std::string, std::string>& pathOf) {
         int analysed = 0;
         for (const auto& mapPath : mapPaths) {
             const std::unique_ptr<Map> map = loadMap(resources, mapPath);
@@ -122,12 +136,102 @@ namespace {
             if (fromNode.displayName.empty() && fromIndex >= 0) {
                 fromNode.displayName = names.displayName(fromIndex, 0);
             }
+            pathOf.emplace(fromFile, mapPath);
             ++analysed;
             for (const MapExit& exit : collectMapExits(*map)) {
                 addExit(names, fromFile, exit, nodes, edges);
             }
         }
         return analysed;
+    }
+
+    // Per-destination-map reachability cache for the one-way join: the map is re-loaded once (the
+    // first pass frees each map after reading its exits) and each elevation's walkable components
+    // are computed on first use.
+    struct DestReachability {
+        std::unique_ptr<Map> map;
+        std::map<int, reachability::ElevationResult> byElevation;
+        bool loadFailed = false;
+    };
+
+    const reachability::ElevationResult& elevationReachability(resource::GameResources& resources,
+        DestReachability& dest, int elevation) {
+        const auto [it, inserted] = dest.byElevation.try_emplace(elevation);
+        if (inserted) {
+            static const std::vector<std::shared_ptr<MapObject>> kNoObjects;
+            const Map::MapFile& file = dest.map->getMapFile();
+            const auto objects = file.map_objects.find(elevation);
+            it->second = reachability::analyzeElevation(resources,
+                static_cast<int>(file.header.player_default_elevation),
+                static_cast<int>(file.header.player_default_position), elevation,
+                objects != file.map_objects.end() ? objects->second : kNoObjects);
+        }
+        return it->second;
+    }
+
+    // The walkability half of the one-way join: does some return exit share a walkable component
+    // with an arrival hex, on the arrival's elevation? Uses the same optimistic model as the
+    // reachability tool (doors passable), so a "return-unreachable" verdict is a real seal, not a
+    // locked door.
+    void evaluateReturnWalkability(resource::GameResources& resources, EdgeInfo& edge,
+        const EdgeInfo& returnEdge, const std::string& toFile,
+        const std::map<std::string, std::string>& pathOf, std::map<std::string, DestReachability>& reach) {
+        DestReachability& dest = reach[toFile];
+        if (!dest.map && !dest.loadFailed) {
+            const auto path = pathOf.find(toFile);
+            dest.map = path != pathOf.end() ? loadMap(resources, path->second) : nullptr;
+            dest.loadFailed = !dest.map;
+        }
+        if (dest.loadFailed) {
+            return; // analysed in the first pass but unreadable now -> leave undetermined
+        }
+        bool sawSameElevationPair = false;
+        for (const MapExit& arrival : edge.exitList) {
+            const reachability::ElevationResult& result = elevationReachability(resources, dest, arrival.destElevation);
+            const int arrivalComponent = reachability::componentOf(arrival.destHex, result.blocked, result.component);
+            for (const MapExit& ret : returnEdge.exitList) {
+                if (ret.srcElevation != arrival.destElevation) {
+                    continue; // a return via another elevation needs stairs -> not walkable evidence
+                }
+                sawSameElevationPair = true;
+                if (arrivalComponent != -1
+                    && reachability::componentOf(ret.srcHex, result.blocked, result.component) == arrivalComponent) {
+                    edge.oneWay = false;
+                    return;
+                }
+            }
+        }
+        if (sawSameElevationPair) {
+            edge.oneWay = true;
+            edge.oneWayReason = "return-unreachable";
+        }
+        // else: every return exit sits on another elevation -> undeterminable, leave unset
+    }
+
+    // The one-way join: for every map-kind edge A->B, can the player walk back to A? Structurally
+    // first (does B have an exit grid targeting A at all), then effectively (is some return exit
+    // walk-connected to an arrival hex — evaluateReturnWalkability). Non-map edges (worldmap/
+    // townmap/unknown) have no "return" concept and stay unset, as do edges into maps that were
+    // never analysed.
+    void annotateReturnPaths(resource::GameResources& resources, const Nodes& nodes, Edges& edges,
+        const std::map<std::string, std::string>& pathOf) {
+        std::map<std::string, DestReachability> reach;
+        for (auto& [key, edge] : edges) {
+            if (edge.kind != "map") {
+                continue;
+            }
+            const auto toNode = nodes.find(key.second);
+            if (toNode == nodes.end() || !toNode->second.analysed) {
+                continue; // never loaded the destination -> its exits are unknown
+            }
+            const auto reciprocal = edges.find({ key.second, key.first });
+            if (reciprocal == edges.end()) {
+                edge.oneWay = true;
+                edge.oneWayReason = "no-return-edge";
+                continue;
+            }
+            evaluateReturnWalkability(resources, edge, reciprocal->second, key.second, pathOf, reach);
+        }
     }
 
     // Structural insight: which analysed maps have no outgoing / no incoming *map* edge.
@@ -153,8 +257,15 @@ namespace {
                 noIncoming.push_back(file);
             }
         }
+        auto oneWay = ordered_json::array(); // edges the player cannot walk back through
+        for (const auto& [key, edge] : edges) {
+            if (edge.oneWay == true) {
+                oneWay.push_back({ { "from", key.first }, { "to", key.second }, { "reason", edge.oneWayReason } });
+            }
+        }
         return { { "maps", analysed }, { "nodes", nodes.size() }, { "edges", edges.size() },
-            { "deadEnds", std::move(deadEnds) }, { "noIncoming", std::move(noIncoming) } };
+            { "deadEnds", std::move(deadEnds) }, { "noIncoming", std::move(noIncoming) },
+            { "oneWayEdges", std::move(oneWay) } };
     }
 
     ordered_json graphToJson(const Nodes& nodes, const Edges& edges, int analysed,
@@ -171,7 +282,9 @@ namespace {
         auto edgesJson = ordered_json::array();
         for (const auto& [key, info] : edges) {
             edgesJson.push_back({ { "from", key.first }, { "to", key.second }, { "kind", info.kind },
-                { "destMap", info.destMap }, { "toName", orNull(info.toName) }, { "exits", info.exits } });
+                { "destMap", info.destMap }, { "toName", orNull(info.toName) }, { "exits", info.exits },
+                { "oneWay", info.oneWay.has_value() ? ordered_json(*info.oneWay) : ordered_json(nullptr) },
+                { "oneWayReason", orNull(info.oneWayReason) } });
         }
         ordered_json root;
         root["nodes"] = std::move(nodesJson);
@@ -197,7 +310,9 @@ int buildMapGraph(resource::GameResources& resources, const MapGraphOptions& opt
     const std::map<std::string, std::string> areaOf = mapToArea(city, names);
     Nodes nodes;
     Edges edges;
-    const int analysed = buildGraph(resources, names, mapPaths, nodes, edges);
+    std::map<std::string, std::string> pathOf;
+    const int analysed = buildGraph(resources, names, mapPaths, nodes, edges, pathOf);
+    annotateReturnPaths(resources, nodes, edges, pathOf);
     out << graphToJson(nodes, edges, analysed, names, areaOf).dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     return 0;
 }

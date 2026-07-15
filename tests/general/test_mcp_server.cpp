@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "mcp/Base64.h"
 #include "mcp/McpServer.h"
 #include "resource/GameResources.h"
 
@@ -53,6 +54,19 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         }
     }
 
+    SECTION("tools/list advertises the embed flag on both render tools") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 2 }, { "method", "tools/list" } });
+        int seen = 0;
+        for (const auto& tool : resp["result"]["tools"]) {
+            const auto name = tool["name"].get<std::string>();
+            if (name == "render_map" || name == "render_frm") {
+                CHECK(tool["inputSchema"]["properties"].contains("embed"));
+                ++seen;
+            }
+        }
+        CHECK(seen == 2);
+    }
+
     SECTION("a notification (no id) gets no response") {
         const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "method", "notifications/initialized" } });
         CHECK(resp.is_null());
@@ -74,6 +88,33 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             { "params", { { "name", "list_maps" }, { "arguments", json::object() } } } });
         CHECK(resp["result"]["isError"] == false);
         CHECK(resp["result"]["content"][0]["text"] == "[]");
+        // An array-emitting tool wraps its structuredContent in an object (the MCP schema
+        // requires an object), under a key named for the payload.
+        CHECK(resp["result"]["structuredContent"] == json{ { "maps", json::array() } });
+    }
+
+    SECTION("a JSON-object tool carries structuredContent mirroring its text block") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 50 }, { "method", "tools/call" },
+            { "params", { { "name", "resolve_fid" }, { "arguments", { { "fid", "0x05000021" } } } } } });
+        REQUIRE(resp["result"]["isError"] == false);
+        REQUIRE(resp["result"].contains("structuredContent"));
+        const json text = json::parse(resp["result"]["content"][0]["text"].get<std::string>());
+        CHECK(resp["result"]["structuredContent"] == text);
+        CHECK(resp["result"]["structuredContent"]["type"] == "misc");
+    }
+
+    SECTION("a plain-text tool result has no structuredContent") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 51 }, { "method", "tools/call" },
+            { "params", { { "name", "script_api" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == false);
+        CHECK_FALSE(resp["result"].contains("structuredContent"));
+    }
+
+    SECTION("a tool error carries no structuredContent") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 52 }, { "method", "tools/call" },
+            { "params", { { "name", "analyze" }, { "arguments", json::object() } } } });
+        REQUIRE(resp["result"]["isError"] == true);
+        CHECK_FALSE(resp["result"].contains("structuredContent"));
     }
 
     SECTION("analyze with no data mounted reports a tool error (not a crash)") {
@@ -200,6 +241,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             { "params", { { "name", "list_frms" }, { "arguments", { { "glob", "ext2grd*" } } } } } });
         CHECK(resp["result"]["isError"] == false);
         CHECK(resp["result"]["content"][0]["text"] == "[]\n");
+        CHECK(resp["result"]["structuredContent"] == json{ { "frms", json::array() } });
     }
 
     SECTION("bad argument types and out-of-range numbers are tool errors, not silent casts") {
@@ -214,6 +256,9 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         CHECK(call("render_map", { { "map", "m.map" }, { "out", "o.png" }, { "maxDimension", -1 } }, 22)["result"]["isError"] == true);
         // A non-string required arg used to slip through as an empty string.
         CHECK(call("render_map", { { "map", 123 }, { "out", "o.png" } }, 23)["result"]["isError"] == true);
+        // embed must be a real boolean, not a truthy string.
+        CHECK(call("render_map", { { "map", "m.map" }, { "out", "o.png" }, { "embed", "yes" } }, 33)["result"]["isError"] == true);
+        CHECK(call("render_frm", { { "frm", "ext2grd1" }, { "out", "o.png" }, { "embed", 1 } }, 34)["result"]["isError"] == true);
         // A negative entry in a pid array would have wrapped too.
         CHECK(call("extract_pattern", { { "map", "m" }, { "out", "o" }, { "name", "n" }, { "pids", json::array({ -1 }) } }, 24)["result"]["isError"] == true);
         // find_gvar requires a non-empty gvar name (empty would match every line).
@@ -237,4 +282,21 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         const json resp = server.handleMessage({ { "id", 31 }, { "method", "tools/list" } });
         CHECK(resp["error"]["code"] == -32600);
     }
+}
+
+// The base64 encoder feeds MCP image content blocks; padding and binary bytes must match RFC 4648.
+TEST_CASE("encodeBase64 produces RFC 4648 output with padding", "[mcp]") {
+    const auto encode = [](const std::string& text) {
+        return mcp::encodeBase64(reinterpret_cast<const unsigned char*>(text.data()), text.size());
+    };
+    CHECK(encode("").empty());
+    CHECK(encode("f") == "Zg==");
+    CHECK(encode("fo") == "Zm8=");
+    CHECK(encode("foo") == "Zm9v");
+    CHECK(encode("foob") == "Zm9vYg==");
+    CHECK(encode("fooba") == "Zm9vYmE=");
+    CHECK(encode("foobar") == "Zm9vYmFy");
+
+    const unsigned char binary[] = { 0x00, 0xFF, 0x10 };
+    CHECK(mcp::encodeBase64(binary, sizeof(binary)) == "AP8Q");
 }
