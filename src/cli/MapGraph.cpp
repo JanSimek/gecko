@@ -186,12 +186,16 @@ namespace {
             return; // analysed in the first pass but unreadable now -> leave undetermined
         }
         bool sawSameElevationPair = false;
+        bool sawCrossElevationOption = false;
         for (const MapExit& arrival : edge.exitList) {
             const reachability::ElevationResult& result = elevationReachability(resources, dest, arrival.destElevation);
             const int arrivalComponent = reachability::componentOf(arrival.destHex, result.blocked, result.component);
             for (const MapExit& ret : returnEdge.exitList) {
                 if (ret.srcElevation != arrival.destElevation) {
-                    continue; // a return via another elevation needs stairs -> not walkable evidence
+                    // A return via another elevation needs stairs, which this model doesn't
+                    // trace — it is a possible way back, so it blocks a one-way verdict below.
+                    sawCrossElevationOption = true;
+                    continue;
                 }
                 sawSameElevationPair = true;
                 if (arrivalComponent != -1
@@ -201,11 +205,13 @@ namespace {
                 }
             }
         }
-        if (sawSameElevationPair) {
+        // "return-unreachable" is claimed only when EVERY (arrival, return) combination was
+        // determinable and blocked; a cross-elevation return option leaves the verdict unset,
+        // since stairs might still connect it.
+        if (sawSameElevationPair && !sawCrossElevationOption) {
             edge.oneWay = true;
             edge.oneWayReason = "return-unreachable";
         }
-        // else: every return exit sits on another elevation -> undeterminable, leave unset
     }
 
     // The one-way join: for every map-kind edge A->B, can the player walk back to A? Structurally

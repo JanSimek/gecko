@@ -164,16 +164,23 @@ namespace {
                     + "' (use .png, .jpg or .bmp); the file was still written",
                 true);
         }
+        // Check the size BEFORE reading: an over-cap image must not be pulled into memory (and
+        // then expanded by base64) just to be refused.
+        std::error_code sizeError;
+        const auto fileSize = std::filesystem::file_size(outPath, sizeError);
+        if (sizeError) {
+            return toolText("embed: could not read back '" + outPath + "'; the file was still written", true);
+        }
+        if (fileSize > kEmbedMaxBytes) {
+            return toolText(std::format("embed: {} is {} bytes (embed cap {}); lower maxDimension or read "
+                                        "the file directly; the file was still written",
+                                outPath, fileSize, kEmbedMaxBytes),
+                true);
+        }
         std::ifstream file(outPath, std::ios::binary);
         const std::string bytes{ std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
         if (file.bad() || bytes.empty()) {
             return toolText("embed: could not read back '" + outPath + "'; the file was still written", true);
-        }
-        if (bytes.size() > kEmbedMaxBytes) {
-            return toolText(std::format("embed: {} is {} bytes (embed cap {}); lower maxDimension or read "
-                                        "the file directly; the file was still written",
-                                outPath, bytes.size(), kEmbedMaxBytes),
-                true);
         }
         result["content"].push_back({ { "type", "image" },
             { "data", encodeBase64(reinterpret_cast<const unsigned char*>(bytes.data()), bytes.size()) },
@@ -701,7 +708,8 @@ namespace {
             "has no exit grid targeting the source; 'return-unreachable' = return exits exist but "
             "none shares a walkable region with the arrival hexes, per the reachability tool's "
             "optimistic model), false when a return path exists, null when undeterminable (the "
-            "destination wasn't analysed, or every return runs through another elevation). 'stats' "
+            "destination wasn't analysed, or a return might run through another elevation — "
+            "stairs are not traced). 'stats' "
             "flags 'deadEnds' (no outgoing map edge), 'noIncoming' (no map exits to it — a "
             "location's entry points or orphans) and 'oneWayEdges' ({from,to,reason}). Omit 'maps' "
             "for every map, or pass it to scope (e.g. one town's maps).",

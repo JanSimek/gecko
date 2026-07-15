@@ -85,7 +85,8 @@ TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapg
         "[Map 2]\nlookup_name=C\nmap_name=mapc\n"
         "[Map 3]\nlookup_name=D\nmap_name=mapd\n"
         "[Map 4]\nlookup_name=E\nmap_name=mape\n"
-        "[Map 5]\nlookup_name=F\nmap_name=mapf\n");
+        "[Map 5]\nlookup_name=F\nmap_name=mapf\n"
+        "[Map 6]\nlookup_name=G\nmap_name=mapg\n");
 
     // mapa exits to every other map; its own grid is open, so return trips INTO mapa always work.
     auto a = Map::createEmptyMapFile();
@@ -94,6 +95,7 @@ TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapg
     a.map_objects[0].push_back(makeExitGrid(104, 3, kOpenHexB, 0));
     a.map_objects[0].push_back(makeExitGrid(106, 4, kOpenHexA, 0));
     a.map_objects[0].push_back(makeExitGrid(108, 5, kOpenHexA, 0));
+    a.map_objects[0].push_back(makeExitGrid(110, 6, kOpenHexA, 0));
     writeMap(base / "maps" / "mapa.map", std::move(a));
 
     // mapb: an open return exit -> two-way.
@@ -119,11 +121,21 @@ TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapg
     f.map_objects[1].push_back(makeExitGrid(kOpenHexA, 0, 108, 0));
     writeMap(base / "maps" / "mapf.map", std::move(f));
 
+    // mapg: a sealed same-elevation return PLUS a return on another elevation — the stairs
+    // option must veto the "return-unreachable" verdict.
+    auto g = Map::createEmptyMapFile();
+    g.map_objects[0].push_back(makeExitGrid(kSealedHex, 0, 110, 0));
+    for (const int neighbour : reachability::hexNeighbors(kSealedHex)) {
+        g.map_objects[0].push_back(makeWall(neighbour));
+    }
+    g.map_objects[1].push_back(makeExitGrid(kOpenHexB, 0, 110, 0));
+    writeMap(base / "maps" / "mapg.map", std::move(g));
+
     resource::GameResources resources;
     resources.files().addDataPath(base.string());
 
     cli::MapGraphOptions options;
-    for (const char* name : { "mapa.map", "mapb.map", "mapc.map", "mape.map", "mapf.map" }) {
+    for (const char* name : { "mapa.map", "mapb.map", "mapc.map", "mape.map", "mapf.map", "mapg.map" }) {
         options.maps.push_back((base / "maps" / name).string());
     }
     std::ostringstream out;
@@ -175,6 +187,13 @@ TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapg
         const json* fToA = findEdge(edges, "mapf.map", "mapa.map");
         REQUIRE(fToA != nullptr);
         CHECK(fToA->at("oneWay") == false);
+    }
+
+    SECTION("a sealed same-elevation return plus a stairs return stays undetermined") {
+        const json* aToG = findEdge(edges, "mapa.map", "mapg.map");
+        REQUIRE(aToG != nullptr);
+        CHECK(aToG->at("oneWay").is_null());
+        CHECK(aToG->at("oneWayReason").is_null());
     }
 
     SECTION("stats lists exactly the flagged one-way edges") {
