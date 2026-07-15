@@ -68,16 +68,10 @@ const json* findEdge(const json& edges, const std::string& from, const std::stri
     return nullptr;
 }
 
-} // namespace
-
-// The one-way join: each map-kind edge is crossed with the reachability model — a destination
-// with no exit grid back is "no-return-edge"; return exits sealed away from the arrival hexes are
-// "return-unreachable"; a walkable return (or an unanalysed / stairs-only destination) is not
-// flagged. Built on a written-map fixture: maps.txt gives the destination indices names, and the
-// .map files are read back through cli::loadMap's disk fallback.
-TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapgraph]") {
-    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "mapgraph";
-    fs::remove_all(base);
+// maps.txt (destination indices -> names) plus the fixture maps under <base>/maps/. mapa exits to
+// every other map and its own grid is open, so return trips INTO mapa always work; each
+// destination exercises one one-way verdict.
+void writeFixture(const fs::path& base) {
     fs::create_directories(base / "maps");
     geck::io::writeFile(base / "data" / "maps.txt",
         "[Map 0]\nlookup_name=A\nmap_name=mapa\n"
@@ -88,7 +82,6 @@ TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapg
         "[Map 5]\nlookup_name=F\nmap_name=mapf\n"
         "[Map 6]\nlookup_name=G\nmap_name=mapg\n");
 
-    // mapa exits to every other map; its own grid is open, so return trips INTO mapa always work.
     auto a = Map::createEmptyMapFile();
     a.map_objects[0].push_back(makeExitGrid(100, 1, kOpenHexB, 0));
     a.map_objects[0].push_back(makeExitGrid(102, 2, kOpenHexB, 0));
@@ -130,6 +123,19 @@ TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapg
     }
     g.map_objects[1].push_back(makeExitGrid(kOpenHexB, 0, 110, 0));
     writeMap(base / "maps" / "mapg.map", std::move(g));
+}
+
+} // namespace
+
+// The one-way join: each map-kind edge is crossed with the reachability model — a destination
+// with no exit grid back is "no-return-edge"; return exits sealed away from the arrival hexes are
+// "return-unreachable"; a walkable return (or an unanalysed / stairs-only destination) is not
+// flagged. Built on a written-map fixture: maps.txt gives the destination indices names, and the
+// .map files are read back through cli::loadMap's disk fallback.
+TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapgraph]") {
+    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "mapgraph";
+    fs::remove_all(base);
+    writeFixture(base);
 
     resource::GameResources resources;
     resources.files().addDataPath(base.string());
